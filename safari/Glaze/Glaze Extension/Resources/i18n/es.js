@@ -3371,6 +3371,7 @@
   "Documents": "Documentos",
   "Blank": "En blanco",
   "Untitled document": "Documento sin título",
+  "Open from Documents": "Abrir desde Documentos",
   "The .docx could not be made.": "No se pudo crear el .docx.",
   "That file could not be read as a Word document.": "Ese archivo no se pudo leer como documento de Word.",
   "Add to dictionary": "Añadir al diccionario",

@@ -14,7 +14,9 @@ const PA = require('../lib/writer-papers.js');
 
 const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || path.join(__dirname, '../writer-paper.js'), 'utf8');
 const cut = (a, b) => { const i = source.indexOf(a), j = source.indexOf(b, i); assert.ok(i >= 0 && j > i, a); return source.slice(i, j); };
-const BLOCKS = `${cut('    // ---- saving', '    const setFormat = async')}\n${cut('    // ---- what the page says', '    const api = {')}`;
+// Open from Documents' pick, with the format change and the restore its Undo runs ('' in a source without it).
+const PICK = source.includes('    // ---- Open from Documents') ? cut('    // ---- Open from Documents', '    let docsSheet') : '';
+const BLOCKS = `${cut('    // ---- saving', '    const setFormat = async')}\n${cut('    // ---- what the page says', '    const api = {')}\n${cut('    const setFormat = async', '    // ---- toolbar actions')}\n${cut('    const restore = async', '    const open2 =')}\n${PICK}`;
 
 const memory = () => {
   const data = {};
@@ -31,7 +33,7 @@ let clock = 1e12;
 // extra: names over the sandbox's (a standalone document's host, own, titleIn and location).
 const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = [], timers = [], windowEvents = {}, extra = {} }) => {
   let onContext = null;
-  const view = { state: E.state({ mode: 'paper' }), updateState(s) { this.state = s; }, dispatch(tr) { this.state = this.state.apply(tr); } };
+  const view = { state: E.state({ mode: 'paper' }), props: { editable: () => true }, updateState(s) { this.state = s; }, dispatch(tr) { this.state = this.state.apply(tr); }, setProps(p) { Object.assign(this.props, p); }, focus() {} };
   const sandbox = vm.createContext({
     recoveryMessages: [], toast: (m) => sandbox.recoveryMessages.push(m),
     console, crypto, TextEncoder, Uint8Array, JSON, Date, Number, Object, Promise, Map, Set, Error, RangeError, structuredClone,
@@ -46,7 +48,7 @@ const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = []
     restyleCSS() {}, counts() {}, setZoom() {}, PG: { relayout() {} }, runChecks() {}, runChecksSoon() {}, outlineDraw() {}, outlineAI: { stop() {} }, sourcesPanel: null,
     own: false, titleIn: null, URLSearchParams, location: { search: '' }, ...extra,
   });
-  vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, key: () => key, keep: () => keep, edits: () => edits, format: () => format, dirty: () => dirty };`, sandbox);
+  vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, key: () => key, keep: () => keep, edits: () => edits, format: () => format, dirty: () => dirty, fromDocs: typeof fromDocs === 'function' ? fromDocs : null };`, sandbox);
   const $ = sandbox.__;
   await $.load();
   const settle = async () => { for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
@@ -396,4 +398,38 @@ test('a rename from the Documents home stays: the title follows it, unsaved typi
   await run(timers);
   await tell();
   assert.deepEqual([titleIn.value, record(local).title], ['Mine', 'Mine']);
+});
+
+test('Open from Documents copies a standalone document into the assignment paper with a version and Undo', async () => {
+  const local = memory(), toasts = [], app = {};
+  await seed(local);
+  const home = PA.open(local, () => (clock += 1000), { versions: async () => 40 });
+  await home.save(DOC, { doc: docOf('Drafted at home.', 'Second paragraph.'), kind: 'paper', named: false, title: 'Drafted at home.', format: 'plain', keep: true });
+  const source = structuredClone(record(local)), sourceVersions = await home.versions(DOC);
+  const extra = { root: { isConnected: true, inert: false }, current: app, api: app, noteCache: new Map(), toast: (text, act) => toasts.push({ text, act }) };
+  const f = await frame({ local, ss: session(), context: { recovery: RECOVERY, paper: PARTS, assignment: { title: 'Essay 2' } }, extra });
+  assert.equal(typeof f.$.fromDocs, 'function', 'writer-paper.js has Open from Documents');
+  const before = await f.$.fromDocs(DOC, 'Drafted at home.');
+  assert.equal(f.shown(), 'Drafted at home.Second paragraph.');
+  assert.deepEqual([f.$.format().id, f.$.keep(), extra.root.inert, f.view.props.editable()], ['plain', true, false, true]);
+  let s = await stored(local);
+  assert.deepEqual([textOf(s.paper.doc), s.paper.format, s.paper.keep, s.paper.title, s.paper.named], ['Drafted at home.Second paragraph.', 'plain', true, 'Essay 2', false], 'the assignment keeps Ultra\'s title');
+  assert.deepEqual(s.versions, ['import', 'start']);
+  const kept = await home.version(KEY, before.id);
+  assert.deepEqual([kept.reason, textOf(kept.doc), kept.format], ['import', 'Two thousand words of my essay.', 'mla9'], 'what the paper held is a version first');
+  assert.deepEqual([record(local), await home.versions(DOC)], [source, sourceVersions], 'the document stays as it was');
+  assert.ok(s.index.includes(DOC) && s.index.includes(KEY));
+  assert.deepEqual([toasts.length, toasts[0].text, toasts[0].act?.label], [1, 'Drafted at home.', 'Undo']);
+  await toasts[0].act.run();
+  assert.equal(f.shown(), 'Two thousand words of my essay.');
+  assert.deepEqual([f.$.format().id, f.$.keep()], ['mla9', false]);
+  s = await stored(local);
+  assert.deepEqual([textOf(s.paper.doc), s.paper.format, s.versions], ['Two thousand words of my essay.', 'mla9', ['restore', 'import', 'start']]);
+  assert.deepEqual(record(local), source);
+
+  // Never into a standalone document, nor from anything but one.
+  const into = await frame({ local, ss: session(), context: {}, extra: { ...standalone('').extra, ...extra } });
+  assert.equal(await into.$.fromDocs(DOC, 'x'), null);
+  assert.equal(await f.$.fromDocs(KEY, 'x'), null);
+  assert.equal(f.shown(), 'Two thousand words of my essay.');
 });

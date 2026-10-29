@@ -3371,6 +3371,7 @@
   "Documents": "Documenten",
   "Blank": "Leeg",
   "Untitled document": "Naamloos document",
+  "Open from Documents": "Openen uit Documenten",
   "The .docx could not be made.": "Het .docx-bestand kon niet worden gemaakt.",
   "That file could not be read as a Word document.": "Dat bestand kon niet als Word-document worden gelezen.",
   "Add to dictionary": "Toevoegen aan woordenboek",

@@ -26,6 +26,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     undo: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3', redo: 'm15 14 5-5-5-5M20 9H9a5 5 0 0 0 0 10h3', focus: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', back: 'M15 18l-6-6 6-6',
     marker: 'm9 11-6 6v3h9l3-3M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4', dots: 'M5 12h.01M12 12h.01M19 12h.01',
     pagenum: 'M6 3h9l4 4v14H6zM10 13h1v5M10 18h2', pages: 'M8 3h8l4 4v12H8zM4 7v14h12', left: 'M4 6h16M4 12h10M4 18h16', portrait: 'M7 3h10v18H7z', landscape: 'M3 7h18v10H3z',
+    close: 'M6 6l12 12M18 6 6 18',
   };
   const icon = (name, cls = 'gp-ico') => { const s = document.createElementNS(SVG, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', cls); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS(SVG, 'path'); p.setAttribute('d', PATHS[name]); s.append(p); return s; };
   const h = (tag, props = {}, ...kids) => {
@@ -1281,6 +1282,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         btn({ role: 'menuitem', onclick: () => { close(); exportFile(); } }, t('Export .docx')),
         ...(globalThis.GZ_WRITER_PRINT?.items() || []).map((it) => btn({ role: 'menuitem', onclick: () => { close(); it.run(); } }, it.label)),
         btn({ role: 'menuitem', onclick: () => { close(); file.click(); } }, host.standalone ? t('Import .docx…') : t('Import…')),
+        own ? null : btn({ role: 'menuitem', onclick: () => { close(); fromDocsSheet(); } }, t('Open from Documents')),
         host.standalone ? null : btn({ role: 'menuitem', onclick: () => { close(); open2('papers.html'); } }, t('Documents')));
       el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(true); } });
       popup(versionsB, el, { above: true });
@@ -1364,6 +1366,76 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (globalThis.GZ_WRITER_OBJECTS?.drop?.(f, e)) return;
       bring(f);
     }, true);
+
+    // ---- Open from Documents (an assignment's paper): the student's standalone documents, newest first, on a sheet drawn
+    // as the import card is (writer-import.js). The one picked becomes the paper as a Word file does (importFile): what the
+    // paper held kept as a version first, the toast's Undo bringing it back; the document stays on the Documents home.
+    const fromDocs = async (k, name) => {
+      if (!key || PA.local(key) || !PA.local(k) || importing) return null;
+      importing = true;
+      const editable = view.props.editable, inert = root.inert;
+      const snapshot = { key, doc: view.state.doc, format };
+      const here = () => root.isConnected && current === api && key === snapshot.key && view.state.doc === snapshot.doc && format === snapshot.format;
+      root.inert = true; view.setProps({ editable: () => false });
+      let before = null;
+      try {
+        const fields = PA.fromDocument(key, await store.get(k));
+        if (!here()) return null;
+        if (!fields) throw new Error('no document');
+        if (!await save()) throw new Error('paper could not be saved before import');
+        if (!here()) return null;
+        const saved = await store.save(key, { ...record(), ...fields }, { reason: 'import' });
+        if (!here()) return null;
+        paper = saved.paper; before = saved.version;
+        keep = paper.keep === true; outlineSaved = paper.outline || null;
+        await setFormat(ST.get(paper.format), { save: false });
+        setDoc(paper.doc);
+        toast(name, before ? { label: t('Undo'), run: () => restore(before.id) } : null);
+      } catch (e) { console.error(e); toast(t('Not saved. Try again in a moment.')); }
+      finally { importing = false; root.inert = inert; view.setProps({ editable }); if (root.isConnected && current === api) view.focus(); }
+      return before;
+    };
+    let docsSheet = null, docsTurn = 0;
+    const closeDocs = (back = true) => {
+      docsTurn++;
+      const s = docsSheet;
+      if (!s) return;
+      docsSheet = null;
+      s.layer.remove();
+      for (const [el, was] of s.inert) el.inert = was;
+      if (back && versionsB.isConnected) versionsB.focus();
+    };
+    // Each row: its title (the one given, else its first line as record() keeps it), format, words and date.
+    const fromDocsSheet = async () => {
+      closeDocs(false);
+      const turn = docsTurn;
+      const docs = (await store.list()).filter((r) => PA.local(r.key) && r.kind === 'paper').sort((a, b) => (b.updated || 0) - (a.updated || 0));
+      if (turn !== docsTurn || !root.isConnected || current !== api || importing) return;
+      const when = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: 'medium' });
+      const x = btn({ class: 'gp-fromdocs-x', title: t('Close'), 'aria-label': t('Close'), onclick: () => closeDocs() }, icon('close'));
+      const picks = docs.map((r) => {
+        const name = r.title || t('Untitled document');
+        return btn({ class: 'gp-fromdocs-row', onclick: () => { closeDocs(false); fromDocs(r.key, name); } }, h('b', { text: name }),
+          h('small', { text: [labelOf(ST.get(r.format)), t('{n} words', { n: nf(r.words || 0) }), Number.isFinite(r.updated) ? when.format(r.updated) : ''].filter(Boolean).join(' · ') }));
+      });
+      const layer = h('div', { class: 'gp-fromdocs-layer' }, h('div', { class: 'gp-fromdocs-dim', onclick: () => closeDocs() }),
+        h('div', { class: 'gp-fromdocs', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'gp-fromdocs-h' },
+          h('div', { class: 'gp-fromdocs-head' }, h('h2', { id: 'gp-fromdocs-h', text: t('Open from Documents') }), x), picks.length ? h('div', { class: 'gp-fromdocs-list' }, picks) : null));
+      const inert = [...document.body.children].map((el) => [el, el.inert]);
+      for (const [el] of inert) el.inert = true;
+      document.body.append(layer);
+      docsSheet = { layer, inert };
+      layer.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDocs(); return; }
+        if (e.key !== 'Tab') return;
+        const all = [...picks, x], i = all.indexOf(document.activeElement);
+        e.preventDefault();
+        all[(i + (e.shiftKey ? all.length - 1 : 1)) % all.length].focus();
+      });
+      layer.getBoundingClientRect();
+      layer.setAttribute('data-open', '');
+      (picks[0] || x).focus();
+    };
 
     // ---- what the page says: Ultra's names and the paper's key
     // The title field: what the student typed, else its derived name in its place, as wide as what it shows.

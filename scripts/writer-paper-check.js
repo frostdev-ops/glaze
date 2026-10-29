@@ -157,7 +157,7 @@ const HARNESS = `(() => {
         // Note marks as their numbers, as Word's PDF shows them.
         lines: lines.map((ls) => ls.map((l) => { let k = 0; v.state.doc.nodesBetween(0, l.from, (n) => { if (n.type.name === 'footnote_ref') k++; }); return v.state.doc.textBetween(l.from, l.to, ' ', (n) => (n.type.name === 'footnote_ref' ? String(++k) : '')).trim(); }).filter(Boolean)) };
     });
-    const shot = async (target, name) => { fs.mkdirSync(shots, { recursive: true }); await pause(250); const f = path.join(shots, name); await target.screenshot({ path: f }); return f; };
+    const shot = async (target, name, dir = shots) => { fs.mkdirSync(dir, { recursive: true }); await pause(250); const f = path.join(dir, name); await target.screenshot({ path: f }); return f; };
     const saved = {};
 
     // ---- a new paper on the attempt
@@ -448,8 +448,86 @@ const HARNESS = `(() => {
     rec = await stored(k2);
     check(rec.title === 'My own title' && rec.named === true && await d.evaluate(() => document.querySelector('.gp-top h1 input').value === 'My own title'), 'a title typed in the editor is saved and stays');
     saved.titled = await shot(d, 'document-titled.png');
+    await d.click('.gp-status button:last-child');
+    await until(() => d.evaluate(() => !!document.querySelector('.gp-versions')), 'document status menu');
+    check(await d.evaluate(() => ![...document.querySelectorAll('.gp-versions [role="menuitem"]')].some((b) => b.textContent === 'Open from Documents')), 'a standalone document\'s status menu has no Open from Documents');
+    await d.keyboard.press('Escape');
     await home.close();
     await d.close();
+
+    // ---- Open from Documents: the assignment's paper takes a standalone document, a version first, Undo in the toast
+    const docShots = path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-documents');
+    const KEY = 'bb.school.test|_900_1|_101_1|_7_1', k3 = `doc:${crypto.randomUUID()}`;
+    const seeder = await context.newPage();
+    watch(seeder, 'seeder');
+    await seeder.goto(`chrome-extension://${id}/papers.html`);
+    await until(() => seeder.evaluate(() => !!globalThis.GZ_WRITER_PAPERS), 'store on the home page');
+    await seeder.evaluate((k) => GZ_WRITER_PAPERS.open().save(k, { doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Reading notes on Beloved' }] }] }, kind: 'paper', named: false, title: 'Reading notes on Beloved', format: 'apa7' }), k3);
+    await seeder.close();
+    const sourceBefore = JSON.stringify(await stored(k2)), versionsOf = (k) => worker.evaluate(async (k) => ((await chrome.storage.local.get(`writerVersions:${k}`))[`writerVersions:${k}`] || []), k);
+    const assignmentText = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent);
+    check(assignmentText.includes('A sentence typed before the reload.'), 'the assignment paper holds its own text before');
+    const openSheet = async () => {
+      await fr.click('.gp-status button:last-child');
+      await until(() => fr.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].some((b) => b.textContent === 'Open from Documents')), 'Open from Documents in the status menu');
+      await fr.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].find((b) => b.textContent === 'Open from Documents').click());
+      await until(() => fr.evaluate(() => !!document.querySelector('.gp-fromdocs-layer[data-open]') && document.activeElement?.classList.contains('gp-fromdocs-row')), 'the sheet open, its first row focused');
+      await settle(fr);
+    };
+    await openSheet();
+    const sheet = await fr.evaluate(() => {
+      const d = document.querySelector('.gp-fromdocs[role="dialog"]');
+      return { modal: d?.getAttribute('aria-modal'), label: document.getElementById(d?.getAttribute('aria-labelledby'))?.textContent,
+        rows: [...d.querySelectorAll('.gp-fromdocs-row')].map((r) => [r.querySelector('b').textContent, r.querySelector('small').textContent]), inert: document.querySelector('.gp').inert };
+    });
+    check(sheet.modal === 'true' && sheet.label === 'Open from Documents' && sheet.inert, `the sheet is a labelled modal dialog over an inert paper (${JSON.stringify(sheet)})`);
+    check(sheet.rows.map((r) => r[0]).join('|') === 'Reading notes on Beloved|My own title' && /^APA 7 · 4 words · /.test(sheet.rows[0][1]) && /^Blank · 6 words · /.test(sheet.rows[1][1]), `the student's standalone documents, newest first: title, format, words, date (${JSON.stringify(sheet.rows)})`);
+    await p.keyboard.press('Tab'); await p.keyboard.press('Tab'); await p.keyboard.press('Tab');
+    check(await fr.evaluate(() => document.activeElement === document.querySelector('.gp-fromdocs-row')), 'Tab stays inside the sheet');
+    await p.keyboard.press('Escape');
+    await until(() => fr.evaluate(() => !document.querySelector('.gp-fromdocs-layer') && document.activeElement?.matches('.gp-status button:last-child') && !document.querySelector('.gp').inert), 'Escape closes the sheet');
+    check(true, 'Escape closes the sheet and returns focus to the status bar');
+    for (const width of [1280, 640]) {
+      await p.setViewportSize({ width, height: 800 });
+      await settle(fr);
+      // As a student opens it: the page scrolled down until the paper's status bar is in the window.
+      await el.evaluate((f) => scrollBy(0, f.getBoundingClientRect().bottom - innerHeight));
+      await settle(fr);
+      await openSheet();
+      const box = await fr.evaluate(() => { const r = document.querySelector('.gp-fromdocs').getBoundingClientRect(), s = document.querySelector('.gp-status').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, w: innerWidth, h: innerHeight, status: s.bottom }; });
+      const frame = await el.evaluate((f) => { const r = f.getBoundingClientRect(); return { top: r.top, left: r.left, scrollY }; });
+      check(frame.top + box.status <= 801, `${width}px: the status bar it opens from is in the window (${JSON.stringify({ frame, status: box.status })})`);
+      check(box.left >= 0 && box.right <= box.w && frame.top + box.top >= 0 && frame.top + box.bottom <= 800, `${width}px: the sheet fits the frame and the window (${JSON.stringify({ box, frame })})`);
+      saved[`fromDocs${width}`] = await shot(p, `open-from-documents-${width}.png`, docShots);
+      await p.keyboard.press('Escape');
+    }
+    await p.setViewportSize({ width: 1440, height: 900 });
+    await settle(fr);
+    await openSheet();
+    await fr.evaluate(() => [...document.querySelectorAll('.gp-fromdocs-row')].find((r) => r.querySelector('b').textContent === 'My own title').click());
+    await until(() => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('Field notes from Tuesday and more')), 'the document in the paper');
+    await until(() => fr.evaluate(() => document.querySelector('.gp-toast span')?.textContent === 'My own title'), 'the toast');
+    check(await fr.evaluate(() => !GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('A sentence typed before the reload.') && GZ_WRITER_PAPER.current().format().id === 'plain' && document.querySelector('.gp-pill').textContent === 'Blank'), 'the editor shows the document, in its format');
+    check(await fr.evaluate(() => document.querySelector('.gp-top h1').textContent === 'Essay 2: Memory in Beloved' && document.querySelector('.gp-toast .gp-toast-do')?.textContent === 'Undo'), 'the title stays the assignment\'s; the toast names the document and offers Undo');
+    let kept = await versionsOf(KEY);
+    check(kept[0]?.reason === 'import' && JSON.stringify(kept[0].doc).includes('A sentence typed before the reload.') && kept[0].format === 'mla9', `a version of the paper before is taken (${kept.map((v) => v.reason).join(', ')})`);
+    const after = await stored(KEY);
+    check(JSON.stringify(after.doc).includes('Field notes from Tuesday and more') && after.format === 'plain' && after.title === 'Essay 2: Memory in Beloved', 'the assignment\'s paper is saved with the document, under Ultra\'s title');
+    check(JSON.stringify(await stored(k2)) === sourceBefore && (await rows()).index.some((r) => r.key === k2), 'the document stays as it was on the Documents home');
+    await fr.click('.gp-toast .gp-toast-do');
+    await until(() => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('A sentence typed before the reload.') && GZ_WRITER_PAPER.current().format().id === 'mla9'), 'Undo');
+    await until(() => fr.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'saved after Undo');
+    kept = await versionsOf(KEY);
+    check(await fr.evaluate(() => !GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('Field notes from Tuesday')) && JSON.stringify((await stored(KEY)).doc).includes('A sentence typed before the reload.') && kept[0]?.reason === 'restore', `Undo restores the paper as it was (${kept.map((v) => v.reason).join(', ')})`);
+    check(JSON.stringify(await stored(k2)) === sourceBefore, 'and the document is still there, unchanged');
+    const inPapers = await context.newPage();
+    watch(inPapers, 'papers assignment');
+    await inPapers.goto(`chrome-extension://${id}/papers.html?paper=${encodeURIComponent(KEY)}`);
+    await until(() => inPapers.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key() && document.querySelectorAll('.gp-sheet').length > 0), 'the assignment paper in papers.html');
+    await inPapers.click('.gp-status button:last-child');
+    await until(() => inPapers.evaluate(() => !!document.querySelector('.gp-versions')), 'status menu in papers.html');
+    check(await inPapers.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].some((b) => b.textContent === 'Open from Documents')), 'papers.html offers Open from Documents on an assignment\'s paper');
+    await inPapers.close();
 
     check(errors.length === 0, `no page or frame errors (${errors.join('; ')})`);
     check(requests.every((r) => r.method === 'GET' && r.origin === site), 'every LMS request is a synthetic GET');

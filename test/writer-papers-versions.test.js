@@ -74,10 +74,27 @@ test('the Versions menu offers every retained version when more than forty are k
   const list = Array.from({ length: 100 }, (_, i) => ({ id: String(i), at: 1000 + i, words: i }));
   const ctx = { versionsB: { addEventListener: (_event, fn) => { click = fn; } }, open: null, key: K, store: { versions: async () => list },
     document: { documentElement: { lang: 'en' } }, Intl, h, btn: (props, ...kids) => h('button', props, ...kids),
-    t: (k) => k, nf: String, REASONS: {}, host: { standalone: true }, popup: (_anchor, el) => { menu = el; } };
+    t: (k) => k, nf: String, REASONS: {}, host: { standalone: true }, own: true, popup: (_anchor, el) => { menu = el; } };
   vm.runInNewContext(source.slice(from, to), ctx);
   await click();
   assert.equal(menu.kids.filter((n) => n?.props?.class === 'gp-mi').length, 100);
+});
+
+test('the status menu offers Open from Documents on an assignment\'s paper, in its frame or papers.html, never on a standalone document', async () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-paper.js'), 'utf8');
+  const from = source.indexOf("    versionsB.addEventListener('click'"), to = source.indexOf('    const restore = ', from);
+  const items = async (standalone, own) => {
+    let click, menu;
+    const h = (tag, props, ...kids) => ({ tag, props, kids: kids.flat(), addEventListener() {} });
+    vm.runInNewContext(source.slice(from, to), { versionsB: { addEventListener: (_event, fn) => { click = fn; } }, open: null, key: K, store: { versions: async () => [] },
+      document: { documentElement: { lang: 'en' } }, Intl, h, btn: (props, ...kids) => h('button', props, ...kids), t: (k) => k, nf: String, REASONS: {}, host: { standalone }, own, popup: (_anchor, el) => { menu = el; } });
+    await click();
+    return menu.kids.filter((n) => n?.props?.role === 'menuitem').map((n) => n.kids.join(''));
+  };
+  assert.deepEqual(await items(undefined, false), ['Export .docx', 'Import…', 'Open from Documents', 'Documents']);
+  assert.deepEqual(await items(true, false), ['Export .docx', 'Import .docx…', 'Open from Documents']);
+  assert.deepEqual(await items(true, true), ['Export .docx', 'Import .docx…']);
 });
 
 test('a restore the store refuses, or of a version gone meanwhile, says so and leaves the paper as it was', async () => {

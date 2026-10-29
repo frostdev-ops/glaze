@@ -175,6 +175,28 @@ test('copyOf drops the assignment fields', async () => {
   assert.deepEqual(Object.keys(PA.copyOf({ kind: 'sheet', title: 'x' }, 'Copy of x', 1)).sort(), ['created', 'keep', 'key', 'kind', 'named', 'revision', 'title', 'updated']);
 });
 
+test('fromDocument: a standalone document\'s text, format and import choice for an assignment\'s paper, never its name', async () => {
+  let t = 100;
+  const P = PA.open(store(), () => (t += 10)), k = PA.keyOf(K), home = PA.newKey();
+  await P.save(k, { doc: doc('My essay so far.'), title: 'Essay 2', format: 'mla9' });
+  const { paper: source } = await P.save(home, { doc: doc('Drafted at home tonight.'), kind: 'paper', named: true, title: 'Home draft', format: 'plain', keep: true });
+  const fields = PA.fromDocument(k, source);
+  assert.deepEqual(fields, { doc: doc('Drafted at home tonight.'), words: 4, format: 'plain', keep: true });
+  fields.doc.content[0].content[0].text = 'Changed.';
+  assert.equal(source.doc.content[0].content[0].text, 'Drafted at home tonight.', 'the paper gets its own copy');
+  const { paper, version } = await P.save(k, { title: 'Essay 2', named: false, ...PA.fromDocument(k, source) }, { reason: 'import' });
+  assert.deepEqual([paper.title, paper.named, paper.format, paper.keep, paper.words, paper.doc], ['Essay 2', false, 'plain', true, 4, doc('Drafted at home tonight.')]);
+  assert.equal(version.reason, 'import');
+  assert.deepEqual((await P.version(k, version.id)).doc, doc('My essay so far.'), 'what the paper held is kept');
+  assert.deepEqual(await P.get(home), source, 'the document itself is untouched');
+  // A preset's format as stored, the words counted when the record has none, an AI outline bound to the paper.
+  const preset = { id: 'custom:x', label: 'Arial 11', base: 'mla9', font: 'Arial', size: 11, line: 2, first: 0.5, margin: 1, header: 'name-page' };
+  const outline = { schema: 1, version: 1, scope: '', identity: 'model', language: 'en', entries: [{ content: 'c', heading: 'Intro' }] };
+  assert.deepEqual(PA.fromDocument(k, { doc: doc('One two three.'), format: preset, outline }), { doc: doc('One two three.'), words: 3, format: preset, keep: false, outline: { ...outline, scope: k } });
+  assert.equal(outline.scope, '');
+  for (const none of [null, undefined, {}, { title: 'x', format: 'mla9' }]) assert.equal(PA.fromDocument(k, none), null);
+});
+
 test('renamed: a title set elsewhere reaches an open editor, its own saves never read as one', async () => {
   let t = 1;
   const P = PA.open(store(), () => t), k = PA.newKey();
