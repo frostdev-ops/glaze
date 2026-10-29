@@ -209,6 +209,9 @@ test('legibility: Automatic is no colour; a colour is read against the highlight
   assert.deepEqual(runOf(html, 'auto text'), {});
   assert.deepEqual(runOf(html, 'white on navy'), { color: { color: 'FFFFFF' }, highlight: { color: 'darkBlue' } });
   assert.deepEqual(runOf(html, 'yellow on yellow'), { highlight: { color: 'yellow' } });
+  const bright = fromWord(`<p class=MsoNormal><span style='color:#FFA500'>orange</span> <span style='color:#D9D9D9'>pale grey</span></p>`);
+  assert.deepEqual(runOf(bright, 'orange'), { color: { color: 'FFA500' } }, 'orange on white (1.97:1) keeps its colour');
+  assert.deepEqual(runOf(bright, 'pale grey'), {}, 'a pale grey (1.4:1) is the paper\'s ink');
   const web = `<p style="background-color: rgb(30, 30, 30); color: rgb(230, 230, 230);">dark mode page</p>`;
   assert.deepEqual(runOf(web, 'dark mode page'), {}, 'a dark-mode site\'s light text');
 });
