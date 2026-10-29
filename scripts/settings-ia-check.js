@@ -407,6 +407,31 @@ const check = async (name, test) => {
       }
       assert.deepEqual([...new Set(problems)], [], 'settings fit a 320px viewport');
     });
+    await check('translated-heading-wrap', async () => {
+      const host = await context.newPage();
+      try {
+        await host.setViewportSize({ width: 320, height: 1000 });
+        await host.addInitScript(() => { chrome.i18n.getUILanguage = () => 'de'; });
+        await host.goto(`${base}/options.html#navigation/items`);
+        await host.waitForFunction(() => document.querySelector('#looks button'));
+        await host.evaluate(() => {
+          // A wide user-selected face also reproduces Linux's longer system-font metrics on macOS.
+          document.documentElement.style.fontSize = '20px';
+          document.querySelector('#heading-navigation-items').style.fontFamily = 'monospace';
+          document.querySelector('#heading-navigation-items').style.fontSize = '25px';
+        });
+        assert.equal(await host.locator('#heading-navigation-items').textContent(), 'Navigationseinträge');
+        for (const direction of ['ltr', 'rtl']) {
+          await host.evaluate((dir) => { document.documentElement.dir = dir; }, direction);
+          assert.ok(await host.evaluate(() => {
+            const h = document.querySelector('#heading-navigation-items'), b = h.getBoundingClientRect();
+            const r = document.createRange(); r.selectNodeContents(h);
+            return document.documentElement.scrollWidth <= 320 && b.left >= 0 && b.right <= 320
+              && [...r.getClientRects()].every((line) => line.left >= b.left - 1 && line.right <= b.right + 1);
+          }), `${direction}: translated heading wraps within the viewport without clipping`);
+        }
+      } finally { await host.close(); }
+    });
     await check('translated-large-layout', async () => {
       const problems = [];
       for (const lang of ['en', 'de', 'fr', 'es', 'nl', 'pt-BR']) {
