@@ -36,6 +36,7 @@ test('the writer key sanitises part by part: junk back to its default, the rest 
     submit: { rememberText: false, text: true } });
   assert.deepEqual(D.GZ_SANITIZE(D.GZ_SANITIZE(raw)).writer, w);
   assert.equal(D.GZ_SANITIZE({ writer: { zoom: '100' } }).writer.zoom, 'fit', 'a percent is a number');
+  for (const n of D.GZ_SPEC.writer.versions[1]) assert.equal(D.GZ_SANITIZE({ writer: { versions: n } }).writer.versions, n, `${n} versions kept`);
   // A fresh object each time: editing one never edits the defaults.
   const a = D.GZ_SANITIZE({}).writer;
   a.autocorrect.typos = false;
@@ -46,6 +47,7 @@ test('backup: the export (Settings, sanitised) carries writer, and a restore rea
   const s = D.GZ_SANITIZE({ writer: { versions: 100, autocorrect: { smart: false }, submit: { text: true } } });
   const back = D.GZ_SANITIZE(JSON.parse(JSON.stringify({ ...s })));
   assert.deepEqual(back.writer, s.writer);
+  assert.equal(back.writer.versions, 100);
   // options.js's export spreads the whole state; its restore sanitises the file.
   assert.match(read('options.js'), /const settings = \{ \.\.\.s, nav, navbar/);
   assert.match(read('options.js'), /const next = \{ \.\.\.GZ_SANITIZE\(raw\)/);

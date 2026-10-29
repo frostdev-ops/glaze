@@ -23,6 +23,15 @@ test('the soon window is three days past today', () => {
   assert.equal(P.due('Due date: 10/15/26, 12:01 AM', now), null);
 });
 
+test('today and the soon window end at midnight across a clock change', (t) => {
+  const tz = process.env.TZ;
+  t.after(() => { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; });
+  process.env.TZ = 'America/New_York'; // 8 March 2026 has 23 hours, 1 November 25
+  assert.equal(P.due('Due date: 3/9/26, 12:30 AM', new Date(2026, 2, 8, 10)), 'soon');
+  assert.equal(P.due('Due date: 11/1/26, 11:59 PM', new Date(2026, 10, 1, 10)), 'today');
+  assert.equal(P.due('Due date: 11/1/26, 11:59 PM', new Date(2026, 9, 29, 10)), 'soon');
+});
+
 test('anything else is left alone', () => {
   for (const t of ['Due date: 18.10.26, 23:59', 'Posted 10/11/26', 'Due date: tomorrow', '', 'Due date: 13/45/26, 11:59 PM']) {
     assert.equal(P.due(t, now), null, t);

@@ -32,11 +32,19 @@ test('a footnote\'s link resolves against the footnotes part\'s own relationship
 test('relationships are read once per part: many links import in time linear in their number', async () => {
   const file = (n) => pack(`<w:p>${Array.from({ length: n }, (_, i) => `<w:hyperlink r:id="L${i}">${r('x')}</w:hyperlink>`).join('')}</w:p>`,
     { 'word/_rels/document.xml.rels': rels([['rS', 'styles', 'styles.xml'], ...Array.from({ length: n }, (_, i) => [`L${i}`, 'hyperlink', `https://e.test/${i}`, true])]) });
-  const time = async (n) => { const bytes = file(n); let best = Infinity; for (let k = 0; k < 3; k++) { const t0 = process.hrtime.bigint(); await X.importDocx(bytes); best = Math.min(best, Number(process.hrtime.bigint() - t0) / 1e6); } return best; };
-  const small = await time(500), large = await time(4000);
-  const got = await imp(file(4000));
+  // The process's CPU time, which a busy machine doesn't add to, in pairs taken together, the small one's best of three:
+  // linear takes about 8 times as long, building the relationships again for each link about 50. One pair under 20 passes.
+  const cpu = () => { const { user, system } = process.cpuUsage(); return (user + system) / 1000; };
+  const time = async (bytes) => { const t0 = cpu(); await X.importDocx(bytes); return cpu() - t0; };
+  const small = file(500), large = file(4000), ratios = [];
+  await time(small); await time(large);
+  while (ratios.length < 7 && !(ratios.at(-1) < 20)) {
+    const s = Math.min(await time(small), await time(small), await time(small));
+    ratios.push((await time(large)) / s);
+  }
+  assert.ok(ratios.at(-1) < 20, `8 times the links took ${ratios.map((x) => x.toFixed(1)).join(', ')} times as long`);
+  const got = await imp(large);
   assert.equal(links(got.node).length, 4000);
-  assert.ok(large / small < 14, `8 times the links took ${(large / small).toFixed(1)} times as long (${small.toFixed(0)} ms, ${large.toFixed(0)} ms)`);
 });
 
 // ---- the package
