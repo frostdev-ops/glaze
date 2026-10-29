@@ -3,6 +3,7 @@
 // more than the frame limit (agent-frames.js) and refuses a longer incoming length before reading its body.
 'use strict';
 const F = require('./agent-frames.js');
+const { isUtf8 } = require('node:buffer');
 
 const MAX_IN = 64 * 1024 * 1024, MAX_OUT = F.FRAME;
 const fail = (code, message) => Object.assign(new Error(`native message: ${message}`), { code });
@@ -20,7 +21,7 @@ const encode = (msg) => {
 const write = (stream, msg) => stream.write(encode(msg));
 
 // push(chunk) with stdin's chunks as they come; onMessage gets each message once all of it is in. A length over `max`,
-// a zero length or a body that isn't JSON throws, and so does every push after it: the browser sends none of them, so
+// a zero length or a body that isn't UTF-8 JSON throws, and so does every push after it: the browser sends none of them, so
 // the stream can't be trusted past one. A throwing onMessage leaves the reader in step; the next push goes on.
 const reader = (onMessage, { max = MAX_IN } = {}) => {
   let chunks = [], have = 0, need = -1, dead = null;
@@ -45,6 +46,7 @@ const reader = (onMessage, { max = MAX_IN } = {}) => {
       const body = take(need);
       need = -1;
       let msg;
+      if (!isUtf8(body)) throw (dead = fail('bad-json', 'not UTF-8 JSON'));
       try { msg = JSON.parse(body.toString('utf8')); } catch { throw (dead = fail('bad-json', 'not JSON')); }
       onMessage(msg);
     }
