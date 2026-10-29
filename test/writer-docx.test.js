@@ -160,3 +160,12 @@ test('import refuses nested footnote references before expanding their graph', a
   try { await assert.rejects(X.importDocx(zipOf([['word/document.xml', main], ['word/footnotes.xml', notes]])), /nested footnote/); }
   finally { X.LIMIT.depth = original; }
 });
+
+// A dark page redraws colours from --c and --h (writer-paper.css); the .docx still takes each mark's own value.
+test('a coloured, highlighted run exports its stored colour and highlighter, whatever the page draws', () => {
+  const html = S.serialize(S.paper, S.parse(S.paper, '<p><span data-gz-color="000000">black</span> <span data-gz-color="1f4e79"><span data-gz-highlight="darkBlue">navy on dark blue</span></span></p>'));
+  assert.match(html, /--c:#1F4E79/);
+  const body = X.exportDocx(S.parse(S.paper, html), { format: 'mla9', date }).parts['word/document.xml'];
+  assert.match(body, /<w:color w:val="000000"\/>/);
+  assert.match(body, /<w:color w:val="1F4E79"\/>(?:(?!<\/w:rPr>).)*<w:highlight w:val="darkBlue"\/>(?:(?!<\/w:r>).)*navy on dark blue/);
+});

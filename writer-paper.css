@@ -1,6 +1,6 @@
 /* Glaze Writer's paper mode (writer-paper.js): the attempt's title bar, toolbar, pages, side panel and status bar as
-   glaze-plans/writer/mockups (C) draws them, in the Look's tokens. The page itself is paper: white, black text, the
-   format's own font and spacing (lib/writer-styles.js css(), in an adopted sheet). Motion as writer.css: transform and
+   glaze-plans/writer/mockups (C) draws them, in the Look's tokens. The page itself is paper: white, black text (dark on a
+   dark Look, below), the format's own font and spacing (lib/writer-styles.js css(), in an adopted sheet). Motion as writer.css: transform and
    opacity only, none while typing. */
 @font-face { font-family: "Times New Roman"; src: local("Times New Roman"), local("TimesNewRomanPSMT"); }
 @font-face { font-family: "Times New Roman"; src: url("lib/fonts/tinos-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
@@ -24,6 +24,23 @@
 @font-face { font-family: "Courier New"; src: url("lib/fonts/cousine-700-italic.woff2") format("woff2"); font-weight: 700; font-style: italic; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 :root { --fmt: #60a5fa; }
+/* The page's colours. On a dark Look the pages on screen are dark (Settings → Writer → Light page keeps them white): only
+   in .gp-zoom, so print's copy and the submit sheet's previews stay white with the paper's own colours. A run's colour
+   (--c) is lifted until it reads on the dark page (black becomes the page's ink, white stays white) and a highlight (--h)
+   is mixed into the page, so a band stays a band and dark highlighters stay dark; the marks themselves keep their values.
+   Colours only: nothing here changes a size, so pagination is the same in either. */
+:root { --sheet: #fff; --sheet-ink: #111; --sheet-line: #111; --sheet-guide: #c8cdd4; --sheet-link: #0563c1; --sheet-hit: #fde68a; --sheet-hit-cur: #fbbf24; }
+@media screen {
+  :root[data-dark]:not([data-light-page]) .gp-zoom { --sheet: #1e1e1e; --sheet-ink: #e6e6e6; --sheet-line: #555; --sheet-guide: #4a4a4a; --sheet-link: #8ab4f8;
+    --sheet-hit: color-mix(in srgb, #fbbf24 32%, transparent); --sheet-hit-cur: color-mix(in srgb, #fbbf24 52%, transparent); color-scheme: dark; }
+  :root[data-dark]:not([data-light-page]) .gp-zoom .gp-sheet { box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 6px 24px rgba(0,0,0,.5); }
+  :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: color-mix(in oklab, var(--c) 35%, var(--sheet-ink)) !important; }
+  @supports (color: oklch(from red l c h)) {
+    :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: oklch(from var(--c) max(l, 0.72, calc(0.93 - l * 0.4)) c h) !important; }
+  }
+  :root[data-dark]:not([data-light-page]) .gp-zoom [data-gz-highlight] { background-color: color-mix(in oklab, var(--h) 35%, var(--sheet)) !important; }
+  :root[data-dark]:not([data-light-page]) .gp-zoom .ProseMirror-gapcursor::after { border-top-color: var(--sheet-ink); }
+}
 /* Focus covers the page: the mockup's ground and opaque panels, whatever is behind. */
 :root:has(.gp-tbtn[aria-pressed="true"]) { --ground: var(--gz-surface-2); --panel: var(--gz-surface-paint, var(--gz-surface)); --top-faint: var(--gz-ink-faint); }
 .gp, .gp-hidden { display: none; }
@@ -75,27 +92,27 @@
 .gp-canvas.gp-drop { box-shadow: inset 0 0 0 2px var(--gz-accent); }
 .gp-size { position: relative; margin: 28px auto 60px; }
 .gp-zoom { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-.gp-sheet { position: absolute; left: 0; background: #fff; color: #111; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+.gp-sheet { position: absolute; left: 0; background: var(--sheet); color: var(--sheet-ink); box-shadow: 0 6px 24px rgba(0,0,0,.5); }
 :root:not([data-dark]) .gp-sheet { box-shadow: 0 6px 24px rgba(15,23,42,.18), 0 1px 3px rgba(15,23,42,.12); }
-.gp-hdr { position: absolute; text-align: right; color: #111; white-space: pre; pointer-events: none; }
-.gp-ftr { position: absolute; color: #111; white-space: pre; pointer-events: none; }
+.gp-hdr { position: absolute; text-align: right; color: var(--sheet-ink); white-space: pre; pointer-events: none; }
+.gp-ftr { position: absolute; color: var(--sheet-ink); white-space: pre; pointer-events: none; }
 .gp-hdr .gp-part, .gp-ftr .gp-part { white-space: pre; }
-.gp-notes { position: absolute; color: #111; pointer-events: none; }
+.gp-notes { position: absolute; color: var(--sheet-ink); pointer-events: none; }
 .gp-notes .gp-sep { position: relative; }
-.gp-notes .gp-rule { position: absolute; top: 50%; left: 0; width: 2in; height: 0; border-top: 0.75px solid #111; }
+.gp-notes .gp-rule { position: absolute; top: 50%; left: 0; width: 2in; height: 0; border-top: 0.75px solid var(--sheet-line); }
 .gp-notes p { margin: 0; }
 .gp-notes sup, .gp-flow sup.gz-footnote { font-size: .66em; line-height: 0; vertical-align: baseline; position: relative; top: -0.42em; }
 .gp-measure { visibility: hidden; top: 0; left: -10000px !important; }
 .gp-flow { position: absolute; }
 /* The caret writer-paper.js draws, the text's height (the browser's is hidden but while an input method composes); it
    blinks as the system's and holds still while it moves. */
-.gp-flow[data-composing] .ProseMirror { caret-color: #111; }
-.gp-cursor { position: absolute; left: 0; top: 0; z-index: 1; width: 2px; margin-left: -1px; background: #111; pointer-events: none; animation: gp-blink 1.06s step-end infinite; }
+.gp-flow[data-composing] .ProseMirror { caret-color: var(--sheet-ink); }
+.gp-cursor { position: absolute; left: 0; top: 0; z-index: 1; width: 2px; margin-left: -1px; background: var(--sheet-ink); pointer-events: none; animation: gp-blink 1.06s step-end infinite; }
 @keyframes gp-blink { 50% { opacity: 0; } }
 
 /* The paper's text (the format adds font, size, spacing and indents) */
 /* Spaces at a line's end hang into the margin, as Word lays them out (ProseMirror's break-spaces would count them). */
-.gp-flow .ProseMirror { min-height: 0; padding: 0; white-space: pre-wrap; tab-size: 0.5in; color: #111; caret-color: transparent; font-kerning: none; font-variant-ligatures: none; outline: none; }
+.gp-flow .ProseMirror { min-height: 0; padding: 0; white-space: pre-wrap; tab-size: 0.5in; color: var(--sheet-ink); caret-color: transparent; font-kerning: none; font-variant-ligatures: none; outline: none; }
 .gp-flow .ProseMirror a { color: #0b57d0; }
 .gp-flow .ProseMirror ::selection { background: rgba(37, 99, 235, .22); }
 .gp-flow .ProseMirror sup, .gp-flow .ProseMirror sub { line-height: 0; }
@@ -114,7 +131,7 @@
 .gp-flow .ProseMirror ol > li.ql-indent-1 { counter-increment: gp-l1; } .gp-flow .ProseMirror ol > li.ql-indent-1::before { content: counter(gp-l1, lower-alpha) "."; }
 .gp-flow .ProseMirror ol > li.ql-indent-2 { counter-increment: gp-l2; } .gp-flow .ProseMirror ol > li.ql-indent-2::before { content: counter(gp-l2, lower-roman) "."; }
 .gp-flow .ProseMirror table { border-collapse: collapse; width: 100%; }
-.gp-flow .ProseMirror td, .gp-flow .ProseMirror th { border: 1px solid #111; vertical-align: top; padding: 0 4px; }
+.gp-flow .ProseMirror td, .gp-flow .ProseMirror th { border: 1px solid var(--sheet-line); vertical-align: top; padding: 0 4px; }
 .gp-flow .ProseMirror td p, .gp-flow .ProseMirror th p { text-indent: 0; }
 .gp-flow .ProseMirror img { max-width: 100%; }
 /* A tab sized to a Word tab stop (lib/writer-paginate.js sizeTabs), with its leader */
@@ -310,7 +327,7 @@
 .gp-actions { align-items: center; margin-top: 2px; }
 .gp-actions .gp-sbtn:disabled { opacity: .45; }
 /* The header and footer, edited on the page */
-.gp-hf { position: absolute; z-index: 2; color: #111; white-space: pre-wrap; outline: 1.5px dashed var(--gz-accent); outline-offset: 4px; border-radius: 1px; caret-color: #111; min-height: 1em; }
+.gp-hf { position: absolute; z-index: 2; color: var(--sheet-ink); white-space: pre-wrap; outline: 1.5px dashed var(--gz-accent); outline-offset: 4px; border-radius: 1px; caret-color: var(--sheet-ink); min-height: 1em; }
 .gp-hf:focus { outline-style: dashed; }
 .gp-hf .gp-field { background: color-mix(in srgb, var(--gz-accent) 18%, transparent); border-radius: 2px; }
 .gp-sheet.gp-editing-header .gp-hdr, .gp-sheet.gp-editing-footer .gp-ftr { visibility: hidden; }

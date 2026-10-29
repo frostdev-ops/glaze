@@ -2,6 +2,21 @@
 // assignment's frame has (writer-paper.js), exported as a .docx, or brought back to an earlier version from its status
 // bar. ?paper=<key> opens one. Reads and writes only Writer's own storage (lib/writer-papers.js).
 (() => {
+  // The student's palette as the popup wears it (ui.js paint, GZ_ACTIVE_COLORS): dark by the theme, or by the system with
+  // auto light and dark, following both live. Until storage answers, the system's mode.
+  const theme = async () => {
+    const root = document.documentElement, scheme = matchMedia('(prefers-color-scheme: dark)');
+    root.toggleAttribute('data-dark', scheme.matches);
+    await GZ_WRITER_PAPER.need(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'ui.js']);
+    const paint = () => chrome.storage.sync.get(null).then((raw) => {
+      GZ_UI.paint(GZ_SANITIZE(raw));
+      root.toggleAttribute('data-dark', root.style.colorScheme === 'dark');
+    });
+    scheme.addEventListener('change', paint);
+    chrome.storage.onChanged.addListener((c, where) => { if (where === 'sync') paint(); });
+    await paint();
+  };
+  theme().catch((e) => console.error(e));
   const $ = (id) => document.getElementById(id);
   const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return navigator.language || 'en'; } })();
   const t = (k, v) => GZ_I18N.t(k, v, locale);

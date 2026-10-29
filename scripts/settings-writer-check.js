@@ -84,15 +84,16 @@ async function pass(scheme) {
 
     await check(`${scheme}-switches`, async () => {
       const keys = await page.$$eval('#panel-writer input[type="checkbox"][data-key]', (els) => els.map((e) => e.dataset.key));
-      assert.deepEqual(keys, ['enhance.writer', 'enhance.writerUploads', 'writer.ruler', 'writer.autocorrect.typos', 'writer.autocorrect.capitalI', 'writer.autocorrect.doubles', 'writer.autocorrect.smart',
+      assert.deepEqual(keys, ['enhance.writer', 'enhance.writerUploads', 'writer.ruler', 'writer.lightPage', 'writer.autocorrect.typos', 'writer.autocorrect.capitalI', 'writer.autocorrect.doubles', 'writer.autocorrect.smart',
         'writer.pasteAsk', 'writer.proofing', 'writer.compose.markdown', 'writer.compose.target', 'writer.compose.quote', 'writer.submit.rememberText']);
       for (const k of keys) {
         const box = page.locator(`#panel-writer [data-key="${k}"]`);
-        assert.equal(await box.isChecked(), true, `${k} starts on`);
+        const start = at(D.GZ_DEFAULTS, k);
+        assert.equal(await box.isChecked(), start, `${k} starts ${start ? 'on' : 'off'}`);
         await box.click();
-        await until(async () => at(await sync(), k) === false, `${k} saved off`);
+        await until(async () => at(await sync(), k) === !start, `${k} saved ${start ? 'off' : 'on'}`);
         await box.click();
-        await until(async () => at(await sync(), k) === true, `${k} saved on`);
+        await until(async () => at(await sync(), k) === start, `${k} saved ${start ? 'on' : 'off'}`);
       }
       const w = (await sync()).writer;
       assert.deepEqual(w, D.GZ_SANITIZE({ writer: w }).writer, 'what is stored is clean');

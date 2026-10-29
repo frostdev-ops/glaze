@@ -11,7 +11,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 // The names stream F's files read (writer-paper.js, writer-ruler.js, writer-paste.js) and the defaults the brief fixes.
 test('the writer key: every name, its default, and what it takes', () => {
   assert.deepEqual(D.GZ_DEFAULTS.writer, {
-    format: 'mla9', zoom: 'fit', ruler: true, pasteAsk: true, versions: 40, proofing: true, dialect: 'en-US',
+    format: 'mla9', zoom: 'fit', ruler: true, lightPage: false, pasteAsk: true, versions: 40, proofing: true, dialect: 'en-US',
     autocorrect: { typos: true, capitalI: true, doubles: true, smart: true },
     compose: { markdown: true, target: true, quote: true },
     submit: { rememberText: true, text: false },
@@ -31,7 +31,7 @@ test('the writer key sanitises part by part: junk back to its default, the rest 
   const raw = { writer: { format: 'apa7', zoom: 125, ruler: false, pasteAsk: 'no', versions: 33, proofing: false, dialect: 'en-NZ',
     autocorrect: { typos: false, smart: 1, extra: true }, compose: 'off', submit: { rememberText: false, text: true } } };
   const w = D.GZ_SANITIZE(raw).writer;
-  assert.deepEqual(w, { format: 'apa7', zoom: 125, ruler: false, pasteAsk: true, versions: 40, proofing: false, dialect: 'en-US',
+  assert.deepEqual(w, { format: 'apa7', zoom: 125, ruler: false, lightPage: false, pasteAsk: true, versions: 40, proofing: false, dialect: 'en-US',
     autocorrect: { typos: false, capitalI: true, doubles: true, smart: true }, compose: { markdown: true, target: true, quote: true },
     submit: { rememberText: false, text: true } });
   assert.deepEqual(D.GZ_SANITIZE(D.GZ_SANITIZE(raw)).writer, w);
