@@ -166,11 +166,12 @@ var GZ_MCP_CALLS = globalThis.GZ_MCP_CALLS || (() => {
       const code = isMod(t) && t.needs === 'tab';
       const { note: _n, account: _a, source, at: when, ageSeconds: _g, ...rest } = isObj(value) ? value : { result: value ?? null };
       const at = code ? now() : Number.isFinite(when) ? when : null;
-      const head = { note: NOTE, account, source: fromTab || code || (!isMod(t) && source === 'tab') ? 'tab' : 'cache', at, ageSeconds: at === null ? null : Math.max(0, Math.round((now() - at) / 1000)) };
+      const head = { note: NOTE, account, source: fromTab || code || (!isMod(t) && t.needs !== undefined && source === 'tab') ? 'tab' : 'cache', at, ageSeconds: at === null ? null : Math.max(0, Math.round((now() - at) / 1000)) };
       let json;
       try { json = JSON.stringify({ ...head, ...rest }); } catch { return ['error', fail('The tool answered with something that is not JSON.')]; }
       // Too long for the app's model: the harness's receipt (a success, as failures went above), under Glaze's fields.
       if (json.length > L().LIMIT.output) json = JSON.stringify({ ...head, omitted: JSON.parse(L().output({ ...head, ...rest, ok: true })) });
+      if (json.length > L().LIMIT.output) return ['error', fail('The tool response metadata is too large to send.')];
       return ['ok', { content: [{ type: 'text', text: json }], structuredContent: JSON.parse(json) }];
     };
 
