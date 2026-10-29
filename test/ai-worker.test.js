@@ -391,6 +391,31 @@ test("Documents' frame in a school's page asks as Writer's frame does, seated by
   assert.equal(await ask(w, onAttempt), 'hung up', 'the tab closed');
 });
 
+test('a pending replacement Documents claim revokes the previous AI seat before persistence completes', async () => {
+  const w = writerOn(); w.page = COURSE;
+  const docs = { ...frame(COURSE, { documentId: 'old-doc' }), url: `${EXT}/papers.html` };
+  const claim = async (s) => {
+    const pass = crypto.randomUUID();
+    await w.send({ type: 'glaze:papers', op: 'job', pass }, top(COURSE));
+    return w.send({ type: 'glaze:papers', op: 'claim', pass }, s);
+  };
+  assert.deepEqual(await claim(docs), { ok: true });
+  assert.equal(await ask(w, docs), 'allowed');
+  const set = w.context.chrome.storage.session.set;
+  let release;
+  w.context.chrome.storage.session.set = async (v) => { if (v['papersFrame:5']) await new Promise((r) => { release = r; }); return set(v); };
+  const next = { ...docs, documentId: 'next-doc' };
+  const pending = claim(next);
+  try {
+    await w.settle();
+    assert.equal(typeof release, 'function');
+    assert.equal(await ask(w, docs), 'hung up', 'the old document is retired as soon as its replacement claims');
+    assert.equal(await ask(w, next), 'hung up', 'the next document has not been granted anything yet');
+  } finally { release?.(); }
+  assert.deepEqual(await pending, { ok: true });
+  assert.equal(await ask(w, next), 'allowed');
+});
+
 test('on an assignment attempt the writer frame runs a completion; a cancel passes on any attempt', async () => {
   const sent = [];
   const w = writerOn(async (url) => {

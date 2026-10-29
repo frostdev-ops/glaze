@@ -112,6 +112,8 @@ test('the worker takes papers writes from an LMS tab\'s Documents frame only onc
   const pass = () => crypto.randomUUID();
 
   assert.deepEqual(await save(frame), refused, 'a papers.html frame that claimed nothing (a site framing it)');
+  assert.deepEqual(await papers('remove', [k], frame), refused, 'an unclaimed frame cannot remove');
+  assert.deepEqual(await papers('merge', [{ [`writerPaper:${k}`]: { key: k, doc: doc('Unclaimed.'), updated: 1 } }], frame), refused, 'an unclaimed frame cannot merge');
   // Passes: only for the top frame of a page of a site Glaze runs on.
   for (const [s, why] of [[{ ...lms, frameId: 3 }, 'a frame of the page'], [{ ...lms, url: 'https://evil.example/', origin: 'https://evil.example', tab: { id: 9, url: 'https://evil.example/' } }, 'a site Glaze does not run on'],
     [{ ...lms, id: 'other' }, 'another extension'], [{ ...lms, tab: undefined }, 'no tab'], [{ ...frame, frameId: 0 }, "Documents' own tab"]]) {
