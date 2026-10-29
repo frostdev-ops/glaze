@@ -248,7 +248,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (m.type === 'native') giveBack(box, true);
   };
   // A page-world reply is untrusted. Check the native DOM too, and keep Writer's copy on every failure.
-  const sameText = (ed, h) => new DOMParser().parseFromString(h, 'text/html').body.textContent === ed.textContent;
+  // An explicit body keeps fragment-leading whitespace and head-like elements in the text being verified.
+  const sameText = (ed, h) => new DOMParser().parseFromString('<body>' + h, 'text/html').body.textContent === ed.textContent;
   // h: what the frame shows; d: its Quill ops, or null when it came from Ultra's editor (which then already holds it).
   const sync = (box, h, d = h === box.latest ? box.delta : null) => {
     if (!sameBox(box)) { box.latest = h; box.delta = d; box.unsynced = true; return false; }

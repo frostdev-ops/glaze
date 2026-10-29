@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 esbuild_version=0.28.2
-file_sha256=33a712ac5433024e449508e93d0b36d5e86a75c3e897798ae95bd7ba0db26e83
+file_sha256=5132e25333a4ad3b68fcd366d10cad9d0c762d50437ac95feedb684687cd8ae4
 css_sha256=eecf411e60757e08f3c76ed6dc544235166dcb65039bad12fe66600dd9eb3d02
 packages="prosemirror-model@1.25.11 prosemirror-state@1.4.4 prosemirror-view@1.42.3 prosemirror-transform@1.12.1
 prosemirror-commands@1.7.2 prosemirror-keymap@1.2.3 prosemirror-history@1.5.1 prosemirror-inputrules@1.5.1
@@ -72,8 +72,9 @@ done > "$tmp/entry.js"
   echo "GZ_PM;"; } > "$tmp/pm.js"
 # Firefox Add-ons' linter refuses the innerHTML assignment prosemirror-view's readHTML uses to parse pasted HTML in a
 # detached document. A DOMParser document is as inert and keeps the <style> rules readHTML then applies. The browser's
-# DOMParser, by globalThis: inside the bundle the bare name is prosemirror-model's.
-perl -0pi -e 's/\n    elt\.innerHTML = maybeWrapTrusted\(html\);\n/\n    doc3 = new globalThis.DOMParser().parseFromString(maybeWrapTrusted(html), "text\/html");\n    elt = doc3.body;\n/ or die "vendor-prosemirror: readHTML has changed; review the DOMParser edit\n"' "$tmp/pm.js"
+# DOMParser, by globalThis: inside the bundle the bare name is prosemirror-model's. Starting in an explicit body keeps
+# fragment whitespace and head-like elements where the old body.innerHTML parser kept them.
+perl -0pi -e 's/\n    elt\.innerHTML = maybeWrapTrusted\(html\);\n/\n    doc3 = new globalThis.DOMParser().parseFromString(maybeWrapTrusted("<body>" + html), "text\/html");\n    elt = doc3.body;\n/ or die "vendor-prosemirror: readHTML has changed; review the DOMParser edit\n"' "$tmp/pm.js"
 
 css="prosemirror-view/style/prosemirror.css prosemirror-tables/style/tables.css prosemirror-gapcursor/style/gapcursor.css"
 { echo "/* ProseMirror's own stylesheets (MIT, lib/pm.LICENSE), for lib/pm.js. Built by scripts/vendor-prosemirror.sh. */"
