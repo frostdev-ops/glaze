@@ -6,7 +6,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
-## [4.0.0] — 2026-10-28
+## [4.0.0] — 2026-10-29
 
 ### Added
 
