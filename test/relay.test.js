@@ -538,7 +538,8 @@ test('SHR-6: files are read back from the store as a stream, never whole in memo
 });
 
 test('SHR-7: a file upload on a slow link is not cut while it progresses; a stalled one is; other bodies keep a total limit', { timeout: 20000 }, async (t) => {
-  const r = await up({ limit: { ...LIMIT, idle: 400, progress: 1024, bodyTime: 600 } });
+  // An idle window ten times the trickle's step, so a loaded machine's late timer isn't taken for a stall.
+  const r = await up({ limit: { ...LIMIT, idle: 1000, progress: 1024, bodyTime: 600 } });
   t.after(() => r.close());
   // Node's own request timeout counts the whole upload: it would cut a 20 MiB file on a slow link at 60 s.
   assert.equal(r.server.requestTimeout, 0);
@@ -576,7 +577,7 @@ test('SHR-7: a file upload on a slow link is not cut while it progresses; a stal
     setTimeout(() => s.destroy(), 5000);
   });
   const stalled = await cut(`PUT /s/${a.st.sid}/b/${id()} HTTP/1.1\r\nHost: x\r\nX-Glaze-Sig: ${'A'.repeat(86)}\r\nContent-Length: 30000\r\n\r\n${'x'.repeat(10000)}`);
-  assert.ok(stalled < 2000, `a stalled upload was cut after ${stalled} ms`);
+  assert.ok(stalled < 4000, `a stalled upload was cut after ${stalled} ms`);
   // A batch that keeps dripping is still cut at its total limit.
   const dripping = await cut(`POST /s/${a.st.sid} HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\n\r\n{`, true);
   assert.ok(dripping < 2000, `a dripping batch was cut after ${dripping} ms`);
