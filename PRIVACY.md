@@ -31,6 +31,12 @@ it propose a bar layout while it runs, without saving over yours. **Use my own**
 device-local `modNavLayout:<id>` until you allow them again. `glaze.nav.go` lets an enabled replacement navigation
 open an existing bar item, only from its Worker within a second of a click in its own navigation controls.
 
+With **documents**, a mod's Worker runs on Writer's Documents page and can read the titles, courses, formats, word counts
+and last-edited times of the documents listed there, add up to four items of its own to the toolbar and to each card's
+menu, and open or start a document right after a click on one of them. **documents.read** (which needs documents) adds
+a document's text and its exported .docx. Glaze treats both as personal data, as above: Worker only, no frame UI, and a
+separately granted network host can receive it.
+
 ## Expanded habitats and local pet learning
 
 The optional pet record stores habitat style, furniture placements, wandering/physics/learning switches, six 0–100 needs (mood, playfulness, energy, bond, curiosity and comfort), and a bounded local preference model. Twelve activities use twenty-six numeric inputs, online weights and confidence estimates, short/long preference estimates, aggregate time-of-day habits and action-transition counts. At most three recent action/context/timestamp records provide delayed feedback; they stop receiving credit after sixty seconds. Observations are limited to one per eight seconds across tabs. Older models migrate without discarding learned weights.

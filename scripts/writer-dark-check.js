@@ -59,6 +59,8 @@ const READ = () => {
     sheet: rgb(cs(sheet).backgroundColor), ink: rgb(cs(pm).color),
     black: rgb(cs(run('000000')).color), white: rgb(cs(run('FFFFFF')).color), red: rgb(cs(run('FF0000')).color), navy: rgb(cs(run('000080')).color),
     link: rgb(cs(pm.querySelector('a')).color), border: rgb(cs(td).borderTopColor), note: rgb(cs(zoom.querySelector('.gp-notes')).color),
+    // The caret drawn beside the pages (.gp-cursor, outside .gp-zoom): the sheet's ink there too (0bc2d482).
+    caret: rgb(cs(document.querySelector('.gp-size > .gp-cursor')).backgroundColor),
     bands,
     // The layout: pages, each page's top, the text's height (colours must not move a line).
     layout: { pages: zoom.querySelectorAll('.gp-sheet').length, tops: [...zoom.querySelectorAll('.gp-sheet')].map((s) => s.style.top), height: pm.offsetHeight },
@@ -135,6 +137,7 @@ const READ = () => {
           const darkPage = scheme === 'dark' && !lightPage;
           if (darkPage) {
             check(r.sheet.join() === '30,30,30', `${name}: the sheet is the dark page (${r.sheet})`);
+            check(r.caret.join() === '230,230,230' && r.caret.join() === r.ink.join(), `${name}: the drawn caret is the dark page's light ink (${r.caret})`);
             check(lum(r.black) > 0.5, `${name}: black-marked text is light (luminance ${lum(r.black).toFixed(3)})`);
             check(r.white.join() === '255,255,255', `${name}: white-marked text is unchanged (${r.white})`);
             for (const k of ['ink', 'red', 'navy', 'link', 'note']) check(ratio(r[k], r.sheet) >= 4.5, `${name}: ${k} reads on the page (${ratio(r[k], r.sheet).toFixed(2)}:1, ${r[k]})`);
@@ -144,6 +147,7 @@ const READ = () => {
             for (const b of r.bands) for (const k of ['plain', 'black', 'white']) check(ratio(b[k], b.bg) >= 4.5, `${name}: ${b.name} band, ${k} text ${ratio(b[k], b.bg).toFixed(2)}:1 (${b[k]} on ${b.bg})`);
           } else {
             check(r.sheet.join() === '255,255,255', `${name}: the sheet is white`);
+            check(r.caret.join() === '17,17,17', `${name}: the drawn caret is the white page's ink (${r.caret})`);
             check(r.black.join() === '0,0,0' && r.white.join() === '255,255,255' && r.red.join() === '255,0,0' && r.navy.join() === '0,0,128', `${name}: runs draw their own colours`);
             check(r.ink.join() === '17,17,17' && r.link.join() === '5,99,193' && r.border.join() === '17,17,17', `${name}: ink, link and borders as before (${r.ink} ${r.link} ${r.border})`);
             check(r.bands.every((b) => b.bg.join() === S.HIGHLIGHT[b.name].match(/\w\w/g).map((x) => parseInt(x, 16)).join()), `${name}: every highlight draws its own colour`);

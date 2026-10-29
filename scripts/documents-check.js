@@ -1,8 +1,10 @@
 // The Documents home (papers.html) in the real unpacked extension: the New band, the grid's lazy thumbnails and their
 // cost, the list view and its kept choice, search by title and by body text, the course filter, sort, rename (seen by an
 // open editor), Make a copy, Delete and Undo (versions kept), .docx drop and import and a refused .txt, the keyboard,
-// accessible names and the live region, opening a card in the same tab and coming back. Screenshots at 1280 and 640 px
-// in English and German. Synthetic records only; the browser reaches no network.
+// accessible names and the live region, opening a card in the same tab and coming back; the student's Look on the page
+// (ground, background and its motion, glass, fonts, corners, contrast over a busy photo, a live change) and a mod's items
+// and calls there. Screenshots at 1280 and 640 px in English and German, and look-*.png on four Looks. Synthetic records
+// only; the browser reaches no network (a Look's fonts are refused and counted apart, the photo is served here).
 // NODE_PATH=<playwright> nice -n 10 node scripts/documents-check.js [evidence directory]
 // DOCUMENTS_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-documents).
 const { chromium } = require('playwright');
@@ -12,7 +14,8 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-documents-check');
 const shots = process.env.DOCUMENTS_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-documents');
-const checks = [], errors = [], requests = [];
+const checks = [], errors = [], requests = [], fontRequests = [];
+const FONT_HOSTS = new Set(['fonts.googleapis.com', 'fonts.gstatic.com', 'cdn.jsdelivr.net']);
 let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
@@ -60,6 +63,7 @@ const records = () => {
 // What each home page records from its first script on: each thumbnail render's main-thread time and when it ended, every
 // storage.local get's key count, and when the first card appeared. lang: chrome.i18n's UI language for the page.
 const PROBE = ({ lang }) => {
+  if (location.pathname !== '/papers.html') return; // not the Look's backdrop nor the mods' sandboxed host
   globalThis.__gd = { renders: [], gets: [], firstCard: null, rowsPaint: null, indexRead: null, disconnects: 0 };
   const IO = globalThis.IntersectionObserver;
   globalThis.IntersectionObserver = class extends IO { disconnect() { __gd.disconnects++; sessionStorage.setItem('review-disconnects', String(__gd.disconnects)); return super.disconnect(); } };
@@ -91,7 +95,8 @@ const PROBE = ({ lang }) => {
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, locale: 'en-US', timezoneId: 'America/New_York',
       reducedMotion: 'reduce', acceptDownloads: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
-    await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:') return r.continue(); requests.push(r.request().url()); return r.abort(); });
+    // A Look's web fonts load from their CDNs (lib/fonts.js): refused here like everything else, and counted apart.
+    await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:') return r.continue(); (FONT_HOSTS.has(u.hostname) ? fontRequests : requests).push(r.request().url()); return r.abort(); });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
     const settings = G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true } });
@@ -209,7 +214,8 @@ const PROBE = ({ lang }) => {
     check(names.more === 'More' && names.popup === 'menu' && names.described && names.link && names.kindHidden === 'true' && names.listName === 'Documents' && names.live === 'polite', 'cards: a titled link, a More menu button described by its title, the kind icon hidden; the list is named Documents');
     check(names.tabbable === 1, `the cards are one Tab stop (${names.tabbable} tabbable)`);
     const darkContrast = await home.evaluate(() => {
-          const rgb = (s) => s.match(/[\d.]+/g).slice(0, 3).map(Number);
+          // Through a canvas: a color-mix() fill serialises as color(srgb …).
+          const g = new OffscreenCanvas(1, 1).getContext('2d'), rgb = (s) => { g.clearRect(0, 0, 1, 1); g.fillStyle = s; g.fillRect(0, 0, 1, 1); return [...g.getImageData(0, 0, 1, 1).data.slice(0, 3)]; };
           const lum = (c) => c.map((v) => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [.2126, .7152, .0722][i], 0);
           const bg = lum(rgb(getComputedStyle(document.querySelector('.gd-card')).backgroundColor));
           return ['.gd-title', '.gd-meta'].map((sel) => { const fg = lum(rgb(getComputedStyle(document.querySelector(sel)).color)); return (Math.max(bg, fg) + .05) / (Math.min(bg, fg) + .05); });
@@ -625,7 +631,8 @@ const PROBE = ({ lang }) => {
         await pg.setViewportSize({ width, height: 900 }); await pg.evaluate(() => scrollTo(0, 0));
         await shot(pg, `grid-${width}-${lang}-light.png`);
         const contrast = await pg.evaluate(() => {
-          const rgb = (s) => s.match(/[\d.]+/g).slice(0, 3).map(Number);
+          // Through a canvas: a color-mix() fill serialises as color(srgb …).
+          const g = new OffscreenCanvas(1, 1).getContext('2d'), rgb = (s) => { g.clearRect(0, 0, 1, 1); g.fillStyle = s; g.fillRect(0, 0, 1, 1); return [...g.getImageData(0, 0, 1, 1).data.slice(0, 3)]; };
           const lum = (c) => c.map((v) => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [.2126, .7152, .0722][i], 0);
           const bg = lum(rgb(getComputedStyle(document.querySelector('.gd-card')).backgroundColor));
           return ['.gd-title', '.gd-meta'].map((sel) => { const fg = lum(rgb(getComputedStyle(document.querySelector(sel)).color)); return (Math.max(bg, fg) + .05) / (Math.min(bg, fg) + .05); });
@@ -635,6 +642,201 @@ const PROBE = ({ lang }) => {
       }
       await pg.close();
     }
+
+    // ---- the page wears the student's Look, as Settings does: ground, background, glass, fonts, corners, motion
+    // Four Looks: Frost (the default palette, a solid ground), Library (light), Frostdev (a scene drawn by the shader painter)
+    // and a busy photo (pure black and white blocks and lines at a low dim). The photo is served here, from no network.
+    const photo = await worker.evaluate(async () => {
+      const c = new OffscreenCanvas(1600, 1000), g = c.getContext('2d'), cols = ['#000000', '#ffffff', '#ff2d55', '#ffd60a', '#0a84ff', '#30d158', '#ffffff', '#000000', '#bf5af2'];
+      for (let y = 0; y < 1000; y += 25) for (let x = 0; x < 1600; x += 40) { g.fillStyle = cols[(x / 40 + (y / 25) * 3) % cols.length]; g.fillRect(x, y, 40, 25); }
+      for (let i = 0; i < 400; i++) { g.strokeStyle = cols[i % cols.length]; g.lineWidth = 2 + (i % 5); g.beginPath(); g.arc((i * 97) % 1600, (i * 61) % 1000, 10 + ((i * 13) % 120), 0, 7); g.stroke(); }
+      const bytes = new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer());
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      return btoa(bin);
+    });
+    await context.route('https://photos.test/**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(photo, 'base64') }));
+    const C = require(path.join(root, 'lib/color.js')), F = require(path.join(root, 'lib/fonts.js'));
+    const lookOf = (name, over = {}) => { const L = G.GZ_LOOKS.find((x) => x.name === name); return G.GZ_SANITIZE({ ...settings, ...G.GZ_LOOK_APPLY(settings, L), ...over }); };
+    const LOOKS = {
+      frost: settings,
+      light: lookOf('Library'),
+      scene: lookOf('Frostdev'),
+      photo: lookOf('Lagoon', { bg: { ...G.GZ_DEFAULTS.bg, kind: 'image', image: 'https://photos.test/busy.png', dim: 20 } }),
+    };
+    const wearLook = (s) => worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, s);
+    const rgbOf = (hex) => `rgb(${hex.match(/\w\w/g).map((x) => parseInt(x, 16)).join(', ')})`;
+    // What the page wears: its ground, the backdrop and what the backdrop's painter has, the glass, fonts and corners.
+    const worn = (pg) => pg.evaluate(() => {
+      const html = document.documentElement, b = document.getElementById('gd-backdrop'), inner = b?.contentDocument?.documentElement;
+      const card = getComputedStyle(document.querySelector('.gd-card')), top = getComputedStyle(document.querySelector('.gd-top'));
+      // A colour as sRGB bytes, through a canvas (color-mix() serialises as color(srgb …)).
+      const g = new OffscreenCanvas(1, 1).getContext('2d'), rgb = (css) => { g.clearRect(0, 0, 1, 1); g.fillStyle = css; g.fillRect(0, 0, 1, 1); return `rgb(${[...g.getImageData(0, 0, 1, 1).data.slice(0, 3)].join(', ')})`; };
+      return { ground: rgb(getComputedStyle(html).backgroundColor), body: getComputedStyle(document.body).backgroundImage + ' ' + getComputedStyle(document.body).backgroundColor, bg: html.getAttribute('data-gz-bg'),
+        dark: html.hasAttribute('data-dark'), motion: html.dataset.motion, backdrop: !!b, shown: !!b?.hasAttribute('data-shown'), innerBg: inner?.getAttribute('data-gz-bg') ?? null,
+        innerMotion: inner?.getAttribute('data-gz-motion') ?? null, scene: !!inner?.querySelector('#gz-scene'), cardBlur: card.backdropFilter, topBlur: top.backdropFilter,
+        cardRadius: card.borderTopLeftRadius, head: getComputedStyle(document.querySelector('h1')).fontFamily, body2: getComputedStyle(document.body).fontFamily };
+    });
+    // The worst contrast between an element's text colour and every pixel under its text: the text made transparent, its box
+    // photographed, each pixel's luminance against the ink's.
+    const contrastOn = async (pg, sel) => {
+      const box = await pg.evaluate((sel) => {
+        const el = document.querySelector(sel), r = el.getBoundingClientRect(), color = getComputedStyle(el).color;
+        el.style.setProperty('color', 'transparent', 'important');
+        return { x: r.x, y: r.y, width: Math.max(1, r.width), height: Math.max(1, r.height), color };
+      }, sel);
+      await pause(120);
+      const png = await pg.screenshot({ clip: { x: box.x, y: box.y, width: box.width, height: box.height } });
+      await pg.evaluate((sel) => document.querySelector(sel).style.removeProperty('color'), sel);
+      return pg.evaluate(async ({ b64, color }) => {
+        const bm = await createImageBitmap(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: 'image/png' }));
+        const c = new OffscreenCanvas(bm.width, bm.height), g = c.getContext('2d');
+        g.drawImage(bm, 0, 0);
+        const d = g.getImageData(0, 0, bm.width, bm.height).data;
+        const lum = (r, gr, b) => [r, gr, b].map((v) => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [.2126, .7152, .0722][i], 0);
+        const one = new OffscreenCanvas(1, 1).getContext('2d');
+        one.fillStyle = color; one.fillRect(0, 0, 1, 1);
+        const L = lum(...one.getImageData(0, 0, 1, 1).data.slice(0, 3));
+        let min = Infinity;
+        for (let i = 0; i < d.length; i += 4) { const l = lum(d[i], d[i + 1], d[i + 2]); min = Math.min(min, (Math.max(l, L) + .05) / (Math.min(l, L) + .05)); }
+        return min;
+      }, { b64: png.toString('base64'), color: box.color });
+    };
+    // A strip of the page's margin, beside the panels: only the background shows there.
+    const margin = (pg) => pg.screenshot({ clip: { x: 2, y: 120, width: 18, height: 300 } });
+    const lookPage = async (name) => {
+      await wearLook(LOOKS[name]);
+      const pg = await openHome('en', `look ${name}`);
+      await until(() => pg.evaluate(() => !!document.querySelector('.gd-pic .gt-thumb')), `${name} thumbnails`);
+      return pg;
+    };
+    for (const name of ['frost', 'light', 'scene', 'photo']) {
+      const s = LOOKS[name], art = s.bg.kind !== 'solid', pg = await lookPage(name);
+      const colors = G.GZ_ACTIVE_COLORS(s, false);
+      if (art) await until(() => pg.evaluate(() => document.getElementById('gd-backdrop')?.hasAttribute('data-shown')), `${name} backdrop shown`);
+      // A scene's canvas follows its module's import, after the frame already wears the Look's ground.
+      if (s.bg.kind === 'scene') await until(() => pg.evaluate(() => !!document.getElementById('gd-backdrop').contentDocument.querySelector('#gz-scene')), `${name} scene canvas`, 10000).catch(() => {});
+      const w = await worn(pg);
+      fs.writeFileSync(path.join(out, `look-${name}.json`), JSON.stringify(w, null, 1));
+      check(w.ground === rgbOf(colors['--gz-surface-2']) && /none rgba\(0, 0, 0, 0\)/.test(w.body), `${name}: the page's ground is the Look's (${w.ground}, the body clear)`);
+      check(w.dark === (C.brightness(C.parse(colors['--gz-surface'])) < .5), `${name}: data-dark follows the Look (${w.dark})`);
+      check(w.cardRadius === `${s.look.radius}px`, `${name}: cards take the Look's corners (${w.cardRadius})`);
+      const bare = (f) => f.replace(/["']/g, '').replace(/\s*,\s*/g, ',');
+      check(bare(w.head) === bare(F.stack(s.look.head === 'auto' ? s.look.font : s.look.head)) && bare(w.body2) === bare(F.stack(s.look.font)), `${name}: the Look's fonts, its heading font on the headings (${w.head})`);
+      if (art) {
+        check(w.backdrop && w.shown && w.innerBg === w.bg && w.bg === (s.bg.kind === 'image' ? 'image' : s.bg.kind), `${name}: the Look's background is drawn behind the page by Settings' painter (${w.innerBg})`);
+        check(/blur\(/.test(w.cardBlur) && /blur\(/.test(w.topBlur), `${name}: the panels and cards are glass over it (${w.cardBlur})`);
+        // Reduced motion (this browser's, followed by default): the painter's motion is off and the background holds still.
+        const a = await margin(pg); await pause(700); const b = await margin(pg);
+        check(w.motion === 'off' && w.innerMotion === 'off' && a.equals(b), `${name}: under reduced motion the background is a still frame (motion ${w.motion}/${w.innerMotion})`);
+      } else check(!w.backdrop && w.cardBlur === 'none', `${name}: a solid Look draws no background frame and no blur (${w.cardBlur})`);
+      if (name === 'scene') {
+        check(w.scene || errors.some((e) => /WebGL/i.test(e)), `scene: the shader's canvas is in the backdrop (${w.scene})`);
+        if (w.scene) {
+          await pg.emulateMedia({ reducedMotion: 'no-preference' });
+          await until(() => pg.evaluate(() => document.getElementById('gd-backdrop').contentDocument.documentElement.getAttribute('data-gz-motion') === 'expressive' && document.documentElement.dataset.motion === 'expressive'), 'scene motion on');
+          const a = await margin(pg); await pause(900); const b = await margin(pg);
+          check(!a.equals(b), 'scene: with motion on the background moves');
+          await pg.emulateMedia({ reducedMotion: 'reduce' });
+        }
+      }
+      for (const sel of ['.gd-card .gd-title', '.gd-card .gd-meta', 'h1', '.gd-tile-name']) {
+        const k = await contrastOn(pg, sel);
+        check(k >= 4.5, `${name}: ${sel} reads at ${k.toFixed(2)}:1 or better against every pixel under it`);
+      }
+      for (const width of [1280, 640]) {
+        await pg.setViewportSize({ width, height: 900 }); await pg.evaluate(() => scrollTo(0, 0));
+        const rows = await pg.evaluate(() => new Set([...document.querySelectorAll('.gd-tile')].map((t) => t.offsetTop)).size);
+        check(rows === 1, `${name} ${width}: the four New tiles keep one row inside the panel (${rows})`);
+        await shot(pg, `look-${name}-${width}.png`);
+      }
+      await pg.close();
+    }
+    // A Look changed in Settings or the popup repaints an open page: solid Frost to the Frostdev scene and back.
+    await wearLook(LOOKS.frost);
+    const live = await openHome('en', 'look live');
+    check((await worn(live)).backdrop === false, 'live: Frost starts with no background frame');
+    await worker.evaluate(async (s) => chrome.storage.sync.set(s), LOOKS.scene);
+    await until(() => live.evaluate(() => document.documentElement.getAttribute('data-gz-bg') === 'scene' && document.getElementById('gd-backdrop')?.hasAttribute('data-shown')), 'live repaint to scene');
+    const w2 = await worn(live);
+    check(w2.cardRadius === '16px' && /blur\(/.test(w2.cardBlur) && /Manrope/i.test(w2.head), `live: a Look change in storage repaints the open page (${w2.cardRadius}, ${w2.head})`);
+    await worker.evaluate(async (s) => chrome.storage.sync.set(s), LOOKS.light);
+    await until(() => live.evaluate(() => !document.documentElement.hasAttribute('data-dark') && !document.getElementById('gd-backdrop')), 'live repaint to light');
+    check(true, 'live: back to a solid light Look, the background frame goes');
+    await live.close();
+    await wearLook(settings);
+
+    // ---- a mod on the Documents page: its items, its calls and their limits (lib/modbroker.js, features/mods.js)
+    const MOD = 'docsmodaaaaaaaaa';
+    const hooksJs = `
+      const save = (k, v) => glaze.storage.set(k, v);
+      const page = new Promise((ok) => glaze.on('page', ok)); // told once, as the mod starts
+      const tryCall = async (k, f) => { try { await save(k, { ok: true, value: await f() }); } catch (e) { await save(k, { ok: false, error: e.message }); } };
+      glaze.on('documents.action', async (d) => {
+        await save('action', d);
+        if (d.slot === 'documents.card') {
+          await tryCall('read', () => glaze.documents.read(d.doc.key));
+          await tryCall('export', async () => { const f = await glaze.documents.export(d.doc.key); return { name: f.name, mime: f.mime, size: f.bytes.length, zip: f.bytes[0] === 0x50 && f.bytes[1] === 0x4b }; });
+        } else {
+          const list = await glaze.documents.list();
+          await tryCall('open', () => glaze.documents.open(list[0].key));
+        }
+      });
+      (async () => {
+        await glaze.documents.add('documents.toolbar', { id: 'newest', label: 'Open newest' });
+        await glaze.documents.add('documents.card', { id: 'peek', label: 'Peek' });
+        await tryCall('page', () => page);
+        await tryCall('list', () => glaze.documents.list());
+        await tryCall('early', () => glaze.documents.open('doc:00000000-0000-0000-0000-000000000000'));
+        await tryCall('todo', () => glaze.todo());
+        await tryCall('style', () => glaze.documents.style({ radius: 24, column: 300 }));
+        await save('ready', true);
+      })();`;
+    const modRec = { id: MOD, enabled: true, hash: 'h', key: 'k', version: '1.0.0', source: 'file', installedAt: 1, dev: false,
+      manifest: { glaze: 1, name: 'Doc Tools', version: '1.0.0', permissions: [{ id: 'documents', why: 'w' }, { id: 'documents.read', why: 'w' }], hooks: 'hooks.js' },
+      grants: { documents: true, 'documents.read': true }, files: { 'hooks.js': Buffer.from(hooksJs).toString('base64') } };
+    await worker.evaluate(async (data) => chrome.storage.local.set(data), { mods: [MOD], [`mod:${MOD}`]: modRec });
+    const modData = () => local(`modData:${MOD}`);
+    const mp = await openHome('en', 'mod');
+    await until(async () => (await modData())?.ready, 'mod ready', 20000);
+    const md = await modData();
+    fs.writeFileSync(path.join(out, 'mod-data.json'), JSON.stringify({ ...md, list: { ok: md.list.ok, n: md.list.value?.length, first: md.list.value?.[0] } }, null, 1));
+    check(md.page?.value?.site === 'documents' && md.page.value.kind === 'documents', `mod: its page event says the Documents page (${JSON.stringify(md.page?.value)})`);
+    const tool = await mp.evaluate(() => [...document.querySelectorAll('.gd-extra button')].map((b) => ({ text: b.textContent, title: b.title })));
+    check(tool.length === 1 && tool[0].text === 'Open newest' && tool[0].title === 'Doc Tools', `mod: its documents.toolbar item renders in the toolbar with its name (${JSON.stringify(tool)})`);
+    const shownKeys = await mp.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    const PUBLIC = 'course,format,key,kind,title,updated,words';
+    check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && [...shownKeys].sort().join() === md.list.value.map((d) => d.key).sort().join(),
+      `mod: documents.list() gives every listed document's public fields only (${md.list.value?.length} × ${Object.keys(md.list.value?.[0] || {}).sort().join(' ')})`);
+    check(!JSON.stringify(md.list.value).includes('Beloved 1. A paragraph') && md.list.value.find((d) => d.key === ESSAY)?.course === 'ENGL 2110', 'mod: the list carries no document text, and an assignment paper\'s course');
+    check(md.early.ok === false && md.early.error === 'permission', `mod: documents.open without a click on its own item is refused (${md.early.error})`);
+    check(md.todo.ok === false && md.todo.error === 'call', `mod: a school page's call is refused on the Documents page (${md.todo.error})`);
+    check(md.style.ok && await mp.evaluate(() => getComputedStyle(document.querySelector('.gd-card')).borderTopLeftRadius === '24px' && getComputedStyle(document.documentElement).getPropertyValue('--gd-column').trim() === '300px'), 'mod: documents.style sets the page\'s --gd-* hooks (24px corners, 300px columns)');
+    await shot(mp, 'look-mod-1280.png');
+    await mp.click(`${card(NOTES)} .gd-more`);
+    const menuItems = await mp.evaluate(() => [...document.querySelectorAll('.gd-menu [role="menuitem"], .gd-menu [role="separator"]')].map((b) => b.getAttribute('role') === 'separator' ? '—' : b.textContent));
+    check(menuItems.join('|') === 'Rename|Make a copy|Export .docx|Delete|—|Peek', `mod: its documents.card item follows Glaze's own in a card's ⋯ menu (${menuItems.join(' | ')})`);
+    await shot(mp, 'look-mod-menu-1280.png');
+    await mp.click('.gd-menu .gd-added');
+    await until(async () => (await modData())?.export, 'mod card action');
+    const act = await modData();
+    check(act.action.slot === 'documents.card' && act.action.id === 'peek' && act.action.doc.key === NOTES && Object.keys(act.action.doc).sort().join() === PUBLIC, `mod: a card item's click tells the mod that card's summary (${JSON.stringify(act.action.doc)})`);
+    fs.writeFileSync(path.join(out, 'mod-action.json'), JSON.stringify({ ...act, list: undefined }, null, 1));
+    const notesText = require(path.join(root, 'lib/doc-home.js')).flat((await local(`writerPaper:${NOTES}`)).doc);
+    check(act.read.ok && act.read.value.key === NOTES && act.read.value.title === act.action.doc.title && act.read.value.text === notesText && notesText.includes('the house on Bluestone Road'), 'mod: documents.read (documents.read) gives the document\'s text, as stored');
+    check(act.export.ok && /\.docx$/.test(act.export.value.name) && act.export.value.mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' && act.export.value.size > 1000 && act.export.value.zip, `mod: documents.export gives the .docx through its kind (${JSON.stringify(act.export.value)})`);
+    await mp.click('.gd-extra button');
+    await until(() => mp.evaluate(() => /[?&]paper=/.test(location.search)), 'mod open after a click');
+    const opened = new URLSearchParams(await mp.evaluate(() => location.search)).get('paper');
+    check(opened === md.list.value[0].key, `mod: documents.open right after a click on its own item opens that document (${opened})`);
+    await mp.close();
+    // Without the documents grant the mod doesn't run here.
+    await worker.evaluate(async ({ id, rec }) => chrome.storage.local.set({ [`mod:${id}`]: { ...rec, grants: { documents: false, 'documents.read': true } }, [`modData:${id}`]: {} }), { id: MOD, rec: modRec });
+    const off = await openHome('en', 'mod off');
+    await pause(1500);
+    check(await off.evaluate(() => !document.querySelector('.gd-extra button')) && !(await modData())?.ready, 'mod: without the documents grant it does not run on the Documents page');
+    await off.close();
+    await worker.evaluate(async (id) => chrome.storage.local.remove(['mods', `mod:${id}`, `modData:${id}`, `modPrivate:${id}`]), MOD);
 
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);

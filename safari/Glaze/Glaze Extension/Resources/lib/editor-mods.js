@@ -10,7 +10,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
   const API = () => (typeof GZ_MODAPI !== 'undefined' ? GZ_MODAPI : require('./modapi.js'));
   const XP = () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('./lookparts.js'));
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
-  const DATA = ['courses', 'todo', 'grades', 'nav.read'];
+  const DATA = ['courses', 'todo', 'grades', 'nav.read', 'documents', 'documents.read'];
 
   // ---- what a mod is and asks for, in Glaze's words ----------------------------------------------------------------
   // Each permission's plain description; the author's reason follows it, quoted. A widget with no code (plain) is drawn by
@@ -24,6 +24,8 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
               : id === 'nav.read' ? t('Navigation — reads Glaze’s navigation bar: its items, course names and unread counts, and when you use it.')
               : id === 'nav.items' ? t('Navigation items — adds up to eight items of its own to Glaze’s navigation bar, linking only to pages of your school’s site.')
               : id === 'nav.layout' ? t('Navigation layout — can arrange Glaze’s navigation bar while it runs. You can always use your own.')
+              : id === 'documents' ? t('Documents — reads the titles, courses and word counts of your documents, opens them and adds items to the Documents page.')
+              : id === 'documents.read' ? t('Document text — reads what your documents say and exports them as .docx files.')
               : id.startsWith('media:') ? t('Its background loads from {host}: that site can see your address and when you use it.', { host: id.slice(6) })
                 : id === 'bgfile' ? t('Its background is a video or animation file that comes with it, checked by Glaze.')
                 : id === 'code' ? t('Runs its author’s code — Glaze doesn’t draw it itself.')
@@ -41,7 +43,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
   const warnings = (view, { t, and = (a) => a.join(', '), signed, source, runs }) => {
     const ids = (view.permissions || []).map((p) => p.id), out = [];
     const data = DATA.filter((d) => ids.includes(d)), hosts = ids.filter((p) => p.startsWith('network:')).map((p) => p.slice(8));
-    const word = { grades: t('grades'), courses: t('courses'), todo: t('to-dos'), 'nav.read': t('navigation') };
+    const word = { grades: t('grades'), courses: t('courses'), todo: t('to-dos'), 'nav.read': t('navigation'), documents: t('documents'), 'documents.read': t('document text') };
     if (data.length && hosts.length) out.push({ kind: 'data', text: t('This mod could send your {data} to {hosts}.', { data: and(data.map((d) => word[d])), hosts: and(hosts) }) });
     if (B().caps(view).includes('frame')) out.push({ kind: 'frame', text: t('It has a page of its own, so it can contact other sites: they can see your address and when you use it.') });
     if (hasCode(view)) out.push({ kind: 'chrome', text: runs ? t('Its code runs only in Chrome.') : t('Needs Chrome: its code won’t run in this browser. Its Look parts and settings still work.') });
