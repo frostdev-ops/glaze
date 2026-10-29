@@ -62,8 +62,7 @@ const records = () => {
 const PROBE = ({ lang }) => {
   globalThis.__gd = { renders: [], gets: [], firstCard: null, rowsPaint: null, indexRead: null, disconnects: 0 };
   const IO = globalThis.IntersectionObserver;
-  globalThis.IntersectionObserver = class extends IO { disconnect() { __gd.disconnects++; return super.disconnect(); } };
-  addEventListener('pagehide', () => { queueMicrotask(() => sessionStorage.setItem('review-disconnects', String(__gd.disconnects))); });
+  globalThis.IntersectionObserver = class extends IO { disconnect() { __gd.disconnects++; sessionStorage.setItem('review-disconnects', String(__gd.disconnects)); return super.disconnect(); } };
   if (lang) { try { chrome.i18n.getUILanguage = () => lang; } catch {} }
   let thumb;
   Object.defineProperty(globalThis, 'GZ_WRITER_THUMB', { configurable: true, get: () => thumb, set: (v) => {
@@ -356,6 +355,10 @@ const PROBE = ({ lang }) => {
     await home.fill('.gd-rename', '<img src=x onerror=alert(1)>'); await home.keyboard.press('Enter');
     await until(async () => (await local(`writerPaper:${copyKey}`))?.title === '<img src=x onerror=alert(1)>', 'literal title saved');
     check(await home.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"] .gd-title`).textContent === '<img src=x onerror=alert(1)>' && !document.querySelector(`.gd-card[data-key="${k}"] .gd-title img`), copyKey), 'HTML in a title stays literal text');
+
+    await home.focus(`${card(copyKey)} .gd-title`); await home.keyboard.press('F2');
+    await home.fill('.gd-rename', 'Copy of Reading notes, revised'); await home.keyboard.press('Enter');
+    await until(async () => (await local(`writerPaper:${copyKey}`))?.title === 'Copy of Reading notes, revised', 'copy name back');
 
     // ---- Delete and Undo; the Delete key and Ctrl+Z
     const versionsBefore = (await local(`writerVersions:${NOTES}`)).map((v) => v.id);
