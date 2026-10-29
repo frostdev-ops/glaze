@@ -682,7 +682,7 @@ const HARNESS = `(() => {
       await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact' && document.querySelector('.gw-bar .gp-full').getAttribute('aria-checked') === 'false'), `${key} turns Full writer off`);
       check(true, `${key} operates the Full writer switch in both views`);
     }
-    await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.parse(GZ_WRITER_SCHEMA.paper, '<p>I definately agree with this statement.</p>').content)); v.focus(); });
+    await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.parse(GZ_WRITER_SCHEMA.paper, '<p>Morrison is less interested in nostalgea than in what the town chooses to forget.</p>').content)); v.focus(); });
     await until(() => fr.evaluate(() => GZ_WRITER_ISSUES.list().some((i) => i.source === 'harper') && !!document.querySelector('#gw .gz-iss')), 'Harper in compact', 30000);
     check(true, 'Harper draws proofing underlines in the compact paper');
     // Kept across a reload; and Settings → Writer → Full writer switches an open assignment live, both ways.
