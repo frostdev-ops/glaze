@@ -6,7 +6,9 @@ const https = require('node:https'), http = require('node:http'), dgram = requir
 const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
 const assert = require('node:assert/strict');
-const ext = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('./check-env.js');
+const HOSTS = ['https://127.0.0.1/*', 'https://trusted.test/*', 'https://rebind.test/*'];
+const ext = env.staged(path.resolve(process.env.EXT || path.join(__dirname, '..')), HOSTS);
 const chrome = require('./check-env.js').chromePath() || chromium.executablePath();
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
@@ -107,6 +109,7 @@ async function battery(secret, mode, sink, plain, stun) {
     const stunPort = udp.address().port;
     lms = https.createServer(tls, (req, res) => {
       if (req.url.startsWith('/page-observation')) { record({ channel: 'page-message', path: req.url }); res.end('ok'); return; }
+      if (/\/users\/me(?:\?|$)/.test(req.url)) { res.setHeader('content-type', 'application/json'); res.end('{"id":"_900_1"}'); return; }
       if (req.url.startsWith('/api/')) { res.setHeader('content-type', 'application/json'); res.end('[]'); return; }
       const strict = req.url.includes('strict');
       if (strict) res.setHeader('content-security-policy', "default-src 'self'; script-src 'nonce-fixture'; frame-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'");
@@ -129,6 +132,7 @@ async function battery(secret, mode, sink, plain, stun) {
       '--renderer-process-limit=8', '--disable-webgl', '--log-net-log=' + path.join(tmp, 'netlog.json'),
     ] });
     deadline = setTimeout(interrupt, 120000);
+    env.noFirstRun(context);
     context.setDefaultTimeout(10000);
     const logs = [];
     const tlsFailures = [];
@@ -136,7 +140,7 @@ async function battery(secret, mode, sink, plain, stun) {
     context.on('console', (m) => { if (logs.length < 100) logs.push(m.type() + ': ' + m.text().slice(0, 500)); });
     context.on('page', (p) => p.on('pageerror', (e) => logs.push('pageerror: ' + e.message)));
     const sw = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
-    assert.equal(await sw.evaluate(() => chrome.permissions.contains({ origins: ['https://127.0.0.1/*'] })), true, 'the fixture holds its loopback LMS host before running mods');
+    assert.equal(await sw.evaluate((origins) => chrome.permissions.contains({ origins }), HOSTS), true, 'the fixture holds its loopback LMS and broker control hosts before running mods');
     const state = (page) => sw.evaluate(async (url) => {
       const [tab] = await chrome.tabs.query({ url });
       const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => globalThis.GZ_MODS?.stats() || null });
@@ -149,13 +153,16 @@ async function battery(secret, mode, sink, plain, stun) {
     const SECRET = 'GLAZE_SECRET_GPA_397_SID_428171', FRAME = 'FRAME_PROBE_ONLY';
     const recordMod = (id, data, active = true) => ({ id, enabled: active, hash: 'fixture', key: 'fixture-key', grants: data ? { grades: true } : {}, manifest: { name: 'Local fixture', permissions: data ? [{ id: 'grades', why: 'test' }] : [], hooks: 'hooks.js', ui: data ? {} : { tiles: [{ id: 'fixture', file: 'ui.html' }] } }, files: { 'hooks.js': b64('void 0'), 'ui.html': b64('<!doctype html><script src="ui.js"></script>'), 'ui.js': b64('void 0') } });
     const install = async (mods) => sw.evaluate(async ({ mods, origin, secret }) => {
-      await chrome.storage.local.clear();
-      await chrome.storage.sync.set({ enabled: true, enhance: {} });
+      // Keep the host approval between cases. Clearing it briefly unregisters Ultra; a readiness poll could see the
+      // old registration just before that queued unregister and load the next page in the gap.
+      await chrome.storage.local.remove(Object.keys(await chrome.storage.local.get(null)).filter((k) => k !== 'ultra'));
+      // This fixture measures the mod hosts; the ordinary navbar intentionally uses an open shadow root.
+      await chrome.storage.sync.set({ enabled: true, enhance: {}, navbar: { on: false } });
       // A frame UI runs in its slot: each frame mod's tile floats over every page (features/widgets.js, features/mods.js).
       const floating = mods.filter((m) => m.manifest.ui.tiles?.length).map((m) => ({ id: `m${m.id.slice(0, 14)}0`, on: true }));
-      await chrome.storage.local.set({ ultra: [origin], mods: mods.map((m) => m.id), ...Object.fromEntries(mods.map((m) => [`mod:${m.id}`, m])), [`insights:${origin}/fixture`]: { at: 1, courses: [{ id: '1', name: secret, trend: [[1, 97]] }] },
+      await chrome.storage.local.set({ ultra: [origin], mods: mods.map((m) => m.id), ...Object.fromEntries(mods.map((m) => [`mod:${m.id}`, m])), [`insights:${origin}/_900_1`]: { at: 1, courses: [{ id: '1', name: secret, trend: [[1, 97]] }] },
         widgetLayout: { boards: { pages: floating } } });
-    }, { mods, origin, secret: SECRET });
+    }, { mods, origin, secret: SECRET }).then(() => env.ultraReady(sw));
     const memory = async () => {
       const cdp = await context.browser().newBrowserCDPSession();
       const { processInfo } = await cdp.send('SystemInfo.getProcessInfo'); await cdp.detach();
@@ -285,6 +292,7 @@ async function battery(secret, mode, sink, plain, stun) {
     results.baseline = baseline;
     console.log(JSON.stringify(results, null, 2));
     if (!results.brokerRebind.blocked || !results.infiniteFrame.recovered) process.exitCode = 1;
+    else console.log(`mods-sandbox-check: ${results.channels.length} channel cases, broker controls and watchdog recovery passed`);
   } catch (e) {
     console.error('PARTIAL_RESULTS ' + JSON.stringify({ ...results, currentPackets: packets, currentHits: hits }));
     console.error('DIAGNOSTICS ' + JSON.stringify(await diagnostics().catch((e) => ({ error: String(e) }))));
