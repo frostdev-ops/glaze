@@ -1455,6 +1455,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       layer.getBoundingClientRect();
       layer.setAttribute('data-open', '');
       (picks[0] || x).focus();
+      // A fixed sheet is centred in the frame; Ultra may show only part of that frame. Bring the whole dialog into
+      // the outer window too, including a keyboard opening while the status bar is below it.
+      layer.querySelector('.gp-fromdocs').scrollIntoView({ block: 'center', inline: 'nearest' });
     };
 
     // ---- what the page says: Ultra's names and the paper's key
