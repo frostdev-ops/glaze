@@ -333,6 +333,7 @@ const check = async (name, test) => {
       await shoot(page, f, 'inpage-ultra-doc-640');
       await f.locator('.gp-top > .gd-btn').click();
       await closed(page);
+      await page.locator('#gz-navbar .tabs .more').click();
       await item(page, 'glaze:settings').click();
       await until(() => framed(page, `${base}/options.html`), 'Settings at 640');
       await until(async () => (await hosted(page)).bottom <= (await page.locator('#gz-navbar .tabs').boundingBox()).y + 1, 'Settings is above the phone bar too');
