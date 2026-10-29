@@ -357,7 +357,7 @@
         render();
       }
     };
-    q.addEventListener('input', () => { words = DH.terms(q.value); render(); bodies().catch((e) => console.error(e)); });
+    q.addEventListener('input', () => { words = DH.terms(q.value); gen++; render(); bodies().catch((e) => console.error(e)); });
     q.addEventListener('keydown', (e) => { if (e.key === 'Escape' && q.value) { e.preventDefault(); q.value = ''; words = []; gen++; render(); } });
     courseSel.addEventListener('change', () => { course = courseSel.value; render(); });
     kindSel.addEventListener('change', () => { kind = kindSel.value; render(); });

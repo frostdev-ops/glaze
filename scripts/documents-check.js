@@ -208,6 +208,13 @@ const PROBE = ({ lang }) => {
     check(names.search === 'Search' && names.course === 'Course' && names.sort === 'Sort' && names.grid === 'Grid' && names.listB === 'List' && names.pressed === 'true,false' && names.imp === 'Import .docx…' && names.file === names.imp, `the toolbar's controls are named (${JSON.stringify(names)})`);
     check(names.more === 'More' && names.popup === 'menu' && names.described && names.link && names.kindHidden === 'true' && names.listName === 'Documents' && names.live === 'polite', 'cards: a titled link, a More menu button described by its title, the kind icon hidden; the list is named Documents');
     check(names.tabbable === 1, `the cards are one Tab stop (${names.tabbable} tabbable)`);
+    const darkContrast = await home.evaluate(() => {
+          const rgb = (s) => s.match(/[\d.]+/g).slice(0, 3).map(Number);
+          const lum = (c) => c.map((v) => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [.2126, .7152, .0722][i], 0);
+          const bg = lum(rgb(getComputedStyle(document.querySelector('.gd-card')).backgroundColor));
+          return ['.gd-title', '.gd-meta'].map((sel) => { const fg = lum(rgb(getComputedStyle(document.querySelector(sel)).color)); return (Math.max(bg, fg) + .05) / (Math.min(bg, fg) + .05); });
+        });
+    check(darkContrast.every((v) => v >= 4.5), `dark Look: card title and metadata meet 4.5:1 (${darkContrast.map((v) => v.toFixed(2)).join(', ')})`);
     await shot(home, 'grid-1280-en.png');
 
     // ---- list view, kept across a reload
@@ -512,6 +519,14 @@ const PROBE = ({ lang }) => {
     await home.click('.gp-top a');
     await until(() => home.evaluate(() => document.querySelectorAll('.gd-card').length > 0), 'home after new');
     check(!(await local(`writerPaper:${fresh}`)) && !(await shown()).includes(fresh), 'a New tile opens a fresh document; untouched, it leaves nothing behind');
+
+    for (const format of ['mla9', 'apa7', 'chicago17']) {
+      await home.click(`.gd-tile[data-format="${format}"]`);
+      await until(() => home.evaluate(() => !!GZ_WRITER_PAPER.current()?.key()), `new ${format}`);
+      const key = await home.evaluate(() => GZ_WRITER_PAPER.current().key());
+      await home.click('.gp-top a'); await until(() => home.evaluate(() => !document.getElementById('list').hidden), 'home after formatted New');
+      check(!(await local(`writerPaper:${key}`)), `an untouched New ${format} leaves no empty record`);
+    }
 
     // Unknown routes return home without writing or mounting a paper over another kind.
     const unknown = `doc:${crypto.randomUUID()}`;

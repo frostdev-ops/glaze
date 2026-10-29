@@ -487,7 +487,7 @@ const HARNESS = `(() => {
         rows: [...d.querySelectorAll('.gp-fromdocs-row')].map((r) => [r.querySelector('b').textContent, r.querySelector('small').textContent]), inert: document.querySelector('.gp').inert };
     });
     check(sheet.modal === 'true' && sheet.label === 'Open from Documents' && sheet.inert, `the sheet is a labelled modal dialog over an inert paper (${JSON.stringify(sheet)})`);
-    check(sheet.rows.map((r) => r[0]).join('|') === 'Reading notes on Beloved|My own title' && /^APA 7 · 4 words · /.test(sheet.rows[0][1]) && /^Blank · 6 words · /.test(sheet.rows[1][1]), `the student's standalone documents, newest first: title, format, words, date (${JSON.stringify(sheet.rows)})`);
+    check(sheet.rows.map((r) => r[0]).join('|') === 'Reading notes on Beloved|Title still being typed' && /^APA 7 · 4 words · /.test(sheet.rows[0][1]) && /^Blank · 6 words · /.test(sheet.rows[1][1]), `the student's standalone documents, newest first: title, format, words, date (${JSON.stringify(sheet.rows)})`);
     await p.keyboard.press('Tab'); await p.keyboard.press('Tab'); await p.keyboard.press('Tab');
     check(await fr.evaluate(() => document.activeElement === document.querySelector('.gp-fromdocs-row')), 'Tab stays inside the sheet');
     await p.keyboard.press('Escape');
