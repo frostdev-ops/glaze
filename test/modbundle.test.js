@@ -1023,3 +1023,57 @@ test('plan: adding or changing a remote background host prompts without granting
   assert.equal(M.plan(before('https://new.example/a.webm'), incoming(null)).prompt, false, 'removing remote media needs no new consent');
   assert.deepEqual(M.caps(manifest(`file:${'a'.repeat(43)}`)), [], 'local media adds no remote capability');
 });
+
+// ---- agent tools (lib/modtools.js) ------------------------------------------------------------------------------------
+const TOOL = { name: 'due_soon', title: 'Due soon', description: 'Open to-dos due this week.', from: 'todo', where: [{ field: 'done', eq: false }] };
+const CODE_TOOL = { name: 'ask', title: 'Ask', description: 'Asks the mod.', code: true, input: { type: 'object', properties: { q: { type: 'string' } }, additionalProperties: false } };
+const AGENTS = { id: 'agents', why: 'Lets the agent apps you connect ask what is due.' };
+const TODO = { id: 'todo', why: 'Reads what is due.' };
+
+test('mod.json tools: kept exactly as written, behind agents, each source\'s permission and hooks for code tools', async () => {
+  const full = { permissions: [AGENTS, TODO], hooks: 'hooks.js', tools: [TOOL, CODE_TOOL] };
+  const got = await man(full, [HOOKS]);
+  assert.deepEqual(got.manifest, { ...BASE, ...full });
+  assert.deepEqual(M.clean(structuredClone(got.manifest), got.files), got.manifest);
+  assert.deepEqual(M.caps(got.manifest), ['agents', 'todo', 'code', 'tool:due_soon@todo', 'tool:ask@code']);
+  assert.deepEqual(got.prompt.tools, full.tools);
+  // agents is a permission like the others, and counts among them: four data, two nav, agents and eight hosts.
+  assert.ok(await man({ permissions: [AGENTS] }, [HOOKS]));
+  const every = [...['courses', 'todo', 'grades', 'nav.read', 'nav.items', 'nav.layout', 'agents'].map((id) => ({ id, why: 'x' })), ...Array.from({ length: 8 }, (_, i) => ({ id: `network:h${i}.example.com`, why: 'x' }))];
+  assert.ok(await man({ permissions: every }, [HOOKS]));
+  assert.ok(await man({ tools: [] }, [HOOKS]), 'no tools need nothing');
+  const cases = [
+    [{ tools: {} }, 'tools'], [{ tools: [TOOL, 7], permissions: full.permissions }, 'tools.1'], [{ tools: [{ ...TOOL, select: ['note'] }], permissions: full.permissions }, 'tools.0.select.0'],
+    [{ tools: [TOOL], permissions: [TODO] }, 'permissions'], [{ tools: [TOOL] }, 'tools.0.from'],
+    [{ tools: [TOOL], permissions: [AGENTS] }, 'tools.0.from'], [{ tools: [{ name: 'gpa', title: 'Grades', description: 'Grades.', from: 'grades' }], permissions: full.permissions }, 'tools.0.from'],
+    [{ tools: [TOOL, CODE_TOOL], permissions: full.permissions }, 'tools.1.code'],
+    [{ permissions: [AGENTS, { ...AGENTS, why: 'y' }] }, 'permissions.1.id'], [{ permissions: [{ id: 'agent', why: 'x' }] }, 'permissions.0.id'],
+    [{ permissions: [{ id: 'agents', why: '' }] }, 'permissions.0.why'], [{ permissions: [...every, { id: 'network:h9.example.com', why: 'x' }] }, 'permissions'],
+  ];
+  for (const [patch, f] of cases) await assert.rejects(man(patch, [HOOKS]), field(f), JSON.stringify(patch).slice(0, 120));
+  // A widget Glaze draws may have declarative tools: it then declares exactly what its blocks and its tools read, no more.
+  const tile = { ui: { tiles: [{ id: 'a', name: 'A', sizes: ['m'], blocks: [{ type: 'text', text: '{todo.count} due' }] }] } };
+  const widget = await man({ ...tile, permissions: [AGENTS, TODO], tools: [TOOL] }, []);
+  assert.deepEqual(M.caps(widget.manifest), ['agents', 'todo', 'tool:due_soon@todo']);
+  await assert.rejects(man({ ...tile, permissions: [AGENTS, TODO, { id: 'grades', why: 'x' }], tools: [TOOL] }, []), field('permissions'));
+  assert.ok(await man({ ...tile, permissions: [AGENTS, TODO, { id: 'grades', why: 'x' }], tools: [TOOL, { name: 'gpa', title: 'Grades', description: 'Grades.', from: 'grades' }] }, []));
+  await assert.rejects(man({ ...tile, permissions: [AGENTS, TODO], tools: [CODE_TOOL] }, []), field('tools.0.code'), 'no Worker to answer it');
+  await assert.rejects(man({ ...tile, permissions: [TODO, AGENTS] }, []), field('permissions'), 'agents with no tool to use it is more than the widget reads');
+});
+
+test('plan: a new tool, or a tool whose source changes, asks again; a retitled or reworded tool does not', () => {
+  const K = AUTHOR.x;
+  const m = (...tools) => ({ permissions: [AGENTS, TODO, { id: 'grades', why: 'x' }], tools });
+  const rec = (manifest) => ({ id: 'aaaaaaaaaaaaaaaa', key: K, hash: 'H1', version: '1.0.0', dev: false, manifest });
+  const inc = (manifest) => ({ id: 'aaaaaaaaaaaaaaaa', key: K, hash: 'H2', version: '1.1.0', signed: true, manifest });
+  const yes = (newPermissions) => ({ action: 'update', reason: 'newer', newPermissions, prompt: newPermissions.length > 0 });
+  const GPA = { name: 'gpa', title: 'Grades', description: 'Grades.', from: 'grades' };
+  assert.deepEqual(M.plan(null, inc(m(TOOL))), { action: 'install', reason: 'new', newPermissions: ['agents', 'todo', 'grades', 'tool:due_soon@todo'], prompt: true });
+  assert.deepEqual(M.plan(rec(m(TOOL)), inc(m(TOOL, GPA))), yes(['tool:gpa@grades']));
+  assert.deepEqual(M.plan(rec(m(TOOL)), inc(m({ ...TOOL, from: 'schedule' }))), yes(['tool:due_soon@schedule']));
+  assert.deepEqual(M.plan(rec(m(TOOL)), inc(m({ ...TOOL, name: 'due_next' }))), yes(['tool:due_next@todo']));
+  assert.deepEqual(M.plan(rec(m(TOOL)), inc(m({ ...TOOL, title: 'Due next', description: 'Due next.', select: ['title'], limit: 5 }))), yes([]));
+  assert.deepEqual(M.plan(rec(m(TOOL, GPA)), inc(m(TOOL))), yes([]), 'a tool dropped');
+  assert.deepEqual(M.plan(rec({ permissions: [TODO] }), inc(m(TOOL))), yes(['agents', 'grades', 'tool:due_soon@todo']), 'tools for the first time');
+  assert.deepEqual(M.plan(rec(m({ ...TOOL, name: 'x', code: true })), inc(m({ ...TOOL, name: 'x' }))), yes(['tool:x@todo']), 'code to declarative is another tool');
+});

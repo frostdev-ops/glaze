@@ -3577,5 +3577,12 @@
   "A feedback request could not fit within this model’s estimated context budget.": "Una solicitud de evaluación no cabía en el presupuesto de contexto estimado de este modelo.",
   "The input fit, but the model exhausted its context while producing the answer.": "La entrada cabía, pero el modelo agotó su contexto al generar la respuesta.",
   "The model exceeded this request’s output limit.": "El modelo superó el límite de salida de esta solicitud.",
-  "{n} bytes": "{n} bytes"
+  "{n} bytes": "{n} bytes",
+  "Agent apps you connect in Settings → Agents can use this mod’s tools.": "Las apps de agentes que conectes en Ajustes → Agentes pueden usar las herramientas de este mod.",
+  "Tool “{title}” — gives agent apps your to-dos, as Glaze last read them.": "Herramienta «{title}» — da a las apps de agentes tus tareas, tal como Glaze las leyó por última vez.",
+  "Tool “{title}” — gives agent apps your to-dos with due dates, as Glaze last read them.": "Herramienta «{title}» — da a las apps de agentes tus tareas con fecha de entrega, tal como Glaze las leyó por última vez.",
+  "Tool “{title}” — gives agent apps your courses, as Glaze last read them.": "Herramienta «{title}» — da a las apps de agentes tus cursos, tal como Glaze los leyó por última vez.",
+  "Tool “{title}” — gives agent apps your grades, as Glaze last read them.": "Herramienta «{title}» — da a las apps de agentes tus calificaciones, tal como Glaze las leyó por última vez.",
+  "Tool “{title}” — its author’s code answers, with what this mod may use.": "Herramienta «{title}» — responde el código de su autor, con lo que este mod puede usar.",
+  "Its tools run its own code and can send what an app asks for to {hosts}.": "Sus herramientas ejecutan su propio código y pueden enviar lo que pida una app a {hosts}."
 };

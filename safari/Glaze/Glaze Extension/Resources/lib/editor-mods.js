@@ -26,25 +26,39 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
               : id === 'nav.layout' ? t('Navigation layout — can arrange Glaze’s navigation bar while it runs. You can always use your own.')
               : id === 'documents' ? t('Documents — reads the titles, courses and word counts of your documents, opens them and adds items to the Documents page.')
               : id === 'documents.read' ? t('Document text — reads what your documents say and exports them as .docx files.')
+              : id === 'agents' ? t('Agent apps you connect in Settings → Agents can use this mod’s tools.')
               : id.startsWith('media:') ? t('Its background loads from {host}: that site can see your address and when you use it.', { host: id.slice(6) })
                 : id === 'bgfile' ? t('Its background is a video or animation file that comes with it, checked by Glaze.')
                 : id === 'code' ? t('Runs its author’s code — Glaze doesn’t draw it itself.')
                 : id === 'frame' ? t('A page of its own — shows its own HTML, which can contact other sites.')
                 : t('Network — sends and receives data from {host}.', { host: id.slice(8) }));
+  // A tool for agent apps (tool:<name>@<from|code>, lib/modtools.js caps): where its answers come from.
+  const toolText = (id, view, t) => {
+    const [name, from] = id.slice(5).split('@'), title = (view.tools || []).find((x) => x?.name === name)?.title || name;
+    return from === 'todo' ? t('Tool “{title}” — gives agent apps your to-dos, as Glaze last read them.', { title })
+      : from === 'schedule' ? t('Tool “{title}” — gives agent apps your to-dos with due dates, as Glaze last read them.', { title })
+        : from === 'courses' ? t('Tool “{title}” — gives agent apps your courses, as Glaze last read them.', { title })
+          : from === 'grades' ? t('Tool “{title}” — gives agent apps your grades, as Glaze last read them.', { title })
+            : t('Tool “{title}” — its author’s code answers, with what this mod may use.', { title });
+  };
   // view: a bundle's `prompt` manifest. → [{ id, text, why, fresh }]; fresh marks what an update newly asks for.
   const lines = (view, t, fresh = null) => B().caps(view).map((id) => ({
-    id, text: permText(id, t, plain(view)), why: (view.permissions || []).find((p) => p.id === id)?.why || '', fresh: !!fresh?.includes(id),
+    id, text: id.startsWith('tool:') ? toolText(id, view, t) : permText(id, t, plain(view)), why: (view.permissions || []).find((p) => p.id === id)?.why || '', fresh: !!fresh?.includes(id),
   }));
+  // A line with a switch on the mod's card: a declared permission. Code, a page of its own, a background's source and tools are told.
+  const grantable = (id) => !['code', 'frame', 'bgfile'].includes(id) && !id.startsWith('media:') && !id.startsWith('tool:');
   // Code runs only in Chrome's sandbox.
   const hasCode = (m) => B().hasCode(m);
   // A widget made of blocks (lib/modwidget.js): no code and no page of its own, so Glaze draws it and nothing of the mod runs.
-  const plain = (m) => !hasCode(m) && [...(m?.ui?.tiles || []), ...(m?.ui?.rail || [])].some((s) => Array.isArray(s?.blocks));
+  // With tools, agent apps get its data too, so it isn't worded as staying on this device.
+  const plain = (m) => !hasCode(m) && !m?.tools?.length && [...(m?.ui?.tiles || []), ...(m?.ui?.rail || [])].some((s) => Array.isArray(s?.blocks));
   // Glaze's own warnings, beyond each permission. ctx: { t, and (list → text), signed, source, runs }.
   const warnings = (view, { t, and = (a) => a.join(', '), signed, source, runs }) => {
     const ids = (view.permissions || []).map((p) => p.id), out = [];
     const data = DATA.filter((d) => ids.includes(d)), hosts = ids.filter((p) => p.startsWith('network:')).map((p) => p.slice(8));
     const word = { grades: t('grades'), courses: t('courses'), todo: t('to-dos'), 'nav.read': t('navigation'), documents: t('documents'), 'documents.read': t('document text') };
     if (data.length && hosts.length) out.push({ kind: 'data', text: t('This mod could send your {data} to {hosts}.', { data: and(data.map((d) => word[d])), hosts: and(hosts) }) });
+    if (hosts.length && (view.tools || []).some((x) => x?.code === true)) out.push({ kind: 'tools', text: t('Its tools run its own code and can send what an app asks for to {hosts}.', { hosts: and(hosts) }) });
     if (B().caps(view).includes('frame')) out.push({ kind: 'frame', text: t('It has a page of its own, so it can contact other sites: they can see your address and when you use it.') });
     if (hasCode(view)) out.push({ kind: 'chrome', text: runs ? t('Its code runs only in Chrome.') : t('Needs Chrome: its code won’t run in this browser. Its Look parts and settings still work.') });
     if (!signed) out.push({ kind: 'dev', text: t('Unsigned (Dev): nobody can confirm who made this copy.') });
@@ -190,15 +204,15 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
       // In the click itself: the browser's prompt for the hosts it reaches needs it.
       pending.held = GZ_SITE.reach(hostsFor(pending.got.manifest, grantsFor(pending.got.manifest, pending.before, pending.fresh)));
     });
-    dialog.addEventListener('close', () => {
+    const closed = () => {
       if (dialog.open) return;
       const installing = !!pending && confirmed === pending;
       confirmed = null;
-      finish(installing);
-    });
+      return finish(installing);
+    };
+    dialog.addEventListener('close', closed);
     const prompt = async (got, bytes, source, before, fresh, link) => {
       const v = got.prompt, update = !!before;
-      pending = { got, bytes, source, before, fresh, channel: link };
       $('mod-prompt-title').textContent = t(update ? 'Update {name}?' : 'Install {name}?', { name: v.name });
       $('mod-prompt-meta').textContent = [t('Version {version}', { version: v.version }), t('by {name}', { name: v.author.name }), t('author key {key}', { key: fingerprint(got.key) })].join(' · ');
       $('mod-prompt-source').replaceChildren(sourceText(source, t), ...(source === 'gallery' ? [' ', h('span', { className: 'mod-badge ok', textContent: t('Reviewed') })] : []),
@@ -213,12 +227,16 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
       const ws = warnings(v, { t, and, signed: got.signed, source, runs: await runs() });
       $('mod-prompt-warn').replaceChildren(...ws.map((w) => h('li', { className: `mod-warn-${w.kind}`, textContent: w.text })));
       $('mod-prompt-install').textContent = t(update ? 'Update' : 'Install');
+      // Publish the new consent only when it can open, after any old queued close event.
+      pending = { got, bytes, source, before, fresh, channel: link };
       dialog.returnValue = '';
       if (!dialog.open) dialog.showModal();
       $('mod-prompt-cancel').focus();
     };
     // A bundle's bytes from anywhere → the prompt, a quiet update, or why not. `said`: where to say it.
     const offerBytes = async (bytes, source, said, link) => {
+      // Native close events are queued: a file picked just after Escape must settle the old prompt first.
+      if (pending && !dialog.open && !offering) await closed();
       if (pending || offering) return false;
       offering = true;
       try {
@@ -331,7 +349,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
           h('button', { type: 'button', textContent: t('Review update'), 'data-f': f('review'), onclick: () => offerBytes(unstd(ch.pending.zip), 'link', $('mods-said'), rec.channel) })),
       ];
       const perms = lines(v, t).map((l) => {
-        if (l.id === 'code' || l.id === 'frame' || l.id === 'bgfile' || l.id.startsWith('media:')) return h('li', {}, h('span', { textContent: l.text }));
+        if (!grantable(l.id)) return h('li', {}, h('span', { textContent: l.text }));
         const granted = !!rec.grants?.[l.id];
         return h('li', {}, h('label', { className: 'check' },
           h('input', { type: 'checkbox', checked: granted, 'data-f': f(`perm:${l.id}`), onchange: (e) => {
@@ -552,6 +570,6 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
     try { return t('Updates are checked at {host} about once a day', { host: new URL(link).host }); } catch { return ''; }
   };
 
-  return { DATA, permText, channelNotice, channelText, lines, hasCode, plain, warnings, sourceText, fingerprint, adds, value, settings, order, replaceLabel, winner, move, grantsFor, hostsFor, refusal, stopText, mount };
+  return { DATA, permText, channelNotice, channelText, lines, grantable, hasCode, plain, warnings, sourceText, fingerprint, adds, value, settings, order, replaceLabel, winner, move, grantsFor, hostsFor, refusal, stopText, mount };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_MODSEDIT;

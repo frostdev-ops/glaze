@@ -63,6 +63,7 @@ over-long value is an error, and nothing is trimmed.
 | `hooks` | A `.js` file of the mod, run in a Worker. |
 | `replaces` | What the mod can take over, below. |
 | `settings` | At most 32, below. |
+| `tools` | At most 8, for the agent apps the student connects, below. |
 
 ### `packs`
 
@@ -88,6 +89,7 @@ chooses what to allow, and can take any of it back later. A call without its gra
 | `nav.read` | `glaze.nav.model()` and the `nav.change`, `nav.navigate`, `nav.expand`, `nav.collapse` and `nav.sheet` events. Glaze's bar shows course names and unread counts, so this is personal data. |
 | `nav.items` | `glaze.nav.add()`, `glaze.nav.update()` and `glaze.nav.remove()`: up to 8 items of the mod's own in Glaze's bar, and the `nav.action` event. |
 | `nav.layout` | `glaze.nav.layout()`, a layout returned from `glaze.nav.items()`, and a `nav` in `glaze.look.override()`: a layout proposed over the student's while the mod runs. Its links go only to pages of the school's site. |
+| `agents` | Agent apps the student connects in **Settings → Agents** can call the mod's `tools`, below. |
 | `network:<host>` | `glaze.fetch()` to `https://<host>/`. The host is a lowercase DNS name with at least two labels: no port, wildcard, address or local name, and subdomains don't count. At most 8. |
 | `documents` | On the [Documents page](#the-documents-page): `glaze.documents.list()`, `open()`, `create()`, `add()`, `remove()` and `style()`, and the `documents.action` and `documents.change` events. The list holds the titles, courses and word counts of the student's documents, so this is personal data. |
 | `documents.read` | `glaze.documents.read()` and `glaze.documents.export()`: a document's text, and the file it saves as. Needs `documents` too. |
@@ -98,8 +100,8 @@ chooses what to allow, and can take any of it back later. A call without its gra
   HTML file anywhere in its bundle, and every UI is a component tree. A mod that has held such data stays Worker-only
   through updates.
 - **Glaze adds its own warnings** to the prompt: personal data together with a network host ("could send your grades to
-  ..."), a page of its own (it can contact other sites, which learn the student's address and when they use it), unsigned
-  (Dev), not reviewed, and Chrome only.
+  ..."), a page of its own (it can contact other sites, which learn the student's address and when they use it), code tools
+  with a network host (they can send what an app asks for there), unsigned (Dev), not reviewed, and Chrome only.
 - **Code is a permission of its own.** A mod with `hooks` or a slot `file` is listed as "Runs its author's code". An update
   that adds code to a mod that had none (a widget made of blocks) asks again, even with the same permissions, and a
   followed channel waits for the student's review.
@@ -136,6 +138,39 @@ and `label` (one line, at most 60).
 | `number` | `min`, `max` (required), `step`, `default` | a number between them (on the step), `min` by default |
 | `text` | `max` (1 to 500, default 500), `default` | a line of text, `''` by default |
 | `color` | `default` | `#rrggbb` (lowercase), `#000000` by default |
+
+### `tools`
+
+Tools that agent apps the student connects in **Settings → Agents** can call. They need the `agents` permission, and each
+appears on its own line in the install prompt; an update that adds a tool, or changes where one's answers come from, asks
+again. Apps see a tool's title as "<mod name> (mod): <title>" and its description after "Written by the mod's author, not
+Glaze." Each tool has:
+
+- `name`: `[a-z][a-z0-9_]`, at most 24 characters, unique in the mod.
+- `title`: one line, at most 60 characters.
+- `description`: one line, at most 500 characters, for the app's model.
+
+**Declarative tools** are answered by Glaze from what it has read, with none of the mod's code, on every browser and with
+no school page open:
+
+```json
+{ "name": "due_soon", "title": "Due soon", "description": "Open to-dos due in the next week, soonest first.", "from": "todo",
+  "select": ["title", "course", "due", "url"], "where": [{ "field": "done", "eq": false }, { "field": "due", "days": 7 }],
+  "sort": { "field": "due", "order": "asc" }, "limit": 20, "input": { "course": true } }
+```
+
+| Key | |
+|---|---|
+| `from` | Required. `todo` (every to-do), `schedule` (to-dos with a due date), `courses` or `grades`: the fields of `glaze.todo()`, `glaze.courses()` or `glaze.grades()`. Needs that permission (`todo` for both plans). |
+| `select` | The fields each answer has, in that order; all of them when left out. |
+| `where` | At most 8 tests, all of which an item passes: `{ field, eq }`, that value exactly (`null` for no date, grade or colour), or `{ field, days }` on `due` or `at`, within that many days from now (-366 to 366, not 0; negative looks back). |
+| `sort` | `{ field, order }`, `asc` or `desc`. Empty values go last; ties keep the source's order. |
+| `limit` | 1 to 200 items; 200 when left out. |
+| `input` | What the app may pass: `"course": true`, one course's items by its id; `"days": true`, 1 to 60 days from now (ahead for due dates, back for when Glaze read a grade; not for `courses`). |
+
+**Code tools**, `{ name, title, description, code: true, input }`, are answered by the mod's Worker, so they need `hooks`,
+and run in Chrome while a school page is open. `input` is the arguments' JSON Schema: an object at the root, in the subset
+`lib/ai/schema.js` checks, with no `reason` property; none when left out.
 
 ### Look parts
 
@@ -421,6 +456,7 @@ The page's parts keep these class names: `gd-top` (the heading and New), `gd-new
 | `glaze.nav.add` | 8 items a mod; label 40, badge 4 characters |
 | `glaze.broadcast` | 64 KiB |
 | `glaze.documents.add` | 4 items a slot; label 40 characters |
+| `tools` | 8 a mod; a declarative tool's answer at most 200 items |
 | Hangs | a Worker silent for 5 s, or a frame holding the page for 2 s, is stopped |
 
 ## Examples
