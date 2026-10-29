@@ -37,20 +37,28 @@ const main = async ({ args = [], browser = null, caller = null, io = {} } = {}) 
   if (!R.BROWSER.test(id)) return refuse(stderr, `got a browser id it can't use: ${id}`);
 
   const log = (s) => stderr.write(`glaze-mcp host: ${s}\n`);
-  let own = null, started = false, done = false;
+  let own = null, starting = null, started = false, done = false;
   const send = (f) => N.write(stdout, f);
-  const mux = M.create({ send });
+  const mux = M.create({ send, pending: () => stdout.writableLength || 0 });
 
   const quit = (code) => {
     if (done) return;
     done = true;
     mux.end();
-    if (own) R.remove(own.dir, own);
     let gone = false;
-    const go = () => { if (!gone) { gone = true; exit(code); } };
-    if (!stdout.writableLength) return go();
-    stdout.once('drain', go);
+    const go = () => {
+      if (gone) return;
+      gone = true;
+      if (own) R.remove(own.dir, own);
+      exit(code);
+    };
+    const finish = () => {
+      if (!stdout.writableLength) return go();
+      stdout.once('drain', go);
+    };
     setTimeout(go, 500).unref();
+    // listen binds before its promise settles. Let start record the inode before exiting on a pipelined bye/EOF.
+    if (starting) starting.then(finish, finish); else finish();
   };
   const fatal = (why) => {
     log(why);
@@ -94,7 +102,8 @@ const main = async ({ args = [], browser = null, caller = null, io = {} } = {}) 
     if (!started) {
       if (f.t !== 'hello' || !R.INSTANCE.test(f.instance)) return fatal('the worker\'s first frame is not a hello this host can take');
       started = true;
-      return start(f.instance).catch((e) => fatal(e.message));
+      starting = start(f.instance).catch((e) => { if (!done) fatal(e.message); });
+      return;
     }
     if (f.t === 'line' || f.t === 'close') mux.frame(f);
   };

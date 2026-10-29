@@ -3,13 +3,13 @@
 // worker's line frames for c are written to the socket as they come, the last piece of each line followed by "\n".
 // A close from either side ends only that connection; the agent's reaches the worker as {t:'close',c,why}:
 //   eof (the agent hung up), error, too-long (a line over 64 MiB), overflow (over 32 MiB waiting for an agent that
-//   doesn't read), bad-line (a worker piece holding "\n", which would break the agent's framing).
+//   doesn't read, or waiting for the browser), bad-line (a worker piece holding "\n", which would break the agent's framing).
 // send(frame) is the host's write to the browser: when it reports a full pipe every socket pauses until release().
 'use strict';
 const F = require('./agent-frames.js');
 const L = require('./lines.js');
 
-const create = ({ send, queue = L.QUEUE, line = L.LINE }) => {
+const create = ({ send, pending = () => 0, queue = L.QUEUE, line = L.LINE }) => {
   const conns = new Map();
   let next = 1, held = false;
 
@@ -18,19 +18,27 @@ const create = ({ send, queue = L.QUEUE, line = L.LINE }) => {
     if (!k) return;
     conns.delete(c);
     k.socket.destroy();
-    send({ t: 'close', c, why });
+    emit({ t: 'close', c, why });
   };
   const hold = () => {
     if (held) return;
     held = true;
     for (const k of conns.values()) k.socket.pause();
   };
+  const emit = (f) => { if (send(f) === false) hold(); };
 
   const open = (socket, peer) => {
+    if (!Number.isSafeInteger(next)) { socket.destroy(); return; }
     const c = next++;
-    conns.set(c, { socket });
-    send({ t: 'open', c, peer });
-    const push = L.cutter((text) => { for (const f of F.split(c, text)) if (send(f) === false) hold(); }, line);
+    conns.set(c, { socket, n: 0 });
+    emit({ t: 'open', c, peer });
+    const push = L.cutter((text) => {
+      if (!conns.has(c)) return;
+      for (const f of F.split(c, text)) {
+        emit(f);
+        if (pending() > queue) { drop(c, 'overflow'); break; }
+      }
+    }, line);
     socket.on('data', (chunk) => {
       if (!conns.has(c)) return;
       try { push(chunk); } catch (e) { if (e.code !== 'too-long') throw e; drop(c, 'too-long'); }
@@ -38,7 +46,8 @@ const create = ({ send, queue = L.QUEUE, line = L.LINE }) => {
     socket.on('error', () => drop(c, 'error'));
     socket.on('end', () => drop(c, 'eof'));
     socket.on('close', () => drop(c, 'eof'));
-    if (!held) socket.resume();
+    if (pending() > queue) drop(c, 'overflow');
+    else if (!held) socket.resume();
     return c;
   };
 
@@ -55,6 +64,9 @@ const create = ({ send, queue = L.QUEUE, line = L.LINE }) => {
     }
     if (f.t !== 'line') return;
     if (f.d.includes('\n')) return drop(f.c, 'bad-line');
+    k.n += F.utf8(f.d);
+    if (k.n > line) return drop(f.c, 'too-long');
+    if (!f.m) k.n = 0;
     if (f.d || !f.m) k.socket.write(Buffer.from(f.m ? f.d : `${f.d}\n`));
     if (k.socket.writableLength > queue) drop(f.c, 'overflow');
   };
