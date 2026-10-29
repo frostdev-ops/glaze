@@ -368,12 +368,12 @@ const HARNESS = `(() => {
     const papers = await context.newPage();
     watch(papers, 'papers');
     await papers.goto(`chrome-extension://${id}/papers.html`);
-    await until(() => papers.evaluate(() => document.querySelectorAll('.gp-paper').length === 1), 'papers list');
-    check(await papers.evaluate(() => document.querySelector('.gp-paper h2').textContent === 'Essay 2: Memory in Beloved' && /ENGL 2110/.test(document.querySelector('.gp-paper p').textContent)), 'papers.html lists the paper (same chrome.storage.local as the frame)');
+    await until(() => papers.evaluate(() => document.querySelectorAll('.gd-card').length === 1), 'papers list');
+    check(await papers.evaluate(() => document.querySelector('.gd-card .gd-title').textContent === 'Essay 2: Memory in Beloved' && /ENGL 2110/.test(document.querySelector('.gd-card .gd-meta').textContent)), 'papers.html lists the paper (same chrome.storage.local as the frame)');
     const idb = await papers.evaluate(() => new Promise((ok) => { const r = indexedDB.open('gz-paper-probe', 1); r.onupgradeneeded = () => r.result.createObjectStore('p'); r.onsuccess = () => { const q = r.result.transaction('p').objectStore('p').get('k'); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); }; r.onerror = () => ok(null); }));
     console.log(`IndexedDB from the frame seen in papers.html: ${idb === 'frame' ? 'shared' : 'partitioned'}`);
     saved.papers = await shot(papers, 'papers.png');
-    await papers.click('.gp-paper a');
+    await papers.click('.gd-card .gd-title');
     await until(() => papers.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key() && document.querySelectorAll('.gp-sheet').length > 0), 'paper opened in papers.html');
     check(await papers.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('A sentence typed before the reload.') && !document.querySelector('.gp-submit')), 'papers.html opens the paper in the same chrome (no Submit)');
     check(await papers.evaluate(() => !!document.querySelector('.gr-ruler') && !!document.querySelector('.gzo-insert') && !!GZ_WRITER_PASTE?.before && !!GZ_WRITER_FIND && !!GZ_WRITER_COUNTS && !!GZ_WRITER_PRINT), 'papers.html loads the ruler, object tools, rich paste, Find, counts and print');
@@ -390,9 +390,10 @@ const HARNESS = `(() => {
       await chrome.storage.local.set({ [`writerPaper:${k}`]: { key: k, doc, title: 'Lab report', format: 'mla9', updated: Date.now(), revision: 1 }, writerPapers: [{ key: k, title: 'Lab report', course: '', url: '', words: 5, format: 'mla9', updated: Date.now(), submitted: null }, ...rows] });
     });
     await papers.goto(`chrome-extension://${id}/papers.html`);
-    await until(() => papers.evaluate(() => document.querySelectorAll('.gp-paper').length === 2), 'papers list with the second paper');
-    await papers.evaluate(() => [...document.querySelectorAll('.gp-paper')].find((a) => a.querySelector('h2').textContent === 'Lab report').querySelector('button').click());
-    await until(() => papers.evaluate(() => [...document.querySelectorAll('.gp-paper')].find((a) => a.querySelector('h2').textContent === 'Lab report').querySelector('[role="status"]')?.textContent === 'The .docx could not be made.'), 'the list says the .docx could not be made');
+    await until(() => papers.evaluate(() => document.querySelectorAll('.gd-card').length === 2), 'papers list with the second paper');
+    await papers.evaluate(() => [...document.querySelectorAll('.gd-card')].find((a) => a.querySelector('.gd-title').textContent === 'Lab report').querySelector('.gd-more').click());
+    await papers.click('.gd-menu [data-act="export"]');
+    await until(() => papers.evaluate(() => document.getElementById('gd-said').textContent === 'The .docx could not be made.'), 'the list says the .docx could not be made');
     check(true, 'papers.html says when a paper\'s .docx could not be made');
     await papers.close();
 
@@ -432,7 +433,7 @@ const HARNESS = `(() => {
     const home = await context.newPage();
     watch(home, 'home');
     await home.goto(`chrome-extension://${id}/papers.html`);
-    await until(() => home.evaluate(() => !!globalThis.GZ_WRITER_PAPERS && document.querySelectorAll('.gp-paper').length >= 1), 'home list');
+    await until(() => home.evaluate(() => !!globalThis.GZ_WRITER_PAPERS && document.querySelectorAll('.gd-card').length >= 1), 'home list');
     await d.keyboard.type(' and more');
     await home.evaluate((k) => GZ_WRITER_PAPERS.open().save(k, { title: 'Renamed at home', named: true }), k2);
     await until(() => d.evaluate(() => document.querySelector('.gp-top h1 input').value === 'Renamed at home'), 'rename reaches the open editor');

@@ -1,0 +1,462 @@
+// The Documents home (papers.html) in the real unpacked extension: the New band, the grid's lazy thumbnails and their
+// cost, the list view and its kept choice, search by title and by body text, the course filter, sort, rename (seen by an
+// open editor), Make a copy, Delete and Undo (versions kept), .docx drop and import and a refused .txt, the keyboard,
+// accessible names and the live region, opening a card in the same tab and coming back. Screenshots at 1280 and 640 px
+// in English and German. Synthetic records only; the browser reaches no network.
+// NODE_PATH=<playwright> nice -n 10 node scripts/documents-check.js [evidence directory]
+// DOCUMENTS_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-documents).
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const out = process.argv[2] || path.join(os.tmpdir(), 'gz-documents-check');
+const shots = process.env.DOCUMENTS_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-documents');
+const checks = [], errors = [], requests = [];
+let passed = false;
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (fn, label, ms = 15000) => {
+  const start = Date.now(); let last;
+  while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(60); }
+  throw Error(`${label} timed out${last ? `: ${last.message}` : ''}`);
+};
+const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
+
+// ---- the seeded documents: two assignment papers (one submitted), a named and an unnamed local document, and fillers
+const NOW = Date.now(), HOUR = 3600e3;
+const p = (text, attrs) => ({ type: 'paragraph', ...(attrs ? { attrs } : {}), ...(text ? { content: [{ type: 'text', text }] } : {}) });
+const words = (doc) => JSON.stringify(doc).match(/"text":"([^"]*)"/g).map((m) => m.slice(8, -1)).join(' ').split(/\s+/).filter(Boolean).length;
+const ESSAY = 'bb.school.test|_900_1|_101_1|_7_1', LAB = 'bb.school.test|_900_1|_102_1|_9_1', ESSAY3 = 'bb.school.test|_900_1|_101_1|_8_1';
+const NOTES = `doc:${crypto.randomUUID()}`, FIELD = `doc:${crypto.randomUUID()}`;
+const body = (n, lead) => Array.from({ length: n }, (_, i) => p(`${lead} ${i + 1}. A paragraph of plain prose that fills the page the way a student's draft does, sentence after sentence, with nothing but text in it.`));
+const seeds = [
+  { key: ESSAY, title: 'Essay 2: Memory in Beloved', courseName: 'ENGL 2110', format: 'mla9', updated: NOW - 1 * HOUR, url: 'https://bb.school.test/ultra/courses/_101_1/outline',
+    doc: { type: 'doc', content: [p('Alex Rivera', { first: 0 }), p('Dr. Okafor', { first: 0 }), p('ENGL 2110', { first: 0 }), p('12 October 2026', { first: 0 }), p('Memory in Beloved', { align: 'center' }), ...body(6, 'Beloved')] } },
+  { key: LAB, title: 'Lab report 3', courseName: 'BIOL 1010', format: 'apa7', updated: NOW - 50 * HOUR, submitted: NOW - 49 * HOUR,
+    doc: { type: 'doc', content: [p('Enzyme rates at three temperatures'), ...body(5, 'Catalase')] } },
+  { key: ESSAY3, title: 'Essay 3: The Clearing', courseName: 'ENGL 2110', format: 'mla9', updated: NOW - 70 * HOUR, doc: { type: 'doc', content: body(4, 'Clearing') } },
+  { key: NOTES, title: 'Reading notes', named: true, format: 'plain', updated: NOW - 3 * HOUR, doc: { type: 'doc', content: [p('Chapter one, the house on Bluestone Road.'), ...body(3, 'Notes')] } },
+  { key: FIELD, title: 'Field notes from Tuesday', named: false, format: 'plain', updated: NOW - 5 * HOUR, doc: { type: 'doc', content: [p('Field notes from Tuesday'), p('The heliotrope by the fence had opened by noon.'), ...body(2, 'Field')] } },
+  ...Array.from({ length: 35 }, (_, i) => ({ key: `doc:${crypto.randomUUID()}`, title: `Draft ${String(i + 1).padStart(2, '0')}`, named: i % 2 === 0, format: ['plain', 'mla9', 'apa7', 'chicago17'][i % 4],
+    updated: NOW - (6 + i) * HOUR, doc: { type: 'doc', content: [p(`Draft ${String(i + 1).padStart(2, '0')}`), ...body(3 + (i % 5), `Draft ${i + 1}`)] } })),
+];
+const VERSIONS = [{ id: 'v1-aaaaaa', at: NOW - 4 * HOUR, reason: 'start', words: 5, bytes: 100, format: 'plain', keep: false, doc: { type: 'doc', content: [p('Chapter one.')] } },
+  { id: 'v2-bbbbbb', at: NOW - 3.5 * HOUR, reason: 'edit', words: 12, bytes: 200, format: 'plain', keep: false, doc: { type: 'doc', content: [p('Chapter one, the house.')] } }];
+const records = () => {
+  const all = {}, index = [];
+  for (const s of seeds) {
+    const rec = { key: s.key, kind: 'paper', named: s.named === true, title: s.title, courseName: s.courseName || '', url: s.url || '', format: s.format, doc: s.doc, words: words(s.doc), keep: false,
+      created: s.updated - HOUR, updated: s.updated, revision: 3, edited: 3, submitted: s.submitted || null };
+    all[`writerPaper:${s.key}`] = rec;
+    index.push({ key: s.key, kind: 'paper', named: rec.named, title: rec.title, course: rec.courseName, url: rec.url, words: rec.words, format: rec.format, updated: rec.updated, submitted: rec.submitted });
+  }
+  all[`writerVersions:${NOTES}`] = VERSIONS;
+  all.writerPapers = index.sort((a, b) => b.updated - a.updated);
+  return all;
+};
+
+// What each home page records from its first script on: each thumbnail render's main-thread time and when it ended, every
+// storage.local get's key count, and when the first card appeared. lang: chrome.i18n's UI language for the page.
+const PROBE = ({ lang }) => {
+  globalThis.__gd = { renders: [], gets: [], firstCard: null };
+  if (lang) { try { chrome.i18n.getUILanguage = () => lang; } catch {} }
+  let thumb;
+  Object.defineProperty(globalThis, 'GZ_WRITER_THUMB', { configurable: true, get: () => thumb, set: (v) => {
+    const render = v.render;
+    v.render = (...a) => { const t = performance.now(); try { return render(...a); } finally { const e = performance.now(); __gd.renders.push({ ms: e - t, at: e }); } };
+    thumb = v;
+  } });
+  const get = chrome.storage.local.get.bind(chrome.storage.local);
+  chrome.storage.local.get = (k, ...rest) => { __gd.gets.push(Array.isArray(k) ? k.slice() : k); return get(k, ...rest); };
+  new MutationObserver((_, o) => { if (document.querySelector('.gd-card')) { __gd.firstCard = performance.now(); o.disconnect(); } }).observe(document, { childList: true, subtree: true });
+};
+
+(async () => {
+  let context, held = false, tmp, ext;
+  const lock = require('./check-env.js').lockPath();
+  try {
+    for (let i = 0; ; i++) {
+      try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\ndocuments-check\n`); break; }
+      catch (e) { if (e.code !== 'EEXIST' || i >= 240) throw e; if (i % 12 === 0) console.error('[documents-check] waiting for heavy lock'); await pause(5000); }
+    }
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-documents-'));
+    fs.mkdirSync(out, { recursive: true });
+    fs.mkdirSync(shots, { recursive: true });
+    ext = require('./check-env.js').staged(root, []);
+    await require('./wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, locale: 'en-US', timezoneId: 'America/New_York',
+      reducedMotion: 'reduce', acceptDownloads: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    env.noFirstRun(context); context.setDefaultTimeout(15000);
+    await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:') return r.continue(); requests.push(r.request().url()); return r.abort(); });
+    const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
+    const G = require(path.join(root, 'defaults.js'));
+    const settings = G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true } });
+    await worker.evaluate(async ({ settings, data }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set(data); }, { settings, data: records() });
+    const HOME = `chrome-extension://${id}/papers.html`;
+    const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
+    const watch = (pg, tag) => {
+      pg.on('pageerror', (e) => errors.push(`${tag}: ${e.message}`));
+      pg.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`${tag} console: ${m.text()}`); });
+    };
+    const openHome = async (lang = null, tag = 'home') => {
+      const pg = await context.newPage();
+      watch(pg, tag);
+      await pg.addInitScript(PROBE, { lang });
+      await pg.goto(HOME);
+      await until(() => pg.evaluate(() => document.querySelectorAll('.gd-card').length > 0 && !document.getElementById('list').hidden), `${tag} cards`);
+      return pg;
+    };
+    const cards = (pg) => pg.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => ({ key: c.dataset.key, title: c.querySelector('.gd-title').textContent, meta: c.querySelector('.gd-meta').textContent, badge: c.querySelector('.gd-badge:not([hidden])')?.textContent || '', thumb: !!c.querySelector('.gd-pic > .gt-thumb') })));
+    const card = (key) => `.gd-card[data-key="${key}"]`;
+    const said = (pg) => pg.evaluate(() => document.getElementById('gd-count').textContent);
+    const focused = (pg) => pg.evaluate(() => document.activeElement?.closest('.gd-card')?.dataset.key || document.activeElement?.id || document.activeElement?.className || '');
+    const shot = async (pg, name) => { await pause(200); const f = path.join(shots, name); await pg.screenshot({ path: f }); saved.push(f); return f; };
+    const saved = [];
+    const total = seeds.length;
+
+    // ---- the page and the New band
+    let home = await openHome();
+    check(await home.evaluate(() => document.title === 'Documents' && document.querySelector('h1').textContent === 'Documents'), 'title and h1 read Documents');
+    const tiles = await home.evaluate(() => [...document.querySelectorAll('.gd-new .gd-tile')].map((a) => ({ name: a.querySelector('.gd-tile-name').textContent, label: a.querySelector('.gt-thumb')?.getAttribute('aria-hidden'), href: a.getAttribute('href'), thumb: !!a.querySelector('.gt-thumb'), format: a.dataset.format })));
+    check(await home.evaluate(() => document.querySelector('.gd-new h2')?.textContent === 'New'), 'the New band has its h2');
+    check(tiles.map((x) => x.name).join('|') === 'Blank|MLA 9|APA 7|Chicago 17' && tiles.every((x) => x.thumb && x.label === 'true'), `New tiles Blank, MLA 9, APA 7, Chicago 17, each drawn (${JSON.stringify(tiles.map((x) => x.name))})`);
+    check(tiles.every((x) => /^papers\.html\?paper=doc%3A[0-9a-f-]{36}&format=(plain|mla9|apa7|chicago17)$/.test(x.href)), 'each tile links papers.html?paper=<new doc: key>&format=<id>');
+
+    // ---- the grid and its thumbnails
+    await until(async () => (await home.evaluate(() => __gd.renders.length)) >= 12, '12 thumbnails');
+    const probe = await home.evaluate(() => ({ ...__gd, nav: performance.getEntriesByType('navigation')[0]?.startTime || 0 }));
+    const t12 = probe.renders[11].at, since = t12 - probe.firstCard;
+    console.log(`first card at ${probe.firstCard.toFixed(0)} ms; 12th thumbnail at ${t12.toFixed(0)} ms from navigation (${since.toFixed(0)} ms after the first card)`);
+    check(t12 <= 400, `the first 12 thumbnails are drawn within 400 ms of navigation (${t12.toFixed(0)} ms)`);
+    let list = await cards(home);
+    check(list.length === total, `the grid lists every document (${list.length} of ${total})`);
+    const drawnFirst = list.filter((c) => c.thumb).length;
+    check(drawnFirst >= 12 && drawnFirst < total, `thumbnails are drawn lazily: ${drawnFirst} of ${total} near the screen`);
+    const thumbGets = probe.gets.filter((g) => Array.isArray(g) && g.every((k) => k.startsWith('writerPaper:')));
+    check(thumbGets.length > 0 && thumbGets.every((g) => g.length <= 12), `thumbnail records come 12 or fewer per storage get (${thumbGets.map((g) => g.length).join(', ')})`);
+    await home.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+    await until(async () => (await cards(home)).every((c) => c.thumb), 'every thumbnail after scrolling');
+    const renders = await home.evaluate(() => __gd.renders.map((r) => r.ms));
+    const worst = Math.max(...renders);
+    console.log(`${renders.length} thumbnail renders; median ${renders.slice().sort((a, b) => a - b)[renders.length >> 1].toFixed(2)} ms, worst ${worst.toFixed(2)} ms`);
+    check(worst <= 6, `each thumbnail costs at most 6 ms of main thread (worst ${worst.toFixed(2)} ms)`);
+    // The clock in a page is coarse (0.1 ms): 50 renders of the largest seeded paper, timed together, say what one costs.
+    const block = await home.evaluate(async (k) => {
+      const rec = (await chrome.storage.local.get(`writerPaper:${k}`))[`writerPaper:${k}`], n = 50, t = performance.now();
+      for (let i = 0; i < n; i++) GZ_WRITER_THUMB.render(GZ_WRITER_THUMB.firstPage(rec.doc), rec.format, { scale: 0.25 });
+      const ms = (performance.now() - t) / n;
+      __gd.renders.splice(-n);
+      return ms;
+    }, ESSAY);
+    console.log(`50 renders of the largest paper back to back: ${block.toFixed(3)} ms each`);
+    check(block > 0 && block <= 6, `a thumbnail of the largest seeded paper costs ${block.toFixed(3)} ms (50 timed together)`);
+    check(await home.evaluate(() => [...document.querySelectorAll('.gt-thumb')].filter((t) => !t.closest('.gd-tile')).every((t) => t.parentElement.matches('.gd-card > .gd-pic') && t.getAttribute('aria-hidden') === 'true')), 'each thumbnail sits in its own card, hidden from assistive tech');
+    const rendersBefore = renders.length;
+    await home.evaluate(() => scrollTo(0, 0));
+    await pause(300);
+    check((await home.evaluate(() => __gd.renders.length)) === rendersBefore, 'scrolling back draws nothing again (cached by key and revision)');
+    list = await cards(home);
+    const essay = list.find((c) => c.key === ESSAY), lab = list.find((c) => c.key === LAB);
+    check(essay.title === 'Essay 2: Memory in Beloved' && /^ENGL 2110 · MLA 9 · \d+ words · /.test(essay.meta), `an assignment paper's card: its title, course, format, words and date (${essay.meta})`);
+    check(lab.badge === 'Submitted' && list.filter((c) => c.badge).length === 1, 'the submitted paper carries the Submitted badge, and only it');
+    check(list.find((c) => c.key === FIELD).title === 'Field notes from Tuesday' && list.find((c) => c.key === NOTES).title === 'Reading notes', 'local documents show their named and derived titles');
+    check(list.map((c) => c.key).join() === seeds.slice().sort((a, b) => b.updated - a.updated).map((s) => s.key).join(), 'Last edited orders the grid newest first');
+    check(await said(home) === `${total} documents`, `the live region says "${total} documents"`);
+    // A stored change to a drawn paper redraws its thumbnail, from the change itself.
+    await worker.evaluate(async (k) => { const r = (await chrome.storage.local.get(`writerPaper:${k}`))[`writerPaper:${k}`]; r.doc.content.unshift({ type: 'paragraph', content: [{ type: 'text', text: 'A sentence added elsewhere.' }] }); r.revision++; r.updated = Date.now(); await chrome.storage.local.set({ [`writerPaper:${k}`]: r }); }, ESSAY);
+    await until(() => home.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"] .gt-thumb`)?.textContent.includes('A sentence added elsewhere.'), ESSAY), 'stale thumbnail redrawn');
+    check(true, 'a change in storage marks a thumbnail stale and it is drawn again');
+
+    // ---- accessible names
+    const names = await home.evaluate(() => {
+      const label = (el) => el?.getAttribute('aria-label') || el?.textContent.trim();
+      const c = document.querySelector('.gd-card'), more = c.querySelector('.gd-more');
+      return { search: label(document.getElementById('gd-q')), course: label(document.getElementById('gd-course')), sort: label(document.getElementById('gd-sort')),
+        grid: label(document.getElementById('gd-grid')), listB: label(document.getElementById('gd-list')), pressed: [document.getElementById('gd-grid').getAttribute('aria-pressed'), document.getElementById('gd-list').getAttribute('aria-pressed')].join(),
+        imp: label(document.getElementById('gd-import')), more: label(more), popup: more.getAttribute('aria-haspopup'), described: document.getElementById(more.getAttribute('aria-describedby'))?.textContent === c.querySelector('.gd-title').textContent,
+        link: c.querySelector('.gd-title').tagName === 'A' && c.querySelector('.gd-title').getAttribute('href').startsWith('papers.html?paper='), kindHidden: c.querySelector('.gd-kind')?.getAttribute('aria-hidden'),
+        listName: document.getElementById(document.getElementById('gd-docs').getAttribute('aria-labelledby'))?.textContent, live: document.getElementById('gd-count').getAttribute('aria-live'),
+        tabbable: [...document.querySelectorAll('#gd-docs a, #gd-docs button')].filter((e) => e.tabIndex >= 0).length };
+    });
+    check(names.search === 'Search' && names.course === 'Course' && names.sort === 'Sort' && names.grid === 'Grid' && names.listB === 'List' && names.pressed === 'true,false' && names.imp === 'Import .docx…', `the toolbar's controls are named (${JSON.stringify(names)})`);
+    check(names.more === 'More' && names.popup === 'menu' && names.described && names.link && names.kindHidden === 'true' && names.listName === 'Documents' && names.live === 'polite', 'cards: a titled link, a More menu button described by its title, the kind icon hidden; the list is named Documents');
+    check(names.tabbable === 1, `the cards are one Tab stop (${names.tabbable} tabbable)`);
+    await shot(home, 'grid-1280-en.png');
+
+    // ---- list view, kept across a reload
+    await home.click('#gd-list');
+    check(await home.evaluate(() => document.getElementById('list').dataset.view === 'list' && document.getElementById('gd-list').getAttribute('aria-pressed') === 'true' && document.getElementById('gd-grid').getAttribute('aria-pressed') === 'false'), 'List shows rows and is pressed');
+    await shot(home, 'list-1280-en.png');
+    await home.reload();
+    await until(() => home.evaluate(() => document.querySelectorAll('.gd-card').length > 0), 'cards after reload');
+    check(await home.evaluate(() => document.getElementById('list').dataset.view === 'list'), 'the List choice is kept across a reload (localStorage)');
+    await home.click('#gd-grid');
+    check(await home.evaluate(() => document.getElementById('list').dataset.view === 'grid' && localStorage.getItem('gz-documents-view') === 'grid'), 'Grid again, and kept');
+
+    // ---- search
+    const shown = () => home.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    await home.fill('#gd-q', 'reading');
+    await until(async () => (await shown()).join() === NOTES, 'title search');
+    check(await said(home) === '1 document', 'search by title: one document, and the live region says so');
+    await home.fill('#gd-q', 'ENGL');
+    await until(async () => (await shown()).sort().join() === [ESSAY, ESSAY3].sort().join(), 'course search');
+    check(true, 'search matches a course name');
+    await home.fill('#gd-q', 'heliotrope');
+    await until(async () => (await shown()).join() === FIELD, 'body search');
+    const bodyGets = (await home.evaluate(() => __gd.gets)).filter((g) => Array.isArray(g) && g.every((k) => k.startsWith('writerPaper:')));
+    check(bodyGets.every((g) => g.length <= 12), 'search by body text finds a word only the document\'s text holds');
+    const d07 = seeds.find((s) => s.title === 'Draft 07').key;
+    await home.fill('#gd-q', 'paragraph 07 draft');
+    await until(async () => (await shown()).join() === d07, 'several terms');
+    check(true, 'every search term must match, title and body together');
+    await home.focus('#gd-q');
+    await home.keyboard.press('Escape');
+    await until(async () => (await shown()).length === total, 'Esc clears');
+    check(await home.evaluate(() => document.getElementById('gd-q').value === ''), 'Esc in the search field clears it');
+
+    // ---- course filter
+    const opts = await home.evaluate(() => [...document.querySelectorAll('#gd-course option')].map((o) => o.textContent));
+    check(opts.join('|') === 'All courses|BIOL 1010|ENGL 2110|No course', `Course offers All, each course by name, No course (${opts.join('|')})`);
+    await home.selectOption('#gd-course', { label: 'ENGL 2110' });
+    check((await shown()).sort().join() === [ESSAY, ESSAY3].sort().join(), 'a course shows only its papers');
+    await home.selectOption('#gd-course', { label: 'No course' });
+    check((await shown()).length === total - 3 && !(await shown()).some((k) => k.includes('|')), 'No course shows only documents without one');
+    await home.selectOption('#gd-course', { label: 'All courses' });
+    check((await shown()).length === total, 'All courses shows every document');
+
+    // ---- sort
+    await home.selectOption('#gd-sort', 'title');
+    const byTitle = (await cards(home)).map((c) => c.title);
+    check(byTitle.join('|') === byTitle.slice().sort(new Intl.Collator('en', { numeric: true, sensitivity: 'base' }).compare).join('|') && byTitle[0] === 'Draft 01', 'Title sorts A to Z');
+    await home.selectOption('#gd-sort', 'updated');
+    check((await cards(home))[0].key === ESSAY, 'Last edited sorts newest first again');
+
+    // ---- rename, seen by the document open in another tab
+    const editor = await context.newPage();
+    watch(editor, 'editor');
+    await editor.goto(`${HOME}?paper=${encodeURIComponent(NOTES)}`);
+    await until(() => editor.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key() && document.querySelector('.gp-top h1 input')?.value === 'Reading notes'), 'editor open');
+    await home.bringToFront();
+    await home.focus(`${card(NOTES)} .gd-title`);
+    await home.keyboard.press('F2');
+    await until(() => home.evaluate(() => document.activeElement?.matches('.gd-rename')), 'rename field');
+    check(await home.evaluate(() => document.activeElement.getAttribute('aria-label') === 'Title' && document.activeElement.value === 'Reading notes'), 'F2 renames in place: a Title field holding the name');
+    await shot(home, 'rename-1280-en.png');
+    await home.keyboard.press('Escape');
+    check(await home.evaluate((s) => !document.querySelector('.gd-rename') && document.activeElement?.matches(`${s} .gd-title`), card(NOTES)), 'Esc cancels a rename and focus returns to the card');
+    await home.keyboard.press('F2');
+    await home.keyboard.press('ControlOrMeta+A');
+    await home.keyboard.type('Reading notes, revised');
+    await home.keyboard.press('Enter');
+    await until(async () => (await local(`writerPaper:${NOTES}`))?.title === 'Reading notes, revised', 'rename saved');
+    const renamed = await local(`writerPaper:${NOTES}`);
+    check(renamed.named === true && (await cards(home)).find((c) => c.key === NOTES).title === 'Reading notes, revised', 'Enter saves the name (named) through the worker, and the card shows it');
+    await until(() => editor.evaluate(() => document.querySelector('.gp-top h1 input').value === 'Reading notes, revised'), 'editor title');
+    check(true, 'the open editor in another tab shows the new title');
+    await editor.close();
+    const essayMenu = await home.evaluate(async (s) => { document.querySelector(`${s} .gd-more`).click(); await new Promise((r) => requestAnimationFrame(r)); const items = [...document.querySelectorAll('.gd-menu [role="menuitem"]')].map((b) => b.textContent); document.querySelector(`${s} .gd-more`).click(); return items; }, card(ESSAY));
+    check(essayMenu.join('|') === 'Make a copy|Export .docx|Delete', `an assignment paper's menu has no Rename (${essayMenu.join('|')})`);
+
+    // ---- Make a copy
+    await home.click(`${card(NOTES)} .gd-more`);
+    const notesMenu = await home.evaluate(() => [...document.querySelectorAll('.gd-menu [role="menuitem"]')].map((b) => b.textContent));
+    check(notesMenu.join('|') === 'Rename|Make a copy|Export .docx|Delete', `a document's menu: Rename, Make a copy, Export .docx, Delete (${notesMenu.join('|')})`);
+    check(await home.evaluate((s) => document.activeElement?.matches('.gd-menu [role="menuitem"]') && document.querySelector(`${s} .gd-more`).getAttribute('aria-expanded') === 'true', card(NOTES)), 'the menu opens with focus on its first item');
+    await shot(home, 'menu-1280-en.png');
+    await home.click('.gd-menu [data-act="copy"]');
+    await until(async () => (await cards(home)).some((c) => c.title === 'Copy of Reading notes, revised'), 'the copy');
+    const copyKey = (await cards(home)).find((c) => c.title === 'Copy of Reading notes, revised').key;
+    const copy = await local(`writerPaper:${copyKey}`);
+    check(/^doc:/.test(copyKey) && copy.named === true && copy.kind === 'paper' && !copy.courseName && JSON.stringify(copy.doc) === JSON.stringify(renamed.doc), 'Make a copy saves a new named document with the same text');
+    check(await focused(home) === copyKey, 'focus moves to the copy');
+
+    // ---- Delete and Undo; the Delete key and Ctrl+Z
+    const versionsBefore = (await local(`writerVersions:${NOTES}`)).map((v) => v.id);
+    await home.click(`${card(NOTES)} .gd-more`);
+    await home.click('.gd-menu [data-act="delete"]');
+    check(!(await shown()).includes(NOTES), 'Delete takes the card away at once');
+    await until(async () => !(await local(`writerPaper:${NOTES}`)) && !(await local(`writerVersions:${NOTES}`)), 'deleted in storage');
+    check(await home.evaluate(() => document.querySelector('.gd-toast')?.textContent.startsWith('Deleted') && document.querySelector('.gd-toast button')?.textContent === 'Undo'), 'a Deleted toast offers Undo; the paper and its versions are gone from storage');
+    await shot(home, 'undo-1280-en.png');
+    await home.click('.gd-toast button');
+    await until(async () => (await shown()).includes(NOTES), 'undone');
+    const back = await local(`writerPaper:${NOTES}`), versionsAfter = (await local(`writerVersions:${NOTES}`) || []).map((v) => v.id);
+    check(back?.title === 'Reading notes, revised' && JSON.stringify(back.doc) === JSON.stringify(renamed.doc) && versionsBefore.every((v) => versionsAfter.includes(v)), `Undo puts the document back with its versions (${versionsAfter.join(', ')})`);
+    check(!(await home.evaluate(() => !!document.querySelector('.gd-toast'))), 'the toast goes once undone');
+    await home.focus(`${card(copyKey)} .gd-title`);
+    await home.keyboard.press('Delete');
+    check(!(await shown()).includes(copyKey), 'the Delete key deletes the focused card');
+    await until(async () => !(await local(`writerPaper:${copyKey}`)), 'copy deleted');
+    check(await home.evaluate(() => document.activeElement?.closest('.gd-card') != null), 'focus stays in the cards after a delete');
+    await home.keyboard.press('ControlOrMeta+z');
+    await until(async () => (await shown()).includes(copyKey) && !!(await local(`writerPaper:${copyKey}`)), 'Ctrl+Z undo');
+    check(true, 'Ctrl+Z while the toast shows undoes the delete');
+
+    // ---- drop and import .docx; a .txt is refused
+    const docx = await home.evaluate(async () => {
+      await GZ_WRITER_PAPER.need(['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js']);
+      const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Imported from Word: the river keeps what the town forgets.' }] }, { type: 'paragraph', content: [{ type: 'text', text: 'A second paragraph of the dropped file.' }] }] };
+      return Array.from(GZ_WRITER_DOCX.exportDocx(doc, { format: GZ_WRITER_STYLES.FORMATS.plain, surname: '', title: '' }).bytes);
+    });
+    const docxPaths = ['a', 'b'].map((d) => { fs.mkdirSync(path.join(tmp, d)); const f = path.join(tmp, d, 'River notes.docx'); fs.writeFileSync(f, Buffer.from(docx)); return f; });
+    const drop = (pg, files, phase = 'drop') => pg.evaluate(({ files, phase }) => {
+      const dt = new DataTransfer();
+      for (const f of files) dt.items.add(new File([new Uint8Array(f.bytes)], f.name, { type: f.type }));
+      const fire = (type) => document.body.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      fire('dragenter'); fire('dragover');
+      if (phase === 'drop') fire('drop');
+    }, { files, phase });
+    const before = (await shown()).length;
+    await drop(home, [{ name: 'River notes.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: docx }], 'over');
+    check(await home.evaluate(() => document.getElementById('list').hasAttribute('data-drop')), 'dragging files over the page shows the drop state');
+    await shot(home, 'drop-1280-en.png');
+    await drop(home, [{ name: 'River notes.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: docx }]);
+    await until(async () => (await cards(home)).some((c) => c.title === 'River notes'), 'dropped document');
+    check(!(await home.evaluate(() => document.getElementById('list').hasAttribute('data-drop'))), 'the drop state goes on drop');
+    const riverKey = (await cards(home)).find((c) => c.title === 'River notes').key;
+    const river = await local(`writerPaper:${riverKey}`), riverVersions = await local(`writerVersions:${riverKey}`);
+    check(/^doc:/.test(riverKey) && river.kind === 'paper' && river.format === 'mla9' && JSON.stringify(river.doc).includes('the river keeps what the town forgets') && riverVersions?.length >= 1, `a dropped .docx becomes a new document in the default format, with a version (${river.format}; ${riverVersions?.map((v) => v.reason).join(', ')})`);
+    check((await shown()).length === before + 1, 'one document per file');
+    await drop(home, [{ name: 'notes.txt', type: 'text/plain', bytes: [104, 105] }]);
+    await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'That file could not be read as a Word document.'), 'refusal');
+    check((await shown()).length === before + 1, 'a .txt is refused with "That file could not be read as a Word document." and adds nothing');
+    await home.setInputFiles('#gd-file', docxPaths);
+    await until(async () => (await cards(home)).filter((c) => c.title === 'River notes').length === 3, 'imported two');
+    check(await home.evaluate(() => document.getElementById('gd-said').textContent === ''), 'Import .docx… takes several files, one document each, and clears the old refusal');
+
+    // ---- Export .docx from the menu
+    const download = home.waitForEvent('download');
+    await home.click(`${card(ESSAY)} .gd-more`);
+    await home.click('.gd-menu [data-act="export"]');
+    const file = await download;
+    check(/\.docx$/.test(file.suggestedFilename()), `Export .docx downloads the paper (${file.suggestedFilename()})`);
+
+    // ---- keyboard
+    await home.evaluate(() => scrollTo(0, 0));
+    const order = await shown();
+    await home.focus('.gd-card .gd-title[tabindex="0"]');
+    const startAt = order.indexOf(await focused(home));
+    await home.keyboard.press('Home');
+    check(await focused(home) === order[0], 'Home goes to the first card');
+    await home.keyboard.press('ArrowRight');
+    check(await focused(home) === order[1], 'Right Arrow moves to the next card');
+    const cols = await home.evaluate(() => { const c = [...document.querySelectorAll('.gd-card')]; return c.filter((x) => x.offsetTop === c[0].offsetTop).length; });
+    await home.keyboard.press('ArrowDown');
+    check(await focused(home) === order[1 + cols], `Down Arrow moves a row down (${cols} columns)`);
+    await home.keyboard.press('ArrowUp');
+    await home.keyboard.press('ArrowLeft');
+    check(await focused(home) === order[0], 'Up and Left Arrows move back');
+    await home.keyboard.press('End');
+    check(await focused(home) === order.at(-1), 'End goes to the last card');
+    check(await home.evaluate(() => [...document.querySelectorAll('#gd-docs a, #gd-docs button')].filter((e) => e.tabIndex >= 0).length === 1 && document.activeElement.tabIndex === 0), 'roving focus keeps one Tab stop on the focused card');
+    await home.keyboard.press('Home');
+    await home.keyboard.press('Shift+F10');
+    check(await home.evaluate(() => document.activeElement?.matches('.gd-menu [role="menuitem"]')), 'Shift+F10 opens the card\'s menu');
+    await home.keyboard.press('ArrowDown');
+    check(await home.evaluate(() => document.activeElement === document.querySelectorAll('.gd-menu [role="menuitem"]')[1]), 'arrows move in the menu');
+    await home.keyboard.press('Escape');
+    check(await home.evaluate((k) => !document.querySelector('.gd-menu') && document.activeElement?.closest('.gd-card')?.dataset.key === k, order[0]), 'Esc closes the menu, focus back on the card');
+    await home.keyboard.press('ContextMenu');
+    check(await home.evaluate(() => !!document.querySelector('.gd-menu')), 'the ContextMenu key opens it too');
+    await home.keyboard.press('Escape');
+    await home.keyboard.press('/');
+    check(await home.evaluate(() => document.activeElement?.id === 'gd-q'), '/ focuses search');
+    await home.keyboard.type('lab');
+    await until(async () => (await shown()).join() === LAB, 'typed search');
+    await home.keyboard.press('Escape');
+    await until(async () => (await shown()).length === order.length, 'cleared');
+    check(true, 'Esc clears the search');
+    await home.focus('.gd-card .gd-title[tabindex="0"]');
+    await home.keyboard.press('Home');
+    await home.keyboard.press('Enter');
+    await until(() => home.evaluate(() => location.search.startsWith('?paper=') && !!GZ_WRITER_PAPER?.current()?.key() && document.querySelectorAll('.gp-sheet').length > 0), 'opened with Enter');
+    check(await home.evaluate((k) => GZ_WRITER_PAPER.current().key() === k, order[0]), 'Enter opens the focused card in the same tab');
+    await home.goBack();
+    await until(() => home.evaluate(() => !location.search && document.querySelectorAll('.gd-card').length > 0), 'back home');
+    check((await shown()).length === order.length, 'and Back returns to the list');
+    await home.click(`${card(LAB)} .gd-title`);
+    await until(() => home.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key()), 'opened by click');
+    check(await home.evaluate((k) => GZ_WRITER_PAPER.current().key() === k && !document.querySelector('.gp-submit'), LAB), 'clicking a title opens it in the same tab');
+    await home.click('.gp-top a');
+    await until(() => home.evaluate(() => !location.search && document.querySelectorAll('.gd-card').length > 0), 'Documents link home');
+    check(true, 'the editor\'s Documents link comes back to the list');
+
+    // ---- a New tile: an untouched document leaves nothing behind
+    await home.click('.gd-tile[data-format="plain"]');
+    await until(() => home.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key() && GZ_WRITER_PAPER.current().format().id === 'plain'), 'new Blank');
+    const fresh = await home.evaluate(() => GZ_WRITER_PAPER.current().key());
+    await shot(home, 'editor-1280-en.png');
+    await home.click('.gp-top a');
+    await until(() => home.evaluate(() => document.querySelectorAll('.gd-card').length > 0), 'home after new');
+    check(!(await local(`writerPaper:${fresh}`)) && !(await shown()).includes(fresh), 'a New tile opens a fresh document; untouched, it leaves nothing behind');
+
+    // ---- 640 px, and German
+    const narrow = async (pg, lang) => {
+      await pg.setViewportSize({ width: 640, height: 900 });
+      await pg.evaluate(() => scrollTo(0, 0));
+      const lay = await pg.evaluate(() => { const c = [...document.querySelectorAll('.gd-card')]; const q = document.getElementById('gd-q').closest('.gd-search').getBoundingClientRect(), s = document.getElementById('gd-sort').getBoundingClientRect(); return { cols: c.filter((x) => x.offsetTop === c[0].offsetTop).length, own: q.bottom <= s.top + 1, wide: document.documentElement.scrollWidth <= innerWidth }; });
+      check(lay.cols === 2 && lay.own && lay.wide, `${lang} 640 px: two columns, search on its own line, nothing wider than the window (${JSON.stringify(lay)})`);
+      await shot(pg, `grid-640-${lang}.png`);
+      await pg.click('#gd-list'); await shot(pg, `list-640-${lang}.png`); await pg.click('#gd-grid');
+      const first = await pg.evaluate(() => document.querySelector('.gd-card').dataset.key);
+      await pg.click(`.gd-card[data-key="${first}"] .gd-more`); await shot(pg, `menu-640-${lang}.png`); await pg.keyboard.press('Escape');
+      const named = await pg.evaluate(() => [...document.querySelectorAll('.gd-card')].find((c) => c.dataset.key.startsWith('doc:')).dataset.key);
+      await pg.focus(`.gd-card[data-key="${named}"] .gd-title`); await pg.keyboard.press('F2'); await shot(pg, `rename-640-${lang}.png`); await pg.keyboard.press('Escape');
+      await drop(pg, [{ name: 'River notes.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: docx }], 'over'); await shot(pg, `drop-640-${lang}.png`);
+      await pg.evaluate(() => { const dt = new DataTransfer(); dt.items.add(new File(['x'], 'x.docx')); document.body.dispatchEvent(new DragEvent('dragleave', { dataTransfer: dt, bubbles: true, relatedTarget: null })); });
+      check(!(await pg.evaluate(() => document.getElementById('list').hasAttribute('data-drop'))), `${lang}: the drop state goes when the drag leaves the window`);
+      await pg.setViewportSize({ width: 1280, height: 900 });
+    };
+    await narrow(home, 'en');
+    await home.setViewportSize({ width: 640, height: 900 });
+    await home.focus(`${card(copyKey)} .gd-title`); await home.keyboard.press('Delete'); await until(() => home.evaluate(() => !!document.querySelector('.gd-toast')), 'toast 640'); await shot(home, 'undo-640-en.png'); await home.keyboard.press('ControlOrMeta+z');
+    await until(async () => (await shown()).includes(copyKey), 'undo at 640');
+    await home.click('.gd-tile[data-format="mla9"]');
+    await until(() => home.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key() && document.querySelectorAll('.gp-sheet').length > 0), 'editor at 640');
+    await shot(home, 'editor-640-en.png');
+    await home.close();
+
+    const de = await openHome('de', 'home de');
+    check(await de.evaluate(() => document.title === 'Dokumente' && document.querySelector('h1').textContent === 'Dokumente' && document.querySelector('.gd-new h2').textContent === 'Neu' && document.querySelector('.gd-tile-name').textContent === 'Leer'), 'German: Dokumente, Neu, Leer');
+    check(await de.evaluate(() => document.getElementById('gd-count').textContent === `${document.querySelectorAll('.gd-card').length} Dokumente` && document.getElementById('gd-grid').getAttribute('aria-label') === 'Raster'), 'German: the live region and the view buttons are translated');
+    await until(() => de.evaluate(() => __gd.renders.length >= 12), 'de thumbnails');
+    await shot(de, 'grid-1280-de.png');
+    await de.click('#gd-list'); await shot(de, 'list-1280-de.png'); await de.click('#gd-grid');
+    await de.click(`${card(NOTES)} .gd-more`); await shot(de, 'menu-1280-de.png');
+    check(await de.evaluate(() => [...document.querySelectorAll('.gd-menu [role="menuitem"]')].map((b) => b.textContent).join('|') === 'Umbenennen|Kopie erstellen|.docx exportieren|Löschen'), 'German menu: Umbenennen, Kopie erstellen, .docx exportieren, Löschen');
+    await de.keyboard.press('Escape');
+    await de.focus(`${card(NOTES)} .gd-title`); await de.keyboard.press('F2'); await shot(de, 'rename-1280-de.png'); await de.keyboard.press('Escape');
+    await de.focus(`${card(copyKey)} .gd-title`); await de.keyboard.press('Delete');
+    await until(() => de.evaluate(() => document.querySelector('.gd-toast')?.textContent === 'GelöschtRückgängig'), 'German toast');
+    check(true, 'German toast: Gelöscht, Rückgängig');
+    await shot(de, 'undo-1280-de.png'); await de.keyboard.press('ControlOrMeta+z');
+    await until(async () => (await de.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key))).includes(copyKey), 'de undo');
+    await drop(de, [{ name: 'River notes.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: docx }], 'over'); await shot(de, 'drop-1280-de.png');
+    await de.evaluate(() => { const dt = new DataTransfer(); dt.items.add(new File(['x'], 'x.docx')); document.body.dispatchEvent(new DragEvent('dragleave', { dataTransfer: dt, bubbles: true, relatedTarget: null })); });
+    await narrow(de, 'de');
+    await de.setViewportSize({ width: 640, height: 900 });
+    await de.focus(`${card(copyKey)} .gd-title`); await de.keyboard.press('Delete'); await until(() => de.evaluate(() => !!document.querySelector('.gd-toast')), 'de toast 640'); await shot(de, 'undo-640-de.png'); await de.keyboard.press('ControlOrMeta+z');
+    await until(async () => (await de.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key))).includes(copyKey), 'de undo 640');
+    await de.setViewportSize({ width: 1280, height: 900 });
+    await de.click('.gd-tile[data-format="apa7"]');
+    await until(() => de.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key() && document.querySelectorAll('.gp-sheet').length > 0), 'de editor');
+    check(await de.evaluate(() => document.querySelector('.gp-top a').textContent === 'Dokumente'), 'German editor header: the Dokumente link');
+    await shot(de, 'editor-1280-de.png');
+    await de.setViewportSize({ width: 640, height: 900 });
+    await shot(de, 'editor-640-de.png');
+    await de.close();
+
+    check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
+    check(errors.length === 0, `no page errors (${errors.join('; ')})`);
+    check(requests.length === 0, `no network requests (${requests.join(', ')})`);
+    passed = true;
+    console.log(JSON.stringify({ checks: checks.length, shots: saved }, null, 2));
+  } finally {
+    await context?.close();
+    if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+    if (ext) fs.rmSync(ext, { recursive: true, force: true });
+    if (held) fs.rmSync(lock, { recursive: true, force: true });
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ passed, checks, errors, requests }, null, 2) + '\n');
+  }
+})().catch((e) => { console.error(e); fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, 'failure.txt'), `${e.stack}\n`); process.exitCode = 1; });
