@@ -181,7 +181,7 @@ test('fromDocument: a standalone document\'s text, format and import choice for 
   await P.save(k, { doc: doc('My essay so far.'), title: 'Essay 2', format: 'mla9' });
   const { paper: source } = await P.save(home, { doc: doc('Drafted at home tonight.'), kind: 'paper', named: true, title: 'Home draft', format: 'plain', keep: true });
   const fields = PA.fromDocument(k, source);
-  assert.deepEqual(fields, { doc: doc('Drafted at home tonight.'), words: 4, format: 'plain', keep: true });
+  assert.deepEqual(fields, { doc: doc('Drafted at home tonight.'), words: 4, format: 'plain', keep: true, outline: null });
   fields.doc.content[0].content[0].text = 'Changed.';
   assert.equal(source.doc.content[0].content[0].text, 'Drafted at home tonight.', 'the paper gets its own copy');
   const { paper, version } = await P.save(k, { title: 'Essay 2', named: false, ...PA.fromDocument(k, source) }, { reason: 'import' });
@@ -195,6 +195,10 @@ test('fromDocument: a standalone document\'s text, format and import choice for 
   assert.deepEqual(PA.fromDocument(k, { doc: doc('One two three.'), format: preset, outline }), { doc: doc('One two three.'), words: 3, format: preset, keep: false, outline: { ...outline, scope: k } });
   assert.equal(outline.scope, '');
   for (const none of [null, undefined, {}, { title: 'x', format: 'mla9' }]) assert.equal(PA.fromDocument(k, none), null);
+  assert.equal(PA.fromDocument(k, { doc: doc('One two three.'), words: 100 }).words, 3, 'old import counts are recomputed');
+  const copied = PA.fromDocument(k, { doc: doc('Draft.'), format: preset, outline });
+  copied.format.font = 'Other'; copied.outline.entries[0].heading = 'Other';
+  assert.equal(preset.font, 'Arial'); assert.equal(outline.entries[0].heading, 'Intro');
 });
 
 test('renamed: a title set elsewhere reaches an open editor, its own saves never read as one', async () => {
