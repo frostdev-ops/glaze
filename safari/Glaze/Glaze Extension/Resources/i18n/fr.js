@@ -1226,6 +1226,7 @@
   "Syllabus import": "Import du plan de cours",
   "Apple Intelligence": "Apple Intelligence",
   "Apple Intelligence is off": "Apple Intelligence est désactivé",
+  "Apple Intelligence isn’t capable enough for Feedback and will likely fail.": "Apple Intelligence n’est pas assez performant pour les Commentaires et échouera probablement.",
   "Glaze can read this syllabus into your course home, GPA and To Do. It stays on this device.": "Glaze peut reporter ce plan de cours sur l'accueil du cours, dans votre moyenne et dans Better To Do. Il reste sur cet appareil.",
   "Read this syllabus": "Lire ce plan de cours",
   "Use a file or text": "Utiliser un fichier ou du texte",

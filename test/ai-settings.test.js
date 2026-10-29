@@ -626,6 +626,28 @@ test('On this device is one card: Apple Intelligence on a Mac that has it, Chrom
   assert.equal(AS.clean({ on: true, use: 'apple' }).model.use, 'device', 'a saved Apple Intelligence choice is On this device now');
 });
 
+test('Feedback on Apple Intelligence says it will likely fail; on another model or Chrome\'s, nothing', async () => {
+  const WARN = 'Apple Intelligence isn’t capable enough for Feedback and will likely fail.';
+  const warns = (p) => p.walk({ children: p.$('ai-feature-list').children }).filter((x) => x.className === 'ai-warn');
+  const on = (provider) => async (m) => (m.op === 'set' ? { ok: true } : { ok: true, state: 'ready', provider });
+  const mac = { providers: ['openai', 'device', 'apple'], device: on('apple'), conns: { openai: kept('openai') } };
+  // Through the default model, and as Feedback's own.
+  for (const ai of [{ on: true, model: { use: 'device' } }, { on: true, model: { use: 'openai', model: 'gpt-5' }, models: { writing: { use: 'device' } } }]) {
+    const p = await open({ ...mac, ai });
+    const [w] = warns(p);
+    assert.equal(warns(p).length, 1);
+    assert.equal(w.textContent, WARN);
+    assert.ok(p.walk(p.row('writing')).includes(w), 'under Feedback');
+    assert.equal(p.$('ai-pick-writing').attrs['aria-describedby'], w.id);
+  }
+  const own = await open({ ...mac, ai: { on: true, model: { use: 'device' }, models: { writing: { use: 'openai', model: 'gpt-5' } } } });
+  assert.deepEqual(warns(own), [], 'Feedback on its own model');
+  assert.equal(own.$('ai-pick-writing').attrs['aria-describedby'], undefined);
+  const chrome = await open({ ai: { on: true, model: { use: 'device' } }, providers: ['openai', 'device'], device: on('device') });
+  assert.deepEqual(warns(chrome), [], 'Chrome on-device AI');
+  for (const l of Object.keys(globalThis.GZ_LANGS)) assert.notEqual(I.t(WARN, {}, l), WARN, l);
+});
+
 test('activity: the recent calls, newest first, feature · provider · model, metadata only, and Clear', async () => {
   const calls = [
     { id: 'r1', task: 'syllabus.read', feature: 'syllabus', provider: 'openai', state: 'completed', startedAt: 1000, ms: 900, usage: { input: 1200, output: 34 }, prompt: 'secret words', key: KEY, base: 'https://api.example.com' },

@@ -91,7 +91,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     let s = S.clean(), conns = {}, calls = [], device = null, open = null, picking = null, on = null, query = '', said = null, unsaved = false;
     const catalogs = {}, tested = {}, drafts = {};
     const offered = () => providers.includes(DEVICE) || providers.includes(APPLE);
-    const deviceName = () => providerName(device?.provider === APPLE || (!device && providers.includes(APPLE)) ? APPLE : DEVICE, t);
+    const apple = () => device?.provider === APPLE || (!device && providers.includes(APPLE));
+    const deviceName = () => providerName(apple() ? APPLE : DEVICE, t);
     const kind = (id) => (id === DEVICE ? DEVICE : CARDS[id] ? 'preset' : 'custom');
     const connected = (id) => (id === DEVICE ? offered() : !!conns[id] && (kind(id) === 'custom' || !!conns[id].key));
     const bad = (id) => connected(id) && (tested[id] ? tested[id].state !== 'ready' && tested[id].reason === 'request-rejected' : refused(calls, id));
@@ -529,6 +530,13 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         if (sel?.use && sel.use !== DEVICE && !catalogs[sel.use]) models(sel.use);
         line.append(name, wrapPick, levels.length ? slider(row, sel, levels) : el('span', 'ai-effort-none'));
         wrap.append(line);
+        // Apple Intelligence's model is too small for Feedback's grading and reading: it mostly gives no usable answer.
+        if (row === 'writing' && S.resolve(s, row)?.use === DEVICE && apple()) {
+          const warn = el('p', 'ai-warn', t('Apple Intelligence isn’t capable enough for Feedback and will likely fail.'));
+          warn.id = 'ai-warn-writing';
+          pick.setAttribute('aria-describedby', warn.id);
+          wrap.append(warn);
+        }
         if (row === 'writing') for (const [setting, text] of [['outline', 'AI outline'], ['sources', 'AI source extraction']]) {
           const label = el('label', 'ai-outline'), box = el('input');
           Object.assign(box, { type: 'checkbox', id: `ai-${setting}`, checked: s[setting] !== false });
