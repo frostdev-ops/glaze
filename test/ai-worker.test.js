@@ -367,6 +367,11 @@ test("Documents' frame in a school's page asks as Writer's frame does, seated by
   assert.equal(await ask(w, { ...next, frameId: 4 }), 'hung up', 'another frame');
   assert.equal(await ask(w, { ...next, tab: { id: 6, url: COURSE } }), 'hung up', 'another tab');
   assert.equal(await ask(w, { ...next, url: `${EXT}/options.html` }), 'hung up', 'not Documents');
+  // The tab's loading (the page's own history entry for a document opened in place brings one) forgets the seats in it; the
+  // claimed document keeps its seat, from the page its claim names. A frame that never claimed gets none.
+  for (const f of w.updated) f(5, { status: 'loading' });
+  assert.equal(await ask(w, next), 'allowed', 'after the tab\'s loading');
+  assert.equal(await ask(w, docs(COURSE, { documentId: 'papers-9' })), 'hung up', 'a document of that frame that claimed nothing');
   // The page under it, read live: a quiz or a tool's page refuses it; an attempt waits for the word that it is an assignment.
   w.page = `${CANVAS}/courses/1/quizzes/3/take`;
   assert.equal(await ask(w, next), 'hung up', 'a quiz');
@@ -377,6 +382,8 @@ test("Documents' frame in a school's page asks as Writer's frame does, seated by
   assert.deepEqual(await report(w, 'assignment'), { ok: true });
   assert.equal(await ask(w, onAttempt), 'allowed');
   assert.equal(await ask(w, onAttempt, 'syllabus'), 'hung up');
+  for (const f of w.removed) f(5);
+  assert.equal(await ask(w, onAttempt), 'hung up', 'the tab closed');
 });
 
 test('on an assignment attempt the writer frame runs a completion; a cancel passes on any attempt', async () => {

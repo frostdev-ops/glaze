@@ -267,7 +267,8 @@ const check = async (name, test) => {
         f = await openFromBar(page);
         await f.locator(`.gd-card[data-key="${AI_KEY}"] .gd-title`).click();
         f = await shown(page);
-        await until(() => f.evaluate(() => !!globalThis.GZ_WRITER_AI?.allowed?.('completion') && GZ_WRITER_AI.allowed('writing')), 'the worker admits its AI port: completion and writing allowed');
+        await until(() => f.evaluate(() => !!globalThis.GZ_WRITER_AI?.allowed?.('completion') && GZ_WRITER_AI.allowed('writing')), 'the worker admits its AI port: completion and writing allowed', 20000)
+          .catch(async (e) => { throw Error(`${e.message} (${await f.evaluate(() => globalThis.GZ_WRITER_AI?.gate?.()).catch((x) => x.message)})`); });
         await f.locator('.ProseMirror').click();
         await f.evaluate((text) => {
           const v = GZ_WRITER_FRAME.editor().view;
@@ -288,6 +289,7 @@ const check = async (name, test) => {
         await atMark(page);
       } finally {
         await (await sw()).evaluate(() => chrome.storage.local.remove('ai'));
+        if (await page.evaluate(() => !!document.getElementById('gz-settings-page'))) { await page.keyboard.press('Escape'); await closed(page).catch(() => {}); }
       }
     });
     await check('ultra: the page heard no document of the student\'s, and its history holds none', async () => {
