@@ -210,7 +210,7 @@ test('defs: what the registry lists for a mod, named, grouped and marked as its 
   for (const x of [...got, bare]) {
     assert.match(x.name, /^mod_[a-z2-7]{16}_[a-z][a-z0-9_]{0,23}$/);
     assert.ok(R.NAME.test(x.name));
-    assert.ok(x.title.length <= 80 && x.description.length <= 1024);
+    assert.ok(x.title.length <= 120 && x.description.length <= 1024);
     assert.equal(S.clean(x.parameters), x.parameters);
     assert.equal(Object.hasOwn(x.parameters.properties, 'reason'), false);
   }
@@ -219,13 +219,13 @@ test('defs: what the registry lists for a mod, named, grouped and marked as its 
   assert.deepEqual(T.defs(rec({ grants: undefined })), []);
   assert.deepEqual(T.defs(rec({ manifest: { ...MANIFEST } })), []);
   assert.deepEqual(T.defs(null), []);
-  // A long title is cut to the registry's 80 after the mod's name and "(mod)" (a name is cut only past 40 UTF-16 units);
+  // A long title fits the registry's 120 after the mod's name and "(mod)" (a name is cut only past 40 UTF-16 units);
   // format and direction characters go.
   const long = T.defs(rec({ manifest: { ...rec().manifest, name: 'M'.repeat(40), tools: [{ ...ASK, title: 'T'.repeat(60) }] } }))[0];
-  assert.equal(long.title.length, 80);
-  assert.ok(long.title.startsWith(`${'M'.repeat(40)} (mod): TTT`) && long.title.endsWith('…'));
+  assert.equal(long.title, `${'M'.repeat(40)} (mod): ${'T'.repeat(60)}`);
+  assert.ok(long.title.startsWith(`${'M'.repeat(40)} (mod): TTT`) && long.title.endsWith('T'.repeat(60)));
   const wide = T.defs(rec({ manifest: { ...rec().manifest, name: '🌱'.repeat(40), tools: [{ ...ASK, title: '🌿'.repeat(60), description: '🍃'.repeat(500) }] } }))[0];
-  assert.ok(wide.title.length <= 80 && wide.description.length <= 1024, `${wide.title.length} ${wide.description.length}`);
+  assert.ok(wide.title.length <= 120 && wide.description.length <= 1024, `${wide.title.length} ${wide.description.length}`);
   assert.ok(wide.title.includes(' (mod): ') && wide.description.startsWith("Written by the mod's author, not Glaze. 🍃"));
   assert.ok(wide.title.isWellFormed() && wide.description.isWellFormed(), 'no half a character');
   const hidden = T.defs(rec({ manifest: { ...rec().manifest, name: 'Due​Soon', tools: [{ ...ASK, title: 'Ask⁦ me', description: 'Hi‍ there.' }] } }))[0];
@@ -245,7 +245,7 @@ test('editor: the agents permission, one line per tool saying where its data com
     ['grades', 'Grades — reads your grades and GPA in every course.'],
     ['code', 'Runs its author’s code — Glaze doesn’t draw it itself.'],
     ['tool:due_soon@todo', 'Tool “Due soon” — gives agent apps your to-dos, as Glaze last read them.'],
-    ['tool:week@schedule', 'Tool “This week” — gives agent apps your due dates, as Glaze last read them.'],
+    ['tool:week@schedule', 'Tool “This week” — gives agent apps your to-dos with due dates, as Glaze last read them.'],
     ['tool:courses@courses', 'Tool “Courses” — gives agent apps your courses, as Glaze last read them.'],
     ['tool:recent_grades@grades', 'Tool “Recent grades” — gives agent apps your grades, as Glaze last read them.'],
     ['tool:ask_garden@code', 'Tool “Ask the garden” — its author’s code answers, with what this mod may use.'],
