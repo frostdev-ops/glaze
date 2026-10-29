@@ -4,7 +4,8 @@
 // pagination) and its list paragraphs (mso-list, their marker spans) as real lists; Docs' guid wrapper, its 1.38 / 1.2
 // line heights (its 1.15 and single) and aria-level lists; a web page's marks, colours and paper fonts, not its layout.
 // Fonts, sizes, colours, highlight, caps, spacing and indents become the paper's marks and paragraph settings, what equals
-// the paper's own left unmarked. After a paste with formatting a toast asks once per paper: Keep formatting (the default,
+// the paper's own left unmarked. A colour stays only where it is legible on the paper (lib/writer-color.js: on its
+// highlight, else the white page; Word's mso-themecolor text and page colours are the paper's ink); block shading drops. After a paste with formatting a toast asks once per paper: Keep formatting (the default,
 // also when it goes unanswered) or Match the paper; the answer is the paper's doc attribute `paste`, and storage.sync
 // writer.pasteAsk false keeps formatting without asking. ⌘⇧V pastes plain text (ProseMirror's shift paste).
 // The normaliser, strip() and tidy() are plain functions for node tests; then the frame.
@@ -12,6 +13,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   const S = () => globalThis.GZ_WRITER_SCHEMA || require('./lib/writer-schema.js');
   const limit = () => { throw Object.assign(new RangeError('writer-paste: input exceeds safe limits'), { code: 'WRITER_INPUT_LIMIT' }); };
   const ST = () => globalThis.GZ_WRITER_STYLES || require('./lib/writer-styles.js');
+  const LEGIBLE = () => globalThis.GZ_WRITER_COLOR || require('./lib/writer-color.js');
 
   // ---- a small tree of the clipboard HTML (the schema's tokenizer; nothing reaches a live document)
   const VOID = new Set(['br', 'hr', 'img', 'wbr', 'input', 'meta', 'link', 'area', 'base', 'col', 'embed', 'param', 'source', 'track']);
@@ -126,12 +128,18 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   // An element's own text direction (dir, or Word's direction:rtl).
   const dirOf = (e, st) => { const d = String(e.a.dir || st.direction || '').trim().toLowerCase(); return d === 'ltr' || d === 'rtl' ? d : null; };
   const cascade = (e, up, ctx, block) => {
-    const st = own(e, ctx), out = { deco: new Set(up.deco), vert: up.vert, bg: block ? null : up.bg, mso: block ? null : up.mso, link: up.link, dir: dirOf(e, st) || up.dir };
+    const st = own(e, ctx), out = { deco: new Set(up.deco), vert: up.vert, bg: block ? null : up.bg, mso: block ? null : up.mso, link: up.link, dir: dirOf(e, st) || up.dir, theme: up.theme, tint: up.tint };
     for (const k of INHERIT) out[k] = up[k];
     const ua = UA[e.name] || (HEADING.test(e.name) ? { 'font-weight': 'bold' } : {});
     const decl = { ...ua, ...st };
     if (e.name === 'font') { if (e.a.face) decl['font-family'] = e.a.face; if (e.a.color) decl.color = e.a.color; }
     for (const k of INHERIT) if (decl[k] != null && decl[k] !== 'inherit') out[k] = decl[k];
+    // Word's theme hint (and its tint or shade) goes with the colour it is written beside.
+    if ((decl.color != null && decl.color !== 'inherit') || decl['mso-themecolor']) {
+      const src = e.style.color != null ? e.style : decl;
+      out.theme = src['mso-themecolor'] || null;
+      out.tint = !!(src['mso-themetint'] || src['mso-themeshade']);
+    }
     if (decl.font) { const m = /(\d*\.?\d+(?:pt|px))\s*(?:\/\S+)?\s+(.+)$/.exec(decl.font); if (m) { out['font-size'] = m[1]; out['font-family'] = m[2]; } }
     const deco = decl['text-decoration'] || decl['text-decoration-line'] || '';
     if (/underline/.test(deco)) out.deco.add('u');
@@ -158,9 +166,8 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
       if (font && font === ctx.base?.font) font = null;
       if (size && size === ctx.base?.size) size = null;
       if (font || size) extra.push(['span', `style="${[font ? `font-family:${font}` : '', size ? `font-size:${size}pt` : ''].filter(Boolean).join(';')}"`]);
-      const color = !c.link && hex(c.color);
+      const hl = marker(c.bg, c.mso), color = !c.link && LEGIBLE().legible(hex(c.color), { on: hl && S().HIGHLIGHT[hl], theme: c.theme, tint: c.tint });
       if (color && !['000000'].includes(color) && !(ctx.source === 'web' && NEAR_BLACK(color))) extra.push(['span', `data-gz-color="${color}"`]);
-      const hl = marker(c.bg, c.mso);
       if (hl) extra.push(['span', `data-gz-highlight="${hl}"`]);
       if (/small-caps/.test(String(c['font-variant'] || ''))) extra.push(['span', 'data-gz-caps="small"']);
       else if (/uppercase/.test(String(c['text-transform'] || ''))) extra.push(['span', 'data-gz-caps="all"']);
@@ -350,7 +357,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
     const source = /docs-internal-guid-/.test(html) ? 'docs' : /urn:schemas-microsoft-com:office:word|content=Word\.Document|class="?Mso|mso-[a-z-]+\s*:/i.test(html) ? 'word' : 'web';
     const { root, css } = tree(html);
     const ctx = { source, match: !!o.match, base: o.base || null, rules: source === 'word' ? rules(css) : new Map(), lists: new Map(), rich: false };
-    const start = { deco: new Set(), vert: null, bg: null, mso: null, link: false };
+    const start = { deco: new Set(), vert: null, bg: null, mso: null, link: false, theme: null, tint: false };
     const out = blocks(root.kids, start, ctx);
     return { html: out, source, rich: ctx.rich && !ctx.match };
   };

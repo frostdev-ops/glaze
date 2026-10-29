@@ -56,7 +56,7 @@
       on: (event, fn) => { if (hooks[event] && typeof fn === 'function') hooks[event].push(fn); },
       plugin: (p) => { if (editor) editor.addPlugins([p]); else plugins.push(p); },
     };
-    await GZ_WRITER_PAPER.need(['lib/writer-sources.js', 'lib/writer-bibliography.js', 'lib/writer-cite.js', 'lib/writer-lookup.js', 'writer-cite.js', 'lib/writer-export.js', 'writer-objects.js', 'writer-find.js', 'writer-counts.js', 'writer-print.js', 'writer-ruler.js', 'writer-paste.js']);
+    await GZ_WRITER_PAPER.need(['lib/writer-sources.js', 'lib/writer-bibliography.js', 'lib/writer-cite.js', 'lib/writer-lookup.js', 'writer-cite.js', 'lib/writer-export.js', 'writer-objects.js', 'writer-find.js', 'writer-counts.js', 'writer-print.js', 'writer-ruler.js', 'lib/writer-color.js', 'writer-paste.js']);
     const mountEl = h('div');
     document.body.append(mountEl);
     editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins, onChange: (change) => { for (const fn of hooks.change) fn(change); } });
