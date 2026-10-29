@@ -26,7 +26,7 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     for (const f of ['lib/relay.js', 'lib/sessions.js', 'defaults.js']) assert.ok(m.background.scripts.includes(f), f);
     assert.deepEqual(m.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'] });
     assert.equal(m.oauth2, undefined);
-    assert.ok(!(m.optional_permissions || []).includes('identity'));
+    assert.deepEqual(m.optional_permissions, ['nativeMessaging'], 'no identity; agent access asks for native messaging');
     assert.ok(m.web_accessible_resources.every((e) => !('use_dynamic_url' in e)));
     // Code mods need Chrome: no sandbox page, CSP or files, so content.js never starts them.
     assert.equal(m.sandbox, undefined);
