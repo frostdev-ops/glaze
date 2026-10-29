@@ -989,18 +989,22 @@
   // Ctrl+K (⌘K on a Mac) opens one search over the site's pages, your courses, this course and Glaze's own switches:
   // features/palette.js, loaded the first time. Never while typing (Ultra's editor uses Ctrl+K for links), top frame only.
   let cmdWanted = null; // while palette.js loads: open it when it's in? Each press meanwhile turns that over.
+  // The key's turn, here or from the page around a course tab on screen (features/coursetabs.js).
+  const askCmd = () => {
+    if (globalThis.GZ_CMD?.isOpen()) GZ_CMD.close();
+    else if (cmdWanted !== null) cmdWanted = !cmdWanted;
+    else { cmdWanted = true; need('features/palette.js', () => globalThis.GZ_CMD).then(() => { if (cmdWanted && chrome.runtime?.id && observer && settings.enhance.palette) GZ_CMD.open(); }, () => {}).finally(() => { cmdWanted = null; }); }
+  };
   if (solo) {
     document.addEventListener('keydown', (e) => {
       if (!chrome.runtime?.id || e.key?.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !settings.enhance.palette || !observer) return;
       // Stopped, as when opening: the search box (focused, now gone) would otherwise answer it with no palette left.
-      if (globalThis.GZ_CMD?.isOpen()) { e.preventDefault(); e.stopPropagation(); GZ_CMD.close(); return; }
-      if (cmdWanted !== null) { e.preventDefault(); e.stopPropagation(); cmdWanted = !cmdWanted; return; }
+      if (globalThis.GZ_CMD?.isOpen() || cmdWanted !== null) { e.preventDefault(); e.stopPropagation(); askCmd(); return; }
       if (typing(e.target)) return;
       if (!ultra && e.target.closest?.('[role="dialog"], [role="menu"], [role="listbox"]')) return;
       e.preventDefault();
       e.stopPropagation();
-      cmdWanted = true;
-      need('features/palette.js', () => globalThis.GZ_CMD).then(() => { if (cmdWanted && chrome.runtime?.id && observer && settings.enhance.palette) GZ_CMD.open(); }, () => {}).finally(() => { cmdWanted = null; });
+      if (!globalThis.GZ_CTABS?.palette?.()) askCmd();
     }, true);
   }
 
@@ -1562,7 +1566,7 @@
   globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, moment, gradeMoment, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
     account: () => (site === 'canvas' ? X.ctx.profile().then((p) => String(p.id)) : X.ctx.me()),
     // The palette, the keys, the course menu, the previews and Download all (W0c).
-    site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, courseId, toggleOf,
+    site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, courseId, toggleOf, askCmd,
     nickOf: (cid) => X.nickOf(cid), courseList: () => courseList, courseColors, varText, cardUI,
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).

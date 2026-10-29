@@ -732,7 +732,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       X.need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE?.open(what === 'customize' ? 'navigation/bar' : '')).then((opened) => { if (!opened) tab(); }, tab);
       return;
     }
-    if (what === 'search') { X.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); return; }
+    // Over a course tab's frame, the palette is that frame's (features/coursetabs.js).
+    if (what === 'search') { if (!globalThis.GZ_CTABS?.palette?.(true)) X.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); return; }
     if (what === 'notes') { X.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ event: e }), () => {}); return; }
     // Writer's Documents (papers.html) in a tab of its own, which the worker opens for the student's own click.
     if (what === 'documents') { if (e?.isTrusted) send('papers'); return; }

@@ -579,6 +579,19 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     box.append(back); host.append(box); retryNote = box;
   };
   const toTop = (op, m = {}) => { try { window.top.postMessage({ gzCtab: op, ...m }, location.origin); } catch { /* gone */ } };
+  // The command palette asked for on this page (content.js's Ctrl+K, open: Glaze's bar's Search) while a tab's frame is
+  // on screen: the frame's own, for the course or page shown, with the keyboard in it ('palette'). A frame whose Glaze
+  // hasn't yet said it is drawn on screen ('drawn', the answer to 'visible') keeps the ask (f.cmd: 'key' or 'open') until
+  // it does; a press meanwhile takes it back, and switching tabs drops it (show).
+  const palette = (open = false) => {
+    const f = on && !framed && !preview && showing && frames.get(showing);
+    if (!f) return false;
+    let live = false; try { live = f.ready && f.live === f.el.contentDocument; } catch { /* gone */ }
+    if (live) cmdTo(f, open);
+    else f.cmd = !open && f.cmd ? '' : open ? 'open' : 'key';
+    return true;
+  };
+  const cmdTo = (f, open) => { f.el.focus({ preventScroll: true }); f.el.contentWindow?.postMessage({ gzCtab: 'palette', open }, location.origin); };
   // The sidebar (features/sidebar.js) works in the document on screen only: this page, or the tab's frame over it. A
   // frame learns which it is from the page around it ('visible'), and counts as hidden until then. Its record's changes
   // go through that page ('sidebar'), which sends them only for the frame on screen, signed in as the page is, and
@@ -1330,6 +1343,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (k === cid) g.at = Date.now();
       g.el.style.visibility = k === cid && g.ready ? '' : 'hidden';
       g.el.inert = k !== cid;
+      g.cmd = '';
       g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid && g.ready }, location.origin);
     }
     if (host) { host.toggleAttribute('data-on', !!cid); lay(); }
@@ -1445,6 +1459,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (ctx.site === 'canvas' && from === showing) w.postMessage({ gzCtab: 'loading', cid: waiting }, location.origin);
       globalThis.GZ_PET_WORLD?.refresh();
     }
+    else if (op === 'drawn' && from === showing && src.ready) {
+      try { src.live = src.el.contentDocument; } catch { /* gone */ }
+      if (src.cmd) { cmdTo(src, src.cmd === 'open'); src.cmd = ''; }
+    }
     else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); nudge(src, true); later(700); keepPage(); if (ctx.site === 'canvas' || from === PAGE) globalThis.GZ_NAVBAR_UI?.sync(); }
     // A link to a page of its own (go), or pressed (warm): turned to by this page (turnTo), the one it leaves kept.
     else if ((op === 'go' || op === 'warm') && ctx.site === 'canvas' && typeof url === 'string' && url.length < 1300) {
@@ -1506,9 +1524,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         told = e.data.on;
         html.toggleAttribute('data-gz-ctab-framed', !e.data.on); ctx.scene();
         for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI', 'GZ_DOCREVIEW']) globalThis[n]?.cover?.();
-        // A hidden page may have left its course while its navigation request was ignored.
-        if (e.data.on) { awayFrom = ''; pass(); }
+        // A hidden page may have left its course while its navigation request was ignored. Its palette goes with it.
+        if (e.data.on) { awayFrom = ''; pass(); toTop('drawn'); } else globalThis.GZ_CMD?.close();
       }
+      // As Ctrl+K here would, or as Glaze's bar's Search does on its own page (open).
+      else if (e.data?.gzCtab === 'palette' && ctx.on()) { if (e.data.open === true) ctx.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); else ctx.askCmd(); }
       else if (e.data?.gzCtab === 'sidebar:ack' && Number.isSafeInteger(e.data.n)) acked(e.data);
       else if (e.data?.gzCtab === 'timer:ack' && Number.isSafeInteger(e.data.n)) acked(e.data, 'timer');
       else if (e.data?.gzCtab === 'note' && typeof e.data.text === 'string' && e.data.text.length <= 500) say(e.data.text);
@@ -2048,7 +2068,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       return true;
     },
   };
-  return { sync, held, petSurface, bar, visible, sidebar: askSidebar, timer: askTimer, drawer, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
+  return { sync, held, petSurface, bar, visible, palette, sidebar: askSidebar, timer: askTimer, drawer, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
 })();
 
 GZ_CTABS;
