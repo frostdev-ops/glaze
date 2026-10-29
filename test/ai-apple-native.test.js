@@ -37,6 +37,9 @@ if #available(macOS 27.0, *) {
     out["guardrail"] = Native.failure(LanguageModelError.guardrailViolation(.init(debugDescription: "PRIVATE")))
     out["rate"] = Native.failure(LanguageModelError.rateLimited(.init(resetDate: nil, debugDescription: "PRIVATE")))
     out["cancelled"] = Native.failure(CancellationError())
+    out["busyCount"] = Native.failure(NSError(domain: "FoundationModels.LanguageModelError", code: -1, userInfo: [NSLocalizedDescriptionKey: "PRIVATE PAPER", NSMultipleUnderlyingErrorsKey: [NSError(domain: "ModelManagerServices.ModelManagerError", code: 1013)]]))
+    out["busyAnswer"] = Native.failure(NSError(domain: "com.apple.SensitiveContentAnalysisML", code: 15, userInfo: [NSLocalizedDescriptionKey: "PRIVATE PAPER"]))
+    out["notBusy"] = Native.failure(NSError(domain: "ModelManagerServices.ModelManagerError", code: 1001))
     out["cloud"] = await Native.status(["model": "private-cloud"])
     out["earlyCancel"] = Native.cancel(["id": "cancel-before-registration"])
     out["earlyRun"] = await Native.run(["id": "cancel-before-registration"])
@@ -69,6 +72,10 @@ test('native errors carry only fixed categories and reasons', { skip: !supported
   for (const k of ['refusal', 'guardrail']) assert.equal(result[k].error, 'refusal');
   assert.deepEqual(result.rate, { ok: false, error: 'request-rejected', reason: 'rate', status: 429 });
   assert.deepEqual(result.cancelled, { ok: false, error: 'cancelled' });
+});
+test('the background budget reads as busy, from its domains and codes alone', { skip: !supported }, () => {
+  for (const k of ['busyCount', 'busyAnswer']) assert.deepEqual(result[k], { ok: false, error: 'provider-unavailable', reason: 'busy' });
+  assert.deepEqual(result.notBusy, { ok: false, error: 'provider-unavailable', reason: 'unknown' });
 });
 test('the native side refuses any model but the one on this device', { skip: !supported }, () => {
   assert.deepEqual(result.cloud, { ok: false, error: 'request-rejected', reason: 'model' });

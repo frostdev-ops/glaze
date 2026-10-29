@@ -58,6 +58,8 @@ test('status: the native answer in the harness\'s words; no handler or a strange
 });
 
 test('native context and guardrail reasons survive the full provider sanitizer, but arbitrary diagnostics do not', async () => {
+  native = async () => ({ ok: false, error: 'provider-unavailable', reason: 'busy' });
+  await assert.rejects(P.run(A, { messages: [{ role: 'user', content: 'Synthetic test.' }] }, { model: 'on-device' }), (e) => e.category === 'provider-unavailable' && e.reason === 'busy');
   native = async () => ({ ok: false, error: 'request-rejected', reason: 'context', context: 8192, tokens: 9100, message: 'PRIVATE PAPER' });
   await assert.rejects(P.run(A, { messages: [{ role: 'user', content: 'Synthetic test.' }] }, { model: 'on-device' }), (e) => {
     assert.deepEqual({ reason: e.reason, context: e.context, tokens: e.tokens }, { reason: 'context', context: 8192, tokens: 9100 });
