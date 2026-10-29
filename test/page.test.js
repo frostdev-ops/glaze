@@ -13,6 +13,11 @@ test('due dates in the formats Ultra writes', () => {
   assert.equal(P.due('Due date: 10/11/2026, 2:59 PM', now), 'overdue');
 });
 
+test('the due field wins over earlier dates in the same text', () => {
+  assert.equal(P.due('Posted 10/1/26. Due date: 10/11/26, 11:59 PM', now), 'today');
+  assert.equal(P.due('Posted 10/11/26, 11:59 PM. Due date: 10/13/26, 9:00 AM', now), 'soon');
+});
+
 test('12 AM and 12 PM', () => {
   assert.equal(P.due('Due date: 10/12/26, 12:00 AM', now), 'soon');   // midnight starting Monday
   assert.equal(P.due('Due date: 10/11/26, 12:00 PM', now), 'overdue'); // noon today, already past
