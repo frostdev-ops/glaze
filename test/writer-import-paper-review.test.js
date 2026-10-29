@@ -12,7 +12,7 @@ const paper = () => {
     need: async () => {}, GZ_WRITER_DOCX: { importDocx: async () => ({ doc: { type: 'doc', text: 'imported' }, html: '<p>Imported</p>', warnings: [] }) },
     S: { paper: { nodeFromJSON: (json) => ({ toJSON: () => json }) } }, PA: require('../lib/writer-papers.js'), keep: false,
     F: { check: () => ({ issues: [{ rule: 'spacing' }] }), KEPT: new Set(['spacing']) },
-    save: async () => { snapshots.push(ctx.keep); return true; }, record: () => ({ keep: ctx.keep }), t: (k) => k, restore: () => {}, toast: (text, act) => notices.push({ text, act }),
+    save: async () => { snapshots.push(ctx.keep); return true; }, keepPictures: async () => {}, record: () => ({ keep: ctx.keep }), t: (k) => k, restore: () => {}, toast: (text, act) => notices.push({ text, act }),
     store: { save: async (k, patch) => { saved.push(k); return { paper: patch, version: { id: 'before' } }; } },
     setDoc: (json) => { applied.push(json); view.state.doc = json; },
   });

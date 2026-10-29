@@ -467,10 +467,11 @@ test('a pick flushes unsaved typing and pending autosave before taking its versi
 test('an autosave queued during the import write cannot write the outgoing document over the pick', async () => {
   const { local, f } = await picking();
   const put = local.set;
-  let release, started;
+  let release, started, held = false;
   const gate = new Promise((r) => { started = r; });
   local.set = async (o) => {
-    if (textOf(o[PA.KEYS.PAPER + KEY]?.doc || docOf('Other')) === 'New document.') {
+    if (!held && textOf(o[PA.KEYS.PAPER + KEY]?.doc || docOf('Other')) === 'New document.') {
+      held = true;
       started(); await new Promise((r) => { release = r; });
     }
     return put(o);
