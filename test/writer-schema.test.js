@@ -329,3 +329,19 @@ test('both files are classic scripts that load after lib/pm.js in a page, once',
   assert.equal(ctx.GZ_WRITER_SCHEMA, first);
   assert.equal(vm.runInContext('GZ_WRITER_SCHEMA.serialize(GZ_WRITER_SCHEMA.compose, GZ_WRITER_SCHEMA.parse(GZ_WRITER_SCHEMA.compose, "<p>x</p>"))', ctx), '<p>x</p>');
 });
+
+// Dark mode (writer-paper.css): a colour run carries its hex as --c and a highlight its colour as --h beside the inline
+// colour copied text keeps; the stored marks and the HTML they parse back from are unchanged.
+test('colour and highlight marks carry --c and --h beside their inline colours', () => {
+  const doc = S.parse(P, '<p><span data-gz-color="1f4e79">navy</span> <span data-gz-highlight="darkBlue">band</span></p>');
+  const html = S.serialize(P, doc);
+  assert.match(html, /<span data-gz-color="1F4E79" style="color:#1F4E79;--c:#1F4E79">navy<\/span>/);
+  assert.match(html, /<span data-gz-highlight="darkBlue" style="background-color:#000080;--h:#000080">band<\/span>/);
+  const back = S.parse(P, html), marks = [];
+  back.descendants((n) => { if (n.isText) marks.push(...n.marks.map((m) => `${m.type.name}:${m.attrs.color}`)); });
+  assert.deepEqual(marks, ['color:1F4E79', 'highlight:darkBlue']);
+  for (const name of Object.keys(S.HIGHLIGHT)) {
+    const one = S.serialize(P, S.parse(P, `<p><span data-gz-highlight="${name}">x</span></p>`));
+    assert.ok(one.includes(`--h:${S.HIGHLIGHT[name]}`), name);
+  }
+});

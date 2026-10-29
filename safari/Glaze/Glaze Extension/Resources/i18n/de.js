@@ -3427,6 +3427,8 @@
   "The format a new paper starts in: its page, heading, spacing and checks. A paper keeps the format it has; change one from its own toolbar.": "Das Format, mit dem eine neue Arbeit beginnt: Seite, Kopf, Abstände und Prüfungen. Eine Arbeit behält ihr Format; ändern Sie es in ihrer eigenen Symbolleiste.",
   "How large a paper opens. Fit fills the width the box has; a percent keeps that size, and the paper’s own Zoom still changes it.": "Wie groß eine Arbeit geöffnet wird. Einpassen füllt die Breite des Felds; ein Prozentwert behält diese Größe, und der Zoom der Arbeit ändert sie weiterhin.",
   "Ruler": "Lineal",
+  "Light page": "Helle Seite",
+  "With a dark Look, a paper’s pages stay white on screen, as they print. Off, they turn dark with the Look.": "Bei einem dunklen Look bleiben die Seiten einer Arbeit auf dem Bildschirm weiß, wie im Druck. Aus werden sie mit dem Look dunkel.",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "Das Lineal über der Seite mit den Einzügen und Tabstopps des Absatzes, die Sie ziehen können. Aus beginnt die Seite direkt unter der Symbolleiste.",
   "Versions kept": "Behaltene Versionen",
   "How many earlier versions each paper keeps on this device, the oldest going first. The last version you submitted always stays.": "Wie viele frühere Versionen jede Arbeit auf diesem Gerät behält; die älteste geht zuerst. Die zuletzt abgegebene Version bleibt immer.",

@@ -1,6 +1,6 @@
 /* Glaze Writer's editing tools (writer-find.js, writer-counts.js, writer-print.js) as glaze-plans/writer/mockups/edit draws
    them, in the Look's tokens, on writer.css's popovers (.pop: they scale in and fade, they go at once). Matches are marked
-   amber: on a paper's white page in paper colours, in a compose box in the Look's warning colour. */
+   amber: on a paper's page in paper colours (dimmed on a dark page), in a compose box in the Look's warning colour. */
 
 /* The find bar: inside the compose box's top right; over a paper's pages, under its toolbar. */
 .ge-find { top: 8px; right: 8px; z-index: 3; width: min(440px, calc(100vw - 16px)); padding: 6px; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 6px; transform-origin: top right; }
@@ -26,8 +26,8 @@
 /* Matches */
 .ge-hit { background: color-mix(in srgb, var(--gz-warn) 30%, transparent); border-radius: 2px; }
 .ge-hit.ge-cur { background: color-mix(in srgb, var(--gz-warn) 62%, transparent); box-shadow: 0 0 0 1.5px var(--gz-warn); }
-.gp-flow .ge-hit { background: #fde68a; }
-.gp-flow .ge-hit.ge-cur { background: #fbbf24; box-shadow: 0 0 0 1.5px #b45309; }
+.gp-flow .ge-hit { background: var(--sheet-hit, #fde68a); }
+.gp-flow .ge-hit.ge-cur { background: var(--sheet-hit-cur, #fbbf24); box-shadow: 0 0 0 1.5px #b45309; }
 ::highlight(ge-note) { background-color: #fbbf24; color: #111; }
 
 /* The word count and its popover */

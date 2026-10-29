@@ -91,17 +91,17 @@
 
 /* ---- tables on the page: borders off show a faint guide while editing, never in print */
 .gp-flow .ProseMirror th { font-weight: inherit; text-align: inherit; }
-.gp-flow .ProseMirror table[data-borders="none"] td, .gp-flow .ProseMirror table[data-borders="none"] th { border: 1px dashed #c8cdd4; }
+.gp-flow .ProseMirror table[data-borders="none"] td, .gp-flow .ProseMirror table[data-borders="none"] th { border: 1px dashed var(--sheet-guide, #c8cdd4); }
 .gp-print table[data-borders="none"] td, .gp-print table[data-borders="none"] th { border-color: transparent; }
 @media print { table[data-borders="none"] td, table[data-borders="none"] th { border-color: transparent !important; } }
 .gp-flow .ProseMirror td[data-valign="middle"], .gp-flow .ProseMirror th[data-valign="middle"] { vertical-align: middle; }
 .gp-flow .ProseMirror td[data-valign="bottom"], .gp-flow .ProseMirror th[data-valign="bottom"] { vertical-align: bottom; }
 
 /* ---- links as the paper format writes them (the .docx's Hyperlink style) */
-.gp .gp-flow .ProseMirror a { color: #0563c1; text-decoration: underline; }
+.gp .gp-flow .ProseMirror a { color: var(--sheet-link, #0563c1); text-decoration: underline; }
 
 /* ---- the horizontal line: one line of the page, a rule through its middle */
-.gp-flow .ProseMirror hr.gz-rule { border: 0; margin: 0; height: 1lh; background: linear-gradient(#111, #111) center / 100% 1px no-repeat; }
+.gp-flow .ProseMirror hr.gz-rule { border: 0; margin: 0; height: 1lh; background: linear-gradient(var(--sheet-line, #111), var(--sheet-line, #111)) center / 100% 1px no-repeat; }
 .gp-flow .ProseMirror hr.gz-rule.ProseMirror-selectednode { outline: 2px solid rgba(37, 99, 235, .6); outline-offset: 2px; }
 
 /* ---- paper lists: every level counts on its own, in its list's style (lib/writer-schema.js --gzs<level> and

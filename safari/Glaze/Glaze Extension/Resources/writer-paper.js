@@ -62,6 +62,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // lib/writer-settings.js's reader where the page loads it (writer.html), else storage as it is (papers.html).
     const SET = globalThis.GZ_WRITER_SETTINGS;
     const prefs = await Promise.race([SET ? SET.load().then(() => SET.now() || {}) : Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => (r?.writer && typeof r.writer === 'object' ? r.writer : {})), new Promise((ok) => setTimeout(() => ok({}), 400))]).catch(() => ({}));
+    // Settings → Writer → Light page: a dark Look's pages stay white (writer-paper.css).
+    const lightPage = (on) => document.documentElement.toggleAttribute('data-light-page', !!on);
+    lightPage(prefs.lightPage);
+    SET?.follow((w) => lightPage(w?.lightPage));
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PG = GZ_WRITER_PAGINATE, PA = GZ_WRITER_PAPERS, S = GZ_WRITER_SCHEMA, PM = GZ_PM;
     const ed = host.editor, view = ed.view, t = (k, v) => { const text = host.t(k, v); return k === 'Document outline' && text === k ? 'Outline' : text; }, store = PA.open();
     const ISSUES = () => globalThis.GZ_WRITER_ISSUES || null;
@@ -290,7 +294,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
             if (i) { seg = h('span'); segs.push(seg); }
             if (!piece) continue;
             const run = h('span', { text: piece });
-            run.style.cssText = [r.b ? 'font-weight:700' : '', r.i ? 'font-style:italic' : '', r.u || r.s ? `text-decoration:${[r.u ? 'underline' : '', r.s ? 'line-through' : ''].join(' ')}` : '', r.sup ? 'vertical-align:super;font-size:.66em' : r.sub ? 'vertical-align:sub;font-size:.66em' : '', r.font ? `font-family:${ST.stack(r.font)}` : '', r.size ? `font-size:${r.size}pt` : '', r.color ? `color:#${r.color}` : ''].filter(Boolean).join(';');
+            run.style.cssText = [r.b ? 'font-weight:700' : '', r.i ? 'font-style:italic' : '', r.u || r.s ? `text-decoration:${[r.u ? 'underline' : '', r.s ? 'line-through' : ''].join(' ')}` : '', r.sup ? 'vertical-align:super;font-size:.66em' : r.sub ? 'vertical-align:sub;font-size:.66em' : '', r.font ? `font-family:${ST.stack(r.font)}` : '', r.size ? `font-size:${r.size}pt` : '', r.color ? `color:#${r.color};--c:#${r.color}` : ''].filter(Boolean).join(';');
             seg.append(run);
           }
         }
@@ -1013,7 +1017,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         const marks = Object.fromEntries(PART_MARKS.filter((k) => r[k] != null).map((k) => [k, r[k]]));
         const el = r.field ? h('span', { class: 'gp-field', contenteditable: 'false', 'data-field': r.field, text: String(r.field === 'PAGE' ? n : total) }) : h('span', { text: r.text });
         el.dataset.marks = JSON.stringify(marks);
-        el.style.cssText = [marks.b ? 'font-weight:700' : '', marks.i ? 'font-style:italic' : '', marks.u ? 'text-decoration:underline' : '', marks.font ? `font-family:${ST.stack(marks.font)}` : '', marks.size ? `font-size:${marks.size}pt` : '', marks.color ? `color:#${marks.color}` : ''].filter(Boolean).join(';');
+        el.style.cssText = [marks.b ? 'font-weight:700' : '', marks.i ? 'font-style:italic' : '', marks.u ? 'text-decoration:underline' : '', marks.font ? `font-family:${ST.stack(marks.font)}` : '', marks.size ? `font-size:${marks.size}pt` : '', marks.color ? `color:#${marks.color};--c:#${marks.color}` : ''].filter(Boolean).join(';');
         line.append(el);
       }
       if (!line.childNodes.length) line.append(h('br'));
@@ -1137,7 +1141,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (open?.opener === moreB) { close(); return; }
       const R = globalThis.GZ_WRITER_RULER, extra = folded();
       menu(moreB, [...extra, ...(extra.length ? ['-'] : []),{ label: t('Page setup…'), run: pageDialog }, { label: t('Header and footer'), run: () => editPart('header', page) },
-        ...(R ? ['-', { label: t('Show ruler'), checked: R.shown(), run: () => R.toggle() }] : [])]);
+        ...(R ? ['-', { label: t('Show ruler'), checked: R.shown(), run: () => R.toggle() }] : []),
+        ...(document.documentElement.hasAttribute('data-dark') ? [...(R ? [] : ['-']), { label: t('Light page'), checked: document.documentElement.hasAttribute('data-light-page'), run: () => {
+          const on = !document.documentElement.hasAttribute('data-light-page');
+          lightPage(on);
+          SET?.patch((w) => ({ ...w, lightPage: on })).catch(() => {});
+        } }] : [])]);
     });
 
     // ---- the page's context menu: cut, copy, paste (the clipboard's, or plain), Paragraph…, Clear formatting. Shift and
