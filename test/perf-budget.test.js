@@ -343,6 +343,9 @@ const review = (list, seen, what) => {
 const FAST_INTERVALS = [
   // Download all: a 15 s keep-alive to the service worker only while a zip streams; cleared when its port closes.
   ['features/download.js', "setInterval(() => { if (!closed) post({ type: 'ping' }); }, 15000)", 1, /\bclearInterval\s*\(\s*ping\s*\)/],
+  // Agent access in Safari: a 20 s keep-alive to the Glaze app only while the link is live (connecting, connected or
+  // retrying); cleared when it goes off or waits for a trigger. Never on Chrome or Firefox.
+  ['lib/agent-link.js', 'setInterval(beat, 20000)', 1, /\bclearInterval\s*\(\s*keep\s*\)/],
 ];
 
 test('no setInterval fires faster than once a minute unless it is reviewed, and its clear is still there', () => {
