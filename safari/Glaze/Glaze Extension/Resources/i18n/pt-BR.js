@@ -3310,6 +3310,7 @@
   "Grid": "Grade",
   "Make a copy": "Fazer uma cópia",
   "Deleted": "Excluído",
+  "Trash": "Lixeira",
   "Copy of {title}": "Cópia de {title}",
   "{n} documents": {"one": "{n} documento", "other": "{n} documentos"},
   "{n} paragraphs aren't double-spaced": {"one": "{n} parágrafo não tem espaço duplo", "other": "{n} parágrafos não têm espaço duplo"},

@@ -177,3 +177,52 @@ test("a browser without document ids (Firefox, Safari) trusts the claimed Docume
   assert.equal((await w.send({ type: 'glaze:writerPapers', op: 'save', args: [PA.newKey(), { doc: doc('Hi.') }] }, frame)).ok, true);
   assert.deepEqual(await w.send({ type: 'glaze:writerPapers', op: 'save', args: [PA.newKey(), { doc: doc('Hi.') }] }, { ...frame, frameId: 5 }), { ok: false, error: 'sender' });
 });
+
+// The Documents home's Trash (S3b): Delete, Undo, Restore and the purge on opening go through the worker, as every paper
+// write does; on browser startup the worker purges too, beside its other sweeps.
+test('the worker takes trash, untrash and purge from Glaze\'s paper pages, and purges past 30 days on startup', async () => {
+  const DAY = 864e5, now = Date.now(), EXT = 'chrome-extension://x', [old, recent, live] = [PA.newKey(), PA.newKey(), PA.newKey()];
+  const rec = (k, trashed) => ({ key: k, kind: 'paper', named: true, title: k, doc: doc('Words.'), format: 'plain', updated: 1, revision: 1, ...(trashed && { trashed }) });
+  const row = (r) => ({ key: r.key, kind: 'paper', named: true, title: r.title, course: '', url: '', words: 1, format: 'plain', updated: 1, submitted: null, ...(r.trashed && { trashed: r.trashed }) });
+  const recs = [rec(old, now - 31 * DAY), rec(recent, now - 29 * DAY), rec(live)];
+  const local = { ultra: [], writerPapers: recs.map(row), ...Object.fromEntries(recs.flatMap((r) => [[`writerPaper:${r.key}`, r], [`writerVersions:${r.key}`, [{ id: 'v1-aaaaaa', at: 1, reason: 'start', words: 1, bytes: 10, doc: doc('Words.') }]]])) };
+  const w = require('./helpers/worker-env.cjs')({ store: { sync: { version: 2, enabled: true, enhance: {} }, local, session: {} } });
+  for (const fn of w.startup) fn();
+  await w.settle();
+  assert.deepEqual([w.store.local[`writerPaper:${old}`], w.store.local[`writerVersions:${old}`]], [undefined, undefined], 'past 30 days: gone with its versions');
+  assert.ok(w.store.local[`writerPaper:${recent}`] && w.store.local[`writerVersions:${recent}`] && w.store.local[`writerPaper:${live}`], '29 days, and what is not trashed, stay');
+  assert.deepEqual(w.store.local.writerPapers.map((r) => r.key).sort(), [recent, live].sort());
+
+  const home = { id: 'glaze', frameId: 0, url: `${EXT}/papers.html`, origin: EXT, tab: { id: 4, url: `${EXT}/papers.html` } };
+  const send = (op, args, s = home) => w.send({ type: 'glaze:writerPapers', op, args }, s);
+  for (const s of [{ ...home, url: `${EXT}/options.html` }, { ...home, origin: 'https://bb.school.test' }, { ...home, id: 'other' }]) {
+    for (const [op, args] of [['trash', [live]], ['untrash', [recent]], ['purge', []]]) assert.deepEqual(await send(op, args, s), { ok: false, error: 'sender' }, `${op} ${JSON.stringify(s)}`);
+  }
+  const trashed = await send('trash', [live]);
+  assert.equal(trashed.ok, true);
+  assert.equal(w.store.local[`writerPaper:${live}`].trashed, trashed.value.trashed);
+  assert.equal(w.store.local.writerPapers.find((r) => r.key === live).trashed, trashed.value.trashed);
+  assert.deepEqual(await send('purge', []), { ok: true, value: [] });
+  // Documents inside a school's page (features/settingspage.js): its frame writes to the Trash once it claimed its pass.
+  const lms = { id: 'glaze', frameId: 0, url: 'https://school.instructure.com/courses/1', origin: 'https://school.instructure.com', tab: { id: 9, url: 'https://school.instructure.com/courses/1' }, documentId: 'top' };
+  const frame = { id: 'glaze', frameId: 7, url: `${EXT}/papers.html`, origin: EXT, tab: lms.tab, documentId: 'd1' };
+  assert.deepEqual(await send('untrash', [live], frame), { ok: false, error: 'sender' }, 'a frame that claimed nothing');
+  const pass = crypto.randomUUID();
+  assert.deepEqual(await w.send({ type: 'glaze:papers', op: 'job', pass }, lms), { ok: true });
+  assert.deepEqual(await w.send({ type: 'glaze:papers', op: 'claim', pass }, frame), { ok: true });
+  assert.deepEqual(await send('untrash', [live], frame), { ok: true, value: { key: live } });
+  assert.equal('trashed' in w.store.local[`writerPaper:${live}`], false);
+  assert.equal((await send('trash', [recent], frame)).ok, true);
+  assert.deepEqual(await send('purge', [], frame), { ok: true, value: [] });
+  assert.deepEqual(await send('trash', [live], { ...frame, frameId: 8 }), { ok: false, error: 'sender' }, 'another frame of the tab');
+});
+
+test('the page\'s store sends trash, untrash and purge to the worker, never writing them itself', async (t) => {
+  const was = globalThis.chrome; t.after(() => { globalThis.chrome = was; });
+  const sent = [];
+  globalThis.chrome = { storage: { local: { get: async () => ({}), set: async () => { throw Error('a page write'); }, remove: async () => { throw Error('a page write'); } } },
+    runtime: { sendMessage: async (m) => { sent.push([m.op, m.args]); return { ok: true, value: m.op === 'purge' ? [] : { key: m.args[0] } }; } } };
+  const store = PA.open(), k = PA.newKey();
+  await store.trash(k); await store.untrash(k); await store.purge();
+  assert.deepEqual(sent, [['trash', [k]], ['untrash', [k]], ['purge', []]]);
+});

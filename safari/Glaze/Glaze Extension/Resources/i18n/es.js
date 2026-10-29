@@ -3310,6 +3310,7 @@
   "Grid": "Cuadrícula",
   "Make a copy": "Hacer una copia",
   "Deleted": "Eliminado",
+  "Trash": "Papelera",
   "Copy of {title}": "Copia de {title}",
   "{n} documents": {"one": "{n} documento", "other": "{n} documentos"},
   "{n} paragraphs aren't double-spaced": {"one": "{n} párrafo no tiene doble espacio", "other": "{n} párrafos no tienen doble espacio"},

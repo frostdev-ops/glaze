@@ -1424,7 +1424,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       closeDocs(false);
       const turn = docsTurn;
       let docs;
-      try { docs = (await store.list()).filter((r) => PA.local(r.key) && r.kind === 'paper').sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
+      try { docs = (await store.list()).filter((r) => PA.local(r.key) && r.kind === 'paper' && !PA.trashed(r)).sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
       catch (e) { console.error(e); if (turn === docsTurn && root.isConnected && current === api) { toast(t('Not saved. Try again in a moment.')); versionsB.focus(); } return; }
       if (turn !== docsTurn || !root.isConnected || current !== api || importing || globalThis.GZ_WRITER_SUBMIT_SHEET?.opened()) return;
       const when = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: 'medium' });

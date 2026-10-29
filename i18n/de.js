@@ -3310,6 +3310,7 @@
   "Grid": "Raster",
   "Make a copy": "Kopie erstellen",
   "Deleted": "Gelöscht",
+  "Trash": "Papierkorb",
   "Copy of {title}": "Kopie von {title}",
   "{n} documents": {"one": "{n} Dokument", "other": "{n} Dokumente"},
   "{n} paragraphs aren't double-spaced": {"one": "{n} Absatz hat keinen doppelten Zeilenabstand", "other": "{n} Absätze haben keinen doppelten Zeilenabstand"},

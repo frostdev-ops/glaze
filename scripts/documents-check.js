@@ -1,6 +1,7 @@
 // The Documents home (papers.html) in the real unpacked extension: the New band, the grid's lazy thumbnails and their
 // cost, the list view and its kept choice, search by title and by body text, the course filter, sort, rename (seen by an
-// open editor), Make a copy, Delete and Undo (versions kept), .docx drop and import and a refused .txt, the keyboard,
+// open editor), Make a copy, Delete to Trash and Undo (versions kept), the Trash (its view, Restore, Delete forever, opening
+// one, the 30-day purge, and nothing trashed in search, courses or a mod's list), .docx drop and import and a refused .txt, the keyboard,
 // accessible names and the live region, opening a card in the same tab and coming back; the student's Look on the page
 // (ground, background and its motion, glass, fonts, corners, contrast over a busy photo, a live change) and a mod's items
 // and calls there. Screenshots at 1280 and 640 px in English and German, and look-*.png on four Looks. Synthetic records
@@ -382,37 +383,105 @@ const PROBE = ({ lang }) => {
     await home.fill('.gd-rename', 'Copy of Reading notes, revised'); await home.keyboard.press('Enter');
     await until(async () => (await local(`writerPaper:${copyKey}`))?.title === 'Copy of Reading notes, revised', 'copy name back');
 
-    // ---- Delete and Undo; the Delete key and Ctrl+Z
+    // ---- Delete (to Trash) and Undo; the Delete key and Ctrl+Z
     const versionsBefore = (await local(`writerVersions:${NOTES}`)).map((v) => v.id);
+    check(await home.evaluate(() => document.getElementById('gd-trash').closest('.gd-bin').hidden), 'with nothing in Trash the toolbar has no Trash control');
     await home.click(`${card(NOTES)} .gd-more`);
     await home.click('.gd-menu [data-act="delete"]');
     check(!(await shown()).includes(NOTES), 'Delete takes the card away at once');
-    await until(async () => !(await local(`writerPaper:${NOTES}`)) && !(await local(`writerVersions:${NOTES}`)), 'deleted in storage');
-    check(await home.evaluate(() => document.querySelector('.gd-toast')?.textContent.startsWith('Deleted') && document.querySelector('.gd-toast button')?.textContent === 'Undo'), 'a Deleted toast offers Undo; the paper and its versions are gone from storage');
+    await until(async () => Number.isFinite((await local(`writerPaper:${NOTES}`))?.trashed), 'trashed in storage');
+    const binnedNotes = await local(`writerPaper:${NOTES}`);
+    check(JSON.stringify(binnedNotes.doc) === JSON.stringify(renamed.doc) && binnedNotes.updated === renamed.updated && (await local(`writerVersions:${NOTES}`)).map((v) => v.id).join() === versionsBefore.join()
+      && (await local('writerPapers')).find((r) => r.key === NOTES).trashed === binnedNotes.trashed, 'Delete marks the paper and its index row trashed, its document, Last edited and versions untouched');
+    check(await home.evaluate(() => document.querySelector('.gd-toast')?.textContent.startsWith('Deleted') && document.querySelector('.gd-toast button')?.textContent === 'Undo' && !document.getElementById('gd-trash').closest('.gd-bin').hidden), 'a Deleted toast offers Undo, and the Trash control shows');
     await shot(home, 'undo-1280-en.png');
     await home.evaluate(() => {
       const send = chrome.runtime.sendMessage.bind(chrome.runtime); globalThis.__undoSend = send;
-      chrome.runtime.sendMessage = (m, ...rest) => m?.op === 'merge' ? Promise.resolve({ ok: false, error: 'intentional review refusal' }) : send(m, ...rest);
+      chrome.runtime.sendMessage = (m, ...rest) => m?.op === 'untrash' ? Promise.resolve({ ok: false, error: 'intentional review refusal' }) : send(m, ...rest);
     });
     await home.click('.gd-toast button');
     await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'Not saved. Try again in a moment.'), 'Undo failure reported');
-    check(await home.evaluate(() => !!document.querySelector('.gd-toast button')), 'a refused Undo keeps its recovery snapshot available for retry');
+    check(await home.evaluate(() => !!document.querySelector('.gd-toast button')) && !(await shown()).includes(NOTES), 'a refused Undo says so, leaves the card in Trash and stays available for retry');
     await home.evaluate(() => { chrome.runtime.sendMessage = __undoSend; });
     await home.click('.gd-toast button');
     await until(async () => (await shown()).includes(NOTES), 'undone');
     const back = await local(`writerPaper:${NOTES}`), versionsAfter = (await local(`writerVersions:${NOTES}`) || []).map((v) => v.id);
-    check(back?.title === 'Reading notes, revised' && JSON.stringify(back.doc) === JSON.stringify(renamed.doc) && versionsBefore.every((v) => versionsAfter.includes(v)), `Undo puts the document back with its versions (${versionsAfter.join(', ')})`);
+    check(back?.title === 'Reading notes, revised' && JSON.stringify(back.doc) === JSON.stringify(renamed.doc) && versionsBefore.every((v) => versionsAfter.includes(v)) && !('trashed' in back), `Undo takes the document out of Trash with its versions (${versionsAfter.join(', ')})`);
     check(back.updated === renamed.updated && versionsAfter.join() === versionsBefore.join(), 'Undo keeps Last edited and restores exactly the original versions, with no extra start');
     check(await focused(home) === NOTES, 'Undo returns focus to the restored document');
     check(!(await home.evaluate(() => !!document.querySelector('.gd-toast'))), 'the toast goes once undone');
     await home.focus(`${card(copyKey)} .gd-title`);
     await home.keyboard.press('Delete');
     check(!(await shown()).includes(copyKey), 'the Delete key deletes the focused card');
-    await until(async () => !(await local(`writerPaper:${copyKey}`)), 'copy deleted');
+    await until(async () => Number.isFinite((await local(`writerPaper:${copyKey}`))?.trashed), 'copy deleted');
     check(await home.evaluate(() => document.activeElement?.closest('.gd-card') != null), 'focus stays in the cards after a delete');
     await home.keyboard.press('ControlOrMeta+z');
-    await until(async () => (await shown()).includes(copyKey) && !!(await local(`writerPaper:${copyKey}`)), 'Ctrl+Z undo');
+    await until(async () => (await shown()).includes(copyKey) && !('trashed' in (await local(`writerPaper:${copyKey}`))), 'Ctrl+Z undo');
     check(true, 'Ctrl+Z while the toast shows undoes the delete');
+
+    // ---- the Trash: its own view, newest trashed first, out of search and the course choices; Restore, Delete forever, and
+    // a document opened from it restored first
+    const binned = async () => home.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    const binOn = () => home.evaluate(() => document.getElementById('gd-trash').getAttribute('aria-pressed') === 'true');
+    await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Delete');
+    await until(async () => Number.isFinite((await local(`writerPaper:${FIELD}`))?.trashed), 'field notes trashed');
+    await home.click(`${card(LAB)} .gd-more`); await home.click('.gd-menu [data-act="delete"]');
+    await until(async () => Number.isFinite((await local(`writerPaper:${LAB}`))?.trashed), 'lab trashed');
+    const courseNow = await home.evaluate(() => [...document.querySelectorAll('#gd-course option')].map((o) => o.textContent));
+    check(courseNow.join('|') === 'All courses|ENGL 2110|No course', `a course whose only paper is in Trash leaves the Course choices (${courseNow.join('|')})`);
+    await home.fill('#gd-q', 'Field notes from Tuesday');
+    await pause(300);
+    check(!(await shown()).includes(FIELD) && await said(home) === '0 documents', 'search leaves out what is in Trash');
+    await home.fill('#gd-q', '');
+    await until(async () => (await shown()).length > 100, 'cleared search');
+    const liveCount = (await shown()).length;
+    await home.click('#gd-trash');
+    await until(async () => (await binned()).join() === [LAB, FIELD].join(), 'the Trash view');
+    const binBar = await home.evaluate(() => ({ course: document.getElementById('gd-course').hidden, sort: document.getElementById('gd-sort').hidden, search: !document.getElementById('gd-q').closest('.gd-search').hidden }));
+    check(await binOn() && binBar.course && binBar.sort && binBar.search && await said(home) === '2 documents', `Trash shows what is in it, last trashed first, pressed, with search only, and the live region counts it (${JSON.stringify(binBar)})`);
+    await home.fill('#gd-q', 'Field notes from Tuesday');
+    await until(async () => (await binned()).join() === FIELD, 'search in Trash');
+    check(true, 'search finds within the Trash');
+    await home.fill('#gd-q', '');
+    await until(async () => (await binned()).length === 2, 'Trash again');
+    await home.evaluate(() => scrollTo(0, 0));
+    await shot(home, 'trash-1280.png');
+    await home.setViewportSize({ width: 640, height: 900 });
+    await shot(home, 'trash-640.png');
+    await home.setViewportSize({ width: 1280, height: 900 });
+    await home.click(`${card(FIELD)} .gd-more`);
+    const binMenu = await home.evaluate(() => [...document.querySelectorAll('.gd-menu [role="menuitem"], .gd-menu [role="separator"]')].map((b) => b.textContent || '—'));
+    check(binMenu.join('|') === 'Restore|Delete forever', `a card in Trash offers Restore and Delete forever only (${binMenu.join('|')})`);
+    await home.keyboard.press('Escape');
+    await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Delete'); await home.keyboard.press('F2'); await pause(200);
+    check((await binned()).includes(FIELD) && !(await home.evaluate(() => document.querySelector('.gd-rename, .gd-toast'))) && !!(await local(`writerPaper:${FIELD}`)), 'in Trash the Delete key and F2 do nothing');
+    await home.click(`${card(FIELD)} .gd-more`); await home.click('.gd-menu [data-act="restore"]');
+    await until(async () => !(await binned()).includes(FIELD) && !('trashed' in (await local(`writerPaper:${FIELD}`))), 'restored');
+    check(await focused(home) === LAB, 'Restore takes the card out of Trash, focus on the next one');
+    // Opening a card in Trash restores it first, then opens it in this tab.
+    await home.click(`${card(LAB)} .gd-title`);
+    await until(() => home.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key()), 'opened from Trash');
+    check(await home.evaluate((k) => GZ_WRITER_PAPER.current().key() === k, LAB) && !('trashed' in (await local(`writerPaper:${LAB}`))), 'a document opened from Trash is restored and opens in the same tab');
+    await home.click('.gp-top a');
+    await until(() => home.evaluate(() => !location.search && document.querySelectorAll('.gd-card').length > 0), 'home after Trash open');
+    check(!(await binOn()) && (await shown()).includes(FIELD) && (await shown()).includes(LAB) && (await shown()).length === liveCount + 2
+      && await home.evaluate(() => document.getElementById('gd-trash').closest('.gd-bin').hidden), 'both are listed again, and with Trash empty its control goes');
+    // Delete forever: the record and its versions, at once, no Undo.
+    const D5 = seeds.find((x) => x.title === 'Draft 05').key;
+    await worker.evaluate(async ({ k, v }) => chrome.storage.local.set({ [`writerVersions:${k}`]: v }), { k: D5, v: VERSIONS });
+    await home.focus(`${card(D5)} .gd-title`); await home.keyboard.press('Delete');
+    await until(async () => Number.isFinite((await local(`writerPaper:${D5}`))?.trashed), 'draft trashed');
+    await home.click('#gd-trash');
+    await until(async () => (await binned()).join() === D5, 'draft in Trash');
+    await home.click(`${card(D5)} .gd-more`); await home.click('.gd-menu [data-act="forever"]');
+    check(!(await binned()).includes(D5), 'Delete forever takes the card away at once');
+    await until(async () => !(await local(`writerPaper:${D5}`)) && !(await local(`writerVersions:${D5}`)) && !(await local('writerPapers')).some((r) => r.key === D5), 'gone for good');
+    check(!(await home.evaluate(() => !!document.querySelector('.gd-toast'))), 'Delete forever removes the paper, its versions and its row, with no Undo');
+    const empty = await home.evaluate(() => ({ cards: document.getElementById('gd-docs').children.length, said: document.getElementById('gd-said').textContent, shown: !document.getElementById('gd-trash').closest('.gd-bin').hidden }));
+    check(await binOn() && empty.cards === 0 && empty.said === '' && empty.shown && await said(home) === '0 documents', `an empty Trash shows nothing but its pressed control (${JSON.stringify(empty)})`);
+    await home.click('#gd-trash');
+    await until(async () => (await shown()).length === liveCount + 1, 'out of Trash');
+    check(await home.evaluate(() => document.getElementById('gd-trash').closest('.gd-bin').hidden && document.activeElement?.id === 'gd-q'), 'leaving an empty Trash hides its control and puts focus in search');
 
     // ---- drop and import .docx; a .txt is refused
     const docx = await home.evaluate(async () => {
@@ -766,12 +835,31 @@ const PROBE = ({ lang }) => {
     await live.close();
     await wearLook(settings);
 
+    // ---- 30 days in Trash: the page's opening purges what was trashed 31 days ago, with its versions, and keeps 29 days
+    const DAY = 864e5, OLD = `doc:${crypto.randomUUID()}`, KEPT = `doc:${crypto.randomUUID()}`;
+    await worker.evaluate(async ({ recs, versions }) => {
+      const rows = (await chrome.storage.local.get('writerPapers')).writerPapers, data = {};
+      for (const r of recs) { data[`writerPaper:${r.key}`] = r; data[`writerVersions:${r.key}`] = versions; rows.push({ key: r.key, kind: 'paper', named: true, title: r.title, course: '', url: '', words: r.words, format: r.format, updated: r.updated, submitted: null, trashed: r.trashed }); }
+      await chrome.storage.local.set({ ...data, writerPapers: rows });
+    }, { versions: VERSIONS, recs: [[OLD, 'Trashed a month ago', 31], [KEPT, 'Trashed last month', 29]].map(([key, title, days]) => ({ ...(records()[`writerPaper:${NOTES}`]), key, title, named: true, updated: NOW - 40 * DAY, trashed: Date.now() - days * DAY })) });
+    const purged = await openHome('en', 'purge');
+    await until(async () => !(await local(`writerPaper:${OLD}`)) && !(await local(`writerVersions:${OLD}`)) && !(await local('writerPapers')).some((r) => r.key === OLD), 'purged on opening');
+    check(!!(await local(`writerPaper:${KEPT}`)) && !!(await local(`writerVersions:${KEPT}`)) && (await local('writerPapers')).some((r) => r.key === KEPT),
+      'opening the page removes a document trashed 31 days ago with its versions, and keeps one trashed 29 days ago');
+    check(!(await purged.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key))).includes(KEPT), 'what is in Trash is not on the home');
+    await purged.click('#gd-trash');
+    await until(() => purged.evaluate((k) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).join() === k, KEPT), 'Trash after purge');
+    check(true, 'the Trash holds the 29-day document only');
+    await purged.close();
+
     // ---- a mod on the Documents page: its items, its calls and their limits (lib/modbroker.js, features/mods.js)
     const MOD = 'docsmodaaaaaaaaa';
     const hooksJs = `
       const save = (k, v) => glaze.storage.set(k, v);
       const page = new Promise((ok) => glaze.on('page', ok)); // told once, as the mod starts
       const tryCall = async (k, f) => { try { await save(k, { ok: true, value: await f() }); } catch (e) { await save(k, { ok: false, error: e.message }); } };
+      let changes = 0;
+      glaze.on('documents.change', async () => { const n = ++changes, list = await glaze.documents.list(); await save('change', { n, keys: list.map((d) => d.key) }); });
       glaze.on('documents.action', async (d) => {
         await save('action', d);
         if (d.slot === 'documents.card') {
@@ -809,6 +897,15 @@ const PROBE = ({ lang }) => {
     check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && [...shownKeys].sort().join() === md.list.value.map((d) => d.key).sort().join(),
       `mod: documents.list() gives every listed document's public fields only (${md.list.value?.length} × ${Object.keys(md.list.value?.[0] || {}).sort().join(' ')})`);
     check(!JSON.stringify(md.list.value).includes('Beloved 1. A paragraph') && md.list.value.find((d) => d.key === ESSAY)?.course === 'ENGL 2110', 'mod: the list carries no document text, and an assignment paper\'s course');
+    check(!md.list.value.some((d) => d.key === KEPT), 'mod: documents.list() leaves out what is in Trash');
+    // documents.change on Delete (into Trash) and on Undo, the list then without it and with it again.
+    const changeAt = (await modData())?.change?.n || 0;
+    await mp.focus(`${card(ESSAY3)} .gd-title`); await mp.keyboard.press('Delete');
+    await until(async () => { const c = (await modData())?.change; return c?.n > changeAt && !c.keys.includes(ESSAY3); }, 'mod told of the delete');
+    const changeMid = (await modData()).change.n;
+    await mp.keyboard.press('ControlOrMeta+z');
+    await until(async () => { const c = (await modData())?.change; return c?.n > changeMid && c.keys.includes(ESSAY3); }, 'mod told of the undo');
+    check(!('trashed' in (await local(`writerPaper:${ESSAY3}`))), 'mod: documents.change fires as a document goes to Trash and comes back, documents.list() following');
     check(md.early.ok === false && md.early.error === 'permission', `mod: documents.open without a click on its own item is refused (${md.early.error})`);
     check(md.todo.ok === false && md.todo.error === 'call', `mod: a school page's call is refused on the Documents page (${md.todo.error})`);
     check(md.style.ok && await mp.evaluate(() => getComputedStyle(document.querySelector('.gd-card')).borderTopLeftRadius === '24px' && getComputedStyle(document.documentElement).getPropertyValue('--gd-column').trim() === '300px'), 'mod: documents.style sets the page\'s --gd-* hooks (24px corners, 300px columns)');

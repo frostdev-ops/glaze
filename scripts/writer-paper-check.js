@@ -472,6 +472,10 @@ const HARNESS = `(() => {
     await seeder.goto(`chrome-extension://${id}/papers.html`);
     await until(() => seeder.evaluate(() => !!globalThis.GZ_WRITER_PAPERS), 'store on the home page');
     await seeder.evaluate((k) => GZ_WRITER_PAPERS.open().save(k, { doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Reading notes on Beloved' }] }] }, kind: 'paper', named: false, title: 'Reading notes on Beloved', format: 'apa7' }), k3);
+    // The newest standalone document is in the Documents page's Trash: the sheet leaves it out.
+    const k4 = `doc:${crypto.randomUUID()}`;
+    await seeder.evaluate(async (k) => { const P = GZ_WRITER_PAPERS.open(); await P.save(k, { doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Thrown away' }] }] }, kind: 'paper', named: true, title: 'Thrown away', format: 'plain' }); await P.trash(k); }, k4);
+    check(Number.isFinite((await stored(k4))?.trashed), 'a standalone document in Trash is seeded');
     await seeder.close();
     const sourceBefore = JSON.stringify(await stored(k2)), versionsOf = (k) => worker.evaluate(async (k) => ((await chrome.storage.local.get(`writerVersions:${k}`))[`writerVersions:${k}`] || []), k);
     const assignmentText = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent);
@@ -490,7 +494,7 @@ const HARNESS = `(() => {
         rows: [...d.querySelectorAll('.gp-fromdocs-row')].map((r) => [r.querySelector('b').textContent, r.querySelector('small').textContent]), inert: document.querySelector('.gp').inert };
     });
     check(sheet.modal === 'true' && sheet.label === 'Open from Documents' && sheet.inert, `the sheet is a labelled modal dialog over an inert paper (${JSON.stringify(sheet)})`);
-    check(sheet.rows.map((r) => r[0]).join('|') === 'Reading notes on Beloved|My own title' && /^APA 7 · 4 words · /.test(sheet.rows[0][1]) && /^Blank · 6 words · /.test(sheet.rows[1][1]), `the student's standalone documents, newest first: title, format, words, date (${JSON.stringify(sheet.rows)})`);
+    check(sheet.rows.map((r) => r[0]).join('|') === 'Reading notes on Beloved|My own title' && /^APA 7 · 4 words · /.test(sheet.rows[0][1]) && /^Blank · 6 words · /.test(sheet.rows[1][1]), `the student's standalone documents, newest first, none in Trash: title, format, words, date (${JSON.stringify(sheet.rows)})`);
     check(await fr.evaluate(() => [...document.querySelectorAll('.gp-fromdocs-row')].every((r) => r.getAttribute('aria-label') === `${r.querySelector('b').textContent} · ${r.querySelector('small').textContent}`)), 'each row has its full title, format, words and date as its accessible name');
     await p.keyboard.press('ArrowDown');
     check(await fr.evaluate(() => document.activeElement === document.querySelectorAll('.gp-fromdocs-row')[1]), 'ArrowDown moves to the next document');

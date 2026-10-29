@@ -2,7 +2,7 @@
 // saved Ultra, Canvas and Moodle pages under invented school origins, Glaze's bar holding its Documents, Search and Settings
 // items. The bar's Documents opens it beside the bar, marked where you are, the page under it out of reach; a document opens
 // in the same frame and Back returns to the list (the tab's history one entry per document, the page told no key); typing
-// there, a delete and its Undo, an import and two exports work from the frame; Escape, Close, Settings and Search leave or
+// there, a delete to Trash and its Undo, the Trash's Restore and Delete forever, an import and two exports work from the frame; Escape, Close, Settings and Search leave or
 // take its place, back to the entry it opened from; Ctrl+K opens it the same way; Writer's AI completes a sentence in a
 // document opened there (the worker's broker on a stand-in for Chrome's Prompt API, as scripts/documents-ai-check.js); a
 // frame of papers.html the page makes itself stays blank and the worker refuses its writes; the popup still opens a tab.
@@ -195,16 +195,40 @@ const check = async (name, test) => {
       await until(() => framed(page) && !new URL(framed(page).url()).search, 'the list again');
       f = await shown(page);
     });
-    await check('ultra: from the list, a delete and its Undo, an export and an import reach storage and the browser', async () => {
+    await check('ultra: from the list, a delete to Trash and its Undo, Restore and Delete forever, an export and an import reach storage and the browser', async () => {
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-more`).click();
       const [dl] = await Promise.all([page.waitForEvent('download'), f.locator('.gd-menu [data-act="export"]').click()]);
       assert.match(dl.suggestedFilename(), /\.docx$/);
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-more`).click();
       await f.locator('.gd-menu [data-act="delete"]').click();
-      await until(async () => !(await record(KEY)), 'deleted from storage');
+      await until(async () => Number.isFinite((await record(KEY))?.trashed), 'in Trash in storage');
       await f.locator('.gd-toast .gp-toast-do').click();
-      await until(async () => JSON.stringify((await record(KEY))?.doc || '').includes('Typed in place.'), 'put back whole (merge)');
+      await until(async () => { const r = await record(KEY); return r && !('trashed' in r) && JSON.stringify(r.doc).includes('Typed in place.'); }, 'out of Trash, whole');
       await until(() => f.locator(`.gd-card[data-key="${KEY}"]`).count(), 'listed again');
+      // The Trash from the frame: Delete, then Restore from its view; a copy deleted forever.
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-more`).click();
+      await f.locator('.gd-menu [data-act="delete"]').click();
+      await until(async () => Number.isFinite((await record(KEY))?.trashed), 'in Trash again');
+      await f.locator('#gd-trash').click();
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-more`).click();
+      await f.locator('.gd-menu [data-act="restore"]').click();
+      await until(async () => !('trashed' in (await record(KEY))), 'restored from the Trash view');
+      await f.locator('#gd-trash').click();
+      await until(() => f.locator(`.gd-card[data-key="${KEY}"]`).count(), 'listed after Restore');
+      const keys = () => worker.evaluate(() => chrome.storage.local.get('writerPapers').then((r) => (r.writerPapers || []).map((x) => x.key)));
+      const before = new Set(await keys());
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-more`).click();
+      await f.locator('.gd-menu [data-act="copy"]').click();
+      let copy = null;
+      await until(async () => (copy = (await keys()).find((k) => !before.has(k))), 'a copy');
+      await f.locator(`.gd-card[data-key="${copy}"] .gd-more`).click();
+      await f.locator('.gd-menu [data-act="delete"]').click();
+      await until(async () => Number.isFinite((await record(copy))?.trashed), 'the copy in Trash');
+      await f.locator('#gd-trash').click();
+      await f.locator(`.gd-card[data-key="${copy}"] .gd-more`).click();
+      await f.locator('.gd-menu [data-act="forever"]').click();
+      await until(async () => !(await record(copy)) && !(await keys()).includes(copy), 'the copy deleted forever');
+      await f.locator('#gd-trash').click();
       const file = path.join(scratch, 'Imported notes.docx');
       fs.writeFileSync(file, docx('Brought in from Word.'));
       const [chooser] = await Promise.all([page.waitForEvent('filechooser'), f.locator('#gd-import').click()]);

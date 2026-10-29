@@ -109,3 +109,18 @@ test('arrow moves: the grid by its columns, the list by one, Home and End to the
   assert.equal(DH.move(0, 'ArrowRight', 0, 4), null, 'no cards');
   assert.equal(DH.move(-1, 'ArrowRight', 3, 1), 1, 'from nowhere: from the first');
 });
+
+test('the Trash: trashed rows leave the lists for their own view, a pending move first; newest trashed first', () => {
+  const rows = [{ key: 'a', updated: 5, course: 'ENGL 2110' }, { key: 'b', updated: 4, trashed: 100, course: 'BIOL 1010' }, { key: 'c', updated: 3, trashed: 300 },
+    { key: 'd', updated: 2, trashed: null }, { key: 'e', updated: 1, trashed: 200 }, { key: 'f', updated: 6, trashed: 200 }];
+  const none = new Map(), keys = (list) => list.map((r) => r.key);
+  assert.deepEqual(keys(DH.view(rows, false, none)), ['a', 'd'], 'the lists, search and course choices take what is not in Trash');
+  assert.deepEqual(keys(DH.view(rows, true, none)), ['b', 'c', 'e', 'f']);
+  assert.deepEqual(DH.courses(DH.view(rows, false, none), 'en').names, ['ENGL 2110'], "a trashed paper's course is no choice");
+  // Delete (into Trash) and Restore show at once, before storage says so.
+  const pending = new Map([['a', true], ['c', false]]);
+  assert.deepEqual(keys(DH.view(rows, false, pending)), ['c', 'd']);
+  assert.deepEqual(keys(DH.view(rows, true, pending)), ['a', 'b', 'e', 'f']);
+  assert.deepEqual([DH.inTrash(rows[1], none), DH.inTrash(rows[1], new Map([['b', false]])), DH.inTrash(rows[3], none), DH.inTrash(null, none)], [true, false, false, false]);
+  assert.deepEqual(keys(DH.sort(DH.view(rows, true, none), 'trashed', new Map(), 'en')), ['c', 'f', 'e', 'b'], 'most recently trashed first, ties last edited first');
+});
