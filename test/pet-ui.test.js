@@ -47,6 +47,25 @@ test('a reload stops the habitat before its next timer or late profile can repai
   assert.equal(q.storage.length + q.timers.size, 0);
 });
 
+test('extension invalidation before habitat, dialog and resume cleanup releases resources without reading chrome.storage', async () => {
+  const p = page({ world: true }), tile = p.ui.mount(p.body, p.api); await settle();
+  await p.ui.open(); await settle();
+  p.ui.resume(); await settle();
+  assert.ok(p.storage.length >= 3);
+  delete p.chrome.storage;
+  assert.doesNotThrow(() => p.fire('pagehide'));
+  assert.doesNotThrow(() => p.doc.root.querySelector('dialog').close());
+  assert.doesNotThrow(() => tile.stop());
+  assert.equal(p.storage.length + p.events.length + p.timers.size, 0);
+});
+
+test('an invalidated storage event cannot interrupt the rest of habitat cleanup', async () => {
+  const p = page(), tile = p.ui.mount(p.body, p.api); await settle();
+  p.chrome.storage.onChanged.removeListener = () => { throw Error('Extension context invalidated.'); };
+  assert.doesNotThrow(() => tile.stop());
+  assert.equal(p.events.length + p.timers.size, 0);
+});
+
 test('animated characters hide Classic outfits without changing the saved outfit', async () => {
   const record = { sprite: 'rime', wear: 'bandana', earned: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`work:assignment:${i}`, 20])) };
   const p = page({ record }), live = p.ui.mount(p.body, p.api, { inDialog: true }); await settle();
