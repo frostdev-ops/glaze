@@ -95,7 +95,8 @@ const world = ({ browser = 'chrome', granted = true, native = true, on = true, l
     contains: async (q) => { permissions.asked++; assert.deepEqual(q, { permissions: ['nativeMessaging'] }); return permissions.granted; },
   };
   storage ||= { local: area({ ...(on ? { mcp: { on: true } } : {}), ...local }), session: area() };
-  const random = (n) => Uint8Array.from({ length: n }, (_, i) => (i * 37 + 11) & 255);
+  let draws = 0;
+  const random = (n) => { const salt = draws++; return Uint8Array.from({ length: n }, (_, i) => (i * 37 + 11 + salt) & 255); };
   const env = { runtime, permissions, storage, browser, timers: c.timers, now: c.now, random };
   const link = L.make(env);
   link.attach({
@@ -601,6 +602,139 @@ test('Safari: a 20 s keep-alive while on, an empty batch when idle, cleared when
     await other.advance(120e3);
     assert.deepEqual(other.pending(), [], browser);
   }
+});
+
+test('R1: Safari rejects dispatches from an earlier session on the replacement port', async () => {
+  const w = world({ browser: 'safari' });
+  await w.link.ensure();
+  const first = w.batches[0].msg;
+  w.batches[0].resolve({ ok: true });
+  await settle();
+  await w.link.stop();
+  w.batches.at(-1).resolve({ ok: true });
+  await settle();
+  await w.link.ensure();
+  const next = w.batches.at(-1).msg;
+  const stale = [HELLO, { t: 'open', c: 99, peer: { verified: true } }, { t: 'line', c: 99, d: 'OLD SESSION' }];
+  for (const s of [first.s, undefined, 'wrong']) {
+    w.port().host({ name: 'agent.frames', userInfo: { i: first.i, s, frames: stale } });
+    assert.equal(w.link.status().state, 'connecting');
+    assert.deepEqual(said(w, 'open'), []);
+    assert.deepEqual(said(w, 'line'), []);
+  }
+  assert.equal(next.i, first.i, 'the profile instance stays stable');
+  assert.match(first.s, /^[0-9a-f]{32}$/);
+  assert.match(next.s, /^[0-9a-f]{32}$/);
+  assert.notEqual(next.s, first.s, 'every connection has a fresh nonce');
+  w.port().host({ name: 'agent.frames', userInfo: { i: next.i, s: next.s, frames: stale } });
+  assert.equal(w.link.status().state, 'connected');
+  assert.deepEqual(said(w, 'line'), [['line', 99, 'OLD SESSION']]);
+});
+
+for (const browser of ['chrome', 'safari']) test('R2: stop invalidates several pending ensures on ' + browser, async () => {
+  const w = world({ browser });
+  const pending = Array.from({ length: 5 }, () => w.link.ensure());
+  await w.link.stop();
+  await Promise.all(pending);
+  assert.equal(w.link.status().state, 'off');
+  assert.equal(w.ports.length, 0);
+  assert.equal(w.jobs.size, 0);
+  await w.link.ensure();
+  assert.equal(w.ports.length, 1, 'a new trigger after stop still connects');
+});
+
+test('R3: every unexpected Swift reply exits and backs off instead of claiming not-installed', async () => {
+  for (const reply of [undefined, null, {}, [], false, { ok: 1 }, { ok: false }, { error: 'not-installed' }, { echo: {} }]) {
+    const w = world({ browser: 'safari' });
+    await w.link.ensure();
+    w.batches[0].resolve(reply);
+    await settle();
+    assert.equal(w.link.status().state, 'exited', String(JSON.stringify(reply)));
+    assert.deepEqual(w.pending().filter((j) => !j.every).map((j) => j.at - w.now()), [1000]);
+    await w.advance(1000);
+    assert.equal(w.ports.length, 2, 'the failed bridge is retried');
+  }
+});
+
+test('R4: Safari fences immediately and queues bye after the outstanding batch', async () => {
+  const w = world({ browser: 'safari' });
+  await w.link.ensure();
+  const first = w.batches[0], p = w.port();
+  const stopping = w.link.stop();
+  assert.ok(p.disconnected, 'the event port is disconnected synchronously');
+  assert.equal(w.batches.length, 1, 'bye cannot overtake the unresolved hello');
+  assert.equal((await stopping).state, 'off');
+  p.host({ name: 'agent.frames', userInfo: { i: first.msg.i, s: first.msg.s, frames: [HELLO] } });
+  assert.equal(w.link.status().state, 'off', 'late work is fenced before draining');
+  const reconnect = w.link.ensure();
+  await settle();
+  assert.equal(w.ports.length, 1, 'a replacement waits for teardown');
+  first.resolve({ ok: true });
+  await settle();
+  assert.deepEqual(w.batches[1].msg, { ...first.msg, seq: 2, frames: [{ t: 'bye' }] });
+  assert.equal(w.ports.length, 1, 'bye must finish too');
+  w.batches[1].resolve({ ok: true });
+  await reconnect;
+  assert.equal(w.ports.length, 2);
+  assert.notEqual(w.batches[2].msg.s, first.msg.s);
+  assert.equal(w.link.status().state, 'connecting');
+});
+
+test('R4: a stalled Safari teardown is bounded and cannot send a late bye', async () => {
+  const w = world({ browser: 'safari' });
+  await w.link.ensure();
+  const first = w.batches[0];
+  await w.link.stop();
+  assert.equal(w.batches.length, 1, 'no parallel bye');
+  assert.equal(w.pending().length, 1, 'only the teardown deadline remains');
+  await w.advance(1000);
+  assert.deepEqual(w.pending(), []);
+  await w.link.ensure();
+  assert.equal(w.ports.length, 2, 'the deadline releases a new connection');
+  const count = w.batches.length;
+  first.resolve({ ok: true });
+  await settle();
+  assert.equal(w.batches.length, count, 'the abandoned continuation never sends bye');
+  assert.equal(w.link.status().state, 'connecting');
+});
+
+test('C2: Safari keep-alive sends native traffic before hello and throughout exited backoff', async () => {
+  const w = world({ browser: 'safari' });
+  await w.link.ensure();
+  w.batches[0].resolve({ ok: true });
+  await settle();
+  await w.advance(20000);
+  assert.equal(w.link.status().state, 'connecting');
+  assert.equal(w.batches.length, 2, 'a native keep-alive does not require the host hello');
+  assert.deepEqual(w.batches[1].msg.frames, []);
+  w.batches[1].resolve({ ok: true });
+  await settle();
+  for (let n = 0; n < 7; n++) {
+    const b = w.batches.at(-1);
+    b.resolve({ ok: true });
+    await settle();
+    w.port().die(EXITED);
+    if (n < 6) {
+      const due = w.pending().find((j) => !j.every);
+      await w.advance(due.at - w.now());
+    }
+  }
+  const due = w.pending().find((j) => !j.every).at, ports = w.ports.length;
+  assert.equal(due - w.now(), 60000);
+  let calls = w.batches.length;
+  for (let n = 0; n < 2; n++) {
+    await w.advance(20000);
+    assert.ok(w.batches.length > calls, 'native traffic continues during a 60 s backoff');
+    const b = w.batches.at(-1);
+    assert.deepEqual(b.msg.frames, [], 'backoff sends no application data');
+    b.resolve({ ok: true });
+    await settle();
+    calls = w.batches.length;
+    assert.equal(w.ports.length, ports, 'keep-alive preserves the backoff');
+  }
+  await w.advance(due - w.now());
+  assert.equal(w.ports.length, ports + 1, 'the scheduled retry still happens');
+  assert.equal(w.batches.at(-1).msg.frames[0].t, 'hello');
 });
 
 test('nothing but the link calls connectNative', () => {
