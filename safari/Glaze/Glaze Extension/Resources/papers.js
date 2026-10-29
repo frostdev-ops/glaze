@@ -451,9 +451,15 @@
         added.length ? h('div', { class: 'gp-hr', role: 'separator' }) : null,
         added.map((x) => btn({ role: 'menuitem', tabindex: '-1', class: 'gd-added', title: x.by || null, onclick: (e) => { closeMenu(true); x.run(summary(c.row), e); } }, x.label)));
       document.body.append(el);
-      const anchor = c.more.getClientRects().length ? c.more : c.link, r = anchor.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
-      el.style.left = `${Math.max(4, Math.min(r.right - w, innerWidth - w - 4))}px`;
-      el.style.top = `${r.bottom + 6 + hh > innerHeight - 4 ? Math.max(4, r.top - hh - 6) : r.bottom + 6}px`;
+      // A host can finish resizing its iframe after the menu opens. Keep both actions beside the live card geometry.
+      const place = () => {
+        const anchor = c.more.getClientRects().length ? c.more : c.link, r = anchor.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
+        el.style.left = `${Math.max(4, Math.min(r.right - w, innerWidth - w - 4))}px`;
+        // The short Trash menu stays above its card, clear of the LMS's bottom navigation in a narrow frame.
+        const above = (bin && r.top >= hh + 10) || r.bottom + 6 + hh > innerHeight - 4;
+        el.style.top = `${Math.max(4, Math.min(above ? r.top - hh - 6 : r.bottom + 6, innerHeight - hh - 4))}px`;
+      };
+      place();
       el.style.transformOrigin = 'top right';
       el.addEventListener('keydown', (e) => {
         const all = [...el.querySelectorAll('[role="menuitem"]')], i = all.indexOf(document.activeElement);
@@ -463,8 +469,9 @@
       el.getBoundingClientRect();
       el.setAttribute('data-open', '');
       c.more.setAttribute('aria-expanded', 'true');
-      menu = { el, k, opener: c.more, back: back || c.more };
+      menu = { el, k, opener: c.more, back: back || c.more, place };
       el.querySelector('[role="menuitem"]').focus();
+      place();
     };
     const run = (act, k) => {
       dismiss();
@@ -480,6 +487,8 @@
     document.addEventListener('pointerdown', (e) => { keyMenu = false; if (menu && !menu.el.contains(e.target) && !menu.opener.contains(e.target)) closeMenu(); }, true);
     // The menu opened from the keyboard: the browser's own context menu that follows the key stays shut.
     document.addEventListener('contextmenu', (e) => { if (keyMenu) { keyMenu = false; e.preventDefault(); } });
+    addEventListener('resize', () => menu?.place());
+    addEventListener('scroll', () => menu?.place(), { passive: true });
 
     // ---- rename in place: Enter saves (named; emptied, the document's first line again), Esc or an unchanged name keeps it
     const rename = (k) => {
