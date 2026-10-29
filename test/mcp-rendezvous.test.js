@@ -144,6 +144,16 @@ test('the run file is written whole at 0600 and holds {v, pid, path, token, brow
   assert.deepEqual(R.read(file), next);
 });
 
+test('write preserves another live host until claim explicitly takes over its name', (t) => {
+  const d = runDir(t), rec = record(d, { pid: process.ppid }), file = R.write(d, rec);
+  const next = { ...rec, pid: process.pid, token: R.token() };
+  assert.throws(() => R.write(d, next), /another live host owns/);
+  assert.deepEqual(R.read(file), rec);
+  R.claim(rec.path, { dir: d, browser: rec.browser, instance: rec.instance });
+  R.write(d, next);
+  assert.deepEqual(R.read(file), next);
+});
+
 test('read refuses a run file that doesn\'t fit its name or its folder', (t) => {
   const d = runDir(t);
   const rec = record(d);

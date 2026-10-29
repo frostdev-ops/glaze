@@ -248,7 +248,8 @@ test('the agent refuses a socket that can\'t prove the token, and the host refus
   const home = scratch(t);
   const b = browser(t, home);
   const { rec, file } = await b.start();
-  R.write(path.dirname(file), { ...rec, token: R.token() });
+  // Deliberately corrupt a live host's metadata; the normal publisher refuses another live owner's record.
+  fs.writeFileSync(file, JSON.stringify({ ...rec, token: R.token() }));
   const a = app(t, home);
   a.write('{"id":1}\n');
   assert.equal((await a.exited).code, 1);
