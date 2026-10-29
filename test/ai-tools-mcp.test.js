@@ -30,6 +30,16 @@ test('a tool without the new keys is defined as before, with no default written 
   assert.equal(t.owner, undefined);
 });
 
+test('mod tool titles fit the mod prefix and titles are capped at 120 characters', () => {
+  const title = `${'m'.repeat(40)} (mod): ${'t'.repeat(60)}`;
+  assert.equal(title.length, 108);
+  assert.equal(TL.define({ ...mod, title }).title, title);
+  for (const t of [base, mod]) {
+    assert.equal(TL.define({ ...t, title: 'x'.repeat(120) }).title.length, 120);
+    refuses({ title: 'x'.repeat(121) }, 'title', t);
+  }
+});
+
 test('aiTools sends the same specs whatever MCP keys a tool carries', () => {
   const plain = [TL.define(base), TL.define({ ...base, name: 'grades_list', kind: 'confirm' })];
   const rich = [TL.define({ ...base, title: 'Courses', group: 'courses', scope: 'account', needs: 'tab', output: S.obj({}), hints: { idempotent: true } }),
@@ -39,13 +49,21 @@ test('aiTools sends the same specs whatever MCP keys a tool carries', () => {
   assert.deepEqual(Object.keys(TL.aiTools(rich)[0]), ['name', 'description', 'parameters']);
 });
 
+test('output accepts every root shape supported by the schema cleaner', () => {
+  for (const output of [{ type: 'array', items: S.obj({ id: S.str('Course ID.') }) }, { type: 'string' },
+    { type: ['object', 'null'] }, { anyOf: [S.obj({}), { type: 'null' }] }, {}]) {
+    assert.equal(S.clean(output), output);
+    assert.equal(TL.define({ ...base, output }).output, output);
+  }
+});
+
 test('each MCP key refuses a value outside its rule, naming the key', () => {
-  for (const title of ['', 'x'.repeat(81), 3, null]) refuses({ title }, 'title');
+  for (const title of ['', 'x'.repeat(121), 3, null]) refuses({ title }, 'title');
   for (const group of ['files', 'Courses', '', 'mod:short', `mod:${ID.toUpperCase()}`, `mod:${ID}x`, 7]) refuses({ group }, 'group');
   for (const owner of ['mod', 'someone', '', `mod:${ID.slice(1)}`, `mod:${ID}1`, `MOD:${ID}`, null]) refuses({ owner }, 'owner');
   for (const scope of ['tab', 'course', '', 1]) refuses({ scope }, 'scope');
   for (const needs of ['account', 'tabs', '', true]) refuses({ needs }, 'needs');
-  for (const output of [{ type: 'object', $ref: '#/x' }, { type: 'array', items: { type: 'string' } }, { type: 'string' }, {}, 'object', null, []]) refuses({ output }, 'output');
+  for (const output of [{ type: 'object', $ref: '#/x' }, { type: 'array', items: { type: 'string', format: 'date' } }, { type: 'unknown' }, 'object', null, []]) refuses({ output }, 'output');
   for (const hints of [{ readOnly: true }, { destructive: false }, { idempotent: 'yes' }, { openWorld: 1 }, [], null, 'idempotent']) refuses({ hints }, 'hints');
 });
 
