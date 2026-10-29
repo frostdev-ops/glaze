@@ -734,6 +734,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     }
     if (what === 'search') { X.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); return; }
     if (what === 'notes') { X.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ event: e }), () => {}); return; }
+    // Writer's Documents (papers.html) in a tab of its own, which the worker opens for the student's own click.
+    if (what === 'documents') { if (e?.isTrusted) send('papers'); return; }
     // To Do lives on the site's home (the Glaze Dashboard on Ultra, the Canvas dashboard): go there.
     if (what === 'todo') goNative(site.home());
   };
@@ -927,7 +929,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const sited = native.filter((n) => /^link:[a-z0-9]{12}$/.test(n.id));
     model = M.build({ native: sited.length ? native.filter((n) => !sited.includes(n)) : native, look, legacy, mods: [...mods.values()].flatMap((m) => [...m.values()]),
       prefs: sited.length ? { ...prefs, links: [...prefs.links.filter((l) => !sited.some((n) => n.id === 'link:' + l.id)), ...sited.map((n) => ({ id: n.id.slice(5), n: n.label, u: n.href, i: n.icon || 'link' }))] } : prefs,
-      names: { notes: t('Notes'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') }, origin: location.origin });
+      names: { notes: t('Notes'), documents: t('Documents'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') }, origin: location.origin });
     for (const n of sited) {
       const i = model.items.find((x) => x.id === n.id);
       if (i) Object.assign(i, { active: !!n.active, ...(n.panel && { panel: true }), ...(typeof n.checked === 'boolean' && { switch: true, checked: n.checked, disabled: !!n.disabled }) });

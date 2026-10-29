@@ -69,6 +69,43 @@ test("the student's own groups, tabs and Glaze items", () => {
   assert.equal(M.build({ native: ULTRA }).items.some((i) => i.id.startsWith('glaze:')), false, 'none by default');
 });
 
+test("Glaze's Documents item: opt-in, drawn when on, and its click asks the worker for the Documents page", () => {
+  const E = require('../lib/editor-navbar.js');
+  // Off until the student turns it on, a fresh device too (its one item is Glaze settings).
+  assert.deepEqual(M.clean({}).glaze, []);
+  assert.deepEqual(M.initial(undefined, undefined, true).glaze, ['settings']);
+  assert.ok(!M.build({ native: ULTRA, prefs: M.initial(undefined, undefined, true) }).items.some((i) => i.id === 'glaze:documents'));
+  const prefs = M.clean({ glaze: ['documents', 'notes'], groups: [{ items: ['glaze:documents', 'calendar'] }], tabs: ['glaze:documents'] });
+  assert.deepEqual([prefs.glaze, prefs.groups[0].items, prefs.tabs], [['notes', 'documents'], ['glaze:documents', 'calendar'], ['glaze:documents']], 'placeable like the other Glaze items');
+  const m = M.build({ native: ULTRA, prefs: M.clean({ glaze: ['documents'] }) });
+  const item = m.items.find((i) => i.id === 'glaze:documents');
+  assert.deepEqual([item.label, item.icon, item.action, item.href], ['Documents', 'documents', 'documents', undefined]);
+  assert.ok(ids(m.groups.at(-1).items).includes('glaze:documents'), 'with the links and Glaze items, in the last group');
+  assert.equal(M.build({ native: ULTRA, prefs: M.clean({ glaze: ['documents'] }), names: { documents: 'Dokumente' } }).items.find((i) => i.id === 'glaze:documents').label, 'Dokumente');
+  // A drawing of its own: the Notes item's page is not Documents'.
+  assert.ok(M.PICKS.includes('documents') && M.MOD_PICKS.includes('documents'));
+  assert.notEqual(M.ICONS.documents, M.ICONS.notes);
+  // Settings → Navigation lists it where the bar puts it, by the name it is given.
+  const row = E.rows({ glaze: ['documents'] }, { names: (id) => (id === 'glaze:documents' ? 'Dokumente' : id) }).flatMap((g) => g.items).find((i) => i.id === 'glaze:documents');
+  assert.deepEqual([row.name, row.icon, row.hidden], ['Dokumente', 'documents', false]);
+  // The page's bar names it in the page's language.
+  const src = read('features/navbar.js');
+  const names = vm.runInNewContext(`(${src.match(/names: (\{ notes: t\('Notes'\)[^}]*\})/)[1]})`, { t: (k) => `«${k}»` });
+  assert.equal(names.documents, '«Documents»');
+  // Its click: the worker opens papers.html (lib/background.js 'papers'), for the student's own click only, in Settings'
+  // preview of the bar as on a school's page.
+  for (const isPreview of [false, true]) {
+    const sent = [];
+    const glaze = vm.runInNewContext(`${src.slice(src.indexOf('  const glaze = (what, e) => {'), src.indexOf("  // The site's own item:"))} glaze`,
+      { send: (m) => sent.push(m), isPreview, X: { need: () => new Promise(() => {}) }, arranged: () => null, goNative() {}, site: { home: () => 'home' } });
+    glaze('documents', { isTrusted: false });
+    glaze('documents');
+    assert.deepEqual(sent, [], 'a mod\'s nav.go or a scripted click opens nothing');
+    glaze('documents', { isTrusted: true });
+    assert.deepEqual(sent, ['papers']);
+  }
+});
+
 test("navbarItems cleaning drops what doesn't fit and is idempotent", () => {
   const raw = {
     items: { course: { label: `  ${'x'.repeat(80)}‮ `, icon: 'nope', hidden: 'yes' }, 'link:bad': { hidden: true }, __proto__: { hidden: true }, 'mod:countdown.next': { hidden: true }, calendar: { icon: 'star', hidden: true } },

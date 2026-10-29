@@ -84,10 +84,13 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...(cid && ctx.settings().enhance.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: () => need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.open(), () => {}) }] : []),
     ];
   };
-  // Canvas and Ultra alike: the notes app (features/notes.js: the library, a new note, and this course's notes), Glaze's
-  // own commands, and every extra with its switch (features/widgets.js), whether or not the widgets are on.
+  // Glaze Writer's Documents (papers.html), on every site while Writer is on: the worker opens it in a tab of its own, for
+  // the student's own click or Enter on its row.
+  const documents = () => (ctx.settings().enhance.writer === false ? [] : [{ label: t('Documents'), hint: 'Glaze', group: 'Glaze', run: (e) => { if (e?.isTrusted) { try { Promise.resolve(chrome.runtime.sendMessage('papers')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } } }]);
+  // Canvas and Ultra alike: Documents, the notes app (features/notes.js: the library, a new note, and this course's notes),
+  // Glaze's own commands, and every extra with its switch (features/widgets.js), whether or not the widgets are on.
   const apps = (cid) => [
-    ...(ultra ? [{ label: t('Papers'), hint: 'Glaze', group: 'Glaze', run: (e) => { if (e?.isTrusted) { try { Promise.resolve(chrome.runtime.sendMessage('papers')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } } }] : []),
+    ...documents(),
     ...(ctx.settings().enhance.pet ? [{ label: t('Pet habitat'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => need('features/pet.js', () => globalThis.GZ_PET_UI)).then(() => GZ_PET_UI.open(), () => {}) }] : []),
     ...(ctx.settings().enhance.notes ? [
       { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: (e) => notes({ event: e }) },
@@ -105,7 +108,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches (glazeCmds), the pointer picture's
     // once lookx knows there is one.
     await need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => globalThis.GZ_LOOKX?.ready(), () => {});
-    if (moodle) { const [m, due] = await Promise.all([moodleIn(), dueWeek()]); return [...await m.commands(go), ...dueCmds(due), ...glazeCmds()]; }
+    if (moodle) { const [m, due] = await Promise.all([moodleIn(), dueWeek()]); return [...await m.commands(go), ...dueCmds(due), ...documents(), ...glazeCmds()]; }
     if (!ultra) return canvasCommands();
     const cid = courseId();
     // A tab's name without its count badge ("Announcements 12").
