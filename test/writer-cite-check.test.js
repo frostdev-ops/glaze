@@ -157,3 +157,20 @@ test('paper format checks can own citation shape while cite checks still find mi
   const issues = C.check('A claim (Morrison, 42), then another (Baldwin xix).', [MORRISON], 'mla9', { shape: false });
   assert.deepEqual(msgs(issues), ['Baldwin is cited but has no entry']);
 });
+
+test('recovering unreviewed bibliography metadata does not invent uncited-source warnings', () => {
+  const B = require('../lib/writer-bibliography.js');
+  const FX = require('./fixtures/writer-paper-fixtures.js');
+  for (const style of ['mla9', 'apa7', 'chicago17']) {
+    const node = W.paper.nodeFromJSON(FX.papers[style]());
+    const recovered = B.entries(node).map(B.parse);
+    assert.ok(recovered.length > 1);
+    assert.deepEqual(C.check(node, recovered, style), [], style);
+  }
+  const recovered = B.parse('Morrison, Toni. Beloved. Knopf, 1987.');
+  assert.deepEqual(C.check('My own observation.', [recovered], 'mla9'), []);
+  for (const source of [{ ...recovered, reviewed: true }, MORRISON]) {
+    assert.deepEqual(msgs(C.check('My own observation.', [source], 'mla9')), ['Morrison is never cited']);
+  }
+  assert.deepEqual(msgs(C.check('A claim (Baldwin xix).', [recovered], 'mla9')), ['Baldwin is cited but has no entry']);
+});
