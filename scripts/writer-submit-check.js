@@ -628,6 +628,7 @@ const HARNESS = `(() => {
     await p.evaluate(() => { const q = document.querySelector('.ql-container[data-gz-writer-id]').__quill; q.root.innerHTML = '<p><span>' + q.root.textContent + '</span></p>'; });
     await pause(150);
     check(JSON.stringify(await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON())) === JSON.stringify(jsonBefore), 'Ultra reformats the projection without replacing the paper');
+    await p.evaluate((delta) => document.querySelector('.ql-container[data-gz-writer-id]').__quill.setContents(delta, 'user'), await fr.evaluate(() => GZ_WRITER_PAPER.project(GZ_WRITER_PAPER.current().editor.view.state.doc).delta));
     await fr.click('.gw-bar .gp-full');
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'full'), 'full again');
     await settle(fr);
@@ -649,6 +650,24 @@ const HARNESS = `(() => {
     check((await versions()).filter((r) => r === 'view').length === viewsBefore + 1, 'the paper kept as a version first');
     check((await p.evaluate(() => __text())).includes('Pages only.') && !/Morrison 35\./.test(await p.evaluate(() => __text())), 'then its text goes into Ultra\'s box again, footnotes left in the paper');
     await until(async () => (await fullSet()) === false, 'writer.full saved off');
+    for (const name of ['Feedback', 'Checks']) {
+      await fr.click('#more');
+      await fr.click(`#menu [role="menuitem"]:text-is("${name}")`);
+      await until(() => fr.evaluate((id) => document.documentElement.dataset.view === 'full' && document.getElementById(`gp-tab-${id}`).getAttribute('aria-selected') === 'true', name.toLowerCase()), `${name} from compact`);
+      check(true, `compact ⋯ → ${name} opens the full view at its panel`);
+      await fr.click('.gp-top .gp-full');
+      await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact after panel');
+    }
+    for (const key of ['Space', 'Enter']) {
+      await fr.focus('.gw-bar .gp-full'); await p.keyboard.press(key);
+      await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'full' && document.querySelector('.gp-top .gp-full').getAttribute('aria-checked') === 'true'), `${key} turns Full writer on`);
+      await fr.focus('.gp-top .gp-full'); await p.keyboard.press(key);
+      await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact' && document.querySelector('.gw-bar .gp-full').getAttribute('aria-checked') === 'false'), `${key} turns Full writer off`);
+      check(true, `${key} operates the Full writer switch in both views`);
+    }
+    await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.parse(GZ_WRITER_SCHEMA.paper, '<p>I definately agree with this statement.</p>').content)); v.focus(); });
+    await until(() => fr.evaluate(() => GZ_WRITER_ISSUES.list().some((i) => i.source === 'harper') && !!document.querySelector('#gw .gz-iss')), 'Harper in compact', 30000);
+    check(true, 'Harper draws proofing underlines in the compact paper');
     // Kept across a reload; and Settings → Writer → Full writer switches an open assignment live, both ways.
     await setFull(true);
     await p.close();
@@ -696,10 +715,17 @@ const HARNESS = `(() => {
     card = await cardOf(fr);
     check(card.tiles.join('|') === 'Open in Writer|Submit as is' && await p.evaluate(() => __uploads.length === 1), `a .docx asks Open in Writer or Submit as is, the frame a paper's height (${h0}px → ${await frameH(el)}px)`);
     saved.compactCard = await cshot(p, 'compact-card-1440.png');
+    const compactRemnant = await p.evaluate(() => __text());
     await fr.click('.gi-default');
     await until(async () => (await paperText(fr)).includes(marker), 'opened');
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'full' && document.querySelectorAll('.gp-sheet').length > 0), 'the pages');
     check(await fullSet() === true, 'Open in Writer opens the file in the pages, Full writer on');
+    check(await p.evaluate(() => __text()) === compactRemnant, 'opening the file leaves Ultra’s compact remnant available for explicit review');
+    await p.click(SUBMIT); await until(() => fr.evaluate(() => !!document.querySelector('.gs-layer')), 'submit imported paper');
+    check(await fr.getAttribute('#gs-keep', 'aria-checked') === 'false' && await fr.getAttribute('#gs-paste', 'aria-checked') === 'false', 'the submit sheet defaults to excluding the compact remnant and paper text');
+    await fr.click('.gs-primary');
+    await until(() => p.evaluate(() => !!document.getElementById('ultra-confirm')), 'imported file submitted');
+    check(await p.evaluate(() => __text().trim() === '' && __uploads.length === 2 && __uploads[1].name.endsWith('.docx') && __clicks.length === 1), 'the imported .docx submits once with no duplicate compact text');
     await p.close();
     await setFull(true);
 

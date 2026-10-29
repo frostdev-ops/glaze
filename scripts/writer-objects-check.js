@@ -326,7 +326,7 @@ const HARNESS = `(() => {
     await caretIn('www.example.org/beloved', 4);
     await settle(fr);
     check(await fr.evaluate(() => !document.querySelector('.gzo-linkpop').hidden && document.querySelector('.gzo-url').textContent === 'https://www.example.org/beloved'), 'the link card shows on a link');
-    check(await fr.evaluate(() => getComputedStyle([...document.querySelectorAll('.gp-flow a')].find((a) => a.textContent === 'www.example.org/beloved')).color === 'rgb(5, 99, 193)'), 'links take the .docx\'s Hyperlink colour, underlined');
+    check(await fr.evaluate(() => (() => { const a = [...document.querySelectorAll('.gp-flow a')].find((a) => a.textContent === 'www.example.org/beloved'), probe = document.createElement('span'); probe.style.color = 'var(--sheet-link)'; a.parentElement.append(probe); const same = getComputedStyle(a).color === getComputedStyle(probe).color && getComputedStyle(a).textDecorationLine.includes('underline'); probe.remove(); return same; })()), 'links take the .docx\'s Hyperlink colour, underlined');
     saved.link = await shot(p, 'link-card-dark.png');
     await p.keyboard.press(`${MOD}+k`);
     await until(() => fr.evaluate(() => !document.querySelector('.gzo-linkedit').hidden && document.activeElement?.type === 'url'), 'link editor');

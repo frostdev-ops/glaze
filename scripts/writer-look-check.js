@@ -141,7 +141,7 @@ const LOOKS = [
         check((await at()).shown, 'the drawn caret is back once the range collapses');
         await fr.evaluate(() => document.querySelector('.ProseMirror').dispatchEvent(new CompositionEvent('compositionstart', { data: '' })));
         c = await at();
-        check(!c.shown && await fr.evaluate(() => getComputedStyle(document.querySelector('.ProseMirror')).caretColor) === 'rgb(17, 17, 17)', 'while an input method composes, the browser\'s caret is back and the drawn one hidden');
+        check(!c.shown && await fr.evaluate(() => getComputedStyle(document.querySelector('.ProseMirror')).caretColor === getComputedStyle(document.querySelector('.ProseMirror')).color), 'while an input method composes, the browser\'s caret is back and the drawn one hidden');
         await fr.evaluate(() => document.querySelector('.ProseMirror').dispatchEvent(new CompositionEvent('compositionend', { data: '' })));
         check((await at()).shown, 'the drawn caret is back after composing');
         await fr.click('.gp-tab#gp-tab-outline');

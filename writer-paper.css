@@ -74,7 +74,7 @@
 .gp-full[aria-checked="true"] .gp-full-track::after { transform: translateX(12px); background: var(--gz-accent-ink); }
 .gp-full:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; border-radius: 6px; }
 /* A narrow box (the frame is as wide as Ultra's): the slider alone, its name still its label. */
-@media (max-width: 480px) { .gp-full-name { display: none; } }
+@media (max-width: 479.98px) { .gp-full-name { display: none; } }
 .gp { flex-direction: column; height: 100vh; background: var(--ground); color: var(--gz-ink); font: 14px/1.5 var(--gz-font); }
 /* In Ultra the paper is a card: the Look's corners and edge (drawn over the bars, which fill to them). Focus fills the window,
    square, as does papers.html. */
