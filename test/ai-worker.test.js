@@ -44,6 +44,24 @@ test('Glaze in a page of a site it runs on, and Glaze\'s own pages, may open the
   }
 });
 
+test('a document opened from the Documents page (papers.html, its tab\'s top frame) asks for the writer\'s features; it has no LMS account, so no visual cache authority', async () => {
+  const w = make();
+  const page = `${EXT}/papers.html?paper=doc%3A00000000-0000-4000-8000-000000000000`;
+  const home = { id: 'glaze', frameId: 0, documentId: 'papers-doc', url: page, origin: EXT, tab: { id: 6, url: page } };
+  let read = 0;
+  w.context.chrome.scripting.executeScript = async () => { read++; return []; };
+  for (const feature of ['completion', 'writing']) {
+    const { port, say } = w.connect('glaze:ai', home);
+    say({ id: 1, op: 'status', feature });
+    await w.settle();
+    assert.equal(port.hungUp, false, feature);
+    assert.equal(port.posted[0]?.type, 'status', feature);
+  }
+  assert.equal(await require('node:vm').runInContext('aiSender', w.context)(home, { op: 'run', feature: 'writing' }), true);
+  assert.equal(await require('node:vm').runInContext('aiVisualScope', w.context)(home), null);
+  assert.equal(read, 0, 'nothing is read from a page: there is no LMS page behind it');
+});
+
 test('only Settings\' own top frame keeps connections, and the key never leaves the worker\'s own store', async () => {
   const w = make();
   const set = { type: 'glaze:ai-config', op: 'set', id: 'main', cfg: { provider: 'openai', base: 'https://api.example.com/v1', model: 'gpt-x', key: KEY } };

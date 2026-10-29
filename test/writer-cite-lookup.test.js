@@ -44,8 +44,8 @@ test('requests: doi.org with CSL-JSON, Open Library\'s books API, the page itsel
   assert.equal(L.request('fetch', 'https://example.org/'), null);
 });
 
-const PAGE = 'chrome-extension://gz/writer.html';
-const env = (over = {}) => ({ id: 'gz', page: PAGE, reach: async () => false, calls: [], ...over });
+const PAGE = 'chrome-extension://gz/writer.html', PAPERS = 'chrome-extension://gz/papers.html';
+const env = (over = {}) => ({ id: 'gz', pages: [PAGE, PAPERS], reach: async () => false, calls: [], ...over });
 const sender = { id: 'gz', url: `${PAGE}#x`, tab: { id: 1 }, frameId: 3 };
 const response = (body, { status = 200, type = 'application/json', url } = {}) => {
   const bytes = Buffer.from(body);
@@ -53,11 +53,14 @@ const response = (body, { status = 200, type = 'application/json', url } = {}) =
     body: { getReader: () => { let sent = 0; return { read: async () => (sent < bytes.length ? { done: false, value: bytes.subarray(sent, (sent += 65536)) } : { done: true }), cancel: async () => {} }; } } };
 };
 
-test('the worker\'s fetch: writer.html only; doi.org and Open Library without a grant, a page only with its host held', async () => {
+test('the worker\'s fetch: Writer\'s pages only (writer.html, papers.html); doi.org and Open Library without a grant, a page only with its host held', async () => {
   const calls = [];
   const fetch = async (url, init) => { calls.push([url, init]); return response(fixture('writer-cite-doi.json'), { url, type: 'application/vnd.citationstyles.csl+json' }); };
-  for (const s of [null, { ...sender, id: 'other' }, { ...sender, url: 'chrome-extension://gz/options.html' }, { ...sender, url: 'https://bb.school.edu/writer.html' }])
+  for (const s of [null, { ...sender, id: 'other' }, { ...sender, url: 'chrome-extension://gz/options.html' }, { ...sender, url: 'https://bb.school.edu/writer.html' }, { ...sender, url: 'https://bb.school.edu/papers.html' }, { ...sender, url: 'chrome-extension://gz/papers.htmlx' }])
     assert.deepEqual(await L.serve({ kind: 'doi', value: '10.5555/gz.2026.001' }, s, env({ fetch })), { ok: false, error: 'sender' });
+  // The Documents page's editor, a tab's top frame, with its document's key in the address.
+  const home = { id: 'gz', url: `${PAPERS}?paper=doc%3A00000000-0000-4000-8000-000000000000`, tab: { id: 2 }, frameId: 0 };
+  assert.equal((await L.serve({ kind: 'doi', value: '10.5555/gz.2026.001' }, home, env({ fetch }))).ok, true);
   const r = await L.serve({ kind: 'doi', value: '10.5555/gz.2026.001' }, sender, env({ fetch }));
   assert.equal(r.ok, true);
   assert.equal(r.text, fixture('writer-cite-doi.json'));
