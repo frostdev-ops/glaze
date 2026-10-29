@@ -671,7 +671,12 @@
       t,
       on: (ev, fn) => { if (hooks[ev] && typeof fn === 'function') hooks[ev].push(fn); },
       list: () => DH.sort(live(), 'updated', new Map(), locale).map(summary),
-      open: (key) => { const r = listed(key); if (r) location.assign(`papers.html?${DK.get(DK.kindOf(r)).param}=${encodeURIComponent(key)}`); return !!r; },
+      open: async (key) => {
+        const r = known().find((r) => r.key === key);
+        if (!r || (DH.inTrash(r, moving) && !await st.untrash(key))) return false;
+        location[window.top === window ? 'assign' : 'replace'](`papers.html?${DK.get(DK.kindOf(r)).param}=${encodeURIComponent(key)}`);
+        return true;
+      },
       create: (format) => { const ok = ST.IDS.includes(format); if (ok) location.assign(fresh(format)); return ok; },
       read: async (key) => { const r = listed(key), rec = r && await st.get(key); return rec?.doc ? { key, title: titleOf(r), text: DK.get(DK.kindOf(r)).text(rec) } : null; },
       export: async (key) => { const r = listed(key), f = r && await DK.get(DK.kindOf(r)).file(key); return f ? { name: f.name, mime: f.mime, bytes: new Uint8Array(f.bytes) } : null; },
@@ -707,7 +712,7 @@
           const at = clicked.get(id);
           if (at === undefined || performance.now() - at > 1000) return { error: 'permission' };
           clicked.delete(id);
-          return (name === 'documents.open' ? D.open(v.key) : D.create(v.format)) ? null : { error: 'args' };
+          return (name === 'documents.open' ? await D.open(v.key) : D.create(v.format)) ? null : { error: 'args' };
         }
         if (name === 'documents.add') {
           const k = `${id}|${v.slot}|${v.id}`;
