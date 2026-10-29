@@ -5,7 +5,8 @@ const vm = require('node:vm');
 const { El, parser } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
 const U = require('../../lib/writer-ultra.js');
-module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recovery = false, pathname = null, account = async () => '_900_1' } = {}) => {
+// writer: the student's Writer settings as the page reads them (writer.full: an assignment opens its full view).
+module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recovery = false, pathname = null, account = async () => '_900_1', writer = {} } = {}) => {
   const doc = { activeElement: null, listeners: [] }, timers = new Map(), observers = [], ports = [], messages = [], clicks = [], kept = [], offers = [];
   doc.root = new El('html', doc); doc.documentElement = doc.root;
   doc.body = parse(fs.readFileSync(path.join(__dirname, `../fixtures/ultra-writer-${fixture}.html`), 'utf8'), doc);
@@ -23,7 +24,7 @@ module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recov
   const ctx = vm.createContext({
     document: doc, location, crypto, CustomEvent, console, Element: El, DOMParser: parser(doc),
     GZ_COLORS: [], GZ_WRITER_ULTRA: U,
-    GZ_CTX: { account, on: () => true, site: 'ultra', settings: () => ({ enabled: true, enhance: { writer: true } }), t: (k) => k, locale: () => 'en', need: async () => ctx.GZ_DRAFT_UI, draftAt: (ed) => ({ ed, id: ed.id, near: U.contextOf(ed, U.kindOf(ed, { path: location.pathname })).post?.id || '', path: location.pathname, html: ed.innerHTML, text: ed.textContent, at: Date.now() }), bookFor: () => ({ results: [{ column: { contentId: '_8_1' } }] }) },
+    GZ_CTX: { account, on: () => true, site: 'ultra', settings: () => ({ enabled: true, enhance: { writer: true }, writer }), t: (k) => k, locale: () => 'en', need: async () => ctx.GZ_DRAFT_UI, draftAt: (ed) => ({ ed, id: ed.id, near: U.contextOf(ed, U.kindOf(ed, { path: location.pathname })).post?.id || '', path: location.pathname, html: ed.innerHTML, text: ed.textContent, at: Date.now() }), bookFor: () => ({ results: [{ column: { contentId: '_8_1' } }] }) },
     GZ_DRAFT_UI: { ready: async () => !recovery, keep: (s) => kept.push({ ...s }), write() {} },
     chrome: { runtime: { getURL: (s) => `chrome-extension://x/${s}`, sendMessage: async (m) => { messages.push(m); return { ok: true }; } }, storage: { onChanged: { addListener() {} } } },
     getComputedStyle: () => ({ getPropertyValue: () => '' }), matchMedia: () => ({ matches: true }),

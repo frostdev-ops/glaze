@@ -1,12 +1,14 @@
-// Glaze Writer's content side with an assignment's paper (features/writer.js, paper mode): the frame is a page of its
-// own, nothing it says is written into Ultra's editor or draft backup, Focus fills the window, and the assignment's
-// context builder is asked once the frame is up.
+// Glaze Writer's content side with an assignment's paper (features/writer.js, paper mode). Full (Settings → Writer → Full
+// writer): the frame is a page of its own, nothing it says is written into Ultra's editor or draft backup, Focus fills the
+// window, and the assignment's context builder is asked once the frame is up. Compact (the default): the frame grows with
+// its box, the paper's projection goes into Ultra's editor (never the draft backup), a switch resizes it and keeps the
+// caret's line on screen, a sheet takes the paper's height, and Ultra's Submit sends the last edit first.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const content = require('./helpers/writer-content.cjs');
 
-const paper = async () => {
-  const c = content({ fixture: 'attempt' });
+const paper = async (full = true) => {
+  const c = content({ fixture: 'attempt', writer: { full } });
   c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
   const sent = [];
   c.ctx.GZ_WRITER_CONTEXT_ASSIGNMENT = { send: async (X, box, alive) => { sent.push({ box, alive: alive() }); } };
@@ -59,4 +61,132 @@ test('"Blackboard editor" from a paper gives the box back as it was, writing not
   assert.ok(!box.root.hasAttribute('data-gz-writer') && !box.container.hasAttribute('data-gz-writer-id'));
   assert.equal(box.editor.innerHTML, before);
   assert.equal(c.sets.length, 0);
+});
+
+// ---- the compact box ----------------------------------------------------------------------------------------------------
+const PAPER = 'max(640px, calc(100vh - 120px))';
+const ops = (text) => [{ insert: `${text}\n` }];
+// The frame's height as last set: its style's own (the stand-in keeps it apart from cssText), else the one it opened with.
+const height = (f) => f.style.height || /height:([^;]+)/.exec(f.style.cssText)?.[1];
+
+test('an assignment opens compact by default: a box as tall as Ultra\'s, then as tall as the frame says', async () => {
+  const { c, frame } = await paper(false);
+  assert.equal(c.ports[0].sent[0].mode, 'paper', 'still the paper');
+  assert.notEqual(height(frame), PAPER);
+  c.emit({ type: 'view', full: false });
+  c.emit({ type: 'height', px: 318 });
+  assert.equal(height(frame), '318px');
+});
+
+test('compact: the paper\'s projection goes into Ultra\'s editor as a post\'s does, never into the draft backup', async () => {
+  const { c, box } = await paper(false);
+  c.emit({ type: 'view', full: false });
+  c.emit({ type: 'change', html: '<p>Memory is a debt.</p>', text: 'Memory is a debt.', delta: ops('Memory is a debt.') });
+  assert.equal(c.sets.length, 1);
+  assert.equal(box.editor.innerHTML, '<p>Memory is a debt.</p>');
+  c.tick(1000);
+  assert.equal(c.kept.length, 0, 'the paper is in Writer\'s storage');
+});
+
+test('a switch to the full view takes the paper\'s height and writes nothing more; back, the box\'s height and its text again', async () => {
+  const { c, box, frame } = await paper(false);
+  c.emit({ type: 'view', full: false });
+  c.emit({ type: 'change', html: '<p>One.</p>', text: 'One.', delta: ops('One.') });
+  c.emit({ type: 'view', full: true, from: 400, to: 200 });
+  assert.equal(height(frame), PAPER);
+  c.emit({ type: 'height', px: 6 });
+  assert.equal(height(frame), PAPER, 'a full paper\'s height reports don\'t shrink it');
+  c.emit({ type: 'change', html: '<p>Two.</p>', text: 'Two.', delta: ops('Two.') });
+  assert.equal(box.editor.innerHTML, '<p>One.</p>', 'the pages never write into Ultra\'s editor');
+  c.emit({ type: 'view', full: false, px: 260, from: 120, to: 480 });
+  assert.equal(height(frame), '260px');
+  c.emit({ type: 'change', html: '<p>Three.</p>', text: 'Three.', delta: ops('Three.') });
+  assert.equal(box.editor.innerHTML, '<p>Three.</p>');
+});
+
+test('compact: a sheet over the box takes the paper\'s height while it is open', async () => {
+  const { c, frame } = await paper(false);
+  c.emit({ type: 'view', full: false });
+  c.emit({ type: 'height', px: 280 });
+  c.emit({ type: 'room', on: true });
+  assert.equal(height(frame), PAPER);
+  c.emit({ type: 'height', px: 300 });
+  assert.equal(height(frame), PAPER, 'the box growing meanwhile waits');
+  c.emit({ type: 'room', on: false });
+  assert.equal(height(frame), '300px');
+});
+
+test('compact: Submit and Save and Close wait for a fresh, saved frame snapshot and reject late replies', async () => {
+  for (const action of ['submit', 'save']) {
+    const { c, box } = await paper(false);
+    const button = c.doc.querySelector(`[data-analytics-id="assignment.attempt.authoring.footer.${action === 'save' ? 'saveAndClose' : action}"]`) || c.doc.querySelector('[data-analytics-id="course.content.assessment.footer.buttons.saveAndClose"]');
+    assert.ok(button, action);
+    const click = () => { const e = { type: 'click', target: button, preventDefault() { this.held = true; }, stopImmediatePropagation() {} }; c.doc.dispatchEvent(e); return e; };
+    c.emit({ type: 'change', html: '<p>Earlier.</p>', text: 'Earlier.', delta: ops('Earlier.') });
+    assert.equal(click().held, true, 'native action waits even when the previous projection synced');
+    const request = c.ports[0].sent.at(-1).request;
+    assert.equal(c.ports[0].sent.at(-1).type, 'compact:flush');
+    c.emit({ type: 'compact:flushed', request: 'stale', ok: true, html: '<p>Wrong.</p>', text: 'Wrong.', delta: ops('Wrong.') });
+    assert.equal(c.clicks.length, 0);
+    c.emit({ type: 'compact:flushed', request, ok: true, html: '<p>Last keystroke.</p>', text: 'Last keystroke.', delta: ops('Last keystroke.') });
+    assert.equal(box.editor.innerHTML, '<p>Last keystroke.</p>');
+    assert.deepEqual(c.clicks, [button]);
+    assert.equal(c.ports[0].sent.at(-1).type, 'compact:resume');
+    click();
+    const failed = c.ports[0].sent.at(-1).request;
+    c.helper('fail');
+    c.emit({ type: 'compact:flushed', request: failed, ok: true, html: '<p>Unsynced.</p>', text: 'Unsynced.', delta: ops('Unsynced.') });
+    assert.equal(c.clicks.length, 1, 'failed native sync never clicks');
+    click(); c.tick(4000);
+    const timedOut = c.ports[0].sent.at(-1).request;
+    c.emit({ type: 'compact:flushed', request: timedOut, ok: true, html: '<p>Late.</p>', text: 'Late.', delta: ops('Late.') });
+    assert.equal(c.clicks.length, 1, 'a timed-out flush cannot submit later');
+  }
+});
+
+test('compact: a reformatted Ultra echo never writes HTML back into the paper; a crashed frame reopens from storage', async () => {
+  const { c, box, frame } = await paper(false);
+  c.emit({ type: 'change', html: '<p>Projected.</p>', text: 'Projected.', delta: ops('Projected.') });
+  box.editor.innerHTML = '<div><span>Projected.</span></div>';
+  c.mutate(box.editor);
+  assert.ok(!c.ports[0].sent.some((m) => m.type === 'html'));
+  frame.remove(); c.ctx.GZ_WRITER.pass();
+  const fresh = box.root.previousElementSibling;
+  await c.boot(fresh); c.emit({ type: 'ready' }, 1);
+  assert.equal(c.ports[1].sent[0].mode, 'paper');
+  assert.ok(!c.ports[1].sent.some((m) => m.type === 'html'), 'only the paper store supplies the authoritative document');
+});
+
+test('compact: Blackboard editor gives the box back holding the paper\'s text', async () => {
+  const { c, box, frame } = await paper(false);
+  c.emit({ type: 'view', full: false });
+  c.emit({ type: 'change', html: '<p>Kept.</p>', text: 'Kept.', delta: ops('Kept.') });
+  c.emit({ type: 'native' });
+  assert.ok(!frame.isConnected);
+  assert.equal(box.editor.innerHTML, '<p>Kept.</p>');
+});
+
+
+test('compact: the file sheet owns its native click and text, without a second compact flush', async () => {
+  const { c, box } = await paper(false);
+  const button = c.doc.querySelector('[data-analytics-id="assignment.attempt.authoring.footer.submit"]');
+  c.ctx.GZ_WRITER_SUBMIT = { passing: (b) => b === button };
+  box.editor.innerHTML = '<p>Explicit submission note.</p>';
+  const e = { type: 'click', target: button, preventDefault() { this.held = true; }, stopImmediatePropagation() {} };
+  c.doc.dispatchEvent(e);
+  assert.equal(!!e.held, false);
+  assert.equal(box.editor.innerHTML, '<p>Explicit submission note.</p>');
+  assert.ok(!c.ports[0].sent.some((m) => m.type === 'compact:flush'));
+});
+
+test('compact: native Submit cannot bypass the flush while a crashed frame is reopening', async () => {
+  const { c, box, frame } = await paper(false);
+  c.emit({ type: 'change', html: '<p>Earlier projection.</p>', text: 'Earlier projection.', delta: ops('Earlier projection.') });
+  frame.remove(); c.ctx.GZ_WRITER.pass();
+  const button = c.doc.querySelector('[data-analytics-id="assignment.attempt.authoring.footer.submit"]');
+  const e = { type: 'click', target: button, preventDefault() { this.held = true; }, stopImmediatePropagation() {} };
+  c.doc.dispatchEvent(e);
+  assert.equal(e.held, true, 'the replacement must load the saved paper before native submission is available');
+  assert.equal(box.editor.innerHTML, '<p>Earlier projection.</p>');
+  assert.ok(!c.ports[1].sent.some((m) => m.type === 'compact:flush'), 'never ask an uninitialized frame to flush');
 });

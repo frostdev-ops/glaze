@@ -86,7 +86,7 @@ const HARNESS = `(() => {
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
-    const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
+    const settings = G.GZ_SANITIZE({ writer: { full: true }, navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
     await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
     const watch = (p, tag) => {
@@ -179,7 +179,7 @@ const HARNESS = `(() => {
     await fr.click('.gp-tool [aria-label="Text colour"]');
     saved.colour = await shot(p, 'format-colour.png');
     await fr.click('.gp-palette [aria-label="#C00000"]');
-    check((await marksOf(fr, 'consent')).color?.color === 'C00000' && await fr.evaluate(() => /192, 0, 0/.test(getComputedStyle(document.querySelector('.gp-flow [data-gz-color="C00000"]')).color)), 'Text colour → dark red, drawn on the page');
+    check((await marksOf(fr, 'consent')).color?.color === 'C00000' && await fr.evaluate(() => (() => { const x = document.querySelector('.gp-flow [data-gz-color="C00000"]'), c = getComputedStyle(x); return c.getPropertyValue('--c').trim().toUpperCase() === '#C00000' && c.color !== getComputedStyle(x.parentElement).color; })()), 'Text colour → dark red, drawn on the page');
     await fr.click('.gp-tool [aria-label="Highlight"]');
     await fr.click('.gp-palette [aria-label="Yellow"]');
     check((await marksOf(fr, 'consent')).highlight?.color === 'yellow', 'Highlight → yellow');
@@ -229,6 +229,8 @@ const HARNESS = `(() => {
     check(await fr.evaluate(() => !!document.querySelector('.ge-find:not([hidden]) .ge-with:not([hidden])')), '⌘⇧H opens Find with Replace');
     await p.keyboard.press('Escape');
 
+    // Shortcut checks above deliberately reset paragraph attributes; start the dialog checks on a fresh fixture.
+    await load(fr, FX.papers.mla9(), 'mla9');
     // ---- the Paragraph dialog
     await pick(fr, 'Critics');
     await fr.click('.gp-tool [aria-label="Paragraph…"]');

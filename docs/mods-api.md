@@ -276,8 +276,8 @@ Where a row says Worker, a frame UI can't use it (personal data goes to Workers 
 | `glaze.effects.play(kind, options?)` | A particle effect: `kind` is `burst`, `confetti`, `rain`, `ring`, `sprite` or `contour` (up to 4 nested rings stepping out to `size`, traced round `spread` degrees and lifted by -`gravity` × 4 px, then its `shapes` round the rim). Options: `count` 1 to 60, `shapes` (up to 4 of `dot` `star` `snow` `heart` `leaf` `spark`), `c` (up to 6 colours), `spread` 0 to 360, `gravity` -2 to 2, `life` 200 to 2500 ms, `size` 2 to 48, `x` and `y` 0 to 1 (fractions of the window; 0.5 and 0.33 by default). One a mod every 200 ms; none with motion off or the page hidden. | |
 | `glaze.look.override(parts)` | Look parts laid over the student's Look while the mod runs, never saved; `null` removes them. The first mod in the student's order to give a part wins it; `rules` add up. Media `src` and `type` must exactly match `parts.bg.media` in the installed manifest; code can change its fit, dim and loop controls. A `nav` is a nav layout from code, as `glaze.nav.layout()`'s, and needs `nav.layout`. Use `glaze.fetch` for network requests. | `nav.layout` for a `nav` |
 | `glaze.broadcast(data)` | To this mod's other Worker and frames on the page, as a `broadcast` event; not back to the sender. At most 64 KiB. | |
-| `glaze.documents.list()` | `[{ key, kind, title, format, words, updated, course }]`: every document the page lists, newest first, its title as shown, `updated` in ms since 1970, `course` `''` for none. Never its text. Documents page, Worker. | `documents` |
-| `glaze.documents.open(key)` | Opens a listed document in this tab. Only within a second of a click on one of the mod's own items; one click allows one call. | `documents` |
+| `glaze.documents.list()` | `[{ key, kind, title, format, words, updated, course }]`: every document the page lists (none in its Trash), newest first, its title as shown, `updated` in ms since 1970, `course` `''` for none. Never its text. Documents page, Worker. | `documents` |
+| `glaze.documents.open(key)` | Opens a document in this tab, restoring it first if it is in Trash. Only within a second of a click on one of the mod's own items; one click allows one call. | `documents` |
 | `glaze.documents.create({ format })` | Starts a new document in this tab: `format` `plain` (Blank, the default), `mla9`, `apa7` or `chicago17`. As `open`, after a click. | `documents` |
 | `glaze.documents.read(key)` | `{ key, title, text }`: a listed document's text, a line a paragraph. | `documents.read` |
 | `glaze.documents.export(key)` | `{ name, mime, bytes }`: a listed document as the file its kind saves (`Lastname_Title.docx`), `bytes` a `Uint8Array`. | `documents.read` |
@@ -373,8 +373,10 @@ seen, so call `glaze.ui.commit` after drawing with one), or on `glaze.ui.commit`
 Glaze Writer's Documents page (Popup → Documents) runs the Worker of each mod granted `documents`, as a school page runs
 mods, and nothing of the others. There a mod has `glaze.storage`, `glaze.theme()`, `glaze.settings()`, `glaze.broadcast()`
 and `glaze.documents`; any other call rejects with `call`, as `glaze.documents` does on a school page. Its `page` event says
-`{ site: 'documents', kind: 'documents', courseId: null }`. A key is one `glaze.documents.list()` gave and the page still
-lists; any other rejects with `args`.
+`{ site: 'documents', kind: 'documents', courseId: null }`. A key is a random opaque handle scoped to this mod on this
+page, without the school host or user id in the internal storage key. It comes from `glaze.documents.list()` or
+`documents.action`; do not persist it across page loads or mod restarts. The document must still be listed;
+any other key rejects with `args`.
 
 ```js
 glaze.documents.add('documents.card', { id: 'count', label: 'Count sentences' });

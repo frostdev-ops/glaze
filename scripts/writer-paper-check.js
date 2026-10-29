@@ -87,7 +87,7 @@ const HARNESS = `(() => {
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
-    const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
+    const settings = G.GZ_SANITIZE({ writer: { full: true }, navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
     await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
     const watch = (p, tag) => {
@@ -267,8 +267,13 @@ const HARNESS = `(() => {
     check(duplicates === 1, `paper format and cite checks share one MLA citation card (${duplicates})`);
     // In the attempt panel, then in Focus (the frame fills the window): the mockup's 1440px view.
     saved.panel = await shot(p, 'paper-panel.png');
+    // A loaded runner has swallowed this click (the frame still laying out); once more if Focus didn't take.
+    const filled = () => el.evaluate((f) => getComputedStyle(f).position === 'fixed' && Math.round(f.getBoundingClientRect().width) === innerWidth);
     await fr.click('.gp-tbtn[aria-label="Focus"]');
-    await until(() => el.evaluate((f) => getComputedStyle(f).position === 'fixed' && Math.round(f.getBoundingClientRect().width) === innerWidth), 'focus fills the window');
+    try { await until(filled, 'focus fills the window', 5000); } catch {
+      if (await fr.evaluate(() => document.querySelector('.gp-tbtn[aria-label="Focus"]')?.getAttribute('aria-pressed')) !== 'true') await fr.click('.gp-tbtn[aria-label="Focus"]');
+      await until(filled, 'focus fills the window');
+    }
     check(true, 'Focus asks the page to fill the window with the paper (focus-mode message)');
     await settle(fr);
     await fr.click('.gp-issue[data-rule="cite-shape"]');
@@ -357,6 +362,7 @@ const HARNESS = `(() => {
     check(key === 'bb.school.test|_900_1|_101_1|_7_1', 'paper keyed by school, student, course and assignment');
     // IndexedDB written in the frame, read from papers.html below: is it one store across the two?
     await fr.evaluate(() => new Promise((ok) => { const r = indexedDB.open('gz-paper-probe', 1); r.onupgradeneeded = () => r.result.createObjectStore('p'); r.onsuccess = () => { const tx = r.result.transaction('p', 'readwrite'); tx.objectStore('p').put('frame', 'k'); tx.oncomplete = () => { r.result.close(); ok(); }; }; }));
+    const trashedBeforeOpen = await fr.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(), k = GZ_WRITER_PAPER.current().key(); await P.trash(k); return P.get(k); });
     await p.reload();
     ({ el, fr } = await (async () => {
       const x = await until(async () => { const y = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return y && await y.evaluate((f) => !f.style.opacity && f.offsetHeight > 500) && y; }, 'paper frame after reload');
@@ -365,6 +371,10 @@ const HARNESS = `(() => {
       return { el: x, fr: d };
     })());
     check(await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('A sentence typed before the reload.')), 'the paper survives a reload');
+    const restoredOnOpen = await fr.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(), k = GZ_WRITER_PAPER.current().key(); return { paper: await P.get(k), versions: await P.versions(k) }; });
+    check(!('trashed' in restoredOnOpen.paper) && restoredOnOpen.paper.updated === trashedBeforeOpen.updated && restoredOnOpen.paper.revision === trashedBeforeOpen.revision,
+      "Ultra restores a trashed assignment on open without changing Last edited or revision");
+    check(restoredOnOpen.versions[0]?.reason === 'restore', 'opening a trashed assignment keeps a checkpoint version');
     const papers = await context.newPage();
     watch(papers, 'papers');
     await papers.goto(`chrome-extension://${id}/papers.html`);
@@ -472,6 +482,10 @@ const HARNESS = `(() => {
     await seeder.goto(`chrome-extension://${id}/papers.html`);
     await until(() => seeder.evaluate(() => !!globalThis.GZ_WRITER_PAPERS), 'store on the home page');
     await seeder.evaluate((k) => GZ_WRITER_PAPERS.open().save(k, { doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Reading notes on Beloved' }] }] }, kind: 'paper', named: false, title: 'Reading notes on Beloved', format: 'apa7' }), k3);
+    // The newest standalone document is in the Documents page's Trash: the sheet leaves it out.
+    const k4 = `doc:${crypto.randomUUID()}`;
+    await seeder.evaluate(async (k) => { const P = GZ_WRITER_PAPERS.open(); await P.save(k, { doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Thrown away' }] }] }, kind: 'paper', named: true, title: 'Thrown away', format: 'plain' }); await P.trash(k); }, k4);
+    check(Number.isFinite((await stored(k4))?.trashed), 'a standalone document in Trash is seeded');
     await seeder.close();
     const sourceBefore = JSON.stringify(await stored(k2)), versionsOf = (k) => worker.evaluate(async (k) => ((await chrome.storage.local.get(`writerVersions:${k}`))[`writerVersions:${k}`] || []), k);
     const assignmentText = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent);
@@ -490,7 +504,7 @@ const HARNESS = `(() => {
         rows: [...d.querySelectorAll('.gp-fromdocs-row')].map((r) => [r.querySelector('b').textContent, r.querySelector('small').textContent]), inert: document.querySelector('.gp').inert };
     });
     check(sheet.modal === 'true' && sheet.label === 'Open from Documents' && sheet.inert, `the sheet is a labelled modal dialog over an inert paper (${JSON.stringify(sheet)})`);
-    check(sheet.rows.map((r) => r[0]).join('|') === 'Reading notes on Beloved|My own title' && /^APA 7 · 4 words · /.test(sheet.rows[0][1]) && /^Blank · 6 words · /.test(sheet.rows[1][1]), `the student's standalone documents, newest first: title, format, words, date (${JSON.stringify(sheet.rows)})`);
+    check(sheet.rows.map((r) => r[0]).join('|') === 'Reading notes on Beloved|My own title' && /^APA 7 · 4 words · /.test(sheet.rows[0][1]) && /^Blank · 6 words · /.test(sheet.rows[1][1]), `the student's standalone documents, newest first, none in Trash: title, format, words, date (${JSON.stringify(sheet.rows)})`);
     check(await fr.evaluate(() => [...document.querySelectorAll('.gp-fromdocs-row')].every((r) => r.getAttribute('aria-label') === `${r.querySelector('b').textContent} · ${r.querySelector('small').textContent}`)), 'each row has its full title, format, words and date as its accessible name');
     await p.keyboard.press('ArrowDown');
     check(await fr.evaluate(() => document.activeElement === document.querySelectorAll('.gp-fromdocs-row')[1]), 'ArrowDown moves to the next document');

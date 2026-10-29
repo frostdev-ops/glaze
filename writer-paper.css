@@ -45,9 +45,36 @@
 /* Focus covers the page: the mockup's ground and opaque panels, whatever is behind. */
 :root:has(.gp-tbtn[aria-pressed="true"]) { --ground: var(--gz-surface-2); --panel: var(--gz-surface-paint, var(--gz-surface)); --top-faint: var(--gz-ink-faint); }
 .gp, .gp-hidden { display: none; }
-:root[data-mode="paper"] body { padding: 0; overflow: hidden; background: transparent; }
-:root[data-mode="paper"] #gw, :root[data-mode="paper"] #tb { display: none !important; }
-:root[data-mode="paper"] .gp, .gp.gp-standalone { display: flex; }
+/* An assignment's paper is its pages (data-view full) or writer.html's compose box (compact; writer-paper.js). */
+:root[data-mode="paper"]:not([data-view="compact"]) body { padding: 0; overflow: hidden; background: transparent; }
+:root[data-mode="paper"]:not([data-view="compact"]) #gw, :root[data-mode="paper"]:not([data-view="compact"]) #tb { display: none !important; }
+:root[data-mode="paper"]:not([data-view="compact"]) .gp, .gp.gp-standalone { display: flex; }
+/* In the compact box: compose's text (writer.css) and the paper's own blocks as compose draws its own; none of the paper's
+   fonts, sizes or line spacing (Ultra's box gets none of them; the pages show them). */
+:root[data-view="compact"] #gw .ProseMirror :is(h1, h2, h5, h6) { margin: 4px 0 10px; line-height: 1.35; font-weight: 600; font-size: 1.2em; }
+:root[data-view="compact"] #gw .ProseMirror [style*="line-height"] { line-height: inherit !important; }
+:root[data-view="compact"] #gw .ProseMirror span[style*="font-"] { font-family: inherit !important; font-size: inherit !important; }
+:root[data-view="compact"] #gw .ProseMirror blockquote { margin: 0 0 10px; padding: 0 0 0 12px; border-left: 3px solid var(--gz-accent); color: var(--gz-ink-muted); }
+:root[data-view="compact"] #gw .ProseMirror blockquote p { margin-bottom: 4px; }
+:root[data-view="compact"] #gw .ProseMirror hr { border: 0; border-top: 1px dashed var(--gz-line-strong); margin: 12px 0; }
+:root[data-view="compact"] #gw .ProseMirror { counter-reset: gz-note; }
+:root[data-view="compact"] #gw .ProseMirror sup.gz-footnote { counter-increment: gz-note; cursor: pointer; color: var(--gz-ink-muted); }
+:root[data-view="compact"] #gw .ProseMirror sup.gz-footnote::after { content: counter(gz-note); }
+:root[data-view="compact"] #gw .ProseMirror table { border-collapse: collapse; margin: 0 0 10px; }
+:root[data-view="compact"] #gw .ProseMirror :is(td, th) { border: 1px solid var(--gz-line-strong); padding: 2px 6px; vertical-align: top; }
+:root[data-view="compact"] #gw .ProseMirror :is(td, th) p { margin: 0; }
+:root[data-view="compact"] #gw .ProseMirror img { max-width: 100%; height: auto; }
+/* Full writer: a slider in the compact bar's right end and the title bar's; the accent when on. Its knob slides
+   (transform only). */
+.gp-full { display: inline-flex; align-items: center; gap: 8px; padding: 4px 2px; font-size: 13px; color: var(--gz-ink-muted); white-space: nowrap; flex: none; }
+.gp-full:hover, .gp-full[aria-checked="true"] { color: var(--gz-ink); }
+.gp-full-track { position: relative; width: 30px; height: 18px; border-radius: 9px; background: var(--gz-line-strong); flex: none; }
+.gp-full-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--gz-ink); transition: transform var(--t) ease-out; }
+.gp-full[aria-checked="true"] .gp-full-track { background: var(--gz-accent); }
+.gp-full[aria-checked="true"] .gp-full-track::after { transform: translateX(12px); background: var(--gz-accent-ink); }
+.gp-full:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; border-radius: 6px; }
+/* A narrow box (the frame is as wide as Ultra's): the slider alone, its name still its label. */
+@media (max-width: 479.98px) { .gp-full-name { display: none; } }
 .gp { flex-direction: column; height: 100vh; background: var(--ground); color: var(--gz-ink); font: 14px/1.5 var(--gz-font); }
 /* In Ultra the paper is a card: the Look's corners and edge (drawn over the bars, which fill to them). Focus fills the window,
    square, as does papers.html. */

@@ -1,6 +1,7 @@
 // The Documents home (papers.html) in the real unpacked extension: the New band, the grid's lazy thumbnails and their
 // cost, the list view and its kept choice, search by title and by body text, the course filter, sort, rename (seen by an
-// open editor), Make a copy, Delete and Undo (versions kept), .docx drop and import and a refused .txt, the keyboard,
+// open editor), Make a copy, Delete to Trash and Undo (versions kept), the Trash (its view, Restore, Delete forever, opening
+// one, the 30-day purge, and nothing trashed in search, courses or a mod's list), .docx drop and import and a refused .txt, the keyboard,
 // accessible names and the live region, opening a card in the same tab and coming back; the student's Look on the page
 // (ground, background and its motion, glass, fonts, corners, contrast over a busy photo, a live change), a mod's items
 // and calls there, and the page in motion (papers-motion.js: a document opening out of its card or New tile and folding
@@ -65,7 +66,13 @@ const records = () => {
 // What each home page records from its first script on: each thumbnail render's main-thread time and when it ended, every
 // storage.local get's key count, and when the first card appeared. lang: chrome.i18n's UI language for the page.
 const PROBE = ({ lang }) => {
-  if (location.pathname !== '/papers.html') return; // not the Look's backdrop nor the mods' sandboxed host
+  if (location.pathname === '/preview.html') {
+    globalThis.__gdRAF = 0;
+    const raf = requestAnimationFrame;
+    globalThis.requestAnimationFrame = (fn) => raf((now) => { __gdRAF++; fn(now); });
+    return;
+  }
+  if (location.pathname !== '/papers.html') return; // not the mods' sandboxed host
   globalThis.__gd = { renders: [], gets: [], firstCard: null, rowsPaint: null, indexRead: null, disconnects: 0 };
   const IO = globalThis.IntersectionObserver;
   globalThis.IntersectionObserver = class extends IO { disconnect() { __gd.disconnects++; sessionStorage.setItem('review-disconnects', String(__gd.disconnects)); return super.disconnect(); } };
@@ -384,37 +391,106 @@ const PROBE = ({ lang }) => {
     await home.fill('.gd-rename', 'Copy of Reading notes, revised'); await home.keyboard.press('Enter');
     await until(async () => (await local(`writerPaper:${copyKey}`))?.title === 'Copy of Reading notes, revised', 'copy name back');
 
-    // ---- Delete and Undo; the Delete key and Ctrl+Z
+    // ---- Delete (to Trash) and Undo; the Delete key and Ctrl+Z
     const versionsBefore = (await local(`writerVersions:${NOTES}`)).map((v) => v.id);
+    check(await home.evaluate(() => document.getElementById('gd-trash').closest('.gd-bin').hidden), 'with nothing in Trash the toolbar has no Trash control');
     await home.click(`${card(NOTES)} .gd-more`);
     await home.click('.gd-menu [data-act="delete"]');
     check(!(await shown()).includes(NOTES), 'Delete takes the card away at once');
-    await until(async () => !(await local(`writerPaper:${NOTES}`)) && !(await local(`writerVersions:${NOTES}`)), 'deleted in storage');
-    check(await home.evaluate(() => document.querySelector('.gd-toast')?.textContent.startsWith('Deleted') && document.querySelector('.gd-toast button')?.textContent === 'Undo'), 'a Deleted toast offers Undo; the paper and its versions are gone from storage');
+    await until(async () => Number.isFinite((await local(`writerPaper:${NOTES}`))?.trashed), 'trashed in storage');
+    const binnedNotes = await local(`writerPaper:${NOTES}`);
+    check(JSON.stringify(binnedNotes.doc) === JSON.stringify(renamed.doc) && binnedNotes.updated === renamed.updated && (await local(`writerVersions:${NOTES}`)).map((v) => v.id).join() === versionsBefore.join()
+      && (await local('writerPapers')).find((r) => r.key === NOTES).trashed === binnedNotes.trashed, 'Delete marks the paper and its index row trashed, its document, Last edited and versions untouched');
+    check(await home.evaluate(() => document.querySelector('.gd-toast')?.textContent.startsWith('Deleted') && document.querySelector('.gd-toast button')?.textContent === 'Undo' && !document.getElementById('gd-trash').closest('.gd-bin').hidden), 'a Deleted toast offers Undo, and the Trash control shows');
     await shot(home, 'undo-1280-en.png');
     await home.evaluate(() => {
       const send = chrome.runtime.sendMessage.bind(chrome.runtime); globalThis.__undoSend = send;
-      chrome.runtime.sendMessage = (m, ...rest) => m?.op === 'merge' ? Promise.resolve({ ok: false, error: 'intentional review refusal' }) : send(m, ...rest);
+      chrome.runtime.sendMessage = (m, ...rest) => m?.op === 'untrash' ? Promise.resolve({ ok: false, error: 'intentional review refusal' }) : send(m, ...rest);
     });
     await home.click('.gd-toast button');
     await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'Not saved. Try again in a moment.'), 'Undo failure reported');
-    check(await home.evaluate(() => !!document.querySelector('.gd-toast button')), 'a refused Undo keeps its recovery snapshot available for retry');
+    check(await home.evaluate(() => !!document.querySelector('.gd-toast button')) && !(await shown()).includes(NOTES), 'a refused Undo says so, leaves the card in Trash and stays available for retry');
     await home.evaluate(() => { chrome.runtime.sendMessage = __undoSend; });
     await home.click('.gd-toast button');
     await until(async () => (await shown()).includes(NOTES), 'undone');
     const back = await local(`writerPaper:${NOTES}`), versionsAfter = (await local(`writerVersions:${NOTES}`) || []).map((v) => v.id);
-    check(back?.title === 'Reading notes, revised' && JSON.stringify(back.doc) === JSON.stringify(renamed.doc) && versionsBefore.every((v) => versionsAfter.includes(v)), `Undo puts the document back with its versions (${versionsAfter.join(', ')})`);
+    check(back?.title === 'Reading notes, revised' && JSON.stringify(back.doc) === JSON.stringify(renamed.doc) && versionsBefore.every((v) => versionsAfter.includes(v)) && !('trashed' in back), `Undo takes the document out of Trash with its versions (${versionsAfter.join(', ')})`);
     check(back.updated === renamed.updated && versionsAfter.join() === versionsBefore.join(), 'Undo keeps Last edited and restores exactly the original versions, with no extra start');
     check(await focused(home) === NOTES, 'Undo returns focus to the restored document');
     check(!(await home.evaluate(() => !!document.querySelector('.gd-toast'))), 'the toast goes once undone');
     await home.focus(`${card(copyKey)} .gd-title`);
     await home.keyboard.press('Delete');
     check(!(await shown()).includes(copyKey), 'the Delete key deletes the focused card');
-    await until(async () => !(await local(`writerPaper:${copyKey}`)), 'copy deleted');
+    await until(async () => Number.isFinite((await local(`writerPaper:${copyKey}`))?.trashed), 'copy deleted');
     check(await home.evaluate(() => document.activeElement?.closest('.gd-card') != null), 'focus stays in the cards after a delete');
     await home.keyboard.press('ControlOrMeta+z');
-    await until(async () => (await shown()).includes(copyKey) && !!(await local(`writerPaper:${copyKey}`)), 'Ctrl+Z undo');
+    await until(async () => (await shown()).includes(copyKey) && !('trashed' in (await local(`writerPaper:${copyKey}`))), 'Ctrl+Z undo');
     check(true, 'Ctrl+Z while the toast shows undoes the delete');
+
+    // ---- the Trash: its own view, newest trashed first, out of search and the course choices; Restore, Delete forever, and
+    // a document opened from it restored first
+    const binned = async () => home.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    const binOn = () => home.evaluate(() => document.getElementById('gd-trash').getAttribute('aria-pressed') === 'true');
+    await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Delete');
+    await until(async () => Number.isFinite((await local(`writerPaper:${FIELD}`))?.trashed), 'field notes trashed');
+    await home.click(`${card(LAB)} .gd-more`); await home.click('.gd-menu [data-act="delete"]');
+    await until(async () => Number.isFinite((await local(`writerPaper:${LAB}`))?.trashed), 'lab trashed');
+    const courseNow = await home.evaluate(() => [...document.querySelectorAll('#gd-course option')].map((o) => o.textContent));
+    check(courseNow.join('|') === 'All courses|ENGL 2110|No course', `a course whose only paper is in Trash leaves the Course choices (${courseNow.join('|')})`);
+    await home.fill('#gd-q', 'Field notes from Tuesday');
+    await pause(300);
+    check(!(await shown()).includes(FIELD) && await said(home) === '0 documents', 'search leaves out what is in Trash');
+    await home.fill('#gd-q', '');
+    await until(async () => (await shown()).length > 100, 'cleared search');
+    const liveCount = (await shown()).length;
+    await home.click('#gd-trash');
+    await until(async () => (await binned()).join() === [LAB, FIELD].join(), 'the Trash view');
+    const binBar = await home.evaluate(() => ({ course: document.getElementById('gd-course').hidden, sort: document.getElementById('gd-sort').hidden, search: !document.getElementById('gd-q').closest('.gd-search').hidden }));
+    check(await binOn() && binBar.course && binBar.sort && binBar.search && await said(home) === '2 documents', `Trash shows what is in it, last trashed first, pressed, with search only, and the live region counts it (${JSON.stringify(binBar)})`);
+    await home.fill('#gd-q', 'Field notes from Tuesday');
+    await until(async () => (await binned()).join() === FIELD, 'search in Trash');
+    check(true, 'search finds within the Trash');
+    await home.fill('#gd-q', '');
+    await until(async () => (await binned()).length === 2, 'Trash again');
+    await home.evaluate(() => scrollTo(0, 0));
+    await shot(home, 'trash-1280.png');
+    await home.setViewportSize({ width: 640, height: 900 });
+    await shot(home, 'trash-640.png');
+    await home.setViewportSize({ width: 1280, height: 900 });
+    await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Shift+F10');
+    const binMenu = await home.evaluate(() => [...document.querySelectorAll('.gd-menu [role="menuitem"], .gd-menu [role="separator"]')].map((b) => b.textContent || '—'));
+    check(binMenu.join('|') === 'Restore|Delete forever', `Shift+F10 in Trash offers Restore and Delete forever only (${binMenu.join('|')})`);
+    await home.keyboard.press('Escape');
+    await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Delete'); await home.keyboard.press('F2'); await pause(200);
+    check((await binned()).includes(FIELD) && !(await home.evaluate(() => document.querySelector('.gd-rename, .gd-toast'))) && !!(await local(`writerPaper:${FIELD}`)), 'in Trash the Delete key and F2 do nothing');
+    await home.click(`${card(FIELD)} .gd-more`); await home.click('.gd-menu [data-act="restore"]');
+    await until(async () => !(await binned()).includes(FIELD) && !('trashed' in (await local(`writerPaper:${FIELD}`))), 'restored');
+    check(await focused(home) === LAB, 'Restore takes the card out of Trash, focus on the next one');
+    // Opening a card in Trash restores it first, then opens it in this tab.
+    await home.click(`${card(LAB)} .gd-title`);
+    await until(() => home.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key()), 'opened from Trash');
+    check(await home.evaluate((k) => GZ_WRITER_PAPER.current().key() === k, LAB) && !('trashed' in (await local(`writerPaper:${LAB}`))), 'a document opened from Trash is restored and opens in the same tab');
+    await home.click('.gp-top a');
+    await until(() => home.evaluate(() => !location.search && document.querySelectorAll('.gd-card').length > 0), 'home after Trash open');
+    check(!(await binOn()) && (await shown()).includes(FIELD) && (await shown()).includes(LAB) && (await shown()).length === liveCount + 2
+      && await home.evaluate(() => document.getElementById('gd-trash').closest('.gd-bin').hidden), 'both are listed again, and with Trash empty its control goes');
+    // Delete forever: the record and its versions, at once, no Undo.
+    const D5 = seeds.find((x) => x.title === 'Draft 05').key;
+    await worker.evaluate(async ({ k, v }) => chrome.storage.local.set({ [`writerVersions:${k}`]: v }), { k: D5, v: VERSIONS });
+    await home.focus(`${card(D5)} .gd-title`); await home.keyboard.press('Delete');
+    await until(async () => Number.isFinite((await local(`writerPaper:${D5}`))?.trashed), 'draft trashed');
+    await home.click('#gd-trash');
+    await until(async () => (await binned()).join() === D5, 'draft in Trash');
+    await home.click(`${card(D5)} .gd-more`); await home.click('.gd-menu [data-act="forever"]');
+    check(!(await binned()).includes(D5), 'Delete forever takes the card away at once');
+    await until(async () => !(await local(`writerPaper:${D5}`)) && !(await local(`writerVersions:${D5}`)) && !(await local('writerPapers')).some((r) => r.key === D5), 'gone for good');
+    check(await home.evaluate(() => document.activeElement?.id === 'gd-q'), 'Delete forever of the last card focuses search');
+    check(!(await home.evaluate(() => !!document.querySelector('.gd-toast'))), 'Delete forever removes the paper, its versions and its row, with no Undo');
+    const empty = await home.evaluate(() => ({ cards: document.getElementById('gd-docs').children.length, said: document.getElementById('gd-said').textContent, shown: !document.getElementById('gd-trash').closest('.gd-bin').hidden }));
+    check(await binOn() && empty.cards === 0 && empty.said === '' && empty.shown && await said(home) === '0 documents', `an empty Trash shows nothing but its pressed control (${JSON.stringify(empty)})`);
+    await home.click('#gd-trash');
+    await until(async () => (await shown()).length === liveCount + 1, 'out of Trash');
+    check(await home.evaluate(() => document.getElementById('gd-trash').closest('.gd-bin').hidden && document.activeElement?.id === 'gd-q'), 'leaving an empty Trash hides its control and puts focus in search');
 
     // ---- drop and import .docx; a .txt is refused
     const docx = await home.evaluate(async () => {
@@ -664,7 +740,8 @@ const PROBE = ({ lang }) => {
       frost: settings,
       light: lookOf('Library'),
       scene: lookOf('Frostdev'),
-      photo: lookOf('Lagoon', { bg: { ...G.GZ_DEFAULTS.bg, kind: 'image', image: 'https://photos.test/busy.png', dim: 20 } }),
+      photo: lookOf('Lagoon', { bg: { ...G.GZ_DEFAULTS.bg, kind: 'image', image: 'https://photos.test/busy.png', dim: 0 } }),
+      lightPhoto: lookOf('Library', { bg: { ...G.GZ_DEFAULTS.bg, kind: 'image', image: 'https://photos.test/busy.png', dim: 0 } }),
     };
     const wearLook = (s) => worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, s);
     const rgbOf = (hex) => `rgb(${hex.match(/\w\w/g).map((x) => parseInt(x, 16)).join(', ')})`;
@@ -710,9 +787,12 @@ const PROBE = ({ lang }) => {
       await wearLook(LOOKS[name]);
       const pg = await openHome('en', `look ${name}`);
       await until(() => pg.evaluate(() => !!document.querySelector('.gd-pic .gt-thumb')), `${name} thumbnails`);
+      const timing = await pg.evaluate(() => ({ first: __gd.firstCard, rows: __gd.rowsPaint - __gd.indexRead }));
+      console.log(`${name}: first card at ${timing.first.toFixed(1)} ms; rows paint in ${timing.rows.toFixed(1)} ms after the index`);
+      check(timing.rows < 150, `${name}: the painter keeps card rendering within 150 ms of the index`);
       return pg;
     };
-    for (const name of ['frost', 'light', 'scene', 'photo']) {
+    for (const name of ['frost', 'light', 'scene', 'photo', 'lightPhoto']) {
       const s = LOOKS[name], art = s.bg.kind !== 'solid', pg = await lookPage(name);
       const colors = G.GZ_ACTIVE_COLORS(s, false);
       if (art) await until(() => pg.evaluate(() => document.getElementById('gd-backdrop')?.hasAttribute('data-shown')), `${name} backdrop shown`);
@@ -729,7 +809,10 @@ const PROBE = ({ lang }) => {
         check(w.backdrop && w.shown && w.innerBg === w.bg && w.bg === (s.bg.kind === 'image' ? 'image' : s.bg.kind), `${name}: the Look's background is drawn behind the page by Settings' painter (${w.innerBg})`);
         check(/blur\(/.test(w.cardBlur) && /blur\(/.test(w.topBlur), `${name}: the panels and cards are glass over it (${w.cardBlur})`);
         // Reduced motion (this browser's, followed by default): the painter's motion is off and the background holds still.
+        const frames = () => pg.evaluate(() => document.getElementById('gd-backdrop').contentWindow.__gdRAF);
+        const beforeFrames = await frames();
         const a = await margin(pg); await pause(700); const b = await margin(pg);
+        check(await frames() === beforeFrames, `${name}: reduced motion schedules no continuing animation frames`);
         check(w.motion === 'off' && w.innerMotion === 'off' && a.equals(b), `${name}: under reduced motion the background is a still frame (motion ${w.motion}/${w.innerMotion})`);
       } else check(!w.backdrop && w.cardBlur === 'none', `${name}: a solid Look draws no background frame and no blur (${w.cardBlur})`);
       if (name === 'scene') {
@@ -744,7 +827,20 @@ const PROBE = ({ lang }) => {
       }
       for (const sel of ['.gd-card .gd-title', '.gd-card .gd-meta', 'h1', '.gd-tile-name']) {
         const k = await contrastOn(pg, sel);
-        check(k >= 4.5, `${name}: ${sel} reads at ${k.toFixed(2)}:1 or better against every pixel under it`);
+        check(Number.isFinite(k) && k >= 4.5, `${name}: ${sel} reads at ${k.toFixed(2)}:1 or better against every pixel under it`);
+      }
+      if (name === 'photo' || name === 'lightPhoto') {
+        await pg.click(`${card(NOTES)} .gd-more`);
+        const menuContrast = await contrastOn(pg, '.gd-menu [role=menuitem]');
+        check(Number.isFinite(menuContrast) && menuContrast >= 4.5, `${name}: the menu text meets 4.5:1 over the photo (${menuContrast.toFixed(2)})`);
+        await pg.click('.gd-menu button:text-is("Delete")');
+        await pg.waitForSelector('.gp-toast-do');
+        for (const sel of ['.gd-toast > span', '.gp-toast-do']) {
+          const k = await contrastOn(pg, sel);
+          check(Number.isFinite(k) && k >= 4.5, `${name}: ${sel} meets 4.5:1 over the photo (${k.toFixed(2)})`);
+        }
+        await pg.click('.gp-toast-do');
+        await until(() => pg.evaluate(() => !document.querySelector('.gd-toast')), 'photo deletion undone');
       }
       for (const width of [1280, 640]) {
         await pg.setViewportSize({ width, height: 900 }); await pg.evaluate(() => scrollTo(0, 0));
@@ -768,12 +864,38 @@ const PROBE = ({ lang }) => {
     await live.close();
     await wearLook(settings);
 
+    // ---- 30 days in Trash: the page's opening purges what was trashed 31 days ago, with its versions, and keeps 29 days
+    const DAY = 864e5, OLD = `doc:${crypto.randomUUID()}`, KEPT = `doc:${crypto.randomUUID()}`;
+    await worker.evaluate(async ({ recs, versions }) => {
+      const rows = (await chrome.storage.local.get('writerPapers')).writerPapers, data = {};
+      for (const r of recs) { data[`writerPaper:${r.key}`] = r; data[`writerVersions:${r.key}`] = versions; rows.push({ key: r.key, kind: 'paper', named: true, title: r.title, course: '', url: '', words: r.words, format: r.format, updated: r.updated, submitted: null, trashed: r.trashed }); }
+      await chrome.storage.local.set({ ...data, writerPapers: rows });
+    }, { versions: VERSIONS, recs: [[OLD, 'Trashed a month ago', 31], [KEPT, 'Trashed last month', 29]].map(([key, title, days]) => ({ ...(records()[`writerPaper:${NOTES}`]), key, title, named: true, updated: NOW - 40 * DAY, trashed: Date.now() - days * DAY })) });
+    const purged = await openHome('en', 'purge');
+    await until(async () => !(await local(`writerPaper:${OLD}`)) && !(await local(`writerVersions:${OLD}`)) && !(await local('writerPapers')).some((r) => r.key === OLD), 'purged on opening');
+    check(!!(await local(`writerPaper:${KEPT}`)) && !!(await local(`writerVersions:${KEPT}`)) && (await local('writerPapers')).some((r) => r.key === KEPT),
+      'opening the page removes a document trashed 31 days ago with its versions, and keeps one trashed 29 days ago');
+    check(!(await purged.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key))).includes(KEPT), 'what is in Trash is not on the home');
+    await purged.click('#gd-trash');
+    await until(() => purged.evaluate((k) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).join() === k, KEPT), 'Trash after purge');
+    check(true, 'the Trash holds the 29-day document only');
+    await purged.close();
+    const apiOpen = await openHome('en', 'api-trash-open');
+    await apiOpen.evaluate((k) => { GZ_DOCUMENTS.open(k); }, KEPT);
+    await until(() => apiOpen.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key()), 'documents.open from Trash');
+    check(await apiOpen.evaluate((k) => GZ_WRITER_PAPER.current().key() === k, KEPT) && !('trashed' in (await local(`writerPaper:${KEPT}`))), 'documents.open restores a trashed key before opening it');
+    // Keep a trashed record for the mod list's exclusion check below.
+    await apiOpen.evaluate((k) => GZ_WRITER_PAPERS.open().trash(k), KEPT);
+    await apiOpen.close();
+
     // ---- a mod on the Documents page: its items, its calls and their limits (lib/modbroker.js, features/mods.js)
     const MOD = 'docsmodaaaaaaaaa';
     const hooksJs = `
       const save = (k, v) => glaze.storage.set(k, v);
       const page = new Promise((ok) => glaze.on('page', ok)); // told once, as the mod starts
       const tryCall = async (k, f) => { try { await save(k, { ok: true, value: await f() }); } catch (e) { await save(k, { ok: false, error: e.message }); } };
+      let changes = 0;
+      glaze.on('documents.change', async () => { const n = ++changes, list = await glaze.documents.list(); await save('change', { n, keys: list.map((d) => d.key), titles: list.map((d) => d.title) }); });
       glaze.on('documents.action', async (d) => {
         await save('action', d);
         if (d.slot === 'documents.card') {
@@ -789,6 +911,7 @@ const PROBE = ({ lang }) => {
         await glaze.documents.add('documents.card', { id: 'peek', label: 'Peek' });
         await tryCall('page', () => page);
         await tryCall('list', () => glaze.documents.list());
+        await tryCall('rawRead', () => glaze.documents.read('bb.school.test|_900_1|_101_1|_7_1'));
         await tryCall('early', () => glaze.documents.open('doc:00000000-0000-0000-0000-000000000000'));
         await tryCall('todo', () => glaze.todo());
         await tryCall('style', () => glaze.documents.style({ radius: 24, column: 300 }));
@@ -806,12 +929,36 @@ const PROBE = ({ lang }) => {
     check(md.page?.value?.site === 'documents' && md.page.value.kind === 'documents', `mod: its page event says the Documents page (${JSON.stringify(md.page?.value)})`);
     const tool = await mp.evaluate(() => [...document.querySelectorAll('.gd-extra button')].map((b) => ({ text: b.textContent, title: b.title })));
     check(tool.length === 1 && tool[0].text === 'Open newest' && tool[0].title === 'Doc Tools', `mod: its documents.toolbar item renders in the toolbar with its name (${JSON.stringify(tool)})`);
-    const shownKeys = await mp.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    const nativeList = await mp.evaluate(() => GZ_DOCUMENTS.list());
+    const shownKeys = nativeList.map((d) => d.key);
     const PUBLIC = 'course,format,key,kind,title,updated,words';
-    check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && [...shownKeys].sort().join() === md.list.value.map((d) => d.key).sort().join(),
+    check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && md.list.value.every((d) => /^document:[0-9a-f-]{36}$/.test(d.key)) && md.list.value.every((d, i) => PUBLIC.split(',').filter((k) => k !== 'key').every((k) => d[k] === nativeList[i][k])),
       `mod: documents.list() gives every listed document's public fields only (${md.list.value?.length} × ${Object.keys(md.list.value?.[0] || {}).sort().join(' ')})`);
-    check(!JSON.stringify(md.list.value).includes('Beloved 1. A paragraph') && md.list.value.find((d) => d.key === ESSAY)?.course === 'ENGL 2110', 'mod: the list carries no document text, and an assignment paper\'s course');
+    check(!JSON.stringify(md.list.value).includes('Beloved 1. A paragraph') && md.list.value.find((d) => d.title === 'Essay 2: Memory in Beloved')?.course === 'ENGL 2110' && !JSON.stringify(md.list.value).includes('bb.school.test') && !JSON.stringify(md.list.value).includes('_900_1'), 'mod: the list carries no document text, and an assignment paper\'s course');
+    check(md.rawRead.ok === false && md.rawRead.error === 'args', 'mod: raw assignment storage keys cannot be used to read text');
+    check(!md.list.value.some((d) => d.title === 'Trashed last month'), 'mod: documents.list() leaves out what is in Trash');
+    // documents.change on Delete (into Trash) and on Undo, the list then without it and with it again.
+    const changeAt = (await modData())?.change?.n || 0;
+    await mp.focus(`${card(ESSAY3)} .gd-title`); await mp.keyboard.press('Delete');
+    await until(async () => { const c = (await modData())?.change; return c?.n > changeAt && !c.titles.includes('Essay 3: The Clearing'); }, 'mod told of the delete');
+    const changeMid = (await modData()).change.n;
+    await mp.keyboard.press('ControlOrMeta+z');
+    await until(async () => { const c = (await modData())?.change; return c?.n > changeMid && c.titles.includes('Essay 3: The Clearing'); }, 'mod told of the undo');
+    check(!('trashed' in (await local(`writerPaper:${ESSAY3}`))), 'mod: documents.change fires as a document goes to Trash and comes back, documents.list() following');
+    const changeBeforeSeed = (await modData()).change.n;
+    await mp.evaluate(async (k) => {
+      const P = GZ_WRITER_PAPERS.open(), old = Date.now() - 31 * 864e5;
+      await P.save(k, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph' }] }, format: 'plain', trashed: old });
+    }, OLD);
+    await until(async () => (await modData())?.change?.n > changeBeforeSeed, 'mod told of the seeded Trash record');
+    const changeBeforePurge = (await modData()).change.n;
+    await mp.evaluate(() => GZ_WRITER_PAPERS.open().purge());
+    await until(async () => (await modData())?.change?.n > changeBeforePurge && !(await local(`writerPaper:${OLD}`)), 'mod told of the purge');
+    check(true, 'mod: documents.change fires on purge');
     check(md.early.ok === false && md.early.error === 'permission', `mod: documents.open without a click on its own item is refused (${md.early.error})`);
+    await mp.evaluate(() => document.querySelector('.gd-extra button').click());
+    await until(async () => (await modData())?.open, 'synthetic mod item click');
+    check((await modData()).open.error === 'permission' && new URL(mp.url()).search === '', 'mod: a synthetic item click cannot authorize opening a document');
     check(md.todo.ok === false && md.todo.error === 'call', `mod: a school page's call is refused on the Documents page (${md.todo.error})`);
     check(md.style.ok && await mp.evaluate(() => getComputedStyle(document.querySelector('.gd-card')).borderTopLeftRadius === '24px' && getComputedStyle(document.documentElement).getPropertyValue('--gd-column').trim() === '300px'), 'mod: documents.style sets the page\'s --gd-* hooks (24px corners, 300px columns)');
     await shot(mp, 'look-mod-1280.png');
@@ -822,15 +969,15 @@ const PROBE = ({ lang }) => {
     await mp.click('.gd-menu .gd-added');
     await until(async () => (await modData())?.export, 'mod card action');
     const act = await modData();
-    check(act.action.slot === 'documents.card' && act.action.id === 'peek' && act.action.doc.key === NOTES && Object.keys(act.action.doc).sort().join() === PUBLIC, `mod: a card item's click tells the mod that card's summary (${JSON.stringify(act.action.doc)})`);
+    check(act.action.slot === 'documents.card' && act.action.id === 'peek' && act.action.doc.key === md.list.value[nativeList.findIndex((d) => d.key === NOTES)].key && Object.keys(act.action.doc).sort().join() === PUBLIC, `mod: a card item's click tells the mod that card's summary (${JSON.stringify(act.action.doc)})`);
     fs.writeFileSync(path.join(out, 'mod-action.json'), JSON.stringify({ ...act, list: undefined }, null, 1));
     const notesText = require(path.join(root, 'lib/doc-home.js')).flat((await local(`writerPaper:${NOTES}`)).doc);
-    check(act.read.ok && act.read.value.key === NOTES && act.read.value.title === act.action.doc.title && act.read.value.text === notesText && notesText.includes('the house on Bluestone Road'), 'mod: documents.read (documents.read) gives the document\'s text, as stored');
+    check(act.read.ok && act.read.value.key === act.action.doc.key && act.read.value.title === act.action.doc.title && act.read.value.text === notesText && notesText.includes('the house on Bluestone Road'), 'mod: documents.read (documents.read) gives the document\'s text, as stored');
     check(act.export.ok && /\.docx$/.test(act.export.value.name) && act.export.value.mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' && act.export.value.size > 1000 && act.export.value.zip, `mod: documents.export gives the .docx through its kind (${JSON.stringify(act.export.value)})`);
     await mp.click('.gd-extra button');
     await until(() => mp.evaluate(() => /[?&]paper=/.test(location.search)), 'mod open after a click');
     const opened = new URLSearchParams(await mp.evaluate(() => location.search)).get('paper');
-    check(opened === md.list.value[0].key, `mod: documents.open right after a click on its own item opens that document (${opened})`);
+    check(opened === nativeList[0].key, `mod: documents.open right after a click on its own item opens that document (${opened})`);
     await mp.close();
     // Without the documents grant the mod doesn't run here.
     await worker.evaluate(async ({ id, rec }) => chrome.storage.local.set({ [`mod:${id}`]: { ...rec, grants: { documents: false, 'documents.read': true } }, [`modData:${id}`]: {} }), { id: MOD, rec: modRec });

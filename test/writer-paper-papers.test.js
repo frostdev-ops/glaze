@@ -325,3 +325,200 @@ test('concurrent unnamed saves derive the title from the body that is saved', as
   assert.equal(r.paper.title, 'My first line');
   assert.equal(r.version.reason, 'conflict');
 });
+
+// The Documents home's Trash (S3b): Delete marks the record, Undo and Restore unmark it, and 30 days on it goes for good.
+const DAY = 864e5;
+test('trash sets the flag and keeps versions; restore clears it; purge removes what\'s older than 30 days and nothing else', async () => {
+  let t = 1e12;
+  const s = store(), P = PA.open(s, () => t), [a, b, c, d, live] = Array.from({ length: 5 }, () => PA.newKey());
+  for (const k of [a, b, c, d, live]) { t += 1000; await P.save(k, { doc: doc(`Words of ${k}.`), title: k, named: true, format: 'plain' }); }
+  t += 1000; await P.save(a, { doc: doc('Imported words.') }, { reason: 'import' });
+  const before = await P.get(a), history = structuredClone(s.data[`writerVersions:${a}`]);
+  assert.equal(history.length, 2);
+  const row = async (k) => (await P.list()).find((r) => r.key === k);
+
+  t += 1000;
+  assert.deepEqual(await P.trash(a), { key: a, trashed: t });
+  const trashed = await P.get(a);
+  assert.equal(trashed.trashed, t);
+  assert.deepEqual([trashed.updated, trashed.revision, trashed.doc, trashed.title], [before.updated, before.revision, before.doc, before.title], 'no edit: Last edited and the revision stay');
+  assert.deepEqual(s.data[`writerVersions:${a}`], history, 'its versions are untouched');
+  assert.equal((await row(a)).trashed, t, 'the index row carries it, so lists need no record');
+  assert.deepEqual([PA.trashed(await row(a)), PA.trashed(await row(live)), PA.trashed(null)], [true, false, false]);
+  const at = t;
+  t += 1000; await P.trash(a);
+  assert.equal((await P.get(a)).trashed, at, 'trashed again, it keeps when it was first trashed');
+
+  assert.deepEqual(await P.untrash(a), { key: a });
+  const back = await P.get(a);
+  assert.equal('trashed' in back, false);
+  assert.equal('trashed' in await row(a), false);
+  assert.deepEqual([back.updated, back.revision], [before.updated, before.revision], 'restored as it was');
+  assert.deepEqual(s.data[`writerVersions:${a}`], history);
+  assert.equal(await P.trash(PA.newKey()), null, 'no such paper: nothing written');
+  await assert.rejects(P.trash(''), /no paper key/);
+
+  // Purge: past 30 days goes with its versions; 30 days exactly, 29, and what isn't trashed stay.
+  const T = 2e12;
+  t = T - 31 * DAY; await P.trash(a);
+  t = T - 30 * DAY; await P.trash(b);
+  t = T - 29 * DAY; await P.trash(c);
+  t = T - 40 * DAY; await P.trash(d); await P.untrash(d);
+  t = T;
+  const kept = structuredClone(Object.fromEntries(Object.entries(s.data).filter(([k]) => !k.endsWith(a) && k !== 'writerPapers')));
+  assert.deepEqual(await P.purge(), [a]);
+  assert.deepEqual([s.data[`writerPaper:${a}`], s.data[`writerVersions:${a}`], await row(a)], [undefined, undefined, undefined]);
+  assert.deepEqual(Object.fromEntries(Object.entries(s.data).filter(([k]) => k !== 'writerPapers')), kept, 'every other record and its versions as they were');
+  assert.deepEqual((await P.list()).map((r) => r.key).sort(), [b, c, d, live].sort());
+  const sets = []; const set = s.set; s.set = async (o) => { sets.push(Object.keys(o)); return set(o); };
+  assert.deepEqual(await P.purge(), [], 'nothing more to purge');
+  assert.deepEqual(sets, [], 'and nothing written');
+  s.set = set;
+});
+
+test('purge trusts the record over a stale row, and drops a row whose record is gone', async () => {
+  let t = 1e12;
+  const s = store(), P = PA.open(s, () => t), [live, ghost] = [PA.newKey(), PA.newKey()];
+  await P.save(live, { doc: doc('Still here.'), format: 'plain' });
+  s.data.writerPapers = [{ ...s.data.writerPapers[0], trashed: t - 60 * DAY }, { key: ghost, kind: 'paper', named: false, title: '', updated: 1, trashed: t - 60 * DAY }];
+  assert.deepEqual(await P.purge(), [ghost]);
+  assert.ok(s.data[`writerPaper:${live}`] && s.data[`writerVersions:${live}`], 'a record not trashed stays whatever its row says');
+  assert.deepEqual(s.data.writerPapers.map((r) => r.key), [live]);
+});
+
+test('a refused purge leaves the papers, versions and index intact', async () => {
+  let t = 1e12;
+  const s = store(), P = PA.open(s, () => t), k = PA.newKey();
+  await P.save(k, { doc: doc('Keep every word.'), format: 'plain' });
+  await P.trash(k);
+  t += 31 * DAY;
+  const before = structuredClone(s.data);
+  s.remove = async () => { throw Error('storage refused'); };
+  await assert.rejects(P.purge(), /storage refused/);
+  assert.deepEqual(s.data, before);
+});
+
+test('typing in or submitting a trashed document brings it back; a rename or an unchanged save leaves it in Trash', async () => {
+  let t = 1e12;
+  const P = PA.open(store(), () => t), k = PA.newKey();
+  await P.save(k, { doc: doc('First words.'), format: 'plain' });
+  await P.trash(k);
+  t += 1000; await P.save(k, { title: 'Renamed', named: true });
+  assert.ok(PA.trashed(await P.get(k)), 'a rename is no edit');
+  t += 1000; await P.save(k, { doc: doc('First words.') });
+  assert.ok(PA.trashed(await P.get(k)), 'an autosave of the same text is no edit');
+  t += 1000; await P.save(k, { doc: doc('First words, and more.') });
+  assert.equal('trashed' in await P.get(k), false, 'what an open editor writes is never purged with the Trash');
+  assert.equal('trashed' in (await P.list())[0], false);
+  await P.trash(k);
+  t += 1000; await P.save(k, { doc: doc('First words, and more.') }, { reason: 'sending' });
+  assert.equal(PA.trashed(await P.get(k)), false, 'a paper submitted as it was is out of Trash too, its submitted version never purged');
+});
+
+test('a backup\'s trashed record keeps its flag through merge, and a newer live one beats an old trashed copy', async () => {
+  let t = 1e12;
+  const s = store(), P = PA.open(s, () => t), k = PA.newKey(), other = PA.newKey();
+  await P.save(k, { doc: doc('From the backup.'), format: 'plain' });
+  await P.trash(k);
+  const records = { [`writerPaper:${k}`]: await P.get(k), [`writerVersions:${k}`]: structuredClone(s.data[`writerVersions:${k}`]) };
+  const Q = PA.open(store(), () => t);
+  await Q.merge(records);
+  assert.equal((await Q.get(k)).trashed, records[`writerPaper:${k}`].trashed);
+  assert.equal((await Q.list())[0].trashed, records[`writerPaper:${k}`].trashed);
+  await P.save(other, { doc: doc('Old.'), format: 'plain' });
+  await P.trash(other);
+  t += 1000;
+  await P.merge({ [`writerPaper:${other}`]: { key: other, kind: 'paper', doc: doc('Newer, written elsewhere.'), format: 'plain', updated: t } });
+  assert.equal(PA.trashed(await P.get(other)), false, 'newer work restored from a backup is out of Trash');
+});
+
+
+test('purge keeps malformed timestamps, future Trash and a clock that moved backwards', async () => {
+  let t = 2e12;
+  const s = store(), P = PA.open(s, () => t), k = PA.newKey();
+  await P.save(k, { doc: doc('Keep this draft.'), format: 'plain' });
+  const paper = await P.get(k), row = (await P.list())[0];
+  for (const flag of [-1, -31 * DAY, 0.5, '1', true, null, {}, 3e12]) {
+    s.data[`writerPaper:${k}`] = { ...paper, trashed: flag };
+    s.data.writerPapers = [{ ...row, trashed: flag }];
+    assert.deepEqual(await P.purge(), [], `unsafe timestamp ${JSON.stringify(flag)}`);
+    assert.ok(s.data[`writerVersions:${k}`], 'history stays');
+  }
+  s.data[`writerPaper:${k}`] = { ...paper, trashed: t };
+  s.data.writerPapers = [{ ...row, trashed: t }];
+  t -= DAY;
+  assert.deepEqual(await P.purge(), [], 'clock rollback');
+  for (const clock of [Infinity, NaN, 3e12 + 0.5]) {
+    t = clock;
+    assert.deepEqual(await P.purge(), [], `unsafe clock ${clock}`);
+  }
+  // A valid old row cannot overrule a malformed or recent record.
+  t = 2e12;
+  s.data.writerPapers = [{ ...row, trashed: t - 31 * DAY }];
+  for (const flag of [-1, 0.5, t - 29 * DAY, t + DAY]) {
+    s.data[`writerPaper:${k}`] = { ...paper, trashed: flag };
+    assert.deepEqual(await P.purge(), [], `record timestamp ${flag}`);
+  }
+});
+
+test('purge and an editor save serialize in either order, with history on a recreated paper', async () => {
+  for (const first of ['save', 'purge']) {
+    let t = 1e12;
+    const s = store(), P = PA.open(s, () => t), editor = PA.open(s, () => t), k = PA.newKey();
+    await P.save(k, { doc: doc('Before.') });
+    await editor.get(k); await P.trash(k); t += 31 * DAY;
+    const save = () => editor.save(k, { doc: doc('Typed while the page was open.') });
+    const sweep = () => P.purge();
+    const results = await Promise.all(first === 'save' ? [save(), sweep()] : [sweep(), save()]);
+    assert.equal(PA.trashed(await P.get(k)), false, first);
+    assert.deepEqual((await P.get(k)).doc, doc('Typed while the page was open.'));
+    assert.ok((await P.list()).some((r) => r.key === k));
+    assert.ok((await P.versions(k)).length, 'a recreated paper has a start version');
+    assert.deepEqual(results[first === 'save' ? 1 : 0], first === 'save' ? [] : [k]);
+  }
+});
+
+test('opening a trashed paper can restore with a checkpoint without changing Last edited or revision', async () => {
+  let t = 1e12;
+  const s = store(), P = PA.open(s, () => t), k = PA.newKey();
+  const before = (await P.save(k, { doc: doc('Assignment draft.'), format: 'plain' })).paper;
+  await P.trash(k); t += DAY;
+  await P.untrash(k, { version: true });
+  const after = await P.get(k), history = await P.versions(k);
+  assert.equal(PA.trashed(after), false);
+  assert.deepEqual([after.updated, after.revision, after.doc], [before.updated, before.revision, before.doc]);
+  assert.equal(history.length, 2);
+  assert.equal(history[0].reason, 'restore');
+  assert.deepEqual((await P.version(k, history[0].id)).doc, before.doc);
+  await P.untrash(k, { version: true });
+  assert.deepEqual(await P.versions(k), history, 'opening again adds no checkpoint');
+});
+
+
+test('a refused restore-on-open cannot separate the checkpoint from the paper or its row', async () => {
+  let t = 1e12;
+  const s = store(), P = PA.open(s, () => t), k = PA.newKey();
+  await P.save(k, { doc: doc('Keep the original.'), format: 'plain' });
+  await P.trash(k); t += DAY;
+  const before = structuredClone(s.data), set = s.set;
+  s.set = async (o) => { if (`writerVersions:${k}` in o) throw Error('QUOTA_BYTES'); await set(o); };
+  await assert.rejects(P.untrash(k, { version: true }), /QUOTA_BYTES/);
+  assert.deepEqual(s.data, before, 'a refused checkpoint leaves the paper in Trash with its history');
+});
+
+test('native submit dispatch restores a paper trashed after its sending version was saved', async () => {
+  let t = 1e12;
+  const s = store(), P = PA.open(s, () => t), k = PA.keyOf(K);
+  await P.save(k, { doc: doc('Submitted words.'), format: 'plain' });
+  t += 1000;
+  const sending = await P.save(k, {}, { reason: 'sending' });
+  assert.equal(sending.version.reason, 'sending');
+  await P.trash(k); t += 1000;
+  const before = await P.get(k);
+  await P.submitted(k, sending.version.id);
+  const paper = await P.get(k);
+  assert.equal(PA.trashed(paper), false, 'dispatch takes the submitted paper out of Trash');
+  assert.equal('trashed' in (await P.list())[0], false);
+  assert.deepEqual([paper.updated, paper.revision, paper.doc], [before.updated, before.revision, before.doc]);
+  assert.equal((await P.version(k, sending.version.id)).reason, 'submit');
+});

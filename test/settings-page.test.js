@@ -244,7 +244,14 @@ test("Documents opens beside the bar as Settings does: a pass for each document 
     history.back();
     await tick();
     assert.equal(page.showing(), 'papers');
-    assert.equal(frameOf().src, 'chrome-extension://glaze/papers.html?paper=doc%3Aabc');
+    assert.equal(frameOf().src, 'chrome-extension://glaze/papers.html', 'the host never sets a document key in an iframe URL');
+    f = frameOf(); windowOf(f);
+    on.message({ source: f.contentWindow, origin: 'chrome-extension://glaze', data: { type: 'glaze:papers:hello' } });
+    await tick();
+    port = ports.at(-1); told = heard(port);
+    port.postMessage({ type: 'opened', at: '' });
+    await tick();
+    assert.deepEqual(told, [{ type: 'go', at: '?paper=doc%3Aabc' }], 'the destination goes only through the private channel');
     // Escape in the page leaves, back past every entry it added.
     on.keydown({ key: 'Escape', preventDefault() {} });
     assert.equal(page.showing(), '');
@@ -272,4 +279,60 @@ test("a pass the worker refuses opens nothing in the page, so the bar and Ctrl+K
   assert.equal(await page.open('', 'papers'), false);
   assert.equal(body.querySelector('#gz-settings-page'), null);
   assert.equal(await page.open('', 'nowhere'), false);
+});
+
+test('Documents closes each retired private channel and ignores its late messages', async () => {
+  const { El } = require('./stand-in-dom.js');
+  const doc = { activeElement: null }, html = new El('html', doc), body = new El('body', doc);
+  doc.root = html; html.append(body);
+  Object.assign(doc, { documentElement: html, body, createElement: (tag) => new El(tag, doc), getElementById: () => null });
+  const on = {}, channels = [];
+  class Channel {
+    constructor() { this.port1 = { close() { this.closed = true; }, postMessage() {} }; this.port2 = {}; channels.push(this); }
+  }
+  const page = vm.runInContext(read('features/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, crypto, MessageChannel: Channel,
+    history: tabHistory(on), addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, sendMessage: async () => ({ ok: true }) } } }));
+  await page.open('', 'papers');
+  const frame = body.querySelector('#gz-settings-page').shadowForTest.children[0];
+  frame.contentWindow = { postMessage() {} };
+  const hello = () => on.message({ source: frame.contentWindow, origin: 'chrome-extension://glaze', data: { type: 'glaze:papers:hello' } });
+  hello(); await tick();
+  const old = channels[0].port1;
+  hello();
+  assert.equal(old.closed, true, 'the previous channel is retired before awaiting the next pass');
+  old.onmessage({ data: { type: 'leave' } });
+  assert.equal(page.showing(), 'papers', 'a late message cannot close the current document');
+  await tick();
+  page.close();
+  assert.equal(channels.at(-1).port1.closed, true, 'leaving closes the host port');
+});
+
+test('the page host follows the measured phone bar and disconnects every layout observer on leave', async () => {
+  const { El } = require('./stand-in-dom.js');
+  const doc = { activeElement: null }, html = new El('html', doc), body = new El('body', doc);
+  doc.root = html; html.append(body); html.setAttribute('data-gz-navbar', 'rail');
+  const bar = new El('div', doc); bar.id = 'gz-navbar'; bar.attachShadow({ mode: 'open' }); body.append(bar);
+  const tabs = new El('nav', doc); tabs.className = 'tabs'; bar.shadowRoot.append(tabs);
+  let top = 744;
+  tabs.getBoundingClientRect = () => ({ top, height: 70 });
+  Object.assign(doc, { documentElement: html, body, createElement: (tag) => new El(tag, doc), getElementById: (id) => id === 'gz-navbar' ? bar : null });
+  const observers = [], on = {};
+  class Observer {
+    constructor(fn) { this.fn = fn; this.observed = []; observers.push(this); }
+    observe(e) { this.observed.push(e); }
+    disconnect() { this.disconnected = true; }
+  }
+  const page = vm.runInContext(read('features/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: false }), innerHeight: 860,
+    MutationObserver: Observer, ResizeObserver: Observer, CSS: { escape: String }, crypto, history: tabHistory(on),
+    addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, sendMessage: (m, reply) => reply({ ok: true, ticket: 'a'.repeat(32) }) } } }));
+  await page.open();
+  const host = body.querySelector('#gz-settings-page');
+  assert.equal(host.style.getPropertyValue('bottom'), '116px');
+  top = 710; observers.find((o) => o.observed.includes(tabs)).fn();
+  assert.equal(host.style.getPropertyValue('bottom'), '150px', 'bar geometry changes update the reserved room');
+  page.close();
+  assert.ok(observers.length === 2 && observers.every((o) => o.disconnected), 'both mutation and resize observers are torn down');
+  assert.equal(on.resize, undefined);
 });

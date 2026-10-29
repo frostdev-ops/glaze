@@ -2,7 +2,7 @@
 // saved Ultra, Canvas and Moodle pages under invented school origins, Glaze's bar holding its Documents, Search and Settings
 // items. The bar's Documents opens it beside the bar, marked where you are, the page under it out of reach; a document opens
 // in the same frame and Back returns to the list (the tab's history one entry per document, the page told no key); typing
-// there, a delete and its Undo, an import and two exports work from the frame; Escape, Close, Settings and Search leave or
+// there, a delete to Trash and its Undo, the Trash's Restore and Delete forever, an import and two exports work from the frame; Escape, Close, Settings and Search leave or
 // take its place, back to the entry it opened from; Ctrl+K opens it the same way; Writer's AI completes a sentence in a
 // document opened there (the worker's broker on a stand-in for Chrome's Prompt API, as scripts/documents-ai-check.js); a
 // frame of papers.html the page makes itself stays blank and the worker refuses its writes; the popup still opens a tab.
@@ -195,16 +195,54 @@ const check = async (name, test) => {
       await until(() => framed(page) && !new URL(framed(page).url()).search, 'the list again');
       f = await shown(page);
     });
-    await check('ultra: from the list, a delete and its Undo, an export and an import reach storage and the browser', async () => {
+    await check('ultra: from the list, a delete to Trash and its Undo, Restore and Delete forever, an export and an import reach storage and the browser', async () => {
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-more`).click();
       const [dl] = await Promise.all([page.waitForEvent('download'), f.locator('.gd-menu [data-act="export"]').click()]);
       assert.match(dl.suggestedFilename(), /\.docx$/);
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-more`).click();
       await f.locator('.gd-menu [data-act="delete"]').click();
-      await until(async () => !(await record(KEY)), 'deleted from storage');
+      await until(async () => Number.isFinite((await record(KEY))?.trashed), 'in Trash in storage');
       await f.locator('.gd-toast .gp-toast-do').click();
-      await until(async () => JSON.stringify((await record(KEY))?.doc || '').includes('Typed in place.'), 'put back whole (merge)');
+      await until(async () => { const r = await record(KEY); return r && !('trashed' in r) && JSON.stringify(r.doc).includes('Typed in place.'); }, 'out of Trash, whole');
       await until(() => f.locator(`.gd-card[data-key="${KEY}"]`).count(), 'listed again');
+      // The Trash from the frame: Delete, then Restore from its view; a copy deleted forever.
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-more`).click();
+      await f.locator('.gd-menu [data-act="delete"]').click();
+      await until(async () => Number.isFinite((await record(KEY))?.trashed), 'in Trash again');
+      await f.locator('#gd-trash').click();
+      const viewport = page.viewportSize();
+      try {
+        await page.setViewportSize({ width: 640, height: 860 });
+        await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).focus();
+        await page.keyboard.press('Shift+F10');
+        assert.deepEqual(await f.locator('.gd-menu [role="menuitem"]').allTextContents(), ['Restore', 'Delete forever']);
+        assert.equal(await f.locator('#gd-count').textContent(), '1 document');
+        assert.ok(await f.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '640px embedded Trash fits');
+        await shoot(page, f, 'inpage-ultra-trash-640');
+        const target = await f.locator('.gd-menu [data-act="forever"]').boundingBox();
+        const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.id, [target.x + target.width / 2, target.y + target.height / 2]);
+        console.log(`     Trash Delete forever: ${JSON.stringify(target)}, hit ${hit}`);
+        await f.locator('.gd-menu [data-act="restore"]').click();
+        assert.equal(await f.evaluate(() => document.activeElement?.id), 'gd-q', 'Restore of the last card focuses search');
+        assert.equal(hit, 'gz-settings-page', 'Trash Delete forever stays above the LMS navigation');
+      } finally { await page.setViewportSize(viewport); }
+      await until(async () => !('trashed' in (await record(KEY))), 'restored from the Trash view');
+      await f.locator('#gd-trash').click();
+      await until(() => f.locator(`.gd-card[data-key="${KEY}"]`).count(), 'listed after Restore');
+      const keys = () => worker.evaluate(() => chrome.storage.local.get('writerPapers').then((r) => (r.writerPapers || []).map((x) => x.key)));
+      const before = new Set(await keys());
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-more`).click();
+      await f.locator('.gd-menu [data-act="copy"]').click();
+      let copy = null;
+      await until(async () => (copy = (await keys()).find((k) => !before.has(k))), 'a copy');
+      await f.locator(`.gd-card[data-key="${copy}"] .gd-more`).click();
+      await f.locator('.gd-menu [data-act="delete"]').click();
+      await until(async () => Number.isFinite((await record(copy))?.trashed), 'the copy in Trash');
+      await f.locator('#gd-trash').click();
+      await f.locator(`.gd-card[data-key="${copy}"] .gd-more`).click();
+      await f.locator('.gd-menu [data-act="forever"]').click();
+      await until(async () => !(await record(copy)) && !(await keys()).includes(copy), 'the copy deleted forever');
+      await f.locator('#gd-trash').click();
       const file = path.join(scratch, 'Imported notes.docx');
       fs.writeFileSync(file, docx('Brought in from Word.'));
       const [chooser] = await Promise.all([page.waitForEvent('filechooser'), f.locator('#gd-import').click()]);
@@ -230,15 +268,39 @@ const check = async (name, test) => {
       // One more Back leaves the page as it would without Documents: nothing of the frame's left in the history.
       length = await page.evaluate(() => history.length);
     });
+    await check('ultra: Escape stays in the document editor, then leaves from outside the editor past both entries', async () => {
+      f = await openFromBar(page);
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+      f = await shown(page);
+      await f.locator('.ProseMirror').click();
+      await page.keyboard.press('Escape');
+      assert.ok(await hosted(page), 'Escape in editable text keeps Documents open');
+      await f.evaluate(() => document.activeElement.blur());
+      await page.keyboard.press('Escape');
+      await closed(page);
+      await atMark(page);
+    });
     await check('ultra: Settings in the bar takes its place, Back is Documents again; Search leaves it', async () => {
       f = await openFromBar(page);
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+      f = await shown(page);
       await item(page, 'glaze:settings').click();
       await until(() => framed(page, `${base}/options.html`), 'Settings in its place');
       assert.equal(framed(page), undefined, 'Documents gone');
       await until(async () => (await item(page, 'glaze:settings').getAttribute('aria-current')) === 'page', 'Settings marked');
       assert.equal(await item(page, 'glaze:documents').getAttribute('aria-current'), null);
+      const settingsFrame = framed(page, `${base}/options.html`);
+      await settingsFrame.locator('[data-editor-tab="study"]').click();
+      await settingsFrame.locator('[data-editor-jump][href="#study/grades"]').click();
+      // A repeated open of Settings sends its section through the host's message handler.
+      await item(page, 'glaze:settings').click();
+      assert.equal(await settingsFrame.evaluate(() => location.hash), '#study/grades');
+      const tabId = await worker.evaluate((url) => chrome.tabs.query({}).then((tabs) => tabs.find((t) => t.url === url)?.id), page.url());
+      await worker.evaluate((tabId) => chrome.scripting.executeScript({ target: { tabId }, func: () => GZ_SETTINGS_PAGE.open('writer/papers') }), tabId);
+      await until(() => settingsFrame.evaluate(() => location.hash === '#writer/papers' && !document.querySelector('[data-editor-panel="writer"]').hidden), 'a repeated open replaces Settings section history');
       await back(page);
       f = await shown(page);
+      assert.equal(new URL(f.url()).searchParams.get('paper'), KEY, 'Back restores the document through the private channel');
       await until(async () => (await item(page, 'glaze:documents').getAttribute('aria-current')) === 'page', 'Documents marked again');
       await item(page, 'glaze:search').click();
       await closed(page);
@@ -334,6 +396,7 @@ const check = async (name, test) => {
       const heard = await page.evaluate(() => __heard);
       assert.ok(heard.length && heard.every((m) => !m.includes(KEY.slice(4)) && !m.includes('pass')), JSON.stringify(heard));
       assert.ok(!JSON.stringify(await page.evaluate(() => history.state)).includes(KEY.slice(4)));
+      assert.ok(!(await page.evaluate(() => performance.getEntriesByType('resource').map((e) => e.name))).some((u) => u.includes(KEY.slice(4))), 'iframe resource URLs reveal no document key');
     });
     await check('ultra: a papers.html frame the page makes itself stays blank, and the worker refuses its writes', async () => {
       await page.evaluate((src) => { const r = document.createElement('iframe'); r.id = 'check-rogue'; r.src = src; document.body.append(r); }, PAPERS);
@@ -352,12 +415,20 @@ const check = async (name, test) => {
       f = await openFromBar(page);
       const h = await hosted(page), b = await item(page, 'glaze:documents').boundingBox();
       console.log(`     640: page host ${JSON.stringify(h)}, bar item ${JSON.stringify(b)}`);
+      const tabs = await page.locator('#gz-navbar .tabs').boundingBox();
+      assert.ok(h.bottom <= tabs.y + 1, `the entire frame is above the phone bar: ${JSON.stringify({ h, tabs })}`);
       assert.ok(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.id === 'gz-navbar', [b.x + b.width / 2, b.y + b.height / 2]), 'the bar stays over it, in use');
       await shoot(page, f, 'inpage-ultra-640');
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
       f = await shown(page);
       await shoot(page, f, 'inpage-ultra-doc-640');
       await f.locator('.gp-top > .gd-btn').click();
+      await closed(page);
+      await page.locator('#gz-navbar .tabs .more').click();
+      await item(page, 'glaze:settings').click();
+      await until(() => framed(page, `${base}/options.html`), 'Settings at 640');
+      await until(async () => (await hosted(page)).bottom <= (await page.locator('#gz-navbar .tabs').boundingBox()).y + 1, 'Settings is above the phone bar too');
+      await page.keyboard.press('Escape');
       await closed(page);
       await page.setViewportSize({ width: 1280, height: 860 });
     });

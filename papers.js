@@ -1,8 +1,9 @@
 // Glaze Writer's Documents home (papers.html): every document on this device as a grid of first-page thumbnails or a
-// list, with a New band (Blank and the three formats), search, a course filter, sort, rename, copy, export, delete with
-// Undo, and .docx files dropped or imported as new documents. ?paper=<key> opens one in the same paper chrome an
-// assignment's frame has (writer-paper.js). Each kind of document (lib/doc-kinds.js) brings its own page code; this file
-// registers the paper's. Reads Writer's storage directly and writes through the worker (lib/writer-papers.js).
+// list, with a New band (Blank and the three formats), search, a course filter, sort, rename, copy, export, delete to
+// Trash with Undo (the Trash its own view: Restore, Delete forever), and .docx files dropped or imported as new documents.
+// ?paper=<key> opens one in the same paper chrome an assignment's frame has (writer-paper.js). Each kind of document
+// (lib/doc-kinds.js) brings its own page code; this file registers the paper's. Reads Writer's storage directly and writes
+// through the worker (lib/writer-papers.js).
 (() => {
   // The student's Look as Glaze's own pages wear it (ui.js paint, settings and parts as GZ_UI.load reads them): the
   // palette, dark by the theme or by the system with auto light and dark (until storage answers, the system's mode), and
@@ -79,7 +80,7 @@
   };
   const btn = (props, ...kids) => h('button', { type: 'button', ...props }, ...kids);
   const SVG = 'http://www.w3.org/2000/svg';
-  const PATHS = { paper: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6', search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', list: 'M4 6h16M4 12h16M4 18h16', dots: 'M5 12h.01M12 12h.01M19 12h.01' };
+  const PATHS = { paper: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6', search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', list: 'M4 6h16M4 12h16M4 18h16', dots: 'M5 12h.01M12 12h.01M19 12h.01', trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6' };
   const icon = (name, cls = 'ico') => { const s = document.createElementNS(SVG, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', cls); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS(SVG, 'path'); p.setAttribute('d', PATHS[name] || PATHS.paper); s.append(p); return s; };
   const catalogue = () => new Promise((ok) => {
     const file = GZ_I18N.file(locale);
@@ -191,18 +192,19 @@
     });
     const band = h('section', { class: 'gd-new', 'aria-labelledby': 'gd-new-h' }, h('h2', { id: 'gd-new-h', text: t('New') }), h('div', { class: 'gd-tiles' }, tiles));
 
-    // ---- the toolbar: search, course, kind (once there are two), sort, grid or list, import
+    // ---- the toolbar: search, course, kind (once there are two), sort, grid or list, Trash (while it holds anything), import
     const q = h('input', { id: 'gd-q', type: 'search', 'aria-label': t('Search'), placeholder: t('Search'), autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search' });
     const courseSel = h('select', { id: 'gd-course', 'aria-label': t('Course'), hidden: true }), kindSel = h('select', { id: 'gd-kind', 'aria-label': t('Kind'), hidden: true });
     const sortSel = h('select', { id: 'gd-sort', 'aria-label': t('Sort') }, h('option', { value: 'updated', text: t('Last edited') }), h('option', { value: 'title', text: t('Title') }));
     const gridB = btn({ id: 'gd-grid', 'aria-label': t('Grid'), title: t('Grid') }, icon('grid')), listB = btn({ id: 'gd-list', 'aria-label': t('List'), title: t('List') }, icon('list'));
+    const binB = btn({ id: 'gd-trash', 'aria-label': t('Trash'), title: t('Trash'), 'aria-pressed': 'false' }, icon('trash')), binBox = h('div', { class: 'gd-views gd-bin', hidden: true }, binB);
     const accept = Object.values(DK.KINDS).flatMap((k) => [...k.accept, k.mime]).join(',');
     const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept, hidden: true, tabindex: '-1', 'aria-label': t('Import .docx…') });
     const importB = btn({ id: 'gd-import', class: 'gd-btn' }, t('Import .docx…'));
     // Items the page's own scripts and mods add (GZ_DOCUMENTS.item 'toolbar'), before Import.
     const extra = h('div', { class: 'gd-extra', hidden: true });
     const said = h('p', { id: 'gd-said', class: 'gd-said', role: 'status' });
-    const bar = h('div', { class: 'gd-bar' }, h('label', { class: 'gd-search' }, icon('search'), q), h('div', { class: 'gd-tools' }, courseSel, kindSel, sortSel, h('div', { class: 'gd-views' }, gridB, listB), extra, importB, file), said);
+    const bar = h('div', { class: 'gd-bar' }, h('label', { class: 'gd-search' }, icon('search'), q), h('div', { class: 'gd-tools' }, courseSel, kindSel, sortSel, h('div', { class: 'gd-views' }, gridB, listB), binBox, extra, importB, file), said);
     const docs = h('ul', { id: 'gd-docs', class: 'gd-docs', 'aria-labelledby': 'heading' });
     const count = h('p', { id: 'gd-count', class: 'gd-sr', 'aria-live': 'polite' });
     // The heading and the New band share one panel of glass; the toolbar is another, the cards each their own.
@@ -216,6 +218,9 @@
     try { if (localStorage.getItem(VIEW) === 'list') view = 'list'; } catch { /* storage can be unavailable */ }
     let active = true, life = 0, textSize = 0;
     const gone = new Set(), texts = new Map(), derived = new Map(), thumbs = new Map(), near = new Set(), cards = new Map(), epochs = new Map(), hitsByKey = new Map();
+    // bin: the Trash is the view. moving: key → into Trash (true) or out (false), as shown until storage says so.
+    let bin = false;
+    const moving = new Map();
     const epoch = (k) => epochs.get(k) || 0;
     const forgetText = (k) => { const x = texts.get(k); if (x) textSize -= x.text.length; texts.delete(k); hitsByKey.delete(k); };
     const titleOf = (r) => DH.titleOf(r, derived.get(r.key), t('Untitled document'));
@@ -230,6 +235,8 @@
     const metaOf = (r) => [r.course, labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 }), when(r.updated)].filter(Boolean).join(' · ');
     // A row whose kind this build has no page code for stays out of the list, untouched.
     const known = () => rows.filter((r) => typeof DK.get(DK.kindOf(r))?.thumb === 'function' && !gone.has(r.key));
+    // What the lists, search, the course choices and mods see: no document in Trash. inView: the view's (the Trash's).
+    const live = () => DH.view(known(), false, moving), inView = () => DH.view(known(), bin, moving);
     // What a record says beyond the index: its text for search, and its first line where the index has no title.
     const learn = (k, rec) => {
       if (!rec?.doc) return;
@@ -294,11 +301,14 @@
     const render = () => {
       if (!active) return;
       if (renaming) { held = true; return; }
-      const list = known();
-      choices(list);
+      const all = known(), list = DH.view(all, bin, moving);
+      // The Trash: newest trashed first, search only; its control shows while it holds anything or is open.
+      if (bin) courseSel.hidden = kindSel.hidden = true; else choices(list);
+      sortSel.hidden = bin;
+      binBox.hidden = !bin && !all.some((r) => DH.inTrash(r, moving));
       const titles = new Map();
-      const hits = list.filter((r) => { const title = titleOf(r); titles.set(r.key, title); return inCourse(r) && (!kind || DK.kindOf(r) === kind) && matches(r, title) === true; });
-      shown = DH.sort(hits, sortBy, titles, locale);
+      const hits = list.filter((r) => { const title = titleOf(r); titles.set(r.key, title); return (bin || (inCourse(r) && (!kind || DK.kindOf(r) === kind))) && matches(r, title) === true; });
+      shown = DH.sort(hits, bin ? 'trashed' : sortBy, titles, locale);
       const els = shown.map(cardFor);
       if (els.length !== docs.children.length || els.some((e, i) => docs.children[i] !== e)) {
         const had = docs.contains(document.activeElement) ? document.activeElement : null;
@@ -329,6 +339,7 @@
           again = false;
           rows = await st.list();
           for (const k of gone) if (!rows.some((r) => r.key === k)) gone.delete(k);
+          for (const [k, into] of moving) { const r = rows.find((x) => x.key === k); if (!r || PA.trashed(r) === into) moving.delete(k); }
           render();
           if (active && words.length) await bodies();
         } while (again);
@@ -404,7 +415,7 @@
     const bodies = async () => {
       const g = ++gen;
       if (!active || !words.length) return;
-      const want = known().filter((r) => matches(r, titleOf(r)) === null);
+      const want = inView().filter((r) => matches(r, titleOf(r)) === null);
       for (let i = 0; i < want.length; i += 10) {
         if (g !== gen || !active) return;
         const part = want.slice(i, i + 10), stamps = part.map((r) => epoch(r.key)), got = await chrome.storage.local.get(part.map((r) => PAPER + r.key));
@@ -433,7 +444,7 @@
     setView(view, false);
 
     // ---- the ⋯ menu: Rename (a standalone document's), Make a copy, Export .docx, Delete; then the items added for cards
-    // (GZ_DOCUMENTS.item 'card'), each told the card's summary
+    // (GZ_DOCUMENTS.item 'card'), each told the card's summary. In Trash: Restore and Delete forever only.
     let menu = null, keyMenu = false;
     const closeMenu = (back) => { if (!menu) return; const m = menu; menu = null; motion().leave(m.el, m.opener); m.opener.setAttribute('aria-expanded', 'false'); if (back) m.back.focus(); };
     const menuFor = (k, back) => {
@@ -441,16 +452,22 @@
       if (!c) return;
       if (menu?.k === k) { closeMenu(true); return; }
       closeMenu();
-      const items = [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', 'Export .docx'], ['delete', 'Delete']].filter(Boolean);
-      const added = [...slots.card.values()];
+      const items = bin ? [['restore', 'Restore'], ['forever', 'Delete forever']] : [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', 'Export .docx'], ['delete', 'Delete']].filter(Boolean);
+      const added = bin ? [] : [...slots.card.values()];
       const el = h('div', { class: 'pop gp-menu gd-menu', role: 'menu', 'aria-labelledby': c.link.id },
         items.map(([act, label]) => btn({ role: 'menuitem', tabindex: '-1', 'data-act': act, onclick: () => { closeMenu(act !== 'rename'); run(act, k); } }, t(label))),
         added.length ? h('div', { class: 'gp-hr', role: 'separator' }) : null,
         added.map((x) => btn({ role: 'menuitem', tabindex: '-1', class: 'gd-added', title: x.by || null, onclick: (e) => { closeMenu(true); x.run(summary(c.row), e); } }, x.label)));
       document.body.append(el);
-      const anchor = c.more.getClientRects().length ? c.more : c.link, r = anchor.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
-      el.style.left = `${Math.max(4, Math.min(r.right - w, innerWidth - w - 4))}px`;
-      el.style.top = `${r.bottom + 6 + hh > innerHeight - 4 ? Math.max(4, r.top - hh - 6) : r.bottom + 6}px`;
+      // A host can finish resizing its iframe after the menu opens. Keep both actions beside the live card geometry.
+      const place = () => {
+        const anchor = c.more.getClientRects().length ? c.more : c.link, r = anchor.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
+        el.style.left = `${Math.max(4, Math.min(r.right - w, innerWidth - w - 4))}px`;
+        // The short Trash menu stays above its card, clear of the LMS's bottom navigation in a narrow frame.
+        const above = (bin && r.top >= hh + 10) || r.bottom + 6 + hh > innerHeight - 4;
+        el.style.top = `${Math.max(4, Math.min(above ? r.top - hh - 6 : r.bottom + 6, innerHeight - hh - 4))}px`;
+      };
+      place();
       el.style.transformOrigin = 'top right';
       el.addEventListener('keydown', (e) => {
         const all = [...el.querySelectorAll('[role="menuitem"]')], i = all.indexOf(document.activeElement);
@@ -461,8 +478,9 @@
       el.setAttribute('data-open', '');
       motion().open(el, c.more);
       c.more.setAttribute('aria-expanded', 'true');
-      menu = { el, k, opener: c.more, back: back || c.more };
+      menu = { el, k, opener: c.more, back: back || c.more, place };
       el.querySelector('[role="menuitem"]').focus();
+      place();
     };
     const run = (act, k) => {
       dismiss();
@@ -472,10 +490,14 @@
       // A paper Word can't take (a picture kept in a form Word has no place for) is said on the page, not logged.
       else if (act === 'export') DK.get(DK.kindOf(cards.get(k)?.row)).exportFile(k).catch(() => say(t('The .docx could not be made.')));
       else if (act === 'delete') del(k);
+      else if (act === 'restore') out(k);
+      else if (act === 'forever') forever(k);
     };
     document.addEventListener('pointerdown', (e) => { keyMenu = false; if (menu && !menu.el.contains(e.target) && !menu.opener.contains(e.target)) closeMenu(); }, true);
     // The menu opened from the keyboard: the browser's own context menu that follows the key stays shut.
     document.addEventListener('contextmenu', (e) => { if (keyMenu) { keyMenu = false; e.preventDefault(); } });
+    addEventListener('resize', () => menu?.place());
+    addEventListener('scroll', () => menu?.place(), { passive: true });
 
     // ---- rename in place: Enter saves (named; emptied, the document's first line again), Esc or an unchanged name keeps it
     const rename = (k) => {
@@ -526,45 +548,68 @@
       await st.save(c.key, c);
     };
 
-    // ---- delete: the card goes at once; the toast's Undo (or Ctrl+Z while it shows) puts the record and its versions
-    // back through the worker (merge). The toast goes at the next action or after 8 seconds.
+    // ---- delete: the card goes to Trash at once; the toast's Undo (or Ctrl+Z while it shows) takes it out again through the
+    // worker. The toast goes at the next action or after 8 seconds. In Trash, Restore and Delete forever (the record and its
+    // versions, no Undo) take the card out of the view at once too.
     let undoable = null;
     const dismiss = () => { if (!undoable) return; clearTimeout(undoable.timer); motion().leave(undoable.el); undoable = null; };
-    const del = async (k) => {
+    // The card leaves the view (hide), focus going to the next card, else the one before, else search; then the worker's
+    // write (write), and the card back with a word on the page if it is refused. → whether it was written.
+    const leave = async (k, hide, back, write) => {
       dismiss();
       say('');
       const i = shown.findIndex((r) => r.key === k), next = shown[i + 1]?.key ?? shown[i - 1]?.key, inside = docs.contains(document.activeElement) || !!menu;
-      gone.add(k);
+      hide();
       if (inside && next) current = next;
       render();
       if (inside && next) go(next);
       else if (inside) q.focus();
-      let records;
-      try {
-        records = await st.remove(k);
-      } catch (e) { console.error(e); gone.delete(k); render(); say(t('Not saved. Try again in a moment.')); return; }
-      const undo = PAPER + k in records ? btn({ class: 'gp-toast-do', onclick: () => restore() }, t('Undo')) : null;
-      const el = h('div', { class: 'pop gp-toast gd-toast', role: 'status' }, h('span', { text: t('Deleted') }), undo);
+      try { if (await write()) { refresh(); return true; } } catch (e) { console.error(e); }
+      back(); render(); say(t('Not saved. Try again in a moment.'));
+      return false;
+    };
+    const del = async (k) => {
+      if (!await leave(k, () => moving.set(k, true), () => moving.delete(k), () => st.trash(k))) return;
+      const el = h('div', { class: 'pop gp-toast gd-toast', role: 'status' }, h('span', { text: t('Deleted') }), btn({ class: 'gp-toast-do', onclick: () => undo() }, t('Undo')));
       document.body.append(el);
       el.getBoundingClientRect();
       el.setAttribute('data-open', '');
       motion().open(el);
-      undoable = { k, records, el, timer: setTimeout(dismiss, 8000) };
+      undoable = { k, el, timer: setTimeout(dismiss, 8000) };
     };
-    const restore = async () => {
+    const undo = async () => {
       const u = undoable;
-      if (!u || u.restoring || !(PAPER + u.k in u.records)) return;
+      if (!u || u.restoring) return;
       u.restoring = true; clearTimeout(u.timer);
-      try { await st.merge(u.records); } catch (e) {
+      try { await st.untrash(u.k); } catch (e) {
         console.error(e); say(t('Not saved. Try again in a moment.')); u.restoring = false;
         if (undoable === u) u.timer = setTimeout(dismiss, 8000);
         return;
       }
       if (undoable === u) dismiss();
-      gone.delete(u.k);
+      moving.set(u.k, false);
       focusNext = u.k;
       await refresh();
     };
+    const out = (k) => leave(k, () => moving.set(k, false), () => moving.delete(k), () => st.untrash(k));
+    const forever = (k) => leave(k, () => gone.add(k), () => gone.delete(k), async () => { await st.remove(k); return true; });
+    // A document in Trash opens restored: a click here waits for the worker, then opens it as a card's link does (a frame
+    // of a school's page replacing itself, embedded below); a new tab or window opens at once, restoring alongside.
+    const reopen = (e) => {
+      const link = e.target.closest?.('.gd-title'), k = link?.closest('.gd-card')?.dataset.key;
+      if (!k || e.button > 1) return;
+      const here = e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
+      if (here) e.preventDefault();
+      st.untrash(k).then(() => { if (here && active) location[window.top === window ? 'assign' : 'replace'](link.href); },
+        (err) => { console.error(err); if (here) say(t('Not saved. Try again in a moment.')); });
+    };
+    binB.addEventListener('click', () => {
+      bin = !bin;
+      binB.setAttribute('aria-pressed', String(bin));
+      dismiss(); closeMenu(); say('');
+      render();
+      if (binBox.hidden) q.focus();
+    });
 
     // ---- files dropped anywhere on the page or chosen with Import .docx…: one new document each, at most 20
     const REFUSALS = new Set(['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.']);
@@ -603,28 +648,29 @@
     docs.addEventListener('focusin', (e) => { const k = e.target.closest?.('.gd-card')?.dataset.key; if (k && e.target.matches('.gd-title') && k !== current) { current = k; roving(); } });
     docs.addEventListener('click', (e) => {
       const more = e.target.closest?.('.gd-more');
-      if (!more) return;
+      if (!more) { if (bin) reopen(e); return; }
       e.preventDefault();
       const k = more.closest('.gd-card').dataset.key;
       current = k; roving();
       menuFor(k, more);
     });
+    docs.addEventListener('auxclick', (e) => { if (bin) reopen(e); });
     docs.addEventListener('keydown', (e) => {
       if (!e.target.matches?.('.gd-title')) return;
       const k = e.target.closest('.gd-card').dataset.key;
-      if (MAC && e.metaKey && e.key === 'Backspace') { e.preventDefault(); del(k); return; }
+      if (MAC && e.metaKey && e.key === 'Backspace') { e.preventDefault(); if (!bin) del(k); return; }
       if (e.altKey || e.ctrlKey || e.metaKey) return;
       if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') { e.preventDefault(); keyMenu = true; menuFor(k, e.target); return; }
       if (e.shiftKey) return;
       const to = DH.move(shown.findIndex((r) => r.key === k), e.key, shown.length, e.key === 'ArrowUp' || e.key === 'ArrowDown' ? cols() : 1);
       if (to != null) { e.preventDefault(); go(shown[to].key); }
-      else if (e.key === 'F2' && PA.local(k)) { e.preventDefault(); rename(k); }
-      else if (e.key === 'Delete') { e.preventDefault(); del(k); }
+      else if (e.key === 'F2' && PA.local(k) && !bin) { e.preventDefault(); rename(k); }
+      else if (e.key === 'Delete' && !bin) { e.preventDefault(); del(k); }
     });
     document.addEventListener('keydown', (e) => {
       if (e.defaultPrevented || isField(e.target)) return;
       if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !menu) { e.preventDefault(); q.focus(); q.select(); }
-      else if (undoable && (MAC ? e.metaKey : e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') { e.preventDefault(); restore(); }
+      else if (undoable && (MAC ? e.metaKey : e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
     });
 
     // ---- GZ_DOCUMENTS: the page's hooks for its own scripts, as GZ_WRITER_FRAME is the editor's. on(event, fn): 'ready'
@@ -637,15 +683,20 @@
     const hooks = { ready: [], change: [] }, slots = { toolbar: new Map(), card: new Map() };
     const tell = (ev) => { for (const fn of hooks[ev]) try { fn(); } catch (e) { console.error(e); } };
     const summary = (r) => DH.summary(r, titleOf(r), DK.kindOf(r));
-    const listed = (key) => known().find((r) => r.key === key) || null;
+    const listed = (key) => live().find((r) => r.key === key) || null;
     const STYLE = { radius: ['--gd-radius', 'px'], glass: ['--gd-glass', 'px'], thumb: ['--gd-thumb', ''], column: ['--gd-column', 'px'] };
     let slotSeq = 0;
     const tools = () => { extra.replaceChildren(...[...slots.toolbar.values()].map((x) => x.el)); extra.hidden = !slots.toolbar.size; };
     const D = {
       t,
       on: (ev, fn) => { if (hooks[ev] && typeof fn === 'function') hooks[ev].push(fn); },
-      list: () => DH.sort(known(), 'updated', new Map(), locale).map(summary),
-      open: (key) => { const r = listed(key); if (r) location.assign(`papers.html?${DK.get(DK.kindOf(r)).param}=${encodeURIComponent(key)}`); return !!r; },
+      list: () => DH.sort(live(), 'updated', new Map(), locale).map(summary),
+      open: async (key) => {
+        const r = known().find((r) => r.key === key);
+        if (!r || (DH.inTrash(r, moving) && !await st.untrash(key))) return false;
+        location[window.top === window ? 'assign' : 'replace'](`papers.html?${DK.get(DK.kindOf(r)).param}=${encodeURIComponent(key)}`);
+        return true;
+      },
       create: (format) => { const ok = ST.IDS.includes(format); if (ok) location.assign(fresh(format)); return ok; },
       read: async (key) => { const r = listed(key), rec = r && await st.get(key); return rec?.doc ? { key, title: titleOf(r), text: DK.get(DK.kindOf(r)).text(rec) } : null; },
       export: async (key) => { const r = listed(key), f = r && await DK.get(DK.kindOf(r)).file(key); return f ? { name: f.name, mime: f.mime, bytes: new Uint8Array(f.bytes) } : null; },
@@ -670,36 +721,43 @@
       if (!chrome.runtime.getManifest().sandbox) return; // code mods run only where the manifest has their sandbox (content.js too)
       const a = await chrome.runtime.sendMessage({ type: 'glaze:modpage', op: 'list' }).catch(() => null);
       if (!Array.isArray(a?.mods) || !a.mods.length || !active) return;
+      await GZ_WRITER_PAPER.need(['defaults.js', 'lib/modapi.js']);
+      const keys = GZ_MODAPI.docKeys();
       const own = new Map(), styles = new Map(), clicked = new Map(); // `${mod}|${slot}|${id}` → item; mod → its hooks; mod → when its item was clicked
       const restyle = () => { const won = {}; for (const id of GZ_MODS.order()) for (const [k, v] of Object.entries(styles.get(id) || {})) won[k] ??= v; D.style(won); };
       const done = (value) => (value == null ? { error: 'args' } : { ok: true, value });
       const call = async (id, name, v, by) => {
-        if (name === 'documents.list') return done(D.list());
-        if (name === 'documents.read') return done(await D.read(v.key));
-        if (name === 'documents.export') return done(await D.export(v.key));
+        if (name === 'documents.list') return done(D.list().map((doc) => keys.summary(id, doc)));
+        if (name === 'documents.read') { const r = await D.read(keys.resolve(id, v.key)); return done(r && { ...r, key: v.key }); }
+        if (name === 'documents.export') return done(await D.export(keys.resolve(id, v.key)));
         if (name === 'documents.open' || name === 'documents.create') {
           const at = clicked.get(id);
           if (at === undefined || performance.now() - at > 1000) return { error: 'permission' };
           clicked.delete(id);
-          return (name === 'documents.open' ? D.open(v.key) : D.create(v.format)) ? null : { error: 'args' };
+          return (name === 'documents.open' ? await D.open(keys.resolve(id, v.key)) : D.create(v.format)) ? null : { error: 'args' };
         }
         if (name === 'documents.add') {
           const k = `${id}|${v.slot}|${v.id}`;
           if (!own.has(k) && [...own.keys()].filter((x) => x.startsWith(`${id}|${v.slot}|`)).length >= 4) return { error: 'args' };
           own.get(k)?.remove();
-          own.set(k, D.item(v.slot.slice(10), v.label, (doc, e) => { if (e?.isTrusted) clicked.set(id, performance.now()); GZ_MODS.documents.action(id, { slot: v.slot, id: v.id, ...(doc && { doc }) }); }, { by }));
+          own.set(k, D.item(v.slot.slice(10), v.label, (doc, e) => { if (e?.isTrusted) clicked.set(id, performance.now()); GZ_MODS.documents.action(id, { slot: v.slot, id: v.id, ...(doc && { doc: keys.summary(id, doc) }) }); }, { by }));
           return null;
         }
         if (name === 'documents.remove') { const k = `${id}|${v.slot}|${v.id}`; if (!own.has(k)) return { error: 'args' }; own.get(k).remove(); own.delete(k); return null; }
         if (name === 'documents.style') { if (v) styles.set(id, v); else styles.delete(id); restyle(); return null; }
         return { error: 'call' };
       };
-      const forget = (id) => { for (const [k, x] of own) if (k.startsWith(`${id}|`)) { x.remove(); own.delete(k); } clicked.delete(id); if (styles.delete(id)) restyle(); };
+      const forget = (id) => { for (const [k, x] of own) if (k.startsWith(`${id}|`)) { x.remove(); own.delete(k); } clicked.delete(id); keys.forget(id); if (styles.delete(id)) restyle(); };
       globalThis.GZ_CTX = Object.freeze({ site: 'documents', need: (f, ready) => (ready() ? Promise.resolve() : GZ_WRITER_PAPER.need([f])), documents: Object.freeze({ call, forget }) });
       await GZ_WRITER_PAPER.need(['features/mods.js']);
       GZ_MODS.start(a.mods);
     };
 
+    // What has been in Trash past 30 days goes as the page opens, once the worker takes its writes: a frame of a school's
+    // page (embedded below) only once it claimed its pass, its body inert until then.
+    const sweep = () => st.purge().catch((e) => console.error(e));
+    if (!document.body.inert) sweep();
+    else new MutationObserver((_, o) => { if (!document.body.inert) { o.disconnect(); sweep(); } }).observe(document.body, { attributes: true, attributeFilter: ['inert'] });
     await Promise.all([refresh(), look.surfaces]);
     main.hidden = false;
     tell('ready');

@@ -10,6 +10,55 @@ const B = require('../lib/modbroker.js');
 const M = require('../lib/modbundle.js');
 const E = require('../lib/editor-mods.js');
 
+test('mod document keys hide account identifiers and resolve only within their mod and page', () => {
+  const keys = A.docKeys();
+  const raw = 'bb.school.test|_900_1|_101_1|_7_1';
+  const doc = { key: raw, title: 'Essay', course: 'English', kind: 'paper' };
+  const a = keys.summary('first', doc), b = keys.summary('second', doc);
+  assert.match(a.key, /^document:[0-9a-f-]{36}$/);
+  assert.equal(JSON.stringify(a).includes('bb.school.test'), false);
+  assert.equal(JSON.stringify(a).includes('_900_1'), false);
+  assert.notEqual(a.key, b.key);
+  assert.deepEqual(keys.summary('first', doc), a, 'stable within this page');
+  assert.equal(keys.resolve('first', a.key), raw);
+  assert.equal(keys.resolve('second', a.key), null);
+  assert.equal(keys.resolve('first', raw), null, 'raw storage keys are never accepted from mods');
+  assert.equal(keys.resolve('first', 'document:unknown'), null);
+  keys.forget('first');
+  assert.equal(keys.resolve('first', a.key), null, 'stopping the mod revokes its handles');
+  assert.equal(keys.resolve('second', b.key), raw);
+  assert.notEqual(A.docKeys().summary('first', doc).key, a.key, 'no cross-page identifier');
+});
+
+test('the page broker masks list and action keys and resolves read and export without returning raw keys', async () => {
+  const src = fs.readFileSync(path.join(__dirname, '../papers.js'), 'utf8');
+  // mods() as papers.js defines it, to its closing brace (what follows it in the page changes).
+  const start = src.indexOf('    const mods = async () => {'), end = src.indexOf('\n    };\n', start) + '\n    };\n'.length;
+  const body = src.slice(start, end);
+  const raw = 'bb.school.test|_900_1|_101_1|_7_1', doc = { key: raw, title: 'Essay', course: 'English' };
+  let action, clicked;
+  const ctx = vm.createContext({ active: true, performance: { now: () => 0 }, GZ_MODAPI: A,
+    chrome: { runtime: { getManifest: () => ({ sandbox: {} }), sendMessage: async () => ({ mods: [{ id: 'first' }] }) } },
+    GZ_WRITER_PAPER: { need: async () => {} }, GZ_MODS: { start() {}, order: () => ['first'], documents: { action: (id, data) => { action = data; } } },
+    D: { list: () => [doc], read: async (key) => key === raw ? { key, title: doc.title, text: 'Body' } : null,
+      export: async (key) => key === raw ? { name: 'Essay.docx', bytes: [80, 75] } : null,
+      item: (slot, label, fn) => { clicked = fn; return { remove() {} }; } },
+  });
+  await vm.runInContext(`${body}\nmods()`, ctx);
+  const call = (mod, name, v) => ctx.GZ_CTX.documents.call(mod, `documents.${name}`, v, 'Tools');
+  const list = await call('first', 'list');
+  const key = list.value[0].key;
+  assert.notEqual(key, raw, 'list must not expose school and account storage keys');
+  assert.equal((await call('first', 'read', { key })).value.key, key, 'read returns the same opaque handle');
+  assert.equal((await call('first', 'export', { key })).value.name, 'Essay.docx');
+  assert.equal((await call('first', 'read', { key: raw })).error, 'args');
+  assert.equal((await call('second', 'read', { key })).error, 'args');
+  await call('first', 'add', { slot: 'documents.card', id: 'count', label: '<img src=x>' });
+  clicked(doc, { isTrusted: false });
+  assert.equal(action.doc.key, key, 'card actions use the same handle as list');
+  assert.equal(JSON.stringify(action).includes('bb.school.test'), false);
+});
+
 const ID = 'abcdefghijklmnop', OTHER = 'qrstuvwxyz234567', SITE = 'https://school.instructure.com';
 const flush = () => new Promise(setImmediate);
 const rec = (perms = ['documents', 'documents.read'], over = {}) => ({
@@ -131,6 +180,24 @@ test('the worker\'s sender check: only the Documents page in a tab of its own, t
   assert.equal(await ctx.fromDocuments(s('chrome-extension://glaze/papers.html')), false, 'Glaze off');
   assert.match(src, /site: preview \? 'editor' : await fromDocuments\(s\) \? 'documents' : await fromLms\(/);
   assert.match(src, /account: \(\) => \(who \|\|= env\.site && !preview && env\.site !== 'documents' \?/, 'the Documents page has no account to read');
+});
+
+test('an embedded Documents pass grants paper writes, never the standalone documents mod API or an LMS account', async () => {
+  const w = require('./helpers/worker-env.cjs')();
+  const home = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/papers.html', origin: 'chrome-extension://x', tab: { id: 8 } };
+  const host = { ...home, url: `${SITE}/courses/1`, origin: SITE };
+  const frame = { ...home, frameId: 3, documentId: 'embedded' };
+  const pass = crypto.randomUUID();
+  await w.send({ type: 'glaze:papers', op: 'job', pass }, host);
+  assert.deepEqual(await w.send({ type: 'glaze:papers', op: 'claim', pass }, frame), { ok: true });
+  const fromDocuments = vm.runInContext('fromDocuments', w.context);
+  assert.equal(await fromDocuments(home), true);
+  for (const sender of [frame, { ...frame, documentId: 'next' }, { ...frame, frameId: 4 }]) {
+    assert.equal(await fromDocuments(sender), false, 'a claimed frame is not a standalone mods host');
+    assert.equal(await vm.runInContext('fromLms', w.context)(sender), null, 'nor an LMS page');
+    assert.deepEqual(await w.send({ type: 'glaze:modpage', op: 'list' }, sender), { ok: false, error: 'sender' });
+    assert.deepEqual(await w.send({ type: 'glaze:mod', mod: ID, call: 'documents.list', args: [], via: 'worker' }, sender), { ok: false, error: 'sender' });
+  }
 });
 
 test('install: documents and documents.read are personal data, and documents.read comes with documents', async () => {

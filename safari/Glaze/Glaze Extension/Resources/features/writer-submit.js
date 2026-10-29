@@ -18,7 +18,8 @@
 // Ultra's own file area (enhance.writerUploads, on by default): one file dropped on it or chosen through its input goes to
 // the paper's frame instead, before Ultra hears it (in the capture phase), which asks what to do with it; Ultra
 // never starts that upload, so nothing of it needs undoing. More than one file, a file over 50 MB, Glaze's own attach and
-// the setting off leave the area to Ultra.
+// the setting off leave the area to Ultra. A paper in its compact box (features/writer.js box.full false) sends text: its
+// Submit and Save and Close stay Ultra's, and its file area gives Writer a Word file only (Open in Writer or Submit as is).
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const L = () => globalThis.GZ_WRITER_SUBMIT_LIB;
@@ -42,7 +43,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const visible = (e) => e.getClientRects().length > 0;
 
   // ---- Ultra's footer buttons, caught before Ultra
-  const ownerOf = (b) => { for (const box of live().keys()) { const f = L().footer(box.editor); if (b && (f.submit === b || f.save === b)) return box; } return null; };
+  const ownerOf = (b) => { for (const box of live().keys()) { if (!box.full) continue; const f = L().footer(box.editor); if (b && (f.submit === b || f.save === b)) return box; } return null; };
   const act = (box, b, e) => {
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -74,6 +75,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   // A disabled button hears no click (Mui's also lets the pointer through to its parent): the press is matched by place.
   const at = (e) => {
     for (const box of live().keys()) {
+      if (!box.full) continue;
       const f = L().footer(box.editor);
       for (const b of [f.submit, f.save]) {
         if (!b || L().enabled(b)) continue;
@@ -235,7 +237,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const hit = zone?.contains(t) && (drop || t === L().uploadInput(area));
       if (!hit) continue;
       const files = drop ? e.dataTransfer?.files : t.files;
-      if (files?.length !== 1 || L().fileError(files[0])) return;
+      if (files?.length !== 1 || L().fileError(files[0]) || (!box.full && L().route(files[0].name) !== 'choose')) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.type === 'input') return;
@@ -269,7 +271,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     else if (m.type === 'submit:held' && armed.has(box)) say(box, { type: 'submit:held', text: heldOf(box).slice(0, 1e6) });
     else if (m.type === 'submit:review' && armed.has(box)) review(box);
   };
-  return { hear };
+  return { hear, passing: (button) => button === passing };
 })();
 
 GZ_WRITER_SUBMIT;
