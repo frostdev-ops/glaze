@@ -31,7 +31,7 @@
    Colours only: nothing here changes a size, so pagination is the same in either. */
 :root { --sheet: #fff; --sheet-ink: #111; --sheet-line: #111; --sheet-guide: #c8cdd4; --sheet-link: #0563c1; --sheet-hit: #fde68a; --sheet-hit-cur: #fbbf24; }
 @media screen {
-  :root[data-dark]:not([data-light-page]) .gp-zoom { --sheet: #1e1e1e; --sheet-ink: #e6e6e6; --sheet-line: #555; --sheet-guide: #4a4a4a; --sheet-link: #8ab4f8;
+  :root[data-dark]:not([data-light-page]) .gp-size { --sheet: #1e1e1e; --sheet-ink: #e6e6e6; --sheet-line: #555; --sheet-guide: #4a4a4a; --sheet-link: #8ab4f8;
     --sheet-hit: color-mix(in srgb, #fbbf24 32%, transparent); --sheet-hit-cur: color-mix(in srgb, #fbbf24 52%, transparent); color-scheme: dark; }
   :root[data-dark]:not([data-light-page]) .gp-zoom .gp-sheet { box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 6px 24px rgba(0,0,0,.5); }
   :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: color-mix(in srgb, var(--c) 10%, #fff) !important; }
