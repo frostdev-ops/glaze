@@ -177,8 +177,13 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     };
     const list = async () => ((await get(INDEX)) || []).filter((r) => r && typeof r.key === 'string').map((r) => ({ ...r, kind: r.kind || 'paper', named: r.named === true }));
     const remove = (k) => serial(k, async () => {
-      await store.remove([PAPER + k, VERSIONS + k]);
-      await store.set({ [INDEX]: ((await get(INDEX)) || []).filter((r) => r.key !== k) });
+      // Undo takes the record actually deleted in this worker turn, including an editor's intervening autosave.
+      const paper = await get(PAPER + k), history = await get(VERSIONS + k), list = (await get(INDEX)) || [];
+      // Publish the smaller index before deleting data: a refused index write must leave the recovery records intact.
+      await store.set({ [INDEX]: list.filter((r) => r.key !== k) });
+      try { await store.remove([PAPER + k, VERSIONS + k]); }
+      catch (e) { await store.set({ [INDEX]: list }); throw e; }
+      return { ...(paper ? { [PAPER + k]: paper } : {}), ...(Array.isArray(history) ? { [VERSIONS + k]: history } : {}) };
     });
 
     // A student's presets (lib/writer-styles.js custom), kept valid.

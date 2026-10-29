@@ -110,9 +110,9 @@
   const home = async () => {
     await GZ_WRITER_PAPER.need(['lib/writer-styles.js', 'lib/writer-format.js', 'lib/writer-thumb.js', 'lib/doc-home.js']);
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PA = GZ_WRITER_PAPERS, DK = GZ_DOC_KINDS, DH = GZ_DOC_HOME, TH = GZ_WRITER_THUMB;
-    const st = papers(), { INDEX, PAPER, VERSIONS } = PA.KEYS;
+    const st = papers(), { INDEX, PAPER } = PA.KEYS;
     const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
-    const VIEW = 'gz-documents-view', TILE = 0.17;
+    const VIEW = 'gz-documents-view', TILE = 0.17, THUMB_CAP = 48, TEXT_CAP = 2e6;
     const main = $('list');
     $('heading').textContent = t('Documents');
     // A format's name: the three's and presets' as they are, Blank's in the page's language.
@@ -125,7 +125,8 @@
     // ---- the New band: Blank, then the three formats, each a link to a new document under a key minted as it opens
     const fresh = (id) => `papers.html?paper=${encodeURIComponent(PA.newKey())}&format=${id}`;
     const tiles = ['plain', ...ST.IDS.filter((id) => id !== 'plain')].map((id) => {
-      const f = ST.FORMATS[id], a = h('a', { class: 'gd-tile', 'data-format': id, href: fresh(id) }, h('span', { class: 'gd-tile-pic' }, TH.tile(f, {}, { scale: TILE })), h('span', { class: 'gd-tile-name', text: labelOf(f) }));
+      const values = { name: t('Your name'), instructor: t('Instructor'), course: t('Course'), date: t('Date'), title: t('Title') };
+      const f = ST.FORMATS[id], a = h('a', { class: 'gd-tile', 'data-format': id, href: fresh(id) }, h('span', { class: 'gd-tile-pic' }, TH.tile(f, id === 'plain' ? {} : values, { scale: TILE })), h('span', { class: 'gd-tile-name', text: labelOf(f) }));
       const mint = () => a.setAttribute('href', fresh(id));
       a.addEventListener('click', mint);
       a.addEventListener('auxclick', mint);
@@ -139,7 +140,7 @@
     const sortSel = h('select', { id: 'gd-sort', 'aria-label': t('Sort') }, h('option', { value: 'updated', text: t('Last edited') }), h('option', { value: 'title', text: t('Title') }));
     const gridB = btn({ id: 'gd-grid', 'aria-label': t('Grid'), title: t('Grid') }, icon('grid')), listB = btn({ id: 'gd-list', 'aria-label': t('List'), title: t('List') }, icon('list'));
     const accept = Object.values(DK.KINDS).flatMap((k) => [...k.accept, k.mime]).join(',');
-    const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept, hidden: true, tabindex: '-1' });
+    const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept, hidden: true, tabindex: '-1', 'aria-label': t('Import .docx…') });
     const importB = btn({ id: 'gd-import', class: 'gd-btn' }, t('Import .docx…'));
     const bar = h('div', { class: 'gd-bar' }, h('label', { class: 'gd-search' }, icon('search'), q), h('div', { class: 'gd-tools' }, courseSel, kindSel, sortSel, h('div', { class: 'gd-views' }, gridB, listB), importB, file));
     const said = h('p', { id: 'gd-said', class: 'gd-said', role: 'status' });
@@ -149,26 +150,40 @@
     const say = (text) => { said.textContent = text || ''; };
 
     // ---- state
-    // rows: the index; gone: deleted here, before storage says so; texts: key → { updated, text } (search); derived: key →
-    // the record's own first line (rows stored without a title); thumbs: key → { rev, el, stale, next } (next: the record
-    // a change brought); near: keys whose card is within a screen of the window.
+    // Text is bounded by characters, thumbnails by count (including those held in a detached card). Search retains each
+    // row's match separately, so evicting text never removes a result. Epochs reject reads started before a stored edit.
     let rows = [], view = 'grid', sortBy = 'updated', course = 'all', kind = '', words = [], shown = [], current = null, focusNext = null, seq = 0;
     try { if (localStorage.getItem(VIEW) === 'list') view = 'list'; } catch { /* storage can be unavailable */ }
-    const gone = new Set(), texts = new Map(), derived = new Map(), thumbs = new Map(), near = new Set(), cards = new Map();
+    let active = true, life = 0, textSize = 0;
+    const gone = new Set(), texts = new Map(), derived = new Map(), thumbs = new Map(), near = new Set(), cards = new Map(), epochs = new Map(), hitsByKey = new Map();
+    const epoch = (k) => epochs.get(k) || 0;
+    const forgetText = (k) => { const x = texts.get(k); if (x) textSize -= x.text.length; texts.delete(k); hitsByKey.delete(k); };
     const titleOf = (r) => DH.titleOf(r, derived.get(r.key), t('Untitled document'));
-    const bodyOf = (r) => { const x = texts.get(r.key); return x && x.updated === r.updated ? x.text : null; };
+    const bodyOf = (r) => { const x = texts.get(r.key); return x && x.updated === r.updated && x.epoch === epoch(r.key) ? x.text : null; };
+    const matches = (r, title) => {
+      const x = hitsByKey.get(r.key);
+      if (x && x.gen === gen && x.updated === r.updated && x.epoch === epoch(r.key)) return x.hit;
+      const hit = DH.matches(r, title, words, bodyOf(r));
+      if (words.length && hit !== null) hitsByKey.set(r.key, { gen, updated: r.updated, epoch: epoch(r.key), hit });
+      return hit;
+    };
     const metaOf = (r) => [r.course, labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 }), when(r.updated)].filter(Boolean).join(' · ');
     // A row whose kind this build has no page code for stays out of the list, untouched.
     const known = () => rows.filter((r) => typeof DK.get(DK.kindOf(r))?.thumb === 'function' && !gone.has(r.key));
     // What a record says beyond the index: its text for search, and its first line where the index has no title.
     const learn = (k, rec) => {
       if (!rec?.doc) return;
-      texts.set(k, { updated: rec.updated, text: DH.flat(rec.doc) });
+      const text = DH.flat(rec.doc);
+      forgetText(k);
+      texts.set(k, { updated: rec.updated, epoch: epoch(k), text }); textSize += text.length;
+      if (words.length) hitsByKey.set(k, { updated: rec.updated, epoch: epoch(k), gen, hit: DH.matches({ course: rec.courseName }, titleOf(rec), words, text) });
+      while (textSize > TEXT_CAP) { const first = texts.keys().next().value; textSize -= texts.get(first).text.length; texts.delete(first); }
       if (!rec.title) { try { derived.set(k, F.name(rec.doc, ST.get(rec.format))); } catch { derived.set(k, ''); } }
     };
 
     // ---- cards: one per document, kept while it is listed so its thumbnail and focus survive a redraw
     const io = new IntersectionObserver((entries) => {
+      if (!active) return;
       for (const e of entries) { if (e.isIntersecting) near.add(e.target.dataset.key); else near.delete(e.target.dataset.key); }
       pump();
     }, { rootMargin: '100% 0px' });
@@ -217,11 +232,12 @@
     // The cards as the filters, search and order have them; the rest leave the page. One Tab stop: the current card's link.
     let renaming = null, held = false;
     const render = () => {
+      if (!active) return;
       if (renaming) { held = true; return; }
       const list = known();
       choices(list);
       const titles = new Map();
-      const hits = list.filter((r) => { const title = titleOf(r); titles.set(r.key, title); return inCourse(r) && (!kind || DK.kindOf(r) === kind) && DH.matches(r, title, words, bodyOf(r)) === true; });
+      const hits = list.filter((r) => { const title = titleOf(r); titles.set(r.key, title); return inCourse(r) && (!kind || DK.kindOf(r) === kind) && matches(r, title) === true; });
       shown = DH.sort(hits, sortBy, titles, locale);
       const els = shown.map(cardFor);
       if (els.length !== docs.children.length || els.some((e, i) => docs.children[i] !== e)) {
@@ -230,13 +246,14 @@
         if (had?.isConnected) had.focus({ preventScroll: true });
       }
       const listed = new Set(rows.map((r) => r.key));
-      for (const [k, c] of cards) if (!listed.has(k) && !gone.has(k)) { io.unobserve(c.pic); near.delete(k); cards.delete(k); if (undoable?.k !== k) thumbs.delete(k); }
+      for (const [k, c] of cards) if (!listed.has(k)) { io.unobserve(c.pic); near.delete(k); cards.delete(k); thumbs.delete(k); forgetText(k); derived.delete(k); epochs.delete(k); }
+      for (const k of epochs.keys()) if (!listed.has(k)) { epochs.delete(k); forgetText(k); derived.delete(k); }
       roving();
       const n = t('{n} documents', { n: shown.length });
       if (count.textContent !== n) count.textContent = n;
       // A copy or an undone delete takes focus once it is listed; one the filters hide doesn't take it later.
       if (focusNext && listed.has(focusNext)) { const k = focusNext; focusNext = null; if (cards.get(k)?.el.isConnected) go(k); }
-      pump();
+      later();
     };
     const roving = () => {
       if (!shown.some((r) => r.key === current)) current = shown[0]?.key ?? null;
@@ -253,69 +270,94 @@
           rows = await st.list();
           for (const k of gone) if (!rows.some((r) => r.key === k)) gone.delete(k);
           render();
+          if (active && words.length) await bodies();
         } while (again);
       })().catch((e) => console.error(e)).finally(() => { reading = null; });
       return reading;
     };
 
     // ---- thumbnails: drawn for cards within a screen of the window, 12 records per storage read, kept by key and
-    // revision; a stored change marks one stale and it is drawn again from that change once it is near and the tab shows.
+    // revision; a stored change only invalidates it. Index refreshes and autosaves share one idle draw, never retaining
+    // a full changed record for each offscreen document. Leaving this page disconnects the observer, also under bfcache.
     let pumping = false, idle = false;
     const pump = async () => {
-      if (pumping || document.hidden) return;
+      if (pumping || !active || document.hidden) return;
       pumping = true;
+      const at = life;
       try {
         for (;;) {
+          if (!active || at !== life) break;
           const batch = [...near].filter((k) => { const th = thumbs.get(k); return cards.get(k)?.el.isConnected && (!th || th.stale); }).slice(0, 12);
           if (!batch.length) break;
-          const ask = batch.filter((k) => !thumbs.get(k)?.next), got = ask.length ? await chrome.storage.local.get(ask.map((k) => PAPER + k)) : {};
-          for (const k of batch) draw(k, thumbs.get(k)?.next || got[PAPER + k] || null);
+          const stamps = batch.map(epoch), got = await chrome.storage.local.get(batch.map((k) => PAPER + k));
+          if (!active || at !== life) break;
+          for (let i = 0; i < batch.length; i++) if (stamps[i] === epoch(batch[i])) draw(batch[i], got[PAPER + batch[i]] || null);
         }
       } catch (e) { console.error(e); } finally { pumping = false; }
     };
     const draw = (k, rec) => {
       let el = null;
       if (rec?.doc) { try { el = DK.get(DK.kindOf(rec))?.thumb(rec) || null; } catch (e) { console.error(e); } learn(k, rec); }
-      thumbs.set(k, { rev: rec?.revision ?? null, el, stale: false, next: null });
+      thumbs.delete(k);
+      thumbs.set(k, { rev: rec?.revision ?? null, el, stale: false });
       const c = cards.get(k);
       if (c) c.pic.replaceChildren(...(el ? [el] : []));
       if (!rows.find((r) => r.key === k)?.title && derived.get(k) && c) { const title = titleOf(c.row); if (c.title !== title && renaming?.k !== k) { c.title = title; c.link.textContent = title; } }
+      for (const [old] of thumbs) {
+        if (thumbs.size <= THUMB_CAP) break;
+        if (near.has(old) && cards.get(old)?.el.isConnected) continue;
+        thumbs.delete(old); cards.get(old)?.pic.replaceChildren();
+      }
     };
     const later = () => {
-      if (idle || document.hidden) return;
+      if (idle || !active || document.hidden) return;
       idle = true;
       (globalThis.requestIdleCallback || requestAnimationFrame)(() => { idle = false; pump(); });
     };
     const stale = (k, rec) => {
-      if (rec?.doc) learn(k, rec);
+      epochs.set(k, epoch(k) + 1); forgetText(k); derived.delete(k);
       const th = thumbs.get(k);
       if (!th || (rec && th.rev === rec.revision)) return;
-      th.stale = true; th.next = rec || null;
+      th.stale = true;
       if (near.has(k)) later();
     };
     document.addEventListener('visibilitychange', () => { if (!document.hidden) pump(); });
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'local') return;
+    const changed = (changes, area) => {
+      if (area !== 'local' || !active) return;
       for (const [name, ch] of Object.entries(changes)) if (name.startsWith(PAPER)) stale(name.slice(PAPER.length), ch.newValue);
-      if (INDEX in changes) refresh();
+      if (words.length) gen++;
+      if (INDEX in changes || (words.length && Object.keys(changes).some((n) => n.startsWith(PAPER)))) refresh();
+    };
+    chrome.storage.onChanged.addListener(changed);
+    addEventListener('pagehide', () => { active = false; life++; gen++; io.disconnect(); near.clear(); closeMenu(); dismiss(); chrome.storage.onChanged.removeListener(changed); });
+    addEventListener('pageshow', (e) => {
+      if (!e.persisted) return;
+      active = true; thumbs.clear(); texts.clear(); hitsByKey.clear(); textSize = 0;
+      for (const c of cards.values()) { c.pic.replaceChildren(); io.observe(c.pic); }
+      chrome.storage.onChanged.addListener(changed); refresh();
     });
-    addEventListener('pageshow', (e) => { if (e.persisted) refresh(); });
 
     // ---- search: titles and courses at once from the index; body text read 10 records at a time, the rest of a search
     // dropped when the next keystroke starts another.
     let gen = 0;
     const bodies = async () => {
       const g = ++gen;
-      if (!words.length) return;
-      const want = known().filter((r) => bodyOf(r) == null && DH.matches(r, titleOf(r), words, null) === null);
+      if (!active || !words.length) return;
+      const want = known().filter((r) => matches(r, titleOf(r)) === null);
       for (let i = 0; i < want.length; i += 10) {
-        const part = want.slice(i, i + 10), got = await chrome.storage.local.get(part.map((r) => PAPER + r.key));
-        for (const r of part) { const rec = got[PAPER + r.key]; if (rec?.doc) learn(r.key, rec); else texts.set(r.key, { updated: r.updated, text: '' }); }
-        if (g !== gen) return;
+        if (g !== gen || !active) return;
+        const part = want.slice(i, i + 10), stamps = part.map((r) => epoch(r.key)), got = await chrome.storage.local.get(part.map((r) => PAPER + r.key));
+        if (g !== gen || !active) return;
+        for (let j = 0; j < part.length; j++) {
+          const r = part[j], rec = got[PAPER + r.key];
+          if (stamps[j] !== epoch(r.key)) continue;
+          if (rec?.doc) learn(r.key, rec);
+          else hitsByKey.set(r.key, { gen, updated: r.updated, epoch: epoch(r.key), hit: false });
+        }
         render();
       }
     };
-    q.addEventListener('input', () => { words = DH.terms(q.value); render(); bodies().catch((e) => console.error(e)); });
+    q.addEventListener('input', () => { words = DH.terms(q.value); gen++; render(); bodies().catch((e) => console.error(e)); });
     q.addEventListener('keydown', (e) => { if (e.key === 'Escape' && q.value) { e.preventDefault(); q.value = ''; words = []; gen++; render(); } });
     courseSel.addEventListener('change', () => { course = courseSel.value; render(); });
     kindSel.addEventListener('change', () => { kind = kindSel.value; render(); });
@@ -392,7 +434,7 @@
         c.link.hidden = false;
         if (keep && v !== was) {
           if (v) { c.title = v; c.link.textContent = v; }
-          name(k, v).catch((e) => { console.error(e); say(t('Not saved. Try again in a moment.')); });
+          name(k, v).catch((e) => { console.error(e); say(t('Not saved. Try again in a moment.')); refresh(); });
         }
         if (back) go(k);
         if (held) { held = false; render(); }
@@ -429,11 +471,10 @@
       if (inside && next) current = next;
       render();
       if (inside && next) go(next);
+      else if (inside) q.focus();
       let records;
       try {
-        const got = await chrome.storage.local.get([PAPER + k, VERSIONS + k]);
-        records = { ...(got[PAPER + k] ? { [PAPER + k]: got[PAPER + k] } : {}), ...(Array.isArray(got[VERSIONS + k]) ? { [VERSIONS + k]: got[VERSIONS + k] } : {}) };
-        await st.remove(k);
+        records = await st.remove(k);
       } catch (e) { console.error(e); gone.delete(k); render(); say(t('Not saved. Try again in a moment.')); return; }
       const undo = PAPER + k in records ? btn({ class: 'gp-toast-do', onclick: () => restore() }, t('Undo')) : null;
       const el = h('div', { class: 'pop gp-toast gd-toast', role: 'status' }, h('span', { text: t('Deleted') }), undo);
@@ -444,9 +485,14 @@
     };
     const restore = async () => {
       const u = undoable;
-      if (!u || !(PAPER + u.k in u.records)) return;
-      dismiss();
-      try { await st.merge(u.records); } catch (e) { console.error(e); say(t('Not saved. Try again in a moment.')); return; }
+      if (!u || u.restoring || !(PAPER + u.k in u.records)) return;
+      u.restoring = true; clearTimeout(u.timer);
+      try { await st.merge(u.records); } catch (e) {
+        console.error(e); say(t('Not saved. Try again in a moment.')); u.restoring = false;
+        if (undoable === u) u.timer = setTimeout(dismiss, 8000);
+        return;
+      }
+      if (undoable === u) dismiss();
       gone.delete(u.k);
       focusNext = u.k;
       await refresh();
@@ -459,12 +505,13 @@
       say('');
       const { take, refused } = DH.route(list, DK.forFile, DK.KINDS, 20);
       const first = refused.find((x) => x.why !== 'count');
+      const limitText = refused.some((x) => x.why === 'count') ? t('Choose up to 20 files at a time.') : '';
       let why = first ? (first.why === 'size' ? 'Choose a Word file smaller than 15 MB.' : 'That file could not be read as a Word document.') : '';
       for (const { file: f, kind: id } of take) {
         try { await DK.get(id).importFile(f); }
         catch (e) { console.error(e); why ||= e instanceof RangeError && REFUSALS.has(e.message) ? e.message : 'That file could not be read as a Word document.'; }
       }
-      if (why) say(REFUSALS.has(why) ? t(why) : t('That file could not be read as a Word document.'));
+      say([why && t(why), limitText].filter(Boolean).join(' '));
     };
     importB.addEventListener('click', () => file.click());
     file.addEventListener('change', () => { const list = [...file.files]; file.value = ''; bring(list).catch((e) => console.error(e)); });
@@ -522,6 +569,15 @@
     GZ_DOC_KINDS.register('paper', { edit, thumb, exportFile, importFile, measure: GZ_WRITER_PAPERS.measure });
     // ?<a kind's param>=<key> opens that document; else the home.
     const params = new URLSearchParams(location.search), id = Object.keys(GZ_DOC_KINDS.KINDS).find((k) => params.get(GZ_DOC_KINDS.KINDS[k].param));
-    await (id ? GZ_DOC_KINDS.get(id).edit(params.get(GZ_DOC_KINDS.KINDS[id].param)) : home());
+    if (id) {
+      const key = params.get(GZ_DOC_KINDS.KINDS[id].param), k = GZ_DOC_KINDS.get(id);
+      const rec = GZ_WRITER_PAPERS.valid(key) ? await papers().get(key) : null;
+      // Only a New tile can open a missing key. A stale link, malformed key or a kind this build cannot edit returns home
+      // without mounting an empty editor over an existing document of another kind.
+      const fresh = !rec && GZ_WRITER_PAPERS.local(key) && ['plain', 'mla9', 'apa7', 'chicago17'].includes(params.get('format'));
+      if (typeof k.edit === 'function' && ((rec && GZ_DOC_KINDS.kindOf(rec) === id) || fresh)) { await k.edit(key); return; }
+      history.replaceState(null, '', 'papers.html');
+    }
+    await home();
   }).catch((e) => console.error(e));
 })();

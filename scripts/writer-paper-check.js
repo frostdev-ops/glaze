@@ -561,6 +561,7 @@ const HARNESS = `(() => {
     check(errors.length === 0, `no page or frame errors (${errors.join('; ')})`);
     check(requests.every((r) => r.method === 'GET' && r.origin === site), 'every LMS request is a synthetic GET');
     passed = true;
+    console.log(`writer-paper-check: ${checks.length} passed, 0 failed`);
     console.log(JSON.stringify({ checks: checks.length, shots: saved, idb: idb === 'frame' ? 'shared' : 'partitioned' }, null, 2));
   } finally {
     await context?.close();

@@ -3302,6 +3302,7 @@
   "Export .docx": ".docx exporteren",
   "Paper": "Werkstuk",
   "{n} words": {"one": "{n} woord", "other": "{n} woorden"},
+  "Choose up to 20 files at a time.": "Kies maximaal 20 bestanden tegelijk.",
   "Grid": "Raster",
   "Make a copy": "Kopie maken",
   "Deleted": "Verwijderd",

@@ -5,6 +5,29 @@ const assert = require('node:assert/strict');
 const DH = require('../lib/doc-home.js');
 const DK = require('../lib/doc-kinds.js');
 const S = require('../lib/writer-schema.js');
+const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+
+test('New tiles show translated format openings; Blank stays empty', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../papers.js'), 'utf8');
+  const from = src.indexOf("    const tiles = "), to = src.indexOf('    const band = ', from), calls = [];
+  const h = () => ({ addEventListener() {} });
+  vm.runInNewContext(src.slice(from, to), { ST: require('../lib/writer-styles.js'), TH: { tile: (f, v) => calls.push([f.id, v]) }, h,
+    t: (k) => `translated ${k}`, fresh: () => '', labelOf: () => '', TILE: .17 });
+  for (const [id, values] of calls) {
+    const text = DH.flat(require('../lib/writer-format.js').template(require('../lib/writer-styles.js').get(id), values));
+    if (id === 'plain') assert.equal(text, '');
+    else for (const k of ['Your name', 'Instructor', 'Course', 'Date', 'Title']) assert.ok(text.includes(`translated ${k}`), `${id}: ${k}`);
+  }
+});
+
+test('every Documents catalogue keeps its singular and plural', () => {
+  const I = require('../lib/i18n.js');
+  for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
+    require(`../i18n/${lang}.js`);
+    assert.equal(typeof globalThis.GZ_LANGS[lang]['{n} documents'], 'object', lang);
+    assert.notEqual(I.t('{n} documents', { n: 1 }, lang).slice(2), I.t('{n} documents', { n: 2 }, lang).slice(2), lang);
+  }
+});
 
 test('a title: the student\'s, else the stored one, else the first line, else untitled', () => {
   assert.equal(DH.titleOf({ named: true, title: 'Mine' }, 'First line', 'Untitled document'), 'Mine');

@@ -3302,6 +3302,7 @@
   "Export .docx": ".docx exportieren",
   "Paper": "Arbeit",
   "{n} words": {"one": "{n} Wort", "other": "{n} Wörter"},
+  "Choose up to 20 files at a time.": "Wähle bis zu 20 Dateien auf einmal.",
   "Grid": "Raster",
   "Make a copy": "Kopie erstellen",
   "Deleted": "Gelöscht",
