@@ -101,6 +101,10 @@ module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
         }));
       }), `${tag}: sidebar chrome and native Rubric are topmost across the card`);
       check(await page.locator('#criterion-1').evaluate((e) => { const r = e.getBoundingClientRect(); return e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), `${tag}: criterion controls are topmost at their visual positions`);
+      check(await page.locator('main > aside').evaluate((e) => {
+        const r = e.getBoundingClientRect(), host = document.querySelector('[data-gz-sidebar-host]'), y = r.top + r.height / 2;
+        return [r.left + 0.5, r.right - 0.5].every((x) => e.contains(document.elementFromPoint(x, y))) && [r.left - 1.5, r.right + 1.5].every((x) => host.contains(document.elementFromPoint(x, y)));
+      }), `${tag}: the card opens exactly on the native Rubric`);
       if (r.projected) {
         await page.locator('#criterion-1').click(); await page.locator('#criterion-1').focus(); await page.keyboard.press('Enter');
         check(await page.evaluate(() => nativeClicks['criterion-1'] === 2), `${tag}: native pointer and keyboard handlers still work`);
