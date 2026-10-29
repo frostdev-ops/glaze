@@ -109,6 +109,8 @@ const measure = () => {
     await page.mouse.move(Math.round(wheel.x), Math.round(wheel.y));
     await page.mouse.wheel(0, 400); await pause(400);
     const off = await page.evaluate(measure);
+    if (!off.content) console.log('off scroll geometry', await page.evaluate(() => ['[class*="makeStylesbaseBody-"]', '[class*="makeStylescontentRoot-"]', '.gz-fx-instructions'].map((sel) => { const el = document.querySelector(sel), cs = getComputedStyle(el), r = el.getBoundingClientRect(); return { sel, rect: r.toJSON(), client: el.clientHeight, scroll: el.scrollHeight, style: el.getAttribute('style'), display: cs.display, visibility: cs.visibility, overflow: cs.overflow, flex: cs.flex, point: document.elementFromPoint(r.left + 100, Math.max(r.top, 230) + 80)?.outerHTML.slice(0, 300) }; })));
+
     check(off.base === 0 && off.content > 300 && Math.abs(off.title.y - offTop.title.y) <= 1, 'off with its setting, the content scrolls under the title, as Ultra has it', { body: off.base, content: off.content, title: [offTop.title.y, off.title.y] });
     await shot('setting-off-scrolled');
     check(errors.length === 0, 'no page errors', errors);
