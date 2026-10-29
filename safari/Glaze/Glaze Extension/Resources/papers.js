@@ -581,3 +581,75 @@
     await home();
   }).catch((e) => console.error(e));
 })();
+
+// ---- embedded: Documents as a page of the school's site (features/settingspage.js). It shows, and the worker takes its
+// writes, only once this document claims the one-use pass Glaze's page sends it after its hello (lib/background.js
+// 'glaze:papers'): a site framing this page itself gets an empty one. It talks to that page over the pass's MessageChannel:
+//   frame → page: opened { at } (this document's query once the list or a document shows), leave (Close, Escape);
+//   page → frame: go { at } (Back or Forward to the list or a document).
+// A link to another of Documents' addresses replaces this document, so the tab's history is the page's to keep.
+if (window.top !== window) (() => {
+  const root = document.documentElement, $ = (id) => document.getElementById(id);
+  const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return navigator.language || 'en'; } })();
+  let port = null, told = false;
+  root.setAttribute('data-embedded', '');
+  root.style.setProperty('opacity', '0', 'important');
+  document.body.inert = true;
+  const leave = () => port?.postMessage({ type: 'leave' });
+  // Back or Forward in the tab: where its entry says, or (here already, or nowhere Documents goes) where this is.
+  const go = (at) => { if (/^(\?[^#]*)?$/.test(at) && at !== location.search) location.replace(`papers.html${at}`); else port?.postMessage({ type: 'opened', at: location.search }); };
+  // Close: at the end of a document's top bar, or level with the list's heading.
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'gd-btn';
+  for (const [k, v] of [['background', 'var(--gz-surface)'], ['color', 'var(--gz-ink)'], ['border', '1px solid var(--gz-line-strong)'], ['flex', 'none']]) close.style.setProperty(k, v);
+  close.addEventListener('click', leave);
+  const align = () => {
+    const h = $('heading'), main = $('list');
+    if (!h || close.parentNode !== main) return;
+    close.style.setProperty('top', `${h.offsetTop + (h.offsetHeight - close.offsetHeight) / 2}px`);
+    close.style.setProperty('right', `${main.clientWidth - h.offsetLeft - h.offsetWidth}px`);
+  };
+  const place = () => {
+    if (close.isConnected) return true;
+    const paper = root.dataset.mode === 'paper', at = paper ? document.querySelector('.gp-top') : $('list');
+    if (!at || at.hidden) return false;
+    close.textContent = GZ_I18N.t('Close', {}, locale);
+    if (!paper) { close.style.setProperty('position', 'absolute'); addEventListener('resize', align); }
+    at.append(close);
+    align();
+    return true;
+  };
+  const update = () => {
+    if (port && !told && (root.dataset.mode === 'paper' || $('list')?.hidden === false)) { told = true; port.postMessage({ type: 'opened', at: location.search }); }
+    if (place() && told) seen.disconnect();
+  };
+  const seen = new MutationObserver(update);
+  seen.observe(root, { attributes: true, attributeFilter: ['data-mode'] });
+  seen.observe(document.body, { childList: true });
+  if ($('list')) seen.observe($('list'), { attributes: true, attributeFilter: ['hidden'] });
+  addEventListener('message', async (e) => {
+    const p = e.ports?.[0];
+    if (port || !p || e.source !== parent || e.data?.type !== 'glaze:papers' || typeof e.data.pass !== 'string') return;
+    const ok = await Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:papers', op: 'claim', pass: e.data.pass })).then((r) => r?.ok === true, () => false);
+    if (!ok || port) { p.close(); return; }
+    port = p;
+    port.onmessage = ({ data }) => { if (data?.type === 'go' && typeof data.at === 'string') go(data.at); };
+    root.style.removeProperty('opacity');
+    document.body.inert = false;
+    update();
+  });
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest?.('a[href]');
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || (a.target && a.target !== '_self') || a.hasAttribute('download')
+      || a.href.split(/[?#]/)[0] !== location.href.split(/[?#]/)[0]) return;
+    e.preventDefault();
+    location.replace(a.href);
+  });
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || e.target.closest?.('input, select, textarea, dialog, [role="dialog"], [role="menu"], [contenteditable]:not([contenteditable="false"])')) return;
+    e.preventDefault();
+    leave();
+  });
+  parent.postMessage({ type: 'glaze:papers:hello' }, '*');
+})();
