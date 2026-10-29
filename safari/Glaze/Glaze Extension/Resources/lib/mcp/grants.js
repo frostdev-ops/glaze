@@ -40,7 +40,7 @@ var GZ_MCP_GRANTS = globalThis.GZ_MCP_GRANTS || (() => {
     const hash = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([str(peer?.exe), str(clientName)])));
     return base32(new Uint8Array(hash, 0, 10));
   };
-  const paired = (rec) => isObj(rec) && !rec.declined?.pair;
+  const paired = (rec) => isObj(rec) && rec.declined?.pair === undefined;
   const granted = (rec, group) => paired(rec) && rec.grants?.[group] === true;
 
   // The apps, over an IndexedDB (the worker's; a test's fake). now: the clock for at, used and declines.
@@ -73,9 +73,13 @@ var GZ_MCP_GRANTS = globalThis.GZ_MCP_GRANTS || (() => {
     const list = () => tx('readonly', (s, done) => { const r = s.getAll(); r.onsuccess = () => done(r.result.map(app).filter(Boolean).sort((a, b) => a.at - b.at)); }).then((v) => v || []);
     // Pairs the app with exactly these groups granted, keeping when it was first paired and its other groups' declines.
     const pair = async (peer, clientName, groups) => {
-      if (!Array.isArray(groups) || !groups.every((g) => T().isGroup(g))) return null;
-      const id = await appId(peer, clientName), at = now();
-      const rec = { id, name: cut(str(clientName), LIMIT.name), exe: cut(str(peer?.exe), LIMIT.exe), verified: peer?.verified === true, at, used: at, grants: Object.fromEntries(groups.map((g) => [g, true])) };
+      if (!Array.isArray(groups)) return null;
+      groups = [...groups];
+      if (!groups.every((g) => T().isGroup(g))) return null;
+      // Keep the identity and grants together across the asynchronous hash.
+      const exe = str(peer?.exe), name = str(clientName), verified = peer?.verified === true;
+      const id = await appId({ exe }, name), at = now();
+      const rec = { id, name: cut(name, LIMIT.name), exe: cut(exe, LIMIT.exe), verified, at, used: at, grants: Object.fromEntries(groups.map((g) => [g, true])) };
       return tx('readwrite', (s, done) => {
         const r = s.get(id);
         r.onsuccess = () => { const was = app(r.result), next = { ...rec, at: was?.at ?? at, declined: without(was?.declined, ['pair', ...groups]) }; s.put(next, id); done(next); };
@@ -102,15 +106,22 @@ var GZ_MCP_GRANTS = globalThis.GZ_MCP_GRANTS || (() => {
     outcome: (v) => OUTCOMES.includes(v),
     ms: (v) => Number.isFinite(v) && v >= 0,
   };
+  const activity = (row) => {
+    if (!isObj(row)) return null;
+    const kept = {};
+    for (const [k, valid] of Object.entries(SHAPE)) { const v = row[k]; if (valid(v)) kept[k] = v; }
+    return Object.hasOwn(kept, 'outcome') ? kept : null;
+  };
   // local: storage.local's { get, set }. Rows are written in the order recorded; a failed write never blocks a call.
   let writes = Promise.resolve();
   const record = (local, row) => {
-    if (!isObj(row) || !OUTCOMES.includes(row.outcome)) return writes;
-    const kept = Object.fromEntries(Object.keys(SHAPE).filter((k) => SHAPE[k](row[k])).map((k) => [k, row[k]]));
+    const kept = activity(row);
+    if (!kept) return writes;
     return (writes = writes.then(async () => {
       try {
         const rows = (await local.get(CALLS))[CALLS];
-        await local.set({ [CALLS]: [...(Array.isArray(rows) ? rows.slice(-(LIMIT.calls - 1)) : []), kept] });
+        const history = Array.isArray(rows) ? rows.map(activity).filter(Boolean).slice(-(LIMIT.calls - 1)) : [];
+        await local.set({ [CALLS]: [...history, kept] });
       } catch { /* The activity list must never block a call. */ }
     }));
   };
