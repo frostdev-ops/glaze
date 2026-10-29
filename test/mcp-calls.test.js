@@ -918,3 +918,20 @@ test('review: both routing arguments are removed from tool args', async () => {
   await io.call('routed_read', { account: A, document: 'doc-1' });
   assert.deepEqual(got, {});
 });
+
+test('review: a cache tool cannot claim a tab source without a refresh or page requirement', async () => {
+  const io = make();
+  await io.pair();
+  io.tools.add({ name: 'cache_read', kind: 'read', group: 'courses', description: 'Cache.', parameters: S.obj({}),
+    run: async () => ({ source: 'tab', items: [] }) });
+  assert.equal((await io.call('cache_read')).structuredContent.source, 'cache');
+});
+
+test('review: an oversized account envelope cannot defeat the 12k response cap', async () => {
+  const io = make();
+  await io.pair();
+  io.accounts = [{ account: `https://school.instructure.com/${'x'.repeat(13000)}` }];
+  const r = await io.call('due_list');
+  assert.ok(text(r).length <= LOOP.LIMIT.output, String(text(r).length));
+  if (r.structuredContent) assert.deepEqual(JSON.parse(text(r)), r.structuredContent);
+});
