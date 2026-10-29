@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.6 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 4.0.0 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -46,11 +46,11 @@ MOODLE
 
 NA SUA ESCOLA
 
-Funciona desde a instalação em instructure.com, blackboard.com e moodlecloud.com. A instalação também pede acesso a frostdev.io e share.frostdev.io; outros hosts são solicitados conforme necessário. Adicione o endereço próprio da sua escola em Configurações › Privacidade e dados › Sites; ali, “Fazer backup…” e “Restaurar…” salvam tudo em um só arquivo. O Glaze nunca altera notas, entrega trabalhos nem envia mensagens, e as notas simuladas ficam no seu dispositivo.
+Funciona desde a instalação em instructure.com, blackboard.com e moodlecloud.com. A instalação também pede acesso a frostdev.io e share.frostdev.io; outros hosts são solicitados conforme necessário. Adicione o endereço próprio da sua escola em Configurações › Privacidade e dados › Sites; ali, “Fazer backup…” e “Restaurar…” salvam tudo em um só arquivo. O Glaze nunca altera notas. Entregar trabalhos ou enviar mensagens exige uma ação sua. Após sua confirmação, o Writer pode anexar seu .docx e entregá-lo pelo Blackboard. As notas simuladas ficam no seu dispositivo.
 
 PRIVACIDADE
 
-As configurações acompanham a sincronização do Chrome ou do Firefox, se ela estiver ativada, com apelidos de cursos, escolhas de GPA e alguns identificadores de escola, curso e conta. Dados dos cursos, anotações, tarefas e backups do que você digita ficam no seu dispositivo. O Glaze lê o seu LMS com a sua sessão e só escreve quando você pede (um visto no planejador, um apelido ou uma cor de curso do Canvas, sair da conta, o modo de edição do Moodle, marcar um aviso como lido ao abri-lo no Canvas ou em um fórum do Moodle com registro automático de leituras). As prévias e o Blackboard não marcam nada como lido. As rubricas são somente para leitura. Fontes da web e imagens de fundo escolhidas fazem requisições de rede comuns. Vídeos e animações por link são buscados sem cookies, referência nem redirecionamentos; os metadados identificadores do contêiner são removidos, mas os fluxos codificados e os pixels visíveis permanecem. Arquivos antigos que não podem ser limpos ficam no dispositivo e não são compartilhados; os esboços das abas de cursos ficam na memória e nunca são enviados para lugar nenhum. O compartilhamento só começa quando você cria, entra ou retoma uma sessão. As sessões compartilhadas e os canais de mods opcionais são criptografados, e o servidor de retransmissão não consegue lê-los; um mod com acesso a dados de cursos e à rede pode enviar esses dados a hosts autorizados. Esses serviços recebem dados de conexão, como seu endereço IP. O Glaze não coleta nem vende seus dados. Política completa: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
+As configurações acompanham a sincronização do Chrome ou do Firefox, se ela estiver ativada, com apelidos de cursos, escolhas de GPA e alguns identificadores de escola, curso e conta. Dados dos cursos, anotações, tarefas e backups do que você digita são armazenados no seu dispositivo. A IA fica desligada por padrão. Se você ativá-la para um recurso, um modelo no dispositivo trabalha localmente; um provedor ou endpoint escolhido recebe o contexto desse recurso, como seu rascunho e os materiais do trabalho. O Glaze lê o seu LMS com a sua sessão e só escreve quando você pede (um visto no planejador, um apelido ou uma cor de curso do Canvas, sair da conta, o modo de edição do Moodle, marcar um aviso como lido ao abri-lo no Canvas ou em um fórum do Moodle com registro automático de leituras). As prévias e o Blackboard não marcam nada como lido. As rubricas são somente para leitura. Fontes da web e imagens de fundo escolhidas fazem requisições de rede comuns. Vídeos e animações por link são buscados sem cookies, referência nem redirecionamentos; os metadados identificadores do contêiner são removidos, mas os fluxos codificados e os pixels visíveis permanecem. Arquivos antigos que não podem ser limpos ficam no dispositivo e não são compartilhados; os esboços das abas de cursos ficam na memória e nunca são enviados para lugar nenhum. O compartilhamento só começa quando você cria, entra ou retoma uma sessão. As sessões compartilhadas e os canais de mods opcionais são criptografados, e o servidor de retransmissão não consegue lê-los; um mod com acesso a dados de cursos e à rede pode enviar esses dados a hosts autorizados. Esses serviços recebem dados de conexão, como seu endereço IP. O Glaze não coleta nem vende seus dados. Política completa: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
 Código aberto (MIT): https://github.com/frostdev-ops/glaze
 
@@ -58,15 +58,13 @@ Canvas é uma marca da Instructure, Inc. Blackboard é uma marca da Anthology In
 
 ## Release notes
 
-NOVO NA 3.4.6
+NOVO NA 4.0.0
 
-• Aparência › Ponteiro tem o interruptor “Ponteiro personalizado”: desligado, você usa o ponteiro do sistema em todas as páginas; ligado, sua escolha volta.
-• “Fazer backup…” e “Restaurar…”, em Configurações › Privacidade e dados, salvam e trazem de volta tudo em um só arquivo: configurações, estilos, tarefas, notas, grades de aulas e mais.
-• O backup de rascunhos guarda uma cópia própria em cada aba e, no Blackboard, mantém uma resposta até ela ser publicada.
-• Restaurar as Notas traz de volta nomes alterados, itens movidos e a ordem das pastas.
-• Grade de aulas: um calendário importado de novo atualiza os dias de folga, as aulas não mudam mais de horário entre fusos, uma grade grande demais avisa em vez de mostrar “Salvo”, e “Parar a leitura” interrompe um link de calendário.
-• As configurações cabem em janelas estreitas.
-• Páginas no endereço próprio da sua escola não carregam mais sem o Glaze enquanto ele é atualizado.
-• Mods e widgets leem só as notas de avaliação, as tarefas e a grade de aulas da conta conectada na página.
-• Os avisos abrem em uma janela do Glaze, com prévia ao passar o cursor.
-• As rubricas recolhidas do Canvas abrem em uma janela; no Blackboard Ultra, aparecem na página quando há espaço e, se não, na janela.
+• Blackboard Ultra: o Glaze Writer traz um editor para discussões, mensagens e trabalhos. O editor do Blackboard continua disponível no menu ⋯.
+• Os trabalhos usam MLA 9, APA 7, Chicago 17 ou seu próprio formato, com páginas reais, verificação do formato, citações, notas de rodapé, versões e importação e exportação .docx.
+• A estrutura segue seus títulos ou a organização de um texto sem títulos. As fontes podem ser importadas de uma bibliografia existente.
+• Ortografia, gramática e correção automática funcionam no seu dispositivo. As provas têm apenas revisão, sem IA nem preenchimento de texto.
+• A IA opcional completa a frase atual e comenta seu texto. Os comentários avaliam a rubrica e as instruções, explicam as notas estimadas ou por que não há pontuação e podem dar nome às seções existentes. O Glaze nunca redige por você.
+• Revise seu trabalho antes de enviar o .docx pelo próprio upload do Blackboard. “Fazer backup…” e “Restaurar…” incluem trabalhos, versões, seu dicionário e fontes salvas.
+• Configurações › IA conecta provedores pelo nome com suas chaves ou um modelo neste dispositivo, com um modelo para tudo ou um por recurso. As visualizações “Simples” e “Avançado” oferecem endpoints próprios e controles do modelo. A IA fica desligada até você ativá-la.
+• As abas de cursos do Blackboard mantêm suas páginas, a busca segue os links nativos dos cursos e desativar a opção de lembrar sua posição cancela qualquer restauração pendente.

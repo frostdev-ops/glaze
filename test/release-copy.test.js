@@ -46,25 +46,26 @@ for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || '
   assert.ok(!/(?:ten tabs|zehn Tabs|diez pestañas|dix onglets|tien tabbladen|dez abas)/.test(listing(lang)), 'no settings editor in ten tabs');
 });
 
-const backup = {
-  '': ['NEW IN 3.4.6', 'Look › Pointer', 'Custom pointer', 'Back up…', 'Restore…', 'Draft backup', 'Restoring Notes', 'Stop reading', 'narrow windows', 'signed-in account'],
-  de: ['NEU IN 3.4.6', 'Aussehen › Mauszeiger', '„Eigener Mauszeiger“', '„Sichern…“', '„Wiederherstellen…“', 'Entwurfssicherung', 'Wiederherstellen von Notizen', '„Lesen abbrechen“', 'schmale Fenster', 'angemeldet'],
-  es: ['NOVEDADES DE 3.4.6', 'Aspecto › Puntero', '«Puntero personalizado»', '«Hacer una copia…»', '«Restaurar…»', 'copia de borradores', 'restaurar las Notas', '«Dejar de leer»', 'ventanas estrechas', 'sesión iniciada'],
-  fr: ['NOUVEAUTÉS DE LA VERSION 3.4.6', 'Apparence › Pointeur', '« Pointeur personnalisé »', '« Sauvegarder… »', '« Restaurer… »', 'sauvegarde de brouillon', 'Restaurer les Notes', '« Arrêter la lecture »', 'fenêtres étroites', 'compte connecté'],
-  nl: ['NIEUW IN 3.4.6', 'Uiterlijk › Aanwijzer', '“Eigen aanwijzer”', '“Back-up maken…”', '“Herstellen…”', 'Back-up van concepten', 'herstellen van Notities', '“Stoppen met lezen”', 'smalle vensters', 'ingelogd'],
-  'pt-BR': ['NOVO NA 3.4.6', 'Aparência › Ponteiro', '“Ponteiro personalizado”', '“Fazer backup…”', '“Restaurar…”', 'backup de rascunhos', 'Restaurar as Notas', '“Parar a leitura”', 'janelas estreitas', 'conta conectada'],
+const writerRelease = {
+  '': ['NEW IN 4.0.0', 'Spelling, grammar and autocorrect', 'no AI or completion', 'rubric and instructions', 'explains estimated grades or why no score is available', 'Glaze never drafts.'],
+  de: ['NEU IN 4.0.0', 'Rechtschreibung, Grammatik und Autokorrektur', 'ohne KI oder Textvervollständigung', 'Bewertungsraster und Anweisungen', 'erklärt geschätzte Noten oder warum keine Punktzahl möglich ist', 'Glaze verfasst keine Entwürfe.'],
+  es: ['NOVEDADES DE 4.0.0', 'La ortografía, la gramática y la autocorrección', 'sin IA ni autocompletado', 'la rúbrica y las instrucciones', 'explican las notas estimadas o por qué no hay puntuación', 'Glaze nunca redacta por ti.'],
+  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.0', 'Orthographe, grammaire et correction automatique', 'sans IA ni complétion', 'la grille et les consignes', 'expliquent les notes estimées ou l’absence de score', 'Glaze ne rédige jamais à votre place.'],
+  nl: ['NIEUW IN 4.0.0', 'Spelling, grammatica en autocorrectie', 'zonder AI of aanvulling', 'het beoordelingsschema en de instructies', 'verklaart geschatte cijfers of waarom er geen score is', 'Glaze schrijft nooit een tekst voor je.'],
+  'pt-BR': ['NOVO NA 4.0.0', 'Ortografia, gramática e correção automática', 'sem IA nem preenchimento de texto', 'a rubrica e as instruções', 'explicam as notas estimadas ou por que não há pontuação', 'O Glaze nunca redige por você.'],
 };
-for (const [lang, expected] of Object.entries(backup)) test(`3.4.6 release notes ${lang || 'en'} name the pointer switch, one-file Back up and Restore, drafts, Notes, the schedule, narrow settings and mods' account`, () => {
+for (const [lang, expected] of Object.entries(writerRelease)) test(`4.0.0 release notes ${lang || 'en'} describe Writer, local proofing, optional AI feedback and paper backups`, () => {
   const text = listing(lang), block = part(text, 'Release notes');
   const context = {};
   if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
   const ui = (key) => lang ? context.GZ_LANGS[lang][key] : key;
-  assert.ok(block.includes(`${ui('Look')} › ${ui('Pointer')}`), 'the release notes use the UI path');
-  for (const key of ['Back up…', 'Restore…', 'Custom pointer']) assert.ok(block.includes(ui(key)), key);
+  assert.ok(block.includes(`${ui('Settings')} › ${ui('AI')}`), 'the release notes use the AI settings UI path');
+  for (const key of ['Back up…', 'Restore…']) assert.ok(block.includes(ui(key)), key);
+  for (const term of ['Glaze Writer', 'MLA 9', 'APA 7', 'Chicago 17', '.docx']) assert.ok(block.includes(term), term);
   for (const term of expected) assert.ok(block.includes(term), term);
   assert.ok(!/\b(?:CI|audit)\b/i.test(block), 'no internal process in store copy');
   assert.ok(!/(?:Export and import all your settings|Exportiere und importiere alle|Exporta e importa todos|Exportez et importez tous|Exporteer en importeer al|Exporte e importe todas)/.test(text), 'one-file backup replaces settings export');
-  assert.ok(description(lang).includes(expected[3]), 'the description names Back up… too');
+  for (const key of ['Back up…', 'Restore…']) assert.ok(description(lang).includes(ui(key)), `the description names ${key} too`);
 });
 
 // Typing effects (3.3.6) draw at the caret: the listing says they never read what is typed and stay out of password fields.
@@ -81,9 +82,9 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
   for (const term of expected) assert.ok(text.includes(term), term);
 });
 
-test('3.4.6 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '3.4.6');
-  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '3.4.6');
+test('4.0.0 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.0');
+  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.0');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('scripts/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));

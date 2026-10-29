@@ -6,9 +6,11 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.0] — 2026-10-28
+
 ### Added
 
-- Blackboard: **Glaze Writer**, Glaze's editor in discussion, message, assignment and test boxes, with Blackboard's own editor one click away in its ⋯ menu. Discussions and messages get a selection toolbar, word and source targets from the prompt, quotes and Ctrl/⌘+Enter to post; assignments become papers on real pages in MLA 9, APA 7, Chicago 17 or your own format, with format checks, footnotes, versions, .docx import and export, a Papers page, and a submit sheet that attaches the .docx through Blackboard's upload. Spelling, grammar and autocorrect run on your device; citations look up a DOI, ISBN or web address when you click; tab completion and AI feedback run only when turned on in Settings → AI. Tests get proofing only. Papers, the dictionary and saved sources are in **Back up…**.
+- Blackboard: **Glaze Writer**, Glaze's editor in discussion, journal, message, assignment and test boxes, with Blackboard's own editor one click away in its ⋯ menu. Discussions and messages get a selection toolbar, word and source targets from the prompt, quotes and Ctrl/⌘+Enter to post; assignments become papers on real pages in MLA 9, APA 7, Chicago 17 or your own format, with format checks, footnotes, versions, .docx import and export, a Papers page, and a submit sheet that attaches the .docx through Blackboard's upload. Spelling, grammar and autocorrect run on your device; citations look up a DOI, ISBN or web address when you click; tab completion and AI feedback run only when turned on in Settings → AI. Tests get proofing only. Papers, the dictionary and saved sources are in **Back up…**.
 
 ### Changed
 
@@ -16,6 +18,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Fixed
 
+- Writer: rubric estimates keep weighted point scales and score verified citation-style mismatches. On-device feedback reads attachments in bounded passes; image descriptions and unchanged outline sections are reused. Safari completion preserves typing while suggestions appear.
+- Safari: Writer recognizes the extension frame's canonical origin and renews idle AI connections when Safari retires its worker.
 - Blackboard: returning to Content leaves folder expansion and outline scrolling to Blackboard, avoiding replay work on large courses. Live course-tab switches retain their actual pages.
 - Palette and course search use Blackboard’s canonical content links and native navigation for explicit course destinations. Discussion body results follow the native discussion link when its title is unambiguous.
 - Turning Remember your place off cancels pending restoration; searching in a course tab no longer marks the native course page as edited.

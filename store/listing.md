@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.4.6
+# Chrome Web Store listing — Glaze 4.0.0
 
 ## Name
 
@@ -54,11 +54,11 @@ MOODLE
 
 AT YOUR SCHOOL
 
-Works from install on instructure.com, blackboard.com and moodlecloud.com. Install access also covers frostdev.io and share.frostdev.io; other hosts are requested when needed. Add your school's own address in Settings › Privacy and data › Sites; Back up… and Restore… there save everything in one file. Glaze never changes grades, submits coursework or sends messages, and what-if scores stay on your device.
+Works from install on instructure.com, blackboard.com and moodlecloud.com. Install access also covers frostdev.io and share.frostdev.io; other hosts are requested when needed. Add your school's own address in Settings › Privacy and data › Sites; Back up… and Restore… there save everything in one file. Glaze never changes grades. Submitting coursework or sending messages requires your action. Writer can attach your .docx and submit it through Blackboard after you confirm. What-if scores stay on your device.
 
 PRIVACY
 
-Settings follow Chrome or Firefox sync if it is on, including course nicknames, GPA choices and some school, course and account identifiers. Coursework records, notes, tasks and typing backups stay on your device. Glaze reads your LMS with your session and writes only when you ask (a planner tick, a Canvas nickname or color, Sign out, Moodle's Edit mode, marking announcements read when opened in Canvas or in Moodle forums with automatic read tracking); previews and Blackboard send no read mark. Rubrics are read-only. Chosen web fonts and background images make ordinary network requests. Linked videos and animations are fetched without cookies, referrers or redirects; identifying container metadata is removed, but encoded streams and visible pixels remain. Older files that cannot be cleaned stay local and are not shared; course tab sketches stay in memory and are never sent anywhere. Sharing starts only when you create, join or resume a session. Optional share sessions and mod channels are encrypted so the relay cannot read them; a mod granted course data and network access can send that data to its granted hosts. These services receive connection data such as your IP address. Glaze does not collect or sell your data. Full policy: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
+Settings follow Chrome or Firefox sync if it is on, including course nicknames, GPA choices and some school, course and account identifiers. Coursework records, notes, tasks and typing backups are stored on your device. AI is off by default. If you enable it for a feature, an on-device model works locally; a provider or endpoint you choose receives that feature's context, such as your draft and assignment materials. Glaze reads your LMS with your session and writes only when you ask (a planner tick, a Canvas nickname or color, Sign out, Moodle's Edit mode, marking announcements read when opened in Canvas or in Moodle forums with automatic read tracking); previews and Blackboard send no read mark. Rubrics are read-only. Chosen web fonts and background images make ordinary network requests. Linked videos and animations are fetched without cookies, referrers or redirects; identifying container metadata is removed, but encoded streams and visible pixels remain. Older files that cannot be cleaned stay local and are not shared; course tab sketches stay in memory and are never sent anywhere. Sharing starts only when you create, join or resume a session. Optional share sessions and mod channels are encrypted so the relay cannot read them; a mod granted course data and network access can send that data to its granted hosts. These services receive connection data such as your IP address. Glaze does not collect or sell your data. Full policy: https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
 Open source (MIT): https://github.com/frostdev-ops/glaze
 
@@ -66,18 +66,16 @@ Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Antholog
 
 ## Release notes
 
-NEW IN 3.4.6
+NEW IN 4.0.0
 
-• Look › Pointer has a Custom pointer switch: off gives you the system pointer on every page, on brings your choice back.
-• Back up… and Restore… in Settings › Privacy and data save and bring back everything in one file: settings, Looks, tasks, notes, schedules and more.
-• Draft backup keeps each tab's own copy, and on Blackboard keeps a reply until it is posted.
-• Restoring Notes brings back renames, moves and folder order.
-• Class schedule: a reimported calendar updates its days off, classes no longer shift across time zones, a schedule over its limits says so instead of "Saved", and Stop reading stops a calendar link.
-• Settings fit narrow windows.
-• Pages on your school's own address no longer load without Glaze while it updates.
-• Mods and widgets read only the signed-in account's grades, to-dos and schedule.
-• Announcements open in a Glaze pop-up, with a preview on hover.
-• Collapsed Canvas rubrics open in a pop-up; on Blackboard Ultra, rubrics show in the page when there's room, otherwise in the pop-up.
+• Blackboard Ultra: Glaze Writer brings an editor to discussions, messages and assignments, with Blackboard's own editor in its ⋯ menu.
+• Papers use MLA 9, APA 7, Chicago 17 or your own format, with real pages, format checks, citations, footnotes, versions and .docx import and export.
+• The outline follows your headings or the structure of an essay without headings. Sources can be imported from an existing bibliography.
+• Spelling, grammar and autocorrect run on your device. Tests get proofing only, with no AI or completion.
+• Optional AI finishes the current sentence and comments on your writing. Feedback assesses the rubric and instructions, explains estimated grades or why no score is available, and can label existing sections. Glaze never drafts.
+• Review your paper before submitting its .docx through Blackboard's own upload. Back up… and Restore… include papers, versions, your dictionary and saved sources.
+• Settings › AI connects named providers with their keys or a model on this device, with one model for everything or one per feature. Simple and Advanced views keep custom endpoints and model controls in reach. AI stays off until you turn it on.
+• Blackboard course tabs keep their pages, search follows native course links, and turning Remember your place off cancels pending restoration.
 
 ## Single-purpose statement
 

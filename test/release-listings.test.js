@@ -174,7 +174,7 @@ test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listi
   assert.ok(firefox.description.includes('Beschreibung nur Firefox') && !firefox.description.includes('Beschreibung nur Chrome') && !firefox.description.includes('Beschreibung nur Safari'), 'AMO filters the description too');
   assert.ok(firefox.notes.includes('nur Firefox') && !firefox.notes.includes('nur Chrome') && !firefox.notes.includes('nur Safari'));
   assert.ok(apple.whatsNew.includes('nur Safari') && !apple.whatsNew.includes('nur Chrome') && !apple.whatsNew.includes('nur Firefox'));
-  assert.ok(firefox.notes.includes('Entwurfssicherung') && apple.whatsNew.includes('Entwurfssicherung'), 'unlabelled bullets go everywhere');
+  assert.ok(firefox.notes.includes('Glaze Writer') && apple.whatsNew.includes('Glaze Writer'), 'unlabelled bullets go everywhere');
   assert.ok(!listings.fr.firefox.notes.includes('seulement Safari') && listings.fr.apple.whatsNew.includes('seulement Safari'), 'French spacing before the colon');
 });
 
@@ -276,12 +276,14 @@ test('the listings command is a dry run: it reads the stores, prints what would 
   const { main } = await import('../scripts/store-release.mjs');
   const { readListings } = await load();
   const listings = readListings(real, version);
+  // The command reads committed HEAD; a pending version bump in this checkout is not its selected source.
+  const selectedVersion = JSON.parse(require('node:child_process').execFileSync('git', ['show', 'HEAD:manifest.json'], { cwd: root, encoding: 'utf8' })).version;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-dry-run-'));
   const { privateKey } = require('node:crypto').generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
   fs.writeFileSync(path.join(dir, 'k.p8'), privateKey.export({ type: 'pkcs8', format: 'pem' }));
   const config = path.join(dir, 'stores.env');
   fs.writeFileSync(config, 'AMO_JWT_ISSUER=user:1:2\nAMO_JWT_SECRET=amo-secret\nASC_KEY_PATH=k.p8\nASC_KEY_ID=KEY123\nASC_ISSUER_ID=issuer-uuid\n');
-  const kit = path.join(root, 'release', version, 'chrome-web-store', 'listing-de.txt'), kitBefore = fs.existsSync(kit) && fs.statSync(kit).mtimeMs;
+  const kit = path.join(root, 'release', selectedVersion, 'chrome-web-store', 'listing-de.txt'), kitBefore = fs.existsSync(kit) && fs.statSync(kit).mtimeMs;
   const answers = [
     [/addons\.mozilla\.org\/api\/v5\/addons\/addon\/glaze@frostdev\.io\/$/, { summary: { 'en-US': listings.en.firefox.summary }, description: {} }],
     [/addons\.mozilla\.org\/.*\/versions\//, null],
@@ -310,7 +312,7 @@ test('the listings command is a dry run: it reads the stores, prints what would 
   const output = lines.join('\n');
   assert.notEqual(exitCode, 1, output);
   assert.ok(calls.length && calls.every((c) => c.startsWith('GET ')), calls.join('\n'));
-  assert.match(output, new RegExp(`^Chrome de: paste kit write \\(release/${version.replace(/\./g, '\\.')}/chrome-web-store/listing-de\\.txt\\)$`, 'm'));
+  assert.match(output, new RegExp(`^Chrome de: paste kit write \\(release/${selectedVersion.replace(/\./g, '\\.')}/chrome-web-store/listing-de\\.txt\\)$`, 'm'));
   assert.match(output, /^Firefox en-US: description add, release notes add$/m);
   assert.match(output, /^Firefox pt-BR: summary add, description add, release notes add$/m);
   assert.match(output, /^Apple MAC_OS en-US: What's New change$/m);
