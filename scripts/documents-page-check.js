@@ -396,6 +396,28 @@ const check = async (name, test) => {
         if (await page.evaluate(() => !!document.getElementById('gz-settings-page'))) { await page.keyboard.press('Escape'); await closed(page).catch(() => {}); }
       }
     });
+    await check('ultra: a document opens editable when its frame\'s pass is claimed after the editor has loaded', async () => {
+      // The worker trusts a claimed frame once the claim is kept in session storage (claimFrame). Holding that write lets the
+      // editor reach its first write (restoring a document from Trash, a tab's unsaved copy) before the frame is trusted.
+      const live = context.serviceWorkers()[0] || worker;
+      await live.evaluate(() => {
+        const s = chrome.storage.session, set = s.set.bind(s);
+        globalThis.__claimSet = set;
+        s.set = async (v) => { if (Object.keys(v || {}).some((k) => k.startsWith('papersFrame:'))) await new Promise((r) => setTimeout(r, 3000)); return set(v); };
+      });
+      try {
+        f = await openFromBar(page);
+        await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+        f = await shown(page);
+        await until(() => f.evaluate(() => !!globalThis.GZ_WRITER_PAPER?.current() && document.querySelector('.ProseMirror')?.isContentEditable === true), 'the document loaded and editable after a slow claim');
+        await f.locator('.gp-top > .gd-btn').click();
+        await closed(page);
+        await atMark(page);
+      } finally {
+        await live.evaluate(() => { if (globalThis.__claimSet) chrome.storage.session.set = globalThis.__claimSet; });
+        if (await page.evaluate(() => !!document.getElementById('gz-settings-page'))) { await page.keyboard.press('Escape'); await closed(page).catch(() => {}); }
+      }
+    });
     await check('ultra: the page heard no document of the student\'s, and its history holds none', async () => {
       const heard = await page.evaluate(() => __heard);
       assert.ok(heard.length && heard.every((m) => !m.includes(KEY.slice(4)) && !m.includes('pass')), JSON.stringify(heard));
