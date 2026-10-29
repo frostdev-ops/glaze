@@ -652,9 +652,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         }`;
         document.body.append(absorbSheet);
         pv(slot, 'height', `${e.getBoundingClientRect().height}px`);
-        const hr = host.el.getBoundingClientRect(), x = sr.left - hr.left, y = sr.top - hr.top, right = x + sr.width, bottom = y + e.getBoundingClientRect().height;
-        // The owned background accepts events everywhere except the exact native Rubric aperture.
-        absorbSheet.textContent += `@media screen { #gz-sidebar.gz-sb-fixed::before { content:""; position:absolute; inset:0; z-index:-1;
+        // The owned background accepts events everywhere except the exact native Rubric aperture: fixed, as the Rubric is,
+        // over the card inside its border. An absolute one filled only the padding box, short of a classic scrollbar's gutter.
+        const hr = host.el.getBoundingClientRect(), hc = css(host.el), b = (k) => parseFloat(hc[`border${k}Width`]) || 0;
+        const box = { left: hr.left + b('Left'), top: hr.top + b('Top'), width: hr.width - b('Left') - b('Right'), height: hr.height - b('Top') - b('Bottom') };
+        const x = sr.left - box.left, y = sr.top - box.top, right = x + sr.width, bottom = y + e.getBoundingClientRect().height;
+        absorbSheet.textContent += `@media screen { #gz-sidebar.gz-sb-fixed::before { content:""; position:fixed; left:${box.left}px; top:${box.top}px; width:${box.width}px; height:${box.height}px; z-index:-1;
           border-radius:inherit; background:var(--gz-sb-fill,var(--gz-surface)); pointer-events:auto;
           clip-path:polygon(evenodd,0 0,100% 0,100% 100%,0 100%,0 0,${x}px ${y}px,${right}px ${y}px,${right}px ${bottom}px,${x}px ${bottom}px,${x}px ${y}px,0 0);
         } }`;
