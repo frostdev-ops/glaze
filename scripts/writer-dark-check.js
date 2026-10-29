@@ -139,6 +139,8 @@ const READ = () => {
             check(r.white.join() === '255,255,255', `${name}: white-marked text is unchanged (${r.white})`);
             for (const k of ['ink', 'red', 'navy', 'link', 'note']) check(ratio(r[k], r.sheet) >= 4.5, `${name}: ${k} reads on the page (${ratio(r[k], r.sheet).toFixed(2)}:1, ${r[k]})`);
             check(ratio(r.border, r.sheet) >= 1.8, `${name}: table borders show (${ratio(r.border, r.sheet).toFixed(2)}:1)`);
+            const blackBand = r.bands.find((b) => b.name === 'black');
+            check(ratio(blackBand.bg, r.sheet) >= 1.5, `${name}: black highlight differs from the sheet (${ratio(blackBand.bg, r.sheet).toFixed(2)}:1, ${blackBand.bg})`);
             for (const b of r.bands) for (const k of ['plain', 'black', 'white']) check(ratio(b[k], b.bg) >= 4.5, `${name}: ${b.name} band, ${k} text ${ratio(b[k], b.bg).toFixed(2)}:1 (${b[k]} on ${b.bg})`);
           } else {
             check(r.sheet.join() === '255,255,255', `${name}: the sheet is white`);

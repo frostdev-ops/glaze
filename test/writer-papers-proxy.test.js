@@ -71,3 +71,27 @@ test('the worker takes merge only from papers.html\'s top frame, for one key\'s 
     assert.ok(w.store.local.writerPapers.some((r) => r.key === k), 'and its row');
   }
 });
+
+
+test('merge refuses malformed documents and versions before writing any record', async () => {
+  const w = require('./helpers/worker-env.cjs')(), k = PA.newKey(), EXT = 'chrome-extension://x';
+  const sender = { id: 'glaze', frameId: 0, url: `${EXT}/papers.html`, origin: EXT, tab: { id: 4 } };
+  const paper = { key: k, doc: doc('Safe.'), updated: 1, revision: 1 };
+  for (const records of [
+    { [`writerPaper:${k}`]: { ...paper, doc: { type: 'no-such-node' } } },
+    { [`writerPaper:${k}`]: { ...paper, doc: { type: 'doc', content: [{ type: 'text', text: 'invalid block' }] } } },
+    { [`writerPaper:${k}`]: { ...paper, updated: 'yesterday' } },
+    { [`writerPaper:${k}`]: { ...paper, kind: 'unknown' } },
+    { [`writerPaper:${k}`]: paper, [`writerVersions:${k}`]: [null] },
+    { [`writerPaper:${k}`]: paper, [`writerVersions:${k}`]: [{ id: 'broken', at: 1, doc: { type: 'no-such-node' } }] },
+  ]) {
+    assert.deepEqual(await w.send({ type: 'glaze:writerPapers', op: 'merge', args: [records] }, sender), { ok: false, error: 'bad' });
+    assert.equal(w.store.local[`writerPaper:${k}`], undefined);
+  }
+});
+
+test('a page cannot call the worker-only submitted writer through its local store', async (t) => {
+  const was = globalThis.chrome; t.after(() => { globalThis.chrome = was; });
+  globalThis.chrome = { storage: { local: memory() }, runtime: { sendMessage: async () => { throw Error('unexpected'); } } };
+  assert.equal(PA.open().submitted, undefined);
+});

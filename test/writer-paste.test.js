@@ -175,7 +175,7 @@ test('pasted headings retain source emphasis and mixed bold text', () => {
 });
 
 // Legibility (lib/writer-color.js): a run's colour stays only where the paper shows it, on its highlight or else the white
-// page, at 2:1 or more. Word's clipboard as it writes shading (background beside mso-shading and mso-pattern), cell and
+// page, at 1.6:1 or more. Word's clipboard as it writes shading (background beside mso-shading and mso-pattern), cell and
 // page colours (bgcolor) and theme colours (mso-themecolor beside the hex).
 const fromWord = (body, page = '') => `<html xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta name=ProgId content=Word.Document></head><body lang=EN-US${page}><div class=WordSection1>${body}</div></body></html>`;
 const runOf = (html, needle) => marksOn(read(P.normalize(html).html), needle);
@@ -214,4 +214,19 @@ test('legibility: Automatic is no colour; a colour is read against the highlight
   assert.deepEqual(runOf(bright, 'pale grey'), {}, 'a pale grey (1.4:1) is the paper\'s ink');
   const web = `<p style="background-color: rgb(30, 30, 30); color: rgb(230, 230, 230);">dark mode page</p>`;
   assert.deepEqual(runOf(web, 'dark mode page'), {}, 'a dark-mode site\'s light text');
+});
+
+
+test('transparent and translucent paste colours become visible ink on the retained surface', () => {
+  assert.deepEqual(runOf('<p style="color:transparent">visible</p>', 'visible'), {});
+  assert.deepEqual(runOf('<p style="color:rgba(0,0,0,.05)">pale alpha</p>', 'pale alpha'), {});
+  assert.deepEqual(runOf('<p style="color:rgba(192,0,0,.5)">half red</p>', 'half red'), { color: { color: 'E08080' } });
+  assert.deepEqual(runOf('<p><span style="background:navy;color:rgba(255,255,255,50%)">half white</span></p>', 'half white'), { color: { color: '8080C0' }, highlight: { color: 'darkBlue' } });
+  assert.deepEqual(runOf('<body style="background:#111;color:#eeeeee"><table><tr><td style="background:#fff"><p>light cell</p></td></tr></table></body>', 'light cell'), {});
+});
+
+test('Writer copy and paste retains explicit black, pale and tinted colours exactly', () => {
+  const original = S.parse(S.paper, '<p><span data-gz-color="000000">black</span><span data-gz-color="D9D9D9">pale</span><span data-gz-color="4472C4">accent</span></p>');
+  const html = S.serialize(S.paper, original);
+  assert.equal(S.serialize(S.paper, read(P.normalize(html.replace('<p>', '<p data-pm-slice="1 1 []">')).html)), html);
 });

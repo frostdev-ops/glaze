@@ -259,3 +259,11 @@ test('a word taken out of the personal dictionary is unknown again: the worker f
   assert.deepEqual([built, disposed], [2, 1], 'Harper built again without it');
   assert.deepEqual(imported.at(-1), ['sethe']);
 });
+
+
+test('Settings groups standalone and recovery documents so every counted paper is visible', () => {
+  const WE = require('../lib/editor-writer.js'), PA = require('../lib/writer-papers.js');
+  const keys = [PA.newKey(), 'recovery:1234'];
+  const groups = WE.byCourse(keys.map((key) => ({ key })));
+  assert.deepEqual(groups, [{ id: 'documents', name: 'Documents', keys }]);
+});

@@ -447,6 +447,11 @@ const HARNESS = `(() => {
     await pause(300);
     rec = await stored(k2);
     check(rec.title === 'My own title' && rec.named === true && await d.evaluate(() => document.querySelector('.gp-top h1 input').value === 'My own title'), 'a title typed in the editor is saved and stays');
+    await d.fill('.gp-top h1 input', 'Title still being typed');
+    await home.evaluate((k) => GZ_WRITER_PAPERS.open().save(k, { title: 'Another home rename', named: true }), k2);
+    await until(() => d.evaluate(() => GZ_WRITER_PAPER.current().paper()?.title === 'Another home rename'), 'incoming rename read');
+    check(await d.inputValue('.gp-top h1 input') === 'Title still being typed', 'an incoming rename preserves an in-progress title');
+    await until(async () => (await stored(k2))?.title === 'Title still being typed', 'in-progress title saved');
     saved.titled = await shot(d, 'document-titled.png');
     await home.close();
     await d.close();
