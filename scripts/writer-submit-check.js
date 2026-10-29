@@ -650,6 +650,23 @@ const HARNESS = `(() => {
     check((await versions()).filter((r) => r === 'view').length === viewsBefore + 1, 'the paper kept as a version first');
     check((await p.evaluate(() => __text())).includes('Pages only.') && !/Morrison 35\./.test(await p.evaluate(() => __text())), 'then its text goes into Ultra\'s box again, footnotes left in the paper');
     await until(async () => (await fullSet()) === false, 'writer.full saved off');
+    for (const width of [480, 479]) {
+      await el.evaluate((f, width) => { f.style.width = `${width}px`; }, width);
+      await until(() => fr.evaluate((width) => { const b = document.querySelector('.gw-bar .gp-full'), label = b.querySelector('.gp-full-name'); return !!label.getClientRects().length === (width >= 480) && b.getAttribute('aria-label') === 'Full writer'; }, width), `switch at ${width}px`);
+      check(true, `Full writer at ${width}px keeps its accessible name and ${width >= 480 ? 'shows' : 'hides'} the visible label`);
+    }
+    await el.evaluate((f) => { f.style.width = 'calc(100% + 6px)'; });
+    // A frame crash during failed native sync recovers its complete paper rather than its projection.
+    await p.evaluate(() => { const c = document.querySelector('.ql-container[data-gz-writer-id]'); window.__savedPaperQuill = c.__quill; delete c.__quill; });
+    const recoveryJSON = await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.insertText('Recovered last edit. ', v.state.selection.from)); return v.state.doc.toJSON(); });
+    const oldCompact = el;
+    await fr.evaluate(() => setTimeout(() => location.reload(), 0));
+    await until(() => oldCompact.evaluate((f) => !f.isConnected), 'crashed compact frame retired');
+    el = await until(() => p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'), 'replacement paper frame');
+    fr = await until(() => el.contentFrame(), 'replacement paper document');
+    await until(() => fr.evaluate(() => !!GZ_WRITER_PAPER.current()?.key()), 'recovered paper loaded');
+    check(JSON.stringify(await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON())) === JSON.stringify(recoveryJSON), 'a crash mid-sync recovers the last edit, notes, page breaks and pictures');
+    await p.evaluate(() => { document.querySelector('.ql-container[data-gz-writer-id]').__quill = __savedPaperQuill; });
     for (const name of ['Feedback', 'Checks']) {
       await fr.click('#more');
       await fr.click(`#menu [role="menuitem"]:text-is("${name}")`);

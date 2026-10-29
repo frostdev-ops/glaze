@@ -74,6 +74,8 @@ const measure = () => {
         await page.setViewportSize({ width: w, height: h });
         await page.goto(site + ATTEMPT);
         await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-accent').trim() && document.querySelector('h1.js-header-text'), null, { timeout: 20000 });
+        await page.mouse.move(0, 0);
+        await page.evaluate(() => document.fonts.ready);
         await pause(900);
         const tag = `${slug(look)} ${w}`;
         const top = await page.evaluate(measure);
@@ -99,9 +101,12 @@ const measure = () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(site + ATTEMPT);
     await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-accent').trim() && document.querySelector('h1.js-header-text'), null, { timeout: 20000 });
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => document.fonts.ready);
     await pause(900);
     const offTop = await page.evaluate(measure);
-    await page.mouse.move(Math.round(offTop.title.x + 40), Math.round((offTop.foot.y + offTop.title.b) / 2));
+    const wheel = await page.locator('.gz-fx-instructions').evaluate((el) => { const r = el.getBoundingClientRect(), c = el.closest('[class*="makeStylescontentRoot-"]').getBoundingClientRect(); return { x: r.left + Math.min(100, r.width / 2), y: Math.max(r.top, c.top) + 80 }; });
+    await page.mouse.move(Math.round(wheel.x), Math.round(wheel.y));
     await page.mouse.wheel(0, 400); await pause(400);
     const off = await page.evaluate(measure);
     check(off.base === 0 && off.content > 300 && Math.abs(off.title.y - offTop.title.y) <= 1, 'off with its setting, the content scrolls under the title, as Ultra has it', { body: off.base, content: off.content, title: [offTop.title.y, off.title.y] });

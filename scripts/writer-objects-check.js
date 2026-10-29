@@ -196,6 +196,7 @@ const HARNESS = `(() => {
     saved.image = await shot(p, 'image-popover-dark.png');
     // A corner handle: drag the south-east corner right; the picture keeps its shape and the width shows as it changes.
     const handle = await fr.$('.gzo-img.ProseMirror-selectednode .gzo-h[data-c="se"]');
+    await handle.scrollIntoViewIfNeeded(); await handle.hover();
     const hb = await handle.boundingBox(), before = await fr.evaluate(() => { const i = document.querySelector('.gzo-img img'); return i.offsetHeight / i.offsetWidth; });
     await p.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
     await p.mouse.down();
@@ -258,7 +259,9 @@ const HARNESS = `(() => {
     await fr.hover('.gzo-grid i[data-r="4"][data-c="3"]');
     check(await fr.evaluate(() => document.querySelector('.gzo-gridlbl').textContent === '3 × 4'), 'the grid shows its size as you point (3 × 4)');
     saved.picker = await shot(p, 'table-picker-dark.png');
-    await fr.click('.gzo-grid i[data-r="4"][data-c="3"]');
+    // Hover already locates the fixed menu through the iframe. A second locator click may scroll the frame again.
+    await fr.hover('.gzo-grid i[data-r="4"][data-c="3"]');
+    await p.mouse.down(); await p.mouse.up();
     let tables = find(await doc(), 'table');
     const cellText = (t, r, c) => (t.content[r].content[c].content || []).map((x) => (x.content || []).map((y) => y.text || '').join('')).join('');
     check(tables.length === 1 && tables[0].content.length === 4 && tables[0].content[0].content.length === 3, 'a click puts in a 3 × 4 table');
