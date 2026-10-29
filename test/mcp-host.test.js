@@ -6,11 +6,13 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { EventEmitter } = require('node:events');
 
 const F = require('../mcp/lib/agent-frames.js');
 const R = require('../mcp/lib/rendezvous.js');
 const L = require('../mcp/lib/lines.js');
 const H = require('../mcp/lib/host.js');
+const M = require('../mcp/lib/mux.js');
 
 const { PKG, ORIGIN, scratch, hmac, until, runDir, browser, agent, opened, lineFrom } = require('./helpers/mcp-pipe.cjs');
 const VERSION = require('../mcp/package.json').version;
@@ -37,6 +39,80 @@ test('lines: cut at "\\n" across any chunking, whole UTF-8, and a line over the 
   const one = [], p2 = L.cutter((s) => one.push(s), 4);
   assert.throws(() => p2(Buffer.from('ok\nabcde\n')), (e) => e.code === 'too-long');
   assert.deepEqual(one, ['ok']);
+});
+
+// A socket whose writes drain immediately, or stay queued, without relying on OS buffer sizes.
+const socket = ({ stalled = false } = {}) => {
+  const s = new EventEmitter();
+  s.paused = true;
+  s.writableLength = 0;
+  s.writes = [];
+  s.pause = () => { s.paused = true; };
+  s.resume = () => { s.paused = false; };
+  s.destroy = () => { s.destroyed = true; };
+  s.end = () => { s.ended = true; };
+  s.write = (b) => { s.writes.push(b); if (stalled) s.writableLength += b.length; return !stalled; };
+  return s;
+};
+
+test('mux: a full browser pipe pauses agents even when open or close filled it, then drain resumes them', () => {
+  let full = false;
+  const mux = M.create({ send: () => !full });
+  const one = socket(), two = socket(), three = socket();
+  mux.open(one, { verified: false });
+  assert.equal(one.paused, false);
+  full = true;
+  mux.open(two, { verified: false });
+  assert.equal(one.paused, true, 'open can fill stdout');
+  assert.equal(two.paused, true);
+  full = false;
+  mux.release();
+  assert.equal(one.paused, false);
+  assert.equal(two.paused, false);
+  full = true;
+  one.emit('end');
+  assert.equal(two.paused, true, 'close can fill stdout too');
+  mux.open(three, { verified: false });
+  assert.equal(three.paused, true, 'a newly admitted socket stays paused');
+  full = false;
+  mux.release();
+  assert.equal(three.paused, false);
+  mux.end();
+});
+
+test('mux: browser output over the queue limit closes the sender, including within one data chunk', () => {
+  let pending = 0;
+  const frames = [];
+  const mux = M.create({ queue: 1024, pending: () => pending, send: (f) => {
+    frames.push(f);
+    pending += N.encode(f).length;
+    return false;
+  } });
+  const s = socket();
+  mux.open(s, { verified: false });
+  s.emit('data', Buffer.from(`${'x'.repeat(2 * F.PIECE)}\nlater\n`));
+  assert.deepEqual(frames.at(-1), { t: 'close', c: 1, why: 'overflow' });
+  assert.equal(frames.filter((f) => f.t === 'line').length, 1, 'stop the current split as soon as it overflows');
+  assert.equal(s.destroyed, true);
+  assert.equal(mux.size(), 0);
+  mux.release();
+  s.emit('data', Buffer.from('after close\n'));
+  assert.equal(frames.at(-1).t, 'close', 'nothing follows close');
+});
+
+test('mux: worker pieces stream immediately, with a per-line byte limit even when the agent drains', () => {
+  const frames = [], s = socket();
+  const mux = M.create({ line: 4, send: (f) => { frames.push(f); return true; } });
+  mux.open(s, { verified: false });
+  mux.frame({ t: 'line', c: 1, d: 'é', m: 1 });
+  assert.equal(Buffer.concat(s.writes).toString(), 'é', 'do not join worker pieces');
+  mux.frame({ t: 'line', c: 1, d: 'é' });
+  assert.equal(Buffer.concat(s.writes).toString(), 'éé\n', 'exactly the limit is allowed');
+  mux.frame({ t: 'line', c: 1, d: 'abcd', m: 1 });
+  mux.frame({ t: 'line', c: 1, d: 'e' });
+  assert.deepEqual(frames.at(-1), { t: 'close', c: 1, why: 'too-long' });
+  assert.equal(Buffer.concat(s.writes).toString(), 'éé\nabcd', 'the overlong piece is not written');
+  assert.equal(s.destroyed, true);
 });
 
 // ---- the host ---------------------------------------------------------------------------------------------------------
@@ -185,6 +261,20 @@ for (const [how, end] of [['the worker\'s bye', (b) => b.send({ t: 'bye' })], ['
     assert.deepEqual(b.left((f) => f.t === 'close'), [], 'nothing more to a worker that has gone');
   });
 }
+
+test('a bye in the same read as hello cleans up a socket whose listen is still starting', async (t) => {
+  const home = scratch(t), b = browser(t, home);
+  await b.take('hello', (f) => f.t === 'hello');
+  const at = Date.now();
+  b.p.stdin.write(Buffer.concat([
+    N.encode({ t: 'hello', v: 1, glaze: '4.0.0', instance: 'starting' }),
+    N.encode({ t: 'bye' }),
+  ]));
+  const { code, at: done } = await b.exited;
+  assert.equal(code, 0, b.err());
+  assert.ok(done - at < 1000, `exited after ${done - at} ms`);
+  assert.deepEqual(fs.readdirSync(runDir(home)), [], 'no socket or run file left behind');
+});
 
 test('a client that stops reading is closed past 32 MiB queued; a line past 64 MiB closes with too-long', async (t) => {
   const home = scratch(t);
