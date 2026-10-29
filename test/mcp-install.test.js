@@ -226,7 +226,7 @@ test('launchers: sh with absolute, quoted paths and exec; a .bat with CRLF, %* a
   const bat = L.bat({ node: 'C:\\Program Files\\nodejs\\node.exe', script: 'C:\\Users\\100%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js', browser: 'edge' });
   // `& exit /b` on the same line: cmd reads a .bat line by line from where it left off, so a rewrite while a host runs
   // must leave nothing after the command for it to read.
-  assert.equal(bat, '@echo off\r\n"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b\r\n');
+  assert.equal(bat, '@echo off\r\n@setlocal DisableDelayedExpansion\r\n"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b\r\n');
   assert.equal(/[^\r]\n/.test(bat), false, 'every line ends in CRLF');
   assert.equal(L.text('win32', { node: 'C:\\n.exe', script: 'C:\\s.js', browser: 'b' }), L.bat({ node: 'C:\\n.exe', script: 'C:\\s.js', browser: 'b' }));
   assert.equal(L.text('linux', { node: '/n', script: '/s', browser: 'b' }), L.sh({ node: '/n', script: '/s', browser: 'b' }));
@@ -351,7 +351,7 @@ test('setup on Windows: manifests and .bat launchers in LOCALAPPDATA, one reg.ex
     assert.equal(m.name, HOST);
     assert.equal(m.path, path.join(hosts, `${b}.bat`));
     assert.deepEqual(b === 'firefox' ? m.allowed_extensions : m.allowed_origins, b === 'firefox' ? ['glaze@frostdev.io'] : [ORIGIN]);
-    assert.equal(fs.readFileSync(m.path, 'utf8'), `@echo off\r\n"C:\\Program Files\\nodejs\\node.exe" "${script}" host --browser=${b} %* & exit /b\r\n`);
+    assert.equal(fs.readFileSync(m.path, 'utf8'), `@echo off\r\n@setlocal DisableDelayedExpansion\r\n"C:\\Program Files\\nodejs\\node.exe" "${script}" host --browser=${b} %* & exit /b\r\n`);
   }
   assert.equal(fs.existsSync(path.join(hosts, 'vivaldi.json')), false);
   assert.equal(fs.existsSync(path.join(hosts, 'vivaldi.bat')), false);
