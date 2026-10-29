@@ -15,6 +15,7 @@ All notable changes to Glaze are documented here. The format follows
 ### Changed
 
 - Settings → AI: providers by name (OpenAI, Anthropic, Google Gemini, OpenRouter, xAI, Mistral, Groq and DeepSeek), each connected with only its key, beside the model on this device; one model for every feature or a feature's own, each with the effort its model takes; and Simple or Advanced, where you add your own OpenAI-compatible endpoints (Ollama and LM Studio a click away) and tune each feature. An endpoint set up before moves over by itself, with its key and model.
+- Motion starts at Expressive. Updating moves Subtle to Expressive once; Off stays Off.
 
 ### Fixed
 
