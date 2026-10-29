@@ -244,7 +244,14 @@ test("Documents opens beside the bar as Settings does: a pass for each document 
     history.back();
     await tick();
     assert.equal(page.showing(), 'papers');
-    assert.equal(frameOf().src, 'chrome-extension://glaze/papers.html?paper=doc%3Aabc');
+    assert.equal(frameOf().src, 'chrome-extension://glaze/papers.html', 'the host never sets a document key in an iframe URL');
+    f = frameOf(); windowOf(f);
+    on.message({ source: f.contentWindow, origin: 'chrome-extension://glaze', data: { type: 'glaze:papers:hello' } });
+    await tick();
+    port = ports.at(-1); told = heard(port);
+    port.postMessage({ type: 'opened', at: '' });
+    await tick();
+    assert.deepEqual(told, [{ type: 'go', at: '?paper=doc%3Aabc' }], 'the destination goes only through the private channel');
     // Escape in the page leaves, back past every entry it added.
     on.keydown({ key: 'Escape', preventDefault() {} });
     assert.equal(page.showing(), '');
