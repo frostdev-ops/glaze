@@ -32,7 +32,7 @@ const OVERRIDE = {
   ...Object.fromEntries(['radius', 'glass', 'depth', ...Object.keys(D.GZ_SPEC.look).filter((k) => /^(surface|shadow)/.test(k))].map((k) => [`look.${k}`, 'look/surfaces'])),
   ...Object.fromEntries(Object.entries(ENHANCE).flatMap(([section, keys]) => keys.map((key) => [`enhance.${key}`, section]))),
   // Settings → Writer: its sections by what each changes.
-  ...Object.fromEntries([['papers', ['format', 'zoom', 'ruler', 'lightPage', 'versions']], ['typing', ['autocorrect.typos', 'autocorrect.capitalI', 'autocorrect.doubles', 'autocorrect.smart', 'pasteAsk']],
+  ...Object.fromEntries([['papers', ['format', 'zoom', 'ruler', 'lightPage', 'full', 'versions']], ['typing', ['autocorrect.typos', 'autocorrect.capitalI', 'autocorrect.doubles', 'autocorrect.smart', 'pasteAsk']],
     ['proofing', ['proofing', 'dialect']], ['discussions', ['compose.markdown', 'compose.target', 'compose.quote']], ['submitting', ['submit.rememberText']]]
     .flatMap(([section, keys]) => keys.map((key) => [`writer.${key}`, `writer/${section}`]))),
   ...Object.fromEntries(['icsDue', 'icsTasks', 'icsPlan', 'icsGs', 'icsClasses', 'icsRange'].map((key) => [`todo.${key}`, 'study/schedule'])),

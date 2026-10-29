@@ -61,7 +61,7 @@ const LOOKS = [
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
 
     for (const L of LOOKS) {
-      const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: L.preset, colors: G.GZ_PRESETS?.find?.(([n]) => n === L.preset)?.[1], bg: { ...G.GZ_DEFAULTS.bg, ...L.bg }, look: { ...G.GZ_DEFAULTS.look, ...L.look },
+      const settings = G.GZ_SANITIZE({ writer: { full: true }, navbar: { on: false }, footer: false, preset: L.preset, colors: G.GZ_PRESETS?.find?.(([n]) => n === L.preset)?.[1], bg: { ...G.GZ_DEFAULTS.bg, ...L.bg }, look: { ...G.GZ_DEFAULTS.look, ...L.look },
         enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
       await worker.evaluate(async ({ settings }) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(settings); }, { settings });
       const p = await context.newPage();

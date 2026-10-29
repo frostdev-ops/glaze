@@ -87,8 +87,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     for (const [el, was] of s.inert) el.inert = was;
     if (s.back?.isConnected) s.back.focus();
   };
+  // The compact box sends text through Ultra's own Submit: the sheet there is a brought file's only (writer-import.js).
   const open = async (api = P()?.current(), file = null) => {
-    if (!api || api.importing?.() || frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
+    if (!api || api.importing?.() || frame.mode() !== 'paper' || frame.kind() !== 'assignment' || (!file && api.compact?.())) return;
     if (sheet) { sheet.first.focus(); return; }
     const opening = ++openings;
     await P().need(['lib/writer-submit.js']);

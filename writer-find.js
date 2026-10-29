@@ -226,9 +226,11 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
     say(t('{n} replaced', { n: hits.length }));
   };
 
-  // Over the paper's pages, at the top right under its toolbar; in compose, inside the box's top right.
+  // Over the paper's pages, at the top right under its toolbar; in compose and a paper's compact box, inside the box's top
+  // right (moved there, or back, as it opens after a switch of view).
+  const pages = () => F.mode() === 'paper' && document.documentElement.dataset.view !== 'compact';
   const place = () => {
-    if (bar.hidden || F.mode() !== 'paper') return;
+    if (bar.hidden || !pages()) return;
     const c = document.querySelector('.gp-canvas')?.getBoundingClientRect();
     bar.style.top = `${Math.max(8, (c ? c.top : 0) + 12)}px`;
     bar.style.right = `${Math.max(8, innerWidth - (c ? c.right : innerWidth) + 20)}px`;
@@ -237,9 +239,11 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   const open = (replacing) => {
     const v = view();
     if (!v) return;
-    if (!bar.isConnected) {
+    if (!bar.isConnected || bar.classList.contains('ge-fixed') !== pages()) {
       label();
-      if (F.mode() === 'paper') { bar.classList.add('ge-fixed'); document.body.append(bar, live); } else document.getElementById('gw').append(bar, live);
+      bar.classList.toggle('ge-fixed', pages());
+      if (pages()) document.body.append(bar, live);
+      else { bar.style.removeProperty('top'); bar.style.removeProperty('right'); document.getElementById('gw').append(bar, live); }
     }
     const sel = v.state.selection, picked = sel.empty ? '' : v.state.doc.textBetween(sel.from, sel.to, '\n');
     anchor = sel.from;

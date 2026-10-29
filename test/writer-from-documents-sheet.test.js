@@ -25,7 +25,7 @@ const sheet = ({ list = async () => rows(), busy = false } = {}) => {
   };
   doc.fire = (el, type, more = {}) => { const e = { type, target: el, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {}, ...more }; el.dispatchEvent(e); return e; };
   const app = {}, notices = [], chosen = [];
-  const ctx = vm.createContext({ document: doc, root, versionsB, current: app, api: app, importing: false, Intl,
+  const ctx = vm.createContext({ document: doc, root, versionsB, current: app, api: app, importing: false, compact: false, Intl,
     PA, ST, store: { list }, h, btn: (props, ...kids) => h('button', props, ...kids), icon: () => h('svg'), t: (k, v) => I.t(k, v, 'en'), nf: String,
     labelOf: () => 'Blank', fromDocs: (...args) => chosen.push(args), toast: (m) => notices.push(m), console: { error() {} },
     GZ_WRITER_SUBMIT_SHEET: { busy: () => busy, opened: () => busy } });
