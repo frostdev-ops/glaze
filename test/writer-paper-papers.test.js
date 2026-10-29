@@ -509,7 +509,10 @@ test('a refused restore-on-open cannot separate the checkpoint from the paper or
 test('native submit dispatch restores a paper trashed after its sending version was saved', async () => {
   let t = 1e12;
   const s = store(), P = PA.open(s, () => t), k = PA.keyOf(K);
-  const sending = await P.save(k, { doc: doc('Submitted words.'), format: 'plain' }, { reason: 'sending' });
+  await P.save(k, { doc: doc('Submitted words.'), format: 'plain' });
+  t += 1000;
+  const sending = await P.save(k, {}, { reason: 'sending' });
+  assert.equal(sending.version.reason, 'sending');
   await P.trash(k); t += 1000;
   const before = await P.get(k);
   await P.submitted(k, sending.version.id);

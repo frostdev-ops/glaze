@@ -856,9 +856,9 @@ const PROBE = ({ lang }) => {
     await apiOpen.evaluate((k) => { GZ_DOCUMENTS.open(k); }, KEPT);
     await until(() => apiOpen.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key()), 'documents.open from Trash');
     check(await apiOpen.evaluate((k) => GZ_WRITER_PAPER.current().key() === k, KEPT) && !('trashed' in (await local(`writerPaper:${KEPT}`))), 'documents.open restores a trashed key before opening it');
-    await apiOpen.close();
     // Keep a trashed record for the mod list's exclusion check below.
-    await home.evaluate((k) => GZ_WRITER_PAPERS.open().trash(k), KEPT);
+    await apiOpen.evaluate((k) => GZ_WRITER_PAPERS.open().trash(k), KEPT);
+    await apiOpen.close();
 
     // ---- a mod on the Documents page: its items, its calls and their limits (lib/modbroker.js, features/mods.js)
     const MOD = 'docsmodaaaaaaaaa';
