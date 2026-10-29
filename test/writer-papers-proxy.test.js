@@ -44,3 +44,30 @@ test('a save that says which revision it builds on keeps a newer one it would re
   const kept = await Promise.all((await worker.versions(KEY)).map((v) => worker.version(KEY, v.id)));
   assert.ok(kept.some((v) => v.reason === 'conflict' && v.doc.content[0].content[0].text === 'Another tab’s.'));
 });
+
+// The home page's delete-Undo puts back one key's paper and versions through the worker, from its own tab only.
+test('the worker takes merge only from papers.html\'s top frame, for one key\'s two records', async () => {
+  const w = require('./helpers/worker-env.cjs')(), EXT = 'chrome-extension://x';
+  const home = { id: 'glaze', frameId: 0, url: `${EXT}/papers.html`, origin: EXT, tab: { id: 4, url: `${EXT}/papers.html` } };
+  const send = (op, args, s = home) => w.send({ type: 'glaze:writerPapers', op, args }, s);
+  for (const k of [PA.newKey(), KEY]) {
+    assert.equal((await send('save', [k, { doc: doc('Kept words.'), title: 'Mine', named: true }])).ok, true);
+    await send('save', [k, { doc: doc('Kept words, then many more words than before to make a version.') }, { reason: 'import' }]);
+    const records = { [`writerPaper:${k}`]: w.store.local[`writerPaper:${k}`], [`writerVersions:${k}`]: w.store.local[`writerVersions:${k}`] };
+    assert.equal((await send('remove', [k])).ok, true);
+    for (const s of [{ ...home, frameId: 2 }, { ...home, tab: undefined }, { ...home, url: `${EXT}/writer.html` }, { ...home, url: `${EXT}/options.html` }, { ...home, origin: 'https://bb.school.test' }, { ...home, id: 'other' }]) {
+      assert.deepEqual(await send('merge', [records], s), { ok: false, error: 'sender' }, JSON.stringify(s));
+    }
+    const other = PA.newKey();
+    for (const bad of [{}, { ...records, [`writerPaper:${other}`]: { ...records[`writerPaper:${k}`], key: other } }, { [`writerPaper:${k}`]: { ...records[`writerPaper:${k}`], key: other } },
+      { [`writerVersions:${k}`]: 'not a list' }, { writerPapers: [] }, { 'writerPaper:doc:nope': { key: 'doc:nope' } }, { [`writerPresets:${k}`]: [] }]) {
+      assert.deepEqual(await send('merge', [bad]), { ok: false, error: 'bad' }, JSON.stringify(Object.keys(bad)));
+    }
+    assert.equal(w.store.local[`writerPaper:${k}`], undefined, 'nothing refused was written');
+    assert.equal((await send('merge', [records])).ok, true);
+    const back = w.store.local[`writerPaper:${k}`];
+    assert.deepEqual([back.title, back.named, back.kind, back.doc.content[0].content[0].text], ['Mine', true, 'paper', 'Kept words, then many more words than before to make a version.']);
+    assert.ok(w.store.local[`writerVersions:${k}`].some((v) => v.reason === 'import'), 'its versions are back');
+    assert.ok(w.store.local.writerPapers.some((r) => r.key === k), 'and its row');
+  }
+});

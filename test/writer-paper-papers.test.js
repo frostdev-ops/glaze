@@ -129,3 +129,48 @@ test('stale formatting changes retain the other editor’s format and import cho
   const versions = await Promise.all((await b.versions(k)).map((v) => b.version(k, v.id)));
   assert.ok(versions.some((v) => v.reason === 'conflict' && v.format === 'apa7' && v.keep === true));
 });
+
+test('a row without kind lists as paper', async () => {
+  const s = store(), P = PA.open(s), k = PA.keyOf(K);
+  s.data.writerPapers = [{ key: k, title: 'Before kinds', course: '', url: '', words: 0, updated: 1, submitted: null }];
+  assert.deepEqual((await P.list()).map((r) => [r.key, r.kind, r.named]), [[k, 'paper', false]]);
+});
+
+test('the index carries kind', async () => {
+  const s = store(), P = PA.open(s, () => 5), k = PA.keyOf(K), d = PA.newKey();
+  await P.save(k, { doc: doc('Assignment.'), title: 'Essay 2' });
+  await P.save(d, { doc: doc('Mine.'), title: 'Notes', named: true });
+  await P.save('later-kind', { kind: 'sheet', title: 'Budget' });
+  assert.deepEqual([(await P.get(k)).kind, (await P.get(k)).named, (await P.get(d)).named, (await P.get('later-kind')).kind], ['paper', false, true, 'sheet']);
+  assert.deepEqual((await P.list()).map((r) => [r.key, r.kind, r.named]), [['later-kind', 'sheet', false], [d, 'paper', true], [k, 'paper', false]]);
+  await P.save(d, { doc: doc('Mine, more.') });
+  assert.equal((await P.get(d)).named, true, 'a later save keeps the typed title');
+});
+
+test('a doc: key saves, lists and removes', async () => {
+  let t = 1000;
+  const s = store(), P = PA.open(s, () => t), k = PA.newKey();
+  assert.match(k, PA.LOCAL);
+  assert.ok(PA.local(k));
+  assert.notEqual(k, PA.newKey());
+  for (const bad of [PA.keyOf(K), 'doc:', 'doc:not-a-uuid', `${k}x`, `x${k}`, null]) assert.equal(PA.local(bad), false, String(bad));
+  assert.equal(PA.keyOf({ school: 'doc', user: k }), null, 'keyOf stays Ultra-only');
+  assert.equal((await P.save(k, { doc: doc(words(300)), title: 'Untitled document' })).version.reason, 'start');
+  t += 1000; await P.save(k, { doc: doc(words(10)) });
+  assert.deepEqual((await P.versions(k)).map((v) => v.reason), ['edit', 'start']);
+  assert.equal((await P.version(k, (await P.versions(k))[0].id)).words, 300);
+  assert.deepEqual((await P.list()).map((r) => [r.key, r.title, r.words, r.course]), [[k, 'Untitled document', 10, '']]);
+  await P.remove(k);
+  assert.deepEqual([await P.get(k), await P.list(), (await P.versions(k)).length], [null, [], 0]);
+});
+
+test('copyOf drops the assignment fields', async () => {
+  const P = PA.open(store(), () => 50), k = PA.keyOf(K);
+  const { paper } = await P.save(k, { doc: doc('Original.'), title: 'Essay 2', courseName: 'ENGL 2110', url: 'https://bb.school.test/x', due: 9, format: 'mla9', keep: true, school: 'bb.school.test', user: '_900_1', course: '_101_1', content: '_7_1' }, { reason: 'submit' });
+  const copy = PA.copyOf(paper, 'Copy of Essay 2', 70);
+  assert.ok(PA.local(copy.key));
+  assert.deepEqual(copy, { key: copy.key, kind: 'paper', doc: doc('Original.'), format: 'mla9', keep: true, title: 'Copy of Essay 2', named: true, created: 70, updated: 70, revision: 0 });
+  copy.doc.content[0].content[0].text = 'Changed.';
+  assert.equal(paper.doc.content[0].content[0].text, 'Original.', 'the copy is its own document');
+  assert.deepEqual(Object.keys(PA.copyOf({ kind: 'sheet', title: 'x' }, 'Copy of x', 1)).sort(), ['created', 'keep', 'key', 'kind', 'named', 'revision', 'title', 'updated']);
+});

@@ -13,6 +13,18 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   // A paper's key, or null unless every part is real: the school's host, and Ultra's ids for the student, course and
   // assignment.
   const keyOf = (k = {}) => (HOST.test(k.school || '') && ID.test(k.user || '') && ID.test(k.course || '') && ID.test(k.content || '') ? `${k.school.toLowerCase()}|${k.user}|${k.course}|${k.content}` : null);
+  // A standalone document's key (the Documents home's New and Make a copy), tied to no assignment.
+  const LOCAL = /^doc:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const local = (k) => typeof k === 'string' && LOCAL.test(k);
+  const newKey = () => `doc:${crypto.randomUUID()}`;
+  // Every key a paper is kept under: an assignment's, a standalone document's, or the stand-in for one whose key never came
+  // (writer-paper.js recovery:).
+  const STORED = /^(?:[a-z0-9.-]{1,253}(?::\d{1,5})?\|_\d+_\d+\|_\d+_\d+\|_\d+_\d+|recovery:[a-z0-9-]{1,64})$/i;
+  const valid = (k) => local(k) || (typeof k === 'string' && STORED.test(k));
+  // A copy as a standalone document: the document and its look only, never the assignment it came from. title: the
+  // caller's, in the student's language.
+  const copyOf = (rec, title, t = Date.now()) => ({ key: newKey(), kind: rec.kind || 'paper', ...(rec.doc !== undefined && { doc: structuredClone(rec.doc) }),
+    ...(rec.format !== undefined && { format: rec.format }), keep: rec.keep === true, title, named: true, created: t, updated: t, revision: 0 });
   const scopeOf = (k = {}) => (HOST.test(k.school || '') && ID.test(k.user || '') ? `${k.school.toLowerCase()}|${k.user}` : null);
   // A document's text size from its JSON: characters and words, a hard break parting words as in the editor's count.
   const measure = (doc) => {
@@ -49,7 +61,8 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       return { ...local, get: async (k) => { const p = await local.get(k); seen.set(k, p?.revision || 0); return p; },
         save: (k, patch, options = {}) => turn(k, () => send('save', [k, patch, { ...options, base: options.base ?? seen.get(k) }])),
         restore: (k, id) => turn(k, () => send('restore', [k, id])), remove: (k) => turn(k, () => send('remove', [k])),
-        savePreset: (scope, p) => send('savePreset', [scope, p]), removePreset: (scope, id) => send('removePreset', [scope, id]) };
+        savePreset: (scope, p) => send('savePreset', [scope, p]), removePreset: (scope, id) => send('removePreset', [scope, id]),
+        merge: (records) => turn(one(records), () => send('merge', [records])) };
     }
     store ||= globalThis.chrome?.storage?.local;
     const get = async (k) => (await store.get(k))[k];
@@ -78,16 +91,19 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     const addVersion = async (k, v) => { const list = await cap([v, ...(await versionsOf(k))]); await store.set({ [VERSIONS + k]: list }); return v; };
     const index = async (paper) => {
       const list = (await get(INDEX)) || [];
-      const row = { key: paper.key, title: paper.title || '', course: paper.courseName || '', url: paper.url || '', words: paper.words || 0, format: paper.format, updated: paper.updated, submitted: paper.submitted || null };
+      const row = { key: paper.key, kind: paper.kind || 'paper', named: paper.named === true, title: paper.title || '', course: paper.courseName || '', url: paper.url || '', words: paper.words || 0, format: paper.format, updated: paper.updated, submitted: paper.submitted || null };
       return [row, ...list.filter((r) => r.key !== paper.key)].slice(0, 2000);
     };
 
-    // Saves the paper under k, merging patch into what's stored. reason: 'auto' (the default: autosave), 'sending' or
+    // Saves the paper under k, merging patch into what's stored; a record written before kinds is a paper, and its title
+    // the assignment's until the student names it (named). reason: 'auto' (the default: autosave), 'sending' or
     // 'submit' (the paper itself kept), 'import' or 'restore' (the doc before it is kept), 'format'. → { paper, version }.
     const save = (k, patch = {}, { reason = 'auto', base = seen.get(k) } = {}) => serial(k, async () => {
       if (typeof k !== 'string' || !k) throw new Error('no paper key');
       const prev = (await get(PAPER + k)) || null, t = now();
       const paper = { ...(prev || { key: k, created: t }), ...patch, key: k, updated: t, revision: (prev?.revision || 0) + 1 };
+      paper.kind ||= 'paper';
+      paper.named = paper.named === true;
       if (patch.doc) paper.words = patch.words ?? measure(patch.doc).words;
       let version = null, history = null;
       const retain = async (v) => { history = await cap([v, ...(history || await versionsOf(k))]); return v; };
@@ -131,7 +147,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       if (!v) return null;
       return save(k, { doc: v.doc, words: v.words, keep: v.keep === true, ...(v.format != null ? { format: v.format } : {}) }, { reason: 'restore' });
     };
-    const list = async () => ((await get(INDEX)) || []).filter((r) => r && typeof r.key === 'string');
+    const list = async () => ((await get(INDEX)) || []).filter((r) => r && typeof r.key === 'string').map((r) => ({ ...r, kind: r.kind || 'paper', named: r.named === true }));
     const remove = (k) => serial(k, async () => {
       await store.remove([PAPER + k, VERSIONS + k]);
       await store.set({ [INDEX]: ((await get(INDEX)) || []).filter((r) => r.key !== k) });
@@ -168,7 +184,17 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     return api;
   };
 
-  return { open, keyOf, scopeOf, measure, CAP, KEYS: { INDEX, PAPER, VERSIONS, PRESETS } };
+  // The key of records that are one paper's record and/or its versions (the home page's delete-Undo), else null.
+  const one = (records) => {
+    if (!records || typeof records !== 'object' || Array.isArray(records)) return null;
+    const names = Object.keys(records), k = names[0]?.replace(/^writer(?:Paper|Versions):/, '');
+    const ok = names.length && names.length <= 2 && valid(k) && names.every((n) => n === PAPER + k || n === VERSIONS + k)
+      && (!(PAPER + k in records) || (records[PAPER + k] && typeof records[PAPER + k] === 'object' && records[PAPER + k].key === k))
+      && (!(VERSIONS + k in records) || Array.isArray(records[VERSIONS + k]));
+    return ok ? k : null;
+  };
+
+  return { open, keyOf, scopeOf, measure, LOCAL, local, newKey, valid, copyOf, one, CAP, KEYS: { INDEX, PAPER, VERSIONS, PRESETS } };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_PAPERS; else GZ_WRITER_PAPERS;
