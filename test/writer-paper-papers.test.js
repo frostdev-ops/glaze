@@ -252,3 +252,22 @@ test('delete then merge keeps every original version at the cap', async () => {
   await P.remove(k); await P.merge(records);
   assert.deepEqual((await P.versions(k)).map((v) => v.id), records[`writerVersions:${k}`].map((v) => v.id));
 });
+
+test('merge keeps an older record with a different format as a version', async () => {
+  const P = PA.open(store(), () => 10), k = PA.newKey();
+  await P.save(k, { doc: doc('Same words.'), format: 'apa7' });
+  await P.merge({ [`writerPaper:${k}`]: { key: k, doc: doc('Same words.'), format: 'plain', updated: 1 } });
+  const kept = await Promise.all((await P.versions(k)).map((v) => P.version(k, v.id)));
+  assert.ok(kept.some((v) => v.reason === 'restore' && v.format === 'plain'));
+});
+
+test('a refused undo merge cannot publish the document without its versions', async () => {
+  const s = store(), P = PA.open(s), k = PA.newKey();
+  await P.save(k, { doc: doc('Kept.'), format: 'plain' });
+  const records = { [`writerPaper:${k}`]: await P.get(k), [`writerVersions:${k}`]: structuredClone(s.data[`writerVersions:${k}`]) };
+  await P.remove(k);
+  const before = structuredClone(s.data), set = s.set;
+  s.set = async (patch) => { if (Object.hasOwn(patch, `writerVersions:${k}`)) throw Error('QUOTA_BYTES'); return set(patch); };
+  await assert.rejects(P.merge(records), /QUOTA_BYTES/);
+  assert.deepEqual(s.data, before);
+});

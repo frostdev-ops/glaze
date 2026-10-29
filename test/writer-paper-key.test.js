@@ -397,3 +397,12 @@ test('a rename from the Documents home stays: the title follows it, unsaved typi
   await tell();
   assert.deepEqual([titleIn.value, record(local).title], ['Mine', 'Mine']);
 });
+
+test('a recovered typed title remains visible when its first save is refused', async () => {
+  const local = memory(), ss = session(), { extra, titleIn } = standalone('?format=plain');
+  ss.setItem(`gz-paper-pending:${DOC}`, JSON.stringify({ key: DOC, base: 0, rename: true, record: { key: DOC, doc: docOf('Notes.'), format: 'plain', title: 'Recovered title', named: true } }));
+  local.set = async () => { throw Error('QUOTA_BYTES'); };
+  const f = await frame({ local, ss, context: {}, extra: { ...extra, console: { error() {} } } });
+  assert.equal(f.$.dirty(), true);
+  assert.equal(titleIn.value, 'Recovered title');
+});
