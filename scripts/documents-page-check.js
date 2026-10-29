@@ -210,16 +210,18 @@ const check = async (name, test) => {
       await f.locator('.gd-menu [data-act="delete"]').click();
       await until(async () => Number.isFinite((await record(KEY))?.trashed), 'in Trash again');
       await f.locator('#gd-trash').click();
-      await page.setViewportSize({ width: 640, height: 900 });
-      await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).focus();
-      await page.keyboard.press('Shift+F10');
-      assert.deepEqual(await f.locator('.gd-menu [role="menuitem"]').allTextContents(), ['Restore', 'Delete forever']);
-      assert.equal(await f.locator('#gd-count').textContent(), '1 documents');
-      assert.ok(await f.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '640px embedded Trash fits');
-      await shoot(page, f, 'inpage-ultra-trash-640');
-      await f.locator('.gd-menu [data-act="restore"]').click();
-      assert.equal(await f.evaluate(() => document.activeElement?.id), 'gd-q', 'Restore of the last card focuses search');
-      await page.setViewportSize({ width: 1280, height: 900 });
+      const viewport = page.viewportSize();
+      try {
+        await page.setViewportSize({ width: 640, height: 860 });
+        await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).focus();
+        await page.keyboard.press('Shift+F10');
+        assert.deepEqual(await f.locator('.gd-menu [role="menuitem"]').allTextContents(), ['Restore', 'Delete forever']);
+        assert.equal(await f.locator('#gd-count').textContent(), '1 document');
+        assert.ok(await f.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '640px embedded Trash fits');
+        await shoot(page, f, 'inpage-ultra-trash-640');
+        await f.locator('.gd-menu [data-act="restore"]').click();
+        assert.equal(await f.evaluate(() => document.activeElement?.id), 'gd-q', 'Restore of the last card focuses search');
+      } finally { await page.setViewportSize(viewport); }
       await until(async () => !('trashed' in (await record(KEY))), 'restored from the Trash view');
       await f.locator('#gd-trash').click();
       await until(() => f.locator(`.gd-card[data-key="${KEY}"]`).count(), 'listed after Restore');
