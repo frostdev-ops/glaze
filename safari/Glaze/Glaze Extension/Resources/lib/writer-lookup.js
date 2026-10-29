@@ -2,8 +2,8 @@
 // content negotiation (CSL-JSON), an ISBN through Open Library's books API, a web page's own citation_*, Dublin Core, og:
 // and JSON-LD (schema.org) metadata and its <title>. doi.org and openlibrary.org answer every origin (CORS); a page's host
 // is asked for from the click (chrome.permissions.request, the editor frame's own), exactly that https host.
-// The writer frame may not connect anywhere (writer.html's CSP), so the worker fetches ('glaze:writer-lookup' { kind,
-// value } from writer.html only → { ok, text, url, type } | { ok: false, error }): no credentials or referrer, no
+// Writer's pages may not connect anywhere (writer.html's and papers.html's CSP), so the worker fetches ('glaze:writer-lookup'
+// { kind, value } from those pages only → { ok, text, url, type } | { ok: false, error }): no credentials or referrer, no
 // cache, one 10 s deadline, checked manual redirects, at most 2 MB read (a page's head is in its first bytes; JSON over that is refused), https all the way. The
 // frame parses what comes back as untrusted text: JSON.parse, and DOMParser for HTML (no script runs, nothing loads), and
 // keeps only text fields that lib/writer-sources.js normalize cleans.
@@ -56,7 +56,8 @@ var GZ_WRITER_LOOKUP = globalThis.GZ_WRITER_LOOKUP || (() => {
   };
 
   // ---- the worker's half ----------------------------------------------------------------------------------------------
-  // env: { fetch, reach(url) → whether the browser holds its host, id: the extension's id, page: writer.html's address }.
+  // env: { fetch, reach(url) → whether the browser holds its host, id: the extension's id, pages: the addresses of Writer's
+  // pages (writer.html, and papers.html, which opens a document from the Documents home) }.
   const bounded = (promise, signal) => new Promise((resolve, reject) => {
     const abort = () => reject(signal.reason);
     if (signal.aborted) { abort(); return; }
@@ -94,7 +95,7 @@ var GZ_WRITER_LOOKUP = globalThis.GZ_WRITER_LOOKUP || (() => {
   };
   const agencies = (doi) => [`https://api.crossref.org/v1/works/${encodeURIComponent(doi)}/transform`, `https://data.crosscite.org/${doi.split('/').map(encodeURIComponent).join('/')}`];
   const serve = async (m, s, env) => {
-    if (!s || s.id !== env.id || typeof s.url !== 'string' || s.url.split(/[?#]/)[0] !== env.page) return { ok: false, error: 'sender' };
+    if (!s || s.id !== env.id || typeof s.url !== 'string' || !env.pages?.includes(s.url.split(/[?#]/)[0])) return { ok: false, error: 'sender' };
     const r = request(m?.kind, m?.value);
     if (!r) return { ok: false, error: 'input' };
     if (!r.open && !await env.reach(r.url)) return { ok: false, error: 'host' };

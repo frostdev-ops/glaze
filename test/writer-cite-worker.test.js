@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const worker = require('./helpers/worker-env.cjs');
 const writer = { id: 'glaze', url: 'chrome-extension://x/writer.html#pass', origin: 'chrome-extension://x', frameId: 3, tab: { id: 7, url: 'https://school.blackboard.com/ultra/courses/1' } };
 
-test('citation worker: the shipped listener serves only writer.html and checks page grants', async () => {
+test('citation worker: the shipped listener serves only Writer\'s pages and checks page grants', async () => {
   const calls = [];
   const w = worker({ fetch: async (url, init) => { calls.push([url, init]); return new Response('{"title":"A work"}', { headers: { 'content-type': 'application/json' } }); } });
   const doi = { type: 'glaze:writer-lookup', kind: 'doi', value: '10.5555/work' };
@@ -12,6 +12,16 @@ test('citation worker: the shipped listener serves only writer.html and checks p
   assert.deepEqual(await w.send(doi, { ...writer, url: 'chrome-extension://x/options.html' }), { ok: false, error: 'sender' });
   assert.deepEqual(await w.send({ type: doi.type, kind: 'url', value: 'https://news.example.com/' }, writer), { ok: false, error: 'host' });
   assert.equal(calls.length, 1);
+});
+
+test('citation worker: a document opened from the Documents page (papers.html) looks up too', async () => {
+  const calls = [];
+  const w = worker({ fetch: async (url, init) => { calls.push([url, init]); return new Response('{"title":"A work"}', { headers: { 'content-type': 'application/json' } }); } });
+  const page = 'chrome-extension://x/papers.html?paper=doc%3A00000000-0000-4000-8000-000000000000';
+  const home = { id: 'glaze', url: page, origin: 'chrome-extension://x', frameId: 0, tab: { id: 8, url: page } };
+  assert.equal((await w.send({ type: 'glaze:writer-lookup', kind: 'doi', value: '10.5555/work' }, home)).ok, true);
+  assert.deepEqual(calls.map(([url]) => url), ['https://doi.org/10.5555/work']);
+  assert.deepEqual(await w.send({ type: 'glaze:writer-lookup', kind: 'doi', value: '10.5555/work' }, { ...home, url: 'chrome-extension://x/popup.html' }), { ok: false, error: 'sender' });
 });
 
 test('citation feature grant: a framed writer never enrolls or probes the cited host as an LMS', async () => {

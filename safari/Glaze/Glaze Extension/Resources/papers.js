@@ -91,19 +91,27 @@
     await GZ_WRITER_PAPER.need(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'lib/writer-settings.js']);
     await GZ_WRITER_SETTINGS.load();
     const plugins = [], hooks = { ready: [], change: [], context: [] };
+    const emit = (event, ...a) => { for (const fn of hooks[event]) try { fn(...a); } catch (e) { console.error(e); } };
     let editor = null;
-    // The same editor modules as an assignment frame, with a local host and no page messaging or submission.
+    // One context object, as writer.js keeps its init's (proofing drops an AI ruling once it changes); Sources stay under
+    // this local key. An assignment's paper adds what its record keeps; its instructions and rubric are read only on Ultra.
+    const rec = GZ_WRITER_PAPERS.local(key) ? null : await papers().get(key).catch(() => null);
+    const context = { school: 'local', user: { id: 'local' }, course: { id: 'papers', ...(rec?.courseName && { name: rec.courseName }) }, item: { id: key },
+      ...(rec && { kind: 'assignment', assignment: { title: rec.title || '', due: rec.due || null } }) };
+    // The same editor modules as an assignment frame, with a local host and no page messaging or submission. ⋯ entries
+    // (item) stay off the page, as the paper hides writer.html's bar.
     globalThis.GZ_WRITER_FRAME = {
-      t, mode: () => 'paper', kind: () => 'paper', editor: () => editor, slot: () => null, context: () => ({ school: 'local', user: { id: 'local' }, course: { id: 'papers' }, item: { id: key } }),
+      t, mode: () => 'paper', kind: () => 'paper', editor: () => editor, slot: () => null, context: () => context,
       on: (event, fn) => { if (hooks[event] && typeof fn === 'function') hooks[event].push(fn); },
       plugin: (p) => { if (editor) editor.addPlugins([p]); else plugins.push(p); },
+      item: (text, fn) => { const b = h('button', { type: 'button', role: 'menuitem', text }); b.addEventListener('click', fn); return b; },
     };
-    await GZ_WRITER_PAPER.need(['lib/writer-sources.js', 'lib/writer-bibliography.js', 'lib/writer-cite.js', 'lib/writer-lookup.js', 'writer-cite.js', 'lib/writer-export.js', 'writer-objects.js', 'writer-find.js', 'writer-counts.js', 'writer-print.js', 'writer-ruler.js', 'lib/writer-color.js', 'writer-paste.js']);
+    await GZ_WRITER_PAPER.need(['lib/writer-sources.js', 'lib/writer-bibliography.js', 'lib/writer-cite.js', 'lib/writer-lookup.js', 'lib/ai/failure.js', 'lib/writer-issues.js', 'lib/writer-proof.js', 'writer-proof.js', 'writer-ai.js', 'writer-cite.js', 'lib/writer-export.js', 'writer-objects.js', 'writer-find.js', 'writer-counts.js', 'writer-print.js', 'writer-ruler.js', 'lib/writer-color.js', 'writer-paste.js']);
     const mountEl = h('div');
     document.body.append(mountEl);
-    editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins, onChange: (change) => { for (const fn of hooks.change) fn(change); } });
+    editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins, onChange: (change) => emit('change', change) });
     await GZ_WRITER_PAPER.mount({ editor, t, standalone: true, key, context: () => ({}) });
-    for (const fn of hooks.ready) fn(editor);
+    emit('ready', editor);
   };
 
   // ---- the home
