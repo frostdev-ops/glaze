@@ -1,7 +1,7 @@
 // Glaze Writer's editor frame (writer.html): Glaze's editor where Ultra shows an editor box, which features/writer.js
 // opens in the box's place. An extension page, so the editor has the workers and WebAssembly the LMS page's CSP keeps from
 // a content script (proofing needs both), its own fonts and styles. It opens only with a one-use pass from the worker
-// (lib/background.js 'glaze:writer') and then talks to the page over that job's MessageChannel only:
+// (lib/background.js 'glaze:writer'). After a public boot signal, it talks to the page over that job's MessageChannel:
 //   page → frame: init { mode, kind, html, selection, placeholder, look { tokens, dark, glass, motion }, context, locale },
 //                 look { look }, context { context }, focus, html { html } (Ultra changed its own editor: a post went, a
 //                 draft came back); and for the frame's later parts (handle): quote (writer-compose.js), ai and
@@ -207,4 +207,14 @@
     px = 0;
     height();
   });
+  // An iframe can first load an inherited about:blank/srcdoc document. The host waits for this signal from Writer's
+  // exact extension origin before creating its one-use job. Announce after every script has registered its hooks.
+  const announce = () => {
+    try {
+      const host = new URL(location.href).searchParams.get('host'), url = new URL(host);
+      if (/^https?:$/.test(url.protocol) && url.origin === host && parent !== globalThis) parent.postMessage({ type: 'glaze:writer:hello' }, host);
+    } catch { /* a standalone Writer or a missing parent origin has no host to announce to */ }
+  };
+  if (document.readyState === 'complete') announce();
+  else addEventListener('load', () => setTimeout(announce, 0), { once: true });
 })();

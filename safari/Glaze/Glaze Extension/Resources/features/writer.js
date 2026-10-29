@@ -20,6 +20,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // A paper (an assignment's attempt) is a page of its own: as tall as the window allows, whatever its text; it stays in
   // Writer's storage and never goes into Ultra's editor (the submit step attaches it as a .docx).
   const PAPER_HEIGHT = 'max(640px, calc(100vh - 120px))';
+  const FRAME_RETRIES = 2;
   const on = () => X.on() && X.site === 'ultra' && X.settings().enabled !== false && !!X.settings().enhance?.writer;
 
   // The Look as the frame wears it: the palette, radius and font on <html>, light or dark, and the motion level; and its
@@ -91,15 +92,12 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     }
     b.root.setAttribute('data-gz-writer', b.kind);
     b.container.setAttribute('data-gz-writer-id', box.id);
-    // A one-use pass for the frame, which also puts lib/writer-main.js in this page (lib/background.js 'glaze:writer').
-    const pass = crypto.randomUUID();
-    const ok = await Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:writer', op: 'job', pass })).then((r) => r?.ok === true, () => false);
-    if (boxes.get(b.editor) !== box) return;
-    if (!ok || !sameBox(box) || !on()) { failed.set(b.editor, Date.now()); drop(box); return; }
-    open(box, pass);
+    if (!on()) { drop(box); return; }
+    open(box);
   };
-  const open = (box, pass) => {
-    const src = chrome.runtime.getURL('writer.html');
+  const open = (box) => {
+    let src;
+    try { src = chrome.runtime.getURL('writer.html'); } catch { recover(box); return; }
     const f = Object.assign(document.createElement('iframe'), { className: 'gz-writer', title: X.t('Glaze Writer') });
     f.setAttribute('data-gz-writer-frame', box.kind);
     // Out of sight until it says it's ready, then in the box's place at the box's height: the frame's 3px each side
@@ -109,41 +107,68 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.frame = f;
     box.ready = false;
     box.port = ch.port1;
-    ch.port1.onmessage = ({ data }) => { if (boxes.get(box.editor) === box && data && typeof data.type === 'string') hear(box, data); };
-    box.wait = setTimeout(() => { failed.set(box.editor, Date.now()); drop(box); }, 15000);
+    ch.port1.onmessage = ({ data }) => { if (boxes.get(box.editor) === box && box.frame === f && box.port === ch.port1 && data && typeof data.type === 'string') hear(box, data); };
+    box.wait = setTimeout(() => reopen(box), 15000);
     // Only to Glaze's own origin (spelled out: URL.origin of an extension scheme is "null" in some engines), so a frame
-    // the page navigated elsewhere gets nothing.
-    const origin = src.slice(0, src.indexOf('/', src.indexOf('://') + 3));
-    let offered = false;
+    // the page navigated elsewhere gets nothing. Lowercase, as the frame's origin is: Safari's getURL keeps its UUID
+    // uppercase (lib/background.js OWN_ORIGIN).
+    const origin = src.slice(0, src.indexOf('/', src.indexOf('://') + 3)).toLowerCase();
+    let offered = false, transferred = false;
+    const hello = async (e) => {
+      if (boxes.get(box.editor) !== box || box.frame !== f || offered || box.ready || e.source !== f.contentWindow || e.origin !== origin || e.data?.type !== 'glaze:writer:hello') return;
+      offered = true;
+      // The initial about:blank/srcdoc load belongs to the LMS. Only Writer itself, after all its scripts load, can
+      // ask for a pass. Keep it out of the URL and never offer it to an inherited or navigated document.
+      const pass = crypto.randomUUID();
+      const ok = await Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:writer', op: 'job', pass })).then((r) => r?.ok === true, () => false);
+      if (boxes.get(box.editor) !== box || box.frame !== f || box.port !== ch.port1) return;
+      if (!ok || !sameBox(box) || !on()) { recover(box); return; }
+      if (!f.isConnected) { reopen(box); return; }
+      try { f.contentWindow.postMessage({ type: 'glaze:writer', pass }, origin, [ch.port2]); transferred = true; }
+      catch { reopen(box); }
+    };
+    box.unhello = () => { removeEventListener('message', hello); if (!transferred) ch.port2.close(); };
+    addEventListener('message', hello);
     f.addEventListener('load', () => {
       if (boxes.get(box.editor) !== box || box.frame !== f) return;
       if (offered || box.ready) { reopen(box); return; }
-      offered = true;
-      f.contentWindow?.postMessage({ type: 'glaze:writer', pass }, origin, [ch.port2]);
     });
-    f.src = src;
+    f.addEventListener('error', () => { if (box.frame === f) reopen(box); });
+    // The parent origin is public; it lets the boot signal use an exact target even with an empty referrer.
+    f.src = `${src}?host=${encodeURIComponent(location.origin)}`;
     box.root.before(f);
   };
   // A crashed or navigated frame gets a fresh one-use channel, initialized from Writer's buffered document.
-  const reopen = async (box) => {
-    if (box.reopening || boxes.get(box.editor) !== box) return;
-    box.reopening = true;
-    remember(box);
+  const retire = (box) => {
+    if (box.focused) focusMode(box, false);
     clearTimeout(box.wait);
+    box.unhello?.();
+    box.unhello = null;
     box.observer?.disconnect();
     box.port?.close();
     box.port = null;
     box.frame?.remove();
     box.frame = null;
     box.ready = false;
-    const pass = crypto.randomUUID();
-    const ok = await Promise.resolve().then(() => chrome.runtime.sendMessage({ type: 'glaze:writer', op: 'job', pass })).then((r) => r?.ok === true, () => false);
-    if (boxes.get(box.editor) !== box) return;
+  };
+  const reopen = (box) => {
+    if (box.reopening || boxes.get(box.editor) !== box) return;
+    box.reopening = true;
+    remember(box);
+    retire(box);
     box.reopening = false;
     box.recovered = true;
-    if (ok && sameBox(box)) { open(box, pass); return; }
+    box.reopens = (box.reopens || 0) + 1;
+    if (box.reopens <= FRAME_RETRIES && sameBox(box) && on()) { open(box); return; }
+    recover(box);
+  };
+  const recover = (box) => {
+    if (boxes.get(box.editor) !== box) return;
+    failed.set(box.editor, Date.now());
+    remember(box);
+    retire(box);
     // A paper lives in Writer's storage, out of reach now: Ultra's editor comes back as it was, and a reload brings Writer.
-    if (box.mode === 'paper') { drop(box); return; }
+    if (box.mode === 'paper' || !box.snapshot || !sameBox(box)) { drop(box); return; }
     // Even an invalidated extension keeps the student's plain text available to copy or hand back. Never insert it as HTML.
     const wrap = document.createElement('div'), field = document.createElement('textarea'), back = document.createElement('button');
     field.setAttribute('data-gz-writer-recovery', '');
@@ -168,6 +193,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // The frame is up: it takes the box's text and place, and the box hides (still in the page, still synced).
   const swap = (box) => {
     clearTimeout(box.wait);
+    box.unhello?.();
+    box.unhello = null;
     const ed = box.editor, f = box.frame, typing = box.root.contains(document.activeElement);
     const l = look();
     worn = JSON.stringify(l);
@@ -295,11 +322,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     boxes.delete(box.editor);
     globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.unwatch(box);
     globalThis.GZ_WRITER_QUOTE?.disarm(box);
-    clearTimeout(box.wait);
     clearTimeout(box.retry);
-    box.observer?.disconnect();
-    box.port?.close();
-    box.frame?.remove();
+    retire(box);
     if (box.display) box.root.style.setProperty('display', ...box.display);
     if (box.display && !box.display[0]) box.root.style.removeProperty('display');
     box.root.removeAttribute('data-gz-writer');
@@ -373,7 +397,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       if (!sameBox(box)) drop(box);
       else if (box.kind === 'post' && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
       else if (box.kind === 'journal' && !U().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
-      else if (box.frame && !box.frame.isConnected) { if (box.unsynced) reopen(box); else drop(box); }
+      else if (box.frame && !box.frame.isConnected) { if (box.unsynced || box.mode === 'paper') reopen(box); else drop(box); }
     }
     if (!U()) { X.need('lib/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
     const at = { path: location.pathname, attempt: attempt() };

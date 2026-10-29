@@ -158,8 +158,8 @@ if (!Object.getOwnPropertyDescriptor(El.prototype, 'classList')) {
       toggle: (c, on) => { if (on ?? !list().includes(c)) { if (!list().includes(c)) e.className = [...list(), c].join(' '); } else e.className = list().filter((x) => x !== c).join(' '); } };
   } });
 }
-const frame = ({ claim = true } = {}) => {
-  const doc = { activeElement: null };
+const frame = ({ claim = true, host = 'https://school.blackboard.com', readyState = 'loading' } = {}) => {
+  const doc = { activeElement: null, readyState };
   doc.root = new El('html', doc);
   doc.head = new El('head', doc);
   doc.body = parse(read('writer.html'), doc);
@@ -168,7 +168,7 @@ const frame = ({ claim = true } = {}) => {
   doc.querySelector = (s) => doc.root.querySelector(s);
   doc.addEventListener = () => {};
   doc.createElement = (t) => new El(t, doc);
-  const listeners = [], asked = [], made = [];
+  const listeners = [], loads = [], ticks = [], asked = [], made = [], announced = [];
   const editor = (opts) => {
     let html = opts.html;
     const ed = { opts, set: [], focused: 0, view: { state: { doc: 'the doc' } }, html: () => html, words: () => (html.replace(/<[^>]*>/g, ' ').match(/\S+/g) || []).length, setHTML: (h) => { ed.set.push(h); html = h; opts.onChange({ html: h, text: h, words: 1, docChanged: true }); }, focus: () => { ed.focused++; }, run: () => true, active: () => ({}) };
@@ -176,9 +176,12 @@ const frame = ({ claim = true } = {}) => {
     return ed;
   };
   const ctx = vm.createContext({
-    document: doc, innerWidth: 800, innerHeight: 300, console,
+    document: doc, innerWidth: 800, innerHeight: 300, console, URL,
+    location: { href: `chrome-extension://x/writer.html?host=${encodeURIComponent(host)}` },
+    parent: { postMessage: (data, origin) => announced.push({ data, origin }) },
+    setTimeout: (fn) => ticks.push(fn),
     ResizeObserver: class { observe() {} },
-    addEventListener: (type, f) => { if (type === 'message') listeners.push(f); },
+    addEventListener: (type, f) => { if (type === 'message') listeners.push(f); else if (type === 'load') loads.push(f); },
     chrome: { runtime: { sendMessage: async (m) => { asked.push(m); return { ok: claim }; } } },
     GZ_WRITER_EDITOR: { create: editor },
     // lib/writer-schema.js as the frame uses it: compose's ops for a doc, and what a box holds that compose can't keep.
@@ -190,10 +193,27 @@ const frame = ({ claim = true } = {}) => {
   const port = () => { const p = { sent: [], closed: false, postMessage(m) { this.sent.push(JSON.parse(JSON.stringify(m))); }, close() { this.closed = true; } }; return p; };
   const hand = async (data, p = port()) => { for (const f of listeners) await f({ data, ports: [p] }); return p; };
   const to = (p, m) => p.onmessage({ data: m });
-  return { doc, hand, to, asked, made, ctx };
+  const loaded = () => { for (const f of loads) f(); };
+  const tick = () => { for (const f of ticks.splice(0)) f(); };
+  return { doc, hand, to, asked, made, ctx, announced, loaded, tick };
 };
 const INIT = { type: 'init', mode: 'compose', kind: 'reply', html: '<p>Hi there</p>', placeholder: 'Type a reply', context: { post: { id: '_201_1' } }, locale: 'en',
   look: { tokens: { '--gz-accent': '#17c8f4', '--gz-font': '"Glaze Inter", sans-serif', '--gz-bad': 'url(https://x.test/a)', '--other': 'red', '--gz-ink': 'red;}body{' }, dark: true, motion: 'off' } };
+
+test('frame: boot is announced after load finishes, to the exact public host origin without a pass', () => {
+  const f = frame({ host: 'https://bb.wpunj.edu' });
+  assert.deepEqual(f.announced, [], 'later Writer scripts must register before the host is contacted');
+  f.loaded();
+  assert.deepEqual(f.announced, [], 'the parent iframe load runs before the boot announcement');
+  f.tick();
+  assert.deepEqual(JSON.parse(JSON.stringify(f.announced)), [{ data: { type: 'glaze:writer:hello' }, origin: 'https://bb.wpunj.edu' }]);
+  assert.deepEqual(f.asked, [], 'a public boot announcement claims no worker pass');
+  assert.equal(frame({ readyState: 'complete' }).announced.length, 1, 'a late injection can also announce its completed boot');
+  for (const host of ['', 'null', '*', 'https://bb.wpunj.edu/path', 'data:text/plain,hello']) {
+    const bad = frame({ host }); bad.loaded(); bad.tick();
+    assert.deepEqual(bad.announced, [], `no permissive or opaque target: ${host}`);
+  }
+});
 
 test('frame: the link field keeps a telephone address as entered', async () => {
   const f = frame(), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });

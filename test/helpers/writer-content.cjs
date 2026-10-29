@@ -6,12 +6,16 @@ const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
 const U = require('../../lib/writer-ultra.js');
 module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recovery = false, pathname = null, account = async () => '_900_1' } = {}) => {
-  const doc = { activeElement: null, listeners: [] }, timers = new Map(), observers = [], ports = [], messages = [], clicks = [], kept = [];
+  const doc = { activeElement: null, listeners: [] }, timers = new Map(), observers = [], ports = [], messages = [], clicks = [], kept = [], offers = [];
   doc.root = new El('html', doc); doc.documentElement = doc.root;
   doc.body = parse(fs.readFileSync(path.join(__dirname, `../fixtures/ultra-writer-${fixture}.html`), 'utf8'), doc);
   for (const el of doc.root.all()) el.style.getPropertyPriority = () => '';
   for (const name of ['querySelector', 'querySelectorAll', 'addEventListener', 'removeEventListener', 'dispatchEvent']) doc[name] = El.prototype[name].bind(doc.root);
-  doc.createElement = (tag) => { const el = new El(tag, doc); el.style.getPropertyPriority = () => ''; return el; };
+  doc.createElement = (tag) => {
+    const el = new El(tag, doc); el.style.getPropertyPriority = () => '';
+    if (tag === 'iframe') el.contentWindow = { postMessage: (data, origin, transfer) => offers.push({ frame: el, data, origin, transfer }) };
+    return el;
+  };
   doc.execCommand = (name, ui, html) => { if (insert) doc.activeElement.innerHTML = html; return insert; };
   doc.fire = (el, type) => { if (type === 'click') clicks.push(el); };
   const location = { origin: 'https://school.blackboard.com', host: 'school.blackboard.com', pathname: pathname || (fixture === 'discussion' ? '/ultra/courses/_101_1/discussion/_9_1' : '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1') };
@@ -26,8 +30,9 @@ module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recov
     getSelection: () => ({ selectAllChildren() {} }),
     setTimeout: (f, ms) => { timers.set(++timer, { f, ms }); return timer; }, clearTimeout: (id) => timers.delete(id),
     MutationObserver: class { constructor(fn) { this.fn = fn; observers.push(this); } observe(target) { this.target = target; } disconnect() { this.target = null; } },
-    MessageChannel: class { constructor() { this.port1 = { sent: [], postMessage(m) { this.sent.push(m); }, close() { this.closed = true; } }; this.port2 = {}; ports.push(this.port1); } },
+    MessageChannel: class { constructor() { this.port1 = { sent: [], postMessage(m) { this.sent.push(m); }, close() { this.closed = true; } }; this.port2 = { close() { this.closed = true; } }; ports.push(this.port1); } },
     addEventListener: (type, fn) => doc.addEventListener(type, fn),
+    removeEventListener: (type, fn) => doc.removeEventListener(type, fn),
   });
   ctx.window = ctx; ctx.top = ctx;
   // Quill as far as these tests need it: each line of the ops' text a paragraph. 'spoof' claims a write it never made.
@@ -42,11 +47,16 @@ module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recov
     if (mode !== 'absent') doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: mode !== 'fail' && html !== null, html }) }));
   });
   vm.runInContext(fs.readFileSync(process.env.WRITER_CONTENT_SOURCE || path.join(__dirname, '../../features/writer.js'), 'utf8'), ctx);
-  const start = async () => { ctx.GZ_WRITER.pass(); await new Promise(setImmediate); for (const p of ports) p.onmessage({ data: { type: 'ready' } }); };
+  const boot = async (frame) => {
+    frame.dispatchEvent({ type: 'load' });
+    doc.dispatchEvent({ type: 'message', source: frame.contentWindow, origin: 'chrome-extension://x', data: { type: 'glaze:writer:hello' } });
+    await new Promise(setImmediate);
+  };
+  const start = async () => { ctx.GZ_WRITER.pass(); await new Promise(setImmediate); for (const frame of doc.querySelectorAll('iframe.gz-writer')) await boot(frame); for (const p of ports) if (!p.closed) p.onmessage({ data: { type: 'ready' } }); };
   const native = (index = 0) => U.boxes(doc, { path: location.pathname })[index];
   // A frame's change carries its Quill ops; these tests write plain paragraphs, so the ops come from the text.
   const emit = (m, index = 0) => ports[index].onmessage({ data: m.type === 'change' && !('delta' in m) ? { ...m, delta: [{ insert: `${m.text}\n` }] } : m });
   const mutate = (ed) => { for (const o of observers) if (o.target === ed) o.fn([]); };
   const tick = (ms) => { for (const [id, t] of [...timers]) if (t.ms === ms) { timers.delete(id); t.f(); } };
-  return { ctx, doc, location, ports, messages, clicks, kept, observers, timers, sets, start, native, emit, mutate, tick, helper: (v) => { mode = v; } };
+  return { ctx, doc, location, ports, messages, clicks, kept, observers, timers, sets, offers, start, boot, native, emit, mutate, tick, helper: (v) => { mode = v; } };
 };

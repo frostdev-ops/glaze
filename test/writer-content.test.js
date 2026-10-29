@@ -2,6 +2,108 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const content = require('./helpers/writer-content.cjs');
 
+test('Writer ignores inherited blank loads and grants a pass only after its own frame boots', async () => {
+  const c = content(); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  const frame = c.native().root.previousElementSibling;
+  frame.dispatchEvent({ type: 'load' });
+  assert.equal(c.offers.length, 0, 'initial about:blank/srcdoc load must not target the LMS origin');
+  assert.equal(c.messages.filter((m) => m.op === 'job').length, 0, 'a blank frame has no one-use pass');
+  const hello = { type: 'message', source: frame.contentWindow, origin: 'chrome-extension://x', data: { type: 'glaze:writer:hello' } };
+  c.doc.dispatchEvent({ ...hello, origin: c.location.origin });
+  c.doc.dispatchEvent({ ...hello, source: {} });
+  await new Promise(setImmediate);
+  assert.equal(c.offers.length, 0, 'neither the page nor another frame can request a channel');
+  c.doc.dispatchEvent(hello); await new Promise(setImmediate);
+  assert.equal(c.offers.length, 1);
+  assert.equal(c.offers[0].origin, 'chrome-extension://x');
+  assert.equal(c.offers[0].data.pass, c.messages.find((m) => m.op === 'job').pass);
+  c.doc.dispatchEvent(hello); await new Promise(setImmediate);
+  assert.equal(c.offers.length, 1, 'a boot receives one fresh pass and port');
+});
+
+test('Safari: Writer boots from the lowercase origin its uppercase extension address stands for, and only from it', async () => {
+  // Safari's runtime.getURL keeps the extension's UUID uppercase; the frame's origin (event.origin) has it lowercase.
+  const c = content();
+  c.ctx.chrome.runtime.getURL = (s) => `safari-web-extension://0A1B2C3D-4E5F-6789-ABCD-EF0123456789/${s}`;
+  c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  const frame = c.native().root.previousElementSibling, own = 'safari-web-extension://0a1b2c3d-4e5f-6789-abcd-ef0123456789';
+  assert.ok(frame.src.startsWith('safari-web-extension://0A1B2C3D-4E5F-6789-ABCD-EF0123456789/writer.html'), 'the frame loads the address getURL gives');
+  const hello = { type: 'message', source: frame.contentWindow, origin: own, data: { type: 'glaze:writer:hello' } };
+  c.doc.dispatchEvent({ ...hello, origin: 'safari-web-extension://ffffffff-4e5f-6789-abcd-ef0123456789' });
+  c.doc.dispatchEvent({ ...hello, origin: c.location.origin });
+  c.doc.dispatchEvent({ ...hello, source: {} });
+  c.doc.dispatchEvent({ ...hello, data: { type: 'glaze:writer' } });
+  await new Promise(setImmediate);
+  assert.equal(c.offers.length, 0, 'another extension, the page, another frame and another message type get nothing');
+  c.doc.dispatchEvent(hello); await new Promise(setImmediate);
+  assert.equal(c.offers.length, 1, 'Writer\'s own frame gets its pass');
+  assert.equal(c.offers[0].origin, own, 'targeted at the origin as Safari compares it');
+  assert.equal(c.offers[0].transfer.length, 1);
+});
+
+test('a stale boot acknowledgement and retired port cannot initialize a replacement frame', async () => {
+  const c = content({ helper: 'fail' }); await c.start();
+  const frame = c.native().root.previousElementSibling, old = c.ports[0];
+  c.emit({ type: 'change', html: '<p>Retain this draft</p>', text: 'Retain this draft' });
+  frame.dispatchEvent({ type: 'load' }); await new Promise(setImmediate);
+  const next = c.native().root.previousElementSibling;
+  old.onmessage({ data: { type: 'ready' } });
+  old.onmessage({ data: { type: 'change', html: '<p>stale</p>', text: 'stale' } });
+  await c.boot(next);
+  const port = c.ports.at(-1); port.onmessage({ data: { type: 'ready' } });
+  assert.equal(port.sent.find((m) => m.type === 'init')?.html, '<p>Retain this draft</p>');
+  assert.equal(old.sent.filter((m) => m.type === 'init').length, 1, 'retired channel is ignored');
+});
+
+test('a pending pass for a navigated document is never offered to its replacement', async () => {
+  const c = content(), pending = [];
+  c.ctx.chrome.runtime.sendMessage = (m) => {
+    c.messages.push(m);
+    return m.op === 'job' ? new Promise((resolve) => pending.push({ m, resolve })) : Promise.resolve({ ok: true });
+  };
+  c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  const frame = c.native().root.previousElementSibling;
+  await c.boot(frame);
+  frame.dispatchEvent({ type: 'load' });
+  const next = c.native().root.previousElementSibling;
+  await c.boot(next);
+  assert.equal(pending.length, 2);
+  assert.notEqual(pending[0].m.pass, pending[1].m.pass, 'each actual boot gets a new one-use pass');
+  pending[0].resolve({ ok: true }); await new Promise(setImmediate);
+  assert.equal(c.offers.length, 0, 'the retired boot cannot offer a stale pass');
+  pending[1].resolve({ ok: true }); await new Promise(setImmediate);
+  assert.equal(c.offers.length, 1);
+  assert.equal(c.offers[0].frame, next);
+  c.ctx.GZ_WRITER.drop();
+  assert.equal(c.doc.root.listeners.filter((l) => l.type === 'message').length, 0, 'dropping boxes releases all pending bootstrap listeners');
+});
+
+test('failed Writer boots stop retrying and keep the buffered draft available', async () => {
+  const c = content({ helper: 'fail' }); await c.start();
+  const b = c.native();
+  c.emit({ type: 'change', html: '<p>Keep after blocked reloads</p>', text: 'Keep after blocked reloads' });
+  b.root.previousElementSibling.dispatchEvent({ type: 'load' }); await new Promise(setImmediate);
+  for (let n = 0; n < 5; n++) { c.tick(15000); await new Promise(setImmediate); }
+  assert.equal(c.doc.querySelectorAll('iframe.gz-writer').length, 1, 'only the unrelated reply frame remains');
+  assert.equal(c.doc.querySelector('textarea[data-gz-writer-recovery]')?.value, 'Keep after blocked reloads');
+  const opened = c.ports.length;
+  c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  assert.equal(c.ports.length, opened, 'a failed boot does not loop on observer passes');
+});
+
+test('a removed paper frame reopens the same stored paper without writing into Ultra', async () => {
+  const c = content({ fixture: 'attempt' }); await c.start();
+  const before = c.ports[0].sent.find((m) => m.type === 'init'), native = c.native().editor.innerHTML;
+  c.doc.querySelector('iframe.gz-writer').remove(); c.ctx.GZ_WRITER.pass();
+  await c.boot(c.doc.querySelector('iframe.gz-writer'));
+  const port = c.ports.at(-1); port.onmessage({ data: { type: 'ready' } });
+  const after = port.sent.find((m) => m.type === 'init');
+  assert.deepEqual(after.context.paper, before.context.paper);
+  assert.equal(after.context.recovery, before.context.recovery, 'session recovery remains tied to the same paper');
+  assert.equal(c.native().editor.innerHTML, native);
+  assert.equal(c.sets.length, 0, 'paper recovery never writes a blank native document into the stored paper');
+});
+
 test('cancelling an empty post releases Writer so the next native activation remains reachable', async () => {
   const c = content(); await c.start();
   const b = c.native(), frame = b.root.previousElementSibling;
@@ -264,6 +366,7 @@ test('if a lost frame cannot get a new pass, its draft stays in a plain recovery
   c.emit({ type: 'change', html: '<p>Keep me</p>', text: 'Keep me', words: 2 });
   c.ctx.chrome.runtime.sendMessage = async () => ({ ok: false });
   b.root.previousElementSibling.dispatchEvent({ type: 'load' }); await new Promise(setImmediate);
+  await c.boot(b.root.previousElementSibling);
   assert.equal(c.doc.querySelector('textarea[data-gz-writer-recovery]')?.value, 'Keep me');
 });
 
@@ -272,6 +375,7 @@ test('an invalidated extension throwing before a new frame pass still exposes th
   c.emit({ type: 'change', html: '<p>Keep me</p>', text: 'Keep me', words: 2 });
   c.ctx.chrome.runtime.sendMessage = () => { throw Error('Extension context invalidated.'); };
   b.root.previousElementSibling.dispatchEvent({ type: 'load' }); await new Promise(setImmediate);
+  await c.boot(b.root.previousElementSibling);
   assert.equal(c.doc.querySelector('textarea[data-gz-writer-recovery]')?.value, 'Keep me');
 });
 
@@ -363,7 +467,7 @@ test('a paper whose frame can\'t come back gives Ultra its editor back as it was
   assert.equal(b.root.style.display, 'none');
   c.ctx.chrome.runtime.sendMessage = async () => { throw new Error('Extension context invalidated.'); };
   frame.dispatchEvent({ type: 'load' });
-  for (let i = 0; i < 10; i++) await new Promise(setImmediate);
+  await c.boot(c.doc.querySelector('iframe.gz-writer'));
   assert.ok(!c.doc.querySelector('[data-gz-writer-recovery]'), 'the paper is in Writer\'s storage, not Ultra\'s box');
   assert.ok(!c.doc.querySelector('iframe.gz-writer'));
   assert.notEqual(b.root.style.display, 'none', 'Ultra\'s own editor is back');
