@@ -63,7 +63,13 @@ const records = () => {
 // What each home page records from its first script on: each thumbnail render's main-thread time and when it ended, every
 // storage.local get's key count, and when the first card appeared. lang: chrome.i18n's UI language for the page.
 const PROBE = ({ lang }) => {
-  if (location.pathname !== '/papers.html') return; // not the Look's backdrop nor the mods' sandboxed host
+  if (location.pathname === '/preview.html') {
+    globalThis.__gdRAF = 0;
+    const raf = requestAnimationFrame;
+    globalThis.requestAnimationFrame = (fn) => raf((now) => { __gdRAF++; fn(now); });
+    return;
+  }
+  if (location.pathname !== '/papers.html') return; // not the mods' sandboxed host
   globalThis.__gd = { renders: [], gets: [], firstCard: null, rowsPaint: null, indexRead: null, disconnects: 0 };
   const IO = globalThis.IntersectionObserver;
   globalThis.IntersectionObserver = class extends IO { disconnect() { __gd.disconnects++; sessionStorage.setItem('review-disconnects', String(__gd.disconnects)); return super.disconnect(); } };
@@ -662,7 +668,8 @@ const PROBE = ({ lang }) => {
       frost: settings,
       light: lookOf('Library'),
       scene: lookOf('Frostdev'),
-      photo: lookOf('Lagoon', { bg: { ...G.GZ_DEFAULTS.bg, kind: 'image', image: 'https://photos.test/busy.png', dim: 20 } }),
+      photo: lookOf('Lagoon', { bg: { ...G.GZ_DEFAULTS.bg, kind: 'image', image: 'https://photos.test/busy.png', dim: 0 } }),
+      lightPhoto: lookOf('Library', { bg: { ...G.GZ_DEFAULTS.bg, kind: 'image', image: 'https://photos.test/busy.png', dim: 0 } }),
     };
     const wearLook = (s) => worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, s);
     const rgbOf = (hex) => `rgb(${hex.match(/\w\w/g).map((x) => parseInt(x, 16)).join(', ')})`;
@@ -710,7 +717,7 @@ const PROBE = ({ lang }) => {
       await until(() => pg.evaluate(() => !!document.querySelector('.gd-pic .gt-thumb')), `${name} thumbnails`);
       return pg;
     };
-    for (const name of ['frost', 'light', 'scene', 'photo']) {
+    for (const name of ['frost', 'light', 'scene', 'photo', 'lightPhoto']) {
       const s = LOOKS[name], art = s.bg.kind !== 'solid', pg = await lookPage(name);
       const colors = G.GZ_ACTIVE_COLORS(s, false);
       if (art) await until(() => pg.evaluate(() => document.getElementById('gd-backdrop')?.hasAttribute('data-shown')), `${name} backdrop shown`);
@@ -727,7 +734,10 @@ const PROBE = ({ lang }) => {
         check(w.backdrop && w.shown && w.innerBg === w.bg && w.bg === (s.bg.kind === 'image' ? 'image' : s.bg.kind), `${name}: the Look's background is drawn behind the page by Settings' painter (${w.innerBg})`);
         check(/blur\(/.test(w.cardBlur) && /blur\(/.test(w.topBlur), `${name}: the panels and cards are glass over it (${w.cardBlur})`);
         // Reduced motion (this browser's, followed by default): the painter's motion is off and the background holds still.
+        const frames = () => pg.evaluate(() => document.getElementById('gd-backdrop').contentWindow.__gdRAF);
+        const beforeFrames = await frames();
         const a = await margin(pg); await pause(700); const b = await margin(pg);
+        check(await frames() === beforeFrames, `${name}: reduced motion schedules no continuing animation frames`);
         check(w.motion === 'off' && w.innerMotion === 'off' && a.equals(b), `${name}: under reduced motion the background is a still frame (motion ${w.motion}/${w.innerMotion})`);
       } else check(!w.backdrop && w.cardBlur === 'none', `${name}: a solid Look draws no background frame and no blur (${w.cardBlur})`);
       if (name === 'scene') {
@@ -742,7 +752,20 @@ const PROBE = ({ lang }) => {
       }
       for (const sel of ['.gd-card .gd-title', '.gd-card .gd-meta', 'h1', '.gd-tile-name']) {
         const k = await contrastOn(pg, sel);
-        check(k >= 4.5, `${name}: ${sel} reads at ${k.toFixed(2)}:1 or better against every pixel under it`);
+        check(Number.isFinite(k) && k >= 4.5, `${name}: ${sel} reads at ${k.toFixed(2)}:1 or better against every pixel under it`);
+      }
+      if (name === 'photo' || name === 'lightPhoto') {
+        await pg.click('.gd-card:first-child .gd-more');
+        const menuContrast = await contrastOn(pg, '.gd-menu [role=menuitem]');
+        check(Number.isFinite(menuContrast) && menuContrast >= 4.5, `${name}: the menu text meets 4.5:1 over the photo (${menuContrast.toFixed(2)})`);
+        await pg.click('.gd-menu button:text-is("Delete")');
+        await pg.waitForSelector('.gd-toast-do');
+        for (const sel of ['.gd-toast > span', '.gd-toast-do']) {
+          const k = await contrastOn(pg, sel);
+          check(Number.isFinite(k) && k >= 4.5, `${name}: ${sel} meets 4.5:1 over the photo (${k.toFixed(2)})`);
+        }
+        await pg.click('.gd-toast-do');
+        await until(() => pg.evaluate(() => !document.querySelector('.gd-toast')), 'photo deletion undone');
       }
       for (const width of [1280, 640]) {
         await pg.setViewportSize({ width, height: 900 }); await pg.evaluate(() => scrollTo(0, 0));
