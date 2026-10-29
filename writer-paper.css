@@ -34,7 +34,7 @@
   :root[data-dark]:not([data-light-page]) .gp-zoom { --sheet: #1e1e1e; --sheet-ink: #e6e6e6; --sheet-line: #555; --sheet-guide: #4a4a4a; --sheet-link: #8ab4f8;
     --sheet-hit: color-mix(in srgb, #fbbf24 32%, transparent); --sheet-hit-cur: color-mix(in srgb, #fbbf24 52%, transparent); color-scheme: dark; }
   :root[data-dark]:not([data-light-page]) .gp-zoom .gp-sheet { box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 6px 24px rgba(0,0,0,.5); }
-  :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: color-mix(in oklab, var(--c) 35%, var(--sheet-ink)) !important; }
+  :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: color-mix(in srgb, var(--c) 10%, #fff) !important; }
   @supports (color: oklch(from red l c h)) {
     :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: oklch(from var(--c) max(l, 0.72, calc(0.93 - l * 0.4)) c h) !important; }
   }
