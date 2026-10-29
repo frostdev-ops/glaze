@@ -82,10 +82,12 @@ const check = async (name, run) => {
             if (type === 'range' || type === 'color') el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
           }, item);
-          await page.waitForFunction(async ({ key, value }) => {
-            const s = await GZ_UI.load();
-            return JSON.stringify(key.split('.').reduce((s, k) => s?.[k], s)) === JSON.stringify(value);
-          }, item, { timeout: 3000 });
+          // Polled from here: waitForFunction takes an async predicate's promise as its answer at once.
+          const saved = () => page.evaluate(async (key) => JSON.stringify(key.split('.').reduce((s, k) => s?.[k], await GZ_UI.load())), item.key);
+          for (const end = Date.now() + 3000; await saved() !== JSON.stringify(item.value);) {
+            if (Date.now() > end) throw new Error(`saved ${await saved()}, not ${JSON.stringify(item.value)}`);
+            await wait(50);
+          }
         });
         if (results.length % 25 === 0) console.log(`Checked ${results.length}/${cases.length} controls`);
         // Respect Chrome's real sync-write quota; no storage or worker mocks hide failed writes.
