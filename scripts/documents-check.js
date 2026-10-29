@@ -232,9 +232,9 @@ const PROBE = ({ lang }) => {
     await until(async () => (await shown()).join() === FIELD, 'body search');
     const bodyGets = (await home.evaluate(() => __gd.gets)).filter((g) => Array.isArray(g) && g.every((k) => k.startsWith('writerPaper:')));
     check(bodyGets.every((g) => g.length <= 12), 'search by body text finds a word only the document\'s text holds');
-    const d07 = seeds.find((s) => s.title === 'Draft 07').key;
+    const d07 = seeds.filter((s) => /^Draft .*07$/.test(s.title)).map((s) => s.key).sort().join();
     await home.fill('#gd-q', 'paragraph 07 draft');
-    await until(async () => (await shown()).join() === d07, 'several terms');
+    await until(async () => (await shown()).sort().join() === d07, 'several terms');
     check(true, 'every search term must match, title and body together');
     await home.focus('#gd-q');
     await home.keyboard.press('Escape');
