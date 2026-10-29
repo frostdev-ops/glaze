@@ -1388,7 +1388,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     titleIn?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); view.focus(); } });
     const head = () => {
       const tt = ctx.assignment?.title || paper?.title || '';
-      if (own) { if (nameEdits === nameSaved) titleIn.value = typed; titled(); } else title.textContent = tt || t('Paper');
+      if (own) { if (nameEdits === nameSaved || titleIn.readOnly) titleIn.value = typed; titled(); } else title.textContent = tt || t('Paper');
       const d = ctx.assignment?.due || paper?.due;
       due.textContent = d && Number.isFinite(Date.parse(d)) ? t('Due {when}', { when: new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(d)) }) : '';
     };
@@ -1479,7 +1479,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         }
         if (!await save()) return;
         const kept = pendingOf(target), filled = kept && await complete(kept, target, await store.get(target));
-        if (filled) { const { base, ...rec } = filled; await ours(store.save(target, rec, Number.isSafeInteger(base) ? { base } : {})); }
+        if (filled) { const { base, rename, ...rec } = filled; await ours(store.save(target, rec, { ...(Number.isSafeInteger(base) ? { base } : {}), rename })); }
         key = target;
         if (await save('import')) { await store.remove(recoveryKey); try { sessionStorage.removeItem(slotOf(recoveryKey)); } catch {} }
       })().catch((e) => { console.error(e); setState('Not saved'); });
