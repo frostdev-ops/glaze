@@ -1454,7 +1454,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const s = docsSheet;
       if (!s) return;
       docsSheet = null;
-      s.layer.remove();
+      // Release focus and the paper at once; the inert, hidden sheet finishes the import card's entrance backwards.
+      s.layer.inert = true;
+      s.layer.setAttribute('aria-hidden', 'true');
+      s.layer.querySelector('[id]')?.removeAttribute('id');
+      s.layer.removeAttribute('data-open');
+      const leaving = s.layer.getAnimations?.({ subtree: true }) || [];
+      if (leaving.length) Promise.allSettled(leaving.map((a) => a.finished)).then(() => s.layer.remove());
+      else s.layer.remove();
       for (const [el, was] of s.inert) el.inert = was;
       if (back) opener().focus();
     };

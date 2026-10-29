@@ -263,9 +263,10 @@
 .gp-versions .gp-mi button { color: var(--gz-accent-hi); font-weight: 600; font-size: 12px; }
 /* Open from Documents: the import card's sheet (writer-import.css) over its dim, a row per document */
 .gp-fromdocs-layer { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; overflow: auto; font: 14px/1.5 var(--gz-font); color: var(--gz-ink); }
-.gp-fromdocs-dim { position: fixed; inset: 0; background: rgba(2,6,12,.66); backdrop-filter: blur(2px); opacity: 0; transition: opacity var(--t) ease-out; }
+.gp-fromdocs-dim { position: fixed; inset: 0; background: rgba(2,6,12,.66); backdrop-filter: blur(2px); opacity: 0; transition: opacity var(--gz-t, var(--t)) var(--gz-ease, ease-out); }
 .gp-fromdocs { position: relative; width: min(520px, 100%); max-height: calc(100vh - 32px); padding: 18px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; background: var(--panel); backdrop-filter: blur(24px);
-  border: 1px solid var(--edge); border-radius: 16px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px) scale(.97); transition: opacity var(--t) ease-out, transform var(--t) ease-out; }
+  border: 1px solid var(--edge); border-radius: 16px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px) scale(.97); transition: opacity var(--gz-t, var(--t)) var(--gz-ease, ease-out), transform var(--gz-t, var(--t)) var(--gz-ease, ease-out); }
+:root[data-gz-no-enter] .gp-fromdocs-layer[data-open] *, :root[data-gz-no-trans] .gp-fromdocs-layer * { transition: none; }
 .gp-fromdocs-layer[data-open] .gp-fromdocs-dim, .gp-fromdocs-layer[data-open] .gp-fromdocs { opacity: 1; transform: none; }
 .gp-fromdocs-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .gp-fromdocs-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
