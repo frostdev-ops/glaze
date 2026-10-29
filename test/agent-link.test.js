@@ -735,6 +735,8 @@ test('C2: Safari keep-alive sends native traffic before hello and throughout exi
   }
   await w.advance(due - w.now());
   assert.equal(w.ports.length, ports + 1, 'the scheduled retry still happens');
+  w.batches.at(-1).resolve({ ok: true }); // a beat due at the same instant may still be in flight
+  await settle();
   assert.equal(w.batches.at(-1).msg.frames[0].t, 'hello');
 });
 
