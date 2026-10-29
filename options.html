@@ -469,7 +469,7 @@
   [data-editor-panel] { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 1.2rem; min-width: 0; }
   [data-editor-section] { scroll-margin-top: calc(var(--editor-header, 100px) + 1rem); }
   .section-heading { display: flex; justify-content: space-between; gap: .7rem; align-items: baseline; flex-wrap: wrap; }
-  .section-heading h2 { margin: 0; font-size: calc(16px * var(--gz-scale, 1)); }
+  .section-heading h2 { min-width: 0; overflow-wrap: anywhere; margin: 0; font-size: calc(16px * var(--gz-scale, 1)); }
   .section-reset { font-size: calc(12px * var(--gz-scale, 1)); }
   [data-editor-alias], #relay a { color: var(--gz-accent); overflow-wrap: anywhere; }
   .section-path { display: none; margin: 0; font-size: calc(12px * var(--gz-scale, 1)); }

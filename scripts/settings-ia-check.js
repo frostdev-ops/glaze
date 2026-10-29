@@ -359,7 +359,8 @@ const check = async (name, test) => {
             }, variant);
             assert.equal(await host.locator('[data-key="navbar.on"]').isChecked(), true, 'narrow layout includes the default navigation controls after earlier checks');
             const routes = await host.evaluate(() => [...document.querySelectorAll('[data-editor-section]')].map((s) => s.dataset.editorSection));
-            assert.equal(routes.length, 42, 'every settings route is swept');
+            const expectedRoutes = [...fs.readFileSync(path.join(root, 'options.html'), 'utf8').matchAll(/data-editor-section="([^"]+)"/g)].map((m) => m[1]);
+            assert.deepEqual(routes, expectedRoutes, 'every settings route is swept');
             const panels = new Set();
             for (const route of routes) {
               await host.evaluate((hash) => { location.hash = hash; }, route);
