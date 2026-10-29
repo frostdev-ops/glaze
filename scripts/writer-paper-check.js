@@ -453,6 +453,9 @@ const HARNESS = `(() => {
     await until(() => d.evaluate(() => GZ_WRITER_PAPER.current().paper()?.title === 'Another home rename'), 'incoming rename read');
     check(await d.inputValue('.gp-top h1 input') === 'Title still being typed', 'an incoming rename preserves an in-progress title');
     await until(async () => (await stored(k2))?.title === 'Title still being typed', 'in-progress title saved');
+    // Back to the title the Open from Documents cases below list and pick.
+    await d.fill('.gp-top h1 input', 'My own title');
+    await until(async () => (await stored(k2))?.title === 'My own title', 'title typed back');
     saved.titled = await shot(d, 'document-titled.png');
     await d.click('.gp-status button:last-child');
     await until(() => d.evaluate(() => !!document.querySelector('.gp-versions')), 'document status menu');
