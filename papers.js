@@ -8,10 +8,16 @@
     const root = document.documentElement, scheme = matchMedia('(prefers-color-scheme: dark)');
     root.toggleAttribute('data-dark', scheme.matches);
     await GZ_WRITER_PAPER.need(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'ui.js']);
-    const paint = () => chrome.storage.sync.get(null).then((raw) => {
-      GZ_UI.paint(GZ_SANITIZE(raw));
-      root.toggleAttribute('data-dark', root.style.colorScheme === 'dark');
-    });
+    let turn = 0;
+    const paint = async () => {
+      const at = ++turn;
+      try {
+        const raw = await chrome.storage.sync.get(null);
+        if (at !== turn) return;
+        GZ_UI.paint(GZ_SANITIZE(raw));
+        root.toggleAttribute('data-dark', root.style.colorScheme === 'dark');
+      } catch (e) { console.error(e); }
+    };
     scheme.addEventListener('change', paint);
     chrome.storage.onChanged.addListener((c, where) => { if (where === 'sync') paint(); });
     await paint();

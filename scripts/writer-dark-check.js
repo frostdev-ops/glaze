@@ -139,6 +139,8 @@ const READ = () => {
             check(r.white.join() === '255,255,255', `${name}: white-marked text is unchanged (${r.white})`);
             for (const k of ['ink', 'red', 'navy', 'link', 'note']) check(ratio(r[k], r.sheet) >= 4.5, `${name}: ${k} reads on the page (${ratio(r[k], r.sheet).toFixed(2)}:1, ${r[k]})`);
             check(ratio(r.border, r.sheet) >= 1.8, `${name}: table borders show (${ratio(r.border, r.sheet).toFixed(2)}:1)`);
+            const blackBand = r.bands.find((b) => b.name === 'black');
+            check(ratio(blackBand.bg, r.sheet) >= 1.5, `${name}: black highlight differs from the sheet (${ratio(blackBand.bg, r.sheet).toFixed(2)}:1, ${blackBand.bg})`);
             for (const b of r.bands) for (const k of ['plain', 'black', 'white']) check(ratio(b[k], b.bg) >= 4.5, `${name}: ${b.name} band, ${k} text ${ratio(b[k], b.bg).toFixed(2)}:1 (${b[k]} on ${b.bg})`);
           } else {
             check(r.sheet.join() === '255,255,255', `${name}: the sheet is white`);
@@ -175,6 +177,23 @@ const READ = () => {
     await B.setWriter({ lightPage: false });
     await until(() => B.page.evaluate(() => !document.documentElement.hasAttribute('data-light-page')), 'Light page follows storage');
     check(true, 'the page follows writer.lightPage changed elsewhere (Settings)');
+    // Exercise the shipped colour fallback, with the relative-colour @supports branch removed.
+    const removed = await B.page.evaluate(() => {
+      let n = 0;
+      const drop = (sheet) => {
+        for (let i = sheet.cssRules.length - 1; i >= 0; i--) {
+          const r = sheet.cssRules[i];
+          if (r.conditionText?.includes('oklch')) { sheet.deleteRule(i); n++; }
+          else if (r.cssRules) drop(r);
+        }
+      };
+      drop([...document.styleSheets].find((s) => s.href?.endsWith('/writer-paper.css')));
+      return n;
+    });
+    check(removed === 1, 'the relative-colour branch is removed for the fallback check');
+    const fallback = await B.page.evaluate(READ);
+    for (const k of ['ink', 'black', 'white', 'red', 'navy', 'link']) check(ratio(fallback[k], fallback.sheet) >= 4.5, `fallback: ${k} reads on the page (${ratio(fallback[k], fallback.sheet).toFixed(2)}:1)`);
+    for (const b of fallback.bands) for (const k of ['plain', 'black', 'white']) check(ratio(b[k], b.bg) >= 4.5, `fallback: ${b.name} band, ${k} text ${ratio(b[k], b.bg).toFixed(2)}:1`);
     await B.page.evaluate(() => dispatchEvent(new Event('beforeprint')));
     await B.page.emulateMedia({ media: 'print', colorScheme: 'dark' });
     const printed = await B.page.evaluate(() => {

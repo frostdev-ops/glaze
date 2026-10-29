@@ -150,6 +150,27 @@ async function pass(scheme) {
       assert.deepEqual(errors, []);
     });
 
+    await check(`${scheme}-documents`, async () => {
+      const keys = ['doc:0f8e2b1a-3c4d-4e5f-8a9b-0c1d2e3f4a5b', 'recovery:1234'];
+      await page.evaluate(async (keys) => {
+        const { writerPapers: rows } = await chrome.storage.local.get('writerPapers');
+        const doc = { type: 'doc', content: [{ type: 'paragraph' }] };
+        await chrome.storage.local.set({ writerPapers: [...keys.map((key) => ({ key, kind: 'paper', title: 'Notes', updated: 1 })), ...rows],
+          ...Object.fromEntries(keys.flatMap((key) => [[`writerPaper:${key}`, { key, kind: 'paper', doc, updated: 1 }], [`writerVersions:${key}`, []]])) });
+      }, keys);
+      await open();
+      await until(async () => /2 documents/.test(await page.locator('#writer-paper-list li').filter({ hasText: 'Documents' }).textContent()), 'documents group');
+      assert.match(await page.locator('#writer-papers-count').textContent(), /^6\b/);
+      await page.getByRole('button', { name: 'Clear documents…', exact: true }).click();
+      assert.equal(await page.locator('#writer-clear-title').textContent(), 'Clear documents?');
+      await page.locator('#writer-clear-ok').click();
+      await until(async () => (await page.locator('#writer-paper-list li').count()) === 2, 'documents removed');
+      const left = await page.evaluate(() => chrome.storage.local.get(null));
+      for (const key of keys) assert.ok(!left[`writerPaper:${key}`] && !left[`writerVersions:${key}`]);
+      assert.equal(left.writerPapers.length, 4, 'course papers stay');
+      assert.deepEqual(errors, []);
+    });
+
     // A paper whose key never came (writer-paper.js keeps it under a stand-in) is the student's too: Clear all takes it.
     await check(`${scheme}-clear-all`, async () => {
       await page.evaluate(async () => {

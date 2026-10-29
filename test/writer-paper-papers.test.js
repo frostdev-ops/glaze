@@ -227,3 +227,78 @@ test('a save typed before a rename landed is no conflict: only a change to the d
   t++; await P.save(k, { doc: doc('Stale tab.') }, { base: r.paper.revision });
   assert.equal((await P.versions(k))[0].reason, 'conflict', 'a stale save over other text still keeps it');
 });
+
+
+test('a stale autosave cannot replace a newer title, but an explicit title edit can', async () => {
+  let t = 1;
+  const P = PA.open(store(), () => t++), k = PA.newKey();
+  const first = (await P.save(k, { doc: doc('Draft.'), title: 'Draft.', named: false })).paper;
+  await P.save(k, { title: 'Home title', named: true });
+  const saved = await P.save(k, { doc: doc('Draft. More.'), title: 'Draft.', named: false }, { base: first.revision });
+  assert.equal(saved.paper.title, 'Home title');
+  assert.equal(saved.paper.named, true);
+  const typed = await P.save(k, { doc: saved.paper.doc, title: 'Typed here', named: true }, { base: first.revision, rename: true });
+  assert.equal(typed.paper.title, 'Typed here');
+});
+
+test('a rename does not advance the base over a different format or import choice', () => {
+  const known = { doc: doc('Same words.'), format: 'plain', keep: false, title: 'A', named: true, revision: 1 };
+  for (const change of [{ format: 'apa7' }, { keep: true }]) {
+    assert.deepEqual(PA.renamed(known, { ...known, ...change, title: 'B', revision: 2 }), { title: 'B', named: true });
+  }
+});
+
+test('format-only stale saves retain the newer format as a conflict version', async () => {
+  const s = store(), a = PA.open(s), b = PA.open(s), k = PA.newKey();
+  await a.save(k, { doc: doc('Same words.'), format: 'plain' }); await b.get(k);
+  await a.save(k, { format: 'apa7' });
+  await b.save(k, { format: 'chicago17' });
+  const kept = await Promise.all((await b.versions(k)).map((v) => b.version(k, v.id)));
+  assert.ok(kept.some((v) => v.reason === 'conflict' && v.format === 'apa7'));
+});
+
+test('a no-op document save does not turn a rename into an intervening document edit', async () => {
+  const P = PA.open(store()), k = PA.newKey();
+  const first = (await P.save(k, { doc: doc('Draft.'), format: 'plain' })).paper;
+  await P.save(k, { title: 'Title', named: true });
+  await P.save(k, { doc: first.doc, format: 'plain' });
+  const r = await P.save(k, { doc: doc('Draft. More.') }, { base: first.revision });
+  assert.notEqual(r.version?.reason, 'conflict');
+});
+
+test('delete then merge keeps every original version at the cap', async () => {
+  let t = 1;
+  const s = store(), P = PA.open(s, () => t++, { versions: async () => 4 }), k = PA.newKey();
+  for (let i = 0; i < 4; i++) await P.save(k, { doc: doc(`Draft ${i}.`) }, { reason: i === 0 ? 'submit' : 'import' });
+  const records = { [`writerPaper:${k}`]: await P.get(k), [`writerVersions:${k}`]: structuredClone(s.data[`writerVersions:${k}`]) };
+  await P.remove(k); await P.merge(records);
+  assert.deepEqual((await P.versions(k)).map((v) => v.id), records[`writerVersions:${k}`].map((v) => v.id));
+});
+
+test('merge keeps an older record with a different format as a version', async () => {
+  const P = PA.open(store(), () => 10), k = PA.newKey();
+  await P.save(k, { doc: doc('Same words.'), format: 'apa7' });
+  await P.merge({ [`writerPaper:${k}`]: { key: k, doc: doc('Same words.'), format: 'plain', updated: 1 } });
+  const kept = await Promise.all((await P.versions(k)).map((v) => P.version(k, v.id)));
+  assert.ok(kept.some((v) => v.reason === 'restore' && v.format === 'plain'));
+});
+
+test('a refused undo merge cannot publish the document without its versions', async () => {
+  const s = store(), P = PA.open(s), k = PA.newKey();
+  await P.save(k, { doc: doc('Kept.'), format: 'plain' });
+  const records = { [`writerPaper:${k}`]: await P.get(k), [`writerVersions:${k}`]: structuredClone(s.data[`writerVersions:${k}`]) };
+  await P.remove(k);
+  const before = structuredClone(s.data), set = s.set;
+  s.set = async (patch) => { if (Object.hasOwn(patch, `writerVersions:${k}`)) throw Error('QUOTA_BYTES'); return set(patch); };
+  await assert.rejects(P.merge(records), /QUOTA_BYTES/);
+  assert.deepEqual(s.data, before);
+});
+
+test('concurrent unnamed saves derive the title from the body that is saved', async () => {
+  const P = PA.open(store()), k = PA.newKey();
+  const first = (await P.save(k, { doc: doc('First line'), title: 'First line', named: false })).paper;
+  await P.save(k, { doc: doc('Another first line'), title: 'Another first line', named: false });
+  const r = await P.save(k, { doc: doc('My first line'), title: 'My first line', named: false }, { base: first.revision });
+  assert.equal(r.paper.title, 'My first line');
+  assert.equal(r.version.reason, 'conflict');
+});

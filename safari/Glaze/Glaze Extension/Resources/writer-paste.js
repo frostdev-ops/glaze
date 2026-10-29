@@ -79,14 +79,15 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   // ---- values
   const COLORS = { black: '000000', white: 'FFFFFF', red: 'FF0000', green: '008000', lime: '00FF00', blue: '0000FF', yellow: 'FFFF00', aqua: '00FFFF', cyan: '00FFFF', fuchsia: 'FF00FF', magenta: 'FF00FF',
     navy: '000080', teal: '008080', purple: '800080', maroon: '800000', olive: '808000', gray: '808080', grey: '808080', silver: 'C0C0C0', orange: 'FFA500', crimson: 'DC143C' };
-  const hex = (v) => {
+  const hex = (v, on = 'FFFFFF') => {
     const s = String(v || '').trim().toLowerCase();
     let m = /^#([0-9a-f]{6})$/.exec(s);
     if (m) return m[1].toUpperCase();
     if ((m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(s))) return `${m[1]}${m[1]}${m[2]}${m[2]}${m[3]}${m[3]}`.toUpperCase();
     if ((m = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)(?:[\s,/]+([\d.]+%?))?\s*\)$/.exec(s))) {
-      if (m[4] != null && parseFloat(m[4]) === 0) return null;
-      return [m[1], m[2], m[3]].map((x) => Math.min(255, +x).toString(16).padStart(2, '0')).join('').toUpperCase();
+      const alpha = m[4] == null ? 1 : Math.min(1, Math.max(0, parseFloat(m[4]) / (m[4].endsWith('%') ? 100 : 1)));
+      if (!alpha) return null;
+      return [m[1], m[2], m[3]].map((x, i) => Math.round(Math.min(255, +x) * alpha + parseInt(on.slice(i * 2, i * 2 + 2), 16) * (1 - alpha)).toString(16).padStart(2, '0')).join('').toUpperCase();
     }
     return COLORS[s] || null;
   };
@@ -166,7 +167,7 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
       if (font && font === ctx.base?.font) font = null;
       if (size && size === ctx.base?.size) size = null;
       if (font || size) extra.push(['span', `style="${[font ? `font-family:${font}` : '', size ? `font-size:${size}pt` : ''].filter(Boolean).join(';')}"`]);
-      const hl = marker(c.bg, c.mso), color = !c.link && LEGIBLE().legible(hex(c.color), { on: hl && S().HIGHLIGHT[hl], theme: c.theme, tint: c.tint });
+      const hl = marker(c.bg, c.mso), on = hl && S().HIGHLIGHT[hl], color = !c.link && LEGIBLE().legible(hex(c.color, on?.slice(1)), { on, theme: c.theme, tint: c.tint });
       if (color && !['000000'].includes(color) && !(ctx.source === 'web' && NEAR_BLACK(color))) extra.push(['span', `data-gz-color="${color}"`]);
       if (hl) extra.push(['span', `data-gz-highlight="${hl}"`]);
       if (/small-caps/.test(String(c['font-variant'] || ''))) extra.push(['span', 'data-gz-caps="small"']);

@@ -169,3 +169,14 @@ test('a coloured, highlighted run exports its stored colour and highlighter, wha
   assert.match(body, /<w:color w:val="000000"\/>/);
   assert.match(body, /<w:color w:val="1F4E79"\/>(?:(?!<\/w:rPr>).)*<w:highlight w:val="darkBlue"\/>(?:(?!<\/w:r>).)*navy on dark blue/);
 });
+
+
+test('Blank Word round trip keeps one body and no header or reference list page', async () => {
+  const doc = S.paper.nodeFromJSON(require('../lib/writer-format.js').template(ST.FORMATS.plain, {}, [{ type: 'paragraph', content: [{ type: 'text', text: 'Field notes' }] }]));
+  const out = X.exportDocx(doc, { format: 'plain', date });
+  assert.ok(!Object.keys(out.parts).some((k) => /header\d+\.xml$/.test(k)));
+  const back = S.paper.nodeFromJSON((await X.importDocx(out.bytes, { format: 'plain' })).doc);
+  assert.equal(back.childCount, 1);
+  assert.equal(back.textContent, 'Field notes');
+  assert.deepEqual(back.attrs.setup.headers, { default: null, first: null });
+});

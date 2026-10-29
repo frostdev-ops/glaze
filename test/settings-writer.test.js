@@ -170,8 +170,10 @@ test('Settings → Writer: its own tab and six sections, the two switches first,
   assert.deepEqual(keys.slice(0, 2), ['enhance.writer', 'enhance.writerUploads'], 'the two existing switches come first');
   assert.equal((html.match(/data-key="enhance\.writer"/g) || []).length, 1, 'and only here');
   for (const k of leaves(D.GZ_DEFAULTS.writer, 'writer').filter((k) => k !== 'writer.submit.text')) assert.ok(keys.includes(k), k);
-  // Every switch explains itself in its info popover, as the existing two do; nothing else under it.
-  for (const k of keys) assert.match(panel, new RegExp(`data-key="${k.replace(/\./g, '\\.')}"[^>]*aria-describedby="info-${k.replace(/\./g, '-')}"`), `${k} has its info popover`);
+  // Existing switches keep their info popovers; Light page is self-explanatory.
+  for (const k of keys.filter((k) => k !== 'writer.lightPage')) assert.match(panel, new RegExp(`data-key="${k.replace(/\./g, '\\.')}"[^>]*aria-describedby="info-${k.replace(/\./g, '-')}"`), `${k} has its info popover`);
+  assert.match(panel, /data-key="writer\.lightPage" aria-labelledby="writer-lightPage-name"/);
+  assert.doesNotMatch(panel, /id="info-writer-lightPage"/);
   for (const id of ['writer-paper-list', 'writer-clear-all', 'writer-words', 'writer-words-clear']) assert.match(panel, new RegExp(`id="${id}"`), id);
   assert.match(html, /<dialog id="writer-clear"/);
   assert.match(html, /<script src="lib\/editor-writer\.js"><\/script>/);
@@ -184,7 +186,7 @@ test('every word lib/editor-writer.js shows is in the five catalogues', () => {
   for (const f of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
     delete globalThis.GZ_LANGS?.[f];
     require(`../i18n/${f}.js`);
-    for (const w of words) assert.ok(Object.hasOwn(globalThis.GZ_LANGS[f], w) && globalThis.GZ_LANGS[f][w] !== w || /^[\d\s%]+$/.test(w), `${f}: ${w}`);
+    for (const w of words) assert.ok(Object.hasOwn(globalThis.GZ_LANGS[f], w) && (globalThis.GZ_LANGS[f][w] !== w || w === 'Documents') || /^[\d\s%]+$/.test(w), `${f}: ${w}`);
   }
 });
 
@@ -258,4 +260,12 @@ test('a word taken out of the personal dictionary is unknown again: the worker f
   assert.equal(p.got.find((m) => m.id === 2).lints.length, 1, 'flagged once taken out');
   assert.deepEqual([built, disposed], [2, 1], 'Harper built again without it');
   assert.deepEqual(imported.at(-1), ['sethe']);
+});
+
+
+test('Settings groups standalone and recovery documents so every counted paper is visible', () => {
+  const WE = require('../lib/editor-writer.js'), PA = require('../lib/writer-papers.js');
+  const keys = [PA.newKey(), 'recovery:1234'];
+  const groups = WE.byCourse(keys.map((key) => ({ key })));
+  assert.deepEqual(groups, [{ id: 'documents', name: 'Documents', keys }]);
 });

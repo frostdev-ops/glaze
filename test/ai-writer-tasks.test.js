@@ -545,3 +545,12 @@ test('the real worker refuses every writer task on a test attempt, and runs them
   await w.settle();
   assert.deepEqual(JSON.parse(JSON.stringify(port.posted.at(-1).output)), { minWords: 250, maxWords: null, sources: null, replies: null });
 });
+
+
+test('Blank context keeps its selected format without claiming MLA', () => {
+  const c = W.clean({ kind: 'assignment', style: 'plain' });
+  assert.equal(c.style, 'plain');
+  const blocks = W.blocks(c);
+  assert.ok(blocks.some((b) => /Blank/.test(b.text)));
+  assert.ok(blocks.every((b) => !/MLA/.test(b.text)));
+});

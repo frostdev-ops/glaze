@@ -5,7 +5,7 @@
 // compares with Word: each fixture's .docx and the editor's pages (count and each page's first line).
 // GETs only, synthetic; no account or outside network from the browser.
 // NODE_PATH=<playwright> nice -n 10 node scripts/writer-paper-check.js [evidence directory]
-// PAPER_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-paper).
+// PAPER_SHOTS: where the screenshots go (default: shots/ under the check's temporary output).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -17,7 +17,7 @@ const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-paper-check');
-const shots = process.env.PAPER_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-paper');
+const shots = process.env.PAPER_SHOTS || path.join(out, 'shots');
 const checks = [], requests = [], errors = [];
 let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -447,6 +447,11 @@ const HARNESS = `(() => {
     await pause(300);
     rec = await stored(k2);
     check(rec.title === 'My own title' && rec.named === true && await d.evaluate(() => document.querySelector('.gp-top h1 input').value === 'My own title'), 'a title typed in the editor is saved and stays');
+    await d.fill('.gp-top h1 input', 'Title still being typed');
+    await home.evaluate((k) => GZ_WRITER_PAPERS.open().save(k, { title: 'Another home rename', named: true }), k2);
+    await until(() => d.evaluate(() => GZ_WRITER_PAPER.current().paper()?.title === 'Another home rename'), 'incoming rename read');
+    check(await d.inputValue('.gp-top h1 input') === 'Title still being typed', 'an incoming rename preserves an in-progress title');
+    await until(async () => (await stored(k2))?.title === 'Title still being typed', 'in-progress title saved');
     saved.titled = await shot(d, 'document-titled.png');
     await d.click('.gp-status button:last-child');
     await until(() => d.evaluate(() => !!document.querySelector('.gp-versions')), 'document status menu');
