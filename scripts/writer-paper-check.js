@@ -527,6 +527,7 @@ const HARNESS = `(() => {
     const indexBefore = await worker.evaluate(async () => (await chrome.storage.local.get('writerPapers')).writerPapers);
     await worker.evaluate(() => chrome.storage.local.set({ writerPapers: [] }));
     await fr.evaluate(() => document.querySelector('.gp-status button:last-child').click());
+    await until(() => fr.evaluate(() => !!document.querySelector('.gp-versions')), 'empty list status menu');
     await fr.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].find((b) => b.textContent === 'Open from Documents').click());
     await until(() => fr.evaluate(() => document.activeElement?.classList.contains('gp-fromdocs-x')), 'empty sheet focuses Close');
     await p.keyboard.press('Shift+Tab');
@@ -540,6 +541,12 @@ const HARNESS = `(() => {
     await inPapers.click('.gp-status button:last-child');
     await until(() => inPapers.evaluate(() => !!document.querySelector('.gp-versions')), 'status menu in papers.html');
     check(await inPapers.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].some((b) => b.textContent === 'Open from Documents')), 'papers.html offers Open from Documents on an assignment\'s paper');
+    await inPapers.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].find((b) => b.textContent === 'Open from Documents').click());
+    await until(() => inPapers.evaluate(() => !!document.querySelector('.gp-fromdocs-row')), 'sheet in papers.html');
+    check(await inPapers.evaluate(() => { const r = document.querySelector('.gp-fromdocs').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && document.activeElement?.classList.contains('gp-fromdocs-row'); }), 'papers.html shows the sheet inside its window with a row focused');
+    await inPapers.evaluate(() => [...document.querySelectorAll('.gp-fromdocs-row')].find((r) => r.querySelector('b').textContent === 'My own title').click());
+    await until(() => inPapers.evaluate(() => GZ_WRITER_PAPER.current().format().id === 'plain' && GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('Field notes from Tuesday and more')), 'pick in papers.html');
+    check(JSON.stringify(await stored(k2)) === sourceBefore, 'a pick in papers.html also leaves the source unchanged');
     await inPapers.close();
 
     check(errors.length === 0, `no page or frame errors (${errors.join('; ')})`);
