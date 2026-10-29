@@ -254,15 +254,39 @@ const check = async (name, test) => {
       // One more Back leaves the page as it would without Documents: nothing of the frame's left in the history.
       length = await page.evaluate(() => history.length);
     });
+    await check('ultra: Escape stays in the document editor, then leaves from outside the editor past both entries', async () => {
+      f = await openFromBar(page);
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+      f = await shown(page);
+      await f.locator('.ProseMirror').click();
+      await page.keyboard.press('Escape');
+      assert.ok(await hosted(page), 'Escape in editable text keeps Documents open');
+      await f.evaluate(() => document.activeElement.blur());
+      await page.keyboard.press('Escape');
+      await closed(page);
+      await atMark(page);
+    });
     await check('ultra: Settings in the bar takes its place, Back is Documents again; Search leaves it', async () => {
       f = await openFromBar(page);
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+      f = await shown(page);
       await item(page, 'glaze:settings').click();
       await until(() => framed(page, `${base}/options.html`), 'Settings in its place');
       assert.equal(framed(page), undefined, 'Documents gone');
       await until(async () => (await item(page, 'glaze:settings').getAttribute('aria-current')) === 'page', 'Settings marked');
       assert.equal(await item(page, 'glaze:documents').getAttribute('aria-current'), null);
+      const settingsFrame = framed(page, `${base}/options.html`);
+      await settingsFrame.locator('[data-editor-tab="study"]').click();
+      await settingsFrame.locator('[data-editor-jump][href="#study/grades"]').click();
+      // A repeated open of Settings sends its section through the host's message handler.
+      await item(page, 'glaze:settings').click();
+      assert.equal(await settingsFrame.evaluate(() => location.hash), '#study/grades');
+      const tabId = await worker.evaluate((url) => chrome.tabs.query({}).then((tabs) => tabs.find((t) => t.url === url)?.id), page.url());
+      await worker.evaluate((tabId) => chrome.scripting.executeScript({ target: { tabId }, func: () => GZ_SETTINGS_PAGE.open('writer/papers') }), tabId);
+      await until(() => settingsFrame.evaluate(() => location.hash === '#writer/papers' && !document.querySelector('[data-editor-panel="writer"]').hidden), 'a repeated open replaces Settings section history');
       await back(page);
       f = await shown(page);
+      assert.equal(new URL(f.url()).searchParams.get('paper'), KEY, 'Back restores the document through the private channel');
       await until(async () => (await item(page, 'glaze:documents').getAttribute('aria-current')) === 'page', 'Documents marked again');
       await item(page, 'glaze:search').click();
       await closed(page);
@@ -320,6 +344,7 @@ const check = async (name, test) => {
       const heard = await page.evaluate(() => __heard);
       assert.ok(heard.length && heard.every((m) => !m.includes(KEY.slice(4)) && !m.includes('pass')), JSON.stringify(heard));
       assert.ok(!JSON.stringify(await page.evaluate(() => history.state)).includes(KEY.slice(4)));
+      assert.ok(!(await page.evaluate(() => performance.getEntriesByType('resource').map((e) => e.name))).some((u) => u.includes(KEY.slice(4))), 'iframe resource URLs reveal no document key');
     });
     await check('ultra: a papers.html frame the page makes itself stays blank, and the worker refuses its writes', async () => {
       await page.evaluate((src) => { const r = document.createElement('iframe'); r.id = 'check-rogue'; r.src = src; document.body.append(r); }, PAPERS);
@@ -338,12 +363,20 @@ const check = async (name, test) => {
       f = await openFromBar(page);
       const h = await hosted(page), b = await item(page, 'glaze:documents').boundingBox();
       console.log(`     640: page host ${JSON.stringify(h)}, bar item ${JSON.stringify(b)}`);
+      const tabs = await page.locator('#gz-navbar .tabs').boundingBox();
+      assert.ok(h.bottom <= tabs.y + 1, `the entire frame is above the phone bar: ${JSON.stringify({ h, tabs })}`);
       assert.ok(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.id === 'gz-navbar', [b.x + b.width / 2, b.y + b.height / 2]), 'the bar stays over it, in use');
       await shoot(page, f, 'inpage-ultra-640');
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
       f = await shown(page);
       await shoot(page, f, 'inpage-ultra-doc-640');
       await f.locator('.gp-top > .gd-btn').click();
+      await closed(page);
+      await page.locator('#gz-navbar .tabs .more').click();
+      await item(page, 'glaze:settings').click();
+      await until(() => framed(page, `${base}/options.html`), 'Settings at 640');
+      await until(async () => (await hosted(page)).bottom <= (await page.locator('#gz-navbar .tabs').boundingBox()).y + 1, 'Settings is above the phone bar too');
+      await page.keyboard.press('Escape');
       await closed(page);
       await page.setViewportSize({ width: 1280, height: 860 });
     });

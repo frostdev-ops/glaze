@@ -373,8 +373,7 @@ test("Documents' frame in a school's page asks as Writer's frame does, seated by
   assert.equal(await ask(w, { ...next, frameId: 4 }), 'hung up', 'another frame');
   assert.equal(await ask(w, { ...next, tab: { id: 6, url: COURSE } }), 'hung up', 'another tab');
   assert.equal(await ask(w, { ...next, url: `${EXT}/options.html` }), 'hung up', 'not Documents');
-  // The tab's loading (the page's own history entry for a document opened in place brings one) forgets the seats in it; the
-  // claimed document keeps its seat, from the page its claim names. A frame that never claimed gets none.
+  // The tab's loading can be a same-document history entry. A frame that never claimed gets no seat.
   for (const f of w.updated) f(5, { status: 'loading' });
   assert.equal(await ask(w, next), 'allowed', 'after the tab\'s loading');
   assert.equal(await ask(w, docs(COURSE, { documentId: 'papers-9' })), 'hung up', 'a document of that frame that claimed nothing');
@@ -390,6 +389,53 @@ test("Documents' frame in a school's page asks as Writer's frame does, seated by
   assert.equal(await ask(w, onAttempt, 'syllabus'), 'hung up');
   for (const f of w.removed) f(5);
   assert.equal(await ask(w, onAttempt), 'hung up', 'the tab closed');
+});
+
+test('a pending replacement Documents claim revokes the previous AI seat before persistence completes', async () => {
+  const w = writerOn(); w.page = COURSE;
+  const docs = { ...frame(COURSE, { documentId: 'old-doc' }), url: `${EXT}/papers.html` };
+  const claim = async (s) => {
+    const pass = crypto.randomUUID();
+    await w.send({ type: 'glaze:papers', op: 'job', pass }, top(COURSE));
+    return w.send({ type: 'glaze:papers', op: 'claim', pass }, s);
+  };
+  assert.deepEqual(await claim(docs), { ok: true });
+  assert.equal(await ask(w, docs), 'allowed');
+  const set = w.context.chrome.storage.session.set;
+  let release;
+  w.context.chrome.storage.session.set = async (v) => { if (v['papersFrame:5']) await new Promise((r) => { release = r; }); return set(v); };
+  const next = { ...docs, documentId: 'next-doc' };
+  const pending = claim(next);
+  try {
+    await w.settle();
+    assert.equal(typeof release, 'function');
+    assert.equal(await ask(w, docs), 'hung up', 'the old document is retired as soon as its replacement claims');
+    assert.equal(await ask(w, next), 'hung up', 'the next document has not been granted anything yet');
+  } finally { release?.(); }
+  assert.deepEqual(await pending, { ok: true });
+  assert.equal(await ask(w, next), 'allowed');
+});
+
+test('Documents admission rechecks its claim after awaiting the live host document', async () => {
+  const w = writerOn(); w.page = COURSE;
+  const docs = { ...frame(COURSE, { documentId: 'old-doc' }), url: `${EXT}/papers.html` };
+  const claim = async (s) => {
+    const pass = crypto.randomUUID();
+    await w.send({ type: 'glaze:papers', op: 'job', pass }, top(COURSE));
+    return w.send({ type: 'glaze:papers', op: 'claim', pass }, s);
+  };
+  await claim(docs);
+  const script = w.context.chrome.scripting.executeScript;
+  let release;
+  w.context.chrome.scripting.executeScript = async (args) => { await new Promise((r) => { release = r; }); return script(args); };
+  const admitted = vm.runInContext('aiSender', w.context)(docs, { op: 'run', feature: 'completion' });
+  try {
+    await w.settle();
+    assert.equal(typeof release, 'function');
+    assert.deepEqual(await claim({ ...docs, documentId: 'next-doc' }), { ok: true });
+    release();
+    assert.equal(await admitted, false, 'the live check cannot finish an earlier document\'s admission');
+  } finally { release?.(); }
 });
 
 test('on an assignment attempt the writer frame runs a completion; a cancel passes on any attempt', async () => {
@@ -432,6 +478,7 @@ test('attempt reports cannot authorize a stale route or a replaced top document'
 test('same-URL reloads and navigation before session hydration discard attempt authority', async () => {
   const w = writerOn(); w.page = ATTEMPT;
   await seat(w); await report(w, 'assignment');
+  w.topDocument = 'reloaded-top'; // a reload replaces the document, unlike pushState
   for (const f of w.updated) f(5, { status: 'loading' });
   assert.notEqual(await ask(w, frame(ATTEMPT)), 'allowed', 'reload requires a fresh report');
   const store = structuredClone(w.store);
@@ -440,6 +487,38 @@ test('same-URL reloads and navigation before session hydration discard attempt a
   for (const f of again.updated) f(5, { url: COURSE });
   await seat(again);
   assert.equal(await ask(again, frame(ATTEMPT)), 'attempt', 'hydration must not resurrect a report cleared by navigation');
+});
+
+test('same-document loading preserves Writer seats and assignment evidence, including before session hydration', async () => {
+  const w = writerOn(); w.page = ATTEMPT;
+  const writer = frame(ATTEMPT, { documentId: 'writer-doc' });
+  await seat(w, writer); await report(w, 'assignment');
+  const store = structuredClone(w.store);
+  for (const f of w.updated) f(5, { status: 'loading' });
+  assert.equal(await ask(w, writer), 'allowed', 'pushState keeps an ordinary Writer frame usable');
+  const again = live2(worker({ globals: fakeIDB(), store })); again.page = ATTEMPT;
+  for (const f of again.updated) f(5, { status: 'loading' });
+  assert.equal(await ask(again, writer), 'allowed', 'loading does not suppress the sleeping worker\'s seats');
+  // Every request still reads the pinned host and its ancestry. A replacement at the same URL gets no authority.
+  again.topDocument = 'replacement-top';
+  assert.equal(await ask(again, writer), 'hung up', 'same URL, different host document');
+  again.topDocument = 'top-doc'; again.page = `${CANVAS}/courses/1/quizzes/3`;
+  assert.equal(await ask(again, writer), 'hung up', 'SPA navigation to a quiz');
+  again.page = ATTEMPT;
+  assert.equal(await ask(again, { ...writer, documentId: 'replacement-writer' }), 'hung up', 'same frame, different Writer document');
+});
+
+test('a Documents claim cannot lend an AI seat to another extension page after loading', async () => {
+  const w = writerOn(); w.page = COURSE;
+  const docs = { ...frame(COURSE, { documentId: 'documents-doc' }), url: `${EXT}/papers.html` };
+  const pass = crypto.randomUUID();
+  await w.send({ type: 'glaze:papers', op: 'job', pass }, top(COURSE));
+  assert.deepEqual(await w.send({ type: 'glaze:papers', op: 'claim', pass }, docs), { ok: true });
+  for (const f of w.updated) f(5, { status: 'loading' });
+  for (const over of [{ url: `${EXT}/options.html` }, { url: `${EXT}/writer.html`, documentId: 'new-doc' }, { frameId: 4 }, { documentId: 'new-doc' }, { tab: { id: 6, url: COURSE } }, { origin: CANVAS }, { id: 'other' }]) {
+    assert.equal(await ask(w, { ...docs, ...over }), 'hung up', JSON.stringify(over));
+  }
+  assert.equal(await ask(w, docs), 'allowed');
 });
 
 test('navigation while an attempt report awaits admission invalidates the report', async () => {

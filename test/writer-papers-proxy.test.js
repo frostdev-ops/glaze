@@ -112,6 +112,8 @@ test('the worker takes papers writes from an LMS tab\'s Documents frame only onc
   const pass = () => crypto.randomUUID();
 
   assert.deepEqual(await save(frame), refused, 'a papers.html frame that claimed nothing (a site framing it)');
+  assert.deepEqual(await papers('remove', [k], frame), refused, 'an unclaimed frame cannot remove');
+  assert.deepEqual(await papers('merge', [{ [`writerPaper:${k}`]: { key: k, doc: doc('Unclaimed.'), updated: 1 } }], frame), refused, 'an unclaimed frame cannot merge');
   // Passes: only for the top frame of a page of a site Glaze runs on.
   for (const [s, why] of [[{ ...lms, frameId: 3 }, 'a frame of the page'], [{ ...lms, url: 'https://evil.example/', origin: 'https://evil.example', tab: { id: 9, url: 'https://evil.example/' } }, 'a site Glaze does not run on'],
     [{ ...lms, id: 'other' }, 'another extension'], [{ ...lms, tab: undefined }, 'no tab'], [{ ...frame, frameId: 0 }, "Documents' own tab"]]) {
@@ -145,6 +147,7 @@ test('the worker takes papers writes from an LMS tab\'s Documents frame only onc
     [{ ...frame, tab: { id: 10 } }, 'another tab'], [{ ...frame, origin: 'https://school.instructure.com' }, 'an LMS origin'], [{ ...frame, url: lms.url, origin: lms.origin }, "the LMS page's content script"],
     [{ ...frame, id: 'other' }, 'another extension']]) {
     assert.deepEqual(await save(s), refused, why);
+    assert.deepEqual(await papers('remove', [k], s), refused, `remove: ${why}`);
     assert.deepEqual(await papers('merge', [records], s), refused, `merge: ${why}`);
   }
   // A document opened in place (papers.html?paper=) is the frame's next document: its own pass, and the one before is done.
@@ -154,6 +157,8 @@ test('the worker takes papers writes from an LMS tab\'s Documents frame only onc
   assert.deepEqual(await claim(p2, next), { ok: true });
   assert.equal((await save(next, 'Words, typed in place.')).ok, true);
   assert.deepEqual(await save(frame), refused, 'the list it replaced');
+  assert.deepEqual(await papers('remove', [k], frame), refused, 'the previous document cannot remove');
+  assert.deepEqual(await papers('merge', [records], frame), refused, 'the previous document cannot merge');
   // Settings' frame trust and Documents' are their own: neither lets the other's page write.
   assert.deepEqual(await w.send({ type: 'glaze:courseName', key: 'x' }, { ...next, url: `${EXT}/options.html` }), refused, "a Documents claim is not Settings'");
 
@@ -225,4 +230,61 @@ test('the page\'s store sends trash, untrash and purge to the worker, never writ
   const store = PA.open(), k = PA.newKey();
   await store.trash(k); await store.untrash(k); await store.purge();
   assert.deepEqual(sent, [['trash', [k]], ['untrash', [k]], ['purge', []]]);
+});
+
+test('Documents passes expire, spend every claim attempt, and require the exact extension page even without sender.origin', async () => {
+  let now = Date.now();
+  const w = require('./helpers/worker-env.cjs')({ globals: { Date: class extends Date { static now() { return now; } } } });
+  const host = { id: 'glaze', frameId: 0, url: 'https://school.instructure.com/courses/1', tab: { id: 8 } };
+  const frame = { id: 'glaze', frameId: 2, documentId: 'doc', url: 'chrome-extension://x/papers.html', tab: host.tab };
+  const job = (pass) => w.send({ type: 'glaze:papers', op: 'job', pass }, host);
+  const claim = (pass, s = frame) => w.send({ type: 'glaze:papers', op: 'claim', pass }, s);
+  const expired = crypto.randomUUID();
+  await job(expired); now += 60001;
+  assert.deepEqual(await claim(expired), { ok: false }, 'expires after one minute');
+  for (const url of ['chrome-extension://other/papers.html', 'chrome-extension://x.evil/papers.html', 'chrome-extension://x/options.html', 'https://school.instructure.com/papers.html']) {
+    const pass = crypto.randomUUID();
+    await job(pass);
+    assert.deepEqual(await claim(pass, { ...frame, url }), { ok: false }, url);
+    assert.deepEqual(await claim(pass), { ok: false }, `the refused claim spent it: ${url}`);
+  }
+  const pass = crypto.randomUUID();
+  assert.equal(await w.send({ type: 'glaze:papers:hello', pass }, host), 'ignored', 'hello cannot issue a pass');
+  assert.deepEqual(await claim(pass), { ok: false });
+});
+
+test('a replacement Documents claim fences the previous document before persistence and queued writes run', async () => {
+  const vm = require('node:vm');
+  const w = require('./helpers/worker-env.cjs')();
+  const host = { id: 'glaze', frameId: 0, documentId: 'top', url: 'https://school.instructure.com/courses/1', tab: { id: 8 } };
+  const frame = { id: 'glaze', frameId: 2, documentId: 'old', url: 'chrome-extension://x/papers.html', tab: host.tab };
+  const next = { ...frame, documentId: 'new' }, key = PA.newKey();
+  const claim = async (sender) => {
+    const pass = crypto.randomUUID();
+    await w.send({ type: 'glaze:papers', op: 'job', pass }, host);
+    return w.send({ type: 'glaze:papers', op: 'claim', pass }, sender);
+  };
+  const save = (s) => w.send({ type: 'glaze:writerPapers', op: 'save', args: [key, { doc: doc('Retired.') }] }, s);
+  assert.deepEqual(await claim(frame), { ok: true });
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const queue = vm.runInContext('(brokerTurn ||= GZ_CARDS.queue())', w.context);
+  const blocking = queue(() => held);
+  const queued = save(frame);
+  await w.settle();
+  const set = w.context.chrome.storage.session.set;
+  let persisted;
+  w.context.chrome.storage.session.set = async (v) => { if (v['papersFrame:8']) await new Promise((r) => { persisted = r; }); return set(v); };
+  try {
+    const claiming = claim(next);
+    await w.settle();
+    assert.equal(typeof persisted, 'function');
+    assert.equal(vm.runInContext('trustedFrame', w.context)(frame, 'papers'), false, 'old claim revoked before the new claim settles');
+    assert.equal(vm.runInContext('trustedFrame', w.context)(next, 'papers'), false, 'pending claim grants nothing');
+    persisted();
+    assert.deepEqual(await claiming, { ok: true });
+    release(); await blocking;
+    assert.deepEqual(await queued, { ok: false, error: 'sender' }, 'a queued write rechecks the document when it runs');
+    assert.equal(w.store.local[`writerPaper:${key}`], undefined);
+  } finally { persisted?.(); release(); }
 });
