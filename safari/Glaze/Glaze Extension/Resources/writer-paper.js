@@ -1669,6 +1669,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       pages: () => (compact ? null : layout?.pages.length || 0),
       // The view: full(on) as the switch does (writer.full saved); compact() whether the compose box shows the paper.
       full: (on) => setView(on !== false, { save: true }), compact: () => compact,
+      flush: (request) => flush(request), resume: (request) => resume(request),
       // A question in the paper's toast: items [{ label, run }], the first the default; gone() when it goes unanswered.
       ask: (text, items, gone) => toast(text, null, { ask: '', items, gone }),
       paragraph: (opener) => paraDialog(opener || paraB), pageSetup: pageDialog,
@@ -1683,20 +1684,49 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // (the page scrolls by what the compact box moved it, features/writer.js; the pages' canvas puts it back once laid
     // out). A switch saves writer.full, which every assignment follows (Settings too). Into the compact box the paper is
     // first kept as a version ('view'), then its projection goes into Ultra's box; out of it, nothing more is written.
-    let loaded = false, projecting = false, holding = false;
+    let loaded = false, projecting = false, holding = false, switching = null, flushing = null;
     const mine = []; // writer.full values this frame saved, heard back from storage as they went
     const caretY = () => { try { return Math.round(view.coordsAtPos(view.state.selection.head).top); } catch { return null; } };
     // The compact box's text for Ultra's: once per turn of edits, as compose's change (writer.js) is.
     const projectSoon = () => {
-      if (!compact || !loaded || holding || projecting || !host.say) return;
+      if (!compact || !loaded || holding || flushing || projecting || !host.say) return;
       projecting = true;
-      queueMicrotask(() => { projecting = false; const p = compact && loaded && !holding && project(view.state.doc); if (p) host.say({ type: 'change', ...p }); });
+      queueMicrotask(() => { projecting = false; const p = compact && loaded && !holding && !flushing && project(view.state.doc); if (p) host.say({ type: 'change', ...p }); });
+    };
+    const resume = (request) => {
+      if (!flushing || flushing.request !== request) return;
+      const f = flushing; flushing = null;
+      root.inert = f.root; boxEl.inert = f.box;
+      view.setProps({ editable: f.editable });
+      if (f.next) setView(f.next.full, f.next.options);
+    };
+    const flush = async (request) => {
+      if (typeof request !== 'string' || flushing || switching || !compact || !loaded || holding || view.composing) {
+        host.say?.({ type: 'compact:flushed', request, ok: false }); return;
+      }
+      const f = flushing = { request, editable: view.props.editable, root: root.inert, box: boxEl.inert }, doc = view.state.doc;
+      view.setProps({ editable: () => false }); root.inert = boxEl.inert = true;
+      const saved = await save();
+      if (flushing !== f) return; // timed out, closed, or replaced
+      const p = saved && doc === view.state.doc && project(doc);
+      host.say?.({ type: 'compact:flushed', request, ok: !!p, ...(p || {}) });
     };
     const setView = async (full, { save: persist = false, from = null } = {}) => {
+      if (switching) return switching.then(() => setView(full, { save: persist, from }));
+      if (flushing) { flushing.next = { full, options: { save: persist, from } }; return; }
       const next = !!boxEl && !full;
-      if (persist && SET && (SET.now()?.full === true) === next) { mine.push(!next); SET.patch((w) => ({ ...w, full: !next })).catch((e) => console.error(e)); }
       if (next === compact) return;
       const typing = view.hasFocus(), keyed = !!from && document.activeElement === from, y = caretY();
+      if (next && key && loaded) {
+        let done; switching = new Promise((r) => { done = r; }); holding = true;
+        const editable = view.props.editable, inert = root.inert; root.inert = true;
+        view.setProps({ editable: () => false });
+        let saved = false;
+        try { saved = (!dirty || !!await save()) && !!await save('view'); }
+        finally { switching = null; holding = false; root.inert = inert; view.setProps({ editable }); done(); }
+        if (!saved) { if (typing) view.focus(); return; } // keep the full paper until its version is safely stored
+      }
+      if (persist && SET && (SET.now()?.full === true) === next) { mine.push(!next); SET.patch((w) => ({ ...w, full: !next })).catch((e) => console.error(e)); }
       if (focus) setFocus(false);
       close();
       compact = next;
@@ -1732,8 +1762,6 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const gw = document.getElementById('gw');
       host.say?.({ type: 'view', full: !compact, px: compact && gw ? Math.ceil(gw.getBoundingClientRect().height) + 6 : null, from: y, to: caretY() });
       if (!compact || !key || !loaded) return;
-      holding = true;
-      try { if (dirty) await save(); await save('view'); } finally { holding = false; }
       projectSoon();
     };
     // Settings → Writer → Full writer changed elsewhere (Settings, another assignment's switch): this frame follows.
@@ -1748,7 +1776,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const more = boxEl && document.getElementById('more');
     if (more) {
       more.before(fullSwitch());
-      const items = [['Cite', () => globalThis.GZ_WRITER_CITE?.open?.({ anchor: more })], ['Versions', () => versions(more)], ['Open from Documents', () => fromDocsSheet()], ['Documents', () => open2('papers.html')]]
+      const panel = async (name) => { await setView(true, { save: true }); if (!compact) { tabs[name].click(); tabs[name].focus(); } };
+      const items = [['Checks', () => panel('checks')], ['Feedback', () => panel('feedback')], ['Cite', () => globalThis.GZ_WRITER_CITE?.open?.({ anchor: more })], ['Versions', () => versions(more)], ['Open from Documents', () => fromDocsSheet()], ['Documents', () => open2('papers.html')]]
         .map(([label, run]) => [host.item?.(t(label), run), label]);
       more.addEventListener('click', () => { for (const [b, label] of items) if (b) b.textContent = t(label); }, true);
     }
@@ -1777,6 +1806,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   if (frame) {
     const listeners = [];
     frame.on('context', (c) => { for (const fn of listeners) fn(c); });
+    frame.handle('compact:flush', (m) => current ? current.flush(m.request) : frame.say({ type: 'compact:flushed', request: m.request, ok: false }));
+    frame.handle('compact:resume', (m) => current?.resume(m.request));
     frame.handle('focus-mode', (m) => current?.focused(m.on === true));
     frame.on('ready', (editor) => {
       if (frame.mode() !== 'paper') return;

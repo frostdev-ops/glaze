@@ -122,6 +122,22 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
     const reset = async (p, text = LAST) => { await p.evaluate((h) => __page.port.postMessage({ type: 'html', html: h }), QUOTED + `<p>${text}</p>`); await until(async () => (await last(p)) === text, 'reset'); await end(p); };
     const next = (p, task, reply) => p.evaluate(([task, reply]) => { __ai.next[task] = reply; }, [task, reply]);
 
+    if (process.argv.includes('--compact')) {
+      const q = await frame({ mode: 'paper', kind: 'assignment', html: `<p>${LAST}</p>`, ctx: { kind: 'assignment' } });
+      try {
+        await until(() => q.evaluate(() => !!GZ_WRITER_PAPER.current()?.compact() && GZ_WRITER_AI.allowed('completion')), 'compact paper ready');
+        await check('compact paper shows completion in the box and Tab accepts only the current sentence', async () => {
+          await next(q, 'writer.complete', GHOST); await end(q); await q.keyboard.type(' it');
+          assert.equal(await until(() => ghost(q), 'compact ghost'), ' arrives uninvited and rearranges the present.');
+          assert.ok(await q.$('#gw .gz-ghost'));
+          await q.keyboard.press('Tab');
+          assert.equal(await last(q), LAST + ' it arrives uninvited and rearranges the present.');
+          assert.equal(await ghost(q), null);
+          assert.equal(await q.evaluate(() => document.documentElement.dataset.view), 'compact');
+        });
+        await check('no page errors', async () => assert.deepEqual(errors, []));
+      } finally { await q.close(); }
+    } else {
     const p = await frame();
     await check('the chip names the connection, with a green dot, when AI is ready', async () => {
       const chip = await until(() => p.$('.slot[data-slot="ai"] .gz-ai-chip'), 'chip');
@@ -554,6 +570,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       } finally { await q.close(); }
     });
     await check('no page errors', async () => assert.deepEqual(errors, []));
+    }
   } finally { await browser.close(); }
   console.log(`${checks - failures}/${checks} passed${failures ? '' : ` · screenshots in ${shots}`}`);
   process.exitCode = failures ? 1 : 0;

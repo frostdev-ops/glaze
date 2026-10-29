@@ -603,11 +603,12 @@ const HARNESS = `(() => {
     for (const [w, hgt] of [[1280, 800], [640, 900]]) { await p.setViewportSize({ width: w, height: hgt }); await el.evaluate((f) => f.scrollIntoView({ block: 'center' })); saved[`compact${w}`] = await cshot(p, `compact-${w}.png`); }
     await p.setViewportSize({ width: 1440, height: 900 });
     // A long paper, the caret in its middle: Full writer and back keep the document, the caret, and its line on the page.
-    await fr.evaluate((json) => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON(json).content)); }, FX.papers.mla9());
+    await fr.evaluate((json) => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON(json).content)); }, { ...FX.papers.mla9(), content: [...FX.papers.mla9().content, { type: 'paragraph', content: [{ type: 'image', attrs: { src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHtQAAAAASUVORK5CYII=', alt: 'Saved picture', width: 20, height: 20 } }] }] });
     await until(async () => /Works Cited/.test(await p.evaluate(() => __text())), 'the long paper in Ultra\'s box');
     await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let at = 0; v.state.doc.descendants((n, pos) => { if (!at && n.isText && n.text.includes('(Morrison 35)')) at = pos + n.text.indexOf('(Morrison 35)'); }); v.focus(); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, at)).scrollIntoView()); });
     await settle(fr);
     const ultraBefore = await p.evaluate(() => __text()), docBefore = await paperText(fr);
+    const jsonBefore = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON());
     const c0 = await caretAt(el, fr);
     await fr.click('.gw-bar .gp-full');
     await until(() => fr.evaluate(() => document.querySelectorAll('.gp-sheet').length > 1 && document.querySelector('.gp-flow').style.visibility === ''), 'pages drawn');
@@ -621,6 +622,16 @@ const HARNESS = `(() => {
     check(c1.y > 0 && c1.y < vh, `the caret's line in sight (${Math.round(c0.y)} → ${Math.round(c1.y)} of ${vh})`);
     await until(async () => (await fullSet()) === true, 'writer.full saved');
     check(true, 'the switch saves writer.full');
+    await fr.click('.gp-top .gp-full');
+    await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'round-trip compact');
+    check(JSON.stringify(await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON())) === JSON.stringify(jsonBefore), 'compact → full → compact preserves the complete document, notes, page breaks and pictures');
+    await p.evaluate(() => { const q = document.querySelector('.ql-container[data-gz-writer-id]').__quill; q.root.innerHTML = '<p><span>' + q.root.textContent + '</span></p>'; });
+    await pause(150);
+    check(JSON.stringify(await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON())) === JSON.stringify(jsonBefore), 'Ultra reformats the projection without replacing the paper');
+    await p.evaluate((delta) => document.querySelector('.ql-container[data-gz-writer-id]').__quill.setContents(delta, 'user'), await fr.evaluate(() => GZ_WRITER_PAPER.project(GZ_WRITER_PAPER.current().editor.view.state.doc).delta));
+    await fr.click('.gw-bar .gp-full');
+    await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'full'), 'full again');
+    await settle(fr);
     await p.keyboard.type('Pages only. ', { delay: 2 });
     await pause(600);
     check((await p.evaluate(() => __text())) === ultraBefore, 'typed in the pages, nothing goes into Ultra\'s box');
@@ -639,6 +650,41 @@ const HARNESS = `(() => {
     check((await versions()).filter((r) => r === 'view').length === viewsBefore + 1, 'the paper kept as a version first');
     check((await p.evaluate(() => __text())).includes('Pages only.') && !/Morrison 35\./.test(await p.evaluate(() => __text())), 'then its text goes into Ultra\'s box again, footnotes left in the paper');
     await until(async () => (await fullSet()) === false, 'writer.full saved off');
+    for (const width of [480, 479]) {
+      await el.evaluate((f, width) => { f.style.width = `${width}px`; }, width);
+      await until(() => fr.evaluate((width) => { const b = document.querySelector('.gw-bar .gp-full'), label = b.querySelector('.gp-full-name'); return !!label.getClientRects().length === (width >= 480) && b.getAttribute('aria-label') === 'Full writer'; }, width), `switch at ${width}px`);
+      check(true, `Full writer at ${width}px keeps its accessible name and ${width >= 480 ? 'shows' : 'hides'} the visible label`);
+    }
+    await el.evaluate((f) => { f.style.width = 'calc(100% + 6px)'; });
+    // A frame crash during failed native sync recovers its complete paper rather than its projection.
+    await p.evaluate(() => { const c = document.querySelector('.ql-container[data-gz-writer-id]'); window.__savedPaperQuill = c.__quill; delete c.__quill; });
+    const recoveryJSON = await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.insertText('Recovered last edit. ', v.state.selection.from)); return v.state.doc.toJSON(); });
+    const oldCompact = el;
+    await fr.evaluate(() => setTimeout(() => location.reload(), 0));
+    await until(() => oldCompact.evaluate((f) => !f.isConnected), 'crashed compact frame retired');
+    el = await until(() => p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'), 'replacement paper frame');
+    fr = await until(() => el.contentFrame(), 'replacement paper document');
+    await until(() => fr.evaluate(() => !!GZ_WRITER_PAPER.current()?.key()), 'recovered paper loaded');
+    check(JSON.stringify(await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON())) === JSON.stringify(recoveryJSON), 'a crash mid-sync recovers the last edit, notes, page breaks and pictures');
+    await p.evaluate(() => { document.querySelector('.ql-container[data-gz-writer-id]').__quill = __savedPaperQuill; });
+    for (const name of ['Feedback', 'Checks']) {
+      await fr.click('#more');
+      await fr.click(`#menu [role="menuitem"]:text-is("${name}")`);
+      await until(() => fr.evaluate((id) => document.documentElement.dataset.view === 'full' && document.getElementById(`gp-tab-${id}`).getAttribute('aria-selected') === 'true', name.toLowerCase()), `${name} from compact`);
+      check(true, `compact ⋯ → ${name} opens the full view at its panel`);
+      await fr.click('.gp-top .gp-full');
+      await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact after panel');
+    }
+    for (const key of ['Space', 'Enter']) {
+      await fr.focus('.gw-bar .gp-full'); await p.keyboard.press(key);
+      await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'full' && document.querySelector('.gp-top .gp-full').getAttribute('aria-checked') === 'true'), `${key} turns Full writer on`);
+      await fr.focus('.gp-top .gp-full'); await p.keyboard.press(key);
+      await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact' && document.querySelector('.gw-bar .gp-full').getAttribute('aria-checked') === 'false'), `${key} turns Full writer off`);
+      check(true, `${key} operates the Full writer switch in both views`);
+    }
+    await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.parse(GZ_WRITER_SCHEMA.paper, '<p>Morrison is less interested in nostalgea than in what the town chooses to forget.</p>').content)); v.focus(); });
+    await until(() => fr.evaluate(() => GZ_WRITER_ISSUES.list().some((i) => i.source === 'harper') && !!document.querySelector('#gw .gz-iss')), 'Harper in compact', 30000);
+    check(true, 'Harper draws proofing underlines in the compact paper');
     // Kept across a reload; and Settings → Writer → Full writer switches an open assignment live, both ways.
     await setFull(true);
     await p.close();
@@ -673,6 +719,20 @@ const HARNESS = `(() => {
     got = await p.evaluate(() => ({ uploads: __uploads.length, clicks: __clicks, text: __text(), confirm: !!document.getElementById('ultra-confirm') }));
     check(got.clicks.join() === 'assignment.attempt.authoring.footer.submit' && got.confirm && got.uploads === 0 && got.text === 'Submitted as text.\n' && await fr.evaluate(() => !document.querySelector('.gs-layer')), 'Ultra\'s Submit sends the text as it is: no sheet, no .docx');
     await p.close();
+    // Submit as is from compact: the sheet owns the native text and its one final click.
+    ({ p, el, fr } = await openCompact('empty'));
+    await fr.click('#gw .ProseMirror'); await p.keyboard.type('Keep this compact draft.');
+    await until(async () => (await p.evaluate(() => __text())).includes('Keep this compact draft.'), 'compact draft synced');
+    await give(p, '[class*="makeStylesinputContainer-"]', 'Compact_original.docx', MIME, essay);
+    await until(() => cardOf(fr), 'compact as-is card');
+    await fr.click('.gi-choice:not(.gi-default)'); await sheetOpen(fr);
+    await fr.fill('#gs-note', 'Original file attached.');
+    await fr.click('.gs-primary');
+    await until(() => p.evaluate(() => __clicks.length === 1), 'compact as-is submitted');
+    check(await p.evaluate(() => __text() === 'Original file attached.\n' && __uploads.length === 1) && sha(await p.evaluate(() => __uploads[0].bytes)) === sha(essay), 'compact Submit as is attaches the original bytes once and preserves the sheet’s note without the compact draft');
+    check((await paperText(fr)).includes('Keep this compact draft.'), 'Submit as is leaves the stored paper intact');
+    await p.close();
+    await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); });
     // Ultra's file area: a PDF is Ultra's; a .docx asks, over a frame as tall as a paper, and Open in Writer opens the pages.
     ({ p, el, fr } = await openCompact('empty'));
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
@@ -686,10 +746,17 @@ const HARNESS = `(() => {
     card = await cardOf(fr);
     check(card.tiles.join('|') === 'Open in Writer|Submit as is' && await p.evaluate(() => __uploads.length === 1), `a .docx asks Open in Writer or Submit as is, the frame a paper's height (${h0}px → ${await frameH(el)}px)`);
     saved.compactCard = await cshot(p, 'compact-card-1440.png');
+    const compactRemnant = await p.evaluate(() => __text());
     await fr.click('.gi-default');
     await until(async () => (await paperText(fr)).includes(marker), 'opened');
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'full' && document.querySelectorAll('.gp-sheet').length > 0), 'the pages');
     check(await fullSet() === true, 'Open in Writer opens the file in the pages, Full writer on');
+    check(await p.evaluate(() => __text()) === compactRemnant, 'opening the file leaves Ultra’s compact remnant available for explicit review');
+    await p.click(SUBMIT); await until(() => fr.evaluate(() => !!document.querySelector('.gs-layer')), 'submit imported paper');
+    check(await fr.getAttribute('#gs-keep', 'aria-checked') === 'false' && await fr.getAttribute('#gs-paste', 'aria-checked') === 'false', 'the submit sheet defaults to excluding the compact remnant and paper text');
+    await fr.click('.gs-primary');
+    await until(() => p.evaluate(() => !!document.getElementById('ultra-confirm')), 'imported file submitted');
+    check(await p.evaluate(() => __text().trim() === '' && __uploads.length === 2 && __uploads[1].name.endsWith('.docx') && __clicks.length === 1), 'the imported .docx submits once with no duplicate compact text');
     await p.close();
     await setFull(true);
 
