@@ -105,7 +105,7 @@ const check = async (name, test) => {
     const own = await context.newPage();
     watch(own, 'papers tab');
     await own.goto(PAPERS);
-    await own.evaluate(async ({ s, key, title, body }) => {
+    await own.evaluate(async ({ s, key, title, body, ai }) => {
       await chrome.storage.sync.set({ ...s, navbarItems: { glaze: ['documents', 'search', 'settings'], tabs: ['glaze:documents'] } });
       await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'], ultra: ['https://bb.school.test'] });
       for (const [k, t, d] of [[key, title, body], [ai.key, 'Reading notes', ai.body]]) {
