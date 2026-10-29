@@ -20,6 +20,8 @@ GZ_UI.load().then((s) => {
     document.body.classList.toggle('off', !s.enabled);
     // inert, not just dimmed: body.off alone leaves the controls reachable by keyboard.
     for (const el of document.querySelectorAll('.tiles > :not(.power, .editor)')) el.inert = !s.enabled;
+    // Writer's Documents, while Writer is on; the theme's switch leaves it be.
+    $('#documents').hidden = s.enhance.writer === false;
     // The look being worn, drawn as the editor's look cards are; none of the eight: the palette's own.
     const L = GZ_LOOKS.find((x) => GZ_LOOK_ON(s, x));
     const c = L ? L.colors : GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
@@ -66,6 +68,7 @@ GZ_UI.load().then((s) => {
     $('#sheet').showModal();
   });
   $('#back').addEventListener('click', () => $('#sheet').close());
+  $('#documents').addEventListener('click', (e) => { if (e.isTrusted) chrome.tabs.create({ url: chrome.runtime.getURL('papers.html') }); });
   // openOptionsPage reuses an editor tab that is already open, but Chrome sometimes refuses it
   // ("Could not create an options page"); a plain tab always opens. Promise.resolve: not every
   // browser returns a promise here.

@@ -1,6 +1,8 @@
-// The ways to Writer's Documents page (papers.html) against the unpacked extension, offline: Settings → Writer → Papers'
-// link, Settings → Navigation's opt-in item, Glaze's bar with it on (Settings' preview, and a Canvas page through the
-// worker) and Canvas's command palette. Shots: the papers heading in a dark and a light Look, and the Glaze items.
+// The ways to Writer's Documents page (papers.html) against the unpacked extension, offline: the popup's header pill (right
+// of "Glaze", its one word, the popup still inside Chrome's 600px, gone with Writer off, kept with the theme off, a real
+// click only; tabs.create stubbed, then real), Settings → Writer → Papers' link, Settings → Navigation's opt-in item,
+// Glaze's bar with it on (Settings' preview, and a Canvas page through the worker) and Canvas's command palette. Shots: the
+// popup at its natural size and the papers heading, each in a dark and a light Look, and the Glaze items.
 // NODE_PATH=<playwright> nice -n 10 node scripts/documents-entry-check.js [shots folder] (default: a temporary folder).
 // EXT selects the checkout.
 const { chromium } = require('playwright');
@@ -63,6 +65,74 @@ const check = async (name, test) => {
     };
     const dark = D.GZ_SANITIZE({});
     const light = D.GZ_SANITIZE({ ...D.GZ_DEFAULTS, ...D.GZ_LOOK_APPLY(D.GZ_DEFAULTS, D.GZ_LOOKS.find((L) => L.name === 'Library')) });
+
+    // ---- the popup, as a page 360px wide (its body's width); popup.html?real keeps the browser's tabs.create
+    const popup = await context.newPage();
+    watch(popup, 'popup');
+    await popup.addInitScript(() => {
+      if (location.pathname !== '/popup.html' || location.search === '?real') return;
+      globalThis.__created = [];
+      chrome.tabs.create = (o) => { globalThis.__created.push(o); return Promise.resolve({ id: 1 }); };
+    });
+    const openPopup = async (query = '') => {
+      await popup.setViewportSize({ width: 360, height: 900 });
+      await popup.goto(`${base}/popup.html${query}`);
+      await until(() => popup.evaluate(() => !!document.querySelector('#look-name').textContent && !!document.querySelector('#motion-name').textContent), 'popup drawn');
+      await pause(250);
+    };
+    const pill = () => popup.getByRole('button', { name: 'Documents', exact: true });
+    // The popup's natural height: its body's, as the browser sizes the popup to it.
+    const natural = () => popup.evaluate(() => Math.ceil(document.body.getBoundingClientRect().height));
+
+    await store(dark);
+    await openPopup();
+    await check('popup-pill', async () => {
+      assert.equal(await pill().count(), 1, 'one Documents button');
+      assert.equal(await pill().evaluate((e) => e.parentElement.matches('header.top') && e.previousElementSibling?.textContent), 'Glaze', 'in the header, after its name');
+      const [b, h, top] = [await pill().boundingBox(), await popup.locator('header.top h1').boundingBox(), await popup.locator('header.top').boundingBox()];
+      assert.ok(b.x > h.x + h.width && Math.abs(b.x + b.width - (top.x + top.width)) < 0.5, `right of "Glaze", at the header's end (${JSON.stringify([b, h, top])})`);
+      assert.equal((await pill().innerText()).trim(), 'Documents', 'its one word');
+      assert.equal(await pill().locator('small').count(), 0, 'no line under it');
+      await pill().evaluate((e) => e.click());
+      assert.deepEqual(await popup.evaluate(() => globalThis.__created), [], 'a scripted click opens nothing');
+      await pill().click();
+      assert.deepEqual(await popup.evaluate(() => globalThis.__created), [{ url: PAPERS }]);
+    });
+    await check('popup-fits', async () => {
+      assert.ok(await pill().isVisible(), 'with the pill');
+      const h = await natural();
+      console.log(`popup height with the pill: ${h}px`);
+      assert.ok(h <= 600, `inside Chrome's 600px popup (${h}px)`);
+    });
+    for (const [name, s] of [['dark', dark], ['light', light]]) {
+      await store(s);
+      await openPopup();
+      const h = await natural();
+      console.log(`${name} popup: 360 × ${h}px`);
+      await popup.setViewportSize({ width: 360, height: h });
+      await pause(200);
+      await popup.screenshot({ path: path.join(shots, `entry-popup-${name}.png`) });
+    }
+    await check('popup-theme-off', async () => {
+      await store({ ...dark, enabled: false });
+      await openPopup();
+      assert.equal(await pill().evaluate((e) => e.inert || !!e.closest('[inert]')), false, 'not inert with the theme off');
+      assert.equal(await pill().evaluate((e) => getComputedStyle(e).opacity), '1');
+      await pill().click();
+      assert.deepEqual(await popup.evaluate(() => globalThis.__created), [{ url: PAPERS }]);
+    });
+    await check('popup-writer-off', async () => {
+      await store(D.GZ_SANITIZE({ enhance: { writer: false } }));
+      await openPopup();
+      assert.equal(await pill().count(), 0, 'no Documents button');
+      assert.equal(await popup.locator('#documents').isVisible(), false);
+      console.log(`popup height without the pill: ${await natural()}px`);
+    });
+    await check('popup-real-tab', async () => {
+      await store(dark);
+      await openPopup('?real');
+      await opensPapers(() => pill().click());
+    });
 
     // ---- Settings → Writer → Papers
     const opts = await context.newPage();
