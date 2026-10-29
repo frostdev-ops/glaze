@@ -101,17 +101,17 @@ test('a kind or view Glaze never sends is a programming error', async () => {
   assert.equal(e.made.length, 0);
 });
 
-test('unknown groups and actions without a complete trusted summary are refused before opening', async () => {
-  for (const [kind, view] of [['pair', { ...PAIR, group: 'Allow everything' }],
-    ...[undefined, ' ', 'x'.repeat(A.LIMIT.summary + 1)].map((summary) => ['action', { ...ACTION, summary }])]) {
+for (const [name, kind, view] of [['unknown group', 'pair', { ...PAIR, group: 'Allow everything' }],
+  ...[undefined, ' ', 'x'.repeat(2001)].map((summary, i) => [`invalid summary ${i}`, 'action', { ...ACTION, summary }])]) {
+  test(`${name} is refused before opening`, async () => {
     const e = env();
     const got = outcome(e.a.ask(kind, view).catch((error) => error));
     await settle();
     assert.ok(got.v instanceof TypeError, 'invalid view must reject instead of waiting for approval');
     assert.equal(e.made.length, 0);
     assert.deepEqual(records(e.data), []);
-  }
-});
+  });
+}
 
 test('long trusted summaries keep their final words instead of cutting the consent scope', async () => {
   const e = env();
