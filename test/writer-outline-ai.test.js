@@ -242,6 +242,21 @@ const savedHarness = (saved = null) => {
   return { c, jobs, writes, timers, tick, update };
 };
 
+test('standalone outline labels survive reopen under only their complete document key', async () => {
+  const scope = 'doc:0f8e2b1a-3c4d-4e5f-8a9b-0c1d2e3f4a5b';
+  const first = savedHarness(); first.update(blocks, { scope }); await first.tick();
+  first.jobs[0].resolve({ sections }); await Promise.resolve(); first.c.stop();
+  assert.equal(first.writes.length, 1, 'a standalone outline must be persisted');
+  assert.equal(first.writes[0].scope, scope);
+  const reopened = savedHarness(first.writes[0]);
+  assert.deepEqual(reopened.update(blocks, { scope }).result, sections);
+  await reopened.tick(20000); assert.equal(reopened.jobs.length, 0, 'reopen uses the labels without inference'); reopened.c.stop();
+  for (const other of ['doc:1f8e2b1a-3c4d-4e5f-8a9b-0c1d2e3f4a5b', 'doc:bad', `${scope}x`, 'recovery:notes', '']) {
+    const h = savedHarness(first.writes[0]); h.update(blocks, { scope: other }); await h.tick();
+    assert.equal(h.jobs.length, 1, other); assert.deepEqual(h.jobs[0].cached, [], other); h.c.stop();
+  }
+});
+
 test('saved outline labels survive reload and reanchor after insertions, reorder and repeated sections', async () => {
   const first = savedHarness(); first.update(); await first.tick(); first.jobs[0].resolve({ sections }); await Promise.resolve();
   assert.equal(first.writes.length, 1);
