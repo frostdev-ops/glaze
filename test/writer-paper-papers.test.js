@@ -277,6 +277,14 @@ test('delete then merge keeps every original version at the cap', async () => {
   assert.equal((await P.get(k)).revision, records[`writerPaper:${k}`].revision, 'Undo adds no save');
 });
 
+test('remove returns the exact document and versions it deleted for Undo', async () => {
+  const s = store(), P = PA.open(s), k = PA.newKey();
+  await P.save(k, { doc: doc('The newest typing.'), format: 'plain' });
+  const records = { [`writerPaper:${k}`]: await P.get(k), [`writerVersions:${k}`]: structuredClone(s.data[`writerVersions:${k}`]) };
+  assert.deepEqual(await P.remove(k), records, 'the worker captures the snapshot in the same turn as deletion');
+  assert.equal(await P.get(k), null);
+});
+
 test('merge keeps an older record with a different format as a version', async () => {
   const P = PA.open(store(), () => 10), k = PA.newKey();
   await P.save(k, { doc: doc('Same words.'), format: 'apa7' });
