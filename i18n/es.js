@@ -3440,6 +3440,7 @@
   "How large a paper opens. Fit fills the width the box has; a percent keeps that size, and the paper’s own Zoom still changes it.": "El tamaño con el que se abre un trabajo. Ajustar llena el ancho del cuadro; un porcentaje mantiene ese tamaño, y el Zoom del trabajo lo sigue cambiando.",
   "Ruler": "Regla",
   "Light page": "Página clara",
+  "Full writer": "Writer completo",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "La regla sobre la página, con las sangrías y tabulaciones del párrafo, que puedes arrastrar. Desactivada, la página empieza justo bajo la barra de herramientas.",
   "Versions kept": "Versiones guardadas",
   "How many earlier versions each paper keeps on this device, the oldest going first. The last version you submitted always stays.": "Cuántas versiones anteriores guarda cada trabajo en este dispositivo; la más antigua se va primero. La última versión entregada siempre se queda.",

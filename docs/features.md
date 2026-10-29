@@ -141,7 +141,7 @@ On by default on Blackboard Ultra (Settings → Writer → Writer → **Glaze Wr
 
 Settings → Writer, one line each (all on by default, MLA 9, Fit, 40 versions and American English to start):
 - **Glaze Writer** and **Open uploads in Writer**: Writer itself, and an assignment's upload area going to Writer first.
-- Papers: **Format for new papers** (MLA 9, APA 7, Chicago 17); **Zoom** a paper opens at (Fit, 75–150%); **Ruler** above the page; **Light page** keeps the page white with a dark Look; **Versions kept** per paper (10, 25, 40, 50, 100; the last submitted always stays).
+- Papers: **Format for new papers** (MLA 9, APA 7, Chicago 17); **Zoom** a paper opens at (Fit, 75–150%); **Ruler** above the page; **Light page** keeps the page white with a dark Look; **Full writer** opens an assignment as pages (off, the compact box whose text goes into Blackboard's); **Versions kept** per paper (10, 25, 40, 50, 100; the last submitted always stays).
 - Papers: **Clear papers** for one course (**Clear…**) or **Clear all papers**, after a question; what you submitted stays in Blackboard.
 - Typing: **Fix typos**; **Capital I and sentence starts**; **Doubled words and spaces**; **Smart quotes and dashes**; **Ask how to paste formatting** after a formatted paste.
 - Proofing: **Spelling and grammar** on or off; **Dialect** (American, British, Canadian or Australian English); **Personal dictionary**, each added word with its remove ✕, and **Clear**.

@@ -2,9 +2,14 @@
 // writer.js makes (glaze-plans/writer/mockups C): the title bar and save state, the toolbar (format, block style, marks,
 // alignment, lists, Cite, Footnote, Page break, undo and redo, zoom, Focus, Submit…), real pages of the paper's size with
 // the running header and footnotes (lib/writer-paginate.js), the side panel (Checks, Sources, Feedback, Outline) and the status bar.
-// The paper lives in Writer's storage (lib/writer-papers.js), autosaved with versions; it never goes into Ultra's editor:
-// the submit step attaches it as a .docx (lib/writer-docx.js). The same chrome edits a paper in papers.html.
-// Classic script after writer.js; the paper libraries load only when a paper opens.
+// The paper lives in Writer's storage (lib/writer-papers.js), autosaved with versions; in this full view it never goes
+// into Ultra's editor: the submit step attaches it as a .docx (lib/writer-docx.js). The same chrome edits a paper in
+// papers.html. An assignment opens compact unless Settings → Writer → Full writer is on (writer.full; the "Full writer"
+// switch in either view sets it): the same paper in writer.html's compose box, its bar and selection toolbar, no pages,
+// panel, ruler or zoom, pagination paused and the format's checks off; its compose projection (project(): what Ultra's
+// Quill can hold) goes into Ultra's text box as a discussion post's does (features/writer.js), and Ultra's own Submit
+// sends that text. Notes, page breaks, pictures, fonts and colours stay in the paper, for the full view's .docx.
+// Classic script after writer.js; the paper libraries load only when a paper opens. module.exports (project) for node.
 var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-outline.js', 'lib/writer-papers.js', 'lib/writer-submit.js'];
   const DOCX = ['lib/writer-color.js', 'lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js'];
@@ -50,10 +55,20 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   const HIGHLIGHTS = [['yellow', 'Yellow'], ['green', 'Bright green'], ['cyan', 'Turquoise'], ['magenta', 'Pink'], ['blue', 'Blue'], ['red', 'Red'], ['darkBlue', 'Dark blue'], ['darkCyan', 'Teal'],
     ['darkGreen', 'Green'], ['darkMagenta', 'Violet'], ['darkRed', 'Dark red'], ['darkYellow', 'Dark yellow'], ['darkGray', 'Gray 50%'], ['lightGray', 'Gray 25%'], ['black', 'Black']];
   const SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
+  // A paper as compose holds it, what the compact view writes into Ultra's box: headings as Quill's, a block quote as
+  // indented lines, a table's cells as lines; notes, page breaks, pictures, fonts and colours left out. → { html, text,
+  // delta } (lib/writer-schema.js compose serialize and Quill ops), or null past compose's input limit.
+  const project = (doc) => {
+    const S = globalThis.GZ_WRITER_SCHEMA;
+    try {
+      const c = S.parse(S.compose, S.serialize(S.paper, doc).replace(/<img\b[^>]*>/g, ''));
+      return { html: S.serialize(S.compose, c), text: S.text(c).text, delta: S.delta(c) };
+    } catch { return null; }
+  };
 
-  // A paper's mount. host: { editor (GZ_WRITER_EDITOR in paper mode), t(key, vars), say(msg) (to the page), context() and
-  // onContext(fn) (Ultra's names, the paper's key), standalone (papers.html: no Submit or Focus), key (papers.html's
-  // paper) }. → the paper's API (also GZ_WRITER_PAPER.current()).
+  // A paper's mount. host: { editor (GZ_WRITER_EDITOR in paper mode), t(key, vars), say(msg) (to the page), item(label, fn)
+  // (a compact box's ⋯ entry), context() and onContext(fn) (Ultra's names, the paper's key), standalone (papers.html: no
+  // Submit, Focus or compact box), key (papers.html's paper) }. → the paper's API (also GZ_WRITER_PAPER.current()).
   let current = null;
   const mount = async (host) => {
     const editable = host.editor.view.props.editable;
@@ -67,6 +82,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const lightPage = (on) => document.documentElement.toggleAttribute('data-light-page', !!on);
     lightPage(prefs.lightPage);
     SET?.follow((w) => lightPage(w?.lightPage));
+    // The compact view (above): the editor (writer.js mounts it as #body) stays in writer.html's compose box (#gw), above
+    // its bar; the frame's ready (below) has set the view from writer.full.
+    const boxEl = host.standalone ? null : document.getElementById('gw');
+    let compact = !!boxEl && document.documentElement.dataset.view === 'compact';
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PG = GZ_WRITER_PAGINATE, PA = GZ_WRITER_PAPERS, S = GZ_WRITER_SCHEMA, PM = GZ_PM;
     const ed = host.editor, view = ed.view, t = (k, v) => { const text = host.t(k, v); return k === 'Document outline' && text === k ? 'Outline' : text; }, store = PA.open();
     const ISSUES = () => globalThis.GZ_WRITER_ISSUES || null;
@@ -137,15 +156,24 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const side = h('aside', { class: 'gp-side' }, h('div', { class: 'gp-tabs', role: 'tablist' }, Object.values(tabs)), Object.values(panes));
     // On an assignment any file can be brought (writer-import.js routes it); papers.html opens Word files only.
     const file = h('input', { type: 'file', accept: host.standalone ? '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document' : null, hidden: true });
+    // "Full writer", a slider in the full view's title bar and the compact bar's right end (setView).
+    const switches = [];
+    const fullSwitch = () => {
+      const b = btn({ class: 'gp-full', role: 'switch', 'aria-checked': String(!compact), title: t('Full writer'), 'aria-label': t('Full writer') }, h('span', { class: 'gp-full-name', text: t('Full writer') }), h('span', { class: 'gp-full-track', 'aria-hidden': 'true' }));
+      b.addEventListener('mousedown', (e) => e.preventDefault()); // the caret stays in the paper
+      b.addEventListener('click', () => setView(compact, { save: true, from: b }));
+      switches.push(b);
+      return b;
+    };
     const root = h('div', { class: `gp${host.standalone ? ' gp-standalone' : ''}` },
-      h('header', { class: 'gp-top' }, host.standalone ? h('a', { href: 'papers.html', text: t('Documents') }) : null, title, due, h('span', { class: 'grow' }), state),
+      h('header', { class: 'gp-top' }, host.standalone ? h('a', { href: 'papers.html', text: t('Documents') }) : null, title, due, h('span', { class: 'grow' }), state, boxEl ? fullSwitch() : null),
       h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('Formatting') }, pill, block, fontB, sizeBox,
         h('div', { class: 'gp-tb' }, marks, moreFmt, colorB, hlB, h('span', { class: 'gp-sepv' }), alignB, paraB, bullets, numbers, h('span', { class: 'gp-sepv' })),
         cite, note, brk, toolGrow, h('div', { class: 'gp-tb' }, undo, redo), zoomB, moreB, host.standalone ? null : focusB, host.standalone ? null : submit),
       h('div', { class: 'gp-work' }, h('div', { class: 'gp-col' }, canvas, status), side), file);
     (host.root || document.body).append(root);
     flow.style.visibility = 'hidden';
-    flow.append(view.dom);
+    if (!compact) flow.append(view.dom);
 
     // The caret, drawn: Safari's runs from the text above to this line's (a whole line tall on double spacing), so the paper
     // hides it and draws one the text's height where ProseMirror puts the cursor. While an input method composes, the
@@ -155,6 +183,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     let caretFrame = 0;
     const placeCaret = () => {
       caretFrame = 0;
+      if (compact) { caret.hidden = true; return; } // the compose box's caret is the browser's
       const sel = view.state.selection;
       let r = null;
       if (sel instanceof PM.state.TextSelection && sel.empty && view.hasFocus() && document.hasFocus() && !view.composing && !flow.hasAttribute('data-composing')) {
@@ -268,7 +297,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const watch = new PM.state.Plugin({
       view: () => ({ update: (v, prev) => {
         if (v.state.doc.attrs.setup !== prev.doc.attrs.setup) { restyleCSS(); noteCache.clear(); PG.relayout(v); }
-        if (v.state.doc !== prev.doc) changed(); else if (!v.state.selection.eq(prev.selection)) selected();
+        if (v.state.doc !== prev.doc) { changed(); projectSoon(); } else if (!v.state.selection.eq(prev.selection)) selected();
         caretSoon();
       } }),
       props: {
@@ -277,14 +306,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return true; }
           // Word's ⌘⇧> and ⌘⇧< step the size from the paper's own; ⌘Enter is a page break here (writer.js's send is compose's).
           if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && ['>', '<', '.', ','].includes(e.key)) { ed.run('sizeStep', { dir: e.key === '>' || e.key === '.' ? 1 : -1, base: look().size }); return true; }
-          if ((MAC ? e.metaKey : e.ctrlKey) && e.key === 'Enter' && !e.shiftKey && !e.altKey) { ed.run('pageBreak'); return true; }
+          if (!compact && (MAC ? e.metaKey : e.ctrlKey) && e.key === 'Enter' && !e.shiftKey && !e.altKey) { ed.run('pageBreak'); return true; }
           // Ahead of ProseMirror's own Escape (select the parent node).
           if (e.key === 'Escape' && focus) { if (!globalThis.GZ_WRITER_AI?.dismissCompletion?.()) setFocus(false); return true; }
           return false;
         },
       },
     });
-    ed.addPlugins([PG.styler(look), PG.plugin({ format: look, notes: noteHeights, gap: GAP, onLayout: (l) => { layout = l; draw(); laidOut(); } }), watch, fallback]);
+    ed.addPlugins([PG.styler(look), PG.plugin({ format: look, notes: noteHeights, gap: GAP, onLayout: (l) => { layout = l; draw(); laidOut(); }, paused: () => compact }), watch, fallback]);
 
     // ---- pages
     const surname = () => F.surname(view.state.doc, format);
@@ -363,7 +392,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       flow.style.visibility = '';
       selected();
       caretSoon();
-      for (const fn of drawn) try { fn(); } catch (e) { console.error(e); }
+      for (const fn of [...drawn]) try { fn(); } catch (e) { console.error(e); } // a hook may take itself out
     };
     const drawn = [];
     const fit = () => {
@@ -389,7 +418,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       } catch { return 0; }
     };
     const selected = () => {
-      if (!layout) return;
+      if (!layout || compact) return;
       page = pageAt(view.state.selection.head) || page;
       outlineMark();
       pageL.textContent = t('Page {n} of {m}', { n: page, m: layout.pages.length });
@@ -504,6 +533,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       view.dispatch(view.state.tr.setMeta(issuesKey, PM.view.DecorationSet.create(view.state.doc, on.filter((i) => i.to > i.from).map((i) => PM.view.Decoration.inline(i.from, i.to, { class: 'gp-u-format gp-cur' })))).setMeta('addToHistory', false));
     };
     const runChecks = () => {
+      // The compact box sends text, not the formatted paper: the format's checks wait for the pages.
+      if (compact) { formatIssues = []; groups = []; picked = hovered = null; ISSUES()?.set('format', []); underline(); cards(); return; }
       const r = F.check(view.state.doc, format, { name: ctx.user?.name || '', course: ctx.course?.name || '' }, { lines, pageAt, keep });
       formatIssues = r.issues.filter((i) => !ignored.has(ignoreKey(i)));
       const lost = missingFont();
@@ -645,12 +676,15 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       view.focus();
     };
     let checkTimer = 0;
-    const runChecksSoon = () => { clearTimeout(checkTimer); checkTimer = setTimeout(runChecks, 250); };
+    const runChecksSoon = () => { clearTimeout(checkTimer); if (!compact) checkTimer = setTimeout(runChecks, 250); };
     ISSUES()?.on?.(() => cards());
 
     // ---- saving
     let outlineSaved = null;
     const outlineScope = () => { const verified = PA.keyOf(ctx.paper || paper || {}); return verified === key ? verified : ''; };
+    // A new paper: the format's opening and list page around what Ultra's box held; in the compact box that alone (the
+    // pages' checks offer the opening).
+    const newPaper = () => F.template(compact ? ST.FORMATS.plain : format, values(), initialBody);
     const values = () => ({ name: ctx.user?.name || '', instructor: ctx.instructor || '', course: ctx.course?.name || '', date: ST.dateText(format), dueDate: Number.isFinite(Date.parse(ctx.assignment?.due || paper?.due)) ? ST.dateText(format, new Date(ctx.assignment?.due || paper.due)) : '', title: ctx.assignment?.title || '' });
     // failing: autosaves refused in a row (storage full or unavailable): each tries again later, longer each time.
     let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false, failing = 0;
@@ -780,7 +814,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       clearTimeout(changed.sources); changed.sources = setTimeout(() => sourcesPanel?.refresh(), 400);
       runChecksSoon();
       clearTimeout(outlineDraw.t);
-      outlineDraw.t = setTimeout(outlineDraw, 400);
+      if (!compact) outlineDraw.t = setTimeout(outlineDraw, 400);
     };
     // The tab's copy only outlives a reload: closing the tab after a refused save would lose the typing.
     addEventListener('beforeunload', (e) => { if (dirty && (!sessionSafe || failing)) { e.preventDefault(); e.returnValue = ''; } });
@@ -1179,7 +1213,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       } catch { toast(t('Press {key} to paste', { key: keyHint(plain ? '⌘⇧V' : '⌘V') })); }
     };
     view.dom.addEventListener('contextmenu', (e) => {
-      if (e.shiftKey || !layout || editing) return;
+      if (e.shiftKey || !layout || editing || compact) return;
       e.preventDefault();
       const anchor = h('span', { class: 'gp-anchor', 'aria-hidden': 'true' });
       anchor.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;width:0;height:0`;
@@ -1275,23 +1309,26 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
 
     // ---- versions, import and export
-    const REASONS = { conflict: 'Another editor’s draft', submit: 'Submitted', import: 'Before import', restore: 'Before restore', format: 'Before format change', edit: 'Before a big edit', auto: 'Autosave', start: 'First draft' };
-    versionsB.addEventListener('click', async () => {
-      if (open?.opener === versionsB) { close(); return; }
+    // view: the paper as the full writer left it, kept before the compact box writes it into Ultra's.
+    const REASONS = { conflict: 'Another editor’s draft', submit: 'Submitted', import: 'Before import', restore: 'Before restore', format: 'Before format change', edit: 'Before a big edit', auto: 'Autosave', start: 'First draft', view: 'Full writer' };
+    // The status bar's Versions; the compact box's ⋯ → Versions shows the versions alone (the rest is its ⋯'s, or the pages').
+    const versions = async (anchor) => {
+      if (open?.opener === anchor) { close(); return; }
       const list = key ? await store.versions(key) : [];
       const when = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
       const el = h('div', { class: 'gp-menu gp-versions', role: 'menu' },
         ...list.map((v) => h('div', { class: 'gp-mi' }, h('span', {}, when.format(v.at), ' ', h('small', { text: `${t(REASONS[v.reason] || 'Autosave')} · ${t('{n} words', { n: nf(v.words) })}` })),
           btn({ role: 'menuitem', onclick: () => { close(); restore(v.id); } }, t('Restore')))),
-        list.length ? h('div', { class: 'gp-hr' }) : null,
-        btn({ role: 'menuitem', onclick: () => { close(); exportFile(); } }, t('Export .docx')),
-        ...(globalThis.GZ_WRITER_PRINT?.items() || []).map((it) => btn({ role: 'menuitem', onclick: () => { close(); it.run(); } }, it.label)),
-        btn({ role: 'menuitem', onclick: () => { close(); file.click(); } }, host.standalone ? t('Import .docx…') : t('Import…')),
-        own ? null : btn({ role: 'menuitem', onclick: () => { close(); fromDocsSheet(); } }, t('Open from Documents')),
-        host.standalone ? null : btn({ role: 'menuitem', onclick: () => { close(); open2('papers.html'); } }, t('Documents')));
+        ...(compact ? [] : [list.length ? h('div', { class: 'gp-hr' }) : null,
+          btn({ role: 'menuitem', onclick: () => { close(); exportFile(); } }, t('Export .docx')),
+          ...(globalThis.GZ_WRITER_PRINT?.items() || []).map((it) => btn({ role: 'menuitem', onclick: () => { close(); it.run(); } }, it.label)),
+          btn({ role: 'menuitem', onclick: () => { close(); file.click(); } }, host.standalone ? t('Import .docx…') : t('Import…')),
+          own ? null : btn({ role: 'menuitem', onclick: () => { close(); fromDocsSheet(); } }, t('Open from Documents')),
+          host.standalone ? null : btn({ role: 'menuitem', onclick: () => { close(); open2('papers.html'); } }, t('Documents'))]));
       el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(true); } });
-      popup(versionsB, el, { above: true });
-    });
+      popup(anchor, el, { above: true });
+    };
+    versionsB.addEventListener('click', () => versions(versionsB));
     const restore = async (id) => {
       if (!await save()) return;
       let r = null;
@@ -1320,8 +1357,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       items: [{ label: t('Keep the document’s formatting'), run: () => {} }, { label: t('Apply {format}', { format: labelOf(format) }), run: () => { keep = false; setDoc(F.apply(view.state.doc)); runChecks(); } }],
     });
     // The paper becomes the Word file's text, what it held kept as a version first; the toast's Undo brings that back.
+    // o.full: the import card's Open in Writer from the compact box, which opens the pages (Full writer on) with the file.
     let importing = false;
-    const importFile = async (f) => {
+    const importFile = async (f, o = {}) => {
       if (!f || importing || globalThis.GZ_WRITER_SUBMIT_SHEET?.busy()) return;
       importing = true;
       const editable = view.props.editable, inert = root.inert;
@@ -1352,6 +1390,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           if (!here()) return;
         }
         keep = own;
+        if (o.full) setView(true, { save: true });
         setDoc(doc.toJSON());
         toast(r.warnings.length ? r.warnings.map((w) => t(w)).join(' ') : f.name, before ? { label: t('Undo'), run: () => restore(before.id) } : null, own ? formatChoices() : null);
       } catch (e) {
@@ -1417,15 +1456,17 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       docsSheet = null;
       s.layer.remove();
       for (const [el, was] of s.inert) el.inert = was;
-      if (back && versionsB.isConnected) versionsB.focus();
+      if (back) opener().focus();
     };
+    // What a sheet goes back to: the status bar's Versions, or the compact box's ⋯.
+    const opener = () => (compact && document.getElementById('more')) || versionsB;
     // Each row: its title (the one given, else its first line as record() keeps it), format, words and date.
     const fromDocsSheet = async () => {
       closeDocs(false);
       const turn = docsTurn;
       let docs;
       try { docs = (await store.list()).filter((r) => PA.local(r.key) && r.kind === 'paper').sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
-      catch (e) { console.error(e); if (turn === docsTurn && root.isConnected && current === api) { toast(t('Not saved. Try again in a moment.')); versionsB.focus(); } return; }
+      catch (e) { console.error(e); if (turn === docsTurn && root.isConnected && current === api) { toast(t('Not saved. Try again in a moment.')); opener().focus(); } return; }
       if (turn !== docsTurn || !root.isConnected || current !== api || importing || globalThis.GZ_WRITER_SUBMIT_SHEET?.opened()) return;
       const when = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: 'medium' });
       const x = btn({ class: 'gp-fromdocs-x', title: t('Close'), 'aria-label': t('Close'), onclick: () => closeDocs() }, icon('close'));
@@ -1509,7 +1550,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         // A new paper: the format's opening and list page around what Ultra's box already held. Under a stand-in key, and
         // as a standalone document (an untouched one leaves nothing on the Documents home), it is saved once something is
         // written in it.
-        setDoc(F.template(format, values(), initialBody), true);
+        setDoc(newPaper(), true);
         made = true;
         if (key !== recoveryKey && !PA.local(key)) await save('auto');
       }
@@ -1538,7 +1579,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (target && key === target) (async () => {
         await loading;
         if (!made || edits || key !== target) return;
-        const next = F.template(format, values(), initialBody);
+        const next = newPaper();
         if (S.paper.nodeFromJSON(next).eq(view.state.doc)) return;
         initializing = true;
         setDoc(next, true);
@@ -1563,7 +1604,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           keep = paper?.keep === true;
           format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
           initializing = true;
-          setDoc(paper?.doc || F.template(format, values(), initialBody), true);
+          setDoc(paper?.doc || newPaper(), true);
           initializing = false;
           const scope = PA.scopeOf(ctx.paper || {});
           presets = scope ? await store.presets(scope) : [];
@@ -1620,10 +1661,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       editor: ed, key: () => key, format: () => format, look, paper: () => paper, context: () => ctx,
       docx, save, notify: (message) => toast(t(message)), version: (reason = 'submit') => save(reason), focus: setFocus, refresh: hooks, zoom: setZoom, importFile, importing: () => importing,
       // Nothing written past the format's opening yet (an import then needs no word about the paper it replaces).
-      blank: () => view.state.doc.textContent.trim() === S.paper.nodeFromJSON(F.template(format, values())).textContent.trim(),
+      blank: () => { const text = view.state.doc.textContent.trim(); return !text || text === S.paper.nodeFromJSON(F.template(format, values())).textContent.trim(); },
       // The page ended Focus (a click on its dim).
       focused: (on) => { focus = on; focusB.setAttribute('aria-pressed', String(on)); },
-      pages: () => layout?.pages.length || 0,
+      pages: () => (compact ? null : layout?.pages.length || 0),
+      // The view: full(on) as the switch does (writer.full saved); compact() whether the compose box shows the paper.
+      full: (on) => setView(on !== false, { save: true }), compact: () => compact,
       // A question in the paper's toast: items [{ label, run }], the first the default; gone() when it goes unanswered.
       ask: (text, items, gone) => toast(text, null, { ask: '', items, gone }),
       paragraph: (opener) => paraDialog(opener || paraB), pageSetup: pageDialog,
@@ -1634,7 +1677,91 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       // The last page plan's blocks and breaks (lib/writer-paginate.js), for checks.
       layout: () => layout && { breaks: layout.breaks, blocks: layout.blocks.map((b) => ({ kind: b.kind, pos: b.pos, lines: (b.lines || []).map((l) => Math.round(l.h * 100) / 100), slack: b.lines?.[0]?.slack || 0, before: b.before || 0, after: b.after || 0 })) },
     };
+    // ---- the two views, switched in place: the same document and caret, the caret's line kept where it was on screen
+    // (the page scrolls by what the compact box moved it, features/writer.js; the pages' canvas puts it back once laid
+    // out). A switch saves writer.full, which every assignment follows (Settings too). Into the compact box the paper is
+    // first kept as a version ('view'), then its projection goes into Ultra's box; out of it, nothing more is written.
+    let loaded = false, projecting = false, holding = false;
+    const mine = []; // writer.full values this frame saved, heard back from storage as they went
+    const caretY = () => { try { return Math.round(view.coordsAtPos(view.state.selection.head).top); } catch { return null; } };
+    // The compact box's text for Ultra's: once per turn of edits, as compose's change (writer.js) is.
+    const projectSoon = () => {
+      if (!compact || !loaded || holding || projecting || !host.say) return;
+      projecting = true;
+      queueMicrotask(() => { projecting = false; const p = compact && loaded && !holding && project(view.state.doc); if (p) host.say({ type: 'change', ...p }); });
+    };
+    const setView = async (full, { save: persist = false, from = null } = {}) => {
+      const next = !!boxEl && !full;
+      if (persist && SET && (SET.now()?.full === true) === next) { mine.push(!next); SET.patch((w) => ({ ...w, full: !next })).catch((e) => console.error(e)); }
+      if (next === compact) return;
+      const typing = view.hasFocus(), keyed = !!from && document.activeElement === from, y = caretY();
+      if (focus) setFocus(false);
+      close();
+      compact = next;
+      document.documentElement.dataset.view = compact ? 'compact' : 'full';
+      for (const b of switches) b.setAttribute('aria-checked', String(!compact));
+      if (compact) {
+        boxEl.insertBefore(view.dom, boxEl.querySelector('.gw-bar'));
+        caret.hidden = true;
+        view.dispatch(view.state.tr.setMeta(PG.key(), PM.view.DecorationSet.empty).setMeta('addToHistory', false));
+        runChecks();
+      } else {
+        // Shown at once (a paper opened compact has never been drawn): its pages are laid out before the next paint, and
+        // the caret can go back into it.
+        flow.append(view.dom);
+        flow.style.visibility = '';
+        // The caret's line put back once laid out and in a paper's height (the page grows the frame after it hears the
+        // switch: at least 640px).
+        let laid = false;
+        const back = () => {
+          if (!compact && (!laid || innerHeight < 600)) return;
+          drawn.splice(drawn.indexOf(back), 1);
+          removeEventListener('resize', back);
+          if (compact) return; // switched back first
+          const now = caretY(), r = canvas.getBoundingClientRect();
+          if (now != null && y != null) canvas.scrollTop += now - Math.min(Math.max(y, r.top + 48), r.bottom - 96);
+        };
+        const mark = () => { laid = true; drawn.splice(drawn.indexOf(mark), 1); };
+        drawn.push(mark, back);
+        addEventListener('resize', back);
+        PG.relayout(view);
+      }
+      if (typing) view.focus(); else if (keyed) switches.find((b) => b.getClientRects().length)?.focus();
+      const gw = document.getElementById('gw');
+      host.say?.({ type: 'view', full: !compact, px: compact && gw ? Math.ceil(gw.getBoundingClientRect().height) + 6 : null, from: y, to: caretY() });
+      if (!compact || !key || !loaded) return;
+      holding = true;
+      try { if (dirty) await save(); await save('view'); } finally { holding = false; }
+      projectSoon();
+    };
+    // Settings → Writer → Full writer changed elsewhere (Settings, another assignment's switch): this frame follows.
+    SET?.follow((w, was) => {
+      const on = w?.full === true, i = mine.indexOf(on);
+      if (!was || on === (was.full === true)) return;
+      if (i >= 0) { mine.splice(0, i + 1); return; }
+      setView(on);
+    });
+    // The compact box's bar: Full writer at its right end, before ⋯; its ⋯ (writer.js, after Blackboard editor): Cite at
+    // the caret, Versions, Open from Documents and Documents, labelled again in the page's language as it opens.
+    const more = boxEl && document.getElementById('more');
+    if (more) {
+      more.before(fullSwitch());
+      const items = [['Cite', () => globalThis.GZ_WRITER_CITE?.open?.({ anchor: more })], ['Versions', () => versions(more)], ['Open from Documents', () => fromDocsSheet()], ['Documents', () => open2('papers.html')]]
+        .map(([label, run]) => [host.item?.(t(label), run), label]);
+      more.addEventListener('click', () => { for (const [b, label] of items) if (b) b.textContent = t(label); }, true);
+    }
+    // A sheet over the compact box (the import card, a file's submit sheet, Open from Documents) asks the page for a
+    // paper's height while it is open.
+    if (boxEl) {
+      let roomy = false;
+      new MutationObserver(() => {
+        const on = compact && !!document.querySelector('.gi-layer, .gs-layer, .gp-fromdocs-layer');
+        if (on !== roomy) { roomy = on; host.say?.({ type: 'room', on }); }
+      }).observe(document.body, { childList: true });
+    }
     await load();
+    loaded = true;
+    projectSoon();
     view.setProps({ editable: editable || (() => true) });
 
     current = api;
@@ -1642,7 +1769,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     return api;
   };
 
-  const self = { mount, need, current: () => current, submit: null };
+  const self = { mount, need, project, current: () => current, submit: null };
   // In writer.html: an assignment's frame opens a paper when its editor is ready.
   const frame = globalThis.GZ_WRITER_FRAME;
   if (frame) {
@@ -1651,8 +1778,13 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     frame.handle('focus-mode', (m) => current?.focused(m.on === true));
     frame.on('ready', (editor) => {
       if (frame.mode() !== 'paper') return;
-      mount({ editor, t: frame.t, say: frame.say, context: frame.context, onContext: (fn) => listeners.push(fn) }).catch((e) => console.error(e));
+      // Compact unless Full writer is on (writer.js read the settings before ready), shown before the paper loads.
+      const full = globalThis.GZ_WRITER_SETTINGS?.now()?.full === true;
+      document.documentElement.dataset.view = full ? 'full' : 'compact';
+      frame.say({ type: 'view', full });
+      mount({ editor, t: frame.t, say: frame.say, item: frame.item, context: frame.context, onContext: (fn) => listeners.push(fn) }).catch((e) => console.error(e));
     });
   }
   return self;
 })();
+if (typeof module !== 'undefined') module.exports = GZ_WRITER_PAPER;

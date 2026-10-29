@@ -3440,6 +3440,7 @@
   "How large a paper opens. Fit fills the width the box has; a percent keeps that size, and the paper’s own Zoom still changes it.": "Wie groß eine Arbeit geöffnet wird. Einpassen füllt die Breite des Felds; ein Prozentwert behält diese Größe, und der Zoom der Arbeit ändert sie weiterhin.",
   "Ruler": "Lineal",
   "Light page": "Helle Seite",
+  "Full writer": "Voller Writer",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "Das Lineal über der Seite mit den Einzügen und Tabstopps des Absatzes, die Sie ziehen können. Aus beginnt die Seite direkt unter der Symbolleiste.",
   "Versions kept": "Behaltene Versionen",
   "How many earlier versions each paper keeps on this device, the oldest going first. The last version you submitted always stays.": "Wie viele frühere Versionen jede Arbeit auf diesem Gerät behält; die älteste geht zuerst. Die zuletzt abgegebene Version bleibt immer.",

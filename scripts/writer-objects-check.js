@@ -82,7 +82,7 @@ const HARNESS = `(() => {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
     const configure = async (preset) => {
-      const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset, colors: G.GZ_PRESETS?.find?.(([n]) => n === preset)?.[1], enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
+      const settings = G.GZ_SANITIZE({ writer: { full: true }, navbar: { on: false }, footer: false, preset, colors: G.GZ_PRESETS?.find?.(([n]) => n === preset)?.[1], enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, drafts: true } });
       await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
     };
     await worker.evaluate(() => chrome.storage.local.clear());

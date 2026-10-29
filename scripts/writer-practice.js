@@ -416,9 +416,10 @@ const launch = async ({ profile, ext, mock, clear, smoke, errors, own, signal, p
   const out = (req) => !!req.serviceWorker()?.url().startsWith(`chrome-extension://${id}/`) && new URL(req.url()).origin !== M.SITE;
   await context.route('**/*', (route) => (out(route.request()) ? route.continue() : mock.handle(route)));
   await context.routeWebSocket('**/*', (ws) => ws.close());
-  // The mock starts every run with nothing submitted, so Writer's fences from an earlier run go too (the papers stay).
+  // The mock starts every run with nothing submitted, so Writer's fences from an earlier run go too (the papers stay). A
+  // fresh profile's (--smoke) submission is the pages' (Full writer on); the compact box is writer-submit-check's.
   await inExtension(context, id, async ({ site, clear }) => {
-    if (clear) { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); }
+    if (clear) { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set({ writer: { full: true } }); }
     const all = await chrome.storage.local.get(null);
     await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:')));
     const ultra = Array.isArray(all.ultra) ? all.ultra : [];

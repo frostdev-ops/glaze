@@ -238,8 +238,9 @@ const WRITER = 24 + 409 + 134 + 728 + 61 + 279 + 31 + 27 + 70;
 // the owner's 2026-10-19 approval): defaults.js's writer group and its group rule, 1089 bytes on every site, where content.js
 // reads every GZ_DEFAULTS key (features/writer-quote.js reads writer.compose.quote); lib/i18n.js's English plural for its
 // "1 paper", 62. Measured against 66c7f370. Settings → Writer → Light page (writer.lightPage, the off switch for a dark
-// Look's dark pages): 28 bytes, measured against c8e99a04.
-const WRITER_SETTINGS = 1089 + 62 + 28;
+// Look's dark pages): 28 bytes, measured against c8e99a04. Settings → Writer → Full writer (writer.full, the compact
+// assignment box's off switch, and its line in the group's comment): 66 bytes, measured against ab37a58d.
+const WRITER_SETTINGS = 1089 + 62 + 28 + 66;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -384,6 +385,7 @@ const STYLE_READS = [
   ['content.js', 'getComputedStyle(p)', 1], // a highlight's fill above an element
   ['content-ultra.js', 'getComputedStyle(p)', 1], // a course slot's probe
   ['features/docs.js', 'getComputedStyle(p)', 1], // the scroller above the document in focus mode
+  ['features/writer.js', 'getComputedStyle(e)', 1], // the scroller above an assignment's Writer frame, once per Full writer switch
   ['features/petworld.js', 'getComputedStyle(n)', 1], // at most 30 ancestors when a pet/toy acquires a content anchor; never in the scroll handler
   ['features/petworld.js', 'getComputedStyle(e)', 1], // only matching panel roots with layout boxes, while the pet is wandering
   ['features/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list

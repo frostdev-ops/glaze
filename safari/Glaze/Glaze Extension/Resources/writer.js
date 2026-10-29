@@ -7,10 +7,11 @@
 //                 draft came back); and for the frame's later parts (handle): quote (writer-compose.js), ai and
 //                 attachments (writer-ai.js), focus-mode (writer-paper.js), import:file (writer-import.js), submit:*
 //                 (writer-submit.js);
-//   frame → page: ready, height { px }, change { html, text, words, delta } (compose only; delta: its Quill ops, what the
-//                 page writes into Ultra's editor), send (Mod-Enter), native (back to Blackboard's editor; with a reason, the
-//                 box holds what Writer can't keep and nothing was written); and the later parts' attachments,
-//                 focus-mode and submit:*.
+//   frame → page: ready, height { px }, change { html, text, words, delta } (compose's; a paper's compact box sends its
+//                 own: writer-paper.js; delta: its Quill ops, what the page writes into Ultra's editor), send (Mod-Enter),
+//                 native (back to Blackboard's editor; with a reason, the box holds what Writer can't keep and nothing was
+//                 written); and the later parts' attachments, focus-mode, view { full, px, from, to }, room { on } and
+//                 submit:*.
 // Besides that pass it asks the extension only for the student's Writer settings (lib/writer-settings.js); its later
 // parts keep the paper (lib/writer-papers.js) and ask for proofing and AI on their own channels.
 (() => {
@@ -155,8 +156,8 @@
         keys: { 'Mod-Enter': () => { say({ type: 'send' }); return true; } } });
       words = ed.words();
       lang(m.locale);
-      height();
       emit('ready', ed, m);
+      height(); // after the parts' ready: a paper's shows its compact box or its pages (writer-paper.js)
     },
     look: (m) => { look(m.look); emit('look', m.look); },
     context: (m) => { context = m.context && typeof m.context === 'object' ? m.context : {}; emit('context', context); },

@@ -46,7 +46,7 @@ const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = []
     format: ST.FORMATS.mla9, paper: null, keep: false, presets: [], zoom: 'fit', formatIssues: [], picked: null,
     t: (k) => k, state: { textContent: '' }, title: {}, due: {},
     restyleCSS() {}, counts() {}, setZoom() {}, PG: { relayout() {} }, runChecks() {}, runChecksSoon() {}, outlineDraw() {}, outlineAI: { stop() {} }, sourcesPanel: null,
-    own: false, titleIn: null, URLSearchParams, location: { search: '' }, ...extra,
+    own: false, titleIn: null, URLSearchParams, location: { search: '' }, compact: false, ...extra,
   });
   vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, restore, key: () => key, keep: () => keep, edits: () => edits, format: () => format, dirty: () => dirty, fromDocs: typeof fromDocs === 'function' ? fromDocs : null };`, sandbox);
   const $ = sandbox.__;
@@ -369,6 +369,18 @@ test('an assignment paper is still saved when it opens, titled by Ultra', async 
   await frame({ local, ss: session(), context: { recovery: RECOVERY, paper: PARTS, assignment: { title: 'Essay 2' } } });
   const { paper } = await stored(local);
   assert.deepEqual([paper.kind, paper.named, paper.title], ['paper', false, 'Essay 2']);
+});
+
+// The compact box (Settings → Writer → Full writer off) sends text: a paper it makes is what Ultra's box held, without the
+// format's opening and list page, even once the page names the student; the pages make the format's.
+test('a new paper made in the compact box has no opening; one made in the pages has the format\'s', async () => {
+  const named = { recovery: RECOVERY, paper: PARTS, user: { name: 'Alex Rivera' }, instructor: 'Professor Okafor', course: { name: 'ENGL 2110' }, assignment: { title: 'Essay 2' } };
+  const compact = await frame({ local: memory(), ss: session(), context: named, extra: { compact: true } });
+  await compact.context(named);
+  assert.equal(compact.shown(), '');
+  assert.equal(compact.$.format().id, 'mla9', 'the format is still the paper\'s, for its pages and .docx');
+  const full = await frame({ local: memory(), ss: session(), context: named });
+  assert.match(full.shown(), /^Alex Rivera/);
 });
 
 test('a rename from the Documents home stays: the title follows it, unsaved typing too, and no conflict version', async () => {

@@ -121,7 +121,7 @@
     const view = ed.view, f = C.format(src, style);
     const size = view.state.doc.content.size;
     const at = Math.max(0, Math.min(saved?.to ?? view.state.selection.to, size));
-    if (style === 'chicago17' && F.mode() === 'paper') {
+    if (style === 'chicago17' && F.mode() === 'paper' && document.documentElement.dataset.view !== 'compact') {
       // The first note for a source is the full one; later notes are short.
       const earlier = C.cites(view.state.doc, sources, style).some((c) => c.kind === 'note' && c.ids.includes(src.id) && c.at[0] < at);
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, at)));
@@ -129,7 +129,8 @@
       ed.focus();
       return true;
     }
-    // Compose has no footnotes: a Chicago citation there is its short note in parentheses.
+    // Compose has no footnotes, nor does the compact box's text for Ultra: a Chicago citation there is its short note in
+    // parentheses.
     const html = style === 'chicago17' ? `(${f.short(page).replace(/\.$/, '')})` : f.inText(page);
     const schema = view.state.schema, italic = schema.marks.italic;
     const before = view.state.doc.textBetween(Math.max(0, at - 1), at, '\n', '\n');
@@ -315,10 +316,11 @@
   const pop = el('div', { class: 'pop gz-cite', role: 'dialog', 'aria-label': t('Cite'), hidden: true });
   document.body.append(pop);
   let anchor = null, returnTo = null, gwPx = 0;
-  // In compose mode the frame is only as tall as the box: while the popover is open the frame asks for its height too.
+  // In compose mode (and a paper's compact box) the frame is only as tall as the box: while the popover is open the frame
+  // asks for its height too.
   const fit = () => {
-    if (F.mode() !== 'compose') return;
     const gw = document.getElementById('gw');
+    if (!gw?.getClientRects().length) return;
     gwPx = gw ? Math.ceil(gw.getBoundingClientRect().height) + 6 : 0;
     const need = pop.hidden ? gwPx : Math.max(gwPx, pop.offsetTop + pop.offsetHeight + 6);
     F.say({ type: 'height', px: need });
