@@ -178,3 +178,15 @@ test('compact: the file sheet owns its native click and text, without a second c
   assert.equal(box.editor.innerHTML, '<p>Explicit submission note.</p>');
   assert.ok(!c.ports[0].sent.some((m) => m.type === 'compact:flush'));
 });
+
+test('compact: native Submit cannot bypass the flush while a crashed frame is reopening', async () => {
+  const { c, box, frame } = await paper(false);
+  c.emit({ type: 'change', html: '<p>Earlier projection.</p>', text: 'Earlier projection.', delta: ops('Earlier projection.') });
+  frame.remove(); c.ctx.GZ_WRITER.pass();
+  const button = c.doc.querySelector('[data-analytics-id="assignment.attempt.authoring.footer.submit"]');
+  const e = { type: 'click', target: button, preventDefault() { this.held = true; }, stopImmediatePropagation() {} };
+  c.doc.dispatchEvent(e);
+  assert.equal(e.held, true, 'the replacement must load the saved paper before native submission is available');
+  assert.equal(box.editor.innerHTML, '<p>Earlier projection.</p>');
+  assert.ok(!c.ports[1].sent.some((m) => m.type === 'compact:flush'), 'never ask an uninitialized frame to flush');
+});
