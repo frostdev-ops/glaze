@@ -30,6 +30,33 @@ test('mod document keys hide account identifiers and resolve only within their m
   assert.notEqual(A.docKeys().summary('first', doc).key, a.key, 'no cross-page identifier');
 });
 
+test('the page broker masks list and action keys and resolves read and export without returning raw keys', async () => {
+  const src = fs.readFileSync(path.join(__dirname, '../papers.js'), 'utf8');
+  const body = src.slice(src.indexOf('    const mods = async () => {'), src.indexOf('\n\n    await Promise.all([refresh()'));
+  const raw = 'bb.school.test|_900_1|_101_1|_7_1', doc = { key: raw, title: 'Essay', course: 'English' };
+  let action, clicked;
+  const ctx = vm.createContext({ active: true, performance: { now: () => 0 }, GZ_MODAPI: A,
+    chrome: { runtime: { getManifest: () => ({ sandbox: {} }), sendMessage: async () => ({ mods: [{ id: 'first' }] }) } },
+    GZ_WRITER_PAPER: { need: async () => {} }, GZ_MODS: { start() {}, order: () => ['first'], documents: { action: (id, data) => { action = data; } } },
+    D: { list: () => [doc], read: async (key) => key === raw ? { key, title: doc.title, text: 'Body' } : null,
+      export: async (key) => key === raw ? { name: 'Essay.docx', bytes: [80, 75] } : null,
+      item: (slot, label, fn) => { clicked = fn; return { remove() {} }; } },
+  });
+  await vm.runInContext(`${body}\nmods()`, ctx);
+  const call = (mod, name, v) => ctx.GZ_CTX.documents.call(mod, `documents.${name}`, v, 'Tools');
+  const list = await call('first', 'list');
+  const key = list.value[0].key;
+  assert.notEqual(key, raw, 'list must not expose school and account storage keys');
+  assert.equal((await call('first', 'read', { key })).value.key, key, 'read returns the same opaque handle');
+  assert.equal((await call('first', 'export', { key })).value.name, 'Essay.docx');
+  assert.equal((await call('first', 'read', { key: raw })).error, 'args');
+  assert.equal((await call('second', 'read', { key })).error, 'args');
+  await call('first', 'add', { slot: 'documents.card', id: 'count', label: '<img src=x>' });
+  clicked(doc, { isTrusted: false });
+  assert.equal(action.doc.key, key, 'card actions use the same handle as list');
+  assert.equal(JSON.stringify(action).includes('bb.school.test'), false);
+});
+
 const ID = 'abcdefghijklmnop', OTHER = 'qrstuvwxyz234567', SITE = 'https://school.instructure.com';
 const flush = () => new Promise(setImmediate);
 const rec = (perms = ['documents', 'documents.read'], over = {}) => ({
