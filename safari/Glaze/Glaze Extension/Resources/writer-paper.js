@@ -650,7 +650,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
 
     // ---- saving
     let outlineSaved = null;
-    const outlineScope = () => { const verified = PA.keyOf(ctx.paper || paper || {}); return verified === key ? verified : ''; };
+    const outlineScope = () => { const verified = PA.local(key) ? key : PA.keyOf(ctx.paper || paper || {}); return verified === key ? verified : ''; };
     const values = () => ({ name: ctx.user?.name || '', instructor: ctx.instructor || '', course: ctx.course?.name || '', date: ST.dateText(format), dueDate: Number.isFinite(Date.parse(ctx.assignment?.due || paper?.due)) ? ST.dateText(format, new Date(ctx.assignment?.due || paper.due)) : '', title: ctx.assignment?.title || '' });
     // failing: autosaves refused in a row (storage full or unavailable): each tries again later, longer each time.
     let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false, failing = 0;
