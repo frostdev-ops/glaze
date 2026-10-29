@@ -290,3 +290,41 @@ test('Delete forever and startup/page purges preserve a paper while its submit p
     assert.equal(w.store.local[`writerVersions:${k}`], undefined);
   }
 });
+
+// The worker stops while a write waits in its queue (MV3 ends an idle or crashed worker): what it never wrote stays
+// unwritten, the page's retry lands once on the next worker, and a write that landed before the reply was lost is
+// retried on its old revision without filing the student's own text as another editor's draft.
+test('a worker stopped mid-queue leaves storage whole, and the next one takes the page\'s retries', async () => {
+  const EXT = 'chrome-extension://x', home = { id: 'glaze', frameId: 0, url: `${EXT}/papers.html`, origin: EXT, tab: { id: 4, url: `${EXT}/papers.html` } };
+  const [a, b] = [PA.newKey(), PA.newKey()];
+  const save = (w, k, text, base) => w.send({ type: 'glaze:writerPapers', op: 'save', args: [k, { kind: 'paper', doc: doc(text), format: 'plain' }, { ...(base != null && { base }) }] }, home);
+  let w = require('./helpers/worker-env.cjs')();
+  await w.settle();
+  assert.equal((await save(w, a, 'A, first.')).ok, true);
+  const rev = (await PA.open(w.context.chrome.storage.local).get(a)).revision;
+  // The next write to A hangs at storage and the worker is gone before it lands; B waits behind it in the same queue.
+  const local = w.context.chrome.storage.local, set = local.set.bind(local);
+  local.set = (v) => (Object.hasOwn(v, `writerPaper:${a}`) ? new Promise(() => {}) : set(v));
+  let answered = 0;
+  save(w, a, 'A, second.', rev).then(() => answered++);
+  save(w, b, 'B, first.').then(() => answered++);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(answered, 0, 'neither write was answered');
+  assert.equal(w.store.local[`writerPaper:${b}`], undefined, 'B never ran');
+  assert.equal(w.store.local[`writerPaper:${a}`].doc.content[0].content[0].text, 'A, first.', 'A as it last landed');
+  w = require('./helpers/worker-env.cjs')({ store: w.store });
+  assert.equal((await save(w, a, 'A, second.', rev)).ok, true);
+  assert.equal((await save(w, b, 'B, first.')).ok, true);
+  const P = PA.open(w.context.chrome.storage.local), rows = await P.list();
+  assert.deepEqual(rows.map((r) => r.key).sort(), [a, b].sort(), 'the index lists each once');
+  for (const r of rows) assert.ok(w.store.local[`writerPaper:${r.key}`], `${r.key}: its record`);
+  assert.deepEqual((await P.versions(a)).map((v) => v.reason), ['start'], 'no conflict for a write that never landed');
+  // A write that landed, its reply lost with the worker: the page sends it again on the revision it had.
+  const landed = (await P.get(a)).revision;
+  assert.equal((await save(w, a, 'A, third.', landed)).ok, true);
+  w = require('./helpers/worker-env.cjs')({ store: w.store });
+  const again = await save(w, a, 'A, third.', landed);
+  assert.equal(again.ok, true);
+  assert.equal(again.value.paper.doc.content[0].content[0].text, 'A, third.');
+  assert.ok(!(await PA.open(w.context.chrome.storage.local).versions(a)).some((v) => v.reason === 'conflict'), 'its own text is no other editor\'s draft');
+});
