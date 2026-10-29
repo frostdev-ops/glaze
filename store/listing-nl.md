@@ -68,3 +68,4 @@ NIEUW IN 4.0.0
 • Bekijk je paper voordat de .docx via Blackboards eigen upload wordt ingeleverd. “Back-up maken…” en “Herstellen…” bevatten papers, versies, je woordenboek en opgeslagen bronnen.
 • Instellingen › AI verbindt genoemde aanbieders met hun sleutel of een model op dit apparaat, met één model voor alles of per functie. “Eenvoudig” en “Geavanceerd” bieden eigen eindpunten en modelinstellingen. AI blijft uit tot je het inschakelt.
 • Blackboard-cursustabbladen behouden hun pagina’s, zoeken volgt de eigen cursuslinks en het uitschakelen van de optie om je plek te onthouden annuleert een gepland herstel.
+• Uiterlijk › Beweging begint bij Expressief. De update zet Subtiel eenmalig op Expressief; Uit blijft Uit.

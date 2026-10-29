@@ -68,3 +68,4 @@ NOVEDADES DE 4.0.0
 • Revisa tu trabajo antes de enviar su .docx mediante la carga de Blackboard. «Hacer una copia…» y «Restaurar…» incluyen trabajos, versiones, tu diccionario y fuentes guardadas.
 • Ajustes › IA conecta proveedores por nombre con sus claves o un modelo en este dispositivo, con un modelo para todo o uno por función. Las vistas «Sencillo» y «Avanzado» ofrecen puntos de conexión propios y controles del modelo. La IA permanece desactivada hasta que la actives.
 • Las pestañas de cursos de Blackboard conservan sus páginas, la búsqueda sigue los enlaces nativos de los cursos y desactivar la opción de recordar tu posición cancela cualquier restauración pendiente.
+• Aspecto › Movimiento empieza en Expresivo. La actualización cambia Sutil a Expresivo una vez; si elegiste No, sigue en No.

@@ -68,3 +68,4 @@ NEU IN 4.0.0
 • Prüfe deine Arbeit, bevor ihre .docx über Blackboards eigenen Upload abgegeben wird. „Sichern…“ und „Wiederherstellen…“ enthalten Arbeiten, Versionen, dein Wörterbuch und gespeicherte Quellen.
 • Einstellungen › KI verbindet benannte Anbieter mit ihrem Schlüssel oder ein Modell auf diesem Gerät. Ein Modell gilt für alles oder je eines pro Funktion. „Einfach“ und „Erweitert“ bieten eigene Endpunkte und Modelloptionen. KI bleibt aus, bis du sie einschaltest.
 • Blackboard-Kurs-Tabs behalten ihre Seiten, die Suche folgt den nativen Kurslinks und das Abschalten der Positionsspeicherung bricht eine ausstehende Wiederherstellung ab.
+• Aussehen › Bewegung beginnt bei Lebhaft. Das Update stellt Dezent einmalig auf Lebhaft um; Aus bleibt Aus.

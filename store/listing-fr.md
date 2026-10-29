@@ -68,3 +68,4 @@ NOUVEAUTÉS DE LA VERSION 4.0.0
 • Relisez votre travail avant l’envoi de son .docx par le téléversement de Blackboard. « Sauvegarder… » et « Restaurer… » incluent travaux, versions, dictionnaire et sources enregistrées.
 • Réglages › IA connecte des fournisseurs par leur nom avec leur clé ou un modèle sur cet appareil, avec un modèle pour tout ou par fonction. Les vues « Simple » et « Avancé » donnent accès aux points de connexion personnalisés et aux réglages du modèle. L’IA reste désactivée tant que vous ne l’activez pas.
 • Les onglets de cours Blackboard conservent leurs pages, la recherche suit les liens natifs des cours et désactiver la mémorisation de votre position annule toute restauration en attente.
+• Apparence › Animations commence à Expressives. La mise à jour passe une fois Subtiles à Expressives ; Aucune reste Aucune.

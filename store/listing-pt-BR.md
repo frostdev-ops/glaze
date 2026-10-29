@@ -68,3 +68,4 @@ NOVO NA 4.0.0
 • Revise seu trabalho antes de enviar o .docx pelo próprio upload do Blackboard. “Fazer backup…” e “Restaurar…” incluem trabalhos, versões, seu dicionário e fontes salvas.
 • Configurações › IA conecta provedores pelo nome com suas chaves ou um modelo neste dispositivo, com um modelo para tudo ou um por recurso. As visualizações “Simples” e “Avançado” oferecem endpoints próprios e controles do modelo. A IA fica desligada até você ativá-la.
 • As abas de cursos do Blackboard mantêm suas páginas, a busca segue os links nativos dos cursos e desativar a opção de lembrar sua posição cancela qualquer restauração pendente.
+• Aparência › Movimento começa em Expressivo. A atualização muda Sutil para Expressivo uma vez; Desligado continua desligado.

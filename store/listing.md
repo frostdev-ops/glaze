@@ -76,6 +76,7 @@ NEW IN 4.0.0
 • Review your paper before submitting its .docx through Blackboard's own upload. Back up… and Restore… include papers, versions, your dictionary and saved sources.
 • Settings › AI connects named providers with their keys or a model on this device, with one model for everything or one per feature. Simple and Advanced views keep custom endpoints and model controls in reach. AI stays off until you turn it on.
 • Blackboard course tabs keep their pages, search follows native course links, and turning Remember your place off cancels pending restoration.
+• Look › Motion starts at Expressive. Updating moves Subtle to Expressive once; Off stays Off.
 
 ## Single-purpose statement
 
