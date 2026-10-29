@@ -4,6 +4,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const vm = require('node:vm');
 const G = require('../lib/mcp/grants.js');
 const { fakeIDB } = require('./helpers/fake-idb.cjs');
 
@@ -81,6 +83,7 @@ test('grants turn on and off per group, for a known app and a known group only',
   assert.equal(await s.grant('aaaaaaaaaaaaaaaa', 'grades', true), null, 'no app, nothing written');
   assert.equal(await s.get('aaaaaaaaaaaaaaaa'), null);
   assert.deepEqual((await s.get(id)).grants, { assignments: true, 'mod:abcdefghijklmnop': true });
+  assert.deepEqual((await s.get(id)).declined, {}, 'switching a grant off does not decline it');
 });
 
 test('declines are remembered, for a group and for pairing, until the student allows it', async () => {
@@ -91,6 +94,7 @@ test('declines are remembered, for a group and for pairing, until the student al
   const d = await s.decline(id, 'grades');
   assert.deepEqual(d.declined, { grades: 2000 });
   assert.deepEqual(d.grants, { courses: true });
+  assert.deepEqual((await s.grant(id, 'grades', false)).declined, { grades: 2000 }, 'switching off preserves an existing decline');
   assert.deepEqual((await G.open(indexedDB).get(id)).declined, { grades: 2000 }, 'remembered by the next worker');
   now.tick();
   assert.deepEqual((await s.decline(id, 'courses')).grants, {}, 'declining a group drops its grant');
@@ -153,4 +157,93 @@ test('the activity list keeps the last 200 rows, its seven keys only, each in it
   await G.record({ get: async () => { throw new Error('quota'); }, set: async () => {} }, row);
   await G.record({ get: async () => ({}), set: async () => { throw new Error('quota'); } }, row);
   assert.equal(G.CALLS, 'mcpCalls');
+});
+
+
+test('activity rewrites stored rows through the same metadata rules', async () => {
+  const local = area();
+  const row = { at: 1000, app: 'q2yhd4emtekyo2kc', tool: 'todo_list', group: 'courses', kind: 'read', outcome: 'ok', ms: 2 };
+  local.data.mcpCalls = [
+    { ...row, args: { essay: 'private draft' }, result: 'private response', error: 'private error' },
+    { outcome: 'private outcome', tool: 'todo_list' },
+    { outcome: 'error', tool: { essay: 'private draft' }, group: 'private group' },
+    null, 'private draft',
+  ];
+  await G.record(local, row);
+  assert.deepEqual(local.data.mcpCalls, [row, { outcome: 'error' }, row]);
+});
+
+test('activity stores the primitive value it validated, even for an accessor', async () => {
+  const local = area();
+  let reads = 0;
+  await G.record(local, { outcome: 'ok', get tool() { return ++reads === 1 ? 'todo_list' : { essay: 'private draft' }; } });
+  assert.deepEqual(local.data.mcpCalls, [{ tool: 'todo_list', outcome: 'ok' }]);
+});
+
+test('pairing binds the executable and verification to the values used for its id', async () => {
+  const s = G.open(fakeIDB().indexedDB, clock());
+  const peer = { exe: '/bin/approved', verified: true };
+  const pending = s.pair(peer, 'test-app', ['courses']);
+  peer.exe = '/bin/other';
+  peer.verified = false;
+  const rec = await pending;
+  assert.equal(rec.id, await G.appId({ exe: '/bin/approved' }, 'test-app'));
+  assert.equal(rec.exe, '/bin/approved');
+  assert.equal(rec.verified, true);
+  const other = await s.pair(peer, 'test-app', []);
+  assert.notEqual(other.id, rec.id);
+  assert.equal(other.exe, '/bin/other');
+  assert.equal((await s.list()).length, 2);
+});
+
+test('pairing keeps exactly the groups validated before hashing', async () => {
+  const s = G.open(fakeIDB().indexedDB, clock());
+  const groups = ['courses'];
+  const pending = s.pair(CODE, 'test-app', groups);
+  groups[0] = 'grades';
+  groups.push('files');
+  assert.deepEqual((await pending).grants, { courses: true });
+});
+
+test('a pairing decline at timestamp zero is still remembered', async () => {
+  const { indexedDB } = fakeIDB(), s = G.open(indexedDB, clock(0));
+  const { id } = await s.pair(CODE, 'test-app', []);
+  const rec = await s.decline(id, 'pair');
+  assert.equal(rec.declined.pair, 0);
+  assert.equal(G.paired(rec), false);
+  assert.equal(G.granted({ ...rec, grants: { grades: true } }, 'grades'), false);
+  assert.equal(G.paired(await G.open(indexedDB).get(id)), false);
+});
+
+test('a new app decline uses an empty pairing followed by a remembered decline', async () => {
+  const { indexedDB } = fakeIDB(), s = G.open(indexedDB, clock());
+  const id = await G.appId(CODE, 'test-app');
+  assert.equal(await s.decline(id, 'pair'), null, 'decline cannot create an unknown app');
+  const rec = await s.pair(CODE, 'test-app', []);
+  assert.equal(G.paired(rec), true);
+  assert.deepEqual(rec.grants, {});
+  assert.equal(G.paired(await s.decline(id, 'pair')), false);
+  assert.equal(G.paired(await G.open(indexedDB).get(id)), false);
+});
+
+test('display caps preserve whole surrogate pairs and never truncate the hashed identity', async () => {
+  const s = G.open(fakeIDB().indexedDB, clock());
+  const exe = 'x'.repeat(1023), name = 'n'.repeat(99);
+  const a = await s.pair({ exe: exe + '😀/a' }, name + '😀a', []);
+  const b = await s.pair({ exe: exe + '😀/b' }, name + '😀a', []);
+  const c = await s.pair({ exe: exe + '😀/a' }, name + '😀b', []);
+  assert.deepEqual([a.exe, a.name], [exe, name]);
+  assert.deepEqual([b.exe, b.name], [exe, name]);
+  assert.equal(new Set([a.id, b.id, c.id]).size, 3);
+  assert.equal(a.id, expected(exe + '😀/a', name + '😀a'));
+});
+
+test('classic-script dependencies are resolved on use, after grants loads', async () => {
+  const context = vm.createContext({ module: { exports: {} } });
+  vm.runInContext(fs.readFileSync(require.resolve('../lib/mcp/grants.js'), 'utf8'), context);
+  context.GZ_AI_TOOLS = require('../lib/ai/tools.js');
+  context.GZ_AI_REQUEST = require('../lib/ai/request.js');
+  const local = area();
+  await context.module.exports.record(local, { tool: 'todo_list', group: 'courses', kind: 'read', outcome: 'ok' });
+  assert.deepEqual(JSON.parse(JSON.stringify(local.data.mcpCalls)), [{ tool: 'todo_list', group: 'courses', kind: 'read', outcome: 'ok' }]);
 });
