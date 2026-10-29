@@ -303,8 +303,9 @@ const check = async (name, test) => {
       await worker.evaluate((tabId) => chrome.scripting.executeScript({ target: { tabId }, func: () => GZ_SETTINGS_PAGE.open('writer/papers') }), tabId);
       await until(() => settingsFrame.evaluate(() => location.hash === '#writer/papers' && !document.querySelector('[data-editor-panel="writer"]').hidden), 'a repeated open replaces Settings section history');
       await back(page);
+      // The frame shows its list once claimed, then the channel's go replaces it with the document.
+      await until(() => framed(page) && new URL(framed(page).url()).searchParams.get('paper') === KEY, 'Back restores the document through the private channel');
       f = await shown(page);
-      assert.equal(new URL(f.url()).searchParams.get('paper'), KEY, 'Back restores the document through the private channel');
       await until(async () => (await item(page, 'glaze:documents').getAttribute('aria-current')) === 'page', 'Documents marked again');
       await item(page, 'glaze:search').click();
       await closed(page);
@@ -375,7 +376,9 @@ const check = async (name, test) => {
         await until(() => f.evaluate(() => document.documentElement.getAttribute('data-gz-motion') === 'expressive' && !matchMedia('(prefers-reduced-motion: reduce)').matches), 'Expressive in the frame');
         const h0 = await page.evaluate(() => history.length), w = await f.evaluate(() => innerWidth);
         const cardW = await f.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"]`).getBoundingClientRect().width, KEY);
-        await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+        // From the keyboard, the pointer away: a hovered card lifts (papers.css), and the genie leaves the card as it shows.
+        await page.mouse.move(2, 2);
+        await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).press('Enter');
         f = await shown(page);
         await ended(f);
         const open = await f.evaluate(() => ({ vt: globalThis.__mo.vt, genie: globalThis.__mo.all.find((x) => x.pseudo === '::view-transition-new(root)' && x.route === 'open' && x.n >= 24) }));
