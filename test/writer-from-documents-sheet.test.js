@@ -44,7 +44,7 @@ test('the sheet labels rows with literal titles, format, words and date; only st
   assert.equal(s.picks().length, 2);
   assert.equal(s.picks()[0].querySelector('b').textContent, rows()[0].title);
   assert.equal(s.picks()[0].querySelector('img'), null);
-  assert.equal(s.picks()[0].getAttribute('aria-label'), `${rows()[0].title} · Blank · 3 words · Jan 1, 1970`);
+  assert.equal(s.picks()[0].getAttribute('aria-label'), `${rows()[0].title} · Blank · 3 words · ${new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(1000)}`);
   assert.equal(s.root.inert, true);
 });
 
