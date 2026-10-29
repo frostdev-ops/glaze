@@ -208,6 +208,7 @@ test('remove takes only a host\'s own files, not those of a host that took over 
   const d = runDir(t);
   const p = R.socketPath(d, 'chrome', 'same');
   const first = net.createServer();
+  t.after(() => first.close());
   await R.listen(first, p);
   const mine = { ...record(d, { instance: 'same' }), ino: fs.lstatSync(p).ino };
   R.write(d, record(d, { instance: 'same', token: mine.token }));
