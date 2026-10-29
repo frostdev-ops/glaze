@@ -1,4 +1,4 @@
-// setup, ensure and uninstall. Setup copies the package (bin, lib, package.json) out of wherever npx put it into
+// setup, ensure and uninstall. Setup copies the package (bin, lib, package.json, LICENSE) out of wherever npx put it into
 // <data>/<version>, keeping the version it replaces, and writes one launcher and one host manifest per browser that is
 // present. On Windows the manifests sit beside the launchers and a key under HKCU points at each; keys go through
 // run('…\System32\reg.exe', argv), never a shell. ensure({ ifNeeded: true }) is the same code, writing only what
@@ -106,12 +106,18 @@ const put = (file, text, mode, force) => {
   safePath(file);
   if (!force && readText(file) === text && (!MODES || !mode || (fs.statSync(file).mode & 0o777) === mode)) return false;
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  let fd, created = false;
   try {
-    fs.writeFileSync(tmp, text, { mode: mode || 0o644, flag: 'wx' });
-    if (MODES && mode) fs.chmodSync(tmp, mode);
+    fd = fs.openSync(tmp, 'wx', mode || 0o644);
+    created = true;
+    fs.writeFileSync(fd, text);
+    if (MODES && mode) fs.fchmodSync(fd, mode);
+    fs.closeSync(fd);
+    fd = undefined;
     fs.renameSync(tmp, file);
   } catch (e) {
-    fs.rmSync(tmp, { force: true });
+    if (fd !== undefined) fs.closeSync(fd);
+    if (created) fs.rmSync(tmp, { force: true });
     throw e;
   }
   return true;
