@@ -21,5 +21,5 @@ test('Writer\'s scripts and ProseMirror write no HTML through the sinks Firefox 
 
 test('ProseMirror parses pasted HTML with DOMParser, as scripts/vendor-prosemirror.sh patches it', () => {
   const pm = fs.readFileSync(path.join(root, 'lib/pm.js'), 'utf8');
-  assert.match(pm, /doc3 = new DOMParser\(\)\.parseFromString\(maybeWrapTrusted\(html\), "text\/html"\);\n {4}elt = doc3\.body;/);
+  assert.match(pm, /doc3 = new globalThis\.DOMParser\(\)\.parseFromString\(maybeWrapTrusted\(html\), "text\/html"\);\n {4}elt = doc3\.body;/);
 });
