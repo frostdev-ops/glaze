@@ -69,6 +69,7 @@ const check = async (name, test) => {
     const base = `chrome-extension://${new URL(worker.url()).host}`, PAGE = `${base}/lib/mcp/approve.html`;
     await until(() => worker.evaluate(() => typeof globalThis.approveCheck?.ask === 'function'), 'the worker loads approve.js');
     const errors = [];
+    const contrastIssues = [];
     const watch = (p, name) => {
       p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
       p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::ERR_/.test(m.text())) errors.push(`${name} console: ${m.text()}`); });
@@ -92,7 +93,10 @@ const check = async (name, test) => {
       await p.waitForFunction(() => document.getElementById('title').textContent.trim() && !document.getElementById('ask').hidden, null, POLL);
       return p;
     };
-    const armed = (p) => p.waitForFunction(() => document.getElementById('yes').getAttribute('aria-disabled') === 'false', null, POLL);
+    const armed = async (p) => {
+      await p.bringToFront();
+      await p.waitForFunction(() => document.hasFocus() && document.getElementById('yes').getAttribute('aria-disabled') === 'false', null, POLL);
+    };
     const read = (p) => p.evaluate(() => ({
       title: document.getElementById('title').textContent, group: document.getElementById('group').hidden ? null : document.getElementById('group').textContent,
       app: document.getElementById('app').textContent, note: document.querySelector('.who .hint').textContent, exe: document.getElementById('exe').hidden ? null : document.getElementById('exe').textContent,
@@ -106,6 +110,13 @@ const check = async (name, test) => {
         await p.emulateMedia({ colorScheme: scheme });
         await p.waitForFunction((s) => document.documentElement.style.colorScheme === s, scheme, POLL);
         await p.screenshot({ path: path.join(shots, `${kind}-${scheme}.png`) });
+        const contrast = await p.evaluate(() => {
+          const bg = getComputedStyle(document.getElementById('ask')).backgroundColor;
+          return [...document.querySelectorAll('.who .hint')].map((el) => ({ text: el.textContent, color: getComputedStyle(el).color,
+            background: bg, ratio: GZ_COLOR.contrast(getComputedStyle(el).color, bg) }));
+        });
+        fs.writeFileSync(path.join(shots, `${kind}-${scheme}-contrast.json`), JSON.stringify(contrast, null, 2));
+        for (const c of contrast) if (c.ratio < 4.5) contrastIssues.push({ kind, scheme, ...c });
       }
       await p.emulateMedia({ colorScheme: 'light' });
     };
@@ -161,7 +172,7 @@ const check = async (name, test) => {
       await until(() => outcome('action2'), 'the second action\'s answer');
       assert.equal(await outcome('action2'), 'yes');
       const state = await worker.evaluate(() => chrome.storage.session.get(null).then((all) => Object.values(all).filter((r) => r?.kind === 'action').map((r) => r.state)));
-      assert.deepEqual(state.sort(), ['no', 'running']);
+      assert.deepEqual(state.sort(), ['no', 'yes']);
       await closes(q);
     });
 
@@ -187,6 +198,7 @@ const check = async (name, test) => {
       const id = await worker.evaluate(() => chrome.storage.session.get(null).then((all) => Object.values(all).find((r) => r?.state === 'waiting' && r.kind === 'action').id));
       assert.deepEqual(await other.evaluate((id) => chrome.runtime.sendMessage({ type: 'glaze:mcp-ask', id, answer: 'yes' }), id), { ok: false });
       await other.close();
+      await p.bringToFront();
       assert.equal(await outcome('first'), null);
       // The app cancels the shown ask: the window shows the next one, with its buttons waiting again.
       await worker.evaluate(() => globalThis.checkAsks.first.ac.abort());
@@ -204,6 +216,69 @@ const check = async (name, test) => {
       await closes(p);
     });
 
+    await check('focus changes reset the guard and held keys cannot approve', async () => {
+      const p = await opened('focus', 'action', VIEWS.action);
+      await armed(p);
+      // Playwright forces every target to report focus by default; let Chromium report real focus for this check.
+      await (await context.newCDPSession(p)).send('Emulation.setFocusEmulationEnabled', { enabled: false });
+      const other = await context.newPage();
+      await (await context.newCDPSession(other)).send('Emulation.setFocusEmulationEnabled', { enabled: false });
+      await other.bringToFront();
+      await p.waitForFunction(() => document.getElementById('yes').getAttribute('aria-disabled') === 'true', null, POLL);
+      await p.evaluate(() => document.getElementById('yes').click());
+      assert.equal(await outcome('focus'), null, 'background activation is ignored');
+      await p.bringToFront();
+      assert.equal(await p.evaluate(() => document.getElementById('yes').getAttribute('aria-disabled')), 'true');
+      await armed(p);
+      await p.keyboard.press('Tab');
+      assert.equal(await p.evaluate(() => document.activeElement.id), 'yes');
+      await p.keyboard.down('Enter');
+      await until(() => outcome('focus'), 'intentional Enter');
+      assert.equal(await outcome('focus'), 'yes');
+      await closes(p);
+      const q = await opened('repeat', 'action', VIEWS.action);
+      // Hold Enter from before this window arms, then repeat it after Allow receives focus.
+      await q.keyboard.down('Enter');
+      await armed(q);
+      await q.keyboard.press('Tab');
+      await q.keyboard.down('Enter');
+      await pause(100);
+      assert.equal(await outcome('repeat'), null, 'a held key is ignored after the guard expires');
+      await q.keyboard.up('Enter');
+      await press(q, 'Escape');
+      await until(() => outcome('repeat'), 'Escape after the held key');
+      assert.equal(await outcome('repeat'), 'no');
+      await closes(q);
+      await other.close();
+    });
+
+    await check('app claims stay text, RTL fits, and forced colours preserve keyboard focus', async () => {
+      const name = '<img src=x onerror=alert(1)>', exe = '/tmp/<script>claim</script>';
+      const p = await opened('text', 'pair', { ...VIEWS.pair, app: { name, exe } });
+      await armed(p);
+      assert.equal((await read(p)).app, name);
+      assert.equal((await read(p)).exe, exe);
+      assert.equal(await p.locator('#app *, #exe *').count(), 0);
+      await p.evaluate(() => { document.documentElement.dir = 'rtl'; });
+      await p.screenshot({ path: path.join(shots, 'pair-rtl.png') });
+      assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      await p.emulateMedia({ forcedColors: 'active' });
+      await p.keyboard.press('Tab');
+      assert.equal(await p.evaluate(() => document.activeElement.id), 'yes');
+      const focus = await p.locator('#yes').evaluate((b) => {
+        const s = getComputedStyle(b); return { style: s.outlineStyle, width: s.outlineWidth, color: s.color, background: s.backgroundColor };
+      });
+      assert.notEqual(focus.style, 'none');
+      assert.notEqual(focus.width, '0px');
+      assert.notEqual(focus.color, focus.background);
+      await p.screenshot({ path: path.join(shots, 'pair-forced-colors.png') });
+      await press(p, 'Escape');
+      await until(() => outcome('text'), 'the text-only ask');
+      assert.equal(await outcome('text'), 'no');
+      await closes(p);
+    });
+
+    await check('self-reported identity text has readable contrast in both palettes', async () => assert.deepEqual(contrastIssues, []));
     await check('no page errors', async () => assert.deepEqual(errors, []));
   } finally {
     await context?.close().catch(() => {});
