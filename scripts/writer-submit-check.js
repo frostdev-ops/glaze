@@ -702,6 +702,20 @@ const HARNESS = `(() => {
     got = await p.evaluate(() => ({ uploads: __uploads.length, clicks: __clicks, text: __text(), confirm: !!document.getElementById('ultra-confirm') }));
     check(got.clicks.join() === 'assignment.attempt.authoring.footer.submit' && got.confirm && got.uploads === 0 && got.text === 'Submitted as text.\n' && await fr.evaluate(() => !document.querySelector('.gs-layer')), 'Ultra\'s Submit sends the text as it is: no sheet, no .docx');
     await p.close();
+    // Submit as is from compact: the sheet owns the native text and its one final click.
+    ({ p, el, fr } = await openCompact('empty'));
+    await fr.click('#gw .ProseMirror'); await p.keyboard.type('Keep this compact draft.');
+    await until(async () => (await p.evaluate(() => __text())).includes('Keep this compact draft.'), 'compact draft synced');
+    await give(p, '[class*="makeStylesinputContainer-"]', 'Compact_original.docx', MIME, essay);
+    await until(() => cardOf(fr), 'compact as-is card');
+    await fr.click('.gi-choice:not(.gi-default)'); await sheetOpen(fr);
+    await fr.fill('#gs-note', 'Original file attached.');
+    await fr.click('.gs-primary');
+    await until(() => p.evaluate(() => __clicks.length === 1), 'compact as-is submitted');
+    check(await p.evaluate(() => __text() === 'Original file attached.\n' && __uploads.length === 1) && sha(await p.evaluate(() => __uploads[0].bytes)) === sha(essay), 'compact Submit as is attaches the original bytes once and preserves the sheet’s note without the compact draft');
+    check((await paperText(fr)).includes('Keep this compact draft.'), 'Submit as is leaves the stored paper intact');
+    await p.close();
+    await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); });
     // Ultra's file area: a PDF is Ultra's; a .docx asks, over a frame as tall as a paper, and Open in Writer opens the pages.
     ({ p, el, fr } = await openCompact('empty'));
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
