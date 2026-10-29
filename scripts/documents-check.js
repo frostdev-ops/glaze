@@ -834,7 +834,7 @@ const PROBE = ({ lang }) => {
     const nativeList = await mp.evaluate(() => GZ_DOCUMENTS.list());
     const shownKeys = nativeList.map((d) => d.key);
     const PUBLIC = 'course,format,key,kind,title,updated,words';
-    check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && md.list.value.every((d) => /^document:[0-9a-f-]{36}$/.test(d.key)) && md.list.value.every((d, i) => JSON.stringify({ ...d, key: '' }) === JSON.stringify({ ...nativeList[i], key: '' })),
+    check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && md.list.value.every((d) => /^document:[0-9a-f-]{36}$/.test(d.key)) && md.list.value.every((d, i) => PUBLIC.split(',').filter((k) => k !== 'key').every((k) => d[k] === nativeList[i][k])),
       `mod: documents.list() gives every listed document's public fields only (${md.list.value?.length} × ${Object.keys(md.list.value?.[0] || {}).sort().join(' ')})`);
     check(!JSON.stringify(md.list.value).includes('Beloved 1. A paragraph') && md.list.value.find((d) => d.title === 'Essay 2: Memory in Beloved')?.course === 'ENGL 2110' && !JSON.stringify(md.list.value).includes('bb.school.test') && !JSON.stringify(md.list.value).includes('_900_1'), 'mod: the list carries no document text, and an assignment paper\'s course');
     check(md.rawRead.ok === false && md.rawRead.error === 'args', 'mod: raw assignment storage keys cannot be used to read text');
