@@ -121,3 +121,28 @@ test('nothing is read for an account that isn\'t exactly one', async () => {
     }
   }
 });
+
+test('grade tools refuse trailing account line terminators before reading', async () => {
+  for (const suffix of ['\n', '\r', '\r\n', '\u2028', '\u2029']) {
+    for (const account of [A + suffix, UL + suffix]) {
+      for (const name of ['grades_list', 'course_grades']) {
+        const c = C.ctx({}, account);
+        assert.deepEqual(await tool(name).run({ course: '25' }, c), { ok: false, error: 'Unknown account.' });
+        assert.deepEqual(c.local.reads, []);
+      }
+    }
+  }
+});
+
+test('course_grades marks its item limit as incomplete even when Insights cached the whole course', async () => {
+  const store = {}, raw = C.canvasGrades()[2];
+  const assignment = raw.groups[0].assignments[0];
+  raw.groups = [{ ...raw.groups[0], assignments: Array.from({ length: B.LIMIT.items + 1 }, (_, i) => ({ ...assignment, id: 10000 + i })) }];
+  await C.keepInsights(store, CANVAS, '5', [C.canvasCourse(raw, NOW)], NOW);
+  const rec = store[`insights:${A}`].courses[0];
+  assert.equal(rec.items.length, B.LIMIT.items + 1);
+  assert.equal(rec.cut, 0);
+  const r = await run('course_grades', store, A, { course: rec.id });
+  assert.equal(r.items.length, B.LIMIT.items);
+  assert.equal(r.course.complete, false);
+});

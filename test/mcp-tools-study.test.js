@@ -191,3 +191,37 @@ test('nothing is read for an account that isn\'t exactly one, and nothing leaks'
   // Glaze's own AI calling with its own context: no account, so nothing.
   assert.deepEqual(await tool('todo_list').run({}, { local: C.area(store) }), { ok: false, error: 'Unknown account.' });
 });
+
+test('account line terminators are refused before any storage read', async () => {
+  for (const suffix of ['\n', '\r', '\r\n', '\u2028', '\u2029']) {
+    for (const account of [A + suffix, UL + suffix]) {
+      assert.equal(ST.parse(account), null, JSON.stringify(account));
+      for (const name of ['courses_list', 'todo_list', 'schedule_list']) {
+        const c = C.ctx({}, account);
+        assert.deepEqual(await tool(name).run({ from: '2026-10-15', to: '2026-10-19' }, c), { ok: false, error: 'Unknown account.' });
+        assert.deepEqual(c.local.reads, []);
+      }
+    }
+  }
+});
+
+test('courses_list never attributes school-wide courses without account evidence, even with only one known account', async () => {
+  const store = await school({ bee: false, ultra: false });
+  const a = await run('courses_list', store, A);
+  assert.ok(!leaks(a, 'B'), 'B left courses but no planner or Insights record');
+  assert.deepEqual(a.items.map((c) => c.id), ['25', '26', '31']);
+  for (const account of [BEE, `${CANVAS}/7`]) {
+    const r = await run('courses_list', store, account);
+    assert.deepEqual(r.items, [], 'an arbitrary account must not inherit the school cache');
+    assert.equal(r.at, null);
+    assert.match(r.missing, /^Open /);
+  }
+  delete store.todoCache;
+  assert.deepEqual((await run('courses_list', store, A)).items, [], 'even no remaining account records prove no ownership');
+});
+
+test('cache fixtures record Canvas courses with the real writer\'s id and name checks', async () => {
+  const seen = await C.canvasSeen([SEEN[0], { id: 'bad', name: 'Invalid', course_code: 'BAD' }, { id: 90, name: '', course_code: 'EMPTY' }]);
+  assert.deepEqual(Object.keys(seen), [`canvas:${CANVAS}/25`]);
+  assert.deepEqual(seen[`canvas:${CANVAS}/25`], { name: 'BIO 1100', code: 'BIO1100-01', canvas: true, color: '#aabbcc' });
+});
