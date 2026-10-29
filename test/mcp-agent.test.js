@@ -15,7 +15,7 @@ const B = require('../mcp/lib/browsers.js');
 const I = require('../mcp/lib/install.js');
 const D = require('../mcp/lib/doctor.js');
 const CLI = require('../mcp/bin/glaze-mcp.js');
-const { PKG, BIN, FIREFOX, scratch, hmac, until, envFor, runDir, stop, browser, opened, lineFrom } = require('./helpers/mcp-pipe.cjs');
+const { PKG, BIN, FIREFOX, scratch, nodeAt, hmac, until, envFor, runDir, stop, browser, opened, lineFrom } = require('./helpers/mcp-pipe.cjs');
 
 const POSIX = process.platform !== 'win32';
 const MiB = 1024 * 1024;
@@ -325,7 +325,7 @@ test('glaze-mcp doctor adds the live rows after its own', { skip: !POSIX }, asyn
   // Only HOME: setup must not follow an XDG_* folder out of the scratch one.
   const home = scratch(t), env = { HOME: home };
   fs.mkdirSync(B.table(process.platform, env).find((b) => b.id === 'chrome').data, { recursive: true });
-  const ctx = { platform: process.platform, env, node: process.execPath, run: nodeVersion, src: PKG };
+  const ctx = { platform: process.platform, env, node: nodeAt(t), run: nodeVersion, src: PKG };
   await I.setup(ctx);
   const b = browser(t, home);
   await b.start();
@@ -338,7 +338,7 @@ test('glaze-mcp doctor adds the live rows after its own', { skip: !POSIX }, asyn
 test('doctor says a missing or relative launcher is what the browser reports as "not found"', async (t) => {
   const home = scratch(t);
   fs.mkdirSync(path.join(home, 'Library', 'Application Support', 'Google', 'Chrome'), { recursive: true });
-  const ctx = { platform: 'darwin', env: { HOME: home }, node: process.execPath, run: nodeVersion, src: PKG };
+  const ctx = { platform: 'darwin', env: { HOME: home }, node: nodeAt(t), run: nodeVersion, src: PKG };
   await I.setup(ctx);
   const launcher = path.join(home, 'Library', 'Application Support', 'glaze-mcp', 'hosts', 'chrome');
   const manifest = path.join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts', 'io.frostdev.glaze_mcp.json');

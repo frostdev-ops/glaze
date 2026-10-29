@@ -21,6 +21,12 @@ const scratch = (t) => {
   t.after(() => fs.rmSync(d, { recursive: true, force: true }));
   return d;
 };
+// Doctor's runner is mocked; its executable must still have a safe path on every developer machine.
+const nodeAt = (t) => {
+  const file = path.join(scratch(t), 'node');
+  fs.writeFileSync(file, '#!/bin/sh\necho v22.11.0\n', { mode: 0o755 });
+  return file;
+};
 const hmac = (token, msg) => crypto.createHmac('sha256', Buffer.from(token, 'base64')).update(msg).digest('base64');
 const until = async (what, ok, ms = 10000) => {
   const end = Date.now() + ms;
@@ -127,4 +133,4 @@ const lineFrom = async (b, c) => {
   }
 };
 
-module.exports = { PKG, BIN, ORIGIN, FIREFOX, scratch, hmac, until, envFor, runDir, stop, browser, agent, opened, lineFrom };
+module.exports = { PKG, BIN, ORIGIN, FIREFOX, scratch, nodeAt, hmac, until, envFor, runDir, stop, browser, agent, opened, lineFrom };

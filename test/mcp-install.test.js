@@ -17,6 +17,7 @@ const L = require('../mcp/lib/launcher.js');
 const I = require('../mcp/lib/install.js');
 const D = require('../mcp/lib/doctor.js');
 const CLI = require('../mcp/bin/glaze-mcp.js');
+const { nodeAt } = require('./helpers/mcp-pipe.cjs');
 const VERSION = require('../mcp/package.json').version;
 const HOST = 'io.frostdev.glaze_mcp';
 const STORE = 'jmmaeoajomodnbnlmdikjooalmcilooh';
@@ -510,7 +511,7 @@ test('doctor: a clean setup passes; a missing launcher, an old node, loose folde
   const home = scratch(t);
   mk(AS(home), 'Google', 'Chrome');
   mk(AS(home), 'Firefox');
-  const ctx = mac(home, { node: process.execPath });
+  const ctx = mac(home, { node: nodeAt(t) });
   const notSet = await D.run(ctx);
   assert.equal(notSet.ok, false);
   assert.match(D.text(notSet), /setup/);
@@ -819,6 +820,20 @@ test('doctor accepts a node symlink whose path and target are safe', { skip: !PO
   assert.deepEqual(fake.calls, [[link, ['--version']]]);
 });
 
+test('doctor refuses a real executable in a world-writable ancestor without running it', { skip: !POSIX }, async (t) => {
+  const home = scratch(t), programs = scratch(t), bin = mk(programs, 'bin'), node = path.join(bin, 'node');
+  const marker = path.join(programs, 'executed');
+  fs.writeFileSync(node, `#!/bin/sh\necho ran > '${marker}'\necho v26.0.0\n`, { mode: 0o755 });
+  mk(AS(home), 'Google', 'Chrome');
+  const ctx = mac(home, { node, run: undefined });
+  await I.setup(ctx);
+  fs.chmodSync(programs, 0o777);
+  const report = await D.run(ctx);
+  assert.equal(fs.existsSync(marker), false, 'the executable never ran');
+  assert.equal(report.ok, false, D.text(report));
+  assert.match(D.text(report), /can be changed by other users/);
+});
+
 test('--dev refuses a keyed manifest instead of granting a different path-derived id', (t) => {
   const dir = scratch(t);
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ key: 'cHVibGljLWtleQ==' }));
@@ -851,7 +866,7 @@ test('the command: --version, a TTY refused in host mode, and host and agent wai
 
 test('the command: setup, doctor and uninstall through the same context, and their refusals', async (t) => {
   const home = scratch(t);
-  const ctx = { platform: 'darwin', env: { HOME: home }, node: process.execPath, run: runner().run, src: PKG };
+  const ctx = { platform: 'darwin', env: { HOME: home }, node: nodeAt(t), run: runner().run, src: PKG };
   const none = io(ctx);
   assert.equal(await CLI.main(['setup'], none), 1);
   assert.match(none.err(), /No supported browser/);
