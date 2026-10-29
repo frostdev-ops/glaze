@@ -247,3 +247,15 @@ test('classic-script dependencies are resolved on use, after grants loads', asyn
   await context.module.exports.record(local, { tool: 'todo_list', group: 'courses', kind: 'read', outcome: 'ok' });
   assert.deepEqual(JSON.parse(JSON.stringify(local.data.mcpCalls)), [{ tool: 'todo_list', group: 'courses', kind: 'read', outcome: 'ok' }]);
 });
+
+
+test('an app id is exactly sixteen base32 characters, without a trailing line break', async () => {
+  const local = area();
+  for (const tail of ['\n', '\r', '\r\n', '\u2028', '\u2029']) {
+    const id = 'a'.repeat(16) + tail;
+    await G.record(local, { app: id, outcome: 'ok' });
+    const s = G.open({ open() { throw new Error('an invalid id must not reach IndexedDB'); } });
+    assert.equal(await s.get(id), null);
+  }
+  assert.deepEqual(local.data.mcpCalls, Array.from({ length: 5 }, () => ({ outcome: 'ok' })));
+});
