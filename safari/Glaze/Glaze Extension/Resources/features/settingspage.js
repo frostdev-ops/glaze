@@ -26,7 +26,7 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
       e.style.setProperty('opacity', '0', 'important');
     }
   };
-  const watch = typeof MutationObserver === 'function' ? new MutationObserver((ms) => { if (host) for (const m of ms) for (const n of m.addedNodes) if (n.parentNode === m.target) still(n); }) : null;
+  const watch = typeof MutationObserver === 'function' ? new MutationObserver((ms) => { if (host) { for (const m of ms) for (const n of m.addedNodes) if (n.parentNode === m.target) still(n); fit(); } }) : null;
   const wide = () => matchMedia('(min-width: 900px)').matches;
   // The page's room, as Glaze's navigation keeps it (theme.css and each site's sheet set the two variables).
   const fit = () => {
@@ -34,8 +34,13 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
     const s = host.style;
     s.setProperty('top', wide() ? 'var(--gz-navbar-top, 0px)' : '0px');
     s.setProperty('inset-inline-start', wide() ? 'var(--gz-navbar-left, 0px)' : '0px');
-    s.setProperty('bottom', !wide() && html.getAttribute('data-gz-navbar') && !html.getAttribute('data-gz-navbar').includes('none') ? 'calc(84px + env(safe-area-inset-bottom, 0px))' : '0px');
+    // Ultra raises its phone bar above the footer. Its actual top includes that room and the safe area.
+    const tabs = document.getElementById('gz-navbar')?.shadowRoot?.querySelector('.tabs');
+    const box = !wide() && tabs?.getBoundingClientRect();
+    s.setProperty('bottom', !wide() && html.getAttribute('data-gz-navbar') && !html.getAttribute('data-gz-navbar').includes('none')
+      ? box?.height ? `${Math.max(0, innerHeight - box.top)}px` : 'calc(84px + env(safe-area-inset-bottom, 0px))' : '0px');
   };
+  const sizes = typeof ResizeObserver === 'function' ? new ResizeObserver(fit) : null;
   // What opened it, through open shadow roots: the document sees only the bar's host, which can't take focus.
   const focused = () => { let a = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a; };
   // The bar draws itself again as Settings opens and closes: what opened it is found there again by what it is.
@@ -80,10 +85,11 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
     spare = '';
     if (!pass) pass = await job();
     if (frame !== f || n !== hellos || !pass) return;
+    port?.close();
     const ch = new MessageChannel();
-    ch.port1.onmessage = ({ data }) => { if (frame !== f) return; port = ch.port1; heard(data); };
+    ch.port1.onmessage = ({ data }) => { if (frame !== f || port !== ch.port1) return; heard(data); };
     port = ch.port1;
-    try { f.contentWindow.postMessage({ type: 'glaze:papers', pass }, ORIGIN, [ch.port2]); } catch { /* the frame went */ }
+    try { f.contentWindow.postMessage({ type: 'glaze:papers', pass }, ORIGIN, [ch.port2]); } catch { ch.port1.close(); ch.port2.close(); }
   };
   const onMessage = (e) => {
     if (!frame || e.source !== frame.contentWindow) return;
@@ -105,8 +111,10 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
     if (!host) return;
     // Focus in Settings (or nowhere) goes back to what opened it; a place picked in the bar keeps it.
     const from = [host, document.body, null].includes(document.activeElement) ? opener : null;
+    port?.close();
     host.remove(); host = root = frame = opener = port = null; shown = spare = ''; turn++; going = resent = false;
     watch?.disconnect();
+    sizes?.disconnect();
     for (const e of stilled) e.inert = false;
     stilled.clear();
     for (const [e, [value, priority, had]] of veiled) {
@@ -128,12 +136,13 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
   // The page's frame in the host, in place of the other page's: Settings at a section, Documents at the list or a document.
   const show = (page, pass, { hash = '', at = '' } = {}) => {
     frame?.remove();
-    port = null; hellos++; going = resent = false;
+    port?.close(); port = null; hellos++; going = !!at; resent = false;
     frame = document.createElement('iframe');
     frame.title = 'Glaze';
     frame.allow = 'clipboard-write';
     for (const [k, v] of [['display', 'block'], ['width', '100%'], ['height', '100%'], ['border', '0'], ['background', 'transparent']]) frame.style.setProperty(k, v);
-    frame.src = page === 'settings' ? `${chrome.runtime.getURL(PAGES.settings)}?t=${pass}${hash}` : `${chrome.runtime.getURL(PAGES.papers)}${/^\?paper=[^#]*$/.test(at) ? at : ''}`;
+    // Even a closed shadow root's iframe URL can appear in the page's resource timings. Restore a document over the channel.
+    frame.src = page === 'settings' ? `${chrome.runtime.getURL(PAGES.settings)}?t=${pass}${hash}` : chrome.runtime.getURL(PAGES.papers);
     shown = page;
     spare = page === 'papers' ? pass : '';
     root.append(frame);
@@ -174,6 +183,11 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
     (document.body || html).append(host);
     for (const e of [...(document.body || html).children, ...html.children]) still(e);
     for (const t of new Set([document.body || html, html])) watch?.observe(t, { childList: true });
+    watch?.observe(html, { childList: true, attributes: true, attributeFilter: ['data-gz-navbar', 'data-gz-footer', 'style'] });
+    const bar = document.getElementById('gz-navbar');
+    if (bar) watch?.observe(bar, { attributes: true, attributeFilter: ['data-place', 'data-style', 'data-footer', 'hidden'] });
+    const tabs = bar?.shadowRoot?.querySelector('.tabs');
+    if (tabs) sizes?.observe(tabs);
     html.setAttribute('data-gz-settings', '');
     addEventListener('message', onMessage); addEventListener('keydown', onKey, true); addEventListener('resize', fit); addEventListener('popstate', onPop);
     try { history.pushState(mark(1, page), ''); back = true; } catch { back = false; }
