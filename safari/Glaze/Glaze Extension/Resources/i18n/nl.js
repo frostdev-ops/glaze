@@ -3521,6 +3521,7 @@
   "Glaze could not reach the Apple Intelligence native handler.": "Glaze kon de native component van Apple Intelligence niet bereiken.",
   "This version of Glaze requires macOS or iOS 27 for Apple Intelligence.": "Deze versie van Glaze vereist macOS of iOS 27 voor Apple Intelligence.",
   "Apple Intelligence is still preparing its model.": "Apple Intelligence bereidt het model nog voor.",
+  "Apple Intelligence is busy. Try again in a few minutes.": "Apple Intelligence is bezig. Probeer het over een paar minuten opnieuw.",
   "The document and instructions exceed this model’s context window.": "Het document en de instructies overschrijden het contextvenster van dit model.",
   "This model does not support the requested input or response format.": "Dit model ondersteunt de gevraagde invoer of antwoordindeling niet.",
   "This model does not support the requested language.": "Dit model ondersteunt de gevraagde taal niet.",

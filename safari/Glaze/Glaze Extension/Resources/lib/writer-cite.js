@@ -469,6 +469,9 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     }
     for (const s of all) {
       if (used.has(s.id)) continue;
+      // Recovering metadata is not the student's choice to add a source. Incomplete names and narrative citations
+      // cannot establish that an existing bibliography entry is unused until its metadata has been reviewed.
+      if (s.origin === 'bibliography' && !s.reviewed) continue;
       const k2 = keysOf(s)[0];
       const line = typed?.entries.find((e) => k2 && S().fold(e.text).startsWith(k2));
       const label = who(s) ? N.cite(who(s).names) : plain(shortTitle(s));
