@@ -1,0 +1,27 @@
+/* The approval window (approve.html): one card in the student's palette, ui.css's buttons. */
+@font-face { font-family: "Glaze Inter"; src: url("../../fonts/inter.woff2") format("woff2"); font-weight: 100 900; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../../fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; }
+/* First paint, before approve-page.js lays the student's palette over it. */
+:root {
+  color-scheme: light dark;
+  --gz-surface: light-dark(#fff, #1a2231); --gz-surface-2: light-dark(#f4f6fa, #10141e); --gz-ink: light-dark(#182333, #e8eef8);
+  --gz-ink-muted: light-dark(#3d4a5c, #c2ccda); --gz-ink-faint: light-dark(#5b687a, #9aa7b9); --gz-line: light-dark(#d5dce6, #3b485d);
+  --gz-line-strong: light-dark(#768599, #8092ab); --gz-accent: light-dark(#075f94, #89d8ff); --gz-accent-hi: light-dark(#054a73, #b5e7ff);
+  --gz-accent-ink: light-dark(#fff, #101722); --gz-accent-soft: light-dark(#e1eef7, #1d3347);
+}
+body { display: grid; min-height: 100vh; padding: 12px; font-family: var(--gz-font, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif); }
+main {
+  margin: auto; width: 100%; max-width: 30rem; display: grid; gap: 0.8rem; padding: 1.1rem 1.25rem;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-line, var(--gz-line));
+  border-radius: calc(var(--gz-radius, 12px) * 7 / 6);
+}
+h1 { font-family: var(--gz-font-head, inherit); font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+p { margin: 0; }
+#group { justify-self: start; padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--gz-accent); background: var(--gz-accent-soft); overflow-wrap: anywhere; }
+.who { display: grid; gap: 0.1rem; overflow-wrap: anywhere; }
+#exe { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+#state { color: var(--gz-ink-muted); }
+.row { display: flex; gap: 0.6rem; justify-content: flex-end; flex-wrap: wrap; }
+.row button { font-size: 13px; padding: 0.4rem 1rem; }
+button[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+[hidden] { display: none !important; }

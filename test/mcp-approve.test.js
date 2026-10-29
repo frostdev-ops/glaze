@@ -209,6 +209,7 @@ test('closing the window is Don\'t allow for every ask it shows; another window\
 test('an ask times out after 600 s', async () => {
   const e = env();
   const r = outcome(e.a.ask('action', ACTION));
+  await settle();
   await e.tick(600e3 - 1);
   assert.equal(r.v, undefined);
   await e.tick(1);
@@ -308,6 +309,7 @@ test('progress every 15 s while the student decides, and none after', async () =
   const said = [];
   const progress = (...a) => { said.push(a); return true; };
   const r = outcome(e.a.ask('pair', PAIR, { progress }));
+  await settle();
   await e.tick(14_999);
   assert.deepEqual(said, []);
   await e.tick(1);
@@ -321,10 +323,12 @@ test('progress every 15 s while the student decides, and none after', async () =
   assert.equal(said.length, 3);
   // The same call's next ask keeps counting up, so the client takes each one as progress.
   e.a.ask('grant', GRANT, { progress });
+  await settle();
   await e.tick(15e3);
   assert.deepEqual(said.map((x) => x[0]), [15, 30, 45, 60]);
   // A callback that throws doesn't stop the ask; an ask without one has only its timeout.
   const bad = outcome(e.a.ask('pair', { ...PAIR, app: CODE }, { progress: () => { throw new Error('gone'); } }));
+  await settle();
   await e.tick(15e3);
   assert.equal(bad.v, undefined);
   const before = e.due.size;

@@ -3585,5 +3585,19 @@
   "Tool “{title}” — gives agent apps your courses, as Glaze last read them.": "Werkzeug „{title}“ — gibt Agenten-Apps deine Kurse, so wie Glaze sie zuletzt gelesen hat.",
   "Tool “{title}” — gives agent apps your grades, as Glaze last read them.": "Werkzeug „{title}“ — gibt Agenten-Apps deine Noten, so wie Glaze sie zuletzt gelesen hat.",
   "Tool “{title}” — its author’s code answers, with what this mod may use.": "Werkzeug „{title}“ — der Code seines Autors antwortet, mit dem, was dieser Mod nutzen darf.",
-  "Its tools run its own code and can send what an app asks for to {hosts}.": "Seine Werkzeuge führen eigenen Code aus und können, was eine App erfragt, an {hosts} senden."
+  "Its tools run its own code and can send what an app asks for to {hosts}.": "Seine Werkzeuge führen eigenen Code aus und können, was eine App erfragt, an {hosts} senden.",
+  "{app} wants to use Glaze": "{app} möchte Glaze verwenden",
+  "{app} wants to see your courses, to-dos and schedule": "{app} möchte deine Kurse, To-dos und Termine sehen",
+  "{app} wants to see your grades": "{app} möchte deine Noten sehen",
+  "{app} wants to see your Writer documents": "{app} möchte deine Writer-Dokumente sehen",
+  "{app} wants to see your assignments and rubrics": "{app} möchte deine Aufgaben und Bewertungsraster sehen",
+  "{app} wants to use the mod {mod}": "{app} möchte den Mod {mod} verwenden",
+  "Courses, to-dos and schedule": "Kurse, To-dos und Termine",
+  "Writer documents": "Writer-Dokumente",
+  "Assignments and rubrics": "Aufgaben und Bewertungsraster",
+  "The mod {mod}": "Der Mod {mod}",
+  "as the app reports itself": "nach Angaben der App",
+  "Don't allow": "Nicht erlauben",
+  "Unnamed app": "Unbenannte App",
+  "Glaze restarted before you answered.": "Glaze wurde neu gestartet, bevor du geantwortet hast."
 };

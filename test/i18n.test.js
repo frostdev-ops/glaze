@@ -22,7 +22,7 @@ const LANGS = globalThis.GZ_LANGS;
 const files = fs.readdirSync(path.join(root, 'i18n'));
 const squash = (s) => s.replace(/\s+/g, ' ').trim();
 // The code Glaze ships to a browser (not the catalogues, which every key appears in, nor the tests).
-const CODE = [...fs.readdirSync(root).filter((f) => /\.(js|html)$/.test(f)), ...['lib', 'features', 'sharing'].flatMap((d) => fs.readdirSync(path.join(root, d)).filter((f) => /\.(js|html)$/.test(f)).map((f) => `${d}/${f}`))];
+const CODE = [...fs.readdirSync(root).filter((f) => /\.(js|html)$/.test(f)), ...['lib', 'lib/mcp', 'features', 'sharing'].flatMap((d) => fs.readdirSync(path.join(root, d)).filter((f) => /\.(js|html)$/.test(f)).map((f) => `${d}/${f}`))];
 // Preserve quoted URLs while dropping comments; literal tables are evidence for dynamic callers, not proof of reachability.
 const withoutComments = (js) => js.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m, q) => q ? m : ' ');
 const literalsOf = (js) => [...withoutComments(js).matchAll(/(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g)].filter((m) => !m[2].includes('${')).map((m) => m[2].replace(/\\(.)/g, '$1'));
@@ -61,7 +61,7 @@ const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
   return out.filter(Boolean);
 };
 // And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
-const JS = ['sharing/quick.js', 'features/welcome.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-pointer.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/editor-navbar.js', 'lib/editor-ai.js', 'lib/editor-writer.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
+const JS = ['sharing/quick.js', 'lib/mcp/approve-page.js', 'features/welcome.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-pointer.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/editor-navbar.js', 'lib/editor-ai.js', 'lib/editor-writer.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 // Glaze Writer's frame (writer.html, papers.html) and the libraries whose words it shows. lib/writer-docx.js's t() reads
 // a run's marks, so only its warnings and refusals are words (below).
 const WRITER = ['writer.js', 'papers.js', ...fs.readdirSync(root).filter((f) => /^writer-.+\.js$/.test(f)), ...fs.readdirSync(path.join(root, 'lib')).filter((f) => /^writer-.+\.js$/.test(f) && f !== 'writer-docx.js').map((f) => `lib/${f}`)];
@@ -119,7 +119,7 @@ const used = new Set([
   // Shader diagnostics are translated when the editor groups them by line.
   ...fromJs(read('lib/glsl.js'), /\b(?:e\([^,]+,|bad\(|message:)\s*/g),
   ...fromJs(read('lib/scene.js'), /\bmessage:\s*/g),
-  ...['sharing/quick.html', 'options.html', 'popup.html', 'features/welcome.html'].flatMap((f) => fromHtml(read(f))),
+  ...['sharing/quick.html', 'lib/mcp/approve.html', 'options.html', 'popup.html', 'features/welcome.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
   // Helpers that translate their own label argument (t() inside add() and check()).
   ...fromJs(read('features/docreview.js'), /\badd\('button',\s*[^,]+,\s*/g),
