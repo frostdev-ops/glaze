@@ -432,12 +432,55 @@ test('triggers: ensure follows the setting and the grant either way, one pass at
   await w.link.ensure();
   assert.equal(w.jobs.size, 0, 'no retry without the grant');
 
-  const racing = world();
-  const pass = racing.link.ensure();
-  racing.link.stop();
+  for (const browser of ['chrome', 'safari']) {
+    const racing = world({ browser, local: { mcpInstance: '0123456789abcdef0123' } });
+    const pass = racing.link.ensure();
+    racing.link.stop();
+    await pass;
+    assert.equal(racing.ports.length, 0, `${browser}: a stop during a pass leaves nothing connected`);
+    assert.equal(racing.link.status().state, 'off');
+  }
+  const asking = world({ local: { mcpInstance: '0123456789abcdef0123' } });
+  let answer;
+  asking.permissions.contains = () => new Promise((r) => { answer = r; });
+  const pass = asking.link.ensure();
+  await settle();
+  asking.link.stop();
+  answer(true);
   await pass;
-  assert.equal(racing.ports.length, 0, 'a stop during a pass leaves nothing connected');
-  assert.equal(racing.link.status().state, 'off');
+  assert.equal(asking.ports.length, 0, 'nor a stop while the grant is being checked');
+});
+
+test('a late message, answer or close from an earlier session changes nothing', async () => {
+  const w = world();
+  await w.link.ensure();
+  const first = w.port();
+  first.host({ ...HELLO, v: 2 });
+  await w.link.ensure();
+  first.host(HELLO);
+  first.die(EXITED);
+  assert.equal(w.ports.length, 2);
+  assert.equal(w.link.status().state, 'old-helper', 'the new try still waits for its own hello');
+  w.port().host(HELLO);
+  assert.equal(w.link.status().state, 'connected');
+
+  const s = world({ browser: 'safari' });
+  for (let n = 0; n < 2; n++) {
+    await s.link.ensure();
+    await s.link.stop();
+  }
+  await s.link.ensure();
+  const hellos = s.batches.filter((x) => x.msg.frames[0]?.t === 'hello');
+  assert.equal(hellos.length, 3);
+  hellos[0].resolve({ echo: hellos[0].msg });
+  hellos[1].reject(new Error('late'));
+  await settle();
+  assert.equal(s.link.status().state, 'connecting', 'earlier sessions\' answers are not this one\'s');
+  const i = s.storage.local.data.mcpInstance;
+  s.ports[0].host({ name: 'agent.frames', userInfo: { i, frames: [HELLO] } });
+  assert.equal(s.link.status().state, 'connecting', 'nor are their ports\' frames');
+  s.port().host({ name: 'agent.frames', userInfo: { i, frames: [{ ...HELLO, v: 2 }, HELLO] } });
+  assert.equal(s.link.status().state, 'old-helper', 'and frames after the one that ended a session are dropped with it');
 });
 
 test('Safari: batches to the Glaze app, one in flight, numbered in order; frames back only for this instance', async () => {
@@ -472,19 +515,19 @@ test('Safari: batches to the Glaze app, one in flight, numbered in order; frames
   w.batches[1].resolve({ ok: true });
   await settle();
   assert.deepEqual(w.batches[2].msg, { type: 'agent.frames', i, seq: 3, frames: [{ t: 'line', c: 1, d: 'c' }, { t: 'close', c: 1, why: 'done' }] });
-  w.batches[2].resolve({ ok: true });
-  await settle();
-  assert.equal(w.batches.length, 3, 'nothing waiting, nothing sent');
 
   app({ i, frames: [{ t: 'open', c: 2, peer: { verified: true } }] });
   assert.equal(w.link.send(2, '\u0001'.repeat(F.PIECE * 2)), true);
-  await settle();
-  w.batches[3].resolve({ ok: true });
-  await settle();
+  assert.equal(w.link.send(2, 'small'), true);
+  for (let n = 2; n < 5; n++) {
+    w.batches[n].resolve({ ok: true });
+    await settle();
+  }
+  assert.deepEqual(w.batches.slice(3).map((x) => x.msg.frames.map((f) => f.d.length)), [[F.PIECE], [F.PIECE, 5]], 'a batch holds at most a frame\'s bytes');
+  assert.ok(w.batches.every((x) => x.msg.frames.reduce((n, f) => n + F.bytes(f), 0) <= F.FRAME));
   w.batches[4].resolve({ ok: true });
   await settle();
-  assert.deepEqual(w.batches.slice(3).map((x) => x.msg.frames.length), [1, 1], 'a batch holds at most a frame\'s bytes');
-  assert.ok(w.batches.every((x) => x.msg.frames.reduce((n, f) => n + F.bytes(f), 0) <= F.FRAME));
+  assert.equal(w.batches.length, 5, 'nothing waiting, nothing sent');
 });
 
 test('Safari: the app\'s answer decides; a build without the agent bridge is not-installed', async () => {
