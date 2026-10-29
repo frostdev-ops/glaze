@@ -448,9 +448,8 @@ test('reruns on Windows: setup writes the same keys again; ensure({ifNeeded}) re
   assert.deepEqual(reg.calls.slice(before).map(([, a]) => a[0]), ['export']);
   // A key pointed elsewhere is put back; a path with non-ASCII letters reads back exactly (reg export is UTF-16).
   reg.keys.set(K('Google\\Chrome'), 'C:\\Users\\Jürgen\\other.json');
-  const fixed = await I.ensure({ ...ctx, ifNeeded: true });
-  assert.deepEqual(fixed.keys, [K('Google\\Chrome')]);
-  assert.equal(reg.keys.get(K('Google\\Chrome')), path.join(base, 'Local', 'glaze-mcp', 'hosts', 'chrome.json'));
+  await assert.rejects(I.ensure({ ...ctx, ifNeeded: true }), /own|refus/i);
+  assert.equal(reg.keys.get(K('Google\\Chrome')), 'C:\\Users\\Jürgen\\other.json');
   reg.keys.set(K('Google\\Chrome'), 'C:\\Users\\Jürgen\\AppData\\Local\\glaze-mcp\\hosts\\chrome.json');
   assert.equal(await I.readKey(ctx, K('Google\\Chrome')), 'C:\\Users\\Jürgen\\AppData\\Local\\glaze-mcp\\hosts\\chrome.json');
   assert.equal(await I.readKey(ctx, K('Chromium')), null);
@@ -689,6 +688,34 @@ test('ids come only from explicit grants, never another manifest carrying our na
   const r = await I.setup({ ...ctx, browsers: ['firefox'], ids: [A] });
   assert.deepEqual(r.ids, [STORE, A]);
   assert.equal(json(chrome).path, '/developer/host');
+});
+
+test('doctor reports a valid Chromium id that was never granted', async (t) => {
+  const home = scratch(t), ctx = mac(home, { node: process.execPath });
+  const dir = mk(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts');
+  await I.setup({ ...ctx, ids: [A] });
+  const file = path.join(dir, `${HOST}.json`);
+  fs.writeFileSync(file, JSON.stringify({ ...json(file), allowed_origins: [ORIGIN, `chrome-extension://${A}/`, `chrome-extension://${Z}/`] }));
+  assert.equal((await D.run(ctx)).ok, false);
+});
+
+test('a shared Windows key can move between our browsers as they are installed', async (t) => {
+  const base = scratch(t), reg = runner(), ctx = win(base, reg);
+  mk(base, 'Local', 'Vivaldi', 'User Data');
+  await I.setup(ctx);
+  mk(base, 'Local', 'Google', 'Chrome', 'User Data');
+  await I.setup(ctx);
+  assert.equal(reg.keys.get(K('Google\\Chrome')), path.join(base, 'Local', 'glaze-mcp', 'hosts', 'chrome.json'));
+  assert.equal((await D.run({ ...ctx, node: process.execPath })).ok, true);
+});
+
+test('registry exports read only the requested key default, never a subkey default', async (t) => {
+  const base = scratch(t), key = K('Google\\Chrome');
+  const ctx = win(base, runner(), { run: async (_file, argv) => {
+    fs.writeFileSync(argv[2], Buffer.from(`\ufeffWindows Registry Editor Version 5.00\r\n\r\n[${key.replace('HKCU', 'HKEY_CURRENT_USER')}]\r\n"named"="keep"\r\n\r\n[${key.replace('HKCU', 'HKEY_CURRENT_USER')}\\child]\r\n@="not the default"\r\n`, 'utf16le'));
+    return {};
+  } });
+  assert.equal(await I.readKey(ctx, key), null);
 });
 
 test('registry executable must be an absolute System32 path even with a malformed SystemRoot', () => {
