@@ -740,7 +740,7 @@ test("Glaze's own read tools over its real caches: todo_list and course_grades t
   assert.equal(todo.ageSeconds, Math.round((C.NOW - store.todoCache.at) / 1000));
   assert.deepEqual(Object.keys(todo), ['note', 'account', 'source', 'at', 'ageSeconds', 'covers', 'items']);
   assert.equal(todo.items[0].title, 'Lab');
-  const id = String(C.canvasGrades()[0].id);
+  const id = store[`insights:${C.CANVAS}/5`].courses[0].id;
   const course = (await call('course_grades', { course: id })).structuredContent;
   assert.deepEqual(Object.keys(course), ['note', 'account', 'source', 'at', 'ageSeconds', 'course', 'trend', 'items']);
   assert.equal(course.ageSeconds, 3600);
