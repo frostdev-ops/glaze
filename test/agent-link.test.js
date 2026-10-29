@@ -534,7 +534,7 @@ test('Safari: batches to the Glaze app, one in flight, numbered in order; frames
 test('Safari: the app\'s answer decides; a build without the agent bridge is not-installed', async () => {
   const cases = [
     [(x) => x.resolve({ echo: x.msg }), 'not-installed', 'no agent bridge'],
-    [(x) => x.resolve(undefined), 'not-installed', 'no agent bridge'],
+    [(x) => x.resolve(undefined), 'exited', 'unexpected agent bridge reply'],
     [(x) => x.resolve({ ok: false, error: 'not-installed' }), 'not-installed', 'not-installed'],
     [(x) => x.resolve({ ok: false, error: 'host gone' }), 'exited', 'host gone'],
     [(x) => x.reject(new Error('Native messaging is not available')), 'exited', 'Native messaging is not available'],
