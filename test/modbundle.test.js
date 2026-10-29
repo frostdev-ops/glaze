@@ -786,8 +786,9 @@ test('broker: a fresh worker loads and enforces the real blocklist for installs,
 
 test('broker: wired as the other brokers are, and cached at install for later worker starts', () => {
   const src = read('lib/background.js');
-  assert.match(src, /BROKER_FILES\.mods = \['zip\.js', 'modapi\.js', 'modwidget\.js', 'modbundle\.js', 'blocklist\.js'\];/);
-  assert.match(src, /addEventListener\?\.\('install', \(\) => importScripts\('zip\.js', 'modapi\.js', 'modwidget\.js', 'modbundle\.js'\)\)/);
+  // A manifest's tools are checked with lib/modtools.js, whose code tools' input is in lib/ai/schema.js's subset.
+  assert.match(src, /BROKER_FILES\.mods = \['zip\.js', 'modapi\.js', 'modwidget\.js', 'ai\/schema\.js', 'modtools\.js', 'modbundle\.js', 'blocklist\.js'\];/);
+  assert.match(src, /addEventListener\?\.\('install', \(\) => importScripts\('zip\.js', 'modapi\.js', 'modwidget\.js', 'ai\/schema\.js', 'modtools\.js', 'modbundle\.js'\)\)/);
   assert.match(src, /allow: \(m, s\) => fromEditor\(s\) && s\.frameId === 0 && ownOrigin\(s\.origin\) && GZ_MODBUNDLE\.OPS\.includes\(m\.op\)/);
   // Safari gives a sender's origin with its UUID lowercased, getURL uppercase: the comparison ignores case.
   assert.match(src, /const OWN_ORIGIN = chrome\.runtime\.getURL\(''\)\.replace\(\/\\\/\$\/, ''\)\.toLowerCase\(\);\nconst ownOrigin = \(o\) => typeof o === 'string' && o\.toLowerCase\(\) === OWN_ORIGIN;/);
