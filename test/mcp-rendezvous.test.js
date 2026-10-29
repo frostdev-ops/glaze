@@ -211,8 +211,10 @@ test('remove takes only a host\'s own files, not those of a host that took over 
   await R.listen(first, p);
   const mine = { ...record(d, { instance: 'same' }), ino: fs.lstatSync(p).ino };
   R.write(d, record(d, { instance: 'same', token: mine.token }));
-  // The next host for the same browser and instance claims the path and writes its own run file.
-  R.claim(p);
+  // A second host must leave the live host reachable. Only its owner clears the name.
+  assert.throws(() => R.claim(p), (e) => e.code === 'unsafe');
+  R.remove(d, mine);
+  await new Promise((resolve) => first.close(resolve));
   const second = net.createServer();
   await R.listen(second, p);
   const theirs = record(d, { instance: 'same' });
@@ -222,11 +224,112 @@ test('remove takes only a host\'s own files, not those of a host that took over 
   assert.deepEqual(R.read(R.runFile(d, 'chrome', 'same')), theirs);
   R.remove(d, { ...theirs, ino: fs.lstatSync(p).ino });
   assert.deepEqual(fs.readdirSync(d), []);
-  first.close();
   second.close();
   // claim refuses to clear anything but a socket.
   fs.writeFileSync(p, 'x');
   assert.throws(() => R.claim(p), (e) => e.code === 'unsafe');
+});
+
+test('run operations refuse a folder replaced by a symlink after check', { skip: !POSIX }, (t) => {
+  const d = runDir(t), outside = scratch(t), saved = `${d}-saved`;
+  const rec = record(d), file = R.write(d, rec);
+  assert.equal(R.check(d), true);
+  fs.renameSync(d, saved);
+  fs.symlinkSync(outside, d, 'dir');
+  for (const op of [() => R.write(d, rec), () => R.read(file), () => R.list(d), () => R.sweep(d),
+    () => R.remove(d, rec), () => R.claim(rec.path)]) {
+    assert.throws(op, (e) => e.code === 'unsafe');
+  }
+  assert.deepEqual(fs.readdirSync(outside), []);
+});
+
+test('a folder swap during write cannot redirect the token', { skip: !POSIX }, (t) => {
+  const d = runDir(t), outside = scratch(t), saved = `${d}-saved`, rec = record(d);
+  const open = fs.openSync;
+  let swapped = false;
+  fs.openSync = function (file, ...args) {
+    if (!swapped && String(file).endsWith('.tmp')) {
+      swapped = true;
+      fs.renameSync(d, saved);
+      fs.symlinkSync(outside, d, 'dir');
+    }
+    return open.call(this, file, ...args);
+  };
+  try { R.write(d, rec); } catch (e) { assert.equal(e.code, 'unsafe'); }
+  finally { fs.openSync = open; }
+  assert.equal(swapped, true);
+  assert.deepEqual(fs.readdirSync(outside), [], 'the token never enters the replacement folder');
+});
+
+test('read refuses symlinks and nonprivate run files', { skip: !POSIX }, (t) => {
+  const d = runDir(t), rec = record(d), file = R.runFile(d, rec.browser, rec.instance);
+  const elsewhere = path.join(scratch(t), 'record');
+  fs.writeFileSync(elsewhere, JSON.stringify(rec), { mode: 0o600 });
+  fs.symlinkSync(elsewhere, file);
+  assert.equal(R.read(file), null);
+  fs.unlinkSync(file);
+  fs.writeFileSync(file, JSON.stringify(rec), { mode: 0o644 });
+  assert.equal(R.read(file), null);
+});
+
+test('a failed atomic write removes its temporary file and preserves the record', (t) => {
+  const d = runDir(t), rec = record(d);
+  R.write(d, rec);
+  const write = fs.writeFileSync;
+  fs.writeFileSync = function (file, ...args) {
+    if (typeof file === 'number') throw Object.assign(new Error('disk full'), { code: 'ENOSPC' });
+    return write.call(this, file, ...args);
+  };
+  try { assert.throws(() => R.write(d, { ...rec, token: R.token() }), (e) => e.code === 'ENOSPC'); }
+  finally { fs.writeFileSync = write; }
+  assert.deepEqual(fs.readdirSync(d), ['chrome.inst1.json']);
+  assert.deepEqual(R.read(R.runFile(d, 'chrome', 'inst1')), rec);
+});
+
+test('sweep leaves an unrecorded live socket alone', { skip: !POSIX }, async (t) => {
+  const d = runDir(t), p = R.socketPath(d, 'chrome', 'junk');
+  const server = net.createServer((s) => s.end());
+  await R.listen(server, p);
+  t.after(() => server.close());
+  fs.writeFileSync(R.runFile(d, 'chrome', 'junk'), 'not json', { mode: 0o600 });
+  R.sweep(d);
+  assert.ok(fs.existsSync(p), 'no dead host record authorizes deleting this socket');
+  const c = R.connect(p);
+  c.on('error', () => {});
+  c.resume();
+  await closed(c);
+});
+
+test('sweep cannot delete a live record published during its stale check', (t) => {
+  const d = runDir(t), dead = deadPid(), stale = record(d, { pid: dead });
+  const file = R.write(d, stale), live = { ...stale, pid: process.pid, token: R.token() };
+  const kill = process.kill;
+  let writer;
+  process.kill = function (pid, signal) {
+    if (pid === dead && !writer) {
+      const code = `const R=require(${JSON.stringify(require.resolve('../mcp/lib/rendezvous.js'))});try{R.write(${JSON.stringify(d)},${JSON.stringify(live)})}catch(e){process.stderr.write(e.code);process.exitCode=1}`;
+      writer = spawnSync(process.execPath, ['-e', code]);
+    }
+    return kill.call(this, pid, signal);
+  };
+  try { R.sweep(d); } finally { process.kill = kill; }
+  assert.ok(writer);
+  if (writer.status === 0) assert.deepEqual(R.read(file), live, 'a published live record survives');
+  else { assert.equal(writer.stderr.toString(), 'EBUSY'); assert.equal(fs.existsSync(file), false); }
+});
+
+test('the longest permitted socket basename is never truncated, including on Node 18', { skip: !POSIX }, async (t) => {
+  const d = path.join(scratch(t), 'é'.repeat(40));
+  fs.mkdirSync(d, { mode: 0o700 });
+  const p = R.socketPath(d, 'b'.repeat(32), 'i'.repeat(64));
+  const server = net.createServer((s) => s.end('exact'));
+  await R.listen(server, p);
+  t.after(() => server.close());
+  assert.deepEqual(fs.readdirSync(d), [path.basename(p)]);
+  const c = R.connect(p), got = bytesFrom(c);
+  c.on('error', () => {});
+  await closed(c);
+  assert.equal(got().toString(), 'exact');
 });
 
 // ---- the handshake ----------------------------------------------------------------------------------------------------
