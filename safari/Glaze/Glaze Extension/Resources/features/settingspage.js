@@ -81,11 +81,11 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
   // trusts its writes for, and this page's end of a MessageChannel. Whatever end the frame took is the one it answers on.
   const greet = async (f) => {
     const n = ++hellos;
+    port?.close(); port = null;
     let pass = spare;
     spare = '';
     if (!pass) pass = await job();
     if (frame !== f || n !== hellos || !pass) return;
-    port?.close();
     const ch = new MessageChannel();
     ch.port1.onmessage = ({ data }) => { if (frame !== f || port !== ch.port1) return; heard(data); };
     port = ch.port1;
