@@ -285,6 +285,15 @@ test('remove returns the exact document and versions it deleted for Undo', async
   assert.equal(await P.get(k), null);
 });
 
+test('a refused delete leaves the paper, versions and index intact', async () => {
+  const s = store(), P = PA.open(s), k = PA.newKey();
+  await P.save(k, { doc: doc('Keep every word.'), format: 'plain' });
+  const before = structuredClone(s.data), set = s.set;
+  s.set = async (patch) => { if ('writerPapers' in patch) throw Error('QUOTA_BYTES'); return set(patch); };
+  await assert.rejects(P.remove(k), /QUOTA_BYTES/);
+  assert.deepEqual(s.data, before);
+});
+
 test('merge keeps an older record with a different format as a version', async () => {
   const P = PA.open(store(), () => 10), k = PA.newKey();
   await P.save(k, { doc: doc('Same words.'), format: 'apa7' });
