@@ -165,3 +165,16 @@ test('compact: Blackboard editor gives the box back holding the paper\'s text', 
   assert.ok(!frame.isConnected);
   assert.equal(box.editor.innerHTML, '<p>Kept.</p>');
 });
+
+
+test('compact: the file sheet owns its native click and text, without a second compact flush', async () => {
+  const { c, box } = await paper(false);
+  const button = c.doc.querySelector('[data-analytics-id="assignment.attempt.authoring.footer.submit"]');
+  c.ctx.GZ_WRITER_SUBMIT = { passing: (b) => b === button };
+  box.editor.innerHTML = '<p>Explicit submission note.</p>';
+  const e = { type: 'click', target: button, preventDefault() { this.held = true; }, stopImmediatePropagation() {} };
+  c.doc.dispatchEvent(e);
+  assert.equal(!!e.held, false);
+  assert.equal(box.editor.innerHTML, '<p>Explicit submission note.</p>');
+  assert.ok(!c.ports[0].sent.some((m) => m.type === 'compact:flush'));
+});
