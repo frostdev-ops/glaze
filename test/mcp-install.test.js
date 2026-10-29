@@ -80,14 +80,15 @@ const pkgAt = (t, version) => {
 };
 
 // ---- the package ------------------------------------------------------------------------------------------------------
-test('the package is glaze-mcp: one bin, Node 18 and later, bin and lib only, MIT, no dependencies', () => {
+test('the package is glaze-mcp: one bin, Node 18 and later, MIT license included, no dependencies', () => {
   const pkg = json(path.join(PKG, 'package.json'));
   assert.equal(pkg.name, 'glaze-mcp');
   assert.deepEqual(pkg.bin, { 'glaze-mcp': 'bin/glaze-mcp.js' });
   assert.deepEqual(pkg.engines, { node: '>=18' });
-  assert.deepEqual(pkg.files, ['bin', 'lib']);
+  assert.deepEqual(pkg.files, ['bin', 'lib', 'LICENSE']);
   assert.equal(pkg.license, 'MIT');
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'LICENSE'), 'utf8'), /^MIT License/);
+  assert.equal(fs.readFileSync(path.join(PKG, 'LICENSE'), 'utf8'), fs.readFileSync(path.join(__dirname, '..', 'LICENSE'), 'utf8'));
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
   for (const k of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'bundleDependencies']) assert.equal(k in pkg, false, k);
   const bin = fs.readFileSync(path.join(PKG, 'bin', 'glaze-mcp.js'), 'utf8');
@@ -283,8 +284,8 @@ test('setup on macOS: a versioned copy, one launcher and one manifest per presen
   assert.deepEqual(r.ids, [STORE]);
   const script = path.join(root, VERSION, 'bin', 'glaze-mcp.js');
   // The copy: bin, lib and package.json, byte for byte.
-  const shipped = ['package.json', ...files(PKG).filter((f) => /^(bin|lib)[\\/]/.test(f))].sort();
-  assert.deepEqual(files(path.join(root, VERSION)), shipped);
+  const shipped = ['package.json', 'LICENSE', ...files(PKG).filter((f) => /^(bin|lib)[\\/]/.test(f))].sort();
+  assert.deepEqual(files(path.join(root, VERSION)).filter((f) => f !== '.glaze-mcp-copy.json'), shipped);
   for (const f of shipped) assert.equal(fs.readFileSync(path.join(root, VERSION, f), 'utf8'), fs.readFileSync(path.join(PKG, f), 'utf8'), f);
   const chrome = path.join(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts', `${HOST}.json`);
   const firefox = path.join(AS(home), 'Mozilla', 'NativeMessagingHosts', `${HOST}.json`);
@@ -388,7 +389,7 @@ test('ids already in an installed manifest are kept, shared with browsers set up
   fs.writeFileSync(chrome, JSON.stringify({ ...json(chrome), allowed_origins: [...json(chrome).allowed_origins, 'chrome-extension://bad/', `chrome-extension://${Z}/`] }));
   await I.setup(ctx);
   const brave = path.join(AS(home), 'BraveSoftware', 'Brave-Browser', 'NativeMessagingHosts', `${HOST}.json`);
-  for (const f of [chrome, brave]) assert.deepEqual(json(f).allowed_origins, [ORIGIN, `chrome-extension://${A}/`, `chrome-extension://${Z}/`], f);
+  for (const f of [chrome, brave]) assert.deepEqual(json(f).allowed_origins, [ORIGIN, `chrome-extension://${A}/`], f);
   await assert.rejects(I.setup({ ...ctx, ids: ['nope'] }), /nope/);
 });
 
@@ -499,7 +500,7 @@ test('uninstall on Windows deletes only keys that point into our folder, and our
   const hosts = path.join(base, 'Local', 'glaze-mcp', 'hosts');
   fs.writeFileSync(path.join(hosts, 'other.json'), JSON.stringify({ name: 'com.other.host', path: path.join(hosts, 'chrome.bat') }));
   const r = await I.uninstall(ctx);
-  assert.deepEqual(reg.ops('delete'), [['delete', K('Google\\Chrome'), '/f'], ['delete', K('Mozilla'), '/f']]);
+  assert.deepEqual(reg.ops('delete'), [['delete', K('Google\\Chrome'), '/ve', '/f'], ['delete', K('Mozilla'), '/ve', '/f']]);
   assert.deepEqual([...reg.keys], [[K('Chromium'), 'C:\\dev\\glaze\\host.json']]);
   assert.ok(r.kept.includes(K('Chromium')));
   assert.deepEqual(fs.readdirSync(hosts), ['other.json']);
@@ -591,6 +592,145 @@ const io = (over = {}) => {
   const out = [], err = [];
   return { stdin: { isTTY: false }, stdout: { write: (s) => out.push(s) }, stderr: { write: (s) => err.push(s) }, out: () => out.join(''), err: () => err.join(''), ...over };
 };
+
+test('setup and uninstall refuse symlinks in installation destinations without changing their targets', { skip: !POSIX }, async (t) => {
+  for (const rel of ['', 'hosts', VERSION, path.join(VERSION, 'bin')]) {
+    await t.test(rel || 'root', async (t) => {
+      const home = scratch(t), outside = scratch(t), ctx = mac(home);
+      mk(AS(home), 'Google', 'Chrome');
+      const root = path.join(AS(home), 'glaze-mcp');
+      const link = rel ? path.join(root, rel) : root;
+      mk(path.dirname(link));
+      fs.writeFileSync(path.join(outside, 'keep'), 'unrelated');
+      fs.symlinkSync(outside, link, 'dir');
+      const before = tree(outside), perms = mode(outside);
+      await assert.rejects(I.setup(ctx), /symlink|symbolic/i);
+      await assert.rejects(I.uninstall(ctx), /symlink|symbolic/i);
+      assert.deepEqual(tree(outside), before);
+      assert.equal(mode(outside), perms);
+      assert.ok(fs.lstatSync(link).isSymbolicLink());
+    });
+  }
+});
+
+test('browser manifest directories and files cannot redirect setup or uninstall through a symlink', { skip: !POSIX }, async (t) => {
+  for (const leaf of [false, true]) await t.test(String(leaf), async (t) => {
+    const home = scratch(t), outside = scratch(t), ctx = mac(home);
+    const dir = mk(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts');
+    const f = path.join(dir, `${HOST}.json`);
+    const target = path.join(outside, 'keep.json');
+    fs.writeFileSync(target, JSON.stringify({ name: HOST, path: path.join(AS(home), 'glaze-mcp', 'hosts', 'chrome') }));
+    if (leaf) fs.symlinkSync(target, f);
+    else { fs.rmdirSync(dir); fs.symlinkSync(outside, dir, 'dir'); }
+    const before = tree(outside);
+    await assert.rejects(I.setup(ctx), /symlink|symbolic/i);
+    await assert.rejects(I.uninstall(ctx), /symlink|symbolic/i);
+    assert.deepEqual(tree(outside), before);
+  });
+});
+
+test('setup refuses unrelated files occupying its launcher, manifest or version paths', async (t) => {
+  for (const which of ['launcher', 'manifest', 'copy']) await t.test(which, async (t) => {
+    const home = scratch(t), ctx = mac(home);
+    const bdir = mk(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts');
+    const root = mk(AS(home), 'glaze-mcp');
+    let f;
+    if (which === 'launcher') f = path.join(mk(root, 'hosts'), 'chrome');
+    else if (which === 'manifest') f = path.join(bdir, `${HOST}.json`);
+    else f = path.join(mk(root, VERSION), 'notes.txt');
+    fs.writeFileSync(f, 'mine');
+    await assert.rejects(I.setup(ctx), /own|unrelated|refus/i);
+    assert.equal(fs.readFileSync(f, 'utf8'), 'mine');
+  });
+});
+
+test('uninstall leaves script-shaped foreign files, version-shaped foreign packages and modified copies alone', async (t) => {
+  const home = scratch(t), ctx = mac(home);
+  mk(AS(home), 'Google', 'Chrome');
+  await I.setup(ctx);
+  const root = path.join(AS(home), 'glaze-mcp');
+  const foreign = path.join(root, 'hosts', 'notes');
+  fs.writeFileSync(foreign, L.sh({ node: '/usr/bin/node', script: '/outside/script.js', browser: 'chrome' }));
+  const copy = mk(root, '9.9.9');
+  fs.writeFileSync(path.join(copy, 'package.json'), JSON.stringify({ name: 'someone-else', version: '9.9.9' }));
+  fs.writeFileSync(path.join(mk(copy, 'bin'), 'glaze-mcp.js'), 'mine');
+  const note = path.join(root, VERSION, 'notes.txt');
+  fs.writeFileSync(note, 'mine too');
+  const saved = fs.readFileSync(foreign, 'utf8');
+  await I.uninstall(ctx);
+  assert.equal(fs.readFileSync(foreign, 'utf8'), saved);
+  assert.equal(json(path.join(copy, 'package.json')).name, 'someone-else');
+  assert.equal(fs.readFileSync(note, 'utf8'), 'mine too');
+});
+
+test('Windows setup preserves foreign registrations; uninstall requires its exact owned manifest and deletes only the default value', async (t) => {
+  const base = scratch(t), reg = runner(), ctx = win(base, reg);
+  mk(base, 'Local', 'Google', 'Chrome', 'User Data');
+  reg.keys.set(K('Google\\Chrome'), 'C:\\dev\\manual.json');
+  await assert.rejects(I.setup(ctx), /own|unrelated|refus/i);
+  assert.equal(reg.keys.get(K('Google\\Chrome')), 'C:\\dev\\manual.json');
+  assert.deepEqual(reg.ops('add'), []);
+  reg.keys.delete(K('Google\\Chrome'));
+  await I.setup(ctx);
+  const foreign = path.join(base, 'Local', 'glaze-mcp', 'hosts', 'notes.json');
+  fs.writeFileSync(foreign, JSON.stringify({ name: 'another.host', path: 'elsewhere' }));
+  reg.keys.set(K('Chromium'), foreign);
+  await I.uninstall(ctx);
+  assert.equal(reg.keys.get(K('Chromium')), foreign);
+  assert.deepEqual(reg.ops('delete'), [['delete', K('Google\\Chrome'), '/ve', '/f']]);
+  assert.equal(json(foreign).name, 'another.host');
+});
+
+test('ids come only from explicit grants, never another manifest carrying our name', async (t) => {
+  const home = scratch(t), ctx = mac(home);
+  const chrome = path.join(mk(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts'), `${HOST}.json`);
+  fs.writeFileSync(chrome, JSON.stringify({ name: HOST, path: '/developer/host', type: 'stdio', allowed_origins: [`chrome-extension://${Z}/`] }));
+  mk(AS(home), 'Firefox');
+  const r = await I.setup({ ...ctx, browsers: ['firefox'], ids: [A] });
+  assert.deepEqual(r.ids, [STORE, A]);
+  assert.equal(json(chrome).path, '/developer/host');
+});
+
+test('registry executable must be an absolute System32 path even with a malformed SystemRoot', () => {
+  for (const SystemRoot of ['relative', '\\Windows', 'C:Windows', 'C:\\Win"dows', 'C:\\Win\ndows']) {
+    assert.throws(() => I.regExe({ env: { SystemRoot } }), /absolute|SystemRoot|invalid/i, SystemRoot);
+  }
+  assert.equal(I.regExe({ env: { SystemRoot: 'D:\\Win dows' } }), 'D:\\Win dows\\System32\\reg.exe');
+});
+
+test('batch launchers reject quote and line injection, preserve carets and percents, and disable delayed expansion', () => {
+  for (const p of ['C:\\bad" & echo injected & "\\node.exe', 'C:\\bad\nnode.exe', 'C:\\bad\rnode.exe', 'C:\\bad\0node.exe']) {
+    assert.throws(() => L.bat({ node: p, script: 'C:\\s.js', browser: 'chrome' }), /invalid|path|character/i);
+    assert.throws(() => L.bat({ node: 'C:\\n.exe', script: p, browser: 'chrome' }), /invalid|path|character/i);
+  }
+  const o = { node: 'C:\\a ^ b\\node.exe', script: 'C:\\100% !name!\\s.js', browser: 'chrome' };
+  const text = L.bat(o);
+  assert.match(text, /setlocal DisableDelayedExpansion/i);
+  assert.match(text, /"C:\\a \^ b\\node.exe"/);
+  assert.match(text, /100%% !name!/);
+  assert.ok(text.endsWith('%* & exit /b\r\n'));
+  assert.deepEqual(L.parse(text), o);
+});
+
+test('doctor rejects unsafe folders before running a node path and rejects extra Firefox ids', { skip: !POSIX }, async (t) => {
+  const home = scratch(t), calls = [], ctx = mac(home, { node: process.execPath, run: async (...args) => { calls.push(args); return { stdout: 'v18.20.8' }; } });
+  mk(AS(home), 'Firefox');
+  await I.setup(ctx);
+  const root = path.join(AS(home), 'glaze-mcp');
+  fs.chmodSync(root, 0o777);
+  assert.equal((await D.run(ctx)).ok, false);
+  assert.deepEqual(calls, []);
+  fs.chmodSync(root, 0o700);
+  const file = path.join(AS(home), 'Mozilla', 'NativeMessagingHosts', `${HOST}.json`);
+  fs.writeFileSync(file, JSON.stringify({ ...json(file), allowed_extensions: [IDS.FIREFOX, 'unasked@example.org'] }));
+  assert.equal((await D.run(ctx)).ok, false);
+});
+
+test('--dev refuses a keyed manifest instead of granting a different path-derived id', (t) => {
+  const dir = scratch(t);
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ key: 'cHVibGljLWtleQ==' }));
+  assert.throws(() => IDS.fromArgs(['--dev', dir], { platform: 'linux' }), /--extension-id/);
+});
 
 test('the command: --version, a TTY refused in host mode, and host and agent waiting for their steps', async () => {
   const bin = path.join(PKG, 'bin', 'glaze-mcp.js');
