@@ -1995,14 +1995,17 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
       || (m.op === 'remove' && page === chrome.runtime.getURL('options.html') && s.frameId === 0 && !!s.tab))
     // The Documents home's delete-Undo puts a paper back whole, from its own tab or its claimed frame (never another frame).
     || (m.op === 'merge' && !papers)
-    || !['save', 'restore', 'remove', 'savePreset', 'removePreset', 'merge'].includes(m.op) || !Array.isArray(m.args)) { reply({ ok: false, error: 'sender' }); return; }
+    || !['save', 'restore', 'remove', 'savePreset', 'removePreset', 'merge', 'trash', 'untrash', 'purge'].includes(m.op) || !Array.isArray(m.args)) { reply({ ok: false, error: 'sender' }); return; }
   (framed ? settingsFramesLoaded.then(() => trustedFrame(s, 'papers')) : Promise.resolve(true)).then((ok) => (ok ? queuePapers(m) : { ok: false, error: 'sender' }))
     .then(reply, (e) => reply({ ok: false, error: e.message }));
   return true;
 });
+const openPapers = () => { if (!paperStore) { importScripts('writer-styles.js', 'writer-papers.js'); paperStore = GZ_WRITER_PAPERS.open(chrome.storage.local); } return paperStore; };
+// What the Documents page's Trash has held past 30 days goes as the browser starts, as it does when the page opens.
+chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => openPapers().purge()).catch(() => {}); });
 const queuePapers = (m) => {
   const task = (brokerTurn ||= GZ_CARDS.queue())(async () => {
-    if (!paperStore) { importScripts('writer-styles.js', 'writer-papers.js'); paperStore = GZ_WRITER_PAPERS.open(chrome.storage.local); }
+    openPapers();
     // One key's paper and versions, nothing else.
     if (m.op === 'merge' && !globalThis.GZ_WRITER_SCHEMA) importScripts('pm.js', 'writer-schema.js');
     if (m.op === 'merge' && (m.args.length !== 1 || !GZ_WRITER_PAPERS.one(m.args[0]))) return { ok: false, error: 'bad' };

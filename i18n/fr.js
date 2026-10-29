@@ -3310,6 +3310,7 @@
   "Grid": "Grille",
   "Make a copy": "Créer une copie",
   "Deleted": "Supprimé",
+  "Trash": "Corbeille",
   "Copy of {title}": "Copie de {title}",
   "{n} documents": {"one": "{n} document", "other": "{n} documents"},
   "{n} paragraphs aren't double-spaced": {"one": "{n} paragraphe n’est pas en double interligne", "other": "{n} paragraphes ne sont pas en double interligne"},

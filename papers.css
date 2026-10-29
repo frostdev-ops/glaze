@@ -52,6 +52,7 @@
 .gd-views button:hover { color: var(--gz-ink); }
 .gd-views button[aria-pressed="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi); }
 :root:not([data-dark]) .gd-views button[aria-pressed="true"] { color: var(--gz-accent); }
+.gd-bin[hidden] { display: none; }
 .gd-btn { height: 36px; padding: 0 16px; border-radius: calc(var(--gd-radius) * 2 / 3); background: var(--gz-accent); color: var(--gz-accent-ink); font-size: 13px; font-weight: 600; white-space: nowrap;
   box-shadow: 0 4px 14px color-mix(in srgb, var(--gz-accent) 30%, transparent); transition: transform var(--t) ease-out, box-shadow var(--t) ease-out; }
 .gd-btn:hover { transform: translateY(calc(var(--gd-lift) / 2)); box-shadow: 0 8px 20px color-mix(in srgb, var(--gz-accent) 38%, transparent); }

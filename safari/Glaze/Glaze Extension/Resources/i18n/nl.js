@@ -3310,6 +3310,7 @@
   "Grid": "Raster",
   "Make a copy": "Kopie maken",
   "Deleted": "Verwijderd",
+  "Trash": "Prullenbak",
   "Copy of {title}": "Kopie van {title}",
   "{n} documents": {"one": "{n} document", "other": "{n} documenten"},
   "{n} paragraphs aren't double-spaced": {"one": "{n} alinea heeft geen dubbele regelafstand", "other": "{n} alinea’s hebben geen dubbele regelafstand"},
