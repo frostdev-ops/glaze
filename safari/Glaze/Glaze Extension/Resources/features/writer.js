@@ -338,9 +338,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     }
     // An attempt's Submit and Save and Close send its box: a compact paper's last edit goes in first.
     for (const box of boxes.values()) {
-      if (box.mode !== 'paper' || box.full || !box.ready || !/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || !box.editor.closest('bb-assignment-attempt-authoring-panel')?.contains(b) || !sameBox(box)) continue;
+      if (box.mode !== 'paper' || box.full || !/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || !box.editor.closest('bb-assignment-attempt-authoring-panel')?.contains(b) || !sameBox(box)) continue;
       e.preventDefault(); e.stopImmediatePropagation();
-      if (box.flushing) return;
+      if (!box.ready || !box.port || box.flushing) return;
       const request = crypto.randomUUID();
       box.flushing = { request, button: b, timer: setTimeout(() => endFlush(box), 4000) };
       box.port.postMessage({ type: 'compact:flush', request });
