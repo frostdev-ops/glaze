@@ -658,7 +658,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // The tab's copy of a paper's unsaved edits, by the paper's key: the next frame on any page of it finds them.
     const slotOf = (k) => `gz-paper-pending:${k}`;
     // → the copy's record, with base: the revision it was typed on (its save keeps a newer one as a version).
-    const pendingOf = (k) => { try { const p = JSON.parse(sessionStorage.getItem(slotOf(k))); return p?.key === k && p.record?.doc ? { ...p.record, base: p.base } : null; } catch { return null; } };
+    const pendingOf = (k) => { try { const p = JSON.parse(sessionStorage.getItem(slotOf(k))); return p?.key === k && p.record?.doc ? { ...p.record, base: p.base, rename: p.rename === true } : null; } catch { return null; } };
     let recoveryKey;
     try { recoveryKey = sessionStorage.getItem(keySlot); } catch { /* storage can be unavailable */ }
     recoveryKey ||= `recovery:${crypto.randomUUID()}`;
@@ -666,7 +666,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const setState = (k) => { state.textContent = k ? t(k) : ''; };
     // named: the paper has a title the student gave it (typed here or on the Documents home), typed; else a standalone
     // document is called by its first line (F.name) and an assignment's paper by the assignment.
-    let named = false, typed = '';
+    let named = false, typed = '', nameEdits = 0, nameSaved = 0;
     const naming = (p) => { named = p?.named === true; typed = named ? String(p.title || '') : ''; };
     const record = () => ({
       doc: view.state.doc.toJSON(), words: ed.words(), format: format.base ? ST.preset(format) : format.id, keep, kind: 'paper', named,
@@ -728,7 +728,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       return { ...rec, doc: recover(rec.doc) };
     };
     const emergency = () => {
-      try { const r = record(); r.doc = pictures(r.doc, (src) => savedPictures.get(src) || src); sessionStorage.setItem(slotOf(key), JSON.stringify({ key, record: r, base: paper?.revision ?? 0 })); sessionSafe = true; }
+      try { const r = record(); r.doc = pictures(r.doc, (src) => savedPictures.get(src) || src); sessionStorage.setItem(slotOf(key), JSON.stringify({ key, record: r, base: paper?.revision ?? 0, rename: nameEdits > nameSaved })); sessionSafe = true; }
       catch { sessionSafe = false; }
     };
     // writing: this editor's writes in flight (storage tells of each before or after it answers); missed: a change heard
@@ -745,11 +745,13 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const saveNow = async (reason = 'auto', base) => {
       clearTimeout(saveTimer);
       if (!key) { setState('Not saved'); return null; }
-      const at = edits, k = key;
+      const at = edits, nameAt = nameEdits, k = key;
       emergency();
       setState('Saving…');
       try {
-        const rec = record(), r = await ours(store.save(key, rec, { reason, base: Number.isSafeInteger(base) ? base : paper?.revision ?? 0 })); paper = r.paper;
+        const rec = record(), r = await ours(store.save(key, rec, { reason, base: Number.isSafeInteger(base) ? base : paper?.revision ?? 0, rename: nameAt > nameSaved })); paper = r.paper;
+        nameSaved = nameAt;
+        if (nameAt === nameEdits) { naming(paper); head(); }
         await keepPictures(rec.doc);
         failing = 0;
         if (at === edits) { dirty = false; setState('Saved'); try { sessionStorage.removeItem(slotOf(k)); } catch {} }
@@ -1375,6 +1377,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // A title typed is saved as an edit is (named; emptied, the derived name again).
     titleIn?.addEventListener('input', () => {
       typed = titleIn.value.replace(/\s+/g, ' ').trim(); named = !!typed;
+      nameEdits++;
       titled();
       edits++; dirty = true;
       emergency();
@@ -1385,7 +1388,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     titleIn?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); view.focus(); } });
     const head = () => {
       const tt = ctx.assignment?.title || paper?.title || '';
-      if (own) { titleIn.value = typed; titled(); } else title.textContent = tt || t('Paper');
+      if (own) { if (nameEdits === nameSaved) titleIn.value = typed; titled(); } else title.textContent = tt || t('Paper');
       const d = ctx.assignment?.due || paper?.due;
       due.textContent = d && Number.isFinite(Date.parse(d)) ? t('Due {when}', { when: new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(d)) }) : '';
     };
@@ -1397,7 +1400,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       await keepPictures(paper?.doc);
       recovered = key === recoveryKey && !!paper?.doc;
       const copy = pendingOf(key), pending = copy && await complete(copy, key, paper);
-      if (pending) { const { base: _, ...rec } = pending; paper = { ...paper, ...rec }; }
+      if (pending) { const { base: _, rename, ...rec } = pending; paper = { ...paper, ...rec }; if (rename) nameEdits++; }
       outlineSaved = paper?.outline || null;
       keep = paper?.keep === true;
       naming(paper);
@@ -1459,7 +1462,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (!written && edits === at) {
           key = target;
           keepPictures(existing?.doc).catch((e) => console.error(e));
-          if (pending) { const { base: _, ...rec } = pending; paper = { ...existing, ...rec }; } else paper = existing;
+          if (pending) { const { base: _, rename, ...rec } = pending; paper = { ...existing, ...rec }; if (rename) nameEdits++; } else paper = existing;
           naming(paper);
           outlineSaved = paper?.outline || null;
           keep = paper?.keep === true;
@@ -1483,7 +1486,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     });
     // Another editor (a second tab, the Papers page) saved this paper: while this one holds nothing unsaved, it shows that,
     // read through the store so its next save builds on it. Unsaved typing stays; its save keeps the other text as a
-    // version. A rename (the Documents home's) reaches the title either way, and the next save carries it.
+    // version. A rename reaches an untouched title; an in-progress title keeps what the student is typing.
     const newer = (p) => p?.doc && !dirty && !initializing && !importing && (p.revision || 0) > (paper?.revision || 0);
     const elsewhere = async (changes, area) => {
       const next = area === 'local' && key ? changes[PA.KEYS.PAPER + key]?.newValue : null;
@@ -1499,7 +1502,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       // text, caret and undo as they are.
       const r = PA.renamed(paper, fresh);
       if (r && (r.revision || !newer(fresh))) {
-        naming(r);
+        if (nameEdits === nameSaved) naming(r);
         if (paper) paper = { ...paper, title: fresh.title, named: r.named, ...(r.revision ? { revision: r.revision } : {}) };
         head();
         return;
