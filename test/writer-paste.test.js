@@ -230,3 +230,16 @@ test('Writer copy and paste retains explicit black, pale and tinted colours exac
   const html = S.serialize(S.paper, original);
   assert.equal(S.serialize(S.paper, read(P.normalize(html.replace('<p>', '<p data-pm-slice="1 1 []">')).html)), html);
 });
+
+
+test('automatic or rejected paste ink remains legible on every retained highlighter', () => {
+  const C = require('../lib/color.js');
+  for (const [name, on] of Object.entries(S.HIGHLIGHT)) {
+    for (const color of ['windowtext', 'transparent', 'black', 'white', on]) {
+      const marks = runOf(`<p><span style="background:${on};color:${color}">band</span></p>`, 'band');
+      assert.equal(marks.highlight?.color, name === 'white' ? undefined : name);
+      const ink = `#${marks.color?.color || '111111'}`;
+      assert.ok(C.contrast(ink, on) >= 1.6, `${name}: ${ink} on ${on}, ${C.contrast(ink, on)}:1`);
+    }
+  }
+});
