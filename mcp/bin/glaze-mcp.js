@@ -4,7 +4,7 @@
 //   glaze-mcp host      what the browser starts over native messaging (lib/host.js); also chosen from the browser's own
 //                       argv alone, so a manifest may name this file directly. Never from a terminal.
 //   glaze-mcp setup | uninstall | doctor | --version
-// lib/host.js and lib/agent.js are loaded only when used and export main({ args, browser, caller }), resolving to an
+// lib/host.js and lib/agent.js are loaded only when used and export main({ args, browser, caller, io }), resolving to an
 // exit code or to nothing while they keep running.
 'use strict';
 const fs = require('node:fs');
@@ -79,7 +79,7 @@ const main = async (args, io = {}) => {
         }
         const mod = part(m.mode, stderr);
         if (!mod) return 2;
-        const code = await mod.main({ args: m.args, browser: m.browser || null, caller: m.caller || null });
+        const code = await mod.main({ args: m.args, browser: m.browser || null, caller: m.caller || null, io: { stdin, stdout, stderr, platform, env: io.env } });
         return typeof code === 'number' ? code : undefined;
       }
       case 'setup': {
@@ -127,7 +127,7 @@ const main = async (args, io = {}) => {
   return 2;
 };
 
-module.exports = { mode, main };
+module.exports = { mode, main, caller };
 if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { if (typeof code === 'number') process.exitCode = code; });
 }
