@@ -229,6 +229,8 @@ const HARNESS = `(() => {
     check(await fr.evaluate(() => !!document.querySelector('.ge-find:not([hidden]) .ge-with:not([hidden])')), '⌘⇧H opens Find with Replace');
     await p.keyboard.press('Escape');
 
+    // Shortcut checks above deliberately reset paragraph attributes; start the dialog checks on a fresh fixture.
+    await load(fr, FX.papers.mla9(), 'mla9');
     // ---- the Paragraph dialog
     await pick(fr, 'Critics');
     await fr.click('.gp-tool [aria-label="Paragraph…"]');
