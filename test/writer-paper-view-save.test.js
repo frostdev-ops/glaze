@@ -20,3 +20,30 @@ test('full → compact refuses to project when the paper or its view version can
     assert.equal(calls, fail);
   }
 });
+
+test('compact flush saves before acknowledging and holds editing through the native click; a timeout ignores late saves', async () => {
+  for (const timeout of [false, true]) {
+    const messages = [], doc = {}, view = { props: { editable: () => true }, state: { doc }, setProps(o) { Object.assign(this.props, o); } };
+    let release;
+    const saved = new Promise((r) => { release = r; });
+    const ctx = vm.createContext({ view, compact: true, loaded: true, holding: false, switching: null, flushing: null,
+      root: { inert: false }, boxEl: { inert: false }, host: { say: (m) => messages.push(m) }, save: () => saved,
+      project: () => ({ html: '<p>Last edit.</p>', text: 'Last edit.', delta: [{ insert: 'Last edit.\n' }] }), setView() {} });
+    vm.runInContext(source.slice(source.indexOf('    const resume = (request)'), start) + '\nglobalThis.begin = flush; globalThis.end = resume;', ctx);
+    const pending = ctx.begin('request');
+    assert.equal(view.props.editable(), false);
+    assert.equal(ctx.root.inert, true);
+    assert.equal(messages.length, 0, 'no acknowledgement before the save');
+    if (timeout) ctx.end('request');
+    release({}); await pending;
+    if (timeout) assert.equal(messages.length, 0, 'timed-out saves cannot trigger a native click');
+    else {
+      assert.equal(messages[0].ok, true);
+      assert.equal(view.props.editable(), false, 'editing remains held until the parent dispatches the click');
+      ctx.end('request');
+    }
+    assert.equal(view.props.editable(), true);
+    assert.equal(ctx.root.inert, false);
+    assert.equal(ctx.boxEl.inert, false);
+  }
+});
