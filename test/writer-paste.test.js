@@ -173,3 +173,45 @@ test('pasted headings retain source emphasis and mixed bold text', () => {
   const bare = read(P.normalize('<h1>Default heading</h1>').html);
   assert.equal(marksOn(bare, 'Default heading').bold, true, 'bare HTML headings retain browser bold emphasis');
 });
+
+// Legibility (lib/writer-color.js): a run's colour stays only where the paper shows it, on its highlight or else the white
+// page, at 2:1 or more. Word's clipboard as it writes shading (background beside mso-shading and mso-pattern), cell and
+// page colours (bgcolor) and theme colours (mso-themecolor beside the hex).
+const fromWord = (body, page = '') => `<html xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta name=ProgId content=Word.Document></head><body lang=EN-US${page}><div class=WordSection1>${body}</div></body></html>`;
+const runOf = (html, needle) => marksOn(read(P.normalize(html).html), needle);
+
+test('legibility: light text on a dark paragraph shading, cell or page takes the paper\'s ink, and the shading stays dropped', () => {
+  const shaded = fromWord(`<p class=MsoNormal style='background:#1F1F1F;mso-shading:white;mso-pattern:solid #1F1F1F'><span style='color:white'>shaded white</span> <span style='color:#FFFFCC'>pale yellow</span> <span style='color:#C00000'>dark red</span></p>`);
+  assert.deepEqual(runOf(shaded, 'shaded white'), {});
+  assert.deepEqual(runOf(shaded, 'pale yellow'), {});
+  assert.deepEqual(runOf(shaded, 'dark red'), { color: { color: 'C00000' } }, 'legible on the page: kept');
+  const cell = fromWord(`<table class=MsoTableGrid border=1 cellspacing=0 cellpadding=0><tr><td width=312 valign=top bgcolor="#262626" style='background:#262626;mso-shading:white;mso-pattern:solid #262626;padding:0in 5.4pt 0in 5.4pt'><p class=MsoNormal><span style='color:white;mso-themecolor:background1'>cell white</span></p></td></tr></table>`);
+  assert.deepEqual(runOf(cell, 'cell white'), {});
+  const page = fromWord(`<p class=MsoNormal><span style='color:#F2F2F2'>page white</span></p>`, ' bgcolor="#0E2841" style=\'tab-interval:.5in\'');
+  assert.deepEqual(runOf(page, 'page white'), {});
+  assert.deepEqual(runOf(fromWord(`<p class=MsoNormal><span style='color:white'>already invisible</span></p>`), 'already invisible'), {}, 'white on white in Word: visible on the paper');
+});
+
+test('legibility: Word\'s theme text and page colours are the paper\'s ink; accents and tints keep their hex', () => {
+  const html = fromWord(`<p class=MsoNormal><span style='color:#1F1F1F;mso-themecolor:background1'>dark page colour</span> <span style='color:#262626;mso-themecolor:text1'>theme text</span> <span style='color:#44546A;mso-themecolor:text2'>theme text two</span> <span style='color:#4472C4;mso-themecolor:accent1'>accent words</span> <span style='color:#595959;mso-themecolor:text1;mso-themetint:166'>tinted text</span></p>`);
+  assert.deepEqual(runOf(html, 'dark page colour'), {});
+  assert.deepEqual(runOf(html, 'theme text two'), {});
+  assert.deepEqual(runOf(html, 'theme text'), {});
+  assert.deepEqual(runOf(html, 'accent words'), { color: { color: '4472C4' } });
+  assert.deepEqual(runOf(html, 'tinted text'), { color: { color: '595959' } }, 'a tint or shade of text1 is a colour of its own');
+  const inner = fromWord(`<p class=MsoNormal><span style='color:white;mso-themecolor:background1'>outer <span style='color:#C00000'>inner red</span></span></p>`);
+  assert.deepEqual(runOf(inner, 'inner red'), { color: { color: 'C00000' } }, 'a theme hint goes with the colour beside it, not a child\'s own');
+});
+
+test('legibility: Automatic is no colour; a colour is read against the highlight it gets', () => {
+  const html = fromWord(`<p class=MsoNormal><span style='color:windowtext'>window text</span> <span style='color:auto'>auto text</span> <span style='background:navy;mso-highlight:navy;color:white'>white on navy</span> <span style='background:yellow;mso-highlight:yellow;color:#FFFF00'>yellow on yellow</span></p>`);
+  assert.deepEqual(runOf(html, 'window text'), {});
+  assert.deepEqual(runOf(html, 'auto text'), {});
+  assert.deepEqual(runOf(html, 'white on navy'), { color: { color: 'FFFFFF' }, highlight: { color: 'darkBlue' } });
+  assert.deepEqual(runOf(html, 'yellow on yellow'), { highlight: { color: 'yellow' } });
+  const bright = fromWord(`<p class=MsoNormal><span style='color:#FFA500'>orange</span> <span style='color:#D9D9D9'>pale grey</span></p>`);
+  assert.deepEqual(runOf(bright, 'orange'), { color: { color: 'FFA500' } }, 'orange on white (1.97:1) keeps its colour');
+  assert.deepEqual(runOf(bright, 'pale grey'), {}, 'a pale grey (1.4:1) is the paper\'s ink');
+  const web = `<p style="background-color: rgb(30, 30, 30); color: rgb(230, 230, 230);">dark mode page</p>`;
+  assert.deepEqual(runOf(web, 'dark mode page'), {}, 'a dark-mode site\'s light text');
+});
