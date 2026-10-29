@@ -40,6 +40,51 @@ test('the call record keeps the last 40 calls, metadata only', async () => {
   await F.record({ get: async () => { throw new Error('down'); } }, 'aiCalls', { id: 'x' }); // never throws
 });
 
+test('safe local diagnostics survive failures and Activity without exposing native text', async () => {
+  const e = F.modelFailure(Object.assign(new Error('PRIVATE PAPER'), { category: 'request-rejected', reason: 'context', context: 8192, tokens: 9000, native: 'PRIVATE PAPER' }));
+  assert.equal(e.reason, 'context'); assert.equal(e.context, 8192); assert.equal(e.tokens, 9000);
+  assert.match(F.explain(e), /context window/);
+  const data = {}, area = { get: async () => data, set: async (v) => Object.assign(data, v) };
+  await F.record(area, 'calls', { id: 'safe', ...e, prompt: 'PRIVATE PAPER' });
+  assert.equal(data.calls[0].reason, 'context'); assert.equal(data.calls[0].tokens, 9000);
+  assert.doesNotMatch(JSON.stringify(data), /PRIVATE PAPER/);
+  assert.deepEqual(F.diagnostic({ reason: 'PRIVATE PAPER', context: Infinity, tokens: -1 }), {});
+});
+
+test('response context diagnostics retain only fixed phases and measured counts', async () => {
+  const data = {}, area = { get: async () => data, set: async (v) => Object.assign(data, v) };
+  const detail = { reason: 'response-context', phase: 'response', tokens: 4000, context: 9216 };
+  assert.deepEqual(F.diagnostic({ ...detail, prompt: 'PRIVATE PAPER' }), detail);
+  assert.deepEqual(F.diagnostic({ phase: 'PRIVATE PAPER' }), {});
+  assert.match(F.explain(detail), /input fit.*producing the answer/);
+  await F.record(area, 'calls', { id: 'response', ...detail, prompt: 'PRIVATE PAPER' });
+  assert.equal(data.calls[0].phase, 'response');
+  assert.doesNotMatch(JSON.stringify(data), /PRIVATE PAPER/);
+});
+
+test('output cutoff diagnostics retain byte counts and never the partial answer', () => {
+  const detail = { reason: 'response-limit', phase: 'response', actual: 1030, limit: 1024, tokens: 3563, context: 9216 };
+  const failure = F.modelFailure(Object.assign(new Error('PRIVATE PARTIAL ANSWER'), { category: 'request-rejected', ...detail }));
+  assert.deepEqual(F.diagnostic(failure), detail);
+  assert.match(F.explain(failure), /output limit/);
+  assert.doesNotMatch(JSON.stringify(failure), /PRIVATE PARTIAL ANSWER/);
+});
+
+test('feedback limit diagnostics retain bounded counts without presenting task caps as native context overflow', async () => {
+  const data = {}, area = { get: async () => data, set: async (v) => Object.assign(data, v) };
+  for (const reason of ['feedback-criteria', 'feedback-attachments', 'feedback-material', 'feedback-calls']) {
+    const diagnostic = F.diagnostic({ reason, actual: 65, limit: 64, prompt: 'PRIVATE PAPER' });
+    assert.deepEqual(diagnostic, { reason, actual: 65, limit: 64 });
+    assert.ok(F.explain(diagnostic)); assert.doesNotMatch(F.explain(diagnostic), /context window/);
+    await F.record(area, 'calls', { id: reason, ...diagnostic, prompt: 'PRIVATE PAPER' });
+  }
+  assert.equal(data.calls.length, 4); assert.equal(data.calls[0].actual, 65); assert.equal(data.calls[0].limit, 64);
+  assert.doesNotMatch(JSON.stringify(data), /PRIVATE PAPER/);
+  assert.deepEqual(F.diagnostic({ reason: 'PRIVATE PAPER', actual: '65', limit: Infinity }), {});
+  for (const value of [-1, 1.5, 10000001]) assert.deepEqual(F.diagnostic({ actual: value, limit: value }), {});
+  assert.match(F.explain({ reason: 'feedback-context' }), /estimated context budget/);
+});
+
 test('bounded refuses a body past its limit; anySignal aborts with the first reason', async () => {
   assert.equal(await F.bounded(new Response('hello')), 'hello');
   await assert.rejects(F.bounded(new Response('x'.repeat(100)), 10), /exceeds/);

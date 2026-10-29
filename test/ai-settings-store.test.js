@@ -9,13 +9,13 @@ const KEY = 'sk-or-v1-0000synthetic000000000000000000000000000000000000000000000
 const OFF = { syllabus: false, completion: false, writing: false };
 
 test('clean gives every part at its default, and keeps only what fits', () => {
-  assert.deepEqual(A.clean(), { on: false, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: OFF });
+  assert.deepEqual(A.clean(), { on: false, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: OFF });
   assert.deepEqual(A.clean(undefined), A.DEFAULTS);
   const s = A.clean({ on: true, mode: 'advanced', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017', effort: 'low' },
     models: { completion: { use: 'groq', model: 'llama-3.3-70b-versatile', effort: 'none' }, writing: { use: 'Bad Id', model: 'x' }, notes: { use: 'openai', model: 'gpt-5' } },
     tune: { completion: { temperature: 0.2, maxTokens: 32, context: 2000, timeoutMs: 4000, pause: 350, top: 1 }, writing: { temperature: 3, pause: 350, maxTokens: 4096.5 } },
     features: { completion: true, writing: 'yes' } });
-  assert.deepEqual(s, { on: true, mode: 'advanced', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017', effort: 'low' },
+  assert.deepEqual(s, { on: true, outline: true, sources: true, mode: 'advanced', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017', effort: 'low' },
     models: { completion: { use: 'groq', model: 'llama-3.3-70b-versatile', effort: 'none' } },
     tune: { completion: { temperature: 0.2, maxTokens: 32, context: 2000, timeoutMs: 4000, pause: 350 } },
     features: { syllabus: false, completion: true, writing: false } });
@@ -56,7 +56,7 @@ test('the owner\'s endpoint on OpenRouter becomes the OpenRouter provider with t
     device: { provider: 'device', generation: 'g-2' } };
   const m = A.migrate(settings, connections);
   assert.deepEqual(m.connections, { openrouter: { provider: 'openai', base: 'https://openrouter.ai/api/v1', key: KEY, generation: 'g-1' }, device: { provider: 'device', generation: 'g-2' } });
-  assert.deepEqual(m.settings, { on: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {},
+  assert.deepEqual(m.settings, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {},
     features: { syllabus: true, completion: true, writing: true } });
   assert.deepEqual(m.changed, { settings: true, connections: true });
   // Read again as written back: nothing more to do.

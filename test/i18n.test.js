@@ -88,6 +88,7 @@ const writerWords = [
   ...tableOf('writer.js', 'LABELS'), ...tableOf('writer-cite.js', 'TYPES', 'FIELDS'), ...tableOf('writer-ai.js', 'STATUS'),
   ...tableOf('writer-submit.js', 'SAYS'), ...tableOf('writer-proof.js', 'LABEL'),
   ...tableOf('writer-paper.js', 'SPACING', 'KIND', 'STYLES', 'REASONS'), ...tableOf('lib/writer-format.js', 'ROWS', 'names'),
+  ...tableOf('lib/ai/tasks/writer-feedback.js', 'GRADE_REASONS'), ...tableOf('lib/ai/failure.js', 'REASONS', 'ERRORS'),
   // Labels handed to the paper chrome's helpers, which translate them.
   ...fromJs(read('writer-paper.js'), /\b(?:mark\('\w+',|row\(|setState\()\s*/g),
   ...[...read('writer-paper.js').matchAll(/\['\w+', '([A-Z][^']*)'\]/g)].map((m) => m[1]),

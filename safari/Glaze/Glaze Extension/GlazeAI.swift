@@ -13,8 +13,9 @@
 //    { type: 'ai.warm', model, instructions } → { ok: true }: a session with these instructions made and prewarmed for the
 //      next run that has them (one already warm stays, its time renewed); nothing is asked of the model
 //  messages are lib/ai/request.js's (system → instructions; earlier turns → the transcript; the last user message → the
-//  prompt; images as base64). schema is lib/ai/schema.js's subset, turned into a DynamicGenerationSchema so the model is
-//  held to it; the answer goes back as JSON text and the worker checks it again. error is one of lib/ai/failure.js's
+//  prompt; images as base64). schema is lib/ai/schema.js's subset, each object with its keys' order (x-order: a dictionary
+//  keeps none, and the model writes them in that order), turned into a DynamicGenerationSchema so the model is held to it;
+//  the answer goes back as JSON text and the worker checks it again. error is one of lib/ai/failure.js's
 //  categories, or 'refusal'. Needs macOS or iOS 27; earlier systems answer unavailable ('os').
 //  A request with no earlier turns starts on a warm session: one that has read only the same instructions, made and
 //  prewarmed when the last such request came. A session answers once (its transcript would carry that answer into the
@@ -53,6 +54,9 @@ enum GlazeAI {
 private enum Native {
     // Glaze's own limits (lib/ai/request.js LIMIT): checked again here, since a message is data.
     static let maxMessages = 64, maxChars = 2_000_000, maxImages = 8, maxImageBytes = 6 << 20, maxSchemaDepth = 12
+    // A picture's tokens in the budget, an estimate: the worker's own allowance (lib/ai/task.js fits). Measured, one took 19
+    // to 195 on macOS 27.0.1, by its size; Foundation Models publishes no fixed cost.
+    static let imageTokens = 1024
 
     // Runs in flight, by the worker's id, so ai.cancel can stop one. Only reaches a run in this same process.
     // JSON bytes cross task boundaries; dictionaries containing Any stay inside the task that decodes them.
@@ -173,9 +177,11 @@ private enum Native {
     private static func respond(_ m: [String: Any]) async -> [String: Any] {
         do {
             try Task.checkCancellation()
-            let (instructions, history, prompt) = try conversation(m["messages"])
+            let c = try conversation(m["messages"])
+            let (instructions, history, prompt) = (c.instructions, c.history, c.prompt)
             var options = GenerationOptions()
-            if let t = m["temperature"] as? Double, t >= 0, t <= 2 { options.temperature = t }
+            // Temperature 0 asks for the likeliest answer: greedy, rather than a sample at the lowest temperature.
+            if let t = m["temperature"] as? Double, t >= 0, t <= 2 { if t == 0 { options.samplingMode = .greedy } else { options.temperature = t } }
             if let n = m["maxTokens"] as? Int, n >= 1, n <= 32768 { options.maximumResponseTokens = n }
             let schema = try (m["schema"] as? [String: Any]).map { try GenerationSchema(root: Schema().node($0, name: "Answer", depth: 0), dependencies: []) }
             let session: LanguageModelSession
@@ -187,6 +193,14 @@ private enum Native {
             case "on-device":
                 let model = SystemLanguageModel.default
                 guard model.isAvailable else { return ["ok": false, "error": "provider-unavailable", "reason": "unavailable"] }
+                // Budget the complete request, including guided generation, before creating a session. Never cut input. A count
+                // the system refuses leaves the run to the model's own check (contextSizeExceeded): a request it can answer is
+                // never lost to its count, as pictures were (count).
+                if let tokens = try? await count(model, c, schema: schema) {
+                    let remaining = model.contextSize - tokens - 256
+                    guard remaining >= 256 else { return ["ok": false, "error": "request-rejected", "reason": "context", "context": model.contextSize, "tokens": tokens] }
+                    options.maximumResponseTokens = min(options.maximumResponseTokens ?? remaining, remaining)
+                }
                 session = history.isEmpty ? warmSession(instructions, entries, model: model) : LanguageModelSession(model: model, transcript: Transcript(entries: entries))
                 name = model.variant.displayName
             default:
@@ -239,7 +253,25 @@ private enum Native {
 
     // ---- the conversation ----------------------------------------------------------------------------------------------
 
-    private static func conversation(_ raw: Any?) throws -> (String?, [Transcript.Entry], Prompt) {
+    /// A request's messages as the session takes them, and what they hold for its budget: every turn's words, and pictures.
+    struct Conversation { let instructions: String?, history: [Transcript.Entry], prompt: Prompt, words: [String], images: Int }
+
+    /// The request's tokens: exact for words alone. tokenCount(for:) throws for a prompt or transcript holding a picture
+    /// (ModelManagerError 1001, macOS 27.0.1) though the model reads it, so with pictures the words are counted alone and each
+    /// picture is estimated at imageTokens.
+    static func count(_ model: SystemLanguageModel, _ c: Conversation, schema: GenerationSchema?) async throws -> Int {
+        var tokens = 0
+        if let instructions = c.instructions { tokens += try await model.tokenCount(for: Instructions(instructions)) }
+        if let schema { tokens += try await model.tokenCount(for: schema) }
+        guard c.images > 0 else {
+            tokens += try await model.tokenCount(for: c.prompt)
+            return c.history.isEmpty ? tokens : tokens + (try await model.tokenCount(for: c.history))
+        }
+        if !c.words.isEmpty { tokens += try await model.tokenCount(for: Prompt(c.words.joined(separator: "\n"))) }
+        return tokens + c.images * imageTokens
+    }
+
+    static func conversation(_ raw: Any?) throws -> Conversation {
         guard let list = raw as? [[String: Any]], !list.isEmpty, list.count <= maxMessages else { throw Refused(reason: "messages") }
         var system: [String] = [], turns: [(role: String, parts: [[String: Any]])] = []
         var chars = 0, images = 0
@@ -265,7 +297,9 @@ private enum Native {
             return Prompt(Attachment<ImageAttachmentContent>(try image(p)))
         }
         let prompt = Prompt { for piece in pieces { piece } }
-        return (system.isEmpty ? nil : system.joined(separator: "\n\n"), history, prompt)
+        let parts = turns.flatMap(\.parts)
+        return Conversation(instructions: system.isEmpty ? nil : system.joined(separator: "\n\n"), history: history, prompt: prompt,
+                            words: parts.compactMap { $0["text"] as? String }, images: parts.filter { $0["text"] == nil }.count)
     }
 
     private static func segment(_ p: [String: Any]) throws -> Transcript.Segment {
@@ -304,16 +338,21 @@ private enum Native {
             case "object":
                 let props = (s["properties"] as? [String: Any]) ?? [:]
                 let required = Set((s["required"] as? [String]) ?? [])
-                // In the order the task wrote them: JSONSerialization's dictionary has none, so sort for a stable prompt.
-                let properties = try props.keys.sorted().map { key -> DynamicGenerationSchema.Property in
+                // In the order the task wrote them (x-order; JSONSerialization's dictionary has none), any others sorted.
+                var seen = Set<String>()
+                let keys = ((s["x-order"] as? [String]) ?? []).filter { props[$0] != nil && seen.insert($0).inserted }
+                let properties = try (keys + props.keys.filter { !keys.contains($0) }.sorted()).map { key -> DynamicGenerationSchema.Property in
                     guard let sub = props[key] as? [String: Any] else { throw Refused(reason: "schema property") }
                     return .init(name: key, description: sub["description"] as? String, schema: try node(sub, name: key.capitalized, depth: depth + 1), isOptional: !required.contains(key))
                 }
-                inner = DynamicGenerationSchema(name: fresh(name), description: description, representNilExplicitlyInGeneratedContent: true, properties: properties)
+                // An optional property the model leaves out is left out: an explicit null fails a property not typed null.
+                inner = DynamicGenerationSchema(name: fresh(name), description: description, representNilExplicitlyInGeneratedContent: false, properties: properties)
             case "array":
                 let items = (s["items"] as? [String: Any]) ?? [:]
                 inner = DynamicGenerationSchema(arrayOf: try node(items, name: name + "Item", depth: depth + 1), minimumElements: s["minItems"] as? Int, maximumElements: s["maxItems"] as? Int)
             case "string":
+                // Foundation Models rejects a general max-length regex as UnsupportedGuide. The task gives the
+                // length instruction and JavaScript validates maxLength (with a bounded, known-answer repair).
                 inner = DynamicGenerationSchema(type: String.self)
             case "integer":
                 var guides: [GenerationGuide<Int>] = []

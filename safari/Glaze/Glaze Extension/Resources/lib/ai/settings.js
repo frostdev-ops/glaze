@@ -1,4 +1,4 @@
-// The AI harness's settings (docs/ai-harness.md): storage.local `ai` = { on, mode, model, models, tune, features }. Off by
+// The AI harness's settings (docs/ai-harness.md): storage.local `ai` = { on, outline, mode, model, models, tune, features }. Off by
 // default, on this device only: a connection (a provider's key, an endpoint's address and key, a model on this computer) is
 // this device's, so the switches that send text to it are too. They are never synced, never in a Back up file or a shared
 // Look. on: AI may run at all; mode: 'simple' | 'advanced' (Settings shows custom endpoints and tuning in Advanced only,
@@ -7,7 +7,8 @@
 // (absent: the overall one); tune: a feature's { temperature?, maxTokens?, context?, timeoutMs?, pause? } (TUNE);
 // features: which of Glaze's features may ask (FEATURES). The connections themselves are in the worker's own store
 // (lib/ai/broker.js vault), never here: any page's script can read storage.local. Not in defaults.js, which every page's
-// first script loads. clean() gives what is stored with anything that doesn't fit at its default, as GZ_SANITIZE does.
+// first script loads. outline defaults on once AI and its Feedback model are configured, with its own opt-out.
+// clean() gives what is stored with anything that doesn't fit at its default, as GZ_SANITIZE does.
 // Classic script for the worker and Settings; node exports.
 var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
   const E = () => (typeof GZ_AI_ENDPOINT !== 'undefined' ? GZ_AI_ENDPOINT : require('./endpoint.js'));
@@ -39,7 +40,7 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
   const TUNE = Object.freeze({ temperature: [0, 2], maxTokens: [16, 32768], context: [1000, 2000000], timeoutMs: [1000, 300000], pause: [100, 2000] });
   const MODEL = /^[^\p{Cc}\p{Bidi_Control}]{1,200}$/u;
   const NONE = Object.freeze({ use: null, model: '' });
-  const DEFAULTS = Object.freeze({ on: false, mode: 'simple', model: NONE, models: Object.freeze({}), tune: Object.freeze({}), features: Object.freeze(Object.fromEntries(FEATURES.map((f) => [f, false]))) });
+  const DEFAULTS = Object.freeze({ on: false, outline: true, sources: true, mode: 'simple', model: NONE, models: Object.freeze({}), tune: Object.freeze({}), features: Object.freeze(Object.fromEntries(FEATURES.map((f) => [f, false]))) });
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   // A selection: { use, model, effort? }; Apple Intelligence was its own choice and is On this device now (lib/ai/broker.js
   // onDevice).
@@ -60,7 +61,7 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
     // model's now, its model filled in from it (migrate).
     const model = pick(Object.hasOwn(r, 'model') ? r.model : { use: r.use });
     return {
-      on: r.on === true, mode: r.mode === 'advanced' ? 'advanced' : 'simple', model,
+      on: r.on === true, outline: r.outline !== false, sources: r.sources !== false, mode: r.mode === 'advanced' ? 'advanced' : 'simple', model,
       models: Object.fromEntries(FEATURES.map((k) => [k, pick(own[k])]).filter(([, s]) => s.use)),
       tune: Object.fromEntries(FEATURES.map((k) => [k, tuned(tune[k], k)]).filter(([, t]) => Object.keys(t).length)),
       features: Object.fromEntries(FEATURES.map((k) => [k, f[k] === true])),

@@ -35,7 +35,8 @@ const passage = (draft, n) => {
 };
 // Writer's task → a synthetic answer, told apart by its instructions' first line.
 const answer = (body) => {
-  const system = body.messages?.find((m) => m.role === 'system')?.content || '';
+  const instructions = body.messages?.find((m) => m.role === 'system')?.content || '';
+  const system = typeof instructions === 'string' ? instructions : Array.isArray(instructions) ? instructions.map((c) => c.text || '').join('\n') : '';
   const user = body.messages?.filter((m) => m.role === 'user').map((m) => (typeof m.content === 'string' ? m.content : (m.content || []).map((c) => c.text || '').join('\n'))).join('\n') || '';
   const data = blocks(user), schema = body.response_format?.json_schema?.schema;
   if (/^You predict how the sentence/.test(system)) {
@@ -43,16 +44,24 @@ const answer = (body) => {
     const word = data['its last word maybe cut off'];
     return `${word ? `${word} ` : ''}and what the town remembers.`;
   }
+  if (Object.hasOwn(data, 'attached picture')) {
+    // The practice fixture is a plain gray PNG (ultra-mock.js); these are deterministic synthetic observations.
+    const shown = (body.messages || []).some((m) => Array.isArray(m.content) && m.content.some((c) => ['image', 'image_url'].includes(c.type)));
+    return JSON.stringify({ description: shown ? 'A plain gray rectangle with no visible text or diagram.' : 'No image was supplied.', requirements: [],
+      complete: shown, reason: shown ? '' : 'The practice request did not include a picture.', relevance: shown ? 'irrelevant' : 'uncertain' });
+  }
   if (/^You tell a student how their draft stands/.test(system)) {
     // Per rubric row by its id; without rows, per requirement, its words copied from the instructions.
     const draft = data.draft || '', ids = [...(data.rubric || '').matchAll(/^\[([\w-]{1,40})\]/gm)].map((m) => m[1]);
     // A criterion's level names, the indented lines under its row; met takes the first, partly the second, missing none.
     const levels = (id) => { const row = (data.rubric || '').split(/^\[/m).find((r) => r.startsWith(`${id}]`)) || ''; return [...row.matchAll(/^ {2}([^:\n]{1,40}):/gm)].map((m) => m[1]); };
     const asks = ids.length ? ids : (data['assignment instructions'] || '').split(/[,.;:]\s+|\n/).map((x) => x.trim()).filter((x) => x.length >= 8).slice(0, 4);
-    // The first comment names an attached file it was given, and how its pictures came.
-    const files = Object.keys(data).filter((k) => k.startsWith('attached file: ')).map((k) => k.slice(15));
-    const pictures = (body.messages || []).flatMap((m) => (Array.isArray(m.content) ? m.content : [])).filter((c) => c.type === 'image_url').length;
-    const seen = files.length ? ` Your draft was read against the attached ${files[0]}${data['attached pictures'] ? `, with ${pictures ? `${pictures} picture` : 'no picture shown'}` : ''}.` : '';
+    // The first comment names its actual document and the separate visual observations, never claiming unseen pixels.
+    const attached = Object.keys(data).filter((k) => k.startsWith('attached file: '));
+    const files = attached.filter((k) => !data[k].startsWith('Image observations (untrusted visual evidence):')).map((k) => k.slice(15));
+    const observed = attached.filter((k) => data[k].startsWith('Image observations (untrusted visual evidence):')).map((k) => k.slice(15));
+    const unavailable = data['image reading limitations'] || data['attached pictures not read'];
+    const seen = files.length ? ` Your draft was read against the attached ${files[0]}${observed.length ? `, with visual observations for ${observed[0]}` : unavailable ? ', with unavailable picture observations' : ''}.` : '';
     return JSON.stringify({ criteria: asks.map((criterion, i) => {
       const q = passage(draft, i);
       return { criterion, status: ['met', 'partly', 'missing'][i % 3], comment: ['Your draft meets this in its middle paragraphs.', 'Your draft touches this, but its evidence stays thin.', 'Your draft does not address this criterion yet.'][i % 3] + (i ? '' : seen),

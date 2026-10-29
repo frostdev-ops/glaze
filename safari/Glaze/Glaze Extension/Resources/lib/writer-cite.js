@@ -288,7 +288,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const list = (sources, st) => {
     const k = style(st);
     const all = S().dedupe(sources);
-    return { title: TITLES[k], entries: all.map((s) => ({ s, key: sortKey(s, k) })).sort((a, b) => cmp(a.key, b.key)).map(({ s }) => ({ id: s.id, html: format(s, k).entry })) };
+    return { title: TITLES[k], entries: all.map((s) => ({ s, key: sortKey(s, k) })).sort((a, b) => cmp(a.key, b.key)).map(({ s }) => ({ id: s.id, html: s.unparsed && s.original ? esc(s.original) : format(s, k).entry })) };
   };
 
   // ---- finding citations in the text --------------------------------------------------------------------------------
@@ -429,9 +429,17 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     const inList = (c) => typed && T.posAt(typed.entries[0]?.from ?? Infinity) <= c.at[0];
     // Imported and hand-written papers need no saved CSL record to have a reference entry.
     const hasEntry = (c) => typed?.entries.some((e) => {
+      if (c.year && !new RegExp(`\\b${c.year.replace(/(\d)[a-z]$/, '$1')}\\b`).test(e.text)) return false;
+      // An unsigned article starts with its quoted title, not an author's surname followed by a comma. MLA may cite
+      // that title in shortened form; compare whole words so an unrelated title with a shared prefix can't match.
+      const title = e.text.match(/^\s*(?:“([^”]+)”|"([^"]+)"|‘([^’]+)’|'([^']+)')/u)?.slice(1).find(Boolean);
+      if (title) {
+        const name = S().fold(article(c.name)), full = S().fold(article(title));
+        return !!name && (name === full || full.startsWith(name + ' '));
+      }
       const name = S().fold(c.name.replace(/\s+(?:and|&|et al\.).*$/, ''));
       const lead = e.text.match(/^\s*([^,]+),/);
-      return lead && name === S().fold(lead[1]) && (!c.year || new RegExp(`\\b${c.year.replace(/(\d)[a-z]$/, '$1')}\\b`).test(e.text));
+      return lead && name === S().fold(lead[1]);
     });
     for (const c of found) {
       if (inList(c)) continue;

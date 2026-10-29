@@ -90,7 +90,7 @@ const page = ({ ai, calls, conns, granted = true, device, providers, features, e
   const settings = { ...AS, ...(providers && { PROVIDERS: [...new Set([...AS.PROVIDERS, ...providers])] }), ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
   const window = {}; window.top = embedded ? {} : window;
   const ctx = vm.createContext({ chrome, window, navigator: { locks }, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
-    GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../lib/ai/endpoint.js') });
+    GZ_AI_FAILURE: require('../lib/ai/failure.js'), GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../lib/ai/endpoint.js') });
   vm.runInContext(read('lib/site.js'), ctx);
   vm.runInContext(read('lib/editor-ai.js'), ctx);
   ctx.GZ_AIEDIT.mount({ t: (k, v) => I.t(k, v, 'en'), when: (at) => `@${at}`, pct: (x) => `${Math.round(x * 100)}%` });
@@ -134,7 +134,7 @@ test('off by default: the switch is off, only it shows, and the worker is asked 
   assert.deepEqual(p.asked, []);
   assert.deepEqual(p.data, {}, 'opening Settings writes nothing');
   assert.match(read('options.html'), /<input type="checkbox" role="switch" id="ai-on" aria-label="Use AI" data-local>/, 'the switch is not checked in the page');
-  assert.deepEqual(AS.clean(undefined), { on: false, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
+  assert.deepEqual(AS.clean(undefined), { on: false, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
 });
 
 test('embedded Settings does not initialize AI controls or read its connections and activity', async () => {
@@ -149,7 +149,7 @@ test('embedded Settings does not initialize AI controls or read its connections 
 test('the switch, the mode and the models are kept in storage.local ai, cleaned; the features stay off until each is turned on', async () => {
   const p = await open();
   await p.change('ai-on', true);
-  assert.deepEqual(p.data.ai, { on: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
+  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
   assert.ok(shown(p.$('ai-connection')) && shown(p.$('ai-features')) && shown(p.$('ai-mode')));
   assert.equal(p.$('ai-mode-simple').checked, true);
   // The overall model first, then each feature: the gray text, Feedback, then the rest.
@@ -162,7 +162,7 @@ test('the switch, the mode and the models are kept in storage.local ai, cleaned;
   await p.change('ai-mode-advanced', true);
   assert.equal(p.data.ai.mode, 'advanced');
   await p.change('ai-on', false);
-  assert.deepEqual({ ...p.data.ai, features: p.data.ai.features.syllabus }, { on: false, mode: 'advanced', model: { use: null, model: '' }, models: {}, tune: {}, features: true }, 'off keeps the choices');
+  assert.deepEqual({ ...p.data.ai, features: p.data.ai.features.syllabus }, { on: false, outline: true, sources: true, mode: 'advanced', model: { use: null, model: '' }, models: {}, tune: {}, features: true }, 'off keeps the choices');
   assert.equal(p.$('ai-connection').hidden, true);
   assert.equal(p.$('ai-mode').hidden, true);
 });
@@ -176,6 +176,15 @@ test('features turned on in quick succession are all kept: no switch is written 
   assert.deepEqual(AS.FEATURES.map((f) => p.$(`ai-feature-${f}`).checked), [true, true, true]);
 });
 
+test('AI outline defaults on under Feedback and can be opted out independently', async () => {
+  const p = await open({ ai: { on: true, model: { use: 'openai', model: 'gpt-5' }, features: { writing: false } }, conns: { openai: kept('openai') } });
+  assert.equal(p.$('ai-outline').checked, true);
+  await p.change('ai-outline', false);
+  assert.equal(p.data.ai.outline, false);
+  assert.equal(p.data.ai.features.writing, false);
+  assert.equal(p.data.ai.model.model, 'gpt-5');
+});
+
 test('features are one row each, from lib/ai/settings.js FEATURES, after the overall model', async () => {
   const p = await open({ ai: { on: true, features: { syllabus: true } }, features: ['syllabus', 'notes'] });
   assert.deepEqual(p.$('ai-feature-list').children.map((w) => text(w.children[0].children[0])), ['Default', 'Syllabus import', 'notes']);
@@ -186,7 +195,7 @@ test('features are one row each, from lib/ai/settings.js FEATURES, after the ove
 
 test('the providers\' cards: on this device first where the browser has a model, then each provider by name; endpoints in Advanced only', async () => {
   const p = await open({ ai: { on: true } });
-  assert.deepEqual(p.cards(), ['Gemini Nano', 'OpenAI', 'Anthropic', 'Google Gemini', 'OpenRouter', 'xAI', 'Mistral', 'Groq', 'DeepSeek']);
+  assert.deepEqual(p.cards(), ['Chrome on-device AI', 'OpenAI', 'Anthropic', 'Google Gemini', 'OpenRouter', 'xAI', 'Mistral', 'Groq', 'DeepSeek']);
   const none = await open({ ai: { on: true }, providers: ['openai'] });
   assert.equal(none.cards()[0], 'OpenAI', 'no model on this device: no card for it');
   const adv = await open({ ai: { on: true, mode: 'advanced' }, conns: { 'custom-1': { provider: 'openai', name: 'Ollama', base: 'http://localhost:11434/v1', generation: 'g' } } });
@@ -333,7 +342,7 @@ test('the model picker lists each connected provider\'s catalog; search, arrows 
   await p.click('ai-pick-model');
   assert.equal(p.picking(), 'model');
   assert.equal(p.$('ai-pick-model').attrs['aria-haspopup'], 'dialog');
-  assert.deepEqual(p.side().map(text), ['Gemini Nano', 'OpenAI', 'Groq'], 'the overall model is always one: no "Same as default"');
+  assert.deepEqual(p.side().map(text), ['Chrome on-device AI', 'OpenAI', 'Groq'], 'the overall model is always one: no "Same as default"');
   assert.equal(p.doc.activeElement, p.$('ai-pick-search'));
   await p.click(p.side()[1]);
   assert.deepEqual(p.options(), ['gpt-4.1', 'gpt-5', 'gpt-5-mini']);
@@ -375,12 +384,12 @@ test('the model on this device is listed at once, and needs no model id', async 
   const device = async (m) => (m.op === 'set' ? { ok: true } : { ok: true, state: 'ready' });
   const p = await open({ ai: { on: true }, device });
   await p.click('ai-pick-model');
-  assert.deepEqual(p.options(), ['Gemini Nano'], 'the picker opens on it, its one model there');
+  assert.deepEqual(p.options(), ['Chrome on-device AI'], 'the picker opens on it, its one model there');
   await p.click(p.side()[0]);
-  assert.deepEqual(p.options(), ['Gemini Nano']);
+  assert.deepEqual(p.options(), ['Chrome on-device AI']);
   await p.click(p.$('ai-pick-list').children[0]);
   assert.deepEqual(p.data.ai.model, { use: 'device', model: '' });
-  assert.equal(text(p.$('ai-pick-model')), 'Gemini Nano');
+  assert.equal(text(p.$('ai-pick-model')), 'Chrome on-device AI');
   assert.equal(p.stops('model'), null, 'no effort to set');
 });
 
@@ -500,7 +509,7 @@ test('the owner\'s older endpoint shows as OpenRouter connected with its key, it
   const server = async (url) => (url === M.OPENROUTER ? new Response(routed, { headers: { 'content-type': 'application/json' } }) : json({ data: { label: 'x' } }));
   const p = await open({ ai: { on: true, use: 'endpoint', features: { syllabus: true, completion: true, writing: true } }, server,
     conns: { endpoint: { provider: 'openai', base: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-v4.1-flash-1017', key: OWNER, generation: 'g-1' } } });
-  assert.deepEqual(p.data.ai, { on: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true } });
+  assert.deepEqual(p.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true } });
   assert.deepEqual(p.vault.get('connections'), { openrouter: { provider: 'openai', base: 'https://openrouter.ai/api/v1', key: OWNER, generation: 'g-1' } });
   assert.equal(p.card('OpenRouter').children[2].className, 'st ok');
   assert.equal(text(p.$('ai-pick-model')), 'DeepSeek: DeepSeek V4.1 Flash 1017 · OpenRouter');
@@ -516,7 +525,7 @@ test('on this device: its status from the worker, a download the student starts,
   const device = async (m) => (m.op === 'set' ? { ok: true } : ['test', 'prepare'].includes(m.op) ? { ok: true, state, ...(state === 'unavailable' && { reason: 'browser' }) } : { ok: false, error: 'op' });
   const p = await open({ ai: { on: true }, device });
   const note = () => p.walk(p.$('ai-drawer')).find((x) => x.className === 'note');
-  await p.click(p.card('Gemini Nano'));
+  await p.click(p.card('Chrome on-device AI'));
   assert.deepEqual(p.sent.filter((m) => m.id === 'device' || m.provider === 'device').map((m) => m.op), ['set', 'test']);
   assert.deepEqual([note().textContent, note().attrs.role], ['Needs a download', 'status']);
   state = 'downloading';
@@ -527,8 +536,8 @@ test('on this device: its status from the worker, a download the student starts,
   const bar = () => p.walk(p.$('ai-drawer')).find((x) => x.tagName === 'PROGRESS');
   assert.equal(note().textContent, '42%');
   assert.equal(bar().value, 0.42);
-  assert.equal(bar().attrs['aria-label'], 'Gemini Nano');
-  assert.deepEqual([p.card('Gemini Nano').children[2].textContent, p.card('Gemini Nano').children[3].className], ['42%', 'bar']);
+  assert.equal(bar().attrs['aria-label'], 'Chrome on-device AI');
+  assert.deepEqual([p.card('Chrome on-device AI').children[2].textContent, p.card('Chrome on-device AI').children[3].className], ['42%', 'bar']);
   await p.progress({ loaded: 0.9 }, { id: 'someone-else' });
   assert.equal(bar().value, 0.42, 'only Glaze\'s own messages');
   await p.progress({ loaded: 50, total: 100 });
@@ -537,7 +546,7 @@ test('on this device: its status from the worker, a download the student starts,
   await p.progress({ loaded: 1 });
   assert.equal(note().textContent, 'Ready');
   assert.equal(bar(), undefined);
-  assert.equal(p.card('Gemini Nano').children[2].className, 'st ok');
+  assert.equal(p.card('Chrome on-device AI').children[2].className, 'st ok');
 });
 
 test('the shipped device provider drives progress and completion through the real broker', async () => {
@@ -551,7 +560,7 @@ test('the shipped device provider drives progress and completion through the rea
   };
   try {
     const p = await open({ ai: { on: true } });
-    await p.click(p.card('Gemini Nano'));
+    await p.click(p.card('Chrome on-device AI'));
     assert.equal(p.vault.get('connections').device.provider, 'device');
     await p.click(p.button('Download', p.$('ai-drawer')));
     notify({ loaded: 0.42 }); await settle();
@@ -571,7 +580,7 @@ test('activation keeps Download available and retries prepare directly from the 
     }
     return m.op === 'set' ? { ok: true } : { ok: true, state: 'download' };
   } });
-  await p.click(p.card('Gemini Nano'));
+  await p.click(p.card('Chrome on-device AI'));
   await p.click(p.button('Download', p.$('ai-drawer')));
   const note = () => p.walk(p.$('ai-drawer')).find((x) => x.className === 'note');
   assert.equal(note().textContent, 'Click Download to continue');
@@ -580,19 +589,19 @@ test('activation keeps Download available and retries prepare directly from the 
   assert.equal(note().textContent, 'Ready');
 });
 
-test('a device that can\'t run says why: the browser, the hardware, a timeout', async () => {
+test('an unavailable device model distinguishes browser, generic availability and timeout failures', async () => {
   const p = await open({ ai: { on: true, model: { use: 'device' } } });
-  await p.click(p.card('Gemini Nano'));
+  await p.click(p.card('Chrome on-device AI'));
   assert.equal(p.walk(p.$('ai-drawer')).find((x) => x.className === 'note').textContent, 'Not available in this browser');
-  for (const [reason, said] of [['device', 'Not available on this device'], ['timeout', 'Not available: Timed out']]) {
+  for (const [reason, said] of [['device', 'The browser reports that the model is unavailable for this device or session.'], ['timeout', 'Not available: The on-device model did not respond in time.']]) {
     const q = await open({ ai: { on: true, model: { use: 'device' } }, device: async (m) => (m.op === 'set' ? { ok: true } : { ok: true, state: 'unavailable', reason }) });
-    await q.click(q.card('Gemini Nano'));
+    await q.click(q.card('Chrome on-device AI'));
     assert.equal(q.walk(q.$('ai-drawer')).find((x) => x.className === 'note').textContent, said);
     assert.equal(q.button('Download', q.$('ai-drawer')), undefined);
   }
 });
 
-test('On this device is one card: Apple Intelligence on a Mac that has it, Gemini Nano elsewhere', async () => {
+test('On this device is one card: Apple Intelligence on a Mac that has it, Chrome on-device AI elsewhere', async () => {
   const markup = read('options.html') + read('lib/editor-ai.js');
   assert.doesNotMatch(markup, /ai-use-apple|ai-choice-apple|id="ai-apple/, 'no separate Apple choice');
   let st = { state: 'ready' };
@@ -609,10 +618,10 @@ test('On this device is one card: Apple Intelligence on a Mac that has it, Gemin
   assert.equal(mac.button('Download', mac.$('ai-drawer')), undefined, 'nothing to download from here');
   // Safari without Apple Intelligence on this Mac: the browser's model, if it has one.
   const other = await open({ ai: { on: true, model: { use: 'device' } }, providers: ['openai', 'device', 'apple'], device: async (m) => (m.op === 'set' ? { ok: true } : { ok: true, state: 'download', provider: 'device' }) });
-  assert.equal(other.cards()[0], 'Gemini Nano');
+  assert.equal(other.cards()[0], 'Chrome on-device AI');
   const t = (k, v) => I.t(k, v, 'en'), E = require('../lib/editor-ai.js');
   assert.equal(E.appleText({ state: 'unavailable', reason: 'os' }, t), 'Not available on this device');
-  assert.equal(E.appleText({ state: 'unavailable', reason: 'native' }, t), 'Not available: Not ready');
+  assert.equal(E.appleText({ state: 'unavailable', reason: 'native' }, t), 'Not available: Glaze could not reach the Apple Intelligence native handler.');
   assert.equal(E.providerName('apple', t), 'Apple Intelligence');
   assert.equal(AS.clean({ on: true, use: 'apple' }).model.use, 'device', 'a saved Apple Intelligence choice is On this device now');
 });
@@ -628,7 +637,7 @@ test('activity: the recent calls, newest first, feature · provider · model, me
   assert.ok(shown(p.$('ai-activity')), 'a record shows with AI off too, so it can be cleared');
   const lines = p.$('ai-calls').children.map((li) => li.children.map((x) => x.textContent).join(' | '));
   assert.deepEqual(lines, ['Tab completion · Ollama · qwen2.5-coder:7b | @4000 · Timed out', 'Feedback · OpenRouter · deepseek/deepseek-v4.1-flash-1017 | @3000 · ×12 · Done',
-    'Syllabus import · Gemini Nano | @2000 · Refused (HTTP 400)', 'Syllabus import · Endpoint | @1000 · 1,234 tokens · Done']);
+    'Syllabus import · Chrome on-device AI | @2000 · Refused (HTTP 400)', 'Syllabus import · Endpoint | @1000 · 1,234 tokens · Done']);
   assert.ok(p.$('ai-calls').children[0].children[1].classList.contains('bad'), 'a failure stands out');
   assert.ok(!p.all().some((x) => /secret words|api\.example\.com|localhost|sk-live/.test(String(x))), 'nothing but metadata');
   assert.equal(p.$('ai-calls-empty').hidden, true);

@@ -144,6 +144,15 @@ test('typed references preserve citation fixes and reject absent authors, surnam
   assert.deepEqual(msgs(C.check('A claim (Morrison, 1992).\nReferences\nMorrison, T. (1987). Beloved. Knopf.', [], 'apa7')), ['Morrison is cited but has no entry']);
 });
 
+test('quoted titles in typed Works Cited entries satisfy unsigned article citations and whole-word short titles', () => {
+  const list = '\nWorks Cited\n“Research Highlights.” Example Review, vol. 37, no. 3, 2024, pp. 60–61.';
+  assert.deepEqual(C.check(`A finding (“Research Highlights” 60), then another (“Research Highlights” 61).${list}`, [], 'mla9'), []);
+  assert.deepEqual(C.check(`A finding ("Research" 60).${list}`, [], 'mla9'), []);
+  assert.deepEqual(msgs(C.check(`A finding (“Research Highlight” 60).${list}`, [], 'mla9')), ['“Research Highlight” is cited but has no entry']);
+  assert.deepEqual(msgs(C.check(`A finding (“Research Highlights”, 2023).${list.replace('Works Cited', 'References')}`, [], 'apa7')), ['“Research Highlights” is cited but has no entry']);
+  assert.deepEqual(C.check('A finding (“Research and Practice” 60).\nWorks Cited\n“Research and Practice.” Example Review, 2024.', [], 'mla9'), []);
+});
+
 test('paper format checks can own citation shape while cite checks still find missing entries', () => {
   const issues = C.check('A claim (Morrison, 42), then another (Baldwin xix).', [MORRISON], 'mla9', { shape: false });
   assert.deepEqual(msgs(issues), ['Baldwin is cited but has no entry']);

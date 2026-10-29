@@ -533,11 +533,13 @@ test('the real worker refuses every writer task on a test attempt, and runs them
   assert.deepEqual(await w.send({ type: 'glaze:attempt-kind', kind: 'test' }, top), { ok: true });
   const { port, say } = w.connect('glaze:ai', frame);
   const RUNS = [['completion', 'writer.complete', { before: BEFORE }], ['writing', 'writer.review', { text: DRAFT }], ['writing', 'writer.feedback', { text: DRAFT, context: ASSIGN }],
-    ['writing', 'writer.requirements', { prompt: 'Write 250 words.' }], ['writing', 'writer.cite', { text: PAGE }], ['writing', 'writer.decide', { sentence: 'Put there coats down.', from: 4, to: 9, suggestions: ['their'] }]];
+    ['writing', 'writer.requirements', { prompt: 'Write 250 words.' }], ['writing', 'writer.cite', { text: PAGE }], ['writing', 'writer.decide', { sentence: 'Put there coats down.', from: 4, to: 9, suggestions: ['their'] }],
+    ['writing', 'writer.sources', { text: PAGE }], ['writing', 'writer.outline', { blocks: [{ id: 'b0', kind: 'paragraph', text: DRAFT }] }]];
   RUNS.forEach(([feature, task, input], i) => say({ id: i + 1, op: 'run', feature, task, input }));
   await w.settle();
   assert.deepEqual(JSON.parse(JSON.stringify(port.posted)), RUNS.map((_, i) => ({ id: i + 1, type: 'error', error: 'attempt' })));
-  assert.deepEqual(JSON.parse(vm.runInContext('JSON.stringify(GZ_AI_TASKS.list().filter((id) => id.startsWith("writer.")))', w.context)), ['writer.complete', 'writer.review', 'writer.feedback', 'writer.requirements', 'writer.cite', 'writer.decide'], 'every writer task is in the worker\'s aiFiles');
+  assert.deepEqual(JSON.parse(vm.runInContext('JSON.stringify(GZ_AI_TASKS.list().filter((id) => id.startsWith("writer.")))', w.context)), ['writer.complete', 'writer.review', 'writer.image', 'writer.feedback', 'writer.outline', 'writer.requirements', 'writer.cite', 'writer.sources', 'writer.decide'], 'every writer task is in the worker\'s aiFiles');
+  assert.equal(vm.runInContext('typeof GZ_WRITER_CITE.cites', w.context), 'function', 'Feedback reuses the existing citation parser in the production worker');
   assert.deepEqual(await w.send({ type: 'glaze:attempt-kind', kind: 'assignment' }, top), { ok: true });
   say({ id: 9, op: 'run', feature: 'writing', task: 'writer.requirements', input: { prompt: 'Write 250 words.' } });
   await w.settle();

@@ -48,20 +48,20 @@
     document.documentElement.dataset.mode = 'paper';
     await GZ_WRITER_PAPER.need(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'lib/writer-settings.js']);
     await GZ_WRITER_SETTINGS.load();
-    const plugins = [], ready = [];
+    const plugins = [], hooks = { ready: [], change: [], context: [] };
     let editor = null;
     // The same editor modules as an assignment frame, with a local host and no page messaging or submission.
     globalThis.GZ_WRITER_FRAME = {
-      t, mode: () => 'paper', kind: () => 'paper', editor: () => editor, slot: () => null,
-      on: (event, fn) => { if (event === 'ready') ready.push(fn); },
+      t, mode: () => 'paper', kind: () => 'paper', editor: () => editor, slot: () => null, context: () => ({ school: 'local', user: { id: 'local' }, course: { id: 'papers' }, item: { id: key } }),
+      on: (event, fn) => { if (hooks[event] && typeof fn === 'function') hooks[event].push(fn); },
       plugin: (p) => { if (editor) editor.addPlugins([p]); else plugins.push(p); },
     };
-    await GZ_WRITER_PAPER.need(['lib/writer-export.js', 'writer-objects.js', 'writer-find.js', 'writer-counts.js', 'writer-print.js', 'writer-ruler.js', 'writer-paste.js']);
+    await GZ_WRITER_PAPER.need(['lib/writer-sources.js', 'lib/writer-bibliography.js', 'lib/writer-cite.js', 'lib/writer-lookup.js', 'writer-cite.js', 'lib/writer-export.js', 'writer-objects.js', 'writer-find.js', 'writer-counts.js', 'writer-print.js', 'writer-ruler.js', 'writer-paste.js']);
     const mountEl = h('div');
     document.body.append(mountEl);
-    editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins });
+    editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins, onChange: (change) => { for (const fn of hooks.change) fn(change); } });
     await GZ_WRITER_PAPER.mount({ editor, t, standalone: true, key, context: () => ({}) });
-    for (const fn of ready) fn(editor);
+    for (const fn of hooks.ready) fn(editor);
   };
   catalogue().then(() => {
     const key = new URLSearchParams(location.search).get('paper');

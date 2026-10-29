@@ -6,7 +6,7 @@
 // the submit step attaches it as a .docx (lib/writer-docx.js). The same chrome edits a paper in papers.html.
 // Classic script after writer.js; the paper libraries load only when a paper opens.
 var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
-  const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-papers.js', 'lib/writer-submit.js'];
+  const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-outline.js', 'lib/writer-papers.js', 'lib/writer-submit.js'];
   const DOCX = ['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js'];
   const GAP = 26.4; // between pages, in page px (22px at 100%)
   const PX100 = 80 / 96; // 100% shows an inch as 80px, as the mockup does
@@ -68,7 +68,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // What the pages are laid out by: the format, with an imported file's own page, base font and header over it.
     const look = (doc = view.state.doc) => ST.look(format, doc.attrs.setup);
     let format = ST.FORMATS.mla9, key = null, paper = null, ctx = host.context?.() || {}, presets = [], zoom = [75, 100, 125, 150].includes(prefs.zoom) ? prefs.zoom / 100 : 'fit', scale = PX100, layout = null, page = 1, focus = false;
-    let laidOut = () => {}, rows = [], feedbackPanel = null; // the Outline's pages once it exists; its rows; Feedback's pages
+    let laidOut = () => {}, rows = [], feedbackPanel = null, sourcesPanel = null; // the checks, Outline and Feedback's pages after layout
     const nf = (n) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(n);
 
     // ---- the chrome
@@ -117,7 +117,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     }
     const issuesEl = h('div', { class: 'gp-issues' }), checklist = h('div', { class: 'gp-list' }), outline = h('div', { class: 'gp-outline' });
     panes.checks.append(issuesEl, checklist);
-    panes.outline.append(outline);
+    const outlineToggle = h('input', { type: 'checkbox', 'aria-label': t('AI outline') });
+    const outlineBusy = h('span', { class: 'gp-ol-busy', text: t('Reading your draft…'), hidden: true, role: 'status' });
+    const outlineRetry = btn({ class: 'gp-sbtn gp-ghost', hidden: true, title: t('AI isn’t available right now.') }, t('Try again'));
+    const outlineError = h('p', { class: 'gz-fb-note', hidden: true, role: 'status' });
+    const outlineOptions = h('div', { class: 'gp-ol-options', hidden: true }, h('label', {}, t('AI outline'), outlineToggle), outlineBusy, outlineRetry);
+    panes.outline.append(outlineOptions, outlineError, outline);
     const side = h('aside', { class: 'gp-side' }, h('div', { class: 'gp-tabs', role: 'tablist' }, Object.values(tabs)), Object.values(panes));
     // On an assignment any file can be brought (writer-import.js routes it); papers.html opens Word files only.
     const file = h('input', { type: 'file', accept: host.standalone ? '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document' : null, hidden: true });
@@ -393,27 +398,71 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       fontL.textContent = `${look().font} ${look().size} · ${t(SPACING[format.line] || String(format.line))}`;
       pill.replaceChildren(format.label, icon('caret', 'gp-ico gp-caret'));
     };
-    // The title, headings and list of sources (F.outline), each with its page, the caret's section marked; a paper with none
-    // of them says so.
+    // The title, authored or inferred sections, and references, each linked to its paragraph and rendered page.
     function outlineMark() {
       const at = view.state.selection.head;
       let cur = null;
       for (const r of rows) if (r.pos <= at) cur = r;
       for (const r of rows) { r.el.classList.toggle('cur', r === cur); if (r === cur) r.el.setAttribute('aria-current', 'true'); else r.el.removeAttribute('aria-current'); }
     }
+    const outlineAI = GZ_WRITER_OUTLINE.create({
+      generate: (blocks, opts) => globalThis.GZ_WRITER_AI?.outline?.({ blocks, cached: opts.cached, language: document.documentElement.lang || 'en' }, opts),
+      persist: (value) => {
+        if (key !== value.scope || outlineScope() !== value.scope) return;
+        outlineSaved = value;
+        dirty = true; emergency();
+        return save();
+      },
+      changed: () => outlineDraw(),
+    });
+    let outlineHidden = false;
     const outlineDraw = () => {
-      const items = F.outline(view.state.doc, format);
-      if (!items.length) { rows = []; outline.replaceChildren(h('div', { class: 'gp-empty' }, icon('bullets', 'gp-empty-ico'), t('No title or headings yet.'))); return; }
-      rows = items.map(({ kind, level, text, pos }) => {
-        const n = pageAt(pos + 1), el = btn({ class: `gp-ol-row${level > 1 ? ' gp-ol-sub' : ''}`, onclick: () => go(pos + 1, pos + 1) }, h('span', {}, text), h('small', {}, n ? nf(n) : ''));
-        el.dataset.kind = kind;
+      const ai = globalThis.GZ_WRITER_AI, info = ai?.outlineInfo?.() || {}, source = F.outlineSource(view.state.doc, format);
+      const blocks = source.blocks.map(({ pos, ...block }) => block);
+      const language = document.documentElement.lang || 'en';
+      const snapshot = { key: JSON.stringify([info.generation, language, blocks]), blocks, language, scope: outlineScope(), identity: info.identity, saved: outlineSaved };
+      const generated = outlineAI.update(snapshot, { enabled: info.enabled === true, active: !outlineHidden && !panes.outline.hidden });
+      outlineOptions.hidden = !info.available;
+      outlineToggle.checked = info.enabled === true;
+      outlineBusy.hidden = !generated.running;
+      outlineRetry.hidden = !generated.error;
+      outlineError.hidden = !generated.error;
+      outlineError.textContent = t(globalThis.GZ_AI_FAILURE?.explain(generated.detail) || 'AI could not read the outline. The local outline is shown.');
+      outline.setAttribute('aria-busy', String(generated.running));
+      let items = F.outline(view.state.doc, format, { paragraphs: true });
+      if (generated.result || generated.cached?.length) {
+        const byId = new Map(source.blocks.map((b) => [b.id, b]));
+        const labels = new Map((generated.result || generated.cached).map((s) => [s.start, s]));
+        const sections = GZ_WRITER_OUTLINE.plan(blocks).map((s, i) => {
+          const first = s.blocks[0], block = byId.get(first.id), label = labels.get(first.id);
+          if (!block) return null;
+          const preview = block.text.replace(/\s+/gu, ' ').trim();
+          return { kind: 'section', text: label?.heading || s.heading || 'Paragraph {n}', role: label?.role, authored: block.kind === 'heading',
+            inferred: !label && !s.heading, number: i + 1, level: s.level, pos: block.pos,
+            preview: preview.length > 160 ? preview.slice(0, 160).replace(/\s+\S*$/u, '') + '…' : preview };
+        });
+        if (sections.every(Boolean)) items = [...source.fixed, ...sections].sort((a, b) => a.pos - b.pos);
+      }
+      if (!items.length) { rows = []; outline.replaceChildren(h('div', { class: 'gp-empty' }, icon('bullets', 'gp-empty-ico'), t('No text yet.'))); return; }
+      rows = items.map(({ kind, level, text, pos, preview, number, inferred, role, authored }) => {
+        const category = role === 'introduction' ? t('Introduction') : role === 'body' ? t('Body') : role === 'conclusion' ? t('Conclusion') : role === 'custom' ? t('Custom') : '';
+        const label = inferred ? t(text, { n: number == null ? '' : nf(number) }) : category && !authored ? `${category}: ${text}` : text;
+        const copy = preview ? h('span', { class: 'gp-ol-copy' }, h('span', { class: 'gp-ol-label', text: label }), h('span', { class: 'gp-ol-preview', text: preview })) : h('span', {}, label);
+        const n = pageAt(pos + 1), el = btn({ class: `gp-ol-row${level > 1 ? ' gp-ol-sub' : ''}${preview ? ' gp-ol-structure' : ''}`, onclick: () => go(pos + 1, pos + 1) }, copy, h('small', {}, n ? nf(n) : ''));
+        el.dataset.kind = kind; if (role) el.dataset.role = role;
+        if (inferred) el.dataset.inferred = 'true';
         if (level > 1) el.style.setProperty('--ol-level', String(level - 1));
         return { pos, kind, el };
       });
       outline.replaceChildren(...rows.flatMap((r) => (r.kind === 'list' && r !== rows[0] ? [h('div', { class: 'gp-ol-sep', role: 'separator' }), r.el] : [r.el])));
       outlineMark();
     };
-    laidOut = () => { if (!panes.outline.hidden) outlineDraw(); feedbackPanel?.updatePages(); };
+    outlineToggle.addEventListener('change', async () => { const value = outlineToggle.checked; outlineToggle.disabled = true; await globalThis.GZ_WRITER_AI?.setOutline?.(value); outlineToggle.disabled = false; if (value) outlineAI.retry(); else outlineDraw(); });
+    outlineRetry.addEventListener('click', () => outlineAI.retry());
+    globalThis.GZ_WRITER_AI?.followOutline?.(outlineDraw);
+    addEventListener('pagehide', () => { outlineHidden = true; outlineAI.stop(); });
+    addEventListener('pageshow', () => { outlineHidden = false; outlineDraw(); });
+    laidOut = () => { if (!panes.outline.hidden) outlineDraw(); feedbackPanel?.updatePages(); globalThis.GZ_WRITER_AI?.layoutChanged?.(); runChecksSoon(); };
     const go = (from, to) => {
       const tr = view.state.tr.setSelection(PM.state.TextSelection.create(view.state.doc, from, to)).scrollIntoView();
       view.dispatch(tr);
@@ -444,7 +493,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       view.dispatch(view.state.tr.setMeta(issuesKey, PM.view.DecorationSet.create(view.state.doc, on.filter((i) => i.to > i.from).map((i) => PM.view.Decoration.inline(i.from, i.to, { class: 'gp-u-format gp-cur' })))).setMeta('addToHistory', false));
     };
     const runChecks = () => {
-      const r = F.check(view.state.doc, format, { name: ctx.user?.name || '', course: ctx.course?.name || '' }, { lines, keep });
+      const r = F.check(view.state.doc, format, { name: ctx.user?.name || '', course: ctx.course?.name || '' }, { lines, pageAt, keep });
       formatIssues = r.issues.filter((i) => !ignored.has(ignoreKey(i)));
       const lost = missingFont();
       if (lost) formatIssues.push({ id: 'format:font-missing:0:0', row: null, rule: 'font-missing', from: 0, to: 0, source: 'format', kind: 'format', key: 'Writer has no match for {font}; pages may differ from Word', message: `Writer has no match for ${lost}; pages may differ from Word`, vars: { font: lost }, suggestions: [], sure: false });
@@ -589,6 +638,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     ISSUES()?.on?.(() => cards());
 
     // ---- saving
+    let outlineSaved = null;
+    const outlineScope = () => { const verified = PA.keyOf(ctx.paper || paper || {}); return verified === key ? verified : ''; };
     const values = () => ({ name: ctx.user?.name || '', instructor: ctx.instructor || '', course: ctx.course?.name || '', date: ST.dateText(format), dueDate: Number.isFinite(Date.parse(ctx.assignment?.due || paper?.due)) ? ST.dateText(format, new Date(ctx.assignment?.due || paper.due)) : '', title: ctx.assignment?.title || '' });
     // failing: autosaves refused in a row (storage full or unavailable): each tries again later, longer each time.
     let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false, failing = 0;
@@ -607,6 +658,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       doc: view.state.doc.toJSON(), words: ed.words(), format: format.base ? ST.preset(format) : format.id, keep,
       title: ctx.assignment?.title || paper?.title || '', due: ctx.assignment?.due || paper?.due || null, url: ctx.paper?.url || paper?.url || '',
       courseName: ctx.course?.name || paper?.courseName || '', ...(ctx.paper ? { school: ctx.paper.school, user: ctx.paper.user, course: ctx.paper.course, content: ctx.paper.content } : {}),
+      ...(outlineSaved?.scope === outlineScope() ? { outline: outlineSaved } : {}),
     });
     // The tab's copy of every edit (sessionStorage, read back by the next frame in this tab) holds each picture already
     // saved as a reference (its SHA-256 digest), so a keystroke never copies picture data; the next frame
@@ -697,19 +749,21 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     const changed = () => {
       if (initializing) return;
+      outlineAI.stop(); sourcesPanel?.pause();
       edits++; dirty = true;
       emergency();
       setState(key ? 'Saving…' : 'Not saved');
       clearTimeout(saveTimer);
       saveTimer = setTimeout(save, 800);
       counts();
+      clearTimeout(changed.sources); changed.sources = setTimeout(() => sourcesPanel?.refresh(), 400);
       runChecksSoon();
       clearTimeout(outlineDraw.t);
       outlineDraw.t = setTimeout(outlineDraw, 400);
     };
     // The tab's copy only outlives a reload: closing the tab after a refused save would lose the typing.
     addEventListener('beforeunload', (e) => { if (dirty && (!sessionSafe || failing)) { e.preventDefault(); e.returnValue = ''; } });
-    addEventListener('pagehide', () => { if (dirty) save(); });
+    addEventListener('pagehide', () => { clearTimeout(changed.sources); sourcesPanel?.pause(); if (dirty) save(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) save(); });
 
     // The document as a whole: on load a fresh state (no undo past it); otherwise one undoable step. The old document's
@@ -1119,7 +1173,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       globalThis.GZ_WRITER_OBJECTS?.toolbar?.({ editor: ed, paper: api, before: toolGrow, lists: numbers });
       const C = globalThis.GZ_WRITER_CITE;
       cite.disabled = typeof C?.open !== 'function';
-      if (C?.sourcesView) C.sourcesView(panes.sources, { editor: ed, paper: api, badge: (n) => { badges.sources.textContent = n ? nf(n) : ''; } });
+      if (C?.sourcesView) { sourcesPanel?.destroy(); sourcesPanel = C.sourcesView(panes.sources, { editor: ed, paper: api, badge: (n) => { badges.sources.textContent = n ? nf(n) : ''; } }); }
       if (globalThis.GZ_WRITER_AI?.feedbackView) feedbackPanel = GZ_WRITER_AI.feedbackView(panes.feedback, { pageAt });
       submit.disabled = typeof GZ_WRITER_PAPER.submit !== 'function';
       fold();
@@ -1128,7 +1182,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     submit.addEventListener('click', () => { if (typeof GZ_WRITER_PAPER.submit === 'function') GZ_WRITER_PAPER.submit(api); });
     for (const [id, tab] of Object.entries(tabs)) tab.addEventListener('click', () => {
       for (const [k, x] of Object.entries(tabs)) { x.setAttribute('aria-selected', String(k === id)); x.tabIndex = k === id ? 0 : -1; panes[k].hidden = k !== id; }
+      if (id === 'sources') sourcesPanel?.refresh(); else sourcesPanel?.pause();
+      if (id === 'feedback') globalThis.GZ_WRITER_AI?.recover?.();
       if (id === 'outline') outlineDraw();
+      else outlineAI.stop();
     });
 
     side.querySelector('[role=tablist]').addEventListener('keydown', (e) => {
@@ -1304,6 +1361,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       recovered = key === recoveryKey && !!paper?.doc;
       const copy = pendingOf(key), pending = copy && await complete(copy, key, paper);
       if (pending) { const { base: _, ...rec } = pending; paper = { ...paper, ...rec }; }
+      outlineSaved = paper?.outline || null;
       keep = paper?.keep === true;
       if (paper?.doc) {
         format = ST.get(paper.format);
@@ -1360,6 +1418,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           key = target;
           keepPictures(existing?.doc).catch((e) => console.error(e));
           if (pending) { const { base: _, ...rec } = pending; paper = { ...existing, ...rec }; } else paper = existing;
+          outlineSaved = paper?.outline || null;
           keep = paper?.keep === true;
           format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
           initializing = true;
@@ -1393,7 +1452,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     adopt = async () => {
       const k = key, fresh = await store.get(k);
       if (k !== key || !newer(fresh)) return;
-      paper = fresh; keep = fresh.keep === true; format = ST.get(fresh.format);
+      paper = fresh; outlineSaved = fresh.outline || null; keep = fresh.keep === true; format = ST.get(fresh.format);
       keepPictures(fresh.doc).catch((e) => console.error(e));
       initializing = true;
       setDoc(fresh.doc, true);

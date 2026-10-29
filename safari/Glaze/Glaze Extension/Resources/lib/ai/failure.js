@@ -6,6 +6,45 @@
 var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
   const CATEGORIES = ['cancelled', 'timeout', 'provider-unavailable', 'request-rejected', 'invalid-response', 'connection-lost'];
   const LIMIT = { calls: 40, body: 64 << 10 };
+  // Fixed codes only. Native descriptions and browser exceptions may contain document text.
+  const REASONS = {
+    browser: 'This browser does not expose the on-device model API.',
+    device: 'The browser reports that the model is unavailable for this device or session.',
+    failed: 'The browser could not check the on-device model’s availability.',
+    native: 'Glaze could not reach the Apple Intelligence native handler.',
+    off: 'Apple Intelligence is off. Turn it on in System Settings.',
+    os: 'This version of Glaze requires macOS or iOS 27 for Apple Intelligence.',
+    'not-ready': 'Apple Intelligence is still preparing its model.',
+    context: 'The document and instructions exceed this model’s context window.',
+    'response-context': 'The input fit, but the model exhausted its context while producing the answer.',
+    'response-limit': 'The model exceeded this request’s output limit.',
+    unsupported: 'This model does not support the requested input or response format.',
+    language: 'This model does not support the requested language.',
+    rate: 'The on-device model is busy. Try again shortly.',
+    guardrail: 'The on-device model declined this request under its safety rules.',
+    refusal: 'The on-device model declined this request.',
+    assets: 'The on-device model’s files are not ready or could not be loaded.',
+    decoding: 'The on-device model returned an answer Glaze could not read.',
+    unknown: 'The on-device model failed without a specific reason.',
+    timeout: 'The on-device model did not respond in time.',
+    activation: 'Open Settings → AI and click Download to prepare this model.',
+    outline: 'The model returned an outline that did not match the document’s structure.',
+    'outline-sections': 'This document has too many sections for one AI outline pass. The local outline is shown.',
+    'outline-section-context': 'A section is too long for this model’s context window. The local outline is shown.',
+    feedback: 'The model could not produce grounded feedback for every criterion.',
+    'feedback-criteria': 'This assignment has more criteria than one feedback assessment supports.',
+    'feedback-attachments': 'This assignment has more attachments than one feedback assessment supports.',
+    'feedback-material': 'The assignment material exceeds the text limit for one feedback assessment.',
+    'feedback-calls': 'Assessing all the material would exceed the request limit for one feedback assessment.',
+    'feedback-context': 'A feedback request could not fit within this model’s estimated context budget.',
+  };
+  const diagnostic = (e) => ({ ...(Object.hasOwn(REASONS, e?.reason) && { reason: e.reason }),
+    ...(['create', 'measure', 'response'].includes(e?.phase) && { phase: e.phase }),
+    ...Object.fromEntries(['context', 'tokens', 'actual', 'limit'].filter((k) => Number.isSafeInteger(e?.[k]) && e[k] >= 0 && e[k] <= 10000000).map((k) => [k, e[k]])) });
+  const ERRORS = { permission: 'Glaze isn’t allowed to reach this address.', setup: 'Choose a model', off: 'AI is off. Turn it on in Settings → AI.', feature: 'Feedback is off. Turn it on in Settings → AI.',
+    timeout: 'Timed out', 'connection-lost': 'Connection lost', 'invalid-response': 'Unreadable answer', check: 'No usable answer', refusal: 'No usable answer',
+    'request-rejected': 'Refused', 'provider-unavailable': 'The provider is unavailable and did not report a specific reason.', often: 'Not ready', busy: 'Running', cancelled: 'Cancelled', size: 'The document is too large.', limit: 'The document is too large.' };
+  const explain = (e) => REASONS[e?.reason] || ERRORS[e?.error || e?.category] || '';
   const reference = () => crypto.randomUUID();
   // error → an Error with { category, status?, reference }: aborted (the student's cancel) wins, then a category the thrower
   // named, a timeout, an HTTP status (5xx: the provider is unavailable; 4xx: it refused the request), JSON that didn't parse,
@@ -19,7 +58,7 @@ var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
         : status ? (status >= 500 ? 'provider-unavailable' : 'request-rejected')
           : e.name === 'SyntaxError' ? 'invalid-response' : 'connection-lost';
     const failure = Object.assign(new Error(`Model request ${category}${status ? ` (HTTP ${status})` : ''}. Reference ${id}. No uncertain inference request was automatically replayed.`),
-      { code: category, category, ...(status && { status }), reference: id });
+      { code: category, category, ...(status && { status }), reference: id, ...diagnostic(e) });
     // What the provider said, for a developer (the eval): not enumerable, so it goes nowhere with the failure. Providers
     // take the key out of it first.
     if (error instanceof Error) Object.defineProperty(failure, 'cause', { value: error, enumerable: false });
@@ -87,7 +126,7 @@ var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
   // All ports share storage, even when their area wrappers differ. Preserve invocation order, including tally renames.
   let writes = Promise.resolve();
   const record = (area, key, row, was) => {
-    const clean = Object.fromEntries(KEYS.filter((k) => row[k] !== undefined).map((k) => [k, row[k]]));
+    const clean = { ...Object.fromEntries(KEYS.filter((k) => row[k] !== undefined).map((k) => [k, row[k]])), ...diagnostic(row) };
     return (writes = writes.then(async () => {
       try {
         const rows = (await area.get(key))[key];
@@ -95,6 +134,6 @@ var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
       } catch { /* Diagnostic metadata must never block a model call. */ }
     }));
   };
-  return { CATEGORIES, LIMIT, modelFailure, transient, bounded, anySignal, deadline, wait, record, reference };
+  return { CATEGORIES, LIMIT, REASONS, diagnostic, explain, modelFailure, transient, bounded, anySignal, deadline, wait, record, reference };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_FAILURE; else GZ_AI_FAILURE;

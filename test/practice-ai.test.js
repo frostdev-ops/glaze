@@ -59,6 +59,19 @@ test('the stand-in\'s Feedback, gray text and autocorrect call pass Writer\'s ow
   assert.deepEqual(decide.check(JSON.parse(NET.answer({ messages: decide.build(di, { text: X }).messages })), di), { verdict: 'suggest', choice: 'their' });
 });
 
+test('the practice visual reader answers both harness and Chat Completions image requests within Writer bounds', () => {
+  const I = require('../lib/ai/tasks/writer-image.js'), R = require('../lib/ai/request.js'), O = require('../lib/ai/providers/openai.js');
+  const input = I.input({ name: 'explore3.png', image: { mime: 'image/png', data: 'iVBORw0KGgo=' }, context: { assignment: { title: 'Essay 2', instructions: 'Compare two scenes.' } } });
+  const request = I.build(input);
+  for (const messages of [request.messages, R.clean(request).messages.map(O.toWire)]) {
+    const out = I.check(JSON.parse(NET.answer({ messages })));
+    assert.equal(out?.complete, true);
+    assert.equal(out.description, 'A plain gray rectangle with no visible text or diagram.');
+    assert.equal(out.relevance, 'irrelevant');
+    assert.ok(X.estimateTokens(out) <= I.LIMIT.tokens);
+  }
+});
+
 test('closing the loopback proxy cancels a pending tunnel admission before it can connect', async () => {
   let allow;
   const upstream = [];

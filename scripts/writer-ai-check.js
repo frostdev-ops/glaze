@@ -12,8 +12,8 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const root = path.resolve(__dirname, '..'), site = 'https://writer.test';
 const shots = process.argv[2] || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-ai');
 const MAC = process.platform === 'darwin', MOD = MAC ? 'Meta' : 'Control', WORD = MAC ? 'Alt+ArrowRight' : 'Control+ArrowRight';
-const AI_FILES = ['schema', 'request', 'stream', 'failure', 'endpoint', 'text', 'providers', 'tools', 'loop', 'task', 'providers/mock',
-  ...['context', 'complete', 'review', 'feedback', 'requirements', 'cite', 'decide'].map((t) => `tasks/writer-${t}`)].map((f) => `lib/ai/${f}.js`);
+const AI_FILES = ['lib/writer-sources.js', 'lib/writer-cite.js', ...['schema', 'request', 'stream', 'failure', 'endpoint', 'text', 'providers', 'tools', 'loop', 'task', 'providers/mock',
+  ...['context', 'complete', 'review', 'image', 'feedback', 'outline', 'requirements', 'cite', 'decide'].map((t) => `tasks/writer-${t}`)].map((f) => `lib/ai/${f}.js`)];
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 8000) => {
@@ -24,7 +24,7 @@ const until = async (fn, label, ms = 8000) => {
 
 // In the frame, before its scripts: chrome.* as the frame sees it, with the worker's port played by the real harness.
 const STUB = `(() => {
-  const ai = window.__ai = { settings: { on: true, use: 'main', features: { completion: true, writing: true } }, connects: 0, runs: [], ends: [], cancels: [], next: {}, changed: [],
+  const ai = window.__ai = { settings: { on: true, outline: false, use: 'main', features: { completion: true, writing: true } }, connects: 0, runs: [], ends: [], cancels: [], next: {}, changed: [],
     status: { completion: { allowed: true, ready: true, provider: 'device', caps: { text: true } }, writing: { allowed: true, ready: true, provider: 'device', caps: { text: true, json: true } } } };
   // The real issues store (lib/writer-issues.js), with every set() recorded as it lands.
   let issues;
@@ -40,11 +40,12 @@ const STUB = `(() => {
     return {
       onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener() {} }, disconnect() {},
       postMessage: async (m) => {
-        if (m.op === 'status') return post({ id: m.id, type: 'status', on: ai.settings.on, ...(ai.settings.features[m.feature] ? ai.status[m.feature] : { allowed: false }) });
+        const allowed = ['writer.outline', 'writer.sources'].includes(m.task) ? ai.settings[m.task === 'writer.outline' ? 'outline' : 'sources'] !== false : ai.settings.features[m.feature];
+        if (m.op === 'status') return post({ id: m.id, type: 'status', on: ai.settings.on, ...(allowed ? ai.status[m.feature] : { allowed: false }) });
         if (m.op === 'cancel') { ai.cancels.push(m.id); inflight.get(m.id)?.abort(); return; }
         if (m.op !== 'run') return;
         const task = GZ_AI_TASKS.get(m.task);
-        if (!ai.settings.features[m.feature]) return post({ id: m.id, type: 'error', error: 'feature' });
+        if (!allowed) return post({ id: m.id, type: 'error', error: 'feature' });
         // A supersede task's newer run cancels the one in flight, as lib/ai/broker.js does.
         if (task.rate?.supersede) for (const [id, c] of inflight) if (c.task === m.task) { c.abort(); }
         const c = Object.assign(new AbortController(), { task: m.task });
@@ -53,7 +54,7 @@ const STUB = `(() => {
         if (ai.hold) await new Promise((r) => { ai.release = r; }); // held, so a check can see the run in flight
         const reply = ai.next[m.task] || { text: '' };
         try {
-          const out = await GZ_AI_TASKS.run(task, m.input, { provider: 'mock', cfg: { replies: [reply] }, signal: c.signal, emit: (e) => post({ ...e, id: m.id }) });
+          const out = await GZ_AI_TASKS.run(task, m.input, { provider: 'mock', cfg: { replies: Array.isArray(reply) ? reply : [reply] }, signal: c.signal, emit: (e) => post({ ...e, id: m.id }) });
           ai.ends.push({ id: m.id, output: out.output });
           post({ id: m.id, type: 'end', output: out.output, meta: out.meta });
         } catch (e) { ai.ends.push({ id: m.id, error: e.code || String(e), detail: String(e.detail || ''), stack: String(e.stack).slice(0, 600) }); post({ id: m.id, type: 'error', error: c.signal.aborted ? 'cancelled' : e.code || 'failed' }); }
@@ -61,7 +62,7 @@ const STUB = `(() => {
       },
     };
   };
-  const data = {}, local = { get: async () => ({ ...data, ai: JSON.parse(JSON.stringify(ai.settings)) }), set: async (o) => Object.assign(data, o), remove: async (k) => { delete data[k]; } };
+  const data = {}, local = { get: async () => ({ ...data, ai: JSON.parse(JSON.stringify(ai.settings)) }), set: async (o) => { Object.assign(data, o); if (o.ai) { ai.settings = JSON.parse(JSON.stringify(o.ai)); ai.changed.forEach((f) => f({ ai: { newValue: o.ai } }, 'local')); } }, remove: async (k) => { delete data[k]; } };
   window.chrome = { runtime: { sendMessage: async (m) => m.type === 'glaze:writerPapers' ? { ok: true, value: await GZ_WRITER_PAPERS.open(local)[m.op](...m.args) } : { ok: true }, connect },
     storage: { local, onChanged: { addListener: (f) => ai.changed.push(f) } } };
 })();`;
@@ -124,7 +125,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
     const p = await frame();
     await check('the chip names the connection, with a green dot, when AI is ready', async () => {
       const chip = await until(() => p.$('.slot[data-slot="ai"] .gz-ai-chip'), 'chip');
-      assert.equal(await chip.textContent(), 'Gemini Nano');
+      assert.equal(await chip.textContent(), 'Chrome on-device AI');
       assert.equal(await chip.evaluate((c) => c.hasAttribute('data-ready')), true);
       assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"]')].map((b) => b.firstChild.textContent)), ['Blackboard editor', 'Check with AI', 'Sources', 'Add references', 'Export .txt', 'Export .md']);
     });
@@ -378,6 +379,64 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       assert.equal(tab, 2);
       await q.close();
     });
+    await check('the feedback model defines the outline; opt-out restores local structure; grading uses the rubric and documents as is', async () => {
+      const assignment = { title: 'Garden essay', instructions: 'Explain the benefits of school gardens.',
+        files: [{ name: 'Prompt.txt', url: 'https://writer.test/prompt.txt' }],
+        rubric: { levels: [{ id: 'high', label: 'Proficient' }, { id: 'low', label: 'Developing' }], criteria: [
+          { id: 'claim', label: 'Claim', points: 10, cells: [{ level: 'high', value: 8 }, { level: 'low', value: 4 }] },
+          { id: 'evidence', label: 'Evidence', points: 10, cells: [{ level: 'high', value: 8 }, { level: 'low', value: 4 }] },
+        ] } };
+      const q = await frame({ mode: 'paper', kind: 'assignment', settings: { on: true, model: { use: 'device' }, outline: true, features: { writing: true } }, ctx: { kind: 'assignment', assignment } });
+      try {
+        await q.setViewportSize({ width: 1440, height: 900 });
+        await until(() => q.evaluate(() => !!GZ_WRITER_PAPER.current()?.pages()), 'paper for outline and grading', 20000);
+        await q.evaluate(() => {
+          const prior = __page.port.onmessage;
+          __page.port.onmessage = (e) => { prior(e); if (e.data.type === 'attachments') __page.port.postMessage({ type: 'attachments', id: e.data.id, files: [{ name: 'Prompt.txt', text: 'Support your claim with two concrete examples.' }] }); };
+          const api = GZ_WRITER_PAPER.current(), v = api.editor.view;
+          const body = ['School gardens connect lessons with everyday life. ', 'Students can compare the growth of different plants. ',
+            'Experiments make classroom concepts easier to understand. ', 'Neighbors can share the work and the harvest. ', 'These benefits make school gardens a lasting investment. '];
+          const doc = GZ_WRITER_SCHEMA.paper.nodeFromJSON(GZ_WRITER_FORMAT.template(api.format(),
+            { name: 'Alex Rivera', instructor: 'Prof. Okafor', course: 'ENG2100', date: '28 October 2026', title: 'School Gardens' },
+            body.map((s) => ({ type: 'paragraph', content: [{ type: 'text', text: s.repeat(8) }] }))));
+          v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, doc.content));
+          __ai.next['writer.outline'] = [
+            { json: { heading: 'Learning in the garden', role: 'introduction' } },
+            { json: { heading: 'Plant growth observations', role: 'body' } },
+            { json: { heading: 'Practical experiments', role: 'body' } },
+            { json: { heading: 'Community partnerships', role: 'body' } },
+            { json: { heading: 'A lasting investment', role: 'conclusion' } },
+          ];
+          __ai.next['writer.feedback'] = { json: { criteria: [
+            { criterion: 'claim', status: 'met', comment: 'Your paper states a clear claim.', quotes: [], level: 'Proficient' },
+            { criterion: 'evidence', status: 'partly', comment: 'Your paper does not give the two concrete examples required.', quotes: [], level: 'Developing' },
+          ], grade: { summary: 'Your paper has a clear claim but loses points for the missing concrete examples.' } } };
+        });
+        await q.click('#gp-tab-outline');
+        await until(() => q.evaluate(() => document.querySelector('.gp-ol-label')?.textContent.startsWith('Introduction:')), 'model-defined outline', 20000);
+        assert.deepEqual(await q.locator('.gp-ol-label').allTextContents(), ['Introduction: Learning in the garden', 'Body: Plant growth observations', 'Body: Practical experiments', 'Body: Community partnerships', 'Conclusion: A lasting investment']);
+        await q.locator('.gp-ol-row[data-kind="section"]').nth(3).click();
+        assert.ok(await q.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.selection.$from.parent.textContent.startsWith('Neighbors')));
+        await q.screenshot({ path: path.join(shots, 'outline-model.png') });
+        await q.getByRole('checkbox', { name: 'AI outline', exact: true }).uncheck();
+        await until(() => q.evaluate(() => document.querySelector('.gp-ol-label')?.textContent === 'Introduction'), 'local outline after opt-out');
+        assert.equal(await runs(q, 'writer.outline'), 1);
+        await q.click('#gp-tab-feedback');
+        await q.getByRole('button', { name: 'Get feedback', exact: true }).click();
+        await until(() => q.evaluate(() => document.querySelector('.gz-fb-score')?.textContent === 'Estimated grade: 12/20'), 'rubric grade');
+        assert.ok(await q.evaluate(() => __ai.runs.find((r) => r.task === 'writer.feedback').input.context.assignment.files[0].text.includes('two concrete examples')));
+        await pause(300);
+        await q.screenshot({ path: path.join(shots, 'feedback-grade.png') });
+        await q.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.insertText('Revised. ', 1)); });
+        await until(() => q.evaluate(() => document.querySelector('.gz-fb-grade')?.textContent.includes('Draft changed') && !document.querySelector('.gz-fb-score')), 'grade invalidated after edit');
+        await q.evaluate(() => { __ai.next['writer.feedback'].json.criteria.pop(); });
+        await q.locator('.gz-fb-grade .gz-fb-run').click();
+        await until(() => q.evaluate(() => document.querySelector('.gz-fb-score')?.textContent === 'Score unavailable'
+          && document.querySelector('.gz-fb-grade')?.textContent.includes('The assessment did not score every rubric category.')), 'unavailable score explains why');
+        await q.screenshot({ path: path.join(shots, 'feedback-grade-unavailable.png') });
+      } finally { await q.close(); }
+    });
+
     // The paper's Feedback and Outline tabs as mockups E draw them: every state, Frost and Paper, wide and narrow.
     const looks = { dark: { dark: true, motion: 'subtle' }, light: { dark: false, motion: 'subtle', tokens: Object.fromEntries(Object.entries(require('../defaults.js').GZ_PRESETS.find((x) => x[0] === 'Paper')[1]).filter(([k]) => k.startsWith('--gz-'))) } };
     const built = path.join(shots, 'feedback-outline');
@@ -466,11 +525,13 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
           await q.click('#gp-tab-outline');
           await q.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let at = null; v.state.doc.descendants((n, pos) => { if (at === null && n.type.name === 'heading' && n.attrs.level === 2) at = pos + 2; }); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, at))); });
           const rows = await until(() => q.evaluate(() => { const r = [...document.querySelectorAll('.gp-ol-row')]; return r.length && r.every((x) => x.querySelector('small').textContent) && r.map((x) => [x.dataset.kind, x.querySelector('span').textContent, x.classList.contains('cur')]); }), 'outline with pages');
-          assert.deepEqual(rows.map((r) => r[0]), ['title', 'heading', 'heading', 'list']);
+          assert.deepEqual(rows.map((r) => r[0]), ['title', 'section', 'heading', 'heading', 'list']);
           assert.deepEqual(rows.filter((r) => r[2]).map((r) => r[1]), ['Baby Suggs\'s sermon'], 'the caret\'s section is marked');
           await side('outline');
           await q.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Just a start.' }] }] }).content)); });
-          await until(() => q.evaluate(() => /No title or headings yet\./.test(document.querySelector('.gp-outline').textContent)), 'outline empty state', 4000);
+          await until(() => q.evaluate(() => document.querySelector('.gp-ol-label')?.textContent === 'Paragraph 1'), 'unheaded draft outline', 4000);
+          await q.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, v.state.schema.nodes.paragraph.create())); });
+          await until(() => q.evaluate(() => /No text yet\./.test(document.querySelector('.gp-outline').textContent)), 'outline empty state', 4000);
           await side('outline-empty');
         } finally { await q.evaluate(() => { __ai.hold = false; __ai.release?.(); }).catch(() => {}); await q.close(); }
       });

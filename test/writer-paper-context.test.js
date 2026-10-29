@@ -27,7 +27,7 @@ test('everything Ultra says about the paper', async () => {
   assert.deepEqual(c.course, { id: '_101_1', name: 'BIO 1100: Biology I' });
   assert.equal(c.instructor, '', 'no read-only source for instructors was seen: left to the student');
   assert.deepEqual([c.assignment.title, c.assignment.due], ['Essay 2: Memory in Beloved', '2026-09-21T03:59:00.000Z']);
-  assert.equal(c.assignment.instructions, 'Essay 2 Write 1,200 words on memory in Beloved.');
+  assert.equal(c.assignment.instructions, 'Essay 2 Write 1,200 words on memory in Beloved. Submit a Word document.', 'the complete API instruction extends the page prefix');
   assert.equal(c.assignment.description, 'A 1,200-word close reading.\nCite at least two critics in MLA style.', 'the item\'s and its assessment\'s, as text');
   assert.equal(c.prompt.text, c.assignment.instructions);
   assert.equal(c.kind, 'assignment');
@@ -82,4 +82,105 @@ test('the production worker allows the assignment context builder', () => {
   assert.ok(list.has('lib/writer-context-assignment.js'));
   const check = fs.readFileSync(path.join(__dirname, '../scripts/writer-paper-check.js'), 'utf8');
   assert.doesNotMatch(check, /fs\.writeFileSync\(bg,/);
+});
+
+test('assignment requirements and rubric details are preserved beyond former display-length cutoffs', async () => {
+  const instruction = 'Instruction material. '.repeat(1100) + 'Include two interviews.';
+  const description = 'Description material. '.repeat(400) + 'Discuss the counterargument.';
+  const source = structuredClone(item);
+  source.description = description;
+  source.contentDetail['resource/x-bb-asmt-test-link'].test.assessment.instructions.rawText = instruction;
+  const context = await C.build(base({ instructions: async () => instruction, get: async (url) => url.includes('/contents/') ? source : column }));
+  assert.equal(context.assignment.instructions, instruction);
+  assert.ok(context.assignment.description.includes('Discuss the counterargument.'));
+  const model = { title: 'Rubric', levels: [{ id: 'full', label: 'Full' }], criteria: [{ id: 'claim', label: 'Claim', detail: 'Detail. '.repeat(80) + 'Required ending.', cells: [{ level: 'full', detail: 'Level description. '.repeat(150) + 'Required level ending.', value: { n: 10 } }] }] };
+  const rubric = C.rubricOf(model);
+  assert.equal(rubric.criteria[0].detail, model.criteria[0].detail);
+  assert.equal(rubric.criteria[0].cells[0].detail, model.criteria[0].cells[0].detail);
+});
+
+test('distinct page and API instruction requirements are both retained', async () => {
+  const context = await C.build(base({ instructions: async () => 'The page requires one interview.' }));
+  assert.ok(context.assignment.instructions.includes('The page requires one interview.'));
+  assert.ok(context.assignment.instructions.includes('Submit a Word document.'));
+});
+
+const weightedColumn = (possible = 100) => {
+  const out = structuredClone(column), definition = out.rubricAssociations[0].rubricDefinition;
+  out.possible = possible; definition.rubricType = 'PERCENTAGE';
+  definition.columnHeaders = ['Excellent', 'Satisfactory', 'Unsatisfactory', 'Poor'].map((header, position) => ({ id: `_${200 + position}_1`, header, position }));
+  definition.rows = [25, 25, 50].map((percentage, position) => ({ id: `_${300 + position}_1`, header: `Criterion ${position + 1}`, percentage, position,
+    cells: definition.columnHeaders.map((level, j) => ({ id: `_${400 + position * 4 + j}_1`, rubricRowId: `_${300 + position}_1`, rubricColumnId: level.id, position: j, percentage: [100, 75, 50, 25][j], description: 'Synthetic criterion descriptor.' })) }));
+  return out;
+};
+const weightedModel = (possible = 100) => {
+  const col = weightedColumn(possible), association = col.rubricAssociations[0];
+  return R.parse.ultra(association.rubricDefinition, association, null, { courseId: '_101_1', contentId: '_7_1', columnId: '_810_1', columnBound: true, userId: '_900_1', state: 'before', pointsPossible: col.possible });
+};
+
+test('a verified 100-point assignment exports weighted percentage rubric levels as actual row points', async () => {
+  const col = weightedColumn(), context = await C.build(base({ get: async (url) => url.includes('/contents/') ? item : col }));
+  const rubric = context.assignment.rubric;
+  assert.equal(rubric.kind, 'points');
+  assert.equal(rubric.total, 100);
+  assert.deepEqual(rubric.criteria.map((row) => [row.points, row.weight, row.unscored]), [[25, 25, false], [25, 25, false], [50, 50, false]]);
+  assert.deepEqual(rubric.criteria.map((row) => row.cells.map((cell) => cell.value)), [[25, 18.75, 12.5, 6.25], [25, 18.75, 12.5, 6.25], [50, 37.5, 25, 12.5]]);
+});
+
+test('weighted conversion uses the explicit assignment total and never changes the native rubric model', () => {
+  const model = weightedModel(20), before = structuredClone(model), rubric = C.rubricOf(model);
+  assert.equal(rubric.kind, 'points');
+  assert.deepEqual(rubric.criteria.map((row) => row.points), [5, 5, 10]);
+  assert.deepEqual(rubric.criteria[0].cells.map((cell) => cell.value), [5, 3.75, 2.5, 1.25]);
+  assert.deepEqual(model, before);
+  assert.equal(model.kind, 'percent');
+  assert.equal(model.criteria[0].points, null);
+  assert.deepEqual(model.criteria[0].cells.map((cell) => cell.value.n), [100, 75, 50, 25]);
+});
+
+test('a percentage rubric without an explicit positive point total keeps percentages without inventing points', () => {
+  for (const total of [null, undefined, 0, -1, NaN, Infinity, '100']) {
+    const model = weightedModel(); model.total = total;
+    const rubric = C.rubricOf(model);
+    assert.equal(rubric.kind, 'percent');
+    assert.ok(rubric.criteria.every((row) => row.points === null));
+    assert.deepEqual(rubric.criteria[0].cells.map((cell) => [cell.value, cell.percentage]), [[null, 100], [null, 75], [null, 50], [null, 25]]);
+  }
+});
+
+test('weighted scaling requires every scored weight and complete scalar percentage cell to be valid', () => {
+  for (const change of [
+    (m) => { m.criteria[0].weight = 20; }, (m) => { m.criteria[0].weight = -1; }, (m) => { m.criteria[0].weight = NaN; }, (m) => { delete m.criteria[0].weight; },
+    (m) => { m.criteria[0].unscored = true; }, (m) => { m.criteria[0].id = m.criteria[1].id; }, (m) => { m.hideTotal = true; }, (m) => { m.hidePoints = true; },
+    (m) => { m.criteria[0].cells.pop(); }, (m) => { m.criteria[0].cells[0].value = { n: 101 }; }, (m) => { m.criteria[0].cells[0].value = { n: '100' }; },
+    (m) => { m.criteria[0].cells[0].value = { lo: 75, hi: 100, loExclusive: false }; }, (m) => { m.criteria[0].cells[0].level = 'unknown'; },
+    (m) => { m.criteria[0].cells[0].level = m.criteria[0].cells[1].level; }, (m) => { m.levels.push({ ...m.levels[0] }); },
+  ]) {
+    const model = weightedModel(); change(model);
+    const rubric = C.rubricOf(model);
+    assert.equal(rubric.kind, 'percent');
+    assert.ok(rubric.criteria.every((row) => row.points === null && row.cells.every((cell) => cell.value === null)));
+  }
+});
+
+test('percentage ranges preserve their unit and endpoints without selecting a point value', () => {
+  const model = weightedModel(); model.kind = 'percent-range';
+  for (const row of model.criteria) for (const cell of row.cells) cell.value = { lo: 50, hi: 100, loExclusive: false };
+  const rubric = C.rubricOf(model);
+  assert.equal(rubric.kind, 'percent-range');
+  assert.ok(rubric.criteria.every((row) => row.points === null));
+  assert.deepEqual(rubric.criteria[0].cells[0], { level: model.levels[0].id, detail: 'Synthetic criterion descriptor.', value: null, percentageRange: { lo: 50, hi: 100, loExclusive: false } });
+});
+
+test('unscored and hidden rubric definitions never acquire row or rating point scores', () => {
+  const source = { kind: 'points', title: 'Unscored feedback', total: 25, levels: [{ id: 'full', label: 'Full' }],
+    criteria: [{ id: 'one', label: 'One', points: 25, unscored: true, cells: [{ level: 'full', value: { n: 25 }, detail: 'Descriptor.' }] }] };
+  const rubric = C.rubricOf(source);
+  assert.equal(rubric.criteria[0].unscored, true);
+  assert.equal(rubric.criteria[0].points, null);
+  assert.equal(rubric.criteria[0].cells[0].value, null);
+  const hidden = weightedModel(); hidden.hidePoints = true;
+  const hiddenRubric = C.rubricOf(hidden);
+  assert.equal(hiddenRubric.total, null);
+  assert.ok(hiddenRubric.criteria.every((row) => row.points === null && row.weight === null && row.cells.every((cell) => cell.value === null && cell.percentage === undefined)));
 });

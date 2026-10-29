@@ -85,7 +85,7 @@ test('the gray text shows where the task would run, Tab-word takes one word, typ
   for (let i = 0; i < 5; i++) s = AI.learn(s, false);
   assert.ok(AI.pause(s) > 500 && AI.pause(s) <= 1000, 'longer when passed by');
   const t = (k) => k;
-  assert.equal(AI.providerName({ provider: 'device' }, t), 'Gemini Nano');
+  assert.equal(AI.providerName({ provider: 'device' }, t), 'Chrome on-device AI');
   assert.equal(AI.providerName({ provider: 'apple' }, t), 'Apple Intelligence');
   assert.equal(AI.providerName({ provider: 'openai', to: 'api.example.com' }, t), 'api.example.com');
 });

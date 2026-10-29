@@ -1,4 +1,4 @@
-// The AI harness's `device` provider (docs/ai-harness.md): Chrome's Prompt API (LanguageModel, Gemini Nano), on this
+// The AI harness's `device` provider (docs/ai-harness.md): Chrome's Prompt API (LanguageModel), on this
 // computer, in the worker itself. Nothing goes over the network and there is no key.
 // What it rests on (checked 2026-10-26):
 // - Chrome 138 ships the Prompt API to extensions only (developer.chrome.com/docs/ai/built-in-apis). Chrome's renderer turns
@@ -23,7 +23,8 @@
 //   doesn't fit fails with QuotaExceededError; one that fits only by dropping earlier turns drops them and fires
 //   contextoverflow (138: quotaoverflow). Glaze measures first and refuses either way: nothing is cut silently.
 // - Tool calls exist in Chromium's main behind expectedOutputs 'tool-call', not in what Chrome 138 ships: not claimed.
-// - No maxTokens: the API takes no output limit.
+// - No maxTokens: the API takes no output limit. Schema requests with an explicit maxTokens use an app byte cutoff at
+//   four UTF-8 bytes per estimated token; streaming is cancelled and its session destroyed when that allowance is exceeded.
 // - clone() copies a session with what it has read (LanguageModel.prototype.clone, with a signal), so a request with no
 //   earlier turns prompts a clone of a warm session that read its system prompt once: one per system prompt (and
 //   sampling and pictures), destroyed WARM.ms after its last use, when a call on it fails or times out, and when a
@@ -34,10 +35,11 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
   const P = typeof GZ_AI_PROVIDERS !== 'undefined' ? GZ_AI_PROVIDERS : require('../providers.js');
   const R = typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('../request.js');
   const F = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('../failure.js');
+  // A stable Glaze compatibility id, not a model selector: Chrome chooses the built-in model. No model option is sent.
   const MODEL = 'gemini-nano';
   const STATES = { unavailable: 'unavailable', downloadable: 'download', downloading: 'downloading', available: 'ready' };
   const api = () => globalThis.LanguageModel || null;
-  const fail = (category, message) => Object.assign(new Error(message), { category });
+  const fail = (category, message, reason, details = {}) => Object.assign(new Error(message), { category, ...(reason && { reason }), ...details });
   const refuse = (code, message) => Object.assign(new Error(message), { code });
   let windowSize = 0; // the context window a session reported, once one has
   let preparing = null; // the download in progress: { done, listeners }
@@ -58,7 +60,7 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
     Promise.resolve(pending).then((s) => { if (!finish(resolve, s)) late?.(s); }, (e) => finish(reject, e));
   });
 
-  // → cfg, or null: the model is always Gemini Nano; images and context are what the broker learnt from catalog().
+  // → cfg, or null: the compatibility id stays fixed; images and context are what the broker learnt from catalog().
   const config = (raw) => {
     if (!R.isObj(raw) || Object.keys(raw).some((k) => !['model', 'images', 'context', 'generation'].includes(k))) return null;
     if (raw.model !== undefined && raw.model !== MODEL) return null;
@@ -78,8 +80,15 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
   const describe = (a) => (a === 'none' ? { state: 'unavailable', reason: 'browser' } : a === 'failed' ? { state: 'unavailable', reason: 'failed' } : a === 'unavailable' ? { state: 'unavailable', reason: 'device' } : { state: STATES[a] });
   const status = async (cfg, { signal } = {}) => {
     const timer = F.deadline(20000), both = F.anySignal([signal, timer.signal]);
-    try { return describe(await availability(false, both.signal)); }
-    catch { return { state: 'unavailable', reason: timer.signal.aborted ? 'timeout' : 'failed' }; }
+    let text;
+    try {
+      text = describe(await availability(false, both.signal));
+      if (text.state !== 'ready') return text;
+      // A fresh connection has no catalog-derived images flag yet. Discover currently ready vision without creating a
+      // session or downloading; an unavailable or failed image probe must not take working text features offline.
+      return { ...text, caps: { images: await availability(true, both.signal) === 'available' } };
+    }
+    catch { return text?.state === 'ready' ? { ...text, caps: { images: false } } : { state: 'unavailable', reason: timer.signal.aborted ? 'timeout' : 'failed' }; }
     finally { timer.done(); both.done(); }
   };
 
@@ -127,7 +136,7 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
       const s = await wait(api().create({ expectedInputs: inputs(false), ...(signal && { signal }) }), signal, destroy);
       try { learn(s); } finally { destroy(s); }
     }
-    const model = { id: MODEL, name: 'Gemini Nano', json: true, ...(a !== 'unavailable' && Object.hasOwn(STATES, pictures) && { vision: pictures !== 'unavailable' }),
+    const model = { id: MODEL, name: 'Chrome on-device AI', json: true, ...(a !== 'unavailable' && Object.hasOwn(STATES, pictures) && { vision: pictures !== 'unavailable' }),
       ...(windowSize && { context: { window: windowSize, inputLimit: windowSize - Math.ceil(windowSize * 0.1) } }) };
     return { models: [model], source: 'live', at: Date.now() };
   };
@@ -182,15 +191,39 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
     const last = req.messages.at(-1);
     if (last.role !== 'user') throw refuse('request', 'The last message must be the student\'s.');
     const LM = api();
-    if (!LM) throw fail('provider-unavailable', 'The Prompt API is not available in this browser.');
+    if (!LM) throw fail('provider-unavailable', 'The Prompt API is not available in this browser.', 'browser');
     const a = await availability(false, signal);
-    if (a !== 'available') throw fail('provider-unavailable', `The model on this device is ${a}.`);
+    if (a !== 'available') throw fail('provider-unavailable', `The model on this device is ${a}.`, a === 'unavailable' ? 'device' : a === 'none' ? 'browser' : 'failed');
     if (R.images(req) > 0 && await availability(true, signal) !== 'available') throw refuse('caps', 'The model on this device does not take pictures.');
     if (signal?.aborted) throw signal.reason;
     const { opts, k } = await plan(LM, req, signal);
-    const prompt = [{ role: 'user', content: content(last) }];
-    const options = { ...(req.schema && { responseConstraint: req.schema }), ...(signal && { signal }) };
-    let s, w, dropped = false, ok = false;
+    const byteLimit = req.schema && Number.isSafeInteger(req.maxTokens) && req.maxTokens > 0 ? req.maxTokens * 4 : 0;
+    const parts = content(last);
+    if (req.schema) parts.push({ type: 'text', value: [
+      'Return only compact JSON matching this JSON Schema. Respect every maxItems, maxLength and enum constraint. No Markdown, commentary or padding.',
+      ...(byteLimit ? [`Keep the entire JSON within ${byteLimit} UTF-8 bytes, the estimated allowance for ${req.maxTokens} output tokens.`] : []),
+      JSON.stringify(req.schema),
+    ].join('\n') });
+    const prompt = [{ role: 'user', content: parts }];
+    // Chrome's implicit schema instructions have not always been included in its native input measurement. Supply the
+    // full bounded schema ourselves, and measure exactly the prompt that is sent, without duplicate hidden guidance.
+    const options = { ...(req.schema && { responseConstraint: req.schema, omitResponseConstraintInput: true }), ...(signal && { signal }) };
+    let s, w, dropped = false, dropPhase, ok = false, phase = 'create', measuredInput, contextSize, inputFits = false;
+    const diagnostic = (at) => {
+      const tokens = Math.ceil(measuredInput), context = Math.floor(contextSize);
+      return { phase: at, ...(Number.isSafeInteger(tokens) && tokens >= 0 && tokens <= 10000000 && { tokens }),
+        ...(Number.isSafeInteger(context) && context > 0 && context <= 10000000 && { context }) };
+    };
+    const responseContext = 'The measured input fit, but the model exhausted its context while processing the prompt or response.';
+    const contextFailure = (message, at = phase) => fail('request-rejected', message, at === 'response' && inputFits ? 'response-context' : 'context', diagnostic(at));
+    const encoder = byteLimit ? new TextEncoder() : null;
+    const withinOutput = (value) => {
+      if (!encoder || typeof value !== 'string') return;
+      // Encode the joined text: a native chunk can split a UTF-16 surrogate pair, whose separate encodings overcount.
+      const actual = encoder.encode(value).byteLength;
+      if (actual > byteLimit) throw fail('request-rejected', 'The response exceeded the estimated UTF-8 byte allowance.', 'response-limit',
+        { ...diagnostic('response'), actual, limit: byteLimit });
+    };
     try {
       try {
         w = k && warmFor(LM, k, opts);
@@ -201,42 +234,70 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
           s = await wait(LM.create({ ...opts, ...(signal && { signal }) }), signal, destroy);
         }
       } catch (e) {
-        if (e?.name === 'QuotaExceededError') throw fail('request-rejected', 'The instructions and earlier turns are longer than the model on this device can read.');
+        if (e?.name === 'QuotaExceededError') throw contextFailure('The instructions and earlier turns are longer than the model on this device can read.');
         throw e;
       }
       if (signal?.aborted) throw signal.reason;
       learn(s);
-      const drop = () => { dropped = true; };
+      const drop = () => { if (!dropped) dropPhase = phase; dropped = true; };
       for (const ev of ['contextoverflow', 'quotaoverflow']) s.addEventListener?.(ev, drop);
       const measure = s.measureContextUsage || s.measureInputUsage;
       let input = used(s);
+      phase = 'measure'; contextSize = room(s);
       if (typeof measure === 'function') {
         const need = await wait(measure.call(s, prompt, options), signal);
-        const left = room(s) - used(s);
-        if (Number.isFinite(need) && Number.isFinite(left) && need > left) throw fail('request-rejected', `The text is longer than the model on this device can read (${Math.ceil(need)} tokens, ${Math.floor(left)} left).`);
+        contextSize = room(s);
+        const initial = used(s), left = contextSize - initial;
+        if (Number.isFinite(need) && need >= 0 && Number.isFinite(initial) && initial >= 0) measuredInput = need + initial;
+        inputFits = Number.isFinite(measuredInput) && Number.isFinite(contextSize) && contextSize > 0 && measuredInput <= contextSize;
+        if (Number.isFinite(need) && Number.isFinite(left) && need > left) throw contextFailure('The text is longer than the model on this device can read.');
         if (Number.isFinite(need)) input += need;
       }
+      if (dropped) throw contextFailure('The model on this device dropped earlier turns while measuring the input.', dropPhase);
+      phase = 'response';
       let text = '';
+      const deltas = byteLimit && typeof onDelta === 'function' ? [] : null;
       try {
-        if (typeof onDelta === 'function') {
+        if (typeof s.promptStreaming === 'function' && (byteLimit || typeof onDelta === 'function')) {
           const reader = s.promptStreaming(prompt, options).getReader();
           try {
             for (;;) {
               const { done, value } = await wait(reader.read(), signal);
               if (done) break;
               if (dropped) break;
-              if (typeof value === 'string' && value) { text += value; onDelta(value); }
+              if (typeof value === 'string' && value) {
+                const next = text + value; withinOutput(next); text = next;
+                if (deltas) deltas.push(value); else onDelta?.(value);
+              }
             }
           } finally { reader.cancel().catch(() => {}); reader.releaseLock(); }
-        } else text = await wait(s.prompt(prompt, options), signal);
+        } else {
+          // An older implementation without streaming can only reject the completed response afterward. This check
+          // bounds accepted output, not how long that native prompt generated before returning.
+          text = await wait(s.prompt(prompt, options), signal); withinOutput(text);
+          if (deltas) deltas.push(text); else if (typeof onDelta === 'function' && typeof text === 'string') onDelta(text);
+        }
       } catch (e) {
-        if (e?.name === 'QuotaExceededError') throw fail('request-rejected', 'The text is longer than the model on this device can read.');
+        if (e?.name === 'QuotaExceededError') throw contextFailure(inputFits ? responseContext : 'The model could not fit the prompt or response in its context window.');
         throw e;
       }
-      if (dropped) throw fail('request-rejected', 'The model on this device dropped earlier turns to fit the text.');
+      if (dropped) throw contextFailure(inputFits ? responseContext : 'The model on this device dropped earlier turns while processing the prompt or response.', dropPhase);
       if (typeof text !== 'string') throw fail('invalid-response', 'The model on this device gave no text.');
+      if (deltas) for (const delta of deltas) { if (signal?.aborted) throw signal.reason; onDelta(delta); }
+      if (signal?.aborted) throw signal.reason;
       ok = true;
       return { text, model: MODEL, finish: 'stop', ...(Number.isSafeInteger(Math.round(input)) && input > 0 && { usage: { input: Math.round(input) } }) };
+    } catch (e) {
+      if (signal?.aborted) throw signal.reason;
+      if (e?.name === 'QuotaExceededError') throw contextFailure(inputFits && phase === 'response' ? responseContext : 'The text is longer than the model on this device can read.');
+      if (e?.name === 'NotSupportedError') throw fail('request-rejected', 'Unsupported model input.', 'unsupported');
+      if (e?.name === 'InvalidStateError') throw fail('provider-unavailable', 'The model session is no longer available.', 'assets');
+      if (e?.name === 'NotAllowedError') throw fail('provider-unavailable', 'Model activation required.', 'activation');
+      // Chromium's exception_helpers.cc uses these for local service, execution and safety failures. They do not mean
+      // the extension port or a network connection was lost. Keep only fixed reasons; native descriptions stay private.
+      if (e?.name === 'NotReadableError') throw fail('request-rejected', 'The model declined the request under its safety rules.', 'guardrail');
+      if (['OperationError', 'UnknownError', 'AbortError'].includes(e?.name)) throw fail('provider-unavailable', 'The model on this device could not complete the request.', 'unknown');
+      throw e;
     } finally {
       destroy(s);
       // A warm session whose call failed or timed out (not the caller's cancel) may be what failed: the next call makes another.

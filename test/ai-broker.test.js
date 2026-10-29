@@ -59,7 +59,86 @@ const env = (over = {}) => {
 const open = (e) => { const p = port(); B.connect(p, e); return p; };
 const run = (input = { text: 'hello' }, extra = {}) => ({ id: 1, op: 'run', feature: 'syllabus', task: 'example.echo', input, ...extra });
 const types = (p) => p.posted.map((m) => m.type);
+
+test('image preparation persists only within the worker-verified account and assignment', async () => {
+  const image = require('../lib/ai/tasks/writer-image.js');
+  const reading = { description: 'The picture requires two sources.', requirements: ['Use two sources.'], complete: true, reason: '', relevance: 'relevant' };
+  const local = area(), calls = [];
+  let account = '_1_1', assignment = '_2_1/_3_1';
+  const e = env({ local, visualScope: async () => ({ school: 'school.example', account, assignment }),
+    settings: async () => ({ on: true, use: 'main', features: { writing: true } }),
+    task: async (id) => id === image.task.id ? image.task : null,
+    fetch: async (url, init) => { if (url.endsWith('/models')) return models(); calls.push(JSON.parse(init.body)); return answer(reading); } });
+  const input = { name: 'instructions.png', image: { mime: 'image/png', data: Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64') }, context: { kind: 'assignment', paper: { school: 'school.example', user: '_1_1', course: '_2_1', content: '_3_1' }, assignment: { title: 'Task', instructions: 'Use the supplied instructions.' } } };
+  const send = async (id) => {
+    const p = open(e); p.say({ id, op: 'run', feature: 'writing', task: 'writer.image', input });
+    for (let i = 0; i < 200 && !p.posted.some((m) => ['end', 'error'].includes(m.type)); i++) await new Promise((r) => setTimeout(r, 5));
+    assert.equal(p.posted.at(-1).type, 'end');
+    assert.equal(p.posted.at(-1).output.complete, true, JSON.stringify(p.posted.at(-1).output)); p.close();
+  };
+  await send(1); await send(2);
+  assert.equal(calls.length, 1, 'a separate run reuses the completed reading');
+  account = '_9_1'; await send(3);
+  assert.equal(calls.length, 2, 'a page payload cannot select another account’s cached reading');
+  assignment = '_2_1/_8_1'; await send(4);
+  assert.equal(calls.length, 3, 'assignment authority is part of the cache key');
+});
 test.beforeEach(() => { B._reset(); M._reset(); });
+
+test('image preparation has its own running slot alongside ordinary writing', async () => {
+  const image = require('../lib/ai/tasks/writer-image.js');
+  let release;
+  const reading = { description: 'A readable instruction.', requirements: ['Use two sources.'], complete: true, reason: '', relevance: 'relevant' };
+  const e = env({ settings: async () => ({ on: true, use: 'main', features: { writing: true } }),
+    task: async (id) => id === image.task.id ? image.task : TASKS[id] || null,
+    fetch: async (url, init) => {
+      if (url.endsWith('/models')) return models();
+      const request = JSON.parse(init.body);
+      if (request.messages.some((m) => Array.isArray(m.content) && m.content.some((c) => c.type === 'image_url'))) return new Promise((resolve) => { release = () => resolve(answer(reading)); });
+      return answer({ text: 'Checked.' });
+    } });
+  const p = open(e);
+  p.say({ id: 1, op: 'run', feature: 'writing', task: 'writer.image', input: { name: 'instructions.png', image: { mime: 'image/png', data: Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64') }, context: { kind: 'assignment' } } });
+  await flush(); assert.equal(typeof release, 'function');
+  p.say({ id: 2, op: 'run', feature: 'writing', task: 'example.echo', input: { text: 'A supplied draft.' } }); await flush();
+  assert.ok(p.posted.some((m) => m.id === 2 && m.type === 'end'));
+  assert.ok(!p.posted.some((m) => m.id === 1 && ['end', 'error'].includes(m.type)));
+  release(); await flush();
+  assert.ok(p.posted.some((m) => m.id === 1 && m.type === 'end' && m.output.complete)); p.close();
+});
+
+test('an endpoint run does not start the local inference keepalive', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let release;
+  const e = env({ fetch: async (url) => url.endsWith('/models') ? models() : new Promise((resolve) => { release = () => resolve(answer({ text: 'hello' })); }) });
+  const p = open(e);
+  try {
+    p.say(run()); await flush();
+    assert.equal(typeof release, 'function');
+    t.mock.timers.tick(20000); await flush();
+    assert.equal(p.posted.some((m) => m.type === 'keepalive'), false);
+    release(); await flush();
+    assert.equal(p.posted.at(-1).type, 'end');
+  } finally { p.close(); release?.(); await flush(); }
+});
+
+test('AI outline defaults on with AI configured, uses Feedback’s model, and honors its independent opt-out', async () => {
+  const O = require('../lib/ai/tasks/writer-outline.js'), calls = [];
+  const settings = { on: true, model: { use: 'main', model: 'unused-default' }, models: { writing: { use: 'main', model: 'gpt-x' } }, features: { writing: false } };
+  const e = env({ settings: async () => settings, task: async (id) => id === O.task.id ? O.task : null,
+    fetch: async (url, init) => { if (url.endsWith('/models')) return models(); calls.push(JSON.parse(init.body)); return answer({ heading: 'An existing argument', role: 'body' }); } });
+  assert.equal((await B.status({ feature: 'writing', task: 'writer.outline' }, e)).ready, true);
+  assert.equal((await B.status({ feature: 'writing' }, e)).allowed, false);
+  const p = open(e), input = { blocks: [{ id: 'b0', kind: 'paragraph', text: 'The existing argument.' }], context: {} };
+  p.say({ id: 1, op: 'run', feature: 'writing', task: 'writer.outline', input }); await flush();
+  assert.equal(p.posted.at(-1).type, 'end'); assert.equal(calls[0].model, 'gpt-x');
+  settings.outline = false;
+  p.say({ id: 2, op: 'run', feature: 'writing', task: 'writer.outline', input }); await flush();
+  assert.equal(p.posted.at(-1).error, 'feature'); assert.equal(calls.length, 1);
+  settings.outline = true; settings.on = false;
+  p.say({ id: 3, op: 'run', feature: 'writing', task: 'writer.outline', input }); await flush();
+  assert.equal(p.posted.at(-1).error, 'off'); assert.equal(calls.length, 1); p.close();
+});
 
 test('a run: its events, then the end with the checked output; no address, model or key in anything a page gets; one metadata row kept', async () => {
   const e = env(), p = open(e);
@@ -648,6 +727,24 @@ test('a supersede task\'s runs make one call-record row a minute per tab and fea
   assert.deepEqual(later.map((r) => [r.count, r.state]), [[4, 'provider-unavailable'], [1, 'completed']], 'a new minute, a new row');
 });
 
+test('a later successful tallied run clears earlier planning-limit counts', async () => {
+  const counted = T.define({ ...finish, id: 'example.counted', input: (raw) => {
+    if (raw.fail) throw Object.assign(new Error('bounded assessment'), { code: 'size', reason: 'feedback-calls', actual: 65, limit: 64 });
+    return raw;
+  } });
+  const e = writer({ task: (id) => id === counted.id ? counted : TASKS[id] });
+  const p = open(e);
+  try {
+    p.say({ ...complete(1), task: counted.id, input: { text: 'A supplied sentence.', fail: true } }); await flush();
+    assert.equal(e.local.data.aiCalls[0].actual, 65);
+    assert.equal(e.local.data.aiCalls[0].limit, 64);
+    p.say({ ...complete(2), task: counted.id }); await flush();
+    const row = e.local.data.aiCalls[0];
+    assert.equal(row.state, 'completed');
+    for (const key of ['reason', 'actual', 'limit']) assert.equal(row[key], undefined, key);
+  } finally { p.close(); }
+});
+
 test('a connection\'s catalog is asked for once per generation, not every run; a changed connection asks again', async () => {
   const e = writer();
   const p = open(e);
@@ -846,7 +943,7 @@ test('the owner\'s older endpoint runs as OpenRouter at once, and Settings\' fir
   assert.equal(vault.get('connections').endpoint.model, 'deepseek/deepseek-v4.1-flash-1017', 'a run writes nothing back');
   const got = await B.config({ op: 'get' }, e);
   assert.deepEqual(order.filter((k) => ['ai', 'connections'].includes(k)), ['ai', 'connections']);
-  assert.deepEqual(local.data.ai, { on: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true } });
+  assert.deepEqual(local.data.ai, { on: true, outline: true, sources: true, mode: 'simple', model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: {}, tune: {}, features: { syllabus: true, completion: true, writing: true } });
   assert.deepEqual(vault.get('connections'), { openrouter: { provider: 'openai', base: OR, key: OWNER, generation: 'g-1' }, device: { provider: 'device', generation: 'g-2' } });
   assert.ok(got.connections.openrouter && !got.connections.endpoint);
   assert.equal(got.connections.openrouter.key, E.mask(OWNER));

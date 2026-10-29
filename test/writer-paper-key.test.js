@@ -42,7 +42,7 @@ const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = []
     host: { context: () => context, onContext: (fn) => { onContext = fn; } }, ctx: context, prefs: {},
     format: ST.FORMATS.mla9, paper: null, keep: false, presets: [], zoom: 'fit', formatIssues: [], picked: null,
     t: (k) => k, state: { textContent: '' }, title: {}, due: {},
-    restyleCSS() {}, counts() {}, setZoom() {}, PG: { relayout() {} }, runChecks() {}, runChecksSoon() {}, outlineDraw() {},
+    restyleCSS() {}, counts() {}, setZoom() {}, PG: { relayout() {} }, runChecks() {}, runChecksSoon() {}, outlineDraw() {}, outlineAI: { stop() {} }, sourcesPanel: null,
   });
   vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, key: () => key, keep: () => keep, edits: () => edits };`, sandbox);
   const $ = sandbox.__;

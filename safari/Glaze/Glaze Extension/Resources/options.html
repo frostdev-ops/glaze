@@ -230,6 +230,7 @@
   .ai-feat .name { font-size: calc(14px * var(--gz-scale, 1)); gap: .6rem; }
   .ai-feat.off :is(.ai-pick, .ai-effort, .ai-tune) { opacity: .45; }
   .ai-feat .popwrap { position: relative; min-width: 0; }
+  .ai-outline { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0 0; font-size: 13px; }
   .ai-pick { display: flex; align-items: center; gap: .55rem; inline-size: 100%; max-inline-size: 22rem; padding: .4rem .55rem .4rem .45rem; border-radius: calc(var(--gz-radius, 12px) * 3 / 4); font-size: calc(13px * var(--gz-scale, 1)); color: var(--gz-ink); text-align: start; }
   .ai-pick:hover { color: var(--gz-ink); }
   .ai-pick .m { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1857,6 +1858,7 @@
   <script src="lib/petlibrary.js"></script>
   <script src="lib/site.js"></script>
   <script src="lib/ai/settings.js"></script>
+<script src="lib/ai/failure.js"></script>
   <script src="lib/ai/endpoint.js"></script>
   <script src="lib/editor-ai.js"></script>
   <script src="lib/writer-papers.js"></script>

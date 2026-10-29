@@ -23,6 +23,12 @@ extension Native {
         do { _ = try GenerationSchema(root: Schema().node(schema, name: "Answer", depth: 0), dependencies: []); return true }
         catch { return false }
     }
+    // The root's key order as the model is given it (GenerationSchema's description is its JSON Schema, with x-order).
+    static func order(_ schema: [String: Any]) -> [String] {
+        guard let g = try? GenerationSchema(root: Schema().node(schema, name: "Answer", depth: 0), dependencies: []),
+              let json = (try? JSONSerialization.jsonObject(with: Data(g.debugDescription.utf8))) as? [String: Any] else { return [] }
+        return json["x-order"] as? [String] ?? []
+    }
 }
 if #available(macOS 27.0, *) {
     var out: [String: Any] = [:]
@@ -40,6 +46,12 @@ if #available(macOS 27.0, *) {
     out["warmModel"] = Native.warm(["model": "private-cloud", "instructions": "Finish it."])
     out["warmEmpty"] = Native.warm(["model": "on-device", "instructions": ""])
     out["warmNone"] = Native.warm(["model": "on-device"])
+    out["order"] = Native.order(["type": "object", "x-order": ["status", "quotes", "complete"], "properties": ["complete": ["type": "boolean"], "quotes": ["type": "string"], "status": ["type": "string"]], "required": ["status", "quotes", "complete"]])
+    out["unordered"] = Native.order(["type": "object", "properties": ["b": ["type": "string"], "a": ["type": "string"]], "required": ["a", "b"]])
+    // A tokenizer count, not inference; tokenCount(for:) throws for a picture (macOS 27.0.1), so this needs the words-and-pictures count.
+    let picture = try Native.conversation([["role": "user", "content": [["type": "text", "text": "Read it."], ["type": "image", "mime": "image/png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="]]]])
+    let words = SystemLanguageModel.default.isAvailable ? ((try? await SystemLanguageModel.default.tokenCount(for: Prompt("Read it."))) ?? -1) : -1
+    out["picture"] = words < 0 ? -1 : ((try? await Native.count(SystemLanguageModel.default, picture, schema: nil)) ?? -2)
     out["nullSchema"] = Native.checkSchema(["type": "object", "properties": ["answer": ["anyOf": [["type": "string"], ["type": "null"]]]], "required": ["answer"]])
     print(String(data: try JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]), encoding: .utf8)!)
 }
@@ -64,6 +76,14 @@ test('the native side refuses any model but the one on this device', { skip: !su
 test('native cancellation arriving before registration prevents the run', { skip: !supported }, () => {
   assert.deepEqual(result.earlyRun, { ok: false, error: 'cancelled' });
   assert.equal(result.emptyCancel.error, 'request-rejected');
+});
+test('native schema conversion keeps the order the worker sent (x-order), else sorts', { skip: !supported }, () => {
+  assert.deepEqual(result.order, ['status', 'quotes', 'complete']);
+  assert.deepEqual(result.unordered, ['a', 'b']);
+});
+test('a request with a picture is budgeted: its words counted, the picture at its estimated allowance', { skip: !supported }, (t) => {
+  if (result.picture === -1) return t.skip('Apple Intelligence counts no tokens here now');
+  assert.ok(Number.isSafeInteger(result.picture) && result.picture > 1024 && result.picture < 1100, String(result.picture));
 });
 test('native schema conversion accepts null branches in an object', { skip: !supported }, () => {
   assert.equal(result.nullSchema, true);

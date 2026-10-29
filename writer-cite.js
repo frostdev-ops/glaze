@@ -16,6 +16,18 @@
   const STYLE = { mla: 'mla9', mla9: 'mla9', apa: 'apa7', apa7: 'apa7', chicago: 'chicago17', chicago17: 'chicago17' };
   let sources = [], key = null, style = 'mla9', saved = null, loading = null, referenceBlock = null;
   const subs = new Set();
+  const B = globalThis.GZ_WRITER_BIBLIOGRAPHY, seenBibliography = new Set(), removedBibliography = new Set(), bibliographyLinks = new Map();
+  // Add metadata without changing the paper. Removed entries stay removed until their text changes.
+  const importBibliography = (doc = F.editor()?.view?.state.doc) => {
+    if (!B || F.mode() !== 'paper' || !doc || loading?.pending) return [];
+    const entries = B.entries(doc); let next = sources, added = false;
+    for (const e of entries) if (!seenBibliography.has(e.id) && !removedBibliography.has(e.id)) {
+      seenBibliography.add(e.id); const s = B.parse(e);
+      if (s) { const merged = S.add(next, s); next = merged.sources; if (merged.id) bibliographyLinks.set(e.id, merged.id); added = true; }
+    }
+    if (added) setSources(next);
+    return entries;
+  };
   const changed = () => { for (const fn of subs) try { fn({ sources: sources.slice(), style }); } catch (e) { console.error(e); } recheck(); };
 
   // ---- DOM helpers ----------------------------------------------------------------------------------------------------
@@ -45,7 +57,7 @@
     clearUndo();
     setSources(S.remove(sources, id));
     after();
-    undoAction = () => { if (key === where) { setSources(S.add(sources, src).sources); after(); } };
+    undoAction = () => { if (key === where) { for (const [entry, id] of bibliographyLinks) if (id === src.id) removedBibliography.delete(entry); setSources(S.add(sources, src).sources); after(); } };
     undoBox.hidden = false;
     undoTimer = setTimeout(clearUndo, 8000);
   };
@@ -54,30 +66,38 @@
   const use = (s) => { const v = STYLE[String(s || '').toLowerCase()]; if (v && v !== style) { style = v; changed(); } return style; };
   const persist = () => {
     if (loading?.pending) { loading.edits = sources.slice(); return Promise.resolve(true); }
-    return key ? S.save(key, sources) : Promise.resolve(true);
+    return key ? S.save(key, sources, undefined, { removed: [...removedBibliography] }) : Promise.resolve(true);
   };
-  const setSources = (list) => { sources = S.dedupe(list); persist(); changed(); };
+  const setSources = (list) => {
+    const next = S.dedupe(list), ids = new Set(next.map((s) => s.id));
+    for (const s of sources) if (!ids.has(s.id)) for (const [entry, id] of bibliographyLinks) if (id === s.id) removedBibliography.add(entry);
+    sources = next; persist(); changed();
+  };
   const loadFor = async (context) => {
     if (context?.style) use(context.style);
     const k = S.keyOf(context);
     if (k === key) return;
     clearUndo();
     key = k;
+    seenBibliography.clear();
+    removedBibliography.clear(); bibliographyLinks.clear();
     sources = [];
     referenceBlock = null;
     const load = loading = { key: k, pending: !!k, edits: null };
     changed();
     if (!k) return;
-    const stored = await S.load(k);
+    const loaded = await S.load(k, undefined, { state: true }), storedState = Array.isArray(loaded) ? { sources: loaded, removed: [] } : loaded, stored = storedState.sources;
     load.pending = false;
     const merged = load.edits ? S.dedupe([...load.edits, ...stored]) : stored;
-    if (load.edits) S.save(k, merged);
     if (loading !== load) return;
+    for (const id of storedState.removed) removedBibliography.add(id);
+    if (load.edits) S.save(k, merged, undefined, { removed: [...removedBibliography] });
     sources = merged;
     changed();
+    importBibliography();
   };
-  F.on('ready', (_, init) => loadFor(init?.context || F.context()));
-  F.on('context', (c) => loadFor(c));
+  F.on('ready', (_, init) => loadFor(init?.context || F.context()).then(() => importBibliography()));
+  F.on('context', (c) => { if (pop.hidden === false) close(); saved = null; return loadFor(c); });
 
   // ---- cite issues ------------------------------------------------------------------------------------------------------
   // Off the typing path: a quiet moment after the last change, then one pass over the document.
@@ -90,7 +110,9 @@
       try { I.set('cite', C.check(ed.view.state.doc, sources, style, { t, shape: F.mode() !== 'paper' })); } catch (e) { console.error(e); }
     }, 600);
   };
-  F.on('change', recheck);
+  let importTimer = 0;
+  F.on('change', () => { recheck(); clearTimeout(importTimer); importTimer = setTimeout(() => importBibliography(), 400); });
+  addEventListener('pagehide', () => clearTimeout(importTimer));
 
   // ---- putting a citation in ------------------------------------------------------------------------------------------
   const insert = (src, page = '') => {
@@ -247,9 +269,11 @@
     f.addEventListener('submit', (e) => {
       e.preventDefault();
       const raw = { id: src.id, type: kind === 'edited' ? 'book' : kind };
+      if (src.origin === 'bibliography') Object.assign(raw, { origin: src.origin, original: src.original, reviewed: true });
       for (const [k] of FIELDS[kind]) { if (k === 'retrieval') { raw[k] = values[k] === true; continue; } const v = (values[k] || '').trim(); if (v) raw[k] = LIST.has(k) ? S.names(v) : DATES.has(k) ? S.date(v) || undefined : v; }
       // A title left as it was keeps its italics (the field shows it plain).
       for (const k of ['title', 'container-title']) if (src[k] && raw[k] === showField(src, k)) raw[k] = src[k];
+      if (src.unparsed && raw.title === src.title && kind === src.type && !raw.author?.length) raw.unparsed = true;
       // What the lookup found but the form doesn't show stays (title-short, archive, …).
       for (const k of ['title-short', 'archive', 'translator', 'genre', 'medium', 'dimensions', 'ISBN', 'DOI']) if (src[k] && raw[k] === undefined && !FIELDS[kind].some(([x]) => x === k)) raw[k] = src[k];
       const s = S.normalize(raw);
@@ -321,8 +345,8 @@
   };
   const sourceRow = (s, page) => {
     const pick = el('button', { type: 'button', class: 'gzc-src', 'data-id': s.id });
-    pick.append(paint(el('span', { class: 'gzc-clamp' }), C.format(s, style).entry));
-    pick.addEventListener('click', () => { insert(s, page.value.trim()); close(); });
+    pick.append(paint(el('span', { class: 'gzc-clamp' }), s.unparsed ? C.list([s], style).entries[0].html : C.format(s, style).entry));
+    pick.addEventListener('click', () => { if (s.unparsed) { drawForm(s, false); return; } insert(s, page.value.trim()); close(); });
     const edit = el('button', { type: 'button', class: 'gzc-edit', 'aria-label': t('Edit'), title: t('Edit') });
     edit.append(icon('M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4'));
     edit.addEventListener('click', () => drawForm(s, false));
@@ -392,21 +416,67 @@
   });
 
   // ---- the paper side panel's Sources view -----------------------------------------------------------------------------------
-  const sourcesView = (container) => {
+  const sourcesView = (container, options = {}) => {
     const root = el('div', { class: 'gzc-view' });
     const title = el('h4');
     const addBtn = el('button', { type: 'button', class: 'sbtn', text: t('Add source') });
     const adder = el('div', { class: 'gzc-adder', hidden: true });
     const cards = el('div', { class: 'gzc-cards' });
-    root.append(el('div', { class: 'gzc-head' }, title, addBtn), adder, cards);
-    const closeAdder = () => { adder.hidden = true; adder.replaceChildren(); addBtn.hidden = false; addBtn.focus(); };
-    const editIn = (host, src, after) => form(host, src, {
-      submit: t('Save'),
-      done: (s) => { keep(s); after(); },
-      cancel: after,
-      drop: sources.some((x) => x.id === src.id) ? (id) => removeSource(id, after) : null,
-    });
+    const toggle = el('input', { type: 'checkbox', 'aria-label': t('AI source extraction') });
+    const controls = el('div', { class: 'gp-ol-options', hidden: true }, el('label', {}, t('AI source extraction'), toggle));
+    const note = el('p', { class: 'gz-fb-note', role: 'status', hidden: true });
+    const retry = el('button', { type: 'button', class: 'sbtn ghost2', text: t('Try again'), hidden: true });
+    root.append(el('div', { class: 'gzc-head' }, title, addBtn), controls, note, retry, adder, cards);
+    let entries = [], fingerprint = '', attempted = new Set(), busy = false, control = null, turn = 0, alive = true, paused = false, documentAt = null, contextAt = key;
+    const stop = () => { turn++; control?.abort(); control = null; if (busy) note.hidden = true; busy = false; };
+    const state = () => {
+      const info = globalThis.GZ_WRITER_AI?.sourcesInfo?.() || {};
+      controls.hidden = !info.available; toggle.checked = info.enabled === true;
+      if (!info.enabled) { stop(); note.hidden = retry.hidden = true; }
+      return info;
+    };
+    const enrich = async () => {
+      const ai = globalThis.GZ_WRITER_AI, info = state();
+      if (!alive || paused || busy || !info.enabled || !root.isConnected || root.closest('[hidden]') || !adder.hidden || root.querySelector('.gzc-form') || document.visibilityState === 'hidden') return;
+      const todo = entries.filter((e) => !attempted.has(e.id)).slice(0, 30);
+      if (!todo.length) return;
+      busy = true; const mine = ++turn, where = key, doc = options.editor?.view?.state.doc || F.editor()?.view?.state.doc; control = new AbortController(); const signal = control.signal;
+      note.hidden = false; note.textContent = t('Reading sources…'); retry.hidden = true;
+      try {
+        for (const e of todo) {
+          if (signal.aborted || mine !== turn) return;
+          const original = sources.find((s) => s.id === e.id), snapshot = JSON.stringify(original);
+          if (!original || original.origin !== 'bibliography' || original.reviewed || B?.incompleteAuthors(e.text)) { attempted.add(e.id); continue; }
+          const out = await ai.extractSource(e.text, { signal });
+          if (signal.aborted || mine !== turn || where !== key || !alive || paused || doc !== (options.editor?.view?.state.doc || F.editor()?.view?.state.doc) || root.querySelector('.gzc-form')) return;
+          attempted.add(e.id);
+          if (out && JSON.stringify(sources.find((s) => s.id === e.id)) === snapshot) {
+            const refined = S.normalize({ ...original, ...out, ...(!out.author?.length && { author: original.author }), id: e.id, origin: 'bibliography', original: e.text, unparsed: false });
+            if (refined) setSources(S.replace(sources, refined));
+          }
+        }
+        note.hidden = true; retry.hidden = !entries.some((e) => !attempted.has(e.id)); retry.textContent = t('Continue');
+      } catch (e) {
+        if (signal.aborted || mine !== turn) return;
+        const reason = globalThis.GZ_AI_FAILURE?.explain(e) || 'AI source extraction failed. Imported sources remain available.';
+        note.hidden = false; note.textContent = t(reason); retry.hidden = false; retry.textContent = t('Try again');
+      } finally { if (mine === turn) { busy = false; control = null; } }
+    };
+    toggle.addEventListener('change', async () => { stop(); await globalThis.GZ_WRITER_AI?.setSourcesAI?.(toggle.checked); attempted.clear(); refresh(); });
+    retry.addEventListener('click', () => { if (retry.textContent !== t('Continue')) attempted.clear(); enrich(); });
+    const closeAdder = () => { adder.hidden = true; adder.replaceChildren(); addBtn.hidden = false; refresh(true); addBtn.focus(); };
+    const editIn = (host, src, after) => {
+      stop();
+      const where = key;
+      return form(host, src, {
+        submit: t('Save'),
+        done: (s) => { if (where === key) keep(s); after(); },
+        cancel: after,
+        drop: sources.some((x) => x.id === src.id) ? (id) => { if (where === key) removeSource(id, after); } : null,
+      });
+    };
     const openAdder = (prefill) => {
+      stop();
       adder.hidden = false;
       addBtn.hidden = true;
       const host = el('div');
@@ -419,27 +489,40 @@
       if (prefill) editIn(host, S.normalize({ type: 'book', ...prefill }) || { type: 'book' }, closeAdder); else find.input.focus();
     };
     addBtn.addEventListener('click', () => openAdder());
-    const refresh = () => {
+    const refresh = (force = false) => {
+      const doc = options.editor?.view?.state.doc || F.editor()?.view?.state.doc;
+      if (doc !== documentAt) { stop(); documentAt = doc; }
+      if (key !== contextAt) { force = true; contextAt = key; adder.hidden = true; adder.replaceChildren(); addBtn.hidden = false; }
+      const current = B?.entries(doc) || [];
+      const next = JSON.stringify([key, globalThis.GZ_WRITER_AI?.sourcesInfo?.().generation, current]);
+      if (next !== fingerprint) { stop(); fingerprint = next; entries = current; attempted.clear(); }
+      importBibliography(doc);
+      state();
       title.textContent = t(C.TITLES[style]);
+      options.badge?.(sources.length);
+      if (!force && root.querySelector('.gzc-form')) return;
       const ordered = C.list(sources, style).entries;
       cards.replaceChildren(...ordered.map((e) => {
         const s = sources.find((x) => x.id === e.id);
         const card = el('div', { class: 'gzc-card', 'data-id': e.id });
         const entry = paint(el('div', { class: 'gzc-entry' }), e.html);
-        const cite = el('button', { type: 'button', class: 'sbtn', text: t('Cite') });
+        const cite = el('button', { type: 'button', class: 'sbtn', text: t('Cite'), disabled: s.unparsed === true });
         cite.addEventListener('click', () => insert(s, ''));
-        const edit = el('button', { type: 'button', class: 'sbtn ghost2', text: t('Edit') });
-        edit.addEventListener('click', () => { const host = el('div'); card.replaceChildren(host); editIn(host, s, () => { refresh(); (root.querySelector(`[data-id="${s.id}"] .ghost2`) || addBtn).focus(); }); });
+        const edit = el('button', { type: 'button', class: 'sbtn ghost2', text: t(s.unparsed ? 'Review source' : 'Edit') });
+        edit.addEventListener('click', () => { const host = el('div'); card.replaceChildren(host); editIn(host, s, () => { refresh(true); (root.querySelector(`[data-id="${s.id}"] .ghost2`) || addBtn).focus(); }); });
         card.append(entry, el('div', { class: 'row' }, cite, edit));
         return card;
       }));
     };
-    const sub = () => refresh();
+    const sub = () => { refresh(); enrich(); };
     subs.add(sub);
     root.addEventListener('keydown', (e) => { if (e.key === 'Escape') { const cancel = e.target.closest('.gzc-form')?.querySelector('[data-do="cancel"]'); if (cancel) { e.preventDefault(); e.stopPropagation(); cancel.click(); } } });
     refresh();
     container.replaceChildren(root);
-    return { refresh, add: openAdder, destroy: () => { subs.delete(sub); root.remove(); } };
+    const unfollow = globalThis.GZ_WRITER_AI?.followOutline?.(() => { if (alive) { refresh(); enrich(); } });
+    const gone = () => stop(), visibility = () => { if (document.visibilityState === 'hidden') stop(); };
+    addEventListener('pagehide', gone); document.addEventListener('visibilitychange', visibility);
+    return { refresh: () => { paused = false; refresh(); enrich(); }, pause: () => { paused = true; stop(); }, add: openAdder, destroy: () => { alive = false; stop(); unfollow?.(); removeEventListener('pagehide', gone); document.removeEventListener('visibilitychange', visibility); subs.delete(sub); root.remove(); } };
   };
 
   Object.assign(C, {

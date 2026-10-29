@@ -10,6 +10,7 @@
 var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
   const A = () => (typeof GZ_AI_SETTINGS !== 'undefined' ? GZ_AI_SETTINGS : require('./ai/settings.js'));
   const E = () => (typeof GZ_AI_ENDPOINT !== 'undefined' ? GZ_AI_ENDPOINT : require('./ai/endpoint.js'));
+  const D = () => (typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('./ai/failure.js'));
   const TYPE = 'glaze:ai-config', CALLS = 'aiCalls';
   // On this device (DEVICE) is the worker's to resolve: Apple Intelligence or the browser's model (lib/ai/broker.js onDevice).
   const DEVICE = 'device', APPLE = 'apple';
@@ -29,7 +30,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
 
   const featureName = (id, t) => ({ syllabus: t('Syllabus import'), completion: t('Tab completion'), writing: t('Feedback') }[id] || id);
   // A connection's name: a provider's, an endpoint's own (names: the kept connections), the model on this device's.
-  const providerName = (id, t, names = {}) => (CARDS[id] ? CARDS[id][0] : id === DEVICE ? 'Gemini Nano' : id === APPLE ? t('Apple Intelligence')
+  const providerName = (id, t, names = {}) => (CARDS[id] ? CARDS[id][0] : id === DEVICE ? t('Chrome on-device AI') : id === APPLE ? t('Apple Intelligence')
     : typeof names[id]?.name === 'string' ? names[id].name : t('Endpoint'));
   const effortName = (e, t) => ({ none: t('Off'), minimal: t('Minimal'), low: t('Low'), medium: t('Medium'), high: t('High') }[e] || e);
   // A call's or a test's end, in a word or two: its state, else its failure category.
@@ -37,11 +38,11 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     'provider-unavailable': t('Unavailable'), 'request-rejected': t('Refused'), 'invalid-response': t('Unreadable answer'), 'connection-lost': t('Connection lost'),
     check: t('No usable answer'), refusal: t('No usable answer') }[code] || t('Not run'));
   // Why a Test didn't say ready (the broker's reason).
-  const reason = (r, t) => (r === 'permission' ? t('Glaze isn’t allowed to reach this address.') : CATEGORIES.includes(r) ? outcome(r, t) : t('Not ready'));
+  const reason = (r, t) => (D().explain({ reason: r }) ? t(D().explain({ reason: r })) : r === 'permission' ? t('Glaze isn’t allowed to reach this address.') : CATEGORIES.includes(r) ? outcome(r, t) : t('Not ready'));
   // The device provider's status: { state: 'ready' | 'download' | 'downloading' | 'unavailable', reason?, progress? (0 to 1) }.
   const deviceText = (st, t, pct) => (st.state === 'ready' ? t('Ready') : st.reason === 'activation' ? t('Click Download to continue') : st.state === 'download' ? t('Needs a download')
     : st.state === 'downloading' ? (typeof st.progress === 'number' ? pct(st.progress) : t('Downloading…'))
-      : st.reason === 'browser' ? t('Not available in this browser') : st.reason === 'device' ? t('Not available on this device')
+      : st.reason === 'browser' ? t('Not available in this browser') : st.reason === 'device' ? reason(st.reason, t)
         : t('Not available: {reason}', { reason: reason(st.reason, t) }));
   // The Apple provider's status (lib/ai/providers/apple.js): { state, reason? }.
   const appleText = (st, t) => (st.state === 'ready' ? t('Ready') : st.reason === 'off' ? t('Apple Intelligence is off')
@@ -54,12 +55,13 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
   };
   // The call record's rows, newest first, as far as they are what lib/ai/failure.js writes; nothing else of a row is kept.
   const rows = (calls) => (Array.isArray(calls) ? calls : []).filter((r) => isObj(r) && Number.isFinite(r.startedAt)).map((r) => ({
-    at: r.startedAt, feature: typeof r.feature === 'string' ? r.feature : '', provider: typeof r.provider === 'string' ? r.provider : '',
+    at: r.startedAt, ...(typeof r.task === 'string' && /^[a-z.-]{1,64}$/.test(r.task) && { task: r.task }), feature: typeof r.feature === 'string' ? r.feature : '', provider: typeof r.provider === 'string' ? r.provider : '',
     ...(typeof r.model === 'string' && r.model && { model: r.model.slice(0, 200) }),
     state: typeof r.state === 'string' ? r.state : '', ...(CATEGORIES.includes(r.category) && { category: r.category }),
     ...(Number.isInteger(r.status) && { status: r.status }), ...(typeof r.id === 'string' && { reference: r.id }),
     ...(isObj(r.usage) && { tokens: [r.usage.input, r.usage.output].filter(Number.isFinite).reduce((a, b) => a + b, 0) }),
     ...(Number.isSafeInteger(r.count) && r.count > 0 && { count: r.count }),
+    ...D().diagnostic(r),
   })).sort((a, b) => b.at - a.at);
   const failed = (r) => !!r.category && r.category !== 'cancelled';
   // A connection whose newest run had its key refused (401, 403): its card and its features show it.
@@ -527,6 +529,13 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         if (sel?.use && sel.use !== DEVICE && !catalogs[sel.use]) models(sel.use);
         line.append(name, wrapPick, levels.length ? slider(row, sel, levels) : el('span', 'ai-effort-none'));
         wrap.append(line);
+        if (row === 'writing') for (const [setting, text] of [['outline', 'AI outline'], ['sources', 'AI source extraction']]) {
+          const label = el('label', 'ai-outline'), box = el('input');
+          Object.assign(box, { type: 'checkbox', id: `ai-${setting}`, checked: s[setting] !== false });
+          box.setAttribute('data-local', '');
+          box.addEventListener('change', () => { const value = box.checked; write(() => ({ [setting]: value })); });
+          label.append(el('span', '', t(text)), box); wrap.append(label);
+        }
         if (s.mode === 'advanced' && row !== 'model') wrap.append(tuning(row));
         return wrap;
       }));
@@ -534,9 +543,9 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     const renderCalls = () => {
       const list = rows(calls);
       $('ai-calls').replaceChildren(...list.map((r) => {
-        const li = el('li'), what = el('span', '', [featureName(r.feature, t), providerName(r.provider === 'openai' && !r.model ? '' : r.provider, t, conns), r.model].filter(Boolean).join(' · '));
+        const li = el('li'), what = el('span', '', [r.task === 'writer.image' ? t('Image preparation') : r.task === 'writer.outline' ? t('AI outline') : r.task === 'writer.sources' ? t('AI source extraction') : featureName(r.feature, t), providerName(r.provider === 'openai' && !r.model ? '' : r.provider, t, conns), r.model].filter(Boolean).join(' · '));
         const more = el('small', failed(r) ? 'bad' : '', [when(r.at), r.count > 1 ? `×${r.count}` : '', r.tokens ? t('{n} tokens', { n: r.tokens }) : '',
-          `${outcome(r.category || r.state, t)}${r.status ? ` (HTTP ${r.status})` : ''}`].filter(Boolean).join(' · '));
+          `${outcome(r.category || r.state, t)}${r.status ? ` (HTTP ${r.status})` : ''}`, D().explain(r) && t(D().explain(r)) !== outcome(r.category || r.state, t) ? t(D().explain(r)) + (Number.isSafeInteger(r.actual) && Number.isSafeInteger(r.limit) ? ` (${r.reason === 'response-limit' ? t('{n} bytes', { n: `${r.actual}/${r.limit}` }) : `${r.actual}/${r.limit}`})` : '') : ''].filter(Boolean).join(' · '));
         li.append(what, more);
         return li;
       }));

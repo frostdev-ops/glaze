@@ -2073,10 +2073,10 @@ const loadInto = (m, sender, files, reply) => {
 // tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
 // Settings' top frame reads and writes them ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
 // worker's importScripts calls name (scripts/package-firefox.sh). A task (lib/ai/tasks/<id>.js) goes in this list too.
-const aiFiles = () => importScripts('ai/schema.js', 'ai/request.js', 'ai/stream.js', 'ai/failure.js', 'ai/endpoint.js', 'ai/text.js', 'ai/models.js', 'ai/providers.js', 'ai/providers/openai.js', 'ai/providers/device.js', 'ai/providers/apple.js', 'ai/tools.js', 'ai/loop.js', 'ai/task.js', 'ai/tasks/syllabus-read.js', 'ai/tasks/writer-context.js', 'ai/tasks/writer-complete.js', 'ai/tasks/writer-review.js', 'ai/tasks/writer-feedback.js', 'ai/tasks/writer-requirements.js', 'ai/tasks/writer-cite.js', 'ai/tasks/writer-decide.js', 'ai/settings.js', 'ai/broker.js');
+const aiFiles = () => importScripts('writer-sources.js', 'writer-cite.js', 'ai/schema.js', 'ai/request.js', 'ai/stream.js', 'ai/failure.js', 'ai/endpoint.js', 'ai/text.js', 'ai/visual-cache.js', 'ai/models.js', 'ai/providers.js', 'ai/providers/openai.js', 'ai/providers/device.js', 'ai/providers/apple.js', 'ai/tools.js', 'ai/loop.js', 'ai/task.js', 'ai/tasks/syllabus-read.js', 'ai/tasks/writer-context.js', 'ai/tasks/writer-complete.js', 'ai/tasks/writer-review.js', 'ai/tasks/writer-image.js', 'ai/tasks/writer-feedback.js', 'ai/tasks/writer-outline.js', 'ai/tasks/writer-requirements.js', 'ai/tasks/writer-cite.js', 'ai/tasks/writer-decide.js', 'ai/settings.js', 'ai/broker.js');
 globalThis.addEventListener?.('install', aiFiles);
 const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ_AI_BROKER; };
-let aiVault = null, aiRevision = 0;
+let aiVault = null, aiLocal = null, aiRevision = 0;
 chrome.storage.onChanged.addListener((changes, area) => {
   if ((area === 'local' && changes.ai) || (area === 'sync' && changes.enabled)) aiRevision++;
 });
@@ -2085,7 +2085,7 @@ const aiEnv = () => ({
   settings: async () => (await chrome.storage.local.get(GZ_AI_SETTINGS.KEY))[GZ_AI_SETTINGS.KEY],
   enabled: async () => (await chrome.storage.sync.get('enabled')).enabled !== false,
   revision: () => aiRevision,
-  vault: (aiVault ||= GZ_AI_BROKER.vault()), local: brokerArea('local'), reach: reachable, fetch: (u, i) => fetch(u, i), task: (id) => GZ_AI_TASKS.get(id),
+  vault: (aiVault ||= GZ_AI_BROKER.vault()), local: (aiLocal ||= brokerArea('local')), reach: reachable, fetch: (u, i) => fetch(u, i), task: (id) => GZ_AI_TASKS.get(id),
   say: (m) => chrome.runtime.sendMessage?.(m)?.catch?.(() => {}), // the device model's download progress, to Settings
 });
 // Ultra's assignment and test attempts share one route (features/sidebar.js reads it too). What the attempt is, Glaze's
@@ -2250,9 +2250,36 @@ const aiSender = async (s, what = {}) => {
   }
   return safe({ ...s, url: page.href, origin: page.origin, tab }, tab.url);
 };
+// Read cache authority from the claimed host's isolated Glaze world. Neither the Writer payload nor a page-selected
+// cache key may name another account. A navigation during the account read invalidates this snapshot.
+const aiVisualScope = async (s) => {
+  if (await aiWriter(s, { op: 'run', feature: 'writing' }) !== true) return null;
+  const host = aiHosts.get(`${s.tab.id}|${s.frameId}`);
+  if (!host) return null;
+  const target = host.documentId ? { tabId: s.tab.id, documentIds: [host.documentId] } : { tabId: s.tab.id, frameIds: [host.frameId] };
+  const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target, func: async () => {
+    const href = location.href;
+    const control = new AbortController(), timer = setTimeout(() => control.abort(), 5000);
+    try {
+      // The content document's ordinary account helper is memoized. A cookie/account switch in another tab must not
+      // reuse that identity for persistent readings, so obtain fresh authenticated authority for this operation.
+      const response = await fetch(`${location.origin}/learn/api/v1/users/me`, { credentials: 'same-origin', cache: 'no-store', redirect: 'error', headers: { accept: 'application/json' }, signal: control.signal });
+      const user = response.ok ? (await response.json())?.id : '';
+      const url = new URL(location.href), at = /^\/ultra\/courses\/(_\d+_\d+)\/assessment\/(_\d+_\d+)\/attempt\//.exec(url.pathname);
+      if (href !== location.href || !at || typeof user !== 'string' || !/^_\d+_\d+$/.test(user)) return null;
+      const ancestors = [];
+      for (let frame = window; frame !== frame.top;) { frame = frame.parent; ancestors.push(frame.location.href); }
+      return { href, origin: url.origin, ancestors, school: url.host.toLowerCase(), account: user, assignment: `${at[1]}/${at[2]}` };
+    } catch { return null; } finally { clearTimeout(timer); }
+  } })]);
+  const live = frames?.[0], page = live?.result, current = aiHosts.get(`${s.tab.id}|${s.frameId}`);
+  if (!page || !host.documentId || live?.documentId !== host.documentId || current !== host || !await aiLmsFrame(tab, live, host.frameId)
+    || await aiAttempt(s.tab.id, host.documentId, page.href) !== 'assignment') return null;
+  return { school: page.school, account: page.account, assignment: page.assignment };
+};
 chrome.runtime.onConnect.addListener((p) => {
   if (p.name !== 'glaze:ai') return;
-  ai().connect(p, { ...aiEnv(), who: String(p.sender?.tab?.id ?? 'none'), allowed: (what) => aiSender(p.sender || {}, what) });
+  ai().connect(p, { ...aiEnv(), who: String(p.sender?.tab?.id ?? 'none'), allowed: (what) => aiSender(p.sender || {}, what), visualScope: () => aiVisualScope(p.sender || {}) });
 });
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:ai-config') return;

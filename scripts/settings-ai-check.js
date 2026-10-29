@@ -215,10 +215,10 @@ async function pass(scheme) {
     });
 
     await check('device', async () => {
-      await page.locator('#ai-providers .ai-prov', { hasText: 'Gemini Nano' }).click();
+      await page.locator('#ai-providers .ai-prov', { hasText: 'Chrome on-device AI' }).click();
       await page.locator('#ai-drawer .note').filter({ hasText: /\S/ }).waitFor();
       await shoot('device');
-      await page.locator('#ai-providers .ai-prov', { hasText: 'Gemini Nano' }).click();
+      await page.locator('#ai-providers .ai-prov', { hasText: 'Chrome on-device AI' }).click();
     });
 
     await check('search', async () => {

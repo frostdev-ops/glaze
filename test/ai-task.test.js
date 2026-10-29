@@ -19,6 +19,18 @@ const dates = {
 const SYLLABUS = 'BIO 101\nMidterm exam — Oct 12, 2026 (25%).\nFinal project due December 5, 2026.';
 const answer = (items) => ({ json: { items } });
 
+test('a trusted bounded subrequest caps an advanced output override in both fit and inference', async () => {
+  const task = T.define({ ...dates, id: 'example.bounded', orchestrate: async (inp, { text, ask, fits }) => {
+    const request = dates.build(inp, { text });
+    assert.equal(fits(request), false, 'the ordinary 4096-token override cannot fit this small model');
+    assert.equal(fits(request, { maxTokensCap: 512 }), true);
+    return ask(request, { maxTokensCap: 512 });
+  } });
+  const cfg = { caps: { context: 1800 }, replies: [answer([])], seen: [] };
+  await T.run(task, { text: 'A short supplied task.' }, { provider: 'mock', cfg, over: { maxTokens: 4096 } });
+  assert.equal(cfg.seen[0].maxTokens, 512);
+});
+
 test('a task runs: input cleaned, request fenced with instructions only in system, answer checked and grounded', async () => {
   const task = T.define(dates);
   const cfg = { replies: [answer([{ title: 'Midterm', date: '2026-10-12', quote: 'Midterm exam - Oct 12, 2026' }, { title: 'Quiz 9', date: '2026-11-01', quote: 'Quiz 9 on Nov 1' }])], seen: [] };
@@ -111,7 +123,7 @@ test('a task that streams lets the deltas through; one that doesn\'t, doesn\'t',
 });
 
 test('the settings model is off by default, local, and lets a feature ask only when AI is on, a model chosen and it is allowed', () => {
-  assert.deepEqual(A.clean(undefined), { on: false, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
+  assert.deepEqual(A.clean(undefined), { on: false, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
   assert.deepEqual(A.clean({ on: 'yes', use: 'Bad Name', features: { syllabus: 1, other: true } }).model, { use: null, model: '' });
   const s = A.clean({ on: true, model: { use: 'my-ollama', model: 'llama3.2' }, features: { syllabus: true } });
   assert.equal(s.model.use, 'my-ollama');
@@ -197,4 +209,33 @@ test('a definition\'s rate and text output are checked', () => {
   assert.throws(() => T.define({ ...finish, output: 'words' }), /: output$/);
   assert.equal(T.define({ ...finish, rate: { supersede: true } }).rate.perMinute, undefined);
   assert.equal(T.define(dates).rate, undefined, 'a task without one keeps the broker\'s limits');
+});
+
+test('orchestrated requests share accounting and cannot exceed the registered call cap', async () => {
+  const built = () => X.request({ system: 'Read the dates.', data: [{ label: 'source', text: SYLLABUS }], maxTokens: 100 });
+  const task = T.define({ ...dates, limits: { calls: 2 }, orchestrate: async (input, { ask }) => {
+    await ask(built()); await ask(built()); return ask(built());
+  } });
+  const cfg = { replies: () => answer([]), seen: [] };
+  await assert.rejects(T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg }), { code: 'limit' });
+  assert.equal(cfg.seen.length, 2);
+  assert.throws(() => T.define({ ...dates, limits: { calls: 65 } }), /limits/);
+});
+
+test('orchestration cannot overlap provider calls or retain call authority after the run ends', async () => {
+  const built = X.request({ system: 'Read the dates.', data: [{ label: 'source', text: SYLLABUS }], maxTokens: 100 });
+  let later;
+  const task = T.define({ ...dates, orchestrate: async (input, { ask, fits }) => {
+    later = ask;
+    assert.equal(fits(built), true);
+    const first = ask(built);
+    await assert.rejects(ask(built), { code: 'limit' });
+    return first;
+  } });
+  const cfg = { replies: () => answer([]), seen: [] };
+  const out = await T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg });
+  assert.equal(out.meta.parts, 1);
+  assert.ok(out.meta.usage.input > 0);
+  await assert.rejects(later(built), { code: 'limit' });
+  assert.equal(cfg.seen.length, 1);
 });

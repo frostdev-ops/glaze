@@ -57,6 +57,18 @@ test('status: the native answer in the harness\'s words; no handler or a strange
   }
 });
 
+test('native context and guardrail reasons survive the full provider sanitizer, but arbitrary diagnostics do not', async () => {
+  native = async () => ({ ok: false, error: 'request-rejected', reason: 'context', context: 8192, tokens: 9100, message: 'PRIVATE PAPER' });
+  await assert.rejects(P.run(A, { messages: [{ role: 'user', content: 'Synthetic test.' }] }, { model: 'on-device' }), (e) => {
+    assert.deepEqual({ reason: e.reason, context: e.context, tokens: e.tokens }, { reason: 'context', context: 8192, tokens: 9100 });
+    assert.doesNotMatch(JSON.stringify(e), /PRIVATE PAPER/); return e.code === 'request-rejected';
+  });
+  native = async () => ({ ok: false, error: 'refusal', reason: 'guardrail' });
+  await assert.rejects(P.run(A, { messages: [{ role: 'user', content: 'Synthetic test.' }] }, { model: 'on-device' }), (e) => e.code === 'refusal' && e.reason === 'guardrail');
+  native = async () => ({ ok: false, error: 'provider-unavailable', reason: 'PRIVATE PAPER' });
+  await assert.rejects(P.run(A, { messages: [{ role: 'user', content: 'Synthetic test.' }] }, { model: 'on-device' }), (e) => e.reason === undefined && !JSON.stringify(e).includes('PRIVATE PAPER'));
+});
+
 test('a run is one message with the cleaned request and the schema; the JSON answer is read and checked', async () => {
   native = async () => ok('{"answer":"42"}');
   const deltas = [];
@@ -67,8 +79,25 @@ test('a run is one message with the cleaned request and the schema; the JSON ans
   const { app, m } = sent[0];
   assert.equal(app, 'io.frostdev.Glaze');
   assert.match(m.id, /^[\w-]{8,64}$/);
-  assert.deepEqual({ ...m, id: 'x' }, { type: 'ai.run', id: 'x', model: 'on-device', schema: SCHEMA, temperature: 0, maxTokens: 300,
+  assert.deepEqual({ ...m, id: 'x' }, { type: 'ai.run', id: 'x', model: 'on-device', schema: { ...SCHEMA, 'x-order': ['answer'] }, temperature: 0, maxTokens: 300,
     messages: [{ role: 'system', content: [{ type: 'text', text: 'Answer.' }] }, { role: 'user', content: [{ type: 'text', text: 'Q' }] }] });
+});
+
+test('the native schema keeps each object\'s key order (x-order), past the request cleaner; the schema that checks the answer is untouched', async () => {
+  const item = { type: 'object', properties: { text: { type: 'string' }, at: { type: 'integer' } }, required: ['text', 'at'], additionalProperties: false };
+  const schema = { type: 'object', properties: { status: { enum: ['met', 'missing'] }, quotes: { type: 'array', items: item },
+    level: { anyOf: [{ type: 'object', properties: { name: { type: 'string' }, points: { type: 'number' } }, required: ['name', 'points'], additionalProperties: false }, { type: 'null' }] },
+    properties: { type: 'string' }, complete: { type: 'boolean' } }, required: ['status', 'quotes', 'level', 'properties', 'complete'], additionalProperties: false };
+  const before = structuredClone(schema);
+  native = async () => ok('{"status":"met","quotes":[{"text":"a","at":0}],"level":null,"properties":"p","complete":true}');
+  assert.deepEqual((await P.run('apple', ask({ schema }), { model: 'on-device' })).json, { status: 'met', quotes: [{ text: 'a', at: 0 }], level: null, properties: 'p', complete: true });
+  const s = sent[0].m.schema;
+  assert.deepEqual(s['x-order'], ['status', 'quotes', 'level', 'properties', 'complete']);
+  assert.deepEqual(s.properties.quotes.items['x-order'], ['text', 'at']);
+  assert.deepEqual(s.properties.level.anyOf[0]['x-order'], ['name', 'points']);
+  assert.deepEqual(Object.keys(s.properties), ['status', 'quotes', 'level', 'properties', 'complete'], 'a property named properties stays a property');
+  assert.equal(s.properties.properties['x-order'], undefined);
+  assert.deepEqual(schema, before);
 });
 
 test('a reasoning effort stays in the worker: the native message has none', async () => {

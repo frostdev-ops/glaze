@@ -47,8 +47,10 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // The pause Advanced's tuning set for the gray text (Settings → AI, lib/ai/settings.js TUNE), else the adaptive one.
   const wait = (s, score) => { const p = s?.mode === 'advanced' ? s.tune?.completion?.pause : undefined; return Number.isSafeInteger(p) && p >= 100 && p <= 2000 ? p : pause(score); };
   // The connection's name on the chip.
-  const providerName = (st, t) => (st?.provider === 'device' ? 'Gemini Nano' : st?.provider === 'apple' ? t('Apple Intelligence') : st?.to || t('Endpoint'));
+  const providerName = (st, t) => (st?.provider === 'device' ? t('Chrome on-device AI') : st?.provider === 'apple' ? t('Apple Intelligence') : st?.to || t('Endpoint'));
   const api = { fits, sentence, nextWord, consume, pause, wait, learn, providerName };
+  const D = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : typeof require === 'function' ? require('./lib/ai/failure.js') : null;
+  const reasonText = (e) => D?.explain(e) || '';
 
   const F = globalThis.GZ_WRITER_FRAME;
   if (!F || typeof document === 'undefined') return api;
@@ -58,6 +60,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
 
   // ---- the port ------------------------------------------------------------------------------------------------------
   let port = null, asked = 0, generation = 0;
+  const safariPort = (() => { try { return /^safari-web-extension:/i.test(chrome.runtime.getURL('')); } catch { return false; } })();
   const waits = new Map(); // message id → its answer's handler
   const hangUp = () => {
     const p = port;
@@ -67,15 +70,22 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     try { p?.disconnect(); } catch { /* gone */ }
   };
   // → the answer that ends message m: a status, an end or an error; .id is its id. ms: an error 'timeout' after that long.
-  const ask = (m, ms) => {
+  const ask = (m, ms, progress) => {
+    // Safari can retire an idle worker without disconnecting its old port. Start a fresh batch when nobody is waiting;
+    // never replace a connection with pending requests or replay an inference that may already have executed.
+    if (safariPort && port && !waits.size) hangUp();
     const id = ++asked;
     return Object.assign(new Promise((resolve) => {
-      const late = ms && setTimeout(() => waits.get(id)?.({ type: 'error', error: 'timeout' }), ms);
-      waits.set(id, (a) => { if (['status', 'end', 'error', 'warmed'].includes(a?.type)) { clearTimeout(late); waits.delete(id); resolve(a); } });
+      const late = ms && setTimeout(() => {
+        const finish = waits.get(id); if (!finish) return;
+        finish({ type: 'error', error: 'timeout' });
+        try { port?.postMessage({ id, op: 'cancel' }); } catch { /* disconnected */ }
+      }, ms);
+      waits.set(id, (a) => { if (['status', 'end', 'error', 'warmed'].includes(a?.type)) { clearTimeout(late); waits.delete(id); resolve(a); } else progress?.(a); });
       try {
         if (!port) {
           const p = port = chrome.runtime.connect({ name: 'glaze:ai' });
-          p.onMessage.addListener((a) => waits.get(a?.id)?.(a));
+          p.onMessage.addListener((a) => { if (port === p) waits.get(a?.id)?.(a); });
           p.onDisconnect.addListener(() => { if (port === p) hangUp(); });
         }
         port.postMessage({ id, ...m });
@@ -85,13 +95,20 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const cancel = (id) => { const w = waits.get(id); if (!w) return; w({ type: 'error', error: 'cancelled' }); try { port?.postMessage({ id, op: 'cancel' }); } catch { /* gone */ } };
   const run = (feature, task, input) => {
     if (!ok(feature)) return Object.assign(Promise.resolve({ type: 'error', error: 'off' }), { id: 0 });
-    const gen = generation, r = ask({ op: 'run', feature, task, input });
+    const gen = generation, r = ask({ op: 'run', feature, task, input }, task === 'writer.feedback' ? 310000 : task === 'writer.image' ? 130000 : undefined, task === 'writer.feedback' ? (a) => {
+      if (a?.type === 'note' && gen === generation && fb.state === 'running' && ['evidence', 'criterion', 'summary'].includes(a.stage)) {
+        fb.progress = { stage: a.stage, part: Number.isSafeInteger(a.part) ? a.part : 0, parts: Number.isSafeInteger(a.parts) ? a.parts : 0 }; paint();
+      }
+    } : undefined);
     return Object.assign(r.then((a) => gen === generation && ok(feature) ? a : { type: 'error', error: 'changed' }), { id: r.id });
   };
 
   // ---- what may run --------------------------------------------------------------------------------------------------
   // status per feature: the broker's answer, or null when Settings → AI says no (then nothing is asked).
   const status = { completion: null, writing: null };
+  let outlineIdentity = '';
+  const outlineListeners = new Set();
+  const outlineChanged = () => { for (const fn of outlineListeners) try { fn(); } catch (e) { console.error(e); } };
   const ok = (f) => !quiet() && status[f]?.allowed === true && status[f]?.ready === true;
   const quiet = () => F.kind() === 'test' || F.context()?.kind === 'test' || !F.editor();
   // What Settings → AI said at the last check (null until it answers), whether a check is under way, since when the worker
@@ -118,12 +135,15 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const invalidate = () => {
     generation++;
     status.completion = status.writing = null;
+    outlineIdentity = '';
+    stopImagePrefetch();
+    outlineChanged();
     stopFlight();
     warmedAt = 0;
     hangUp();
     if (view()) clear(view());
-    fb.done?.();
-    Object.assign(fb, { state: 'idle', criteria: [], place: null, done: null });
+    fb.done?.(); feedbackTurn++; feedbackRead?.(); feedbackRead = null;
+    Object.assign(fb, { state: 'idle', criteria: [], place: null, done: null, grade: null, stale: false, error: '' });
     reviewing = false;
     render();
   };
@@ -131,12 +151,13 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // (the worker's word may still be on its way) asks again in this generation, after each of AGAIN's pauses: with none,
   // the gray text stayed off while Feedback, asked a moment later, ran (Safari, 2026-10-27).
   const ASK = { status: 30000 }, AGAIN = [500, 1000, 2000, 4000, 8000];
-  const settled = (st) => st?.type === 'status' && !(st.allowed === false && st.why === 'attempt');
+  const settled = (st) => st?.type === 'status' && !(st.allowed === false && st.why === 'attempt')
+    && !(['device', 'apple'].includes(st.provider) && !st.ready && ['unavailable', 'downloading'].includes(st.why));
   const again = (f, gen, n = 0) => setTimeout(async () => {
     if (gen !== generation || quiet()) return;
     const st = await ask({ op: 'status', feature: f }, ASK.status);
     if (gen !== generation || quiet()) return;
-    if (st?.type === 'status') { status[f] = st; warmUp(); render(); }
+    if (st?.type === 'status') { status[f] = st; warmUp(); render(); scheduleImagePrefetch(); }
     if (!settled(st) && n + 1 < AGAIN.length) again(f, gen, n + 1);
   }, AGAIN[n]);
   const refresh = async () => {
@@ -155,9 +176,20 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       status[f] = st?.type === 'status' ? st : null;
       if (want(f) && !settled(st)) again(f, gen);
     }
+    // Outline and Sources have their own consent. Resolve their safe cache identity without enabling Feedback's
+    // status or any other writing task when its feature switch is off.
+    const selection = s?.models?.writing?.use ? s.models.writing : s?.model;
+    const configured = !!selection?.use && (!!selection.model || ['device', 'apple'].includes(selection.use)) || !!s?.use;
+    const independent = s?.on === true && configured && (s.outline !== false ? 'writer.outline' : s.sources !== false ? 'writer.sources' : '');
+    if (!want('writing') && independent) {
+      const st = await ask({ op: 'status', feature: 'writing', task: independent }, ASK.status);
+      if (gen !== generation || quiet()) return;
+      outlineIdentity = typeof st?.identity === 'string' ? st.identity : '';
+    }
     warmUp();
     said = s && typeof s === 'object' ? s : {};
     checking = false;
+    outlineChanged();
     clearTimeout(attemptTimer);
     if (status.writing?.why === 'attempt') {
       attemptSince ||= Date.now();
@@ -165,8 +197,17 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     } else attemptSince = 0;
     if (status.writing?.why !== 'downloading') loaded = null;
     render();
+    scheduleImagePrefetch();
   };
   try { chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.ai) refresh(); }); } catch { /* no storage */ }
+  const recover = () => { if (!checking && !quiet() && Date.now() - checked > 5000 && ['device', 'apple'].includes(status.writing?.provider) && !status.writing.ready) refresh(); };
+  addEventListener('focus', recover);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { stopImagePrefetch(); if (fb.state === 'running') stopFeedback(); }
+    else { recover(); scheduleImagePrefetch(); }
+  });
+  addEventListener('pagehide', () => { imagesDestroyed = true; stopImagePrefetch(); if (fb.state === 'running') stopFeedback(); });
+  addEventListener('pageshow', () => { imagesDestroyed = false; recover(); scheduleImagePrefetch(); });
 
   // ---- the editor --------------------------------------------------------------------------------------------------
   const { Plugin, PluginKey, TextSelection } = GZ_PM.state;
@@ -250,6 +291,10 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
         return g ? DecorationSet.create(state.doc, [Decoration.widget(g.pos, ghostDom(g), { side: 1, ignoreSelection: true, key: `gz-ghost${g.id}:${g.fresh ? 1 : 0}:${g.text}` })]) : null;
       },
       handleKeyDown(v, e) {
+        // Cancel before the browser handles the key, without waiting for ProseMirror's document/selection transaction:
+        // a reply in that gap must not insert a widget at the native input's caret.
+        // Modifier keys alone do not start an edit and must not interrupt a completion's pause.
+        if (!['Shift', 'Alt', 'Control', 'Meta', 'CapsLock', 'Fn', 'AltGraph'].includes(e.key)) stopFlight();
         if ((mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
           if (!ok('writing')) return false;
           review();
@@ -267,9 +312,11 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
         return false;
       },
       handleDOMEvents: {
+        // Dictation, replacement text, paste and touch keyboards need not send keydown. Leave their native input alone.
+        beforeinput: () => { stopFlight(); return false; },
         compositionstart: (v) => { stopFlight(); clear(v); return false; },
         blur: (v) => { stopFlight(); clear(v); clearInterval(keeping); keeping = 0; return false; },
-        focus: () => { warmUp(); clearInterval(keeping); keeping = setInterval(() => warmUp(true), 90000); return false; },
+        focus: () => { recover(); warmUp(); clearInterval(keeping); keeping = setInterval(() => warmUp(true), 90000); return false; },
       },
     },
     // A change to the text starts the pause again; any change at all ends the run in flight.
@@ -277,9 +324,10 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       update(v, prev) {
         if (v.state.doc === prev.doc && v.state.selection.eq(prev.selection)) return;
         stopFlight();
+        if (v.state.doc !== prev.doc && fb.grade && !fb.stale) { fb.stale = true; paint(); }
         if (v.state.doc !== prev.doc && !KEY.getState(v.state) && ok('completion')) timer = setTimeout(complete, wait(said, score));
       },
-      destroy: () => { stopFlight(); clearInterval(keeping); keeping = 0; },
+      destroy: () => { stopFlight(); clearInterval(keeping); keeping = 0; imagesDestroyed = true; stopImagePrefetch(); if (fb.state === 'running') stopFeedback(); },
     }),
   });
 
@@ -359,42 +407,128 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
 
   // ---- Feedback ----------------------------------------------------------------------------------------------------
   // One result for the frame, shown by every mounted view.
-  const fb = { state: 'idle', criteria: [], place: null, done: null };
+  const fb = { state: 'idle', criteria: [], place: null, done: null, grade: null, stale: false, error: '' };
   const views = new Set();
-  const assignment = () => { const a = F.context()?.assignment; return !!a && !!(a.instructions || a.description || a.rubric); };
+  const assignment = () => { const a = F.context()?.assignment; return !!a && !!(a.instructions || a.description || a.rubric || a.files?.length); };
   // The paper's layout, as writer.feedback tells the model the .docx is laid out.
   const layout = () => {
-    const f = globalThis.GZ_WRITER_PAPER?.current()?.format();
-    return f ? { format: f.label, font: f.font, size: f.size, line: f.line, margin: f.margins.every((m) => m === f.margins[0]) ? f.margins[0] : null, header: f.header.text } : null;
+    const paper = globalThis.GZ_WRITER_PAPER?.current(), f = paper?.look?.() || paper?.format();
+    if (!f) return null;
+    let mixed = false;
+    view()?.state.doc.descendants?.((n) => {
+      if (n.attrs?.line != null || n.attrs?.lineExact != null || n.attrs?.lineAtLeast != null) mixed = true;
+      if (n.marks?.some((m) => m.type.name === 'text_style' && ((m.attrs.font && m.attrs.font !== f.font) || (m.attrs.size && m.attrs.size !== f.size)))) mixed = true;
+    });
+    const customHeader = f.setup && !(f.setup.own && f.setup.headers?.default == null);
+    const parts = customHeader ? [...(f.setup.headers?.default || []), ...(f.setup.headers?.first || [])] : [];
+    const header = customHeader ? (parts.some((p) => p.runs?.some((r) => r.text?.trim() || r.field)) ? 'custom' : 'none') : f.header.text;
+    return { format: f.label, font: f.font, size: f.size, line: f.line, margin: f.margins.every((m) => m === f.margins[0]) ? f.margins[0] : null, header, ...(mixed && { mixed: true }) };
   };
-  // The assignment's attached files, read by the page when Feedback first asks (lib/writer-context-assignment.js
+  const layoutChanged = () => { if (fb.grade && !fb.stale && fb.layoutKey !== JSON.stringify(layout())) { fb.stale = true; paint(); } };
+  // The assignment's attached files, read by the page for image preparation or Feedback (lib/writer-context-assignment.js
   // attachments): [{ name, text } | { name, image }], none after two minutes. Pictures aren't read for a model known not to
   // take them.
   let asks = 0;
   const files = new Map(); // ask id → its answer's handler
-  F.handle?.('attachments', (m) => files.get(m.id)?.(Array.isArray(m.files) ? m.files : []));
-  const attachments = () => new Promise((resolve) => {
+  F.handle?.('attachments', (m) => { const list = Array.isArray(m.files) ? [...m.files] : []; if (m.incomplete === true) list.incomplete = true; files.get(m.id)?.(list); });
+  const attachments = () => { let stop; const request = new Promise((resolve) => {
     const id = ++asks, end = (v) => { clearTimeout(timer); files.delete(id); resolve(v); }, timer = setTimeout(() => end([]), 120000);
-    files.set(id, end);
+    files.set(id, end); stop = () => end([]);
     try { F.say({ type: 'attachments', id, images: status.writing?.caps?.images !== false }); } catch { end([]); }
-  });
+  }); return Object.assign(request, { stop: () => stop() }); };
+  const attachmentContext = (ctx, named, read) => {
+    const provided = read.length ? read : (Array.isArray(named) ? named : []);
+    const incomplete = ctx?.assignment?.incomplete === true || read.incomplete === true || provided.some((p) => p.incomplete === true);
+    return { context: { ...ctx, assignment: { ...ctx.assignment, files: provided, ...(incomplete && { incomplete: true }) } },
+      unreadFiles: (Array.isArray(named) ? named : []).filter((f) => !provided.some((p) => (p.id && f.id ? p.id === f.id : p.name === f.name) && !p.incomplete && (p.text?.trim() || p.image?.data))).map((f) => f.name || 'File') };
+  };
+  // The worker owns validated visual readings and their persistent cache. This frame only schedules one preparation per
+  // assignment/model/layout snapshot and joins it before Feedback, so opening Feedback cannot read the same pixels twice.
+  // No draft text, editor transaction, or page-supplied description participates in this background preparation.
+  let imageTimer = 0, imagePrefetch = null, imagesDestroyed = false;
+  const imageTried = new Set();
+  const namedImages = (ctx) => (Array.isArray(ctx?.assignment?.files) ? ctx.assignment.files : []).filter((f) => f?.image === true && typeof f.name === 'string' && f.name.trim());
+  const imageReady = () => !imagesDestroyed && !document.hidden && !checking && said?.on === true && said.features?.writing === true
+    && F.mode() === 'paper' && F.context()?.kind === 'assignment' && ok('writing') && status.writing?.caps?.images === true && namedImages(F.context()).length > 0;
+  const imageKey = () => {
+    try { return JSON.stringify({ context: F.context(), paper: layout(), model: said?.models?.writing?.use ? said.models.writing : said?.model || said?.use,
+      provider: status.writing?.provider, selected: status.writing?.model, to: status.writing?.to }); } catch { return ''; }
+  };
+  const stopImagePrefetch = () => {
+    clearTimeout(imageTimer); imageTimer = 0;
+    const old = imagePrefetch; imagePrefetch = null;
+    if (!old) return;
+    old.stopped = true; old.read?.stop(); cancel(old.job);
+  };
+  const prefetchImages = () => {
+    clearTimeout(imageTimer); imageTimer = 0;
+    if (!imageReady()) return null;
+    const key = imageKey();
+    if (!key) return null;
+    if (imagePrefetch?.key === key && !imagePrefetch.stopped) return imagePrefetch;
+    stopImagePrefetch();
+    if (imageTried.has(key)) return null;
+    const ctx = F.context(), named = namedImages(ctx), paper = layout();
+    const work = imagePrefetch = { key, gen: generation, read: null, job: 0, stopped: false, promise: null };
+    const current = () => imagePrefetch === work && !work.stopped && work.gen === generation && imageReady() && imageKey() === key;
+    work.promise = (async () => {
+      const reading = work.read = attachments(), read = await reading;
+      work.read = null;
+      if (!current()) return [];
+      const { context } = attachmentContext(ctx, ctx.assignment.files, read), seen = new Set();
+      for (const file of read) {
+        if (!current()) return [];
+        const attachment = file && named.find((f) => (f.id && file.id ? f.id === file.id : f.name === file.name));
+        if (!attachment || seen.has(attachment) || !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.image?.mime) || typeof file.image?.data !== 'string' || !file.image.data) continue;
+        seen.add(attachment);
+        const job = run('writing', 'writer.image', { name: file.name, image: { mime: file.image.mime, data: file.image.data }, context, paper });
+        work.job = job.id;
+        await job;
+        work.job = 0;
+      }
+      if (!current()) return [];
+      imageTried.add(key);
+      return read;
+    })();
+    return work;
+  };
+  const scheduleImagePrefetch = () => {
+    clearTimeout(imageTimer); imageTimer = 0;
+    if (!imageReady()) { stopImagePrefetch(); return; }
+    const key = imageKey();
+    if (imagePrefetch && imagePrefetch.key !== key) stopImagePrefetch();
+    if (!key || imagePrefetch?.key === key || imageTried.has(key)) return;
+    imageTimer = setTimeout(prefetchImages, 400);
+  };
+  let feedbackTurn = 0, feedbackRead = null;
+  const stopFeedback = () => {
+    feedbackTurn++; feedbackRead?.(); feedbackRead = null; cancel(fb.job); fb.done?.();
+    Object.assign(fb, { state: 'idle', job: 0, done: null, progress: null }); paint();
+  };
   const feedback = async () => {
     const v = view();
     if (!v || !ok('writing') || fb.state === 'running' || !assignment()) return;
     const doc = v.state.doc, text = S.text(doc).text;
     if (!text.trim()) return;
     fb.done?.();
-    const tr = track(), gen = generation;
-    Object.assign(fb, { state: 'running', criteria: [], place: null, done: tr.done });
+    const tr = track(), gen = generation, turn = ++feedbackTurn;
+    Object.assign(fb, { state: 'running', criteria: [], place: null, done: tr.done, grade: null, stale: false, error: '', progress: null, job: 0 });
     paint();
     const paper = F.mode() === 'paper', ctx = F.context(), named = ctx?.assignment?.files;
-    const read = Array.isArray(named) && named.length ? await attachments() : [];
-    if (gen !== generation) { tr.done(); return; }
-    const context = read.length ? { ...ctx, assignment: { ...ctx.assignment, files: read } } : ctx;
-    const end = await run('writing', 'writer.feedback', { text, mode: paper ? 'paper' : 'compose', kind: F.kind(), context, ...(paper ? { paper: layout() } : {}) });
-    if (gen !== generation) { tr.done(); return; }
-    if (end.type !== 'end' || !Array.isArray(end.output?.criteria)) { tr.done(); Object.assign(fb, { state: 'error', done: null }); paint(); return; }
-    Object.assign(fb, { state: 'done', criteria: end.output.criteria, place: placer(doc, tr.m) });
+    const prefetch = prefetchImages();
+    const reading = prefetch?.promise || (Array.isArray(named) && named.length ? attachments() : null);
+    feedbackRead = prefetch ? stopImagePrefetch : reading?.stop || null;
+    const read = reading ? await reading : [];
+    if (gen !== generation || turn !== feedbackTurn) { tr.done(); return; }
+    if (!ok('writing') || document.hidden || (prefetch && (prefetch.stopped || prefetch.key !== imageKey()))) { stopFeedback(); return; }
+    feedbackRead = null;
+    const { context, unreadFiles } = attachmentContext(ctx, named, read);
+    const layoutSnapshot = paper ? layout() : null, layoutKey = JSON.stringify(layoutSnapshot);
+    const job = run('writing', 'writer.feedback', { text, mode: paper ? 'paper' : 'compose', kind: F.kind(), context, unreadFiles, ...(paper ? { paper: layoutSnapshot, grade: true } : {}) });
+    fb.job = job.id; const end = await job;
+    if (gen !== generation || turn !== feedbackTurn || fb.job !== job.id) { tr.done(); return; }
+    if (end.type !== 'end' || !Array.isArray(end.output?.criteria)) { tr.done(); Object.assign(fb, { state: 'error', done: null, error: end.error || 'invalid-response', detail: D?.diagnostic(end) || {} }); paint(); return; }
+    Object.assign(fb, { state: 'done', criteria: end.output.criteria, place: placer(doc, tr.m), grade: end.output.grade || null, reason: end.output.reason || null, layoutKey, stale: v.state.doc !== doc || layoutKey !== JSON.stringify(paper ? layout() : null) });
     paint();
   };
   const STATUS = { met: ['Met', 'var(--gz-ok)', '{n} met'], partly: ['Partly', 'var(--gz-warn)', '{n} partly'], missing: ['Missing', 'var(--gz-err)', '{n} missing'] };
@@ -430,11 +564,14 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
         download: () => t('The on-device model isn’t downloaded. Download it in Settings → AI.'),
         downloading: () => (loaded === null ? t('Downloading the model…') : t('Downloading the model: {pct}', { pct: `${Math.round(loaded * 100)}%` })),
         'apple-off': () => t('Apple Intelligence is off. Turn it on in System Settings.'),
-        device: () => t('{provider} is unavailable. Choose another model in Settings → AI.', { provider: providerName(status.writing, t) }),
+        device: () => reasonText(status.writing) ? t(reasonText(status.writing)) : t('{provider} is unavailable. Choose another model in Settings → AI.', { provider: providerName(status.writing, t) }),
         unverified: () => t('Glaze couldn’t confirm this page may use AI. Reload the page to try again.'),
         attempt: () => t('AI is only available on confirmed assignments, never on tests.'),
       }[no];
       box.append(el('p', 'gz-fb-note', say ? say() : t('AI isn’t available right now.')));
+      if (['device', 'downloading'].includes(no)) {
+        const retry = el('button', 'gz-fb-run', t('Try again')); retry.type = 'button'; retry.addEventListener('click', refresh); box.append(retry);
+      }
       if (['ai-off', 'off', 'setup', 'permission', 'download', 'device'].includes(no)) {
         const go = el('button', 'gz-fb-run', t('Settings'));
         go.type = 'button';
@@ -456,7 +593,13 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       const card = el('div', 'gz-fb-error'), top = el('div', 'gz-fb-top'), dot = el('span', 'gz-dot');
       dot.style.background = 'var(--gz-err)';
       top.append(dot, el('span', 'gz-fb-msg', t("AI couldn't give feedback.")));
-      card.append(top, run(t('Try again'), true));
+      const reason = { timeout: t('Timed out'), 'connection-lost': t('Connection lost'), 'provider-unavailable': t('Unavailable'), 'request-rejected': t('Refused'),
+        cancelled: t('Cancelled'), permission: t('Glaze isn’t allowed to reach this address.'), setup: t('Choose a model'), busy: t('Running'), often: t('Not ready'),
+        'invalid-response': t('Unreadable answer'), check: t('No usable answer'), refusal: t('No usable answer'), size: t('The document is too large.') }[fb.error] || t('No usable answer');
+      const detail = reasonText(fb.detail) ? t(reasonText(fb.detail)) : reason;
+      const counts = Number.isSafeInteger(fb.detail?.actual) && Number.isSafeInteger(fb.detail?.limit) ? (fb.detail.reason === 'response-limit' ? t('{n} bytes', { n: `${fb.detail.actual}/${fb.detail.limit}` }) : `${fb.detail.actual}/${fb.detail.limit}`)
+        : Number.isSafeInteger(fb.detail?.tokens) && Number.isSafeInteger(fb.detail?.context) ? t('{n} tokens', { n: `${fb.detail.tokens}/${fb.detail.context}` }) : '';
+      card.append(top, el('p', 'gz-fb-note', detail + (counts ? ` (${counts})` : '')), run(t('Try again'), true));
       box.append(card);
       return;
     }
@@ -468,10 +611,15 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (fb.state === 'running') {
       const a = F.context()?.assignment, n = a?.rubric?.criteria?.length || a?.criteria?.length;
       if (n) sum.textContent = t('Criteria: {n}', { n });
-      head.append(run(t('Reading your draft…'), false));
+      const stage = fb.progress?.stage;
+      const reading = stage === 'criterion' && fb.progress.parts > 0 ? t('Checking criterion {n} of {total}…', { n: fb.progress.part, total: fb.progress.parts }) : stage === 'evidence' ? t('Reading assignment material…') : stage === 'summary' ? t('Summarizing feedback…') : t('Reading your draft…');
+      head.append(run(reading, false));
+      const stop = el('button', 'gz-fb-run gz-fb-ghost', t('Cancel')); stop.type = 'button';
+      stop.addEventListener('click', stopFeedback); head.append(stop);
       for (const lines of [3, 3, 2]) { const k = el('div', 'gz-fb-skel'); k.setAttribute('aria-hidden', 'true'); for (let i = 0; i < lines; i++) k.append(el('i')); box.append(k); }
       return;
     }
+    if (!fb.grade && fb.reason?.key) box.append(el('p', 'gz-fb-note', t(fb.reason.key, fb.reason.vars)));
     for (const [status, [, colour, count]] of Object.entries(STATUS)) {
       const n = fb.criteria.filter((c) => c.status === status).length;
       if (!n) continue;
@@ -481,6 +629,19 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       sum.append(part);
     }
     head.append(run(t('Check again'), false));
+    if (fb.grade) {
+      const card = el('section', 'gz-fb-grade');
+      card.append(el('h3', '', t('Grade as is')));
+      if (fb.stale) card.append(el('p', 'gz-fb-note', t('Draft changed after this assessment. Check again to grade the current version.')), run(t('Check again'), true));
+      else {
+        const g = fb.grade, number = (n) => new Intl.NumberFormat(document.documentElement?.lang || undefined, { maximumFractionDigits: 2 }).format(n);
+        const score = Number.isFinite(g.earned) && Number.isFinite(g.total) && g.total > 0 && g.earned >= 0 && g.earned <= g.total ? `${number(g.earned)}/${number(g.total)}` : '';
+        card.append(el('strong', 'gz-fb-score', score ? t('Estimated grade: {score}', { score }) : t('Score unavailable')));
+        if (!score) card.append(el('p', 'gz-fb-comment', g.reason?.key ? t(g.reason.key, g.reason.vars) : t('The assessment did not provide enough detail to verify a score.')));
+        if (g.summary) card.append(el('p', 'gz-fb-comment', g.summary));
+      }
+      box.append(card);
+    }
     if (!fb.criteria.length) box.append(el('p', 'gz-fb-note', t('No criteria to check.')));
     const pageAt = panel?.pageAt;
     fb.criteria.forEach((c, i) => {
@@ -490,6 +651,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       top.append(el('span', `gz-fb-chip ${STATUS[c.status] ? c.status : 'partly'}`, t(word)));
       const l = c.level;
       if (l?.label) top.append(el('span', 'gz-fb-level', l.value != null && l.points != null ? `${l.label} · ${l.value}/${l.points}` : l.label));
+      if (c.score && !fb.stale && !(l?.value === c.score.earned && l?.points === c.score.total)) top.append(el('span', 'gz-fb-level', `${c.score.earned}/${c.score.total}`));
       card.append(top, el('div', 'gz-fb-crit', c.label));
       if (c.comment) card.append(el('p', 'gz-fb-comment', c.comment));
       for (const q of c.quotes) {
@@ -529,6 +691,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const panel = { ...opts, pages: [] };
     panels.set(box, panel);
     views.add(box);
+    recover();
     draw(box);
     return { el: box, updatePages: () => { for (const update of panel.pages) update(); }, destroy: () => { panel.pages = []; panels.delete(box); views.delete(box); box.remove(); } };
   };
@@ -644,8 +807,63 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const ask1 = async (task, input) => { if (!ok('writing')) return null; const end = await run('writing', task, input); return end.type === 'end' ? end.output ?? null : null; };
   const requirements = (prompt) => ask1('writer.requirements', { prompt });
   const cite = ({ text, url } = {}) => ask1('writer.cite', { text, ...(url && { url }) });
+  const outlineInfo = () => {
+    const sel = said?.models?.writing?.use ? said.models.writing : said?.model;
+    const configured = !!sel?.use && (!!sel.model || ['device', 'apple'].includes(sel.use)) || !!said?.use;
+    const available = !quiet() && !checking && said?.on === true && configured;
+    // The worker supplies only stable, safe model/config fields. Page generations still cancel current work, while
+    // this identity lets saved section labels survive a reload and invalidates them when the connection changes.
+    return { available, enabled: available && said?.outline !== false, generation, identity: outlineIdentity || status.writing?.identity || '' };
+  };
+  const outline = async (input, { signal, identity = outlineInfo().identity } = {}) => {
+    if (!outlineInfo().enabled || F.mode() !== 'paper' || signal?.aborted) return null;
+    const gen = generation;
+    const query = ask({ op: 'status', feature: 'writing', task: 'writer.outline' }, ASK.status), stopQuery = () => cancel(query.id);
+    signal?.addEventListener('abort', stopQuery, { once: true });
+    const st = await query;
+    signal?.removeEventListener('abort', stopQuery);
+    if (gen !== generation || !outlineInfo().enabled || signal?.aborted) return null;
+    if (typeof st?.identity === 'string' && st.identity !== outlineInfo().identity) {
+      outlineIdentity = st.identity;
+      outlineChanged();
+    }
+    // Availability can choose a different native model without a settings generation. Rebuild the controller's cache
+    // namespace first; do not send old labels to the replacement or save its labels under the previous identity.
+    if (identity !== outlineInfo().identity || signal?.aborted) return null;
+    if (!st?.allowed || !st?.ready) throw Object.assign(new Error('outline unavailable'), { error: st?.why || st?.error, ...D?.diagnostic(st) });
+    if (identity && st?.identity !== identity) throw Object.assign(new Error('outline identity unavailable'), { error: 'connection-lost' });
+    const job = ask({ op: 'run', feature: 'writing', task: 'writer.outline', input: { ...input, kind: F.kind(), context: F.context() } }, 100000);
+    const stop = () => cancel(job.id);
+    signal?.addEventListener('abort', stop, { once: true });
+    try { const end = await job; if (gen !== generation || identity !== outlineInfo().identity || !outlineInfo().enabled || signal?.aborted) return null; if (end.type !== 'end') throw Object.assign(new Error('outline failed'), { error: end.error, ...D?.diagnostic(end) }); return end.output ?? null; }
+    finally { signal?.removeEventListener('abort', stop); }
+  };
+  const setOutline = async (enabled) => {
+    const save = async () => { const raw = (await chrome.storage.local.get('ai'))?.ai || {}; await chrome.storage.local.set({ ai: { ...raw, outline: enabled === true } }); };
+    try { if (navigator.locks?.request) await navigator.locks.request('glaze:ai-settings', save); else await save(); return true; } catch { return false; }
+  };
+  const followOutline = (fn) => { outlineListeners.add(fn); return () => outlineListeners.delete(fn); };
+  const sourcesInfo = () => { const info = outlineInfo(); return { ...info, enabled: info.available && said?.sources !== false }; };
+  const setSourcesAI = async (enabled) => {
+    const save = async () => { const raw = (await chrome.storage.local.get('ai'))?.ai || {}; await chrome.storage.local.set({ ai: { ...raw, sources: enabled === true } }); };
+    try { if (navigator.locks?.request) await navigator.locks.request('glaze:ai-settings', save); else await save(); return true; } catch { return false; }
+  };
+  const extractSource = async (text, { signal } = {}) => {
+    if (!sourcesInfo().enabled || signal?.aborted) return null;
+    const gen = generation, statusJob = ask({ op: 'status', feature: 'writing', task: 'writer.sources' }, ASK.status);
+    const stop = () => cancel(statusJob.id); signal?.addEventListener('abort', stop, { once: true });
+    const st = await statusJob; signal?.removeEventListener('abort', stop);
+    if (gen !== generation || signal?.aborted || !sourcesInfo().enabled) return null;
+    if (!st.allowed || !st.ready) throw Object.assign(new Error('sources unavailable'), { error: st.why || st.error, ...D?.diagnostic(st) });
+    const url = globalThis.GZ_WRITER_BIBLIOGRAPHY?.address(text);
+    const job = ask({ op: 'run', feature: 'writing', task: 'writer.sources', input: { text, ...(url && { url }) } }, 65000);
+    const abort = () => cancel(job.id); signal?.addEventListener('abort', abort, { once: true });
+    try { const end = await job; if (gen !== generation || signal?.aborted || !sourcesInfo().enabled) return null; if (end.type !== 'end') throw Object.assign(new Error('sources failed'), { error: end.error, ...D?.diagnostic(end) }); return end.output ?? null; }
+    finally { signal?.removeEventListener('abort', abort); }
+  };
 
   F.on('ready', () => {
+    imagesDestroyed = false;
     if (F.kind() === 'test') return;
     document.body.append(menu, pop, live);
     F.plugin(plugin);
@@ -665,6 +883,6 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       if (loaded >= 1) refresh(); else paint();
     });
   } catch { /* no runtime */ }
-  return Object.assign(api, { feedbackView, feedback, review, decide, requirements, cite, allowed: ok, refresh, dismissCompletion, gate });
+  return Object.assign(api, { feedbackView, feedback, review, decide, requirements, cite, outline, outlineInfo, setOutline, followOutline, sourcesInfo, extractSource, setSourcesAI, allowed: ok, refresh, recover, layoutChanged, dismissCompletion, gate });
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_AI;

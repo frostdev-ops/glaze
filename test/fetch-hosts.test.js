@@ -39,6 +39,9 @@ const covered = (origin) => manifest.host_permissions.some((p) => {
 // file → [{ at: text on the call's line, kind, … }]. `n`: how many calls on lines with that text (1 when absent).
 const SITES = {
   'lib/background.js': [
+    // Runs inside the claimed LMS document via executeScript; its origin is fixed by that document. The worker's
+    // Writer admission gate and the browser's held school grant are required before injecting the account read.
+    { at: 'fetch(`${location.origin}/learn/api/v1/users/me`', kind: 'asked', flow: 'the verified Blackboard assignment host, under its existing school grant, for the visual cache account binding', guard: /if \(await aiWriter\(s, \{ op: 'run', feature: 'writing' \}\) !== true\) return null/ },
     { at: 'return GZ_WRITER_LOOKUP.listener', kind: 'via', to: 'lib/writer-lookup.js' },
     { at: "{ fetch: (u, i) => fetch(u, i), allow", kind: 'via', to: 'lib/media.js' },
     { at: 'GZ_MEDIA.fromGallery(h, m.type, { fetch:', kind: 'via', to: 'lib/media.js' },

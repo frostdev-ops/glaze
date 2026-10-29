@@ -171,12 +171,27 @@ test('the practice assignment attaches a Word prompt and a picture, which Feedba
     assert.deepEqual(context.assignment.files.map((f) => [f.name, f.image, new URL(f.url).origin]), [['Essay 2 prompt.docx', false, M.SITE], ['explore3.png', true, M.SITE]]);
     const files = await C.read(context.assignment.files, { D, get: async (url) => { const r = await call(mock, { url }); return r.status === 200 ? new Uint8Array(r.body) : null; }, text: ({ bytes }) => D.docx(bytes) });
     assert.deepEqual(files.map((f) => [f.name, f.text ?? f.image.mime]), [['Essay 2 prompt.docx', M.PROMPT], ['explore3.png', 'image/png']]);
-    const T = require('../lib/ai/task.js'); require('../lib/ai/tasks/writer-feedback.js');
-    const task = T.get('writer.feedback');
-    const input = task.input({ text: 'A synthetic draft about memory.', context: { ...context, assignment: { ...context.assignment, files } } });
-    const request = task.build(input, { text: require('../lib/ai/text.js') });
-    const answer = JSON.parse(require('../scripts/practice-ai.js').answer({ messages: request.messages }));
-    assert.match(answer.criteria[0].comment, /read against the attached Essay 2 prompt\.docx, with no picture shown\.$/);
-    assert.ok(task.check(answer, input).criteria[0].comment, 'a comment Feedback keeps');
+    const T = require('../lib/ai/task.js'); require('../lib/ai/tasks/writer-feedback.js'); require('../lib/ai/providers/mock.js');
+    const task = T.get('writer.feedback'), input = { text: 'A synthetic draft about memory.', context: { ...context, assignment: { ...context.assignment, files } } };
+    for (const images of [true, false]) {
+      const cfg = { caps: { context: 128000, images }, seen: [], replies: (req) => ({ text: require('../scripts/practice-ai.js').answer({ messages: req.messages }) }) };
+      const out = await T.run(task, input, { provider: 'mock', cfg });
+      assert.equal(cfg.seen.length, images ? 2 : 1);
+      const shown = (req) => req.messages.flatMap((m) => m.content).filter((p) => p.type === 'image');
+      assert.equal(cfg.seen.reduce((n, req) => n + shown(req).length, 0), images ? 1 : 0);
+      const review = cfg.seen.at(-1);
+      assert.equal(shown(review).length, 0, 'the assignment review always receives text only');
+      assert.match(review.messages[1].content[0].text, /Compare two scenes where memory returns unbidden/);
+      if (images) {
+        assert.equal(cfg.seen[0].maxTokens, 512);
+        assert.match(review.messages[1].content[0].text, /A plain gray rectangle with no visible text or diagram/);
+        assert.match(out.output.criteria[0].comment, /read against the attached Essay 2 prompt\.docx, with visual observations for explore3\.png\.$/);
+        assert.ok(!out.output.reason, 'a complete visual reading has no unavailable-image limitation');
+      } else {
+        assert.match(out.output.criteria[0].comment, /read against the attached Essay 2 prompt\.docx, with unavailable picture observations\.$/);
+        assert.match(out.output.reason.key, /attached images/);
+        assert.match(out.output.reason.vars.files, /explore3\.png: .*cannot read images/);
+      }
+    }
   } finally { fs.rmSync(out, { recursive: true, force: true }); }
 });
