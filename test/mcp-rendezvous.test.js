@@ -15,6 +15,8 @@ const H = require('../mcp/lib/handshake.js');
 const P = require('../mcp/lib/peer.js');
 
 const POSIX = process.platform !== 'win32';
+const posixOnly = (why) => (POSIX ? false : why);
+const windowsOnly = (why) => (POSIX ? why : false);
 const scratch = (t) => {
   const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-mcp-rv-')));
   t.after(() => fs.rmSync(d, { recursive: true, force: true }));
@@ -62,7 +64,7 @@ test('ready makes the folder 0700 and is idempotent', (t) => {
   if (POSIX) assert.equal(mode(d), 0o700);
 });
 
-test('ready refuses a symlink, a file, a folder others can open, and another user\'s folder', { skip: !POSIX }, async (t) => {
+test('ready refuses a symlink, a file, a folder others can open, and another user\'s folder', { skip: posixOnly('POSIX symlinks, modes and owners; the junction test covers Windows') }, async (t) => {
   const make = (t, how) => {
     const home = scratch(t), d = R.dir({ platform: process.platform, env: { HOME: home } });
     fs.mkdirSync(path.dirname(d), { recursive: true });
@@ -105,7 +107,7 @@ test('socket and run file names: <browser>.<instance>, and only safe ids', (t) =
   }
 });
 
-test('a socket path past 103 bytes is bound and reached from inside its folder', { skip: !POSIX }, async (t) => {
+test('a socket path past 103 bytes is bound and reached from inside its folder', { skip: posixOnly('unix socket path limits; a Windows pipe is named apart from its folder') }, async (t) => {
   let d = scratch(t);
   while (Buffer.byteLength(path.join(d, 'chrome.inst.sock')) < 120) d = path.join(d, 'deeper-folder');
   fs.mkdirSync(d, { recursive: true, mode: 0o700 });
@@ -215,7 +217,7 @@ test('sweep removes run files whose host is gone, with their sockets, and leaves
   for (const f of removed) assert.equal(fs.existsSync(f), false, f);
 });
 
-test('remove takes only a host\'s own files, not those of a host that took over its name', { skip: !POSIX }, async (t) => {
+test('remove takes only a host\'s own files, not those of a host that took over its name', { skip: posixOnly('unix socket files; the named pipe test covers Windows') }, async (t) => {
   const d = runDir(t);
   const p = R.socketPath(d, 'chrome', 'same');
   const first = net.createServer();
@@ -242,7 +244,7 @@ test('remove takes only a host\'s own files, not those of a host that took over 
   assert.throws(() => R.claim(p), (e) => e.code === 'unsafe');
 });
 
-test('remove cleans up its unpublished socket after bye during listen, but preserves a replacement file', { skip: !POSIX }, async (t) => {
+test('remove cleans up its unpublished socket after bye during listen, but preserves a replacement file', { skip: posixOnly('unix socket files') }, async (t) => {
   const d = runDir(t), rec = record(d), server = net.createServer();
   await R.listen(server, rec.path);
   t.after(() => server.close());
@@ -255,7 +257,7 @@ test('remove cleans up its unpublished socket after bye during listen, but prese
   assert.equal(mode(rec.path), 0o644);
 });
 
-test('claim refuses an unrecorded socket and a symlink even when the record names a live host', { skip: !POSIX }, async (t) => {
+test('claim refuses an unrecorded socket and a symlink even when the record names a live host', { skip: posixOnly('unix socket files and POSIX symlinks') }, async (t) => {
   const d = runDir(t), rec = record(d), server = net.createServer();
   await R.listen(server, rec.path);
   t.after(() => server.close());
@@ -272,7 +274,7 @@ test('claim refuses an unrecorded socket and a symlink even when the record name
   assert.deepEqual(R.read(R.runFile(d, rec.browser, rec.instance)), rec);
 });
 
-test('run operations refuse a folder replaced by a symlink after check', { skip: !POSIX }, (t) => {
+test('run operations refuse a folder replaced by a symlink after check', { skip: posixOnly('POSIX symlinks; the junction test covers Windows') }, (t) => {
   const d = runDir(t), outside = scratch(t), saved = `${d}-saved`;
   const rec = record(d), file = R.write(d, rec);
   assert.equal(R.check(d), true);
@@ -285,7 +287,47 @@ test('run operations refuse a folder replaced by a symlink after check', { skip:
   assert.deepEqual(fs.readdirSync(outside), []);
 });
 
-test('a folder swap during write cannot redirect the token', { skip: !POSIX }, (t) => {
+test('Windows: a run folder that is a junction, made or swapped in, is refused by every run operation', (t) => {
+  const d = runDir(t), outside = scratch(t), rec = record(d), file = R.write(d, rec);
+  fs.renameSync(d, `${d}-saved`);
+  // Node reads a junction as a symlink. Off Windows the type is ignored and this is a symlink.
+  fs.symlinkSync(outside, d, 'junction');
+  assert.throws(() => R.ready(d), (e) => e.code === 'unsafe' && /symlink/.test(e.message));
+  assert.throws(() => R.check(d), /symlink/);
+  for (const op of [() => R.write(d, rec), () => R.read(file), () => R.list(d), () => R.sweep(d), () => R.remove(d, rec),
+    () => R.claim(rec.path, { dir: d, browser: rec.browser, instance: rec.instance })]) {
+    assert.throws(op, (e) => e.code === 'unsafe');
+  }
+  assert.deepEqual(fs.readdirSync(outside), []);
+});
+
+test('Windows: each host listens on a pipe of its own; claim retires the old record and remove takes only its own', { skip: windowsOnly('named pipes are Windows only; the unix socket tests cover POSIX') }, async (t) => {
+  const d = runDir(t);
+  const serve = async (word) => {
+    const rec = record(d, { instance: 'same' }), server = net.createServer((s) => s.end(`${word}\n`));
+    assert.equal(await R.listen(server, rec.path), null, 'a pipe has no inode to pin');
+    t.after(() => server.close());
+    return rec;
+  };
+  const said = async (p) => { const c = R.connect(p), got = bytesFrom(c); c.on('error', () => {}); await closed(c); return got().toString(); };
+  const first = await serve('first'), file = R.write(d, first);
+  assert.deepEqual(fs.readdirSync(d), ['chrome.same.json'], 'a pipe is no file in the run folder');
+  // A second host for the same browser and instance.
+  R.claim(first.path, { dir: d, browser: 'chrome', instance: 'same' });
+  assert.equal(R.read(file), null);
+  const second = await serve('second');
+  assert.notEqual(second.path, first.path);
+  R.write(d, second);
+  R.remove(d, first);
+  assert.deepEqual(R.read(file), second, 'the old host leaving takes nothing of the new one\'s');
+  // The old pipe still answers until its host exits, unpublished.
+  assert.equal(await said(first.path), 'first\n');
+  assert.equal(await said(second.path), 'second\n');
+  R.remove(d, second);
+  assert.deepEqual(fs.readdirSync(d), []);
+});
+
+test('a folder swap during write cannot redirect the token', { skip: posixOnly('POSIX symlinks; Windows can\'t rename a folder a process is in') }, (t) => {
   const d = runDir(t), outside = scratch(t), saved = `${d}-saved`, rec = record(d);
   const open = fs.openSync;
   let swapped = false;
@@ -303,7 +345,7 @@ test('a folder swap during write cannot redirect the token', { skip: !POSIX }, (
   assert.deepEqual(fs.readdirSync(outside), [], 'the token never enters the replacement folder');
 });
 
-test('read refuses symlinks and nonprivate run files', { skip: !POSIX }, (t) => {
+test('read refuses symlinks and nonprivate run files', { skip: posixOnly('POSIX symlinks and file modes') }, (t) => {
   const d = runDir(t), rec = record(d), file = R.runFile(d, rec.browser, rec.instance);
   const elsewhere = path.join(scratch(t), 'record');
   fs.writeFileSync(elsewhere, JSON.stringify(rec), { mode: 0o600 });
@@ -328,7 +370,7 @@ test('a failed atomic write removes its temporary file and preserves the record'
   assert.deepEqual(R.read(R.runFile(d, 'chrome', 'inst1')), rec);
 });
 
-test('sweep leaves an unrecorded live socket alone', { skip: !POSIX }, async (t) => {
+test('sweep leaves an unrecorded live socket alone', { skip: posixOnly('unix socket files') }, async (t) => {
   const d = runDir(t), p = R.socketPath(d, 'chrome', 'junk');
   const server = net.createServer((s) => s.end());
   await R.listen(server, p);
@@ -360,7 +402,7 @@ test('sweep cannot delete a live record published during its stale check', (t) =
   else { assert.equal(writer.stderr.toString(), 'EBUSY'); assert.equal(fs.existsSync(file), false); }
 });
 
-test('claim clears a dead record before a new socket can be swept during startup', { skip: !POSIX }, async (t) => {
+test('claim clears a dead record before a new socket can be swept during startup', { skip: posixOnly('unix socket files') }, async (t) => {
   const d = runDir(t), rec = record(d, { pid: deadPid() });
   R.write(d, rec);
   R.claim(rec.path);
@@ -372,7 +414,7 @@ test('claim clears a dead record before a new socket can be swept during startup
   assert.ok(fs.existsSync(rec.path), 'stale metadata cannot delete the new live socket');
 });
 
-test('the longest permitted socket basename is never truncated, including on Node 18', { skip: !POSIX }, async (t) => {
+test('the longest permitted socket basename is never truncated, including on Node 18', { skip: posixOnly('unix socket path limits') }, async (t) => {
   const d = path.join(scratch(t), 'é'.repeat(40));
   fs.mkdirSync(d, { mode: 0o700 });
   const p = R.socketPath(d, 'b'.repeat(32), 'i'.repeat(64));
