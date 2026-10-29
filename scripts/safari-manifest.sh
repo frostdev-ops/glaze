@@ -2,7 +2,8 @@
 # Rewrites a copy of manifest.json for Safari, in place. Safari rejects options_ui.open_in_tab and
 # doesn't support use_dynamic_url; the App Store caps the description at 112 characters and may reject a name that
 # carries other companies' trademarks, so Safari keeps the plain name Glaze. Safari has no
-# identity API, so Google Calendar sync's oauth2 key and optional identity permission go (S3 §4).
+# identity API, so Google Calendar sync's oauth2 key and optional identity permission go (S3 §4). Safari requires
+# nativeMessaging (the Mac app's updates), so agent access's optional copy goes too.
 # Code mods need Chrome: the sandbox page, its CSP and its files (mods/, beside the manifest) go too;
 # content.js starts code mods only where the manifest has the sandbox. Declarative widgets stay (features/modwidgets.js,
 # drawn by features/modui.js).
@@ -17,7 +18,7 @@ if 'nativeMessaging' not in manifest.setdefault('permissions', []):
     manifest['permissions'].append('nativeMessaging')
 manifest.get('options_ui', {}).pop('open_in_tab', None)
 manifest.pop('oauth2', None)
-optional = [p for p in manifest.get('optional_permissions', []) if p != 'identity']
+optional = [p for p in manifest.get('optional_permissions', []) if p != 'identity' and p not in manifest['permissions']]
 if optional:
     manifest['optional_permissions'] = optional
 else:
