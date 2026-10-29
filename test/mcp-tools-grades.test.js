@@ -17,7 +17,7 @@ const leaks = (v, who) => new RegExp(`${who} secret`).test(JSON.stringify(v));
 
 // A's record, B's (newer, at the same school, with a course only B takes) and the Ultra account's.
 const school = async () => {
-  const store = { todoCache: C.canvasPlan('5', [C.planner({ id: 1, title: 'A secret lab', at: '2026-10-16T03:59:00Z' })]) };
+  const store = { todoCache: await C.canvasPlan('5', [C.planner({ id: 1, title: 'A secret lab', at: '2026-10-16T03:59:00Z' })]) };
   const [math, eng, bio, hist] = C.canvasGrades();
   await C.keepInsights(store, CANVAS, '5', [C.canvasCourse(bio, NOW - 7200e3), C.canvasCourse(eng, NOW - 7200e3, { name: 'A secret English' })], NOW - 7200e3);
   await C.keepInsights(store, CANVAS, '6', [C.canvasCourse(math, NOW - 3600e3), C.canvasCourse(hist, NOW - 3600e3),

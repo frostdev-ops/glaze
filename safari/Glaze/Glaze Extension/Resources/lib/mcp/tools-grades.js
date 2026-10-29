@@ -48,7 +48,7 @@ var GZ_MCP_GRADES = globalThis.GZ_MCP_GRADES || (() => {
         const [g] = q ? [] : await B().CALLS.grades.run([id], r.env);
         return {
           account: who.account, at: r.rec.at,
-          course: { courseId: id, name: g?.name ?? (typeof c.name === 'string' ? c.name.slice(0, 200) : ''), percent: g?.percent ?? null, at: g?.at ?? null, lettersOnly: q, complete: c.more !== true && !(c.cut > 0) },
+          course: { courseId: id, name: g?.name ?? (typeof c.name === 'string' ? c.name.slice(0, 200) : ''), percent: g?.percent ?? null, at: g?.at ?? null, lettersOnly: q, complete: c.more !== true && !(c.cut > 0) && arr(c.items).length <= B().LIMIT.items },
           trend: q ? [] : arr(c.trend).filter((p) => Array.isArray(p) && when(p[0]) && Number.isFinite(p[1])).map(([at, percent, period]) => ({ at, percent, period: typeof period === 'string' && period ? period : null })),
           items: arr(c.items).filter((i) => isObj(i) && typeof i.k === 'string' && i.k.includes(':')).slice(0, B().LIMIT.items).map((i) => ({
             type: i.k.slice(0, i.k.indexOf(':')), id: i.k.slice(i.k.indexOf(':') + 1), title: typeof i.n === 'string' ? i.n.slice(0, 300) : '', due: when(i.d) || null,

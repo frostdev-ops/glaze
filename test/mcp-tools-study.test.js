@@ -30,8 +30,8 @@ const SEEN = [
   { id: 27, name: 'MATH 1350', course_code: 'MATH1350' }, { id: 28, name: 'HIST 2010', course_code: 'HIST2010' },
   { id: 31, name: 'A secret elective', course_code: 'ELEC' }, { id: 32, name: 'B secret seminar', course_code: 'SEM', color: '#112233' },
 ];
-const school = async ({ plan = C.canvasPlan('5', A_PLAN), bee = true, ultra = true } = {}) => {
-  const store = { todoCache: plan, seenCourses: { ...C.canvasSeen(SEEN), ...(ultra && C.ultraSeen()) }, ...(ultra && { [`seenCoursesAt ${ULTRA}`]: NOW - 300e3 }) };
+const school = async ({ plan, bee = true, ultra = true } = {}) => {
+  const store = { todoCache: plan || await C.canvasPlan('5', A_PLAN), seenCourses: { ...await C.canvasSeen(SEEN), ...(ultra && await C.ultraSeen()) } };
   if (bee) await C.keepInsights(store, CANVAS, '6', [...C.canvasGrades().map((c) => C.canvasCourse(c, NOW - 7200e3)), { id: '32', name: 'B secret seminar', items: [], trend: [[NOW - 9e6, 91]] }], NOW - 3600e3);
   if (ultra) await C.keepInsights(store, ULTRA, C.ULTRA_UID, [C.ultraCourse('_101_1', 'BIO 1100: Biology I', C.ultraRows('grades'), NOW)], NOW - 30e3);
   return store;
@@ -99,7 +99,7 @@ test('todo_list: the account\'s planner items as a mod gets them, with the span 
     assert.ok(!leaks(r, 'A'), who);
   }
   // Ultra's planner, once it is the one kept, with a calendar Glaze couldn't read whole.
-  store.todoCache = C.ultraPlan(NOW - 120e3, false);
+  store.todoCache = await C.ultraPlan(NOW - 120e3, false);
   const u = await run('todo_list', store, UL);
   assert.deepEqual(u.items, await B.CALLS.todo.run([], C.broker(store, UL)));
   assert.deepEqual(u.items.map((i) => i.title), ['Publisher Homework 4', 'Lab Report 3', 'Essay 3']);
@@ -144,19 +144,21 @@ test('schedule_list: dates or date-times, at most 60 days, the same items as the
   assert.match(r.missing, /Dashboard at https:\/\/school\.instructure\.com/);
 });
 
-test('courses_list: the school\'s courses as a mod gets them while one account holds data there; with two, each one\'s own', async () => {
-  // Ultra: one account at that school, so its record is the account's.
+test('courses_list: only account-owned memberships, in the slim mod shape, with one or several accounts at a school', async () => {
+  // Ultra: even one known account cannot prove ownership of the school's other courses.
   const store = await school();
   const ultra = await run('courses_list', store, UL);
-  assert.deepEqual(ultra, { account: UL, at: NOW - 300e3, items: await B.CALLS.courses.run([], C.broker(store, UL)) });
-  assert.deepEqual(ultra.items.map((c) => c.id), ['_101_1', '_102_1', '_103_1', '_104_1']);
+  const [bio] = await B.CALLS.courses.run([], C.broker(store, UL));
+  assert.deepEqual(ultra, { account: UL, at: store[`insights:${UL}`].at, items: [{ ...bio, color: null }] });
+  assert.deepEqual(ultra.items.map((c) => c.id), ['_101_1']);
   assert.deepEqual(Object.keys(ultra.items[0]), ['id', 'name', 'code', 'color']);
-  // Canvas with A alone: the school's list, which keeps no time of its own.
+  // Canvas with A alone: the account's planner establishes membership and its cache time.
   const alone = await school({ bee: false, ultra: false });
   delete alone.seenCourses[`canvas:${CANVAS}/32`];
   const solo = await run('courses_list', alone, A);
-  assert.deepEqual(solo, { account: A, at: null, items: await B.CALLS.courses.run([], C.broker(alone, A)) });
-  assert.deepEqual(solo.items.find((c) => c.id === '25'), { id: '25', name: 'BIO 1100', code: 'BIO1100-01', color: '#aabbcc' });
+  assert.deepEqual(solo, { account: A, at: alone.todoCache.at, items: [
+    { id: '25', name: 'BIO 1100', code: 'BIO1100-01', color: null }, { id: '26', name: 'ENG 1100', code: 'ENG1100-02', color: null },
+    { id: '31', name: 'A secret elective', code: 'ELEC', color: null }] });
   // A and B: the courses each one's own planner and Insights name, by its own names, and no colour another may have picked.
   const a = await run('courses_list', store, A), b = await run('courses_list', store, BEE);
   assert.deepEqual(a, { account: A, at: store.todoCache.at, items: [
@@ -167,7 +169,7 @@ test('courses_list: the school\'s courses as a mod gets them while one account h
   assert.equal(b.at, store[`insights:${CANVAS}/6`].at);
   assert.ok(!leaks(a, 'B') && !leaks(b, 'A'));
   // Nothing of its own kept for an account (its planner gone to another), or no course at its school: what to open.
-  store.todoCache = C.ultraPlan();
+  store.todoCache = await C.ultraPlan();
   for (const [who, s] of [[A, store], [`${ULTRA}/_901_1`, { ...store, seenCourses: {} }], ['https://other.instructure.com/5', store]]) {
     const r = await run('courses_list', s, who);
     assert.deepEqual([r.at, r.items], [null, []], who);
