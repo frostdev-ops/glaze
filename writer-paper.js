@@ -1696,6 +1696,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       const f = flushing; flushing = null;
       root.inert = f.root; boxEl.inert = f.box;
       view.setProps({ editable: f.editable });
+      if (f.next) setView(f.next.full, f.next.options);
     };
     const flush = async (request) => {
       if (typeof request !== 'string' || flushing || switching || !compact || !loaded || holding || view.composing) {
@@ -1710,7 +1711,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     const setView = async (full, { save: persist = false, from = null } = {}) => {
       if (switching) return switching.then(() => setView(full, { save: persist, from }));
-      if (flushing) return;
+      if (flushing) { flushing.next = { full, options: { save: persist, from } }; return; }
       const next = !!boxEl && !full;
       if (next === compact) return;
       const typing = view.hasFocus(), keyed = !!from && document.activeElement === from, y = caretY();

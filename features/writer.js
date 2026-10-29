@@ -246,7 +246,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       const f = box.flushing;
       if (!f || m.request !== f.request) return;
       try {
-        if (!box.full && m.ok === true && typeof m.html === 'string' && Array.isArray(m.delta) && sameBox(box) && U().enabled(f.button) && sync(box, m.html, m.delta)) {
+        if (!box.full && m.ok === true && typeof m.html === 'string' && Array.isArray(m.delta) && sameBox(box) && f.button.isConnected && U().enabled(f.button) && sync(box, m.html, m.delta)) {
           passing = f.button;
           try { f.button.click(); } finally { passing = null; }
         }
