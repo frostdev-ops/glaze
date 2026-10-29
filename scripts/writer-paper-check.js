@@ -5,7 +5,7 @@
 // compares with Word: each fixture's .docx and the editor's pages (count and each page's first line).
 // GETs only, synthetic; no account or outside network from the browser.
 // NODE_PATH=<playwright> nice -n 10 node scripts/writer-paper-check.js [evidence directory]
-// PAPER_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-paper).
+// PAPER_SHOTS: where the screenshots go (default: shots/ under the check's temporary output).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -17,7 +17,7 @@ const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-paper-check');
-const shots = process.env.PAPER_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-paper');
+const shots = process.env.PAPER_SHOTS || path.join(out, 'shots');
 const checks = [], requests = [], errors = [];
 let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
