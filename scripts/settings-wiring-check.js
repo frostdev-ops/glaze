@@ -39,6 +39,9 @@ const check = async (name, run) => {
       const cases = await page.evaluate(() => {
         const schema = { ...GZ_SPEC, card: GZ_CARDS.SPEC }, initial = { ...GZ_SANITIZE(), card: GZ_CARDS.settings() };
         const read = (s, key) => key.split('.').reduce((v, k) => v?.[k], s);
+        const put = (s, key, v) => { const ks = key.split('.'), last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; };
+        // A key's [default, rule] at any depth (writer.autocorrect.typos): a group's (GZ_GROUP) rule is its own spec.
+        const specOf = (key) => key.split('.').reduce((s, k, i) => (i && Array.isArray(s) ? s[1]?.[k] : s?.[k]), schema);
         const cases = [], seen = new Set();
         for (const el of document.querySelectorAll('[data-key], .seg input[type=radio]:not([data-local]), #enabled')) {
           const key = el.dataset.key || el.name || el.id;
@@ -46,22 +49,24 @@ const check = async (name, run) => {
           seen.add(key);
           // Enabling Gradescope needs the browser's real permission gesture. Consent/allow checks cover that boundary.
           if (key === 'enhance.gradescope') continue;
-          const [group, field] = key.split('.'), before = read(initial, key);
+          const group = key.split('.')[0], spec = specOf(key), before = read(initial, key);
+          // An option as defaults.js declares its choice: writer.zoom's 75 is a number beside 'fit'.
+          const typed = (v) => { const c = Array.isArray(spec?.[1]) ? spec[1].find((x) => String(x) === v) : undefined; return c === undefined ? v : c; };
           let value, choices;
           if (el.type === 'checkbox') choices = [false, true], value = !el.checked;
           else if (el.type === 'range') choices = [+el.min, +el.max], value = +el.value === +el.max ? +el.min : +el.max;
-          else if (el.tagName === 'SELECT') choices = [...el.options].map((o) => o.value), value = choices.find((v) => v !== el.value);
+          else if (el.tagName === 'SELECT') choices = [...el.options].map((o) => typed(o.value)), value = choices.find((v) => v !== typed(el.value));
           else if (el.type === 'radio') choices = [...document.querySelectorAll(`input[name="${key}"]`)].map((r) => r.value), value = choices.find((v) => v !== before);
           else if (el.type === 'color') choices = ['#123456'], value = '#123456';
           else if (el.type === 'time') choices = ['13:17'], value = '13:17';
           else if (el.type === 'text') choices = ['Audit sidebar'], value = 'Audit sidebar';
           const rejected = (choices || []).filter((value) => {
             const raw = structuredClone(initial);
-            if (field) raw[group][field] = value; else raw[group] = value;
+            put(raw, key, value);
             const clean = group === 'card' ? { card: GZ_CARDS.settings(raw.card) } : GZ_SANITIZE(raw);
             return JSON.stringify(read(clean, key)) !== JSON.stringify(value);
           });
-          cases.push({ key, type: el.type, value, rejected, known: !field || !!schema[group]?.[field] || group === 'courses' });
+          cases.push({ key, type: el.type, value, rejected, known: !key.includes('.') || !!spec || group === 'courses' });
         }
         return cases;
       });
