@@ -431,3 +431,65 @@ test('a backup\'s trashed record keeps its flag through merge, and a newer live 
   await P.merge({ [`writerPaper:${other}`]: { key: other, kind: 'paper', doc: doc('Newer, written elsewhere.'), format: 'plain', updated: t } });
   assert.equal(PA.trashed(await P.get(other)), false, 'newer work restored from a backup is out of Trash');
 });
+
+
+test('purge keeps malformed timestamps, future Trash and a clock that moved backwards', async () => {
+  let t = 2e12;
+  const s = store(), P = PA.open(s, () => t), k = PA.newKey();
+  await P.save(k, { doc: doc('Keep this draft.'), format: 'plain' });
+  const paper = await P.get(k), row = (await P.list())[0];
+  for (const flag of [-1, -31 * DAY, 0.5, '1', true, null, {}, 3e12]) {
+    s.data[`writerPaper:${k}`] = { ...paper, trashed: flag };
+    s.data.writerPapers = [{ ...row, trashed: flag }];
+    assert.deepEqual(await P.purge(), [], `unsafe timestamp ${JSON.stringify(flag)}`);
+    assert.ok(s.data[`writerVersions:${k}`], 'history stays');
+  }
+  s.data[`writerPaper:${k}`] = { ...paper, trashed: t };
+  s.data.writerPapers = [{ ...row, trashed: t }];
+  t -= DAY;
+  assert.deepEqual(await P.purge(), [], 'clock rollback');
+  for (const clock of [Infinity, NaN, 3e12 + 0.5]) {
+    t = clock;
+    assert.deepEqual(await P.purge(), [], `unsafe clock ${clock}`);
+  }
+  // A valid old row cannot overrule a malformed or recent record.
+  t = 2e12;
+  s.data.writerPapers = [{ ...row, trashed: t - 31 * DAY }];
+  for (const flag of [-1, 0.5, t - 29 * DAY, t + DAY]) {
+    s.data[`writerPaper:${k}`] = { ...paper, trashed: flag };
+    assert.deepEqual(await P.purge(), [], `record timestamp ${flag}`);
+  }
+});
+
+test('purge and an editor save serialize in either order, with history on a recreated paper', async () => {
+  for (const first of ['save', 'purge']) {
+    let t = 1e12;
+    const s = store(), P = PA.open(s, () => t), editor = PA.open(s, () => t), k = PA.newKey();
+    await P.save(k, { doc: doc('Before.') });
+    await editor.get(k); await P.trash(k); t += 31 * DAY;
+    const save = () => editor.save(k, { doc: doc('Typed while the page was open.') });
+    const sweep = () => P.purge();
+    const results = await Promise.all(first === 'save' ? [save(), sweep()] : [sweep(), save()]);
+    assert.equal(PA.trashed(await P.get(k)), false, first);
+    assert.deepEqual((await P.get(k)).doc, doc('Typed while the page was open.'));
+    assert.ok((await P.list()).some((r) => r.key === k));
+    assert.ok((await P.versions(k)).length, 'a recreated paper has a start version');
+    assert.deepEqual(results[first === 'save' ? 1 : 0], first === 'save' ? [] : [k]);
+  }
+});
+
+test('opening a trashed paper can restore with a checkpoint without changing Last edited or revision', async () => {
+  let t = 1e12;
+  const s = store(), P = PA.open(s, () => t), k = PA.newKey();
+  const before = (await P.save(k, { doc: doc('Assignment draft.'), format: 'plain' })).paper;
+  await P.trash(k); t += DAY;
+  await P.untrash(k, { version: true });
+  const after = await P.get(k), history = await P.versions(k);
+  assert.equal(PA.trashed(after), false);
+  assert.deepEqual([after.updated, after.revision, after.doc], [before.updated, before.revision, before.doc]);
+  assert.equal(history.length, 2);
+  assert.equal(history[0].reason, 'restore');
+  assert.deepEqual((await P.version(k, history[0].id)).doc, before.doc);
+  await P.untrash(k, { version: true });
+  assert.deepEqual(await P.versions(k), history, 'opening again adds no checkpoint');
+});

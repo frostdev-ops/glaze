@@ -226,3 +226,32 @@ test('the page\'s store sends trash, untrash and purge to the worker, never writ
   await store.trash(k); await store.untrash(k); await store.purge();
   assert.deepEqual(sent, [['trash', [k]], ['untrash', [k]], ['purge', []]]);
 });
+
+
+test('Delete forever and startup/page purges preserve a paper while its submit permit is held', async () => {
+  const make = require('./helpers/worker-env.cjs'), k = KEY;
+  for (const scheme of ['https', 'http']) {
+    let w = make();
+    const sender = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/papers.html', tab: { id: 4 } };
+    const send = (op, args) => w.send({ type: 'glaze:writerPapers', op, args }, sender);
+    await send('save', [k, { doc: doc('The submitted draft.'), format: 'plain' }, { reason: 'sending' }]);
+    await send('trash', [k]);
+    const permit = `writerSubmit:${scheme}://${k}`;
+    w.store.local[permit] = { run: { token: 'a'.repeat(36), owner: '1|doc', until: Date.now() - 1000 }, sent: [] };
+    const before = structuredClone(w.store.local);
+    assert.deepEqual(await send('remove', [k]), { ok: false, error: 'submit in progress' });
+    assert.deepEqual(w.store.local, before, 'a refusal changes no records');
+    const old = Date.now() - 31 * 864e5;
+    w.store.local[`writerPaper:${k}`].trashed = old;
+    w.store.local.writerPapers[0].trashed = old;
+    assert.deepEqual(await send('purge', []), { ok: true, value: [] });
+    w = make({ store: w.store });
+    for (const f of w.startup) f();
+    await w.settle();
+    assert.ok(w.store.local[`writerPaper:${k}`] && w.store.local[`writerVersions:${k}`], 'the permit survives a worker restart');
+    w.store.local[permit].run = null;
+    assert.deepEqual(await send('purge', []), { ok: true, value: [k] });
+    assert.equal(w.store.local[`writerPaper:${k}`], undefined);
+    assert.equal(w.store.local[`writerVersions:${k}`], undefined);
+  }
+});

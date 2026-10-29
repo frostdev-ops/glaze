@@ -279,3 +279,20 @@ test('Settings lists and counts no document in Trash, and Clear all clears those
   assert.deepEqual(WE.byCourse(rows).map((c) => [c.name, c.keys]), [['Documents', [doc]], ['ENG 101', [paper]]]);
   assert.deepEqual(WE.allKeys(rows).sort(), [doc, binned, paper, gone].sort());
 });
+
+
+test('Clear all stays enabled with only Trash and confirms every paper it removes', async () => {
+  const vm = require('node:vm'), WE = require('../lib/editor-writer.js'), PA = require('../lib/writer-papers.js');
+  const source = read('lib/editor-writer.js'), from = source.indexOf('    const drawPapers = '), to = source.indexOf("    dialog.addEventListener('close'", from);
+  const nodes = new Map(), $ = (id) => {
+    if (!nodes.has(id)) nodes.set(id, { textContent: '', replaceChildren() {}, showModal() {}, focus() {} });
+    return nodes.get(id);
+  };
+  await vm.runInNewContext(`(async () => { let courses, everything, asked; ${source.slice(from, to).replace('    let asked = null;', '')} await drawPapers(); ask(everything); })()`, {
+    $, papers: () => ({ list: async () => [{ key: PA.newKey(), trashed: 1 }] }), byCourse: WE.byCourse, allKeys: WE.allKeys,
+    t: (k, v) => k.replace('{n}', v?.n), away: () => false, console,
+  });
+  assert.equal($('writer-papers-count').textContent, '', 'the list count skips Trash');
+  assert.equal($('writer-clear-all').disabled, false, 'Clear all can still remove Trash');
+  assert.match($('writer-clear-note').textContent, /^1 papers\./, 'the confirmation counts what it deletes');
+});
