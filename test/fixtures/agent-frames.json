@@ -93,6 +93,11 @@
   "nativeRefused": [
     {"name": "a zero length", "hex": "00000000", "code": "empty"},
     {"name": "a length one byte over 64 MiB, refused before its body", "hex": "01000004", "code": "too-large"},
-    {"name": "a body that is not JSON", "hex": "020000007b2c", "code": "bad-json"}
+    {"name": "a body that is not JSON", "hex": "020000007b2c", "code": "bad-json"},
+    {"name": "an invalid UTF-8 byte inside a JSON string", "hex": "0300000022ff22", "code": "bad-json"},
+    {"name": "an overlong UTF-8 sequence inside a JSON string", "hex": "0400000022c08022", "code": "bad-json"},
+    {"name": "a UTF-8 encoded surrogate inside a JSON string", "hex": "0500000022eda08022", "code": "bad-json"},
+    {"name": "a UTF-8 code point past U+10FFFF inside a JSON string", "hex": "0600000022f490808022", "code": "bad-json"},
+    {"name": "an incomplete UTF-8 sequence inside a JSON string", "hex": "0400000022e28222", "code": "bad-json"}
   ]
 }

@@ -44,6 +44,18 @@ test('read: several messages in one chunk, and one across many, with empty reads
   assert.deepEqual(read([...parts, Buffer.from(V.native[2].hex, 'hex')]), [big, V.native[2].message]);
 });
 
+test('read: malformed UTF-8 is terminal even with another message buffered', () => {
+  const bad = Buffer.from('0300000022ff22', 'hex'), got = [], push = N.reader((m) => got.push(m));
+  for (const b of bad.subarray(0, -1)) push(Buffer.from([b]));
+  refused(() => push(Buffer.concat([bad.subarray(-1), N.encode({ t: 'bye' })])), 'bad-json');
+  refused(() => push(Buffer.alloc(0)), 'bad-json');
+  assert.deepEqual(got, []);
+});
+
+test('read: a literal replacement character and escaped surrogates are valid UTF-8 JSON', () => {
+  for (const s of ['\ufffd', '\ud800', '\udc00', '\ud83d\ude00']) assert.deepEqual(read([N.encode(s)]), [s]);
+});
+
 test('read: a length up to 64 MiB waits for its body; one byte more is refused at once', () => {
   assert.deepEqual(read([head(N.MAX_IN), Buffer.from('"')]), []);
   refused(() => read([head(N.MAX_IN + 1)]), 'too-large');
