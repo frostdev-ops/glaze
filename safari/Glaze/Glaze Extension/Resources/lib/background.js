@@ -2254,24 +2254,27 @@ const aiLmsFrame = async (tab, live, frameId) => {
 // page: one LMS site Glaze runs on, never a quiet route, but the tab's own attempt page, where only the writer's features
 // may ask, once that host document is said to be an assignment. A cancel only stops.
 const aiWriter = async (s, { op, feature } = {}) => {
-  if (s.url?.split(/[?#]/)[0] === chrome.runtime.getURL('papers.html')) {
+  const papers = s.url?.split(/[?#]/)[0] === chrome.runtime.getURL('papers.html');
+  if (papers) {
     await settingsFramesLoaded;
     if (!trustedFrame(s, 'papers')) return false; // a replacement claim revokes the earlier seat before its storage write
   }
   await aiKept();
   const host = aiHosts.get(`${s.tab.id}|${s.frameId}`);
   if (!host || (host.writerDocumentId && host.writerDocumentId !== s.documentId)) return false;
+  const current = () => aiHosts.get(`${s.tab.id}|${s.frameId}`) === host && (!papers || trustedFrame(s, 'papers'));
   const target = host.documentId ? { tabId: s.tab.id, documentIds: [host.documentId] } : { tabId: s.tab.id, frameIds: [host.frameId] };
   const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target, func: aiFramePage })]);
   const live = frames?.[0], page = live?.result;
   if (host.documentId && live?.documentId !== host.documentId) return false;
   let path;
   try { if (!await aiLmsFrame(tab, live, host.frameId)) return false; path = decodeURIComponent(new URL(page.href).pathname); } catch { return false; }
-  if (!modQuiet(path)) return true;
+  if (!modQuiet(path)) return current();
   if (!AI_ATTEMPT.test(path)) return false;
-  if (op === 'cancel') return true;
+  if (op === 'cancel') return current();
   if (!AI_WRITER.includes(feature)) return false;
-  return (host.documentId && await aiAttempt(tab.id, host.documentId, page.href) === 'assignment') || 'attempt';
+  const assignment = host.documentId && await aiAttempt(tab.id, host.documentId, page.href) === 'assignment';
+  return current() && (assignment || 'attempt');
 };
 const aiSender = async (s, what = {}) => {
   if (s.id !== chrome.runtime.id) return false;
