@@ -303,6 +303,21 @@ test('closing during window creation declines the queue before the popup can be 
   assert.equal(e.data.mcpAskWindow, undefined);
 });
 
+test('closing before tab discovery fails still declines instead of reporting interruption', async () => {
+  const e = env();
+  let fail;
+  e.deps.windows.create = async () => ({ id: 50 });
+  e.deps.tabs.query = () => new Promise((resolve, reject) => { fail = () => reject(new Error('Window closed')); });
+  const r = outcome(e.a.ask('pair', PAIR));
+  await settle();
+  e.a.closed(50);
+  fail();
+  await settle();
+  assert.equal(r.v, 'no');
+  assert.equal(e.data.mcpAskWindow, undefined);
+  assert.deepEqual(e.removed, [], 'the closed popup needs no removal');
+});
+
 test('failed tab discovery removes the popup it created', async () => {
   const e = env();
   e.deps.windows.create = async () => ({ id: 77 });
