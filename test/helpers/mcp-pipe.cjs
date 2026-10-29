@@ -55,8 +55,8 @@ const stop = async (p, exited) => {
 };
 
 // One host: frames read off its stdout, each with its native message size; frames written to its stdin; its exit.
-const browser = (t, home, args = ['host', '--browser=chrome', ORIGIN]) => {
-  const p = spawn(process.execPath, [BIN, ...args], { env: envFor(home), stdio: ['pipe', 'pipe', 'pipe'] });
+const browser = (t, home, args = ['host', '--browser=chrome', ORIGIN], nodeArgs = []) => {
+  const p = spawn(process.execPath, [...nodeArgs, BIN, ...args], { env: envFor(home), stdio: ['pipe', 'pipe', 'pipe'] });
   const frames = [];
   let raw = Buffer.alloc(0), err = '', exit = null;
   p.stdout.on('data', (c) => {

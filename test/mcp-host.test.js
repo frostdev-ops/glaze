@@ -9,6 +9,7 @@ const path = require('node:path');
 const { EventEmitter } = require('node:events');
 
 const F = require('../mcp/lib/agent-frames.js');
+const N = require('../mcp/lib/native.js');
 const R = require('../mcp/lib/rendezvous.js');
 const L = require('../mcp/lib/lines.js');
 const H = require('../mcp/lib/host.js');
@@ -274,6 +275,30 @@ test('a bye in the same read as hello cleans up a socket whose listen is still s
   assert.equal(code, 0, b.err());
   assert.ok(done - at < 1000, `exited after ${done - at} ms`);
   assert.deepEqual(fs.readdirSync(runDir(home)), [], 'no socket or run file left behind');
+});
+
+test('a replacement file at the bound socket path keeps its mode and is never published as a host', { skip: !POSIX }, async (t) => {
+  const home = scratch(t), preload = path.join(home, 'replace.cjs');
+  fs.writeFileSync(preload, `
+    const fs = require('node:fs'), R = require(${JSON.stringify(require.resolve('../mcp/lib/rendezvous.js'))});
+    const listen = R.listen;
+    R.listen = async (server, p) => {
+      const own = await listen(server, p);
+      fs.unlinkSync(p);
+      fs.writeFileSync(p, 'replacement', { mode: 0o644 });
+      fs.chmodSync(p, 0o644);
+      return own;
+    };
+  `);
+  const b = browser(t, home, undefined, ['--require', preload]);
+  await b.take('hello', (f) => f.t === 'hello');
+  b.send({ t: 'hello', v: 1, glaze: '4.0.0', instance: 'replaced' });
+  const d = runDir(home), file = R.runFile(d, 'chrome', 'replaced'), p = R.socketPath(d, 'chrome', 'replaced');
+  await until('startup completes or fails', () => b.p.exitCode !== null || R.read(file));
+  assert.equal(mode(p), 0o644, 'the host must never chmod a replacement');
+  assert.equal(fs.readFileSync(p, 'utf8'), 'replacement');
+  assert.equal((await b.exited).code, 1, b.err());
+  assert.equal(fs.existsSync(file), false, 'a replaced socket is not advertised');
 });
 
 test('a client that stops reading is closed past 32 MiB queued; a line past 64 MiB closes with too-long', async (t) => {

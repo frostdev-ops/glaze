@@ -213,10 +213,10 @@ test('remove takes only a host\'s own files, not those of a host that took over 
   await R.listen(first, p);
   const mine = { ...record(d, { instance: 'same' }), ino: fs.lstatSync(p).ino };
   R.write(d, record(d, { instance: 'same', token: mine.token }));
-  // A second host must leave the live host reachable. Only its owner clears the name.
-  assert.throws(() => R.claim(p), (e) => e.code === 'unsafe');
+  // Taking over a recorded socket retires its name, without closing the old listener.
+  R.claim(p);
+  assert.equal(fs.existsSync(p), false);
   R.remove(d, mine);
-  await new Promise((resolve) => first.close(resolve));
   const second = net.createServer();
   await R.listen(second, p);
   const theirs = record(d, { instance: 'same' });
@@ -230,6 +230,36 @@ test('remove takes only a host\'s own files, not those of a host that took over 
   // claim refuses to clear anything but a socket.
   fs.writeFileSync(p, 'x');
   assert.throws(() => R.claim(p), (e) => e.code === 'unsafe');
+});
+
+test('remove cleans up its unpublished socket after bye during listen, but preserves a replacement file', { skip: !POSIX }, async (t) => {
+  const d = runDir(t), rec = record(d), server = net.createServer();
+  await R.listen(server, rec.path);
+  t.after(() => server.close());
+  const own = { ...rec, ino: fs.lstatSync(rec.path).ino };
+  R.remove(d, own);
+  assert.equal(fs.existsSync(rec.path), false, 'no run file was published yet');
+  fs.writeFileSync(rec.path, 'replacement', { mode: 0o644 });
+  R.remove(d, own);
+  assert.equal(fs.readFileSync(rec.path, 'utf8'), 'replacement');
+  assert.equal(mode(rec.path), 0o644);
+});
+
+test('claim refuses an unrecorded socket and a symlink even when the record names a live host', { skip: !POSIX }, async (t) => {
+  const d = runDir(t), rec = record(d), server = net.createServer();
+  await R.listen(server, rec.path);
+  t.after(() => server.close());
+  assert.throws(() => R.claim(rec.path), (e) => e.code === 'unsafe');
+  fs.writeFileSync(R.runFile(d, rec.browser, rec.instance), JSON.stringify({ pid: process.pid }), { mode: 0o600 });
+  assert.throws(() => R.claim(rec.path), (e) => e.code === 'unsafe');
+  fs.unlinkSync(rec.path);
+  const other = path.join(d, 'keep');
+  fs.writeFileSync(other, 'mine');
+  fs.symlinkSync(other, rec.path);
+  R.write(d, rec);
+  assert.throws(() => R.claim(rec.path), (e) => e.code === 'unsafe');
+  assert.equal(fs.readFileSync(other, 'utf8'), 'mine');
+  assert.deepEqual(R.read(R.runFile(d, rec.browser, rec.instance)), rec);
 });
 
 test('run operations refuse a folder replaced by a symlink after check', { skip: !POSIX }, (t) => {

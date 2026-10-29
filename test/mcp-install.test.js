@@ -779,6 +779,46 @@ test('doctor rejects unsafe folders before running a node path and rejects extra
   assert.equal((await D.run(ctx)).ok, false);
 });
 
+test('doctor never executes a node from an unsafe file or any unsafe path ancestor', { skip: !POSIX }, async (t) => {
+  for (const which of ['node', 'parent', 'ancestor', 'link parent', 'link target', 'installation ancestor', 'script parent', 'manifest parent']) {
+    await t.test(which, async (t) => {
+      const home = scratch(t), programs = scratch(t), calls = [];
+      const bin = mk(programs, 'tools', 'bin'), node = path.join(bin, 'node');
+      fs.writeFileSync(node, '#!/bin/sh\necho v26.0.0\n', { mode: 0o755 });
+      let exe = node;
+      if (which.startsWith('link')) {
+        exe = path.join(mk(programs, 'links'), 'node');
+        fs.symlinkSync(node, exe);
+      }
+      const ctx = mac(home, { node: exe, run: async (...args) => { calls.push(args); return { stdout: 'v26.0.0' }; } });
+      const manifestDir = mk(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts');
+      await I.setup(ctx);
+      const unsafe = {
+        node, parent: bin, ancestor: programs, 'link parent': path.dirname(exe), 'link target': bin,
+        'installation ancestor': AS(home), 'script parent': path.join(AS(home), 'glaze-mcp', VERSION, 'bin'),
+        'manifest parent': manifestDir,
+      }[which];
+      fs.chmodSync(unsafe, 0o777);
+      const report = await D.run(ctx);
+      assert.equal(calls.length, 0, `doctor executed ${exe} through ${unsafe}`);
+      assert.equal(report.ok, false, D.text(report));
+      assert.ok(report.rows.some((r) => r.level === 'fail' && r.detail.includes(unsafe)), D.text(report));
+    });
+  }
+});
+
+test('doctor accepts a node symlink whose path and target are safe', { skip: !POSIX }, async (t) => {
+  const home = scratch(t), bin = mk(scratch(t), 'bin'), node = path.join(bin, 'node'), link = path.join(bin, 'stable');
+  fs.writeFileSync(node, '#!/bin/sh\necho v26.0.0\n', { mode: 0o755 });
+  fs.symlinkSync('node', link);
+  const fake = runner(), ctx = mac(home, { node: link, run: fake.run });
+  mk(AS(home), 'Google', 'Chrome');
+  await I.setup(ctx);
+  const report = await D.run(ctx);
+  assert.equal(report.ok, true, D.text(report));
+  assert.deepEqual(fake.calls, [[link, ['--version']]]);
+});
+
 test('--dev refuses a keyed manifest instead of granting a different path-derived id', (t) => {
   const dir = scratch(t);
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ key: 'cHVibGljLWtleQ==' }));
