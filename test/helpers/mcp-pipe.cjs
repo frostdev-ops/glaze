@@ -39,6 +39,21 @@ const envFor = (home, over = {}) => {
 };
 const runDir = (home) => R.dir({ platform: process.platform, env: envFor(home) });
 
+const stop = async (p, exited) => {
+  const wait = async () => {
+    let timer;
+    try { return await Promise.race([exited.then(() => true), new Promise((r) => { timer = setTimeout(() => r(false), 1000); })]); }
+    finally { clearTimeout(timer); }
+  };
+  if (p.exitCode !== null || p.signalCode !== null) return exited;
+  p.stdin.end();
+  if (await wait()) return exited;
+  p.kill('SIGTERM');
+  if (await wait()) return exited;
+  p.kill('SIGKILL');
+  return exited;
+};
+
 // One host: frames read off its stdout, each with its native message size; frames written to its stdin; its exit.
 const browser = (t, home, args = ['host', '--browser=chrome', ORIGIN]) => {
   const p = spawn(process.execPath, [BIN, ...args], { env: envFor(home), stdio: ['pipe', 'pipe', 'pipe'] });
@@ -55,7 +70,7 @@ const browser = (t, home, args = ['host', '--browser=chrome', ORIGIN]) => {
   p.stderr.on('data', (c) => { err += c; });
   p.stdin.on('error', () => {});
   const exited = new Promise((r) => p.on('exit', (code, signal) => r((exit = { code, signal, at: Date.now() }))));
-  t.after(() => { if (!exit) p.kill('SIGKILL'); return exited; });
+  t.after(() => stop(p, exited));
   // The first frame not yet taken that matches.
   const take = async (what, ok = () => true, ms) => {
     const i = await until(what, () => { const j = frames.findIndex((x) => !x.taken && ok(x.f)); return j < 0 ? 0 : j + 1; }, ms);
@@ -112,4 +127,4 @@ const lineFrom = async (b, c) => {
   }
 };
 
-module.exports = { PKG, BIN, ORIGIN, FIREFOX, scratch, hmac, until, envFor, runDir, browser, agent, opened, lineFrom };
+module.exports = { PKG, BIN, ORIGIN, FIREFOX, scratch, hmac, until, envFor, runDir, stop, browser, agent, opened, lineFrom };

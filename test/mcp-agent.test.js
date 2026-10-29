@@ -15,7 +15,7 @@ const B = require('../mcp/lib/browsers.js');
 const I = require('../mcp/lib/install.js');
 const D = require('../mcp/lib/doctor.js');
 const CLI = require('../mcp/bin/glaze-mcp.js');
-const { PKG, BIN, FIREFOX, scratch, hmac, until, envFor, runDir, browser, opened, lineFrom } = require('./helpers/mcp-pipe.cjs');
+const { PKG, BIN, FIREFOX, scratch, hmac, until, envFor, runDir, stop, browser, opened, lineFrom } = require('./helpers/mcp-pipe.cjs');
 
 const POSIX = process.platform !== 'win32';
 const MiB = 1024 * 1024;
@@ -30,7 +30,7 @@ const app = (t, home, args = [], env = {}) => {
   p.stderr.on('data', (c) => { err += c; });
   p.stdin.on('error', () => {});
   const exited = new Promise((r) => p.on('exit', (code) => r((exit = { code, at: Date.now() }))));
-  t.after(() => { if (!exit) p.kill('SIGKILL'); return exited; });
+  t.after(() => stop(p, exited));
   return { p, exited, out: () => out, err: () => err, write: (s) => p.stdin.write(s), end: () => p.stdin.end() };
 };
 
@@ -83,6 +83,7 @@ test('the agent holds exactly 1 MiB of stdin until it has a host, and loses none
 
 test('stdin EOF at the 1 MiB waiting limit still exits 0 promptly', async (t) => {
   const a = app(t, scratch(t));
+  await until('waiting before full-buffer EOF', () => /waiting/i.test(a.err()));
   a.write(Buffer.alloc(MiB, 'a'));
   a.end();
   await until('exit after a full waiting buffer and EOF', () => a.p.exitCode !== null, 1000);
@@ -93,7 +94,9 @@ test('stdin EOF at the 1 MiB waiting limit still exits 0 promptly', async (t) =>
 test('waiting input over 1 MiB is refused promptly without forwarding a partial request', async (t) => {
   // Test both many ordinary pipe reads and a single oversized Readable chunk.
   const a = app(t, scratch(t));
-  a.write(Buffer.alloc(MiB + 1, 'a'));
+  await until('waiting before input overflow', () => /waiting/i.test(a.err()));
+  a.write(Buffer.alloc(3 * MiB, 'a'));
+  a.end();
   await until('exit after overflowing the waiting buffer', () => a.p.exitCode !== null, 1000);
   assert.equal((await a.exited).code, 1);
   assert.match(a.err(), /1 MiB.*before.*host/i);
