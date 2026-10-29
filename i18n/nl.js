@@ -3377,7 +3377,6 @@
   "Clear documents…": "Documenten wissen…",
   "Clear documents?": "Documenten wissen?",
   "{n} document": "{n} document",
-  "{n} documents": "{n} documenten",
   "Blank": "Leeg",
   "Untitled document": "Naamloos document",
   "Open from Documents": "Openen uit Documenten",

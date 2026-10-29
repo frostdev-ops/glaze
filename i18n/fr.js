@@ -3377,7 +3377,6 @@
   "Clear documents…": "Effacer les documents…",
   "Clear documents?": "Effacer les documents ?",
   "{n} document": "{n} document",
-  "{n} documents": "{n} documents",
   "Blank": "Vierge",
   "Untitled document": "Document sans titre",
   "Open from Documents": "Ouvrir depuis Documents",
