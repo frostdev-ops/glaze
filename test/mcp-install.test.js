@@ -643,6 +643,32 @@ test('setup refuses unrelated files occupying its launcher, manifest or version 
   });
 });
 
+test('an atomic-write collision never removes the preexisting temporary file', async (t) => {
+  const home = scratch(t), ctx = mac(home);
+  mk(AS(home), 'Google', 'Chrome');
+  await I.setup(ctx);
+  const tmp = path.join(AS(home), 'glaze-mcp', 'hosts', `chrome.${process.pid}.00000000.tmp`);
+  fs.writeFileSync(tmp, 'unrelated');
+  const random = crypto.randomBytes;
+  crypto.randomBytes = (n) => Buffer.alloc(n);
+  try { await assert.rejects(I.setup(ctx), /exist|EEXIST/i); }
+  finally { crypto.randomBytes = random; }
+  assert.equal(fs.readFileSync(tmp, 'utf8'), 'unrelated');
+});
+
+test('uninstall independently refuses a redirected hosts directory and preserves its contents', { skip: !POSIX }, async (t) => {
+  const home = scratch(t), outside = scratch(t), ctx = mac(home);
+  mk(AS(home), 'Google', 'Chrome');
+  await I.setup(ctx);
+  const hosts = path.join(AS(home), 'glaze-mcp', 'hosts');
+  const moved = path.join(outside, 'hosts');
+  fs.renameSync(hosts, moved);
+  fs.symlinkSync(moved, hosts, 'dir');
+  const before = tree(moved);
+  await I.uninstall(ctx).catch((e) => assert.match(e.message, /symlink|symbolic/i));
+  assert.deepEqual(tree(moved), before);
+});
+
 test('uninstall leaves script-shaped foreign files, version-shaped foreign packages and modified copies alone', async (t) => {
   const home = scratch(t), ctx = mac(home);
   mk(AS(home), 'Google', 'Chrome');
