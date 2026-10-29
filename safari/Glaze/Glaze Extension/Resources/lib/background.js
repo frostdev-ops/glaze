@@ -1907,7 +1907,8 @@ const fromLms = async (s, parts = false) => {
   if ((await chrome.storage.sync.get('enabled')).enabled === false) return null;
   return (await fromCanvas(s)) || (await fromUltra(s)) || (await approved('moodle', u) ? u.origin : null);
 };
-// The Documents page (papers.html), a tab of Glaze's own, with Glaze on: its mods have the documents calls and no LMS data.
+// Documents mods remain in its own tab, with Glaze on and no LMS data. A framed pass grants paper writes and AI only;
+// it does not expand S3c's standalone mod authority into a school's page.
 const fromDocuments = async (s) => s.id === chrome.runtime.id && !!s.tab && s.frameId === 0 && typeof s.url === 'string'
   && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('papers.html') && (await chrome.storage.sync.get('enabled')).enabled !== false;
 // Whose plans and grades a mod or widget on that page reads (lib/modbroker.js account): the account signed in on the
@@ -2253,6 +2254,10 @@ const aiLmsFrame = async (tab, live, frameId) => {
 // page: one LMS site Glaze runs on, never a quiet route, but the tab's own attempt page, where only the writer's features
 // may ask, once that host document is said to be an assignment. A cancel only stops.
 const aiWriter = async (s, { op, feature } = {}) => {
+  if (s.url?.split(/[?#]/)[0] === chrome.runtime.getURL('papers.html')) {
+    await settingsFramesLoaded;
+    if (!trustedFrame(s, 'papers')) return false; // a replacement claim revokes the earlier seat before its storage write
+  }
   await aiKept();
   const host = aiHosts.get(`${s.tab.id}|${s.frameId}`);
   if (!host || (host.writerDocumentId && host.writerDocumentId !== s.documentId)) return false;
