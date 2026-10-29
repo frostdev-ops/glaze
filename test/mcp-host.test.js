@@ -1,120 +1,22 @@
 // The glaze-mcp host (mcp/lib/host.js, mux.js, lines.js), run as the browser runs it: a real process started with
-// process.execPath, spoken to over the native codec on its stdin and stdout, with agents written here from the
-// handshake's format. Every run gets a scratch HOME (LOCALAPPDATA on Windows) for its run folder.
+// process.execPath, spoken to over the native codec on its stdin and stdout, with agents written from the handshake's
+// format (helpers/mcp-pipe.cjs). Every run gets a scratch HOME (LOCALAPPDATA on Windows) for its run folder.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
 
-const N = require('../mcp/lib/native.js');
 const F = require('../mcp/lib/agent-frames.js');
 const R = require('../mcp/lib/rendezvous.js');
 const L = require('../mcp/lib/lines.js');
 const H = require('../mcp/lib/host.js');
 
-const PKG = path.join(__dirname, '..', 'mcp');
-const BIN = path.join(PKG, 'bin', 'glaze-mcp.js');
+const { PKG, ORIGIN, scratch, hmac, until, runDir, browser, agent, opened, lineFrom } = require('./helpers/mcp-pipe.cjs');
 const VERSION = require('../mcp/package.json').version;
-const ORIGIN = 'chrome-extension://jmmaeoajomodnbnlmdikjooalmcilooh/';
 const POSIX = process.platform !== 'win32';
 const MiB = 1024 * 1024;
-
-const scratch = (t) => {
-  const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-mcp-host-')));
-  t.after(() => fs.rmSync(d, { recursive: true, force: true }));
-  return d;
-};
 const mode = (f) => fs.statSync(f).mode & 0o777;
-const hmac = (token, msg) => crypto.createHmac('sha256', Buffer.from(token, 'base64')).update(msg).digest('base64');
-const until = async (what, ok, ms = 10000) => {
-  const end = Date.now() + ms;
-  for (;;) {
-    const v = ok();
-    if (v) return v;
-    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
-    await new Promise((r) => setTimeout(r, 10));
-  }
-};
-const envFor = (home) => ({ ...process.env, HOME: home, LOCALAPPDATA: home });
-const runDir = (home) => R.dir({ platform: process.platform, env: envFor(home) });
-
-// The browser's side of one host: frames read off its stdout (each with its native message size), frames written to
-// its stdin, and its exit.
-const browser = (t, home, args = ['host', '--browser=chrome', ORIGIN]) => {
-  const p = spawn(process.execPath, [BIN, ...args], { env: envFor(home), stdio: ['pipe', 'pipe', 'pipe'] });
-  const frames = [];
-  let raw = Buffer.alloc(0), err = '', exit = null;
-  p.stdout.on('data', (c) => {
-    raw = Buffer.concat([raw, c]);
-    while (raw.length >= 4 && raw.length >= 4 + raw.readUInt32LE(0)) {
-      const n = raw.readUInt32LE(0);
-      frames.push({ f: JSON.parse(raw.subarray(4, 4 + n).toString('utf8')), n });
-      raw = raw.subarray(4 + n);
-    }
-  });
-  p.stderr.on('data', (c) => { err += c; });
-  p.stdin.on('error', () => {});
-  const exited = new Promise((r) => p.on('exit', (code, signal) => r((exit = { code, signal, at: Date.now() }))));
-  t.after(() => { if (!exit) p.kill('SIGKILL'); return exited; });
-  // The first frame not yet taken that matches.
-  const take = async (what, ok = () => true, ms) => {
-    const i = await until(what, () => { const j = frames.findIndex((x) => !x.taken && ok(x.f)); return j < 0 ? 0 : j + 1; }, ms);
-    frames[i - 1].taken = true;
-    return frames[i - 1].f;
-  };
-  return {
-    p, frames, take, exited,
-    err: () => err,
-    send: (f) => p.stdin.write(N.encode(f)),
-    left: (ok = () => true) => frames.filter((x) => !x.taken && ok(x.f)).map((x) => x.f),
-    // hello both ways, then the run file.
-    async start(instance = 'inst1') {
-      const hello = await take('hello', (f) => f.t === 'hello');
-      this.send({ t: 'hello', v: 1, glaze: '4.0.0', instance });
-      const file = R.runFile(runDir(home), args.includes('--browser=firefox') ? 'firefox' : 'chrome', instance);
-      const rec = await until('the run file', () => R.read(file));
-      return { hello, rec, file };
-    },
-  };
-};
-
-// An agent written from the handshake's format alone: { s, lines (got so far), ended }.
-const agent = async (rec, { peer = { exe: '/usr/bin/agent', ppid: 7, verified: false }, token = rec.token, read = true } = {}) => {
-  const s = R.connect(rec.path);
-  const n = crypto.randomBytes(16).toString('base64');
-  s.write(`${JSON.stringify({ 'glaze-mcp': 1, n, p: hmac(token, `a${n}`), peer })}\n`);
-  const a = { s, bytes: Buffer.alloc(0), ended: false, answer: null };
-  s.on('error', () => {});
-  s.on('close', () => { a.ended = true; });
-  s.on('data', (c) => {
-    a.bytes = Buffer.concat([a.bytes, c]);
-    if (!a.answer) {
-      const i = a.bytes.indexOf(10);
-      if (i < 0) return;
-      a.answer = JSON.parse(a.bytes.subarray(0, i).toString());
-      a.bytes = a.bytes.subarray(i + 1);
-      if (!read) s.pause();
-    }
-  });
-  a.lines = () => { const t = a.bytes.toString('utf8'); return t ? t.split('\n').slice(0, -1) : []; };
-  await until('the answer', () => a.answer || a.ended);
-  if (a.answer) assert.deepEqual(a.answer, { ok: 1, p: hmac(rec.token, `h${n}`) });
-  return a;
-};
-const opened = (b) => b.take('open', (f) => f.t === 'open');
-const lineFrames = (b, c, count) => until(`${count} line frames for ${c}`, () => { const got = b.left((f) => f.t === 'line' && f.c === c); return got.length >= count && got; });
-// Every frame of one line from the agent on connection c, joined.
-const lineFrom = async (b, c) => {
-  const j = F.joiner();
-  for (;;) {
-    const f = await b.take(`a line for ${c}`, (x) => x.t === 'line' && x.c === c);
-    const s = j.push(f);
-    if (s !== null) return s;
-  }
-};
 
 // ---- lines.js ---------------------------------------------------------------------------------------------------------
 test('lines: cut at "\\n" across any chunking, whole UTF-8, and a line over the limit refused', () => {
@@ -397,7 +299,6 @@ test('the pipe files start no process, open no network port and run no code they
   const LOCAL = new Set([...PIPE.map((n) => `./${n}.js`), '../package.json', '../bin/glaze-mcp.js']);
   for (const name of PIPE) {
     const file = path.join(PKG, 'lib', `${name}.js`);
-    if (name === 'agent' && !fs.existsSync(file)) continue;
     const code = fs.readFileSync(file, 'utf8').replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
     assert.doesNotMatch(code, /\b(child_process|http|https|http2|dgram|tls|vm|worker_threads|inspector)\b['"]/, name);
     // Bare calls only: RegExp's .exec( is fine, and no module that has a spawn can be required.

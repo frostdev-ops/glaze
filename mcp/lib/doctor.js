@@ -71,11 +71,14 @@ const run = async (o = {}) => {
     const mLoose = loose(file, st);
     if (mLoose) out.push(mLoose);
     if (typeof m.path !== 'string') return [...out, `${file} names no launcher`];
+    // The browser can't start a launcher it can't find, and says only that the host was not found.
+    const notFound = b.family === 'firefox' ? '' : ', which the browser reports as "Specified native messaging host not found."';
+    if (ctx.platform !== 'win32' && !path.isAbsolute(m.path)) return [...out, `${file} names its launcher by a relative path${notFound}; it must be absolute. ${FIX}`];
     const launcher = path.resolve(path.dirname(file), m.path);
     if (!I.inside(ctx, ctx.root, launcher)) return [...out, `${file} runs ${launcher}, outside ${ctx.root}`];
     try { I.safePath(launcher); } catch (e) { return [...out, e.message]; }
     let text, lst;
-    try { text = fs.readFileSync(launcher, 'utf8'); lst = fs.statSync(launcher); } catch { return [...out, `launcher ${launcher} is missing. ${FIX}`]; }
+    try { text = fs.readFileSync(launcher, 'utf8'); lst = fs.statSync(launcher); } catch { return [...out, `launcher ${launcher} is missing${notFound}. ${FIX}`]; }
     const l = L.parse(text);
     if (!l) return [...out, `${launcher} is not a glaze-mcp launcher. ${FIX}`];
     const vdir = path.dirname(path.dirname(l.script));
