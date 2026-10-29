@@ -1488,10 +1488,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       due.textContent = d && Number.isFinite(Date.parse(d)) ? t('Due {when}', { when: new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(d)) }) : '';
     };
     // made: this frame made the paper from the format's opening and nothing is written in it yet.
+    // Before showing a trashed paper (including Ultra's delayed assignment key), restore it with a checkpoint.
+    const openPaper = async (k) => { await store.untrash(k, { version: true }); return store.get(k); };
     let loading = null, recovered = false, made = false;
     const load = () => (loading ||= (async () => {
       key = host.key || PA.keyOf(ctx.paper || {}) || recoveryKey;
-      paper = await store.get(key);
+      paper = await openPaper(key);
       await keepPictures(paper?.doc);
       recovered = key === recoveryKey && !!paper?.doc;
       const copy = pendingOf(key), pending = copy && await complete(copy, key, paper);
@@ -1551,7 +1553,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         await loading;
         if (key !== recoveryKey) return;
         const at = edits, written = at > 0 || recovered;
-        const existing = written ? null : await store.get(target);
+        const existing = written ? null : await openPaper(target);
         const copy = !written && pendingOf(target), pending = copy && await complete(copy, target, existing);
         if (key !== recoveryKey) return;
         if (!written && edits === at) {
