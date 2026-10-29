@@ -3575,7 +3575,7 @@
   "{n} bytes": "{n} bytes",
   "Agent apps you connect in Settings → Agents can use this mod’s tools.": "Os apps de agentes que você conectar em Configurações → Agentes podem usar as ferramentas deste mod.",
   "Tool “{title}” — gives agent apps your to-dos, as Glaze last read them.": "Ferramenta “{title}” — dá aos apps de agentes suas tarefas, como o Glaze as leu por último.",
-  "Tool “{title}” — gives agent apps your due dates, as Glaze last read them.": "Ferramenta “{title}” — dá aos apps de agentes seus prazos, como o Glaze os leu por último.",
+  "Tool “{title}” — gives agent apps your to-dos with due dates, as Glaze last read them.": "Ferramenta “{title}” — dá aos apps de agentes suas tarefas com prazo, como o Glaze os leu por último.",
   "Tool “{title}” — gives agent apps your courses, as Glaze last read them.": "Ferramenta “{title}” — dá aos apps de agentes seus cursos, como o Glaze os leu por último.",
   "Tool “{title}” — gives agent apps your grades, as Glaze last read them.": "Ferramenta “{title}” — dá aos apps de agentes suas notas, como o Glaze as leu por último.",
   "Tool “{title}” — its author’s code answers, with what this mod may use.": "Ferramenta “{title}” — o código do autor responde, com o que este mod pode usar.",

@@ -3575,7 +3575,7 @@
   "{n} bytes": "{n} bytes",
   "Agent apps you connect in Settings → Agents can use this mod’s tools.": "Agent-apps die je koppelt in Instellingen → Agents kunnen de tools van deze mod gebruiken.",
   "Tool “{title}” — gives agent apps your to-dos, as Glaze last read them.": "Tool “{title}” — geeft agent-apps je taken, zoals Glaze ze het laatst las.",
-  "Tool “{title}” — gives agent apps your due dates, as Glaze last read them.": "Tool “{title}” — geeft agent-apps je inleverdata, zoals Glaze ze het laatst las.",
+  "Tool “{title}” — gives agent apps your to-dos with due dates, as Glaze last read them.": "Tool “{title}” — geeft agent-apps je taken met een inleverdatum, zoals Glaze ze het laatst las.",
   "Tool “{title}” — gives agent apps your courses, as Glaze last read them.": "Tool “{title}” — geeft agent-apps je cursussen, zoals Glaze ze het laatst las.",
   "Tool “{title}” — gives agent apps your grades, as Glaze last read them.": "Tool “{title}” — geeft agent-apps je cijfers, zoals Glaze ze het laatst las.",
   "Tool “{title}” — its author’s code answers, with what this mod may use.": "Tool “{title}” — de code van de maker antwoordt, met wat deze mod mag gebruiken.",

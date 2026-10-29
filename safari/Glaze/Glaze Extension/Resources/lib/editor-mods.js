@@ -34,7 +34,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
   const toolText = (id, view, t) => {
     const [name, from] = id.slice(5).split('@'), title = (view.tools || []).find((x) => x?.name === name)?.title || name;
     return from === 'todo' ? t('Tool “{title}” — gives agent apps your to-dos, as Glaze last read them.', { title })
-      : from === 'schedule' ? t('Tool “{title}” — gives agent apps your due dates, as Glaze last read them.', { title })
+      : from === 'schedule' ? t('Tool “{title}” — gives agent apps your to-dos with due dates, as Glaze last read them.', { title })
         : from === 'courses' ? t('Tool “{title}” — gives agent apps your courses, as Glaze last read them.', { title })
           : from === 'grades' ? t('Tool “{title}” — gives agent apps your grades, as Glaze last read them.', { title })
             : t('Tool “{title}” — its author’s code answers, with what this mod may use.', { title });
