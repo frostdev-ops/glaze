@@ -11,11 +11,17 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
   // lib/writer-styles.js FORMATS' labels: names, the same in every language but Blank's.
   const FORMATS = [['mla9', 'MLA 9'], ['apa7', 'APA 7'], ['chicago17', 'Chicago 17'], ['plain', 'Blank']];
   const dialects = (t) => [['en-US', t('American English')], ['en-GB', t('British English')], ['en-CA', t('Canadian English')], ['en-AU', t('Australian English')]];
-  // A paper's key is school|user|course|assignment (lib/writer-papers.js keyOf): the papers by course, the most first.
+  // Assignment papers by course, the most first; standalone and recovery papers in Documents.
   const byCourse = (rows) => {
     const out = new Map();
     for (const r of Array.isArray(rows) ? rows : []) {
+      if (r?.kind && r.kind !== 'paper') continue;
       const parts = typeof r?.key === 'string' ? r.key.split('|') : [];
+      if (parts.length === 1 && /^(doc:|recovery:)/.test(r.key)) {
+        if (!out.has('documents')) out.set('documents', { id: 'documents', name: 'Documents', keys: [] });
+        out.get('documents').keys.push(r.key);
+        continue;
+      }
       if (parts.length !== 4) continue;
       const id = `${parts[0]}|${parts[2]}`;
       if (!out.has(id)) out.set(id, { id, name: '', keys: [] });
@@ -26,7 +32,7 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
     return [...out.values()].map((c) => ({ ...c, name: c.name || c.id.split('|')[1] })).sort((a, b) => b.keys.length - a.keys.length || a.name.localeCompare(b.name));
   };
   // Every paper's key, a course's or not: a paper whose key never came is kept under a stand-in (writer-paper.js).
-  const allKeys = (rows) => (Array.isArray(rows) ? rows : []).map((r) => r?.key).filter((k) => typeof k === 'string' && k);
+  const allKeys = (rows) => byCourse(rows).flatMap((c) => c.keys);
   // The dictionary as kept: strings only, the newest last.
   const words = (v) => (Array.isArray(v) ? v.filter((w) => typeof w === 'string' && w.trim()) : []);
 
@@ -49,7 +55,7 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
     const drawPapers = async () => {
       let rows = [];
       try { rows = await papers().list(); } catch (e) { console.error(e); }
-      courses = byCourse(rows);
+      courses = byCourse(rows).map((c) => c.id === 'documents' ? { ...c, name: t('Documents') } : c);
       everything = [{ id: '', name: '', keys: allKeys(rows) }];
       const n = everything[0].keys.length;
       $('writer-papers-count').textContent = n ? t('{n} papers', { n }) : '';
@@ -58,9 +64,9 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
       $('writer-paper-list').replaceChildren(...courses.map((c) => {
         const li = el('li'), clear = el('button', '', t('Clear…'));
         clear.type = 'button';
-        clear.setAttribute('aria-label', t('Clear {course}’s papers', { course: c.name }));
+        clear.setAttribute('aria-label', c.id === 'documents' ? t('Clear documents…') : t('Clear {course}’s papers', { course: c.name }));
         clear.addEventListener('click', () => ask([c]));
-        li.append(el('b', '', c.name), el('small', '', t('{n} papers', { n: c.keys.length })), clear);
+        li.append(el('b', '', c.name), el('small', '', t(c.id === 'documents' ? c.keys.length === 1 ? '{n} document' : '{n} documents' : '{n} papers', { n: c.keys.length })), clear);
         return li;
       }));
     };
@@ -70,8 +76,9 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
       if (away('#writer/papers')) return;
       asked = list;
       const n = list.reduce((k, c) => k + c.keys.length, 0);
-      $('writer-clear-title').textContent = list === everything ? t('Clear all papers?') : t('Clear {course}’s papers?', { course: list[0].name });
-      $('writer-clear-note').textContent = `${t('{n} papers', { n })}. ${t('They and their versions are deleted from this device. What you submitted stays in Blackboard.')}`;
+      const documents = list !== everything && list[0].id === 'documents';
+      $('writer-clear-title').textContent = list === everything ? t('Clear all papers?') : documents ? t('Clear documents?') : t('Clear {course}’s papers?', { course: list[0].name });
+      $('writer-clear-note').textContent = `${t(documents ? n === 1 ? '{n} document' : '{n} documents' : '{n} papers', { n })}. ${t('They and their versions are deleted from this device. What you submitted stays in Blackboard.')}`;
       dialog.returnValue = '';
       dialog.showModal();
       $('writer-clear-cancel').focus(); // not autofocus: Settings can be a frame of a school page, where browsers refuse it

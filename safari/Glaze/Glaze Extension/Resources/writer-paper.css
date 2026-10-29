@@ -34,11 +34,12 @@
   :root[data-dark]:not([data-light-page]) .gp-zoom { --sheet: #1e1e1e; --sheet-ink: #e6e6e6; --sheet-line: #555; --sheet-guide: #4a4a4a; --sheet-link: #8ab4f8;
     --sheet-hit: color-mix(in srgb, #fbbf24 32%, transparent); --sheet-hit-cur: color-mix(in srgb, #fbbf24 52%, transparent); color-scheme: dark; }
   :root[data-dark]:not([data-light-page]) .gp-zoom .gp-sheet { box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 6px 24px rgba(0,0,0,.5); }
-  :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: color-mix(in oklab, var(--c) 35%, var(--sheet-ink)) !important; }
+  :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: color-mix(in srgb, var(--c) 10%, #fff) !important; }
   @supports (color: oklch(from red l c h)) {
     :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: oklch(from var(--c) max(l, 0.72, calc(0.93 - l * 0.4)) c h) !important; }
   }
   :root[data-dark]:not([data-light-page]) .gp-zoom [data-gz-highlight] { background-color: color-mix(in oklab, var(--h) 35%, var(--sheet)) !important; }
+  :root[data-dark]:not([data-light-page]) .gp-zoom [data-gz-highlight="black"] { background-color: #424242 !important; }
   :root[data-dark]:not([data-light-page]) .gp-zoom .ProseMirror-gapcursor::after { border-top-color: var(--sheet-ink); }
 }
 /* Focus covers the page: the mockup's ground and opaque panels, whatever is behind. */
@@ -115,7 +116,6 @@
 /* The paper's text (the format adds font, size, spacing and indents) */
 /* Spaces at a line's end hang into the margin, as Word lays them out (ProseMirror's break-spaces would count them). */
 .gp-flow .ProseMirror { min-height: 0; padding: 0; white-space: pre-wrap; tab-size: 0.5in; color: var(--sheet-ink); caret-color: transparent; font-kerning: none; font-variant-ligatures: none; outline: none; }
-.gp-flow .ProseMirror a { color: #0b57d0; }
 .gp-flow .ProseMirror ::selection { background: rgba(37, 99, 235, .22); }
 .gp-flow .ProseMirror sup, .gp-flow .ProseMirror sub { line-height: 0; }
 .gp-flow .ProseMirror sup.gz-footnote { counter-increment: gz-note; cursor: pointer; }

@@ -11,7 +11,7 @@ var GZ_AI_WRITER = globalThis.GZ_AI_WRITER || (() => {
   const LIMIT = { prompt: 8000, post: 4000, thread: 24000, posts: 80, title: 300, name: 120, instructions: 12000, description: 6000, rubric: 12000, criteria: 50, levels: 12,
     file: 12000, files: 24000, attachments: 6, pictures: 4, picture: 4 << 20, album: 8 << 20 };
   const PICTURES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
-  const STYLES = { mla9: 'MLA 9', apa7: 'APA 7', chicago17: 'Chicago 17 (notes and bibliography)' };
+  const STYLES = { mla9: 'MLA 9', apa7: 'APA 7', chicago17: 'Chicago 17 (notes and bibliography)', plain: 'Blank (no prescribed citation style)' };
   const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
   const code = (n) => (Number.isInteger(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : ' ');
