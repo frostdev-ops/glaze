@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm'), fs = require('node:fs');
 const { El } = require('./stand-in-dom.js');
-const source = fs.readFileSync(require.resolve('../papers-motion.js'), 'utf8');
+const source = fs.readFileSync(process.env.PAPERS_MOTION_SOURCE || require.resolve('../papers-motion.js'), 'utf8');
 const KEY = 'gz-documents-route';
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 const page = ({ raw, anim = 'genie', ready = true, failAnimation = false, name = '' } = {}) => {
@@ -42,7 +42,9 @@ const page = ({ raw, anim = 'genie', ready = true, failAnimation = false, name =
     tick: (t) => { clock = t; const all = [...raf.values()]; raf.clear(); for (const f of all) f(t); },
     change: (value) => changed({ popup: { newValue: { anim: value } } }, 'sync'),
     mutate: () => observers.forEach((o) => o.f([])),
-    menu: () => { const el = new El('div', doc); el.className = 'gd-menu'; el.animate = animate; doc.body.append(el); return el; } };
+    menu: () => { const el = new El('div', doc); el.className = 'gd-menu'; el.classList = { contains: (x) => x === 'gd-menu' }; el.animate = animate; el.box = { left: 100, top: 100, width: 200, height: 200 };
+      el.cloneNode = () => { const copy = new El('div', doc); copy.className = 'gd-menu'; copy.animate = animate; return copy; };
+      doc.body.append(el); return el; } };
 };
 const pending = async (options) => {
   const p = page(options); p.data.set(KEY, JSON.stringify(p.record));
@@ -83,4 +85,26 @@ test('pagehide and a persisted pageshow release a pending transition', async () 
 });
 test('a failure to animate the held picture skips cleanly', async () => {
   const p = await pending({ failAnimation: true }); assert.equal(p.skipped(), 1); assert.equal(p.html.hasAttribute('data-gd-route'), false);
+});
+
+// The menu's source is smaller and wholly visible so these cases take the genie path.
+const button = (p) => { const b = new El('button', p.doc); b.box = { left: 100, top: 60, width: 32, height: 32 }; p.doc.body.append(b); return b; };
+test('menu copies are inaccessible, and detaching the real menu or leaving removes them', async () => {
+  for (const exit of ['detach', 'pagehide', 'none']) {
+    const p = page(); await flush(); const menu = p.menu(); p.ctx.GZ_PAPERS_MOTION.open(menu, button(p));
+    const copy = p.doc.body.children.find((e) => e !== menu && e.className === 'gd-menu');
+    assert.ok(copy); assert.equal(copy.inert, true); assert.equal(copy.getAttribute('aria-hidden'), 'true');
+    if (exit === 'detach') { menu.remove(); p.mutate(); } else if (exit === 'none') p.change('none'); else p.event('pagehide');
+    await flush(); assert.equal(copy.isConnected, false);
+    assert.equal(p.animations.filter((a) => a.playState === 'running').length, 0);
+  }
+});
+test('a partially created menu animation removes its copy when the second animate throws', async () => {
+  const p = page(); await flush(); const menu = p.menu(); menu.animate = () => { throw Error('no animation'); };
+  p.ctx.GZ_PAPERS_MOTION.open(menu, button(p)); await flush();
+  assert.equal(p.doc.body.children.filter((e) => e.className === 'gd-menu').length, 1);
+});
+test('a live Fade entrance is cancelled when Pop-up animation becomes None', async () => {
+  const p = page({ anim: 'fade' }); await flush(); p.ctx.GZ_PAPERS_MOTION.open(p.menu()); p.change('none'); await flush();
+  assert.equal(p.animations.filter((a) => a.playState === 'running').length, 0);
 });

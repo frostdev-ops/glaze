@@ -23,9 +23,9 @@ test('each level, setting and switch gets lib/popup.js\'s choice, and none with 
   }
 });
 
-test('a change of page crossfades with the Pop-up animation at None, and never moves with motion off', () => {
-  assert.equal(PM.route({ anim: 'none', level: 'expressive' }), 'fade');
-  assert.equal(PM.route({ anim: 'none', level: 'subtle' }), 'fade');
+test('a change of page is instant with the Pop-up animation at None, and never moves with motion off', () => {
+  assert.equal(PM.route({ anim: 'none', level: 'expressive' }), 'none');
+  assert.equal(PM.route({ anim: 'none', level: 'subtle' }), 'none');
   assert.equal(PM.route({ anim: 'genie', level: 'expressive' }), 'genie');
   assert.equal(PM.route({ anim: 'none', level: 'off' }), 'none');
   assert.equal(PM.route({ anim: 'none', level: 'expressive', reduced: true }), 'none');
