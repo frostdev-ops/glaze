@@ -331,6 +331,15 @@ test('legacy image references are not resolved to a different picture in a newer
 const DOC = 'doc:0f8e2b1a-3c4d-4e5f-8a9b-0c1d2e3f4a5b';
 const titleField = () => { const on = {}; return { on, value: '', placeholder: '', size: 0, readOnly: true, addEventListener: (type, fn) => { on[type] = fn; } }; };
 const standalone = (search, titleIn = titleField()) => ({ titleIn, extra: { own: true, titleIn, location: { search }, host: { standalone: true, key: DOC, context: () => ({}) } } });
+
+test('a standalone paper scopes its saved outline to its own document key', async () => {
+  const local = memory(), { extra } = standalone('?format=plain');
+  const f = await frame({ local, ss: session(), context: {}, extra });
+  assert.equal(vm.runInContext('outlineScope()', f.sandbox), DOC);
+  vm.runInContext('outlineSaved = { scope: key, entries: [] }', f.sandbox);
+  f.type('Notes written here.'); await f.$.save();
+  assert.equal((await PA.open(local).get(DOC)).outline.scope, DOC);
+});
 const run = async (timers) => { for (const x of timers.splice(0)) if (x.fn) await x.fn(); };
 const record = (local) => local.data[PA.KEYS.PAPER + DOC];
 

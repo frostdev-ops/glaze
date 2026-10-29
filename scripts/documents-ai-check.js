@@ -15,7 +15,7 @@ const env = require('./check-env.js'), root = path.resolve(process.env.EXT || pa
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-documents-ai-check');
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
-const results = [], errors = [], unexpected = [], lookups = [];
+const results = [], errors = [], unexpected = [], lookups = [], visuals = [];
 let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 12000) => {
@@ -94,6 +94,16 @@ const INSTALL = () => {
 // In each page, before its scripts: the 'glaze:ai' port as the page sees it (opened, statuses heard, runs sent).
 const TAP = () => {
   const ai = globalThis.__aiTap = { ports: 0, statuses: [], runs: [], disconnects: 0 };
+  const proof = globalThis.__proofTap = { opens: 0, closes: 0, port: null };
+  const Shared = globalThis.SharedWorker;
+  if (Shared) globalThis.SharedWorker = class extends Shared {
+    constructor(...a) {
+      super(...a);
+      if (a[1]?.name !== 'glaze-harper') return;
+      proof.opens++; proof.port = this.port;
+      this.port.addEventListener('message', ({ data }) => { if (data?.op === 'closing') proof.closes++; });
+    }
+  };
   try {
     const connect = chrome.runtime.connect.bind(chrome.runtime);
     chrome.runtime.connect = (...a) => {
@@ -147,9 +157,11 @@ const TAP = () => {
     await model();
     const HOME = `chrome-extension://${id}/papers.html`;
 
+    const pages = [];
     for (const d of DOCS) {
       const tag = d.label;
       const pg = await context.newPage();
+      pages.push(pg);
       pg.on('pageerror', (e) => errors.push(`${tag}: ${e.message}`));
       pg.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`${tag} console: ${m.text()}`); });
       await pg.addInitScript(TAP);
@@ -196,6 +208,16 @@ const TAP = () => {
         const ghost = await until(() => pg.evaluate(() => document.querySelector('.gz-ghost')?.firstChild?.textContent ?? null), 'the gray text');
         assert.equal(ghost, GHOST);
         assert.deepEqual(await pg.evaluate(() => { const g = getComputedStyle(document.querySelector('.gz-ghost')), k = getComputedStyle(document.querySelector('.gz-ghost .gz-k')); return [g.pointerEvents, k.display]; }), ['none', 'inline-block'], 'styled as the frame styles it (writer-ai.css)');
+        await until(() => pg.evaluate(() => getComputedStyle(document.querySelector('.gz-ghost')).opacity === '1'), 'the visible gray text');
+        const colors = await pg.evaluate(() => {
+          const pixel = (color) => { const c = document.createElement('canvas'); c.width = c.height = 1; const x = c.getContext('2d'); x.fillStyle = color; x.fillRect(0, 0, 1, 1); return [...x.getImageData(0, 0, 1, 1).data].slice(0, 3); };
+          return { dark: document.documentElement.hasAttribute('data-dark'), sheet: pixel(getComputedStyle(document.querySelector('.gp-sheet')).backgroundColor),
+            ghost: pixel(getComputedStyle(document.querySelector('.gz-ghost')).color), spelling: pixel(getComputedStyle(document.querySelector('.gz-iss-sp')).textDecorationColor) };
+        });
+        const luminance = (rgb) => rgb.map((n) => n / 255).map((n) => n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4).reduce((v, n, i) => v + n * [.2126, .7152, .0722][i], 0);
+        const contrast = (rgb) => { const a = luminance(colors.sheet), b = luminance(rgb); return (Math.max(a, b) + .05) / (Math.min(a, b) + .05); };
+        const measured = { document: tag, ...colors, ghostContrast: contrast(colors.ghost), spellingContrast: contrast(colors.spelling) };
+        visuals.push(measured); assert.equal(colors.dark, true); assert.ok(measured.ghostContrast >= 3 && measured.spellingContrast >= 3, JSON.stringify(measured));
         await pg.screenshot({ path: path.join(out, `${d.format}-ghost.png`) });
         await pg.keyboard.press('Tab');
         assert.equal(await lastText(), `${LAST} it${GHOST}`);
@@ -222,6 +244,14 @@ const TAP = () => {
         if (d.courseName) assert.deepEqual([ctx.kind, ctx.course?.name, ctx.assignment?.title], ['assignment', d.courseName, d.title], JSON.stringify(ctx));
         else assert.ok(!ctx.assignment && !ctx.kind && !ctx.course?.name, JSON.stringify(ctx));
       });
+      await step(`${tag}: reopening reuses saved outline labels without asking the model`, async () => {
+        await until(() => pg.evaluate(async (key) => (await chrome.storage.local.get(`writerPaper:${key}`))[`writerPaper:${key}`]?.outline?.scope === key, d.key), 'the outline saved under its document key');
+        await pg.reload();
+        await until(() => pg.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key() && GZ_WRITER_AI?.allowed('writing')), 'the reopened editor and AI');
+        await pg.click('#gp-tab-outline');
+        await until(async () => (await pg.locator('.gp-ol-label').allTextContents()).includes('Body: Memory and forgetting'), 'the reused labels');
+        assert.equal(await pg.evaluate(() => __aiTap.runs.filter((r) => r.task === 'writer.outline').length), 0, 'cached labels need no inference');
+      });
       await step(`${tag}: Cite looks a DOI up through the worker`, async () => {
         await caret();
         await pg.locator('.gp-tool > .gp-tbtn', { hasText: 'Cite' }).click();
@@ -234,8 +264,23 @@ const TAP = () => {
         await pg.keyboard.press('Escape');
       });
       lookups.length = 0;
-      await pg.close();
     }
+    await step('two Documents tabs share one Harper, reconnect after idle close, and keep proofing', async () => {
+      const stats = () => Promise.all(pages.map((pg) => pg.evaluate(() => GZ_WRITER_PROOF.stats())));
+      const before = await stats();
+      assert.equal(before[0].worker, before[1].worker); assert.equal(before[0].ports, 2); assert.equal(before[0].loads, 1);
+      // The worker's existing idle test message shortens five minutes; observe both closing notices before any restart.
+      await pages[0].evaluate(() => __proofTap.port.postMessage({ op: 'idle', ms: 1000 }));
+      await until(async () => (await Promise.all(pages.map((pg) => pg.evaluate(() => __proofTap.closes)))).every((n) => n > 0), 'both idle closing notices');
+      for (const pg of pages) {
+        await pg.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view; v.dispatch(v.state.tr.insertText(' A seperate note.', v.state.doc.content.size - 1)); });
+        await until(() => pg.evaluate(() => GZ_WRITER_ISSUES.list().some((i) => i.source === 'harper' && i.text === 'seperate')), 'proofing after idle');
+      }
+      const after = await stats();
+      assert.notEqual(after[0].worker, before[0].worker); assert.equal(after[0].worker, after[1].worker);
+      assert.equal(after[0].ports, 2); assert.equal(after[0].loads, 1);
+    });
+    for (const pg of pages) await pg.close();
     await step('no page errors', async () => assert.deepEqual(errors, []));
     await step('no request but the DOI lookup', async () => assert.deepEqual(unexpected, []));
     passed = results.every((r) => r.ok);
@@ -246,7 +291,7 @@ const TAP = () => {
     if (ext) fs.rmSync(ext, { recursive: true, force: true });
     if (held) fs.rmSync(lock, { recursive: true, force: true });
     fs.mkdirSync(out, { recursive: true });
-    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ passed, results, errors, unexpected }, null, 2) + '\n');
+    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ passed, results, errors, unexpected, visuals }, null, 2) + '\n');
     process.exitCode = passed ? 0 : 1;
   }
 })().catch((e) => { console.error(e); fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, 'failure.txt'), `${e.stack}\n`); process.exitCode = 1; });

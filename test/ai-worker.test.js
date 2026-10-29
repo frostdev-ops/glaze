@@ -60,6 +60,12 @@ test('a document opened from the Documents page (papers.html, its tab\'s top fra
   assert.equal(await require('node:vm').runInContext('aiSender', w.context)(home, { op: 'run', feature: 'writing' }), true);
   assert.equal(await require('node:vm').runInContext('aiVisualScope', w.context)(home), null);
   assert.equal(read, 0, 'nothing is read from a page: there is no LMS page behind it');
+  for (const extra of [{ frameId: 2 }, { origin: 'https://evil.example.com' }, { id: 'another-extension' },
+    { url: 'https://school.instructure.com/papers.html', origin: CANVAS }, { url: 'chrome-extension://x.evil/papers.html' }]) {
+    const { port, say } = w.connect('glaze:ai', { ...home, ...extra });
+    say({ id: 1, op: 'status', feature: 'writing' }); await w.settle();
+    assert.equal(port.hungUp, true, JSON.stringify(extra)); assert.equal(port.posted.length, 0);
+  }
 });
 
 test('only Settings\' own top frame keeps connections, and the key never leaves the worker\'s own store', async () => {

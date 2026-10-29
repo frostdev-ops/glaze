@@ -56,11 +56,14 @@ const response = (body, { status = 200, type = 'application/json', url } = {}) =
 test('the worker\'s fetch: Writer\'s pages only (writer.html, papers.html); doi.org and Open Library without a grant, a page only with its host held', async () => {
   const calls = [];
   const fetch = async (url, init) => { calls.push([url, init]); return response(fixture('writer-cite-doi.json'), { url, type: 'application/vnd.citationstyles.csl+json' }); };
-  for (const s of [null, { ...sender, id: 'other' }, { ...sender, url: 'chrome-extension://gz/options.html' }, { ...sender, url: 'https://bb.school.edu/writer.html' }, { ...sender, url: 'https://bb.school.edu/papers.html' }, { ...sender, url: 'chrome-extension://gz/papers.htmlx' }])
+  for (const s of [null, { ...sender, id: 'other' }, ...['chrome-extension://gz/options.html', 'https://bb.school.edu/writer.html', 'https://bb.school.edu/papers.html',
+    'chrome-extension://gz/papers.htmlx', 'chrome-extension://gz.evil/papers.html', 'chrome-extension://gz/papers.html/child', 'chrome-extension://gz/nested/papers.html',
+    'https://gz/papers.html', 'chrome-extension://gz/papers%2ehtml'].map((url) => ({ ...sender, url }))])
     assert.deepEqual(await L.serve({ kind: 'doi', value: '10.5555/gz.2026.001' }, s, env({ fetch })), { ok: false, error: 'sender' });
   // The Documents page's editor, a tab's top frame, with its document's key in the address.
   const home = { id: 'gz', url: `${PAPERS}?paper=doc%3A00000000-0000-4000-8000-000000000000`, tab: { id: 2 }, frameId: 0 };
   assert.equal((await L.serve({ kind: 'doi', value: '10.5555/gz.2026.001' }, home, env({ fetch }))).ok, true);
+  assert.equal((await L.serve({ kind: 'doi', value: '10.5555/gz.2026.001' }, { ...home, url: `${home.url}#notes` }, env({ fetch }))).ok, true);
   const r = await L.serve({ kind: 'doi', value: '10.5555/gz.2026.001' }, sender, env({ fetch }));
   assert.equal(r.ok, true);
   assert.equal(r.text, fixture('writer-cite-doi.json'));
