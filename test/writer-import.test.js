@@ -155,7 +155,10 @@ test('the card: a .docx shows its name, pages and size, and Open in Writer (the 
   await f.I.bring(f.api, file); await f.flush();
   assert.ok(f.card(), 'a .docx asks first');
   assert.equal(f.doc.querySelector('.gi-file b').textContent, 'Rivera_Essay2.docx');
-  assert.match(f.doc.querySelector('.gi-file small').textContent, /^4 pages · \d+ KB$/);
+  const meta = f.doc.querySelector('.gi-file small');
+  // Word metadata is decompressed asynchronously; a fixed number of event-loop turns can precede that I/O on the runner.
+  for (const until = Date.now() + 5000; !/^4 pages · /.test(meta.textContent) && Date.now() < until;) await new Promise((r) => setTimeout(r, 10));
+  assert.match(meta.textContent, /^4 pages · \d+ KB$/);
   const [open, asis] = f.tiles();
   assert.equal(open.querySelector('span').textContent, 'Open in Writer');
   assert.equal(asis.querySelector('span').textContent, 'Submit as is');
