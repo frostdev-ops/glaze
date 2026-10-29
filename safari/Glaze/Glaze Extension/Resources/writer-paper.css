@@ -324,3 +324,7 @@
 @media print { .gp-hf, .gp-hfbar { display: none !important; } }
 .gp-more .gp-ico { stroke-width: 3.2; }
 .gp-fgrid label { white-space: nowrap; }
+/* thumbnails (lib/writer-thumb.js): page 1 drawn small, its format's page CSS in the thumbnail's own sheet */
+.gt-thumb { position: relative; overflow: hidden; flex: none; pointer-events: none; user-select: none; }
+.gt-thumb .gt-page.gp-sheet { top: 0; left: 0; box-shadow: none; }
+.gt-thumb .gp-flow { overflow: hidden; }
