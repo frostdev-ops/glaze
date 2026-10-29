@@ -107,3 +107,19 @@ test('review: Step 4 copy discloses redirected Download all files in every langu
     assert.ok(description(lang).toLowerCase().includes(term.toLowerCase()), `${lang || 'en'}: redirected file limit`);
   }
 });
+
+test('Writer disclosures describe the complete Feedback material budget and automatic picture preparation', () => {
+  const budget = require('../lib/ai/tasks/writer-feedback.js').LIMIT.material;
+  assert.equal(budget, 200000);
+  const policy = read('PRIVACY.md').split('**Feedback**')[1].split('- **PDFs')[0];
+  assert.match(policy, /200,000 characters/);
+  assert.doesNotMatch(policy, /24,000 characters|12,000 characters/);
+  const harness = read('docs/ai-harness.md').split('| `writer.feedback`')[1].split('\n')[0];
+  assert.match(harness, /200,000 characters/);
+  assert.doesNotMatch(harness, /12,000 characters|24,000 in all/);
+  for (const lang of ['', 'de', 'es', 'fr', 'nl', 'pt-BR']) {
+    const detail = description(lang);
+    assert.match(detail, /128/, `${lang || 'en'}: bounded local readings disclosed`);
+    assert.match(detail, /30/, `${lang || 'en'}: retention disclosed`);
+  }
+});
