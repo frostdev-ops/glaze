@@ -19,7 +19,8 @@ h1 { font-family: var(--gz-font-head, inherit); font-size: 17px; line-height: 1.
 p { margin: 0; }
 #group { justify-self: start; padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--gz-accent); background: var(--gz-accent-soft); overflow-wrap: anywhere; }
 .who { display: grid; gap: 0.1rem; overflow-wrap: anywhere; }
-#exe { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.who .hint { color: var(--gz-ink-muted); }
+#exe { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; direction: ltr; unicode-bidi: isolate; }
 #state { color: var(--gz-ink-muted); }
 .row { display: flex; gap: 0.6rem; justify-content: flex-end; flex-wrap: wrap; }
 .row button { font-size: 13px; padding: 0.4rem 1rem; }

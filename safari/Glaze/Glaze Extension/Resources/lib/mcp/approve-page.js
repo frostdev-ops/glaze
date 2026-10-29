@@ -2,8 +2,7 @@
 // wrote it to storage.session, live through storage.onChanged. The app's name and program are the app's own claims and say
 // so; every other word is Glaze's, and an action's is the sentence Glaze's summarize built. A mod's name comes from its
 // installed record. Allow and Don't allow send glaze:mcp-ask with the shown ask's id, so a decision is only ever for what
-// was on screen. Focus starts on Don't allow, Escape is Don't allow, and both wait ARM ms after a new ask appears, so a
-// keystroke meant for another window can't answer it.
+// was on screen. Focus starts on Don't allow; a new ask or regained focus waits ARM ms, and held keys never answer.
 (() => {
   const PREFIX = 'mcpAsk:', ARM = 800, MOD = /^mod:([a-z2-7]{16})$/;
   GZ_I18N.page();
@@ -16,7 +15,7 @@
   // A group's name on a pairing, and the question a grant asks; mod: a mod group's installed name.
   const label = (group, mod) => (mod ? t('The mod {mod}', { mod }) : {
     courses: t('Courses, to-dos and schedule'), grades: t('Grades'), writer: t('Writer documents'), assignments: t('Assignments and rubrics'),
-  }[group] ?? group);
+  }[group] ?? '');
   const question = (group, app, mod) => (mod ? t('{app} wants to use the mod {mod}', { app, mod }) : {
     courses: t('{app} wants to see your courses, to-dos and schedule', { app }),
     grades: t('{app} wants to see your grades', { app }),
@@ -32,7 +31,15 @@
 
   let shown = null, armed = false, sent = false, turn = 0, timer = 0;
   const lock = () => { for (const b of [$('no'), $('yes')]) b.setAttribute('aria-disabled', String(!armed || sent)); };
-  const arm = () => { armed = false; lock(); clearTimeout(timer); timer = setTimeout(() => { armed = true; lock(); }, ARM); };
+  const active = () => document.hasFocus() && document.visibilityState === 'visible';
+  const disarm = () => { armed = false; clearTimeout(timer); lock(); };
+  const arm = () => {
+    disarm();
+    if (shown && !sent && active()) timer = setTimeout(() => { armed = active(); lock(); }, ARM);
+  };
+  window.addEventListener('blur', disarm);
+  window.addEventListener('focus', () => { if (shown && !sent) { $('no').focus(); arm(); } });
+  document.addEventListener('visibilitychange', arm);
 
   const fill = (rec, mod) => {
     const app = str(rec.app?.name) || t('Unnamed app'), exe = str(rec.app?.exe);
@@ -67,7 +74,7 @@
   };
 
   const answer = (value) => {
-    if (!shown || !armed || sent) return;
+    if (!shown || !armed || sent || !active()) return;
     sent = true;
     lock();
     const back = (r) => { if (r?.ok) return; sent = false; lock(); render(); };
@@ -75,7 +82,11 @@
   };
   $('yes').addEventListener('click', () => answer('yes'));
   $('no').addEventListener('click', () => answer('no'));
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); answer('no'); } });
+  document.addEventListener('keydown', (e) => {
+    if (!['Enter', ' ', 'Escape'].includes(e.key)) return;
+    if (e.repeat || e.isComposing || !armed || !active()) { e.preventDefault(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); answer('no'); }
+  });
   chrome.storage.onChanged.addListener((changes, area) => { if (area === 'session' && Object.keys(changes).some((k) => k.startsWith(PREFIX))) render(); });
 
   // The student's palette, as the share panel wears it (sharing/quick.js): their colors or, with auto on, the light or dark one.
