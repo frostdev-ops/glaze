@@ -242,7 +242,7 @@ const HARNESS = `(() => {
       await pause(400);
       const issues = await fr.evaluate(() => GZ_WRITER_ISSUES.list().map(({ source, message, rule }) => ({ source, message, rule })));
       const clean = await fr.evaluate(() => document.querySelectorAll('.gp-issue[data-rule]').length);
-      check(clean === 0 && !issues.some((i) => ['format', 'cite'].includes(i.source)), `${fid}: a clean paper has no format or citation issues in Checks`);
+      check(clean === 0 && !issues.some((i) => ['format', 'cite'].includes(i.source)), `${fid}: a clean paper has no format or citation issues in Checks (${clean} cards; ${JSON.stringify(issues)})`);
       for (const [rule, json] of FX.seeded[fid]()) {
         await load(fr, json, fid);
         const found = await until(() => fr.evaluate((r) => document.querySelectorAll(`.gp-issue[data-rule="${r}"]`).length, rule), `${fid} ${rule} card`, 4000).catch(() => 0);
