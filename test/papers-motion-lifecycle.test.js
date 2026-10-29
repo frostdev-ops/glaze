@@ -108,3 +108,15 @@ test('a live Fade entrance is cancelled when Pop-up animation becomes None', asy
   const p = page({ anim: 'fade' }); await flush(); p.ctx.GZ_PAPERS_MOTION.open(p.menu()); p.change('none'); await flush();
   assert.equal(p.animations.filter((a) => a.playState === 'running').length, 0);
 });
+
+test('a drawn list waits for its asynchronously loaded motion level within the same deadline', async () => {
+  const p = page();
+  p.record.box = { left: 100, top: 100, width: 200, height: 200 };
+  const q = page({ raw: p.record });
+  q.html.removeAttribute('data-gz-motion'); await flush(); q.reveal(); await flush();
+  q.ctx.GZ_PAPERS_MOTION.shown('paper'); await flush();
+  assert.equal(q.html.getAttribute('data-gd-route'), 'hold');
+  q.html.setAttribute('data-gz-motion', 'expressive'); q.mutate(); await flush();
+  assert.equal(q.html.getAttribute('data-gd-route'), 'open');
+  assert.ok(q.animations.some((a) => a.frames.length >= 24));
+});
