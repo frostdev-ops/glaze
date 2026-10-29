@@ -20,8 +20,8 @@ const harness = () => {
     GZ_ULTRA: { read: () => r }, GZ_LMSQ: {}, GZ_WRITER_TARGET: { parse: () => ({}), forKind: () => ({}) },
     setTimeout: (fn, ms) => { const id = ++seq; timers.set(id, { fn, ms }); return id; }, clearTimeout: (id) => timers.delete(id),
     MutationObserver: class { constructor(fn) { this.fn = fn; } observe() { observe = this; } disconnect() { observe = null; } },
-    document: { body: {}, querySelectorAll: (sel) => sel === 'h1' ? [{ textContent: 'Topic' }] : [{ getAttribute: () => signature }],
-      createElement: () => ({ set innerHTML(v) {}, content: { querySelectorAll: () => [], textContent: 'Prompt' } }) },
+    document: { body: {}, querySelectorAll: (sel) => sel === 'h1' ? [{ textContent: 'Topic' }] : [{ getAttribute: () => signature }] },
+    DOMParser: class { parseFromString() { return { body: { querySelectorAll: () => [], textContent: 'Prompt' } }; } },
   };
   vm.createContext(sandbox); vm.runInContext(source, sandbox);
   const api = sandbox.GZ_WRITER_CONTEXT_DISCUSSION;

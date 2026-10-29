@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { El } = require('../stand-in-dom.js');
+const { El, parser } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
 const U = require('../../lib/writer-ultra.js');
 module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recovery = false, pathname = null, account = async () => '_900_1' } = {}) => {
@@ -21,7 +21,7 @@ module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recov
   const location = { origin: 'https://school.blackboard.com', host: 'school.blackboard.com', pathname: pathname || (fixture === 'discussion' ? '/ultra/courses/_101_1/discussion/_9_1' : '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1') };
   let timer = 0, mode = helper;
   const ctx = vm.createContext({
-    document: doc, location, crypto, CustomEvent, console, Element: El,
+    document: doc, location, crypto, CustomEvent, console, Element: El, DOMParser: parser(doc),
     GZ_COLORS: [], GZ_WRITER_ULTRA: U,
     GZ_CTX: { account, on: () => true, site: 'ultra', settings: () => ({ enabled: true, enhance: { writer: true } }), t: (k) => k, locale: () => 'en', need: async () => ctx.GZ_DRAFT_UI, draftAt: (ed) => ({ ed, id: ed.id, near: U.contextOf(ed, U.kindOf(ed, { path: location.pathname })).post?.id || '', path: location.pathname, html: ed.innerHTML, text: ed.textContent, at: Date.now() }), bookFor: () => ({ results: [{ column: { contentId: '_8_1' } }] }) },
     GZ_DRAFT_UI: { ready: async () => !recovery, keep: (s) => kept.push({ ...s }), write() {} },

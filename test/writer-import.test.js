@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const zlib = require('node:zlib');
-const { El } = require('./stand-in-dom.js');
+const { El, parser } = require('./stand-in-dom.js');
 const I = require('../lib/i18n.js');
 const L = require('../lib/writer-submit.js');
 const page = require('./helpers/writer-submit-page.cjs');
@@ -135,10 +135,11 @@ const frame = ({ blank = true, busy = false } = {}) => {
   for (const n of ['querySelector', 'querySelectorAll', 'addEventListener', 'removeEventListener', 'dispatchEvent']) doc[n] = El.prototype[n].bind(doc.root);
   doc.createElement = (tag) => new El(tag, doc);
   doc.createElementNS = (ns, tag) => new El(tag, doc);
+  doc.importNode = (n) => n;
   doc.fire = (el, type, more = {}) => { const e = { type, target: el, isTrusted: true, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {}, ...more }; el.dispatchEvent(e); return e; };
   const api = { notify: (k) => notices.push(k), blank: () => blank, importFile: async (f) => { imported.push(f); return { id: 'v1' }; } };
   const sheet = { open: (a, f) => { opened.push(f); }, close: () => {}, busy: () => busy };
-  const ctx = vm.createContext({ document: doc, console, Intl, File, TextDecoder, Uint8Array, ArrayBuffer, DecompressionStream, Response, Blob,
+  const ctx = vm.createContext({ document: doc, DOMParser: parser(doc), console, Intl, File, TextDecoder, Uint8Array, ArrayBuffer, DecompressionStream, Response, Blob,
     GZ_WRITER_FRAME: { t: (k, v) => I.t(k, v, 'en'), mode: () => 'paper', kind: () => 'assignment', handle: (k, f) => { handles[k] = f; } },
     GZ_WRITER_PAPER: { current: () => api, need: async () => { ctx.GZ_DOCTEXT ||= require('../lib/doctext.js'); } },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_SUBMIT_SHEET: sheet });
