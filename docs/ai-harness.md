@@ -322,6 +322,9 @@ Each object carries its property order to the native side, so guided generation 
 properties remain omitted; required nullable properties still accept `null`. Temperature zero uses greedy sampling.
 Native messages and errors never log or forward prompt text through diagnostics.
 
+Apple's background budget errors retain the fixed `busy` reason and ask the user to try again in a few minutes. This
+classification uses only bounded underlying error domains and codes; it has no HTTP status and is not retried as 429.
+
 Cancel and timeout end the worker's wait immediately and send `ai.cancel` for that request id. Native cancellation is
 cooperative and confined to the same extension process; `cancelled: true` means a registered task received cancellation,
 not that computation has already stopped. An early cancel is remembered for five minutes (up to 256 ids), duplicate runs

@@ -246,9 +246,20 @@ private enum Native {
             }
         }
         if error is SystemLanguageModel.Error { return ["ok": false, "error": "provider-unavailable", "reason": "assets"] }
+        if busy(error as NSError) { return ["ok": false, "error": "provider-unavailable", "reason": "busy"] }
         if error is GeneratedContent.ParsingError { return ["ok": false, "error": "invalid-response", "reason": "decoding"] }
         // Native error domains, descriptions and underlying errors can contain user text. Never send them back.
         return ["ok": false, "error": "provider-unavailable", "reason": "unknown"]
+    }
+
+    /// The system's budget for background use: Foundation Models is rate-limited in a background process, Safari's extension
+    /// among them. On macOS 27.0.1 it comes as ModelManagerError 1013 (counts) and SensitiveContentAnalysisML 15 (answers),
+    /// possibly under a LanguageModelError, while availability stays available; it clears in minutes. Domains and codes only.
+    static func busy(_ e: NSError, depth: Int = 0) -> Bool {
+        if (e.domain == "ModelManagerServices.ModelManagerError" && e.code == 1013) || (e.domain == "com.apple.SensitiveContentAnalysisML" && e.code == 15) { return true }
+        guard depth < 4 else { return false }
+        let under = (e.userInfo[NSMultipleUnderlyingErrorsKey] as? [NSError] ?? []) + [e.userInfo[NSUnderlyingErrorKey] as? NSError].compactMap { $0 }
+        return under.contains { busy($0, depth: depth + 1) }
     }
 
     // ---- the conversation ----------------------------------------------------------------------------------------------
