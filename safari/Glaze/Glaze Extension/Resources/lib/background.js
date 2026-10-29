@@ -1861,6 +1861,10 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   const now = Date.now();
   for (const [k, v] of readerPasses) if (now - v.at > 60000) readerPasses.delete(k);
   const pass = typeof m.pass === 'string' && /^[\w-]{32,64}$/.test(m.pass) ? m.pass : '';
+  // A Documents pass is spent on the attempt, including a refused sender or address.
+  const papersClaim = m.type === 'glaze:papers' && m.op === 'claim';
+  const papersPass = papersClaim ? readerPasses.get(pass) : null;
+  if (papersPass?.type === m.type) readerPasses.delete(pass);
   let from = null;
   try { from = new URL(addressOf(s)); } catch { /* no address */ }
   if (!pass || s.id !== chrome.runtime.id || !s.tab || !from) { reply({ ok: false }); return; }
@@ -1872,8 +1876,8 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     return true;
   }
   let ok = false, p = null;
-  if (m.op === 'claim' && from.protocol === new URL(chrome.runtime.getURL('')).protocol && from.pathname === page) {
-    p = readerPasses.get(pass);
+  if (m.op === 'claim' && ownOrigin(`${from.protocol}//${from.host}`) && from.pathname === page) {
+    p = papersClaim ? papersPass : readerPasses.get(pass);
     ok = p?.tab === s.tab.id && p.type === m.type;
     if (p?.type === m.type) readerPasses.delete(pass);
   }
@@ -1996,12 +2000,13 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     // The Documents home's delete-Undo puts a paper back whole, from its own tab or its claimed frame (never another frame).
     || (m.op === 'merge' && !papers)
     || !['save', 'restore', 'remove', 'savePreset', 'removePreset', 'merge'].includes(m.op) || !Array.isArray(m.args)) { reply({ ok: false, error: 'sender' }); return; }
-  (framed ? settingsFramesLoaded.then(() => trustedFrame(s, 'papers')) : Promise.resolve(true)).then((ok) => (ok ? queuePapers(m) : { ok: false, error: 'sender' }))
+  (framed ? settingsFramesLoaded.then(() => trustedFrame(s, 'papers')) : Promise.resolve(true)).then((ok) => (ok ? queuePapers(m, () => !framed || trustedFrame(s, 'papers')) : { ok: false, error: 'sender' }))
     .then(reply, (e) => reply({ ok: false, error: e.message }));
   return true;
 });
-const queuePapers = (m) => {
+const queuePapers = (m, allowed = () => true) => {
   const task = (brokerTurn ||= GZ_CARDS.queue())(async () => {
+    if (!allowed()) return { ok: false, error: 'sender' };
     if (!paperStore) { importScripts('writer-styles.js', 'writer-papers.js'); paperStore = GZ_WRITER_PAPERS.open(chrome.storage.local); }
     // One key's paper and versions, nothing else.
     if (m.op === 'merge' && !globalThis.GZ_WRITER_SCHEMA) importScripts('pm.js', 'writer-schema.js');
