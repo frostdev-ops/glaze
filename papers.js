@@ -4,24 +4,56 @@
 // assignment's frame has (writer-paper.js). Each kind of document (lib/doc-kinds.js) brings its own page code; this file
 // registers the paper's. Reads Writer's storage directly and writes through the worker (lib/writer-papers.js).
 (() => {
-  // The student's palette as the popup wears it (ui.js paint, GZ_ACTIVE_COLORS): dark by the theme, or by the system with
-  // auto light and dark, following both live. Until storage answers, the system's mode.
+  // The student's Look as Glaze's own pages wear it (ui.js paint, settings and parts as GZ_UI.load reads them): the
+  // palette, dark by the theme or by the system with auto light and dark (until storage answers, the system's mode), and
+  // the motion level as content.js takes it (off under reduced motion while it follows the system). The student's own
+  // theme: this is no course's page, so course Looks don't apply. With look.whole (the home), the whole Look as Settings
+  // wears it: fonts, text size, corners, depth, surfaces opaque enough to read over its background, and the background
+  // itself drawn behind everything by Settings' own painter (#gd-backdrop: preview.html's backdrop, fed the Look and its
+  // parts as options.js feeds #backdrop; there only while Glaze is on and the Look has one). Follows storage live. The home
+  // is an address with no document's key (a kind's param, lib/doc-kinds.js), so its first paint is already the whole Look; a
+  // stale link that falls back home paints again (home below). The Look's surfaces (features/surfaces.css) are the home's.
+  const look = { whole: !/[?&]paper=/.test(location.search), paint: () => {}, surfaces: null,
+    sheet: () => { look.surfaces ||= new Promise((ok) => { const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'features/surfaces.css', onload: ok, onerror: ok }); document.head.append(l); }); } };
   const theme = async () => {
-    const root = document.documentElement, scheme = matchMedia('(prefers-color-scheme: dark)');
+    const root = document.documentElement, scheme = matchMedia('(prefers-color-scheme: dark)'), calm = matchMedia('(prefers-reduced-motion: reduce)');
     root.toggleAttribute('data-dark', scheme.matches);
-    await GZ_WRITER_PAPER.need(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'ui.js']);
-    let turn = 0;
+    if (look.whole) look.sheet();
+    await GZ_WRITER_PAPER.need(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'lib/cards.js', 'lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js', 'lib/motionx.js', 'lib/lookparts.js', 'ui.js']);
+    let turn = 0, worn = null, backdrop = null;
+    // The frame shows once it wears this Look's ground (its first paint is the default Look's), at most a second later.
+    const post = () => {
+      const b = backdrop;
+      if (!worn || !b?.hasAttribute('data-ready')) return;
+      b.contentWindow?.postMessage({ gzPreview: worn, gzPreviewParts: worn.parts ?? null }, location.origin);
+      let frames = 0;
+      const show = () => { if (b.contentDocument?.documentElement.getAttribute('data-gz-bg') === root.getAttribute('data-gz-bg') || ++frames > 60) b.setAttribute('data-shown', ''); else requestAnimationFrame(show); };
+      if (!b.hasAttribute('data-shown')) requestAnimationFrame(show);
+    };
+    const wear = (s) => {
+      const art = look.whole && s.enabled !== false && s.bg.kind !== 'solid';
+      GZ_UI.paint(art || !look.whole ? s : { ...s, bg: { ...s.bg, kind: 'solid' } }, { page: look.whole });
+      root.toggleAttribute('data-dark', root.style.colorScheme === 'dark');
+      root.dataset.motion = s.motion.followSystem && calm.matches ? 'off' : s.motion.level;
+      if (art && !backdrop) {
+        backdrop = Object.assign(document.createElement('iframe'), { id: 'gd-backdrop', src: 'preview.html?site=canvas&backdrop', tabIndex: -1, inert: true });
+        backdrop.setAttribute('aria-hidden', 'true');
+        document.body.prepend(backdrop);
+      } else if (!art && backdrop) { backdrop.remove(); backdrop = null; }
+      worn = s;
+      post();
+    };
     const paint = async () => {
       const at = ++turn;
       try {
-        const raw = await chrome.storage.sync.get(null);
-        if (at !== turn) return;
-        GZ_UI.paint(GZ_SANITIZE(raw));
-        root.toggleAttribute('data-dark', root.style.colorScheme === 'dark');
+        const s = await GZ_UI.load();
+        if (at === turn) wear(s);
       } catch (e) { console.error(e); }
     };
-    scheme.addEventListener('change', paint);
-    chrome.storage.onChanged.addListener((c, where) => { if (where === 'sync') paint(); });
+    addEventListener('message', (e) => { if (backdrop && e.origin === location.origin && e.source === backdrop.contentWindow && e.data?.gzPreviewReady) { backdrop.setAttribute('data-ready', ''); post(); } });
+    for (const q of [scheme, calm]) q.addEventListener('change', paint);
+    chrome.storage.onChanged.addListener((c, where) => { if (where === 'sync' || (where === 'local' && 'lookX' in c)) paint(); });
+    look.paint = paint;
     await paint();
   };
   theme().catch((e) => console.error(e));
@@ -54,18 +86,26 @@
   const papers = () => (store ||= GZ_WRITER_PAPERS.open());
 
   // ---- the paper kind's page code (GZ_DOC_KINDS.register below)
-  // A paper as a .docx download.
-  const exportFile = async (key) => {
+  // A paper as its .docx: { name, mime, bytes }, or null when it holds no document.
+  const file = async (key) => {
     await GZ_WRITER_PAPER.need([...DOCX, 'lib/writer-submit.js']);
     const p = await papers().get(key);
-    if (!p?.doc) return;
+    if (!p?.doc) return null;
     const f = GZ_WRITER_STYLES.get(p.format), surname = GZ_WRITER_FORMAT.surname(p.doc, f);
     const out = GZ_WRITER_DOCX.exportDocx(p.doc, { format: f, surname, title: p.title });
-    const url = URL.createObjectURL(new Blob([out.bytes], { type: out.type }));
-    const a = h('a', { href: url, download: GZ_WRITER_SUBMIT_LIB.fileName({ surname, title: p.title, fallback: t('Paper') }) });
+    return { name: GZ_WRITER_SUBMIT_LIB.fileName({ surname, title: p.title, fallback: t('Paper') }), mime: out.type, bytes: out.bytes };
+  };
+  // A paper as a .docx download.
+  const exportFile = async (key) => {
+    const f = await file(key);
+    if (!f) return;
+    const url = URL.createObjectURL(new Blob([f.bytes], { type: f.mime }));
+    const a = h('a', { href: url, download: f.name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   };
+  // A paper's text, a line a paragraph (lib/doc-home.js flat).
+  const text = (rec) => GZ_DOC_HOME.flat(rec?.doc);
   // A paper's page 1, small (lib/writer-thumb.js).
   const thumb = (rec, scale = 0.25) => GZ_WRITER_THUMB.render(GZ_WRITER_THUMB.firstPage(rec.doc), rec.format, { scale });
   // A Word file as a new standalone document, as the editor's import reads one (writer-paper.js importFile): in the format
@@ -108,6 +148,7 @@
 
   // ---- the home
   const home = async () => {
+    if (!look.whole) { look.whole = true; look.sheet(); look.paint(); }
     await GZ_WRITER_PAPER.need(['lib/writer-styles.js', 'lib/writer-format.js', 'lib/writer-thumb.js', 'lib/doc-home.js']);
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PA = GZ_WRITER_PAPERS, DK = GZ_DOC_KINDS, DH = GZ_DOC_HOME, TH = GZ_WRITER_THUMB;
     const st = papers(), { INDEX, PAPER } = PA.KEYS;
@@ -142,11 +183,14 @@
     const accept = Object.values(DK.KINDS).flatMap((k) => [...k.accept, k.mime]).join(',');
     const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept, hidden: true, tabindex: '-1', 'aria-label': t('Import .docx…') });
     const importB = btn({ id: 'gd-import', class: 'gd-btn' }, t('Import .docx…'));
-    const bar = h('div', { class: 'gd-bar' }, h('label', { class: 'gd-search' }, icon('search'), q), h('div', { class: 'gd-tools' }, courseSel, kindSel, sortSel, h('div', { class: 'gd-views' }, gridB, listB), importB, file));
+    // Items the page's own scripts and mods add (GZ_DOCUMENTS.item 'toolbar'), before Import.
+    const extra = h('div', { class: 'gd-extra', hidden: true });
     const said = h('p', { id: 'gd-said', class: 'gd-said', role: 'status' });
+    const bar = h('div', { class: 'gd-bar' }, h('label', { class: 'gd-search' }, icon('search'), q), h('div', { class: 'gd-tools' }, courseSel, kindSel, sortSel, h('div', { class: 'gd-views' }, gridB, listB), extra, importB, file), said);
     const docs = h('ul', { id: 'gd-docs', class: 'gd-docs', 'aria-labelledby': 'heading' });
     const count = h('p', { id: 'gd-count', class: 'gd-sr', 'aria-live': 'polite' });
-    main.append(band, bar, said, docs, count);
+    // The heading and the New band share one panel of glass; the toolbar is another, the cards each their own.
+    main.append(h('div', { class: 'gd-top' }, $('heading'), band), bar, docs, count);
     const say = (text) => { said.textContent = text || ''; };
 
     // ---- state
@@ -272,6 +316,7 @@
           render();
           if (active && words.length) await bodies();
         } while (again);
+        tell('change');
       })().catch((e) => console.error(e)).finally(() => { reading = null; });
       return reading;
     };
@@ -371,7 +416,8 @@
     listB.addEventListener('click', () => setView('list', true));
     setView(view, false);
 
-    // ---- the ⋯ menu: Rename (a standalone document's), Make a copy, Export .docx, Delete
+    // ---- the ⋯ menu: Rename (a standalone document's), Make a copy, Export .docx, Delete; then the items added for cards
+    // (GZ_DOCUMENTS.item 'card'), each told the card's summary
     let menu = null, keyMenu = false;
     const closeMenu = (back) => { if (!menu) return; const m = menu; menu = null; m.el.remove(); m.opener.setAttribute('aria-expanded', 'false'); if (back) m.back.focus(); };
     const menuFor = (k, back) => {
@@ -380,8 +426,11 @@
       if (menu?.k === k) { closeMenu(true); return; }
       closeMenu();
       const items = [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', 'Export .docx'], ['delete', 'Delete']].filter(Boolean);
+      const added = [...slots.card.values()];
       const el = h('div', { class: 'pop gp-menu gd-menu', role: 'menu', 'aria-labelledby': c.link.id },
-        items.map(([act, label]) => btn({ role: 'menuitem', tabindex: '-1', 'data-act': act, onclick: () => { closeMenu(act !== 'rename'); run(act, k); } }, t(label))));
+        items.map(([act, label]) => btn({ role: 'menuitem', tabindex: '-1', 'data-act': act, onclick: () => { closeMenu(act !== 'rename'); run(act, k); } }, t(label))),
+        added.length ? h('div', { class: 'gp-hr', role: 'separator' }) : null,
+        added.map((x) => btn({ role: 'menuitem', tabindex: '-1', class: 'gd-added', title: x.by || null, onclick: (e) => { closeMenu(true); x.run(summary(c.row), e); } }, x.label)));
       document.body.append(el);
       const anchor = c.more.getClientRects().length ? c.more : c.link, r = anchor.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
       el.style.left = `${Math.max(4, Math.min(r.right - w, innerWidth - w - 4))}px`;
@@ -559,14 +608,89 @@
       else if (undoable && (MAC ? e.metaKey : e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') { e.preventDefault(); restore(); }
     });
 
-    await refresh();
+    // ---- GZ_DOCUMENTS: the page's hooks for its own scripts, as GZ_WRITER_FRAME is the editor's. on(event, fn): 'ready'
+    // (the home is drawn) and 'change' (the documents changed); list(): every listed document's public summary
+    // (lib/doc-home.js summary), newest first; open(key) and create(format) in this tab; read(key) → { key, title, text } and
+    // export(key) → { name, mime, bytes } (its kind's file, GZ_DOC_KINDS), for a listed key only, else null; item(slot, label,
+    // fn, { by }): a button in the toolbar ('toolbar') or an entry in every card's ⋯ menu ('card'), fn(summary or null, the
+    // click) → { remove() }; style({ radius, glass, thumb, column }): the --gd-* hooks (papers.css), each a number or left
+    // to the Look. Mods reach these through features/mods.js, each call checked by the worker first (lib/modbroker.js).
+    const hooks = { ready: [], change: [] }, slots = { toolbar: new Map(), card: new Map() };
+    const tell = (ev) => { for (const fn of hooks[ev]) try { fn(); } catch (e) { console.error(e); } };
+    const summary = (r) => DH.summary(r, titleOf(r), DK.kindOf(r));
+    const listed = (key) => known().find((r) => r.key === key) || null;
+    const STYLE = { radius: ['--gd-radius', 'px'], glass: ['--gd-glass', 'px'], thumb: ['--gd-thumb', ''], column: ['--gd-column', 'px'] };
+    let slotSeq = 0;
+    const tools = () => { extra.replaceChildren(...[...slots.toolbar.values()].map((x) => x.el)); extra.hidden = !slots.toolbar.size; };
+    const D = {
+      t,
+      on: (ev, fn) => { if (hooks[ev] && typeof fn === 'function') hooks[ev].push(fn); },
+      list: () => DH.sort(known(), 'updated', new Map(), locale).map(summary),
+      open: (key) => { const r = listed(key); if (r) location.assign(`papers.html?${DK.get(DK.kindOf(r)).param}=${encodeURIComponent(key)}`); return !!r; },
+      create: (format) => { const ok = ST.IDS.includes(format); if (ok) location.assign(fresh(format)); return ok; },
+      read: async (key) => { const r = listed(key), rec = r && await st.get(key); return rec?.doc ? { key, title: titleOf(r), text: DK.get(DK.kindOf(r)).text(rec) } : null; },
+      export: async (key) => { const r = listed(key), f = r && await DK.get(DK.kindOf(r)).file(key); return f ? { name: f.name, mime: f.mime, bytes: new Uint8Array(f.bytes) } : null; },
+      item: (slot, label, fn, { by = '' } = {}) => {
+        if (!slots[slot] || typeof fn !== 'function') return null;
+        const k = ++slotSeq, x = { label: String(label), by: String(by), run: fn };
+        if (slot === 'toolbar') x.el = btn({ class: 'gd-btn gd-quiet', title: x.by || null, onclick: (e) => fn(null, e) }, x.label);
+        slots[slot].set(k, x);
+        if (slot === 'toolbar') tools();
+        return { remove: () => { if (slots[slot].delete(k) && slot === 'toolbar') tools(); } };
+      },
+      style: (vars) => { for (const [k, [prop, unit]] of Object.entries(STYLE)) { const v = vars?.[k]; if (Number.isFinite(v)) document.documentElement.style.setProperty(prop, `${v}${unit}`); else document.documentElement.style.removeProperty(prop); } },
+    };
+    globalThis.GZ_DOCUMENTS = Object.freeze(D);
+    hooks.change.push(() => globalThis.GZ_MODS?.documents.change());
+
+    // ---- mods: the Workers of the mods granted documents run here as on a school page (features/mods.js: its host, its
+    // watchdog), on this page's calls: what the worker's answer carries is done through GZ_DOCUMENTS. Their items show with
+    // the mod's name; opening or starting a document follows a click on one of the mod's own items, within a second, once.
+    // The first mod in the student's order to set a --gd-* hook wins it.
+    const mods = async () => {
+      if (!chrome.runtime.getManifest().sandbox) return; // code mods run only where the manifest has their sandbox (content.js too)
+      const a = await chrome.runtime.sendMessage({ type: 'glaze:modpage', op: 'list' }).catch(() => null);
+      if (!Array.isArray(a?.mods) || !a.mods.length || !active) return;
+      const own = new Map(), styles = new Map(), clicked = new Map(); // `${mod}|${slot}|${id}` → item; mod → its hooks; mod → when its item was clicked
+      const restyle = () => { const won = {}; for (const id of GZ_MODS.order()) for (const [k, v] of Object.entries(styles.get(id) || {})) won[k] ??= v; D.style(won); };
+      const done = (value) => (value == null ? { error: 'args' } : { ok: true, value });
+      const call = async (id, name, v, by) => {
+        if (name === 'documents.list') return done(D.list());
+        if (name === 'documents.read') return done(await D.read(v.key));
+        if (name === 'documents.export') return done(await D.export(v.key));
+        if (name === 'documents.open' || name === 'documents.create') {
+          const at = clicked.get(id);
+          if (at === undefined || performance.now() - at > 1000) return { error: 'permission' };
+          clicked.delete(id);
+          return (name === 'documents.open' ? D.open(v.key) : D.create(v.format)) ? null : { error: 'args' };
+        }
+        if (name === 'documents.add') {
+          const k = `${id}|${v.slot}|${v.id}`;
+          if (!own.has(k) && [...own.keys()].filter((x) => x.startsWith(`${id}|${v.slot}|`)).length >= 4) return { error: 'args' };
+          own.get(k)?.remove();
+          own.set(k, D.item(v.slot.slice(10), v.label, (doc, e) => { if (e?.isTrusted) clicked.set(id, performance.now()); GZ_MODS.documents.action(id, { slot: v.slot, id: v.id, ...(doc && { doc }) }); }, { by }));
+          return null;
+        }
+        if (name === 'documents.remove') { const k = `${id}|${v.slot}|${v.id}`; if (!own.has(k)) return { error: 'args' }; own.get(k).remove(); own.delete(k); return null; }
+        if (name === 'documents.style') { if (v) styles.set(id, v); else styles.delete(id); restyle(); return null; }
+        return { error: 'call' };
+      };
+      const forget = (id) => { for (const [k, x] of own) if (k.startsWith(`${id}|`)) { x.remove(); own.delete(k); } clicked.delete(id); if (styles.delete(id)) restyle(); };
+      globalThis.GZ_CTX = Object.freeze({ site: 'documents', need: (f, ready) => (ready() ? Promise.resolve() : GZ_WRITER_PAPER.need([f])), documents: Object.freeze({ call, forget }) });
+      await GZ_WRITER_PAPER.need(['features/mods.js']);
+      GZ_MODS.start(a.mods);
+    };
+
+    await Promise.all([refresh(), look.surfaces]);
     main.hidden = false;
+    tell('ready');
+    mods().catch((e) => console.error(e));
   };
 
   catalogue().then(async () => {
     document.title = t('Documents');
     await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/doc-kinds.js']);
-    GZ_DOC_KINDS.register('paper', { edit, thumb, exportFile, importFile, measure: GZ_WRITER_PAPERS.measure });
+    GZ_DOC_KINDS.register('paper', { edit, thumb, file, exportFile, text, importFile, measure: GZ_WRITER_PAPERS.measure });
     // ?<a kind's param>=<key> opens that document; else the home.
     const params = new URLSearchParams(location.search), id = Object.keys(GZ_DOC_KINDS.KINDS).find((k) => params.get(GZ_DOC_KINDS.KINDS[k].param));
     if (id) {

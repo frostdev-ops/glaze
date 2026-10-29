@@ -8,6 +8,7 @@ Optional [encrypted sharing](../PRIVACY.md#optional-encrypted-share-sessions) en
 
 User-installed [mods](../PRIVACY.md#user-installed-mods) can read course data only with declared and granted permissions. Removing a mod also removes the data it stored, unless you untick **Remove its stored data too**. On Chrome, code with access to personal data runs in a Worker; a mod granted both data and network access can send that data to its approved hosts. Firefox and Safari use declarative parts only.
 The `nav.read` permission is personal-data access too: it reads the bar's items, course names, unread counts and navigation events, without link addresses, and disables the mod's frame UI. `nav.items` lets a mod manage up to eight items of its own with school-origin links or click actions; `nav.layout` proposes a layout while it runs. Use my own keeps that mod's layouts off locally. An enabled replacement can use `glaze.nav.go` to open an existing bar item only within a second of a click in its navigation controls.
+`documents` lets a mod's Worker on the Documents page read your documents' titles, courses and word counts and add items of its own there; `documents.read` adds their text and exported files. Both are personal data, Worker only.
 
 On Chrome, the optional [signed mod blocklist](../PRIVACY.md#signed-mod-blocklist) makes a credential-free request at most daily when Glaze and the setting are on and a code mod is installed. Failed checks retry after an hour. Declarative-only mods, Firefox and Safari do not make this request.
 

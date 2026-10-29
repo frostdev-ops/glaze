@@ -1,5 +1,5 @@
 // The kinds of document the Documents home (papers.html) holds: each kind's fixed facts here, its page code (edit, thumb,
-// exportFile, importFile, measure) attached by the page script that draws it. A stored record or index row without a kind
+// file → { name, mime, bytes }, exportFile, text, importFile, measure) attached by the page script that draws it. A stored record or index row without a kind
 // was written before kinds and is a paper (lib/writer-papers.js). Later kinds join KINDS; a build that lacks one leaves
 // its rows alone rather than guessing at them.
 // Classic script; module.exports for node.
