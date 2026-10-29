@@ -273,6 +273,8 @@ test('delete then merge keeps every original version at the cap', async () => {
   const records = { [`writerPaper:${k}`]: await P.get(k), [`writerVersions:${k}`]: structuredClone(s.data[`writerVersions:${k}`]) };
   await P.remove(k); await P.merge(records);
   assert.deepEqual((await P.versions(k)).map((v) => v.id), records[`writerVersions:${k}`].map((v) => v.id));
+  assert.equal((await P.get(k)).updated, records[`writerPaper:${k}`].updated, 'Undo preserves Last edited');
+  assert.equal((await P.get(k)).revision, records[`writerPaper:${k}`].revision, 'Undo adds no save');
 });
 
 test('merge keeps an older record with a different format as a version', async () => {
