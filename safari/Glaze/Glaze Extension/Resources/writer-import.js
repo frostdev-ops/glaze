@@ -29,7 +29,8 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
     open: (replace) => { const x = replace ? 52 : 43, y = replace ? 14 : 8; return `${replace ? '<rect class="gi-old" x="30" y="10" width="46" height="62" rx="3"/>' : ''}<rect class="gi-pg" x="${x}" y="${y}" width="46" height="62" rx="3"/>${lines(x, y)}<rect class="gi-accf" x="${x + 27}" y="${y + 50}" width="2" height="9" rx="1"/><path class="gi-acc" d="M${replace ? 104 : 96} ${replace ? 62 : 58}l14-14 5 5-14 14h-5z"/>`; },
     asis: () => '<rect class="gi-pg" x="43" y="12" width="46" height="62" rx="3"/><rect class="gi-tagf" x="53" y="34" width="26" height="14" rx="3"/><text class="gi-tagt" x="66" y="44.2" text-anchor="middle">DOCX</text><path class="gi-acc" d="M50 6v14a4 4 0 0 0 8 0V9"/><path class="gi-acc" d="M104 52V22M96 30l8-8 8 8"/>',
   };
-  const art = (markup) => { const s = document.createElementNS(SVG, 'svg'); s.setAttribute('viewBox', '0 0 132 84'); s.setAttribute('class', 'gi-art'); s.setAttribute('aria-hidden', 'true'); s.innerHTML = markup; return s; };
+  // Parsed as SVG rather than set as innerHTML, which Firefox Add-ons' linter refuses.
+  const art = (markup) => document.importNode(new DOMParser().parseFromString(`<svg xmlns="${SVG}" viewBox="0 0 132 84" class="gi-art" aria-hidden="true">${markup}</svg>`, 'image/svg+xml').documentElement, true);
   const HISTORY = 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2', X = 'M6 6l12 12M18 6 6 18';
   const icon = (d) => { const s = document.createElementNS(SVG, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'ico'); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS(SVG, 'path'); p.setAttribute('d', d); s.append(p); return s; };
 

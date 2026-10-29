@@ -132,12 +132,11 @@ var GZ_WRITER_CONTEXT_DISCUSSION = globalThis.GZ_WRITER_CONTEXT_DISCUSSION || ((
   let page = null; // { key, path, base: Promise, thread: Promise|null, data, threadAt, sig, timer }
   let X = null, observer = null;
   const alive = (box) => box.frame === null || !!box.frame?.isConnected;
-  // A read-only Quill body's text as lib/writer-ultra.js reads one, from HTML parsed inert (a template: no scripts, no loads).
+  // A read-only Quill body's text as lib/writer-ultra.js reads one, from HTML parsed inert (DOMParser: no scripts, no loads).
   const htmlText = (h) => {
-    const t = document.createElement('template');
-    t.innerHTML = String(h || '');
-    const blocks = [...t.content.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, pre')];
-    return blocks.length ? blocks.map((b) => squash(b.textContent)).filter(Boolean).join('\n') : squash(t.content.textContent);
+    const body = new DOMParser().parseFromString(String(h || ''), 'text/html').body;
+    const blocks = [...body.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, pre')];
+    return blocks.length ? blocks.map((b) => squash(b.textContent)).filter(Boolean).join('\n') : squash(body.textContent);
   };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const reader = (live, signal) => X.need('lib/lmsq.js', () => globalThis.GZ_LMSQ).then(() => X.need('lib/ultra.js', () => globalThis.GZ_ULTRA))
