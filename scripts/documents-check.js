@@ -758,7 +758,7 @@ const PROBE = ({ lang }) => {
         check(Number.isFinite(k) && k >= 4.5, `${name}: ${sel} reads at ${k.toFixed(2)}:1 or better against every pixel under it`);
       }
       if (name === 'photo' || name === 'lightPhoto') {
-        await pg.click('.gd-card:first-child .gd-more');
+        await pg.click(`${card(NOTES)} .gd-more`);
         const menuContrast = await contrastOn(pg, '.gd-menu [role=menuitem]');
         check(Number.isFinite(menuContrast) && menuContrast >= 4.5, `${name}: the menu text meets 4.5:1 over the photo (${menuContrast.toFixed(2)})`);
         await pg.click('.gd-menu button:text-is("Delete")');
