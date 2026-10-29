@@ -75,3 +75,11 @@ test('a Word import saves the new word count before its editor autosave', async 
   await p.importFile(p.file());
   assert.equal(p.ctx.paper.words, 3);
 });
+
+test('a Word import cannot start during an active submit', async () => {
+  const p = paper();
+  let reads = 0;
+  p.ctx.GZ_WRITER_SUBMIT_SHEET = { busy: () => true };
+  await p.importFile({ ...p.file(), arrayBuffer: async () => { reads++; return new ArrayBuffer(3); } });
+  assert.equal(reads + p.saved.length + p.applied.length, 0);
+});

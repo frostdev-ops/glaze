@@ -527,7 +527,6 @@ test('a document with a large picture stays intact in the pick and its session r
   const picture = { type: 'image', attrs: { src: `data:image/png;base64,${'A'.repeat(2_100_000)}`, alt: 'Photo' } };
   const { local, f, ss } = await picking({ doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Photo notes.' }, picture] }] } });
   await f.$.fromDocs(DOC, 'Photo notes');
-  await f.$.save();
   assert.equal(f.view.state.doc.firstChild.lastChild.attrs.src, picture.attrs.src);
   f.type(' More notes.');
   assert.ok(ss.getItem(`gz-paper-pending:${KEY}`).length < 5000, 'the saved picture is a digest in sessionStorage');
