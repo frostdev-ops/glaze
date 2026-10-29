@@ -715,6 +715,9 @@ const PROBE = ({ lang }) => {
       await wearLook(LOOKS[name]);
       const pg = await openHome('en', `look ${name}`);
       await until(() => pg.evaluate(() => !!document.querySelector('.gd-pic .gt-thumb')), `${name} thumbnails`);
+      const timing = await pg.evaluate(() => ({ first: __gd.firstCard, rows: __gd.rowsPaint - __gd.indexRead }));
+      console.log(`${name}: first card at ${timing.first.toFixed(1)} ms; rows paint in ${timing.rows.toFixed(1)} ms after the index`);
+      check(timing.rows < 150, `${name}: the painter keeps card rendering within 150 ms of the index`);
       return pg;
     };
     for (const name of ['frost', 'light', 'scene', 'photo', 'lightPhoto']) {
@@ -810,6 +813,7 @@ const PROBE = ({ lang }) => {
         await glaze.documents.add('documents.card', { id: 'peek', label: 'Peek' });
         await tryCall('page', () => page);
         await tryCall('list', () => glaze.documents.list());
+        await tryCall('rawRead', () => glaze.documents.read('bb.school.test|_900_1|_101_1|_7_1'));
         await tryCall('early', () => glaze.documents.open('doc:00000000-0000-0000-0000-000000000000'));
         await tryCall('todo', () => glaze.todo());
         await tryCall('style', () => glaze.documents.style({ radius: 24, column: 300 }));
@@ -833,6 +837,7 @@ const PROBE = ({ lang }) => {
     check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && md.list.value.every((d) => /^document:[0-9a-f-]{36}$/.test(d.key)) && md.list.value.every((d, i) => JSON.stringify({ ...d, key: '' }) === JSON.stringify({ ...nativeList[i], key: '' })),
       `mod: documents.list() gives every listed document's public fields only (${md.list.value?.length} × ${Object.keys(md.list.value?.[0] || {}).sort().join(' ')})`);
     check(!JSON.stringify(md.list.value).includes('Beloved 1. A paragraph') && md.list.value.find((d) => d.title === 'Essay 2: Memory in Beloved')?.course === 'ENGL 2110' && !JSON.stringify(md.list.value).includes('bb.school.test') && !JSON.stringify(md.list.value).includes('_900_1'), 'mod: the list carries no document text, and an assignment paper\'s course');
+    check(md.rawRead.ok === false && md.rawRead.error === 'args', 'mod: raw assignment storage keys cannot be used to read text');
     check(md.early.ok === false && md.early.error === 'permission', `mod: documents.open without a click on its own item is refused (${md.early.error})`);
     await mp.evaluate(() => document.querySelector('.gd-extra button').click());
     await until(async () => (await modData())?.open, 'synthetic mod item click');
@@ -847,7 +852,7 @@ const PROBE = ({ lang }) => {
     await mp.click('.gd-menu .gd-added');
     await until(async () => (await modData())?.export, 'mod card action');
     const act = await modData();
-    check(act.action.slot === 'documents.card' && act.action.id === 'peek' && act.action.doc.key === md.list.value.find((d) => d.title === 'Reading notes').key && Object.keys(act.action.doc).sort().join() === PUBLIC, `mod: a card item's click tells the mod that card's summary (${JSON.stringify(act.action.doc)})`);
+    check(act.action.slot === 'documents.card' && act.action.id === 'peek' && act.action.doc.key === md.list.value[nativeList.findIndex((d) => d.key === NOTES)].key && Object.keys(act.action.doc).sort().join() === PUBLIC, `mod: a card item's click tells the mod that card's summary (${JSON.stringify(act.action.doc)})`);
     fs.writeFileSync(path.join(out, 'mod-action.json'), JSON.stringify({ ...act, list: undefined }, null, 1));
     const notesText = require(path.join(root, 'lib/doc-home.js')).flat((await local(`writerPaper:${NOTES}`)).doc);
     check(act.read.ok && act.read.value.key === act.action.doc.key && act.read.value.title === act.action.doc.title && act.read.value.text === notesText && notesText.includes('the house on Bluestone Road'), 'mod: documents.read (documents.read) gives the document\'s text, as stored');
