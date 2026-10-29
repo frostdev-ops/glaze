@@ -42,6 +42,8 @@ const run = async (o = {}) => {
   }
 
   const nodes = new Map();
+  let allowed;
+  try { allowed = I.granted(ctx); } catch (e) { add('fail', 'Extension ids', e.message); return done(); }
   const nodeVersion = (node) => {
     if (!nodes.has(node)) nodes.set(node, Promise.resolve(ctx.run(node, ['--version'])).then((r) => String(r.stdout).trim(), () => null));
     return nodes.get(node);
@@ -63,6 +65,7 @@ const run = async (o = {}) => {
       const ids = IDS.fromManifest(m);
       if (!ids.includes(IDS.STORE)) out.push(`${file} doesn't let in the store copy of Glaze (${IDS.STORE}). ${FIX}`);
       if (!Array.isArray(m.allowed_origins) || ids.length !== m.allowed_origins.length) out.push(`${file} has allowed_origins that aren't chrome-extension://<id>/`);
+      if (ids.some((id) => !allowed.includes(id))) out.push(`${file} lets in extension ids that setup was never given. ${FIX}`);
     }
     const st = fs.statSync(file);
     const mLoose = loose(file, st);

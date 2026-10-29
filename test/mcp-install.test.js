@@ -700,7 +700,7 @@ test('doctor reports a valid Chromium id that was never granted', async (t) => {
 });
 
 test('a shared Windows key can move between our browsers as they are installed', async (t) => {
-  const base = scratch(t), reg = runner(), ctx = win(base, reg);
+  const base = scratch(t), reg = runner(), ctx = win(base, reg, { node: process.execPath });
   mk(base, 'Local', 'Vivaldi', 'User Data');
   await I.setup(ctx);
   mk(base, 'Local', 'Google', 'Chrome', 'User Data');

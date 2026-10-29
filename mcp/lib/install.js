@@ -137,6 +137,14 @@ const same = (a, b) => {
   } catch { return false; }
 };
 const real = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+const granted = (ctx) => {
+  const file = path.join(ctx.root, GRANTS);
+  safePath(file);
+  const g = readJson(file);
+  if (!g && !fs.existsSync(file)) return IDS.merge();
+  if (!g || g.name !== B.HOST || !Array.isArray(g.ids) || !g.ids.every(IDS.valid)) throw new Error(`refusing unrelated file: ${file}`);
+  return IDS.merge(g.ids);
+};
 // Receipts describe every copied entry. An added or changed file makes a copy ineligible for recursive removal.
 const inventory = (dir, rel = '') => fs.readdirSync(path.join(dir, rel), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap((e) => {
   const f = path.join(rel, e.name);
@@ -243,10 +251,7 @@ const ensure = async (o = {}) => {
   if (!chosen.length) return out;
   destinations(ctx, chosen);
   const grantsFile = path.join(ctx.root, GRANTS);
-  const saved = readJson(grantsFile);
-  const validGrants = (g) => g && g.name === B.HOST && Array.isArray(g.ids) && g.ids.every(IDS.valid);
-  if (fs.existsSync(grantsFile) && !validGrants(saved)) throw new Error(`refusing unrelated file: ${grantsFile}`);
-  out.ids = IDS.merge(validGrants(saved) ? saved.ids : [], o.ids || []);
+  out.ids = IDS.merge(granted(ctx), o.ids || []);
   const owner = new Map();
   if (ctx.platform === 'win32') for (const b of chosen) for (const k of b.keys) if (!owner.has(k)) owner.set(k, b);
   // Check every destination before the first write. A reserved name alone does not confer ownership.
@@ -258,8 +263,10 @@ const ensure = async (o = {}) => {
     if (fs.existsSync(mf) && !ours(ctx, b, mf, readJson(mf))) throw new Error(`refusing unrelated manifest: ${mf}`);
     L.text(ctx.platform, { node: ctx.node, script: path.join(ctx.root, version, SCRIPT), browser: b.id });
   }
+  const priorKeys = new Map();
   for (const [k, b] of owner) {
     const v = await readKey(ctx, k);
+    priorKeys.set(k, v);
     if (v !== null && !equalPath(ctx, v, manifestPath(ctx, b)) && !all.some((x) => x.keys.includes(k) && equalPath(ctx, v, manifestPath(ctx, x)) && ours(ctx, x, v, readJson(v)))) throw new Error(`refusing registry value we do not own: ${k}`);
   }
   const before = new Set(launchers(ctx).map(({ l }) => path.relative(ctx.root, l.script).split(path.sep)[0]));
@@ -277,7 +284,7 @@ const ensure = async (o = {}) => {
     fs.mkdirSync(path.dirname(mf), { recursive: true });
     if (put(mf, `${JSON.stringify(manifest(b, launcher, out.ids), null, 2)}\n`, 0, force)) out.wrote.push(mf);
     for (const k of keys) {
-      if (!force && (await readKey(ctx, k)) === mf) continue;
+      if (!force && equalPath(ctx, priorKeys.get(k), mf)) continue;
       await ctx.run(regExe(ctx), ['add', k, '/ve', '/t', 'REG_SZ', '/d', mf, '/f']);
       out.keys.push(k);
     }
@@ -316,4 +323,4 @@ const uninstall = async (o = {}) => {
   return { removed, kept };
 };
 
-module.exports = { DESCRIPTION, context, ensure, setup, uninstall, readKey, versionOf, manifestPath, inside, regExe, runFile, stableNode, safePath };
+module.exports = { DESCRIPTION, context, ensure, setup, uninstall, readKey, versionOf, manifestPath, inside, regExe, runFile, stableNode, safePath, granted };
