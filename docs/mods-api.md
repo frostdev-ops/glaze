@@ -373,8 +373,10 @@ seen, so call `glaze.ui.commit` after drawing with one), or on `glaze.ui.commit`
 Glaze Writer's Documents page (Popup → Documents) runs the Worker of each mod granted `documents`, as a school page runs
 mods, and nothing of the others. There a mod has `glaze.storage`, `glaze.theme()`, `glaze.settings()`, `glaze.broadcast()`
 and `glaze.documents`; any other call rejects with `call`, as `glaze.documents` does on a school page. Its `page` event says
-`{ site: 'documents', kind: 'documents', courseId: null }`. A key is one `glaze.documents.list()` gave and the page still
-lists; any other rejects with `args`.
+`{ site: 'documents', kind: 'documents', courseId: null }`. A key is a random opaque handle scoped to this mod on this
+page, without the school host or user id in the internal storage key. It comes from `glaze.documents.list()` or
+`documents.action`; do not persist it across page loads or mod restarts. The document must still be listed;
+any other key rejects with `args`.
 
 ```js
 glaze.documents.add('documents.card', { id: 'count', label: 'Count sentences' });

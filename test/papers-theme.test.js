@@ -51,6 +51,7 @@ test('the editor wears the palette only; the home the whole Look', async () => {
   const home = await theme({ whole: true }); home.pending[0].resolve(look({ bg: { kind: 'scene' } })); await home.loading;
   assert.deepEqual(JSON.parse(JSON.stringify(home.painted[0][1])), { page: true });
   assert.equal(home.frames.length, 1, 'the home draws the background');
+  assert.equal(home.painted.length, 1, 'the home paints its initial Look once');
 });
 
 test('the motion level follows the system\'s reduced motion only while the Look follows it', async () => {

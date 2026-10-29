@@ -10,6 +10,53 @@ const B = require('../lib/modbroker.js');
 const M = require('../lib/modbundle.js');
 const E = require('../lib/editor-mods.js');
 
+test('mod document keys hide account identifiers and resolve only within their mod and page', () => {
+  const keys = A.docKeys();
+  const raw = 'bb.school.test|_900_1|_101_1|_7_1';
+  const doc = { key: raw, title: 'Essay', course: 'English', kind: 'paper' };
+  const a = keys.summary('first', doc), b = keys.summary('second', doc);
+  assert.match(a.key, /^document:[0-9a-f-]{36}$/);
+  assert.equal(JSON.stringify(a).includes('bb.school.test'), false);
+  assert.equal(JSON.stringify(a).includes('_900_1'), false);
+  assert.notEqual(a.key, b.key);
+  assert.deepEqual(keys.summary('first', doc), a, 'stable within this page');
+  assert.equal(keys.resolve('first', a.key), raw);
+  assert.equal(keys.resolve('second', a.key), null);
+  assert.equal(keys.resolve('first', raw), null, 'raw storage keys are never accepted from mods');
+  assert.equal(keys.resolve('first', 'document:unknown'), null);
+  keys.forget('first');
+  assert.equal(keys.resolve('first', a.key), null, 'stopping the mod revokes its handles');
+  assert.equal(keys.resolve('second', b.key), raw);
+  assert.notEqual(A.docKeys().summary('first', doc).key, a.key, 'no cross-page identifier');
+});
+
+test('the page broker masks list and action keys and resolves read and export without returning raw keys', async () => {
+  const src = fs.readFileSync(path.join(__dirname, '../papers.js'), 'utf8');
+  const body = src.slice(src.indexOf('    const mods = async () => {'), src.indexOf('\n\n    await Promise.all([refresh()'));
+  const raw = 'bb.school.test|_900_1|_101_1|_7_1', doc = { key: raw, title: 'Essay', course: 'English' };
+  let action, clicked;
+  const ctx = vm.createContext({ active: true, performance: { now: () => 0 }, GZ_MODAPI: A,
+    chrome: { runtime: { getManifest: () => ({ sandbox: {} }), sendMessage: async () => ({ mods: [{ id: 'first' }] }) } },
+    GZ_WRITER_PAPER: { need: async () => {} }, GZ_MODS: { start() {}, order: () => ['first'], documents: { action: (id, data) => { action = data; } } },
+    D: { list: () => [doc], read: async (key) => key === raw ? { key, title: doc.title, text: 'Body' } : null,
+      export: async (key) => key === raw ? { name: 'Essay.docx', bytes: [80, 75] } : null,
+      item: (slot, label, fn) => { clicked = fn; return { remove() {} }; } },
+  });
+  await vm.runInContext(`${body}\nmods()`, ctx);
+  const call = (mod, name, v) => ctx.GZ_CTX.documents.call(mod, `documents.${name}`, v, 'Tools');
+  const list = await call('first', 'list');
+  const key = list.value[0].key;
+  assert.notEqual(key, raw, 'list must not expose school and account storage keys');
+  assert.equal((await call('first', 'read', { key })).value.key, key, 'read returns the same opaque handle');
+  assert.equal((await call('first', 'export', { key })).value.name, 'Essay.docx');
+  assert.equal((await call('first', 'read', { key: raw })).error, 'args');
+  assert.equal((await call('second', 'read', { key })).error, 'args');
+  await call('first', 'add', { slot: 'documents.card', id: 'count', label: '<img src=x>' });
+  clicked(doc, { isTrusted: false });
+  assert.equal(action.doc.key, key, 'card actions use the same handle as list');
+  assert.equal(JSON.stringify(action).includes('bb.school.test'), false);
+});
+
 const ID = 'abcdefghijklmnop', OTHER = 'qrstuvwxyz234567', SITE = 'https://school.instructure.com';
 const flush = () => new Promise(setImmediate);
 const rec = (perms = ['documents', 'documents.read'], over = {}) => ({

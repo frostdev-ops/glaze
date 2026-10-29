@@ -64,7 +64,13 @@ const records = () => {
 // What each home page records from its first script on: each thumbnail render's main-thread time and when it ended, every
 // storage.local get's key count, and when the first card appeared. lang: chrome.i18n's UI language for the page.
 const PROBE = ({ lang }) => {
-  if (location.pathname !== '/papers.html') return; // not the Look's backdrop nor the mods' sandboxed host
+  if (location.pathname === '/preview.html') {
+    globalThis.__gdRAF = 0;
+    const raf = requestAnimationFrame;
+    globalThis.requestAnimationFrame = (fn) => raf((now) => { __gdRAF++; fn(now); });
+    return;
+  }
+  if (location.pathname !== '/papers.html') return; // not the mods' sandboxed host
   globalThis.__gd = { renders: [], gets: [], firstCard: null, rowsPaint: null, indexRead: null, disconnects: 0 };
   const IO = globalThis.IntersectionObserver;
   globalThis.IntersectionObserver = class extends IO { disconnect() { __gd.disconnects++; sessionStorage.setItem('review-disconnects', String(__gd.disconnects)); return super.disconnect(); } };
@@ -731,7 +737,8 @@ const PROBE = ({ lang }) => {
       frost: settings,
       light: lookOf('Library'),
       scene: lookOf('Frostdev'),
-      photo: lookOf('Lagoon', { bg: { ...G.GZ_DEFAULTS.bg, kind: 'image', image: 'https://photos.test/busy.png', dim: 20 } }),
+      photo: lookOf('Lagoon', { bg: { ...G.GZ_DEFAULTS.bg, kind: 'image', image: 'https://photos.test/busy.png', dim: 0 } }),
+      lightPhoto: lookOf('Library', { bg: { ...G.GZ_DEFAULTS.bg, kind: 'image', image: 'https://photos.test/busy.png', dim: 0 } }),
     };
     const wearLook = (s) => worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, s);
     const rgbOf = (hex) => `rgb(${hex.match(/\w\w/g).map((x) => parseInt(x, 16)).join(', ')})`;
@@ -777,9 +784,12 @@ const PROBE = ({ lang }) => {
       await wearLook(LOOKS[name]);
       const pg = await openHome('en', `look ${name}`);
       await until(() => pg.evaluate(() => !!document.querySelector('.gd-pic .gt-thumb')), `${name} thumbnails`);
+      const timing = await pg.evaluate(() => ({ first: __gd.firstCard, rows: __gd.rowsPaint - __gd.indexRead }));
+      console.log(`${name}: first card at ${timing.first.toFixed(1)} ms; rows paint in ${timing.rows.toFixed(1)} ms after the index`);
+      check(timing.rows < 150, `${name}: the painter keeps card rendering within 150 ms of the index`);
       return pg;
     };
-    for (const name of ['frost', 'light', 'scene', 'photo']) {
+    for (const name of ['frost', 'light', 'scene', 'photo', 'lightPhoto']) {
       const s = LOOKS[name], art = s.bg.kind !== 'solid', pg = await lookPage(name);
       const colors = G.GZ_ACTIVE_COLORS(s, false);
       if (art) await until(() => pg.evaluate(() => document.getElementById('gd-backdrop')?.hasAttribute('data-shown')), `${name} backdrop shown`);
@@ -796,7 +806,10 @@ const PROBE = ({ lang }) => {
         check(w.backdrop && w.shown && w.innerBg === w.bg && w.bg === (s.bg.kind === 'image' ? 'image' : s.bg.kind), `${name}: the Look's background is drawn behind the page by Settings' painter (${w.innerBg})`);
         check(/blur\(/.test(w.cardBlur) && /blur\(/.test(w.topBlur), `${name}: the panels and cards are glass over it (${w.cardBlur})`);
         // Reduced motion (this browser's, followed by default): the painter's motion is off and the background holds still.
+        const frames = () => pg.evaluate(() => document.getElementById('gd-backdrop').contentWindow.__gdRAF);
+        const beforeFrames = await frames();
         const a = await margin(pg); await pause(700); const b = await margin(pg);
+        check(await frames() === beforeFrames, `${name}: reduced motion schedules no continuing animation frames`);
         check(w.motion === 'off' && w.innerMotion === 'off' && a.equals(b), `${name}: under reduced motion the background is a still frame (motion ${w.motion}/${w.innerMotion})`);
       } else check(!w.backdrop && w.cardBlur === 'none', `${name}: a solid Look draws no background frame and no blur (${w.cardBlur})`);
       if (name === 'scene') {
@@ -811,7 +824,20 @@ const PROBE = ({ lang }) => {
       }
       for (const sel of ['.gd-card .gd-title', '.gd-card .gd-meta', 'h1', '.gd-tile-name']) {
         const k = await contrastOn(pg, sel);
-        check(k >= 4.5, `${name}: ${sel} reads at ${k.toFixed(2)}:1 or better against every pixel under it`);
+        check(Number.isFinite(k) && k >= 4.5, `${name}: ${sel} reads at ${k.toFixed(2)}:1 or better against every pixel under it`);
+      }
+      if (name === 'photo' || name === 'lightPhoto') {
+        await pg.click(`${card(NOTES)} .gd-more`);
+        const menuContrast = await contrastOn(pg, '.gd-menu [role=menuitem]');
+        check(Number.isFinite(menuContrast) && menuContrast >= 4.5, `${name}: the menu text meets 4.5:1 over the photo (${menuContrast.toFixed(2)})`);
+        await pg.click('.gd-menu button:text-is("Delete")');
+        await pg.waitForSelector('.gp-toast-do');
+        for (const sel of ['.gd-toast > span', '.gp-toast-do']) {
+          const k = await contrastOn(pg, sel);
+          check(Number.isFinite(k) && k >= 4.5, `${name}: ${sel} meets 4.5:1 over the photo (${k.toFixed(2)})`);
+        }
+        await pg.click('.gp-toast-do');
+        await until(() => pg.evaluate(() => !document.querySelector('.gd-toast')), 'photo deletion undone');
       }
       for (const width of [1280, 640]) {
         await pg.setViewportSize({ width, height: 900 }); await pg.evaluate(() => scrollTo(0, 0));
@@ -859,7 +885,7 @@ const PROBE = ({ lang }) => {
       const page = new Promise((ok) => glaze.on('page', ok)); // told once, as the mod starts
       const tryCall = async (k, f) => { try { await save(k, { ok: true, value: await f() }); } catch (e) { await save(k, { ok: false, error: e.message }); } };
       let changes = 0;
-      glaze.on('documents.change', async () => { const n = ++changes, list = await glaze.documents.list(); await save('change', { n, keys: list.map((d) => d.key) }); });
+      glaze.on('documents.change', async () => { const n = ++changes, list = await glaze.documents.list(); await save('change', { n, keys: list.map((d) => d.key), titles: list.map((d) => d.title) }); });
       glaze.on('documents.action', async (d) => {
         await save('action', d);
         if (d.slot === 'documents.card') {
@@ -875,6 +901,7 @@ const PROBE = ({ lang }) => {
         await glaze.documents.add('documents.card', { id: 'peek', label: 'Peek' });
         await tryCall('page', () => page);
         await tryCall('list', () => glaze.documents.list());
+        await tryCall('rawRead', () => glaze.documents.read('bb.school.test|_900_1|_101_1|_7_1'));
         await tryCall('early', () => glaze.documents.open('doc:00000000-0000-0000-0000-000000000000'));
         await tryCall('todo', () => glaze.todo());
         await tryCall('style', () => glaze.documents.style({ radius: 24, column: 300 }));
@@ -892,21 +919,26 @@ const PROBE = ({ lang }) => {
     check(md.page?.value?.site === 'documents' && md.page.value.kind === 'documents', `mod: its page event says the Documents page (${JSON.stringify(md.page?.value)})`);
     const tool = await mp.evaluate(() => [...document.querySelectorAll('.gd-extra button')].map((b) => ({ text: b.textContent, title: b.title })));
     check(tool.length === 1 && tool[0].text === 'Open newest' && tool[0].title === 'Doc Tools', `mod: its documents.toolbar item renders in the toolbar with its name (${JSON.stringify(tool)})`);
-    const shownKeys = await mp.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    const nativeList = await mp.evaluate(() => GZ_DOCUMENTS.list());
+    const shownKeys = nativeList.map((d) => d.key);
     const PUBLIC = 'course,format,key,kind,title,updated,words';
-    check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && [...shownKeys].sort().join() === md.list.value.map((d) => d.key).sort().join(),
+    check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && md.list.value.every((d) => /^document:[0-9a-f-]{36}$/.test(d.key)) && md.list.value.every((d, i) => PUBLIC.split(',').filter((k) => k !== 'key').every((k) => d[k] === nativeList[i][k])),
       `mod: documents.list() gives every listed document's public fields only (${md.list.value?.length} × ${Object.keys(md.list.value?.[0] || {}).sort().join(' ')})`);
-    check(!JSON.stringify(md.list.value).includes('Beloved 1. A paragraph') && md.list.value.find((d) => d.key === ESSAY)?.course === 'ENGL 2110', 'mod: the list carries no document text, and an assignment paper\'s course');
-    check(!md.list.value.some((d) => d.key === KEPT), 'mod: documents.list() leaves out what is in Trash');
+    check(!JSON.stringify(md.list.value).includes('Beloved 1. A paragraph') && md.list.value.find((d) => d.title === 'Essay 2: Memory in Beloved')?.course === 'ENGL 2110' && !JSON.stringify(md.list.value).includes('bb.school.test') && !JSON.stringify(md.list.value).includes('_900_1'), 'mod: the list carries no document text, and an assignment paper\'s course');
+    check(md.rawRead.ok === false && md.rawRead.error === 'args', 'mod: raw assignment storage keys cannot be used to read text');
+    check(!md.list.value.some((d) => d.title === 'Trashed last month'), 'mod: documents.list() leaves out what is in Trash');
     // documents.change on Delete (into Trash) and on Undo, the list then without it and with it again.
     const changeAt = (await modData())?.change?.n || 0;
     await mp.focus(`${card(ESSAY3)} .gd-title`); await mp.keyboard.press('Delete');
-    await until(async () => { const c = (await modData())?.change; return c?.n > changeAt && !c.keys.includes(ESSAY3); }, 'mod told of the delete');
+    await until(async () => { const c = (await modData())?.change; return c?.n > changeAt && !c.titles.includes('Essay 3: The Clearing'); }, 'mod told of the delete');
     const changeMid = (await modData()).change.n;
     await mp.keyboard.press('ControlOrMeta+z');
-    await until(async () => { const c = (await modData())?.change; return c?.n > changeMid && c.keys.includes(ESSAY3); }, 'mod told of the undo');
+    await until(async () => { const c = (await modData())?.change; return c?.n > changeMid && c.titles.includes('Essay 3: The Clearing'); }, 'mod told of the undo');
     check(!('trashed' in (await local(`writerPaper:${ESSAY3}`))), 'mod: documents.change fires as a document goes to Trash and comes back, documents.list() following');
     check(md.early.ok === false && md.early.error === 'permission', `mod: documents.open without a click on its own item is refused (${md.early.error})`);
+    await mp.evaluate(() => document.querySelector('.gd-extra button').click());
+    await until(async () => (await modData())?.open, 'synthetic mod item click');
+    check((await modData()).open.error === 'permission' && new URL(mp.url()).search === '', 'mod: a synthetic item click cannot authorize opening a document');
     check(md.todo.ok === false && md.todo.error === 'call', `mod: a school page's call is refused on the Documents page (${md.todo.error})`);
     check(md.style.ok && await mp.evaluate(() => getComputedStyle(document.querySelector('.gd-card')).borderTopLeftRadius === '24px' && getComputedStyle(document.documentElement).getPropertyValue('--gd-column').trim() === '300px'), 'mod: documents.style sets the page\'s --gd-* hooks (24px corners, 300px columns)');
     await shot(mp, 'look-mod-1280.png');
@@ -917,15 +949,15 @@ const PROBE = ({ lang }) => {
     await mp.click('.gd-menu .gd-added');
     await until(async () => (await modData())?.export, 'mod card action');
     const act = await modData();
-    check(act.action.slot === 'documents.card' && act.action.id === 'peek' && act.action.doc.key === NOTES && Object.keys(act.action.doc).sort().join() === PUBLIC, `mod: a card item's click tells the mod that card's summary (${JSON.stringify(act.action.doc)})`);
+    check(act.action.slot === 'documents.card' && act.action.id === 'peek' && act.action.doc.key === md.list.value[nativeList.findIndex((d) => d.key === NOTES)].key && Object.keys(act.action.doc).sort().join() === PUBLIC, `mod: a card item's click tells the mod that card's summary (${JSON.stringify(act.action.doc)})`);
     fs.writeFileSync(path.join(out, 'mod-action.json'), JSON.stringify({ ...act, list: undefined }, null, 1));
     const notesText = require(path.join(root, 'lib/doc-home.js')).flat((await local(`writerPaper:${NOTES}`)).doc);
-    check(act.read.ok && act.read.value.key === NOTES && act.read.value.title === act.action.doc.title && act.read.value.text === notesText && notesText.includes('the house on Bluestone Road'), 'mod: documents.read (documents.read) gives the document\'s text, as stored');
+    check(act.read.ok && act.read.value.key === act.action.doc.key && act.read.value.title === act.action.doc.title && act.read.value.text === notesText && notesText.includes('the house on Bluestone Road'), 'mod: documents.read (documents.read) gives the document\'s text, as stored');
     check(act.export.ok && /\.docx$/.test(act.export.value.name) && act.export.value.mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' && act.export.value.size > 1000 && act.export.value.zip, `mod: documents.export gives the .docx through its kind (${JSON.stringify(act.export.value)})`);
     await mp.click('.gd-extra button');
     await until(() => mp.evaluate(() => /[?&]paper=/.test(location.search)), 'mod open after a click');
     const opened = new URLSearchParams(await mp.evaluate(() => location.search)).get('paper');
-    check(opened === md.list.value[0].key, `mod: documents.open right after a click on its own item opens that document (${opened})`);
+    check(opened === nativeList[0].key, `mod: documents.open right after a click on its own item opens that document (${opened})`);
     await mp.close();
     // Without the documents grant the mod doesn't run here.
     await worker.evaluate(async ({ id, rec }) => chrome.storage.local.set({ [`mod:${id}`]: { ...rec, grants: { documents: false, 'documents.read': true } }, [`modData:${id}`]: {} }), { id: MOD, rec: modRec });
