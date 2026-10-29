@@ -30,6 +30,16 @@ test('a tool without the new keys is defined as before, with no default written 
   assert.equal(t.owner, undefined);
 });
 
+test('mod tool titles fit the mod prefix and titles are capped at 120 characters', () => {
+  const title = `${'m'.repeat(40)} (mod): ${'t'.repeat(60)}`;
+  assert.equal(title.length, 108);
+  assert.equal(TL.define({ ...mod, title }).title, title);
+  for (const t of [base, mod]) {
+    assert.equal(TL.define({ ...t, title: 'x'.repeat(120) }).title.length, 120);
+    refuses({ title: 'x'.repeat(121) }, 'title', t);
+  }
+});
+
 test('aiTools sends the same specs whatever MCP keys a tool carries', () => {
   const plain = [TL.define(base), TL.define({ ...base, name: 'grades_list', kind: 'confirm' })];
   const rich = [TL.define({ ...base, title: 'Courses', group: 'courses', scope: 'account', needs: 'tab', output: S.obj({}), hints: { idempotent: true } }),
@@ -40,7 +50,7 @@ test('aiTools sends the same specs whatever MCP keys a tool carries', () => {
 });
 
 test('each MCP key refuses a value outside its rule, naming the key', () => {
-  for (const title of ['', 'x'.repeat(81), 3, null]) refuses({ title }, 'title');
+  for (const title of ['', 'x'.repeat(121), 3, null]) refuses({ title }, 'title');
   for (const group of ['files', 'Courses', '', 'mod:short', `mod:${ID.toUpperCase()}`, `mod:${ID}x`, 7]) refuses({ group }, 'group');
   for (const owner of ['mod', 'someone', '', `mod:${ID.slice(1)}`, `mod:${ID}1`, `MOD:${ID}`, null]) refuses({ owner }, 'owner');
   for (const scope of ['tab', 'course', '', 1]) refuses({ scope }, 'scope');
