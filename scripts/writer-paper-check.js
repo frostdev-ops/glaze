@@ -510,9 +510,9 @@ const HARNESS = `(() => {
     await p.setViewportSize({ width: 1440, height: 900 });
     await settle(fr);
     await openSheet();
-    await fr.evaluate(() => [...document.querySelectorAll('.gp-fromdocs-row')].find((r) => r.querySelector('b').textContent === 'My own title').click());
+    await fr.evaluate(() => [...document.querySelectorAll('.gp-fromdocs-row')].find((r) => r.querySelector('b').textContent === 'Title still being typed').click());
     await until(() => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('Field notes from Tuesday and more')), 'the document in the paper');
-    await until(() => fr.evaluate(() => document.querySelector('.gp-toast span')?.textContent === 'My own title'), 'the toast');
+    await until(() => fr.evaluate(() => document.querySelector('.gp-toast span')?.textContent === 'Title still being typed'), 'the toast');
     check(await fr.evaluate(() => !GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('A sentence typed before the reload.') && GZ_WRITER_PAPER.current().format().id === 'plain' && document.querySelector('.gp-pill').textContent === 'Blank'), 'the editor shows the document, in its format');
     check(await fr.evaluate(() => document.querySelector('.gp-top h1').textContent === 'Essay 2: Memory in Beloved' && document.querySelector('.gp-toast .gp-toast-do')?.textContent === 'Undo'), 'the title stays the assignment\'s; the toast names the document and offers Undo');
     let kept = await versionsOf(KEY);
