@@ -282,7 +282,13 @@ var GZ_PAPERS_MOTION = globalThis.GZ_PAPERS_MOTION || (() => {
   const play = () => {
     const p = pending;
     if (!p?.ready || p.played || !drawn) return;
-    if (!visible()) { waiting ||= new MutationObserver(play); waiting.observe(html, { attributes: true, attributeFilter: ['style'] }); return; }
+    // Home can draw before its asynchronously loaded Look has worn the motion level. Keep the captured page until
+    // both are ready, rather than accidentally using the head script's Subtle fallback for an Expressive return.
+    if (!visible() || !html.hasAttribute('data-gz-motion')) {
+      waiting ||= new MutationObserver(play);
+      waiting.observe(html, { attributes: true, attributeFilter: ['style', 'data-gz-motion'] });
+      return;
+    }
     waiting?.disconnect(); waiting = null;
     const current = route(now());
     if (current === 'none' || performance.now() >= p.until) { end(p, true); return; }

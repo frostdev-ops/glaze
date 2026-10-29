@@ -274,7 +274,8 @@ const check = async (name, test) => {
       f = await shown(page);
       const editor = f.locator('.ProseMirror');
       await editor.click();
-      // The OOPIF's click can finish before keyboard focus reaches it. Observe focus, then send through the editor.
+      await editor.focus();
+      // Establish the keyboard target in the OOPIF explicitly; a pointer click alone does not prove that precondition.
       await until(() => f.evaluate(() => document.hasFocus() && document.activeElement?.isContentEditable), 'editor keyboard focus');
       await editor.press('Escape');
       assert.ok(await hosted(page), 'Escape in editable text keeps Documents open');
