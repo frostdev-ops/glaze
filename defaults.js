@@ -281,7 +281,7 @@ const cleanValue = (v, d, rule) => {
     // the CSS url("…") content.js builds.
     try { const u = typeof v === 'string' && v.length <= 2048 && new URL(v); return u && u.protocol === 'https:' && !/["\\]/.test(u.href) ? u.href : d; } catch { return d; }
   }
-  if (typeof rule[0] === 'number' && rule.length === 2) return typeof v === 'number' && v >= rule[0] && v <= rule[1] ? v : d;
+  if (rule.length === 2 && typeof rule[0] === 'number' && typeof rule[1] === 'number') return typeof v === 'number' && v >= rule[0] && v <= rule[1] ? v : d;
   return rule.includes(v) ? v : d;
 };
 
