@@ -202,15 +202,15 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
       // In the click itself: the browser's prompt for the hosts it reaches needs it.
       pending.held = GZ_SITE.reach(hostsFor(pending.got.manifest, grantsFor(pending.got.manifest, pending.before, pending.fresh)));
     });
-    dialog.addEventListener('close', () => {
+    const closed = () => {
       if (dialog.open) return;
       const installing = !!pending && confirmed === pending;
       confirmed = null;
-      finish(installing);
-    });
+      return finish(installing);
+    };
+    dialog.addEventListener('close', closed);
     const prompt = async (got, bytes, source, before, fresh, link) => {
       const v = got.prompt, update = !!before;
-      pending = { got, bytes, source, before, fresh, channel: link };
       $('mod-prompt-title').textContent = t(update ? 'Update {name}?' : 'Install {name}?', { name: v.name });
       $('mod-prompt-meta').textContent = [t('Version {version}', { version: v.version }), t('by {name}', { name: v.author.name }), t('author key {key}', { key: fingerprint(got.key) })].join(' · ');
       $('mod-prompt-source').replaceChildren(sourceText(source, t), ...(source === 'gallery' ? [' ', h('span', { className: 'mod-badge ok', textContent: t('Reviewed') })] : []),
@@ -225,12 +225,16 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
       const ws = warnings(v, { t, and, signed: got.signed, source, runs: await runs() });
       $('mod-prompt-warn').replaceChildren(...ws.map((w) => h('li', { className: `mod-warn-${w.kind}`, textContent: w.text })));
       $('mod-prompt-install').textContent = t(update ? 'Update' : 'Install');
+      // Publish the new consent only when it can open, after any old queued close event.
+      pending = { got, bytes, source, before, fresh, channel: link };
       dialog.returnValue = '';
       if (!dialog.open) dialog.showModal();
       $('mod-prompt-cancel').focus();
     };
     // A bundle's bytes from anywhere → the prompt, a quiet update, or why not. `said`: where to say it.
     const offerBytes = async (bytes, source, said, link) => {
+      // Native close events are queued: a file picked just after Escape must settle the old prompt first.
+      if (pending && !dialog.open && !offering) await closed();
       if (pending || offering) return false;
       offering = true;
       try {
