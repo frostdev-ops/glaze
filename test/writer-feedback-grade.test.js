@@ -8,7 +8,7 @@ const rubric = { levels: [{ id: 'strong', label: 'Strong' }, { id: 'developing',
   { id: 'evidence', label: 'Evidence', points: 60, cells: [{ level: 'strong', value: 60 }, { level: 'developing', value: 30 }] },
 ] };
 const raw = () => ({ text: 'School gardens help students learn together.', grade: true, kind: 'assignment', context: {
-  kind: 'assignment', assignment: { instructions: 'Explain the benefits of school gardens.', rubric,
+  kind: 'assignment', assignment: { instructions: 'Explain the benefits of school gardens.', rubric: structuredClone(rubric),
     files: [{ name: 'Prompt.txt', text: 'Support the claim with two concrete examples.' }] },
 } });
 const reply = () => ({ criteria: [
@@ -96,4 +96,15 @@ test('explicit unresolved percent units never become point values in worker feed
   const ranged = F.task.input(input).context.assignment;
   assert.equal(ranged.criteria[0].levels[0].value, null);
   assert.match(ranged.rubric, />75–100%/);
+});
+
+test('an answer long in one place is kept: a long quote context still anchors, and a long summary gives way to the comments', async () => {
+  const long = reply();
+  // gpt-6-luna's 99 characters for "the one to four words just before it" (2026-10-29), and a summary past LIMIT.comment.
+  long.criteria[0].quotes = [{ quote: 'help students learn together', before: 'In conclusion, smartphones are not harmful in themselves, but their constant presence fragments attention.', after: '' }];
+  long.grade.summary = `Your paper states a clear claim. ${'It needs the two examples the prompt asks for. '.repeat(10)}`;
+  const { output } = await T.run(F.task, raw(), { provider: 'mock', cfg: { replies: [{ json: long }], seen: [] } });
+  assert.deepEqual(output.criteria[0].quotes, [{ start: 15, end: 43, quote: 'help students learn together' }]);
+  assert.equal(output.grade.summary, `${long.criteria[0].comment} ${long.criteria[1].comment}`);
+  assert.deepEqual([output.grade.earned, output.grade.reason], [75, null]);
 });
