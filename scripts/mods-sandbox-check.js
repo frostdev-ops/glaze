@@ -136,6 +136,7 @@ async function battery(secret, mode, sink, plain, stun) {
     context.on('console', (m) => { if (logs.length < 100) logs.push(m.type() + ': ' + m.text().slice(0, 500)); });
     context.on('page', (p) => p.on('pageerror', (e) => logs.push('pageerror: ' + e.message)));
     const sw = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+    assert.equal(await sw.evaluate(() => chrome.permissions.contains({ origins: ['https://127.0.0.1/*'] })), true, 'the fixture holds its loopback LMS host before running mods');
     const state = (page) => sw.evaluate(async (url) => {
       const [tab] = await chrome.tabs.query({ url });
       const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => globalThis.GZ_MODS?.stats() || null });

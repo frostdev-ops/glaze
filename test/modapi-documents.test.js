@@ -10,6 +10,26 @@ const B = require('../lib/modbroker.js');
 const M = require('../lib/modbundle.js');
 const E = require('../lib/editor-mods.js');
 
+test('mod document keys hide account identifiers and resolve only within their mod and page', () => {
+  const keys = A.docKeys();
+  const raw = 'bb.school.test|_900_1|_101_1|_7_1';
+  const doc = { key: raw, title: 'Essay', course: 'English', kind: 'paper' };
+  const a = keys.summary('first', doc), b = keys.summary('second', doc);
+  assert.match(a.key, /^document:[0-9a-f-]{36}$/);
+  assert.equal(JSON.stringify(a).includes('bb.school.test'), false);
+  assert.equal(JSON.stringify(a).includes('_900_1'), false);
+  assert.notEqual(a.key, b.key);
+  assert.deepEqual(keys.summary('first', doc), a, 'stable within this page');
+  assert.equal(keys.resolve('first', a.key), raw);
+  assert.equal(keys.resolve('second', a.key), null);
+  assert.equal(keys.resolve('first', raw), null, 'raw storage keys are never accepted from mods');
+  assert.equal(keys.resolve('first', 'document:unknown'), null);
+  keys.forget('first');
+  assert.equal(keys.resolve('first', a.key), null, 'stopping the mod revokes its handles');
+  assert.equal(keys.resolve('second', b.key), raw);
+  assert.notEqual(A.docKeys().summary('first', doc).key, a.key, 'no cross-page identifier');
+});
+
 const ID = 'abcdefghijklmnop', OTHER = 'qrstuvwxyz234567', SITE = 'https://school.instructure.com';
 const flush = () => new Promise(setImmediate);
 const rec = (perms = ['documents', 'documents.read'], over = {}) => ({

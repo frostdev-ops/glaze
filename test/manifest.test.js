@@ -168,6 +168,10 @@ test('Glaze\'s pages may compile WebAssembly for the OCR engine, nothing more; S
   assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // Glaze Writer's editor frame: Glaze's files only, no network from the page itself.
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'writer.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  // Documents uses Settings' GZ_FONTS loader: selected Google Fonts and jsDelivr files, fetched without credentials.
+  const papers = fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8');
+  assert.match(papers, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; connect-src 'self' https:\/\/fonts.googleapis.com https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  assert.doesNotMatch(papers, /<style\b|<script(?![^>]*\bsrc=)/);
 });
 
 test('the mods host is the one sandbox page: no same-origin, no inline script, no requests, and only it and its bootstrap are exposed', () => {

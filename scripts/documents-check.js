@@ -804,12 +804,16 @@ const PROBE = ({ lang }) => {
     check(md.page?.value?.site === 'documents' && md.page.value.kind === 'documents', `mod: its page event says the Documents page (${JSON.stringify(md.page?.value)})`);
     const tool = await mp.evaluate(() => [...document.querySelectorAll('.gd-extra button')].map((b) => ({ text: b.textContent, title: b.title })));
     check(tool.length === 1 && tool[0].text === 'Open newest' && tool[0].title === 'Doc Tools', `mod: its documents.toolbar item renders in the toolbar with its name (${JSON.stringify(tool)})`);
-    const shownKeys = await mp.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    const nativeList = await mp.evaluate(() => GZ_DOCUMENTS.list());
+    const shownKeys = nativeList.map((d) => d.key);
     const PUBLIC = 'course,format,key,kind,title,updated,words';
-    check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && [...shownKeys].sort().join() === md.list.value.map((d) => d.key).sort().join(),
+    check(md.list.ok && md.list.value.length === shownKeys.length && md.list.value.every((d) => Object.keys(d).sort().join() === PUBLIC) && md.list.value.every((d) => /^document:[0-9a-f-]{36}$/.test(d.key)) && md.list.value.every((d, i) => JSON.stringify({ ...d, key: '' }) === JSON.stringify({ ...nativeList[i], key: '' })),
       `mod: documents.list() gives every listed document's public fields only (${md.list.value?.length} × ${Object.keys(md.list.value?.[0] || {}).sort().join(' ')})`);
-    check(!JSON.stringify(md.list.value).includes('Beloved 1. A paragraph') && md.list.value.find((d) => d.key === ESSAY)?.course === 'ENGL 2110', 'mod: the list carries no document text, and an assignment paper\'s course');
+    check(!JSON.stringify(md.list.value).includes('Beloved 1. A paragraph') && md.list.value.find((d) => d.title === 'Essay 2: Memory in Beloved')?.course === 'ENGL 2110' && !JSON.stringify(md.list.value).includes('bb.school.test') && !JSON.stringify(md.list.value).includes('_900_1'), 'mod: the list carries no document text, and an assignment paper\'s course');
     check(md.early.ok === false && md.early.error === 'permission', `mod: documents.open without a click on its own item is refused (${md.early.error})`);
+    await mp.evaluate(() => document.querySelector('.gd-extra button').click());
+    await until(async () => (await modData())?.open, 'synthetic mod item click');
+    check((await modData()).open.error === 'permission' && new URL(mp.url()).search === '', 'mod: a synthetic item click cannot authorize opening a document');
     check(md.todo.ok === false && md.todo.error === 'call', `mod: a school page's call is refused on the Documents page (${md.todo.error})`);
     check(md.style.ok && await mp.evaluate(() => getComputedStyle(document.querySelector('.gd-card')).borderTopLeftRadius === '24px' && getComputedStyle(document.documentElement).getPropertyValue('--gd-column').trim() === '300px'), 'mod: documents.style sets the page\'s --gd-* hooks (24px corners, 300px columns)');
     await shot(mp, 'look-mod-1280.png');
@@ -820,15 +824,15 @@ const PROBE = ({ lang }) => {
     await mp.click('.gd-menu .gd-added');
     await until(async () => (await modData())?.export, 'mod card action');
     const act = await modData();
-    check(act.action.slot === 'documents.card' && act.action.id === 'peek' && act.action.doc.key === NOTES && Object.keys(act.action.doc).sort().join() === PUBLIC, `mod: a card item's click tells the mod that card's summary (${JSON.stringify(act.action.doc)})`);
+    check(act.action.slot === 'documents.card' && act.action.id === 'peek' && act.action.doc.key === md.list.value.find((d) => d.title === 'Reading notes').key && Object.keys(act.action.doc).sort().join() === PUBLIC, `mod: a card item's click tells the mod that card's summary (${JSON.stringify(act.action.doc)})`);
     fs.writeFileSync(path.join(out, 'mod-action.json'), JSON.stringify({ ...act, list: undefined }, null, 1));
     const notesText = require(path.join(root, 'lib/doc-home.js')).flat((await local(`writerPaper:${NOTES}`)).doc);
-    check(act.read.ok && act.read.value.key === NOTES && act.read.value.title === act.action.doc.title && act.read.value.text === notesText && notesText.includes('the house on Bluestone Road'), 'mod: documents.read (documents.read) gives the document\'s text, as stored');
+    check(act.read.ok && act.read.value.key === act.action.doc.key && act.read.value.title === act.action.doc.title && act.read.value.text === notesText && notesText.includes('the house on Bluestone Road'), 'mod: documents.read (documents.read) gives the document\'s text, as stored');
     check(act.export.ok && /\.docx$/.test(act.export.value.name) && act.export.value.mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' && act.export.value.size > 1000 && act.export.value.zip, `mod: documents.export gives the .docx through its kind (${JSON.stringify(act.export.value)})`);
     await mp.click('.gd-extra button');
     await until(() => mp.evaluate(() => /[?&]paper=/.test(location.search)), 'mod open after a click');
     const opened = new URLSearchParams(await mp.evaluate(() => location.search)).get('paper');
-    check(opened === md.list.value[0].key, `mod: documents.open right after a click on its own item opens that document (${opened})`);
+    check(opened === nativeList[0].key, `mod: documents.open right after a click on its own item opens that document (${opened})`);
     await mp.close();
     // Without the documents grant the mod doesn't run here.
     await worker.evaluate(async ({ id, rec }) => chrome.storage.local.set({ [`mod:${id}`]: { ...rec, grants: { documents: false, 'documents.read': true } }, [`modData:${id}`]: {} }), { id: MOD, rec: modRec });

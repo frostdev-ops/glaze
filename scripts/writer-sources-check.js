@@ -28,6 +28,7 @@ const check = (condition, name) => { assert.ok(condition, name); checks++; conso
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     await worker.evaluate(() => chrome.storage.local.clear());
     const page = async (key, enabled = false) => {
+      assert.ok(require('../lib/writer-papers.js').valid(key), 'the Sources fixture opens a valid stored document key');
       const p = await context.newPage(); p.on('pageerror', (e) => errors.push(e.message));
       await p.addInitScript(({ enabled }) => {
         const listeners = new Set(), events = {}; let frame;
