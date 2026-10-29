@@ -54,7 +54,7 @@ const err = (m, code) => { assert.equal(m.error?.code, code, JSON.stringify(m));
 
 // ---- choosing the era ---------------------------------------------------------------------------------------------------
 test('initialize starts the legacy era and answers per 2025-11-25, with our latest legacy version for one we do not speak', () => {
-  for (const [asked, got] of [['2025-11-25', '2025-11-25'], ['2025-06-18', '2025-11-25'], ['2099-01-01', '2025-11-25']]) {
+  for (const [asked, got] of [['2025-11-25', '2025-11-25'], ['2025-06-18', '2025-06-18'], ['2025-03-26', '2025-11-25'], ['2099-01-01', '2025-11-25']]) {
     const io = setup();
     const m = io.one(INIT(asked));
     assert.equal(m.id, 0);
@@ -126,7 +126,7 @@ test('server/discover names the versions, tools capability, identity and caching
   assert.deepEqual(m, {
     jsonrpc: '2.0', id: 'd1',
     result: {
-      resultType: 'complete', supportedVersions: ['2026-07-28', '2025-11-25'], capabilities: { tools: { listChanged: true } },
+      resultType: 'complete', supportedVersions: ['2026-07-28', '2025-11-25', '2025-06-18'], capabilities: { tools: { listChanged: true } },
       instructions: 'Ask Glaze about courses.', ttlMs: W.TTL, cacheScope: 'private', _meta: { [K.server]: SERVER },
     },
   });
@@ -145,11 +145,20 @@ test('every modern request is checked for its _meta: protocolVersion and clientC
 
 test('an unsupported version is -32022 with the versions we speak and the one asked for', () => {
   const io = setup();
-  for (const v of ['1900-01-01', '2025-11-25', '2027-03-01', '']) {
-    const e = err(io.one(req(5, 'tools/call', { name: 'a_tool' }, { [K.version]: v, [K.caps]: undefined })), -32022);
-    assert.deepEqual(e.data, { supported: ['2026-07-28', '2025-11-25'], requested: v });
+  for (const v of ['1900-01-01', '2025-11-25', '2025-06-18', '2027-03-01', '']) {
+    const e = err(io.one(req(5, 'tools/call', { name: 'a_tool' }, { [K.version]: v })), -32022);
+    assert.deepEqual(e.data, { supported: ['2026-07-28', '2025-11-25', '2025-06-18'], requested: v });
   }
   assert.equal(io.calls.length, 0);
+});
+
+test('missing or malformed required capabilities is -32602 even with an unsupported version', () => {
+  const io = setup();
+  for (const caps of [undefined, null, [], 'all']) {
+    err(io.one(req(1, 'server/discover', {}, { [K.version]: '2099-01-01', [K.caps]: caps })), -32602);
+  }
+  assert.equal(io.c.snapshot().era, null);
+  assert.equal(io.one(INIT()).result.protocolVersion, '2025-11-25');
 });
 
 test('tools/list is sorted by name, paged by 50 with opaque cursors, and cached privately', () => {
@@ -247,6 +256,19 @@ test('call() answering rpcError, throwing or answering nonsense becomes a JSON-R
   }
 });
 
+test('an unserializable rpcError still answers the request with a private internal error', async () => {
+  const cycle = {};
+  cycle.self = cycle;
+  for (const data of [10n, cycle]) {
+    for (const open of [setup, legacy]) {
+      const io = open({ call: async () => ({ rpcError: { code: -32602, message: 'private diagnostic', data } }) });
+      io.line(req(7, 'tools/call', { name: 'a_tool' }));
+      await tick();
+      assert.deepEqual(io.take(), [{ jsonrpc: '2.0', id: 7, error: { code: -32603, message: 'Internal error.' } }]);
+    }
+  }
+});
+
 test('subscriptions/listen honours toolsListChanged only, acknowledges with its id, and stays open', () => {
   const io = setup();
   io.line(req('s1', 'subscriptions/listen', { notifications: { toolsListChanged: true, promptsListChanged: true, resourceSubscriptions: ['file:///x'] } }));
@@ -287,6 +309,21 @@ test('subscriptions/listen needs a notifications filter and has a limit', () => 
   for (let i = 0; i < W.SUBS; i++) io.line(req(`s${i}`, 'subscriptions/listen', { notifications: { toolsListChanged: true } }));
   assert.equal(io.take().length, W.SUBS);
   err(io.one(req('over', 'subscriptions/listen', { notifications: { toolsListChanged: true } })), -32603);
+});
+
+test('malformed subscription filter fields are -32602 and never open a stream', () => {
+  const io = setup();
+  const filters = [
+    { toolsListChanged: 'true' }, { toolsListChanged: null }, { toolsListChanged: 1 },
+    { promptsListChanged: [] }, { resourcesListChanged: {} },
+    { resourceSubscriptions: 'file:///x' }, { resourceSubscriptions: [7] }, { resourceSubscriptions: [null] },
+  ];
+  for (const notifications of filters) {
+    err(io.one(req(1, 'subscriptions/listen', { notifications })), -32602);
+    assert.deepEqual(io.c.snapshot().subs, []);
+  }
+  io.line(req(2, 'subscriptions/listen', { notifications: { toolsListChanged: false, promptsListChanged: true, resourceSubscriptions: ['file:///x'] } }));
+  assert.deepEqual(io.take()[0].params.notifications, {}, 'well-typed unsupported filters are omitted');
 });
 
 test('notifications/cancelled aborts the call and its reply never comes; stray ones are ignored', async () => {
@@ -350,6 +387,68 @@ test('resources and prompts are not offered, in either era', () => {
 });
 
 // ---- legacy ---------------------------------------------------------------------------------------------------------------
+test('2025-06-18 is echoed, advertised and restored, without offering 2025-03-26', async () => {
+  assert.deepEqual(W.LEGACY, ['2025-11-25', '2025-06-18']);
+  assert.equal(W.SUPPORTED.includes('2025-03-26'), false);
+  const io = setup();
+  assert.equal(io.one(INIT('2025-06-18')).result.protocolVersion, '2025-06-18');
+  io.line(note('notifications/initialized'));
+  const next = setup();
+  assert.equal(next.c.restore(JSON.parse(JSON.stringify(io.c.snapshot()))), true);
+  assert.equal(next.c.snapshot().version, '2025-06-18');
+  assert.deepEqual(next.one(bare(1, 'ping')).result, {});
+  assert.equal(next.one(bare(2, 'tools/list')).result.tools.length, 2);
+  next.line(bare(3, 'tools/call', { name: 'a_tool' }));
+  await tick();
+  assert.deepEqual(next.take()[0].result, { content: [{ type: 'text', text: 'done' }] });
+});
+
+test('legacy lists omit output schemas their revision cannot describe and preserve the modern list', () => {
+  const tools = [
+    { ...tool('array'), outputSchema: { type: 'array', items: { type: 'number' } } },
+    { ...tool('object'), outputSchema: { type: 'object', properties: { n: { type: 'number' } } } },
+    { ...tool('union'), outputSchema: { anyOf: [{ type: 'number' }, { type: 'object' }] } },
+  ];
+  const modern = setup({ tools });
+  assert.deepEqual(modern.one(req(1, 'tools/list')).result.tools, tools);
+  for (const version of ['2025-11-25', '2025-06-18']) {
+    const io = setup({ tools });
+    io.one(INIT(version));
+    io.line(note('notifications/initialized'));
+    const result = io.one(bare(1, 'tools/list')).result.tools;
+    assert.equal('outputSchema' in result[0], false);
+    assert.deepEqual(result[1], tools[1]);
+    assert.equal('outputSchema' in result[2], false);
+  }
+  assert.equal(tools[0].outputSchema.type, 'array', 'list() objects are never mutated');
+  assert.deepEqual(modern.one(req(2, 'tools/list')).result.tools, tools);
+});
+
+test('non-object structured content reaches legacy clients as text and stays structured for modern clients', async () => {
+  for (const value of [[1, 2], 'answer', 42, true, null]) {
+    for (const version of [null, '2025-11-25', '2025-06-18']) {
+      const io = setup({ call: async () => ({ content: [], structuredContent: value }) });
+      if (version) { io.one(INIT(version)); io.line(note('notifications/initialized')); }
+      io.line(version ? bare(1, 'tools/call', { name: 'a_tool' }) : req(1, 'tools/call', { name: 'a_tool' }));
+      await tick();
+      const result = io.take()[0].result;
+      if (version) {
+        assert.equal('structuredContent' in result, false);
+        assert.deepEqual(result.content, [{ type: 'text', text: JSON.stringify(value) }]);
+      } else assert.deepEqual(result.structuredContent, value);
+    }
+  }
+  const content = [{ type: 'text', text: '[1,2]' }];
+  const io = legacy({ call: async () => ({ content, structuredContent: [1, 2] }) });
+  io.line(bare(1, 'tools/call', { name: 'a_tool' }));
+  await tick();
+  assert.deepEqual(io.take()[0].result.content, content, 'an existing text fallback is not duplicated');
+  const bad = legacy({ call: async () => ({ content: [], structuredContent: 10n }) });
+  bad.line(bare(1, 'tools/call', { name: 'a_tool' }));
+  await tick();
+  err(bad.take()[0], -32603);
+});
+
 test('legacy ping, tools/list and tools/call carry no modern-only fields', async () => {
   const io = legacy({ tools: Array.from({ length: 51 }, (_, i) => tool(`t${String(i).padStart(2, '0')}`)) });
   assert.deepEqual(io.one(bare(1, 'ping')), { jsonrpc: '2.0', id: 1, result: {} });
