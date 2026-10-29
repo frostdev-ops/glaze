@@ -71,6 +71,51 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
       assert.equal(result.text, input);
       assert.equal(result.html, '<p>&nbsp;&nbsp;😀&nbsp;&nbsp;x</p><p><br></p><p>שלום&nbsp;&nbsp;</p>');
     });
+    await check('native sync verifies fragment whitespace and head-like text exactly', async () => {
+      // Exercise the shipped verifier with the browser parser, rather than stand-in-dom's innerHTML stand-in.
+      const source = fs.readFileSync(path.join(root, 'features/writer.js'), 'utf8');
+      const start = source.indexOf('  const sameText ='), end = source.indexOf('  // h: what the frame shows;', start);
+      assert.ok(start >= 0 && end > start);
+      await page.addScriptTag({ content: `{ ${source.slice(start, end)} window.writerSameText = sameText; }` });
+      const result = await page.evaluate(() => {
+        const exact = document.createElement('div'), missing = document.createElement('div');
+        exact.textContent = '  Draft'; missing.textContent = 'Draft';
+        const style = document.createElement('div'); style.textContent = '.a{}Draft';
+        return [writerSameText(exact, '  Draft'), writerSameText(missing, '  Draft'),
+          writerSameText(style, '<style>.a{}</style><p>Draft</p>'), writerSameText(missing, '<style>.a{}</style><p>Draft</p>')];
+      });
+      assert.deepEqual(result, [true, false, true, false]);
+    });
+    await check('HTML paste keeps fragment whitespace before text and blocks', async () => {
+      const result = await page.evaluate(() => {
+        const seen = [];
+        ed.view.setProps({ transformPastedHTML: (html) => html, clipboardParser: { parseSlice: (dom) => {
+          seen.push(dom.textContent); return GZ_PM.model.Slice.empty;
+        } } });
+        for (const html of ['  Draft', '\n  <p>Draft</p>', '<meta charset="utf-8">  Draft'])
+          GZ_PM.view.__parseFromClipboard(ed.view, '', html, false, ed.view.state.selection.$from);
+        return seen;
+      });
+      assert.deepEqual(result, ['  Draft', '\n  Draft', '  Draft']);
+    });
+    await check('HTML paste applies Word and Docs head styles and keeps table wrappers', async () => {
+      const result = await page.evaluate(() => {
+        const seen = [];
+        ed.view.setProps({ transformPastedHTML: (html) => html, clipboardParser: { parseSlice: (dom) => {
+          seen.push({ text: dom.textContent, bold: dom.querySelector('.word')?.style.fontWeight,
+            italic: dom.querySelector('.docs')?.style.fontStyle, cell: dom.querySelector('td')?.textContent });
+          return GZ_PM.model.Slice.empty;
+        } } });
+        for (const html of ['<html><head><style>.word{font-weight:bold}</style></head><body><p class="word">Word</p></body></html>',
+          '<meta charset="utf-8"><style>.docs{font-style:italic}</style><b id="docs-internal-guid"><p class="docs">Docs</p></b>',
+          '<tr><td>Cell</td></tr>'])
+          GZ_PM.view.__parseFromClipboard(ed.view, '', html, false, ed.view.state.selection.$from);
+        return seen;
+      });
+      assert.equal(result[0].bold, 'bold'); assert.ok(result[0].text.endsWith('Word'));
+      assert.equal(result[1].italic, 'italic'); assert.ok(result[1].text.endsWith('Docs'));
+      assert.equal(result[2].cell, 'Cell');
+    });
     await check('remeasurement places page gaps at natural line starts after a width change', async () => {
       const result = await page.evaluate(async (words) => {
         ed.destroy();
