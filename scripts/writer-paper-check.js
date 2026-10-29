@@ -394,10 +394,12 @@ const HARNESS = `(() => {
     check(true, 'Versions lists saved versions');
     saved.versions = await shot(papers, 'paper-versions.png');
     // A paper Word can't take (a picture kept in a form Word has no place for) says so on the list, and nothing breaks.
+    // Seeded through the worker, the index's one writer: the open editor's autosave of the paste above rewrites the index
+    // too, and a write around the worker's queue lost this row to it on a loaded runner.
     await papers.evaluate(async () => {
-      const k = 'bb.school.test|_900_1|_101_1|_8_1', { writerPapers: rows } = await chrome.storage.local.get('writerPapers');
+      const k = 'bb.school.test|_900_1|_101_1|_8_1';
       const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A picture Word can’t take: ' }, { type: 'image', attrs: { src: 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA', alt: 'Chart' } }] }] };
-      await chrome.storage.local.set({ [`writerPaper:${k}`]: { key: k, doc, title: 'Lab report', format: 'mla9', updated: Date.now(), revision: 1 }, writerPapers: [{ key: k, title: 'Lab report', course: '', url: '', words: 5, format: 'mla9', updated: Date.now(), submitted: null }, ...rows] });
+      await GZ_WRITER_PAPERS.open().save(k, { doc, title: 'Lab report', format: 'mla9' });
     });
     await papers.goto(`chrome-extension://${id}/papers.html`);
     await until(() => papers.evaluate(() => document.querySelectorAll('.gd-card').length === 2), 'papers list with the second paper');
