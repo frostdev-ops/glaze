@@ -6,7 +6,6 @@
 // The server is never closed: libuv unlinks the name it bound on close, which may by then be a newer host's socket for
 // the same browser and instance (or, bound by a relative name, a file in another folder). Exiting leaves it to us.
 'use strict';
-const fs = require('node:fs');
 const net = require('node:net');
 const F = require('./agent-frames.js');
 const N = require('./native.js');
@@ -16,7 +15,6 @@ const M = require('./mux.js');
 
 const VERSION = require('../package.json').version;
 const FIREFOX = 'glaze@frostdev.io';
-const POSIX = process.platform !== 'win32';
 
 const refuse = (stderr, why) => {
   stderr.write(`glaze-mcp host ${why}. The browser starts it; to set it up: npx glaze-mcp setup\n`);
@@ -82,13 +80,10 @@ const main = async ({ args = [], browser = null, caller = null, io = {} } = {}) 
     const token = R.token(), p = R.socketPath(dir, id, instance);
     R.claim(p);
     const server = net.createServer({ pauseOnConnect: true }, admit);
-    if (POSIX) process.umask(0o077);
-    await R.listen(server, p);
-    const ino = POSIX ? fs.lstatSync(p).ino : null;
-    if (POSIX) fs.chmodSync(p, 0o600);
+    const ino = await R.listen(server, p);
     own = { dir, browser: id, instance, token, ino };
     if (done) return R.remove(dir, own);
-    R.write(dir, { v: 1, pid: process.pid, path: p, token, browser: id, instance, at: Date.now() });
+    R.write(dir, { v: 1, pid: process.pid, path: p, token, browser: id, instance, at: Date.now() }, ino);
     log(`ready for agents (${id}, instance ${instance})`);
   };
 

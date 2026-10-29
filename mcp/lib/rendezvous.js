@@ -102,12 +102,19 @@ const reach = (p, fn) => {
 };
 const listen = (server, p) => new Promise((resolve, reject) => {
   const error = (e) => { server.off('error', error); reject(e); };
+  let ino = null;
   server.once('error', error);
   try {
     reach(p, (name) => {
       const mask = MODES ? process.umask(0o177) : null;
       try {
-        server.listen(name, () => { server.off('error', error); resolve(); });
+        server.listen(name, () => { server.off('error', error); resolve(ino); });
+        // bind is synchronous on POSIX. Capture the identity in the pinned folder, before yielding to callers.
+        if (MODES && server.listening) {
+          const st = fs.lstatSync(name);
+          if (!st.isSocket()) throw unsafe(`${p} is not our socket`);
+          ino = st.ino;
+        }
       } finally { if (mask !== null) process.umask(mask); }
     });
   } catch (e) { error(e); }
@@ -137,11 +144,13 @@ const record = (file, r, platform = process.platform) => {
   return where ? { v: 1, pid: r.pid, path: r.path, token: r.token, browser: r.browser, instance: r.instance, at: r.at } : null;
 };
 const read = (file, { platform = process.platform } = {}) => within(path.dirname(file), () => record(file, json(path.basename(file)), platform), null);
-const write = (d, rec) => {
+const write = (d, rec, ino) => {
   const file = runFile(d, rec.browser, rec.instance), name = path.basename(file);
   return within(d, () => locked(() => {
-    const old = json(name, false);
-    if (old && old.pid !== process.pid && Number.isSafeInteger(old.pid) && old.pid > 0 && alive(old.pid)) throw unsafe('another live host owns this run file');
+    if (MODES && ino) {
+      const st = fs.lstatSync(`${base(rec.browser, rec.instance)}.sock`);
+      if (!st.isSocket() || st.ino !== ino) throw unsafe('the bound socket was replaced before publication');
+    }
     const tmp = `${name}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`;
     let fd, made = false;
     try {
@@ -168,10 +177,12 @@ const claim = (p) => {
   return within(path.dirname(p), () => locked(() => {
     let st;
     try { st = fs.lstatSync(path.basename(p)); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-    // A missing/malformed record does not prove that a listening host is dead. sweep alone removes stale sockets.
-    if (st) throw unsafe(`${p} is already claimed`);
     const name = `${path.basename(p, '.sock')}.json`, r = json(name, false);
-    if (r && Number.isSafeInteger(r.pid) && r.pid > 0 && alive(r.pid)) throw unsafe(`${p} belongs to a live host`);
+    const known = record(path.join(path.dirname(p), name), r);
+    // Only an exact recorded host can be superseded. Unrecorded listeners and unrelated paths stay untouched.
+    if (st && (!st.isSocket() || !known)) throw unsafe(`${p} is already claimed`);
+    if (!known && r && Number.isSafeInteger(r.pid) && r.pid > 0 && alive(r.pid)) throw unsafe(`${p} belongs to a live host`);
+    if (st) fs.unlinkSync(path.basename(p));
     // Otherwise a sweeper could use the previous host's metadata to unlink our socket before write publishes it.
     fs.rmSync(name, { force: true });
   }));
@@ -200,8 +211,8 @@ const sweep = (d) => within(d, () => locked(() => {
 }), []);
 const remove = (d, { browser, instance, token: tok, ino }) => within(d, () => locked(() => {
   const name = `${base(browser, instance)}.json`, r = json(name);
-  if (!r || r.token !== tok) return;
-  fs.unlinkSync(name);
+  if (r && r.token !== tok) return;
+  if (r) fs.unlinkSync(name);
   if (!MODES || !ino) return;
   const sock = `${base(browser, instance)}.sock`;
   try { const st = fs.lstatSync(sock); if (st.isSocket() && st.ino === ino) fs.unlinkSync(sock); } catch { /* gone */ }
