@@ -133,6 +133,13 @@ const check = async (name, test) => {
       await openPopup('?real');
       await opensPapers(() => pill().click());
     });
+    await check('popup-keyboard', async () => {
+      await openPopup();
+      await popup.keyboard.press('Tab');
+      assert.equal(await pill().evaluate((e) => e === document.activeElement && e.matches(':focus-visible') && getComputedStyle(e).outlineStyle === 'solid' && parseFloat(getComputedStyle(e).outlineWidth) >= 2), true, 'first Tab reaches the named pill with a focus ring');
+      await popup.keyboard.press('Enter');
+      assert.deepEqual(await popup.evaluate(() => globalThis.__created), [{ url: PAPERS }], 'Enter opens it once');
+    });
 
     // ---- Settings → Writer → Papers
     const opts = await context.newPage();
@@ -145,6 +152,10 @@ const check = async (name, test) => {
       assert.equal(await link.count(), 1);
       assert.deepEqual(await link.evaluate((a) => [a.href, a.target, a.rel, a.className, a.closest('.wr-sub')?.querySelector('h3')?.textContent]), [PAPERS, '_blank', 'noopener', 'button', 'Saved papers']);
       await opensPapers(() => link.click());
+      await opts.keyboard.press('Tab');
+      await link.focus();
+      assert.equal(await link.evaluate((e) => e.tabIndex === 0 && e === document.activeElement && e.matches(':focus-visible') && getComputedStyle(e).outlineStyle === 'solid' && parseFloat(getComputedStyle(e).outlineWidth) >= 2), true, 'the named link has keyboard focus and a focus ring');
+      await opensPapers(() => link.press('Enter'));
     });
     for (const [name, s] of [['dark', dark], ['light', light]]) {
       await store(s);
@@ -178,6 +189,30 @@ const check = async (name, test) => {
       assert.equal((await item.getAttribute('aria-label')) || (await item.innerText()).trim(), 'Documents');
       await opensPapers(() => item.click());
       await prev.close();
+    });
+
+    await check('bar-icon-looks-and-sizes', async () => {
+      const prev = await context.newPage();
+      watch(prev, 'preview layouts');
+      try {
+        for (const L of D.GZ_LOOKS) {
+          for (const [mode, width, navbar] of [['rail', 1440, { rail: 'open' }], ['icons', 1024, { rail: 'icons' }], ['top', 1280, { place: 'top' }], ['phone', 390, {}]]) {
+            const s = D.GZ_SANITIZE({ ...D.GZ_DEFAULTS, ...D.GZ_LOOK_APPLY(D.GZ_DEFAULTS, L) });
+            await store({ ...s, navbar: { ...s.navbar, ...navbar }, navbarItems: { glaze: ['documents'], tabs: ['glaze:documents'] } });
+            await prev.setViewportSize({ width, height: 900 });
+            await prev.goto(`${base}/preview.html?site=canvas`);
+            const item = prev.locator('#gz-navbar [data-id="glaze:documents"]:visible').first();
+            await item.waitFor();
+            const svg = item.locator('svg');
+            const b = await svg.boundingBox();
+            assert.ok(b?.width > 0 && b?.height > 0, `${L.name} ${mode}: icon has room`);
+            assert.equal(await svg.locator('path').getAttribute('d'), require('../lib/navbar.js').ICONS.documents, `${L.name} ${mode}: Documents drawing`);
+            assert.equal(await svg.evaluate((e) => getComputedStyle(e).stroke), await item.evaluate((e) => getComputedStyle(e).color), `${L.name} ${mode}: inherits the item's ink`);
+          }
+        }
+        console.log(`${D.GZ_LOOKS.length} Looks × 4 bar layouts checked`);
+      } finally { await prev.close(); }
+      await store({ ...dark, navbarItems: { glaze: ['documents'] } });
     });
 
     // ---- a Canvas page: the bar's item and the command palette, each through the worker
