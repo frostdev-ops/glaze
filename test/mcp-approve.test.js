@@ -113,6 +113,15 @@ test('unknown groups and actions without a complete trusted summary are refused 
   }
 });
 
+test('long trusted summaries keep their final words instead of cutting the consent scope', async () => {
+  const e = env();
+  const summary = `${'A'.repeat(680)} Only in the selected course.`;
+  const r = outcome(e.a.ask('action', { ...ACTION, summary }).catch((error) => error));
+  await settle();
+  assert.equal(records(e.data)[0]?.summary, summary);
+  assert.equal(r.v, undefined, 'the complete summary waits for consent');
+});
+
 test('Allow and Don\'t allow from the window decide once, and the window closes when nothing waits', async () => {
   const e = env();
   const r = outcome(e.a.ask('pair', PAIR));
