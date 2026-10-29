@@ -186,7 +186,7 @@ const PROBE = ({ lang }) => {
     check(await home.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"] img`)?.getAttribute('src').startsWith('data:image/png;base64,'), NOTES), 'a thumbnail keeps the inline data-URL picture');
     list = await cards(home);
     const essay = list.find((c) => c.key === ESSAY), lab = list.find((c) => c.key === LAB);
-    check(essay.title === 'Essay 2: Memory in Beloved' && /^ENGL 2110 · MLA 9 · \d+ words · /.test(essay.meta), `an assignment paper's card: its title, course, format, words and date (${essay.meta})`);
+    check(essay.title === 'Essay 2: Memory in Beloved' && /^ENGL 2110\s·\sMLA\s9\s·\s\d+\swords\s·\s/.test(essay.meta), `an assignment paper's card: its title, course, format, words and date (${essay.meta})`);
     check(lab.badge === 'Submitted' && list.filter((c) => c.badge).length === 1, 'the submitted paper carries the Submitted badge, and only it');
     check(list.find((c) => c.key === FIELD).title === 'Field notes from Tuesday' && list.find((c) => c.key === NOTES).title === 'Reading notes', 'local documents show their named and derived titles');
     check(list.map((c) => c.key).join() === seeds.slice().sort((a, b) => b.updated - a.updated).map((s) => s.key).join(), 'Last edited orders the grid newest first');

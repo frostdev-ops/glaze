@@ -238,7 +238,9 @@
       if (words.length && hit !== null) hitsByKey.set(r.key, { gen, updated: r.updated, epoch: epoch(r.key), hit });
       return hit;
     };
-    const metaOf = (r) => [r.course, labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 }), when(r.updated)].filter(Boolean).join(' · ');
+    // A narrow card wraps its line between parts, never inside one ("7:33 / PM") nor before a dot; a course name wraps.
+    const whole = (s) => String(s).replace(/ /g, '\u00a0');
+    const metaOf = (r) => [r.course, ...[labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 }), when(r.updated)].map(whole)].filter(Boolean).join('\u00a0· ');
     // A row whose kind this build has no page code for stays out of the list, untouched.
     const known = () => rows.filter((r) => typeof DK.get(DK.kindOf(r))?.thumb === 'function' && !gone.has(r.key));
     // What the lists, search, the course choices and mods see: no document in Trash. inView: the view's (the Trash's).
