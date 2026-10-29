@@ -91,7 +91,8 @@ const check = async (name, test) => {
         const button = frame.locator('#todo button.info').first();
         await button.click(); await frame.locator('.info-pop:popover-open.placed').waitFor();
         await host.keyboard.press('Escape');
-        await pause(80);
+        await frame.waitForFunction(() => !document.querySelector(':popover-open') && document.activeElement.matches('#todo button.info'));
+        await painted(host);
         assert.equal(await host.evaluate(() => closedSettings), 0, 'Escape must leave Settings open');
         assert.equal(await frame.locator(':popover-open').count(), 0, 'Escape closes the description');
         assert.equal(await button.evaluate((b) => document.activeElement === b), true, 'focus returns to the question button');
