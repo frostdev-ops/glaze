@@ -913,16 +913,24 @@ test('a share deleted by --delete in its own process frees its room for the serv
   assert.equal(fs.existsSync(path.join(blobs, a.st.sid)), false);
 });
 
-test('one serving relay per database: a second waits out the lease and refuses; a dead one\'s uploads are reclaimed', async (t) => {
+test('one serving relay per database: a second waits out the lease and refuses; a dead one\'s uploads are reclaimed', { timeout: 30e3 }, async (t) => {
+  // On a mocked clock only pass() moves: a loaded machine stalling between the holder's renewal and the other relay's
+  // check can't lapse the lease, and a relay left waiting never starts.
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: Date.now() });
+  const pass = async (ms) => { for (let n = 0; n < ms; n += 5) { t.mock.timers.tick(5); await new Promise(setImmediate); } };
   const dir = tmp(t);
   const db = path.join(dir, 'share.db');
   const store = memory();
   const first = await up({ db, store, lease: 300 });
   // A second relay on the same database, while the first renews its lease.
   const second = relay({ db, store: memory(), lease: 300 });
+  t.after(() => Promise.all([first.close(), second.close()]));
   const t0 = Date.now();
-  await assert.rejects(second.listen(0, '127.0.0.1'), /another relay is serving this database/);
-  assert.ok(Date.now() - t0 >= 800, `gave up after ${Date.now() - t0} ms`);
+  const refused = second.listen(0, '127.0.0.1').then(() => 'served', (e) => ({ e, after: Date.now() - t0 }));
+  await pass(1500);
+  const { e, after } = await refused;
+  assert.match(e?.message ?? 'served', /another relay is serving this database/);
+  assert.ok(after >= 900, `gave up after ${after} ms`);
   await second.close();
   await first.close(); // gives the lease back: the next one starts at once
   const third = await up({ db, store, lease: 300 });
@@ -935,10 +943,15 @@ test('one serving relay per database: a second waits out the lease and refuses; 
   d0.prepare('INSERT OR REPLACE INTO lease (id, boot, seen) VALUES (1, ?, ?)').run('dead', Date.now());
   d0.close();
   store.m.set(`${a.sid}/${'D'.repeat(22)}`, Buffer.alloc(100));
-  const t1 = Date.now();
-  const fourth = await up({ db, store, lease: 300, grace: GRACE });
+  const fourth = relay({ db, store, lease: 300, grace: GRACE });
   t.after(() => fourth.close());
-  assert.ok(Date.now() - t1 >= 250, `took over after ${Date.now() - t1} ms`);
+  const holder = () => fourth.db.prepare('SELECT boot FROM lease').get().boot;
+  const started = fourth.listen(0, '127.0.0.1');
+  await pass(295);
+  assert.equal(holder(), 'dead', 'took over before the lease lapsed');
+  await pass(25);
+  await started;
+  assert.equal(holder(), fourth.boot);
   // Its row became a doomed key, its object deleted and its room still booked. A late write from the dead relay (a bucket
   // finishing a request it already had) lands afterwards; the next scheduled delete takes it.
   assert.deepEqual([store.m.size, blobRows(fourth, a.sid), doomed(fourth, a.sid), booked(fourth)], [0, 0, 1, 100]);

@@ -37,7 +37,7 @@ const GZ_BUILT_IN = (kind, u) => u.protocol === 'https:' && !u.port && !!{ canva
 // A setting of settings (writer.autocorrect): its defaults, and its spec as the rule.
 const GZ_GROUP = (spec) => [Object.fromEntries(Object.entries(spec).map(([k, [d]]) => [k, d])), spec];
 
-// Everything else, as [default, rule]. A rule is an enum (array of strings), a [min, max] number
+// Everything else, as [default, rule]. A rule is an enum (array of choices), a [min, max] number
 // range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
 // 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
 // 'font-auto' (the same, or 'auto') or 'time' (local "HH:MM") or a group's own spec (GZ_GROUP). GZ_SANITIZE walks this.
@@ -281,7 +281,7 @@ const cleanValue = (v, d, rule) => {
     // the CSS url("…") content.js builds.
     try { const u = typeof v === 'string' && v.length <= 2048 && new URL(v); return u && u.protocol === 'https:' && !/["\\]/.test(u.href) ? u.href : d; } catch { return d; }
   }
-  if (typeof rule[0] === 'number') return typeof v === 'number' && v >= rule[0] && v <= rule[1] ? v : d;
+  if (typeof rule[0] === 'number' && rule.length === 2) return typeof v === 'number' && v >= rule[0] && v <= rule[1] ? v : d;
   return rule.includes(v) ? v : d;
 };
 
