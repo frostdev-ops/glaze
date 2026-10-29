@@ -33,7 +33,8 @@ them on the device). Sharing is optional and encrypted on your device before it 
   and syllabus import.
 - **Write:** Glaze Writer replaces Blackboard Ultra's editor in discussions, journals, messages, assignments and tests.
   Papers sit on real pages in MLA, APA, Chicago or your own format, with citations, footnotes, versions and .docx import
-  and export; spelling and grammar are checked on your device. Optional AI finishes your sentence and comments on your
+  and export, and every paper and document of your own waits on one Documents page; spelling and grammar are checked on
+  your device. Optional AI finishes your sentence and comments on your
   draft, and never writes it for you.
 - **Your dashboard:** widgets you place anywhere (notes, agenda, focus timer, music, your course cards), a sidebar on
   Canvas and Blackboard, course tabs on both, and Ctrl/⌘K search across your courses.
