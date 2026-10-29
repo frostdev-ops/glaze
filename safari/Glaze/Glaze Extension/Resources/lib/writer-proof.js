@@ -99,7 +99,8 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     while (a > 0 && !/\s/u.test(text[a - 1])) a--;
     while (b < text.length && !/\s/u.test(text[b])) b++;
     const token = text.slice(a, b), inside = (m) => start >= a + m.index && end <= a + m.index + m[0].length;
-    const addresses = /(?:[a-z][a-z\d+.-]*:\/\/|www\.)[^\s<>"“”]+|(?:[\p{L}\p{N}._%+-]+@)?(?:[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?\.)+[\p{L}]{2,}(?::\d+)?(?:[/?#][^\s<>"“”]*)?/giu;
+    // Start only at a host/token boundary. Retrying at every label in a long dotted non-address is quadratic.
+    const addresses = /(?<![\p{L}\p{N}.-])(?:(?:[a-z][a-z\d+.-]*:\/\/|www\.)[^\s<>"“”]+|(?:[\p{L}\p{N}._%+-]+@)?(?:[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?\.)+[\p{L}]{2,}(?::\d+)?(?:[/?#][^\s<>"“”]*)?)/giu;
     if ([...token.matchAll(addresses)].some(inside)) return true;
     // Course numbers (ENG1100-008), article numbers (e0001091) and other mixed identifiers aren't dictionary words.
     return [...token.matchAll(/[\p{L}\p{M}\p{N}]+(?:[-_–—][\p{L}\p{M}\p{N}]+)*/gu)]
