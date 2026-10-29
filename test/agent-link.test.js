@@ -480,7 +480,7 @@ test('a late message, answer or close from an earlier session changes nothing', 
   const i = s.storage.local.data.mcpInstance;
   s.ports[0].host({ name: 'agent.frames', userInfo: { i, frames: [HELLO] } });
   assert.equal(s.link.status().state, 'connecting', 'nor are their ports\' frames');
-  s.port().host({ name: 'agent.frames', userInfo: { i, frames: [{ ...HELLO, v: 2 }, HELLO] } });
+  s.port().host({ name: 'agent.frames', userInfo: { i, s: hellos[2].msg.s, frames: [{ ...HELLO, v: 2 }, HELLO] } });
   assert.equal(s.link.status().state, 'old-helper', 'and frames after the one that ended a session are dropped with it');
 });
 
@@ -489,17 +489,17 @@ test('Safari: batches to the Glaze app, one in flight, numbered in order; frames
   assert.equal((await w.link.ensure()).state, 'connecting');
   assert.equal(w.permissions.asked, 0, 'Safari requires nativeMessaging');
   assert.equal(w.port().name, APP, 'the port only hears the app\'s dispatchMessage');
-  const i = w.storage.local.data.mcpInstance;
-  assert.deepEqual(w.batches.map((x) => [x.app, x.msg]), [[APP, { type: 'agent.frames', i, seq: 1, frames: [{ t: 'hello', v: 1, glaze: '4.0.0', instance: i }] }]]);
+  const { i, s } = w.batches[0].msg;
+  assert.deepEqual(w.batches.map((x) => [x.app, x.msg]), [[APP, { type: 'agent.frames', i, s, seq: 1, frames: [{ t: 'hello', v: 1, glaze: '4.0.0', instance: i }] }]]);
   assert.deepEqual(w.port().sent, [], 'nothing is posted on the port');
 
   const app = (userInfo, name = 'agent.frames') => w.port().host({ name, userInfo });
   app({ i: 'another profile', frames: [HELLO] });
-  app({ i, frames: [HELLO] }, 'something.else');
+  app({ i, s, frames: [HELLO] }, 'something.else');
   app({ frames: [HELLO] });
-  app({ i, frames: HELLO });
+  app({ i, s, frames: HELLO });
   assert.equal(w.link.status().state, 'connecting', 'another instance\'s frames, or another message, count for nothing');
-  app({ i, frames: [{ ...HELLO, browser: 'safari' }, { t: 'open', c: 1, peer: { verified: true } }] });
+  app({ i, s, frames: [{ ...HELLO, browser: 'safari' }, { t: 'open', c: 1, peer: { verified: true } }] });
   assert.deepEqual(w.link.status(), { state: 'connected', at: w.now(), host: '0.1.0', browser: 'safari' });
   assert.deepEqual(said(w, 'open'), [['open', 1, { verified: true }]]);
 
@@ -508,16 +508,16 @@ test('Safari: batches to the Glaze app, one in flight, numbered in order; frames
   assert.equal(w.batches.length, 1, 'the hello is still in flight');
   w.batches[0].resolve({ ok: true });
   await settle();
-  assert.deepEqual(w.batches[1].msg, { type: 'agent.frames', i, seq: 2, frames: [{ t: 'line', c: 1, d: 'a' }, { t: 'line', c: 1, d: 'b' }] });
+  assert.deepEqual(w.batches[1].msg, { type: 'agent.frames', i, s, seq: 2, frames: [{ t: 'line', c: 1, d: 'a' }, { t: 'line', c: 1, d: 'b' }] });
   w.link.send(1, 'c');
   w.link.close(1, 'done');
   await settle();
   assert.equal(w.batches.length, 2);
   w.batches[1].resolve({ ok: true });
   await settle();
-  assert.deepEqual(w.batches[2].msg, { type: 'agent.frames', i, seq: 3, frames: [{ t: 'line', c: 1, d: 'c' }, { t: 'close', c: 1, why: 'done' }] });
+  assert.deepEqual(w.batches[2].msg, { type: 'agent.frames', i, s, seq: 3, frames: [{ t: 'line', c: 1, d: 'c' }, { t: 'close', c: 1, why: 'done' }] });
 
-  app({ i, frames: [{ t: 'open', c: 2, peer: { verified: true } }] });
+  app({ i, s, frames: [{ t: 'open', c: 2, peer: { verified: true } }] });
   assert.equal(w.link.send(2, '\u0001'.repeat(F.PIECE * 2)), true);
   assert.equal(w.link.send(2, 'small'), true);
   for (let n = 2; n < 5; n++) {
@@ -550,8 +550,8 @@ test('Safari: the app\'s answer decides; a build without the agent bridge is not
   }
   const w = world({ browser: 'safari' });
   await w.link.ensure();
-  const i = w.storage.local.data.mcpInstance;
-  w.port().host({ name: 'agent.frames', userInfo: { i, frames: [HELLO, { t: 'open', c: 1, peer: { verified: true } }] } });
+  const { i, s } = w.batches[0].msg;
+  w.port().host({ name: 'agent.frames', userInfo: { i, s, frames: [HELLO, { t: 'open', c: 1, peer: { verified: true } }] } });
   w.batches[0].resolve({ ok: true });
   await settle();
   w.link.send(1, 'x');
@@ -566,12 +566,12 @@ test('Safari: a 20 s keep-alive while on, an empty batch when idle, cleared when
   await w.link.ensure();
   const beats = () => w.pending().filter((j) => j.every);
   assert.deepEqual(beats().map((j) => j.every), [20e3]);
-  const i = w.storage.local.data.mcpInstance;
-  w.port().host({ name: 'agent.frames', userInfo: { i, frames: [HELLO] } });
+  const { i, s } = w.batches[0].msg;
+  w.port().host({ name: 'agent.frames', userInfo: { i, s, frames: [HELLO] } });
   w.batches[0].resolve({ ok: true });
   await settle();
   await w.advance(20e3);
-  assert.deepEqual(w.batches[1].msg, { type: 'agent.frames', i, seq: 2, frames: [] }, 'the beat also tells the app the worker is there');
+  assert.deepEqual(w.batches[1].msg, { type: 'agent.frames', i, s, seq: 2, frames: [] }, 'the beat also tells the app the worker is there');
   await w.advance(20e3);
   assert.equal(w.batches.length, 2, 'not while a batch is in flight');
   w.batches[1].resolve({ ok: true });
@@ -585,7 +585,7 @@ test('Safari: a 20 s keep-alive while on, an empty batch when idle, cleared when
   w.storage.local.data.mcp = { on: false };
   assert.equal((await w.link.ensure()).state, 'off');
   assert.deepEqual(beats(), [], 'cleared when turned off');
-  assert.deepEqual(w.batches.at(-1).msg, { type: 'agent.frames', i, seq: 4, frames: [{ t: 'bye' }] });
+  assert.deepEqual(w.batches.at(-1).msg, { type: 'agent.frames', i, s, seq: 4, frames: [{ t: 'bye' }] });
   assert.ok(w.port().disconnected);
   await w.advance(120e3);
   assert.equal(w.batches.length, 4);
