@@ -69,7 +69,7 @@ test('annotations follow the kind; openWorld only when the tool says so', () => 
   // A code tool of a mod granted a network host reaches the open world (lib/modtools.js defs); one without stays closed.
   assert.equal(of(s, `mod_${ID}_ask`).annotations.openWorldHint, false);
   const net = rec(ID, { grants: { agents: true, todo: true, 'network:api.example.com': true }, manifest: { ...rec(ID).manifest, permissions: P('agents', 'todo', 'network:api.example.com') } });
-  assert.deepEqual(of(state({ mods: [net] }), `mod_${ID}_ask`).annotations, { ...READ, openWorldHint: true });
+  assert.deepEqual(of(state({ mods: [net] }), `mod_${ID}_ask`).annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
   // The student approves every change: write and confirm say so; reads don't.
   for (const kind of ['write', 'confirm']) assert.equal(d({ kind })._meta[`${NS}approval`], 'student');
   assert.equal(Object.hasOwn(d({ kind: 'read' })._meta, `${NS}approval`), false);
@@ -179,6 +179,44 @@ test('code tools only in Chrome, once a page has found the mods sandbox working'
     assert.deepEqual(names(state(over)).filter((n) => n.endsWith('_due_soon')), [`mod_${ID}_due_soon`, `mod_${OTHER}_due_soon`]);
     assert.equal(V.get(`mod_${ID}_ask`, state(over)), null);
   }
+});
+
+test('a Worker tool waits for approval and makes no read-only or repeat-safety promise', () => {
+  const s = state();
+  const t = V.get(`mod_${ID}_ask`, s), shown = V.describe(t);
+  // A Worker has storage.set/remove even with no network grant (modbroker CALLS); code routing cannot prove a read.
+  assert.equal(t.kind, 'confirm');
+  assert.equal(typeof t.summarize, 'function');
+  assert.match(t.summarize({}, {}), /Due Soon \(mod\): Ask/);
+  for (const era of [undefined, '2025-11-25', '2025-06-18']) {
+    const d = V.describe(t, era);
+    assert.deepEqual(d.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+    assert.equal(d._meta[`${NS}approval`], 'student');
+  }
+  assert.equal(shown._meta[`${NS}needs`], 'tab');
+});
+
+test('duplicate records for a mod contribute no ambiguous tool, whatever their order', () => {
+  const first = rec(ID), second = rec(ID, { manifest: { ...rec(ID).manifest, name: 'Other version' } });
+  const a = state({ mods: [first, second, rec(OTHER)] }), b = state({ mods: [second, rec(OTHER), first] });
+  assert.deepEqual(names(a).filter((n) => n.startsWith(`mod_${ID}_`)), []);
+  assert.deepEqual(V.list(a), V.list(b));
+  assert.equal(V.hash(V.list(a)), V.hash(V.list(b)));
+  assert.equal(V.get(`mod_${ID}_ask`, a), null);
+  assert.equal(V.get(`mod_${ID}_due_soon`, b), null);
+  assert.ok(V.get(`mod_${OTHER}_due_soon`, a));
+});
+
+test('a mod runner retains the admitted source and filters after the caller edits its record', async () => {
+  const tool = { ...DUE, where: [{ field: 'done', eq: false }], select: ['id'] };
+  const r = rec(ID, { manifest: { ...rec(ID).manifest, tools: [tool] } }), asked = [];
+  const s = state({ mods: [r], data: async (source) => { asked.push(source); return { items: [{ id: 'one', done: false }] }; } });
+  const t = V.get(`mod_${ID}_due_soon`, s);
+  tool.from = 'grades';
+  tool.where[0].eq = true;
+  tool.select.push('percent');
+  assert.deepEqual((await t.run({}, { account: ACCOUNT })).items, [{ id: 'one' }]);
+  assert.deepEqual(asked, ['todo'], 'the mod has no grades grant');
 });
 
 test("a declarative mod tool answers from the data path through GZ_MODTOOLS.apply; a code tool goes to the code runner", async () => {
