@@ -193,6 +193,14 @@ var GZ_PAPERS_MOTION = globalThis.GZ_PAPERS_MOTION || (() => {
   const params = () => ['paper', ...Object.values(globalThis.GZ_DOC_KINDS?.KINDS || {}).map((x) => x.param)];
   const here = () => address(location.search, params());
   const boxOf = (el) => rect(el?.isConnected ? el.getBoundingClientRect() : null);
+  // Where an element comes to rest: its box with what animates it at its end (a new card already settling in, when the
+  // list drew before this page's transition began), so a fold ends on the card and not on a frame of its entrance.
+  const restOf = (el) => {
+    const run = el?.isConnected ? el.getAnimations().filter((a) => a.playState === 'running' && Number.isFinite(a.effect?.getComputedTiming().endTime)) : [];
+    const at = run.map((a) => a.currentTime);
+    try { for (const a of run) a.currentTime = a.effect.getComputedTiming().endTime; return boxOf(el); }
+    finally { run.forEach((a, i) => { a.currentTime = at[i]; }); }
+  };
   // The card a document's address belongs to on the list, or for a new one its New tile's page.
   const sourceOf = (a) => (a ? document.querySelector(`.gd-card[data-key="${CSS.escape(a.key)}"]`)
     || (a.format ? document.querySelector(`.gd-tile[data-format="${CSS.escape(a.format)}"] .gd-tile-pic`) : null) : null);
@@ -297,7 +305,7 @@ var GZ_PAPERS_MOTION = globalThis.GZ_PAPERS_MOTION || (() => {
     p.hold?.cancel();
     const back = !!p.h.back && !here(), view = win();
     const sameSize = p.view?.width === view.width && p.view?.height === view.height;
-    const f = frames(current === 'genie' && p.h.kind !== 'genie' ? p.h.kind : current, back ? boxOf(sourceOf({ key: p.h.back, format: p.h.format })) : sameSize ? p.h.box : null, view, back, view);
+    const f = frames(current === 'genie' && p.h.kind !== 'genie' ? p.h.kind : current, back ? restOf(sourceOf({ key: p.h.back, format: p.h.format })) : sameSize ? p.h.box : null, view, back, view);
     settle();
     if (!f) { end(p, true); return; }
     // A crossfade (Fade) is lib/motion.js swap's: at the transitions' pace, the pictures added (motion.css).

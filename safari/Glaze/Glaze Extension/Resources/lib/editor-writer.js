@@ -69,7 +69,7 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
         clear.type = 'button';
         clear.setAttribute('aria-label', c.id === 'documents' ? t('Clear documents…') : t('Clear {course}’s papers', { course: c.name }));
         clear.addEventListener('click', () => ask([c]));
-        li.append(el('b', '', c.name), el('small', '', t(c.id === 'documents' ? c.keys.length === 1 ? '{n} document' : '{n} documents' : '{n} papers', { n: c.keys.length })), clear);
+        li.append(el('b', '', c.name), el('small', '', t(c.id === 'documents' ? '{n} documents' : '{n} papers', { n: c.keys.length })), clear);
         return li;
       }));
     };
@@ -81,7 +81,7 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
       const n = list.reduce((k, c) => k + c.keys.length, 0);
       const documents = list !== everything && list[0].id === 'documents';
       $('writer-clear-title').textContent = list === everything ? t('Clear all papers?') : documents ? t('Clear documents?') : t('Clear {course}’s papers?', { course: list[0].name });
-      $('writer-clear-note').textContent = `${t(documents ? n === 1 ? '{n} document' : '{n} documents' : '{n} papers', { n })}. ${t('They and their versions are deleted from this device. What you submitted stays in Blackboard.')}`;
+      $('writer-clear-note').textContent = `${t(documents ? '{n} documents' : '{n} papers', { n })}. ${t('They and their versions are deleted from this device. What you submitted stays in Blackboard.')}`;
       dialog.returnValue = '';
       dialog.showModal();
       $('writer-clear-cancel').focus(); // not autofocus: Settings can be a frame of a school page, where browsers refuse it

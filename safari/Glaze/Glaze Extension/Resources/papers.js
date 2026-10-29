@@ -92,6 +92,10 @@
   const DOCX = ['lib/writer-color.js', 'lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js'];
   let store = null;
   const papers = () => (store ||= GZ_WRITER_PAPERS.open());
+  // In a frame of a school's page the worker takes this document's writes once it has claimed its pass (embedded below,
+  // which keeps the body inert until then): what writes waits for that.
+  const claimed = () => (document.body.inert ? new Promise((ok) => new MutationObserver((_, o) => { if (!document.body.inert) { o.disconnect(); ok(); } })
+    .observe(document.body, { attributes: true, attributeFilter: ['inert'] })) : Promise.resolve());
 
   // ---- the paper kind's page code (GZ_DOC_KINDS.register below)
   // A paper as its .docx: { name, mime, bytes }, or null when it holds no document.
@@ -158,6 +162,8 @@
     const mountEl = h('div');
     document.body.append(mountEl);
     editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins, onChange: (change) => emit('change', change) });
+    // Opening writes (a document in Trash comes out of it, a tab's unsaved copy is saved): not before the claim.
+    await claimed();
     await GZ_WRITER_PAPER.mount({ editor, t, standalone: true, key, context: () => ({}) });
     emit('ready', editor);
     motion().shown('paper');
@@ -232,7 +238,9 @@
       if (words.length && hit !== null) hitsByKey.set(r.key, { gen, updated: r.updated, epoch: epoch(r.key), hit });
       return hit;
     };
-    const metaOf = (r) => [r.course, labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 }), when(r.updated)].filter(Boolean).join(' · ');
+    // A narrow card wraps its line between parts, never inside one ("7:33 / PM") nor before a dot; a course name wraps.
+    const whole = (s) => String(s).replace(/ /g, '\u00a0');
+    const metaOf = (r) => [r.course, ...[labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 }), when(r.updated)].map(whole)].filter(Boolean).join('\u00a0· ');
     // A row whose kind this build has no page code for stays out of the list, untouched.
     const known = () => rows.filter((r) => typeof DK.get(DK.kindOf(r))?.thumb === 'function' && !gone.has(r.key));
     // What the lists, search, the course choices and mods see: no document in Trash. inView: the view's (the Trash's).
@@ -753,11 +761,8 @@
       GZ_MODS.start(a.mods);
     };
 
-    // What has been in Trash past 30 days goes as the page opens, once the worker takes its writes: a frame of a school's
-    // page (embedded below) only once it claimed its pass, its body inert until then.
-    const sweep = () => st.purge().catch((e) => console.error(e));
-    if (!document.body.inert) sweep();
-    else new MutationObserver((_, o) => { if (!document.body.inert) { o.disconnect(); sweep(); } }).observe(document.body, { attributes: true, attributeFilter: ['inert'] });
+    // What has been in Trash past 30 days goes as the page opens, once the worker takes its writes.
+    claimed().then(() => st.purge()).catch((e) => console.error(e));
     await Promise.all([refresh(), look.surfaces]);
     main.hidden = false;
     tell('ready');
