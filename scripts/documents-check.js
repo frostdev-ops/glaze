@@ -762,12 +762,12 @@ const PROBE = ({ lang }) => {
         const menuContrast = await contrastOn(pg, '.gd-menu [role=menuitem]');
         check(Number.isFinite(menuContrast) && menuContrast >= 4.5, `${name}: the menu text meets 4.5:1 over the photo (${menuContrast.toFixed(2)})`);
         await pg.click('.gd-menu button:text-is("Delete")');
-        await pg.waitForSelector('.gd-toast-do');
-        for (const sel of ['.gd-toast > span', '.gd-toast-do']) {
+        await pg.waitForSelector('.gp-toast-do');
+        for (const sel of ['.gd-toast > span', '.gp-toast-do']) {
           const k = await contrastOn(pg, sel);
           check(Number.isFinite(k) && k >= 4.5, `${name}: ${sel} meets 4.5:1 over the photo (${k.toFixed(2)})`);
         }
-        await pg.click('.gd-toast-do');
+        await pg.click('.gp-toast-do');
         await until(() => pg.evaluate(() => !document.querySelector('.gd-toast')), 'photo deletion undone');
       }
       for (const width of [1280, 640]) {
