@@ -174,3 +174,34 @@ test('copyOf drops the assignment fields', async () => {
   assert.equal(paper.doc.content[0].content[0].text, 'Original.', 'the copy is its own document');
   assert.deepEqual(Object.keys(PA.copyOf({ kind: 'sheet', title: 'x' }, 'Copy of x', 1)).sort(), ['created', 'keep', 'key', 'kind', 'named', 'revision', 'title', 'updated']);
 });
+
+test('renamed: a title set elsewhere reaches an open editor, its own saves never read as one', async () => {
+  let t = 1;
+  const P = PA.open(store(), () => t), k = PA.newKey();
+  const mine = (await P.save(k, { doc: doc('Draft.'), title: 'Draft.', named: false })).paper;
+  assert.equal(PA.renamed(mine, mine), null, 'the editor\'s own save');
+  t++; const derived = (await P.save(k, { doc: doc('Draft two.'), title: 'Draft two.', named: false })).paper;
+  assert.equal(PA.renamed(mine, derived), null, 'another unnamed save: each editor derives its own title');
+  t++; const home = (await P.save(k, { title: 'Field notes', named: true })).paper;
+  assert.deepEqual(PA.renamed(derived, home), { title: 'Field notes', named: true, revision: home.revision }, 'the document unchanged: the editor builds on the rename');
+  assert.deepEqual(PA.renamed(mine, home), { title: 'Field notes', named: true }, 'the document changed too: the title alone');
+  assert.equal(PA.renamed(home, { ...home }), null);
+  assert.equal(PA.renamed({ ...home, revision: home.revision + 1 }, home), null, 'an older record');
+  t++; const cleared = (await P.save(k, { title: '', named: false })).paper;
+  assert.deepEqual(PA.renamed(home, cleared), { title: '', named: false, revision: cleared.revision }, 'a name taken away');
+  assert.deepEqual(PA.renamed(null, home), { title: 'Field notes', named: true }, 'an editor that has saved nothing yet');
+  assert.equal(PA.renamed(home, null), null);
+});
+
+test('a save typed before a rename landed is no conflict: only a change to the document is', async () => {
+  let t = 1;
+  const P = PA.open(store(), () => t), k = PA.newKey();
+  const first = (await P.save(k, { doc: doc('Draft.'), title: 'Draft.' })).paper;
+  t++; await P.save(k, { title: 'Field notes', named: true });
+  t++; const r = await P.save(k, { doc: doc('Draft. And more.'), title: 'Field notes', named: true }, { base: first.revision });
+  assert.deepEqual((await P.versions(k)).map((v) => v.reason), ['start'], 'the rename changed no text');
+  assert.equal(r.paper.title, 'Field notes');
+  t++; await P.save(k, { doc: doc('Another tab.') }, { base: r.paper.revision });
+  t++; await P.save(k, { doc: doc('Stale tab.') }, { base: r.paper.revision });
+  assert.equal((await P.versions(k))[0].reason, 'conflict', 'a stale save over other text still keeps it');
+});

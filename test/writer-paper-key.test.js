@@ -28,7 +28,8 @@ const textOf = (json) => S.paper.nodeFromJSON(json).textContent;
 let clock = 1e12;
 
 // One frame: its blocks in a sandbox, a view over a real paper state, and the page's context handed over by context(c).
-const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = [], timers = [], windowEvents = {} }) => {
+// extra: names over the sandbox's (a standalone document's host, own, titleIn and location).
+const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = [], timers = [], windowEvents = {}, extra = {} }) => {
   let onContext = null;
   const view = { state: E.state({ mode: 'paper' }), updateState(s) { this.state = s; }, dispatch(tr) { this.state = this.state.apply(tr); } };
   const sandbox = vm.createContext({
@@ -43,8 +44,9 @@ const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = []
     format: ST.FORMATS.mla9, paper: null, keep: false, presets: [], zoom: 'fit', formatIssues: [], picked: null,
     t: (k) => k, state: { textContent: '' }, title: {}, due: {},
     restyleCSS() {}, counts() {}, setZoom() {}, PG: { relayout() {} }, runChecks() {}, runChecksSoon() {}, outlineDraw() {}, outlineAI: { stop() {} }, sourcesPanel: null,
+    own: false, titleIn: null, URLSearchParams, location: { search: '' }, ...extra,
   });
-  vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, key: () => key, keep: () => keep, edits: () => edits };`, sandbox);
+  vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, key: () => key, keep: () => keep, edits: () => edits, format: () => format, dirty: () => dirty };`, sandbox);
   const $ = sandbox.__;
   await $.load();
   const settle = async () => { for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
@@ -321,4 +323,77 @@ test('legacy image references are not resolved to a different picture in a newer
   const f = await frame({ local, ss, context: { recovery: RECOVERY, paper: PARTS } });
   assert.equal(pictureOf(f.view), null, 'an ambiguous legacy reference gets a placeholder, never the wrong picture');
   assert.ok(f.shown().endsWith(' Unsaved.'));
+});
+
+// ---- a standalone document (doc: key, papers.html): made by the Documents home, titled in the editor
+const DOC = 'doc:0f8e2b1a-3c4d-4e5f-8a9b-0c1d2e3f4a5b';
+const titleField = () => { const on = {}; return { on, value: '', placeholder: '', size: 0, readOnly: true, addEventListener: (type, fn) => { on[type] = fn; } }; };
+const standalone = (search, titleIn = titleField()) => ({ titleIn, extra: { own: true, titleIn, location: { search }, host: { standalone: true, key: DOC, context: () => ({}) } } });
+const run = async (timers) => { for (const x of timers.splice(0)) if (x.fn) await x.fn(); };
+const record = (local) => local.data[PA.KEYS.PAPER + DOC];
+
+test('a new standalone document opens in ?format= and is saved only once written in or titled', async () => {
+  for (const [search, id] of [['?paper=x&format=plain', 'plain'], ['?format=apa7', 'apa7'], ['?format=ieee', 'mla9'], ['', 'mla9']]) {
+    const local = memory(), timers = [], { extra } = standalone(search);
+    const f = await frame({ local, ss: session(), context: {}, timers, extra });
+    assert.equal(f.$.format().id, id, search);
+    await run(timers);
+    assert.deepEqual(Object.keys(local.data), [], `${search}: an untouched document leaves nothing behind`);
+  }
+  const local = memory(), timers = [], { extra, titleIn } = standalone('?format=plain');
+  const f = await frame({ local, ss: session(), context: {}, timers, extra });
+  assert.equal(titleIn.readOnly, false);
+  assert.equal(titleIn.placeholder, 'Untitled document');
+  f.type('Shopping list');
+  assert.equal(titleIn.placeholder, 'Shopping list', 'its first line in the title field');
+  await run(timers);
+  assert.deepEqual([record(local).kind, record(local).named, record(local).title, record(local).format], ['paper', false, 'Shopping list', 'plain']);
+  titleIn.value = '  Field   notes '; titleIn.on.input();
+  await run(timers);
+  assert.deepEqual([record(local).named, record(local).title], [true, 'Field notes'], 'a typed title, saved as an edit is');
+  titleIn.value = ''; titleIn.on.input();
+  await run(timers);
+  assert.deepEqual([record(local).named, record(local).title], [false, 'Shopping list'], 'emptied: its first line again');
+
+  const local2 = memory(), timers2 = [], s2 = standalone('?format=plain');
+  await frame({ local: local2, ss: session(), context: {}, timers: timers2, extra: s2.extra });
+  s2.titleIn.value = 'Named first'; s2.titleIn.on.input();
+  await run(timers2);
+  assert.deepEqual([record(local2).named, record(local2).title, record(local2).doc?.type], [true, 'Named first', 'doc'], 'a title alone saves the document');
+});
+
+test('an assignment paper is still saved when it opens, titled by Ultra', async () => {
+  const local = memory();
+  await frame({ local, ss: session(), context: { recovery: RECOVERY, paper: PARTS, assignment: { title: 'Essay 2' } } });
+  const { paper } = await stored(local);
+  assert.deepEqual([paper.kind, paper.named, paper.title], ['paper', false, 'Essay 2']);
+});
+
+test('a rename from the Documents home stays: the title follows it, unsaved typing too, and no conflict version', async () => {
+  const local = memory(), timers = [], changed = [], { extra, titleIn } = standalone('?format=plain');
+  const home = PA.open(local, () => (clock += 1000), { versions: async () => 40 });
+  const f = await frame({ local, ss: session(), context: {}, timers, changed, extra });
+  f.type('First line.');
+  await run(timers);
+  const tell = async () => { await changed[0]({ [PA.KEYS.PAPER + DOC]: { newValue: record(local) } }, 'local'); for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
+  // Nothing unsaved: the title changes, the editor's state (text, caret, undo) is the same object.
+  const before = f.view.state;
+  await home.save(DOC, { title: 'Renamed', named: true });
+  await tell();
+  assert.equal(titleIn.value, 'Renamed');
+  assert.equal(f.view.state, before, 'the document is not reloaded for a rename');
+  // Unsaved typing, then a rename: both survive the next save.
+  f.type(' More.');
+  assert.ok(f.$.dirty());
+  await home.save(DOC, { title: 'Renamed again', named: true });
+  await tell();
+  assert.equal(titleIn.value, 'Renamed again');
+  await run(timers);
+  assert.deepEqual([record(local).title, record(local).named, f.shown()], ['Renamed again', true, 'First line. More.']);
+  assert.ok(!(await home.versions(DOC)).some((v) => v.reason === 'conflict'), 'the editor built on the rename');
+  // Its own saves never read as a rename.
+  titleIn.value = 'Mine'; titleIn.on.input();
+  await run(timers);
+  await tell();
+  assert.deepEqual([titleIn.value, record(local).title], ['Mine', 'Mine']);
 });

@@ -324,7 +324,7 @@ const HARNESS = `(() => {
     await settle(fr);
     check(await fr.evaluate(() => !GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('The Clearing as Ledger')), 'and the import undoes in one step');
     await fr.evaluate(() => { document.querySelector('.gp-pill').click(); });
-    check(await fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role^="menuitem"]')].map((b) => b.textContent).join('|').startsWith('MLA 9|APA 7|Chicago 17|New preset')), 'format pill offers MLA 9, APA 7, Chicago 17 and a new preset');
+    check(await fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role^="menuitem"]')].map((b) => b.textContent).join('|').startsWith('MLA 9|APA 7|Chicago 17|Blank|New preset')), 'format pill offers MLA 9, APA 7, Chicago 17, Blank and a new preset');
     await p.keyboard.press('ArrowDown');
     check(await fr.evaluate(() => document.activeElement?.textContent === 'APA 7'), 'one Down Arrow moves from MLA to the next format');
     await p.keyboard.press('ArrowUp');
@@ -335,6 +335,10 @@ const HARNESS = `(() => {
     check(await fr.evaluate(() => document.activeElement?.textContent === 'MLA 9'), 'Home reaches the first format');
     await p.keyboard.press('Escape');
     check(await fr.evaluate(() => document.activeElement?.matches('.gp-pill') && !document.querySelector('.gp-menu')), 'format Escape restores its opener');
+    await fr.evaluate(() => document.querySelector('.gp-status button:last-child').click());
+    await until(() => fr.evaluate(() => [...document.querySelectorAll('.gp-versions [role="menuitem"]')].some((b) => b.textContent === 'Documents')), 'versions menu with Documents');
+    check(true, 'the status bar menu opens Documents');
+    await p.keyboard.press('Escape');
     await fr.evaluate(() => document.querySelector('.gp-pill').click());
     saved.menu = await shot(p, 'paper-format-menu.png');
     await fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role^="menuitem"]')].find((b) => b.textContent.startsWith('New preset')).click());
@@ -391,6 +395,61 @@ const HARNESS = `(() => {
     await until(() => papers.evaluate(() => [...document.querySelectorAll('.gp-paper')].find((a) => a.querySelector('h2').textContent === 'Lab report').querySelector('[role="status"]')?.textContent === 'The .docx could not be made.'), 'the list says the .docx could not be made');
     check(true, 'papers.html says when a paper\'s .docx could not be made');
     await papers.close();
+
+    // ---- standalone documents (papers.html?paper=doc:<uuid>&format=<id>, as the Documents home opens them)
+    const rows = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); return { papers: Object.keys(all).filter((k) => k.startsWith('writerPaper:doc:')), index: (all.writerPapers || []).filter((r) => r.key.startsWith('doc:')) }; });
+    const stored = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(`writerPaper:${k}`))[`writerPaper:${k}`] || null, k);
+    const openDoc = async (k, format) => {
+      const d = await context.newPage();
+      watch(d, `doc ${format}`);
+      await d.goto(`chrome-extension://${id}/papers.html?paper=${encodeURIComponent(k)}&format=${format}`);
+      await until(() => d.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key() && document.querySelectorAll('.gp-sheet').length > 0 && !document.querySelector('.gp-flow').style.visibility), `document ${format} open`);
+      return d;
+    };
+    const k1 = `doc:${crypto.randomUUID()}`;
+    let d = await openDoc(k1, 'mla9');
+    check(await d.evaluate(() => GZ_WRITER_PAPER.current().format().id === 'mla9' && document.querySelector('.gp-sheet .gp-hdr').textContent === '1'), '?format=mla9 opens a new MLA document');
+    check(await d.evaluate(() => document.querySelector('.gp-top a').textContent === 'Documents'), 'the back link reads Documents');
+    check(await d.evaluate(() => { const i = document.querySelector('.gp-top h1 input'); return i && i.getAttribute('aria-label') === 'Title' && i.placeholder === 'Untitled document' && !i.readOnly && document.querySelector('.gp-state').textContent === ''; }), 'its title is a field, Untitled document, and nothing says Saved');
+    await pause(1500);
+    await d.close();
+    check((await rows()).papers.length === 0 && (await rows()).index.length === 0, 'an untouched new document leaves nothing behind');
+
+    const k2 = `doc:${crypto.randomUUID()}`;
+    d = await openDoc(k2, 'plain');
+    check(await d.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; return GZ_WRITER_PAPER.current().format().id === 'plain' && v.state.doc.childCount === 1 && !v.state.doc.textContent && [...document.querySelectorAll('.gp-sheet .gp-hdr')].every((x) => !x.textContent); }), '?format=plain opens a blank page: no heading, header or list page');
+    check(await d.evaluate(() => document.querySelector('.gp-pill').textContent === 'Blank' && !document.querySelector('.gp-list h4')), 'the pill says Blank and the checklist is empty');
+    await d.evaluate(() => GZ_WRITER_PAPER.current().editor.view.focus());
+    await d.keyboard.type('Field notes from Tuesday');
+    await until(() => d.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'typed document saved');
+    let rec = await stored(k2);
+    check(rec && rec.kind === 'paper' && rec.named === false && rec.title === 'Field notes from Tuesday' && rec.format === 'plain', `typing saves it, named by its first line (${JSON.stringify(rec && { kind: rec.kind, named: rec.named, title: rec.title, format: rec.format })})`);
+    check(await d.evaluate(() => document.querySelector('.gp-top h1 input').placeholder === 'Field notes from Tuesday'), 'the title field shows the derived name');
+    check(await d.evaluate(() => GZ_WRITER_FORMAT.check(GZ_WRITER_PAPER.current().editor.view.state.doc, GZ_WRITER_PAPER.current().format()).issues.length === 0 && !document.querySelector('.gp-issue[data-source="format"]')), 'Blank has no format checks');
+    saved.blank = await shot(d, 'document-blank.png');
+
+    // A rename from another page (the Documents home's) while this editor holds unsaved typing.
+    const home = await context.newPage();
+    watch(home, 'home');
+    await home.goto(`chrome-extension://${id}/papers.html`);
+    await until(() => home.evaluate(() => !!globalThis.GZ_WRITER_PAPERS && document.querySelectorAll('.gp-paper').length >= 1), 'home list');
+    await d.keyboard.type(' and more');
+    await home.evaluate((k) => GZ_WRITER_PAPERS.open().save(k, { title: 'Renamed at home', named: true }), k2);
+    await until(() => d.evaluate(() => document.querySelector('.gp-top h1 input').value === 'Renamed at home'), 'rename reaches the open editor');
+    check(true, 'a rename from another page shows in the open editor while it holds unsaved typing');
+    await until(() => d.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'saved after rename');
+    rec = await stored(k2);
+    const docReasons = await worker.evaluate(async (k) => ((await chrome.storage.local.get(`writerVersions:${k}`))[`writerVersions:${k}`] || []).map((v) => v.reason), k2);
+    check(rec.title === 'Renamed at home' && rec.named === true && JSON.stringify(rec.doc).includes('Field notes from Tuesday and more') && !docReasons.includes('conflict'), `the editor's next save keeps the rename and the typing, no conflict version (${rec.title}; ${docReasons.join(', ')})`);
+    await d.click('.gp-top h1 input', { clickCount: 3 });
+    await d.keyboard.type('My own title');
+    await until(() => d.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'title saved');
+    await pause(300);
+    rec = await stored(k2);
+    check(rec.title === 'My own title' && rec.named === true && await d.evaluate(() => document.querySelector('.gp-top h1 input').value === 'My own title'), 'a title typed in the editor is saved and stays');
+    saved.titled = await shot(d, 'document-titled.png');
+    await home.close();
+    await d.close();
 
     check(errors.length === 0, `no page or frame errors (${errors.join('; ')})`);
     check(requests.every((r) => r.method === 'GET' && r.origin === site), 'every LMS request is a synthetic GET');

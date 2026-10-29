@@ -74,9 +74,15 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     let format = ST.FORMATS.mla9, key = null, paper = null, ctx = host.context?.() || {}, presets = [], zoom = [75, 100, 125, 150].includes(prefs.zoom) ? prefs.zoom / 100 : 'fit', scale = PX100, layout = null, page = 1, focus = false;
     let laidOut = () => {}, rows = [], feedbackPanel = null, sourcesPanel = null; // the checks, Outline and Feedback's pages after layout
     const nf = (n) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(n);
+    // A format's name: the three's and presets' as they are, Blank's in the page's language.
+    const labelOf = (f) => (f === ST.FORMATS.plain ? t('Blank') : f.label);
 
     // ---- the chrome
-    const title = h('h1'), due = h('span', { class: 'gp-due' }), state = h('span', { class: 'gp-state', role: 'status' });
+    // A standalone document's title is the student's to type (until then its derived name shows); an assignment's is
+    // Ultra's.
+    const own = host.standalone === true && PA.local(host.key);
+    const titleIn = own ? h('input', { class: 'gp-title-in', type: 'text', maxlength: '120', autocomplete: 'off', 'aria-label': t('Title'), placeholder: t('Untitled document'), readonly: true }) : null;
+    const title = h('h1', {}, titleIn), due = h('span', { class: 'gp-due' }), state = h('span', { class: 'gp-state', role: 'status' });
     const pill = btn({ class: 'gp-pill', 'aria-haspopup': 'menu' }), block = btn({ class: 'gp-box', 'aria-haspopup': 'menu' });
     const mark = (run, label, kid) => btn({ 'data-run': run, title: t(label), 'aria-label': t(label), 'aria-pressed': 'false' }, kid);
     const marks = [mark('bold', 'Bold', 'B'), mark('italic', 'Italic', h('i', { text: 'I' })), mark('underline', 'Underline', h('u', { text: 'U' }))];
@@ -131,7 +137,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // On an assignment any file can be brought (writer-import.js routes it); papers.html opens Word files only.
     const file = h('input', { type: 'file', accept: host.standalone ? '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document' : null, hidden: true });
     const root = h('div', { class: `gp${host.standalone ? ' gp-standalone' : ''}` },
-      h('header', { class: 'gp-top' }, host.standalone ? h('a', { href: 'papers.html', text: t('Papers') }) : null, title, due, h('span', { class: 'grow' }), state),
+      h('header', { class: 'gp-top' }, host.standalone ? h('a', { href: 'papers.html', text: t('Documents') }) : null, title, due, h('span', { class: 'grow' }), state),
       h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('Formatting') }, pill, block, fontB, sizeBox,
         h('div', { class: 'gp-tb' }, marks, moreFmt, colorB, hlB, h('span', { class: 'gp-sepv' }), alignB, paraB, bullets, numbers, h('span', { class: 'gp-sepv' })),
         cite, note, brk, toolGrow, h('div', { class: 'gp-tb' }, undo, redo), zoomB, moreB, host.standalone ? null : focusB, host.standalone ? null : submit),
@@ -400,7 +406,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const counts = () => {
       wordsL.textContent = t('{n} words', { n: nf(ed.words()) });
       fontL.textContent = `${look().font} ${look().size} · ${t(SPACING[format.line] || String(format.line))}`;
-      pill.replaceChildren(format.label, icon('caret', 'gp-ico gp-caret'));
+      pill.replaceChildren(labelOf(format), icon('caret', 'gp-ico gp-caret'));
     };
     // The title, authored or inferred sections, and references, each linked to its paragraph and rendered page.
     function outlineMark() {
@@ -506,7 +512,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (picked && !groupOf(picked)) picked = null;
       for (const row of r.rows) ROWS.set(row.id, row.label);
       const list = r.rows.map((row) => ({ ...row, count: formatIssues.filter((i) => i.row === row.id).length }));
-      checklist.replaceChildren(h('h4', { text: format.label }), ...list.map((row) => h('div', {}, t(row.label), h('span', { class: row.count ? 'gp-no' : 'gp-ok', text: row.count ? nf(row.count) : '✓' }))));
+      checklist.replaceChildren(list.length ? h('h4', { text: labelOf(format) }) : '', ...list.map((row) => h('div', {}, t(row.label), h('span', { class: row.count ? 'gp-no' : 'gp-ok', text: row.count ? nf(row.count) : '✓' }))));
       if (ISSUES()) ISSUES().set('format', formatIssues);
       underline();
       cards();
@@ -658,9 +664,13 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     recoveryKey ||= `recovery:${crypto.randomUUID()}`;
     try { sessionStorage.setItem(keySlot, recoveryKey); } catch { /* the durable copy is still in Papers */ }
     const setState = (k) => { state.textContent = k ? t(k) : ''; };
+    // named: the paper has a title the student gave it (typed here or on the Documents home), typed; else a standalone
+    // document is called by its first line (F.name) and an assignment's paper by the assignment.
+    let named = false, typed = '';
+    const naming = (p) => { named = p?.named === true; typed = named ? String(p.title || '') : ''; };
     const record = () => ({
-      doc: view.state.doc.toJSON(), words: ed.words(), format: format.base ? ST.preset(format) : format.id, keep,
-      title: ctx.assignment?.title || paper?.title || '', due: ctx.assignment?.due || paper?.due || null, url: ctx.paper?.url || paper?.url || '',
+      doc: view.state.doc.toJSON(), words: ed.words(), format: format.base ? ST.preset(format) : format.id, keep, kind: 'paper', named,
+      title: named ? typed : own ? F.name(view.state.doc, format) : ctx.assignment?.title || paper?.title || '', due: ctx.assignment?.due || paper?.due || null, url: ctx.paper?.url || paper?.url || '',
       courseName: ctx.course?.name || paper?.courseName || '', ...(ctx.paper ? { school: ctx.paper.school, user: ctx.paper.user, course: ctx.paper.course, content: ctx.paper.content } : {}),
       ...(outlineSaved?.scope === outlineScope() ? { outline: outlineSaved } : {}),
     });
@@ -753,6 +763,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     const changed = () => {
       if (initializing) return;
+      titled();
       outlineAI.stop(); sourcesPanel?.pause();
       edits++; dirty = true;
       emergency();
@@ -800,14 +811,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
 
     // ---- toolbar actions
     const presetMenu = () => [
-      ...ST.IDS.map((id) => ({ label: ST.FORMATS[id].label, checked: format.id === id, run: () => setFormat(ST.FORMATS[id]) })),
+      ...ST.IDS.map((id) => ({ label: labelOf(ST.FORMATS[id]), checked: format.id === id, run: () => setFormat(ST.FORMATS[id]) })),
       ...(presets.length ? ['-', ...presets.map((p) => ST.custom(p)).filter(Boolean).map((p) => ({ label: p.label, checked: format.id === p.id, run: () => setFormat(p) }))] : []),
       '-', { label: t('New preset…'), run: presetForm },
     ];
     const presetForm = () => {
       const opt = (v, label, sel) => h('option', { value: String(v), selected: sel || null }, label);
       const name = h('input', { type: 'text', maxlength: '40', value: t('My format') });
-      const base = h('select', {}, ST.IDS.map((id) => opt(id, ST.FORMATS[id].label, (format.base || format.id) === id)));
+      const base = h('select', {}, ST.IDS.map((id) => opt(id, labelOf(ST.FORMATS[id]), (format.base || format.id) === id)));
       const font = h('select', {}, ST.FONTS.map((x) => opt(x, x, format.font === x)));
       const fsize = h('select', {}, [10, 10.5, 11, 11.5, 12, 13, 14].map((x) => opt(x, String(x), format.size === x)));
       const line = h('select', {}, [1, 1.15, 1.5, 2].map((x) => opt(x, t(SPACING[x]), format.line === x)));
@@ -1270,7 +1281,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         btn({ role: 'menuitem', onclick: () => { close(); exportFile(); } }, t('Export .docx')),
         ...(globalThis.GZ_WRITER_PRINT?.items() || []).map((it) => btn({ role: 'menuitem', onclick: () => { close(); it.run(); } }, it.label)),
         btn({ role: 'menuitem', onclick: () => { close(); file.click(); } }, host.standalone ? t('Import .docx…') : t('Import…')),
-        host.standalone ? null : btn({ role: 'menuitem', onclick: () => { close(); open2('papers.html'); } }, t('All papers')));
+        host.standalone ? null : btn({ role: 'menuitem', onclick: () => { close(); open2('papers.html'); } }, t('Documents')));
       el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(true); } });
       popup(versionsB, el, { above: true });
     });
@@ -1297,8 +1308,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     let keep = false;
     const ownFormatting = (doc) => F.check(doc, format, {}, {}).issues.some((i) => F.KEPT.has(i.rule) && i.fix?.op !== 'format');
     const formatChoices = () => ({
-      ask: t('Its formatting differs from {format}', { format: format.label }),
-      items: [{ label: t('Keep the document’s formatting'), run: () => {} }, { label: t('Apply {format}', { format: format.label }), run: () => { keep = false; setDoc(F.apply(view.state.doc)); runChecks(); } }],
+      ask: t('Its formatting differs from {format}', { format: labelOf(format) }),
+      items: [{ label: t('Keep the document’s formatting'), run: () => {} }, { label: t('Apply {format}', { format: labelOf(format) }), run: () => { keep = false; setDoc(F.apply(view.state.doc)); runChecks(); } }],
     });
     // The paper becomes the Word file's text, what it held kept as a version first; the toast's Undo brings that back.
     let importing = false;
@@ -1355,9 +1366,26 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     }, true);
 
     // ---- what the page says: Ultra's names and the paper's key
+    // The title field: what the student typed, else its derived name in its place, as wide as what it shows.
+    const titled = () => {
+      if (!own) return;
+      if (!named) titleIn.placeholder = F.name(view.state.doc, format) || t('Untitled document');
+      titleIn.size = Math.min(60, Math.max(12, (titleIn.value || titleIn.placeholder).length + 1));
+    };
+    // A title typed is saved as an edit is (named; emptied, the derived name again).
+    titleIn?.addEventListener('input', () => {
+      typed = titleIn.value.replace(/\s+/g, ' ').trim(); named = !!typed;
+      titled();
+      edits++; dirty = true;
+      emergency();
+      setState('Saving…');
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(save, 800);
+    });
+    titleIn?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); view.focus(); } });
     const head = () => {
       const tt = ctx.assignment?.title || paper?.title || '';
-      title.textContent = tt || t('Paper');
+      if (own) { titleIn.value = typed; titled(); } else title.textContent = tt || t('Paper');
       const d = ctx.assignment?.due || paper?.due;
       due.textContent = d && Number.isFinite(Date.parse(d)) ? t('Due {when}', { when: new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(d)) }) : '';
     };
@@ -1372,16 +1400,20 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (pending) { const { base: _, ...rec } = pending; paper = { ...paper, ...rec }; }
       outlineSaved = paper?.outline || null;
       keep = paper?.keep === true;
+      naming(paper);
       if (paper?.doc) {
         format = ST.get(paper.format);
         setDoc(paper.doc, true);
       } else {
-        format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
-        // A new paper: the format's opening and list page around what Ultra's box already held. Under a stand-in key it is
-        // saved once something is written in it.
+        // papers.html?format=<id>: the Documents home's New in that format.
+        const asked = host.standalone ? new URLSearchParams(location.search).get('format') : null;
+        format = ST.get(paper?.format || (ST.IDS.includes(asked) ? asked : ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
+        // A new paper: the format's opening and list page around what Ultra's box already held. Under a stand-in key, and
+        // as a standalone document (an untouched one leaves nothing on the Documents home), it is saved once something is
+        // written in it.
         setDoc(F.template(format, values(), initialBody), true);
         made = true;
-        if (key !== recoveryKey) await save('auto');
+        if (key !== recoveryKey && !PA.local(key)) await save('auto');
       }
       initializing = false;
       if (pending) { dirty = true; await save('auto', pending.base); }
@@ -1394,7 +1426,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       PG.relayout(view);
       runChecks();
       outlineDraw();
-      if (!dirty) setState('Saved');
+      if (titleIn) titleIn.readOnly = false;
+      if (!dirty) setState(PA.local(key) && !paper ? '' : 'Saved');
     })());
     // The paper's key came after the frame opened (the student's id wasn't known then), so far kept under a stand-in key.
     // Nothing written under it: the student's paper opens as it was saved, with this tab's unsaved copy of it. Written in:
@@ -1427,6 +1460,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
           key = target;
           keepPictures(existing?.doc).catch((e) => console.error(e));
           if (pending) { const { base: _, ...rec } = pending; paper = { ...existing, ...rec }; } else paper = existing;
+          naming(paper);
           outlineSaved = paper?.outline || null;
           keep = paper?.keep === true;
           format = ST.get(paper?.format || (ST.IDS.includes(prefs.format) ? prefs.format : 'mla9'));
@@ -1449,24 +1483,35 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     });
     // Another editor (a second tab, the Papers page) saved this paper: while this one holds nothing unsaved, it shows that,
     // read through the store so its next save builds on it. Unsaved typing stays; its save keeps the other text as a
-    // version.
+    // version. A rename (the Documents home's) reaches the title either way, and the next save carries it.
     const newer = (p) => p?.doc && !dirty && !initializing && !importing && (p.revision || 0) > (paper?.revision || 0);
     const elsewhere = async (changes, area) => {
       const next = area === 'local' && key ? changes[PA.KEYS.PAPER + key]?.newValue : null;
-      if (!newer(next)) return;
+      if (!newer(next) && !PA.renamed(paper, next)) return;
       // While this editor's own write is in flight, its word may be that write: look again once it has answered.
       if (writing) { missed = true; return; }
       await adopt();
     };
     adopt = async () => {
       const k = key, fresh = await store.get(k);
-      if (k !== key || !newer(fresh)) return;
+      if (k !== key) return;
+      // Only the name changed (the text is the one here), or this editor holds unsaved typing: the title alone, the
+      // text, caret and undo as they are.
+      const r = PA.renamed(paper, fresh);
+      if (r && (r.revision || !newer(fresh))) {
+        naming(r);
+        if (paper) paper = { ...paper, title: fresh.title, named: r.named, ...(r.revision ? { revision: r.revision } : {}) };
+        head();
+        return;
+      }
+      if (!newer(fresh)) return;
       paper = fresh; outlineSaved = fresh.outline || null; keep = fresh.keep === true; format = ST.get(fresh.format);
+      naming(fresh);
       keepPictures(fresh.doc).catch((e) => console.error(e));
       initializing = true;
       setDoc(fresh.doc, true);
       initializing = false;
-      restyleCSS(); counts(); PG.relayout(view); runChecks(); outlineDraw(); setState('Saved');
+      restyleCSS(); counts(); head(); PG.relayout(view); runChecks(); outlineDraw(); setState('Saved');
     };
     try { chrome.storage.onChanged.addListener((c, area) => { elsewhere(c, area).catch((e) => console.error(e)); }); } catch { /* outside the extension */ }
     restyleCSS();

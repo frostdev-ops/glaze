@@ -63,6 +63,8 @@
 .gp-top h1, .gp-top .gp-due, .gp-top .gp-state { min-height: 36px; padding: 6px 14px; line-height: 22px; border-radius: 999px; background: var(--pill); border: 1px solid var(--edge); }
 .gp-top .gp-due:empty, .gp-top .gp-state:empty { display: none; }
 .gp-top a { color: var(--gz-ink-muted); text-decoration: none; font-size: 13px; }
+/* A standalone document's title field: the pill's own type, nothing of a text box's. */
+.gp-top h1 .gp-title-in { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; max-width: 100%; text-overflow: ellipsis; }
 .grow { flex: 1; }
 
 /* Toolbar */
