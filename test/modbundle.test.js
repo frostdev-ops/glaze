@@ -1043,9 +1043,9 @@ test('mod.json tools: kept exactly as written, behind agents, each source\'s per
   assert.ok(await man({ permissions: every }, [HOOKS]));
   assert.ok(await man({ tools: [] }, [HOOKS]), 'no tools need nothing');
   const cases = [
-    [{ tools: {} }, 'tools'], [{ tools: [TOOL, 7] }, 'tools.1'], [{ tools: [{ ...TOOL, select: ['note'] }], permissions: full.permissions }, 'tools.0.select.0'],
+    [{ tools: {} }, 'tools'], [{ tools: [TOOL, 7], permissions: full.permissions }, 'tools.1'], [{ tools: [{ ...TOOL, select: ['note'] }], permissions: full.permissions }, 'tools.0.select.0'],
     [{ tools: [TOOL], permissions: [TODO] }, 'permissions'], [{ tools: [TOOL] }, 'tools.0.from'],
-    [{ tools: [TOOL], permissions: [AGENTS] }, 'tools.0.from'], [{ tools: [{ ...TOOL, from: 'grades' }], permissions: full.permissions }, 'tools.0.from'],
+    [{ tools: [TOOL], permissions: [AGENTS] }, 'tools.0.from'], [{ tools: [{ name: 'gpa', title: 'Grades', description: 'Grades.', from: 'grades' }], permissions: full.permissions }, 'tools.0.from'],
     [{ tools: [TOOL, CODE_TOOL], permissions: full.permissions }, 'tools.1.code'],
     [{ permissions: [AGENTS, { ...AGENTS, why: 'y' }] }, 'permissions.1.id'], [{ permissions: [{ id: 'agent', why: 'x' }] }, 'permissions.0.id'],
     [{ permissions: [{ id: 'agents', why: '' }] }, 'permissions.0.why'], [{ permissions: [...every, { id: 'network:h9.example.com', why: 'x' }] }, 'permissions'],

@@ -3572,5 +3572,12 @@
   "A feedback request could not fit within this model’s estimated context budget.": "Une requête d’évaluation ne tenait pas dans le budget de contexte estimé de ce modèle.",
   "The input fit, but the model exhausted its context while producing the answer.": "L’entrée tenait dans le contexte, mais le modèle l’a épuisé en produisant la réponse.",
   "The model exceeded this request’s output limit.": "Le modèle a dépassé la limite de sortie de cette requête.",
-  "{n} bytes": "{n} octets"
+  "{n} bytes": "{n} octets",
+  "Agent apps you connect in Settings → Agents can use this mod’s tools.": "Les apps d’agents que vous connectez dans Réglages → Agents peuvent utiliser les outils de ce mod.",
+  "Tool “{title}” — gives agent apps your to-dos, as Glaze last read them.": "Outil « {title} » — donne aux apps d’agents vos tâches, telles que Glaze les a lues en dernier.",
+  "Tool “{title}” — gives agent apps your due dates, as Glaze last read them.": "Outil « {title} » — donne aux apps d’agents vos échéances, telles que Glaze les a lues en dernier.",
+  "Tool “{title}” — gives agent apps your courses, as Glaze last read them.": "Outil « {title} » — donne aux apps d’agents vos cours, tels que Glaze les a lus en dernier.",
+  "Tool “{title}” — gives agent apps your grades, as Glaze last read them.": "Outil « {title} » — donne aux apps d’agents vos notes, telles que Glaze les a lues en dernier.",
+  "Tool “{title}” — its author’s code answers, with what this mod may use.": "Outil « {title} » — le code de son auteur répond, avec ce que ce mod peut utiliser.",
+  "Its tools run its own code and can send what an app asks for to {hosts}.": "Ses outils exécutent leur propre code et peuvent envoyer ce qu’une app demande à {hosts}."
 };

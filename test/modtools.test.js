@@ -269,3 +269,17 @@ test('editor: the agents permission, one line per tool saying where its data com
   assert.equal(E.lines({ ...widget, permissions: P('agents', 'todo'), tools: [DUE] }, t)[1].text, 'To Do — reads your to-dos, due dates and schedule.');
   assert.equal(E.plain({ ...widget, tools: [] }), true);
 });
+
+test('the editor loads the schema subset and lib/modtools.js before lib/modbundle.js, which work there as classic scripts', () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const html = read('options.html');
+  const at = ['lib/ai/schema.js', 'lib/modtools.js', 'lib/modbundle.js', 'lib/editor-mods.js'].map((f) => html.indexOf(`<script src="${f}"></script>`));
+  assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), String(at));
+  // No require on a page: each finds the others as globals.
+  const ctx = vm.createContext({ crypto: globalThis.crypto, TextEncoder, TextDecoder, btoa, atob, URL });
+  for (const f of ['lib/ai/schema.js', 'lib/modtools.js', 'lib/modbundle.js']) vm.runInContext(read(f), ctx, { filename: f });
+  const manifest = { ...MANIFEST, author: { name: 'Kai', key: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo' }, tools: [DUE, ASK] };
+  const got = vm.runInContext('(m) => { const c = GZ_MODBUNDLE.clean(m, { "hooks.js": new Uint8Array([49]) }); return JSON.stringify([c === m, GZ_MODBUNDLE.caps(m)]); }', ctx)(manifest);
+  assert.deepEqual(JSON.parse(got), [true, ['agents', 'todo', 'courses', 'grades', 'code', 'tool:due_soon@todo', 'tool:ask_garden@code']]);
+});

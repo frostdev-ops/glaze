@@ -15,6 +15,8 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
   // The packs a mod carries are read with lib/media.js; the worker brings it on first use.
   const MEDIA = () => (typeof GZ_MEDIA !== 'undefined' ? GZ_MEDIA : typeof require === 'function' ? require('./media.js') : (importScripts('media.js'), GZ_MEDIA));
   const WG = () => (typeof GZ_MODWIDGET !== 'undefined' ? GZ_MODWIDGET : require('./modwidget.js'));
+  // Only a manifest with `tools` needs lib/modtools.js.
+  const T = () => (typeof GZ_MODTOOLS !== 'undefined' ? GZ_MODTOOLS : require('./modtools.js'));
 
   // Files in a bundle, bytes of them all (mod.json and mod.sig too), bytes of .js, bytes of mod.json, a path's characters
   // and folders, the zip itself (the files plus room for headers), and a glazemod1: code's characters.
@@ -237,17 +239,19 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
   const DATA = ['courses', 'todo', 'grades', 'nav.read'];
   // What Glaze's navigation bar lets a mod change (no personal data).
   const NAV = ['nav.items', 'nav.layout'];
+  // Agent apps the student connects may use the mod's `tools` (lib/modtools.js).
+  const AGENTS = 'agents';
   const HOSTS_MAX = 8;
   // A DNS name as a browser asks for it: lowercase ASCII (punycode for the rest), two labels at least, a top label that
   // starts with a letter (so never an IPv4 address), no port, no wildcard, no trailing dot.
   const HOST = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
   const permissions = (v) => {
-    if (!Array.isArray(v) || v.length > DATA.length + NAV.length + HOSTS_MAX) bad('permissions');
+    if (!Array.isArray(v) || v.length > DATA.length + NAV.length + 1 + HOSTS_MAX) bad('permissions');
     const seen = new Set();
     v.forEach((p, i) => {
       keys(p, ['id', 'why'], `permissions.${i}`, ['id', 'why']);
       const host = typeof p.id === 'string' && p.id.startsWith('network:') ? p.id.slice(8) : null;
-      if (!(DATA.includes(p.id) || NAV.includes(p.id) || (host && HOST.test(host))) || seen.has(p.id)) bad(`permissions.${i}.id`);
+      if (!(DATA.includes(p.id) || NAV.includes(p.id) || p.id === AGENTS || (host && HOST.test(host))) || seen.has(p.id)) bad(`permissions.${i}.id`);
       if (!line(p.why, 280)) bad(`permissions.${i}.why`);
       seen.add(p.id);
     });
@@ -319,7 +323,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     });
   };
   const hasBlocks = (m) => [...(m.ui?.tiles || []), ...(m.ui?.rail || [])].some((s) => own(s, 'blocks'));
-  const MANIFEST = ['glaze', 'name', 'version', 'author', 'permissions', 'parts', 'ui', 'hooks', 'replaces', 'settings', 'packs'];
+  const MANIFEST = ['glaze', 'name', 'version', 'author', 'permissions', 'parts', 'ui', 'hooks', 'replaces', 'settings', 'packs', 'tools'];
   // raw: mod.json as parsed; files: the bundle's { path: bytes }, for the files mod.json names.
   const clean = (raw, files) => {
     keys(raw, MANIFEST, 'mod.json', ['glaze', 'name', 'version', 'author']);
@@ -330,6 +334,8 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     if (!line(raw.author.name, 40)) bad('author.name');
     if (!keyOk(raw.author.key)) bad('author.key');
     if (own(raw, 'permissions')) permissions(raw.permissions);
+    // Tools for agent apps, behind agents, each source's data permission and, for code tools, the hooks that answer them.
+    if (own(raw, 'tools')) T().clean(raw.tools, raw);
     if (own(raw, 'parts')) { const p = X().clean(raw.parts); if (!p || !X().same(p, raw.parts)) bad('parts'); }
     // A background file of its own: `./<path>`, there, and what lib/media.js keeps for a Look's background of its declared
     // type (as cleaned, within the background's limits). A video is carried only as that file.
@@ -344,9 +350,10 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     if (own(raw, 'ui')) {
       ui(raw.ui, files);
       // A widget's data comes with its permission, declared and explained like any other, and asks for no more than its
-      // blocks show: no network host, which it could do nothing with, and no data it never draws.
+      // blocks show and its tools answer with: no network host, which it could do nothing with, and no data it never uses.
       if (hasBlocks(raw)) {
-        const want = [...new Set([...(raw.ui.tiles || []), ...(raw.ui.rail || [])].flatMap((s) => (own(s, 'blocks') ? WG().needs(s.blocks) : [])))].sort();
+        const want = [...new Set([...[...(raw.ui.tiles || []), ...(raw.ui.rail || [])].flatMap((s) => (own(s, 'blocks') ? WG().needs(s.blocks) : [])),
+          ...(own(raw, 'tools') ? T().needs(raw.tools) : [])])].sort();
         if (want.join() !== (raw.permissions || []).map((p) => p.id).sort().join()) bad('permissions');
       }
     }
@@ -374,13 +381,14 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     return file(m?.hooks) || [...(m?.ui?.tiles || []), ...(m?.ui?.rail || []), m?.ui?.nav, m?.ui?.background].some((s) => file(s?.file));
   };
   // What a manifest asks the student to consent to: declared permissions, its own code ('code': an update that adds code to
-  // a widget Glaze drew itself has to ask again), its own frame, and a remote background's host ('bgfile' for one it
-  // carries: nothing is asked of a site, but the prompt says so).
+  // a widget Glaze drew itself has to ask again), its own frame, a remote background's host ('bgfile' for one it carries:
+  // nothing is asked of a site, but the prompt says so), and each tool for agent apps (tool:<name>@<from|code>).
   const caps = (m) => {
     const slots = [...(m.ui?.tiles || []), ...(m.ui?.rail || []), m.ui?.nav, m.ui?.background];
     const media = m.parts?.bg?.media?.src;
     return [...(m.permissions || []).map((p) => p.id), ...(hasCode(m) ? ['code'] : []), ...(slots.some((s) => s?.file) ? ['frame'] : []),
-      ...(typeof media === 'string' && media.startsWith('https:') ? [`media:${new URL(media).hostname}`] : []), ...(bgMedia(m)?.path ? ['bgfile'] : [])];
+      ...(typeof media === 'string' && media.startsWith('https:') ? [`media:${new URL(media).hostname}`] : []), ...(bgMedia(m)?.path ? ['bgfile'] : []),
+      ...(m.tools?.length ? T().caps(m) : [])];
   };
 
   // Display-only manifest for install prompts and editor labels; the signed manifest and files stay byte-for-byte intact.

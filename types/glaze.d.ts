@@ -535,3 +535,76 @@ interface GlazeLook {
   /** A layer over the worn Look while the mod runs, never saved. `null` takes it away. Media src/type must match mod.json. */
   override(parts: GlazeLookParts | null): Promise<unknown>;
 }
+
+// ---- mod.json tools --------------------------------------------------------------------------------------------------
+// Not on the `glaze` object: the shape of mod.json's `tools`, for agent apps the student connects (docs/mods-api.md).
+
+/** A tool in mod.json `tools`: answered by Glaze from what it keeps, or (`code: true`) by the mod's Worker. Needs `agents`. */
+type GlazeTool = GlazeTodoTool | GlazeCourseTool | GlazeGradeTool | GlazeCodeTool;
+
+/** The fields of `glaze.todo()`'s items, for `from: 'todo'` and `'schedule'`. */
+type GlazeTodoField = 'id' | 'type' | 'courseId' | 'course' | 'title' | 'due' | 'url' | 'done' | 'submitted' | 'graded' | 'late' | 'missing';
+/** The fields of `glaze.courses()`'s items. */
+type GlazeCourseField = 'id' | 'name' | 'code' | 'color';
+/** The fields of `glaze.grades()`'s items. */
+type GlazeGradeField = 'courseId' | 'name' | 'percent' | 'at';
+
+/** `eq`: the field is that value exactly (`null` for no date, grade or colour). `days`, on `due` or `at`: within that many days from now, -366 to 366, not 0; negative looks back. */
+type GlazeToolWhere<F extends string> = { field: F; eq: string | number | boolean | null } | { field: F; days: number };
+
+interface GlazeToolBase {
+  /** `[a-z][a-z0-9_]`, at most 24 characters, unique in the mod. */
+  name: string;
+  /** One line, at most 60 characters. Apps show "<mod name> (mod): <title>". */
+  title: string;
+  /** One line, at most 500 characters, for the app's model. Apps get it after "Written by the mod's author, not Glaze." */
+  description: string;
+}
+
+/** What the app may pass: `course`, one course's items by its id; `days`, 1 to 60 days ahead (for grades, back). */
+interface GlazeToolInput {
+  course?: true;
+  days?: true;
+}
+
+/** A tool Glaze answers from the cached plan: every to-do, or (`schedule`) those with a due date. Needs `todo`. */
+interface GlazeTodoTool extends GlazeToolBase {
+  from: 'todo' | 'schedule';
+  /** The fields each answer has, in this order; all of them when left out. */
+  select?: GlazeTodoField[];
+  /** At most 8; an item passes all of them. */
+  where?: GlazeToolWhere<GlazeTodoField>[];
+  /** Empty values last; ties keep the plan's order. */
+  sort?: { field: GlazeTodoField; order: 'asc' | 'desc' };
+  /** 1 to 200; 200 when left out. */
+  limit?: number;
+  input?: GlazeToolInput;
+}
+
+/** A tool Glaze answers from the courses it has seen. Needs `courses`. */
+interface GlazeCourseTool extends GlazeToolBase {
+  from: 'courses';
+  select?: GlazeCourseField[];
+  where?: GlazeToolWhere<GlazeCourseField>[];
+  sort?: { field: GlazeCourseField; order: 'asc' | 'desc' };
+  limit?: number;
+  /** `course` only: courses have no date. */
+  input?: { course?: true };
+}
+
+/** A tool Glaze answers from each course's latest grade. Needs `grades`. */
+interface GlazeGradeTool extends GlazeToolBase {
+  from: 'grades';
+  select?: GlazeGradeField[];
+  where?: GlazeToolWhere<GlazeGradeField>[];
+  sort?: { field: GlazeGradeField; order: 'asc' | 'desc' };
+  limit?: number;
+  input?: GlazeToolInput;
+}
+
+/** A tool the mod's Worker (`hooks`) answers, in Chrome, while a school page is open. */
+interface GlazeCodeTool extends GlazeToolBase {
+  code: true;
+  /** The arguments' JSON Schema: an object at the root, in the subset lib/ai/schema.js checks, with no `reason` property. None when left out. */
+  input?: { type: 'object'; [keyword: string]: unknown };
+}
