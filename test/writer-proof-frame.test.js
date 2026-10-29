@@ -60,6 +60,28 @@ test('a stale paragraph reply cannot flag a prefix of the word now being typed',
   assert.equal(f.issues.list().length, 0);
 });
 
+test('full and paragraph lints skip course codes and URL fragments, while retaining a nearby typo', async () => {
+  const text = 'ENG1100-008 https://doi.org/10.5555/pgph.123 apsac.org/wp/file.pdf e0001091 and recieve.';
+  const lints = ['ENG1100', 'pgph', 'wp', 'pdf', 'e0001091', 'recieve'].map((problem) => ({
+    start: text.indexOf(problem), end: text.indexOf(problem) + problem.length, kind: 'Spelling', problem, suggestions: [{ k: 0, t: 'wrong' }],
+  }));
+  const f = frame({ html: `<p>${text}</p>` }); await flush();
+  const reply = () => f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints });
+  reply();
+  assert.deepEqual(f.issues.list().map((i) => i.text), ['recieve']);
+  f.view.dispatch(f.view.state.tr.insertText(' ', text.length + 1)); await f.run(150);
+  reply();
+  assert.deepEqual(f.issues.list().map((i) => i.text), ['recieve']);
+});
+
+test('a late spelling reply cannot flag text that has since become part of an address', async () => {
+  const f = frame({ html: '<p>recieve</p>' }); await flush();
+  const id = f.lint().id;
+  f.view.dispatch(f.view.state.tr.insertText('https://example.test/', 1));
+  f.reply(f.ports[0], { op: 'lint', id, lints: [{ start: 0, end: 7, kind: 'Spelling', problem: 'recieve', suggestions: [{ k: 0, t: 'receive' }] }] });
+  assert.equal(f.issues.list().length, 0);
+});
+
 test('a constructor failure uses the per-frame Worker fallback, and pagehide releases it', async () => {
   const f = frame({ throwShared: true }); await flush();
   assert.equal(f.proof.mode, 'worker');

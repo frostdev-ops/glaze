@@ -303,6 +303,18 @@ const rss = (profile) => {
     await tp.keyboard.type('unfortunatly ', { delay: 12 });
     check((await text(essay.fr)) === 'unfortunately ', 'a long curated typo is corrected');
     check(await essay.fr.evaluate(() => { const p = document.querySelector('.gp-fix'); return p.scrollWidth <= p.clientWidth && p.getBoundingClientRect().right <= innerWidth; }), 'a long autocorrect and its Undo fit inside the pop');
+    await essay.fr.evaluate(() => {
+      const v = GZ_WRITER_FRAME.editor().view, s = v.state.schema;
+      v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, s.nodes.paragraph.create(null,
+        s.text('ENG1100-008 https://doi.org/10.5555/journal.pgph.123 apsac.org/wp/file.pdf e0001091 and recieve.'))));
+      v.focus();
+    });
+    await settle(essay.fr, 'recieve');
+    await pause(1700); // Also let the full-document pass land, after the paragraph pass.
+    check(await essay.fr.evaluate(() => {
+      const issues = GZ_WRITER_ISSUES.list();
+      return issues.some((i) => i.text === 'recieve') && !issues.some((i) => /ENG1100|pgph|apsac|\bwp\b|pdf|e0001091/.test(i.text));
+    }), 'course codes, article identifiers and bare or linked URL fragments are not proofed; nearby prose still is');
     await tp.close();
 
     check(errors.length === 0, `no page or frame errors (${errors.join('; ')})`);

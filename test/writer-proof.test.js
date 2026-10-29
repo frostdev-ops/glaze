@@ -242,6 +242,20 @@ test('nameLike: a Capitalised word mid-sentence, in capitals, in a heading block
   assert.equal(P.nameLike(...at('We met Anselm at noon.', 'Anselm')), true, 'mid-sentence');
 });
 
+test('literalLike: course and article identifiers, URLs and email addresses keep their spelling; nearby prose is checked', () => {
+  const at = (text, word) => [text, text.indexOf(word), text.indexOf(word) + word.length];
+  for (const [text, words] of [
+    ['ENG1100-008 and CS2010, engl2100–008 and e0001091.', ['ENG1100', 'CS2010', 'engl2100', 'e0001091']],
+    ['See https://doi.org/10.5555/journal.pgph.123 and doi.org/10.5555/pgph.123.', ['pgph', 'journal']],
+    ['(apsac.org/wp-content/uploads/2024/12/12345.pdf).', ['apsac', 'wp', 'pdf']],
+    ['Read www.exampel.edu/teh?q=recieve#teh and mail teh@exampel.edu.', ['exampel', 'teh', 'recieve']],
+  ]) for (const word of words) assert.equal(P.literalLike(...at(text, word)), true, `${text}: ${word}`);
+  for (const [text, word] of [['See doi.org and recieve updates.', 'recieve'], ['The pgph label is misspelled.', 'pgph'], ['An ordinary teh error.', 'teh'], ['recieve,doi.org', 'recieve']]) {
+    assert.equal(P.literalLike(...at(text, word)), false, text);
+  }
+  assert.ok(P.contextWords({ course: { name: '202640-ENG1100-008' } }).includes('202640-ENG1100-008'));
+});
+
 // ---- issues -----------------------------------------------------------------------------------------------------------
 test('issues: set, list, ranges, and positions that follow edits', () => {
   const e = editor('<p>Morrison is definately less interested</p><p>the clearing seem to collect</p>');

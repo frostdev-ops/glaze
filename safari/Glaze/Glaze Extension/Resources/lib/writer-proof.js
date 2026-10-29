@@ -92,12 +92,26 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   };
 
   // ---- where a fix never goes ---------------------------------------------------------------------------------------
+  // Proofing sees plain text, so it needs the boundaries of addresses and identifiers even without link marks. Look
+  // only at the surrounding token; a misspelling beside an address must still be checked.
+  const literalLike = (text, start, end) => {
+    let a = start, b = end;
+    while (a > 0 && !/\s/u.test(text[a - 1])) a--;
+    while (b < text.length && !/\s/u.test(text[b])) b++;
+    const token = text.slice(a, b), inside = (m) => start >= a + m.index && end <= a + m.index + m[0].length;
+    const addresses = /(?:[a-z][a-z\d+.-]*:\/\/|www\.)[^\s<>"“”]+|(?:[\p{L}\p{N}._%+-]+@)?(?:[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?\.)+[\p{L}]{2,}(?::\d+)?(?:[/?#][^\s<>"“”]*)?/giu;
+    if ([...token.matchAll(addresses)].some(inside)) return true;
+    // Course numbers (ENG1100-008), article numbers (e0001091) and other mixed identifiers aren't dictionary words.
+    return [...token.matchAll(/[\p{L}\p{M}\p{N}]+(?:[-_–—][\p{L}\p{M}\p{N}]+)*/gu)]
+      .some((m) => inside(m) && /\p{L}/u.test(m[0]) && /\p{N}/u.test(m[0]));
+  };
   // A token (the run between spaces) that is an address, a path, a handle, code or a number: www.teh.com, teh@x.edu, a_teh.
   const unsafe = (token) => /[@/\\_:#<>{}=|~^`$%&*+]|\d|\.\p{L}|^\p{L}+\.\p{L}/u.test(token) || /\p{Ll}\p{Lu}/u.test(token);
   // The textblock at pos is code, or the range carries a link.
   const guarded = (doc, from, to) => {
     const $from = doc.resolve(from);
     if ($from.parent.type.spec.code || $from.parent !== doc.resolve(to).parent) return true;
+    if (literalLike(blockText($from.parent), $from.parentOffset, $from.parentOffset + to - from)) return true;
     let link = false;
     doc.nodesBetween(Math.max(from - 1, $from.start()), Math.min(to + 1, $from.end()), (n) => { if (n.isText && n.marks.some((m) => m.type.name === 'link')) link = true; });
     return link;
@@ -196,7 +210,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     const parts = [str(c.course?.name), str(c.prompt?.text), str(c.assignment?.title), str(c.assignment?.instructions), name(c.user), name(c.instructor), str(c.replyTo?.author)];
     if (Array.isArray(c.thread)) for (const m of c.thread.slice(0, 500)) parts.push(str(m?.author));
     const out = new Set();
-    for (const w of parts.join(' ').slice(0, 200000).split(/[^\p{L}\p{M}'’-]+/u)) {
+    for (const w of parts.join(' ').slice(0, 200000).split(/[^\p{L}\p{M}\p{N}'’-]+/u)) {
       const v = w.replace(/['’]s$/u, '').replace(/^['’-]+|['’-]+$/gu, '');
       if (v.length >= 2 && v.length <= 40 && /\p{L}/u.test(v)) out.add(v);
       if (out.size >= 2000) break;
@@ -395,7 +409,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
 
   return {
     decide: null, verdict, key, KIND, SURE, ASK, CLASS, TYPOS, TWICE, toIssue, kindOf, plausible, distance, blockText, docText, unsafe, guarded, sentenceStart, fix,
-    contextWords, nameLike, plugin, since, mapPos, autofix, revert, within, finished,
+    contextWords, nameLike, literalLike, plugin, since, mapPos, autofix, revert, within, finished,
   };
 })();
 

@@ -37,9 +37,14 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
   const read = (doc, f) => {
     const all = kids(doc);
     if (f.opening === 'heading') {
-      if (all.length < 5 || all.slice(0, 4).some((n) => type(n) !== 'paragraph' || attrs(n).align) || type(all[4]) !== 'paragraph' || attrs(all[4]).align !== 'center') return null;
+      // Word imports can spell out left alignment and leave blank paragraphs before the centered title.
+      if (all.length < 5 || all.slice(0, 4).some((n) => type(n) !== 'paragraph' || (attrs(n).align && attrs(n).align !== 'left'))) return null;
+      let title = 4;
+      while (title < 12 && type(all[title]) === 'paragraph' && !text(all[title]).trim() && type(all[title + 1]) === 'paragraph') title++;
+      if (type(all[title]) !== 'paragraph' || attrs(all[title]).align !== 'center') title = 4;
+      if (type(all[title]) !== 'paragraph' || attrs(all[title]).align !== 'center') return null;
       const keys = ['name', 'instructor', 'course', 'date'];
-      return { end: 5, lines: { ...Object.fromEntries(keys.map((k, i) => [k, text(all[i]).trim()])), title: text(all[4]).trim() }, at: { ...Object.fromEntries(keys.map((k, i) => [k, i])), title: 4 } };
+      return { end: title + 1, lines: { ...Object.fromEntries(keys.map((k, i) => [k, text(all[i]).trim()])), title: text(all[title]).trim() }, at: { ...Object.fromEntries(keys.map((k, i) => [k, i])), title } };
     }
     const brk = all.findIndex((n) => type(n) === 'page_break');
     if (brk < 1 || brk > 24 || all.slice(0, brk).some((n) => type(n) !== 'paragraph' || attrs(n).align !== 'center')) return null;
@@ -103,7 +108,8 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
   // space between paragraphs, the page's margins and the base font (a preset's own margins and font still count).
   const KEPT = new Set(['spacing', 'paragraph-space', 'paragraph-space-before', 'margins', 'preset-font', 'font']);
   // doc: a paper Node (positions are its positions). f: the format. ctx: { name, course } as Ultra gave them.
-  // o: { lines(from, to) → line count, keep (the paper keeps an imported file's formatting) }. → { issues, rows: [{ id,
+  // o: { lines(from, to) → line count, pageAt(pos) → rendered page (0: unknown), keep (the paper keeps an imported
+  // file's formatting) }. → { issues, rows: [{ id,
   // label, count }] }.
   const fill = (k, v) => k.replace(/\{(\w+)\}/g, (m, n) => (v && n in v ? String(v[n]) : m));
   const check = (doc, f, ctx = {}, o = {}) => {
@@ -245,7 +251,22 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     else {
       const t = tops[list.title], s = span(t);
       if (t.node.textContent.trim() !== f.list.title) add('list', 'list-title', s.from, s.to, 'This format calls it {title}', { vars: { title: f.list.title }, suggestions: [f.list.title] });
-      if (tops[list.title - 1]?.node.type.name !== 'page_break') add('list', 'list-page', s.from, s.to, '{title} starts on a new page', { vars: { title: f.list.title }, fix: { op: 'page-break', at: t.pos } });
+      let before = list.title - 1;
+      // Blank spacing after a manual break doesn't undo that break. Images and other non-text content still count as
+      // body content, even when textContent is empty.
+      while (before >= 0) {
+        const n = tops[before].node;
+        if (n.type.name !== 'paragraph' || n.textContent.trim() || n.content.content.some((c) => !c.isText && c.type.name !== 'hard_break')) break;
+        before--;
+      }
+      const previous = tops[before];
+      let ownPage = !previous || previous.node.type.name === 'page_break';
+      if (!ownPage && o.pageAt) {
+        const titlePage = o.pageAt(s.from), bodyPage = o.pageAt(Math.max(previous.pos + 1, previous.pos + previous.node.nodeSize - 2));
+        // Use the body's last character: a paragraph may itself continue onto the heading's page.
+        if (Number.isInteger(titlePage) && titlePage > 0 && Number.isInteger(bodyPage) && bodyPage > 0) ownPage = titlePage > bodyPage;
+      }
+      if (!ownPage) add('list', 'list-page', s.from, s.to, '{title} starts on a new page', { vars: { title: f.list.title }, fix: { op: 'page-break', at: t.pos } });
       const entries = tops.slice(list.from, list.to).filter((x) => x.node.textContent.trim());
       const flat = entries.filter((x) => x.node.attrs.first != null && x.node.attrs.first >= 0);
       if (flat.length) add('list', 'list-hanging', flat[0].pos + 1, flat.at(-1).pos + flat.at(-1).node.nodeSize - 1, 'Entries take a hanging indent', { fix: { op: 'hanging', at: flat.map((x) => x.pos) } });
@@ -262,12 +283,13 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     return { issues, rows };
   };
 
-  // The Outline: the paper's title (as read() finds it), its headings, and its list of sources, in order. doc: a paper
-  // Node. → [{ kind: 'title' | 'heading' | 'list', level (headings' 1-6, else 0), text, pos (where the block starts) }]
-  const outline = (doc, f) => {
+  // The Outline: authored headings take precedence. With paragraphs:true an unheaded essay gets an inferred reverse
+  // outline: opening, body paragraphs and closing, with short previews. These are navigation entries, never doc edits.
+  // → [{ kind: 'title' | 'heading' | 'list' | 'section', level, text, pos, preview?, number?, inferred? }].
+  const outline = (doc, f, o = {}) => {
     const top = [];
     doc.forEach((n, pos) => top.push(pos));
-    const title = read(doc, f)?.at?.title, list = ST().listAt(doc), out = [];
+    const opening = read(doc, f), title = opening?.at?.title, list = ST().listAt(doc), out = [];
     doc.descendants((n, pos) => {
       if (n.type.name === 'heading' && n.textContent.trim()) out.push({ kind: 'heading', level: n.attrs.level, text: n.textContent.trim(), pos });
       return !n.isTextblock;
@@ -276,7 +298,59 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
       const n = Number.isInteger(i) && doc.child(i);
       if (n && n.textContent.trim()) out.push({ kind, level: 0, text: n.textContent.trim(), pos: top[i] });
     }
+    if (o.paragraphs) {
+      // Imported references need not have the format's alignment or heading style to be kept out of the essay body.
+      const titles = new Set([...Object.values(ST().FORMATS).map((s) => s.list.title.toLowerCase()), 'works consulted']);
+      let listTitle = list?.title;
+      if (listTitle == null) {
+        doc.forEach((n, _pos, i) => { if (['paragraph', 'heading'].includes(n.type.name) && titles.has(n.textContent.trim().replace(/:$/, '').toLowerCase())) listTitle = i; });
+        if (listTitle != null) out.push({ kind: 'list', level: 0, text: doc.child(listTitle).textContent.trim(), pos: top[listTitle] });
+      }
+      let start = opening ? (top[opening.end] ?? doc.content.size) : 0;
+      const end = listTitle == null ? doc.content.size : top[listTitle];
+      if (!opening && doc.firstChild?.type.name === 'paragraph' && doc.firstChild.attrs.align === 'center' && doc.firstChild.textContent.trim() && top[0] < end) {
+        out.push({ kind: 'title', level: 0, text: doc.firstChild.textContent.trim(), pos: top[0] });
+        start = top[1] ?? doc.content.size;
+      }
+      const headings = out.filter((x) => x.kind === 'heading' && x.pos >= start && x.pos < end);
+      // A quote, list, table or picture isn't a prose paragraph. Blank spacers, the opening and references aren't roles.
+      const prose = [];
+      doc.forEach((n, pos) => { if (pos >= start && pos < end && n.type.name === 'paragraph' && /[\p{L}\p{N}]/u.test(n.textContent)) prose.push({ pos, text: n.textContent.replace(/\s+/gu, ' ').trim() }); });
+      const section = (p, label, number) => {
+        const preview = p.text.length > 160 ? p.text.slice(0, 160).replace(/\s+\S*$/u, '') + '…' : p.text;
+        out.push({ kind: 'section', level: 0, text: label, pos: p.pos, preview, number, inferred: true });
+      };
+      if (headings.length) {
+        const lead = prose.find((p) => p.pos < headings[0].pos);
+        if (lead) section(lead, 'Introduction');
+      } else {
+        prose.forEach((p, i) => {
+          if (prose.length < 3) section(p, 'Paragraph {n}', i + 1);
+          else if (i === 0) section(p, 'Introduction');
+          else if (i === prose.length - 1) section(p, 'Conclusion');
+          else section(p, 'Body {n}', i);
+        });
+      }
+      // The reference heading has its own row, including when it was styled as an authored heading.
+      for (let i = out.length - 1; i >= 0; i--) if (out[i].kind === 'heading' && out[i].pos >= end) out.splice(i, 1);
+    }
     return out.sort((a, b) => a.pos - b.pos);
+  };
+
+  // Stable ids within a snapshot let a model group the existing prose without inventing positions or touching the doc.
+  const outlineSource = (doc, f) => {
+    const opening = read(doc, f), top = [];
+    doc.forEach((n, pos, i) => top.push({ n, pos, i }));
+    const fixed = outline(doc, f, { paragraphs: true }).filter((x) => x.kind === 'title' || x.kind === 'list');
+    const title = fixed.find((x) => x.kind === 'title'), list = fixed.find((x) => x.kind === 'list');
+    const start = opening ? (top[opening.end]?.pos ?? doc.content.size) : title ? title.pos + doc.nodeAt(title.pos).nodeSize : 0;
+    const blocks = top.filter(({ n, pos }) => pos >= start && pos < (list?.pos ?? doc.content.size) && /[\p{L}\p{N}]/u.test(n.textContent))
+      .map(({ n, pos }, i) => {
+        let anchor = pos;
+        if (!n.isTextblock) { let found = false; n.descendants((child, off) => { if (found) return false; if (child.isTextblock) { anchor = pos + 1 + off; found = true; return false; } return true; }); }
+        return { id: `b${i}`, kind: n.type.name, level: n.type.name === 'heading' ? n.attrs.level : 0, text: n.isTextblock ? n.textContent : n.textBetween(0, n.content.size, '\n', ' '), pos: anchor };
+      });
+    return { blocks, fixed };
   };
 
   // The paper to its format: an imported file's page, base font and paragraph spacing and line heights left to the format
@@ -288,7 +362,7 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     return { ...json, attrs: { ...json.attrs, setup: null } };
   };
 
-  return { template, opening, closing, read, surname, restyle, check, outline, apply, KEPT, DATE };
+  return { template, opening, closing, read, surname, restyle, check, outline, outlineSource, apply, KEPT, DATE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_FORMAT; else GZ_WRITER_FORMAT;

@@ -152,6 +152,8 @@
     const place = (l, base, text) => {
       const i = P.toIssue(l), from = P.mapPos(maps, base(l.start), 1), to = P.mapPos(maps, base(l.end), -1);
       if (to <= from || to > doc.content.size || doc.textBetween(from, to, '\n', ' ') !== l.problem) return null;
+      const $from = doc.resolve(from);
+      if ($from.parent === doc.resolve(to).parent && P.literalLike(P.blockText($from.parent), $from.parentOffset, $from.parentOffset + to - from)) return null;
       if (i.kind === 'spelling' && P.nameLike(text, l.start, l.end)) return null;
       return { ...i, from, to };
     };

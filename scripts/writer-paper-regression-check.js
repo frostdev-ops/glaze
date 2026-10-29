@@ -31,6 +31,88 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
       return p;
     };
     const type = (p, text) => p.evaluate((text) => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.insertText(text, 1)); }, text);
+    await run('outline', async () => {
+      const p = await page('review-outline'), errors = [];
+      p.on('pageerror', (e) => errors.push(e.message));
+      const paragraphs = await p.evaluate(() => {
+        const api = GZ_WRITER_PAPER.current(), v = api.editor.view;
+        const paragraphs = [
+          'School gardens give students a shared place to learn and work together. ',
+          'First, a garden connects classroom lessons with practical experiments. ',
+          'Shared projects teach students how to divide work and resolve disagreements. ',
+          'A garden gives the neighborhood a place to meet and exchange ideas. ',
+          'Taken together, these benefits make a school garden a lasting investment in the community. ',
+        ].map((s) => s.repeat(8).trim());
+        const doc = GZ_WRITER_SCHEMA.paper.nodeFromJSON(GZ_WRITER_FORMAT.template(api.format(),
+          { name: 'Alex Rivera', instructor: 'Prof. Okafor', course: 'ENG2100-001', date: '28 October 2026', title: 'The Value of School Gardens' },
+          paragraphs.map((text) => ({ type: 'paragraph', content: [{ type: 'text', text }] }))));
+        v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, doc.content));
+        return paragraphs;
+      });
+      await p.click('#gp-tab-outline');
+      const sections = p.locator('.gp-ol-row[data-kind="section"]'), labels = () => sections.locator('.gp-ol-label').allTextContents();
+      await p.waitForFunction(() => document.querySelectorAll('.gp-ol-row[data-kind="section"]').length === 5);
+      assert.deepEqual(await labels(), ['Introduction', 'Body 1', 'Body 2', 'Body 3', 'Conclusion']);
+      assert.equal(await p.locator('.gp-ol-row[data-kind="title"]').textContent(), 'The Value of School Gardens1');
+      for (let i = 0; i < paragraphs.length; i++) {
+        await sections.nth(i).click();
+        assert.equal(await p.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.selection.$from.parent.textContent), paragraphs[i]);
+        assert.equal(await sections.nth(i).getAttribute('aria-current'), 'true');
+        assert.match(await sections.nth(i).locator('small').textContent(), /^[1-9]\d*$/);
+      }
+      assert.ok(await p.evaluate(() => {
+        const v = GZ_WRITER_PAPER.current().editor.view; let headings = 0;
+        v.state.doc.descendants((n) => { if (n.type.name === 'heading') headings++; });
+        return headings === 0 && [...document.querySelectorAll('.gp-ol-preview')].every((el) => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth + 1);
+      }), 'navigation keeps the essay unchanged, and previews fit');
+      await sections.first().click();
+      if (process.env.PAPER_EVIDENCE) await p.screenshot({ path: path.join(evidence(), 'outline-essay.png') });
+      await p.evaluate(() => {
+        const api = GZ_WRITER_PAPER.current(), v = api.editor.view;
+        const last = GZ_WRITER_FORMAT.outline(v.state.doc, api.format(), { paragraphs: true }).filter((x) => x.kind === 'section').at(-1);
+        v.dispatch(GZ_PM.history.closeHistory(v.state.tr.insert(last.pos, v.state.schema.nodes.paragraph.create(null, v.state.schema.text('Another body paragraph develops the argument.')))));
+      });
+      await p.waitForFunction(() => document.querySelectorAll('.gp-ol-row[data-kind="section"]').length === 6);
+      assert.deepEqual(await labels(), ['Introduction', 'Body 1', 'Body 2', 'Body 3', 'Body 4', 'Conclusion']);
+      await p.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; GZ_PM.history.undo(v.state, (tr) => v.dispatch(tr)); });
+      await p.waitForFunction(() => document.querySelectorAll('.gp-ol-row[data-kind="section"]').length === 5);
+      assert.deepEqual(errors, []); await p.close();
+    });
+    await run('list-page', async () => {
+      const p = await page('review-list-page'), errors = [];
+      p.on('pageerror', (e) => errors.push(e.message));
+      const load = (blanks, explicit = false) => p.evaluate(({ blanks, explicit }) => {
+        const v = GZ_WRITER_PAPER.current().editor.view, s = v.state.schema;
+        const paragraph = (text = '', attrs = null) => s.nodes.paragraph.create(attrs, text ? s.text(text) : null);
+        const content = [paragraph('A brief conclusion.'), ...(explicit ? [s.nodes.page_break.create()] : []),
+          ...Array.from({ length: blanks }, () => paragraph()), paragraph('Works Cited', { align: 'center' }), paragraph('Rivera, Alex. A Sample Book. Example Press, 2026.')];
+        v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, content));
+      }, { blanks, explicit });
+      const pages = () => p.evaluate(() => {
+        const api = GZ_WRITER_PAPER.current(), v = api.editor.view, title = [...v.dom.querySelectorAll('p')].find((el) => el.textContent === 'Works Cited');
+        const origin = v.dom.getBoundingClientRect().top, scale = api.view.scale(), stride = api.view.geometry().height + 26.4;
+        const pageOf = (el) => Math.floor((el.getBoundingClientRect().top - origin) / scale / stride) + 1;
+        return { body: pageOf(v.dom.querySelector('p')), title: pageOf(title), warning: !!document.querySelector('.gp-issue[data-rule="list-page"]') };
+      });
+      await load(25);
+      await p.waitForFunction(() => GZ_WRITER_PAPER.current().pages() >= 2);
+      await pause(600);
+      let result = await pages();
+      assert.ok(result.title > result.body && !result.warning, JSON.stringify(result));
+      await load(0); await pause(600); result = await pages();
+      assert.ok(result.title === result.body && result.warning, JSON.stringify(result));
+      await load(2, true); await pause(600); result = await pages();
+      assert.ok(result.title > result.body && !result.warning, JSON.stringify(result));
+      // A page-geometry change can move the heading onto the body's page without a text edit.
+      await load(18); await pause(600);
+      await p.evaluate(() => GZ_WRITER_PAPER.current().setup({ page: [8.5, 7], margins: [0.5, 1, 0.5, 1] }));
+      await pause(600); result = await pages();
+      assert.ok(result.title > result.body && !result.warning, JSON.stringify(result));
+      await p.evaluate(() => GZ_WRITER_PAPER.current().setup({ page: [8.5, 22], margins: [0.5, 1, 0.5, 1] }));
+      await pause(600); result = await pages();
+      assert.ok(result.title === result.body && result.warning, JSON.stringify(result));
+      assert.deepEqual(errors, []); await p.close();
+    });
     await run('unknown', async () => {
       let p = await page(); await pause(16000); await type(p, 'Recover this unknown paper.');
       await p.evaluate(() => GZ_WRITER_PAPER.current().save());
