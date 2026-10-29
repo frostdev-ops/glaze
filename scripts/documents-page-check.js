@@ -230,6 +230,18 @@ const check = async (name, test) => {
       // One more Back leaves the page as it would without Documents: nothing of the frame's left in the history.
       length = await page.evaluate(() => history.length);
     });
+    await check('ultra: Escape stays in the document editor, then leaves from outside the editor past both entries', async () => {
+      f = await openFromBar(page);
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+      f = await shown(page);
+      await f.locator('.ProseMirror').click();
+      await page.keyboard.press('Escape');
+      assert.ok(await hosted(page), 'Escape in editable text keeps Documents open');
+      await f.evaluate(() => document.activeElement.blur());
+      await page.keyboard.press('Escape');
+      await closed(page);
+      await atMark(page);
+    });
     await check('ultra: Settings in the bar takes its place, Back is Documents again; Search leaves it', async () => {
       f = await openFromBar(page);
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
@@ -245,6 +257,9 @@ const check = async (name, test) => {
       // A repeated open of Settings sends its section through the host's message handler.
       await item(page, 'glaze:settings').click();
       assert.equal(await settingsFrame.evaluate(() => location.hash), '#study/grades');
+      const tabId = await worker.evaluate((url) => chrome.tabs.query({}).then((tabs) => tabs.find((t) => t.url === url)?.id), page.url());
+      await worker.evaluate((tabId) => chrome.scripting.executeScript({ target: { tabId }, func: () => GZ_SETTINGS_PAGE.open('writer/papers') }), tabId);
+      await until(() => settingsFrame.evaluate(() => location.hash === '#writer/papers' && !document.querySelector('[data-editor-panel="writer"]').hidden), 'a repeated open replaces Settings section history');
       await back(page);
       f = await shown(page);
       assert.equal(new URL(f.url()).searchParams.get('paper'), KEY, 'Back restores the document through the private channel');

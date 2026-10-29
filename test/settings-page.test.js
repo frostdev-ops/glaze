@@ -307,3 +307,32 @@ test('Documents closes each retired private channel and ignores its late message
   page.close();
   assert.equal(channels.at(-1).port1.closed, true, 'leaving closes the host port');
 });
+
+test('the page host follows the measured phone bar and disconnects every layout observer on leave', async () => {
+  const { El } = require('./stand-in-dom.js');
+  const doc = { activeElement: null }, html = new El('html', doc), body = new El('body', doc);
+  doc.root = html; html.append(body); html.setAttribute('data-gz-navbar', 'rail');
+  const bar = new El('div', doc); bar.id = 'gz-navbar'; bar.attachShadow({ mode: 'open' }); body.append(bar);
+  const tabs = new El('nav', doc); tabs.className = 'tabs'; bar.shadowRoot.append(tabs);
+  let top = 744;
+  tabs.getBoundingClientRect = () => ({ top, height: 70 });
+  Object.assign(doc, { documentElement: html, body, createElement: (tag) => new El(tag, doc), getElementById: (id) => id === 'gz-navbar' ? bar : null });
+  const observers = [], on = {};
+  class Observer {
+    constructor(fn) { this.fn = fn; this.observed = []; observers.push(this); }
+    observe(e) { this.observed.push(e); }
+    disconnect() { this.disconnected = true; }
+  }
+  const page = vm.runInContext(read('features/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: false }), innerHeight: 860,
+    MutationObserver: Observer, ResizeObserver: Observer, CSS: { escape: String }, crypto, history: tabHistory(on),
+    addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, sendMessage: (m, reply) => reply({ ok: true, ticket: 'a'.repeat(32) }) } } }));
+  await page.open();
+  const host = body.querySelector('#gz-settings-page');
+  assert.equal(host.style.getPropertyValue('bottom'), '116px');
+  top = 710; observers.find((o) => o.observed.includes(tabs)).fn();
+  assert.equal(host.style.getPropertyValue('bottom'), '150px', 'bar geometry changes update the reserved room');
+  page.close();
+  assert.ok(observers.length === 2 && observers.every((o) => o.disconnected), 'both mutation and resize observers are torn down');
+  assert.equal(on.resize, undefined);
+});
