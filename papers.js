@@ -35,6 +35,9 @@
       GZ_UI.paint(art || !look.whole ? s : { ...s, bg: { ...s.bg, kind: 'solid' } }, { page: look.whole });
       root.toggleAttribute('data-dark', root.style.colorScheme === 'dark');
       root.dataset.motion = s.motion.followSystem && calm.matches ? 'off' : s.motion.level;
+      // Glaze's motion knobs (motion.css) read the same level and the three switches, as content.js sets them.
+      root.dataset.gzMotion = root.dataset.motion;
+      for (const [a, on] of [['data-gz-no-trans', s.motion.transitions], ['data-gz-no-enter', s.motion.enter], ['data-gz-no-hover', s.motion.hover]]) root.toggleAttribute(a, !on);
       if (art && !backdrop) {
         backdrop = Object.assign(document.createElement('iframe'), { id: 'gd-backdrop', src: 'preview.html?site=canvas&backdrop', tabIndex: -1, inert: true });
         backdrop.setAttribute('aria-hidden', 'true');
@@ -57,6 +60,10 @@
     await paint();
   };
   theme().catch((e) => console.error(e));
+  // The page in motion (papers-motion.js): cards moving, menus, the field, the toast and the status line coming and going,
+  // and the list or a document having drawn. Without it, each change at once.
+  const STILL = { cards: (change) => change(), open: () => {}, leave: (el) => el.remove(), say: (el, text) => { el.textContent = text; }, shown: () => {} };
+  const motion = () => globalThis.GZ_PAPERS_MOTION || STILL;
   const $ = (id) => document.getElementById(id);
   const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return navigator.language || 'en'; } })();
   const t = (k, v) => GZ_I18N.t(k, v, locale);
@@ -152,6 +159,7 @@
     editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins, onChange: (change) => emit('change', change) });
     await GZ_WRITER_PAPER.mount({ editor, t, standalone: true, key, context: () => ({}) });
     emit('ready', editor);
+    motion().shown('paper');
   };
 
   // ---- the home
@@ -199,7 +207,7 @@
     const count = h('p', { id: 'gd-count', class: 'gd-sr', 'aria-live': 'polite' });
     // The heading and the New band share one panel of glass; the toolbar is another, the cards each their own.
     main.append(h('div', { class: 'gd-top' }, $('heading'), band), bar, docs, count);
-    const say = (text) => { said.textContent = text || ''; };
+    const say = (text) => motion().say(said, text || '');
 
     // ---- state
     // Text is bounded by characters, thumbnails by count (including those held in a detached card). Search retains each
@@ -294,7 +302,7 @@
       const els = shown.map(cardFor);
       if (els.length !== docs.children.length || els.some((e, i) => docs.children[i] !== e)) {
         const had = docs.contains(document.activeElement) ? document.activeElement : null;
-        docs.replaceChildren(...els);
+        motion().cards(() => docs.replaceChildren(...els));
         if (had?.isConnected) had.focus({ preventScroll: true });
       }
       const listed = new Set(rows.map((r) => r.key));
@@ -416,7 +424,7 @@
     kindSel.addEventListener('change', () => { kind = kindSel.value; render(); });
     sortSel.addEventListener('change', () => { sortBy = sortSel.value; render(); });
     const setView = (v, keep) => {
-      view = v; main.dataset.view = v;
+      view = v; motion().cards(() => { main.dataset.view = v; });
       gridB.setAttribute('aria-pressed', String(v === 'grid')); listB.setAttribute('aria-pressed', String(v === 'list'));
       if (keep) try { localStorage.setItem(VIEW, v); } catch { /* the choice lasts this visit */ }
     };
@@ -427,7 +435,7 @@
     // ---- the ⋯ menu: Rename (a standalone document's), Make a copy, Export .docx, Delete; then the items added for cards
     // (GZ_DOCUMENTS.item 'card'), each told the card's summary
     let menu = null, keyMenu = false;
-    const closeMenu = (back) => { if (!menu) return; const m = menu; menu = null; m.el.remove(); m.opener.setAttribute('aria-expanded', 'false'); if (back) m.back.focus(); };
+    const closeMenu = (back) => { if (!menu) return; const m = menu; menu = null; motion().leave(m.el, m.opener); m.opener.setAttribute('aria-expanded', 'false'); if (back) m.back.focus(); };
     const menuFor = (k, back) => {
       const c = cards.get(k);
       if (!c) return;
@@ -451,6 +459,7 @@
       });
       el.getBoundingClientRect();
       el.setAttribute('data-open', '');
+      motion().open(el, c.more);
       c.more.setAttribute('aria-expanded', 'true');
       menu = { el, k, opener: c.more, back: back || c.more };
       el.querySelector('[role="menuitem"]').focus();
@@ -478,6 +487,7 @@
       input.value = was;
       c.link.hidden = true;
       c.link.after(input);
+      motion().open(input);
       renaming = { k, input };
       input.focus();
       input.select();
@@ -519,7 +529,7 @@
     // ---- delete: the card goes at once; the toast's Undo (or Ctrl+Z while it shows) puts the record and its versions
     // back through the worker (merge). The toast goes at the next action or after 8 seconds.
     let undoable = null;
-    const dismiss = () => { if (!undoable) return; clearTimeout(undoable.timer); undoable.el.remove(); undoable = null; };
+    const dismiss = () => { if (!undoable) return; clearTimeout(undoable.timer); motion().leave(undoable.el); undoable = null; };
     const del = async (k) => {
       dismiss();
       say('');
@@ -538,6 +548,7 @@
       document.body.append(el);
       el.getBoundingClientRect();
       el.setAttribute('data-open', '');
+      motion().open(el);
       undoable = { k, records, el, timer: setTimeout(dismiss, 8000) };
     };
     const restore = async () => {
@@ -692,6 +703,7 @@
     await Promise.all([refresh(), look.surfaces]);
     main.hidden = false;
     tell('ready');
+    motion().shown('home');
     mods().catch((e) => console.error(e));
   };
 

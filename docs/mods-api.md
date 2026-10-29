@@ -394,7 +394,7 @@ The page wears the student's Look, background and glass included. These hooks re
 | `--gd-glass` | the Look's blur | The blur behind the panels, cards and menus over a background (`glass`). |
 | `--gd-thumb` | `1` | The thumbnails' scale (`thumb`). |
 | `--gd-column` | `224px` | The grid's narrowest column (`column`). |
-| `--gd-lift` | `-2px` (`-4px` expressive, `0` with motion off) | A hovered card's rise. |
+| `--gd-lift` | Glaze's hover lift (`--gz-lift`: up 2px, 4px and 1% larger on Expressive, none with motion or hover effects off) | A hovered card's and New tile's lift, a `transform`. |
 | `--gd-panel` | the Look's surface, opaque enough to read | The panels' and cards' fill. |
 
 The page's parts keep these class names: `gd-top` (the heading and New), `gd-new`, `gd-tile`, `gd-bar` (the toolbar),

@@ -134,6 +134,8 @@
 		D2400000000000000000C700 /* papers.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F700 /* papers.js */; };
 		D2400000000000000000A780 /* papers.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F780 /* papers.css */; };
 		D2400000000000000000C780 /* papers.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F780 /* papers.css */; };
+		D2400000000000000000A790 /* papers-motion.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F790 /* papers-motion.js */; };
+		D2400000000000000000C790 /* papers-motion.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F790 /* papers-motion.js */; };
 		B0B1000000000000000000A4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000C4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000A5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
@@ -254,6 +256,7 @@
 		D2400000000000000000F600 /* papers.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = papers.html; path = Resources/papers.html; sourceTree = "<group>"; };
 		D2400000000000000000F700 /* papers.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = papers.js; path = Resources/papers.js; sourceTree = "<group>"; };
 		D2400000000000000000F780 /* papers.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = papers.css; path = Resources/papers.css; sourceTree = "<group>"; };
+		D2400000000000000000F790 /* papers-motion.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = papers-motion.js; path = Resources/papers-motion.js; sourceTree = "<group>"; };
 		B0B1000000000000000000F4 /* features */ = {isa = PBXFileReference; lastKnownFileType = folder; name = features; path = Resources/features; sourceTree = "<group>"; };
 		B0B1000000000000000000F5 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
 		D6B0000000000000000000F1 /* sharing */ = {isa = PBXFileReference; lastKnownFileType = folder; name = sharing; path = Resources/sharing; sourceTree = "<group>"; };
@@ -395,6 +398,7 @@
 				D2400000000000000000F600 /* papers.html */,
 				D2400000000000000000F700 /* papers.js */,
 				D2400000000000000000F780 /* papers.css */,
+				D2400000000000000000F790 /* papers-motion.js */,
 				D6B0000000000000000000F1 /* sharing */,
 				B0B1000000000000000000F4 /* features */,
 				B0B1000000000000000000F5 /* assets */,
@@ -609,6 +613,7 @@
 				D2400000000000000000A600 /* papers.html in Resources */,
 				D2400000000000000000A700 /* papers.js in Resources */,
 				D2400000000000000000A780 /* papers.css in Resources */,
+				D2400000000000000000A790 /* papers-motion.js in Resources */,
 				D6B0000000000000000000A1 /* sharing in Resources */,
 				B0B1000000000000000000A4 /* features in Resources */,
 				B0B1000000000000000000A5 /* assets in Resources */,
@@ -681,6 +686,7 @@
 				D2400000000000000000C600 /* papers.html in Resources */,
 				D2400000000000000000C700 /* papers.js in Resources */,
 				D2400000000000000000C780 /* papers.css in Resources */,
+				D2400000000000000000C790 /* papers-motion.js in Resources */,
 				D6B0000000000000000000C1 /* sharing in Resources */,
 				B0B1000000000000000000C4 /* features in Resources */,
 				B0B1000000000000000000C5 /* assets in Resources */,

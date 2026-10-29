@@ -292,6 +292,44 @@ const check = async (name, test) => {
         if (await page.evaluate(() => !!document.getElementById('gz-settings-page'))) { await page.keyboard.press('Escape'); await closed(page).catch(() => {}); }
       }
     });
+    await check('ultra: with motion on, a document opens out of its card in the frame and Back folds it in again, the page keeping the history', async () => {
+      // Every animation on a view transition's pictures in Documents' frame (papers-motion.js), and the transition.
+      await page.addInitScript(() => {
+        if (location.pathname !== '/papers.html') return;
+        const log = globalThis.__mo = { vt: null, finished: 0, all: [] }, animate = Element.prototype.animate;
+        addEventListener('pagereveal', (e) => { log.vt = !!e.viewTransition; e.viewTransition?.finished.then(() => { log.finished = 1; }, () => { log.finished = -1; }); });
+        Element.prototype.animate = function (frames, o = {}) { if (o.pseudoElement) log.all.push({ pseudo: o.pseudoElement, route: document.documentElement.getAttribute('data-gd-route'), n: frames.length, first: frames[0], last: frames.at(-1) }); return animate.call(this, frames, o); };
+      });
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      await worker.evaluate((motion) => chrome.storage.sync.set({ motion }), { ...G.GZ_DEFAULTS.motion, level: 'expressive' });
+      const ended = (g) => until(() => g.evaluate(() => globalThis.__mo && (globalThis.__mo.vt === false || globalThis.__mo.finished !== 0)), 'the frame\'s transition ends');
+      const edge = (frame, w) => { const m = /polygon\(([-\d.]+)% [-\d.]+%, ([-\d.]+)%/.exec(frame?.clipPath || ''); return m ? (m[2] - m[1]) / 100 * w : NaN; };
+      try {
+        f = await openFromBar(page);
+        await until(() => f.evaluate(() => document.documentElement.getAttribute('data-gz-motion') === 'expressive' && !matchMedia('(prefers-reduced-motion: reduce)').matches), 'Expressive in the frame');
+        const h0 = await page.evaluate(() => history.length), w = await f.evaluate(() => innerWidth);
+        const cardW = await f.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"]`).getBoundingClientRect().width, KEY);
+        await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+        f = await shown(page);
+        await ended(f);
+        const open = await f.evaluate(() => ({ vt: globalThis.__mo.vt, genie: globalThis.__mo.all.find((x) => x.pseudo === '::view-transition-new(root)' && x.route === 'open' && x.n >= 24) }));
+        assert.ok(open.vt && open.genie && Math.abs(edge(open.genie.first, w) - cardW) < 1, `the genie out of the card (${JSON.stringify({ vt: open.vt, edge: edge(open.genie?.first, w), cardW })})`);
+        assert.equal(await page.evaluate(() => history.length), h0 + 1, 'the page keeps one entry for the document');
+        await back(page);
+        await until(() => framed(page) && !new URL(framed(page).url()).search, 'the list in the frame');
+        f = await shown(page);
+        await ended(f);
+        const shut = await f.evaluate(() => globalThis.__mo.all.find((x) => x.pseudo === '::view-transition-old(root)' && x.route === 'back' && x.n >= 24));
+        assert.ok(shut && shut.last.opacity === 0 && Math.abs(edge(shut.last, w) - cardW) < 1, `folded into the card (${JSON.stringify(shut && { edge: edge(shut.last, w), cardW })})`);
+        await f.locator('#list > .gd-btn').click();
+        await closed(page);
+        await atMark(page);
+      } finally {
+        await worker.evaluate((motion) => chrome.storage.sync.set({ motion }), settings.motion);
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        if (await page.evaluate(() => !!document.getElementById('gz-settings-page'))) { await page.keyboard.press('Escape'); await closed(page).catch(() => {}); }
+      }
+    });
     await check('ultra: the page heard no document of the student\'s, and its history holds none', async () => {
       const heard = await page.evaluate(() => __heard);
       assert.ok(heard.length && heard.every((m) => !m.includes(KEY.slice(4)) && !m.includes('pass')), JSON.stringify(heard));

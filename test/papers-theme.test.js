@@ -60,6 +60,15 @@ test('the motion level follows the system\'s reduced motion only while the Look 
   }
 });
 
+test('Glaze\'s motion knobs (motion.css) read the same level and the three switches', async () => {
+  const r = await theme({ reduced: true }); r.pending[0].resolve(look({ motion: { level: 'expressive', followSystem: true, transitions: false, enter: true, hover: false } })); await r.loading;
+  assert.equal(r.root.dataset.gzMotion, 'off');
+  assert.deepEqual(['data-gz-no-trans', 'data-gz-no-enter', 'data-gz-no-hover'].map((a) => r.root.getAttribute(a) !== null), [true, false, true]);
+  const on = await theme(); on.pending[0].resolve(look({ motion: { level: 'subtle', followSystem: true, transitions: true, enter: true, hover: true } })); await on.loading;
+  assert.equal(on.root.dataset.gzMotion, 'subtle');
+  assert.deepEqual(['data-gz-no-trans', 'data-gz-no-enter', 'data-gz-no-hover'].map((a) => on.root.getAttribute(a) !== null), [false, false, false]);
+});
+
 test('the backdrop is fed the Look and its parts once ready, and goes with a solid Look or with Glaze off', async () => {
   const r = await theme({ whole: true });
   const s = look({ bg: { kind: 'image', image: 'https://photos.test/a.png' }, parts: { x: { bg: { shader: { src: 'x' } } } } });
