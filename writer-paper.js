@@ -1421,14 +1421,16 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const fromDocsSheet = async () => {
       closeDocs(false);
       const turn = docsTurn;
-      const docs = (await store.list()).filter((r) => PA.local(r.key) && r.kind === 'paper').sort((a, b) => (b.updated || 0) - (a.updated || 0));
-      if (turn !== docsTurn || !root.isConnected || current !== api || importing) return;
+      let docs;
+      try { docs = (await store.list()).filter((r) => PA.local(r.key) && r.kind === 'paper').sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
+      catch (e) { console.error(e); if (turn === docsTurn && root.isConnected && current === api) { toast(t('Not saved. Try again in a moment.')); versionsB.focus(); } return; }
+      if (turn !== docsTurn || !root.isConnected || current !== api || importing || globalThis.GZ_WRITER_SUBMIT_SHEET?.opened()) return;
       const when = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: 'medium' });
       const x = btn({ class: 'gp-fromdocs-x', title: t('Close'), 'aria-label': t('Close'), onclick: () => closeDocs() }, icon('close'));
       const picks = docs.map((r) => {
         const name = r.title || t('Untitled document');
-        return btn({ class: 'gp-fromdocs-row', onclick: () => { closeDocs(false); fromDocs(r.key, name); } }, h('b', { text: name }),
-          h('small', { text: [labelOf(ST.get(r.format)), t('{n} words', { n: nf(r.words || 0) }), Number.isFinite(r.updated) ? when.format(r.updated) : ''].filter(Boolean).join(' · ') }));
+        const meta = [labelOf(ST.get(r.format)), t('{n} words', { n: nf(r.words || 0) }), Number.isFinite(r.updated) ? when.format(r.updated) : ''].filter(Boolean).join(' · ');
+        return btn({ class: 'gp-fromdocs-row', 'aria-label': `${name} · ${meta}`, onclick: () => { closeDocs(false); fromDocs(r.key, name); } }, h('b', { text: name }), h('small', { text: meta }));
       });
       const layer = h('div', { class: 'gp-fromdocs-layer' }, h('div', { class: 'gp-fromdocs-dim', onclick: () => closeDocs() }),
         h('div', { class: 'gp-fromdocs', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'gp-fromdocs-h' },
@@ -1439,6 +1441,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       docsSheet = { layer, inert };
       layer.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDocs(); return; }
+        if (picks.length && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+          const i = picks.indexOf(document.activeElement);
+          e.preventDefault(); e.stopPropagation();
+          picks[e.key === 'Home' ? 0 : e.key === 'End' ? picks.length - 1 : (i + (e.key === 'ArrowUp' ? picks.length - 1 : 1)) % picks.length].focus();
+          return;
+        }
         if (e.key !== 'Tab') return;
         const all = [...picks, x], i = all.indexOf(document.activeElement);
         e.preventDefault();
