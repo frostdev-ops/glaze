@@ -27,6 +27,8 @@ const NOW = Date.now(), HOUR = 3600e3;
 const p = (text, attrs) => ({ type: 'paragraph', ...(attrs ? { attrs } : {}), ...(text ? { content: [{ type: 'text', text }] } : {}) });
 const words = (doc) => JSON.stringify(doc).match(/"text":"([^"]*)"/g).map((m) => m.slice(8, -1)).join(' ').split(/\s+/).filter(Boolean).length;
 const ESSAY = 'bb.school.test|_900_1|_101_1|_7_1', LAB = 'bb.school.test|_900_1|_102_1|_9_1', ESSAY3 = 'bb.school.test|_900_1|_101_1|_8_1';
+// The PNG and inline image shape are the writer-objects round-trip fixture.
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const NOTES = `doc:${crypto.randomUUID()}`, FIELD = `doc:${crypto.randomUUID()}`;
 const body = (n, lead) => Array.from({ length: n }, (_, i) => p(`${lead} ${i + 1}. A paragraph of plain prose that fills the page the way a student's draft does, sentence after sentence, with nothing but text in it.`));
 const seeds = [
@@ -35,9 +37,9 @@ const seeds = [
   { key: LAB, title: 'Lab report 3', courseName: 'BIOL 1010', format: 'apa7', updated: NOW - 50 * HOUR, submitted: NOW - 49 * HOUR,
     doc: { type: 'doc', content: [p('Enzyme rates at three temperatures'), ...body(5, 'Catalase')] } },
   { key: ESSAY3, title: 'Essay 3: The Clearing', courseName: 'ENGL 2110', format: 'mla9', updated: NOW - 70 * HOUR, doc: { type: 'doc', content: body(4, 'Clearing') } },
-  { key: NOTES, title: 'Reading notes', named: true, format: 'plain', updated: NOW - 3 * HOUR, doc: { type: 'doc', content: [p('Chapter one, the house on Bluestone Road.'), ...body(3, 'Notes')] } },
+  { key: NOTES, title: 'Reading notes', named: true, format: 'plain', updated: NOW - 3 * HOUR, doc: { type: 'doc', content: [p('Chapter one, the house on Bluestone Road.'), { type: 'paragraph', content: [{ type: 'image', attrs: { src: PNG, alt: 'Diagram', width: 96, display: 'inline', align: null, caption: '' } }] }, ...body(3, 'Notes')] } },
   { key: FIELD, title: 'Field notes from Tuesday', named: false, format: 'plain', updated: NOW - 5 * HOUR, doc: { type: 'doc', content: [p('Field notes from Tuesday'), p('The heliotrope by the fence had opened by noon.'), ...body(2, 'Field')] } },
-  ...Array.from({ length: 35 }, (_, i) => ({ key: `doc:${crypto.randomUUID()}`, title: `Draft ${String(i + 1).padStart(2, '0')}`, named: i % 2 === 0, format: ['plain', 'mla9', 'apa7', 'chicago17'][i % 4],
+  ...Array.from({ length: 195 }, (_, i) => ({ key: `doc:${crypto.randomUUID()}`, title: `Draft ${String(i + 1).padStart(2, '0')}`, named: i % 2 === 0, format: ['plain', 'mla9', 'apa7', 'chicago17'][i % 4],
     updated: NOW - (6 + i) * HOUR, doc: { type: 'doc', content: [p(`Draft ${String(i + 1).padStart(2, '0')}`), ...body(3 + (i % 5), `Draft ${i + 1}`)] } })),
 ];
 const VERSIONS = [{ id: 'v1-aaaaaa', at: NOW - 4 * HOUR, reason: 'start', words: 5, bytes: 100, format: 'plain', keep: false, doc: { type: 'doc', content: [p('Chapter one.')] } },
@@ -58,7 +60,10 @@ const records = () => {
 // What each home page records from its first script on: each thumbnail render's main-thread time and when it ended, every
 // storage.local get's key count, and when the first card appeared. lang: chrome.i18n's UI language for the page.
 const PROBE = ({ lang }) => {
-  globalThis.__gd = { renders: [], gets: [], firstCard: null };
+  globalThis.__gd = { renders: [], gets: [], firstCard: null, rowsPaint: null, indexRead: null, disconnects: 0 };
+  const IO = globalThis.IntersectionObserver;
+  globalThis.IntersectionObserver = class extends IO { disconnect() { __gd.disconnects++; return super.disconnect(); } };
+  addEventListener('pagehide', () => { queueMicrotask(() => sessionStorage.setItem('review-disconnects', String(__gd.disconnects))); });
   if (lang) { try { chrome.i18n.getUILanguage = () => lang; } catch {} }
   let thumb;
   Object.defineProperty(globalThis, 'GZ_WRITER_THUMB', { configurable: true, get: () => thumb, set: (v) => {
@@ -67,8 +72,8 @@ const PROBE = ({ lang }) => {
     thumb = v;
   } });
   const get = chrome.storage.local.get.bind(chrome.storage.local);
-  chrome.storage.local.get = (k, ...rest) => { __gd.gets.push(Array.isArray(k) ? k.slice() : k); return get(k, ...rest); };
-  new MutationObserver((_, o) => { if (document.querySelector('.gd-card')) { __gd.firstCard = performance.now(); o.disconnect(); } }).observe(document, { childList: true, subtree: true });
+  chrome.storage.local.get = (k, ...rest) => { __gd.gets.push(Array.isArray(k) ? k.slice() : k); const reading = get(k, ...rest); if (k === 'writerPapers') reading.then(() => { __gd.indexRead ??= performance.now(); }); return reading; };
+  new MutationObserver((_, o) => { if (document.querySelector('.gd-card')) { __gd.firstCard = performance.now(); requestAnimationFrame(() => { __gd.rowsPaint = performance.now(); }); o.disconnect(); } }).observe(document, { childList: true, subtree: true });
 };
 
 (async () => {
@@ -96,7 +101,7 @@ const PROBE = ({ lang }) => {
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
     const watch = (pg, tag) => {
       pg.on('pageerror', (e) => errors.push(`${tag}: ${e.message}`));
-      pg.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`${tag} console: ${m.text()}`); });
+      pg.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|intentional review refusal|Error: not a zip file/.test(m.text())) errors.push(`${tag} console: ${m.text()}`); });
     };
     const openHome = async (lang = null, tag = 'home') => {
       const pg = await context.newPage();
@@ -117,14 +122,17 @@ const PROBE = ({ lang }) => {
     // ---- the page and the New band
     let home = await openHome();
     check(await home.evaluate(() => document.title === 'Documents' && document.querySelector('h1').textContent === 'Documents'), 'title and h1 read Documents');
-    const tiles = await home.evaluate(() => [...document.querySelectorAll('.gd-new .gd-tile')].map((a) => ({ name: a.querySelector('.gd-tile-name').textContent, label: a.querySelector('.gt-thumb')?.getAttribute('aria-hidden'), href: a.getAttribute('href'), thumb: !!a.querySelector('.gt-thumb'), format: a.dataset.format })));
+    const tiles = await home.evaluate(() => [...document.querySelectorAll('.gd-new .gd-tile')].map((a) => ({ name: a.querySelector('.gd-tile-name').textContent, label: a.querySelector('.gt-thumb')?.getAttribute('aria-hidden'), href: a.getAttribute('href'), thumb: !!a.querySelector('.gt-thumb'), format: a.dataset.format, text: a.querySelector('.gt-thumb')?.textContent })));
     check(await home.evaluate(() => document.querySelector('.gd-new h2')?.textContent === 'New'), 'the New band has its h2');
     check(tiles.map((x) => x.name).join('|') === 'Blank|MLA 9|APA 7|Chicago 17' && tiles.every((x) => x.thumb && x.label === 'true'), `New tiles Blank, MLA 9, APA 7, Chicago 17, each drawn (${JSON.stringify(tiles.map((x) => x.name))})`);
     check(tiles.every((x) => /^papers\.html\?paper=doc%3A[0-9a-f-]{36}&format=(plain|mla9|apa7|chicago17)$/.test(x.href)), 'each tile links papers.html?paper=<new doc: key>&format=<id>');
 
+    check(tiles.every((x) => x.format === 'plain' ? !/Your name|Instructor|Course|Date|Title/.test(x.text) : ['Your name', 'Instructor', 'Course', 'Date', 'Title'].every((v) => x.text.includes(v))), 'format tiles show their opening placeholders; Blank stays empty');
+
     // ---- the grid and its thumbnails
     await until(async () => (await home.evaluate(() => __gd.renders.length)) >= 12, '12 thumbnails');
     const probe = await home.evaluate(() => ({ ...__gd, nav: performance.getEntriesByType('navigation')[0]?.startTime || 0 }));
+    check(total === 200 && probe.rowsPaint - probe.indexRead < 150, `200 document rows paint within 150 ms of the index read (${(probe.rowsPaint - probe.indexRead).toFixed(1)} ms)`);
     const t12 = probe.renders[11].at, since = t12 - probe.firstCard;
     console.log(`first card at ${probe.firstCard.toFixed(0)} ms; 12th thumbnail at ${t12.toFixed(0)} ms from navigation (${since.toFixed(0)} ms after the first card)`);
     check(t12 <= 400, `the first 12 thumbnails are drawn within 400 ms of navigation (${t12.toFixed(0)} ms)`);
@@ -134,8 +142,11 @@ const PROBE = ({ lang }) => {
     check(drawnFirst >= 12 && drawnFirst < total, `thumbnails are drawn lazily: ${drawnFirst} of ${total} near the screen`);
     const thumbGets = probe.gets.filter((g) => Array.isArray(g) && g.every((k) => k.startsWith('writerPaper:')));
     check(thumbGets.length > 0 && thumbGets.every((g) => g.length <= 12), `thumbnail records come 12 or fewer per storage get (${thumbGets.map((g) => g.length).join(', ')})`);
-    await home.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
-    await until(async () => (await cards(home)).every((c) => c.thumb), 'every thumbnail after scrolling');
+    for (let i = 0; i < total; i += 12) {
+      await home.evaluate((i) => document.querySelectorAll('.gd-card')[i].scrollIntoView({ block: 'start' }), i);
+      await until(() => home.evaluate((i) => !!document.querySelectorAll('.gd-card')[i].querySelector('.gt-thumb'), i), `thumbnail ${i}`);
+    }
+    check(await home.evaluate(() => document.querySelectorAll('.gd-pic .gt-thumb').length <= 48), 'after visiting 200 documents, at most 48 thumbnails are retained');
     const renders = await home.evaluate(() => __gd.renders.map((r) => r.ms));
     const worst = Math.max(...renders);
     console.log(`${renders.length} thumbnail renders; median ${renders.slice().sort((a, b) => a - b)[renders.length >> 1].toFixed(2)} ms, worst ${worst.toFixed(2)} ms`);
@@ -154,7 +165,12 @@ const PROBE = ({ lang }) => {
     const rendersBefore = renders.length;
     await home.evaluate(() => scrollTo(0, 0));
     await pause(300);
-    check((await home.evaluate(() => __gd.renders.length)) === rendersBefore, 'scrolling back draws nothing again (cached by key and revision)');
+    check((await home.evaluate(() => __gd.renders.length)) > rendersBefore, 'evicted thumbnails are redrawn when revisited');
+    const cached = await home.evaluate(() => __gd.renders.length);
+    await worker.evaluate(async () => { const r = await chrome.storage.local.get('writerPapers'); await chrome.storage.local.set(r); });
+    await pause(150);
+    check((await home.evaluate(() => __gd.renders.length)) === cached, 'an unchanged index never redraws cached thumbnails');
+    check(await home.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"] img`)?.getAttribute('src').startsWith('data:image/png;base64,'), NOTES), 'a thumbnail keeps the inline data-URL picture');
     list = await cards(home);
     const essay = list.find((c) => c.key === ESSAY), lab = list.find((c) => c.key === LAB);
     check(essay.title === 'Essay 2: Memory in Beloved' && /^ENGL 2110 · MLA 9 · \d+ words · /.test(essay.meta), `an assignment paper's card: its title, course, format, words and date (${essay.meta})`);
@@ -167,18 +183,30 @@ const PROBE = ({ lang }) => {
     await until(() => home.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"] .gt-thumb`)?.textContent.includes('A sentence added elsewhere.'), ESSAY), 'stale thumbnail redrawn');
     check(true, 'a change in storage marks a thumbnail stale and it is drawn again');
 
+    // A burst of autosaves invalidates once; the index's redraw cannot bypass the queued idle render.
+    await home.evaluate(() => { __gd.idles = []; __gd.idle = requestIdleCallback; globalThis.requestIdleCallback = (fn) => { __gd.idles.push(fn); return 0; }; __gd.beforeBurst = __gd.renders.length; });
+    for (let i = 0; i < 8; i++) await worker.evaluate(async ({ k, i }) => {
+      const name = `writerPaper:${k}`, r = (await chrome.storage.local.get(name))[name];
+      r.doc.content[0].content[0].text = `Autosave ${i}.`; r.revision++;
+      await chrome.storage.local.set({ [name]: r, writerPapers: (await chrome.storage.local.get('writerPapers')).writerPapers });
+    }, { k: ESSAY, i });
+    check(await home.evaluate(() => __gd.renders.length === __gd.beforeBurst && __gd.idles.length === 1), 'eight autosaves queue one thumbnail draw without index redraw storms');
+    await home.evaluate(() => { globalThis.requestIdleCallback = __gd.idle; __gd.idles.splice(0).forEach((fn) => fn()); });
+    await until(() => home.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"] .gt-thumb`)?.textContent.includes('Autosave 7.'), ESSAY), 'latest autosave thumbnail');
+    check(await home.evaluate(() => __gd.renders.length === __gd.beforeBurst + 1), 'the burst draws only the newest thumbnail');
+
     // ---- accessible names
     const names = await home.evaluate(() => {
       const label = (el) => el?.getAttribute('aria-label') || el?.textContent.trim();
       const c = document.querySelector('.gd-card'), more = c.querySelector('.gd-more');
       return { search: label(document.getElementById('gd-q')), course: label(document.getElementById('gd-course')), sort: label(document.getElementById('gd-sort')),
         grid: label(document.getElementById('gd-grid')), listB: label(document.getElementById('gd-list')), pressed: [document.getElementById('gd-grid').getAttribute('aria-pressed'), document.getElementById('gd-list').getAttribute('aria-pressed')].join(),
-        imp: label(document.getElementById('gd-import')), more: label(more), popup: more.getAttribute('aria-haspopup'), described: document.getElementById(more.getAttribute('aria-describedby'))?.textContent === c.querySelector('.gd-title').textContent,
+        imp: label(document.getElementById('gd-import')), file: label(document.getElementById('gd-file')), more: label(more), popup: more.getAttribute('aria-haspopup'), described: document.getElementById(more.getAttribute('aria-describedby'))?.textContent === c.querySelector('.gd-title').textContent,
         link: c.querySelector('.gd-title').tagName === 'A' && c.querySelector('.gd-title').getAttribute('href').startsWith('papers.html?paper='), kindHidden: c.querySelector('.gd-kind')?.getAttribute('aria-hidden'),
         listName: document.getElementById(document.getElementById('gd-docs').getAttribute('aria-labelledby'))?.textContent, live: document.getElementById('gd-count').getAttribute('aria-live'),
         tabbable: [...document.querySelectorAll('#gd-docs a, #gd-docs button')].filter((e) => e.tabIndex >= 0).length };
     });
-    check(names.search === 'Search' && names.course === 'Course' && names.sort === 'Sort' && names.grid === 'Grid' && names.listB === 'List' && names.pressed === 'true,false' && names.imp === 'Import .docx…', `the toolbar's controls are named (${JSON.stringify(names)})`);
+    check(names.search === 'Search' && names.course === 'Course' && names.sort === 'Sort' && names.grid === 'Grid' && names.listB === 'List' && names.pressed === 'true,false' && names.imp === 'Import .docx…' && names.file === names.imp, `the toolbar's controls are named (${JSON.stringify(names)})`);
     check(names.more === 'More' && names.popup === 'menu' && names.described && names.link && names.kindHidden === 'true' && names.listName === 'Documents' && names.live === 'polite', 'cards: a titled link, a More menu button described by its title, the kind icon hidden; the list is named Documents');
     check(names.tabbable === 1, `the cards are one Tab stop (${names.tabbable} tabbable)`);
     await shot(home, 'grid-1280-en.png');
@@ -201,7 +229,7 @@ const PROBE = ({ lang }) => {
     await home.fill('#gd-q', 'ENGL');
     await until(async () => (await shown()).sort().join() === [ESSAY, ESSAY3].sort().join(), 'course search');
     check(true, 'search matches a course name');
-    await home.fill('#gd-q', 'heliotrope');
+    await home.fill('#gd-q', 'HÉLIOTROPE');
     await until(async () => (await shown()).join() === FIELD, 'body search');
     const bodyGets = (await home.evaluate(() => __gd.gets)).filter((g) => Array.isArray(g) && g.every((k) => k.startsWith('writerPaper:')));
     check(bodyGets.every((g) => g.length <= 12), 'search by body text finds a word only the document\'s text holds');
@@ -213,6 +241,48 @@ const PROBE = ({ lang }) => {
     await home.keyboard.press('Escape');
     await until(async () => (await shown()).length === total, 'Esc clears');
     check(await home.evaluate(() => document.getElementById('gd-q').value === ''), 'Esc in the search field clears it');
+
+    // A body read held across an edit must not overwrite the new search result; a superseded query must stop too.
+    const searchPage = await openHome('en', 'search races'), target = seeds.at(-1).key;
+    const holdSearch = async () => {
+      await searchPage.evaluate((k) => {
+        const get = chrome.storage.local.get.bind(chrome.storage.local); globalThis.__blocked = false;
+        chrome.storage.local.get = async (names, ...rest) => {
+          const got = await get(names, ...rest);
+          if (!__blocked && Array.isArray(names) && names.includes(`writerPaper:${k}`)) {
+            __blocked = true; await new Promise((r) => { globalThis.__release = r; });
+          }
+          return got;
+        };
+      }, target);
+    };
+    await holdSearch(); await searchPage.fill('#gd-q', 'newuniqueword');
+    await until(() => searchPage.evaluate(() => __blocked), 'held body scan');
+    await worker.evaluate(async (k) => {
+      const name = `writerPaper:${k}`, r = (await chrome.storage.local.get(name))[name];
+      r.doc.content.push({ type: 'paragraph', content: [{ type: 'text', text: 'newuniqueword' }] }); r.updated = Date.now(); r.revision++;
+      const index = (await chrome.storage.local.get('writerPapers')).writerPapers.map((x) => x.key === k ? { ...x, updated: r.updated } : x);
+      await chrome.storage.local.set({ [name]: r, writerPapers: index });
+    }, target);
+    await until(() => searchPage.evaluate((k) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).join() === k, target), 'new stored body result');
+    await searchPage.evaluate(() => __release()); await pause(100);
+    check(await searchPage.evaluate((k) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).join() === k, target), 'a body read started before a storage edit cannot replace its new search result');
+    await searchPage.reload(); await until(() => searchPage.evaluate(() => document.querySelectorAll('.gd-card').length > 0), 'search reload');
+    // The updated target is now first; hold an unvisited record at the other end instead.
+    const abortKey = seeds.at(-2).key;
+    await searchPage.evaluate((k) => {
+      const get = chrome.storage.local.get.bind(chrome.storage.local); globalThis.__blocked = false;
+      chrome.storage.local.get = async (names, ...rest) => { const got = await get(names, ...rest); if (!__blocked && Array.isArray(names) && names.includes(`writerPaper:${k}`)) { __blocked = true; await new Promise((r) => { globalThis.__release = r; }); } return got; };
+    }, abortKey);
+    await searchPage.fill('#gd-q', 'never-present'); await until(() => searchPage.evaluate(() => __blocked), 'held old query');
+    await searchPage.fill('#gd-q', 'Lab report'); await searchPage.evaluate(() => __release()); await pause(100);
+    check(await searchPage.evaluate((k) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).join() === k, LAB), 'a superseded body scan cannot repaint the newer query');
+    await searchPage.close();
+    await worker.evaluate(async ({ k, updated }) => {
+      const name = `writerPaper:${k}`, r = (await chrome.storage.local.get(name))[name]; r.updated = updated; r.doc.content.pop(); r.revision++;
+      await chrome.storage.local.set({ [name]: r, writerPapers: (await chrome.storage.local.get('writerPapers')).writerPapers.map((x) => x.key === k ? { ...x, updated } : x) });
+    }, { k: target, updated: seeds.at(-1).updated });
+    await until(async () => (await shown()).length === total, 'home updated after body race');
 
     // ---- course filter
     const opts = await home.evaluate(() => [...document.querySelectorAll('#gd-course option')].map((o) => o.textContent));
@@ -249,13 +319,24 @@ const PROBE = ({ lang }) => {
     await home.keyboard.type('Reading notes, revised');
     await home.keyboard.press('Enter');
     await until(async () => (await local(`writerPaper:${NOTES}`))?.title === 'Reading notes, revised', 'rename saved');
-    const renamed = await local(`writerPaper:${NOTES}`);
+    let renamed = await local(`writerPaper:${NOTES}`);
     check(renamed.named === true && (await cards(home)).find((c) => c.key === NOTES).title === 'Reading notes, revised', 'Enter saves the name (named) through the worker, and the card shows it');
     await until(() => editor.evaluate(() => document.querySelector('.gp-top h1 input').value === 'Reading notes, revised'), 'editor title');
     check(true, 'the open editor in another tab shows the new title');
+    await editor.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.insertText(' Unsaved typing.')); });
+    await home.focus(`${card(NOTES)} .gd-title`); await home.keyboard.press('F2');
+    await home.fill('.gd-rename', 'Race title'); await home.keyboard.press('Enter');
+    await until(async () => (await local(`writerPaper:${NOTES}`))?.title === 'Race title', 'race rename');
+    await editor.evaluate(() => GZ_WRITER_PAPER.current().save());
+    check((await local(`writerPaper:${NOTES}`)).title === 'Race title' && JSON.stringify((await local(`writerPaper:${NOTES}`)).doc).includes('Unsaved typing.'), 'a home rename racing editor typing keeps both the title and the text');
+    await home.focus(`${card(NOTES)} .gd-title`); await home.keyboard.press('F2');
+    await home.fill('.gd-rename', 'Reading notes, revised'); await home.keyboard.press('Enter');
+    await until(async () => (await local(`writerPaper:${NOTES}`))?.title === 'Reading notes, revised', 'name back');
     await editor.close();
     const essayMenu = await home.evaluate(async (s) => { document.querySelector(`${s} .gd-more`).click(); await new Promise((r) => requestAnimationFrame(r)); const items = [...document.querySelectorAll('.gd-menu [role="menuitem"]')].map((b) => b.textContent); document.querySelector(`${s} .gd-more`).click(); return items; }, card(ESSAY));
     check(essayMenu.join('|') === 'Make a copy|Export .docx|Delete', `an assignment paper's menu has no Rename (${essayMenu.join('|')})`);
+
+    renamed = await local(`writerPaper:${NOTES}`);
 
     // ---- Make a copy
     await home.click(`${card(NOTES)} .gd-more`);
@@ -268,7 +349,13 @@ const PROBE = ({ lang }) => {
     const copyKey = (await cards(home)).find((c) => c.title === 'Copy of Reading notes, revised').key;
     const copy = await local(`writerPaper:${copyKey}`);
     check(/^doc:/.test(copyKey) && copy.named === true && copy.kind === 'paper' && !copy.courseName && JSON.stringify(copy.doc) === JSON.stringify(renamed.doc), 'Make a copy saves a new named document with the same text');
+    check(JSON.stringify(copy.doc).includes(PNG), 'Make a copy preserves data-URL pictures');
     check(await focused(home) === copyKey, 'focus moves to the copy');
+
+    await home.focus(`${card(copyKey)} .gd-title`); await home.keyboard.press('F2');
+    await home.fill('.gd-rename', '<img src=x onerror=alert(1)>'); await home.keyboard.press('Enter');
+    await until(async () => (await local(`writerPaper:${copyKey}`))?.title === '<img src=x onerror=alert(1)>', 'literal title saved');
+    check(await home.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"] .gd-title`).textContent === '<img src=x onerror=alert(1)>' && !document.querySelector(`.gd-card[data-key="${k}"] .gd-title img`), copyKey), 'HTML in a title stays literal text');
 
     // ---- Delete and Undo; the Delete key and Ctrl+Z
     const versionsBefore = (await local(`writerVersions:${NOTES}`)).map((v) => v.id);
@@ -278,10 +365,20 @@ const PROBE = ({ lang }) => {
     await until(async () => !(await local(`writerPaper:${NOTES}`)) && !(await local(`writerVersions:${NOTES}`)), 'deleted in storage');
     check(await home.evaluate(() => document.querySelector('.gd-toast')?.textContent.startsWith('Deleted') && document.querySelector('.gd-toast button')?.textContent === 'Undo'), 'a Deleted toast offers Undo; the paper and its versions are gone from storage');
     await shot(home, 'undo-1280-en.png');
+    await home.evaluate(() => {
+      const send = chrome.runtime.sendMessage.bind(chrome.runtime); globalThis.__undoSend = send;
+      chrome.runtime.sendMessage = (m, ...rest) => m?.op === 'merge' ? Promise.resolve({ ok: false, error: 'intentional review refusal' }) : send(m, ...rest);
+    });
+    await home.click('.gd-toast button');
+    await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'Not saved. Try again in a moment.'), 'Undo failure reported');
+    check(await home.evaluate(() => !!document.querySelector('.gd-toast button')), 'a refused Undo keeps its recovery snapshot available for retry');
+    await home.evaluate(() => { chrome.runtime.sendMessage = __undoSend; });
     await home.click('.gd-toast button');
     await until(async () => (await shown()).includes(NOTES), 'undone');
     const back = await local(`writerPaper:${NOTES}`), versionsAfter = (await local(`writerVersions:${NOTES}`) || []).map((v) => v.id);
     check(back?.title === 'Reading notes, revised' && JSON.stringify(back.doc) === JSON.stringify(renamed.doc) && versionsBefore.every((v) => versionsAfter.includes(v)), `Undo puts the document back with its versions (${versionsAfter.join(', ')})`);
+    check(back.updated === renamed.updated && versionsAfter.join() === versionsBefore.join(), 'Undo keeps Last edited and restores exactly the original versions, with no extra start');
+    check(await focused(home) === NOTES, 'Undo returns focus to the restored document');
     check(!(await home.evaluate(() => !!document.querySelector('.gd-toast'))), 'the toast goes once undone');
     await home.focus(`${card(copyKey)} .gd-title`);
     await home.keyboard.press('Delete');
@@ -324,6 +421,14 @@ const PROBE = ({ lang }) => {
     await until(async () => (await cards(home)).filter((c) => c.title === 'River notes').length === 3, 'imported two');
     check(await home.evaluate(() => document.getElementById('gd-said').textContent === ''), 'Import .docx… takes several files, one document each, and clears the old refusal');
 
+    await drop(home, [{ name: 'Broken.docx', bytes: [1, 2, 3] }]);
+    await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'That file could not be read as a Word document.'), 'broken Word refusal');
+    check((await shown()).length === before + 3, 'a broken .docx reports its failure in the status line and creates no document');
+    const beforeBatch = (await shown()).length;
+    await drop(home, Array.from({ length: 23 }, (_, i) => ({ name: `Batch ${i}.docx`, bytes: docx })));
+    await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'Choose up to 20 files at a time.'), 'batch limit');
+    check((await shown()).length === beforeBatch + 20, 'a 23-file drop imports 20 and reports the limit');
+
     // ---- Export .docx from the menu
     const download = home.waitForEvent('download');
     await home.click(`${card(ESSAY)} .gd-more`);
@@ -349,6 +454,11 @@ const PROBE = ({ lang }) => {
     await home.keyboard.press('End');
     check(await focused(home) === order.at(-1), 'End goes to the last card');
     check(await home.evaluate(() => [...document.querySelectorAll('#gd-docs a, #gd-docs button')].filter((e) => e.tabIndex >= 0).length === 1 && document.activeElement.tabIndex === 0), 'roving focus keeps one Tab stop on the focused card');
+    await home.click('#gd-list');
+    await home.focus('.gd-title[tabindex="0"]'); await home.keyboard.press('Home'); await home.keyboard.press('ArrowDown');
+    check(await focused(home) === order[1], 'list Down Arrow moves by one row');
+    await home.keyboard.press('ArrowUp'); check(await focused(home) === order[0], 'list Up Arrow moves back one row');
+    await home.click('#gd-grid'); await home.focus('.gd-title[tabindex="0"]');
     await home.keyboard.press('Home');
     await home.keyboard.press('Shift+F10');
     check(await home.evaluate(() => document.activeElement?.matches('.gd-menu [role="menuitem"]')), 'Shift+F10 opens the card\'s menu');
@@ -371,6 +481,7 @@ const PROBE = ({ lang }) => {
     await home.keyboard.press('Enter');
     await until(() => home.evaluate(() => location.search.startsWith('?paper=') && !!GZ_WRITER_PAPER?.current()?.key() && document.querySelectorAll('.gp-sheet').length > 0), 'opened with Enter');
     check(await home.evaluate((k) => GZ_WRITER_PAPER.current().key() === k, order[0]), 'Enter opens the focused card in the same tab');
+    check(await home.evaluate(() => Number(sessionStorage.getItem('review-disconnects')) > 0), 'leaving home disconnects its IntersectionObserver');
     await home.goBack();
     await until(() => home.evaluate(() => !location.search && document.querySelectorAll('.gd-card').length > 0), 'back home');
     check((await shown()).length === order.length, 'and Back returns to the list');
@@ -389,6 +500,20 @@ const PROBE = ({ lang }) => {
     await home.click('.gp-top a');
     await until(() => home.evaluate(() => document.querySelectorAll('.gd-card').length > 0), 'home after new');
     check(!(await local(`writerPaper:${fresh}`)) && !(await shown()).includes(fresh), 'a New tile opens a fresh document; untouched, it leaves nothing behind');
+
+    // Unknown routes return home without writing or mounting a paper over another kind.
+    const unknown = `doc:${crypto.randomUUID()}`;
+    const future = { ...(await local(`writerPaper:${NOTES}`)), key: unknown, kind: 'future-kind' };
+    await worker.evaluate(async (r) => chrome.storage.local.set({ [`writerPaper:${r.key}`]: r }), future);
+    for (const key of ['not-a-key', `doc:${crypto.randomUUID()}`, unknown]) {
+      const pg = await context.newPage(); watch(pg, 'unknown route');
+      await pg.goto(`${HOME}?paper=${encodeURIComponent(key)}`);
+      await until(() => pg.evaluate(() => !document.getElementById('list').hidden), 'unknown route home');
+      check(await pg.evaluate(() => !GZ_WRITER_PAPER.current() && !location.search), 'an invalid, missing or unsupported-kind paper route returns home');
+      await pg.close();
+    }
+    check(JSON.stringify(await local(`writerPaper:${unknown}`)) === JSON.stringify(future), 'an unsupported kind stays unchanged');
+    await worker.evaluate(async (k) => chrome.storage.local.remove(`writerPaper:${k}`), unknown);
 
     // ---- 640 px, and German
     const narrow = async (pg, lang) => {
@@ -446,10 +571,49 @@ const PROBE = ({ lang }) => {
     await shot(de, 'editor-640-de.png');
     await de.close();
 
+    // The store's 2000-row ceiling: visiting distant cards evicts thumbnails instead of retaining every image tree.
+    const base = await local('writerPapers'), extras = Array.from({ length: 2000 - base.length }, () => `doc:${crypto.randomUUID()}`);
+    await worker.evaluate(async ({ keys, source }) => {
+      const data = {}, rows = (await chrome.storage.local.get('writerPapers')).writerPapers;
+      for (const key of keys) { const r = { ...source, key, title: 'Archive', named: true, updated: 1 }; data[`writerPaper:${key}`] = r; rows.push({ key, kind: r.kind, named: true, title: r.title, course: '', url: '', words: r.words, format: r.format, updated: 1, submitted: null }); }
+      await chrome.storage.local.set({ ...data, writerPapers: rows });
+    }, { keys: extras, source: await local(`writerPaper:${FIELD}`) });
+    const archive = await openHome('en', '2000 documents');
+    check(await archive.evaluate(() => document.querySelectorAll('.gd-card').length === 2000), 'the 2000-document index paints every row');
+    for (let i = 0; i < 2000; i += 200) {
+      await archive.evaluate((i) => document.querySelectorAll('.gd-card')[i].scrollIntoView({ block: 'start' }), i);
+      await until(() => archive.evaluate((i) => !!document.querySelectorAll('.gd-card')[i].querySelector('.gt-thumb'), i), `archive ${i}`);
+    }
+    check(await archive.evaluate(() => document.querySelectorAll('.gd-pic .gt-thumb').length <= 48), '2000 documents retain at most 48 thumbnail trees after distant scrolls');
+    await archive.close();
+    await worker.evaluate(async (keys) => { const gone = new Set(keys); await chrome.storage.local.remove(keys.map((k) => `writerPaper:${k}`)); await chrome.storage.local.set({ writerPapers: (await chrome.storage.local.get('writerPapers')).writerPapers.filter((r) => !gone.has(r.key)) }); }, extras);
+
+    // Light Paper Look, both sizes and languages, with measured title and metadata contrast on the actual card.
+    const light = G.GZ_SANITIZE({ ...settings, preset: 'Paper', colors: G.GZ_PRESET('Paper') });
+    await worker.evaluate(async (s) => chrome.storage.sync.set(s), light);
+    for (const lang of ['en', 'de']) {
+      const pg = await openHome(lang, `light ${lang}`);
+      await until(() => pg.evaluate(() => !document.documentElement.hasAttribute('data-dark')), 'light Look');
+      for (const width of [1280, 640]) {
+        await pg.setViewportSize({ width, height: 900 }); await pg.evaluate(() => scrollTo(0, 0));
+        await shot(pg, `grid-${width}-${lang}-light.png`);
+        const contrast = await pg.evaluate(() => {
+          const rgb = (s) => s.match(/[\d.]+/g).slice(0, 3).map(Number);
+          const lum = (c) => c.map((v) => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [.2126, .7152, .0722][i], 0);
+          const bg = lum(rgb(getComputedStyle(document.querySelector('.gd-card')).backgroundColor));
+          return ['.gd-title', '.gd-meta'].map((sel) => { const fg = lum(rgb(getComputedStyle(document.querySelector(sel)).color)); return (Math.max(bg, fg) + .05) / (Math.min(bg, fg) + .05); });
+        });
+        check(contrast.every((v) => v >= 4.5), `light ${lang} ${width}: card title and metadata meet 4.5:1 (${contrast.map((v) => v.toFixed(2)).join(', ')})`);
+        await pg.click('#gd-list'); await shot(pg, `list-${width}-${lang}-light.png`); await pg.click('#gd-grid');
+      }
+      await pg.close();
+    }
+
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);
     check(requests.length === 0, `no network requests (${requests.join(', ')})`);
     passed = true;
+    console.log(`documents-check: ${checks.length} passed, 0 failed`);
     console.log(JSON.stringify({ checks: checks.length, shots: saved }, null, 2));
   } finally {
     await context?.close();
