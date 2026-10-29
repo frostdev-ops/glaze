@@ -299,10 +299,11 @@ test('Documents closes each retired private channel and ignores its late message
   const hello = () => on.message({ source: frame.contentWindow, origin: 'chrome-extension://glaze', data: { type: 'glaze:papers:hello' } });
   hello(); await tick();
   const old = channels[0].port1;
-  hello(); await tick();
-  assert.equal(old.closed, true, 'the previous document has no live channel');
+  hello();
+  assert.equal(old.closed, true, 'the previous channel is retired before awaiting the next pass');
   old.onmessage({ data: { type: 'leave' } });
   assert.equal(page.showing(), 'papers', 'a late message cannot close the current document');
+  await tick();
   page.close();
   assert.equal(channels.at(-1).port1.closed, true, 'leaving closes the host port');
 });
