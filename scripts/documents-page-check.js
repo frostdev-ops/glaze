@@ -219,8 +219,12 @@ const check = async (name, test) => {
         assert.equal(await f.locator('#gd-count').textContent(), '1 document');
         assert.ok(await f.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '640px embedded Trash fits');
         await shoot(page, f, 'inpage-ultra-trash-640');
+        const target = await f.locator('.gd-menu [data-act="forever"]').boundingBox();
+        const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.id, [target.x + target.width / 2, target.y + target.height / 2]);
+        console.log(`     Trash Delete forever: ${JSON.stringify(target)}, hit ${hit}`);
         await f.locator('.gd-menu [data-act="restore"]').click();
         assert.equal(await f.evaluate(() => document.activeElement?.id), 'gd-q', 'Restore of the last card focuses search');
+        assert.equal(hit, 'gz-settings-page', 'Trash Delete forever stays above the LMS navigation');
       } finally { await page.setViewportSize(viewport); }
       await until(async () => !('trashed' in (await record(KEY))), 'restored from the Trash view');
       await f.locator('#gd-trash').click();
