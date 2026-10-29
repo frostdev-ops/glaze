@@ -3,8 +3,10 @@
 // items. The bar's Documents opens it beside the bar, marked where you are, the page under it out of reach; a document opens
 // in the same frame and Back returns to the list (the tab's history one entry per document, the page told no key); typing
 // there, a delete and its Undo, an import and two exports work from the frame; Escape, Close, Settings and Search leave or
-// take its place, back to the entry it opened from; Ctrl+K opens it the same way; a frame of papers.html the page makes
-// itself stays blank and the worker refuses its writes; the popup still opens a tab. All other requests abort.
+// take its place, back to the entry it opened from; Ctrl+K opens it the same way; Writer's AI completes a sentence in a
+// document opened there (the worker's broker on a stand-in for Chrome's Prompt API, as scripts/documents-ai-check.js); a
+// frame of papers.html the page makes itself stays blank and the worker refuses its writes; the popup still opens a tab.
+// All other requests abort.
 // Shots: inpage-<site>-<width>.png and inpage-ultra-doc-<width>.png at 1280 and 640.
 //   NODE_PATH=<playwright> nice -n 10 node scripts/documents-page-check.js [shots folder]   (EXT selects the checkout)
 const { chromium } = require('playwright');
@@ -27,6 +29,35 @@ const until = async (fn, label, ms = 15000) => {
 const doc = (text) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
 // A Word file of one paragraph, for Import .docx….
 const docx = (text) => Buffer.concat(ZIP.zip([{ name: 'word/document.xml', data: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`) }]));
+// Writer's gray text: the model's answer to writer.complete after the student types " it" at the end of LAST.
+const LAST = 'When Sethe returns to the clearing, the memory is not something she owns;';
+const GHOST = ' arrives uninvited and rearranges the present.';
+// In the worker: Chrome's Prompt API as lib/ai/providers/device.js reads it (scripts/documents-ai-check.js's stand-in).
+const INSTALL = () => {
+  if (globalThis.__lm) return 'kept';
+  const lm = globalThis.__lm = { prompts: [] };
+  const TASKS = [['You predict how the sentence', 'writer.complete'], ['You proofread a student', 'writer.review'], ['Describe only the supplied existing section', 'writer.outline'], ['You settle one spelling or grammar call', 'writer.decide']];
+  const reply = (task, system) => {
+    if (task === 'writer.complete') return 'it arrives uninvited and rearranges the present. Then the river takes it back.';
+    if (task === 'writer.review') return JSON.stringify({ issues: [] });
+    if (task === 'writer.outline') return JSON.stringify(/only "role"/.test(system) ? { role: 'body' } : { heading: 'Notes', role: 'body' });
+    if (task === 'writer.decide') return JSON.stringify({ verdict: 'keep', choice: null });
+    return '';
+  };
+  const LM = {
+    availability: async (o = {}) => (o.expectedInputs?.some((i) => i.type === 'image') ? 'unavailable' : 'available'),
+    params: async () => ({ defaultTopK: 3, maxTopK: 8, defaultTemperature: 1, maxTemperature: 2 }),
+    create: async (o = {}) => {
+      const system = (o.initialPrompts || []).filter((x) => x.role === 'system').map((x) => x.content).join('\n');
+      const task = TASKS.find(([mark]) => system.includes(mark))?.[1] || '';
+      const answer = () => { lm.prompts.push(task || system.slice(0, 60)); return reply(task, system); };
+      return { contextWindow: 100000, contextUsage: 10, measureContextUsage: async () => 200, destroy() {}, addEventListener() {}, removeEventListener() {},
+        prompt: async () => answer(), promptStreaming: () => { const text = answer(); return new ReadableStream({ start(c) { if (text) c.enqueue(text); c.close(); } }); } };
+    },
+  };
+  Object.defineProperty(globalThis, 'LanguageModel', { value: LM, configurable: true, writable: true });
+  return 'installed';
+};
 let total = 0, failed = 0;
 const check = async (name, test) => {
   total++;
@@ -68,7 +99,7 @@ const check = async (name, test) => {
       p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::ERR_/.test(m.text())) errors.push(`${name} console: ${m.text()}`); });
     };
     const record = (k) => worker.evaluate((key) => chrome.storage.local.get(`writerPaper:${key}`).then((r) => r[`writerPaper:${key}`] || null), k);
-    const KEY = PA.newKey(), TITLE = 'Field notes';
+    const KEY = PA.newKey(), TITLE = 'Field notes', AI_KEY = PA.newKey();
 
     // ---- the student's settings and one document, written as the Documents tab writes
     const own = await context.newPage();
@@ -77,9 +108,11 @@ const check = async (name, test) => {
     await own.evaluate(async ({ s, key, title, body }) => {
       await chrome.storage.sync.set({ ...s, navbarItems: { glaze: ['documents', 'search', 'settings'], tabs: ['glaze:documents'] } });
       await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'], ultra: ['https://bb.school.test'] });
-      const r = await chrome.runtime.sendMessage({ type: 'glaze:writerPapers', op: 'save', args: [key, { kind: 'paper', doc: body, format: 'plain', title, named: true }, { reason: 'import' }] });
-      if (!r?.ok) throw Error(`seed: ${JSON.stringify(r)}`);
-    }, { s: settings, key: KEY, title: TITLE, body: doc('Notes from the archive.') });
+      for (const [k, t, d] of [[key, title, body], [ai.key, 'Reading notes', ai.body]]) {
+        const r = await chrome.runtime.sendMessage({ type: 'glaze:writerPapers', op: 'save', args: [k, { kind: 'paper', doc: d, format: 'plain', title: t, named: true }, { reason: 'import' }] });
+        if (!r?.ok) throw Error(`seed: ${JSON.stringify(r)}`);
+      }
+    }, { s: settings, key: KEY, title: TITLE, body: doc('Notes from the archive.'), ai: { key: AI_KEY, body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Reading notes on Beloved' }] }, { type: 'paragraph', content: [{ type: 'text', text: LAST }] }] } } });
     await require('./check-env.js').ultraReady(own);
     await own.close();
 
@@ -224,6 +257,38 @@ const check = async (name, test) => {
       await f.locator('#list > .gd-btn').click();
       await closed(page);
       await atMark(page);
+    });
+    await check('ultra: Writer\'s AI finishes a sentence in a document opened there, and Tab takes it', async () => {
+      const sw = async () => context.serviceWorkers()[0] || context.waitForEvent('serviceworker');
+      context.on('serviceworker', (w) => { w.evaluate(INSTALL).catch(() => {}); });
+      await (await sw()).evaluate(INSTALL);
+      await (await sw()).evaluate(() => chrome.storage.local.set({ ai: { on: true, model: { use: 'device' }, features: { completion: true, writing: true } } }));
+      try {
+        f = await openFromBar(page);
+        await f.locator(`.gd-card[data-key="${AI_KEY}"] .gd-title`).click();
+        f = await shown(page);
+        await until(() => f.evaluate(() => !!globalThis.GZ_WRITER_AI?.allowed?.('completion') && GZ_WRITER_AI.allowed('writing')), 'the worker admits its AI port: completion and writing allowed');
+        await f.locator('.ProseMirror').click();
+        await f.evaluate((text) => {
+          const v = GZ_WRITER_FRAME.editor().view;
+          let at = null;
+          v.state.doc.descendants((n, pos) => { if (at === null && n.isTextblock && n.textContent.startsWith(text)) at = pos + n.nodeSize - 1; });
+          v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, at)));
+          v.focus();
+        }, LAST);
+        await page.keyboard.type(' it');
+        assert.equal(await until(() => f.evaluate(() => document.querySelector('.gz-ghost')?.firstChild?.textContent ?? null), 'the gray text'), GHOST);
+        await shoot(page, f, 'inpage-ultra-ai-1280');
+        await page.keyboard.press('Tab');
+        await until(() => f.evaluate((text) => { let t = null; GZ_WRITER_FRAME.editor().view.state.doc.descendants((n) => { if (t === null && n.isTextblock && n.textContent.startsWith(text)) t = n.textContent; }); return t; }, LAST).then((t) => t === `${LAST} it${GHOST}`), 'Tab takes it');
+        assert.ok((await (await sw()).evaluate(() => globalThis.__lm?.prompts || [])).includes('writer.complete'), 'the worker\'s model was asked writer.complete');
+        await until(async () => JSON.stringify((await record(AI_KEY))?.doc).includes('rearranges the present.'), 'saved through the worker');
+        await f.locator('.gp-top > .gd-btn').click();
+        await closed(page);
+        await atMark(page);
+      } finally {
+        await (await sw()).evaluate(() => chrome.storage.local.remove('ai'));
+      }
     });
     await check('ultra: the page heard no document of the student\'s, and its history holds none', async () => {
       const heard = await page.evaluate(() => __heard);
