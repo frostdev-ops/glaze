@@ -642,11 +642,12 @@ test('a relay restored from an older backup heals, even from a member who only r
   await r.close();
   fs.copyFileSync(copy, db);
   for (const x of ['-wal', '-shm']) fs.rmSync(db + x, { force: true });
-  // The copy carries no lease, so the restored relay starts at once rather than wait one out.
+  // The copy carries no lease, so the restored relay starts at once rather than wait one out (60 s): a quarter of that
+  // tells the two apart on a loaded machine too.
   const t0 = Date.now();
   r = await up({ db }, port);
   t.after(() => r.close());
-  assert.ok(Date.now() - t0 < 2000, `started after ${Date.now() - t0} ms`);
+  assert.ok(Date.now() - t0 < 15e3, `started after ${Date.now() - t0} ms`);
   // Only d comes back (a is gone for good). A kept-alive connection to the old process may fail once.
   await d.pump().catch(() => d.pump());
   const fresh = await join(await a.s.link(false));
