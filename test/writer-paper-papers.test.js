@@ -271,3 +271,12 @@ test('a refused undo merge cannot publish the document without its versions', as
   await assert.rejects(P.merge(records), /QUOTA_BYTES/);
   assert.deepEqual(s.data, before);
 });
+
+test('concurrent unnamed saves derive the title from the body that is saved', async () => {
+  const P = PA.open(store()), k = PA.newKey();
+  const first = (await P.save(k, { doc: doc('First line'), title: 'First line', named: false })).paper;
+  await P.save(k, { doc: doc('Another first line'), title: 'Another first line', named: false });
+  const r = await P.save(k, { doc: doc('My first line'), title: 'My first line', named: false }, { base: first.revision });
+  assert.equal(r.paper.title, 'My first line');
+  assert.equal(r.version.reason, 'conflict');
+});
