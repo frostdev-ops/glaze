@@ -6,6 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const A = require('../lib/mcp/approve.js');
 
 const root = path.join(__dirname, '..');
@@ -78,7 +79,7 @@ test('an ask is a storage.session record and one focused popup at the approval p
 test('the record keeps what Glaze shows and nothing else: no arguments, no extra view fields, no staged text', async () => {
   const e = env();
   e.a.ask('grant', { ...GRANT, app: { ...CLAUDE, name: '‮Claude\n\nAllow​ everything', verified: true, ppid: 4 }, args: { secret: 1 }, extra: 'x' });
-  e.a.ask('action', { ...ACTION, app: { name: 'n'.repeat(500), exe: 'e'.repeat(5000) }, tool: { name: 'todo_mark_done' }, summary: `s${'\u0007'.repeat(3)}${'y'.repeat(2000)}`, args: { id: 7 } });
+  e.a.ask('action', { ...ACTION, app: { name: 'n'.repeat(500), exe: 'e'.repeat(5000) }, tool: { name: 'todo_mark_done' }, summary: `s${'\u0007'.repeat(3)}${'y'.repeat(100)}`, args: { id: 7 } });
   await settle();
   const [grant, action] = records(e.data);
   assert.deepEqual(Object.keys(grant).sort(), ['app', 'at', 'group', 'id', 'kind', 'state', 'tool', 'until']);
@@ -87,12 +88,8 @@ test('the record keeps what Glaze shows and nothing else: no arguments, no extra
   assert.equal(action.app.name.length, A.LIMIT.name);
   assert.equal(action.app.exe.length, A.LIMIT.exe);
   assert.deepEqual(action.tool, { name: 'todo_mark_done', title: '' });
-  assert.equal(action.summary.length, A.LIMIT.summary);
+  assert.equal(action.summary.length, 102);
   assert.ok(action.summary.startsWith('s y'));
-  // An action with no summary shows what the tool is called.
-  e.a.ask('action', { app: CLAUDE, tool: { name: 'todo_mark_done', title: 'Mark a to-do done' } });
-  await settle();
-  assert.equal(records(e.data)[2].summary, 'Mark a to-do done');
 });
 
 test('a kind or view Glaze never sends is a programming error', async () => {
@@ -102,6 +99,18 @@ test('a kind or view Glaze never sends is a programming error', async () => {
   await assert.rejects(e.a.ask('grant', { ...GRANT, group: '' }), TypeError);
   assert.deepEqual(records(e.data), []);
   assert.equal(e.made.length, 0);
+});
+
+test('unknown groups and actions without a complete trusted summary are refused before opening', async () => {
+  for (const [kind, view] of [['pair', { ...PAIR, group: 'Allow everything' }],
+    ...[undefined, ' ', 'x'.repeat(A.LIMIT.summary + 1)].map((summary) => ['action', { ...ACTION, summary }])]) {
+    const e = env();
+    const got = outcome(e.a.ask(kind, view).catch((error) => error));
+    await settle();
+    assert.ok(got.v instanceof TypeError, 'invalid view must reject instead of waiting for approval');
+    assert.equal(e.made.length, 0);
+    assert.deepEqual(records(e.data), []);
+  }
 });
 
 test('Allow and Don\'t allow from the window decide once, and the window closes when nothing waits', async () => {
@@ -138,6 +147,7 @@ test('decisions come only from the window\'s own tab, top frame and page, from G
     {}, null, undefined,
     { id: 'glaze', url: URL_, frameId: 0 },
     e.from(w, { tab: { id: 999, windowId: w.id } }),
+    e.from(w, { tab: { id: w.id * 100, windowId: w.id + 1 } }),
     e.from(w, { frameId: 3 }),
     e.from(w, { url: 'chrome-extension://glaze/options.html' }),
     e.from(w, { url: 'https://school.instructure.com/lib/mcp/approve.html' }),
@@ -270,6 +280,30 @@ test('a window that can\'t open interrupts what waits on it, and the next ask tr
   assert.equal(c.v, undefined);
 });
 
+test('closing during window creation declines the queue before the popup can be registered', async () => {
+  const e = env();
+  let open;
+  e.deps.windows.create = () => new Promise((resolve) => { open = () => resolve({ id: 50, tabs: [{ id: 5000 }] }); });
+  const r = outcome(e.a.ask('pair', PAIR));
+  await settle();
+  e.a.closed(50);
+  open();
+  await settle();
+  assert.equal(r.v, 'no');
+  assert.equal(records(e.data)[0].state, 'no');
+  assert.equal(e.data.mcpAskWindow, undefined);
+});
+
+test('failed tab discovery removes the popup it created', async () => {
+  const e = env();
+  e.deps.windows.create = async () => ({ id: 77 });
+  e.deps.tabs.query = async () => { throw new Error('Tab lookup failed'); };
+  const r = outcome(e.a.ask('pair', PAIR));
+  await settle();
+  assert.equal(r.v, 'interrupted');
+  assert.deepEqual(e.removed, [77]);
+});
+
 test('a window without its tab in hand finds it through tabs.query', async () => {
   const e = env();
   e.deps.windows.create = async (o) => { e.made.push({ ...o, id: 77 }); return { id: 77 }; };
@@ -337,7 +371,7 @@ test('progress every 15 s while the student decides, and none after', async () =
   assert.equal(e.due.size, before + 1);
 });
 
-test('an allowed action is running for a minute after Allow, then done', async () => {
+test('an approval records consent and never invents execution or completion', async () => {
   const e = env();
   const r = outcome(e.a.ask('action', ACTION));
   await settle();
@@ -346,10 +380,10 @@ test('an allowed action is running for a minute after Allow, then done', async (
   await settle();
   assert.equal(r.v, 'yes');
   const rec = records(e.data)[0];
-  assert.equal(rec.state, 'running');
-  assert.equal(rec.until, e.now() + A.RUN);
-  await e.tick(A.RUN);
-  assert.equal(records(e.data)[0].state, 'done');
+  assert.equal(rec.state, 'yes');
+  assert.equal(e.due.size, 0, 'approval owns no execution timer');
+  await e.tick(60e3);
+  assert.equal(records(e.data)[0].state, 'yes');
   // A refused action never runs; an allowed pairing isn't a run.
   outcome(e.a.ask('action', ACTION));
   outcome(e.a.ask('pair', PAIR));
@@ -358,7 +392,7 @@ test('an allowed action is running for a minute after Allow, then done', async (
   e.a.decide({ type: 'glaze:mcp-ask', id: refused.id, answer: 'no' }, e.from(e.made[1]));
   e.a.decide({ type: 'glaze:mcp-ask', id: pair.id, answer: 'yes' }, e.from(e.made[1]));
   await settle();
-  assert.deepEqual(records(e.data).map((x) => x.state), ['done', 'no', 'yes']);
+  assert.deepEqual(records(e.data).map((x) => x.state), ['yes', 'no', 'yes']);
 });
 
 test('a worker start sweeps the last worker\'s asks: waiting and running are interrupted, and a run may have happened', async () => {
@@ -382,7 +416,8 @@ test('a worker start sweeps the last worker\'s asks: waiting and running are int
   await settle();
   assert.deepEqual(e.data['mcpAsk:a'], { ...base, id: 'a', at: t - 1000, until: t + 599e3, state: 'interrupted' });
   assert.deepEqual(e.data['mcpAsk:b'], { ...base, id: 'b', at: t - 9000, until: t + 30e3, state: 'interrupted', mayHaveRun: true });
-  assert.equal(e.data['mcpAsk:c'].state, 'done', 'its minute had passed');
+  assert.equal(e.data['mcpAsk:c'].state, 'interrupted', 'elapsed time is not evidence of completion');
+  assert.equal(e.data['mcpAsk:c'].mayHaveRun, true);
   assert.equal(e.data['mcpAsk:d'].state, 'no');
   assert.equal(e.data['mcpAsk:e'], undefined, 'settled over an hour ago');
   assert.equal(e.data['mcpAsk:f'], 'not a record');
@@ -432,4 +467,65 @@ test('the approval page is not reachable from web pages', () => {
   const m = require('../manifest.json');
   const listed = (m.web_accessible_resources || []).flatMap((w) => w.resources);
   assert.ok(!listed.some((r) => /^lib\/(?:mcp\/|\*)|approve/.test(r)), listed.join(', '));
+});
+
+// Execute the shipped page with a small DOM and controlled focus/clock, including native button default actions.
+const pageEnv = async () => {
+  const handlers = {}, events = {}, sent = [], due = new Map(), elements = new Map();
+  let focused = true, seq = 0;
+  const document = { activeElement: null, hasFocus: () => focused, visibilityState: 'visible', documentElement: { style: {} },
+    addEventListener: (type, fn) => { (events[type] ||= []).push(fn); },
+    getElementById: (id) => {
+      if (!elements.has(id)) elements.set(id, { id, hidden: false, textContent: '', attrs: {},
+        setAttribute(k, v) { this.attrs[k] = v; }, focus() { document.activeElement = this; },
+        addEventListener(type, fn) { this[type] = fn; } });
+      return elements.get(id);
+    } };
+  const fire = (list, type, extra = {}) => {
+    const e = { key: '', repeat: false, isComposing: false, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...extra };
+    for (const fn of list[type] || []) fn(e);
+    return e;
+  };
+  vm.runInNewContext(read('lib/mcp/approve-page.js'), { document,
+    window: { addEventListener: (type, fn) => { (handlers[type] ||= []).push(fn); } },
+    GZ_I18N: { page() {}, ui: () => 'en', t: (k, values = {}) => k.replace(/\{(\w+)\}/g, (_, p) => values[p]) },
+    matchMedia: () => ({ matches: false, addEventListener() {} }),
+    setTimeout: (fn) => { due.set(++seq, fn); return seq; }, clearTimeout: (id) => due.delete(id),
+    chrome: { storage: { session: { get: async () => ({ 'mcpAsk:a': { ...ACTION, id: 'a', kind: 'action', at: 1, state: 'waiting' } }) },
+      onChanged: { addListener() {} }, sync: { get: async () => ({}) } },
+    runtime: { sendMessage: (m, cb) => { sent.push(m); cb({ ok: true }); } } },
+  });
+  await settle();
+  return { sent, el: document.getElementById,
+    elapse: () => { const jobs = [...due.values()]; due.clear(); jobs.forEach((f) => f()); },
+    focus: (value) => { focused = value; fire(handlers, value ? 'focus' : 'blur'); },
+    key: (extra) => { const e = fire(events, 'keydown', extra); if (!e.defaultPrevented && e.key === 'Enter') document.activeElement?.click(); return e; },
+  };
+};
+
+test('the page disarms on blur and waits again after focus returns', async () => {
+  const p = await pageEnv();
+  p.elapse();
+  p.focus(false);
+  p.el('yes').click();
+  assert.equal(p.sent.length, 0, 'a background window cannot approve');
+  p.focus(true);
+  p.el('yes').click();
+  assert.equal(p.sent.length, 0, 'focus starts a new input guard');
+  assert.equal(p.el('no').attrs['aria-disabled'], 'true');
+  p.elapse();
+  p.el('yes').click();
+  assert.equal(p.sent[0].answer, 'yes');
+});
+
+test('held and composing Enter keys cannot activate Allow after the guard expires', async () => {
+  for (const extra of [{ repeat: true }, { isComposing: true }]) {
+    const p = await pageEnv();
+    p.elapse();
+    p.el('yes').focus();
+    p.key({ key: 'Enter', ...extra });
+    assert.equal(p.sent.length, 0, JSON.stringify(extra));
+    p.key({ key: 'Enter' });
+    assert.equal(p.sent[0].answer, 'yes', 'a fresh, intentional key still works');
+  }
 });
