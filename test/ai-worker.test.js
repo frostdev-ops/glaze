@@ -349,6 +349,49 @@ test('the word goes when the tab goes anywhere else, is kept through a fragment 
   assert.deepEqual([w.store.session.aiAttempts, w.store.session.aiHosts], [{}, {}]);
 });
 
+// Documents as a page of an LMS tab (features/settingspage.js): each document its frame loads claims a pass the tab's page
+// asked for ('glaze:papers'), and that claim seats it as Writer's claim does, judged by the page it sits in.
+test("Documents' frame in a school's page asks as Writer's frame does, seated by its own document's pass, judged by the page it sits in", async () => {
+  const w = writerOn();
+  const docs = (page, extra = {}) => ({ id: 'glaze', frameId: 3, documentId: 'papers-1', url: `${EXT}/papers.html`, origin: EXT, tab: { id: 5, url: page }, ...extra });
+  const claim = async (sender, host = top(w.page)) => {
+    const pass = crypto.randomUUID();
+    assert.deepEqual(await w.send({ type: 'glaze:papers', op: 'job', pass }, host), { ok: true });
+    return w.send({ type: 'glaze:papers', op: 'claim', pass }, sender);
+  };
+  w.page = COURSE;
+  assert.equal(await ask(w, docs(COURSE)), 'hung up', 'before its claim (a site framing papers.html)');
+  assert.deepEqual(await claim(docs(COURSE)), { ok: true });
+  assert.equal(await ask(w, docs(COURSE)), 'allowed');
+  assert.equal(await ask(w, docs(COURSE), 'writing'), 'allowed');
+  // A document opened in place: the frame's next document, seated by its own pass; the list it replaced is not.
+  const next = docs(COURSE, { documentId: 'papers-2', url: `${EXT}/papers.html?paper=doc%3A00000000-0000-4000-8000-000000000000` });
+  assert.equal(await ask(w, next), 'hung up', 'before its own claim');
+  assert.deepEqual(await claim(next), { ok: true });
+  assert.equal(await ask(w, next), 'allowed');
+  assert.equal(await ask(w, docs(COURSE)), 'hung up', 'the document it replaced');
+  assert.equal(await ask(w, { ...next, frameId: 4 }), 'hung up', 'another frame');
+  assert.equal(await ask(w, { ...next, tab: { id: 6, url: COURSE } }), 'hung up', 'another tab');
+  assert.equal(await ask(w, { ...next, url: `${EXT}/options.html` }), 'hung up', 'not Documents');
+  // The tab's loading (the page's own history entry for a document opened in place brings one) forgets the seats in it; the
+  // claimed document keeps its seat, from the page its claim names. A frame that never claimed gets none.
+  for (const f of w.updated) f(5, { status: 'loading' });
+  assert.equal(await ask(w, next), 'allowed', 'after the tab\'s loading');
+  assert.equal(await ask(w, docs(COURSE, { documentId: 'papers-9' })), 'hung up', 'a document of that frame that claimed nothing');
+  // The page under it, read live: a quiz or a tool's page refuses it; an attempt waits for the word that it is an assignment.
+  w.page = `${CANVAS}/courses/1/quizzes/3/take`;
+  assert.equal(await ask(w, next), 'hung up', 'a quiz');
+  w.page = ATTEMPT;
+  const onAttempt = docs(ATTEMPT, { documentId: 'papers-3' });
+  assert.deepEqual(await claim(onAttempt), { ok: true });
+  assert.equal(await ask(w, onAttempt), 'attempt');
+  assert.deepEqual(await report(w, 'assignment'), { ok: true });
+  assert.equal(await ask(w, onAttempt), 'allowed');
+  assert.equal(await ask(w, onAttempt, 'syllabus'), 'hung up');
+  for (const f of w.removed) f(5);
+  assert.equal(await ask(w, onAttempt), 'hung up', 'the tab closed');
+});
+
 test('on an assignment attempt the writer frame runs a completion; a cancel passes on any attempt', async () => {
   const sent = [];
   const w = writerOn(async (url) => {

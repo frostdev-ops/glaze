@@ -84,9 +84,12 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...(cid && ctx.settings().enhance.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: () => need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.open(), () => {}) }] : []),
     ];
   };
-  // Glaze Writer's Documents (papers.html), on every site while Writer is on: the worker opens it in a tab of its own, for
-  // the student's own click or Enter on its row.
-  const documents = () => (ctx.settings().enhance.writer === false ? [] : [{ label: t('Documents'), hint: 'Glaze', group: 'Glaze', run: (e) => { if (e?.isTrusted) { try { Promise.resolve(chrome.runtime.sendMessage('papers')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } } }]);
+  // Glaze Writer's Documents (papers.html), on every site while Writer is on, for the student's own click or Enter on its row:
+  // as a page of the site, as the bar's item opens it (features/settingspage.js), else in a tab the worker opens.
+  const papersTab = () => { try { Promise.resolve(chrome.runtime.sendMessage('papers')).catch(() => {}); } catch { /* extension reloaded under the tab */ } };
+  const documents = () => (ctx.settings().enhance.writer === false ? [] : [{ label: t('Documents'), hint: 'Glaze', group: 'Glaze', run: (e) => {
+    if (e?.isTrusted) need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE.open('', 'papers')).then((opened) => { if (!opened) papersTab(); }, papersTab);
+  } }]);
   // Canvas and Ultra alike: Documents, the notes app (features/notes.js: the library, a new note, and this course's notes),
   // Glaze's own commands, and every extra with its switch (features/widgets.js), whether or not the widgets are on.
   const apps = (cid) => [
