@@ -1,10 +1,10 @@
 // The MCP protocol engine: JSON-RPC lines in and out for each agent app's connection, in both eras of the spec
-// (https://modelcontextprotocol.io/specification/2026-07-28, and 2025-11-25 for clients that still send initialize).
+// (https://modelcontextprotocol.io/specification/2026-07-28, and 2025-11-25 / 2025-06-18 for clients that send initialize).
 // - Modern (2026-07-28) is stateless: every request names its version and client capabilities in _meta. server/discover,
 //   tools/list (sorted by name, 50 a page, cached privately), tools/call, and subscriptions/listen for toolsListChanged.
-// - Legacy (2025-11-25) is the initialize handshake, ping, tools/list, tools/call and notifications/tools/list_changed.
+// - Legacy is the initialize handshake, ping, tools/list, tools/call and notifications/tools/list_changed.
 // The first request served fixes a connection's era: initialize means legacy, a request with the modern protocolVersion in
-// _meta means modern. server/discover and refused requests fix nothing, so a client told our versions can still choose.
+// _meta means modern. server/discover and invalid request metadata fix nothing, so a client told our versions can choose.
 // Tools only: resources, prompts and the rest are unknown methods. The engine answers; it never asks the client anything.
 //
 // create({ serverInfo: {name, version}, instructions?, list() → [MCP Tool], listHash() → string, call(c) → Promise })
@@ -19,7 +19,7 @@
 // Pure: no extension APIs and no timers. Classic script for the worker (loaded with the rest of lib/mcp on first use);
 // module.exports for node.
 var GZ_MCP_WIRE = globalThis.GZ_MCP_WIRE || (() => {
-  const MODERN = '2026-07-28', LEGACY = ['2025-11-25'];
+  const MODERN = '2026-07-28', LEGACY = ['2025-11-25', '2025-06-18'];
   const SUPPORTED = [MODERN, ...LEGACY];
   // The most a line may be, in UTF-8 bytes; how long a list stays fresh; tools in a page; open subscriptions a connection may hold.
   const MAX = 1 << 20, TTL = 60e3, PAGE = 50, SUBS = 16;
@@ -63,7 +63,7 @@ var GZ_MCP_WIRE = globalThis.GZ_MCP_WIRE || (() => {
       const out = (m) => {
         let text;
         try { text = JSON.stringify({ jsonrpc: '2.0', ...m }); } catch {
-          if (m.id === undefined || !('result' in m)) return;
+          if (m.id === undefined) return;
           text = JSON.stringify({ jsonrpc: '2.0', id: m.id, error: { code: -32603, message: 'Internal error.' } });
         }
         send(text);
@@ -81,7 +81,13 @@ var GZ_MCP_WIRE = globalThis.GZ_MCP_WIRE || (() => {
           from = typeof p.cursor === 'string' ? parseInt(p.cursor, 36) : NaN;
           if (!(from > 0 && from < all.length && from % PAGE === 0 && cursor(from) === p.cursor)) return fail(id, -32602, 'Invalid cursor.');
         }
-        const body = { tools: all.slice(from, from + PAGE), ...(from + PAGE < all.length && { nextCursor: cursor(from + PAGE) }) };
+        // Legacy output schemas require an object root; those clients can still use the tool's text results.
+        const tools = all.slice(from, from + PAGE).map((t) => {
+          if (now || t.outputSchema === undefined || t.outputSchema?.type === 'object') return t;
+          const { outputSchema, ...old } = t;
+          return old;
+        });
+        const body = { tools, ...(from + PAGE < all.length && { nextCursor: cursor(from + PAGE) }) };
         reply(id, now ? done({ ...body, ttlMs: TTL, cacheScope: 'private' }) : body);
       };
 
@@ -108,6 +114,14 @@ var GZ_MCP_WIRE = globalThis.GZ_MCP_WIRE || (() => {
           if (isObj(e) && Number.isInteger(e.code) && typeof e.message === 'string') return fail(id, e.code, e.message, e.data);
           if (!isObj(r) || e !== undefined || !Array.isArray(r.content)) return fail(id, -32603, 'Internal error.');
           const body = { content: r.content, ...(r.structuredContent !== undefined && { structuredContent: r.structuredContent }), ...(typeof r.isError === 'boolean' && { isError: r.isError }) };
+          // Legacy structuredContent is object-only. Preserve other JSON values in a text block instead.
+          if (!now && r.structuredContent !== undefined && !isObj(r.structuredContent)) {
+            let text;
+            try { text = JSON.stringify(r.structuredContent); } catch { return fail(id, -32603, 'Internal error.'); }
+            if (text === undefined) return fail(id, -32603, 'Internal error.');
+            delete body.structuredContent;
+            if (!body.content.some((x) => x?.type === 'text' && x.text === text)) body.content = [...body.content, { type: 'text', text }];
+          }
           reply(id, now ? done(body) : body);
         };
         new Promise((res) => res(call({ conn: cid, peer, client: who, name: p.name, args: p.arguments ?? {}, meta, progress, signal: job.ac.signal })))
@@ -117,6 +131,9 @@ var GZ_MCP_WIRE = globalThis.GZ_MCP_WIRE || (() => {
       // The stream stays open until the client cancels it or the connection closes; no answer until then.
       const listen = (id, p) => {
         if (!isObj(p.notifications)) return fail(id, -32602, 'Invalid params: subscriptions/listen needs a notifications filter.');
+        const n = p.notifications;
+        if (['toolsListChanged', 'promptsListChanged', 'resourcesListChanged'].some((k) => n[k] !== undefined && typeof n[k] !== 'boolean')
+          || (n.resourceSubscriptions !== undefined && (!Array.isArray(n.resourceSubscriptions) || !n.resourceSubscriptions.every((uri) => typeof uri === 'string')))) return fail(id, -32602, 'Invalid params: malformed notifications filter.');
         if (subs.size >= SUBS) return fail(id, -32603, 'Subscription limit reached.');
         const tools = p.notifications.toolsListChanged === true;
         subs.set(id, { tools });
@@ -140,12 +157,12 @@ var GZ_MCP_WIRE = globalThis.GZ_MCP_WIRE || (() => {
         fail(id, -32601, 'Method not found.');
       };
 
-      // The per-request _meta first: the version (so a client can retry with one we speak), then the capabilities.
+      // Validate required metadata before version support: malformed requests are always Invalid params.
       const modern = (id, method, p, meta) => {
         const v = meta[KEY.version];
         if (typeof v !== 'string') return fail(id, -32602, era ? `Invalid params: _meta needs ${KEY.version}.` : `Send initialize, or ${KEY.version} in _meta.`);
-        if (v !== MODERN) return fail(id, -32022, 'Unsupported protocol version.', { supported: [...SUPPORTED], requested: v });
         if (!isObj(meta[KEY.caps])) return fail(id, -32602, `Invalid params: _meta needs ${KEY.caps}.`);
+        if (v !== MODERN) return fail(id, -32022, 'Unsupported protocol version.', { supported: [...SUPPORTED], requested: v });
         if (meta[KEY.client] !== undefined && !info(meta[KEY.client])) return fail(id, -32602, `Invalid params: ${KEY.client} needs a name and a version.`);
         if (method === 'server/discover') return reply(id, done({ supportedVersions: [...SUPPORTED], capabilities: CAPS, ...said, ttlMs: TTL, cacheScope: 'private' }));
         era = 'modern';
