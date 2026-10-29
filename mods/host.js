@@ -159,6 +159,10 @@
       look: Object.freeze({ override: (parts) => call('look.override', parts === undefined ? null : parts) }),
       // To this mod's own Worker and frames on this page ('broadcast' events), never another mod's.
       broadcast: (data) => call('broadcast', data === undefined ? null : data),
+      // The Documents page's: documents (list, open, create, add, remove, style) and documents.read (read, export).
+      documents: Object.freeze({ list: () => call('documents.list'), open: (key) => call('documents.open', key), create: (o) => call('documents.create', o ?? {}),
+        read: (key) => call('documents.read', key), export: (key) => call('documents.export', key), add: (slot, item) => call('documents.add', slot, item),
+        remove: (slot, id) => call('documents.remove', slot, id), style: (vars) => call('documents.style', vars === undefined ? null : vars) }),
     });
     Object.defineProperty(globalThis, 'glaze', { value: glaze, enumerable: false });
     return glaze;

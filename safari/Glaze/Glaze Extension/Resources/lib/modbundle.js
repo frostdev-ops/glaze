@@ -233,8 +233,9 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
     }
   };
 
-  // Personal data: these grants never come with a page of the mod's own.
-  const DATA = ['courses', 'todo', 'grades', 'nav.read'];
+  // Personal data: these grants never come with a page of the mod's own. documents.read (a document's text) comes with
+  // documents (the list it picks from).
+  const DATA = ['courses', 'todo', 'grades', 'nav.read', 'documents', 'documents.read'];
   // What Glaze's navigation bar lets a mod change (no personal data).
   const NAV = ['nav.items', 'nav.layout'];
   const HOSTS_MAX = 8;
@@ -252,6 +253,7 @@ var GZ_MODBUNDLE = globalThis.GZ_MODBUNDLE || (() => {
       seen.add(p.id);
     });
     if (v.filter((p) => p.id.startsWith('network:')).length > HOSTS_MAX) bad('permissions');
+    if (seen.has('documents.read') && !seen.has('documents')) bad(`permissions.${v.findIndex((p) => p.id === 'documents.read')}.id`);
   };
   const isFile = (files, p, e) => typeof p === 'string' && own(files, p) && ext(p) === e;
   // Slots: tiles and rail widgets drawn from the mod's Worker (a component tree and a canvas), or, for a mod without data

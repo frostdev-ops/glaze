@@ -1,8 +1,9 @@
 // The ways to Writer's Documents page (papers.html) against the unpacked extension, offline: the popup's header pill (right
 // of "Glaze", its one word, the popup still inside Chrome's 600px, gone with Writer off, kept with the theme off, a real
 // click only; tabs.create stubbed, then real), Settings → Writer → Papers' link, Settings → Navigation's opt-in item,
-// Glaze's bar with it on (Settings' preview, and a Canvas page through the worker) and Canvas's command palette. Shots: the
-// popup at its natural size and the papers heading, each in a dark and a light Look, and the Glaze items.
+// Glaze's bar with it on (Settings' preview: a tab through the worker; a Canvas page: Documents beside the bar, as Settings
+// opens, scripts/documents-page-check.js) and Canvas's command palette (the same). Shots: the popup at its natural size and
+// the papers heading, each in a dark and a light Look, and the Glaze items.
 // NODE_PATH=<playwright> nice -n 10 node scripts/documents-entry-check.js [shots folder] (default: a temporary folder).
 // EXT selects the checkout.
 const { chromium } = require('playwright');
@@ -62,6 +63,19 @@ const check = async (name, test) => {
       await act();
       const tab = await until(() => context.pages().find((p) => !before.has(p) && p.url().split(/[?#]/)[0] === PAPERS), 'papers.html in a new tab');
       await tab.close();
+    };
+    // Documents beside Glaze's bar on a school's page (features/settingspage.js), its document shown once it claims its pass;
+    // no tab opens. Left again with Escape.
+    const opensInPage = async (p, act) => {
+      const before = new Set(context.pages());
+      await act();
+      const f = await until(() => p.frames().find((x) => x.parentFrame() && x.url().split(/[?#]/)[0] === PAPERS), 'papers.html beside the bar');
+      await until(() => f.evaluate(() => !document.documentElement.style.getPropertyValue('opacity') && !document.getElementById('list').hidden), 'Documents shows');
+      assert.equal(await p.evaluate(() => document.getElementById('gz-settings-page')?.getBoundingClientRect().width > 0), true);
+      assert.deepEqual(context.pages().filter((x) => !before.has(x)).map((x) => x.url()), [], 'no tab');
+      await f.locator('#heading').click();
+      await p.keyboard.press('Escape');
+      await until(() => p.evaluate(() => !document.getElementById('gz-settings-page')), 'Documents leaves');
     };
     const dark = D.GZ_SANITIZE({});
     const light = D.GZ_SANITIZE({ ...D.GZ_DEFAULTS, ...D.GZ_LOOK_APPLY(D.GZ_DEFAULTS, D.GZ_LOOKS.find((L) => L.name === 'Library')) });
@@ -225,7 +239,7 @@ const check = async (name, test) => {
     await check('canvas-bar-item', async () => {
       const item = lms.locator('#gz-navbar [data-id="glaze:documents"]').first();
       await item.waitFor({ state: 'visible' });
-      await opensPapers(() => item.click());
+      await opensInPage(lms, () => item.click());
     });
     await check('canvas-palette', async () => {
       await lms.locator('body').click({ position: { x: 640, y: 600 } }).catch(() => {});
@@ -234,7 +248,7 @@ const check = async (name, test) => {
       const row = lms.locator('#gz-cmd-list li').filter({ hasText: /^DocumentsGlaze$/ });
       await row.waitFor();
       assert.ok(!await lms.locator('#gz-cmd-list li').filter({ hasText: /^Papers/ }).count(), 'not under its old name');
-      await opensPapers(() => row.click());
+      await opensInPage(lms, () => row.click());
     });
     await check('no page errors', async () => assert.deepEqual(errors, []));
   } finally {

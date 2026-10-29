@@ -370,7 +370,7 @@ test('only Glaze\'s content script in the top frame of an LMS page it runs on, w
     { ...frame, url: 'about:blank', origin: 'https://other.school.edu' }, { ...frame, url: 'https://bb.school.edu/ultra/courses/_1_1/assessment/_2_1' }]) {
     assert.equal(await ctx.fromLms(sender, true), null, `parts refuse ${sender.url}`);
   }
-  assert.match(src, /site: preview \? 'editor' : await fromLms\(s, m\.type === 'glaze:modpage' && m\.op === 'parts'\)/);
+  assert.match(src, /site: preview \? 'editor' : await fromDocuments\(s\) \? 'documents' : await fromLms\(s, m\.type === 'glaze:modpage' && m\.op === 'parts'\)/);
   // Only the editor's own pages stand in for a page, and only to read parts and a mod's background file.
   assert.match(src, /const preview = m\.type === 'glaze:modpage' && \['parts', 'media'\]\.includes\(m\.op\) && fromPreview\(s\);/);
   store.sync.enabled = false;
@@ -439,7 +439,7 @@ for (const revoke of [{ [`mod:${ID}`]: { newValue: { enabled: false } } }, { mod
   const changes = [];
   const ctx = vm.createContext({
     GZ_MODBROKER: B, AbortController, DOMException, Map, Set, setTimeout, clearTimeout,
-    fromLms: async () => SITE, reachable: async () => true, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
+    fromLms: async () => SITE, fromDocuments: async () => false, reachable: async () => true, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
     fetch: async (url, init) => { signal = init.signal; return new Promise((r) => { finish = r; }); },
     chrome: { runtime: { onMessage: { addListener(f) { message = f; } } }, storage: { local: e.local, onChanged: { addListener(f) { changes.push(f); } } } },
   });
@@ -491,7 +491,7 @@ test('the worker cancels an in-flight declarative widget read on revocation', as
   const ctx = vm.createContext({
     GZ_MODBROKER: { ...B, page: async (m, env) => { signal = env.signal; return new Promise((r) => { finish = r; }); } },
     AbortController, DOMException, Map, Set, setTimeout, clearTimeout, brokerIn() {},
-    fromLms: async () => SITE, reachable: async () => true, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
+    fromLms: async () => SITE, fromDocuments: async () => false, reachable: async () => true, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
     chrome: { runtime: { onMessage: { addListener(f) { message = f; } } }, storage: { local: e.local, onChanged: { addListener(f) { changes.push(f); } } } },
   });
   vm.runInContext(code, ctx);

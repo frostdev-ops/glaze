@@ -147,6 +147,37 @@ var GZ_MODAPI = globalThis.GZ_MODAPI || (() => {
     return c;
   };
 
+  // ---- the Documents page (papers.html, documents and documents.read) ----------------------------------------------------
+  // glaze.documents.add(slot, { id, label }): one of the mod's own items, a button in the toolbar (documents.toolbar) or an
+  // entry in each card's ⋯ menu (documents.card), drawn by the page under Glaze's own with the mod's name. → { slot, id, label }.
+  const DOC_SLOTS = ['documents.toolbar', 'documents.card'];
+  const docItem = (slot, v) => { const s = oneOf(DOC_SLOTS)(slot), c = shape({ id, label: str(40, { empty: false }) }, ['id', 'label'])(v); return s && c ? { slot: s, ...c } : null; };
+  const docSlot = (slot, v) => { const s = oneOf(DOC_SLOTS)(slot), i = id(v); return s && i ? { slot: s, id: i } : null; };
+  // A document's key as glaze.documents.list() gave it: the page acts only on a key it lists, so here only its shape.
+  const docKey = (v) => (typeof v === 'string' && v.length > 0 && v.length <= 320 && !/[\p{Cc}\s]/u.test(v) ? v : null);
+  // glaze.documents.create({ format }): a new document in one of Writer's formats (lib/writer-styles.js IDS), Blank by default.
+  const DOC_FORMATS = ['plain', 'mla9', 'apa7', 'chicago17'];
+  const docCreate = (v = {}) => { const c = shape({ format: oneOf(DOC_FORMATS) })(v); return c ? { format: c.format ?? 'plain' } : null; };
+  // glaze.documents.style(vars): the page's --gd-* hooks (papers.css) the mod sets while it runs, each in its range: corner
+  // radius and glass blur in px, the thumbnails' scale, the grid's narrowest column in px. At least one; null withdraws.
+  const DOC_STYLE = { radius: num(0, 32), glass: num(0, 40), thumb: num(0.6, 1.6), column: num(160, 400) };
+  const docStyle = (v) => { const c = shape(DOC_STYLE)(v); return c && Object.keys(c).length ? c : null; };
+  // The Documents page's trusted broker adapter keeps raw storage keys here. Ultra keys contain the school and user;
+  // mods receive random handles instead, scoped to that mod in this page and discarded when it stops.
+  const docKeys = () => {
+    const mods = new Map();
+    return {
+      summary: (mod, doc) => {
+        if (!mods.has(mod)) mods.set(mod, { raw: new Map(), handles: new Map() });
+        const m = mods.get(mod);
+        if (!m.raw.has(doc.key)) { const h = `document:${crypto.randomUUID()}`; m.raw.set(doc.key, h); m.handles.set(h, doc.key); }
+        return { ...doc, key: m.raw.get(doc.key) };
+      },
+      resolve: (mod, handle) => mods.get(mod)?.handles.get(handle) ?? null,
+      forget: (mod) => mods.delete(mod),
+    };
+  };
+
   // ---- the student's records for a mod ---------------------------------------------------------------------------------
   // Written by the editor's Mods section, read by the worker. storage.local modOrder = [id]: the student's order, which
   // decides who has a slot two mods claim and the order transforms run in. modSettings:<id> = { setting id: value }, the
@@ -181,6 +212,6 @@ var GZ_MODAPI = globalThis.GZ_MODAPI || (() => {
   // Ids in the student's order (modOrder), the rest after them in the order given.
   const order = (ids, stored) => { const o = Array.isArray(stored) ? stored : []; const at = (id) => { const i = o.indexOf(id); return i < 0 ? o.length : i; }; return [...ids].sort((x, y) => at(x) - at(y)); };
 
-  return { LIMIT, TOKENS, NAV_ICONS, navItem, color, tree, images, decoration, decorations, commands, effect, replace, enabled, claims, values, order, keysOf, isObj, str, num, bool, oneOf, shape, list };
+  return { LIMIT, TOKENS, NAV_ICONS, navItem, DOC_SLOTS, DOC_FORMATS, docItem, docSlot, docKey, docCreate, docStyle, docKeys, color, tree, images, decoration, decorations, commands, effect, replace, enabled, claims, values, order, keysOf, isObj, str, num, bool, oneOf, shape, list };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_MODAPI; else GZ_MODAPI;

@@ -1,6 +1,6 @@
 // The Documents home's pure rules (papers.html, papers.js): a row's shown title, what a search matches, the orders and
-// course choices, which dropped files become documents, a document's flat text, and where an arrow key moves focus in the
-// grid or the list. No DOM, no storage.
+// course choices, what the Trash holds, which dropped files become documents, a document's flat text, where an arrow key
+// moves focus in the grid or the list, and a row's public summary. No DOM, no storage.
 // Classic script; module.exports for node.
 var GZ_DOC_HOME = globalThis.GZ_DOC_HOME || (() => {
   // Text as a search compares it: lower case, accents off, runs of space as one.
@@ -22,13 +22,19 @@ var GZ_DOC_HOME = globalThis.GZ_DOC_HOME || (() => {
     return words.every((w) => all.includes(w));
   };
 
-  // Rows in an order: 'updated' (last edited first) or 'title' (A to Z in the student's language, numbers by value), ties
-  // newest first. titles: key → shown title.
+  // Rows in an order: 'updated' (last edited first), 'title' (A to Z in the student's language, numbers by value) or
+  // 'trashed' (the Trash: last trashed first), ties newest first. titles: key → shown title.
   const sort = (rows, by, titles, locale) => {
     const c = new Intl.Collator(locale, { numeric: true, sensitivity: 'base' });
     const newest = (a, b) => (b.updated || 0) - (a.updated || 0);
-    return [...rows].sort(by === 'title' ? (a, b) => c.compare(titles.get(a.key) || '', titles.get(b.key) || '') || newest(a, b) : newest);
+    return [...rows].sort(by === 'title' ? (a, b) => c.compare(titles.get(a.key) || '', titles.get(b.key) || '') || newest(a, b)
+      : by === 'trashed' ? (a, b) => (b.trashed || 0) - (a.trashed || 0) || newest(a, b) : newest);
   };
+
+  // Whether a row is in Trash (trashed: when, in ms; lib/writer-papers.js), a move the page made and storage hasn't
+  // shown yet standing first (pending: key → true into Trash, false out of it). view: the Trash's rows, or the rest.
+  const inTrash = (row, pending) => (pending?.has(row?.key) ? pending.get(row.key) === true : Number.isFinite(row?.trashed));
+  const view = (rows, trash, pending) => rows.filter((r) => inTrash(r, pending) === trash);
 
   // The Course filter's choices: each course name once, A to Z, and whether any row has none.
   const courses = (rows, locale) => {
@@ -92,7 +98,12 @@ var GZ_DOC_HOME = globalThis.GZ_DOC_HOME || (() => {
     }
   };
 
-  return { fold, terms, titleOf, matches, sort, courses, NONE, inCourse, route, stem, flat, move };
+  // What a row says beyond this page (GZ_DOCUMENTS.list, a mod's glaze.documents.list): its public fields, never its text.
+  // title: as shown; kind: its kind's id.
+  const summary = (row, title, kind) => ({ key: String(row?.key || ''), kind: String(kind || 'paper'), title: String(title || ''), format: String(row?.format || ''),
+    words: Number.isSafeInteger(row?.words) && row.words > 0 ? row.words : 0, updated: Number.isFinite(row?.updated) ? row.updated : 0, course: String(row?.course || '').trim() });
+
+  return { fold, terms, titleOf, matches, sort, inTrash, view, courses, NONE, inCourse, route, stem, flat, move, summary };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_DOC_HOME; else GZ_DOC_HOME;

@@ -31,27 +31,35 @@ test('Word import refusals show translated student messages and never raw parser
   }
 });
 
-test('the command palette offers Documents on Ultra and Canvas while Writer is on, and opens it only for a trusted choice', async () => {
+test('the command palette offers Documents on Ultra and Canvas while Writer is on, and opens it beside the bar only for a trusted choice', async () => {
   const source = read('features/palette.js'), start = source.indexOf("  // Glaze Writer's Documents"), end = source.indexOf('  // Notes opens', start);
   assert.ok(start > 0 && end > start);
+  const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(setImmediate); };
   for (const ultra of [true, false]) {
     for (const [enhance, shown] of [[{ writer: true }, true], [{}, true], [{ writer: false }, false]]) {
-      const sent = [];
-      const apps = vm.runInNewContext(`${source.slice(start, end)} apps`, {
-        ultra, ctx: { settings: () => ({ enhance }) }, t: (key) => key, glazeCmds: () => [],
-        chrome: { runtime: { sendMessage: async (m) => sent.push(m) } },
-      });
-      const rows = apps(null);
-      assert.ok(!rows.some((row) => row.label === 'Papers'), 'the old name is gone');
-      const docs = rows.find((row) => row.label === 'Documents');
-      assert.equal(!!docs, shown, `${ultra ? 'Ultra' : 'Canvas'}, enhance ${JSON.stringify(enhance)}`);
-      if (!docs) continue;
-      assert.deepEqual([docs.hint, docs.group], ['Glaze', 'Glaze']);
-      await docs.run({ isTrusted: false });
-      await docs.run();
-      assert.equal(sent.length, 0, 'a scripted choice opens nothing');
-      await docs.run({ isTrusted: true });
-      assert.deepEqual(sent, ['papers']);
+      for (const opens of [true, false]) {
+        const sent = [];
+        const apps = vm.runInNewContext(`${source.slice(start, end)} apps`, {
+          ultra, ctx: { settings: () => ({ enhance }) }, t: (key) => key, glazeCmds: () => [],
+          need: async (file, ready) => { sent.push(['need', file]); return ready(); },
+          GZ_SETTINGS_PAGE: { open: async (...a) => { sent.push(['open', ...a]); return opens; } },
+          chrome: { runtime: { sendMessage: async (m) => sent.push(m) } },
+        });
+        const rows = apps(null);
+        assert.ok(!rows.some((row) => row.label === 'Papers'), 'the old name is gone');
+        const docs = rows.find((row) => row.label === 'Documents');
+        assert.equal(!!docs, shown, `${ultra ? 'Ultra' : 'Canvas'}, enhance ${JSON.stringify(enhance)}`);
+        if (!docs) continue;
+        assert.deepEqual([docs.hint, docs.group], ['Glaze', 'Glaze']);
+        docs.run({ isTrusted: false });
+        docs.run();
+        await settle();
+        assert.equal(sent.length, 0, 'a scripted choice opens nothing');
+        docs.run({ isTrusted: true });
+        await settle();
+        // Beside the bar (features/settingspage.js), else (the page can't hold it) the tab the worker opens.
+        assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['need', 'features/settingspage.js'], ['open', '', 'papers'], ...(opens ? [] : ['papers'])]);
+      }
     }
   }
 });

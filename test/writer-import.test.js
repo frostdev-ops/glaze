@@ -144,7 +144,12 @@ const frame = ({ blank = true, busy = false } = {}) => {
     GZ_WRITER_PAPER: { current: () => api, need: async () => { ctx.GZ_DOCTEXT ||= require('../lib/doctext.js'); } },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_SUBMIT_SHEET: sheet });
   vm.runInContext(process.env.WRITER_IMPORT_SOURCE ? fs.readFileSync(process.env.WRITER_IMPORT_SOURCE, 'utf8') : read('writer-import.js'), ctx);
-  const flush = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
+  // Settle the microtasks, or wait (2 s at most) for what a thread pool answers late under load: the .docx's page count
+  // comes through DecompressionStream (zlib's threads), which no number of event-loop turns flushes.
+  const flush = async (ready = null) => {
+    for (let i = 0; i < 20; i++) await new Promise(setImmediate);
+    for (let t = 0; ready && !ready() && t < 200; t++) await new Promise((r) => setTimeout(r, 10));
+  };
   const card = () => doc.querySelector('.gi-card');
   const tiles = () => doc.querySelectorAll('.gi-choice');
   return { doc, ctx, api, handles, opened, imported, notices, flush, card, tiles, I: ctx.GZ_WRITER_IMPORT, key: (key) => doc.fire(doc.querySelector('.gi-layer'), 'keydown', { key, stopPropagation() {} }) };
@@ -152,7 +157,7 @@ const frame = ({ blank = true, busy = false } = {}) => {
 
 test('the card: a .docx shows its name, pages and size, and Open in Writer (the default, focused for Enter) opens it', async () => {
   const f = frame(), file = docx();
-  await f.I.bring(f.api, file); await f.flush();
+  await f.I.bring(f.api, file); await f.flush(() => /pages/.test(f.doc.querySelector('.gi-file small')?.textContent || ''));
   assert.ok(f.card(), 'a .docx asks first');
   assert.equal(f.doc.querySelector('.gi-file b').textContent, 'Rivera_Essay2.docx');
   assert.match(f.doc.querySelector('.gi-file small').textContent, /^4 pages · \d+ KB$/);

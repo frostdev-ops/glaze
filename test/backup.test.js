@@ -158,6 +158,25 @@ test('a doc: paper backs up and restores', async () => {
   } finally { a.stop(); b.stop(); }
 });
 
+test('a document in Trash backs up and restores still in Trash, with when it was trashed and its versions', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const key = PA.newKey(), kept = PA.newKey(), a = device(), b = device();
+  try {
+    let clock = NOW;
+    const P = PA.open(a.local, () => ++clock);
+    await P.save(key, { doc: SC.parse(SC.paper, '<p>MARK-TRASHED-DOC</p>').toJSON(), title: 'Old notes', named: true, format: 'plain' });
+    await P.save(kept, { doc: SC.parse(SC.paper, '<p>MARK-KEPT-DOC</p>').toJSON(), title: 'Notes', named: true, format: 'plain' });
+    const { trashed } = await P.trash(key);
+    const file = await backUp(a), result = await restore(b, file, ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    const Q = PA.open(b.local), p = await Q.get(key), rows = await Q.list();
+    assert.equal(p.trashed, trashed, 'the record keeps its flag');
+    assert.equal(rows.find((r) => r.key === key).trashed, trashed, 'and its row, so it restores into Trash');
+    assert.equal(PA.trashed(rows.find((r) => r.key === kept)), false, 'what was not trashed is not');
+    assert.ok((await Q.versions(key)).length, 'its versions came with it');
+  } finally { a.stop(); b.stop(); }
+});
+
 test('a record of an unknown kind is skipped on restore', async () => {
   const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
   const paper = 'bb.school.test|_900_1|_101_1|_7_1', sheet = PA.newKey(), later = PA.newKey(), a = device(), b = device();

@@ -69,7 +69,7 @@ test("the student's own groups, tabs and Glaze items", () => {
   assert.equal(M.build({ native: ULTRA }).items.some((i) => i.id.startsWith('glaze:')), false, 'none by default');
 });
 
-test("Glaze's Documents item: opt-in, drawn when on, and its click asks the worker for the Documents page", () => {
+test("Glaze's Documents item: opt-in, drawn when on, and its click opens Documents beside the bar (its own tab in Settings' preview)", async () => {
   const E = require('../lib/editor-navbar.js');
   // Off until the student turns it on, a fresh device too (its one item is Glaze settings).
   assert.deepEqual(M.clean({}).glaze, []);
@@ -92,17 +92,31 @@ test("Glaze's Documents item: opt-in, drawn when on, and its click asks the work
   const src = read('features/navbar.js');
   const names = vm.runInNewContext(`(${src.match(/names: (\{ notes: t\('Notes'\)[^}]*\})/)[1]})`, { t: (k) => `«${k}»` });
   assert.equal(names.documents, '«Documents»');
-  // Its click: the worker opens papers.html (lib/background.js 'papers'), for the student's own click only, in Settings'
-  // preview of the bar as on a school's page.
-  for (const isPreview of [false, true]) {
+  // Its click, the student's own only: Documents as a page of the site, as Settings opens (features/settingspage.js); its own
+  // tab, which the worker opens (lib/background.js 'papers'), in Settings' preview of the bar or where the page can't hold it.
+  for (const [isPreview, opens, want] of [[false, true, [['open', '', 'papers']]], [true, true, ['papers']], [false, false, [['open', '', 'papers'], 'papers']]]) {
     const sent = [];
-    const glaze = vm.runInNewContext(`${src.slice(src.indexOf('  const glaze = (what, e) => {'), src.indexOf("  // The site's own item:"))} glaze`,
-      { send: (m) => sent.push(m), isPreview, X: { need: () => new Promise(() => {}) }, arranged: () => null, goNative() {}, site: { home: () => 'home' } });
+    const ctx = { send: (m) => sent.push(m), isPreview, arranged: () => null, goNative() {}, site: { home: () => 'home' },
+      X: { need: async (file, ready) => { sent.push(['need', file]); return ready(); } },
+      GZ_SETTINGS_PAGE: { open: async (...a) => { sent.push(['open', ...a]); return opens; } } };
+    const glaze = vm.runInNewContext(`${src.slice(src.indexOf('  const glaze = (what, e) => {'), src.indexOf("  // The site's own item:"))} glaze`, ctx);
     glaze('documents', { isTrusted: false });
     glaze('documents');
+    for (let i = 0; i < 5; i++) await new Promise(setImmediate);
     assert.deepEqual(sent, [], 'a mod\'s nav.go or a scripted click opens nothing');
     glaze('documents', { isTrusted: true });
-    assert.deepEqual(sent, ['papers']);
+    for (let i = 0; i < 5; i++) await new Promise(setImmediate);
+    assert.deepEqual(JSON.parse(JSON.stringify(sent.filter((x) => x[0] !== 'need'))), want, JSON.stringify({ isPreview, opens }));
+    if (!isPreview) assert.deepEqual(JSON.parse(JSON.stringify(sent[0])), ['need', 'features/settingspage.js']);
+  }
+  // Picking it while Settings or Documents is open doesn't leave first: it takes Settings' place, or stays.
+  assert.match(src, /!\['glaze:settings', 'glaze:documents'\]\.includes\(target\.dataset\.id\) && !\['customize',[^\n]*GZ_SETTINGS_PAGE\?\.close\(\)/);
+  // Open, it is where you are: its item is marked, the site's are not.
+  const marking = src.slice(src.indexOf('    const glazePage = '), src.indexOf('    // Glaze\'s widgets load with the first one turned on'));
+  for (const [showing, active] of [['papers', 'glaze:documents'], ['settings', 'glaze:settings'], ['', null]]) {
+    const items = [{ id: 'glaze:settings' }, { id: 'glaze:documents' }, { id: 'course' }];
+    vm.runInNewContext(`${marking.replace(/const native = [\s\S]*?(?=    if \(glazePage\))/, '')}`, { globalThis: { GZ_SETTINGS_PAGE: { showing: () => showing } }, model: { items } });
+    assert.deepEqual(items.filter((i) => i.active).map((i) => i.id), active ? [active] : [], showing);
   }
 });
 

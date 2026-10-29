@@ -207,6 +207,7 @@
       "resources": [
         "sharing/quick.html",
         "options.html",
+        "papers.html",
         "preview.html",
         "features/allow.html"
       ],

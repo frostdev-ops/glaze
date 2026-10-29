@@ -115,16 +115,20 @@ const gradescopeFor = async (gid, s) => {
   const to = GZ_GRADESCOPE.clean(gradescope).map[gid]?.to;
   return (site && to?.startsWith(`canvas:${site}/`)) || (ultra && to?.startsWith(`ultra:${ultra}/`)) ? to : null;
 };
-// Frames the worker trusts, by what for. Course tabs and the Settings page of an LMS tab are frames, so a plain "top frame"
+// Frames the worker trusts, by what for. Course tabs and Glaze's pages in an LMS tab are frames, so a plain "top frame"
 // check refuses them:
 // - 'settings': Settings in a tab of its own (the top frame), or the Settings frame of an LMS tab that claimed its one-use
 //   ticket (glaze:settings-claim). Only the writes that hold no keys or grants ask: Sharing, Mods and Backup are gated in that
 //   frame, and the worker keeps them to the editor's own tab.
+// - 'papers': Documents (papers.html) in a tab of its own, or the Documents frame of an LMS tab whose document claimed its
+//   one-use pass (glaze:papers). A document opened there loads in that frame as its next document, with a pass of its own.
 // - 'download': a course page's top frame, or a course tab's frame of a page on its own site (lib/download.js).
 // A claimed frame is remembered by its tab, frame and document in session storage as well (this worker sleeps while Settings
 // stays open), until the tab closes. Without a document id (some browsers), the frame in that tab is what is known.
-const settingsFrames = new Map(); // tab id -> { frameId, documentId? }
-const settingsFrameKey = (tab) => `settingsFrame:${tab}`;
+const FRAMED = { settings: new Map(), papers: new Map() }; // what for -> tab id -> { frameId, documentId? }
+const FRAMED_PAGE = { settings: 'options.html', papers: 'papers.html' };
+const frameKey = (what, tab) => `${what}Frame:${tab}`;
+const settingsFrameKey = (tab) => frameKey('settings', tab);
 const closedSettingsTabs = new Set(); // only needed while the initial session read is outstanding
 let settingsRestoreDone = !chrome.storage?.session;
 const settingsFramesLoaded = settingsRestoreDone ? Promise.resolve() : new Promise((resolve) => {
@@ -132,34 +136,40 @@ const settingsFramesLoaded = settingsRestoreDone ? Promise.resolve() : new Promi
   const timer = setTimeout(finish, 1500); // an unavailable session store cannot stall Settings indefinitely
   Promise.resolve().then(() => chrome.storage.session?.get(null)).then((all) => {
     if (settingsRestoreDone) return;
-    for (const [k, f] of Object.entries(all || {})) if (/^settingsFrame:\d+$/.test(k) && !closedSettingsTabs.has(+k.slice(14))
-      && !settingsFrames.has(+k.slice(14)) && Number.isInteger(f?.frameId) && f.frameId > 0
-      && (f.documentId === undefined || typeof f.documentId === 'string')) settingsFrames.set(+k.slice(14), f);
+    for (const [k, f] of Object.entries(all || {})) {
+      const [, what, tab] = /^(settings|papers)Frame:(\d+)$/.exec(k) || [];
+      if (what && !closedSettingsTabs.has(+tab) && !FRAMED[what].has(+tab) && Number.isInteger(f?.frameId) && f.frameId > 0
+        && (f.documentId === undefined || typeof f.documentId === 'string')
+        && (f.host === undefined || (Number.isInteger(f.host?.frameId) && (f.host.documentId === undefined || typeof f.host.documentId === 'string')))) FRAMED[what].set(+tab, f);
+    }
     finish();
   }, finish);
 });
-const claimSettingsFrame = async (s) => {
+// host: the page that asked for the pass ({ frameId, documentId? }), which Documents' frame is judged by for AI (aiWriter).
+const claimFrame = async (s, what = 'settings', host = null) => {
   if (!Number.isInteger(s.frameId) || s.frameId <= 0 || !Number.isInteger(s.tab?.id)
     || (s.origin !== undefined && !ownOrigin(s.origin))) throw Error('sender');
-  const f = { frameId: s.frameId, ...(s.documentId && { documentId: s.documentId }), pending: true };
-  settingsFrames.set(s.tab.id, f);
+  const frames = FRAMED[what], key = frameKey(what, s.tab.id);
+  const f = { frameId: s.frameId, ...(s.documentId && { documentId: s.documentId }), ...(host && { host }), pending: true };
+  frames.set(s.tab.id, f);
   try {
     const { pending, ...saved } = f;
-    await chrome.storage.session?.set({ [settingsFrameKey(s.tab.id)]: saved });
-    if (settingsFrames.get(s.tab.id) !== f) {
-      if (!settingsFrames.has(s.tab.id)) await chrome.storage.session?.remove(settingsFrameKey(s.tab.id));
+    await chrome.storage.session?.set({ [key]: saved });
+    if (frames.get(s.tab.id) !== f) {
+      if (!frames.has(s.tab.id)) await chrome.storage.session?.remove(key);
       throw Error('closed');
     }
     delete f.pending;
-  } catch (e) { if (settingsFrames.get(s.tab.id) === f) settingsFrames.delete(s.tab.id); throw e; }
+  } catch (e) { if (frames.get(s.tab.id) === f) frames.delete(s.tab.id); throw e; }
 };
 const trustedFrame = (s, purpose) => {
   if (purpose === 'download') return GZ_DOWNLOAD.sender(s, chrome.runtime.id);
-  if (purpose !== 'settings') return false;
+  if (!Object.hasOwn(FRAMED, purpose)) return false;
   if (s.frameId === 0) return true;
-  if (!Number.isInteger(s.frameId) || !Number.isInteger(s.tab?.id) || !fromEditor(s)) return false;
+  if (!Number.isInteger(s.frameId) || !Number.isInteger(s.tab?.id) || s.id !== chrome.runtime.id || typeof s.url !== 'string'
+    || s.url.split(/[?#]/)[0] !== chrome.runtime.getURL(FRAMED_PAGE[purpose])) return false;
   if (s.origin !== undefined && !ownOrigin(s.origin)) return false; // when the browser says, it must be ours
-  const f = settingsFrames.get(s.tab.id);
+  const f = FRAMED[purpose].get(s.tab.id);
   return !!f && !f.pending && f.frameId === s.frameId && f.documentId === s.documentId;
 };
 const BROKER = {
@@ -960,7 +970,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     const t = typeof m.ticket === 'string' && settingsTickets.get(m.ticket);
     if (!t || !fromEditor(s) || s.frameId === 0 || s.tab?.id !== t.tab) return { ok: false };
     settingsTickets.delete(m.ticket);
-    await claimSettingsFrame(s); // this frame, as this document, may now save what trustedFrame(…, 'settings') lets Settings save
+    await claimFrame(s); // this frame, as this document, may now save what trustedFrame(…, 'settings') lets Settings save
     return { ok: true };
   })().then(reply, () => reply({ ok: false }));
   return true;
@@ -1041,8 +1051,8 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 chrome.tabs?.onRemoved?.addListener((id) => {
-  chrome.storage.session?.remove([`landed:${id}`, settingsFrameKey(id)]).catch(() => {});
-  settingsFrames.delete(id);
+  chrome.storage.session?.remove([`landed:${id}`, ...Object.keys(FRAMED).map((what) => frameKey(what, id))]).catch(() => {});
+  for (const frames of Object.values(FRAMED)) frames.delete(id);
   if (!settingsRestoreDone) closedSettingsTabs.add(id);
   for (const [k, t] of quickTickets) if (t.tab === id) quickTickets.delete(k); // a closed tab's Notes share panel tickets
   for (const p of quickPanels) if (p.tab === id) p.revoke();
@@ -1840,7 +1850,10 @@ chrome.runtime.onMessage.addListener((m, s) => {
 // on; its job also puts lib/writer-main.js in that page's own world, where Ultra's Quill can be reached (scripting
 // world MAIN: Chrome 95, Firefox 128, Safari 15.4), into the document that asked. The writer's claim also tells the AI
 // broker which tab and document the frame works for (aiFrameHost, where the AI harness defines it).
-const PASS_PAGES = { 'glaze:reader': '/reader.html', 'glaze:writer': '/writer.html' };
+// Documents as a page of an LMS tab (features/settingspage.js, 'glaze:papers'): a pass for each document its frame loads,
+// asked by the top frame of a page Glaze runs on; the frame's claim makes it, as that document, the tab's Documents frame
+// (trustedFrame 'papers'), the one that may write papers the way the Documents tab does.
+const PASS_PAGES = { 'glaze:reader': '/reader.html', 'glaze:writer': '/writer.html', 'glaze:papers': '/papers.html' };
 const readerPasses = new Map(); // pass → { type, tab, at, from: the job's sender { tab, frameId, documentId } }
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (!Object.hasOwn(PASS_PAGES, m?.type ?? '')) return;
@@ -1853,7 +1866,8 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (!pass || s.id !== chrome.runtime.id || !s.tab || !from) { reply({ ok: false }); return; }
   if (m.op === 'job' && /^https?:$/.test(from.protocol) && readerPasses.size < 50) {
     const writer = m.type === 'glaze:writer';
-    (writer ? fromUltra(s).then((o) => o && chrome.scripting.executeScript({ target: s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] }, files: ['lib/writer-main.js'], world: 'MAIN', injectImmediately: true }).then(() => true)) : Promise.resolve(true))
+    (writer ? fromUltra(s).then((o) => o && chrome.scripting.executeScript({ target: s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] }, files: ['lib/writer-main.js'], world: 'MAIN', injectImmediately: true }).then(() => true))
+      : m.type === 'glaze:papers' ? (s.frameId === 0 ? lmsPage(s) : Promise.resolve(null)).then(Boolean) : Promise.resolve(true))
       .then((ok) => { if (ok) readerPasses.set(pass, { type: m.type, tab: s.tab.id, at: now, from: { tab: s.tab, frameId: s.frameId, documentId: s.documentId } }); reply({ ok: !!ok }); }, () => reply({ ok: false }));
     return true;
   }
@@ -1862,6 +1876,15 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     p = readerPasses.get(pass);
     ok = p?.tab === s.tab.id && p.type === m.type;
     if (p?.type === m.type) readerPasses.delete(pass);
+  }
+  if (ok && m.type === 'glaze:papers') {
+    // Only a frame, as Glaze's own page (its own tab needs no pass); the pass is spent either way. Like the writer's claim,
+    // it seats the frame with the AI broker, judged by the page that asked for the pass.
+    if (s.frameId > 0 && (s.origin === undefined || ownOrigin(s.origin))) {
+      const host = { frameId: p.from.frameId, ...(typeof p.from.documentId === 'string' && { documentId: p.from.documentId }) };
+      claimFrame(s, 'papers', host).then(() => (typeof aiFrameHost === 'function' ? aiFrameHost(s, p.from) : null)).then(() => reply({ ok: true }), () => reply({ ok: false }));
+    } else reply({ ok: false });
+    return true;
   }
   if (!ok || m.type !== 'glaze:writer' || typeof aiFrameHost !== 'function') { reply({ ok }); return; }
   // The editor opens either way; without the host, the frame's AI stays refused.
@@ -1872,7 +1895,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 
 // Code mods (lib/modbroker.js): a mod's API calls ('glaze:mod') and the page's own asks ('glaze:modpage'),
 // only from Glaze's content script in the top frame of an LMS page Glaze runs on and is on for, never a quiz or a tool's
-// page. Parts also go to same-site Ultra course frames. The broker checks everything else.
+// page, or from the Documents page. Parts also go to same-site Ultra course frames. The broker checks everything else.
 globalThis.addEventListener?.('install', () => importScripts('modapi.js', 'modwidget.js', 'modbroker.js'));
 const modQuiet = (p) => GZ_LX.quiet(p) || /\/(quizzes|external_tools|assessment|attempt|lti)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(p);
 const fromLms = async (s, parts = false) => {
@@ -1883,6 +1906,9 @@ const fromLms = async (s, parts = false) => {
   if ((await chrome.storage.sync.get('enabled')).enabled === false) return null;
   return (await fromCanvas(s)) || (await fromUltra(s)) || (await approved('moodle', u) ? u.origin : null);
 };
+// The Documents page (papers.html), a tab of Glaze's own, with Glaze on: its mods have the documents calls and no LMS data.
+const fromDocuments = async (s) => s.id === chrome.runtime.id && !!s.tab && s.frameId === 0 && typeof s.url === 'string'
+  && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('papers.html') && (await chrome.storage.sync.get('enabled')).enabled !== false;
 // Whose plans and grades a mod or widget on that page reads (lib/modbroker.js account): the account signed in on the
 // document that asked, as Glaze's own content script there reads it (GZ_CTX.account, as the sidebar's record check does), never what
 // a message says. That document by its documentId, else the frame, which must still hold the document the call names
@@ -1934,9 +1960,9 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
       // The editor's preview shows installed mods' parts and their background files as a page would (same checks, no code).
       const preview = m.type === 'glaze:modpage' && ['parts', 'media'].includes(m.op) && fromPreview(s);
       let who;
-      const env = { site: preview ? 'editor' : await fromLms(s, m.type === 'glaze:modpage' && m.op === 'parts'), signal: control?.signal, local, sync: brokerArea('sync'), fetch: (u, i) => fetch(u, control ? { ...i, signal: control.signal } : i), reach: reachable, queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
+      const env = { site: preview ? 'editor' : await fromDocuments(s) ? 'documents' : await fromLms(s, m.type === 'glaze:modpage' && m.op === 'parts'), signal: control?.signal, local, sync: brokerArea('sync'), fetch: (u, i) => fetch(u, control ? { ...i, signal: control.signal } : i), reach: reachable, queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
         keys: async () => (chrome.storage.local.getKeys ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null))),
-        account: () => (who ||= env.site && !preview ? modAccount(s, env.site, m.doc) : Promise.resolve(null)),
+        account: () => (who ||= env.site && !preview && env.site !== 'documents' ? modAccount(s, env.site, m.doc) : Promise.resolve(null)),
         record: (id) => modRead(`mod:${id}`), blocklist: () => modRead('modsBlocklist') };
       return await (m.type === 'glaze:mod' ? GZ_MODBROKER.handle(m, env) : GZ_MODBROKER.page(m, env));
     } finally {
@@ -1958,23 +1984,35 @@ globalThis.addEventListener?.('install', () => importScripts('writer-styles.js',
 let paperStore = null;
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:writerPapers') return;
+  const page = s.url?.split(/[?#]/)[0];
+  const papers = page === chrome.runtime.getURL('papers.html');
+  // The Documents frame of a school's page writes once its document claimed its pass (trustedFrame 'papers'), which a
+  // woken worker reads back first.
+  const framed = papers && s.frameId !== 0;
   if (s.id !== chrome.runtime.id || (s.origin !== undefined && !ownOrigin(s.origin))
-    || !(['writer.html', 'papers.html'].some((p) => s.url?.split(/[?#]/)[0] === chrome.runtime.getURL(p))
+    || !(page === chrome.runtime.getURL('writer.html') || (papers && (framed || !!s.tab))
       // Settings → Writer's Clear papers, from Settings' own tab only (never a frame a school's page holds).
-      || (m.op === 'remove' && s.url?.split(/[?#]/)[0] === chrome.runtime.getURL('options.html') && s.frameId === 0 && !!s.tab))
-    // The Documents home's delete-Undo puts a paper back whole, from its own tab only (never a frame inside a school's page).
-    || (m.op === 'merge' && (s.url?.split(/[?#]/)[0] !== chrome.runtime.getURL('papers.html') || s.frameId !== 0 || !s.tab))
-    || !['save', 'restore', 'remove', 'savePreset', 'removePreset', 'merge'].includes(m.op) || !Array.isArray(m.args)) { reply({ ok: false, error: 'sender' }); return; }
+      || (m.op === 'remove' && page === chrome.runtime.getURL('options.html') && s.frameId === 0 && !!s.tab))
+    // The Documents home's delete-Undo puts a paper back whole, from its own tab or its claimed frame (never another frame).
+    || (m.op === 'merge' && !papers)
+    || !['save', 'restore', 'remove', 'savePreset', 'removePreset', 'merge', 'trash', 'untrash', 'purge'].includes(m.op) || !Array.isArray(m.args)) { reply({ ok: false, error: 'sender' }); return; }
+  (framed ? settingsFramesLoaded.then(() => trustedFrame(s, 'papers')) : Promise.resolve(true)).then((ok) => (ok ? queuePapers(m) : { ok: false, error: 'sender' }))
+    .then(reply, (e) => reply({ ok: false, error: e.message }));
+  return true;
+});
+const openPapers = () => { if (!paperStore) { importScripts('writer-styles.js', 'writer-papers.js'); paperStore = GZ_WRITER_PAPERS.open(chrome.storage.local); } return paperStore; };
+// What the Documents page's Trash has held past 30 days goes as the browser starts, as it does when the page opens.
+chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => openPapers().purge()).catch(() => {}); });
+const queuePapers = (m) => {
   const task = (brokerTurn ||= GZ_CARDS.queue())(async () => {
-    if (!paperStore) { importScripts('writer-styles.js', 'writer-papers.js'); paperStore = GZ_WRITER_PAPERS.open(chrome.storage.local); }
+    openPapers();
     // One key's paper and versions, nothing else.
     if (m.op === 'merge' && !globalThis.GZ_WRITER_SCHEMA) importScripts('pm.js', 'writer-schema.js');
     if (m.op === 'merge' && (m.args.length !== 1 || !GZ_WRITER_PAPERS.one(m.args[0]))) return { ok: false, error: 'bad' };
     return { ok: true, value: await paperStore[m.op](...m.args) };
   });
-  task.then(reply, (e) => reply({ ok: false, error: e.message }));
-  return true;
-});
+  return task;
+};
 // Writer submit permits live in the worker so two tabs and an MV3 restart share the same fence: one per assignment, since
 // Ultra can number an attempt at /attempt/create (/attempt/_N_1) while a run is under way. A run (claim) belongs to one
 // page. A run that attached nothing releases it; one that may have uploaded keeps it until the student opens Blackboard's
@@ -2099,12 +2137,13 @@ const aiEnv = () => ({
 // content script in that document says ('glaze:attempt-kind' { kind: 'assignment' | 'test' | 'unknown' }), with
 // LMS and live ancestry checks but on this route; kept for that document's own page, including a course-tab frame. Unknown is a test, and
 // takes back an earlier 'assignment' once the page shows it can't be one.
-// The writer frame is judged by the frame it sits in: the writer's claim of its pass (glaze:writer) names it with
-// aiFrameHost(writer frame's sender, the sender that asked for the pass); a writer frame no claim named may not ask. Both
+// The writer frame is judged by the frame it sits in: the writer's claim of its pass (glaze:writer, and Documents' frame's,
+// glaze:papers) names it with aiFrameHost(writer frame's sender, the sender that asked for the pass); a writer frame no claim
+// named may not ask. Both
 // are kept in storage.session too, so a stopped worker remembers them.
 const AI_ATTEMPT = /^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)\/?$/;
 const AI_WRITER = ['completion', 'writing'];
-const AI_FRAMES = ['/writer.html'];
+const AI_FRAMES = ['/writer.html', '/papers.html']; // Writer's frame, and Documents as a page of an LMS tab (glaze:papers)
 const aiAttempts = new Map(); // `${tab id}|${document id}` → { page, kind, frameId, documentId }
 const aiRevisions = new Map(); // tab navigation epochs also prevent stale session hydration and late reports
 const aiReports = new Map(); // per-document report order, independent of navigation and session hydration
@@ -2211,9 +2250,19 @@ const aiLmsFrame = async (tab, live, frameId) => {
 // known to be an assignment, asked for the writer's features). The frame it sits in, every frame above it and the tab's
 // page: one LMS site Glaze runs on, never a quiet route, but the tab's own attempt page, where only the writer's features
 // may ask, once that host document is said to be an assignment. A cancel only stops.
+// Documents' frame keeps the page its claim was for (FRAMED.papers): the tab's loading, which that page's own history entry
+// for a document opened in place brings (pushState, just after the claim), forgets every seat in the tab, so the claimed
+// document is seated again from its claim, then judged live like any.
+const aiDocumentsHost = async (s) => {
+  await settingsFramesLoaded;
+  const f = FRAMED.papers.get(s.tab.id);
+  if (!f?.host || !trustedFrame(s, 'papers')) return null;
+  await aiFrameHost(s, { tab: s.tab, frameId: f.host.frameId, documentId: f.host.documentId });
+  return aiHosts.get(`${s.tab.id}|${s.frameId}`) || null;
+};
 const aiWriter = async (s, { op, feature } = {}) => {
   await aiKept();
-  const host = aiHosts.get(`${s.tab.id}|${s.frameId}`);
+  const host = aiHosts.get(`${s.tab.id}|${s.frameId}`) || await aiDocumentsHost(s);
   if (!host || (host.writerDocumentId && host.writerDocumentId !== s.documentId)) return false;
   const target = host.documentId ? { tabId: s.tab.id, documentIds: [host.documentId] } : { tabId: s.tab.id, frameIds: [host.frameId] };
   const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target, func: aiFramePage })]);

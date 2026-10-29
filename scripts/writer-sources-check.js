@@ -27,7 +27,10 @@ const check = (condition, name) => { assert.ok(condition, name); checks++; conso
     await context.route('**/*', (route) => { const url = route.request().url(); if (url.startsWith('chrome-extension:')) return route.continue(); network.push(url); return route.abort(); });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     await worker.evaluate(() => chrome.storage.local.clear());
-    const page = async (key, enabled = false) => {
+    const page = async (name, enabled = false) => {
+      const key = `doc:${require('node:crypto').randomUUID()}`;
+      await worker.evaluate(async ({ key, name }) => chrome.storage.local.set({ [`writerPaper:${key}`]: { key, kind: 'paper', title: name, format: 'mla9', doc: { type: 'doc', content: [{ type: 'paragraph' }] }, updated: Date.now() } }), { key, name });
+      assert.ok(require('../lib/writer-papers.js').valid(key), 'the Sources fixture opens a valid stored document key');
       const p = await context.newPage(); p.on('pageerror', (e) => errors.push(e.message));
       await p.addInitScript(({ enabled }) => {
         const listeners = new Set(), events = {}; let frame;

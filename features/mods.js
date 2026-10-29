@@ -1,8 +1,10 @@
 // Code mods on the page (Chrome, whose manifest has the sandbox). content.js loads this only when
-// the worker names an installed mod that is on, in the top frame of a page Glaze is on. It frames mods/host.html inside a
-// closed shadow root, hands it one port with a one-use nonce, starts the mods' Workers there and passes their calls on to
-// the worker ('glaze:mod'), which checks every one (lib/modbroker.js). A frame UI (a slot with an HTML file of its own) gets
-// a host of its own in its slot, the same way, while the slot is on the page. It owns the watchdog, with heartbeats while
+// the worker names an installed mod that is on, in the top frame of a page Glaze is on; the Documents page (papers.js)
+// loads it with a GZ_CTX of its own (site 'documents'), which applies the documents calls (GZ_CTX.documents). It frames
+// mods/host.html inside a closed shadow root, hands it one port with a one-use nonce, starts the mods' Workers there and
+// passes their calls on to the worker ('glaze:mod'), which checks every one (lib/modbroker.js). A frame UI (a slot with an
+// HTML file of its own) gets a host of its own in its slot, the same way, while the slot is on the page. It owns the
+// watchdog, with heartbeats while
 // the page is shown: a Worker that stops answering is ended alone; a host that stops answering froze on a frame UI (they
 // share a thread), so it is removed and the other mods start again without that mod. A mod stopped so is kept for the
 // editor (storage.local modStops). Never on a quiz or a tool's page; everything stops when Glaze is reloaded or turned off.
@@ -114,7 +116,8 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     if (!alive()) return stop();
     r.waiting.set(d.mod, n + 1);
     chrome.runtime.sendMessage({ type: 'glaze:mod', mod: d.mod, via: d.via, call: d.call, args: d.args, doc: globalThis.__gzDoc })
-      .then((x) => { const own = x?.ok === true && current() && !gone.has(d.mod) ? apply(d.mod, d.via, d.call, x.value) : null; reply(own || x); }, () => reply({ error: 'failed' }))
+      .then(async (x) => { const own = x?.ok === true && current() && !gone.has(d.mod) ? await apply(d.mod, d.via, d.call, x.value) : null; reply(own || x); })
+      .catch(() => reply({ error: 'failed' }))
       .finally(() => r.waiting.set(d.mod, r.waiting.get(d.mod) - 1));
   };
   const heard = (r, d) => {
@@ -220,10 +223,11 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   };
   const emitAll = (event, data, may = () => true) => { for (const m of running()) if (may(m)) emit(m.id, event, data); };
   // The data events, each only to the mods granted what it is about; they carry no data (the mod asks, and is checked).
-  const NEEDS = { courses: 'courses', todo: 'todo', grade: 'grades', complete: 'todo', submit: 'todo', 'nav.change': 'nav.read', 'nav.navigate': 'nav.read', 'nav.expand': 'nav.read', 'nav.collapse': 'nav.read', 'nav.sheet': 'nav.read' };
+  const NEEDS = { courses: 'courses', todo: 'todo', grade: 'grades', complete: 'todo', submit: 'todo', 'nav.change': 'nav.read', 'nav.navigate': 'nav.read', 'nav.expand': 'nav.read', 'nav.collapse': 'nav.read', 'nav.sheet': 'nav.read', 'documents.change': 'documents' };
   const tell = (event, data = {}) => emitAll(event, data, (m) => Array.isArray(m.events) && m.events.includes(NEEDS[event]));
   const site = () => ctx()?.site || '';
   const pageNow = () => {
+    if (site() === 'documents') return { site: 'documents', kind: 'documents', courseId: null };
     const p = location.pathname;
     const courseId = p.match(/\/ultra\/courses\/(_\d+_\d+)/)?.[1] || p.match(/^\/courses\/(\d+)/)?.[1] || (/^\/course\/view\.php$/.test(p) ? new URLSearchParams(location.search).get('id') : null) || null;
     const kind = courseId ? 'course' : /^\/ultra\/course\/?$|^\/courses\/?$|^\/my\/courses\.php$/.test(p) ? 'courses' : /^\/(ultra\/institution-page\/?|my\/?|)$/.test(p) ? 'dashboard'
@@ -357,6 +361,8 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     else if (call === 'cards.set') { o.cards = v; paintCards(); }
     else if (call === 'palette.set') o.cmds = v;
     else if (call.startsWith('nav.') && call !== 'nav.set' && call !== 'nav.layout') return navCall(id, via, call, v);
+    // The Documents page answers these itself: { ok, value } or { error }, or a promise of one.
+    else if (call.startsWith('documents.')) return ctx()?.documents?.call(id, call, v, list.find((m) => m.id === id)?.name || '') ?? { error: 'call' };
     else if (call === 'nav.set' || call === 'nav.layout' || call === 'rules.set' || call === 'look.override') {
       o[{ 'nav.set': 'nav', 'nav.layout': 'layout', 'rules.set': 'rules', 'look.override': 'look' }[call]] = Array.isArray(v) && !v.length ? null : v;
       reparts();
@@ -380,6 +386,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     if (had?.nav || had?.layout || had?.rules || had?.look) reparts();
     navGestures.delete(id);
     if (navOwn.delete(id)) bar()?.clear(id);
+    ctx()?.documents?.forget(id);
   };
   const resetAll = () => { for (const m of list) forget(m.id); };
 
@@ -715,7 +722,9 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     if (!wired) wire();
     if (!run && Array.isArray(mods)) { list = mods; begin(); } else refresh();
   };
-  return { start, stop, verdict, parts, arranger, navStands: () => navTaken?.mode === 'bar', navModel, hasBg: () => running().some((m) => overlays.get(m.id)?.look?.bg), replaces, tiles, rail, cmds, pass, attach,
+  // The Documents page's events: a click on one of a mod's own items (to that mod), and the list changing (to those granted documents).
+  const documents = { action: (id, data) => emit(id, 'documents.action', data), change: () => tell('documents.change') };
+  return { start, stop, verdict, documents, order: () => running().map((m) => m.id), parts, arranger, navStands: () => navTaken?.mode === 'bar', navModel, hasBg: () => running().some((m) => overlays.get(m.id)?.look?.bg), replaces, tiles, rail, cmds, pass, attach,
     stats: () => ({ ...stats, running: !!run, runtime, gone: Object.fromEntries(gone), slots: [...mounts.keys()], slotHosts: run ? run.slots.size : 0, nav: navTaken?.k || '', navMode: navTaken?.mode || '', navItems: Object.fromEntries([...navOwn].map(([k, v]) => [k, [...v.keys()]])), bg: bgTaken?.k || '' }) };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_MODS; else GZ_MODS;

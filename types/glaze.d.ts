@@ -56,6 +56,8 @@ interface Glaze {
   look: GlazeLook;
   /** Send data to this mod's other Worker and frames on the page (not back to the sender). At most 64 KiB. */
   broadcast(data?: unknown): Promise<unknown>;
+  /** The student's documents, on the Documents page only. Needs `documents` (and `documents.read` for their text); Worker only. */
+  documents: GlazeDocuments;
 }
 
 // ---- storage, theme, data ------------------------------------------------------------------------------------------
@@ -173,6 +175,10 @@ interface GlazeEvents {
   'nav.sheet': { open: boolean };
   /** The student clicked one of this mod's own items added with `action: true` (`nav.items`). `id` is the mod's id for it. */
   'nav.action': { id: string };
+  /** On the Documents page: the student clicked one of this mod's own items; `doc` for an item in a card's menu (`documents`). */
+  'documents.action': { slot: GlazeDocumentSlot; id: string; doc?: GlazeDocument };
+  /** On the Documents page: the documents changed (`documents`). Ask `glaze.documents.list()`. */
+  'documents.change': Record<string, never>;
   /** Worker only: the canvas of a slot has this size, in device pixels. */
   'canvas.size': { slot: string; w: number; h: number; dpr: number };
   /** Worker only: nothing of the slot's canvases shows (page hidden, motion off, or no canvas on the page); animation frames are on hold. */
@@ -180,8 +186,8 @@ interface GlazeEvents {
 }
 
 interface GlazePage {
-  site: 'ultra' | 'canvas' | 'moodle' | '';
-  kind: 'course' | 'courses' | 'dashboard' | 'grades' | 'calendar' | 'other';
+  site: 'ultra' | 'canvas' | 'moodle' | 'documents' | '';
+  kind: 'course' | 'courses' | 'dashboard' | 'grades' | 'calendar' | 'documents' | 'other';
   courseId: string | null;
 }
 
@@ -534,4 +540,64 @@ interface GlazeLookParts {
 interface GlazeLook {
   /** A layer over the worn Look while the mod runs, never saved. `null` takes it away. Media src/type must match mod.json. */
   override(parts: GlazeLookParts | null): Promise<unknown>;
+}
+
+// ---- the Documents page ----------------------------------------------------------------------------------------------
+
+type GlazeDocumentSlot = 'documents.toolbar' | 'documents.card';
+
+/** A document's public summary (`documents`): never its text. */
+interface GlazeDocument {
+  /** Opaque handle for this mod on this page; expires on page load or mod restart. Never an internal storage key. */
+  key: string;
+  /** Its kind of document: `paper`. */
+  kind: string;
+  /** As the page shows it. */
+  title: string;
+  /** `plain`, `mla9`, `apa7` or `chicago17`. */
+  format: string;
+  words: number;
+  /** Last edited, ms since 1970. */
+  updated: number;
+  /** The course's name, `''` for none. */
+  course: string;
+}
+
+/** An item of this mod's own on the Documents page: a button in the toolbar or an entry in each card's ⋯ menu. */
+interface GlazeDocumentItem {
+  /** `a-z`, `0-9`, `-`, up to 32, starting with a letter. */
+  id: string;
+  /** One line, up to 40. */
+  label: string;
+}
+
+/** The page's --gd-* hooks, each in its range. */
+interface GlazeDocumentStyle {
+  /** Corner radius of the band, toolbar and cards, 0 to 32 px. */
+  radius?: number;
+  /** Blur of the glass, 0 to 40 px. */
+  glass?: number;
+  /** The thumbnails' scale, 0.6 to 1.6. */
+  thumb?: number;
+  /** The grid's narrowest column, 160 to 400 px. */
+  column?: number;
+}
+
+interface GlazeDocuments {
+  /** Every document listed on the page, newest first: public fields only. `documents`. */
+  list(): Promise<GlazeDocument[]>;
+  /** Opens a listed document in this tab, within a second of a click on one of this mod's items. `documents`. */
+  open(key: string): Promise<{ key: string }>;
+  /** Starts a new document in a format (Blank by default), within a second of a click on one of this mod's items. `documents`. */
+  create(options?: { format?: 'plain' | 'mla9' | 'apa7' | 'chicago17' }): Promise<{ format: string }>;
+  /** A listed document's text, a line a paragraph. `documents.read`. */
+  read(key: string): Promise<{ key: string; title: string; text: string }>;
+  /** A listed document as the file its kind saves (a .docx). `documents.read`. */
+  export(key: string): Promise<{ name: string; mime: string; bytes: Uint8Array }>;
+  /** Adds (or replaces) one of this mod's items in a slot; at most 4 a slot. `documents`. */
+  add(slot: GlazeDocumentSlot, item: GlazeDocumentItem): Promise<{ slot: GlazeDocumentSlot; id: string; label: string }>;
+  /** Removes one of this mod's items. `documents`. */
+  remove(slot: GlazeDocumentSlot, id: string): Promise<{ slot: GlazeDocumentSlot; id: string }>;
+  /** Sets the page's --gd-* hooks while the mod runs; `null` withdraws them. The first mod in the student's order to set one wins it. `documents`. */
+  style(vars: GlazeDocumentStyle | null): Promise<GlazeDocumentStyle | null>;
 }

@@ -271,3 +271,11 @@ test('Settings groups standalone and recovery documents so every counted paper i
   const groups = WE.byCourse(keys.map((key) => ({ key })));
   assert.deepEqual(groups, [{ id: 'documents', name: 'Documents', keys }]);
 });
+
+test('Settings lists and counts no document in Trash, and Clear all clears those too', () => {
+  const WE = require('../lib/editor-writer.js'), PA = require('../lib/writer-papers.js');
+  const doc = PA.newKey(), binned = PA.newKey(), paper = 'bb.school.test|_9_1|_101_1|_7_1', gone = 'bb.school.test|_9_1|_101_1|_8_1';
+  const rows = [{ key: doc }, { key: binned, trashed: 1 }, { key: paper, course: 'ENG 101' }, { key: gone, course: 'ENG 101', trashed: 2 }];
+  assert.deepEqual(WE.byCourse(rows).map((c) => [c.name, c.keys]), [['Documents', [doc]], ['ENG 101', [paper]]]);
+  assert.deepEqual(WE.allKeys(rows).sort(), [doc, binned, paper, gone].sort());
+});
