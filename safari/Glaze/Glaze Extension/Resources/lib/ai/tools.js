@@ -8,7 +8,7 @@
 // parameters before run sees them. Glaze's own tools in H1 are read or confirm only; a write tool needs its own review.
 // What the MCP view reads (lib/mcp/*.js), each optional: title (≤ 120), group (courses, grades, writer, assignments, or a
 // mod's mod:<id>), owner ('glaze' when absent, or mod:<id>), scope ('account' | 'document'), needs ('tab' | 'writer': what
-// must be open), output (a schema of an object, as parameters), hints ({ idempotent?, openWorld? }: booleans). A mod's tool
+// must be open), output (a schema accepted by lib/ai/schema.js), hints ({ idempotent?, openWorld? }: booleans). A mod's tool
 // is named mod_<id>_<local> (local [a-z][a-z0-9_]{0,23}) in the group mod:<id>; Glaze's names never start with mod_.
 // Classic script for the worker; module.exports for node.
 var GZ_AI_TOOLS = globalThis.GZ_AI_TOOLS || (() => {
@@ -33,7 +33,7 @@ var GZ_AI_TOOLS = globalThis.GZ_AI_TOOLS || (() => {
     const owner = d.owner === undefined ? 'glaze' : d.owner;
     return typeof owner !== 'string' || !(owner === 'glaze' || MOD.test(owner)) ? 'owner' : !named(d.name, owner) ? 'name' : !grouped(d.group, owner) ? 'group'
       : d.title !== undefined && (typeof d.title !== 'string' || !d.title || d.title.length > LIMIT.title) ? 'title'
-        : !one(d.scope, SCOPES) ? 'scope' : !one(d.needs, NEEDS) ? 'needs' : d.output !== undefined && S().clean(d.output)?.type !== 'object' ? 'output'
+        : !one(d.scope, SCOPES) ? 'scope' : !one(d.needs, NEEDS) ? 'needs' : d.output !== undefined && !S().clean(d.output) ? 'output'
           : d.hints !== undefined && !(R().isObj(d.hints) && Object.entries(d.hints).every(([k, v]) => HINTS.includes(k) && typeof v === 'boolean')) ? 'hints' : '';
   };
   // → the tool, frozen; throws a TypeError that says what is wrong with it.
