@@ -603,11 +603,12 @@ const HARNESS = `(() => {
     for (const [w, hgt] of [[1280, 800], [640, 900]]) { await p.setViewportSize({ width: w, height: hgt }); await el.evaluate((f) => f.scrollIntoView({ block: 'center' })); saved[`compact${w}`] = await cshot(p, `compact-${w}.png`); }
     await p.setViewportSize({ width: 1440, height: 900 });
     // A long paper, the caret in its middle: Full writer and back keep the document, the caret, and its line on the page.
-    await fr.evaluate((json) => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON(json).content)); }, FX.papers.mla9());
+    await fr.evaluate((json) => { const v = GZ_WRITER_PAPER.current().editor.view; v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, GZ_WRITER_SCHEMA.paper.nodeFromJSON(json).content)); }, { ...FX.papers.mla9(), content: [...FX.papers.mla9().content, { type: 'paragraph', content: [{ type: 'image', attrs: { src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHtQAAAAASUVORK5CYII=', alt: 'Saved picture', width: 20, height: 20 } }] }] });
     await until(async () => /Works Cited/.test(await p.evaluate(() => __text())), 'the long paper in Ultra\'s box');
     await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let at = 0; v.state.doc.descendants((n, pos) => { if (!at && n.isText && n.text.includes('(Morrison 35)')) at = pos + n.text.indexOf('(Morrison 35)'); }); v.focus(); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, at)).scrollIntoView()); });
     await settle(fr);
     const ultraBefore = await p.evaluate(() => __text()), docBefore = await paperText(fr);
+    const jsonBefore = await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON());
     const c0 = await caretAt(el, fr);
     await fr.click('.gw-bar .gp-full');
     await until(() => fr.evaluate(() => document.querySelectorAll('.gp-sheet').length > 1 && document.querySelector('.gp-flow').style.visibility === ''), 'pages drawn');
@@ -621,6 +622,15 @@ const HARNESS = `(() => {
     check(c1.y > 0 && c1.y < vh, `the caret's line in sight (${Math.round(c0.y)} → ${Math.round(c1.y)} of ${vh})`);
     await until(async () => (await fullSet()) === true, 'writer.full saved');
     check(true, 'the switch saves writer.full');
+    await fr.click('.gp-top .gp-full');
+    await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'round-trip compact');
+    check(JSON.stringify(await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON())) === JSON.stringify(jsonBefore), 'compact → full → compact preserves the complete document, notes, page breaks and pictures');
+    await p.evaluate(() => { const q = document.querySelector('.ql-container[data-gz-writer-id]').__quill; q.root.innerHTML = '<p><span>' + q.root.textContent + '</span></p>'; });
+    await pause(150);
+    check(JSON.stringify(await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.toJSON())) === JSON.stringify(jsonBefore), 'Ultra reformats the projection without replacing the paper');
+    await fr.click('.gw-bar .gp-full');
+    await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'full'), 'full again');
+    await settle(fr);
     await p.keyboard.type('Pages only. ', { delay: 2 });
     await pause(600);
     check((await p.evaluate(() => __text())) === ultraBefore, 'typed in the pages, nothing goes into Ultra\'s box');
