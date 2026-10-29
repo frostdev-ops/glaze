@@ -1044,6 +1044,23 @@ const PROBE = ({ lang }) => {
       await landed(mo, 'home');
       await until(() => mo.evaluate(() => document.documentElement.getAttribute('data-gz-motion') === 'expressive' && !document.documentElement.hasAttribute('data-gz-no-trans')), 'motion: Expressive worn');
 
+      // The full list is scanned once on each side of a filter; only nearby cards get FLIP animations, never per-frame reads.
+      const budget = await mo.evaluate(() => {
+        const docs = document.getElementById('gd-docs'), q = document.getElementById('gd-q');
+        const original = Element.prototype.getBoundingClientRect;
+        let reads = 0;
+        Element.prototype.getBoundingClientRect = function () { if (this.parentElement === docs) reads++; return original.call(this); };
+        const n = docs.children.length, start = performance.now();
+        try { q.value = 'notes'; q.dispatchEvent(new Event('input')); }
+        finally { Element.prototype.getBoundingClientRect = original; }
+        return { n, hits: docs.children.length, ms: performance.now() - start, reads };
+      });
+      console.log(`motion filter: ${budget.n} cards to ${budget.hits}; ${budget.ms.toFixed(1)} ms; ${budget.reads} card box reads`);
+      check(budget.n >= 180 && budget.hits > 0 && budget.hits < budget.n && budget.ms < 150 && budget.reads <= budget.n + budget.hits + 100,
+        `motion: filtering hundreds of cards stays bounded (${JSON.stringify(budget)})`);
+      await mo.fill('#gd-q', '');
+      await settled(mo);
+
       // Opening on Expressive, from a list sorted by title, filtered to the documents without a course, scrolled down.
       await mo.selectOption('#gd-sort', 'title');
       await mo.selectOption('#gd-course', 'none');
@@ -1259,10 +1276,13 @@ const PROBE = ({ lang }) => {
       await mo.keyboard.press('Escape');
 
       // Off, and reduced motion followed: nothing animates, and opening a document is a plain page change.
-      for (const [name, level, reduced] of [['Off', 'off', 'no-preference'], ['reduced motion', 'expressive', 'reduce']]) {
-        await wearLook(MOVE(level));
+      for (const [name, level, reduced, switches] of [['Off', 'off', 'no-preference'], ['reduced motion', 'expressive', 'reduce'],
+        ['transitions off', 'expressive', 'no-preference', { transitions: false }]]) {
+        const choice = MOVE(level);
+        if (switches) Object.assign(choice.motion, switches);
+        await wearLook(choice);
         await mo.emulateMedia({ reducedMotion: reduced });
-        await until(() => mo.evaluate(() => document.documentElement.getAttribute('data-gz-motion') === 'off'), `motion: ${name} worn`);
+        await until(() => mo.evaluate((off) => off ? document.documentElement.getAttribute('data-gz-motion') === 'off' : document.documentElement.hasAttribute('data-gz-no-trans'), !switches), `motion: ${name} worn`);
         await mo.reload();
         await landed(mo, 'home');
         t = await clock(mo);
@@ -1288,6 +1308,31 @@ const PROBE = ({ lang }) => {
         await mo.goBack();
         await landed(mo, 'home');
       }
+      await mo.emulateMedia({ reducedMotion: 'no-preference' });
+      await wearLook(MOVE('expressive'));
+      await worker.evaluate(() => chrome.storage.sync.set({ popup: { anim: 'none' } }));
+      await mo.reload(); await landed(mo, 'home'); await settled(mo);
+      t = await clock(mo);
+      const noneKey = await visibleCard(mo);
+      await mo.focus(`${card(noneKey)} .gd-title`); await mo.keyboard.press('Shift+F10');
+      await mo.keyboard.press('Escape');
+      const noneMenu = await mo.evaluate(() => !document.querySelector('.gd-menu'));
+      const noneMoves = await since(mo, t);
+      await openWithEnter(mo, noneKey);
+      log = await mo.evaluate(() => globalThis.__mo);
+      check(noneMenu && noneMoves.length === 0 && log.vt === false && log.all.length === 0,
+        `motion: Pop-up None leaves no menu animation or native transition (${noneMoves.length} animations, transition ${log.vt})`);
+      await mo.goBack(); await landed(mo, 'home');
+      await worker.evaluate(() => chrome.storage.sync.set({ popup: { anim: 'fade' } }));
+      await settled(mo);
+      t = await clock(mo);
+      await mo.focus(`${card(noneKey)} .gd-title`); await mo.keyboard.press('Shift+F10');
+      const fadeMoves = await since(mo, t, (x) => x.cls === 'gp-menu gd-menu');
+      check(fadeMoves.some((x) => x.n === 2 && x.first.opacity === 0 && !x.first.scale && !x.first.transform), 'motion: live Pop-up Fade uses a fade without scale or genie');
+      await mo.keyboard.press('Escape'); await settled(mo);
+      await openWithEnter(mo, noneKey);
+      log = await mo.evaluate(() => globalThis.__mo);
+      check(log.vt && log.all.some((x) => x.route === 'fade' && x.first.opacity === 0 && x.last.opacity === 1), 'motion: Pop-up Fade crossfades the native pictures');
       await mo.close();
     }
 

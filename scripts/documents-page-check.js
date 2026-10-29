@@ -272,11 +272,14 @@ const check = async (name, test) => {
       f = await openFromBar(page);
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
       f = await shown(page);
-      await f.locator('.ProseMirror').click();
-      await page.keyboard.press('Escape');
+      const editor = f.locator('.ProseMirror');
+      await editor.click();
+      // The OOPIF's click can finish before keyboard focus reaches it. Observe focus, then send through the editor.
+      await until(() => f.evaluate(() => document.hasFocus() && document.activeElement?.isContentEditable), 'editor keyboard focus');
+      await editor.press('Escape');
       assert.ok(await hosted(page), 'Escape in editable text keeps Documents open');
-      await f.evaluate(() => document.activeElement.blur());
-      await page.keyboard.press('Escape');
+      await f.locator('.gp-top > .gd-btn').focus();
+      await f.locator('.gp-top > .gd-btn').press('Escape');
       await closed(page);
       await atMark(page);
     });

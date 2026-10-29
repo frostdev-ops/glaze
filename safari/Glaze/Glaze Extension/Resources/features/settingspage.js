@@ -139,6 +139,7 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
     port?.close(); port = null; hellos++; going = !!at; resent = false;
     frame = document.createElement('iframe');
     frame.title = 'Glaze';
+    if (page === 'papers') frame.name = `gz-documents:${crypto.randomUUID()}`;
     frame.allow = 'clipboard-write';
     for (const [k, v] of [['display', 'block'], ['width', '100%'], ['height', '100%'], ['border', '0'], ['background', 'transparent']]) frame.style.setProperty(k, v);
     // Even a closed shadow root's iframe URL can appear in the page's resource timings. Restore a document over the channel.

@@ -26,7 +26,7 @@ const page = ({ raw, anim = 'genie', ready = true, failAnimation = false, name =
   const media = { matches: false, addEventListener(t, f) { this.change = f; } };
   const ctx = vm.createContext({ document: doc, innerWidth: 1280, innerHeight: 900, scrollY: 0, name,
     location: new URL('https://extension.test/papers.html?paper=doc:a'), history: {}, URL, URLSearchParams, CSS: { escape: (x) => x },
-    GZ_POPUP_LIB: require('../lib/popup.js'), GZ_MOTION: { enter: (e) => e.animate([], {}), exit: (e) => { e.remove(); return Promise.resolve(); } },
+    GZ_POPUP_LIB: require('../lib/popup.js'), GZ_MOTION: { enter: (e) => { try { return e.animate([], {}); } catch { return null; } }, exit: (e) => { e.remove(); return Promise.resolve(); } },
     chrome: { storage: { sync: { get: async () => ({ popup: { anim } }) }, onChanged: { addListener: (f) => { changed = f; } } } },
     matchMedia: () => media, sessionStorage: { getItem: (k) => data.get(k) || null, removeItem: (k) => data.delete(k), setItem: (k, v) => data.set(k, v) },
     performance: { now: () => clock }, Date, requestAnimationFrame: (f) => { raf.set(++frame, f); return frame; }, cancelAnimationFrame: (id) => raf.delete(id),
