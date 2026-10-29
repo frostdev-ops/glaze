@@ -997,6 +997,7 @@ const PROBE = ({ lang }) => {
       const RECORD = () => {
         if (location.pathname !== '/papers.html') return;
         const log = globalThis.__mo = { vt: null, t0: 0, finished: 0, all: [] };
+        chrome.storage.onChanged.addListener((c, area) => { if (area === 'sync' && 'popup' in c) log.popup = c.popup.newValue?.anim || 'genie'; });
         // The frames the page draws while its transition runs: how smooth the genie is beside the page's own first work.
         addEventListener('pagereveal', (e) => {
           log.vt = !!e.viewTransition; log.t0 = performance.now(); log.frames = [];
@@ -1324,10 +1325,11 @@ const PROBE = ({ lang }) => {
         `motion: Pop-up None leaves no menu animation or native transition (${noneMoves.length} animations, transition ${log.vt})`);
       await mo.goBack(); await landed(mo, 'home');
       await worker.evaluate(() => chrome.storage.sync.set({ popup: { anim: 'fade' } }));
+      await until(() => mo.evaluate(() => globalThis.__mo.popup === 'fade'), 'live Pop-up Fade update');
       await settled(mo);
       t = await clock(mo);
       await mo.focus(`${card(noneKey)} .gd-title`); await mo.keyboard.press('Shift+F10');
-      const fadeMoves = await since(mo, t, (x) => x.cls === 'gp-menu gd-menu');
+      const fadeMoves = await since(mo, t, (x) => /\bgd-menu\b/.test(x.cls));
       check(fadeMoves.some((x) => x.n === 2 && x.first.opacity === 0 && !x.first.scale && !x.first.transform), 'motion: live Pop-up Fade uses a fade without scale or genie');
       await mo.keyboard.press('Escape'); await settled(mo);
       await openWithEnter(mo, noneKey);

@@ -490,7 +490,7 @@ const run = async () => {
     // Same-document support does not imply cross-document support (Firefox 140+). Load a stale handoff and navigate for real.
     const support = await b.value(`({ reveal: 'onpagereveal' in window, swap: 'onpageswap' in window, same: typeof document.startViewTransition === 'function' })`, papersTab);
     console.log(`Documents view-transition support: ${JSON.stringify(support)}`);
-    await b.value(`sessionStorage.setItem('gz-documents-route', JSON.stringify({ at: '?paper=old', kind: 'genie' })); 1`, papersTab);
+    await b.value(`(sessionStorage.setItem('gz-documents-route', JSON.stringify({ at: '?paper=old', kind: 'genie' })), 1)`, papersTab);
     await until(() => b.value(`!!document.querySelector('.gd-card[data-key="${KEY}"] .gd-title')`, papersTab), 'the Documents card');
     await b.clickOn(papersTab, `document.querySelector('.gd-card[data-key="${KEY}"] .gd-title')`);
     await until(() => b.value(`!!globalThis.GZ_WRITER_PAPER?.current()?.key()`, papersTab), 'document editor without cross-document transitions');
