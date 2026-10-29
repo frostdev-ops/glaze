@@ -28,14 +28,16 @@ var GZ_MCP_REGISTRY = globalThis.GZ_MCP_REGISTRY || (() => {
   };
 
   const describe = (t, era) => {
-    const change = t.kind !== 'read';
+    // A mod's Worker can change its storage and granted network hosts; a read-only dispatcher does not exist yet.
+    const code = t.owner?.startsWith('mod:') && t.needs === 'tab';
+    const change = code || t.kind !== 'read';
     const inputSchema = copy(t.parameters);
     if (SCOPE[t.scope]) inputSchema.properties = { ...inputSchema.properties, [t.scope]: { ...SCOPE[t.scope] } };
     if (t.scope === 'document') inputSchema.required = [...(inputSchema.required || []).filter((k) => k !== 'document'), 'document'];
     const output = t.output !== undefined && !(LEGACY.includes(era) && t.output.type !== 'object');
     return {
       name: t.name, ...(t.title !== undefined && { title: t.title }), description: t.description, inputSchema, ...(output && { outputSchema: copy(t.output) }),
-      annotations: { readOnlyHint: !change, destructiveHint: false, idempotentHint: !change || t.hints?.idempotent === true, openWorldHint: t.hints?.openWorld === true },
+      annotations: { readOnlyHint: !change, destructiveHint: !!code, idempotentHint: !code && (!change || t.hints?.idempotent === true), openWorldHint: t.hints?.openWorld === true },
       _meta: { [`${NS}group`]: t.group, ...(t.needs !== undefined && { [`${NS}needs`]: t.needs }), ...(change && { [`${NS}approval`]: 'student' }) },
     };
   };
@@ -55,10 +57,16 @@ var GZ_MCP_REGISTRY = globalThis.GZ_MCP_REGISTRY || (() => {
   // One manifest entry at a time, so each descriptor runs on the entry it was made from; one C1 refuses is left out.
   const modTools = (rec, s) => {
     const code = s.browser === 'chrome' && s.runtime?.ok === true;
-    return (Array.isArray(rec.manifest.tools) ? rec.manifest.tools : []).flatMap((t) => (isObj(t) && (t.code !== true || code)
-      ? M().defs({ ...rec, manifest: { ...rec.manifest, tools: [t] } }).flatMap((d) => {
-        try { return [T().define({ ...d, run: t.code === true ? worker(rec.id, t.name, s) : answer(t, s) })]; } catch { return []; }
-      }) : []));
+    return (Array.isArray(rec.manifest.tools) ? rec.manifest.tools : []).flatMap((entry) => {
+      if (!isObj(entry) || (entry.code === true && !code)) return [];
+      try {
+        // The runner keeps the same source and filters that passed the grant check, even if the input record changes.
+        const t = copy(entry);
+        return M().defs({ ...rec, manifest: { ...rec.manifest, tools: [t] } }).map((d) => T().define({ ...d,
+          ...(t.code === true && { kind: 'confirm', summarize: () => `Run ${d.title}.` }),
+          run: t.code === true ? worker(rec.id, t.name, s) : answer(t, s) }));
+      } catch { return []; }
+    });
   };
   // Every listed tool by name. Glaze's own come first and a name is never taken twice, though C1 keeps mod_ names for mods.
   const all = (state) => {
@@ -71,7 +79,10 @@ var GZ_MCP_REGISTRY = globalThis.GZ_MCP_REGISTRY || (() => {
       try { put(T().is(t) ? t : T().define(t)); } catch { /* not a tool C1 takes */ }
     }
     const mods = (Array.isArray(s.mods) ? s.mods : []).filter((r) => B().usable(r, r?.id, s.dev === true) && !B().blocked(s.blocklist, r));
-    for (const r of mods.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) modTools(r, s).forEach(put);
+    // Repeated records have no unambiguous owner/revision. Refuse that mod rather than let input order choose its tools.
+    const counts = new Map();
+    for (const r of mods) counts.set(r.id, (counts.get(r.id) || 0) + 1);
+    for (const r of mods.filter((r) => counts.get(r.id) === 1).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) modTools(r, s).forEach(put);
     return out;
   };
 
