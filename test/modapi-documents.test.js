@@ -32,7 +32,9 @@ test('mod document keys hide account identifiers and resolve only within their m
 
 test('the page broker masks list and action keys and resolves read and export without returning raw keys', async () => {
   const src = fs.readFileSync(path.join(__dirname, '../papers.js'), 'utf8');
-  const body = src.slice(src.indexOf('    const mods = async () => {'), src.indexOf('\n\n    await Promise.all([refresh()'));
+  // mods() as papers.js defines it, to its closing brace (what follows it in the page changes).
+  const start = src.indexOf('    const mods = async () => {'), end = src.indexOf('\n    };\n', start) + '\n    };\n'.length;
+  const body = src.slice(start, end);
   const raw = 'bb.school.test|_900_1|_101_1|_7_1', doc = { key: raw, title: 'Essay', course: 'English' };
   let action, clicked;
   const ctx = vm.createContext({ active: true, performance: { now: () => 0 }, GZ_MODAPI: A,
