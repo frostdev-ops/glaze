@@ -267,8 +267,13 @@ const HARNESS = `(() => {
     check(duplicates === 1, `paper format and cite checks share one MLA citation card (${duplicates})`);
     // In the attempt panel, then in Focus (the frame fills the window): the mockup's 1440px view.
     saved.panel = await shot(p, 'paper-panel.png');
+    // A loaded runner has swallowed this click (the frame still laying out); once more if Focus didn't take.
+    const filled = () => el.evaluate((f) => getComputedStyle(f).position === 'fixed' && Math.round(f.getBoundingClientRect().width) === innerWidth);
     await fr.click('.gp-tbtn[aria-label="Focus"]');
-    await until(() => el.evaluate((f) => getComputedStyle(f).position === 'fixed' && Math.round(f.getBoundingClientRect().width) === innerWidth), 'focus fills the window');
+    try { await until(filled, 'focus fills the window', 5000); } catch {
+      if (await fr.evaluate(() => document.querySelector('.gp-tbtn[aria-label="Focus"]')?.getAttribute('aria-pressed')) !== 'true') await fr.click('.gp-tbtn[aria-label="Focus"]');
+      await until(filled, 'focus fills the window');
+    }
     check(true, 'Focus asks the page to fill the window with the paper (focus-mode message)');
     await settle(fr);
     await fr.click('.gp-issue[data-rule="cite-shape"]');
