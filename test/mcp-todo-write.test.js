@@ -168,3 +168,17 @@ test('a pending approval cannot change its title, Canvas target or sync destinat
     assert.equal(s[`todo:${A}`], undefined);
   }
 });
+
+test('Canvas must confirm a completed mark, and a lost write response reports uncertainty', async () => {
+  for (const lost of [false, true]) {
+    const tab = canvasTab({ routes: { '/api/v1/planner/overrides': () => {
+      if (lost) throw new TypeError('Failed to fetch');
+      return { id: 901, marked_complete: false, dismissed: false };
+    } } });
+    const { t, ctx, s } = await setup({ sync: SYNC, tabs: [tab] }), before = structuredClone(s.todoCache);
+    const r = await t.run({ type: 'assignment', id: '1' }, ctx());
+    assert.equal(r.ok, false);
+    if (lost) { assert.match(r.error, /may or may not/); assert.ok(!r.error.includes('Nothing was done')); }
+    assert.deepEqual(s.todoCache, before);
+  }
+});
