@@ -427,7 +427,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     // Leaving: a signature being chosen is cancelled, and what the tools hold (a drawing, a note being typed) is kept.
     const leaveNow = () => { signs?.cancel(); tools?.commit(true); };
     // The first save of a visit keeps the file as it was opened as a version ('edit'); the rest replace it ('auto').
-    let dirty = false, saving = null, timer = 0, first = true;
+    let dirty = false, saving = null, timer = 0, first = true, replacement = null, replaced = false;
     const save = async () => {
       tools?.commit();
       // A signature being chosen leaves pdf.js an empty editor: the save waits for the dialog (signs done).
@@ -445,6 +445,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     };
     const flush = () => {
       clearTimeout(timer);
+      if (replaced) return Promise.resolve(true);
       if (!saving) saving = (async () => {
         while (dirty && !signs?.busy()) if (!await save()) return false;
         return true;
@@ -452,13 +453,27 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       return saving;
     };
     if (doc && !src) {
-      modified = () => { dirty = true; say(''); clearTimeout(timer); timer = setTimeout(flush, 1000); };
+      modified = () => { if (replaced) return; dirty = true; say(''); clearTimeout(timer); timer = setTimeout(flush, 1000); };
       doc.annotationStorage.onSetModified = modified;
       // pdf.js only calls onSetModified once until its current save finishes. Track each input as well, so a field
       // changed during that save cannot be mistaken for the value its worker already captured.
       ui.addEventListener('input', (e) => { if (e.target.closest?.('.annotationLayer')) modified(); }, { signal });
       ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } }, { signal });
     }
+    // Page replacement owns the viewer until reload. The old proxy can never autosave over the new file.
+    const replaceFile = (prepare, apply) => {
+      if (replacement) return replacement;
+      ui.inert = true;
+      replacement = (async () => {
+        const target = await prepare();
+        leaveNow();
+        if (!await flush()) throw new Error('not saved');
+        await apply(target);
+        replaced = true; dirty = false; clearTimeout(timer);
+        location.reload();
+      })().catch((e) => { ui.inert = false; throw e; }).finally(() => { replacement = null; });
+      return replacement;
+    };
     // ---- the pages panel's Done: the file as saved, its page operations baked into new bytes in one pass (lib/pdf-doc.js
     // bake), kept with the file before it as a version ('edit'), and the viewer opened again on them. That version is
     // the one step Undo takes back (pagesUndo, kept for this tab across the reload). Its stages show as an import's do.
@@ -471,28 +486,38 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       if (!ops.length) return;
       const progress = GZ_DOC_KINDS.progress((p) => { const w = !p.end && !p.failed && GZ_DOC_KINDS.said(p, 'pdf'); if (w) say(t(...w)); }, ['prepare', 'copy', 'save']);
       try {
-        leaveNow();
-        if (!await flush()) throw new Error('not saved');
-        progress({ stage: 'prepare' });
-        rec = await st.get(key);
-        const out = await (await pdfdoc()).bake(await STORE.get(rec), ops).catch((e) => { throw Object.assign(e, { say: PAGE_SAYS[e.name] }); });
-        const back = await read(out.bytes);
-        let thumbUrl = null;
-        try { thumbUrl = await picture(back.doc).catch(() => null); } finally { await back.task.destroy().catch(() => {}); }
-        progress({ stage: 'copy', done: 0, total: out.bytes.length });
-        const kept = await STORE.put(out.bytes, (done, total) => progress({ stage: 'copy', done, total }));
-        progress({ stage: 'save' });
-        const { paper, version } = await st.save(key, { ...kept, pages: out.pages, ...(thumbUrl && { thumb: thumbUrl }) }, { expectedKind: 'pdf', reason: 'edit' });
-        progress.end();
-        try { if (version?.id) sessionStorage.setItem(UNDO, JSON.stringify({ id: version.id, revision: paper.revision })); } catch { /* the version stays in Versions */ }
-        location.reload();
+        await replaceFile(async () => null, async () => {
+          progress({ stage: 'prepare' });
+          const base = rec;
+          const out = await (await pdfdoc()).bake(await STORE.get(base), ops).catch((e) => { throw Object.assign(e, { say: PAGE_SAYS[e.name] }); });
+          const back = await read(out.bytes);
+          let thumbUrl = null;
+          try { thumbUrl = await picture(back.doc).catch(() => null); } finally { await back.task.destroy().catch(() => {}); }
+          progress({ stage: 'copy', done: 0, total: out.bytes.length });
+          const kept = await STORE.put(out.bytes, (done, total) => progress({ stage: 'copy', done, total }));
+          progress({ stage: 'save' });
+          const { paper, version } = await st.save(key, { ...kept, pages: out.pages, ...(thumbUrl && { thumb: thumbUrl }) }, { expectedKind: 'pdf', expectedFile: base.file, reason: 'edit' });
+          progress.end();
+          try { if (version?.id) sessionStorage.setItem(UNDO, JSON.stringify({ id: version.id, revision: paper.revision })); } catch { /* the version stays in Versions */ }
+        });
       } catch (e) { progress.fail(e); say(''); throw e; }
     };
     // Back to a kept version: the file as it is now kept first (lib/writer-papers.js restore), then the viewer opened on it.
     const restoreTo = async (id) => {
-      leaveNow();
-      if (!await flush()) return;
-      try { await st.restore(key, id); try { sessionStorage.removeItem(UNDO); } catch { /* none */ } location.reload(); } catch (e) { console.error(e); say(t('Not saved. Try again in a moment.')); }
+      try {
+        await replaceFile(async () => {
+          // The first edit flush may evict an old version. Capture its bytes before that flush, then re-claim them.
+          const target = await st.version(key, id);
+          if (target?.kind !== 'pdf') throw new Error('no PDF version');
+          const bytes = await STORE.get(target);
+          if (!bytes) throw new Error('no file');
+          return { target, bytes };
+        }, async ({ target, bytes }) => {
+          const base = rec.file, kept = await STORE.put(bytes);
+          await st.save(key, { ...kept, pages: target.pages, thumb: target.thumb || null }, { expectedKind: 'pdf', expectedFile: base, reason: 'restore' });
+          try { sessionStorage.removeItem(UNDO); } catch { /* none */ }
+        });
+      } catch (e) { console.error(e); say(t('Not saved. Try again in a moment.')); }
     };
     pagesUndo && tools?.extraUndo({ run: () => restoreTo(pagesUndo.id) });
     let panel = null;
@@ -521,10 +546,10 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       flush().then((ok) => { if (ok) location[window.top === window ? 'assign' : 'replace'](back.href); });
     });
     // The embedded frame's Close, Escape and history routes await the same storage acknowledgement as Documents.
-    addEventListener('glaze:papers:beforeleave', (e) => { leaveNow(); if (dirty || saving) e.detail.wait(flush()); }, { signal });
+    addEventListener('glaze:papers:beforeleave', (e) => { if (replacement) { e.detail.wait(replacement.then(() => true, () => false)); return; } leaveNow(); if (dirty || saving) e.detail.wait(flush()); }, { signal });
     document.addEventListener('visibilitychange', () => { if (document.hidden) tools?.commit(true); if (document.hidden && dirty) flush(); }, { signal });
     // Native tab navigation cannot await a promise. Protect unsaved work until the write acknowledges it.
-    addEventListener('beforeunload', (e) => { leaveNow(); if (dirty || saving) { flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
+    addEventListener('beforeunload', (e) => { if (replaced) return; leaveNow(); if (dirty || saving || replacement) { flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
     const dispose = async () => {
       life.abort(); clearTimeout(timer); clearTimeout(drawTimer); sizing.disconnect(); l10n.destroy(); closeMenu(); tools?.dispose();
       viewer.setDocument(null); links.setDocument(null); finder.setDocument(null);
@@ -553,8 +578,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       if (!drawFailed) { if (ok) host.shown?.(); else host.failed?.(doc ? 'draw' : 'read'); }
     }
     // What an assignment's submit sheet sends (writer-submit.js): the PDF as saved, its fields filled.
-    return { pages: () => doc?.numPages || 0, say, ready: () => !!doc, save: flush, dispose,
-      file: async () => { if (!await flush()) throw new Error('not saved'); rec = await st.get(key); const bytes = await STORE.get(rec); if (!bytes) throw new Error('no file'); return { bytes, mime: 'application/pdf', ext: '.pdf' }; } };
+    return { pages: () => doc?.numPages || 0, say, ready: () => !!doc, save: () => replacement ? replacement.then(() => true, () => false) : flush(), dispose,
+      file: async () => { if (replacement) await replacement; if (!await flush()) throw new Error('not saved'); rec = await st.get(key); const bytes = await STORE.get(rec); if (!bytes) throw new Error('no file'); return { bytes, mime: 'application/pdf', ext: '.pdf' }; } };
   };
   // A PDF brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it held
   // kept as a version first (the 'import' save), its title the assignment's. → the record.
