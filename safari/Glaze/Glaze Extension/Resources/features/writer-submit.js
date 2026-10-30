@@ -219,7 +219,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!extra && !keep && written.has(box) && !shown) return fail('review');
       const d = keep && !extra ? null : L().delta({ kept: keep ? held : '', note: m.note, text: m.text || '' }) || (held ? [{ insert: '\n' }] : null);
       let s = L().start({ text: !!d, asis });
-      if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'docx' });
+      if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'build' });
       const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < end;
       if (!here()) return fail('page');
       if (!await permit('claim')) return fail('claimed');

@@ -377,6 +377,19 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
   for (const [file, call, , clear] of FAST_INTERVALS) assert.match(executable(read(file)), clear, `${file}: the clear that bounds ${call} is gone (a comment doesn't count)`);
 });
 
+// PDF form autosave is an event-driven debounce, never polling: one timer, replaced on input and cleared on save/leave.
+const PDF_TIMEOUTS = [
+  ['pdf-kind.js', 'setTimeout(flush, 1000)', 1, /clearTimeout\(timer\)/],
+];
+test('PDF timeouts under a minute are reviewed and retain their clear', () => {
+  const fast = calls('setTimeout', read('pdf-kind.js')).filter((c) => {
+    const delay = Number(lastArg(c.args));
+    return !Number.isFinite(delay) || delay < 60000;
+  }).map((c) => ({ file: 'pdf-kind.js', ...c }));
+  review(PDF_TIMEOUTS, fast, 'PDF timeouts must be bounded and reviewed.');
+  for (const [file, call, , clear] of PDF_TIMEOUTS) assert.match(executable(read(file)), clear, `${call}: its clear is gone`);
+});
+
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
   ['lib/writer-ultra.js', "querySelectorAll('*')", 1], // Only the recognized Quill body at takeover or after a foreign edit; mounted boxes are skipped on observer passes.

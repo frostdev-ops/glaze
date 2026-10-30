@@ -73,7 +73,7 @@ const fixture = () => {
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
     page = await context.newPage();
     page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
-    page.on('console', (m) => { const x = m.text(); logs.push(`${m.type()}: ${x}`); if (m.type() === 'error' && !/Failed to load resource/.test(x)) errors.push(`console: ${x}`); if (/fake worker/i.test(x)) errors.push(`fake worker: ${x}`); });
+    page.on('console', (m) => { const x = m.text(); logs.push(`${m.type()}: ${x}`); if (m.type() === 'error' && !/Failed to load resource|pdf-check quota refusal/.test(x)) errors.push(`console: ${x}`); if (/fake worker/i.test(x)) errors.push(`fake worker: ${x}`); });
     page.on('worker', (w) => workers.push(w.url()));
     page.on('framenavigated', (f) => { if (f === page.mainFrame()) logs.push(`navigated: ${f.url()}`); });
     const shot = async (name) => { await pause(250); const f = path.join(out, name); await page.screenshot({ path: f }); shots.push(f); };
@@ -112,9 +112,12 @@ const fixture = () => {
     // pdf.js's words come from Glaze's catalogue (lib/pdf-l10n.js), set as its elements are added.
     const landmark = await until(() => page.evaluate(() => document.querySelector('.pdfViewer .page[data-page-number="2"]')?.getAttribute('aria-label')), 'page landmarks');
     check(landmark === 'Page 2', `each page is a landmark named in Glaze's words (${landmark})`);
-    check(workers.some((u) => u.endsWith('/lib/pdfjs/pdf.worker.mjs')), `pdf.js runs in its module worker (${workers.join(', ')})`);
+    const moduleWorker = page.workers().find((w) => w.url().endsWith('/lib/pdfjs/pdf.worker.mjs'));
+    const moduleType = moduleWorker && await moduleWorker.evaluate(() => { try { importScripts(); return false; } catch (e) { return /module/i.test(e.message); } });
+    check(moduleType, `pdf.js runs in its module worker (${workers.join(', ')})`);
     const chrome1 = await page.evaluate(() => ({ title: document.querySelector('.gp-top h1 input')?.value ?? document.querySelector('.gp-top h1')?.textContent, back: document.querySelector('.gp-top a')?.getAttribute('href'), mode: document.documentElement.dataset.mode }));
     check(chrome1.title === 'Field trip form' && chrome1.back === 'papers.html' && chrome1.mode === 'pdf', `the top bar: Documents, the title (${JSON.stringify(chrome1)})`);
+    check(await page.getByRole('region', { name: 'Field trip form', exact: true }).count() === 1, 'the scrollable PDF has a named region');
     // The page is paper under a dark Look; the bar around it is the Look's.
     const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
     const colours = await page.evaluate(() => ({ dark: document.documentElement.hasAttribute('data-dark'), page: getComputedStyle(document.querySelector('.pdfViewer .page')).backgroundColor, bar: getComputedStyle(document.querySelector('.gp-top')).backgroundColor, ground: getComputedStyle(document.querySelector('.gq-scroll')).backgroundColor }));
@@ -143,8 +146,9 @@ const fixture = () => {
     const found = await until(() => page.evaluate(() => { const n = document.getElementById('gq-find-n').textContent, hit = document.querySelector('.page[data-page-number="2"] .textLayer .highlight'); return hit && /1/.test(n) ? { n, hit: hit.textContent } : null; }), 'find hits');
     check(found.n === '1 of 1' && /page 2|2/.test(found.hit), `find "page 2": one hit on page 2 (${JSON.stringify(found)})`);
     await shot('viewer-find-1280.png');
+    await page.locator('#gq-zoom-in').focus();
     await page.keyboard.press('Escape');
-    check(await page.evaluate(() => document.getElementById('gq-find').hidden && !document.querySelector('.textLayer .highlight')), 'Esc closes find and clears its highlights');
+    check(await page.evaluate(() => document.getElementById('gq-find').hidden && !document.querySelector('.textLayer .highlight')), 'Esc closes find outside its input and clears its highlights');
 
     // ---- fill the form field, close, open again
     await page.evaluate(() => document.querySelector('.gq-scroll').scrollTo(0, 0));
@@ -211,10 +215,88 @@ const fixture = () => {
     const keptOff = await until(() => page.evaluate(() => document.querySelector('.page[data-page-number="1"] .annotationLayer input')?.value || null), 'the kept PDF opens with the switch off');
     check(keptOff === 'Ada Lovelace', `off again: the kept PDF opens, filled (${keptOff})`);
 
+    // Refusing a write must keep both the last good file and the student's unsaved field on screen.
+    const good = await local(`writerPaper:${key}`);
+    await worker.evaluate(() => {
+      globalThis.pdfCheckSet = chrome.storage.local.set.bind(chrome.storage.local);
+      chrome.storage.local.set = async (items) => {
+        if (Object.keys(items).some((k) => k.startsWith('writerPaper:'))) throw new Error('pdf-check quota refusal');
+        return globalThis.pdfCheckSet(items);
+      };
+    });
+    try {
+      await page.locator('.page[data-page-number="1"] .annotationLayer input').first().fill('Grace Hopper');
+      await page.click('.gp-top a[href="papers.html"]');
+      await until(() => page.evaluate(() => !location.search || document.querySelector('.gp-state')?.textContent === 'Not saved. Try again in a moment.'), 'quota refusal or navigation');
+      check(page.url().includes('?pdf=') && await page.evaluate(() => document.querySelector('.annotationLayer input')?.value === 'Grace Hopper'), 'quota refusal keeps the unsaved form open');
+      check((await local(`writerPaper:${key}`)).file === good.file, 'quota refusal keeps the last good bytes');
+    } finally {
+      await worker.evaluate(() => { chrome.storage.local.set = globalThis.pdfCheckSet; delete globalThis.pdfCheckSet; });
+    }
+    await page.click('.gp-top a[href="papers.html"]');
+    await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'retry saved before returning home');
+    await page.click(`.gd-card[data-key="${key}"] .gd-title`);
+    check(await until(() => page.evaluate(() => document.querySelector('.annotationLayer input')?.value === 'Grace Hopper'), 'the retried value'), 'retry persists the edited form before leaving');
+
+    // Hold the worker's first save after its byte snapshot, while annotationStorage is still marked modified.
+    await openHome();
+    await page.evaluate(async (key) => {
+      await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs'));
+      const V = await import(chrome.runtime.getURL('lib/pdfjs/pdf_viewer.mjs'));
+      const setDocument = V.PDFViewer.prototype.setDocument;
+      V.PDFViewer.prototype.setDocument = function (doc) { globalThis.pdfCheckDoc = doc; return setDocument.call(this, doc); };
+      try {
+        document.getElementById('list').hidden = true;
+        history.replaceState(null, '', `papers.html?pdf=${encodeURIComponent(key)}`);
+        await GZ_DOC_KINDS.get('pdf').edit(key);
+      } finally { V.PDFViewer.prototype.setDocument = setDocument; }
+      const handler = globalThis.pdfCheckDoc._transport.messageHandler, send = handler.sendWithPromise.bind(handler);
+      handler.sendWithPromise = async (action, ...args) => {
+        const result = await send(action, ...args);
+        if (action === 'SaveDocument' && !globalThis.pdfCheckPaused) {
+          globalThis.pdfCheckPaused = true;
+          await new Promise((r) => { globalThis.pdfCheckRelease = r; });
+        }
+        return result;
+      };
+    }, key);
+    const racing = page.locator('.page[data-page-number="1"] .annotationLayer input').first();
+    await racing.fill('First edit');
+    await racing.press('Tab');
+    await until(() => page.evaluate(() => globalThis.pdfCheckPaused), 'the first save snapshot');
+    await racing.fill('Second edit');
+    await page.click('.gp-top a[href="papers.html"]');
+    await page.evaluate(() => globalThis.pdfCheckRelease());
+    await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'home after overlapping edits');
+    await page.click(`.gd-card[data-key="${key}"] .gd-title`);
+    const afterRace = await until(() => page.evaluate(() => document.querySelector('.annotationLayer input')?.value || null), 'overlapping edits reopened');
+    check(afterRace === 'Second edit', `an edit made during a save is persisted before leaving (${afterRace})`);
+
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(!errors.some((e) => /fake worker/i.test(e)), 'pdf.js never fell back to a fake worker');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);
     check(requests.length === 0, `no network (${requests.join(', ')})`);
+    // A browser that refuses module workers uses pdf.js's in-page worker. Its image decoders still need WebAssembly.
+    const fallback = await context.newPage();
+    try {
+      await fallback.goto(HOME);
+      await until(() => fallback.evaluate(() => !document.getElementById('list').hidden), 'fallback home');
+      const result = await fallback.evaluate(async (key) => {
+        globalThis.Worker = class { constructor() { throw new Error('module workers unavailable'); } };
+        const P = await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs'));
+        P.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdfjs/pdf.worker.mjs');
+        const rec = (await chrome.storage.local.get(`writerPaper:${key}`))[`writerPaper:${key}`];
+        const data = Uint8Array.from(atob(rec.file), (c) => c.charCodeAt(0));
+        const task = P.getDocument({ data, isEvalSupported: false, verbosity: 0 });
+        try {
+          const doc = await task.promise;
+          let wasm = false;
+          try { await WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])); wasm = true; } catch { /* the assertion reports CSP refusal */ }
+          return { pages: doc.numPages, port: task._worker.port.constructor.name, wasm };
+        } finally { await task.destroy(); }
+      }, key);
+      check(result.pages === 3 && result.port === 'LoopbackPort' && result.wasm, `module-worker refusal: the local fallback opens and can compile its image decoders (${JSON.stringify(result)})`);
+    } finally { await fallback.close(); }
     passed = true;
   } catch (e) {
     console.error(e);

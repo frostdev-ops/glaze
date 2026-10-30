@@ -1,22 +1,36 @@
 // Glaze Writer's submit step, the parts that decide: the paper's file name, where Ultra's upload control and footer
 // buttons are on an assignment attempt (glaze-plans/writer/probe/skeleton-assignment-attempt.html, probed 2026-10-27), when
 // the file shows as attached, the note and text as Quill ops, the order the steps run in, and where a file the student
-// brings goes (a .docx asks, anything else is submitted as is). Pure: elements in, values out.
+// brings goes (a .docx asks, and a .pdf, .pptx or .ppsx while its kind opens in the frame; anything else is submitted as
+// is). Pure: elements in, values out.
 // The sheet (writer-submit.js) and the page's side (features/writer-submit.js) do the rest.
 // Classic script, loaded on demand in the frame and the page; module.exports for node.
 var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   const MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  // The files each document kind takes (lib/doc-kinds.js KINDS accept; test/writer-kinds-submit.test.js holds them equal),
+  // with the type each is sent as. sheet: the spreadsheet kind's (sheets/grid), here so its files route once it opens.
+  const EXT = Object.freeze({
+    '.docx': { kind: 'paper', mime: MIME }, '.pdf': { kind: 'pdf', mime: 'application/pdf' },
+    '.pptx': { kind: 'slides', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+    '.ppsx': { kind: 'slides', mime: 'application/vnd.openxmlformats-officedocument.presentationml.slideshow' },
+    '.xlsx': { kind: 'sheet', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }, '.csv': { kind: 'sheet', mime: 'text/csv' },
+  });
+  const extOf = (name) => /(\.[^./\\]+)$/.exec(typeof name === 'string' ? name : '')?.[1].toLowerCase() || '';
+  const kindOf = (name) => (Object.hasOwn(EXT, extOf(name)) ? EXT[extOf(name)].kind : null);
+  const mimeOf = (name) => (Object.hasOwn(EXT, extOf(name)) ? EXT[extOf(name)].mime : null);
   const squash = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
   // "Essay 2: Memory in Beloved" → "Essay 2": the title before its subtitle, as the mockup's sheet and file name have it.
   const shortTitle = (title) => { const t = squash(title), main = squash(t.split(/:\s/)[0]); return main || t; };
   // Each word capitalized and run together, letters and digits only: "Essay 2" → "Essay2".
   const word = (s) => squash(s).split(' ').map((w) => w.replace(/[^\p{L}\p{N}]+/gu, '')).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('');
-  // Lastname_Title.docx (Rivera_Essay2.docx); "Paper.docx" when neither is known.
-  const fileName = ({ surname = '', title = '', fallback = 'Paper' } = {}) => {
+  // Lastname_Title and the kind's extension (Rivera_Essay2.docx, Rivera_FieldTrip.pdf); "Paper.docx" when neither is known.
+  const fileName = ({ surname = '', title = '', fallback = 'Paper', ext = '.docx' } = {}) => {
     const parts = [word(surname).slice(0, 40), word(shortTitle(title)).slice(0, 60)].filter(Boolean);
-    return `${parts.length ? parts.join('_') : word(fallback) || 'Paper'}.docx`;
+    const e = String(ext).toLowerCase();
+    return `${parts.length ? parts.join('_') : word(fallback) || 'Paper'}${Object.hasOwn(EXT, e) ? e : '.docx'}`;
   };
-  const safeName = (n) => typeof n === 'string' && /^[\p{L}\p{N}_]{1,101}\.docx$/u.test(n);
+  // A built file's name: letters, digits and _, then an extension of the kind it is (a paper's when none is said).
+  const safeName = (n, kind = 'paper') => typeof n === 'string' && /^[\p{L}\p{N}_]{1,101}\.[a-z]{3,4}$/u.test(n) && kindOf(n) === kind;
   const paperKey = (p = {}) => /^[a-z0-9.-]{1,253}(:\d{1,5})?$/i.test(p.school || '') && [p.user, p.course, p.content].every((id) => /^_\d+_\d+$/.test(id || '')) ?
     `${p.school.toLowerCase()}|${p.user}|${p.course}|${p.content}` : null;
   const MAX_FILE = 50e6;
@@ -25,9 +39,13 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   const fileBytes = (f, bytes) => bytes instanceof ArrayBuffer && bytes.byteLength === f.size && !fileError(f);
   const kb = (bytes) => Math.max(1, Math.round((Number(bytes) || 0) / 1024));
 
-  // ---- a file the student brings (writer-import.js): a .docx asks Open in Writer or Submit as is; Writer opens nothing
-  // else, so any other file goes straight to the submit sheet as is.
-  const route = (name) => (/\.docx$/i.test(String(name || '')) ? 'choose' : 'submit');
+  // ---- a file the student brings (writer-import.js): a .docx asks Open in Writer or Submit as is, and a file of a kind
+  // that opens in the frame (kinds: its switch on, its viewer here; writer-kinds.js) Open in Glaze or Submit as is; any
+  // other file goes straight to the submit sheet as is. forFile: the registry's (lib/doc-kinds.js) where it is loaded.
+  const route = (name, { kinds = [], forFile = kindOf } = {}) => {
+    const k = forFile(String(name || ''));
+    return k === 'paper' || (!!k && [...kinds].includes(k)) ? 'choose' : 'submit';
+  };
   // A file submitted as is keeps its own name: any name a file can have, never a path.
   const asIsName = (n) => typeof n === 'string' && /^[^/\\\u0000-\u001f\u007f]{1,255}$/u.test(n) && !/^\.*$/.test(n.trim());
   // The file's badge: its extension (DOCX, PDF), else FILE.
@@ -85,10 +103,10 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
     return [{ insert: `${parts.map((p) => p.join('\n')).join('\n\n')}\n` }];
   };
 
-  // ---- the order: nothing reaches Ultra's Submit unless every step before it went through, in turn. A file submitted as
-  // is skips the paper's: nothing is saved or built.
-  const STEPS = ['save', 'docx', 'attach', 'text', 'submit'];
-  const start = ({ text = false, asis = false } = {}) => ({ plan: STEPS.filter((s) => (s !== 'text' || text) && !(asis && (s === 'save' || s === 'docx'))), at: 0, done: false, error: null });
+  // ---- the order: nothing reaches Ultra's Submit unless every step before it went through, in turn: the document saved, its
+  // file built (a paper's .docx, a PDF as saved, a deck as brought). A file submitted as is skips both.
+  const STEPS = ['save', 'build', 'attach', 'text', 'submit'];
+  const start = ({ text = false, asis = false } = {}) => ({ plan: STEPS.filter((s) => (s !== 'text' || text) && !(asis && (s === 'save' || s === 'build'))), at: 0, done: false, error: null });
   const step = (s) => (s.done || s.error ? null : s.plan[s.at]);
   const advance = (s, ev = {}) => {
     if (s.done || s.error) return s;
@@ -99,7 +117,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   };
   const may = (s, name) => step(s) === name;
 
-  return { MIME, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
+  return { MIME, EXT, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SUBMIT_LIB;
 GZ_WRITER_SUBMIT_LIB;

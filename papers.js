@@ -819,9 +819,16 @@ if (window.top !== window) (() => {
   root.setAttribute('data-embedded', '');
   root.style.setProperty('opacity', '0', 'important');
   document.body.inert = true;
-  const leave = () => port?.postMessage({ type: 'leave' });
+  // A kind with pending bytes defers the actual departure until its storage write has acknowledged them.
+  const beforeLeave = (run) => {
+    const waits = [];
+    dispatchEvent(new CustomEvent('glaze:papers:beforeleave', { detail: { wait: (p) => waits.push(Promise.resolve(p)) } }));
+    if (!waits.length) { run(); return; }
+    Promise.all(waits).then((ok) => { if (ok.every(Boolean)) run(); }).catch((e) => console.error(e));
+  };
+  const leave = () => beforeLeave(() => port?.postMessage({ type: 'leave' }));
   // Back or Forward in the tab: where its entry says, or (here already, or nowhere Documents goes) where this is.
-  const go = (at) => { if (/^(\?[^#]*)?$/.test(at) && at !== location.search) location.replace(`papers.html${at}`); else port?.postMessage({ type: 'opened', at: location.search }); };
+  const go = (at) => { if (/^(\?[^#]*)?$/.test(at) && at !== location.search) beforeLeave(() => location.replace(`papers.html${at}`)); else port?.postMessage({ type: 'opened', at: location.search }); };
   // Close: at the end of a document's top bar, or level with the list's heading.
   const close = document.createElement('button');
   close.type = 'button';
@@ -869,7 +876,7 @@ if (window.top !== window) (() => {
     if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || (a.target && a.target !== '_self') || a.hasAttribute('download')
       || a.href.split(/[?#]/)[0] !== location.href.split(/[?#]/)[0]) return;
     e.preventDefault();
-    location.replace(a.href);
+    beforeLeave(() => location.replace(a.href));
   });
   addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || e.defaultPrevented || e.target.closest?.('input, select, textarea, dialog, [role="dialog"], [role="menu"], [contenteditable]:not([contenteditable="false"])')) return;

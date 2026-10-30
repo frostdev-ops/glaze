@@ -33,7 +33,14 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     // bytes → the record's fields for them.
     put: (bytes) => { if (!(bytes?.length > 0) || bytes.length > STORE.max) throw new RangeError(TOO_BIG); return { file: b64(bytes), size: bytes.length }; },
     // a record → its bytes, or null.
-    get: (rec) => (typeof rec?.file === 'string' && rec.file ? unb64(rec.file) : null),
+    get: (rec) => {
+      if (typeof rec?.file !== 'string' || !rec.file || rec.file.length > 4 * Math.ceil(STORE.max / 3)
+        || (rec.size != null && (!Number.isSafeInteger(rec.size) || rec.size <= 0 || rec.size > STORE.max))) return null;
+      try {
+        const bytes = unb64(rec.file);
+        return bytes.length > 0 && bytes.length <= STORE.max && (rec.size == null || rec.size === bytes.length) ? bytes : null;
+      } catch { return null; }
+    },
   };
 
   // A form only XFA can draw (XFA, and no AcroForm fields to fall back on): pdf.js shows its "needs Adobe Reader" page.
@@ -130,7 +137,9 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     if (!f) throw new Error('no file');
     const href = URL.createObjectURL(new Blob([f.bytes], { type: f.mime })), a = h('a', { href, download: f.name });
     document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(href), 30000);
+    const revoke = () => { clearTimeout(revokeTimer); URL.revokeObjectURL(href); removeEventListener('pagehide', revoke); };
+    const revokeTimer = setTimeout(revoke, 60000);
+    addEventListener('pagehide', revoke, { once: true });
   };
   // No text of its own yet: search finds a PDF by its title (the text layer's words feed search in a later step).
   const text = () => '';
@@ -161,7 +170,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const prevB = btn({ class: 'gq-ib', title: t('Previous'), 'aria-label': t('Previous') }, icon('up')), nextB = btn({ class: 'gq-ib', title: t('Next'), 'aria-label': t('Next') }, icon('down'));
     const closeFind = btn({ class: 'gq-ib', title: t('Close'), 'aria-label': t('Close') }, icon('x'));
     const findBar = h('div', { id: 'gq-find', class: 'gq-find', role: 'search', hidden: true }, q, count, prevB, nextB, closeFind);
-    const pagesEl = h('div', { class: 'pdfViewer' }), scroll = h('div', { class: 'gq-scroll', tabindex: '0', 'aria-label': rec?.title || t('PDF') }, pagesEl);
+    const pagesEl = h('div', { class: 'pdfViewer' }), scroll = h('div', { class: 'gq-scroll', role: 'region', tabindex: '0', 'aria-label': rec?.title || t('PDF') }, pagesEl);
     const said = h('p', { class: 'gq-said', role: 'alert', hidden: true });
     const ui = h('div', { class: 'gp gp-standalone gq' },
       h('header', { class: 'gp-top' }, back, h('h1', {}, titleIn || rec?.title || t('Untitled document')), h('span', { class: 'grow' }), state),
@@ -183,7 +192,6 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const bytes = STORE.get(rec);
     let task = null, doc = null;
     try { if (!bytes) throw new RangeError(UNREAD); ({ task, doc } = await read(bytes)); } catch { refuse(); }
-    addEventListener('pagehide', () => { task?.destroy().catch(() => {}); });
     const inited = new Promise((ok) => bus.on('pagesinit', ok, { once: true }));
     if (doc) {
       bus.on('pagesinit', () => { viewer.currentScaleValue = 'page-width'; });
@@ -197,7 +205,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     zoomIn.addEventListener('click', () => viewer.increaseScale());
     zoomOut.addEventListener('click', () => viewer.decreaseScale());
     // A fit follows the room it fits (the window, the find bar), as pdf.js's own app re-applies it.
-    new ResizeObserver(() => { const v = viewer.currentScaleValue; if (doc && PRESETS.some(([p]) => p === v)) viewer.currentScaleValue = v; }).observe(scroll);
+    const sizing = new ResizeObserver(() => { const v = viewer.currentScaleValue; if (doc && PRESETS.some(([p]) => p === v)) viewer.currentScaleValue = v; });
+    sizing.observe(scroll);
 
     // ---- menus (the paper's .pop .gp-menu): arrows move, Esc and Tab close, focus back on the opener
     let menu = null;
@@ -225,7 +234,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     zoomB.addEventListener('click', () => openMenu(zoomB, [...PRESETS.map(([v, label]) => [t(label), () => { viewer.currentScaleValue = v; }, { 'data-zoom': v }]),
       ...STEPS.map((n) => [`${n}%`, () => { viewer.currentScaleValue = String(n / 100); }, { 'data-zoom': String(n) }])]));
     // ⋯: Export .pdf (the pages panel's bake and the tools come in later steps).
-    moreB.addEventListener('click', () => openMenu(moreB, [[t('Export .pdf'), () => { flush().then(() => exportFile(key)).catch(() => say(t(UNREAD))); }, { 'data-act': 'export' }]]));
+    moreB.addEventListener('click', () => openMenu(moreB, [[t('Export .pdf'), () => { flush().then((ok) => ok && exportFile(key)).catch(() => say(t(UNREAD))); }, { 'data-act': 'export' }]]));
 
     // ---- find: pdf.js's find controller over the text layer, every hit highlighted, the current one counted
     const find = (type, back = false) => bus.dispatch('find', { source: findBar, type, query: q.value, caseSensitive: false, entireWord: false, matchDiacritics: false, highlightAll: true, findPrevious: back });
@@ -248,6 +257,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     nextB.addEventListener('click', () => find('again', false));
     const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
     document.addEventListener('keydown', (e) => {
+      if (e.defaultPrevented) return;
+      if (e.key === 'Escape' && !findBar.hidden) { e.preventDefault(); e.stopPropagation(); showFind(false); return; }
       if (!(MAC ? e.metaKey : e.ctrlKey) || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === 'f' && doc) { e.preventDefault(); showFind(true); }
@@ -260,7 +271,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const say = (text) => { state.textContent = text; };
     let dirty = false, saving = null, timer = 0;
     const save = async () => {
-      if (!doc || !dirty) return;
+      if (!doc || !dirty) return true;
       dirty = false; clearTimeout(timer);
       say(t('Saving…'));
       try {
@@ -268,19 +279,40 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
         const thumbUrl = await picture(doc).catch(() => null);
         ({ paper: rec } = await st.save(key, { ...STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }));
         say(dirty ? '' : t('Saved'));
-      } catch (e) { console.error(e); dirty = true; say(t(e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); }
+        return true;
+      } catch (e) { console.error(e); dirty = true; say(t(e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); return false; }
     };
-    const flush = () => { const p = (saving || Promise.resolve()).then(save); saving = p; p.finally(() => { if (saving === p) saving = null; }); return p; };
+    const flush = () => {
+      clearTimeout(timer);
+      if (!saving) saving = (async () => {
+        while (dirty) if (!await save()) return false;
+        return true;
+      })().finally(() => { saving = null; });
+      return saving;
+    };
     if (doc) {
-      doc.annotationStorage.onSetModified = () => { dirty = true; say(''); clearTimeout(timer); timer = setTimeout(flush, 1000); };
-      ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { clearTimeout(timer); timer = setTimeout(flush, 0); } });
+      const modified = () => { dirty = true; say(''); clearTimeout(timer); timer = setTimeout(flush, 1000); };
+      doc.annotationStorage.onSetModified = modified;
+      // pdf.js only calls onSetModified once until its current save finishes. Track each input as well, so a field
+      // changed during that save cannot be mistaken for the value its worker already captured.
+      ui.addEventListener('input', (e) => { if (e.target.closest?.('.annotationLayer')) modified(); });
+      ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } });
     }
     back.addEventListener('click', (e) => {
       if (!dirty && !saving) return;
       e.preventDefault();
-      flush().finally(() => location[window.top === window ? 'assign' : 'replace'](back.href));
+      flush().then((ok) => { if (ok) location[window.top === window ? 'assign' : 'replace'](back.href); });
     });
-    addEventListener('pagehide', () => { if (dirty) flush(); });
+    // The embedded frame's Close, Escape and history routes await the same storage acknowledgement as Documents.
+    addEventListener('glaze:papers:beforeleave', (e) => { if (dirty || saving) e.detail.wait(flush()); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) flush(); });
+    // Native tab navigation cannot await a promise. Protect unsaved work until the write acknowledges it.
+    addEventListener('beforeunload', (e) => { if (dirty || saving) { flush(); e.preventDefault(); e.returnValue = ''; } });
+    addEventListener('pagehide', () => {
+      clearTimeout(timer); sizing.disconnect(); l10n.destroy();
+      flush().finally(() => task?.destroy().catch(() => {}));
+    });
+    addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
 
     // ---- the title: a standalone document's to type, saved on Enter or leaving the field; Esc puts it back
     if (titleIn) {
