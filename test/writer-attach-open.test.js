@@ -77,6 +77,20 @@ test('turning a kind off during its GET prevents delivery to the frame', async (
   assert.deepEqual(p.port.sent, []);
 });
 
+test('attachment redirects may use Blackboard\'s observed file store, never an unrelated response origin', async () => {
+  for (const [url, allowed] of [
+    ['https://files.prod.files.blackboard.com/signed/form.pdf', true],
+    ['https://elsewhere.test/form.pdf', false],
+    ['https://files.prod.files.blackboard.com.elsewhere.test/form.pdf', false],
+    ['http://files.prod.files.blackboard.com/form.pdf', false],
+  ]) {
+    const p = page({});
+    globalThis.fetch = async () => { const r = new Response(new Uint8Array([37, 80, 68, 70, 45])); Object.defineProperty(r, 'url', { value: url }); return r; };
+    assert.equal(await C.open(p.X, p.box, 'attachment-1', L), allowed, url);
+    assert.equal(p.port.sent[0]?.m.type, allowed ? 'import:file' : 'import:failed');
+  }
+});
+
 test('every matching link keeps a stable opener, and changed hrefs lose theirs', () => {
   const p = page({});
   const links = [FILES[0].url, FILES[0].url, 'https://other.test/bbcswebdav/not-listed'].map((href) => ({ href, isConnected: true,
