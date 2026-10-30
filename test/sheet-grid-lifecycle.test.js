@@ -237,3 +237,28 @@ test('unsaved work over another tab\'s write saves over it whole, keeping theirs
   assert.equal(back.sheets[0].rows.get(0).get(0).v, 'theirs');
   assert.equal(back.sheets[1].rows.get(0).get(0).v, 5);
 });
+
+test('a write that leaves the cells alone (a submit checkpoint) keeps undo; another tab\'s cells still show', async () => {
+  const f = frame(), get = (keys) => f.store.get(keys), other = PA.open(f.store);
+  const deliver = (paper) => { for (const l of f.changes) l({ [`writerPaper:${KEY}`]: { newValue: paper } }, 'local'); };
+  f.type('one'); f.key('Enter');
+  assert.equal(await f.view.save(), true);
+  let got = await SD.read(get, KEY);
+  const checkpoint = await other.save(KEY, {}, { expectedKind: 'sheet', base: got.rec.revision, version: { reason: 'submit', gz: await SD.pack(got.wb), cells: 1 } });
+  assert.equal(checkpoint.paper.edited, got.rec.edited, 'the checkpoint changes no cell');
+  deliver(checkpoint.paper);
+  await settle();
+  assert.equal(f.el('gx-undo').disabled, false, 'undo is still there');
+  f.key('z', { ctrlKey: true });
+  assert.equal(await f.view.save(), true, 'and saves on the checkpoint\'s revision');
+  got = await SD.read(get, KEY);
+  assert.equal(got.wb.sheets[0].rows.get(0)?.get(0), undefined, 'the typed cell undone and saved');
+  // Cells from another tab: shown, as before.
+  const theirs = M.workbook(); theirs.sheets[0].rows.set(0, new Map([[0, { t: 's', v: 'theirs' }]]));
+  const wrote = await SD.write(other, KEY, theirs, got.sigs, { base: got.rec.revision });
+  deliver(wrote.saved.paper);
+  await settle();
+  f.el('gx-grid').focus(); f.key('ArrowUp');
+  assert.equal(f.el('gx-formula').value, 'theirs');
+  assert.equal(f.el('gx-undo').disabled, true, 'their workbook comes without this one\'s undo');
+});

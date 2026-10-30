@@ -736,9 +736,16 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       pill();
       return saving;
     };
-    // Another tab's write: with nothing unsaved here, its workbook is shown; else the next save writes every part.
-    const theirs = async (rev) => {
+    // Another tab's write: with nothing unsaved here, its workbook is shown; else the next save writes every part. A write
+    // that left the cells as they were (the frame's submit checkpoint, a rename) brings only its record, and undo stays.
+    const theirs = async (next) => {
+      const rev = next?.revision;
       if (rev == null || rev <= (rec?.revision || 0)) return;
+      if (next.kind === 'sheet' && next.edited != null && rec?.edited != null && next.edited <= rec.edited) {
+        rec = next; lastVersion = rec.lastVersion || lastVersion;
+        if (titleIn && document.activeElement !== titleIn && rec.title) titleIn.value = rec.title;
+        return;
+      }
       if (busy() || editing) { foreign = true; return; }
       const got = await SD.read((ks) => chrome.storage.local.get(ks), key).catch(() => null);
       if (gone) return;
@@ -753,8 +760,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const PAPER = `writerPaper:${key}`;
     const onStore = (ch, area) => {
       if (area !== 'local' || !(PAPER in ch)) return;
-      const rev = ch[PAPER].newValue?.revision;
-      if (saving) saving.then(() => theirs(rev)); else theirs(rev);
+      const next = ch[PAPER].newValue;
+      if (saving) saving.then(() => theirs(next)); else theirs(next);
     };
     chrome.storage.onChanged.addListener(onStore);
     addEventListener('pagehide', () => { if (busy()) { commit(); flush(); } }, { signal });
