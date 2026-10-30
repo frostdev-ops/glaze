@@ -172,11 +172,11 @@ test('TYPE observes implicit intersection and array-formula context', () => {
   assert.equal(val(e, 'C1'), 64);
 });
 
-test('CELL uses the resulting text type and returns numeric zero for blank contents', () => {
+test('CELL uses the resulting text type and preserves blank contents in nested functions', () => {
   const e = book({ A1: '="text"', A2: '=""' });
   cases(e, [
     ['CELL("type",A1)', 'l'], ['CELL("type",A2)', 'l'],
-    ['ISNUMBER(CELL("contents",Z1))', true], ['ISBLANK(CELL("contents",Z1))', false],
+    ['ISNUMBER(CELL("contents",Z1))', false], ['ISBLANK(CELL("contents",Z1))', true],
     ['SHEETS(TRUE)', '#N/A'], ['SHEETS("Sheet1")', '#N/A'], ['SHEETS({1,2})', '#N/A'],
   ]);
 });
