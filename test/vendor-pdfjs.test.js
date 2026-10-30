@@ -118,7 +118,8 @@ test("pdf.js's escape and unescape calls are written out and decode exactly as b
 });
 
 // The three modules, loaded once, in node with no DOM library: pdf.mjs and its worker as they are, then the viewer, which
-// reads one thing from the page at load (a style object, to learn which CSS it can use); a stub of it is there only then.
+// at load asks for an animation frame and reads the page's root style and a new element's style, to learn which CSS it
+// can use; a stub of those three is there only while it loads.
 let loaded = null;
 const load = () => loaded ||= (async () => {
   const { pathToFileURL } = require('node:url');
@@ -129,8 +130,9 @@ const load = () => loaded ||= (async () => {
     const pdfjs = await import(url('pdf.mjs'));
     pdfjs.GlobalWorkerOptions.workerSrc = url('pdf.worker.mjs');
     const worker = await import(url('pdf.worker.mjs'));
-    globalThis.document = { documentElement: { style: {} } };
-    try { return { pdfjs, worker, viewer: await import(url('pdf_viewer.mjs')) }; } finally { delete globalThis.document; }
+    globalThis.window = { requestAnimationFrame() {} };
+    globalThis.document = { documentElement: { style: {} }, createElement: () => ({ style: {} }) };
+    try { return { pdfjs, worker, viewer: await import(url('pdf_viewer.mjs')) }; } finally { delete globalThis.window; delete globalThis.document; }
   } finally { [console.log, console.warn] = [log, warn]; }
 })();
 
