@@ -91,7 +91,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const ISSUES = () => globalThis.GZ_WRITER_ISSUES || null;
     // What the pages are laid out by: the format, with an imported file's own page, base font and header over it.
     const look = (doc = view.state.doc) => ST.look(format, doc.attrs.setup);
-    let format = ST.FORMATS.mla9, key = null, paper = null, ctx = host.context?.() || {}, presets = [], zoom = [75, 100, 125, 150].includes(prefs.zoom) ? prefs.zoom / 100 : 'fit', scale = PX100, layout = null, page = 1, focus = false;
+    let format = ST.FORMATS.mla9, key = null, paper = null, ctx = host.context?.() || {}, presets = [], zoom = [75, 100, 125, 150].includes(prefs.zoom) ? prefs.zoom / 100 : 'fit', scale = PX100, layout = null, page = 1, sizeTop = 0, focus = false;
     let laidOut = () => {}, rows = [], feedbackPanel = null, sourcesPanel = null; // the checks, Outline and Feedback's pages after layout
     const nf = (n) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(n);
     // A format's name: the three's and presets' as they are, Blank's in the page's language.
@@ -366,6 +366,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       zoomEl.style.transform = `scale(${scale})`;
       size.style.width = `${geo.width * scale}px`;
       size.style.height = `${(n * stride - GAP) * scale}px`;
+      sizeTop = size.offsetTop;
       while (sheets.children.length > n) sheets.lastChild.remove();
       while (sheets.children.length < n) sheets.append(h('div', { class: 'gp-sheet' }, h('div', { class: 'gp-hdr' }), h('div', { class: 'gp-ftr' }), h('div', { class: 'gp-notes' })));
       const name = surname(), sep = ST.lineHeight(L, { line: 1 });
@@ -417,11 +418,22 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         return Math.min(layout.pages.length, Math.max(1, Math.floor(y / (ST.geometry(look()).height + GAP)) + 1));
       } catch { return 0; }
     };
+    // The status bar's page: the one under the top of the view, as Word and Docs count it (page, the caret's, is the
+    // ruler's and the header's). From the pages' fixed stride (draw) and the canvas's scroll, once a frame while it scrolls.
+    let viewTurn = 0;
+    const inView = () => {
+      if (!layout || compact) return;
+      const n = layout.pages.length, stride = (ST.geometry(look()).height + GAP) * scale;
+      const at = Math.min(n, Math.max(1, Math.floor((canvas.scrollTop - sizeTop + GAP * scale) / stride) + 1));
+      const text = t('Page {n} of {m}', { n: at, m: n });
+      if (pageL.textContent !== text) pageL.textContent = text;
+    };
+    canvas.addEventListener('scroll', () => { viewTurn ||= requestAnimationFrame(() => { viewTurn = 0; inView(); }); }, { passive: true });
     const selected = () => {
       if (!layout || compact) return;
       page = pageAt(view.state.selection.head) || page;
       outlineMark();
-      pageL.textContent = t('Page {n} of {m}', { n: page, m: layout.pages.length });
+      inView();
       const a = ed.active();
       for (const b of marks) b.setAttribute('aria-pressed', String(!!a[b.dataset.run]));
       bullets.setAttribute('aria-pressed', String(a.list === 'bullet'));

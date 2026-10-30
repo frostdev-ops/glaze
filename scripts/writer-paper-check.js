@@ -333,6 +333,17 @@ const HARNESS = `(() => {
     await settle(fr);
     await until(() => fr.evaluate((n) => document.querySelectorAll('.gp-sheet').length === n + 1, before), 'a page more');
     check(true, 'Page break starts a new page');
+    // The status bar counts the page at the top of the view, as Word and Docs do, not the caret's.
+    const pageSaid = () => fr.evaluate(() => document.querySelector('.gp-status > span').textContent);
+    const caretPage = () => fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view, y = v.coordsAtPos(v.state.selection.head).top; return [...document.querySelectorAll('.gp-zoom .gp-sheet')].findIndex((s) => { const r = s.getBoundingClientRect(); return y >= r.top && y <= r.bottom; }) + 1; });
+    const toPage = (n) => fr.evaluate((n) => { const c = document.querySelector('.gp-canvas'), s = document.querySelectorAll('.gp-zoom .gp-sheet')[n - 1]; c.scrollTop = n === 1 ? 0 : c.scrollTop + s.getBoundingClientRect().top - c.getBoundingClientRect().top + 4; }, n);
+    const pagesNow = before + 1, onPage = await caretPage();
+    await toPage(1);
+    await until(async () => (await pageSaid()) === `Page 1 of ${pagesNow}`, `"Page 1 of ${pagesNow}" with page 1 in view`);
+    check(onPage > 1 && await caretPage() === onPage, `scrolled to page 1 with the caret on page ${onPage}: "Page 1 of ${pagesNow}"`);
+    await toPage(onPage + 1);
+    await until(async () => (await pageSaid()) === `Page ${onPage + 1} of ${pagesNow}`, `"Page ${onPage + 1} of ${pagesNow}" with it at the top`);
+    check(await caretPage() === 0 || await caretPage() === onPage, `scrolled on to page ${onPage + 1}, the caret still on ${onPage}: "Page ${onPage + 1} of ${pagesNow}"`);
     await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.run('undo'));
     await settle(fr);
     const input = await fr.$('input[type="file"]');
