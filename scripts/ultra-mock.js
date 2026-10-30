@@ -249,7 +249,7 @@ const viewerPage = (f) => `<!doctype html><html lang="en"><head><meta charset="u
 // until (converting before this time, done after), s3: 'fail' | 'fail-first' (S3's refusal of an address that ran out,
 // once) | 'huge' (a converted.pdf past 50 MB), expires } per file; pdf(file): its converted.pdf's bytes.
 const previews = ({ site = SITE, pdf, scenario = () => ({}) } = {}) => {
-  const seen = { viewer: 0, api: 0, s3: 0, ranges: 0, refused: 0, origins: new Set(), asks: new Map() };
+  const seen = { viewer: 0, api: 0, s3: 0, ranges: 0, refused: 0, cookies: 0, origins: new Set(), asks: new Map() };
   const refusedOnce = new Set();
   const byAt = new Map(PREVIEW_FILES.map((f) => [f.at, f])), byHash = new Map(PREVIEW_FILES.map((f) => [f.hash, f]));
   const ok = (p) => p.then(() => true);
@@ -282,7 +282,8 @@ const previews = ({ site = SITE, pdf, scenario = () => ({}) } = {}) => {
     const file = u.origin === BUCKET && new RegExp(`^/files/${TENANT}/([0-9a-f]{40})/converted\\.pdf$`).exec(u.pathname);
     if (file) {
       const origin = req.headers().origin;
-      if (origin) seen.origins.add(origin);
+      seen.origins.add(origin || '');
+      if (req.headers().cookie) seen.cookies++;
       const cors = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'Accept-Ranges, Content-Range, Content-Length, ETag', 'access-control-allow-headers': 'range', 'access-control-allow-methods': 'GET, HEAD' };
       if (method === 'OPTIONS') return ok(route.fulfill({ status: 200, headers: cors, body: '' }));
       seen.s3++;

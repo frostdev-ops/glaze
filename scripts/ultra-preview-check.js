@@ -6,8 +6,8 @@
 // origin, never the frame's) and handed over; the page box jumps; collapse and expand; one already open when the switch
 // comes on; the switch off, and Settings → Writer → PDFs off: Blackboard's frame; "converting": Blackboard's frame while it
 // waits, then Glaze's; the documents API failing, S3 refusing every address, or a PDF past 50 MB: Blackboard's frame; an
-// address that ran out: asked again, then shown; Save to Documents: a PDF record in Documents, and past the kind's cap
-// refused; Open original: the file in a new tab; dark documents inverts Blackboard's frame, never Glaze's; the keyboard
+// address that ran out: asked again, then shown; Save to Documents: PDF records in the file store, including 12 MB;
+// Open original: the file in a new tab; dark documents inverts Blackboard's frame, never Glaze's; the keyboard
 // reaches the frame and Esc returns to the Preview button; at 640 px it fits. The browser's following of viewerUrl's 302 in
 // the worker is stood in for (ultra-mock.js WHERE: Playwright doesn't follow a routed redirect there); the real one is the
 // owner's live check. GETs only, synthetic. NODE_PATH=<playwright> node scripts/ultra-preview-check.js [dir]
@@ -51,6 +51,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
+    await context.addCookies([{ name: 'preview-check-cookie', value: 'synthetic', domain: new URL(P.BUCKET).hostname, path: '/', secure: true, sameSite: 'None' }]);
     await context.route('**/*', async (r) => {
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
@@ -116,6 +117,19 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     if (!reviewCase) {
     // ---- an expanded preview: Blackboard's frame first, then Glaze's with page 1's text, read by Range from the frame
     await load();
+    await worker.evaluate(async (site) => {
+      const [tab] = await chrome.tabs.query({ url: `${site}/*` });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, func: () => {
+        const post = MessagePort.prototype.postMessage;
+        globalThis.__gzPreviewTransfers = [];
+        MessagePort.prototype.postMessage = function (m, ...args) {
+          if (m?.type !== 'init' || m.mode !== 'view') return post.call(this, m, ...args);
+          const before = m.view.bytes.byteLength, result = post.call(this, m, ...args);
+          globalThis.__gzPreviewTransfers.push({ before, after: m.view.bytes.byteLength });
+          return result;
+        };
+      } });
+    }, site);
     check((await view(SLIDES)).expanded === 'false' && !(await view(SLIDES)).bb, 'the Document page with its two attachments, collapsed');
     await toggle(SLIDES);
     await until(async () => (await view(SLIDES)).bbShown, "expanding shows Blackboard's frame at once");
@@ -125,6 +139,11 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     check(true, "Glaze's viewer takes Blackboard's frame's place and shows the PDF's first page text (\"Page 1 of 6\")");
     check(mock.seen.viewer >= 1 && mock.seen.api >= 1, `the worker followed viewerUrl (${mock.seen.viewer}) and asked the documents API (${mock.seen.api})`);
     check([...mock.seen.origins].every((o) => o === site) && mock.seen.origins.size === 1 && mock.seen.s3 >= 1, `Glaze in the page read the PDF from S3 (${mock.seen.s3} GET, Origin ${[...mock.seen.origins].join(', ')}); the frame read nothing`);
+    const transfers = await worker.evaluate(async (site) => {
+      const [tab] = await chrome.tabs.query({ url: `${site}/*` });
+      return (await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, func: () => globalThis.__gzPreviewTransfers }))[0].result;
+    }, site);
+    check(transfers.length === 1 && transfers[0].before === pdfs[SLIDES.hash].length && transfers[0].after === 0, 'the PDF buffer transfers once and is detached in the page');
     const title = await fr.evaluate(() => document.querySelector('.gp-top h1')?.textContent);
     check(title === SLIDES.name, `its title is the attachment's name ("${title}")`);
     const v1 = await view(SLIDES);
@@ -412,6 +431,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
       check(v.bbShown && !v.gz && v.state === 'ended:viewer:draw', `a failed PDF draw keeps Blackboard's frame (${v.state})`);
     }
 
+    check(mock.seen.origins.size === 1 && [...mock.seen.origins].every((o) => o === site) && mock.seen.cookies === 0, 'every S3 request uses the page Origin and omits cookies, including retries');
     check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
     passed = true;
   } catch (e) {
