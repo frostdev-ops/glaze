@@ -187,3 +187,10 @@ test('offset lookup stays on a shown row beyond a trailing run of hidden rows, a
   z.grow(9);
   assert.equal(z.at(1e9), 8);
 });
+
+test('CSV delimiter detection counts separators outside quoted fields and embedded newlines', () => {
+  for (const [text, delimiter] of [['"commas,,, inside";value\n1;2', ';'], ['"many,,, commas"\tvalue\n1\t2', '\t'], ['"a\nb",c\n1,2', ',']]) {
+    assert.equal(G.sniff(text), delimiter);
+    assert.equal(G.parseDelimited(text, G.sniff(text))[0].length, 2);
+  }
+});
