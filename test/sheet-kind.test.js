@@ -326,3 +326,16 @@ test('the assignment frame\'s hooks: view, into over a paper, empty', async () =
   const e = k.empty();
   assert.ok(SD.isGlance(JSON.parse(JSON.stringify(e.grid))) && e.cells === 0 && e.sheets === 1 && !('book' in e));
 });
+
+test('two editors refuse a stale spreadsheet save before any bands or history change', async () => {
+  const s = store(), P = PA.open(s, () => 1), wb = book();
+  await SD.write(P, KEY, wb, new Map());
+  const a = await SD.read((ks) => s.get(ks), KEY), b = await SD.read((ks) => s.get(ks), KEY);
+  put(a.wb.sheets[0], 1, 0, { t: 's', v: 'newer tab' });
+  await SD.write(P, KEY, a.wb, a.sigs);
+  const before = JSON.stringify(s.data);
+  put(b.wb.sheets[0], 1000, 0, { t: 's', v: 'older tab' });
+  await assert.rejects(SD.write(P, KEY, b.wb, b.sigs), /changed in another tab/);
+  assert.equal(JSON.stringify(s.data), before, 'refusal cannot publish a mixture of the two workbooks');
+  same((await SD.read((ks) => s.get(ks), KEY)).wb, a.wb);
+});
