@@ -229,7 +229,7 @@ const fixture = () => {
     await shot('viewer-notes-1280.png');
     await page.setViewportSize({ width: 640, height: 900 });
     check(await page.locator('#gs-zoom-in').isVisible() && await page.locator('#gs-zoom-out').isVisible(), '640 px: zoom controls remain available');
-    const narrowFit = await width();
+    const narrowFit = await until(async () => { const w = await width(); return w <= 640 ? w : false; }, 'fit after resizing to 640 px');
     await page.click('#gs-zoom-in');
     check(await width() > narrowFit, '640 px: zoom in changes the slide scale');
     await page.click('#gs-zoom');
