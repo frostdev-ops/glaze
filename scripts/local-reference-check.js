@@ -25,11 +25,22 @@ const fileSource = (file) => {
   const fd = fs.openSync(file, 'r');
   return { size: fs.fstatSync(fd).size, read(o, n) { const b = Buffer.allocUnsafe(n); let got = 0; while (got < n) { const r = fs.readSync(fd, b, got, n - got, o + got); if (!r) break; got += r; } return new Uint8Array(b.buffer, b.byteOffset, got); } };
 };
-// Row i of a dump's .f32 file.
-const rows = (file, vocab) => {
-  const fd = fs.openSync(file, 'r'), n = fs.fstatSync(fd).size / (4 * vocab);
-  return { n, row(i) { const b = Buffer.allocUnsafe(4 * vocab); fs.readSync(fd, b, 0, 4 * vocab, i * 4 * vocab); return new Float32Array(b.buffer, b.byteOffset, vocab); }, close: () => fs.closeSync(fd) };
+// Row i of a dump's .f32 file, which must hold exactly `want` rows.
+const rows = (file, vocab, want) => {
+  const fd = fs.openSync(file, 'r'), size = fs.fstatSync(fd).size;
+  if (size !== want * 4 * vocab) { fs.closeSync(fd); throw new Error(`${file}: ${size} bytes, ${want} rows of ${vocab} floats expected`); }
+  return {
+    n: want,
+    row(i) {
+      const b = Buffer.alloc(4 * vocab);
+      if (fs.readSync(fd, b, 0, 4 * vocab, i * 4 * vocab) !== 4 * vocab) throw new Error(`${file}: short read at row ${i}`);
+      return new Float32Array(b.buffer, b.byteOffset, vocab);
+    },
+    close: () => fs.closeSync(fd),
+  };
 };
+// Non-finite logits are a failed run, never a match.
+const finite = (v) => { for (let i = 0; i < v.length; i++) if (!Number.isFinite(v[i])) return false; return true; };
 const argmax = (v) => { let b = 0; for (let i = 1; i < v.length; i++) if (v[i] > v[b]) b = i; return b; };
 const second = (v, best) => { let s = -Infinity; for (let i = 0; i < v.length; i++) if (i !== best && v[i] > s) s = v[i]; return s; };
 
@@ -95,7 +106,10 @@ if (mode === 'tsv') {
       else console.log(`${msg.id}: ${msg.n} prompt tokens in ${(msg.prefillMs / 1000).toFixed(1)} s (${(msg.n / (msg.prefillMs / 1000)).toFixed(2)} tok/s), ${steps} decode steps in ${(msg.decodeMs / 1000).toFixed(1)} s (${(+steps / (msg.decodeMs / 1000)).toFixed(2)} tok/s)`);
       next();
     });
-    child.on('exit', (code) => { if (code) { console.error(`worker ${j} exited ${code}`); process.exitCode = 1; } if (!--live) console.log('done'); });
+    child.on('exit', (code, signal) => {
+      if (code !== 0) { console.error(`worker ${j} exited ${signal || code}`); process.exitCode = 1; }
+      if (!--live) console.log(process.exitCode ? 'failed' : 'done');
+    });
   }
 } else if (mode === 'compare') {
   const out = flag('--out', null), strict = has('--strict');
@@ -108,11 +122,12 @@ if (mode === 'tsv') {
     const A = JSON.parse(fs.readFileSync(fa, 'utf8')), B = JSON.parse(fs.readFileSync(fb, 'utf8'));
     if (A.prompt.join() !== B.prompt.join()) { console.log(`${p.id}: different prompt tokens`); allTop1 = allGen = false; continue; }
     const V = A.vocab, n = A.prompt.length;
-    const ra = rows(path.join(aDir, `${p.id}.prefill.f32`), V), rb = rows(path.join(bDir, `${p.id}.prefill.f32`), V);
-    let same = 0, dmax = 0, dsum = 0;
+    const ra = rows(path.join(aDir, `${p.id}.prefill.f32`), V, n), rb = rows(path.join(bDir, `${p.id}.prefill.f32`), V, n);
+    let same = 0, dmax = 0, dsum = 0, nonFinite = 0;
     const misses = [];
     for (let i = 0; i < n; i++) {
       const x = ra.row(i), y = rb.row(i);
+      if (!finite(x) || !finite(y)) { nonFinite++; continue; }
       for (let k = 0; k < V; k++) { const d = Math.abs(x[k] - y[k]); dsum += d; if (d > dmax) dmax = d; }
       const ta = argmax(x), tb = argmax(y);
       if (ta === tb) same++;
@@ -123,10 +138,11 @@ if (mode === 'tsv') {
     const ga = A.gen, gb = B.gen;
     let firstDiff = 0;
     while (firstDiff < ga.length && firstDiff < gb.length && ga[firstDiff] === gb[firstDiff]) firstDiff++;
-    const da = rows(path.join(aDir, `${p.id}.decode.f32`), V), db = rows(path.join(bDir, `${p.id}.decode.f32`), V);
+    const da = rows(path.join(aDir, `${p.id}.decode.f32`), V, ga.length - 1), db = rows(path.join(bDir, `${p.id}.decode.f32`), V, gb.length - 1);
     let ddmax = 0, compared = 0;
     for (let s = 0; s < Math.min(da.n, db.n) && s < firstDiff; s++) {
       const x = da.row(s), y = db.row(s);
+      if (!finite(x) || !finite(y)) { nonFinite++; continue; }
       for (let k = 0; k < V; k++) { const d = Math.abs(x[k] - y[k]); if (d > ddmax) ddmax = d; }
       compared++;
     }
@@ -136,14 +152,14 @@ if (mode === 'tsv') {
       atDiff = { step: firstDiff, a: ga[firstDiff], b: gb[firstDiff], gapA: +(x[ga[firstDiff]] - x[gb[firstDiff]]).toFixed(5), gapB: +(y[gb[firstDiff]] - y[ga[firstDiff]]).toFixed(5) };
     }
     da.close(); db.close();
-    const genSame = ga.length === gb.length && firstDiff === ga.length;
-    const r = { id: p.id, tokens: n, top1: same, of: n, prefillMaxAbs: dmax, prefillMeanAbs: dsum / (n * V), misses, gen: ga.length, genAgree: firstDiff, genSame, decodeCompared: compared, decodeMaxAbs: ddmax, atDiff, speed: A.prefillTokS ? { prefillTokS: A.prefillTokS, decodeTokS: A.decodeTokS } : B.prefillTokS ? { prefillTokS: B.prefillTokS, decodeTokS: B.decodeTokS } : undefined };
+    const genSame = ga.length === gb.length && firstDiff === ga.length && !nonFinite;
+    const r = { id: p.id, tokens: n, top1: same, of: n, nonFinite, prefillMaxAbs: dmax, prefillMeanAbs: dsum / (n * V), misses, gen: ga.length, genAgree: firstDiff, genSame, decodeCompared: compared, decodeMaxAbs: ddmax, atDiff, speed: A.prefillTokS ? { prefillTokS: A.prefillTokS, decodeTokS: A.decodeTokS } : B.prefillTokS ? { prefillTokS: B.prefillTokS, decodeTokS: B.decodeTokS } : undefined };
     results.prompts.push(r);
     agree += same; total += n;
-    if (same !== n) allTop1 = false;
+    if (same !== n || nonFinite) allTop1 = false;
     if (!genSame) allGen = false;
     maxPrefill = Math.max(maxPrefill, dmax); maxDecode = Math.max(maxDecode, ddmax);
-    console.log(`${p.id}: top-1 ${same}/${n}, max |Δ| ${dmax.toExponential(3)} (mean ${(dsum / (n * V)).toExponential(2)}); greedy ${firstDiff}/${ga.length} agree, decode max |Δ| ${ddmax.toExponential(3)} over ${compared} steps${misses.length ? `; misses ${JSON.stringify(misses.slice(0, 5))}` : ''}${atDiff ? `; first different token ${JSON.stringify(atDiff)}` : ''}`);
+    console.log(`${p.id}: ${nonFinite ? `${nonFinite} rows with non-finite logits; ` : ''}top-1 ${same}/${n}, max |Δ| ${dmax.toExponential(3)} (mean ${(dsum / (n * V)).toExponential(2)}); greedy ${firstDiff}/${ga.length} agree, decode max |Δ| ${ddmax.toExponential(3)} over ${compared} steps${misses.length ? `; misses ${JSON.stringify(misses.slice(0, 5))}` : ''}${atDiff ? `; first different token ${JSON.stringify(atDiff)}` : ''}`);
   }
   Object.assign(results, { top1: agree, of: total, allTop1, allGen, prefillMaxAbs: maxPrefill, decodeMaxAbs: maxDecode });
   console.log(`all: top-1 ${agree}/${total} (${total ? ((100 * agree) / total).toFixed(2) : 'n/a'}%), greedy identical on ${results.prompts.filter((r) => r.genSame).length}/${PROMPTS.length}, max |Δ| prefill ${maxPrefill.toExponential(3)}, decode ${maxDecode.toExponential(3)}`);

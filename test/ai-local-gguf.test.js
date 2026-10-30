@@ -55,7 +55,8 @@ const KV = [
   ['a.u64', 'u64', 2n ** 63n + 5n], ['a.i64', 'i64', -(2n ** 62n)], ['a.true', 'bool', true], ['a.false', 'bool', false],
   ['a.heads', 'arr', ['i32', [0, 0, 4, 0, -4]]],
   ['a.window', 'arr', ['bool', [false, true, true]]],
-  ['a.tokens', 'arr', ['str', ['<|im_start|>', 'Ġhello', '', 'ĊĊ']]],
+  ['a.tokens', 'arr', ['str', ['<|im_start|>', 'Ġhello', '', 'ĊĊ', '\uFEFF', '\uFEFFfoo']]],
+  ['a.bom', 'str', '\uFEFFbom'],
   ['a.f32s', 'arr', ['f32', [1, 0.5, -2]]],
   ['a.u64s', 'arr', ['u64', [1n, 2n ** 40n]]],
   ['a.nested', 'arr', ['arr', [['u8', [1, 2]], ['u8', [3]]]]],
@@ -83,7 +84,9 @@ test('every metadata type reads back as written', async () => {
   assert.ok(g.kv['a.heads'] instanceof Int32Array);
   assert.deepEqual([...g.kv['a.heads']], [0, 0, 4, 0, -4]);
   assert.deepEqual(g.kv['a.window'], [false, true, true]);
-  assert.deepEqual(g.kv['a.tokens'], ['<|im_start|>', 'Ġhello', '', 'ĊĊ']);
+  // A leading U+FEFF is text, not a byte order mark (gguf.cpp keeps it).
+  assert.deepEqual(g.kv['a.tokens'], ['<|im_start|>', 'Ġhello', '', 'ĊĊ', '\uFEFF', '\uFEFFfoo']);
+  assert.equal(g.kv['a.bom'], '\uFEFFbom');
   assert.ok(g.kv['a.f32s'] instanceof Float32Array);
   assert.deepEqual([...g.kv['a.f32s']], [1, 0.5, -2]);
   assert.ok(g.kv['a.u64s'] instanceof BigUint64Array);
