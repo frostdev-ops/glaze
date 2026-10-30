@@ -289,8 +289,10 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       if (`${at.origin}${at.pathname}` !== (id ? `${UPLOAD}/${id}` : UPLOAD) || !at.searchParams.get('upload_id')) throw new Fail('bad');
       return json(await call(at.href, { method: 'PUT', headers: { 'content-type': mime }, body: bytes }));
     };
-    // Metadata only: a name, Glaze's properties, in or out of Drive's trash (never deleted for good).
-    const patch = async (id, meta, fields = SYNC) => json(await call(`${API}/${idOf(id)}?${q({ fields })}`, { method: 'PATCH', headers: { 'content-type': JSON_TYPE }, body: JSON.stringify(meta) }));
+    // Metadata only: a name, Glaze's properties, in or out of Drive's trash (never deleted for good). move: { add, remove: [ids] },
+    // from those folders into that one (Sync's folders converging, documents/drive-sync.js converge).
+    const patch = async (id, meta, fields = SYNC, move = null) => json(await call(`${API}/${idOf(id)}?${q({ fields, ...(move && { addParents: idOf(move.add), removeParents: move.remove.map(idOf).join(',') }) })}`,
+      { method: 'PATCH', headers: { 'content-type': JSON_TYPE }, body: JSON.stringify(meta) }));
     // A file with no content (a folder).
     const folder = async (meta, fields = SYNC) => {
       const j = await json(await call(`${API}?${q({ fields })}`, { method: 'POST', headers: { 'content-type': JSON_TYPE }, body: JSON.stringify(meta) }));
