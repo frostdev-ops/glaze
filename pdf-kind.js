@@ -170,7 +170,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const prevB = btn({ class: 'gq-ib', title: t('Previous'), 'aria-label': t('Previous') }, icon('up')), nextB = btn({ class: 'gq-ib', title: t('Next'), 'aria-label': t('Next') }, icon('down'));
     const closeFind = btn({ class: 'gq-ib', title: t('Close'), 'aria-label': t('Close') }, icon('x'));
     const findBar = h('div', { id: 'gq-find', class: 'gq-find', role: 'search', hidden: true }, q, count, prevB, nextB, closeFind);
-    const pagesEl = h('div', { class: 'pdfViewer' }), scroll = h('div', { class: 'gq-scroll', tabindex: '0', 'aria-label': rec?.title || t('PDF') }, pagesEl);
+    const pagesEl = h('div', { class: 'pdfViewer' }), scroll = h('div', { class: 'gq-scroll', role: 'region', tabindex: '0', 'aria-label': rec?.title || t('PDF') }, pagesEl);
     const said = h('p', { class: 'gq-said', role: 'alert', hidden: true });
     const ui = h('div', { class: 'gp gp-standalone gq' },
       h('header', { class: 'gp-top' }, back, h('h1', {}, titleIn || rec?.title || t('Untitled document')), h('span', { class: 'grow' }), state),
