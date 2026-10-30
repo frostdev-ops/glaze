@@ -3429,6 +3429,8 @@ const openDriveSync = () => {
     // they stay out of Drive; Settings' own Back up… carries them behind its warning).
     snapshot: async () => {
       brokerIn('backup');
+      // The zip (and Notes' export, which builds on it) is loaded only by a document's export: a restarted worker may have none.
+      if (!globalThis.GZ_ZIP) importScripts('../core/zip.js');
       const all = await chrome.storage.local.get(null), raw = await chrome.storage.sync.get(null);
       const tasks = Object.fromEntries(Object.entries(all).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
       const pets = GZ_PET.backup(Object.fromEntries(Object.entries(all).filter(([k]) => GZ_PET.KEY.test(k)))) || {};
