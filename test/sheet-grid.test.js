@@ -177,3 +177,13 @@ test('fill text-number series preserves signs across zero in either direction', 
   assert.deepEqual(vals(G.fill([s('Item 0')], 2, { back: true })), ['Item -1', 'Item -2']);
   assert.deepEqual(vals(G.fill([s('Item -02'), s('Item -01')], 3)), ['Item 00', 'Item 01', 'Item 02']);
 });
+
+test('offset lookup stays on a shown row beyond a trailing run of hidden rows, after resizing and growth', () => {
+  const z = new G.Sizes(8, 20, new Map([[0, 0], [5, 0], [6, 0], [7, 0]]));
+  z.set(4, 35);
+  assert.equal(z.at(0), 1);
+  assert.equal(z.at(z.total()), 4);
+  assert.equal(z.at(1e9), 4);
+  z.grow(9);
+  assert.equal(z.at(1e9), 8);
+});
