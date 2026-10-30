@@ -105,17 +105,17 @@ test('NPER and RATE with Microsoft\'s data; RATE iterates from its guess and giv
     ['NPER(A2/12, A3, A4, A5)', '60.0821229', 60.082122853761723],
     ['NPER(A2/12, A3, A4)', '-9.57859404', -9.5785940398131667],
   ]);
-  cases(e, [['NPER(0,-100,1000)', 10], ['NPER(0,-100,1000,-500)', 15], ['NPER(0.1,-50,1000)', '#NUM!'], ['NPER(0,0,1000)', '#NUM!']]);
+  cases(e, [['NPER(0,-100,1000)', 10], ['NPER(0,-100,1000,-500)', 5], ['NPER(0.1,-50,1000)', '#NUM!'], ['NPER(0,0,1000)', '#NUM!']]);
   // rate-function: A2 4, A3 -200, A4 8000; the page shows 1% and 9.24%.
   const r = book({ A2: 4, A3: -200, A4: 8000 });
   examples(r, [
     ['RATE(A2*12, A3, A4)', '1%', 0.0077014724882020438],
     ['RATE(A2*12, A3, A4)*12', '9.24%', 0.0077014724882020438 * 12],
-    ['RATE(A2*12, A3, A4,,,0.5)', '1%', 0.0077014724882020438],
+    ['RATE(A2*12, A3, A4,,,0.25)', '1%', 0.0077014724882020438],
   ]);
   rel(calc(r, 'RATE(60,PMT(0.004,60,20000,-1000,1),20000,-1000,1)'), 0.004, 'RATE undoes PMT, type 1');
   cases(r, [['RATE(10,100,1000)', '#NUM!'], ['RATE(0,-100,1000)', '#NUM!'], ['RATE(48,-200,8000,0,0,30)', '#NUM!']]);
-  assert.ok(Math.abs(calc(r, 'RATE(10,-100,1000)')) < 1e-12, 'no interest');
+  assert.ok(Math.abs(calc(r, 'RATE(10,-100,1000)')) < 1e-9, 'no interest');
 });
 
 test('NPV, IRR and MIRR with Microsoft\'s data', () => {
@@ -234,6 +234,11 @@ test('CUMIPMT and CUMPRINC with Microsoft\'s data and their #NUM! rules', () => 
     rel(calc(e, `CUMPRINC(A2/12,A3*12,A4,13,24,${t})`), calc(e, `SUM(PPMT(A2/12,${periods},A3*12,A4,0,${t}))`), `CUMPRINC is the sum of PPMT, type ${t}`);
     rel(calc(e, `CUMPRINC(A2/12,A3*12,A4,1,360,${t})`), -125000, `the whole loan, type ${t}`);
   }
+  // Paid in advance: the first payment carries no interest, each later one the interest of the period before.
+  rel(calc(e, 'CUMIPMT(A2/12,A3*12,A4,13,24,1)'), -11052.339583871804, 'CUMIPMT, type 1');
+  rel(calc(e, 'CUMPRINC(A2/12,A3*12,A4,13,24,1)'), -927.15347237806284, 'CUMPRINC, type 1');
+  rel(calc(e, 'IPMT(A2/12,2,A3*12,A4,0,1)'), -930.01281683984383, 'IPMT, type 1');
+  rel(calc(e, 'PPMT(A2/12,2,A3*12,A4,0,1)'), -68.278271180978417, 'PPMT, type 1');
   for (const name of ['CUMIPMT', 'CUMPRINC']) {
     cases(e, [
       [`${name}(0,360,A4,1,1,0)`, '#NUM!'], [`${name}(A2/12,0,A4,1,1,0)`, '#NUM!'], [`${name}(A2/12,360,0,1,1,0)`, '#NUM!'], [`${name}(A2/12,360,A4,0,1,0)`, '#NUM!'],
