@@ -93,6 +93,8 @@ test('resting waits while a view transition covers the page', async () => {
   const t = node([10, 10, 24, 24]);
   const vt = { ...anim(300), effect: { pseudoElement: '::view-transition-group(root)', getComputedTiming: () => ({ endTime: 300 }) } };
   await assert.rejects(resting(realms({ tab: realm({ '#go': t }, [vt]) }), 'tab', `document.querySelector("#go")`), /\(moving\)/);
+  vt.effect.getComputedTiming = () => ({ endTime: Infinity });
+  await assert.rejects(resting(realms({ tab: realm({ '#go': t }, [vt]) }), 'tab', `document.querySelector("#go")`), /\(moving\)/);
 });
 
 test('resting, for a target in a frame, looks in the frame\'s realm and at the frame\'s element in the tab', async () => {
@@ -126,4 +128,31 @@ test('every click rests before it measures and presses', async () => {
   button.anims = [];
   await b.click('tab', '#gz-dl-73');
   assert.equal(JSON.stringify(pressed), JSON.stringify([{ type: 'pointerMove', x: 112, y: 212 }])); // made in the check's realm
+});
+
+test('Firefox frame lookup binds the URL to the frame element in the requested header', async () => {
+  const prefix = 'moz-extension://check/features/allow.html';
+  const header = { context: 'header-frame', url: 'about:blank' };
+  const other = { context: 'other-frame', url: prefix };
+  const send = async (method, params) => {
+    if (method === 'browsingContext.getTree') return { contexts: [{ context: 'tab', children: [other, header] }] };
+    assert.equal(method, 'script.evaluate');
+    assert.equal(params.target.context, 'tab');
+    const selected = vm.runInNewContext(params.expression, { document: { querySelector: (s) => {
+      assert.equal(s, '#context_module_73 .ig-header > .gz-dl-allow');
+      return { contentWindow: 'header-window' };
+    } } });
+    assert.equal(selected, 'header-window');
+    return { type: 'success', result: { type: 'window', value: { context: 'header-frame' } } };
+  };
+  const b = browser(send, () => '');
+  assert.equal(await b.frame('tab', prefix, '#context_module_73 .ig-header > .gz-dl-allow'), undefined);
+  header.url = prefix;
+  assert.equal(await b.frame('tab', prefix, '#context_module_73 .ig-header > .gz-dl-allow'), 'header-frame');
+});
+
+test('Firefox Allow wait asks for the frame from module 73 rather than another Allow page', async () => {
+  const b = allowBrowser();
+  b.frame = async (tab, prefix, selector) => selector === '#context_module_73 .ig-header > .gz-dl-allow' ? 'frame' : undefined;
+  assert.equal(await allowFrame(b, 'tab'), 'frame');
 });
