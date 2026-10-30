@@ -105,11 +105,12 @@ var GZ_LX = globalThis.GZ_LX || (() => {
     }
     return null;
   };
-  // What rotation turns through: theme codes (favorites) and built-in Look names, as chosen; none chosen is every built-in Look.
-  // `kept`, the favorites' codes: one removed from favorites has no box to untick, so it isn't turned to either.
+  // What rotation turns through: kept Looks (lib/looks.js ids; theme codes as ticked before ids) and built-in Look names, as
+  // chosen; none chosen is every built-in Look. `kept`, the kept Looks' ids (or codes): one removed has no box to untick, so it
+  // isn't turned to either.
   const rotation = (chosen, looks, kept) => {
     const fav = (v) => !kept || kept.includes(v);
-    const list = Array.isArray(chosen) ? chosen.filter((v) => typeof v === 'string' && (v.startsWith('glaze1:') ? v.length <= 4000 && fav(v) : v.startsWith('glaze2:') ? v.length <= 20000 && fav(v) : looks.includes(v))) : [];
+    const list = Array.isArray(chosen) ? chosen.filter((v) => typeof v === 'string' && (v.startsWith('glaze1:') ? v.length <= 4000 && fav(v) : v.startsWith('glaze2:') ? v.length <= 20000 && fav(v) : /^c:[0-9a-z]{14}$/.test(v) ? fav(v) : looks.includes(v))) : [];
     return list.length ? [...new Set(list)] : [...looks];
   };
   // The settings to save for wearing a decoded theme code (lib/share.js) over `s`, as "Use this theme" does (options.js), minus

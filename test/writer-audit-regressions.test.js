@@ -99,7 +99,7 @@ for (const failure of ['loader', 'commands']) test(`Moodle retains Documents and
   const source = read('features/palette.js');
   const start = source.indexOf('  const commands = async () => {'), end = source.indexOf('  // Ultra\'s GPA', start);
   const commands = vm.runInNewContext(`${source.slice(start, end)} commands`, {
-    need: async () => {}, moodle: true, go() {},
+    need: async () => {}, keeping: Promise.resolve(), moodle: true, go() {},
     moodleIn: async () => {
       if (failure === 'loader') throw Error('loader failed');
       return { commands: async () => { throw Error('commands failed'); } };

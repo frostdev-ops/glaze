@@ -13,7 +13,7 @@ const worker = (stored = {}, faults = {}) => {
   const context = vm.createContext({ GZ_DEFAULTS: D.GZ_DEFAULTS, console, brokerTurn: null,
     GZ_CARDS: { queue: () => (fn) => Promise.resolve().then(fn) },
     tabsAuto: async () => {}, keepWidgets: async () => {}, serial: (fn) => Promise.resolve().then(fn), ensure: async () => {},
-    sweepMedia() {}, moveChannelKeys: async () => {}, perSite: async () => {}, pointerToLook() {}, lightUp: async () => {}, firstRun() {},
+    sweepMedia() {}, moveChannelKeys: async () => {}, perSite: async () => {}, pointerToLook() {}, lightUp: async () => {}, firstRun() {}, catalogue() {},
     chrome: { runtime: { onInstalled: { addListener: (fn) => installed.push(fn) } }, storage: { sync: {
       get: async (keys) => {
         if (faults.get) throw Error('storage read failed');
