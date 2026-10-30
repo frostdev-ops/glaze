@@ -143,7 +143,7 @@ test('bullets and auto-numbering hang in the indent; autofit scales the type', a
   const paras = all(body).filter(cls('gs-p'));
   assert.deepEqual(paras.map((p) => find(p, cls('gs-bu'))?.textContent ?? null), ['•', '–', '•', '•', null, '1.', 'a)', 'b)', '2.', 'IV.']);
   const [first] = paras;
-  assert.equal(px(first.style.getPropertyValue('padding-left')), 24); // marL 228600
+  assert.equal(px(first.style.getPropertyValue('padding-inline-start')), 24); // marL 228600, on the start side
   assert.equal(px(first.style.getPropertyValue('text-indent')), -24);
   const bu = find(first, cls('gs-bu'));
   assert.equal(px(bu.style.getPropertyValue('min-width')), 24);
@@ -157,6 +157,17 @@ test('bullets and auto-numbering hang in the indent; autofit scales the type', a
   // An empty paragraph keeps its line: the end mark's size.
   assert.equal(px(paras[4].style.getPropertyValue('font-size')), Math.round(14 * 0.925 * 4 / 3 * 100) / 100);
   assert.ok(find(paras[4], tag('br')));
+});
+
+test('a right-to-left paragraph keeps its margin and hanging bullet on its start side, the right', async () => {
+  const d = await deck(), s = structuredClone(d.slides[1]);
+  const body = s.shapes.find((x) => x.name === 'Content Placeholder 2');
+  for (const p of body.text.paragraphs) { p.rtl = true; p.align = 'right'; }
+  const p = find(named(R.slide(s, d, { document: doc, media: MEDIA, labels: LABELS }), 'Content Placeholder 2'), cls('gs-p'));
+  assert.equal(p.style.getPropertyValue('direction'), 'rtl');
+  assert.equal(px(p.style.getPropertyValue('padding-inline-start')), 24);
+  assert.equal(p.style.getPropertyValue('padding-left'), '');
+  assert.equal(px(p.style.getPropertyValue('text-indent')), -24);
 });
 
 test('geometry: presets and custom paths, gradients, dashes, caps and arrowheads; rotation and flips on the box', async () => {
