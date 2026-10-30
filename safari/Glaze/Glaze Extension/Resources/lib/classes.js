@@ -461,14 +461,15 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
       const e = o.event;
       if (e.allDay || !(o.end > o.start) || o.end - o.start > 8 * 36e5) continue;
       const a = L.inputs(o.start, tz), b = L.inputs(o.end, tz);
-      if (a.date !== b.date) continue;
+      const midnight = b.time === '00:00' && dayNum(b.date) === dayNum(a.date) + 1;
+      if (a.date !== b.date && !midnight) continue;
       const title = e.summary.trim() || '?';
       if (!groups.has(title)) groups.set(title, { events: new Set(), slots: new Map() });
       const g = groups.get(title);
       g.events.add(e);
       const mins = (x) => +x.time.slice(0, 2) * 60 + +x.time.slice(3);
-      const k = `${mins(a)}|${mins(b)}|${e.location.trim()}`;
-      if (!g.slots.has(k)) g.slots.set(k, { start: mins(a), end: mins(b), loc: e.location.trim(), dates: new Set(), open: false });
+      const end = midnight ? 1440 : mins(b), k = `${mins(a)}|${end}|${e.location.trim()}`;
+      if (!g.slots.has(k)) g.slots.set(k, { start: mins(a), end, loc: e.location.trim(), dates: new Set(), open: false });
       const s = g.slots.get(k);
       s.dates.add(a.date);
       if (e.rrule && e.rrule.until == null && e.rrule.count == null) s.open = true;

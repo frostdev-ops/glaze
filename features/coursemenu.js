@@ -34,36 +34,39 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     edits.clear();
     const restore = ctx.settings().courses === editCourses;
     editCourses = null;
-    if (restore) ctx.setCourses(editStored);
+    if (restore) ctx.setCourses(...editStored);
     menuNote(t('Too much to sync. Shorten a nickname or clear one.'));
     if (menu) paintMenu();
     return false;
   };
+  // A Look picked goes in courses.looks or courseLooks (GZ_COURSE_EDIT.look): `k`, written with the courses when one was.
+  const tooBig = (c, k) => GZ_SYNC_BYTES('courses', c) > GZ_SYNC_ITEM_MAX || GZ_SYNC_BYTES('courseLooks', k) > GZ_SYNC_ITEM_MAX;
   const saveEdits = () => {
     clearTimeout(editTimer);
     editTimer = 0;
     if (!edits.size) return true;
-    const c = structuredClone(ctx.settings().courses);
-    for (const fn of edits.values()) fn(c);
-    if (GZ_SYNC_BYTES('courses', c) > GZ_SYNC_ITEM_MAX) return refuseEdits();
+    const c = structuredClone(ctx.settings().courses), k = { ...ctx.settings().courseLooks };
+    for (const fn of edits.values()) fn(c, k);
+    if (tooBig(c, k)) return refuseEdits();
+    const looks = [...edits.keys()].some((key) => key.startsWith('look '));
     edits.clear();
     editCourses = null;
     try {
-      chrome.storage.sync.set({ version: 2, courses: c }, () => { if (chrome.runtime.lastError) menuNote(t('Not saved. Try again in a moment.')); });
+      chrome.storage.sync.set({ version: 2, courses: c, ...(looks && { courseLooks: k }) }, () => { if (chrome.runtime.lastError) menuNote(t('Not saved. Try again in a moment.')); });
     } catch { /* extension reloaded under the tab */ }
     return true;
   };
   // An edit that would take the courses item past what sync storage keeps (8 KB) is refused, said in the menu,
   // and leaves the page as it was: false.
   const editCourse = (key, fn, soon = false) => {
-    const c = structuredClone(ctx.settings().courses);
-    for (const edit of edits.values()) edit(c);
-    fn(c);
-    if (GZ_SYNC_BYTES('courses', c) > GZ_SYNC_ITEM_MAX) return refuseEdits();
+    const c = structuredClone(ctx.settings().courses), k = { ...ctx.settings().courseLooks };
+    for (const edit of edits.values()) edit(c, k);
+    fn(c, k);
+    if (tooBig(c, k)) return refuseEdits();
     menuNote('');
-    if (ctx.settings().courses !== editCourses) editStored = ctx.settings().courses;
+    if (ctx.settings().courses !== editCourses) editStored = [ctx.settings().courses, ctx.settings().courseLooks];
     editCourses = c;
-    ctx.setCourses(c);
+    ctx.setCourses(c, k);
     edits.set(key, fn);
     clearTimeout(editTimer);
     if (soon) { editTimer = setTimeout(saveEdits, 500); return true; }
@@ -195,7 +198,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     const { cid } = m;
     const c = ctx.settings().courses;
     m.tint.checked = GZ_COURSE_TINTED(c, cid, ctx.courseList());
-    const look = m.looks.some((b) => b.dataset.look === c.looks[cid]) ? c.looks[cid] : '';
+    const id = GZ_COURSE_LOOK_ID(ctx.settings(), cid, kept), look = m.looks.some((b) => b.dataset.look === id) ? id : '';
     for (const b of m.looks) b.setAttribute('aria-pressed', String(look === b.dataset.look));
     if (canvas) {
       // Canvas's color for it now, as its cards show it: a swatch of the same color is pressed, else the picker is.
@@ -276,7 +279,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
       b.style.borderColor = c['--gz-line-strong'];
       b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 3px, transparent 3px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${tone.join(', ')})`;
     }
-    b.addEventListener('click', () => editCourse(`look ${cid}`, (c) => GZ_COURSE_EDIT.look(c, cid, look)));
+    b.addEventListener('click', () => editCourse(`look ${cid}`, (c, k) => GZ_COURSE_EDIT.look(c, cid, look, k)));
     return b;
   });
   const refreshLooks = () => {
