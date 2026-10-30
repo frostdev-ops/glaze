@@ -141,9 +141,9 @@ On by default on Blackboard Ultra (Settings → Writer → Writer → **Glaze Wr
 
 **Back up…** carries your papers and documents (Trash's too), their versions and presets, your dictionary and saved sources.
 
-Settings → Writer, one line each (on by default but Light page and Full writer; MLA 9, Fit, 40 versions and American English to start):
+Settings → Writer, one line each (on by default but Light page, Full writer and PDFs; MLA 9, Fit, 40 versions and American English to start):
 - **Glaze Writer** and **Open uploads in Writer**: Writer itself, and an assignment's upload area going to Writer first.
-- Papers: **Format for new papers** (MLA 9, APA 7, Chicago 17, Blank); **Zoom** a paper opens at (Fit, 75–150%); **Ruler** above the page; **Light page** keeps the page white with a dark Look; **Full writer** opens an assignment as pages (off, the compact box whose text goes into Blackboard's); **Versions kept** per paper (10, 25, 40, 50, 100; the last submitted always stays).
+- Papers: **Format for new papers** (MLA 9, APA 7, Chicago 17, Blank); **Zoom** a paper opens at (Fit, 75–150%); **Ruler** above the page; **Light page** keeps the page white with a dark Look; **Full writer** opens an assignment as pages (off, the compact box whose text goes into Blackboard's); **PDFs** lets Documents import, open and fill PDF files (off, it takes Word files only); **Versions kept** per paper (10, 25, 40, 50, 100; the last submitted always stays).
 - Papers: **Documents** opens the Documents page; **Clear papers** for one course (**Clear…**) or **Clear all papers and documents** (Trash too), after a question; what you submitted stays in Blackboard.
 - Typing: **Fix typos**; **Capital I and sentence starts**; **Doubled words and spaces**; **Smart quotes and dashes**; **Ask how to paste formatting** after a formatted paste.
 - Proofing: **Spelling and grammar** on or off; **Dialect** (American, British, Canadian or Australian English); **Personal dictionary**, each added word with its remove ✕, and **Clear**.
