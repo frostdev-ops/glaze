@@ -28,11 +28,11 @@ const wire = () => {
 };
 const octal = (buf) => [...buf].map((b) => (b >= 0x20 && b < 0x7f && b !== 0x25 && b !== 0x5c && b !== 0x27 ? String.fromCharCode(b) : `\\${b.toString(8).padStart(3, '0')}`)).join('');
 
-const oldSh = ({ node, also = [], script, browser }) => (node === null
+const makeSh = ({ node, also = [], script, browser }, guarded = false) => (node === null
   ? `#!/bin/sh\n: no node for ${q(abs(script))} host --browser=${id(browser)}\nprintf '${octal(wire())}'\nexit 1\n`
-  : `#!/bin/sh\nfor n in ${[node, ...also].map((n) => q(abs(n))).join(' ')}; do\n  [ -f "$n" ] && [ -x "$n" ] && exec "$n" ${q(abs(script))} host --browser=${id(browser)} "$@"\ndone\nprintf '${octal(wire())}'\nexit 1\n`);
-const sh = (o) => o.node === null ? oldSh(o) : oldSh(o).replace('#!/bin/sh\n', SH_SAFE)
-  .replace('&& exec "$n"', '&& safe_path "$n" 2>/dev/null && exec "$n"');
+  : `${guarded ? SH_SAFE : '#!/bin/sh\n'}for n in ${[node, ...also].map((n) => q(abs(n))).join(' ')}; do\n  [ -f "$n" ] && [ -x "$n" ] && ${guarded ? 'safe_path "$n" 2>/dev/null && ' : ''}exec "$n" ${q(abs(script))} host --browser=${id(browser)} "$@"\ndone\nprintf '${octal(wire())}'\nexit 1\n`);
+const oldSh = (o) => makeSh(o);
+const sh = (o) => makeSh(o, true);
 // cmd expands % even inside quotes, so it is doubled. cmd reads a .bat a line at a time from where it left off, so the
 // command ends the file's reading itself (`& exit /b`): a launcher rewritten while its host runs is never read further.
 // PowerShell writes the no-node bytes: cmd has no way to write a NUL. %SystemRoot% is the browser's own.
@@ -57,7 +57,7 @@ const SH = /^#!\/bin\/sh\nexec '((?:[^']|'\\'')*)' '((?:[^']|'\\'')*)' host --br
 const BAT = /^@echo off\r\n(?:@setlocal DisableDelayedExpansion\r\n)?"([^"\x00-\x1f]*)" "([^"\x00-\x1f]*)" host --browser=([a-z][a-z-]*) %\* & exit \/b\r\n$/;
 // A launcher with nodes is ours only as text() writes it.
 const Q = String.raw`'((?:[^']|'\\'')*)'`, W = '"([^"\x00-\x1f]*)"';
-const SH_FOR = new RegExp(`^#!/bin/sh\nfor n in ((?:${Q} ?)+); do\n  \\[ -f "\\$n" \\] && \\[ -x "\\$n" \\] && exec "\\$n" ${Q} host --browser=([a-z][a-z-]*) "\\$@"\n`);
+const SH_FOR = new RegExp(`^#!/bin/sh\nfor n in ((?:${Q} ?)+); do\n  \\[ -f "\\$n" \\] && \\[ -x "\\$n" \\] && (?:safe_path "\\$n" 2>/dev/null && )?exec "\\$n" ${Q} host --browser=([a-z][a-z-]*) "\\$@"\n`);
 const BAT_IF = /^@echo off\r\n@setlocal DisableDelayedExpansion\r\n((?:if exist [^\r\n]+\r\n)+)/;
 const nodesOf = (list, re, un) => [...list.matchAll(re)].map((m) => un(m[1]));
 // A launcher with no node is ours only as text() writes it.
@@ -72,7 +72,7 @@ const parse = (t) => {
   const unSh = (s) => s.replace(/'\\''/g, "'"), unBat = (s) => s.replace(/%%/g, '%');
   const back = (o, make) => { try { return make(o) === t ? o : null; } catch { return null; } };
   const guarded = typeof t === 'string' && t.startsWith(SH_SAFE);
-  const plain = guarded ? t.replace(SH_SAFE, '#!/bin/sh\n').replace('&& safe_path "$n" 2>/dev/null && exec "$n"', '&& exec "$n"') : t;
+  const plain = guarded ? `#!/bin/sh\n${t.slice(SH_SAFE.length)}` : t;
   let f = typeof plain === 'string' && SH_FOR.exec(plain);
   if (f) {
     const [node, ...also] = nodesOf(f[1], new RegExp(Q, 'g'), unSh);
