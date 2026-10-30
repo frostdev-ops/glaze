@@ -92,6 +92,31 @@ const worker = async (ctx) => until(async () => ctx.serviceWorkers().find((w) =>
     check(canon(await registered(sw)) === canon(want), 'the replacement restores the execution world');
     check(JSON.stringify(await pass(sw)) === '[]', 'the next pass leaves the repaired registrations alone');
 
+    // The lists taken away and put back (a restore, an undo): the pass the first write started has read them empty by the
+    // time the second lands. Held at its read of the registrations until then, it must not unregister the sites, as a page
+    // loading before the second write's own pass would get no Glaze.
+    const churn = await sw.evaluate(async (lists) => {
+      const s = chrome.scripting, calls = [], real = {};
+      let open, reads = 0, read;
+      const held = new Promise((r) => { open = r; }), reading = (n) => new Promise((r) => { read = () => { if (reads >= n) r(); }; read(); });
+      for (const k of ['registerContentScripts', 'unregisterContentScripts', 'updateContentScripts', 'getRegisteredContentScripts']) real[k] = s[k];
+      for (const k of ['registerContentScripts', 'unregisterContentScripts', 'updateContentScripts']) s[k] = (o, ...rest) => { calls.push([k, (o?.ids || o || []).map((x) => x.id || x)]); return real[k].call(s, o, ...rest); };
+      s.getRegisteredContentScripts = async (...a) => { reads++; read?.(); await held; return real.getRegisteredContentScripts.apply(s, a); };
+      try {
+        let first = reading(1);
+        await chrome.storage.local.remove(Object.keys(lists));
+        await first;
+        first = reading(2);
+        await chrome.storage.local.set(lists);
+        open();
+        await first;
+        await serial(() => {});
+      } finally { Object.assign(s, real); }
+      return calls;
+    }, { canvas: [`${C}/*`, `${A}/*`], ultra: [B] });
+    check(JSON.stringify(churn) === '[]', `the lists taken away and put back: no registration is taken away or changed (${JSON.stringify(churn)})`);
+    check(canon(await registered(sw)) === canon(want), 'and they are as before');
+
     const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${C}/`);
     check(await until(async () => (await sheets(page)).includes('canvas.css')), `the Canvas site's page gets Glaze (${(await sheets(page)).join(', ')})`);

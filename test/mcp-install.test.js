@@ -15,6 +15,9 @@ const B = require('../mcp/lib/browsers.js');
 const IDS = require('../mcp/lib/ids.js');
 const L = require('../mcp/lib/launcher.js');
 const I = require('../mcp/lib/install.js');
+// Whether setup would name the node running these tests. It won't on GitHub's hosted runners, where node sits under
+// /opt/hostedtoolcache, a folder anyone can write; nodes.js refuses that, as it should.
+const trusted = (platform) => !require('../mcp/lib/nodes.js').trust(platform).path(process.execPath);
 const D = require('../mcp/lib/doctor.js');
 const CLI = require('../mcp/bin/glaze-mcp.js');
 const { nodeAt } = require('./helpers/mcp-pipe.cjs');
@@ -305,7 +308,7 @@ test('launchers name node by the PATH entry that leads to it, so a Homebrew upgr
   assert.equal(I.stableNode(cellar, 'darwin', { HOME: d }), cellar);
   // The default node is this one, named that way.
   fs.symlinkSync(process.execPath, path.join(mk(d, 'link'), 'node'));
-  assert.equal(I.context({ platform: 'darwin', env: { HOME: d, PATH: path.join(d, 'link') } }).node, path.join(d, 'link', 'node'));
+  assert.equal(I.context({ platform: 'darwin', env: { HOME: d, PATH: path.join(d, 'link') } }).node, trusted('darwin') ? path.join(d, 'link', 'node') : null);
   assert.equal(I.context({ platform: 'darwin', env: { HOME: d, PATH: path.join(d, 'link') }, node: '/given/node' }).node, '/given/node');
 });
 
@@ -886,12 +889,14 @@ test('ids come only from explicit grants, never another manifest carrying our na
 });
 
 test('doctor reports a valid Chromium id that was never granted', async (t) => {
-  const home = scratch(t), ctx = mac(home, { node: process.execPath });
+  const home = scratch(t), ctx = mac(home, { node: nodeAt(t) });
   const dir = mk(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts');
   await I.setup({ ...ctx, ids: [A] });
+  assert.equal((await D.run(ctx)).ok, true);
   const file = path.join(dir, `${HOST}.json`);
   fs.writeFileSync(file, JSON.stringify({ ...json(file), allowed_origins: [ORIGIN, `chrome-extension://${A}/`, `chrome-extension://${Z}/`] }));
-  assert.equal((await D.run(ctx)).ok, false);
+  const bad = await D.run(ctx);
+  assert.ok(bad.rows.some((r) => r.level === 'fail' && /lets in extension ids that setup was never given/.test(r.detail)), D.text(bad));
 });
 
 test('a shared Windows key can move between our browsers as they are installed', async (t) => {
@@ -935,9 +940,11 @@ test('batch launchers reject quote and line injection, preserve carets and perce
 });
 
 test('doctor rejects unsafe folders before running a node path and rejects extra Firefox ids', { skip: posixOnly('POSIX file modes') }, async (t) => {
-  const home = scratch(t), calls = [], ctx = mac(home, { node: process.execPath, run: async (...args) => { calls.push(args); return { stdout: 'v18.20.8' }; } });
+  const home = scratch(t), calls = [], ctx = mac(home, { node: nodeAt(t), run: async (...args) => { calls.push(args); return { stdout: 'v18.20.8' }; } });
   mk(AS(home), 'Firefox');
   await I.setup(ctx);
+  assert.equal((await D.run(ctx)).ok, true);
+  calls.length = 0;
   const root = path.join(AS(home), 'glaze-mcp');
   fs.chmodSync(root, 0o777);
   assert.equal((await D.run(ctx)).ok, false);
@@ -945,7 +952,8 @@ test('doctor rejects unsafe folders before running a node path and rejects extra
   fs.chmodSync(root, 0o700);
   const file = path.join(AS(home), 'Mozilla', 'NativeMessagingHosts', `${HOST}.json`);
   fs.writeFileSync(file, JSON.stringify({ ...json(file), allowed_extensions: [IDS.FIREFOX, 'unasked@example.org'] }));
-  assert.equal((await D.run(ctx)).ok, false);
+  const bad = await D.run(ctx);
+  assert.ok(bad.rows.some((r) => r.level === 'fail' && /must let in only/.test(r.detail)), D.text(bad));
 });
 
 test('doctor never executes a node from an unsafe file or any unsafe path ancestor', { skip: posixOnly('POSIX file modes') }, async (t) => {

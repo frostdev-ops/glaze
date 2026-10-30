@@ -59,10 +59,13 @@ module.exports = async ({ ctx, opts, O, ok, out }) => {
     await opts.evaluate(async ([s, l]) => {
       for (const [area, v] of [[chrome.storage.sync, s], [chrome.storage.local, l]]) { await area.remove(Object.keys(await area.get(null)).filter((k) => !(k in v))); await area.set(v); }
     }, [sync, local]);
-    await opts.waitForFunction(async ([want]) => {
+    // Polled from Node: waitForFunction resolves at once on an async predicate (its promise is truthy).
+    const want = [[`${MD}/*`, !!local.moodle?.length], [`${UB}/ultra/*`, !!local.ultra?.length]];
+    const done = () => opts.evaluate(async (w) => {
       const scripts = await chrome.scripting.getRegisteredContentScripts();
-      return want.every(([pattern, on]) => scripts.some((s) => s.matches?.includes(pattern)) === on);
-    }, [[[`${MD}/*`, !!local.moodle?.length], [`${UB}/ultra/*`, !!local.ultra?.length]]], { timeout: 10000 });
+      return w.every(([pattern, on]) => scripts.some((s) => s.matches?.includes(pattern)) === on);
+    }, want);
+    ok(await until(done, 10000), `the worker has registered what the lists name (${JSON.stringify(want)})`);
   };
   const settings = (extra = {}) => G.GZ_SANITIZE({ navbar: { on: false }, motion: { level: 'off' }, announce: { delay: 300 }, ...extra, enhance: { ...off, ...extra.enhance } });
   await store(settings(), { ultra: [UB], moodle: [`${MD}/*`], freshDefaults: { fresh: false } });
