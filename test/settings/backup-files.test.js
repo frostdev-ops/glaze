@@ -56,36 +56,41 @@ const ioFor = (dev, o = {}) => {
     },
   };
 };
-// A 12 MB PDF filled once (its first file a version), and a deck.
+// A 12 MB PDF submitted and filled since (one file: the filled one), and a deck opened again (its first file a version).
 const seeded = async (a) => {
   const pdf = PA.newKey(), deck = PA.newKey();
-  const first = bytes(12e6, 2), filled = bytes(12e6 + 500, 3), slides = bytes(8e6, 4);
+  const first = bytes(12e6, 2), filled = bytes(12e6 + 500, 3), slides = bytes(8e6, 4), early = bytes(1e6, 5);
   const f1 = await a.files.put(first, 'application/pdf');
   await a.P.save(pdf, { kind: 'pdf', doc: null, file: f1, size: f1.size, pages: 400, title: 'Big form', named: true }, { reason: 'import' });
   await a.P.save(pdf, {}, { reason: 'submit', expectedKind: 'pdf' });
   const f2 = await a.files.put(filled, 'application/pdf');
   await a.P.save(pdf, { file: f2, size: f2.size }, { expectedKind: 'pdf' });
+  const f0 = await a.files.put(early, F.TYPES['.pptx']);
+  await a.P.save(deck, { kind: 'slides', doc: null, file: f0, size: f0.size, ext: '.pptx', slides: 1, title: 'Deck', named: true }, { reason: 'import' });
+  a.clock.t += 1000;
   const f3 = await a.files.put(slides, F.TYPES['.pptx']);
-  await a.P.save(deck, { kind: 'slides', doc: null, file: f3, size: f3.size, ext: '.pptx', slides: 3, text: 'MARK-DECK', words: 1, title: 'Deck', named: true }, { reason: 'import' });
-  return { pdf, deck, first, filled, slides };
+  await a.P.save(deck, { kind: 'slides', doc: null, file: f3, size: f3.size, ext: '.pptx', slides: 3, text: 'MARK-DECK', words: 1, title: 'Deck', named: true }, { reason: 'import', expectedKind: 'slides' });
+  return { pdf, deck, first, filled, slides, early };
 };
 
 test('Back up writes each file once beside its record; Restore puts them back before the records', { timeout: 120000 }, async () => {
   const a = device(), b = device();
-  const { pdf, deck, first, filled, slides } = await seeded(a);
+  const { pdf, deck, first, filled, slides, early } = await seeded(a);
   const { file, entries } = await backUp(a);
   const m = JSON.parse(new TextDecoder().decode(entries.find((e) => e.name === B.MANIFEST).data));
-  assert.deepEqual(m.blobs.map((x) => x.hash).sort(), [sha(first), sha(filled), sha(slides)].sort(), 'each file once');
+  assert.deepEqual(m.blobs.map((x) => x.hash).sort(), [sha(filled), sha(slides), sha(early)].sort(), 'each file once; the PDF\'s submitted file is not kept');
   assert.ok(m.blobs.every((x) => /^papers\/\d+\.bin$/.test(x.file) && entries.find((e) => e.name === x.file).data.length === x.size));
-  assert.deepEqual(m.filePapers.map((r) => r.key).sort(), [`writerPaper:${pdf}`, `writerVersions:${pdf}`, `writerPaper:${deck}`].sort());
-  assert.ok(!(m.papers || []).some((r) => [pdf, deck].some((k) => r.key.endsWith(k))), 'records pointing at files are not in papers');
+  assert.deepEqual(m.filePapers.map((r) => r.key).sort(), [`writerPaper:${pdf}`, `writerPaper:${deck}`, `writerVersions:${deck}`].sort());
+  assert.ok(!(m.papers || []).some((r) => [`writerPaper:${pdf}`, `writerPaper:${deck}`, `writerVersions:${deck}`].includes(r.key)), 'records pointing at files are not in papers');
   const plan = await B.read(file);
   const out = await B.restore(plan, new Set(['papers']), ioFor(b));
   assert.deepEqual(out.failed, []);
   assert.deepEqual(b.store[`writerPaper:${pdf}`], a.store[`writerPaper:${pdf}`]);
-  assert.deepEqual(b.store[`writerVersions:${pdf}`].map((v) => v.file.hash), a.store[`writerVersions:${pdf}`].map((v) => v.file.hash));
+  assert.equal(a.store[`writerVersions:${pdf}`][0].sent.hash, sha(first), 'the submit kept what was sent as metadata');
+  assert.deepEqual(b.store[`writerVersions:${pdf}`] || [], [], 'which stays on the device: a reader takes a PDF\'s version only with its file');
+  assert.equal(b.store[`writerPaper:${pdf}`].submitted, a.store[`writerPaper:${pdf}`].submitted);
   assert.equal(sha(await b.get(b.store[`writerPaper:${pdf}`].file)), sha(filled));
-  assert.equal(sha(await b.get(b.store[`writerVersions:${pdf}`].find((v) => v.reason === 'submit').file)), sha(first), 'the submitted version\'s file');
+  assert.equal(sha(await b.get(b.store[`writerVersions:${deck}`].find((v) => v.reason === 'import').file)), sha(early), 'the deck version\'s file');
   assert.equal(sha(await b.get(b.store[`writerPaper:${deck}`].file)), sha(slides));
   // Owned: deleting the deck there takes its file.
   b.clock.t += F.HOLD + 1;
@@ -209,4 +214,60 @@ test('a refused restore cannot delete a live version file while replaying overla
   a.clock.t += F.GRACE + 1;
   await a.files.sweep({ live: new Set([old.hash, current.hash]) });
   assert.equal(await a.files.stat(incoming.hash), null, 'the refused restore cannot leave its unused file owned forever');
+});
+
+test('a PDF that had versions from an earlier build backs up with exactly one file once it is saved', async () => {
+  const a = device(), k = PA.newKey();
+  const files = await Promise.all([1, 2, 3].map((i) => a.files.put(bytes(2000, 20 + i), 'application/pdf')));
+  const [v1, v2, cur] = files;
+  a.store[`writerPaper:${k}`] = { key: k, kind: 'pdf', doc: null, file: cur, size: cur.size, pages: 1, title: 'Old', named: true, created: NOW, updated: NOW, revision: 3, edited: 3 };
+  a.store[`writerVersions:${k}`] = [v1, v2].map((f, i) => ({ id: `v-${i}`, at: NOW - i, reason: 'edit', kind: 'pdf', file: f, size: f.size, pages: 1, bytes: 200 }));
+  a.store.writerPapers = [{ key: k, kind: 'pdf', title: 'Old', named: true, updated: NOW }];
+  await a.files.own(k, files.map((f) => f.hash));
+  const before = JSON.parse(new TextDecoder().decode((await backUp(a)).entries.find((e) => e.name === B.MANIFEST).data));
+  assert.equal(before.blobs.length, 3, 'as an earlier build left it');
+  a.clock.t += F.HOLD + 1;
+  await a.P.save(k, { title: 'New', named: true }, { rename: true });
+  const m = JSON.parse(new TextDecoder().decode((await backUp(a)).entries.find((e) => e.name === B.MANIFEST).data));
+  assert.deepEqual(m.blobs.map((x) => x.hash), [cur.hash], 'one file entry: the PDF itself');
+  assert.deepEqual(m.filePapers.map((r) => r.key), [`writerPaper:${k}`]);
+});
+
+test('backup publication releases obsolete PDF Undo; a refused replay keeps the live hold', async () => {
+  for (const refuse of [false, true]) {
+    const a = device(), k = PA.newKey();
+    const [before, current, incoming] = await Promise.all([81, 82, 83].map((seed) => a.files.put(bytes(100, seed), 'application/pdf')));
+    await a.P.save(k, { kind: 'pdf', doc: null, file: before, size: before.size, pages: 2 }, { reason: 'import' });
+    const { paper } = await a.P.save(k, { file: current, size: current.size, pages: 1 }, { reason: 'edit', hold: true });
+    const original = structuredClone(a.store);
+    a.clock.t += F.HOLD + 1;
+    const steps = [{ action: 'own', value: { papers: { [`writerPaper:${k}`]: { ...paper, file: incoming, updated: NOW + 1000 } } } },
+      { action: 'settings', value: {} }];
+    const out = await B.atomic(steps, { local: a.local, sync: a.local, files: a.files, settings: async () => ({ ok: !refuse, error: 'write' }) });
+    assert.equal(out.ok, !refuse);
+    if (refuse) {
+      assert.deepEqual(a.store, original);
+      assert.equal(sha(await a.get(before)), before.hash, 'rollback preserves the original Undo file');
+    } else {
+      assert.equal(a.store[`writerPaper:${k}`].file.hash, incoming.hash);
+      assert.equal(await a.files.stat(before.hash), null, 'successful publication releases the obsolete Undo owner');
+    }
+  }
+});
+
+test('restoring a missing PDF removes earlier orphan PDF history and preserves deck history', async () => {
+  const a = device(), k = PA.newKey();
+  const [old, deck, current] = await Promise.all([91, 92, 93].map((seed) => a.files.put(bytes(100, seed), 'application/pdf')));
+  a.store[`writerVersions:${k}`] = [old, deck].map((file, i) => ({ id: `old-${i}`, kind: i ? 'slides' : 'pdf',
+    file, size: file.size, doc: null, at: NOW - i, bytes: 200 }));
+  await a.P.reown(k);
+  a.clock.t += F.HOLD + 1;
+  const paper = { key: k, kind: 'pdf', doc: null, file: current, size: current.size, pages: 1, updated: NOW };
+  const out = await B.atomic([{ action: 'own', value: { papers: { [`writerPaper:${k}`]: paper } } }],
+    { local: a.local, sync: a.local, files: a.files });
+  assert.equal(out.ok, true);
+  assert.deepEqual(a.store[`writerVersions:${k}`].map((v) => v.file.hash), [deck.hash]);
+  assert.equal(await a.files.stat(old.hash), null);
+  assert.equal(sha(await a.get(deck)), deck.hash);
+  assert.equal(sha(await a.get(current)), current.hash);
 });

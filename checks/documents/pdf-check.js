@@ -721,26 +721,15 @@ const photo = () => {
     const baked = await readBack(pAfter), said = await page.evaluate(() => JSON.parse(sessionStorage.getItem('pdfcheck-says') || '[]'));
     check(baked.join('|') === 'This is page 3@90|Alpha page one|Bravo page two|Charlie page three|∅|This is page 1' && said.includes('Preparing pages…') && said.some((x) => /^Copying/.test(x)) && said.includes('Saving…'),
       `one Done applies them all: ${baked.join(' | ')}; said ${JSON.stringify([...new Set(said)])}`);
-    const pVersions = await local(`writerVersions:${pKey}`);
-    check(pVersions.some((v) => v.reason === 'edit' && v.file.hash === pBefore.file.hash && v.pages === 3), 'the file before Done is kept as a version');
-    // Undo: the one step back.
+    const fileVersions = async () => ((await local(`writerVersions:${pKey}`)) || []).filter((v) => v.file);
+    check(!(await fileVersions()).length && await page.evaluate(() => !document.querySelector('[data-act="versions"]')), 'one copy: Done keeps no version, and the viewer has no Versions');
+    // Undo: the one step back, to the file Done held for it.
     await until(() => page.evaluate(() => document.querySelector('[data-act="undo"]')?.disabled === false), 'Undo on after Done');
     await page.click('[data-act="undo"]');
     const pUndone = await until(async () => { const r = await local(`writerPaper:${pKey}`); return r.file.hash === pBefore.file.hash ? r : null; }, 'the undo', 30000);
     await until(() => page.evaluate(() => document.querySelectorAll('.pdfViewer .page').length === 3), 'the viewer on the pages before');
-    check(pUndone.pages === 3 && (await readBack(pUndone)).join('|') === 'This is page 1|This is page 2|This is page 3', 'Undo takes the whole Done back to the file before it');
-
-    // ---- Versions: the file Done made is a version now (the undo kept it); restoring it opens it.
-    await until(() => page.evaluate(() => document.querySelector('[data-act="versions"]')?.disabled === false), 'Versions on');
-    await page.click('[data-act="versions"]');
-    const vItems = await until(() => page.evaluate(() => { const l = [...document.querySelectorAll('.gq-menu [data-act="restore"]')].map((b) => ({ id: b.dataset.version, label: b.textContent })); return l.length ? l : null; }), 'the versions menu');
-    const vList = await local(`writerVersions:${pKey}`), six = vList.find((v) => v.file.hash === pAfter.file.hash);
-    await shot('versions-1280.png');
-    check(vItems.length === vList.filter((v) => v.kind === 'pdf').length && !!six && vItems.some((v) => v.id === six.id), `Versions lists the PDF's versions by date (${JSON.stringify(vItems.map((v) => v.label))})`);
-    await page.click(`.gq-menu [data-version="${six.id}"]`);
-    const restored = await until(async () => { const r = await local(`writerPaper:${pKey}`); return r.file.hash === pAfter.file.hash ? r : null; }, 'the restore', 30000);
-    await until(() => page.evaluate(() => document.querySelectorAll('.pdfViewer .page').length === 6), 'the viewer on the restored file');
-    check(restored.pages === 6 && (await local(`writerVersions:${pKey}`)).some((v) => v.reason === 'restore' && v.file.hash === pBefore.file.hash), 'a version restored opens again, the file it replaced kept first');
+    check(pUndone.pages === 3 && (await readBack(pUndone)).join('|') === 'This is page 1|This is page 2|This is page 3' && !(await fileVersions()).length
+      && await page.evaluate((k) => sessionStorage.getItem(`gq-pages-undo:${k}`) === null, pKey), 'Undo takes the whole Done back to the file before it, keeping no version');
 
     // ---- a signed file: Pages off, saying why.
     const signedPdf = path.join(tmp, 'Signed form.pdf');

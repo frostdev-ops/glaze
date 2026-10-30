@@ -956,7 +956,9 @@ for (const kind of ['pdf', 'deck']) test(`an older ${kind} already versioned in 
     const P = require('../../extension/writer/writer-papers.js').open(b.local, () => NOW + 1e6);
     await P.save(k, { ...a.store[`writerPaper:${k}`], file: 'TkVX', size: 3 }, { reason: 'import' });
     assert.deepEqual((await restore(b, await backUp(a), ['papers'])).out.failed, []);
-    assert.deepEqual(b.store[`writerVersions:${k}`].map((v) => v.id).sort(), a.store[`writerVersions:${k}`].map((v) => v.id).sort(), 'the existing backup version already retains the older file');
+    // A PDF keeps one copy: the backup's older file is no version of it, and its submit's metadata stays on its device.
+    if (kind === 'pdf') assert.deepEqual((b.store[`writerVersions:${k}`] || []).filter((v) => v.file), [], 'no version holds the older PDF');
+    else assert.deepEqual(b.store[`writerVersions:${k}`].map((v) => v.id).sort(), a.store[`writerVersions:${k}`].map((v) => v.id).sort(), 'the existing backup version already retains the older file');
   } finally { a.stop(); b.stop(); }
 });
 

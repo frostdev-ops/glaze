@@ -59,19 +59,19 @@ test('a copy shares the file; it goes only with the last document pointing at it
   assert.deepEqual(kept(), []);
 });
 
-test('a filled PDF saved over its file: the old file stays while a version points at it, then goes with it', async () => {
+test('a deck saved over its file: the old file stays while a version points at it, then goes with it', async () => {
   const { P, files, clock, kept, store } = make();
-  const k = key(), f1 = await files.put(bytes(3000, 5), 'application/pdf');
-  await P.save(k, { kind: 'pdf', file: f1, size: f1.size, pages: 1 }, { reason: 'import' });
+  const k = key(), deck = F.TYPES['.pptx'], f1 = await files.put(bytes(3000, 5), deck);
+  await P.save(k, { kind: 'slides', file: f1, size: f1.size, ext: '.pptx', slides: 1 }, { reason: 'import' });
   // The submit's version holds f1.
-  await P.save(k, {}, { reason: 'submit', expectedKind: 'pdf' });
-  const f2 = await files.put(bytes(3000, 6), 'application/pdf');
+  await P.save(k, {}, { reason: 'submit', expectedKind: 'slides' });
+  const f2 = await files.put(bytes(3000, 6), deck);
   clock.t += F.HOLD + 1;
-  await P.save(k, { file: f2, size: f2.size }, { expectedKind: 'pdf' });
+  await P.save(k, { file: f2, size: f2.size }, { expectedKind: 'slides' });
   assert.deepEqual(kept(), [f1.hash, f2.hash].sort(), 'f1 is the submitted version\'s');
-  const f3 = await files.put(bytes(3000, 7), 'application/pdf');
+  const f3 = await files.put(bytes(3000, 7), deck);
   clock.t += F.HOLD + 1;
-  await P.save(k, { file: f3, size: f3.size }, { expectedKind: 'pdf' });
+  await P.save(k, { file: f3, size: f3.size }, { expectedKind: 'slides' });
   assert.deepEqual(kept(), [f1.hash, f3.hash].sort(), 'f2: no version kept it (an autosave keeps none)');
   assert.ok(store.data[`writerVersions:${k}`].some((v) => v.reason === 'submit' && v.file.hash === f1.hash));
 });
@@ -97,8 +97,8 @@ test('a record whose file went missing can still take a new one (Re-import)', as
   assert.equal(paper.file.hash, f2.hash);
 });
 
-test('two PDF editors saving from the same revision keep the overwritten file as a conflict version', async () => {
-  const { P, files, store, clock } = make(), k = key();
+test('two PDF editors saving from the same revision: the later file wins, and no version keeps the other', async () => {
+  const { P, files, store, clock, kept } = make(), k = key();
   const first = await files.put(bytes(100, 41), 'application/pdf');
   await P.save(k, { kind: 'pdf', doc: null, file: first, size: first.size, pages: 1 }, { reason: 'import' });
   const other = PA.open(store, () => clock.t, { files });
@@ -106,10 +106,11 @@ test('two PDF editors saving from the same revision keep the overwritten file as
   const a = await files.put(bytes(100, 42), 'application/pdf');
   const b = await files.put(bytes(100, 43), 'application/pdf');
   await P.save(k, { file: a }, { expectedKind: 'pdf' });
-  clock.t++;
+  clock.t += F.HOLD + 1;
   await other.save(k, { file: b }, { expectedKind: 'pdf' });
   assert.equal(store.data[`writerPaper:${k}`].file.hash, b.hash);
-  assert.ok(store.data[`writerVersions:${k}`].some((v) => v.reason === 'conflict' && v.file.hash === a.hash), 'the other editor did not lose its filled form');
+  assert.deepEqual(store.data[`writerVersions:${k}`] || [], [], 'one copy: no conflict version');
+  assert.deepEqual(kept(), [b.hash]);
 });
 
 test('versions keep at most CAP.files bytes of files, the submitted one and the newest always', async () => {
@@ -117,13 +118,13 @@ test('versions keep at most CAP.files bytes of files, the submitted one and the 
   assert.equal(PA.CAP.files, 200e6);
   const k = key(), big = 60e6;
   // Refs for files this size without making them: the store is asked only about the fresh one each save brings.
-  const fake = (i) => ({ hash: sha(Buffer.from(String(i))), size: big, type: 'application/pdf' });
+  const fake = (i) => ({ hash: sha(Buffer.from(String(i))), size: big, type: F.TYPES['.pptx'] });
   const real = files.own;
   files.own = async (owner, hs, o) => ({ missing: [] });
   try {
-    await P.save(k, { kind: 'pdf', file: fake(0), size: big, pages: 1 }, { reason: 'import' });
-    await P.save(k, {}, { reason: 'submit', expectedKind: 'pdf' });
-    for (let i = 1; i <= 6; i++) { clock.t += 1000; await P.save(k, { kind: 'pdf', file: fake(i), size: big, pages: 1 }, { reason: 'import', expectedKind: 'pdf' }); }
+    await P.save(k, { kind: 'slides', file: fake(0), size: big, ext: '.pptx', slides: 1 }, { reason: 'import' });
+    await P.save(k, {}, { reason: 'submit', expectedKind: 'slides' });
+    for (let i = 1; i <= 6; i++) { clock.t += 1000; await P.save(k, { kind: 'slides', file: fake(i), size: big, ext: '.pptx', slides: 1 }, { reason: 'import', expectedKind: 'slides' }); }
   } finally { files.own = real; }
   const list = store.data[`writerVersions:${k}`];
   const sizes = new Map(list.map((v) => [v.file.hash, v.file.size]));
@@ -179,23 +180,20 @@ test('a page\'s papers proxy asks the worker to migrate', async () => {
   } finally { delete globalThis.chrome; }
 });
 
-test('a PDF saved with reason edit (the pages panel\'s Done, a viewer\'s first save) keeps the file before it; restore takes it back', async () => {
-  const { P, files, store, clock } = make(), k = key();
+test('a PDF saved with reason edit (the pages panel\'s Done) keeps no version: the record\'s file is its one copy', async () => {
+  const { P, files, store, clock, kept } = make(), k = key();
   const f1 = await files.put(bytes(500, 61), 'application/pdf');
   await P.save(k, { kind: 'pdf', file: f1, size: f1.size, pages: 3 }, { reason: 'import' });
   const f2 = await files.put(bytes(400, 62), 'application/pdf');
-  clock.t += 1000;
+  clock.t += F.HOLD + 1;
   const { paper, version } = await P.save(k, { file: f2, size: f2.size, pages: 2 }, { reason: 'edit', expectedKind: 'pdf' });
   assert.equal(paper.file.hash, f2.hash);
-  assert.ok(version && version.reason === 'edit' && version.file.hash === f1.hash && version.pages === 3, 'the file before, with its page count');
-  clock.t += 1000;
-  const back = await P.restore(k, version.id);
-  assert.equal(back.paper.file.hash, f1.hash);
-  assert.equal(back.paper.pages, 3);
-  assert.ok(store.data[`writerVersions:${k}`].some((v) => v.reason === 'restore' && v.file.hash === f2.hash), 'what the restore replaced is a version too');
+  assert.equal(version, null);
+  assert.deepEqual(store.data[`writerVersions:${k}`] || [], []);
+  assert.deepEqual(kept(), [f2.hash]);
 });
 
-test('a 40 MB PDF saved six times: versions hold at most CAP.files of files, the submitted one and the newest always', async () => {
+test('a 40 MB PDF saved six times keeps no file in versions: the submit is metadata, the record the one copy', async () => {
   const { P, files, clock, store } = make();
   const k = key(), size = 40e6, fake = (i) => ({ hash: sha(Buffer.from(`forty-${i}`)), size, type: 'application/pdf' });
   const real = files.own;
@@ -205,12 +203,10 @@ test('a 40 MB PDF saved six times: versions hold at most CAP.files of files, the
     await P.save(k, {}, { reason: 'submit', expectedKind: 'pdf' });
     for (let i = 1; i <= 6; i++) { clock.t += 60e3; await P.save(k, { file: fake(i), size, pages: 300 }, { reason: 'edit', expectedKind: 'pdf' }); }
   } finally { files.own = real; }
-  const list = store.data[`writerVersions:${k}`], held = new Map(list.map((v) => [v.file.hash, v.file.size]));
-  const total = [...held.values()].reduce((n, x) => n + x, 0);
-  assert.ok(total <= PA.CAP.files, `files in versions: ${total / 1e6} MB`);
-  assert.ok(list.some((v) => v.reason === 'submit' && v.file.hash === fake(0).hash), 'the submitted version stays');
-  assert.equal([...list].sort((a, b) => b.at - a.at)[0].file.hash, fake(5).hash, 'the newest stays: the file the last save replaced');
-  assert.equal(held.size, 5, `five files of 40 MB: ${list.map((v) => `${v.reason}:${v.file.hash.slice(0, 6)}`).join(' ')}`);
+  const list = store.data[`writerVersions:${k}`];
+  assert.deepEqual(list.filter((v) => v.file), [], 'no version holds a file');
+  assert.deepEqual(PA.refs(list).size, 0);
+  assert.ok(list.some((v) => v.reason === 'submit' && v.sent?.hash === fake(0).hash && v.sent.size === size), 'what was submitted, as metadata');
   assert.equal(store.data[`writerPaper:${k}`].file.hash, fake(6).hash);
 });
 
