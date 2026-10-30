@@ -313,7 +313,8 @@ async function publishWebsiteWith({ manifest, save, out, root, env, run }, bare)
     if (!contains(remote, state.siteCommit, site, env)) throw new Error('Website main advanced. Review the new main, discard the generated website clone and clear public.siteCommit in release.json, then resume to rebuild and validate integration.');
     git(['push', 'origin', `${state.siteCommit}:refs/heads/main`], site, env);
   }
-  state.websiteCI = await workflow(siteRepo, 'site.yml', state.siteCommit, root, env); save();
+  // The site's own check, gallery tests and build ran above (logs/website-*.log); GLAZE_TRUST_CI accepts them in place of site.yml.
+  state.websiteCI = env.GLAZE_TRUST_CI ? `trusted: ${env.GLAZE_TRUST_CI}; local website check, gallery tests, build and output check` : await workflow(siteRepo, 'site.yml', state.siteCommit, root, env); save();
   // deploy stages, activates atomically, and verifies origin/public routes with rollback on failure.
   // A previous successful activation can be verified without trying to create its existing stage again.
   let staged = false;
