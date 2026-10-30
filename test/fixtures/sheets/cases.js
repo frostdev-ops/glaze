@@ -6,7 +6,7 @@
 // typed in) or { f: '=…' } (a formula). fill: the range one formula was filled over, which Excel saves as a shared
 // formula; array: a legacy (Ctrl+Shift+Enter) array formula's range; unsupported: Excel's message when it refused the
 // formula. Every other formula is entered as a dynamic-array formula and returns one value (no spills). Deterministic
-// only: no NOW, TODAY, RAND, INFO or CELL("filename"). Text and dates read as en-US, the locale Excel ran in.
+// only: no NOW, TODAY, RAND, INFO, or CELL that names the workbook. Text and dates read as en-US, Excel's locale here.
 
 const colName = (c) => { let s = ''; for (; c > 0; c = Math.floor((c - 1) / 26)) s = String.fromCharCode(65 + ((c - 1) % 26)) + s; return s; };
 const colNumber = (s) => [...s].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
@@ -945,7 +945,6 @@ const ROWS = {
     ['=NA()', ''],
     ['=CELL("row",Data!C7)', 'mixed'],
     ['=CELL("col",Data!D1)', 'dec'],
-    ['=CELL("address",Data!B2)', 'ys'],
     ['=CELL("contents",Data!A1)', 'nums'],
     ['=CELL("type",Data!E1)', 'words'],
     ['=CELL("type",Data!H1)', 'blank'],

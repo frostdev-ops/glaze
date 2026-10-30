@@ -14,7 +14,8 @@ const { cases, families } = require('./fixtures/sheets/cases.js');
 
 const DIR = path.join(__dirname, 'fixtures/sheets');
 const GOLDEN = path.join(DIR, 'golden.json');
-const VOLATILE = /(?<![\w.])(NOW|TODAY|RAND|RANDBETWEEN|RANDARRAY|INFO)\(|CELL\("filename"/i;
+// Volatile, or naming the workbook (which is "Book1" or "Book2" when Excel calculates it).
+const VOLATILE = /(?<![\w.])(NOW|TODAY|RAND|RANDBETWEEN|RANDARRAY|INFO)\(|CELL\("filename"|CELL\("address",[^)]*!/i;
 // Excel's file prefixes for functions newer than the file format, LAMBDA/LET parameters and unknown functions.
 const bare = (f) => f.replace(/_xl(fn|ws|pm|udf)\./g, '');
 
