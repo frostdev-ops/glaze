@@ -404,6 +404,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       if (p.request && box.port === p.port) { end(); return; } // answered: Ultra's button went, or the bar says why
       if (Date.now() - p.at >= 60000) { fail(); return; }
       if (box.full && x) {
+        if (p.port !== box.port) { p.port = box.port; p.up = null; }
         if (globalThis.GZ_WRITER_SUBMIT?.armed?.(box)) { end(); GZ_WRITER_SUBMIT.press(box, x, type); return; }
         if (!box.ready || !box.port) p.up = null;
         else if (Date.now() - (p.up ??= Date.now()) > HOLD_ARM) { fail(); return; }
