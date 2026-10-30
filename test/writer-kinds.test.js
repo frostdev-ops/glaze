@@ -257,3 +257,32 @@ test('a viewer that fails gives the page back the compact view it had', async ()
   assert.deepEqual(said.map((m) => `${m.type}:${m.full}`), ['view:true', 'view:false']);
   assert.deepEqual({ ...root.dataset }, { view: 'compact' }, 'the paper shown again, compact');
 });
+
+for (const [id, next] of [['pdf', 'slides'], ['slides', 'sheet'], ['sheet', 'paper']]) {
+  test(`a ${id} build that finishes after the record becomes ${next} is disposed and restores the compact view`, async () => {
+    const said = [], el = () => ({ dataset: {}, append() {}, remove() {}, addEventListener() {} }), root = el();
+    root.dataset.view = 'compact';
+    let built, disposed = 0, removed = 0;
+    const P = PA.open(store(), () => Date.now());
+    await P.save(KEY, { kind: id, doc: null });
+    const DK = require('../lib/doc-kinds.js');
+    const ctx = vm.createContext({ console: { error() {} },
+      document: { documentElement: root, body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: () => ({ ...el(), remove: () => { removed++; } }) },
+      GZ_WRITER_PAPERS: { open: () => P }, GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], view: () => new Promise((ok) => { built = ok; }) }) },
+      GZ_WRITER_FRAME: { t: (s) => s, say: (m) => said.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({}) },
+      GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'writer-kinds.js'), 'utf8'), ctx);
+    const K = ctx.GZ_WRITER_KINDS, mounting = K.mount(id, KEY, { context: () => ({}), paper: () => ({}) });
+    for (let i = 0; i < 50 && !built; i++) await new Promise((r) => setImmediate(r));
+    assert.equal(typeof built, 'function');
+    await P.save(KEY, { kind: next, doc: null }, { reason: 'import' });
+    built({ dispose: async () => { disposed++; } });
+    assert.equal(await mounting, null, 'a stale build cannot become the current surface');
+    assert.equal(disposed, 1, 'its listeners and observers are disposed');
+    assert.equal(removed, 1, 'its mount is removed');
+    assert.equal(K.shown(), null);
+    assert.equal((await P.get(KEY)).kind, next);
+    assert.deepEqual({ ...root.dataset }, { view: 'compact' });
+    assert.deepEqual(said.map((m) => `${m.type}:${m.full}`), ['view:true', 'view:false']);
+  });
+}
