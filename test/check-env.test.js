@@ -222,3 +222,10 @@ test('the popup check starts after the install and its first screen, and reads t
   assert.match(source, /hasAttribute\('data-settled'\)/);
   assert.doesNotMatch(source, /pause\(([2-9]\d{2}|\d{4,})\)/, 'no fixed waits stand in for the browser');
 });
+
+test('the Sites check starts after the install and its first screen, and reads each state once it has landed', () => {
+  const source = fs.readFileSync(path.join(scripts, 'sites-check.js'), 'utf8');
+  assert.match(source, /await env\.installed\(sw\)/);
+  assert.match(source, /await welcomed/);
+  assert.doesNotMatch(source, /pause\(([2-9]\d{2}|\d{4,})\)/, 'no fixed waits stand in for the page');
+});
