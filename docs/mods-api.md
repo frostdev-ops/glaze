@@ -178,6 +178,9 @@ with `glaze.tools.handle`:
 glaze.tools.handle('open_count', async () => ({ open: (await glaze.todo()).filter((i) => !i.done && !i.submitted).length }));
 ```
 
+The answer is accepted only while that tab is still signed in as the requested account. Cancelling before dispatch stops
+the call; once dispatched, it runs to its answer or the 15 s timeout. Each broker write takes its own serialized turn.
+
 ### Look parts
 
 `parts` holds the same data as a theme code's parts, cleaned by `lib/lookparts.js`, which has every field and limit.

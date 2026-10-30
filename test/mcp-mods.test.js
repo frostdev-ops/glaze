@@ -171,6 +171,20 @@ test('an answer arriving before the tab acknowledges dispatch still drains the p
   assert.deepEqual(tabs.sent.map(([, m]) => m.op), ['call', 'wait']);
 });
 
+test('cancelling after dispatch keeps the eventual result and clears the timeout', async () => {
+  let route, id;
+  const active = new Set(), ac = new AbortController();
+  const tabs = tabsOf([TAB(7)], (tab, m) => { id = m.call; return m.op === 'call' ? { ok: true } : new Promise(() => {}); });
+  route = R.create({ tabs, browser: 'chrome', timers: { setTimeout: (f) => { active.add(f); return f; }, clearTimeout: (f) => active.delete(f) } });
+  const pending = route.code(MOD, 'echo', {}, { ...CTX, signal: ac.signal });
+  await settle();
+  ac.abort();
+  assert.equal(active.size, 1);
+  assert.equal(route.settle(from(7), MOD, id, { value: 'done' }, '5'), true);
+  assert.equal(await pending, 'done');
+  assert.equal(active.size, 0);
+});
+
 test('arguments too large, too many calls waiting, a call cancelled before it went, or no account to route by: refused before any tab is asked', async () => {
   const tabs = tabsOf([TAB(7)], (t, m) => (m.op === 'call' ? { ok: true } : new Promise(() => {})));
   const route = R.create({ tabs, browser: 'chrome', timers: never });
@@ -372,6 +386,18 @@ test('a pending answer is refused if the tab is now signed in as another account
   }
 });
 
+test('another mod cannot answer a pending call by forging the owner in its Worker message', async () => {
+  const c = await chain({ local: { [`mod:${OTHER}`]: modRec({ id: OTHER }) } });
+  const pending = c.route.code(MOD, 'slow', {}, CTX);
+  await settle();
+  const call = c.asked.find((m) => m.op === 'call').call;
+  c.host.workers[1].onmessage({ data: { mod: MOD, via: 'worker', id: 101, call: 'tools.result', args: [call, 'forged'] } });
+  await settle();
+  assert.equal(c.sent.find((m) => m.call === 'tools.result').mod, OTHER, 'the host supplies the sender identity');
+  c.host.workers[0].onmessage({ data: { id: 102, call: 'tools.result', args: [call, 'owned'] } });
+  assert.equal(await pending, 'owned', 'only the owning Worker can finish it');
+});
+
 test('the page hands a call only to a running mod\'s Worker with that tool, on that school\'s page signed in as that account, from the worker', async () => {
   const c = await chain();
   const ask = (m = {}, sender) => c.deliver({ type: 'glaze:modtool', op: 'call', mod: MOD, call: `c-${Math.random()}`, name: 'slow', args: {}, account: ACCOUNT, ...m }, sender);
@@ -478,8 +504,8 @@ const wired = () => require('./helpers/modcode-wiring.cjs').wired(read('lib/back
 
 // The real worker with a school's tab: its content script's messages go to the worker's own listeners as that tab's top
 // frame, and the worker's tabs.sendMessage to that frame reaches the page.
-const wiredWorker = async () => {
-  const store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], mods: [MOD], [`mod:${MOD}`]: modRec(), modRuntime: { ok: true, at: 1 } }, session: {} };
+const wiredWorker = async ({ record = modRec() } = {}) => {
+  const store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], mods: [MOD], [`mod:${MOD}`]: record, modRuntime: { ok: true, at: 1 } }, session: {} };
   const w = worker({ store, background: wired(), globals: { indexedDB: fakeIDB().indexedDB } });
   const sender = from(7);
   const s = school({ toWorker: (m) => w.send(m, sender) });
@@ -545,6 +571,19 @@ test('an approved code tool can write its storage through the broker without hol
   assert.equal(result.structuredContent.kept, 'x');
   assert.equal(store.local[`modData:${MOD}`].kept, 'x');
   assert.deepEqual(plain(inWorker('reviewAsks')), ['action']);
+});
+
+test('an approved code tool can make its first personal-data read, including the queued privacy marker', async () => {
+  const record = modRec();
+  record.grants.todo = true;
+  record.manifest.permissions.push({ id: 'todo', why: 'Reads the plan.' });
+  record.files['hooks.js'] = b64(HOOKS + "\nglaze.tools.handle('keep', async () => ({ items: await glaze.todo() }));");
+  const c = await wiredWorker({ record });
+  c.inWorker("mcpFiles(); GZ_MCP_MODROUTE.LIMIT.timeout = 500;");
+  const result = plain(await c.call(`mod_${MOD}_keep`, {}));
+  assert.equal(result.isError, undefined, JSON.stringify(result));
+  assert.deepEqual(result.structuredContent.items, []);
+  assert.equal(c.store.local[`modPrivate:${MOD}`], true);
 });
 
 test('code tools still recheck access and their revision after approval, and first-party tab changes keep the turn', async () => {
