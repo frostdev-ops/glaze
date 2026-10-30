@@ -178,3 +178,49 @@ test('a page\'s papers proxy asks the worker to migrate', async () => {
     assert.equal(P.reown, undefined, 'owners are the worker\'s');
   } finally { delete globalThis.chrome; }
 });
+
+test('a PDF saved with reason edit (the pages panel\'s Done, a viewer\'s first save) keeps the file before it; restore takes it back', async () => {
+  const { P, files, store, clock } = make(), k = key();
+  const f1 = await files.put(bytes(500, 61), 'application/pdf');
+  await P.save(k, { kind: 'pdf', file: f1, size: f1.size, pages: 3 }, { reason: 'import' });
+  const f2 = await files.put(bytes(400, 62), 'application/pdf');
+  clock.t += 1000;
+  const { paper, version } = await P.save(k, { file: f2, size: f2.size, pages: 2 }, { reason: 'edit', expectedKind: 'pdf' });
+  assert.equal(paper.file.hash, f2.hash);
+  assert.ok(version && version.reason === 'edit' && version.file.hash === f1.hash && version.pages === 3, 'the file before, with its page count');
+  clock.t += 1000;
+  const back = await P.restore(k, version.id);
+  assert.equal(back.paper.file.hash, f1.hash);
+  assert.equal(back.paper.pages, 3);
+  assert.ok(store.data[`writerVersions:${k}`].some((v) => v.reason === 'restore' && v.file.hash === f2.hash), 'what the restore replaced is a version too');
+});
+
+test('a 40 MB PDF saved six times: versions hold at most CAP.files of files, the submitted one and the newest always', async () => {
+  const { P, files, clock, store } = make();
+  const k = key(), size = 40e6, fake = (i) => ({ hash: sha(Buffer.from(`forty-${i}`)), size, type: 'application/pdf' });
+  const real = files.own;
+  files.own = async () => ({ missing: [] });
+  try {
+    await P.save(k, { kind: 'pdf', file: fake(0), size, pages: 300 }, { reason: 'import' });
+    await P.save(k, {}, { reason: 'submit', expectedKind: 'pdf' });
+    for (let i = 1; i <= 6; i++) { clock.t += 60e3; await P.save(k, { file: fake(i), size, pages: 300 }, { reason: 'edit', expectedKind: 'pdf' }); }
+  } finally { files.own = real; }
+  const list = store.data[`writerVersions:${k}`], held = new Map(list.map((v) => [v.file.hash, v.file.size]));
+  const total = [...held.values()].reduce((n, x) => n + x, 0);
+  assert.ok(total <= PA.CAP.files, `files in versions: ${total / 1e6} MB`);
+  assert.ok(list.some((v) => v.reason === 'submit' && v.file.hash === fake(0).hash), 'the submitted version stays');
+  assert.equal([...list].sort((a, b) => b.at - a.at)[0].file.hash, fake(5).hash, 'the newest stays: the file the last save replaced');
+  assert.equal(held.size, 5, `five files of 40 MB: ${list.map((v) => `${v.reason}:${v.file.hash.slice(0, 6)}`).join(' ')}`);
+  assert.equal(store.data[`writerPaper:${k}`].file.hash, fake(6).hash);
+});
+
+test('page replacement refuses a base changed by another viewer before publishing history or Undo', async () => {
+  const { P, files, store, clock } = make(), k = key();
+  const [a, b, c] = await Promise.all([1, 2, 3].map((i) => files.put(bytes(100, i), 'application/pdf')));
+  await P.save(k, { kind: 'pdf', file: a, size: a.size, pages: 1 }, { reason: 'import' });
+  clock.t++;
+  await P.save(k, { file: b, size: b.size }, { reason: 'edit' });
+  const before = structuredClone(store.data);
+  await assert.rejects(P.save(k, { file: c, size: c.size }, { reason: 'edit', expectedKind: 'pdf', expectedFile: a }), /document changed in another tab/);
+  assert.deepEqual(store.data, before, 'neither the document nor the version used as Undo changes');
+});

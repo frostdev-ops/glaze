@@ -3,8 +3,11 @@
 // pdftotext, pdftoppm, pdfsig) and in PDFKit, Preview's engine (a small Swift program compiled in a temporary folder),
 // and compares page count, page order (each page's text), rotation and field values with what was asked. Prints a
 // table, writes fidelity.json and the outputs to the folder, exits 1 on any difference. macOS; a heavy job, so it runs
-// under the machine's heavy-job lock, niced.
-// node scripts/pdf-fidelity.js [folder] [--small]   (default folder: a new temporary one; --small: not the 300-page file)
+// under the machine's heavy-job lock, niced. With --annotated, only that file: a PDF the viewer's tools marked
+// (scripts/pdf-check.js writes annotated.pdf to its evidence), each annotation pdf.js finds there read back by PDFKit (its
+// type, on its page) and drawn by Poppler (pdftoppm with and without annotations differ inside its box).
+// node scripts/pdf-fidelity.js [folder] [--small] [--annotated file.pdf]   (default folder: a new temporary one; --small:
+// not the 300-page file)
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -170,7 +173,40 @@ const readers = async (tmp) => {
     return { pages: out.pages.map((p) => ({ text: squash(p.text), rotate: p.rotate })), fields: out.fields, encrypted: out.encrypted, printing: out.printing,
       notes: out.pages.flatMap((p) => p.annotations).filter((t) => t === 'FreeText').length };
   };
-  return { pdfjs, list: [['pdf.js', pdfjsRead], ['Poppler', popplerRead], ['PDFKit', pdfkitRead]] };
+  // Each page's annotation types as PDFKit lists them.
+  const pdfkitTypes = (file) => { const r = run(binary, [file]); const out = r.status === 0 ? JSON.parse(r.stdout) : null; return out?.pages?.map((p) => p.annotations) || null; };
+  return { pdfjs, pdfkitTypes, list: [['pdf.js', pdfjsRead], ['Poppler', popplerRead], ['PDFKit', pdfkitRead]] };
+};
+
+// A grey picture of page n by Poppler at 36 dpi, its annotations drawn or hidden: { w, h, px }.
+const popplerPage = (file, n, hide, tmp) => {
+  const base = path.join(tmp, `ann-${n}-${hide ? 'hidden' : 'shown'}`);
+  const r = run('pdftoppm', [...(hide ? ['-hide-annotations'] : []), '-r', '36', '-gray', '-singlefile', '-f', String(n), '-l', String(n), file, base]);
+  if (r.status !== 0) return null;
+  const b = fs.readFileSync(`${base}.pgm`), head = b.toString('latin1', 0, 64).match(/^P5\s+(\d+)\s+(\d+)\s+(\d+)\s/);
+  return head && { w: +head[1], h: +head[2], px: b.subarray(head[0].length) };
+};
+const annotatedRows = async (file, tmp, { pdfjs, pdfkitTypes }) => {
+  const rows = [], doc = await pdfjs.getDocument({ data: new Uint8Array(fs.readFileSync(file)), verbosity: 0 }).promise;
+  const kit = pdfkitTypes(file);
+  try {
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n), anns = (await page.getAnnotations()).filter((a) => a.subtype !== 'Widget' && a.subtype !== 'Popup');
+      if (!anns.length) continue;
+      const [x0, y0, , y1] = page.view, shown = popplerPage(file, n, false, tmp), hidden = popplerPage(file, n, true, tmp), k = 36 / 72;
+      const kitLeft = [...(kit?.[n - 1] || [])];
+      for (const a of anns) {
+        const [ax0, ay0, ax1, ay1] = a.rect;
+        let differ = 0;
+        if (shown && hidden) for (let y = Math.max(0, Math.floor((y1 - ay1) * k)); y < Math.min(shown.h, Math.ceil((y1 - ay0) * k)); y++)
+          for (let x = Math.max(0, Math.floor((ax0 - x0) * k)); x < Math.min(shown.w, Math.ceil((ax1 - x0) * k)); x++) if (Math.abs(shown.px[y * shown.w + x] - hidden.px[y * shown.w + x]) > 8) differ++;
+        const at = kitLeft.indexOf(a.subtype);
+        if (at >= 0) kitLeft.splice(at, 1);
+        rows.push({ page: n, type: a.subtype, poppler: shown && hidden ? (differ ? `drawn (${differ} px)` : 'not drawn') : 'pdftoppm failed', pdfkit: kit ? (at >= 0 ? 'read' : `not listed (${(kit[n - 1] || []).join(', ')})`) : 'PDFKit failed' });
+      }
+    }
+  } finally { await doc.loadingTask.destroy(); }
+  return rows;
 };
 
 // ---- the cases -------------------------------------------------------------------------------------------------------
@@ -195,7 +231,18 @@ const CASES = [
 const main = async () => {
   const args = process.argv.slice(2);
   const small = args.includes('--small');
-  const dir = path.resolve(args.find((a) => !a.startsWith('--')) || fs.mkdtempSync(path.join(os.tmpdir(), 'gz-pdf-fidelity-')));
+  const marked = args.includes('--annotated') ? path.resolve(args[args.indexOf('--annotated') + 1]) : null;
+  if (marked) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-pdfkit-'));
+    try {
+      const rows = await annotatedRows(marked, tmp, await readers(tmp));
+      const head = ['page', 'type', 'poppler', 'pdfkit'];
+      console.log([`| ${head.join(' | ')} |`, `|${head.map(() => '---').join('|')}|`, ...rows.map((r) => `| ${head.map((h) => r[h]).join(' | ')} |`)].join('\n'));
+      if (!rows.length || rows.some((r) => !/^drawn/.test(r.poppler) || r.pdfkit !== 'read')) process.exitCode = 1;
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+    return;
+  }
+  const dir = path.resolve(args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--annotated') || fs.mkdtempSync(path.join(os.tmpdir(), 'gz-pdf-fidelity-')));
   fs.mkdirSync(dir, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-pdfkit-'));
   const rows = [];
