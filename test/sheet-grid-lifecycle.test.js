@@ -403,3 +403,24 @@ test('a formula waiting for a reference stays open on another sheet, in the form
   assert.equal(f.el('gx-tab-2').getAttribute('aria-selected'), 'true');
   assert.equal(f.wb.sheets[1].rows.get(0).get(0).f, 'SUM(Sheet1!A1:A2)');
 });
+
+test('Enter and Tab after a cross-sheet reference move from the formula cell, retaining its selection for undo', async () => {
+  for (const [key, want] of [['Enter', 'D6'], ['Tab', 'E5']]) {
+    const f = frame();
+    f.fire(f.el('gx-add'), 'click');
+    f.el('gx-name').value = 'D5'; f.fire(f.el('gx-name'), 'keydown', { key: 'Enter' });
+    f.type('=SUM('); f.el('gx-edit').setSelectionRange(5, 5);
+    f.fire(f.el('gx-tab-1'), 'click');
+    const fx = f.el('gx-formula');
+    fx.value = '=SUM(Sheet1!A1:A2)'; f.fire(fx, 'input');
+    f.key(key);
+    assert.equal(f.wb.sheets[1].rows.get(4).get(3).f, 'SUM(Sheet1!A1:A2)');
+    assert.equal(f.el('gx-tab-2').getAttribute('aria-selected'), 'true');
+    assert.equal(f.el('gx-name').value, want, `${key} moves from Sheet2!D5`);
+    f.key('z', { ctrlKey: true });
+    assert.equal(f.el('gx-name').value, 'D5', 'undo selects the formula cell on its own sheet');
+    assert.equal(f.wb.sheets[1].rows.get(4)?.get(3), undefined);
+    assert.equal(await f.view.save(), true);
+    await f.view.dispose();
+  }
+});
