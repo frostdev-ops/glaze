@@ -60,3 +60,22 @@
 /* pdf.js's bar on a selected mark (Delete, its colour): Glaze's buttons inherit their font (writer.css), and the mark's
    layer carries the page's text scale, so its buttons take back a control's own size. */
 .gq-scroll .annotationEditorLayer .editToolbar button { font: 13px/1 system-ui, sans-serif; }
+/* Signature (lib/pdf-sign.js): saved ones to put in, then Draw, Name or Image. */
+dialog.gq-sign { position: fixed; inset: 0; margin: auto; width: min(460px, calc(100vw - 32px)); height: fit-content; max-height: calc(100vh - 32px); overflow: auto; padding: 16px; display: none; flex-direction: column; gap: 12px; color: var(--gz-ink); }
+dialog.gq-sign[open] { display: flex; }
+dialog.gq-sign::backdrop { background: rgba(0,0,0,.35); }
+.gq-sign-saved { display: flex; flex-wrap: wrap; gap: 6px; }
+.gq-sign-saved[hidden], .gq-sign-pane[hidden] { display: none; }
+.gq-sign-item { display: inline-flex; align-items: center; border: 1px solid var(--gz-line-strong); border-radius: 8px; background: #fff; color: #111; }
+.gq-sign-item .gq-ib { color: #111; width: 28px; height: 28px; }
+.gq-sign-use { padding: 2px 6px; border-radius: 8px; display: grid; place-items: center; }
+.gq-sign-tabs { display: flex; gap: 4px; }
+.gq-sign-tabs [aria-selected="true"] { background: color-mix(in srgb, var(--gz-accent) 22%, transparent); }
+.gq-sign-pane { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.gq-sign-pad { width: 100%; aspect-ratio: 400 / 150; background: #fff; border: 1px solid var(--gz-line-strong); border-radius: 8px; touch-action: none; cursor: crosshair; }
+.gq-sign-pad path { fill: none; stroke: #111; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.gq-sign-name { width: 100%; height: 56px; padding: 0 12px; border: 1px solid var(--gz-line-strong); border-radius: 8px; background: #fff; color: #111; font: 28px cursive; }
+.gq-sign-said { margin: 0; font-size: 13px; color: var(--gz-err); }
+.gq-sign-said:empty { display: none; }
+.gq-sign-end { display: flex; justify-content: flex-end; gap: 8px; }
+dialog.gq-sign button:disabled { opacity: .45; cursor: default; }

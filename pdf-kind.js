@@ -197,7 +197,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'pdf';
     // A kept PDF's tools (lib/pdf-tools.js) come with its viewer; a preview has none.
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/pdf-l10n.js', ...(src ? [] : ['lib/pdf-tools.js'])]);
+    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/pdf-l10n.js', ...(src ? [] : ['lib/pdf-tools.js', 'lib/pdf-sign.js'])]);
     const sheet = (href) => new Promise((ok) => { document.head.append(h('link', { rel: 'stylesheet', href, onload: ok, onerror: ok })); });
     const st = papers(), PA = GZ_WRITER_PAPERS;
     let rec = src ? null : await st.get(key);
@@ -237,14 +237,16 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const bus = new V.EventBus(), links = new V.PDFLinkService({ eventBus: bus, externalLinkTarget: V.LinkTarget.BLANK, externalLinkRel: 'noopener noreferrer nofollow' });
     const finder = new V.PDFFindController({ eventBus: bus, linkService: links });
     const l10n = GZ_PDF_L10N.make({ t, lang: locale() });
-    // A kept PDF's editor (its tools, lib/pdf-tools.js) waits at NONE until a tool is chosen; a preview has none.
+    // A kept PDF's editor (its tools, lib/pdf-tools.js) waits at NONE until a tool is chosen; a preview has none. Signatures
+    // are Glaze's dialog over pdf.js's own signature editor (lib/pdf-sign.js).
+    const signs = src ? null : GZ_PDF_SIGN.manager({ P, t, h, btn, done: () => modified() });
     const viewer = new V.PDFViewer({ container: scroll, viewer: pagesEl, eventBus: bus, linkService: links, findController: finder, l10n, annotationMode: src ? P.AnnotationMode.ENABLE : P.AnnotationMode.ENABLE_FORMS,
       annotationEditorMode: src ? P.AnnotationEditorType.DISABLE : P.AnnotationEditorType.NONE, annotationEditorHighlightColors: src ? null : GZ_PDF_TOOLS.HIGHLIGHTS,
-      enablePermissions: true, imageResourcesPath: url('lib/pdfjs/images/'), removePageBorders: false });
+      signatureManager: signs, enablePermissions: true, imageResourcesPath: url('lib/pdfjs/images/'), removePageBorders: false });
     links.setViewer(viewer);
     // Every change the tools make saves as a filled field does (modified, below).
     let modified = () => {};
-    const tools = src ? null : GZ_PDF_TOOLS.mount({ P, viewer, bus, t, h, btn, openMenu: (...a) => openMenu(...a), modified: () => modified(), scroll, signatures: null, say: (x) => say(x) });
+    const tools = src ? null : GZ_PDF_TOOLS.mount({ P, viewer, bus, t, h, btn, openMenu: (...a) => openMenu(...a), modified: () => modified(), scroll, signatures: signs, say: (x) => say(x) });
     if (tools) findB.after(h('span', { class: 'gp-sepv' }), tools.el);
     l10n.translate(scroll);
     const refuse = (e) => {
@@ -411,10 +413,13 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     // ---- saving: a field filled (pdf.js's annotation storage) saves a second after the last change, and before the page
     // leaves for Documents; the bytes pdf.js writes (an incremental update) replace the record's, with page 1 drawn again.
     const say = (text) => { if (state.textContent !== text) state.textContent = text; };
+    // Leaving: a signature being chosen is cancelled, and what the tools hold (a drawing, a note being typed) is kept.
+    const leaveNow = () => { signs?.cancel(); tools?.commit(true); };
     let dirty = false, saving = null, timer = 0;
     const save = async () => {
       tools?.commit();
-      if (!doc || !dirty) return true;
+      // A signature being chosen leaves pdf.js an empty editor: the save waits for the dialog (signs done).
+      if (!doc || !dirty || signs?.busy()) return true;
       dirty = false; clearTimeout(timer);
       say(t('Saving…'));
       try {
@@ -423,12 +428,12 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
         ({ paper: rec } = await st.save(key, { ...await STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }, { expectedKind: 'pdf' }));
         say(dirty ? '' : t('Saved'));
         return true;
-      } catch (e) { console.error(e); dirty = true; say(t(e instanceof FileError ? e.message : e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); return false; }
+      } catch (e) { console.error(e); if (e?.cause) console.error(e.cause); dirty = true; say(t(e instanceof FileError ? e.message : e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); return false; }
     };
     const flush = () => {
       clearTimeout(timer);
       if (!saving) saving = (async () => {
-        while (dirty) if (!await save()) return false;
+        while (dirty && !signs?.busy()) if (!await save()) return false;
         return true;
       })().finally(() => { saving = null; });
       return saving;
@@ -442,16 +447,16 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } }, { signal });
     }
     back?.addEventListener('click', (e) => {
-      tools?.commit(true);
+      leaveNow();
       if (!dirty && !saving) return;
       e.preventDefault();
       flush().then((ok) => { if (ok) location[window.top === window ? 'assign' : 'replace'](back.href); });
     });
     // The embedded frame's Close, Escape and history routes await the same storage acknowledgement as Documents.
-    addEventListener('glaze:papers:beforeleave', (e) => { tools?.commit(true); if (dirty || saving) e.detail.wait(flush()); }, { signal });
+    addEventListener('glaze:papers:beforeleave', (e) => { leaveNow(); if (dirty || saving) e.detail.wait(flush()); }, { signal });
     document.addEventListener('visibilitychange', () => { if (document.hidden) tools?.commit(true); if (document.hidden && dirty) flush(); }, { signal });
     // Native tab navigation cannot await a promise. Protect unsaved work until the write acknowledges it.
-    addEventListener('beforeunload', (e) => { tools?.commit(true); if (dirty || saving) { flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
+    addEventListener('beforeunload', (e) => { leaveNow(); if (dirty || saving) { flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
     const dispose = async () => {
       life.abort(); clearTimeout(timer); clearTimeout(drawTimer); sizing.disconnect(); l10n.destroy(); closeMenu(); tools?.dispose();
       viewer.setDocument(null); links.setDocument(null); finder.setDocument(null);

@@ -3755,5 +3755,6 @@
   "Rectangle": "Rechteck",
   "Ellipse": "Ellipse",
   "Arrow": "Pfeil",
-  "The owner of this PDF doesn't allow adding to it.": "Der Eigentümer dieses PDFs erlaubt keine Ergänzungen."
+  "The owner of this PDF doesn't allow adding to it.": "Der Eigentümer dieses PDFs erlaubt keine Ergänzungen.",
+  "Draw": "Zeichnen"
 };

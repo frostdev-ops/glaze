@@ -486,7 +486,7 @@ const photo = () => {
     await until(() => page.evaluate(() => !!document.querySelector('.pdfViewer .page[data-page-number="1"] canvas') && document.querySelector('[data-tool="pen"]')?.disabled === false), 'the tools on');
     const group = await page.evaluate(() => ({ tools: [...document.querySelectorAll('.gq-tools [data-tool]')].map((b) => b.dataset.tool), label: document.querySelector('.gq-tools').getAttribute('aria-label'),
       undo: document.querySelector('.gq-tools [data-act="undo"]').disabled, redo: document.querySelector('.gq-tools [data-act="redo"]').disabled, inBar: !!document.querySelector('.gp-tool .gq-tools'), pdfjsBar: !!document.querySelector('#toolbarContainer, #editorModeButtons') }));
-    check(['highlight', 'pen', 'text', 'image', 'shape'].every((x) => group.tools.includes(x)) && group.inBar && !group.pdfjsBar && group.undo && group.redo, `the tools are a group in Glaze's toolbar, Undo and Redo off until there is something (${JSON.stringify(group)})`);
+    check(['highlight', 'pen', 'text', 'image', 'shape', 'signature'].every((x) => group.tools.includes(x)) && group.inBar && !group.pdfjsBar && group.undo && group.redo, `the tools are a group in Glaze's toolbar, Undo and Redo off until there is something (${JSON.stringify(group)})`);
     const count = (sel) => page.evaluate((s) => document.querySelectorAll(`.page[data-page-number="1"] .annotationEditorLayer ${s}`).length, sel);
     const stateNow = () => page.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent);
     const fileHash = async () => (await local(`writerPaper:${tKey}`)).file.hash;
@@ -594,6 +594,65 @@ const photo = () => {
     const subtypes = Object.fromEntries(['Ink', 'Highlight', 'FreeText', 'Stamp'].map((s) => [s, (tText.match(new RegExp(`/Subtype\\s*/${s}\\b`, 'g')) || []).length]));
     check(sha(tBytes) === (await local(`writerPaper:${tKey}`)).file.hash && subtypes.Ink === 5 && subtypes.Highlight === 1 && subtypes.FreeText === 1 && subtypes.Stamp === 1 && /\/C\s*\[\s*0\.85\d*\s+0\.18\d*\s+0\.14\d*\s*\]/.test(tText),
       `Export .pdf: the saved file, its marks as editable annotations (${JSON.stringify(subtypes)}, ${tBytes.length} bytes)`);
+
+    // ---- Signature (lib/pdf-sign.js): drawn, typed and from a picture, each on the page and kept for next time as its
+    // outlines only, at most five; a kept one goes in again in one click; Cancel leaves nothing.
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(tKey)}`);
+    await until(() => page.evaluate(() => document.querySelector('[data-tool="signature"]')?.disabled === false), 'the Signature tool on');
+    const stored = () => worker.evaluate(async () => (await chrome.storage.local.get('pdfSignatures')).pdfSignatures || []);
+    const signed = () => count('.signatureEditor:not(.hidden)');
+    const dialogOpen = () => until(() => page.evaluate(() => !!document.querySelector('dialog.gq-sign[open]')), 'the signature dialog');
+    const sign = async (tab, fill) => {
+      await page.click('[data-tool="signature"]');
+      await dialogOpen();
+      if (tab) await page.click(`dialog.gq-sign [data-tab="${tab}"]`);
+      await fill();
+      await until(() => page.evaluate(() => !document.querySelector('dialog.gq-sign [data-act="insert"]').disabled), `Insert ready (${tab || 'draw'})`);
+      await page.click('dialog.gq-sign [data-act="insert"]');
+      await until(() => page.evaluate(() => !document.querySelector('dialog.gq-sign')), 'the dialog closed');
+    };
+    let sb = await pageBox();
+    await sign(null, async () => {
+      const r = await page.evaluate(() => document.querySelector('.gq-sign-pad').getBoundingClientRect().toJSON());
+      for (const [y0, y1] of [[0.3, 0.7], [0.7, 0.3]]) { await page.mouse.move(r.x + r.width * 0.2, r.y + r.height * y0); await page.mouse.down(); for (let i = 1; i <= 10; i++) await page.mouse.move(r.x + r.width * (0.2 + 0.06 * i), r.y + r.height * (y0 + ((y1 - y0) * i) / 10)); await page.mouse.up(); }
+    });
+    await until(async () => (await signed()) === 1, 'the drawn signature on the page');
+    const hSig = await autosaved(await fileHash(), 'the signature saved').catch(async () => fileHash());
+    const one = await until(async () => { const s = await stored(); return s.length === 1 ? s : null; }, 'the drawn signature kept');
+    check(Object.keys(one[0]).sort().join() === 'at,data,id,kind,name' && one[0].kind === 'draw' && !/data:image|image\//.test(JSON.stringify(one)) && await page.evaluate(async (d) => !!await GZ_PDF_SIGN.decode(d), one[0].data),
+      `Signature, drawn: on the page, autosaved (${hSig.slice(0, 8)}), kept as its outline only (${one[0].data.length} chars)`);
+    await sign('name', async () => { await page.fill('dialog.gq-sign .gq-sign-name', 'Ada Lovelace'); });
+    await until(async () => (await signed()) === 2, 'the typed signature');
+    // A photo of a signature: dark ink on light paper.
+    const inkPng = path.join(tmp, 'ink.png'), iw = 160, ih = 60, ihd = Buffer.alloc(13); ihd.writeUInt32BE(iw, 0); ihd.writeUInt32BE(ih, 4); ihd.set([8, 0, 0, 0, 0], 8);
+    const inkRows = Buffer.concat(Array.from({ length: ih }, (_, y) => Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: iw }, (_, x) => (Math.abs(y - (30 + 18 * Math.sin(x / 12))) < 3 && x > 10 && x < 150 ? 20 : 240)))])));
+    fs.writeFileSync(inkPng, Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', ihd), chunk('IDAT', require('node:zlib').deflateSync(inkRows)), chunk('IEND', Buffer.alloc(0))]));
+    await sign('image', async () => { await page.setInputFiles('dialog.gq-sign .gq-sign-file', inkPng); });
+    await until(async () => (await signed()) === 3, 'the picture signature');
+    const three = await until(async () => { const s = await stored(); return s.length === 3 ? s : null; }, 'three kept');
+    check(three.map((x) => x.kind).join() === 'image,name,draw' && three[1].name === 'Ada Lovelace' && !/data:image|image\//.test(JSON.stringify(three)), `Signature, typed and from a picture: on the page, kept newest first as outlines (${JSON.stringify(three.map((x) => [x.kind, x.name, x.data.length]))})`);
+    // A kept one, in one click.
+    await page.click('[data-tool="signature"]');
+    await dialogOpen();
+    const keptShown = await until(() => page.evaluate(() => (document.querySelectorAll('dialog.gq-sign [data-act="use"]').length === 3 ? 3 : null)), 'the kept signatures listed');
+    await shot('signature-1280.png');
+    await page.click('dialog.gq-sign [data-act="use"] >> nth=1');
+    await until(async () => (await signed()) === 4, 'a kept signature put in');
+    // Cancel: nothing goes on the page.
+    await page.click('[data-tool="signature"]');
+    await dialogOpen();
+    await page.click('dialog.gq-sign [data-act="cancel"]');
+    await until(() => page.evaluate(() => !document.querySelector('dialog.gq-sign')), 'cancelled');
+    check(keptShown === 3 && (await signed()) === 4, `a kept signature goes in from the list; Cancel adds nothing (${keptShown} listed)`);
+    // Three more: still five kept, the newest.
+    for (const n of ['Grace Hopper', 'Katherine Johnson', 'Mary Jackson']) await sign('name', async () => { await page.fill('dialog.gq-sign .gq-sign-name', n); });
+    await until(async () => (await signed()) === 7, 'seven on the page');
+    const five = await until(async () => { const s = await stored(); return s[0]?.name === 'Mary Jackson' ? s : null; }, 'the newest kept');
+    check(five.length === 5 && five.map((x) => x.name).join() === 'Mary Jackson,Katherine Johnson,Grace Hopper,,Ada Lovelace', `at most five kept, the newest (${JSON.stringify(five.map((x) => x.name || x.kind))})`);
+    await until(async () => (await stateNow()) === 'Saved', 'the signatures saved');
+    await page.reload();
+    const sigsAfter = await until(() => page.evaluate(() => { const n = document.querySelectorAll('.page[data-page-number="1"] .annotationLayer [data-annotation-id]').length; return n >= 15 ? n : null; }), 'the signatures after a reload');
+    check(sigsAfter >= 15, `after a reload the seven signatures are still on page 1 (${sigsAfter} annotations there)`);
 
     // ---- a file whose owner forbids adding to it: the tools are there, disabled, and say why.
     const noMarks = path.join(tmp, 'No marks.pdf'), FX = require('./pdf-fixtures.js');

@@ -3755,5 +3755,6 @@
   "Rectangle": "Rechthoek",
   "Ellipse": "Ellips",
   "Arrow": "Pijl",
-  "The owner of this PDF doesn't allow adding to it.": "De eigenaar van deze pdf staat geen toevoegingen toe."
+  "The owner of this PDF doesn't allow adding to it.": "De eigenaar van deze pdf staat geen toevoegingen toe.",
+  "Draw": "Tekenen"
 };
