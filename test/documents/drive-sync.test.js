@@ -690,3 +690,54 @@ test('a fresh device can import a PDF replaced in Drive before it connected', as
   assert.equal(dec(await b.files.read(got.file.hash)), '%PDF annotated elsewhere');
   assert.equal(sidecarJson(drive, key).record.file.hash, got.file.hash);
 });
+
+test('a second device joining with an older copy of a document: the later edited stays current on both, the other a version', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  const a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'school.blackboard.com|_1_1|_2_1|_3_1'; // one assignment's paper, written on both before either synced
+  await b.papers.save(key, { doc: doc('Thesis, first draft'), title: 'Essay', named: true });
+  clock.t += 3600e3;
+  await a.papers.save(key, { doc: doc('Thesis, final draft'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  clock.t += 60e3;
+  assert.ok((await b.sync.set(true)).ok);
+  assert.ok((await a.sync.run()).ok);
+  assert.equal(textOf((await a.papers.get(key)).doc), 'Thesis, final draft', 'A\'s later edit stays current on A');
+  assert.equal(textOf((await b.papers.get(key)).doc), 'Thesis, final draft', 'and becomes current on B');
+  const kept = (await b.papers.versions(key)).filter((v) => v.reason === 'conflict');
+  assert.equal(kept.length, 1);
+  assert.equal(textOf((await b.papers.version(key, kept[0].id)).doc), 'Thesis, first draft', 'B\'s older copy kept as a version on B');
+  noDeletes(drive);
+});
+
+test('two devices whose first syncs overlap on one document keep one copy and see each other\'s later edits', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  // A's document uploads wait until B has listed the folder: both find no copy, and each makes one.
+  let listed;
+  const held = new Promise((r) => { listed = r; });
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  const gateA = { ...drive, fetch: async (u, i = {}) => { if (u.includes('/upload/') && i.method === 'POST' && /"glaze":"(doc|file)"/.test(text(i.body))) await held; return drive.fetch(u, i); } };
+  const gateB = { ...drive, fetch: async (u, i) => { const r = await drive.fetch(u, i); if (u.includes('/drive/v3/files?') && decodeURIComponent(u).includes("value='doc'")) listed(); return r; } };
+  const a = device(gateA, { clock }), b = device(gateB, { clock });
+  const key = 'school.blackboard.com|_1_1|_2_1|_3_1';
+  await a.papers.save(key, { doc: doc('From A'), title: 'Essay', named: true });
+  clock.t += 1000;
+  await b.papers.save(key, { doc: doc('From B'), title: 'Essay', named: true });
+  // A starts first and makes the Glaze folder, so both work in the one folder.
+  const first = a.sync.set(true);
+  await new Promise((r) => setTimeout(r, 20));
+  await Promise.all([first, b.sync.set(true)]);
+  for (let i = 0; i < 2; i++) { assert.ok((await a.sync.run()).ok); assert.ok((await b.sync.run()).ok); }
+  assert.equal(textOf((await a.papers.get(key)).doc), textOf((await b.papers.get(key)).doc), 'one document on both');
+  clock.t += 60e3;
+  await a.papers.save(key, { doc: doc('A, later') });
+  await a.sync.touched(key); await a.fire();
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(textOf((await b.papers.get(key)).doc), 'A, later', 'A\'s later edit reaches B');
+  clock.t += 60e3;
+  await b.papers.save(key, { doc: doc('B, later') });
+  await b.sync.touched(key); await b.fire();
+  assert.ok((await a.sync.run()).ok);
+  assert.equal(textOf((await a.papers.get(key)).doc), 'B, later', 'and B\'s reaches A');
+  noDeletes(drive);
+});
