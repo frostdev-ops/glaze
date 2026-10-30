@@ -19,27 +19,63 @@ test('papers.html loads the kind registry first and slides-kind.js after papers.
   for (const line of pkg) for (const f of ['slides-kind.js', 'slides-kind.css']) assert.ok(line.includes(` ${f} `), `${f} in: ${line.slice(0, 40)}…`);
 });
 
-// slides-kind.js in a context of its own: the registry, a storage.sync answering writer.slides, and need() as a no-op.
+// defaults.js's GZ_SANITIZE with writer.slides defaulting to `on`, as a page has it.
+const sanitizer = (on) => {
+  const src = read('defaults.js'), flipped = src.replace(/slides: \[(?:true|false), 'bool'\]/, `slides: [${on}, 'bool']`);
+  assert.notEqual(flipped, on ? src.replace(/slides: \[true/, 'x') : src.replace(/slides: \[false/, 'x'), 'writer.slides in defaults.js');
+  const c = vm.createContext({ require: require('node:module').createRequire(path.join(__dirname, '..', 'defaults.js')), TextEncoder, Intl });
+  vm.runInContext(`${flipped}\nthis.GZ_SANITIZE = GZ_SANITIZE;`, c);
+  return c.GZ_SANITIZE;
+};
+const { GZ_SANITIZE, GZ_DEFAULTS } = require('../defaults.js');
+// slides-kind.js in a context of its own: the registry, defaults.js's sanitizer, a storage.sync answering writer.slides, and
+// need() as a no-op.
 const load = (writer, overrides = {}) => {
   delete require.cache[require.resolve('../lib/doc-kinds.js')];
   delete globalThis.GZ_DOC_KINDS;
   const DK = require('../lib/doc-kinds.js');
-  const ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_WRITER_PAPER: { need: async () => {} }, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,
+  const ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_SANITIZE, GZ_WRITER_PAPER: { need: async () => {} }, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,
     chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}` } } });
   ctx.globalThis = ctx;
+  if (ctx.GZ_SANITIZE === undefined) delete ctx.GZ_SANITIZE;
   vm.runInContext(read('slides-kind.js'), ctx);
   return { DK, ctx };
 };
+const imports = async (DK) => {
+  await DK.settled();
+  for (const f of ['edit', 'thumb', 'file', 'exportFile', 'copy', 'text']) assert.equal(typeof DK.get('slides')[f], 'function', f);
+  const on = typeof DK.get('slides').importFile === 'function';
+  assert.equal(DK.opens('Week 3.pptx'), on ? 'slides' : null);
+  assert.equal(/pptx/.test(DK.accept()), on);
+  return on;
+};
 
-test('off (the default), slides still view and export while Documents imports Word files only', async () => {
-  for (const writer of [undefined, { slides: false }, { slides: 'yes' }, { full: true }, { pdf: true }]) {
-    const { DK } = load(writer);
-    await DK.settled();
-    for (const f of ['edit', 'thumb', 'file', 'exportFile', 'copy', 'text']) assert.equal(typeof DK.get('slides')[f], 'function', `${f}: ${JSON.stringify(writer)}`);
-    assert.equal(DK.get('slides').importFile, undefined);
-    assert.equal(DK.opens('Week 3.pptx'), null);
-    assert.ok(!/pptx/.test(DK.accept()));
+test('off, slides still view and export while Documents imports Word files only', async () => {
+  for (const writer of [{ slides: false }, { slides: false, full: true }]) {
+    for (const def of [false, true]) assert.equal(await imports(load(writer, { GZ_SANITIZE: sanitizer(def) }).DK), false, `${JSON.stringify(writer)}, default ${def}`);
   }
+});
+
+test('with no choice stored, import follows writer.slides\'s default in defaults.js', async () => {
+  for (const writer of [undefined, { slides: 'yes' }, { full: true }, { pdf: true }]) {
+    for (const def of [false, true]) assert.equal(await imports(load(writer, { GZ_SANITIZE: sanitizer(def) }).DK), def, `${JSON.stringify(writer)}, default ${def}`);
+    assert.equal(await imports(load(writer).DK), GZ_DEFAULTS.writer.slides, `${JSON.stringify(writer)}, defaults.js as it is`);
+  }
+});
+
+test('defaults.js loads through need() only where the page lacks it', async () => {
+  assert.ok(!read('papers.html').includes('src="defaults.js"'), 'papers.html loads it on demand');
+  assert.ok(read('writer.html').includes('<script src="defaults.js"></script>'), 'writer.html has it');
+  const asked = [];
+  let ctx;
+  const need = async (files) => { asked.push(...files); if (files.includes('defaults.js')) ctx.GZ_SANITIZE = sanitizer(true); };
+  ({ ctx } = load(undefined, { GZ_SANITIZE: undefined, GZ_WRITER_PAPER: { need } }));
+  assert.equal(await imports(ctx.GZ_DOC_KINDS), true);
+  assert.deepEqual(asked, ['defaults.js']);
+  asked.length = 0;
+  ({ ctx } = load(undefined, { GZ_SANITIZE: sanitizer(true), GZ_WRITER_PAPER: { need } }));
+  assert.equal(await imports(ctx.GZ_DOC_KINDS), true);
+  assert.deepEqual(asked, [], 'writer.html has defaults.js already');
 });
 
 test('on, the slides kind registers its page code', async () => {

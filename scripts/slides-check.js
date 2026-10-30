@@ -1,5 +1,5 @@
 // Slide decks on the Documents page (papers.html, slides-kind.js) in the real unpacked extension: with Settings → Writer →
-// Slides off (writer.slides, the default) a .pptx is refused as before; on, the fixture deck (test/fixtures/pptx/deck, zipped
+// Slides set off (writer.slides: false) a .pptx is refused as before; on, the fixture deck (test/fixtures/pptx/deck, zipped
 // with lib/zip.js) imports as a card showing slide 1, opens in the viewer (the rail, slide 1, arrows and Page keys, zoom,
 // find in the slides' text, the notes), presents in a dialog whose keys are Rimeward's and which skips the hidden slide,
 // exports the bytes it was given, and Esc and Back behave as a paper's. The chrome wears a dark Look while the slide stays

@@ -1,4 +1,4 @@
-// Slide decks on the Documents page (papers.html). Settings → Writer → Slides (writer.slides, off by default) permits
+// Slide decks on the Documents page (papers.html). Settings → Writer → Slides (writer.slides, its default in defaults.js) permits
 // importing .pptx and .ppsx files; existing decks always remain available for viewing. Documents of the slides kind
 // (lib/doc-kinds.js), each card showing slide 1, and open in a viewer: a rail of thumbnails, the slide (lib/slides-render.js
 // on lib/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, and Present (a dialog, full screen
@@ -513,8 +513,11 @@
       words: measure({ text: words2 }).words, ...(thumbUrl && { thumb: thumbUrl }) }, { reason: 'import' })).paper;
   };
 
-  // Viewing stays registered; only import follows the switch. The page waits before it routes or draws.
-  const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.slides === true, () => false);
+  // Viewing stays registered; only import follows the switch, read through defaults.js as every Writer setting is (a device
+  // with no stored choice gets the default). writer.html has defaults.js already; loading it twice would redeclare its
+  // consts. The page waits before it routes or draws.
+  const sanitizer = () => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(['defaults.js']));
+  const on = Promise.resolve().then(sanitizer).then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.slides === true).catch(() => false);
   DK.wait(on.then((yes) => DK.register('slides', { edit, view: (key, host) => edit(key, { host }), into, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
   globalThis.GZ_SLIDES_KIND = Object.freeze({ STORE });
 })();
