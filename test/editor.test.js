@@ -218,7 +218,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
     frame: { contentDocument: { querySelector: () => section }, contentWindow: { postMessage: (m) => messages.push(m) } },
     $: (selector) => ({ value: selector === '#preview-size' ? 'desktop' : 'current' }), location: { origin: 'chrome-extension://fixture' },
     previewSite: 'ultra', previewPage: 'outline', previewCourse: '', renderNav() {}, renderContrast() {}, sizePreview() {}, paintBackdrop() {}, previewItems: () => ({}),
-    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED, GZ_LOOK_PARTS: require('../lib/lookset.js'),
+    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED, GZ_LOOK_PARTS: require('../lib/lookset.js'), catalog: require('../lib/looks.js').list(),
   });
   vm.runInContext(`(${preview})()`, context);
   assert.equal(section.className, 'course course-color-2'); assert.equal(name.textContent, 'My course');

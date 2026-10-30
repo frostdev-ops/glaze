@@ -69,6 +69,10 @@ test('which Look is worn: a kept Look as its code wears it, parts and all; a bui
   const got = await S.decode(favorites[2].code);
   const worn = { ...G.GZ_SANITIZE({ ...s, ...LX.wearCode(s, got) }), parts: got.parts };
   assert.equal(C.worn(worn, all)?.id, cat.looks[2].id);
+  // As Chrome hands the stored catalogue back: every object's keys sorted.
+  const sorted = (o) => JSON.parse(JSON.stringify(o, (k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1))) : v)));
+  assert.notEqual(JSON.stringify(sorted(cat).looks[2].colors), JSON.stringify(cat.looks[2].colors));
+  assert.equal(C.worn(worn, C.list(sorted(cat)))?.id, cat.looks[2].id, 'read back from storage, still the Look worn');
   assert.equal(worn.look.tooltips, false, 'tooltips stay the student\'s');
   assert.equal(C.worn({ ...worn, look: { ...worn.look, radius: 2 } }, all), null, 'changed since: none');
   assert.equal(C.worn({ ...worn, parts: { x: { pointer: 'ghost' } } }, all), null, 'other parts: another Look');
@@ -83,14 +87,14 @@ test('a course wears a kept Look by id; an old built-in name still reads; a miss
   const { favorites, settings } = await fixtures();
   const cat = await C.build(favorites, S.decode), saved = C.looks(cat);
   const study = cat.looks[0].id, lib = cat.looks[1].id;
-  const s = G.GZ_SANITIZE({ preset: 'Ember', colors: G.GZ_PRESET('Ember'), look: { tooltips: false, scale: 1.1 }, courses: { looks: { _1_1: 'Library', _2_1: study, _3_1: lib, _4_1: 'c:00000000000000', _5_1: 'c:bad', _6_1: 'Nope' } } });
+  const s = G.GZ_SANITIZE({ preset: 'Ember', colors: G.GZ_PRESET('Ember'), look: { tooltips: false }, bg: { image: 'https://pics.school.test/a.png' }, courses: { looks: { _1_1: 'Library', _2_1: study, _3_1: lib, _4_1: 'c:00000000000000', _5_1: 'c:bad', _6_1: 'Nope' } } });
   assert.deepEqual(s.courses.looks, { _1_1: 'Library', _2_1: study, _3_1: lib, _4_1: 'c:00000000000000' }, 'built-in names and kept ids are kept, on every device; anything else goes');
   // A saved Look named like a built-in is still its own: the name maps to the built-in, the id to the saved one.
   assert.ok(G.GZ_LOOK_ON(G.GZ_COURSE_LOOK(s, '_1_1', saved), look('Library')));
   const mine = G.GZ_COURSE_LOOK(s, '_2_1', saved);
   assert.deepEqual(mine.colors, settings.mine.colors);
   assert.equal(mine.look.radius, 3);
-  assert.equal(mine.look.scale, 1.1, 'what its code doesn\'t carry stays the student\'s');
+  assert.equal(mine.bg.image, 'https://pics.school.test/a.png', 'what its code doesn\'t carry stays the student\'s');
   assert.equal(mine.look.tooltips, false);
   assert.deepEqual(mine.bg.colors, settings.mine.bg.colors);
   assert.equal(mine.preset, 'Forest');
@@ -136,4 +140,101 @@ test('a kept Look made now carries its id and where it came from, and favorites 
   assert.equal(C.kept({ ...favorites[1], id: 'nope' }).id, C.idOf(favorites[1].code), 'a stored id that isn\'t one is made again from the code');
   assert.equal(C.kept({ code: 'glaze1:a', name: 'n', from: 'saved', author: 'someone' }).from, 'saved');
   assert.equal(C.kept({ code: 1, name: 'n' }), null);
+});
+
+// ---- the worker: the catalogue it keeps, wearing a kept Look by id, rotation by id ------------------------------------------
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const worker = (local = {}, syncStore = {}) => {
+  const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
+  const changed = [], installed = [], messages = [];
+  const area = (s, name) => ({
+    get: (k) => later(() => structuredClone(k === null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])))),
+    set: (v) => later(() => { const was = structuredClone(s); Object.assign(s, structuredClone(v)); for (const f of changed) f(Object.fromEntries(Object.keys(v).map((k) => [k, { oldValue: was[k], newValue: s[k] }])), name); }),
+    remove: (k) => later(() => { for (const x of [].concat(k)) delete s[x]; }),
+  });
+  const context = vm.createContext({
+    URL, console: { ...console, warn() {} }, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    chrome: {
+      runtime: {
+        id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'),
+        onMessage: { addListener: (f) => messages.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
+      },
+      storage: { local: area(local, 'local'), sync: area(syncStore, 'sync'), onChanged: { addListener: (f) => changed.push(f) } },
+    },
+  });
+  vm.runInContext(read('lib/background.js'), context);
+  const send = (msg, sender) => new Promise((res) => {
+    let kept = false;
+    for (const f of messages) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
+    if (!kept) res('ignored');
+  });
+  const until = async (fn) => { for (let i = 0; i < 400 && !fn(); i++) await new Promise((r) => setTimeout(r, 5)); return fn(); };
+  return { send, local, sync: syncStore, until, set: context.chrome.storage.local.set, install: () => { for (const f of installed) f({ reason: 'update' }); }, popup: { id: 'glaze', url: 'chrome-extension://x/popup.html' } };
+};
+
+test('the worker keeps the catalogue: built on update, again when a Look is saved, renamed or removed', async () => {
+  const { favorites } = await fixtures();
+  const w = worker({ lookFavorites: favorites.slice(0, 2) });
+  w.install();
+  assert.ok(await w.until(() => w.local.lookCatalog?.looks?.length === 2), 'built on update from what was kept before');
+  const [study] = w.local.lookCatalog.looks.map((E) => E.id);
+  // Saved, renamed, removed: each a write of lookFavorites, as Settings makes it.
+  await w.set({ lookFavorites: favorites });
+  assert.ok(await w.until(() => w.local.lookCatalog.looks.length === 4));
+  await w.set({ lookFavorites: favorites.map((f, i) => (i === 0 ? { ...f, name: 'Finals' } : f)) });
+  assert.ok(await w.until(() => w.local.lookCatalog.looks[0].name === 'Finals'));
+  assert.equal(w.local.lookCatalog.looks[0].id, study, 'renamed, the same Look');
+  await w.set({ lookFavorites: favorites.slice(1) });
+  assert.ok(await w.until(() => w.local.lookCatalog.looks.length === 3 && !w.local.lookCatalog.looks.some((E) => E.id === study)));
+});
+
+test('Settings wakes the worker to build the catalogue where the storage change alone would not; a page cannot ask', async () => {
+  const { favorites } = await fixtures();
+  const w = worker();
+  w.local.lookFavorites = favorites; // written as a browser that doesn't wake the worker for it: no change heard
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'build' }, { id: 'glaze', tab: {}, url: 'https://school.instructure.com/courses/1' }), { ok: false, error: 'sender' });
+  assert.equal(w.local.lookCatalog, undefined);
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'build' }, { id: 'glaze', tab: {}, frameId: 0, url: 'chrome-extension://x/options.html' }), { ok: true });
+  assert.equal(w.local.lookCatalog?.looks?.length, 4);
+});
+
+test('a kept Look put on by id from the popup wears its code as "Use this theme" does; a page elsewhere cannot', async () => {
+  const { favorites, settings } = await fixtures();
+  const w = worker({ lookFavorites: favorites }, structuredClone(G.GZ_SANITIZE({ look: { tooltips: false }, navbar: { on: false } })));
+  const night = C.kept(favorites[3]);
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'wear', id: night.id }, { id: 'glaze', tab: {}, url: 'https://evil.example/' }), { ok: false, error: 'sender' });
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'wear', id: 'c:00000000000000' }, w.popup), { ok: false, error: 'gone' });
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'wear', id: night.id }, w.popup), { ok: true });
+  const s = G.GZ_SANITIZE(w.sync);
+  assert.deepEqual(s.colors, settings.animated.colors);
+  assert.equal(s.bg.scene, 'graveyard');
+  assert.equal(s.look.tooltips, false, 'tooltips stay the student\'s');
+  assert.equal(s.navbar.on, false, 'whether the bar is on stays the student\'s');
+  assert.ok(w.sync.lookX, 'its parts went with it');
+  const got = await S.decode(favorites[3].code);
+  const parts = await require('../lib/lookparts.js').fromStored(w.sync.lookX, { get: async () => ({}) });
+  assert.deepEqual(parts, got.parts);
+  const cat = await C.build(favorites, S.decode);
+  assert.equal(C.worn({ ...s, parts }, C.list(cat))?.id, night.id, 'and it is the Look the picker shows pressed');
+});
+
+test('rotation turns to a kept Look ticked by id, and one ticked by its code before ids', async () => {
+  const { favorites, settings } = await fixtures();
+  for (const tick of [C.kept(favorites[0]).id, favorites[0].code]) {
+    const w = worker({ lookFavorites: favorites, rotateLooks: [tick], rotateState: { mode: '6h 08:00', at: 1, i: -1 } }, G.GZ_SANITIZE({ extras: { rotate: '6h' } }));
+    assert.deepEqual(await w.send({ type: 'glaze:rotate' }, w.popup), { ok: true });
+    assert.deepEqual(G.GZ_SANITIZE(w.sync).colors, settings.mine.colors, tick.slice(0, 8));
+  }
+});
+
+test('lib/looks.js loads on demand as the worker injects it: it ends on a value, and a second injection keeps the first', () => {
+  const context = vm.createContext({ GZ_LOOKS: G.GZ_LOOKS, GZ_LOOK_ON: G.GZ_LOOK_ON });
+  const first = vm.runInContext(read('lib/looks.js'), context);
+  assert.ok(first, 'no last value: the worker would answer "did not finish"');
+  assert.equal(vm.runInContext(read('lib/looks.js'), context), first);
+  assert.equal(vm.runInContext('GZ_CATALOG', context).list().length, G.GZ_LOOKS.length);
 });

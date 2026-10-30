@@ -493,7 +493,7 @@ test('editor: an offer whose file had no room says so', async () => {
     GZ_SHARE: S, GZ_XPARTS: X, GZ_SANITIZE: G.GZ_SANITIZE, GZ_MATCH_PRESET: G.GZ_MATCH_PRESET, GZ_CARDS: require('../lib/cards.js'), GZ_FONTS: require('../lib/fonts.js'),
     GZ_I18N: { ui: () => 'en', locale: () => 'en' }, s: G.GZ_SANITIZE(), offer: null, from: null, offerFile: '', offerGeneration: 0, letGo() {}, URL, Intl,
     $: (id) => controls[id], document: { createElement: () => ({}) }, fontName: (f) => f.name,
-    t: (x, vars) => x.replace(/\{(\w+)(?:\|\w+)?\}/g, (_, k) => vars[k]), endOffer() {}, hint() {}, preview() {}, GZ_UI: { paint() {} },
+    t: (x, vars) => x.replace(/\{(\w+)(?:\|\w+)?\}/g, (_, k) => vars[k]), endOffer() {}, hint() {}, preview() {}, drawLooks() {}, GZ_UI: { paint() {} },
   });
   await vm.runInContext(`${section}\ntryCode({ name: 'Loop', author: '', media: { h: '${'A'.repeat(43)}', error: 'full' } });`, context);
   assert.match(notes.join(' '), /isn.t room/i);
@@ -507,7 +507,7 @@ test('editor: Cancel lets an offer\'s pending file go, using it keeps it, and Re
   const ends = pick('  let from = null;', '  const tryCode =');
   const listeners = {};
   const $ = (id) => (listeners[id] ||= { hidden: false, value: '', addEventListener: (type, f) => { listeners[id][type] = f; }, focus() {} });
-  const ctx = vm.createContext({ chrome, $, GZ_UI: { paint() {} }, preview() {}, s: {}, offer: null, addEventListener() {} });
+  const ctx = vm.createContext({ chrome, $, GZ_UI: { paint() {} }, preview() {}, drawLooks() {}, s: {}, offer: null, addEventListener() {} });
   vm.runInContext(`${ends}\nglobalThis.ends = { endOffer, take: (h, pending) => { offerFile = pending ? h : ''; } };`, ctx);
   ctx.ends.take('A'.repeat(43), true);
   ctx.ends.endOffer();
@@ -530,7 +530,7 @@ test('editor: a refused gallery code releases its pending file, and Cancel wins 
     chrome: { runtime: { sendMessage: (m, cb) => { sent.push(clone(m)); cb?.({ ok: true }); } } },
     $: (id) => controls[id], GZ_SHARE: { decode: () => new Promise((resolve, reject) => { decode = { resolve, reject }; }) },
     GZ_UI: { paint() {} }, GZ_I18N: { locale: () => 'en', ui: () => 'en' },
-    s: {}, offer: null, preview() {}, addEventListener() {}, t: (s) => s, hint() {}, Intl,
+    s: {}, offer: null, preview() {}, drawLooks() {}, addEventListener() {}, t: (s) => s, hint() {}, Intl,
   });
   vm.runInContext(`${section}\nglobalThis.startOffer = tryCode; globalThis.cancel = endOffer;`, ctx);
   const h = 'A'.repeat(43);

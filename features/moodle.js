@@ -89,7 +89,7 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
       }
       const color = on && s.courses.tint && s.courses.tinted.includes(key) && list[key]?.color;
       const look = on && s.courses.looks[key];
-      const worn = GZ_COURSE_LOOK(s, key);
+      const worn = GZ_COURSE_LOOK(s, key, GZ_CTX.looks?.());
       let colors = (look || color) && GZ_ACTIVE_COLORS(worn, matchMedia('(prefers-color-scheme: dark)').matches);
       if (color) colors = GZ_TINT(colors, color, s.courses.strength / 100);
       const vars = colors ? { ...colors, ...Object.fromEntries(Object.entries(GZ_SURFACE_VARS({ ...worn, bg: s.bg })).map(([key, value]) => [key, value || 'initial'])),

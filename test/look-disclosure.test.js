@@ -140,7 +140,7 @@ const offer = async (code) => {
     s: D.GZ_SANITIZE(), offer: null, from: null, offerFile: '', offerGeneration: 0, letGo() {}, URL, Intl,
     $: (id) => controls[id], document: { createElement: () => ({}) }, fontName: (f) => f.name,
     t: (s, vars = {}) => s.replace(/\{(\w+)(?:\|\w+)?\}/g, (_, k) => vars[k]),
-    endOffer() {}, hint: (...xs) => hints.push(xs), preview() {}, GZ_UI: { paint: (s) => paints.push(s) },
+    endOffer() {}, hint: (...xs) => hints.push(xs), preview() {}, drawLooks() {}, GZ_UI: { paint: (s) => paints.push(s) },
   });
   await vm.runInContext(section + '\ntryCode();', context);
   return { text: notes.join(' '), paints, hints, offer: context.offer };

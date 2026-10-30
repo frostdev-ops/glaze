@@ -10,6 +10,7 @@ const D = require('../defaults.js');
 const C = require('../lib/color.js');
 const F = require('../lib/fonts.js');
 const S = require('../lib/share.js');
+const LC = require('../lib/looks.js');
 const X = require('../lib/lookparts.js');
 const K = require('../lib/cards.js');
 const P = require('../lib/parts.js');
@@ -74,7 +75,7 @@ const use = async (code, s = D.GZ_SANITIZE({}), answer = () => true) => {
     GZ_I18N: { ui: () => 'en', locale: () => 'en' }, s, offer: null, from: null, URL, Intl, pendingNav: new Set(),
     offerFile: '', offerGeneration: 0, letGo() {}, // WP-L2's pending offer file
     $: (id) => controls[id], document: { createElement: () => ({}) }, fontName: (f) => f.name, t: say,
-    endOffer() {}, hint: (...a) => hints.push(a), leaving: () => history++, GZ_SITE: { reach: (urls) => { asked.push([[...urls], active]); return Promise.resolve(answer(urls)); } }, preview() {}, fill() {}, cardsOp: (op) => sets.push(op), GZ_UI: { paint() {} }, save: (keys) => saved.push(keys),
+    endOffer() {}, drawLooks() {}, hint: (...a) => hints.push(a), leaving: () => history++, GZ_SITE: { reach: (urls) => { asked.push([[...urls], active]); return Promise.resolve(answer(urls)); } }, preview() {}, fill() {}, cardsOp: (op) => sets.push(op), GZ_UI: { paint() {} }, save: (keys) => saved.push(keys),
   });
   await vm.runInContext(`${tryCode}\ntryCode();`, context);
   const offer = context.offer;
@@ -146,9 +147,9 @@ const shaded = () => ({ ...D.GZ_SANITIZE({ bg: { kind: 'shader' } }), parts: { x
 const refreshed = (s, extra = {}) => {
   const picks = {}, saved = [], hints = [], log = [];
   const element = () => ({ hidden: false, checked: false, value: '', textContent: '', classList: { toggle() {} } });
-  const source = between(options, '  const refresh = () => {', '  // Puts every control back in line');
+  const source = between(options, '  const drawLooks = ', '  // Puts every control back in line');
   const context = vm.createContext({
-    s, offer: null, GZ_UI: { paint() {}, looks: (box, v, cb) => { picks.look = cb; }, swatches: (box, v, cb) => { picks.swatch = cb; }, pickLook: UI.pickLook, pickPreset: UI.pickPreset },
+    s, offer: null, catalog: LC.list(), wearKept() {}, GZ_UI: { paint() {}, looks: (box, v, cb) => { picks.look = cb; }, swatches: (box, v, cb) => { picks.swatch = cb; }, pickLook: UI.pickLook, pickPreset: UI.pickPreset },
     $: element, $$: () => [], get: () => 0, finder: { value: '' }, preview() {}, renderContrast() {}, renderMine() {}, renderHistory() {}, renderExtras() {}, renderBg() {}, renderNav() {}, showResets() {},
     navbarEditor: null, presetOptions() {}, outputs() {}, GZ_EDITOR_X: { render() {} }, GZ_XEDIT: { render() {} }, document: { body: { classList: { toggle() {} } } },
     save: (keys) => { saved.push(keys); log.push('save'); }, fill: () => log.push('fill'), hint: (...a) => { hints.push(a); log.push('hint'); }, t: say,
@@ -178,7 +179,7 @@ test('LOOK-3: a whole Look replaces the extras, with the Look left already in Hi
   let undone = 0;
   const run = refreshed(s, { undo: () => { undone++; } });
   const aurora = D.GZ_LOOKS[0];
-  run.picks.look(aurora);
+  run.picks.look(LC.find(LC.list(), aurora.name));
   assert.deepEqual(s.parts, require('../lib/lookset.js')(aurora), 'a Look is a whole choice: its own extras replace the ones before');
   assert.deepEqual(run.log.slice(0, 2), ['leaving', 'save'], 'the Look being left is kept before anything changes');
   assert.equal(run.hints.length, 1);
@@ -187,7 +188,7 @@ test('LOOK-3: a whole Look replaces the extras, with the Look left already in Hi
   assert.equal(undone, 1);
   // Nothing to lose, nothing to say.
   const plain = refreshed(D.GZ_SANITIZE({}));
-  plain.picks.look(aurora);
+  plain.picks.look(LC.find(LC.list(), aurora.name));
   assert.equal(plain.hints.length, 0);
 });
 
@@ -448,7 +449,7 @@ const history = (s, entries) => {
   const elements = { '#history-back': { disabled: false, title: '' }, '#history-clear': { hidden: false }, '#history': rows };
   const source = between(options, '  const renderHistory = ', "  $('#history-back').addEventListener");
   const context = vm.createContext({
-    s, history: entries, GZ_HISTORY: counting, GZ_UI: { themeName: (th) => th.preset || 'Custom theme' }, t: say, $: (id) => elements[id],
+    s, history: entries, catalog: LC.list(), GZ_HISTORY: counting, GZ_UI: { themeName: (th) => th.preset || 'Custom theme' }, t: say, $: (id) => elements[id],
     row: (colors, name, sub) => ({ name, sub }), button: () => ({}), when: String, wearEntry() {}, WeakMap, JSON,
   });
   vm.runInContext(`${source}\nglobalThis.renderHistory = renderHistory;`, context);

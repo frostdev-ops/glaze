@@ -32,6 +32,13 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   // Ultra's Institution page is Glaze's Dashboard while its switch is on (features/dashboard.js).
   const dash = () => (ctx.settings().enhance.dashboard ? [['/ultra/institution-page', 'Dashboard']] : []);
   const pages = () => (moodle ? [] : ultra ? [...dash(), ...TOOLS] : CANVAS_TOOLS).map(([path, label]) => ({ label: t(label), hint: ultra ? 'Blackboard' : 'Canvas', group: 'Go to', run: go(path) }));
+  // The student's saved and gallery Looks (lib/looks.js: the worker's storage.local lookCatalog), as they change; each is put on
+  // by the worker from its code, as Settings' "Use this theme" puts it on.
+  let kept = [];
+  const keep = () => Promise.resolve().then(() => need('lib/looks.js', () => globalThis.GZ_CATALOG)).then(() => chrome.storage.local.get(GZ_CATALOG.KEY)).then((r) => { kept = GZ_CATALOG.looks(r?.[GZ_CATALOG.KEY]); }, () => {});
+  let keeping = keep();
+  try { chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.lookCatalog) keeping = keep(); }); } catch { /* extension reloaded under the tab */ }
+  const wear = (id) => () => { try { chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'wear', id }).catch(() => {}); } catch { /* extension reloaded under the tab */ } };
   // A built-in Look comes with its own extras (parts) in place of the one before's, in the same write (lib/lookparts.js).
   const store = (patch, look) => () => { try { if (look) chrome.runtime.sendMessage({ type: 'glaze:look', parts: null, look: look.name, patch: { version: 2, ...patch } }).catch(() => {}); else chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
@@ -51,6 +58,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     const s = ctx.settings();
     return [
       ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L), L) })),
+      ...kept.map((E) => ({ label: t('Look: {name}', { name: E.name }), hint: GZ_CATALOG.on(s, E) ? t('Current') : 'Glaze', group: 'Glaze', run: wear(E.id) })),
       ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }, false) })),
       ...[['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']].map(([m, n]) => ({ label: t('Auto light and dark: {mode}', { mode: t(n) }), hint: (s.auto.on ? s.auto.mode : 'off') === m ? t('Current') : 'Glaze', group: 'Glaze', run: store({ auto: { ...s.auto, on: m !== 'off', ...(m !== 'off' && { mode: m }) } }) })),
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
@@ -111,6 +119,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches (glazeCmds), the pointer picture's
     // once lookx knows there is one.
     await need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => globalThis.GZ_LOOKX?.ready(), () => {});
+    await keeping;
     if (moodle) {
       // A failed Moodle loader or course list leaves Glaze's own commands available, as well as the cached due items.
       const [rows, due] = await Promise.all([moodleIn().then((m) => m.commands(go)).catch(() => []), dueWeek()]);

@@ -197,6 +197,9 @@ GZ_UI.load().then((s) => {
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
   let courses = {}; // course id -> { name, slot, org }, from the content script
+  // The Looks catalogue (lib/looks.js): built in, then the kept Looks the worker decoded into storage.local lookCatalog. Every
+  // list of Looks here reads it, drawn again when it changes (a Look saved, installed, renamed or removed, here or elsewhere).
+  let catalog = GZ_CATALOG.list();
   const previewItems = () => navItems.links.length ? navItems : GZ_NAV.clean({ ...navItems, links: [{ id: 'previewlinkx', n: t('Research resources and academic support'), u: 'https://example.invalid/research', i: 'book', tab: true }] });
   const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs', 'stream'], canvas: ['courses', 'outline', 'dashboard', 'tabs', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
   let previewSite = 'ultra', previewPage = 'outline', previewCourse = '', previewCollapsed = false, searchWasOn = false, beforeSearch = false;
@@ -211,7 +214,7 @@ GZ_UI.load().then((s) => {
   const preview = () => {
     const belongs = (course) => course && (course.canvas ? 'canvas' : course.moodle ? 'moodle' : 'ultra') === previewSite;
     const base = offer || s, id = belongs(courses[previewCourse]) ? previewCourse : base.courses.tinted.find((id) => belongs(courses[id])), course = courses[id];
-    const settings = offer || (previewPage === 'outline' ? GZ_COURSE_LOOK(s, id) : s), mode = $('#nav-preview-mode').value, scheme = $('#nav-preview-scheme').value;
+    const settings = offer || (previewPage === 'outline' ? GZ_COURSE_LOOK(s, id, catalog) : s), mode = $('#nav-preview-mode').value, scheme = $('#nav-preview-scheme').value;
     // The real Ultra painter reads the first tinted course's slot and variables from its mock section.
     const section = frame.contentDocument?.querySelector('section.course');
     if (section) {
@@ -440,16 +443,19 @@ GZ_UI.load().then((s) => {
   const outputs = () => {
     for (const o of $$('output[data-for]')) o.textContent = (FORMAT[o.dataset.format] || ((v) => GZ_I18N.num(v, GZ_I18N.ui())))(get(o.dataset.for));
   };
+  // Every Look (catalog), the one shown pressed: the one on offer while it is previewed, else the one worn. A built-in brings its
+  // own extras: the Look being left is in History first, and Undo wears it again. A kept one is put on as it came (wearKept).
+  const drawLooks = () => GZ_UI.looks($('#looks'), offer || s, (E) => {
+    if (!E.L) return wearKept(E);
+    const undo = leaving();
+    save(GZ_UI.pickLook(s, E.L));
+    fill();
+    if (undo) hint(t('{name} replaced this Look’s extras.', { name: E.name }), false, undo);
+  }, catalog);
   const refresh = () => {
     GZ_UI.paint(s, { page: true });
     preview();
-    // A whole Look brings its own extras: the Look being left is in History first, and Undo wears it again.
-    GZ_UI.looks($('#looks'), s, (L) => {
-      const undo = leaving();
-      save(GZ_UI.pickLook(s, L));
-      fill();
-      if (undo) hint(t('{name} replaced this Look’s extras.', { name: L.name }), false, undo);
-    });
+    drawLooks();
     GZ_UI.swatches($('#presets'), s, (name, colors) => { save(GZ_UI.pickPreset(s, name, colors)); fill(); });
     renderMine();
     renderHistory();
@@ -922,6 +928,12 @@ GZ_UI.load().then((s) => {
   $('#reset-colors').addEventListener('click', () => { save(GZ_UI.pickPreset(s, 'Frost', GZ_PRESET('Frost'))); fill(); });
 
   // ---- courses: recorded by the content script, on this device only ----
+  // The catalogue as a select's options, in groups (Built in, Saved, Gallery) when there is more than one.
+  const lookOptions = () => {
+    const groups = GZ_CATALOG.groups(catalog), heads = { builtin: t('Built in'), saved: t('Saved'), gallery: t('Gallery') };
+    const options = (list) => list.map((E) => Object.assign(new Option(E.name, E.id), { translate: false }));
+    return groups.length > 1 ? groups.map(([g, list]) => { const o = Object.assign(document.createElement('optgroup'), { label: heads[g] }); o.append(...options(list)); return o; }) : options(catalog);
+  };
   // A row per course, organizations apart, each in its own color (GZ_COURSE_COLORS) with its own tint.
   const renderCourses = (next = courses) => {
     courses = next || {};
@@ -987,11 +999,12 @@ GZ_UI.load().then((s) => {
         save(['courses']);
       });
       tint.append(box, t('Tint'));
-      // Its own look on its pages, or the student's theme. Look names are names: not translated.
+      // Its own Look on its pages (by id, lib/looks.js), or the student's theme. Look names are names: not translated. One this
+      // device doesn't keep shows as the theme, which it wears here.
       const look = Object.assign(document.createElement('select'), { title: t('Look for {name}', { name: c.name }) });
       look.dataset.settingControl = 'courses.looks';
       look.setAttribute('aria-label', look.title);
-      look.append(new Option(t('Your theme'), ''), ...GZ_LOOKS.map((L) => Object.assign(new Option(L.name, L.name), { translate: false })));
+      look.append(new Option(t('Your theme'), ''), ...lookOptions());
       look.value = cc.looks[id] || '';
       look.addEventListener('change', () => {
         if (look.value) cc.looks[id] = look.value; else delete cc.looks[id];
@@ -1182,7 +1195,8 @@ GZ_UI.load().then((s) => {
     try { code = await GZ_SHARE.encode(s, cards, s.parts, { files: false }); } catch (e) { return hint(t(e.why || e.message, e.vars), true); }
     try { await navigator.clipboard.writeText(code); hint(t('Theme code copied.')); } catch { $('#share-code').value = code; $('#share-code').select(); hint(t('Copy the code from the box.')); }
   });
-  // from: the gallery Look the code came with ({ name, author }), or null for a pasted code.
+  // from: the gallery Look the code came with ({ name, author, gallery }), one of the student's own (lib/looks.js kept, with
+  // `kept`), or null for a pasted code.
   let from = null;
   // The background file the worker kept for a gallery or share offer, pending (lib/media.js) until the offer is used: any other
   // end of the offer, or leaving the editor, lets it go. used: the Look (or a favorite) now names it, so it stays.
@@ -1192,7 +1206,7 @@ GZ_UI.load().then((s) => {
     offerFile = '';
   };
   addEventListener('pagehide', () => { offerGeneration++; letGo(); });
-  const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s, { page: true }); preview(); };
+  const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s, { page: true }); preview(); drawLooks(); };
   const tryCode = async (gallery = null) => {
     const code = $('#share-code').value.trim();
     if (!code) return endOffer();
@@ -1250,6 +1264,7 @@ GZ_UI.load().then((s) => {
     $('#share-offer').hidden = false;
     GZ_UI.paint(offer, { page: true });
     preview();
+    drawLooks();
   };
   $('#share-try').addEventListener('click', () => tryCode());
   $('#share-code').addEventListener('paste', () => setTimeout(tryCode));
@@ -1275,6 +1290,8 @@ GZ_UI.load().then((s) => {
       const set = offer.cardSet;
       if (set.length) cardsOp({ set });
       $('#share-code').value = '';
+      // A Look from the gallery is one of the student's own from now on (lib/looks.js), in the picker with the rest.
+      if (from?.gallery) local.set({ lookFavorites: GZ_HISTORY.favor(favorites, GZ_CATALOG.make(chosen.code, from.name, from.author, 'gallery')) });
       endOffer(true); // its background file, if it brought one, is kept now
       fill();
       save([...GZ_HISTORY.KEYS, 'card', 'nav', 'navbar', ...sidebarLook ? ['sidebar'] : []]);
@@ -1328,12 +1345,27 @@ GZ_UI.load().then((s) => {
       return row(got.colors, f.name, f.author || '',
         button(t('Preview'), t('Preview {name}', { name: f.name }), async () => {
           $('#share-code').value = f.code;
-          await tryCode(f);
+          await tryCode({ ...GZ_CATALOG.kept(f), kept: true });
           $('#share-offer').scrollIntoView({ block: 'nearest' });
         }),
-        button(t('Remove'), t('Remove {name} from favorites', { name: f.name }), () => local.set({ lookFavorites: favorites.filter((x) => x !== f) }), 'danger'));
+        button(t('Remove'), t('Remove {name} from favorites', { name: f.name }), () => removeKept(f), 'danger'));
     }));
     $('#favorites').replaceChildren(...rows.filter(Boolean));
+  };
+  // A kept Look removed goes from every list (the worker's catalogue follows), from rotation, and from the courses that wore
+  // it, which wear the student's theme again.
+  const removeKept = (f) => {
+    const { id } = GZ_CATALOG.kept(f);
+    local.set({ lookFavorites: favorites.filter((x) => x !== f), rotateLooks: GZ_CATALOG.ids(rotateLooks, favorites).filter((x) => x !== id) });
+    if (GZ_CATALOG.unmap(s.courses, id)) { renderCourses(); refresh(); save(['courses']); }
+  };
+  // A kept Look picked (lib/looks.js): its code goes through the offer and "Use this theme" as it did when it came, at once.
+  const wearKept = async (E) => {
+    const f = GZ_CATALOG.keptAll(favorites).find((x) => x.id === E.id);
+    if (!f) return;
+    $('#share-code').value = f.code;
+    await tryCode({ ...f, kept: true });
+    if (offer?.code === f.code) $('#share-apply').click();
   };
   // A change that replaces this Look's extras (a whole Look, a code, an entry of History, a reset): the Look being left goes into
   // History now, since the background records a theme only after 4 s of rest and what was typed in the last moments would be
@@ -1355,17 +1387,18 @@ GZ_UI.load().then((s) => {
   };
   // Redrawn only when what it shows changes: History itself, or which entries are worn now and which is the Previous Look (a
   // slider moves neither, so a drag cleans one theme per tick and builds no rows). Each entry's theme and name are made once,
-  // when History comes in (lib/history.js).
+  // when History comes in (lib/history.js), and its name again when the Looks catalogue does.
   const renderHistory = (() => {
-    let drawn = '', from = null, entries = [], shown = '';
+    let drawn = '', from = null, named = null, entries = [], shown = '';
     return () => {
       const worn = JSON.stringify([s.colors, s.preset, s.auto, s.look, s.bg, s.parts, s.presets]);
-      if (worn === drawn && history === from) return;
+      if (worn === drawn && history === from && catalog === named) return;
       drawn = worn;
-      if (history !== from) {
+      if (history !== from || catalog !== named) {
         from = history;
+        named = catalog;
         shown = '';
-        entries = history.map((e) => { const theme = GZ_HISTORY.theme(e.theme); return { ...e, theme, name: GZ_UI.themeName(theme) }; });
+        entries = history.map((e) => { const theme = GZ_HISTORY.theme(e.theme); return { ...e, theme, name: GZ_UI.themeName(theme, catalog) }; });
       }
       const now = GZ_HISTORY.theme(s), wearing = entries.map((e) => GZ_HISTORY.wearing(now, e));
       const back = GZ_HISTORY.previous(entries, now);
@@ -1384,8 +1417,9 @@ GZ_UI.load().then((s) => {
   $('#history-back').addEventListener('click', () => { const e = GZ_HISTORY.previous(history, s); if (e) wearEntry(e); });
   // Through the background, which also drops a recording still waiting to be written.
   $('#history-clear').addEventListener('click', () => chrome.runtime.sendMessage('clear-history', () => void chrome.runtime.lastError));
+  // Kept with the student's Looks (lib/looks.js): in the picker at once, pressed while it is the one on offer.
   $('#share-fav').addEventListener('click', () => {
-    const f = { code: offer.code, name: from?.name || offer.preset || t('Custom theme'), author: from?.author || '', at: Date.now() };
+    const f = GZ_CATALOG.make(offer.code, from?.name || offer.preset || t('Custom theme'), from?.author || '', from?.gallery ? 'gallery' : from?.from || 'saved');
     letGo(true); // a favorite names its background file: it stays
     local.set({ lookFavorites: GZ_HISTORY.favor(favorites, f) }, () => {
       const err = chrome.runtime.lastError;
@@ -1401,7 +1435,7 @@ GZ_UI.load().then((s) => {
     if (!g?.code) return;
     await local.remove('galleryOffer');
     $('#share-code').value = g.code;
-    await tryCode({ name: g.name || t('Custom theme'), author: g.author || '', media: g.media });
+    await tryCode({ name: g.name || t('Custom theme'), author: g.author || '', media: g.media, gallery: true });
     editor.show('look/palette', { scroll: true });
     if (offer) $('#share-apply').focus({ preventScroll: true });
   };
@@ -1411,9 +1445,14 @@ GZ_UI.load().then((s) => {
     renderFavorites();
     renderHistory();
   });
+  // What reads the catalogue, drawn again; not the page, which may be showing a Look on offer.
+  const takeCatalog = (raw) => { catalog = GZ_CATALOG.list(raw); drawLooks(); renderHistory(); renderCourses(); renderRotate(); preview(); };
+  local.get(GZ_CATALOG.KEY, (r) => takeCatalog(r?.[GZ_CATALOG.KEY]));
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    if (changes.lookFavorites) { favorites = GZ_HISTORY.favorites(changes.lookFavorites.newValue); renderFavorites(); }
+    if (changes[GZ_CATALOG.KEY]) takeCatalog(changes[GZ_CATALOG.KEY].newValue);
+    // The worker brings the catalogue up to date (lib/background.js looks: build), awake or not.
+    if (changes.lookFavorites) { favorites = GZ_HISTORY.favorites(changes.lookFavorites.newValue); renderFavorites(); chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'build' }, () => void chrome.runtime.lastError); }
     if (changes.lookHistory) { history = GZ_HISTORY.entries(changes.lookHistory.newValue); renderHistory(); }
     if (changes.galleryOffer?.newValue) takeOffer();
   });
@@ -1441,15 +1480,17 @@ GZ_UI.load().then((s) => {
     $('#rotate-at').hidden = s.extras.rotate !== 'daily';
     $('#rotate-looks').hidden = s.extras.rotate === 'off';
   };
-  const renderRotate = async () => {
-    const tick = (id, colors, name) => {
-      const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: rotateLooks.includes(id) });
-      c.setAttribute('aria-label', t('Rotate through {name}', { name }));
-      c.addEventListener('change', () => local.set({ rotateLooks: c.checked ? [...rotateLooks, id] : rotateLooks.filter((x) => x !== id) }));
-      return row(colors, name, '', c);
+  // Every Look of the catalogue, ticked by id; a tick from before ids (a kept Look's code) is its Look's, and is written as its
+  // id with the next change.
+  const renderRotate = () => {
+    const ticked = GZ_CATALOG.ids(rotateLooks, favorites);
+    const tick = (E) => {
+      const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: ticked.includes(E.id) });
+      c.setAttribute('aria-label', t('Rotate through {name}', { name: E.name }));
+      c.addEventListener('change', () => { const now = GZ_CATALOG.ids(rotateLooks, favorites).filter((x) => x !== E.id); local.set({ rotateLooks: c.checked ? [...now, E.id] : now }); });
+      return row(E.colors, E.name, '', c);
     };
-    const favs = await Promise.all(favorites.map((f) => GZ_SHARE.decode(f.code).then((got) => tick(f.code, got.colors, f.name), () => null)));
-    $('#rotate-looks').replaceChildren(...GZ_LOOKS.map((L) => tick(L.name, L.colors, L.name)), ...favs.filter(Boolean));
+    $('#rotate-looks').replaceChildren(...catalog.map(tick));
   };
   local.get('rotateLooks', (r) => { rotateLooks = Array.isArray(r?.rotateLooks) ? r.rotateLooks : []; renderRotate(); });
   chrome.storage.onChanged.addListener((changes, area) => {

@@ -142,7 +142,7 @@ const GZ_DEFAULTS = {
   ...Object.fromEntries(Object.entries(GZ_SPEC).map(([g, keys]) => [g, Object.fromEntries(Object.entries(keys).map(([k, [d]]) => [k, d]))])),
   // colors: picked by course id (a slot number is a pick from before 2.1.3). tint: inside a course
   // listed in `tinted` (course ids, or slots likewise), its color tints the palette, `strength` %.
-  // looks: a look's name by course id, worn on that course's pages instead of the student's theme.
+  // looks: a Look's id (lib/looks.js) by course id, worn on that course's pages instead of the student's theme.
   // names: a nickname by course id, shown in place of the course's name (the course menu, Ultra only).
   courses: { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60, looks: {}, names: {} },
   footer: true,
@@ -349,10 +349,11 @@ const GZ_LOOK_ON = (s, L) => {
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   return !s.auto.on && same(s.colors, want.colors) && Object.keys(want.look).every((k) => same(s.look[k], want.look[k])) && Object.keys(want.bg).every((k) => same(s.bg[k], want.bg[k]));
 };
-// The settings to paint on course `cid`'s pages: its own look (courses.looks) over `s`, or `s` itself.
-const GZ_COURSE_LOOK = (s, cid) => {
-  const L = cid && GZ_LOOKS.find((l) => l.name === s.courses.looks[cid]);
-  return L ? { ...s, ...GZ_LOOK_APPLY(s, L) } : s;
+// The settings to paint on course `cid`'s pages: its own Look (courses.looks) over `s`, or `s` itself; a kept Look from
+// `saved` (lib/looks.js) as its code wears it, or the student's theme where this device hasn't it.
+const GZ_COURSE_LOOK = (s, cid, saved) => {
+  const id = cid && s.courses.looks[cid], L = id && GZ_LOOKS.find((l) => l.name === id), E = !L && saved?.find((e) => e.id === id);
+  return L ? { ...s, ...GZ_LOOK_APPLY(s, L) } : E ? { ...s, colors: { ...E.colors }, preset: GZ_MATCH_PRESET(E.colors, s.presets), auto: { ...s.auto, on: false }, look: { ...s.look, ...E.look }, bg: { ...s.bg, ...E.bg } } : s;
 };
 const GZ_PRESET = (name, custom) => GZ_ALL_PRESETS(custom).find(([n]) => n === name)?.[1] || null;
 const GZ_MATCH_PRESET = (colors, custom) => GZ_ALL_PRESETS(custom).find(([, c]) => sameColors(c, colors))?.[0] || null;
@@ -382,7 +383,7 @@ const GZ_SANITIZE = (raw, fresh = false) => {
     tint: cleanValue(rc.tint, false, 'bool'),
     tinted: Array.isArray(rc.tinted) ? [...new Set(rc.tinted.filter((n) => typeof n === 'string' && (COURSE_ID.test(n) || COURSE_SLOT.test(n))))].slice(0, 200) : [],
     strength: cleanValue(rc.strength, 60, [10, 100]),
-    looks: Object.fromEntries(isObj(rc.looks) ? Object.entries(rc.looks).filter(([id, n]) => COURSE_ID.test(id) && GZ_LOOKS.some((L) => L.name === n)).slice(0, 200) : []),
+    looks: Object.fromEntries(isObj(rc.looks) ? Object.entries(rc.looks).filter(([id, n]) => COURSE_ID.test(id) && (GZ_LOOKS.some((L) => L.name === n) || /^c:[0-9a-z]{14}$/.test(n))).slice(0, 200) : []),
     names: {},
   };
   out.courses.names = cleanNicks(rc.names, GZ_SYNC_ITEM_MAX - GZ_SYNC_BYTES('courses', out.courses));
@@ -513,7 +514,7 @@ const GZ_COURSE_EDIT = {
     if (slot && c.tinted.includes(slot)) c.tinted.push(...Object.keys(list).filter((n) => n !== id && list[n].slot === slot && !c.tinted.includes(n)));
     c.tinted = c.tinted.filter((n) => n !== id && n !== slot);
   },
-  // A look's name, or '' for the student's theme.
+  // A Look's id, or '' for the student's theme.
   look: (c, id, name) => { if (name) c.looks[id] = name; else delete c.looks[id]; },
   // A nickname, or '' (or only spaces) to let it go.
   name: (c, id, nick) => { const n = cleanNick(nick); if (n) c.names[id] = n; else delete c.names[id]; },

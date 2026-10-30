@@ -14,6 +14,11 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
   // Ultra's course-color-1…10 in order, by hue, for the swatches' names.
   const TONES = ['Purple', 'Cyan', 'Yellow', 'Orange', 'Mint', 'Pink', 'Green', 'Teal', 'Magenta', 'Blue'];
   let menu = null; // { box, btn, cid, nick, edited, note, custom, reset, tint, grid, sw, looks } while the popover is open
+  // The student's saved and gallery Looks (lib/looks.js: the worker's storage.local lookCatalog), as they change, for the Looks.
+  let kept = [];
+  const keep = () => Promise.resolve().then(() => ctx.need('lib/looks.js', () => globalThis.GZ_CATALOG)).then(() => chrome.storage.local.get(GZ_CATALOG.KEY)).then((r) => { kept = GZ_CATALOG.looks(r?.[GZ_CATALOG.KEY]); }, () => {});
+  keep();
+  try { chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.lookCatalog) keep(); }); } catch { /* extension reloaded under the tab */ }
   let fading = null; // a closed menu may paint briefly, but must not duplicate the next menu's ids/label targets
 
   // -- edits: painted here at once, saved a moment later --
@@ -313,8 +318,9 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     const tint = make('input', { type: 'checkbox' });
     tint.addEventListener('change', () => { const on = tint.checked; editCourse(`tint ${cid}`, (c) => GZ_COURSE_EDIT.tint(c, cid, on, ctx.courseList())); });
 
-    // Look: the student's own theme, or one of the eight, drawn as the popup's look cards are. Look names are names.
-    const looks = [['', null], ...GZ_LOOKS.map((L) => [L.name, L])].map(([look, L]) => {
+    // Look: the student's own theme, or a Look by its id (built in, then their saved and gallery Looks), drawn as the popup's
+    // Look cards are. Look names are names.
+    const looks = [['', null], ...GZ_LOOKS.map((L) => [L.name, L]), ...kept.map((E) => [E.id, E])].map(([look, L]) => {
       const b = make('button', { type: 'button', className: 'gz-cm-look', textContent: L ? L.name : t('Your theme') });
       b.dataset.look = look;
       if (L) {
