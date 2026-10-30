@@ -3750,5 +3750,17 @@
   "as the app reports itself": "zoals de app zichzelf noemt",
   "Don't allow": "Niet toestaan",
   "Unnamed app": "Naamloze app",
-  "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde."
+  "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde.",
+  "Export .xlsm": ".xlsm exporteren",
+  "Attach from Documents": "Bijvoegen uit Documenten",
+  "{name} could not be made.": "{name} kon niet worden gemaakt.",
+  "{name} is larger than 50 MB.": "{name} is groter dan 50 MB.",
+  "Attach up to {n} documents.": "Voeg maximaal {n} documenten toe.",
+  "Attached: {names}": "Bijgevoegd: {names}",
+  "A file is larger than 50 MB. Nothing was submitted.": "Een bestand is groter dan 50 MB. Er is niets ingeleverd.",
+  "A file could not be read. Nothing was submitted.": "Een bestand kon niet worden gelezen. Er is niets ingeleverd.",
+  "The document changed or was deleted. Remove it and pick it again. Nothing was submitted.": "Het document is gewijzigd of verwijderd. Verwijder het en selecteer het opnieuw. Er is niets ingeleverd.",
+  "File: {name}.": "Bestand: {name}.",
+  "Use Blackboard editor to review or remove these uploads: {names}.": "Gebruik de Blackboard-editor om deze uploads te controleren of te verwijderen: {names}.",
+  "Not attached": "Niet bijgevoegd"
 };

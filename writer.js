@@ -20,7 +20,7 @@
   const $ = (id) => document.getElementById(id);
   let port = null, ed = null, locale = 'en', quiet = false, words = 0, context = {}, refused = false;
   const t = (k, v) => GZ_I18N.t(k, v, locale);
-  const say = (m) => port?.postMessage(m);
+  const say = (m, transfer = []) => port?.postMessage(m, transfer);
 
   // ---- the editor --------------------------------------------------------------------------------------------------
   // lib/writer-editor.js (GZ_WRITER_EDITOR) over lib/writer-schema.js: compose holds exactly what Ultra's Quill keeps.
