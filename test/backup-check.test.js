@@ -27,6 +27,10 @@ const harness = (local, expired = false) => {
   return sandbox.launch;
 };
 
+test('backup launch accepts a completed install and completed Settings startup', async () => {
+  await harness(ready())('/unused-profile');
+});
+
 for (const delayed of ['newsSeen', navKey]) test(`backup launch waits for Settings' ${delayed} write after install finishes`, async () => {
   const local = ready(), value = local[delayed];
   delete local[delayed];
