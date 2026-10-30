@@ -213,6 +213,7 @@ const HOSTS = ['www.googleapis.com', 'openidconnect.googleapis.com', 'oauth2.goo
       const rec = await home.evaluate(async (k) => (await chrome.storage.local.get(`writerPaper:${k}`))[`writerPaper:${k}`], key);
       return { first, asked: log.drive.slice(m), drive: rec.drive, rec };
     };
+    const edited = await home.evaluate(async (k) => (await chrome.storage.local.get(`writerPaper:${k}`))[`writerPaper:${k}`].updated, river);
     let r = await save(river, 'file');
     ok(r.first === 'file', 'a paper offers a Word file first');
     ok(r.asked.length === 1 && r.asked[0].method === 'POST' && r.asked[0].path === '/upload/drive/v3/files' && r.asked[0].query.uploadType === 'multipart' && r.asked[0].query.fields === 'id,name,mimeType',
@@ -222,6 +223,7 @@ const HOSTS = ['www.googleapis.com', 'openidconnect.googleapis.com', 'oauth2.goo
     ok(r.asked[0].auth === `Bearer ${TOKEN}` && !r.asked[0].cookie, 'with the token and no cookie');
     const first = r.drive?.id;
     ok(r.drive?.as === 'file' && /^1NeW_/.test(first), `the record remembers the Drive file (${JSON.stringify(r.drive)})`);
+    ok(r.rec.updated === edited, 'and its Last edited stays as it was');
     await home.screenshot({ path: path.join(out, 'drive-3-saved-file.png') });
 
     r = await save(river, 'file');
