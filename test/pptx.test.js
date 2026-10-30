@@ -454,8 +454,8 @@ test('relationship targets stay within the package while root paths and parent p
 test('preset colours include standard long names and abbreviated aliases', async () => {
   const values = { aliceBlue: '#f0f8ff', dkBlue: '#00008b', darkBlue: '#00008b', ltBlue: '#add8e6', lightBlue: '#add8e6', medPurple: '#9370db', mediumPurple: '#9370db', tomato: '#ff6347' };
   for (const [val, color] of Object.entries(values)) {
-    const slide = fixture('ppt/slides/slide3.xml').replace('<a:solidFill><a:schemeClr val="accent1"/></a:solidFill>', `<a:solidFill><a:prstClr val="${val}"/></a:solidFill>`);
+    const slide = fixture('ppt/slides/slide3.xml').replace('</p:spPr>', `<a:solidFill><a:prstClr val="${val}"/></a:solidFill></p:spPr>`);
     const d = await P.read(pack({ 'ppt/slides/slide3.xml': slide }));
-    assert.deepEqual(named(d.slides[2], 'Rounded').fill, { type: 'solid', color }, val);
+    assert.deepEqual(named(d.slides[2], 'Default').fill, { type: 'solid', color }, val);
   }
 });
