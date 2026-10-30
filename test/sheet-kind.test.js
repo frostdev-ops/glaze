@@ -592,3 +592,16 @@ test('a kept workbook never mounts without the codec that tracks its edits', asy
   await assert.rejects(DK.get('sheet').view(KEY, {}), (e) => e.code === 'codecs');
   assert.equal(mounted, false);
 });
+
+test('the New spreadsheet tile leaves codecs unloaded until an actual workbook is listed', async () => {
+  const { El } = require('./stand-in-dom.js');
+  let loads = 0;
+  const doc = { createElement: (tag) => new El(tag, doc) };
+  const { DK } = load({ sheets: true }, { document: doc,
+    GZ_WRITER_PAPER: { need: async () => { loads++; } } });
+  await DK.settled();
+  DK.get('sheet').thumb(null);
+  assert.equal(loads, 0, 'an empty Documents home does not load the codecs');
+  DK.get('sheet').thumb({ grid: [] });
+  assert.equal(loads, 1, 'a saved spreadsheet starts the shared load');
+});
