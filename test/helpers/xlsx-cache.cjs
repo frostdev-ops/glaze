@@ -59,6 +59,9 @@ const shift = (f, dr, dc) => {
     }
     if (ch === '#') { const m = /^#[A-Za-z0-9_/]+[!?]?/.exec(rest); const s = m ? m[0] : '#'; out += s; i += s.length; continue; }
     let m;
+    if ((m = /^[A-Za-z_\\][\w.\\]*(?::[A-Za-z_\\][\w.\\]*)?!/.exec(rest))) {
+      out += m[0]; i += m[0].length; continue;
+    }
     if ((m = /^(\$?)([A-Za-z]{1,3})(\$?)(\d{1,7})(?![\w.(!])/.exec(rest))) {
       const r = row(m[3], +m[4]), c = col(m[1], colNumber(m[2]));
       out += okRow(r) && okCol(c) && okRow(+m[4]) && okCol(colNumber(m[2])) ? `${m[1]}${colName(c)}${m[3]}${r}` : '#REF!';
