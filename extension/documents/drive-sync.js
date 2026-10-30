@@ -37,13 +37,14 @@
 // Nothing goes anywhere but Google Drive.
 // Classic script for the worker; module.exports for node.
 var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
-  const STATE = 'driveSync', DOC = 'driveSyncDoc:', FILE = 'driveSyncFile:', DIRTY = 'driveSyncDirty';
+  const STATE = 'driveSync', DOC = 'driveSyncDoc:', FILE = 'driveSyncFile:', DIRTY = 'driveSyncDirty', WAITING = 'driveSyncWaiting';
   const FOLDER = 'application/vnd.google-apps.folder', JSON_TYPE = 'application/json', NAME = 'Glaze';
   const KINDS = ['paper', 'sheet', 'pdf', 'slides'], FILES = ['pdf', 'slides'];
   const EXT = { paper: '.docx', sheet: '.xlsx', pdf: '.pdf', slides: '.pptx' };
   // What a record carries that is this device's own, never synced or compared.
   const STRIP = ['key', 'revision', 'titled', 'edited', 'lastVersion', 'parts', 'partDrops', 'drive', 'trashed', 'updated'];
-  const WAIT = { push: 5000, pull: 30e3, retry: [1000, 2000, 4000, 8000, 16000], run: 60e3, most: 3600e3 };
+  // copy: how long a file that moved on waits for its JSON copy (tries, or ms since first seen) before it stands alone.
+  const WAIT = { push: 5000, pull: 30e3, retry: [1000, 2000, 4000, 8000, 16000], run: 60e3, most: 3600e3, copy: { tries: 3, ms: 10 * 60e3 } };
   const MAX_JSON = 64e6;
   const HASH = /^[0-9a-f]{32}$/, SUM = /^[0-9a-f]{64}$/, PART = /^\d{1,9}:\d{1,5}$/;
   // Why a run stopped that only the student can fix (Settings says how); every other reason is tried again later.
@@ -101,7 +102,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     };
     const dropDoc = (h, was) => S.remove([DOC + h, ...[was?.json, was?.file].filter(Boolean).map((id) => FILE + id)]);
     const forget = async () => {
-      const keys = (await S.keys()).filter((k) => k.startsWith(DOC) || k.startsWith(FILE) || k === DIRTY);
+      const keys = (await S.keys()).filter((k) => k.startsWith(DOC) || k.startsWith(FILE) || k === DIRTY || k === WAITING);
       if (keys.length) await S.remove(keys);
       await more?.forget();
     };
@@ -171,10 +172,24 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const got = await env.files.put(bytes, (external ? E.mimeType : ref.type) || '');
       // A new device has no earlier mapping or change event for an external replacement. Bring that side in now.
       if (external) return { ref: { hash: got.hash, size: got.size, type: got.type }, rev: E.headRevisionId };
-      // The file moved on since the copy was written (its next copy is on its way): the next run takes both.
-      if (got.hash !== ref.hash) throw new Fail('stale');
+      // The file moved on since the copy was written: its next copy is on its way, and the next run takes both. One that
+      // never comes (its device stopped between the two) holds the document back only so long: then the file's own bytes
+      // are Drive's side, as a replacement made outside Glaze is.
+      if (got.hash !== ref.hash) {
+        if (!await waited(h)) throw new Fail('stale');
+        await unwait(h);
+        return { ref: { hash: got.hash, size: got.size, type: got.type }, rev: E.headRevisionId };
+      }
+      await unwait(h);
       return null;
     };
+    // A copy's file seen moved on: how many times and since when (storage.local driveSyncWaiting { h: { n, since } }). → waited long enough
+    const waited = (h) => held('waiting', async () => {
+      const m = (await S.get(WAITING))[WAITING] || {}, w = m[h] = { n: (m[h]?.n || 0) + 1, since: m[h]?.since || now() };
+      await S.set({ [WAITING]: m });
+      return w.n >= WAIT.copy.tries || now() - w.since >= WAIT.copy.ms;
+    });
+    const unwait = (h) => held('waiting', async () => { const m = (await S.get(WAITING))[WAITING]; if (m?.[h]) { delete m[h]; await S.set({ [WAITING]: m }); } });
     // Drive's side written here as the document's current state. → the record and its parts as written.
     const take = async (key, l, got) => {
       const { paper } = await env.papers.save(key, got.record, { reason: l && kindOf(l.rec) !== got.kind ? 'import' : 'auto', base: l ? l.rec.revision || 0 : 0, expectedRevision: l?.rec.revision || 0, rename: true,
@@ -208,6 +223,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       const ex = await env.exportOf(key, l.rec, l.parts);
       const base = (ex?.name || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
       let file = d?.file || null, fh = d?.fh || null;
+      // A document going up for the first time may have a file there already: its push stopped before the JSON copy went.
+      if (!file && !d?.json && ex) file = (await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='file' } and trashed=false`, { pageSize: 10 })))
+        .files.filter((f) => f.appProperties?.key === h && f.appProperties?.glaze === 'file').sort((a, b) => (a.id < b.id ? -1 : 1))[0]?.id || null;
       const up = async (id, meta, mime, bytes) => {
         if (id) { try { return await D((c) => c.put({ id, meta, mime, bytes })); } catch (e) { if (e.why !== 'missing') throw e; } }
         return D((c) => c.put({ meta: { ...meta, mimeType: mime, parents: [folder] }, mime, bytes }));
@@ -324,6 +342,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
       if (rdirty) {
         const got = await fetchCopy(R, h, key);
+        // Both changed to the same thing (another device took what this one pushed only halfway): nothing to keep apart.
+        if (ldirty && (await sumOf(key, l)) === got.sum) { await agreed(key, h, R, got, l, d); return; }
         if (ldirty) { await keepOther(key, l, got); return push(key, h, await local(key), d, folder); }
         const now2 = await take(key, l, got);
         if (force || got.external) return push(key, h, now2, { ...d, json: R.id }, folder);
