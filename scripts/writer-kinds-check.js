@@ -53,7 +53,7 @@ const until = async (fn, label, ms = 20000, state = null) => {
   const was = state ? await Promise.resolve().then(state).then((x) => JSON.stringify(x), (e) => `unreadable: ${e.message}`) : '';
   throw Error(`${label} timed out after ${ms} ms${last ? `: ${last.message}` : ''}${was ? `; at the deadline ${was}` : ''}`);
 };
-// features/writer.js gives a frame 15 s to say ready and reopens it FRAME_RETRIES (2) times before falling back: 45 s, plus margin.
+// features/writer.js: 15 s for the initial frame plus FRAME_RETRIES (2) reopens = 45 s, with 5 s margin for this wait.
 const FRAME_SHOWN_MS = 50000;
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 const quiet = async (fn, label, ms = 800) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) throw Error(`${label}: it happened`); await pause(80); } return true; };
@@ -127,15 +127,26 @@ const holds = (bytes, value) => {
       const t0 = Date.now();
       await p.goto(`${site}${ATTEMPT}?mode=empty`);
       const tGoto = Date.now() - t0;
-      // What the page shows of the frame while it is awaited, read at the deadline: each Writer frame's inline opacity (held until the
-      // frame says ready) and the extension addresses the page has framed.
-      const state = () => Promise.race([new Promise((r) => setTimeout(r, 5000, 'unreadable: page busy')), p.evaluate(() => [...document.querySelectorAll('iframe.gz-writer')].map((f) => ({ kind: f.dataset.gzWriterFrame, opacity: f.style.opacity, connected: f.isConnected })))
-        .then((frames) => ({ frames, extensionFrames: p.frames().filter((f) => f.url().startsWith('chrome-extension:')).length }))]);
-      const el = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.evaluate((f) => !f.style.opacity) && x; }, 'the frame shown', FRAME_SHOWN_MS, state);
+      let sawFrame = false;
+      // Read only page state at the deadline. Recovery removes the frame and Writer markers, leaving Ultra's editor visible.
+      const state = async () => {
+        let timer;
+        try {
+          return await Promise.race([new Promise((r) => { timer = setTimeout(r, 5000, 'unreadable: page busy'); }), p.evaluate(() => {
+            const frames = [...document.querySelectorAll('iframe.gz-writer')].map((f) => ({ kind: f.dataset.gzWriterFrame, opacity: f.style.opacity, connected: f.isConnected }));
+            const editor = document.getElementById('bb-editorassignment-attempt-authoring-submission');
+            const nativeEditor = editor ? { visible: editor.getClientRects().length > 0, writerMounted: !!editor.closest('[data-gz-writer], [data-gz-writer-id]') } : null;
+            return { frames, nativeEditor };
+          }).then((s) => ({ ...s, frameSeen: sawFrame, status: !s.frames.some((f) => f.kind === 'assignment') && s.nativeEditor?.visible === true && !s.nativeEditor.writerMounted
+            ? (sawFrame ? 'Writer frame removed; native editor visible' : 'no Writer frame observed; native editor visible') : 'Writer frame not shown',
+            extensionFrames: p.frames().filter((f) => f.url().startsWith('chrome-extension:')).length }))]);
+        } finally { clearTimeout(timer); }
+      };
+      const el = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); if (x) sawFrame = true; return x && await x.evaluate((f) => !f.style.opacity) && x; }, `open ${n}: Writer frame shown`, FRAME_SHOWN_MS, state);
       const tShown = Date.now() - t0;
-      const fr = await until(() => el.contentFrame(), 'frame document');
-      await until(() => fr.evaluate(() => !!globalThis.GZ_WRITER_PAPER?.current()?.key()), 'loaded', 30000);
-      console.log(`open ${n}: frame shown ${tShown} ms after navigation started (goto ${tGoto} ms), paper loaded ${Date.now() - t0} ms`);
+      const fr = await until(() => el.contentFrame(), `open ${n}: Writer frame document`);
+      await until(() => fr.evaluate(() => !!globalThis.GZ_WRITER_PAPER?.current()?.key()), `open ${n}: paper loaded`, 30000);
+      console.log(`open ${n}: navigation completed at ${tGoto} ms, Writer frame shown at ${tShown} ms, paper loaded at ${Date.now() - t0} ms (all since navigation started)`);
       return { p, el, fr };
     };
     const give = (p, name, type, bytes) => p.evaluate(({ name, type, bytes }) => {
