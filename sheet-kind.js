@@ -19,6 +19,8 @@
   // The .xlsx reader and writer and what they stand on, loaded the first time a spreadsheet is listed, opened, imported or
   // written (never with the page). One shared load; a failure rejects the operation and allows a later retry.
   const CODECS = ['lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js'];
+  // The charts a workbook's sheets keep, drawn on the grid; without them the grid opens all the same.
+  const CHARTS = ['lib/sheet-chart-xml.js', 'lib/sheet-chart.js'];
   let codecLoad = null;
   const codecs = () => (codecLoad ||= Promise.resolve().then(() => need(CODECS)).then(() => {
     if (!xlsx()) throw new Error('lib/sheet-xlsx.js did not load');
@@ -154,6 +156,7 @@
     const wb = got?.wb || GZ_SHEET_MODEL.workbook();
     // A workbook from an .xlsx keeps parts whose references the codec moves as the grid edits: it is here before the grid.
     await codecs();
+    await need(CHARTS).catch((e) => console.error(e));
     if (!host) document.documentElement.dataset.mode = 'sheet';
     const v = GZ_SHEET_GRID.mount({ key, wb, rec: got?.rec || null, sigs: got?.sigs || new Map(), fresh: !got, t: host?.t || t, locale, papers: papers(), show: shower,
       local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: () => 'Export .xlsx', host });

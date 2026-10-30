@@ -459,6 +459,129 @@ const seeded = (key, wb = M.workbook()) => {
       check(await failed.evaluate(() => !document.querySelector('#gx-grid') && document.querySelector('#gd-docs') && !document.querySelector('#list').hidden), 'a missing codec shows the read error on Documents, without a blank or untracked grid');
     } finally { await failed.close(); }
 
+    // ---- charts: a workbook with a column, line, pie and scatter chart and a radar chart (test/fixtures/sheets/charts.js)
+    // opens with all five drawn at their anchors, the radar as its titled frame; a typed value redraws its bar; a row
+    // inserted moves the charts and undo brings them back; 640 px; the dark Look's words on the chart's ground; no motion;
+    // and the export keeps the chart parts byte for byte.
+    const FX = require(path.join(root, 'test/fixtures/sheets/charts.js'));
+    const chartsFile = path.join(tmp, 'Charts.xlsx');
+    fs.writeFileSync(chartsFile, FX.workbook());
+    await openHome();
+    const cardsC = await page.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    await page.setInputFiles('#gd-file', chartsFile);
+    const ckey = await until(() => page.evaluate((was) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).find((k) => !was.includes(k)), cardsC), 'the chart workbook card');
+    await until(() => local(`writerPaper:${ckey}`), 'the chart workbook record');
+    await page.click(`.gd-card[data-key="${ckey}"] .gd-title`);
+    await grid();
+    const chartsNow = () => page.evaluate(() => [...document.querySelectorAll('#gx-grid .gx-chart')].map((el) => {
+      const b = el.getBoundingClientRect(), svg = el.querySelector('svg');
+      return { id: el.dataset.chart, x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height), title: [...el.querySelectorAll('.gc-title')].map((t) => t.textContent).join(' '),
+        kind: el.querySelector('.gc-kind')?.textContent ?? null, bars: el.querySelectorAll('.gc-bar').length, slices: el.querySelectorAll('.gc-slice').length, lines: el.querySelectorAll('.gc-line').length,
+        marks: el.querySelectorAll('.gc-mark').length, label: svg?.getAttribute('aria-label') };
+    }));
+    const drawn = await until(async () => { const l = await chartsNow(); return l.length === 5 ? l : null; }, 'five charts drawn');
+    const byTitle = Object.fromEntries(drawn.map((c) => [c.title, c]));
+    check(byTitle['Sales by month']?.bars === 8 && byTitle.Trend?.lines === 1 && byTitle.Share?.slices === 4 && byTitle.Spread?.marks === 4,
+      `a column, line, pie and scatter chart are drawn with their titles (${JSON.stringify(drawn.map(({ title, bars, slices, lines, marks }) => ({ title, bars, slices, lines, marks })))})`);
+    check(byTitle['Radar view']?.kind === 'Radar chart' && byTitle['Radar view'].bars === 0, `a radar chart shows its titled frame (${JSON.stringify(byTitle['Radar view'])})`);
+    const cellBox = (r, c) => page.evaluate(([r, c]) => { const el = document.querySelector(`#gx-grid .gx-c[data-r="${r}"][data-c="${c}"]`); if (!el) return null; const b = el.getBoundingClientRect(); return { x: Math.round(b.left), y: Math.round(b.top) }; }, [r, c]);
+    const atG2 = await cellBox(1, 6), atN2 = await cellBox(1, 13), atG17 = await cellBox(16, 6);
+    const near = (a, b) => a && b && Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1;
+    check(near(byTitle['Sales by month'], atG2) && near(byTitle.Trend, atN2) && near(byTitle.Share, atG17) && byTitle['Sales by month'].w === 6 * 64 && byTitle['Sales by month'].h === 14 * 20,
+      `each chart sits at its anchor's cells, G2:M16 for the column chart (${JSON.stringify({ column: byTitle['Sales by month'], G2: atG2, N2: atN2, G17: atG17 })})`);
+    await shot('charts-1280.png');
+    // Typing into a referenced cell redraws its bar, a moment later.
+    const firstBar = () => page.evaluate(() => { const r = document.querySelector('#gx-grid .gx-chart[data-chart$="#0"] .gc-bar'); return r ? Number(r.getAttribute('height')) : null; });
+    const bar0 = await firstBar();
+    await go('B2');
+    await type('80');
+    const bar1 = await until(async () => { const v = await firstBar(); return v !== null && v > bar0 * 1.5 ? v : null; }, 'the bar redrawn');
+    check(bar1 > bar0, `editing a referenced cell (B2 10 → 80) redraws its bar (${bar0} → ${bar1} px)`);
+    // A row inserted above row 1 moves every chart down a row; undo brings them back.
+    const gridBox = await page.evaluate(() => { const b = document.getElementById('gx-grid').getBoundingClientRect(); return { x: b.left, y: b.top }; });
+    await page.mouse.click(gridBox.x + 20, gridBox.y + 34, { button: 'right' });
+    await page.click('.gx-menu [data-act="row-above"]');
+    const moved = await until(async () => { const l = await chartsNow(); const c = l.find((x) => x.title === 'Sales by month'); return c && c.y === byTitle['Sales by month'].y + 20 ? l : null; }, 'the charts moved down');
+    const movedBar = await firstBar();
+    check(moved.every((c) => c.y === drawn.find((d) => d.id === c.id).y + 20) && Math.abs(movedBar - bar1) < 0.5,
+      `inserting a row above moves the charts down a row, their data with them (${JSON.stringify(moved.map((c) => c.y))}; bar ${movedBar})`);
+    await page.keyboard.press('Control+z');
+    const unmoved = await until(async () => { const l = await chartsNow(); return l.length === 5 && l.every((c) => c.y === drawn.find((d) => d.id === c.id).y) ? l : null; }, 'the charts back');
+    check(unmoved.length === 5, 'undoing the insert brings the charts back');
+    // Frozen panes: with the top row frozen, the charts scroll under it with their cells.
+    await page.click('#gx-freeze');
+    await page.click('.gx-menu [data-act="freeze-row"]');
+    await page.evaluate(() => { document.querySelector('#gx-grid .gx-scroll').scrollTop = 100; });
+    const frozen = await until(async () => { const l = await chartsNow(); const c = l.find((x) => x.title === 'Sales by month'); return c && c.y === byTitle['Sales by month'].y - 100 ? l : null; }, 'charts scrolled under the frozen row');
+    const panes = await page.evaluate(() => ({ top: document.querySelectorAll('#gx-grid .gx-tl .gx-chart, #gx-grid .gx-tr .gx-chart').length, rest: document.querySelectorAll('#gx-grid .gx-br .gx-chart').length }));
+    check(panes.top === 0 && panes.rest === 5 && frozen.every((c) => c.y === drawn.find((d) => d.id === c.id).y - 100), `frozen top row: the charts scroll with their cells, below it (${JSON.stringify(panes)})`);
+    await page.evaluate(() => { document.querySelector('#gx-grid .gx-scroll').scrollTop = 0; });
+    await page.click('#gx-freeze');
+    await page.click('.gx-menu [data-act="unfreeze"]');
+    await until(async () => { const l = await chartsNow(); return l.length === 5 && l.every((c) => c.y === drawn.find((d) => d.id === c.id).y) ? l : null; }, 'unfrozen');
+    // The dark Look: the chart's words read on its ground.
+    const lumOf = (rgb) => { const [r, g, b] = rgb.match(/[\d.]+/g).slice(0, 3).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const ink = await page.evaluate(() => { const el = document.querySelector('#gx-grid .gx-chart .gc-title'), bg = document.querySelector('#gx-grid .gx-chart .gc-bg'), tick = document.querySelector('#gx-grid .gx-chart .gc-tick'); return { dark: document.documentElement.hasAttribute('data-dark'), title: getComputedStyle(el).fill, tick: getComputedStyle(tick).fill, ground: getComputedStyle(bg).fill }; });
+    const ratio = (a, b) => { const [x, y] = [lumOf(a), lumOf(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    check(ink.dark && ratio(ink.title, ink.ground) >= 4.5 && ratio(ink.tick, ink.ground) >= 3, `dark Look: the chart's title and ticks read on its ground (${JSON.stringify(ink)}; ${ratio(ink.title, ink.ground).toFixed(1)}:1, ${ratio(ink.tick, ink.ground).toFixed(1)}:1)`);
+    const still = await page.evaluate(() => ({ anims: document.getAnimations().filter((a) => a.effect?.target?.closest?.('.gx-charts')).length, transition: getComputedStyle(document.querySelector('#gx-grid .gx-chart')).transitionDuration }));
+    check(still.anims === 0 && /^0s(, 0s)*$/.test(still.transition), `reduced motion: charts draw without motion (${JSON.stringify(still)})`);
+    await page.setViewportSize({ width: 640, height: 900 });
+    const narrowC = await until(async () => { const l = await chartsNow(); const g = await cellBox(1, 6); return l.length && g && near(l.find((c) => c.title === 'Sales by month'), g) ? { l, g } : null; }, 'charts at 640 px');
+    const over640 = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    check(over640 <= 0 && narrowC.l.length >= 1, `640 px: the column chart stays at G2, no page overflow (${narrowC.l.length} drawn, overflow ${over640})`);
+    await shot('charts-640.png');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await saved(ckey);
+    await page.click('#gx-more');
+    const [cdl] = await Promise.all([page.waitForEvent('download'), page.click('.gx-menu [data-act="export"]')]);
+    const cfile = path.join(tmp, `charts-${cdl.suggestedFilename()}`);
+    await cdl.saveAs(cfile);
+    const D = require(path.join(root, 'lib/doctext.js'));
+    const zin = D.unzip(new Uint8Array(fs.readFileSync(chartsFile))), zout = D.unzip(new Uint8Array(fs.readFileSync(cfile)));
+    const chartParts = zin.names.filter((n) => /^xl\/(charts|drawings)\//.test(n));
+    const same = [];
+    for (const n of chartParts) if (zout.names.includes(n) && (await zin.text(n)) === (await zout.text(n))) same.push(n);
+    check(chartParts.length === 7 && same.length === chartParts.length, `the export keeps the drawing and chart parts byte for byte (${same.length} of ${chartParts.length})`);
+    // Insert → Column on A1:C5: a sixth chart, chosen, at E1 (a column clear of the data); dragged 128 px right; Delete takes it,
+    // Ctrl+Z brings it back; the export holds it with its references, and Excel's file reads it back.
+    await go('A1');
+    await page.keyboard.down('Shift');
+    for (const k of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowRight']) await page.keyboard.press(k);
+    await page.keyboard.up('Shift');
+    await page.click('#gx-chart');
+    const kinds = await page.evaluate(() => [...document.querySelectorAll('.gx-menu [data-act^="chart-"]')].map((b) => b.textContent));
+    check(kinds.join() === 'Column,Bar,Line,Pie,Scatter', `the Chart menu offers ${kinds.join(', ')}`);
+    await page.click('.gx-menu [data-act="chart-column"]');
+    const made = await until(async () => { const l = await chartsNow(); return l.length === 6 ? l : null; }, 'the inserted chart');
+    const mine = await page.evaluate(() => { const el = document.querySelector('#gx-grid .gx-chart[data-on]'); if (!el) return null; const b = el.getBoundingClientRect(); return { id: el.dataset.chart, x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height), bars: el.querySelectorAll('.gc-bar').length }; });
+    const atE1 = await cellBox(0, 4);
+    check(mine && near(mine, atE1) && mine.w === 480 && mine.h === 288 && mine.bars === 8 && made.length === 6, `Insert → Column charts A1:C5 at E1, chosen, 480×288 (${JSON.stringify({ mine, E1: atE1 })})`);
+    await page.mouse.move(mine.x + 200, mine.y + 150);
+    await page.mouse.down();
+    await page.mouse.move(mine.x + 264, mine.y + 150, { steps: 4 });
+    await page.mouse.move(mine.x + 328, mine.y + 150, { steps: 4 });
+    await page.mouse.up();
+    const dragged = await until(async () => { const l = await chartsNow(); const c = l.find((x) => x.id === mine.id); return c && c.x === mine.x + 128 ? c : null; }, 'the chart dragged');
+    check(dragged.y === mine.y && dragged.w === 480, `dragging the chart moves it two columns right (${mine.x} → ${dragged.x})`);
+    await page.keyboard.press('Delete');
+    await until(async () => (await chartsNow()).length === 5, 'Delete takes the chart');
+    check(await cell(1, 1) === '80', 'Delete with a chart chosen leaves the cells alone');
+    await page.keyboard.press('Control+z');
+    const undeleted = await until(async () => { const l = await chartsNow(); const c = l.find((x) => x.id === mine.id); return l.length === 6 && c && c.x === mine.x + 128 ? c : null; }, 'Ctrl+Z brings it back');
+    check(!!undeleted, 'Ctrl+Z brings the deleted chart back where it was dragged');
+    await saved(ckey);
+    await page.click('#gx-more');
+    const [idl] = await Promise.all([page.waitForEvent('download'), page.click('.gx-menu [data-act="export"]')]);
+    const ifile = path.join(tmp, `inserted-${idl.suggestedFilename()}`);
+    await idl.saveAs(ifile);
+    const CXL = require(path.join(root, 'lib/sheet-chart-xml.js'));
+    const ibook = await XL.read(new Uint8Array(fs.readFileSync(ifile)));
+    const ilist = CXL.charts(ibook, ibook.sheets[0]);
+    const sixth = ilist[5]?.chart.groups?.[0];
+    check(ibook.keep.problems.length === 0 && ilist.length === 6 && sixth?.type === 'bar' && sixth.series.map((s) => s.val.f).join() === 'Data!$B$2:$B$5,Data!$C$2:$C$5' && ilist[5].anchor.from.col === 6,
+      `the export holds the inserted chart, its references and its dragged anchor (${JSON.stringify({ problems: ibook.keep.problems, n: ilist.length, refs: sixth?.series.map((s) => s.val.f), col: ilist[5]?.anchor.from.col })})`);
+
     const intervals = await page.evaluate(() => globalThis.gzIntervals || []);
     check(intervals.every((ms) => ms >= 60000), `no interval under a minute (${JSON.stringify(intervals)})`);
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
