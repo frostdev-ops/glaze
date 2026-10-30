@@ -165,7 +165,9 @@ async function pass(scheme) {
       assert.match(await page.locator('#writer-papers-count').textContent(), /^6\b/);
       await page.getByRole('button', { name: 'Clear documents…', exact: true }).click();
       assert.equal(await page.locator('#writer-clear-title').textContent(), 'Clear documents?');
+      assert.equal(await page.locator('#writer-clear-ok').textContent(), 'Clear documents');
       await page.locator('#writer-clear-ok').click();
+      await until(async () => (await page.locator('#hint').textContent()) === 'Documents cleared.', 'the Documents hint');
       await until(async () => (await page.locator('#writer-paper-list li').count()) === 2, 'documents removed');
       const left = await page.evaluate(() => chrome.storage.local.get(null));
       for (const key of keys) assert.ok(!left[`writerPaper:${key}`] && !left[`writerVersions:${key}`]);
