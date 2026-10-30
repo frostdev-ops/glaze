@@ -389,3 +389,68 @@ test('a full recalculation of 50,000 formulas stays quick', (t) => {
   assert.equal(e.value(sh.id, 0, 6), (9999 * 10000) / 2 - 5000 + 1);
   t.diagnostic(`full ${full.toFixed(0)} ms, edit ${edit.toFixed(0)} ms`);
 });
+
+// Microsoft: Excel Recalculation, dirty precedents must settle before their dependents.
+test('a returned range discovers dirty precedents outside its literal argument', () => {
+  C.define('TESTOFFSET', { min: 1, max: 1, p: ['r'], volatile: true, fn: ([ref]) => new C.lib.Ref(ref.sheet, ref.r0 + 1, ref.c0, ref.r1 + 1, ref.c1) });
+  const e = book({ C1: '=SUM(TESTOFFSET(A1))', A2: '=B2*2', B2: 3, D1: '=C1+1' });
+  assert.equal(val(e, 'D1'), 7);
+  e.edit(e.wb.sheets[0].id, 1, 1, '5');
+  assert.equal(val(e, 'D1'), 11);
+  e.edit(e.wb.sheets[0].id, 1, 0, '=C1');
+  assert.equal(val(e, 'C1'), 0);
+  assert.ok(e.status.circular.length);
+});
+
+test('cycles through cell names are reported and clearing a formula removes its reverse edges', () => {
+  const e = book({ A1: '=Loop', B1: '=A1+1' }, { names: [{ name: 'Loop', ref: 'Sheet1!$B$1' }] });
+  assert.deepEqual([val(e, 'A1'), val(e, 'B1')], [0, 0]);
+  const id = e.wb.sheets[0].id;
+  e.apply({ op: 'clear', sheet: id, r0: 0, r1: 0, c0: 1, c1: 1 });
+  assert.equal(val(e, 'A1'), 0);
+  assert.deepEqual(e.status.circular, []);
+  e.edit(id, 0, 1, '8');
+  assert.equal(val(e, 'A1'), 8);
+  e.apply({ op: 'clear', sheet: id, r0: 0, r1: 0, c0: 0, c1: 0 });
+  const dependents = [];
+  e.dependents(id, 0, 1, (k) => dependents.push(k));
+  assert.deepEqual(dependents, []);
+});
+
+test('array members count toward the cell cap before the engine allocates them', () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  sh.rows.set(0, new Map([[0, { t: 'n', v: 0, f: '1', a: 'A1:A250001' }]]));
+  const before = structuredClone(wb);
+  // Stop a broken implementation at its first allocation rather than allocate the oversized array in this test.
+  const original = sh.rows.set;
+  sh.rows.set = () => { throw new Error('allocated before checking cap'); };
+  assert.throws(() => C.engine(wb), (e) => e.code === 'cap-cells');
+  delete sh.rows.set;
+  assert.equal(sh.rows.set, original);
+  assert.deepEqual(wb, before);
+});
+
+test('broadcast and materialized array values are bounded before allocation', () => {
+  assert.equal(out(C.lib.map([Array.from({ length: 501 }, () => [1]), [Array(501).fill(2)]], (a, b) => a + b)), '#NUM!');
+  const wb = M.workbook(), sh = wb.sheets[0];
+  sh.rows.set(0, new Map([[0, { t: 'n', v: 0, f: 'SUM(B1:ZZ1000*2)', a: 'A1' }]]));
+  const e = C.engine(wb);
+  e.recalc();
+  assert.equal(out(e.value(sh.id, 0, 0)), '#NUM!');
+});
+
+test('reverse range queries skip disjoint row intervals', () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  for (let r = 0; r < 10000; r += 2) sh.rows.set(r, new Map([[1, { t: 'n', v: 0, f: `SUM(A${r + 1}:A${r + 2})` }]]));
+  const e = C.engine(wb);
+  const col = e.index.get(sh.id).cols.get(0);
+  // Count index entries visited, independent of machine speed.
+  let visited = 0;
+  const ranges = col.ranges;
+  const iterator = ranges[Symbol.iterator].bind(ranges);
+  ranges[Symbol.iterator] = function* () { for (const entry of iterator()) { visited++; yield entry; } };
+  const found = [];
+  e.dependents(sh.id, 5000, 0, (k) => found.push(k));
+  assert.equal(found.length, 1);
+  assert.ok(visited <= 21, `visited ${visited} disjoint intervals`);
+});
