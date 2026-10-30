@@ -48,31 +48,34 @@ test('a record without a kind still versions as a paper', async () => {
   assert.equal(version.kind, 'paper');
 });
 
-test('file versions retain bytes and metadata through kind switches and restores', async () => {
+test('file versions through kind switches and restores; a PDF record keeps none holding a PDF file', async () => {
   let time = 1000;
   const P = PA.open(store(), () => ++time);
   const draft = doc('Before the PDF.');
   await P.save(KEY, { doc: draft, format: 'mla9' });
   const pdf = { kind: 'pdf', doc: null, file: 'JVBERi0=', size: 5, pages: 2, thumb: 'data:image/png;base64,AA==' };
   const imported = await P.save(KEY, pdf, { reason: 'import' });
+  assert.equal(imported.version.kind, 'paper', 'the paper before the PDF is kept');
   const sending = (await P.save(KEY, {}, { reason: 'sending' })).version;
-  assert.equal(sending.file, pdf.file, 'a submitted PDF version contains its file');
-  assert.ok(sending.bytes >= pdf.file.length, 'the version cap counts the file');
-  assert.equal((await P.versions(KEY)).find((v) => v.id === sending.id).file, undefined, 'version listings omit file payloads');
+  assert.equal(sending.file, undefined, 'a PDF\'s submit keeps no file: the record is its one copy');
+  assert.deepEqual(sending.sent, { name: '', size: 5, hash: '' }, 'what was sent, as metadata');
+  assert.equal(await P.restore(KEY, sending.id), null, 'nothing to restore from metadata');
   const back = await P.restore(KEY, imported.version.id);
   assert.equal(back.paper.kind, 'paper');
   assert.deepEqual(back.paper.doc, draft);
   assert.equal(back.paper.file, null, 'a restored paper has no leftover PDF');
-  assert.equal(back.version.file, pdf.file, 'the replaced PDF is restorable too');
-  const again = await P.restore(KEY, sending.id);
+  assert.equal(back.version.file, pdf.file, 'the replaced PDF is restorable from the paper');
+  const again = await P.restore(KEY, back.version.id);
   for (const [field, value] of Object.entries(pdf)) assert.deepEqual(again.paper[field], value, field);
   const deck = { kind: 'slides', doc: null, file: 'UEsDBA==', size: 4, ext: '.ppsx', slides: 3, text: 'Deck words', words: 2 };
   const changed = await P.save(KEY, deck, { reason: 'import' });
   assert.equal(changed.version.kind, 'pdf');
   assert.equal(changed.version.file, pdf.file, 'PDF to deck retains the PDF');
   const deckVersion = (await P.save(KEY, {}, { reason: 'sending' })).version;
-  await P.restore(KEY, sending.id);
+  assert.equal(deckVersion.file, deck.file, 'a deck\'s submit keeps its file');
+  await P.restore(KEY, changed.version.id);
   assert.equal((await P.get(KEY)).ext, null, 'the PDF has no leftover slideshow extension');
+  assert.ok((await P.versions(KEY)).some((v) => v.id === deckVersion.id), 'back to a PDF: deck versions stay');
   const restored = await P.restore(KEY, deckVersion.id);
   for (const [field, value] of Object.entries(deck)) assert.deepEqual(restored.paper[field], value, field);
 });

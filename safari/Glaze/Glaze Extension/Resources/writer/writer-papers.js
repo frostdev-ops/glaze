@@ -10,8 +10,10 @@
 // own set() and stamped with its revision, and its versions packed (gz) by the page, up to CAP.packed bytes of them.
 // A PDF's or deck's bytes are the worker's file store's (documents/doc-files.js): its record and versions point at them as file
 // { hash, size, type }, the store told which hashes each document holds (o.files own) before a write points at one and
-// after one lets one go, and versions keep at most CAP.files bytes of files. A record from before the store holds its bytes
-// as base64 in file until migrate moves them.
+// after one lets one go, and versions keep at most CAP.files bytes of files. A PDF keeps one copy of its file, the latest:
+// no version of it holds a file (a submit's keeps what was sent as sent { name, size, hash }), a save lets go of those an
+// earlier build kept, and the file before the pages panel's Done is held apart for its Undo (UNDO, save's hold). A record
+// from before the store holds its bytes as base64 in file until migrate moves them.
 // Classic script; module.exports for node.
 var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   const INDEX = 'writerPapers', PAPER = 'writerPaper:', VERSIONS = 'writerVersions:', PRESETS = 'writerPresets:', PART = 'writerSheet:';
@@ -22,10 +24,16 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   // The card's text a spreadsheet's index row carries (sheet-data.js glance): 4 rows of 6 short strings.
   const glance = (g) => Array.isArray(g) && g.length === 4 && g.every((row) => Array.isArray(row) && row.length === 6 && row.every((x) => typeof x === 'string' && x.length <= 40));
   const FILE_FIELDS = ['file', 'size', 'pages', 'thumb', 'ext', 'slides', 'text'];
+  // The file store's owner of the one copy a PDF's pages Done holds for its Undo (pdf-kind.js): never a version, never in
+  // a backup (background/backup.js reads records and versions only).
+  const UNDO = 'undo:';
   // A file in the store (documents/doc-files.js ref), the same file, and the hashes records and version lists point at.
   const isRef = (f) => !!f && typeof f === 'object' && /^[0-9a-f]{64}$/.test(f.hash) && Number.isSafeInteger(f.size) && f.size > 0;
   const sameFile = (a, b) => a === b || (isRef(a) && isRef(b) && a.hash === b.hash && a.size === b.size);
   const refs = (...values) => new Set(values.flatMap((v) => (Array.isArray(v) ? v : [v])).filter((v) => isRef(v?.file)).map((v) => v.file.hash));
+  // A version or record holding a file: in the store, or base64 from before it.
+  const holdsFile = (v) => isRef(v?.file) || (typeof v?.file === 'string' && v.file.length > 0);
+  const pdfFile = (v) => v?.kind === 'pdf' && holdsFile(v);
   // The bytes of the files a list of versions holds, each file once.
   const fileBytes = (list) => [...new Map(list.filter((v) => isRef(v?.file)).map((v) => [v.file.hash, v.file.size])).values()].reduce((n, x) => n + x, 0);
   const ID = /^_\d+_\d+$/, HOST = /^[a-z0-9.-]{1,253}(:\d{1,5})?$/i;
@@ -115,7 +123,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
         restore: (k, id) => turn(k, () => send('restore', [k, id])), remove: (k) => turn(k, () => send('remove', [k])),
         savePreset: (scope, p) => send('savePreset', [scope, p]), removePreset: (scope, id) => send('removePreset', [scope, id]),
         trash: (k) => turn(k, () => send('trash', [k])), untrash: (k, options) => turn(k, () => send('untrash', options ? [k, options] : [k])), purge: () => send('purge', []),
-        migrate: (k) => turn(k, () => send('migrate', [k])) };
+        migrate: (k, options) => turn(k, () => send('migrate', options ? [k, options] : [k])) };
     }
     store ||= globalThis.chrome?.storage?.local;
     const get = async (k) => (await store.get(k))[k];
@@ -173,11 +181,12 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     // Saves the paper under k, merging patch into what's stored; a record written before kinds is a paper, and its title
     // the assignment's until the student names it (named). reason: 'auto' (the default: autosave), 'sending' or
     // 'submit' (the paper itself kept), 'import' or 'restore' (the doc before it is kept), 'format', 'view' (the paper as
-    // the full writer left it, before the compact box writes it into Blackboard's), 'edit' (a PDF's or deck's file before
-    // the one this save brings). attached: on a 'sending' save, the files the submit attaches beside it ({ name, size,
-    // mime }), kept on its version. touch: false keeps Last edited (updated): a field recorded about the document, not a
-    // change to it (documents/drive.js drive). → { paper, version }.
-    const save = (k, patch = {}, { reason = 'auto', base = seen.get(k), rename = false, expectedKind, expectedFile, expectedRevision, parts = null, drop = null, changed: own, version: packed = null, attached = null, touch = true } = {}) => serial(k, async () => {
+    // the full writer left it, before the compact box writes it into Blackboard's), 'edit' (a deck's file before the one this
+    // save brings). A PDF file is never kept in a version of a PDF record; earlier papers and decks keep theirs. attached: on a 'sending' save, the files the
+    // submit attaches beside it ({ name, size, mime }), kept on its version. hold: a PDF's pages Done, its file before held
+    // (UNDO) in place of any held before; any other save that replaces a PDF's file lets that go. touch: false keeps Last
+    // edited (updated): a field recorded about the document, not a change to it (documents/drive.js drive). → { paper, version, held }.
+    const save = (k, patch = {}, { reason = 'auto', base = seen.get(k), rename = false, expectedKind, expectedFile, expectedRevision, parts = null, drop = null, changed: own, version: packed = null, attached = null, hold = false, touch = true } = {}) => serial(k, async () => {
       if (typeof k !== 'string' || !k) throw new Error('no paper key');
       const written = Object.keys(parts || {}), dropped = [...(drop || [])];
       if ([...written, ...dropped].some((n) => typeof n !== 'string' || !PART_NAME.test(n)) || (packed && typeof packed.gz !== 'string')) throw new Error('no such part');
@@ -221,7 +230,14 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       // what is written is never purged with it. A record that says it is in Trash (a backup's) says so itself.
       if ((changed || reason === 'sending' || reason === 'submit') && !('trashed' in patch)) delete paper.trashed;
       let version = null, history = null, held = false;
+      // A PDF is its one file: a version that would hold one is none, but a submit's, which keeps what was sent.
+      const one = paper.kind === 'pdf';
       const retain = async (v) => {
+        if (one && pdfFile(v)) {
+          if (v.reason !== 'sending' && v.reason !== 'submit') return null;
+          const { id, at, reason: why, kind, format, keep } = v;
+          v = { kind, format, keep, outline: null, id, at, reason: why, words: 0, bytes: bytes(null) + bytes({}), sent: { name: String(paper.title || ''), size: v.size ?? v.file.size ?? 0, hash: isRef(v.file) ? v.file.hash : '' } };
+        }
         if (paper.kind === 'sheet' && v.bytes > limit) throw new RangeError('spreadsheet version size limit');
         const before = history || await versionsOf(k);
         if (!history) held = refs(before).size > 0;
@@ -246,6 +262,11 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       if (!prev && patch.doc) version = await retain(snapshot(paper, 'start', t));
       if (packed) version = await retain({ id: `${t.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at: t, reason: String(packed.reason || 'auto'), kind: paper.kind,
         cells: Number.isSafeInteger(packed.cells) ? packed.cells : 0, bytes: packed.gz.length, gz: packed.gz });
+      // The versions an earlier build kept of a PDF's file go with this save, the store letting go of their files below.
+      if (one) {
+        const before = history || await versionsOf(k), kept = before.filter((v) => !pdfFile(v));
+        if (kept.length !== before.length) { held ||= refs(before).size > 0; history = kept; }
+      }
       if (version) paper.lastVersion = t;
       if (version && (reason === 'sending' || packed?.reason === 'sending') && Array.isArray(attached)) version.attached = attachedOf(attached);
       await claim(k, [paper, ...(history || [])], [patch]);
@@ -257,9 +278,15 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       // The document is already safely published. A cleanup refusal must not turn that successful save into a retry
       // against an old revision; the persisted cleanup names keep deletion recoverable.
       if (stale.length) { try { await store.remove(stale); } catch { /* retry on the next save or deletion */ } }
+      // Done's Undo copy: held while k still owns it (before owned lets it go), or let go once a save replaced the file.
+      let undo = false;
+      if ((one || prev?.kind === 'pdf') && o.files && !sameFile(prev?.file, paper.file)) {
+        const keep = one && hold && prev?.kind === 'pdf' && isRef(prev.file);
+        try { await o.files.own(UNDO + k, keep ? [prev.file.hash] : []); undo = keep; } catch (e) { console.warn(e); }
+      }
       if (refs(prev).size || held) await owned(k, paper, history);
       seen.set(k, paper.revision);
-      return { paper, version };
+      return { paper, version, ...(undo && { held: true }) };
     });
     // The 'sending' version a submit was built from, once Ultra's Submit is clicked (background/background.js, at the dispatch):
     // 'submit' from then, the paper submitted. The document is unchanged, so its revision is too.
@@ -293,6 +320,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       try { await store.remove([PAPER + k, VERSIONS + k, ...sourcesOf(k), ...partsOf(k, paper)]); }
       catch (e) { await store.set({ [INDEX]: list }); throw e; }
       if (refs(paper, Array.isArray(history) ? history : []).size) await owned(k, {}, []);
+      await owned(UNDO + k, {}, []);
       return { ...(paper ? { [PAPER + k]: paper } : {}), ...(Array.isArray(history) ? { [VERSIONS + k]: history } : {}) };
     });
     // Into Trash (on: when it was first trashed stays) or out of it. Neither is an edit: the document, its versions, its
@@ -322,16 +350,23 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       await store.set({ [INDEX]: list.filter((r) => !gone.has(r?.key)) });
       try { await store.remove([...keys.flatMap((k) => [PAPER + k, VERSIONS + k, ...sourcesOf(k)]), ...extra]); }
       catch (e) { await store.set({ [INDEX]: list }); throw e; }
-      for (const k of keys) await owned(k, {}, []);
+      for (const k of keys) { await owned(k, {}, []); await owned(UNDO + k, {}, []); }
       return keys;
     });
     // A record from before the file store (its file base64) and its versions, moved into it (o.files put), its revision and
     // Last edited as they were: the same document. Again after a stop, it moves what is left. → { moved }, the files moved.
+    // release: a closing PDF viewer lets go of its Undo copy; file makes the release conditional on that exact hold.
     const legacy = (v) => typeof v?.file === 'string' && v.file.length > 0 && !!v.kind && v.kind !== 'paper' && v.kind !== 'sheet';
     const TYPES = { pdf: 'application/pdf', '.ppsx': 'application/vnd.openxmlformats-officedocument.presentationml.slideshow', slides: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
     const unb64 = (s) => { if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(s); const bin = atob(s), out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
-    const migrate = (k) => serial(k, async () => {
+    const migrate = (k, { release = false, file } = {}) => serial(k, async () => {
       if (typeof k !== 'string' || !k) throw new Error('no paper key');
+      if (release === true) {
+        if (file !== undefined) {
+          if (!isRef(file)) throw new Error('no undo file');
+          try { await o.files?.own(UNDO + k, [], { expected: [file.hash] }); } catch (e) { console.warn(e); }
+        } else await owned(UNDO + k, {}, []);
+      }
       const paper = await get(PAPER + k), list = await versionsOf(k);
       if (!legacy(paper) && !list.some(legacy)) return { moved: 0 };
       if (!o.files) throw new Error('file storage unavailable');
@@ -401,8 +436,11 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       const sizeOf = (v) => (v.kind === 'sheet' ? (typeof v.gz === 'string' ? v.gz.length : 0)
         : bytes(v.doc ?? null) + (v.kind && v.kind !== 'paper' ? bytes(Object.fromEntries(FILE_FIELDS.filter((f) => v[f] !== undefined).map((f) => [f, v[f]]))) : 0));
       const mergedVersions = async (k, incoming, sheet) => {
-        const here = await versionsOf(k), ids = new Set(here.map((v) => v.id));
+        let here = await versionsOf(k);
         const current = await get(PAPER + k);
+        // A PDF's versions from an earlier build's backup bring no file: the PDF keeps one copy.
+        if ((current || records[PAPER + k])?.kind === 'pdf') { here = here.filter((v) => !pdfFile(v)); incoming = incoming.filter((v) => !pdfFile(v)); }
+        const ids = new Set(here.map((v) => v.id));
         // History may arrive before a missing record. Keep the larger budget until its kind is known below.
         const limit = (sheet ?? (!current || current.kind === 'sheet')) || incoming.some((v) => v.kind === 'sheet') ? CAP.packed : CAP.bytes;
         return cap([...here, ...incoming.filter((v) => !ids.has(v.id)).map((v) => ({ ...v, bytes: sizeOf(v) }))], limit);
@@ -428,7 +466,8 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
           else if (prev.kind === 'sheet') continue;
           // The backup's newer: it replaces what is here, which is kept as a version (a spreadsheet's bands written with it).
           else if ((value.updated || 0) > (prev.updated || 0)) await save(k, value, { reason: same(prev, value) ? 'auto' : 'restore', rename: true, ...(sheet && bands && { parts: bands }) });
-          else if (!sheet && !same(prev, value) && ![...await versionsOf(k), ...(records[VERSIONS + k] || [])].some((v) => same(v, value))) await addVersion(k, snapshot(value, 'restore', now()));
+          // An older PDF in the backup is no version; older papers and decks still join the history.
+          else if (!sheet && value.kind !== 'pdf' && !same(prev, value) && ![...await versionsOf(k), ...(records[VERSIONS + k] || [])].some((v) => same(v, value))) await addVersion(k, snapshot(value, 'restore', now()));
         } else if (name.startsWith(VERSIONS) && !restored.has(name)) {
           const list = await mergedVersions(name.slice(VERSIONS.length), full);
           await claim(name.slice(VERSIONS.length), list, []);

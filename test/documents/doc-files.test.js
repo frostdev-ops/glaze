@@ -47,6 +47,28 @@ const wire = (st, o = {}) => {
   return { client, log };
 };
 
+test('sweep drains released files after HOLD across a worker restart, preserving every live owner', async () => {
+  const { st, db, clock, data } = make();
+  const a = await st.put(bytes(30, 91), 'application/pdf');
+  const b = await st.put(bytes(30, 92), 'application/pdf');
+  const c = await st.put(bytes(30, 93), 'application/pdf');
+  for (const f of [a, b, c]) { await st.own('doc:a', [f.hash], { add: true }); }
+  await st.own('undo:doc:a', [b.hash]);
+  await st.own('doc:copy', [c.hash]);
+  await st.own('doc:a', []);
+  clock(F.HOLD - 1);
+  assert.equal(await st.sweep(), 0, 'the upload grace still protects the released file');
+  clock(2);
+  const restarted = F.store(db, { now: () => 1e12 + F.HOLD + 1 });
+  assert.equal(await restarted.sweep({ live: new Set([a.hash]) }), 0, 'a live record protects its file');
+  assert.equal(await restarted.sweep(), 1, 'the released file goes without another ownership write');
+  assert.equal(await restarted.stat(a.hash), null);
+  assert.ok(await restarted.stat(b.hash), 'Undo still owns b');
+  assert.ok(await restarted.stat(c.hash), 'another document still owns c');
+  assert.equal(data().has('r:'), false, 'the release list is drained');
+  assert.equal([...data().keys()].filter((k) => k.startsWith('c:')).length, 2, 'released chunks go too');
+});
+
 test('the largest file is the kinds\' and the submit sheet\'s one number', () => {
   assert.equal(F.MAX, 50e6);
   assert.equal(DK.KINDS.pdf.max, F.MAX);

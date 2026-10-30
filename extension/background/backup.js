@@ -371,8 +371,12 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       if (Object.values(bands).some((p) => !obj(p))) throw fail('bad');
       return { ...rec, $parts: bands };
     };
+    // A PDF's submit keeps what was sent as metadata, no file (writer/writer-papers.js): left out, as a reader takes a PDF's
+    // version only with its file. The record's submitted stamp goes with the record.
+    const sent = (v) => obj(v) && v.kind === 'pdf' && v.file === undefined && obj(v.sent);
     const papers = Object.entries(local).filter(([key]) => paperKey.test(key))
-      .map(([key, value], i) => ({ key, value: key.startsWith('writerVersions:') && Array.isArray(value) ? value.filter(paperVersion) : withBands(key, value), file: `papers/${i + 1}.json` }));
+      .map(([key, value], i) => ({ key, value: key.startsWith('writerVersions:') && Array.isArray(value) ? value.filter((v) => paperVersion(v) && !sent(v)) : withBands(key, value), file: `papers/${i + 1}.json` }))
+      .filter(({ key, value }) => !(key.startsWith('writerVersions:') && Array.isArray(value) && !value.length));
     // Restore stages each record through the worker's 32 MiB write fence (background/background.js BROKER.backup.allow).
     // Count the whole command, including its UUID token and wrapper, as that fence does: JSON characters, not bytes.
     if (papers.some(({ key, value }) => JSON.stringify({ op: 'stage', token: '0'.repeat(36), action: 'own', value: { papers: { [key]: value } } }).length > LIMIT.command)) throw fail('big');
@@ -625,12 +629,19 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     // Replay may evict versions on an overlay that never commits. Claim the files it brings, but keep every live
     // owner's files until publication succeeds; the worker reconciles owners from the committed records afterwards.
     const files = env.files && { ...env.files, own: (owner, hashes) => env.files.own(owner, hashes, { add: true }) };
-    const owners = new Set();
+    const owners = new Set(), originals = new Map();
     let session, skipped = 0;
     try {
       for await (const { action, value } of steps) {
         if (action === 'own') {
-          for (const key of Object.keys(value?.papers || {})) if (paperKey.test(key) && /^writer(?:Paper|Versions):/.test(key)) owners.add(key.replace(/^writer(?:Paper|Versions):/, ''));
+          for (const key of Object.keys(value?.papers || {})) if (paperKey.test(key) && /^writer(?:Paper|Versions):/.test(key)) {
+            const k = key.replace(/^writer(?:Paper|Versions):/, '');
+            if (!owners.has(k)) {
+              const before = (await env.local.get(`writerPaper:${k}`))[`writerPaper:${k}`];
+              originals.set(k, { kind: before?.kind, file: before?.file });
+            }
+            owners.add(k);
+          }
           check(await apply(value, { ...areas, files }));
         }
         else if (action === 'settings') check(await env.settings(value, areas));
@@ -659,6 +670,10 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       if (files) for (const k of owners) try {
         const saved = await env.local.get([`writerPaper:${k}`, `writerVersions:${k}`]);
         await env.files.own(k, [...new Set([...refsOf(saved[`writerPaper:${k}`]), ...refsOf(saved[`writerVersions:${k}`])].map((f) => f.hash))]);
+        // Replay only adds claims. Release an obsolete Undo after publication, using actual saved state so a rollback
+        // keeps the original hold. A versions-only restore or an unchanged file leaves it alone.
+        const original = originals.get(k), before = original?.file, after = saved[`writerPaper:${k}`]?.file;
+        if (original?.kind === 'pdf' && !(before === after || ref(before) && ref(after) && before.hash === after.hash && before.size === after.size)) await env.files.own(`undo:${k}`, []);
       } catch { /* retain claims until a later reconciliation */ }
     }
   };

@@ -256,7 +256,7 @@ var GZ_PDF_TOOLS = globalThis.GZ_PDF_TOOLS || (() => {
 
     pressed();
     const dispose = () => { life.abort(); drag?.preview.remove(); };
-    return { el, decide, commit, ready: settled, dispose, extraUndo: (x) => { extra = x; undoB.disabled = false; }, get tool() { return tool; } };
+    return { el, decide, commit, ready: settled, dispose, extraUndo: (x) => { extra = x || null; undoB.disabled = !canUndo && !extra; }, get tool() { return tool; } };
   };
 
   return { SHAPES, INKS, MARKS, SIZES, HIGHLIGHTS, NO_TOOLS, shape, mount };
