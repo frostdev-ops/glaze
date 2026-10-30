@@ -18,7 +18,7 @@
   const proofOn = () => pref()?.proofing !== false;
   const allow = (cls) => pref()?.autocorrect?.[cls] !== false;
   const allowRule = (rule) => !P.CLASS?.[rule] || allow(P.CLASS[rule]);
-  let view = null, port = null, started = false, ids = 0, seen = 0, dirty = [], blockTimer = 0, docTimer = 0;
+  let view = null, port = null, started = false, ids = 0, seen = 0, line = null, dirty = [], blockTimer = 0, docTimer = 0;
   const respell = () => view?.setProps?.({}); // the editor's attributes (spellcheck, below) read again
   let context = [], dict = new Set();
   const pending = new Map(), asked = new Set(), stats = new Map();
@@ -136,9 +136,11 @@
   };
   // Every change: its ranges marked, a paragraph lint soon and a full one on a pause. Nothing else while typing.
   const onUpdate = (v, prev) => {
-    if (v.state.doc === prev.doc) return;
-    const maps = P.since(v.state, seen);
-    seen = ver();
+    const state = P.key.getState(v.state), fresh = state.line !== line;
+    if (!fresh && v.state.doc === prev?.doc) return;
+    const maps = !fresh && P.since(v.state, seen);
+    seen = state.ver; line = state.line;
+    if (fresh) { pending.clear(); asked.clear(); dirty = []; closeCard(); closeFix(); }
     if (!started || !proofOn()) return;
     if (!maps) dirty = [[0, v.state.doc.content.size]];
     else dirty = [...dirty.map(([a, b]) => [P.mapPos(maps, a, -1), P.mapPos(maps, b, 1)]), ...changed(maps)];
@@ -212,12 +214,12 @@
   // The same bounded context the AI reads: source identity arriving is harmless; a changed prompt or thread isn't.
   const rulingContext = (c) => JSON.stringify(GZ_AI_WRITER.clean(c));
   const rule = async (i) => {
-    const version = ver(), contextAtAsk = structuredClone(F.context()), contextKey = rulingContext(contextAtAsk);
+    const version = ver(), lineAtAsk = P.key.getState(view.state).line, contextAtAsk = structuredClone(F.context()), contextKey = rulingContext(contextAtAsk);
     const $from = view.state.doc.resolve(i.from), start = $from.start();
     let said = null;
     try { said = await P.decide({ text: P.blockText($from.parent), from: i.from - start, to: i.to - start, suggestions: i.suggestions.slice(), context: contextAtAsk }); } catch (e) { console.error(e); }
     const v = P.verdict(said, i.suggestions.length), now = view && I.list().find((x) => x.id === i.id);
-    if (stopped || view.composing || ver() !== version || rulingContext(F.context()) !== contextKey || !v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
+    if (stopped || view.composing || P.key.getState(view.state).line !== lineAtAsk || ver() !== version || rulingContext(F.context()) !== contextKey || !v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
     if (v.verdict === 'apply' && allowRule(now.rule)) { const made = P.autofix(view, now, now.suggestions[v.choice]); if (made) showFix(made); return; }
     // 'suggest': the choice first on the card.
     const list = now.suggestions.slice(), [pick] = list.splice(v.choice, 1), bare = (x) => ({ ...x, id: x.id.replace(/^harper:/, '') });
@@ -409,7 +411,7 @@
   I.on(count);
 
   // ---- wiring ---------------------------------------------------------------------------------------------------------
-  F.plugin(P.plugin({ onFix: (_v, f) => showFix(f), onUpdate, allow }));
+  F.plugin(P.plugin({ onFix: (_v, f) => showFix(f), onView: onUpdate, onUpdate, allow }));
   // While Harper reads the text the browser's own spellcheck stays off, so its underline never sits beside Harper's and a
   // word in the student's dictionary stays clear; proofing off (or Harper unable to start here) gives it back.
   F.plugin(new GZ_PM.state.Plugin({ props: { attributes: () => (proofOn() && !broken ? { spellcheck: 'false' } : {}) } }));

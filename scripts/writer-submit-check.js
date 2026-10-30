@@ -58,7 +58,7 @@ const still = async (target) => { await until(() => target.evaluate(STILL), 'at 
 const stillAll = async (p) => { for (const f of p.frames()) await until(() => f.evaluate(STILL).catch(() => true), 'frames at rest'); await drawn(p); };
 
 // A student's click on something in Writer's frame, made as one: the element settled where it is (nothing animating on it or
-// its ancestors, the same box two polls running), in sight in the page, and the top thing at its centre both in the frame
+// its ancestors, the same box three polls running), in sight in the page, and the top thing at its centre both in the frame
 // (elementFromPoint there: no part of Writer covers it) and in the page (the frame itself there); then the mouse there, and
 // the click heard by that element. Headless Chromium sometimes gives a press over the frame to the page's <iframe> element
 // instead (most often just after a sheet opens, and under load): the frame hears nothing, so nothing happened, and the press
@@ -132,7 +132,9 @@ const tap = async (fr, sel, { count = 1 } = {}) => {
     }
     if (heard === 'heard') return;
     if (!heard) throw Error(`${sel}: the click reached nothing`);
+    if (heard !== 'given to the page\'s <iframe>') throw Error(`${sel}: ${heard} (aimed at ${Math.round(aim.x)},${Math.round(aim.y)} in the frame; ${Math.round(at.x)},${Math.round(at.y)} in the page)`);
     taps.again.push(`${sel}: ${heard} (aimed at ${Math.round(aim.x)},${Math.round(aim.y)} in the frame)`);
+    console.log(`tap retry: ${taps.again.at(-1)}`);
     if (attempt >= 5) throw Error(`${sel}: ${attempt} clicks, none heard (${taps.again.slice(-attempt).join('; ')})`);
     // What the browser routes by is stale until the page re-lays the frame out (a repaint inside it doesn't do): its width
     // a pixel less for two frames, then as it was.
@@ -219,8 +221,10 @@ const HARNESS = `(() => {
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
 
     ext = require('./check-env.js').staged(root, [`${site}/*`]);
+    // Pinned Linux Chromium can route 2x frame clicks at half their CSS coordinates (1083,623 → 541,311). Use 1x there;
+    // the Mac retains Retina coverage. tap still fails on every misroute except a confirmed hit on the page's iframe.
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: process.platform === 'linux' ? 1 : 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json'));
     const members = JSON.parse(fixture('ultra-memberships.json'));
@@ -609,7 +613,7 @@ const HARNESS = `(() => {
     await tap(fr, '.gp-status button:last-child');
     await until(() => fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role=menuitem]')].some((b) => b.textContent === 'Import…')), 'Import… in the menu');
     saved.menu = await ishot(p, 'import-menu-dark.png');
-    const [chooser] = await Promise.all([p.waitForEvent('filechooser'), fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role=menuitem]')].find((b) => b.textContent === 'Import…').click())]);
+    const [chooser] = await Promise.all([p.waitForEvent('filechooser'), tap(fr, '.gp-menu [role=menuitem]:text-is("Import…")')]);
     await chooser.setFiles(path.join(files, 'Rivera_Essay2.docx'));
     await until(() => cardOf(fr), 'the card from Import…');
     check(true, '⋯ → Import… brings a chosen .docx to the same card');
@@ -893,6 +897,8 @@ const HARNESS = `(() => {
     await until(async () => (await bar(fr))?.text === 'Too long for Ultra’s text box. Use Full writer.', 'the reason in the compact bar');
     const b1 = await bar(fr);
     check(b1.lines === 1 && b1.nowrap && b1.offer && (await p.evaluate(() => __text())) === 'Short start.\n', 'the compact bar says "Too long for Ultra’s text box. Use Full writer." on one line, the Full writer switch marked; Ultra\'s box keeps what last fit');
+    await p.emulateMedia({ reducedMotion: 'reduce' });
+    check(await fr.evaluate(() => [...document.querySelector('.gw-bar .gp-full').getAnimations({ subtree: true })].every((a) => a.playState !== 'running')), 'the offered Full writer ring has no motion under reduced motion');
     await until(() => fr.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'the long paper saved');
     await p.click(SUBMIT);
     await until(() => fr.evaluate(() => document.hasFocus() && !!document.activeElement?.matches('.gw-bar .gp-full')), 'Full writer focused');
@@ -901,6 +907,15 @@ const HARNESS = `(() => {
     await p.keyboard.press('Space');
     await until(async () => (await fullSet()) === true && await fr.evaluate(() => document.documentElement.dataset.view === 'full' && document.querySelectorAll('.gp-sheet').length > 1), 'Full writer from the switch', 60000);
     check(true, 'Space on it turns Full writer on (writer.full saved): the paper in its pages, for a .docx');
+    await tap(fr, '.gp-submit'); await sheetOpen(fr);
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => __clicks.length === 1 && __uploads.length === 1), 'the over-limit paper submitted as a Word file', 60000);
+    const longRun = await p.evaluate(() => ({ clicks: __clicks, uploads: __uploads, text: __text() }));
+    const longBytes = new Uint8Array(longRun.uploads[0].bytes);
+    fs.writeFileSync(path.join(out, 'over-limit.docx'), longBytes);
+    // doctext.docx includes the running header; compare the body alone with all 26,000 digits, in order.
+    const longZip = DT.unzip(longBytes), longBody = [...DT.tokens(await longZip.text('word/document.xml'))].filter((t) => t.text).map((t) => DT.decode(t.text)).join('').replace(/\s/g, '');
+    check(longRun.clicks.join() === 'assignment.attempt.authoring.footer.submit' && longRun.uploads[0].type === MIME && longBody === '1234567890'.repeat(2600) && !longRun.text.includes('Short start.'), 'Full writer submits the entire over-limit paper as one .docx, once; the stale compact text is absent');
     await p.close();
     await setFull(false);
     await blankPaper();
