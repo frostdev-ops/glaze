@@ -7,6 +7,16 @@ const F = require('../lib/doc-files.js');
 const DK = require('../lib/doc-kinds.js');
 const { fakeIDB } = require('./helpers/fake-idb.cjs');
 
+test('a restarted worker loads the file store before answering its first port', async () => {
+  const w = require('./helpers/worker-env.cjs')({ globals: fakeIDB() });
+  const { port, say, close } = w.connect(F.PORT, { id: 'glaze', frameId: 0, url: 'chrome-extension://x/papers.html', origin: 'chrome-extension://x', tab: { id: 7 } });
+  try {
+    say({ op: 'stat', hash: 'a'.repeat(64) });
+    await w.settle();
+    assert.deepEqual(JSON.parse(JSON.stringify(port.posted)), [{ file: null }]);
+  } finally { close(); }
+});
+
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const bytes = (n, seed = 1) => { const b = new Uint8Array(n); let x = seed; for (let i = 0; i < n; i++) { x = (x * 1103515245 + 12345) >>> 0; b[i] = x >>> 24; } return b; };
 const make = (o = {}) => {
