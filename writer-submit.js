@@ -271,6 +271,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   frame.handle('submit:open', async () => { const api = P()?.current() || await paper(); if (api) open(api); });
   frame.handle('submit:step', (m) => { if (waiting && m.run === waiting.run) waiting.step(m.step); });
   frame.handle('submit:held', (m) => { sheet?.held?.(m.text); });
+  frame.handle('submit:unavailable', (m) => P()?.current()?.notify?.(m.action === 'save' ? 'Not saved. Try again in a moment.' : 'Nothing was submitted. Try again in a moment.'));
   frame.handle('submit:done', (m) => { if (waiting && m.run === waiting.run) waiting.done({ ok: m.ok === true, error: typeof m.error === 'string' ? m.error : 'page' }); });
   // Ultra's Save and Close: the paper saved first (it attaches nothing), then the page lets Ultra's own go on. A press
   // made as the frame opened waits for the paper; a save the worker hasn't answered in SAVE_WAIT says so, and Ultra's

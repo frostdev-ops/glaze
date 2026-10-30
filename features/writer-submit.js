@@ -49,18 +49,26 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   // the paper's title bar saying Saving… (the frame gives up with a word after a while, writer-submit.js); a frame that
   // reopened before answering is asked again; once saved, Ultra's own Save and Close, found again (Ultra may have drawn
   // its footer anew), goes on once. A box no longer Writer's lets go: Ultra's editor is there to press again.
-  const busy = (b, on) => { if (!b?.isConnected) return; if (on) { b.setAttribute('aria-busy', 'true'); b.style.setProperty('cursor', 'progress'); } else { b.removeAttribute('aria-busy'); b.style.removeProperty('cursor'); } };
+  const busy = (b, on) => { if (!b) return; if (on) { b.setAttribute('aria-busy', 'true'); b.style.setProperty('cursor', 'progress'); } else { b.removeAttribute('aria-busy'); b.style.removeProperty('cursor'); } };
   const act = (box, b, e) => {
     e.preventDefault();
     e.stopImmediatePropagation();
+    if (running || box.opening || box.saved) return;
+    let marked = b;
+    const mark = () => {
+      const x = L().footer(box.editor)[L().actionOf(b)];
+      if (marked !== x) { busy(marked, false); marked = x; }
+      busy(marked, true);
+    };
     if (L().actionOf(b) === 'submit') {
-      if (running || box.opening) return;
       const opening = box.opening = {};
+      const at = Date.now();
       const open = () => {
         if (box.opening !== opening) return;
-        if (!live().has(box)) { box.opening = null; busy(b, false); return; }
+        if (!live().has(box) || Date.now() - at >= SAVE_LOST) { box.opening = null; busy(marked, false); return; }
+        mark();
         if (!box.ready || !box.port) { setTimeout(open, 100); return; }
-        box.opening = null; busy(b, false);
+        box.opening = null; busy(marked, false);
         box.frame?.focus(); say(box, { type: 'submit:open' });
       };
       busy(b, true);
@@ -70,14 +78,13 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     // Save and Close: one matching save acknowledgement, never a late reply. After Writer's Submit (Ultra's confirmation
     // cancelled) it goes on the same way. One that waited past what the frame waits for its save has been lost (its frame
     // went quiet): a press asks anew.
-    if (running || (box.saved && Date.now() - box.saved.at < SAVE_LOST)) return;
     const go = e.type === 'click', request = crypto.randomUUID();
     let asked = null;
     box.saveRequest = request;
     const saved = (ok) => {
       if (box.saved !== saved) return;
       box.saved = null; box.saveRequest = null;
-      busy(b, false);
+      busy(marked, false);
       const x = L().footer(box.editor).save;
       if (go && ok && live().has(box) && x?.isConnected && L().enabled(x)) pass(x);
     };
@@ -85,9 +92,10 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     box.saved = saved;
     const ask = () => {
       if (box.saved !== saved) return;
-      if (!live().has(box)) { saved(false); return; }
+      if (!live().has(box) || Date.now() - saved.at >= SAVE_LOST) { saved(false); return; }
+      mark();
       if (box.ready && box.port && box.port !== asked) { asked = box.port; saved.at = Date.now(); say(box, { type: 'submit:save', request }); }
-      setTimeout(ask, 100);
+      if (box.saved === saved) setTimeout(ask, 100);
     };
     busy(b, true);
     ask();
