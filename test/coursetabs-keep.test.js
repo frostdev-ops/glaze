@@ -257,6 +257,27 @@ test('the page-transition click handler leaves Ultra\'s own Sign Out to the page
   }
 });
 
+test('Ultra\'s page-link crossfade starts only with the page world\'s guard there, and hands it the transition', () => {
+  // Chrome rejects a skipped transition's ready in the page's own world too (lib/background.js transitionGuard).
+  const ultra = read('content-ultra.js');
+  const block = part('  if (solo && document.startViewTransition) {', '  // ---- course colors and tint', ultra);
+  for (const guarded of [false, true]) {
+    let listener, transitions = 0;
+    const events = [];
+    class Element {}
+    const link = Object.assign(new Element(), { matches: () => false, getAttribute: (k) => (k === 'href' ? '/ultra/stream' : null), click() {} });
+    const target = Object.assign(new Element(), { closest: () => link });
+    vm.runInNewContext(block, { solo: true, I: { observer: {} }, Element, Event, html: { getAttribute: () => null, hasAttribute: () => false }, location: { href: 'https://bb.test/ultra/course' },
+      dispatchEvent: (e) => { events.push([e.type, e.cancelable, transitions]); if (guarded && e.cancelable) e.preventDefault(); return !e.defaultPrevented; },
+      document: { activeViewTransition: null, startViewTransition: () => { transitions++; const p = { catch: () => {} }; return { ready: p, finished: p }; }, addEventListener: (type, fn, capture) => { if (type === 'click' && capture) listener = fn; } } });
+    const e = { target, button: 0, defaultPrevented: false, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.stopped = true; } };
+    listener(e);
+    assert.equal(e.prevented, guarded, guarded ? 'held for the crossfade' : 'without the guard the click is Ultra\'s, with no transition');
+    assert.equal(transitions, guarded ? 1 : 0);
+    assert.deepEqual(events, guarded ? [['glaze:transition', true, 0], ['glaze:transition', false, 1]] : [['glaze:transition', true, 0]]);
+  }
+});
+
 test('RTL: injected Ultra UI uses logical sides, and the progress fill grows from the inline start', () => {
   const extras = read('extras.css'), tabs = read('features/coursetabs.css');
   const rule = (css, head) => { const i = css.indexOf(head); assert.ok(i >= 0, head); return css.slice(i, css.indexOf('}', i)); };

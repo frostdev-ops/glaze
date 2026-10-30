@@ -107,7 +107,7 @@ const worker = ({ m = manifest, held = [], local = {}, sync = {}, net = {}, tabs
         registerContentScripts: async (list) => { w.registered.push(...plain(list)); },
         unregisterContentScripts: async (o) => { w.registered = o?.ids ? w.registered.filter((s) => !o.ids.includes(s.id)) : []; },
         executeScript: async (o) => {
-          w.ran.push(o.files ? { target: plain(o.target), files: [...o.files] } : { target: plain(o.target), func: String(o.func), args: plain(o.args || []) });
+          w.ran.push(o.files ? { target: plain(o.target), files: [...o.files] } : { target: plain(o.target), func: String(o.func), args: plain(o.args || []), ...(o.world && { world: o.world }) });
           return [{ result: o.files ? {} : /typeof GZ_I18N|window\.__gzGlaze/.test(String(o.func)) ? false : true }];
         },
       },
@@ -391,9 +391,25 @@ test('the lit icon: a page Glaze runs in shows Glaze\'s own icon for its tab; no
   for (const call of src.match(/action\.setIcon\([^)]*\)/g) || []) assert.match(call, /tabId/, call);
 });
 
-test('content.js tells the worker each page Glaze starts in, from its top frame', () => {
+test('content.js tells the worker each page and frame Glaze starts in', () => {
   const js = read('content.js');
-  assert.match(js, /if \(!site\) return;[\s\S]{0,400}window\.top === window && !isPreview[^\n]*sendMessage\(\{ type: 'glaze:here' \}\)/);
+  const line = js.slice(js.indexOf('if (!site) return;')).split('\n').find((l) => l.includes("sendMessage({ type: 'glaze:here' })"));
+  assert.ok(line && /!isPreview/.test(line), 'not from Glaze\'s own preview');
+  assert.doesNotMatch(line, /window\.top === window/, 'a frame starts crossfades of its own (content-ultra.js), so it needs the guard too');
+});
+
+test('a page Glaze runs in, and each frame of one, gets the page-world guard for its crossfades; nothing else does', async () => {
+  for (const dc of [true, false]) {
+    const w = worker({ dc, local: { moodle: ['https://moodle.school.edu/*'] }, held: ['https://moodle.school.edu/*'] });
+    for (const url of ['https://school.instructure.com/courses/1', 'https://moodle.school.edu/my/', 'https://school.blackboard.com/ultra/stream']) await w.send({ type: 'glaze:here' }, page(url));
+    await w.send({ type: 'glaze:here' }, page('https://school.blackboard.com/ultra/courses/_1_1/outline', { frameId: 4, documentId: 'doc-4' }));
+    for (const s of [page('https://shop.test/'), { ...page('https://school.instructure.com/'), id: 'other' }, popup]) await w.send({ type: 'glaze:here' }, s);
+    await settle();
+    const guards = w.ran.filter((r) => /activeViewTransition/.test(r.func || ''));
+    assert.equal(guards.length, 4, `three pages and a frame (${dc ? 'Chrome' : 'Firefox'})`);
+    assert.ok(guards.every((g) => g.world === 'MAIN'), 'in the page\'s own world, where Chrome also rejects the transition');
+    assert.deepEqual(guards.map((g) => g.target), [...Array(3).fill({ tabId: 7, documentIds: ['doc-1'] }), { tabId: 7, documentIds: ['doc-4'] }], 'the document that asked');
+  }
 });
 
 test('lib/detect.js reports Ultra on an /ultra page by its base, as content.js knows it', () => {
