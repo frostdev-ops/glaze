@@ -23,8 +23,10 @@ final class Memory: GlazeGoogle.Vault, @unchecked Sendable {
 }
 final class Google: GlazeGoogle.Transport, @unchecked Sendable {
     let lock = NSLock(); var answers: [(Int, [String: Any])] = []; var sent: [[String: String]] = []
+    var during: (@Sendable () async -> Void)?
     func post(_ url: URL, form: [String: String]) async throws -> (Int, Data) {
-        try lock.withLock {
+        if let d = lock.withLock({ () -> (@Sendable () async -> Void)? in let d = during; during = nil; return d }) { await d() }
+        return try lock.withLock {
             sent.append(form.merging(["url": url.absoluteString]) { a, _ in a })
             guard !answers.isEmpty else { throw URLError(.notConnectedToInternet) }
             let (s, j) = answers.removeFirst()
@@ -167,6 +169,19 @@ out["disconnect"] = await ask(["type": "google.disconnect"])
 out["revokeForm"] = google.sent.last!
 out["vaultLeft"] = vault.items.count
 out["disconnectAgain"] = await ask(["type": "google.disconnect"])
+// Disconnect while Google answers: the late grant is dropped and revoked, the late refresh not held.
+let c6 = G.signIn(from: URL(string: (await ask(["type": "google.connect"]))["open"] as! String)!)!
+_ = slot.put(c6.state, try! JSONSerialization.data(withJSONObject: ["url": G.redirect + "?state=\(c6.state)&code=4/late"]))
+google.answers = [(200, good.merging(["id_token": jwt(claims.merging(["exp": clock.t.timeIntervalSince1970 + 3600]) { _, b in b })]) { _, b in b }), (200, [:]), (200, [:])]
+google.during = { _ = await engine.disconnect(profile: p.uuidString) }
+out["lateFinish"] = await ask(["type": "google.finish"])
+out["lateRevoke"] = google.sent.last!
+out["lateStatus"] = await ask(["type": "google.status"])
+_ = vault.write("refresh." + p.uuidString, try! JSONEncoder().encode(G.Engine.Saved(refresh: "1//s", sub: "1234567890", email: "student@example.edu")))
+google.answers = [(200, [:]), (200, ["access_token": "ya29.late", "token_type": "Bearer", "expires_in": 3599, "scope": G.drive])] // the revoke inside Disconnect answers first
+google.during = { _ = await engine.disconnect(profile: p.uuidString) }
+out["lateToken"] = await ask(["type": "google.token"])
+out["lateTokenAfter"] = await ask(["type": "google.token"])
 out["unknown"] = await ask(["type": "google.nope"])
 out["notOurs"] = G.Request(["type": "ai.status"], profile: nil) == nil
 let noGroup = G.Engine(vault: Memory(), slot: nil, transport: google)
@@ -268,6 +283,13 @@ test('disconnect revokes with the refresh token and forgets everything', { skip 
   assert.equal(result.vaultLeft, 0);
   assert.deepEqual(result.disconnectAgain, { ok: true, revoked: false, had: false });
 });
+test('a Disconnect while Google answers wins: the late grant is revoked, the late token dropped', { skip }, () => {
+  assert.deepEqual(result.lateFinish, { ok: false, why: 'signin' });
+  assert.deepEqual(result.lateRevoke, { url: 'https://oauth2.googleapis.com/revoke', token: '1//r' });
+  assert.deepEqual(result.lateStatus, { ok: true, email: null, sub: null });
+  assert.deepEqual(result.lateToken, { ok: false, why: 'signin' });
+  assert.deepEqual(result.lateTokenAfter, { ok: false, why: 'signin' });
+});
 test('fixed reasons; a build without the app group answers setup', { skip }, () => {
   assert.deepEqual(result.unknown, { ok: false, why: 'request' });
   assert.equal(result.notOurs, true);
@@ -282,7 +304,8 @@ test('nothing in the Google code logs, and the handler routes google.* before ec
   const handler = read('Glaze Extension/SafariWebExtensionHandler.swift');
   assert.ok(handler.indexOf('GlazeGoogle.Request(') > 0 && handler.indexOf('GlazeGoogle.Request(') < handler.indexOf('"echo"'));
 });
-test('the project compiles the Google code into both apps and both extensions, the sign-in page into the apps only', () => {
+const mac = { skip: process.platform !== 'darwin' }; // plutil
+test('the project compiles the Google code into both apps and both extensions, the sign-in page into the apps only', mac, () => {
   const p = plist(path.join(safari, 'Glaze.xcodeproj/project.pbxproj'));
   const o = p.objects, ref = (name) => Object.keys(o).find((k) => o[k].isa === 'PBXFileReference' && o[k].path === name);
   const compiled = (name) => Object.values(o).find((t) => t.isa === 'PBXNativeTarget' && t.name === name).buildPhases.map((k) => o[k])
@@ -294,7 +317,7 @@ test('the project compiles the Google code into both apps and both extensions, t
   const group = (r) => Object.values(o).find((g) => g.isa === 'PBXGroup' && g.children?.includes(r)).path;
   assert.deepEqual([group(google), group(signIn)], ['Glaze Extension', 'Glaze']);
 });
-test('entitlements: iOS shares group.io.frostdev.Glaze; the Mac extension reaches the network; the Mac files gain no group', () => {
+test('entitlements: iOS shares group.io.frostdev.Glaze; the Mac extension reaches the network; the Mac files gain no group', mac, () => {
   const p = plist(path.join(safari, 'Glaze.xcodeproj/project.pbxproj'));
   for (const [target, file] of [['Glaze iOS', 'Glaze iOS/Glaze iOS.entitlements'], ['Glaze iOS Extension', 'Glaze iOS/Glaze iOS Extension.entitlements']]) {
     const t = Object.values(p.objects).find((x) => x.isa === 'PBXNativeTarget' && x.name === target);

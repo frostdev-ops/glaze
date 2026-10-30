@@ -163,6 +163,9 @@ nonisolated enum GlazeGoogle {
 
         private let vault: Vault, slot: Slot?, transport: Transport, now: @Sendable () -> Date
         private var held: [String: (token: String, expires: Date, sub: String)] = [:]
+        /// Bumped by connect and disconnect: an answer that arrives after either, across an await, is dropped.
+        private var generation: [String: Int] = [:]
+        private func bump(_ profile: String) { generation[profile, default: 0] += 1 }
 
         init(vault: Vault, slot: Slot?, transport: Transport, now: @escaping @Sendable () -> Date = { Date() }) {
             self.vault = vault; self.slot = slot; self.transport = transport; self.now = now
@@ -181,6 +184,7 @@ nonisolated enum GlazeGoogle {
             guard let slot else { throw Fail.setup }
             if let hint, !validEmail(hint) { throw Fail.request }
             guard let state = random(), let verifier = random() else { throw Fail.setup }
+            bump(profile)
             if let old = load(Pending.self, "pending." + profile) { slot.remove(old.state) }
             slot.sweep(olderThan: now().addingTimeInterval(-pendingFor))
             guard store(Pending(state: state, verifier: verifier, at: now().timeIntervalSince1970), "pending." + profile) else { throw Fail.setup }
@@ -190,6 +194,7 @@ nonisolated enum GlazeGoogle {
         func finish(profile: String, wait: TimeInterval) async throws -> Account {
             guard let slot else { throw Fail.setup }
             guard let p = load(Pending.self, "pending." + profile) else { throw Fail.signin }
+            let started = generation[profile, default: 0]
             let drop = { self.vault.remove("pending." + profile); slot.remove(p.state) }
             guard now().timeIntervalSince1970 - p.at < pendingFor else { drop(); throw Fail.signin }
             let until = now().addingTimeInterval(min(max(wait, 0), maxWait))
@@ -198,6 +203,7 @@ nonisolated enum GlazeGoogle {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 reply = slot.take(p.state)
             }
+            guard generation[profile, default: 0] == started else { throw Fail.signin }
             guard let reply else { throw Fail.pending }
             // The sign-in is answered either way: a new one starts with google.connect.
             drop()
@@ -208,6 +214,10 @@ nonisolated enum GlazeGoogle {
                                                            "grant_type": "authorization_code", "redirect_uri": redirect])
             let g: Grant
             do { g = try grant(status: status, body: body, now: now()) } catch Fail.revoked { throw Fail.auth } // a spent code
+            guard generation[profile, default: 0] == started else { // disconnected or restarted meanwhile: this grant goes too
+                if let r = g.refresh { _ = try? await post(revokeURL, ["token": r]) }
+                throw Fail.signin
+            }
             guard let refresh = g.refresh, let account = g.account else { throw Fail.auth }
             guard store(Saved(refresh: refresh, sub: account.sub, email: account.email), "refresh." + profile) else { throw Fail.setup }
             held[profile] = (g.access, g.expires, account.sub)
@@ -219,7 +229,9 @@ nonisolated enum GlazeGoogle {
             if let sub, sub != s.sub { throw Fail.account }
             if let h = held[profile], h.sub == s.sub, h.expires.timeIntervalSince(now()) > early { return (h.token, h.expires) }
             held[profile] = nil
+            let started = generation[profile, default: 0]
             let (status, body) = try await post(tokenURL, ["client_id": client, "grant_type": "refresh_token", "refresh_token": s.refresh])
+            guard generation[profile, default: 0] == started else { throw Fail.signin } // disconnected meanwhile
             let g: Grant
             do { g = try grant(status: status, body: body, now: now()) } catch Fail.revoked { vault.remove("refresh." + profile); throw Fail.revoked }
             catch Fail.scope { vault.remove("refresh." + profile); throw Fail.revoked } // Drive's access was taken back
@@ -230,6 +242,7 @@ nonisolated enum GlazeGoogle {
         }
 
         func disconnect(profile: String) async -> (revoked: Bool, had: Bool) {
+            bump(profile)
             let s = load(Saved.self, "refresh." + profile)
             if let p = load(Pending.self, "pending." + profile) { slot?.remove(p.state) }
             vault.remove("refresh." + profile)
