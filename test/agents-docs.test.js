@@ -71,12 +71,16 @@ const editor = path.join(root, 'lib/editor-agents.js');
 test('docs/agents.md covers each helper state and its command', () => {
   const E = require(editor), text = agents(), id = 'abcdefghijklmnopabcdefghijklmnop';
   const states = ['connected', 'connecting', 'restart', 'not-installed', 'forbidden', 'exited', 'old-helper', E.NO_NODE, 'needs-permission'];
-  for (const browser of ['chrome', 'firefox', 'safari']) for (const state of states) {
-    const l = E.line({ state }, { browser, id }, (s) => s);
+  for (const browser of ['chrome', 'firefox', 'safari']) for (const state of states) for (const stuck of [false, true]) {
+    const l = E.line({ state }, { browser, id, stuck }, (s) => s);
     if (!l) continue;
     if (state !== 'not-installed') for (const part of l.text.split('{command}').map((s) => s.trim()).filter(Boolean)) assert.ok(text.includes(part), `${browser} ${state}: ${part}`);
     if (l.command) assert.ok(text.includes(`\`${l.command.replace(id, '<id>')}\``), l.command);
   }
+});
+
+test('the helper state table explains the browser restart immediately after Allow', () => {
+  assert.match(read('docs/agents.md'), /\| Allow Glaze to start the helper \| Press \*\*Allow\*\*\. \|\n\| Restart your browser to start the helper \| Quit the browser and open it again\. \|/);
 });
 
 
