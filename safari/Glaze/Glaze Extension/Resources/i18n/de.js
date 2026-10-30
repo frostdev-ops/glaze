@@ -3755,5 +3755,15 @@
   "Glaze needs the browser's sign-in permission to connect.": "Glaze braucht die Anmeldeberechtigung des Browsers, um sich zu verbinden.",
   "Connect again and allow Google Drive access.": "Verbinde dich erneut und erlaube den Zugriff auf Google Drive.",
   "Google Drive didn't connect. Try again in a moment.": "Google Drive hat sich nicht verbunden. Versuch es gleich noch einmal.",
-  "Couldn't disconnect. Try again in a moment.": "Konnte nicht trennen. Versuch es gleich noch einmal."
+  "Couldn't disconnect. Try again in a moment.": "Konnte nicht trennen. Versuch es gleich noch einmal.",
+  "From Google Drive": "Aus Google Drive",
+  "Save to Google Drive": "In Google Drive speichern",
+  "Word file": "Word-Datei",
+  "Google Doc": "Google-Dokument",
+  "Saved to Google Drive.": "In Google Drive gespeichert.",
+  "Glaze can't reach this file in Google Drive.": "Glaze kann diese Datei in Google Drive nicht erreichen.",
+  "Google Drive is busy. Try again in a moment.": "Google Drive ist ausgelastet. Versuch es gleich noch einmal.",
+  "Your Google Drive is full.": "Dein Google Drive ist voll.",
+  "Connect Google Drive again in Settings.": "Verbinde Google Drive in den Einstellungen erneut.",
+  "Couldn't reach Google Drive. Try again in a moment.": "Google Drive war nicht erreichbar. Versuch es gleich noch einmal."
 };

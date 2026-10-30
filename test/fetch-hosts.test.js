@@ -52,6 +52,7 @@ const SITES = {
     { at: 'const channelEnv = () => ({', kind: 'asked', flow: 'a mod channel\'s relay: share.frostdev.io, or one the editor asked for (lib/editor-mods.js Read code)', guard: /reachable\(u\)/, near: 0 },
     { at: 'fetch: (url, init) => fetch(url, init),', kind: 'via', to: 'lib/gcal.js', exact: true },
     { at: 'fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'lib/google.js', exact: true },
+    { at: 'drive: D.create({ fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'lib/drive.js' },
     { at: 'fetch(chrome.runtime.getURL(`icons/icon', kind: 'extension' },
     { at: "credentials: 'include', redirect: 'error'", kind: 'asked', flow: 'Gradescope: the Settings switch asks for www.gradescope.com', guard: /reachable\(GZ_GRADESCOPE\.HOST\)/ },
     { at: "redirect: wide ? 'follow' : 'manual', cache: 'no-store', signal: ctl.signal", kind: 'asked', flow: 'Canvas Download all: the page\'s Allow frame (features/allow.html) for the file server', guard: /if \(!await reachable\(url\)\)/ },
@@ -93,6 +94,8 @@ const SITES = {
   ],
   // Drive's sign-in (behind lib/google-config.js's placeholders until its clients are real): Google's userinfo and revoke,
   // and the HEAD that finds the picker page that loads.
+  // Drive's files (behind lib/google.js's ON): the Drive v3 API and its upload address, both on www.googleapis.com.
+  'lib/drive.js': [{ at: 'const send = (url, init) => env.fetch(url', kind: 'open', host: 'https://www.googleapis.com', why: 'Drive v3 (files and uploads) answers every origin (CORS); behind GZ_GOOGLE.ON (off)' }],
   'lib/google.js': [{ at: 'const send = (url, init = {}) => env.fetch(url', kind: 'open', why: 'openidconnect.googleapis.com and oauth2.googleapis.com answer every origin (CORS); of the picker pages, frostdev.io is a required host and its GitHub Pages copy answers every origin' }],
   'lib/fonts.js': [{ at: 'const get = (url, as) => fetch(url', kind: 'open', host: 'https://fonts.googleapis.com', hosts: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net'], why: 'Google Fonts CSS, fonts.gstatic.com and the jsDelivr catalog files answer every origin' }],
   'options.js': [{ at: 'fetch(GZ_FONTS.cssUrl(name, false)', kind: 'open', host: 'https://fonts.googleapis.com', why: 'whether a typed Google font exists' }],
