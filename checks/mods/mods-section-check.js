@@ -8,15 +8,15 @@
 //   - the gallery handoff against a local HTTPS gallery page and bundle server: a script's click sends nothing, a real click
 //     makes the worker fetch exactly that bundle, without cookies or referrer, and the editor prompts with Reviewed.
 // frostdev.io resolves to a server on 127.0.0.1 with a certificate made here; every other host fails to resolve.
-//   NODE_PATH=/path/to/node_modules nice -n 10 node scripts/mods-section-check.js
+//   NODE_PATH=/path/to/node_modules nice -n 10 node checks/mods/mods-section-check.js
 // One headless browser at a time across agents: it waits while another runs. Its profile and server go when it is done.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), https = require('node:https');
 const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
 
-const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['https://api.weather.gov/*']);
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, '../../extension'), ['https://api.weather.gov/*']);
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const M = require(path.join(ext, 'lib/modbundle.js'));
 const enc = new TextEncoder();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -62,7 +62,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     });
     const port = await new Promise((r) => server.listen(0, '127.0.0.1', () => r(server.address().port)));
 
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     watchdog = setTimeout(() => { console.log('FAIL timed out after 180 s'); context?.close().finally(() => { server?.close(); fs.rmSync(tmp, { recursive: true, force: true }); process.exit(1); }); }, 180000);
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...chromeLaunch, headless: true, locale: 'en-US', acceptDownloads: true, viewport: { width: 1200, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, `--ignore-certificate-errors-spki-list=${spki}`, '--disable-background-networking', '--disable-component-update', '--no-proxy-server',

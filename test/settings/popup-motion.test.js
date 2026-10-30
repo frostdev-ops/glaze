@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../lib/popup.js');
+const P = require('../../extension/lib/popup.js');
 
 const dialog = { left: 420, top: 180, right: 1020, bottom: 720, width: 600, height: 540 };
 const point = (transform, x, y) => {

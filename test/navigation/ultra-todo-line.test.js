@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
-const css = fs.readFileSync(path.join(__dirname, '../theme.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const css = fs.readFileSync(path.join(__dirname, '../../extension/theme.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(([, s, b]) => s.split(/,(?![^(]*\))/).map((x) => [x.trim(), b]));
 // [ids, classes and attributes, tags]; :not() counts as its most specific argument.
 const spec = (sel) => {

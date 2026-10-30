@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const { El } = require('./stand-in-dom.js');
+const D = require('../../extension/defaults.js');
+const { El } = require('../stand-in-dom.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const wait = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 const settle = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const O = 'https://school.instructure.com';
@@ -38,9 +38,9 @@ const page = ({ site = 'canvas', origin = O, anim = 'genie', motion = 'subtle', 
   const ctx = vm.createContext({
     GZ_CTX: { site, t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', settings: () => settings, need: async () => {},
       moodleIn: async () => ({ session: () => ({ root: origin, sesskey: 'sk' }) }) },
-    GZ_I18N: require('../lib/i18n.js'), GZ_SANITIZE: D.GZ_SANITIZE,
-    GZ_POPUP_LIB: require('../lib/popup.js'), GZ_ANNOUNCE_LIB: require('../lib/announce.js'), GZ_NOTES: require('../lib/notes.js'), GZ_DOCTEXT: require('../lib/doctext.js'),
-    GZ_ULTRA: require('../lib/ultra.js'),
+    GZ_I18N: require('../../extension/lib/i18n.js'), GZ_SANITIZE: D.GZ_SANITIZE,
+    GZ_POPUP_LIB: require('../../extension/lib/popup.js'), GZ_ANNOUNCE_LIB: require('../../extension/lib/announce.js'), GZ_NOTES: require('../../extension/lib/notes.js'), GZ_DOCTEXT: require('../../extension/lib/doctext.js'),
+    GZ_ULTRA: require('../../extension/lib/ultra.js'),
     GZ_LMSQ: { fetch: (url, init = {}, prio = 0) => {
       asked.push({ url, method: init.method || 'GET', prio, init });
       return Promise.resolve(answer ? answer(url, init) : { status: 200, body: TOPIC }).then((a) => {

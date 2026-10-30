@@ -4,15 +4,15 @@
 // Submission heading stays a pill its text's width. The paper's caret is drawn the text's height. Screenshots of each Look at
 // 1440px.
 // GETs only, synthetic; no account or outside network from the browser.
-// NODE_PATH=<playwright> nice -n 10 node scripts/writer-look-check.js [screenshot directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/writer/writer-look-check.js [screenshot directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const site = 'https://bb.school.test';
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create', DISCUSSION = '/ultra/courses/_101_1/discussion/_9_1';
 const shots = process.argv[2] || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-look');
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const checks = [], errors = [];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
@@ -35,7 +35,7 @@ const LOOKS = [
 
 (async () => {
   let context, held = false, tmp;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-look-check\n`); break; }
@@ -43,9 +43,9 @@ const LOOKS = [
     }
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-look-'));
     fs.mkdirSync(shots, { recursive: true });
-    const ext = require('./check-env.js').staged(root, [`${site}/*`]);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    const ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     await context.route('**/*', async (r) => {
       const req = r.request(), u = new URL(req.url());

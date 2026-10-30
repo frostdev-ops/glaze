@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../lib/modbundle.js');
+const M = require('../../extension/lib/modbundle.js');
 
 const enc = new TextEncoder();
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const std = (b) => Buffer.from(b).toString('base64');
 const AUTHOR = { kty: 'OKP', crv: 'Ed25519', d: 'nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A', x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo' };
 const MANIFEST = { glaze: 1, name: 'Grade Ring', version: '1.0.0', author: { name: 'Kai' }, permissions: [{ id: 'grades', why: 'Draws a ring.' }], hooks: 'hooks.js' };
@@ -97,7 +97,7 @@ test('offer: the size cap holds whatever Content-Length says', async () => {
   assert.ok(pulled <= M.CAP.archive + (3 << 16), `read ${pulled} bytes`);
 });
 
-// lib/background.js in a vm, as test/modbundle.test.js runs it.
+// lib/background.js in a vm, as test/mods/modbundle.test.js runs it.
 const worker = (globals = {}) => {
   const local = {};
   const area = (s) => ({
@@ -111,7 +111,7 @@ const worker = (globals = {}) => {
     Blob, CompressionStream, DecompressionStream, DOMException, setTimeout, clearTimeout, ...globals,
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         openOptionsPage: async () => { opened.push('options'); }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(local), sync: area({ enabled: true }), onChanged: { addListener() {} } },
       tabs: { query: async () => [] },

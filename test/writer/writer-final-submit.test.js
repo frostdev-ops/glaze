@@ -8,7 +8,7 @@ const para = (...content) => ({ type: 'paragraph', attrs: BLOCK, content });
 const text = (t, marks) => ({ type: 'text', text: t, ...(marks && { marks }) });
 
 test('F5: a paper\'s words are counted as the status bar counts them, hard breaks and all', () => {
-  const S = require('../lib/writer-schema.js'), E = require('../lib/writer-editor.js'), P = require('../lib/writer-papers.js');
+  const S = require('../../extension/lib/writer-schema.js'), E = require('../../extension/lib/writer-editor.js'), P = require('../../extension/lib/writer-papers.js');
   const docs = {
     hardBreak: [para(text('one'), { type: 'hard_break' }, text('two'))],
     marks: [para(text('alpha'), text('beta', [{ type: 'bold' }]))],
@@ -22,8 +22,8 @@ test('F5: a paper\'s words are counted as the status bar counts them, hard break
   }
 });
 
-const page = require('./helpers/writer-submit-page.cjs');
-const L = require('../lib/writer-submit.js');
+const page = require('../helpers/writer-submit-page.cjs');
+const L = require('../../extension/lib/writer-submit.js');
 const done = (p) => p.sent.filter((m) => m.type === 'submit:done').map((m) => (m.ok ? 'ok' : m.error));
 
 test('D9: once Writer has clicked Ultra\'s Submit, Ultra\'s Save and Close works again (after the paper saves)', async () => {
@@ -43,7 +43,7 @@ test('D9: once Writer has clicked Ultra\'s Submit, Ultra\'s Save and Close works
 // The frame between its ready (the page is armed and catches Ultra's file area and Submit) and the paper's mount.
 const early = (file) => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-  const { El } = require('./stand-in-dom.js'), I = require('../lib/i18n.js');
+  const { El } = require('../stand-in-dom.js'), I = require('../../extension/lib/i18n.js');
   const doc = { activeElement: null }, handles = {}, hooks = {}, opened = [], timers = [];
   doc.root = new El('html', doc); doc.documentElement = doc.root;
   doc.body = new El('body', doc); doc.root.append(doc.body); doc.body.append(new El('main', doc));
@@ -55,7 +55,7 @@ const early = (file) => {
     setTimeout: (f) => { timers.push(f); return timers.length; }, clearTimeout: () => {},
     GZ_WRITER_FRAME: { t: (k, v) => I.t(k, v, 'en'), mode: () => 'paper', kind: () => 'assignment', say: () => {}, handle: (k, f) => { handles[k] = f; }, on: (k, f) => { hooks[k] = f; } },
     GZ_WRITER_PAPER: { current: () => current, need: async () => {} }, GZ_WRITER_SUBMIT_LIB: L });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension', file), 'utf8'), ctx);
   const flush = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
   const later = async () => { for (const f of timers.splice(0)) f(); await flush(); };
   return { ctx, doc, handles, opened, flush, later, mount: (api) => { current = api; } };
@@ -87,7 +87,7 @@ test('D8: Ultra\'s Submit pressed before the paper has mounted opens the sheet o
 // The worker's permits under the submit page: one assignment, pages opened in turn (a reload is a new document, a re-render
 // a new box in the same one). The worker's clock is the test's.
 const ultra = () => {
-  const make = require('./helpers/worker-env.cjs');
+  const make = require('../helpers/worker-env.cjs');
   const store = { sync: { enabled: true, enhance: { writer: true } }, local: { ultra: [] }, session: {} };
   let clock = Date.now();
   class Clock extends Date { static now() { return clock; } }
@@ -167,7 +167,7 @@ test('D1: a review never takes the permit from another tab\'s run under way', as
 });
 
 test('D1: the sheet\'s Blackboard editor says the student is reviewing before it hands the box back', async () => {
-  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const sheet = require('../helpers/writer-submit-sheet.cjs');
   const s = sheet(); await s.open(); s.builds[0].resolve(); await s.flush();
   s.click('.gs-primary'); await s.flush();
   const go = s.messages.find((m) => m.type === 'submit:go');
@@ -248,14 +248,14 @@ test('D7: the Submit is recorded in the very turn Ultra\'s Submit is clicked, ne
 });
 
 // lib/writer-papers.js over a plain object (the worker's storage.local in ultra()).
-const PA = require('../lib/writer-papers.js');
+const PA = require('../../extension/lib/writer-papers.js');
 const over = (data = {}) => ({ data, get: async (k) => ({ [k]: data[k] === undefined ? undefined : structuredClone(data[k]) }),
   set: async (o) => { Object.assign(data, structuredClone(o)); }, remove: async (ks) => { for (const k of [].concat(ks)) delete data[k]; } });
 const paperDoc = (t) => ({ type: 'doc', content: [para(text(t))] });
 const KEY = PA.keyOf({ school: 'school.blackboard.com', user: '_900_1', course: '_101_1', content: '_7_1' });
 
 test('D5: a submit that fails or is cancelled records no submission and no Submitted version', async () => {
-  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const sheet = require('../helpers/writer-submit-sheet.cjs');
   const P = PA.open(over());
   await P.save(KEY, { doc: paperDoc('A first draft.') });
   for (const how of ['docx', 'attach', 'cancel']) {
@@ -275,7 +275,7 @@ test('D5: a submit that fails or is cancelled records no submission and no Submi
 });
 
 test('D5: the sheet hands the page the version its .docx was built from', async () => {
-  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const sheet = require('../helpers/writer-submit-sheet.cjs');
   const P = PA.open(over());
   const s = sheet();
   let saved = null;
@@ -365,7 +365,7 @@ test('D4: Keep on for text Ultra\'s box no longer holds stops before anything is
 });
 
 test('D4: the sheet shows what Ultra\'s text box holds, with Keep off, and sends the student\'s choice', async () => {
-  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const sheet = require('../helpers/writer-submit-sheet.cjs');
   const s = sheet(); await s.open(); s.builds[0].resolve(); await s.flush();
   assert.ok(s.messages.some((m) => m.type === 'submit:held'), 'the sheet asks the page');
   s.handles['submit:held']({ text: NATIVE }); await s.flush();
@@ -386,7 +386,7 @@ test('D4: the sheet shows what Ultra\'s text box holds, with Keep off, and sends
 });
 
 test('D4: an empty text box shows no Keep switch', async () => {
-  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const sheet = require('../helpers/writer-submit-sheet.cjs');
   const s = sheet(); await s.open();
   s.handles['submit:held']({ text: '' }); await s.flush();
   assert.equal(s.doc.querySelector('#gs-keep'), null);
@@ -400,7 +400,7 @@ test('D8: while a paper\'s frame reopens, Ultra\'s Submit still waits for Writer
   assert.ok(during.stopped, 'Ultra never hears a Submit pressed while the frame reopens');
   assert.ok(!p.clicks.includes(p.button()));
   // open(): the new frame is in the page, its port made, not ready yet.
-  p.box.reopening = false; p.box.frame = new (require('./stand-in-dom.js').El)('iframe', p.doc); p.doc.body.append(p.box.frame); p.box.port = port; p.sent.length = 0;
+  p.box.reopening = false; p.box.frame = new (require('../stand-in-dom.js').El)('iframe', p.doc); p.doc.body.append(p.box.frame); p.box.port = port; p.sent.length = 0;
   const after = p.fire(p.button(), 'click');
   assert.ok(after.stopped);
   await p.tick(100);
@@ -423,7 +423,7 @@ test('D2: a page opened after a Writer submit went out is free, however late the
 });
 
 test('a Submit pressed before the page has said which assignment this is waits for it, so the sheet and its .docx name it', async () => {
-  const sheet = require('./helpers/writer-submit-sheet.cjs');
+  const sheet = require('../helpers/writer-submit-sheet.cjs');
   const s = sheet();
   let context = {};
   s.api.context = () => context;

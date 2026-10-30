@@ -2,10 +2,10 @@
 // pill of its tools at the end with no backing, the page under it reachable beside it and not moved by the fold; whole
 // again under keyboard focus and back at the top. With Glaze's course strip in it the strip stays as it is. Off with its
 // setting, the bar stays whole. Four window sizes; a dark and a light Look.
-// EXT=<checkout> NODE_PATH=<playwright> nice node scripts/ultra-course-bar-check.js <out dir> [--looks=a,b]
+// EXT=<checkout>/extension NODE_PATH=<playwright> nice node checks/navigation/ultra-course-bar-check.js <out dir> [--looks=a,b]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const G = require(path.join(ext, 'defaults.js'));
 const site = 'https://bb.school.test', uid = '_42_1';
 const out = path.resolve(process.argv[2] || 'ultra-course-bar-evidence');
@@ -27,7 +27,7 @@ const fixture = [
   ['<div class="panel-wrap hide-in-background modern"><section class="course course-color-${r.course.color}" bb-course-membership-markups="${r.course.id}">${barHtml(r.course, r.tool)}</section></div>',
     '<div class="panel-wrap hide-in-background modern">${barHtml(r.course, r.tool)}<section class="course course-color-${r.course.color}" bb-course-membership-markups="${r.course.id}"></section></div>'],
   ['</style>', '  .course-content-container > .panel-wrap { display: flex; flex-direction: column; }\n  .MuiListItemText-root { margin: 4px 0; }\n  .MuiTypography-body1 { margin: 0; font-size: 14px; line-height: 1.5; }\n</style>'],
-].reduce((html, [from, to]) => swap(html, from, to), fs.readFileSync(path.join(ext, 'test/fixtures/ultra-course.html'), 'utf8'));
+].reduce((html, [from, to]) => swap(html, from, to), fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8'));
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const results = [];
 const check = (v, label, actual) => { results.push({ pass: !!v, label, actual }); console.log(`${v ? 'ok  ' : 'FAIL'} ${label}${actual === undefined ? '' : ' ' + JSON.stringify(actual)}`); };
@@ -56,8 +56,8 @@ const measure = () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-course-bar-'));
   fs.mkdirSync(out, { recursive: true });
   try {
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true,
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true,
       viewport: { width: 1800, height: 987 }, reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
     await ctx.route('**/*', (route) => {
@@ -81,7 +81,7 @@ const measure = () => {
         await chrome.storage.sync.set(settings);
         await chrome.storage.local.set({ ultra: [site], [`ctabs:${site}:${uid}`]: { tabs: [1, 2].map((i) => ({ cid: `_10${i}_1`, name: `Course ${i}`, path: `/ultra/courses/_10${i}_1/outline`, at: i, top: 0 })) } });
       }, { settings, site, uid });
-      await require('./check-env.js').ultraReady(opts);
+      await require('../../tools/dev/check-env.js').ultraReady(opts);
     };
     const go = async (strip) => {
       await page.goto(`${site}/ultra/courses/_101_1/outline`);

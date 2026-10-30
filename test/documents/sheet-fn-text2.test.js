@@ -10,11 +10,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-text.js');
-require('../lib/sheet-fn-text2.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-text.js');
+require('../../extension/lib/sheet-fn-text2.js');
 
 // arrays: { 'D1:F2': formula } entered as array formulas, so a function's whole array result can be read back.
 const book = (cells = {}, arrays = {}) => {
@@ -50,7 +50,7 @@ const NAMES = 'TEXTBEFORE TEXTAFTER TEXTSPLIT TEXTJOIN SUBSTITUTE REPLACE REPT F
 test('the text functions are registered', () => {
   assert.equal(NAMES.length, 23);
   for (const name of NAMES) assert.ok(C.fn(name), name);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-text2.js'), 'utf8')), 'no timers');
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-text2.js'), 'utf8')), 'no timers');
 });
 
 test('TEXTBEFORE and TEXTAFTER with Microsoft\'s data', () => {

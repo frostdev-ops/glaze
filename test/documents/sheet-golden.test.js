@@ -1,19 +1,19 @@
-// Glaze Sheets' formula engine against Microsoft Excel. scripts/sheet-excel-golden.js writes the cases
+// Glaze Sheets' formula engine against Microsoft Excel. tools/fidelity/sheet-excel-golden.js writes the cases
 // (test/fixtures/sheets/cases.js) into Excel, one workbook per family, has Excel calculate and save them as
 // test/fixtures/sheets/<family>.xlsx, and reads what Excel cached back into test/fixtures/sheets/golden.json.
 // Regenerate on a Mac with Excel after changing the cases, as the one heavy job running:
-//   nice -n 10 node scripts/sheet-excel-golden.js [family …]
+//   nice -n 10 node tools/fidelity/sheet-excel-golden.js [family …]
 // Checked here: the cases themselves, the reader the harness reads workbooks with (test/helpers/xlsx-cache.cjs), the
 // workbooks and golden.json against the cases, and the engine against golden.json: a case the engine can't answer yet
 // is a todo, with its reason in TODO below or, for a function not built, its name.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
-const Z = require('../lib/zip.js');
-const X = require('./helpers/xlsx-cache.cjs');
-const { cases, families } = require('./fixtures/sheets/cases.js');
+const Z = require('../../extension/lib/zip.js');
+const X = require('../helpers/xlsx-cache.cjs');
+const { cases, families } = require('../fixtures/sheets/cases.js');
 
-const DIR = path.join(__dirname, 'fixtures/sheets');
+const DIR = path.join(__dirname, '../fixtures/sheets');
 const GOLDEN = path.join(DIR, 'golden.json');
 const VOLATILE = /(?<![\w.])(NOW|TODAY|RAND|RANDBETWEEN|RANDARRAY|INFO|CELL|OFFSET|INDIRECT)\s*\(/i;
 // Excel's file prefixes for functions newer than the file format, LAMBDA/LET parameters and unknown functions.
@@ -353,10 +353,10 @@ test('engine comparison: 1e-12 relative, types strict', () => {
   }
 });
 
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-const F = require('../lib/sheet-formula.js');
-const LIB = path.join(__dirname, '../lib');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+const F = require('../../extension/lib/sheet-formula.js');
+const LIB = path.join(__dirname, '../../extension/lib');
 for (const f of fs.readdirSync(LIB).filter((name) => /^sheet-fn-.*\.js$/.test(name)).sort()) require(path.join(LIB, f));
 
 // A family's workbook as Glaze opens the one Excel saved: the inputs, then each case's formula at its cell, an array

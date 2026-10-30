@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const D = require('../defaults.js');
-const E = require('../lib/editor.js');
+const D = require('../../extension/defaults.js');
+const E = require('../../extension/lib/editor.js');
 
 const defaults = { show: 'auto', inline: true };
 
@@ -36,7 +36,7 @@ test('resetting rubric preferences preserves the shared pop-up animation and oth
 
 test('rubric settings and table vocabulary are translated with rating placeholders in every catalogue', () => {
   for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
-    require(`../i18n/${lang}.js`);
+    require(`../../extension/i18n/${lang}.js`);
     const words = globalThis.GZ_LANGS[lang];
     for (const key of ['Rubrics', 'Automatic', 'Pop-up', "The site's own", "Show inline when there's room", 'Rubric', 'Feedback', 'Criterion', 'Rating {n}', 'Not scored', 'Weight', 'Score', 'Points', 'Selected', 'Total']) {
       assert.ok(typeof words[key] === 'string' && words[key].trim(), `${lang}: ${key}`);

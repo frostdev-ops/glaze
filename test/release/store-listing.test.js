@@ -5,12 +5,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const justification = (text, heading) => text.split(`### ${heading}\n\n`)[1]?.split(/^### |^## /m)[0].trim();
 const manifest = JSON.parse(read('manifest.json'));
 const [major, minor, patch] = manifest.version.split('.');
-const listings = fs.readdirSync(path.join(root, 'store')).filter((f) => /^listing(?:-[\w-]+)?\.md$/.test(f));
+const listings = fs.readdirSync(path.join(__dirname, '../../store')).filter((f) => /^listing(?:-[\w-]+)?\.md$/.test(f));
 
 // "NEW IN 3.3" in each language: the heading of the newest release notes.
 const NEWEST = /^(?:NEW IN|NEU IN|NOVEDADES DE|NOUVEAUTÉS DE LA VERSION|NIEUW IN|NOVO NA) (\d+\.\d+(?:\.\d+)?)$/m;
@@ -20,7 +20,7 @@ test('BLD-4: there are six listings, English and five translations', () => {
 });
 
 for (const file of listings) {
-  const text = read(`store/${file}`);
+  const text = read(`../store/${file}`);
 
   test(`BLD-4: ${file} is headed with the manifest's version (${major}.${minor})`, () => {
     const m = /^# Chrome Web Store listing — Glaze (\d+)\.(\d+)(?:\.(\d+))?/.exec(text);
@@ -44,7 +44,7 @@ for (const file of listings) {
 }
 
 test('BLD-4: the English listing fits the store limits it states', () => {
-  const text = read('store/listing.md');
+  const text = read('../store/listing.md');
   const short = /## Short summary \(132 character maximum\)\n\n(.+)\n/.exec(text)[1];
   assert.ok(short.length <= 132, `short summary is ${short.length} characters`);
   const host = justification(text, 'Host access (1,000 character maximum)');
@@ -53,13 +53,13 @@ test('BLD-4: the English listing fits the store limits it states', () => {
   const remote = /## Remote code \(1,000 character maximum\)\n\n(.+)\n/.exec(text)[1];
   assert.ok(remote.length <= 1000, `remote code statement is ${remote.length} characters`);
   for (const file of listings) {
-    const s = /## Short summary \(132 character maximum\)\n\n(.+)\n/.exec(read(`store/${file}`))[1];
+    const s = /## Short summary \(132 character maximum\)\n\n(.+)\n/.exec(read(`../store/${file}`))[1];
     assert.ok(s.length <= 132, `${file}: short summary is ${s.length} characters`);
   }
 });
 
 test('BLD-6: the host-access justification names opt-in writes and the narrow hosts, not only reads', () => {
-  const text = read('store/listing.md');
+  const text = read('../store/listing.md');
   const host = justification(text, 'Host access (1,000 character maximum)');
   assert.ok(!/read-only/i.test(host), 'it no longer says the requests are read-only');
   assert.match(host, /writes only on (?:their|the user's) click/);
@@ -73,7 +73,7 @@ test('BLD-6: the host-access justification names opt-in writes and the narrow ho
 });
 
 test('BLD-6: every permission the manifest asks for at install has a justification', () => {
-  const text = read('store/listing.md');
+  const text = read('../store/listing.md');
   const justified = text.slice(text.indexOf('## Permission justifications'), text.indexOf('## Remote code'));
   for (const p of manifest.permissions) {
     assert.match(justified, new RegExp(`^### ${p}$`, 'm'), `${p} has a heading`);
@@ -84,7 +84,7 @@ test('BLD-6: every permission the manifest asks for at install has a justificati
 });
 
 test('BLD-2: the README does not promise that everything stays on the device', () => {
-  const text = read('README.md');
+  const text = read('../README.md');
   assert.ok(!/what Glaze keeps stays on your device/i.test(text));
   assert.match(text, /Chrome or Firefox sync/);
 });

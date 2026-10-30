@@ -6,10 +6,10 @@
 // and its answers come back through the broker. It checks: the tool is listed once the sandbox ran; an answer that reads the
 // page and the student's plan; a mod's error; another account or no tab of the school says to open it; a mod turned off
 // mid-call and a page navigated away mid-call end the call at once; and 15 s without an answer.
-//   NODE_PATH=<playwright> nice -n 10 node scripts/mods-tools-check.js [evidence folder]   (EXT selects the checkout)
+//   NODE_PATH=<playwright> nice -n 10 node checks/mods/mods-tools-check.js [evidence folder]   (EXT selects the checkout)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const SCHOOL = 'https://school.instructure.com', ACCOUNT = `${SCHOOL}/5`, ID = 'abcdefghijklmnop', TOOL = (n) => `mod_${ID}_${n}`;
 const TEXT = {
   open: "Open school.instructure.com, signed in as this account; this mod's tool runs there.",
@@ -41,9 +41,9 @@ const RECORD = { id: ID, enabled: true, hash: 'h-tools', key: 'fixture-key', ver
     tools: [tool('echo', { type: 'object', properties: { text: { type: 'string', maxLength: 40 } }, additionalProperties: false }), tool('slow'), tool('boom')] },
   files: { 'hooks.js': Buffer.from(HOOKS).toString('base64') } };
 const strip = (html) => html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
-const COURSE = strip(fs.readFileSync(path.join(root, 'test/fixtures/canvas-course-home.html'), 'utf8'));
+const COURSE = strip(fs.readFileSync(path.join(__dirname, '../../test/fixtures/canvas-course-home.html'), 'utf8'));
 // The planner Glaze reads afresh on the page (features/todo.js), which replaces the plan kept for the account.
-const PLANNER = JSON.stringify([require(path.join(root, 'test/helpers/mcp-caches.cjs')).planner({ id: 1, course: 25, name: 'Chem', title: 'Lab report', at: new Date(Date.now() + 864e5).toISOString() })]);
+const PLANNER = JSON.stringify([require(path.join(__dirname, '../../test/helpers/mcp-caches.cjs')).planner({ id: 1, course: 25, name: 'Chem', title: 'Lab report', at: new Date(Date.now() + 864e5).toISOString() })]);
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
   const start = Date.now(); let last;
@@ -59,7 +59,7 @@ const check = async (name, test) => {
 };
 
 (async () => {
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-mods-tools-'));
   const out = process.argv[2] ? path.resolve(process.argv[2]) : path.join(scratch, 'out');
   fs.mkdirSync(out, { recursive: true });
@@ -69,17 +69,17 @@ const check = async (name, test) => {
       try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nmods-tools-check\n`);
-    const ext = require('./check-env.js').staged(root, [], scratch);
+    const ext = require('../../tools/dev/check-env.js').staged(root, [], scratch);
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
     const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
     fs.rmSync(path.join(ext, 'lib/background.js'));
     fs.writeFileSync(path.join(ext, 'lib/background.js'), worker0 + SHIM);
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 }, locale: 'en-US',
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 }, locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
-    require('./check-env.js').noFirstRun(context);
+    require('../../tools/dev/check-env.js').noFirstRun(context);
     context.setDefaultTimeout(15000);
     const external = [], errors = [];
     await context.route('**/*', (r) => {

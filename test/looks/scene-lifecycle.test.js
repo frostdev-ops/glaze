@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const { engine } = require('./helpers/scene-engine.cjs');
+const { engine } = require('../helpers/scene-engine.cjs');
 const opts = { name: 'mist', ground: '#000', colors: ['#123', '#456', '#789'], dim: 0, amount: 0.5, speed: 1 };
 
 test('a scene cut off from its caller stops its frames and keeps its last frame on screen', () => {

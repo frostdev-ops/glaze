@@ -5,7 +5,7 @@
 // is ever started, answered, saved or submitted (the attempt's buttons here are stubs whose clicks are only counted).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { page, record, natives, unmoved } = require('./sidebar-ultra-page.js');
+const { page, record, natives, unmoved } = require('../sidebar-ultra-page.js');
 
 const docked = () => record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } });
 const PROPS = ['--gz-sb-px-y', '--gz-sb-px-x', '--gz-sb-px-w', '--gz-sb-px-clip'];

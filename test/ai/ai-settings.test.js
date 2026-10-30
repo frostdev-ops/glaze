@@ -7,14 +7,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const I = require('../lib/i18n.js');
-const AS = require('../lib/ai/settings.js');
-const B = require('../lib/ai/broker.js');
-const M = require('../lib/ai/models.js');
-require('../lib/ai/providers/openai.js');
-const D = require('../lib/ai/providers/device.js');
+const I = require('../../extension/lib/i18n.js');
+const AS = require('../../extension/lib/ai/settings.js');
+const B = require('../../extension/lib/ai/broker.js');
+const M = require('../../extension/lib/ai/models.js');
+require('../../extension/lib/ai/providers/openai.js');
+const D = require('../../extension/lib/ai/providers/device.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async () => { for (let i = 0; i < 80; i++) await new Promise(setImmediate); };
 const KEY = 'sk-live-ABCDEF0123456789';
@@ -90,7 +90,7 @@ const page = ({ ai, calls, conns, granted = true, device, providers, features, e
   const settings = { ...AS, ...(providers && { PROVIDERS: [...new Set([...AS.PROVIDERS, ...providers])] }), ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
   const window = {}; window.top = embedded ? {} : window;
   const ctx = vm.createContext({ chrome, window, navigator: { locks }, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
-    GZ_AI_FAILURE: require('../lib/ai/failure.js'), GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../lib/ai/endpoint.js') });
+    GZ_AI_FAILURE: require('../../extension/lib/ai/failure.js'), GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../../extension/lib/ai/endpoint.js') });
   vm.runInContext(read('lib/site.js'), ctx);
   vm.runInContext(read('lib/editor-ai.js'), ctx);
   ctx.GZ_AIEDIT.mount({ t: (k, v) => I.t(k, v, 'en'), when: (at) => `@${at}`, pct: (x) => `${Math.round(x * 100)}%` });
@@ -506,7 +506,7 @@ test('Advanced\'s tuning: each feature\'s sliders at its task\'s own until moved
 });
 
 test('the owner\'s older endpoint shows as OpenRouter connected with its key, its model the overall one, the features as they were', async () => {
-  const routed = read('test/fixtures/openrouter-models.json');
+  const routed = read('../test/fixtures/openrouter-models.json');
   const server = async (url) => (url === M.OPENROUTER ? new Response(routed, { headers: { 'content-type': 'application/json' } }) : json({ data: { label: 'x' } }));
   const p = await open({ ai: { on: true, use: 'endpoint', features: { syllabus: true, completion: true, writing: true } }, server,
     conns: { endpoint: { provider: 'openai', base: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-v4.1-flash-1017', key: OWNER, generation: 'g-1' } } });
@@ -620,7 +620,7 @@ test('On this device is one card: Apple Intelligence on a Mac that has it, Chrom
   // Safari without Apple Intelligence on this Mac: the browser's model, if it has one.
   const other = await open({ ai: { on: true, model: { use: 'device' } }, providers: ['openai', 'device', 'apple'], device: async (m) => (m.op === 'set' ? { ok: true } : { ok: true, state: 'download', provider: 'device' }) });
   assert.equal(other.cards()[0], 'Chrome on-device AI');
-  const t = (k, v) => I.t(k, v, 'en'), E = require('../lib/editor-ai.js');
+  const t = (k, v) => I.t(k, v, 'en'), E = require('../../extension/lib/editor-ai.js');
   assert.equal(E.appleText({ state: 'unavailable', reason: 'os' }, t), 'Not available on this device');
   assert.equal(E.appleText({ state: 'unavailable', reason: 'native' }, t), 'Not available: Glaze could not reach the Apple Intelligence native handler.');
   assert.equal(E.providerName('apple', t), 'Apple Intelligence');
@@ -750,7 +750,7 @@ test('every word of Settings → AI is in every language', () => {
 });
 
 test('the helpers: a download\'s progress, the record\'s rows, a refused key and the tuning\'s words', () => {
-  const E = require('../lib/editor-ai.js'), t = (k, v) => I.t(k, v, 'en');
+  const E = require('../../extension/lib/editor-ai.js'), t = (k, v) => I.t(k, v, 'en');
   assert.equal(E.progress({ loaded: 0.5 }), 0.5);
   assert.equal(E.progress({ loaded: 30, total: 60 }), 0.5);
   assert.equal(E.progress({ progress: 2 }), 1);
@@ -837,7 +837,7 @@ test('device progress preserves a key being typed in another provider drawer', a
 
 test('the current effort has a checked stop and a thumb before an override is saved', async () => {
   const p = await open({ ai: { on: true, model: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' }, models: { completion: { use: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' } } },
-    conns: { openrouter: kept('openrouter') }, server: async () => json(require('./fixtures/openrouter-models.json')) });
+    conns: { openrouter: kept('openrouter') }, server: async () => json(require('../fixtures/openrouter-models.json')) });
   const current = (row) => p.stops(row).filter((b) => b.attrs['aria-checked'] === 'true').map(text);
   assert.deepEqual(current('model'), ['High'], 'the catalog states this model defaults to High');
   assert.deepEqual(current('completion'), ['Off'], 'completion requests no reasoning unless overridden');
@@ -861,7 +861,7 @@ test('Activity names a preset OpenAI call as OpenAI rather than a custom endpoin
 
 test('completion does not label its unsupported task effort as the provider default', async () => {
   const p = await open({ ai: { on: true, models: { completion: { use: 'openrouter', model: 'openai/gpt-5' } } },
-    conns: { openrouter: kept('openrouter') }, server: async () => json(require('./fixtures/openrouter-models.json')) });
+    conns: { openrouter: kept('openrouter') }, server: async () => json(require('../fixtures/openrouter-models.json')) });
   assert.deepEqual(p.stops('completion').filter((b) => b.attrs['aria-checked'] === 'true').map(text), ['Default'], 'the task asks none; the provider default Medium is not sent');
   assert.equal(p.data.ai.models.completion.effort, undefined);
 });

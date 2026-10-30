@@ -3,7 +3,7 @@
 // text is kept as a version. Here the worker is the same module over the same in-memory storage, answering late.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const PA = require('../lib/writer-papers.js');
+const PA = require('../../extension/lib/writer-papers.js');
 
 const memory = () => {
   const data = {};
@@ -21,7 +21,7 @@ test('an unanswered worker save releases its queue at 60 s, and a late answer ca
       sent.push(m);
       return sent.length === 1 ? new Promise((r) => { answer = r; }) : Promise.resolve({ ok: true, value: { paper: { revision: sent.length } } });
     } } } });
-  vm.runInContext(fs.readFileSync(require.resolve('../lib/writer-papers.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/writer-papers.js'), 'utf8'), ctx);
   const store = ctx.GZ_WRITER_PAPERS.open();
   await store.get(KEY);
   const lost = store.save(KEY, { doc: doc('Before.') }); lost.catch(() => {});
@@ -72,7 +72,7 @@ test('a save that says which revision it builds on keeps a newer one it would re
 });
 
 test('paper pages have no merge write or local backup replay entry point', async (t) => {
-  const w = require('./helpers/worker-env.cjs')(), EXT = 'chrome-extension://x';
+  const w = require('../helpers/worker-env.cjs')(), EXT = 'chrome-extension://x';
   for (const page of ['papers.html', 'writer.html', 'options.html']) {
     assert.deepEqual(await w.send({ type: 'glaze:writerPapers', op: 'merge', args: [{}] },
       { id: 'glaze', frameId: 0, url: `${EXT}/${page}`, tab: { id: 4 } }), { ok: false, error: 'sender' });
@@ -94,7 +94,7 @@ test('a page cannot call the worker-only submitted writer through its local stor
 // own tab does: saves, removes and Trash/Restore. A site framing papers.html itself gets no pass.
 test('the worker takes papers writes from an LMS tab\'s Documents frame only once its document claims a one-use pass', async () => {
   const EXT = 'chrome-extension://x';
-  let w = require('./helpers/worker-env.cjs')();
+  let w = require('../helpers/worker-env.cjs')();
   const lms = { id: 'glaze', frameId: 0, url: 'https://school.instructure.com/courses/1', origin: 'https://school.instructure.com', tab: { id: 9, url: 'https://school.instructure.com/courses/1' }, documentId: 'top' };
   const frame = { id: 'glaze', frameId: 7, url: `${EXT}/papers.html`, origin: EXT, tab: lms.tab, documentId: 'd1' };
   const k = PA.newKey(), refused = { ok: false, error: 'sender' };
@@ -158,7 +158,7 @@ test('the worker takes papers writes from an LMS tab\'s Documents frame only onc
   assert.deepEqual(await w.send({ type: 'glaze:courseName', key: 'x' }, { ...next, url: `${EXT}/options.html` }), refused, "a Documents claim is not Settings'");
 
   // The worker sleeps while the page stays open: the frame it trusted is remembered for that tab until the tab closes.
-  w = require('./helpers/worker-env.cjs')({ store: w.store });
+  w = require('../helpers/worker-env.cjs')({ store: w.store });
   assert.equal((await save(next, 'Words, after the worker woke.')).ok, true);
   assert.deepEqual(await save(frame), refused);
   for (const f of w.removed) f(9);
@@ -168,7 +168,7 @@ test('the worker takes papers writes from an LMS tab\'s Documents frame only onc
 });
 
 test("a browser without document ids (Firefox, Safari) trusts the claimed Documents frame by its tab and frame", async () => {
-  const w = require('./helpers/worker-env.cjs')();
+  const w = require('../helpers/worker-env.cjs')();
   const lms = { id: 'glaze', frameId: 0, url: 'https://school.instructure.com/courses/1', tab: { id: 3, url: 'https://school.instructure.com/courses/1' } };
   const frame = { id: 'glaze', frameId: 2, url: 'chrome-extension://x/papers.html', tab: lms.tab };
   const pass = crypto.randomUUID();
@@ -186,7 +186,7 @@ test('the worker takes trash, untrash and purge from Glaze\'s paper pages, and p
   const row = (r) => ({ key: r.key, kind: 'paper', named: true, title: r.title, course: '', url: '', words: 1, format: 'plain', updated: 1, submitted: null, ...(r.trashed && { trashed: r.trashed }) });
   const recs = [rec(old, now - 31 * DAY), rec(recent, now - 29 * DAY), rec(live)];
   const local = { ultra: [], writerPapers: recs.map(row), ...Object.fromEntries(recs.flatMap((r) => [[`writerPaper:${r.key}`, r], [`writerVersions:${r.key}`, [{ id: 'v1-aaaaaa', at: 1, reason: 'start', words: 1, bytes: 10, doc: doc('Words.') }]]])) };
-  const w = require('./helpers/worker-env.cjs')({ store: { sync: { version: 2, enabled: true, enhance: {} }, local, session: {} } });
+  const w = require('../helpers/worker-env.cjs')({ store: { sync: { version: 2, enabled: true, enhance: {} }, local, session: {} } });
   await w.settle();
   assert.ok(w.store.local[`writerPaper:${old}`], 'worker initialization runs no startup purge');
   for (const fn of w.startup) fn();
@@ -234,7 +234,7 @@ test('the page\'s store sends trash, untrash and purge to the worker, never writ
 
 test('Documents passes expire, spend every claim attempt, and require the exact extension page even without sender.origin', async () => {
   let now = Date.now();
-  const w = require('./helpers/worker-env.cjs')({ globals: { Date: class extends Date { static now() { return now; } } } });
+  const w = require('../helpers/worker-env.cjs')({ globals: { Date: class extends Date { static now() { return now; } } } });
   const host = { id: 'glaze', frameId: 0, url: 'https://school.instructure.com/courses/1', tab: { id: 8 } };
   const frame = { id: 'glaze', frameId: 2, documentId: 'doc', url: 'chrome-extension://x/papers.html', tab: host.tab };
   const job = (pass) => w.send({ type: 'glaze:papers', op: 'job', pass }, host);
@@ -255,7 +255,7 @@ test('Documents passes expire, spend every claim attempt, and require the exact 
 
 test('a replacement Documents claim fences the previous document before persistence and queued writes run', async () => {
   const vm = require('node:vm');
-  const w = require('./helpers/worker-env.cjs')();
+  const w = require('../helpers/worker-env.cjs')();
   const host = { id: 'glaze', frameId: 0, documentId: 'top', url: 'https://school.instructure.com/courses/1', tab: { id: 8 } };
   const frame = { id: 'glaze', frameId: 2, documentId: 'old', url: 'chrome-extension://x/papers.html', tab: host.tab };
   const next = { ...frame, documentId: 'new' }, key = PA.newKey();
@@ -290,7 +290,7 @@ test('a replacement Documents claim fences the previous document before persiste
 });
 
 test('Delete forever and startup/page purges preserve a paper while its submit permit is held', async () => {
-  const make = require('./helpers/worker-env.cjs'), k = KEY;
+  const make = require('../helpers/worker-env.cjs'), k = KEY;
   for (const scheme of ['https', 'http']) {
     let w = make();
     const sender = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/papers.html', tab: { id: 4 } };
@@ -324,7 +324,7 @@ test('a worker stopped mid-queue leaves storage whole, and the next one takes th
   const EXT = 'chrome-extension://x', home = { id: 'glaze', frameId: 0, url: `${EXT}/papers.html`, origin: EXT, tab: { id: 4, url: `${EXT}/papers.html` } };
   const [a, b] = [PA.newKey(), PA.newKey()];
   const save = (w, k, text, base) => w.send({ type: 'glaze:writerPapers', op: 'save', args: [k, { kind: 'paper', doc: doc(text), format: 'plain' }, { ...(base != null && { base }) }] }, home);
-  let w = require('./helpers/worker-env.cjs')();
+  let w = require('../helpers/worker-env.cjs')();
   await w.settle();
   assert.equal((await save(w, a, 'A, first.')).ok, true);
   const rev = (await PA.open(w.context.chrome.storage.local).get(a)).revision;
@@ -338,7 +338,7 @@ test('a worker stopped mid-queue leaves storage whole, and the next one takes th
   assert.equal(answered, 0, 'neither write was answered');
   assert.equal(w.store.local[`writerPaper:${b}`], undefined, 'B never ran');
   assert.equal(w.store.local[`writerPaper:${a}`].doc.content[0].content[0].text, 'A, first.', 'A as it last landed');
-  w = require('./helpers/worker-env.cjs')({ store: w.store });
+  w = require('../helpers/worker-env.cjs')({ store: w.store });
   assert.equal((await save(w, a, 'A, second.', rev)).ok, true);
   assert.equal((await save(w, b, 'B, first.')).ok, true);
   const P = PA.open(w.context.chrome.storage.local), rows = await P.list();
@@ -348,7 +348,7 @@ test('a worker stopped mid-queue leaves storage whole, and the next one takes th
   // A write that landed, its reply lost with the worker: the page sends it again on the revision it had.
   const landed = (await P.get(a)).revision;
   assert.equal((await save(w, a, 'A, third.', landed)).ok, true);
-  w = require('./helpers/worker-env.cjs')({ store: w.store });
+  w = require('../helpers/worker-env.cjs')({ store: w.store });
   const again = await save(w, a, 'A, third.', landed);
   assert.equal(again.ok, true);
   assert.equal(again.value.paper.doc.content[0].content[0].text, 'A, third.');

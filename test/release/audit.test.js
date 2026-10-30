@@ -1,7 +1,7 @@
-// scripts/canvas-shots.js --audit (scripts/audit.js), run against a stand-in window: it may only count what is on screen.
+// tools/dev/canvas-shots.js --audit (tools/dev/audit.js), run against a stand-in window: it may only count what is on screen.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { auditFrame } = require('../scripts/audit.js');
+const { auditFrame } = require('../../tools/dev/audit.js');
 
 // A window 1000×600 over a page 4000 tall, dark palette, with boxes laid out as given (viewport coordinates).
 const page = (boxes) => {

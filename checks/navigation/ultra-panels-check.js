@@ -3,19 +3,19 @@
 // Settings, an item's details; a MUI drawer; Canvas's trays; Moodle's drawers) keeps its title, Close and actions in reach
 // with the bar at the top and as a rail, and the pet and its Return home pill step aside while one is open.
 // The panels are built here with the markup and the position, z-index and size Ultra, Canvas and Moodle give them.
-//   NODE_PATH=/path/to/node_modules nice -n 15 node scripts/ultra-panels-check.js [screenshots directory]
+//   NODE_PATH=/path/to/node_modules nice -n 15 node checks/navigation/ultra-panels-check.js [screenshots directory]
 // Hold $GLAZE_LOCK (default glaze-heavy.lock in the OS temp directory) while it runs.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const G = require('../defaults.js');
-require('../lib/coursetabs.js'); require('../lib/nav.js'); // their settings, so GZ_SANITIZE keeps them
+const G = require('../../extension/defaults.js');
+require('../../extension/lib/coursetabs.js'); require('../../extension/lib/nav.js'); // their settings, so GZ_SANITIZE keeps them
 
-const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-panels-'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let checks = 0, fails = 0;
 const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`); if (value) checks++; else fails++; };
@@ -49,10 +49,10 @@ const MOODLE_DRAWER = `<div id="theme_boost-drawers-blocks" class="drawer drawer
   let ctx;
   const errors = [];
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 860 }, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${src}`, `--load-extension=${src}`, '--host-resolver-rules=MAP * ~NOTFOUND'] });
-    require('./check-env.js').noFirstRun(ctx);
+    require('../../tools/dev/check-env.js').noFirstRun(ctx);
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
     const bar = () => page.evaluate(() => { const r = document.getElementById('gz-navbar')?.shadowRoot; return !!r && !r.host.hidden; });

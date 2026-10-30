@@ -6,16 +6,16 @@
 // shell): a course wears its saved Look, one this device doesn't keep falls back to the theme, and Ctrl+K lists and wears the
 // kept Looks. A gallery Look picked for a course in Settings stays worn after a Glaze 3.x device on the same sync account writes
 // the courses back. Screenshots at 1280 and 640 wide, in a light and a dark Look.
-// NODE_PATH=<installed playwright> nice node scripts/looks-catalog-check.js [evidence directory]
+// NODE_PATH=<installed playwright> nice node checks/looks/looks-catalog-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const root = path.join(__dirname, '..');
-const G = require('../defaults.js');
-const S = require('../lib/share.js');
-const C = require('../lib/looks.js');
+const root = path.join(__dirname, '../../extension');
+const G = require('../../extension/defaults.js');
+const S = require('../../extension/lib/share.js');
+const C = require('../../extension/lib/looks.js');
 const site = 'https://bb.school.test';
-const ext = require('./check-env.js').staged(root, [`${site}/*`]);
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 // Polled from Node: waitForFunction resolves at once on an async predicate.
 const until = async (fn, ms = 10000) => {
@@ -33,8 +33,8 @@ const look = (name) => G.GZ_LOOKS.find((L) => L.name === name);
 // Glaze 3.4.6's defaults.js as released (git show v3.4.6:defaults.js), for its sanitize of the courses it writes back.
 const old = (() => {
   const module = { exports: {} };
-  require('node:vm').runInNewContext(fs.readFileSync(path.join(root, 'test/fixtures/defaults-3.4.6.js.txt'), 'utf8'), {
-    module, TextEncoder, console, GZ_COLOR: require('../lib/color.js'), GZ_SURFACES: require('../lib/surfaces.js'), GZ_FONTS: require('../lib/fonts.js') });
+  require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../../test/fixtures/defaults-3.4.6.js.txt'), 'utf8'), {
+    module, TextEncoder, console, GZ_COLOR: require('../../extension/lib/color.js'), GZ_SURFACES: require('../../extension/lib/surfaces.js'), GZ_FONTS: require('../../extension/lib/fonts.js') });
   return module.exports;
 })();
 // A course's saved or gallery Look, as Settings stores it (defaults.js courseLooks); and what this course wears by id.
@@ -60,15 +60,15 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     const kept = [C.make(codes.seminar, 'Seminar', '', 'saved'), C.make(codes.night, 'Night walk', 'frostdev-ops', 'gallery')];
     const ids = { seminar: kept[0].id, night: kept[1].id, sunset: C.idOf(codes.sunset), field: C.idOf(codes.field) };
 
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
       ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--no-proxy-server', '--host-resolver-rules=MAP * ~NOTFOUND'],
     });
     ctx.setDefaultTimeout(10000);
-    require('./check-env.js').noFirstRun(ctx);
+    require('../../tools/dev/check-env.js').noFirstRun(ctx);
     // The school's pages are the synthetic Ultra shell; everything else (web fonts) is blocked: the check reads colours.
-    const shell = fs.readFileSync(path.join(root, 'test/fixtures/ultra-course.html'), 'utf8');
+    const shell = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
@@ -259,7 +259,7 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
       await chrome.storage.sync.set({ courseLooks: { _101_1: id } });
     }, { site, id: ids.seminar });
     await a.evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:look', parts: { x: { pointer: 'quill', cursor: { kind: 'sparkle' } } }, patch: { version: 2 } }));
-    await require('./check-env.js').ultraReady(a);
+    await require('../../tools/dev/check-env.js').ultraReady(a);
     const lms = await ctx.newPage();
     lms.on('pageerror', (e) => errors.push(`ultra: ${e}`));
     await lms.goto(`${site}/ultra/courses/_101_1/outline`);
@@ -312,7 +312,7 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     check(await until(async () => (await ink(lms)) === night.colors['--gz-ink']), '  and the theme\'s palette');
 
     // ---- a kept video, including a live course frame; repeated switches release the old player and GL context ----
-    const put = await a.evaluate((b64) => chrome.runtime.sendMessage({ type: 'glaze:media', op: 'put', kind: 'video', b64 }), fs.readFileSync(path.join(root, 'test/fixtures/media/clip.webm')).toString('base64'));
+    const put = await a.evaluate((b64) => chrome.runtime.sendMessage({ type: 'glaze:media', op: 'put', kind: 'video', b64 }), fs.readFileSync(path.join(__dirname, '../../test/fixtures/media/clip.webm')).toString('base64'));
     check(put.ok, 'the worker keeps the video fixture');
     const videoCode = await S.encode(G.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'video', src: `file:${put.h}` } }, pointer: 'lava' } });
     const videoLook = C.make(videoCode, 'Course video', '', 'saved');

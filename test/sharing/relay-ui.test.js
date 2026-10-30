@@ -4,10 +4,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const R = require('../lib/relay.js');
-const D = require('../defaults.js'), S = require('../lib/surfaces.js');
-const G = require('../lib/sharing.js');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const R = require('../../extension/lib/relay.js');
+const D = require('../../extension/defaults.js'), S = require('../../extension/lib/surfaces.js');
+const G = require('../../extension/lib/sharing.js');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let n = 0; n < 8; n++) await new Promise(setImmediate); };
 const page = async ({ accepted = false, granted = true, selected = G.SERVER, hosts = [] } = {}) => {
   class Element {
@@ -64,12 +64,12 @@ test('E1 UI confirms selected and previously approved custom hosts even with req
 });
 
 test('E1 helper stays out of LMS startup, is cached for a worker restart and is packaged for both Safari targets', () => {
-  const manifest = require('../manifest.json');
+  const manifest = require('../../extension/manifest.json');
   assert.ok(!manifest.content_scripts.flatMap((s) => s.js).includes('lib/relay.js'));
   assert.ok(!manifest.web_accessible_resources.some((r) => r.resources.includes('lib/relay.js')));
   assert.match(read('lib/background.js'), /addEventListener\?\.\('install', \(\) => importScripts\('relay\.js', 'sharing\.js', 'sessions\.js'\)\)/);
   assert.match(read('options.html'), /<script src="lib\/relay\.js"><\/script>/);
-  const safari = require('../scripts/safari-resources.js');
+  const safari = require('../../tools/build/safari-resources.js');
   assert.deepEqual(safari.missing(['lib/relay.js']), []);
-  assert.match(read('package.sh'), /defaults\.js lib i18n/);
+  assert.match(read('../tools/build/package.sh'), /defaults\.js lib i18n/);
 });

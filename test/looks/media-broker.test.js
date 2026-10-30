@@ -6,15 +6,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../lib/media.js');
-const X = require('../lib/lookparts.js');
-const B = require('../lib/modbroker.js');
-const G = require('../defaults.js');
+const M = require('../../extension/lib/media.js');
+const X = require('../../extension/lib/lookparts.js');
+const B = require('../../extension/lib/modbroker.js');
+const G = require('../../extension/defaults.js');
 
-const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
 const slice = source.slice(source.indexOf('// Media for a Look (lib/media.js)'), source.indexOf("// Share keys and relay traffic"));
 const frames = source.slice(source.indexOf('// Frames the worker trusts, by what for.'), source.indexOf('const BROKER = {')); // trustedFrame, whose Settings frame none claimed here
-const spin = fs.readFileSync(path.join(__dirname, 'fixtures/media/spin.json'), 'utf8');
+const spin = fs.readFileSync(path.join(__dirname, '../fixtures/media/spin.json'), 'utf8');
 const URL1 = 'https://cdn.example.com/spin.json';
 const OTHER = 'https://cdn.example.com/other.json';
 
@@ -26,14 +26,14 @@ const rig = async ({ worn = URL1, wornType = 'lottie', body = spin, lms = 'https
   const sync = { lookX }, local2 = installed;
   const ctx = vm.createContext({
     BROKER: {}, BROKER_FILES: {}, GZ_MEDIA: M, GZ_XPARTS: X, GZ_MODBROKER: B, importScripts() {}, URL, console,
-    GZ_SANITIZE: G.GZ_SANITIZE, GZ_LOOKS: G.GZ_LOOKS, GZ_CATALOG: require('../lib/looks.js'), GZ_SHARE: require('../lib/share.js'),
+    GZ_SANITIZE: G.GZ_SANITIZE, GZ_LOOKS: G.GZ_LOOKS, GZ_CATALOG: require('../../extension/lib/looks.js'), GZ_SHARE: require('../../extension/lib/share.js'),
     addressOf: (s) => s.url, approved: async () => false,
     MEDIA_FILES: { get: async () => undefined, put: async () => {}, del: async () => {}, keys: async () => [] },
     chrome: { runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, onMessage: { addListener: (f) => listeners.push(f) } } },
     fromEditor: (s) => s.id === 'glaze' && s.url?.split(/[?#]/)[0] === 'chrome-extension://glaze/options.html',
     fromLms: async (s) => (s.id === 'glaze' && s.tab && s.frameId === 0 && s.url?.startsWith(lms) ? lms : null),
     brokerArea: (name) => area(name === 'sync' ? sync : local2),
-    reachable: async () => true, // the address's host held (test/feature-hosts.test.js: one that isn't)
+    reachable: async () => true, // the address's host held (test/platform/feature-hosts.test.js: one that isn't)
     setTimeout, clearTimeout,
     fetch: async (u, i) => { fetched.push([u, i]); return respond ? respond(u, i) : new Response(body, { status: 200 }); },
   });
@@ -118,8 +118,8 @@ test('installed mod Lottie sources are authorized only while the mod is eligible
 
 // ---- a video or an animated picture at an address (LOOK-6) ---------------------------------------------------------------------
 const CLIP = 'https://cdn.example.com/loop.webm';
-const clip = fs.readFileSync(path.join(__dirname, 'fixtures/media/clip.webm'));
-const webp = fs.readFileSync(path.join(__dirname, 'fixtures/media/anim.webp'));
+const clip = fs.readFileSync(path.join(__dirname, '../fixtures/media/clip.webm'));
+const webp = fs.readFileSync(path.join(__dirname, '../fixtures/media/anim.webp'));
 
 test('a page gets a remote video or picture, cleaned, only for the address and kind the worn Look names', async () => {
   const r = await rig({ worn: CLIP, wornType: 'video', body: clip });
@@ -152,7 +152,7 @@ test('a remote address that points inward, is not https or is not as cleaned is 
 });
 
 test('what the address serves is read as a kept file is: a picture past the caps, or another kind, is refused after the fetch', async () => {
-  const mp4 = fs.readFileSync(path.join(__dirname, 'fixtures/media/clip.mp4'));
+  const mp4 = fs.readFileSync(path.join(__dirname, '../fixtures/media/clip.mp4'));
   const a = await rig({ worn: CLIP, wornType: 'image', body: clip });
   assert.deepEqual(await a.ask({ type: 'glaze:remoteMedia', src: CLIP, kind: 'image' }, page), { ok: false, error: 'type' }, 'a video where a picture was named');
   const b = await rig({ worn: CLIP, wornType: 'video', body: webp });
@@ -185,7 +185,7 @@ test('a remote media fetch is not held up by, and does not hold up, the broker\'
 });
 
 test('simultaneous remote requests share one download only after each caller is authorized', async (t) => {
-  const url = 'https://cdn.example.com/a.webm', bytes = fs.readFileSync(path.join(__dirname, 'fixtures/media/clip.webm'));
+  const url = 'https://cdn.example.com/a.webm', bytes = fs.readFileSync(path.join(__dirname, '../fixtures/media/clip.webm'));
   const gates = [];
   const r = await rig({ worn: url, wornType: 'video', respond: () => new Promise((resolve) => gates.push(resolve)) });
   t.after(() => gates.forEach((resolve) => resolve(new Response(bytes))));
@@ -204,7 +204,7 @@ test('simultaneous remote requests share one download only after each caller is 
 });
 
 test('the worker bounds distinct remote downloads rather than retaining an unbounded waiting queue', async (t) => {
-  const bytes = fs.readFileSync(path.join(__dirname, 'fixtures/media/clip.webm')), gates = [];
+  const bytes = fs.readFileSync(path.join(__dirname, '../fixtures/media/clip.webm')), gates = [];
   const r = await rig({ respond: () => new Promise((resolve) => gates.push(resolve)) });
   t.after(() => gates.forEach((resolve) => resolve(new Response(bytes))));
   const request = (name) => r.ask({ type: 'glaze:remoteMedia', src: `https://cdn.example.com/${name}.webm`, kind: 'video' }, preview);

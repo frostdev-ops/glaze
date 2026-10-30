@@ -5,15 +5,15 @@
 // popup the tab (activeTab) the way a click on Glaze's button does, on a school host the staged copy doesn't hold. The
 // other schools stand in the staged copy's host_permissions (the student's grant, which headless can't give), and the
 // popup is told one isn't held where the check needs the not-held path to reach the worker as it would after a grant.
-// NODE_PATH=<installed playwright> nice node scripts/popup-check.js [evidence directory]
+// NODE_PATH=<installed playwright> nice node checks/settings/popup-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const BB = 'https://bb.school.edu', CANVAS = 'https://canvas.school.edu', MOODLE = 'https://moodle.school.edu', WWW = 'https://www.school.edu';
-const env = require('./check-env.js');
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${CANVAS}/*`, `${MOODLE}/*`, `${WWW}/*`]);
+const env = require('../../tools/dev/check-env.js');
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), [`${CANVAS}/*`, `${MOODLE}/*`, `${WWW}/*`]);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-popup-'));
 const out = process.argv[2] || path.join(tmp, 'shots');
 fs.mkdirSync(out, { recursive: true });
@@ -67,9 +67,9 @@ const stub = (notHeld) => {
   let ctx, cdp;
   const profile = path.join(tmp, 'profile');
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(profile, {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 },
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1', '--remote-debugging-port=0'],
     });
     const welcomed = env.noFirstRun(ctx);

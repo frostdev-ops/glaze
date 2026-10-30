@@ -2,14 +2,14 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(__dirname, '..');
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(__dirname, '../../extension');
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const mla = 'Rivera, Alex, and Sam Patel. “Learning in School Gardens.” Journal of Garden Studies, vol. 7, no. 2, May 2024, pp. 12–19, doi.org/10.1234/gardens.2024.5.';
 const apa = 'Rivera, A., & Patel, S. (2024). Learning in school gardens. Journal of Garden Studies, 7(2), 12–19. https://doi.org/10.1234/gardens.2024.5';
 const raw = 'Notebook collection: Garden learning — Rivera, Alex (2024)';
 const refined = { type: 'report', title: 'Garden learning', author: [{ family: 'Rivera', given: 'Alex' }], issued: { 'date-parts': [[2024]] } };
 let context, tmp, extension, held = false, checks = 0;
-const lock = require('./check-env.js').lockPath();
+const lock = require('../../tools/dev/check-env.js').lockPath();
 const check = (condition, name) => { assert.ok(condition, name); checks++; console.log(`ok ${name}`); };
 (async () => {
   try {
@@ -19,8 +19,8 @@ const check = (condition, name) => { assert.ok(condition, name); checks++; conso
     }
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-writer-sources-'));
     extension = env.staged(root, []);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context);
     context.setDefaultTimeout(10000);
     const network = [], errors = [];
@@ -30,7 +30,7 @@ const check = (condition, name) => { assert.ok(condition, name); checks++; conso
     const page = async (name, enabled = false) => {
       const key = `doc:${require('node:crypto').randomUUID()}`;
       await worker.evaluate(async ({ key, name }) => chrome.storage.local.set({ [`writerPaper:${key}`]: { key, kind: 'paper', title: name, format: 'mla9', doc: { type: 'doc', content: [{ type: 'paragraph' }] }, updated: Date.now() } }), { key, name });
-      assert.ok(require('../lib/writer-papers.js').valid(key), 'the Sources fixture opens a valid stored document key');
+      assert.ok(require('../../extension/lib/writer-papers.js').valid(key), 'the Sources fixture opens a valid stored document key');
       const p = await context.newPage(); p.on('pageerror', (e) => errors.push(e.message));
       await p.addInitScript(({ enabled }) => {
         const listeners = new Set(), events = {}; let frame;

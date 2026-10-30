@@ -3,15 +3,15 @@
 // is in view. Synthetic page, no account or network.
 // A manifest-covered synthetic host avoids a Chromium startup race where a new dynamic registration is listed but
 // not yet injected into the renderer. Host registration has its own checks; this check exercises the sidebar.
-// NODE_PATH=<playwright> nice node scripts/sidebar-test-attempt-check.js <out dir>   (EXT=<checkout> to check another)
+// NODE_PATH=<playwright> nice node checks/navigation/sidebar-test-attempt-check.js <out dir>   (EXT=<checkout>/extension to check another)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://school.blackboard.com/*']);
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://school.blackboard.com/*']);
 const G = require(path.join(ext, 'defaults.js'));
 const site = 'https://school.blackboard.com', uid = '_42_1';
 const out = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sidebar-test-')));
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_8123_1/attempt/_8124_1';
-const html = fs.readFileSync(path.join(ext, 'test/fixtures/ultra-test-attempt.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-test-attempt.html'), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0;
 const check = (v, label, actual) => { fails += !v; console.log(`${v ? 'ok  ' : 'FAIL'} ${label}${actual === undefined ? '' : ' ' + JSON.stringify(actual)}`); };
@@ -22,8 +22,8 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sidebar-test-profile-'));
   fs.mkdirSync(out, { recursive: true });
   try {
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true,
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true,
       viewport: { width: 1800, height: 987 }, reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
     await ctx.route('**/*', (route) => {
@@ -42,7 +42,7 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
       await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ ultra: [site], [`sidebar:ultra:${site}/${uid}`]: { v: 1, rev: 1, mig: 1, open: true, dock: [{ id: 'notes' }], dest: { notes: 'dock' } } });
     }, { settings: base, site, uid });
-    await require('./check-env.js').ultraReady(opts);
+    await require('../../tools/dev/check-env.js').ultraReady(opts);
     const page = await ctx.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
     const box = (sel) => page.evaluate((sel) => { const e = document.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect(); return { l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom), w: Math.round(r.width) }; }, sel);

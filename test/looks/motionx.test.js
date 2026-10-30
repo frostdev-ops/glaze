@@ -4,9 +4,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/motionx.js');
+const M = require('../../extension/lib/motionx.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 // ---- a grammar for what compile may write -------------------------------------------------------------------------------
 const NUM = '-?\\d+(?:\\.\\d+)?';
@@ -294,7 +294,7 @@ test('a sparkle draws the mark selected in the Look builder', () => {
 
 test('an orbit can have just one mark', () => {
   assert.equal(M.cursor({ kind: 'orbit', len: 1 }).len, 1);
-  const X = require('../lib/editor-x.js');
+  const X = require('../../extension/lib/editor-x.js');
   assert.deepEqual(X.put(null, 'cursor', { kind: 'orbit', len: 1 }), { x: { cursor: { kind: 'orbit', len: 1 } } });
 });
 

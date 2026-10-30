@@ -4,11 +4,11 @@
 // Synthetic OOXML only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-globalThis.GZ_WRITER_OBJECTS_DOCX = require('../lib/writer-objects-docx.js');
-const S = require('../lib/writer-schema.js');
-const X = require('../lib/writer-docx.js');
-const Z = require('../lib/zip.js');
-const { pack, p, r } = require('./fixtures/writer-hostile.js');
+globalThis.GZ_WRITER_OBJECTS_DOCX = require('../../extension/lib/writer-objects-docx.js');
+const S = require('../../extension/lib/writer-schema.js');
+const X = require('../../extension/lib/writer-docx.js');
+const Z = require('../../extension/lib/zip.js');
+const { pack, p, r } = require('../fixtures/writer-hostile.js');
 
 const NSW = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -48,7 +48,7 @@ test('relationships are read once per part: many links import in time linear in 
 });
 
 // ---- the package
-const entries = async (bytes) => { const z = require('../lib/doctext.js').unzip(bytes); return Promise.all(z.names.map(async (name) => ({ name, data: await z.bytes(name) }))); };
+const entries = async (bytes) => { const z = require('../../extension/lib/doctext.js').unzip(bytes); return Promise.all(z.names.map(async (name) => ({ name, data: await z.bytes(name) }))); };
 test('part names match relationship targets without regard to case, as the package format has it', async () => {
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
   const out = X.exportDocx(S.parse(S.paper, `<p>Hello case<img src="data:image/png;base64,${png}" alt="Dot"></p>`));
@@ -242,7 +242,7 @@ test('export pads table cells as the page does: 4 px (60 twips) left and right, 
   const order = ['tblStyle', 'tblpPr', 'tblOverlap', 'bidiVisual', 'tblStyleRowBandSize', 'tblStyleColBandSize', 'tblW', 'jc', 'tblCellSpacing', 'tblInd', 'tblBorders', 'shd', 'tblLayout', 'tblCellMar', 'tblLook'];
   const kids = X.xml(`<w:tblPr ${NSW}>${pr}</w:tblPr>`).kids[0].kids.filter((k) => k.name).map((k) => k.local);
   assert.deepEqual(kids, [...kids].sort((a, b) => order.indexOf(a) - order.indexOf(b)), kids.join(' '));
-  const css = require('fs').readFileSync(require('path').join(__dirname, '../writer-paper.css'), 'utf8');
+  const css = require('fs').readFileSync(require('path').join(__dirname, '../../extension/writer-paper.css'), 'utf8');
   assert.match(css, /\.gp-flow \.ProseMirror td, \.gp-flow \.ProseMirror th \{[^}]*padding: 0 4px;/, 'the page\'s padding this matches');
 });
 
@@ -283,7 +283,7 @@ test('a captioned block picture comes back a captioned block picture, its captio
 });
 
 test('the page draws a caption as Word\'s Caption style does: no space above, two points smaller, 8 pt at least', () => {
-  const css = require('fs').readFileSync(require('path').join(__dirname, '../writer-objects.css'), 'utf8');
+  const css = require('fs').readFileSync(require('path').join(__dirname, '../../extension/writer-objects.css'), 'utf8');
   const rule = /\.gzo-img\[data-caption\]::after \{([^}]*)\}/.exec(css)[1];
   assert.match(rule, /padding-top: 0;/);
   assert.match(rule, /font-size: max\(8pt, calc\(1em - 2pt\)\);/);

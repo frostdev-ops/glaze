@@ -7,8 +7,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const worker = require('./helpers/worker-env.cjs');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
+const worker = require('../helpers/worker-env.cjs');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
 
 const CANVAS = 'https://school.instructure.com', EXT = 'chrome-extension://x';
 const KEY = 'sk-proj-WORKERKEY0123456789';
@@ -126,9 +126,9 @@ test('AI is off by default: a fresh worker has no settings for it, and a page is
 });
 
 test('a Back up file and a shared Look carry none of AI\'s settings, its connections or a key', async () => {
-  const G = require('../defaults.js');
-  const BK = require('../lib/backup.js');
-  const SH = require('../lib/share.js');
+  const G = require('../../extension/defaults.js');
+  const BK = require('../../extension/lib/backup.js');
+  const SH = require('../../extension/lib/share.js');
   const local = { ai: { on: true, use: 'main', features: { syllabus: true } }, aiCalls: [{ id: 'r', task: 't', state: 'completed' }], connections: { main: { key: KEY } }, aiKey: KEY };
   const settings = G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ai: { on: true }, aiKey: KEY });
   assert.equal(settings.ai, undefined, 'not a synced setting');
@@ -143,19 +143,19 @@ test('a Back up file and a shared Look carry none of AI\'s settings, its connect
 });
 
 test('nothing of AI is in a page\'s first script, and the worker loads it only when a port opens', () => {
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   for (const c of m.content_scripts) for (const f of c.js) assert.ok(!f.startsWith('lib/ai/'), f);
-  const bg = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
+  const bg = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   assert.ok(!/^importScripts\([^)]*ai\//m.test(bg), 'not in the worker\'s first imports');
   const w = worker();
   assert.equal(w.context.GZ_AI_BROKER, undefined);
 });
 
 test('Firefox\'s event page loads every file of the harness the worker would import, by name', () => {
-  // scripts/package-firefox.sh: the files named in the worker's importScripts calls, as it reads them.
-  const bg = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
+  // tools/build/package-firefox.sh: the files named in the worker's importScripts calls, as it reads them.
+  const bg = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const named = new Set([...bg.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => `lib/${f}`)));
-  const shipped = fs.readdirSync(path.join(__dirname, '..', 'lib/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js').map((f) => `lib/ai/${f}`);
+  const shipped = fs.readdirSync(path.join(__dirname, '../../extension/lib/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js').map((f) => `lib/ai/${f}`);
   assert.ok(shipped.length >= 14);
   for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
   assert.ok(!named.has('lib/ai/providers/mock.js'), 'the mock is for tests and the eval');

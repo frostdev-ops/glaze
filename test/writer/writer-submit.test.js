@@ -1,16 +1,16 @@
 // Glaze Writer's submit step, the pure parts (lib/writer-submit.js) over the probed attempt shape
 // (test/fixtures/ultra-writer-attempt.html): the file name, Ultra's upload input and footer buttons, when the file shows as
 // attached, the note and text as Quill ops, and the step order that keeps Ultra's Submit last. The sheet and the page's
-// side in a browser: scripts/writer-submit-check.js.
+// side in a browser: checks/writer/writer-submit-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { El } = require('./stand-in-dom.js');
-const { parse } = require('./fixture-dom.js');
-const S = require('../lib/writer-submit.js');
+const { El } = require('../stand-in-dom.js');
+const { parse } = require('../fixture-dom.js');
+const S = require('../../extension/lib/writer-submit.js');
 
-const page = (f = 'ultra-writer-attempt.html') => { const doc = { activeElement: null }; doc.root = new El('html', doc); doc.body = parse(fs.readFileSync(path.join(__dirname, 'fixtures', f), 'utf8'), doc); return doc.body; };
+const page = (f = 'ultra-writer-attempt.html') => { const doc = { activeElement: null }; doc.root = new El('html', doc); doc.body = parse(fs.readFileSync(path.join(__dirname, '../fixtures', f), 'utf8'), doc); return doc.body; };
 const editorOf = (body) => body.querySelector('#bb-editorassignment-attempt-authoring-submission');
 
 test('the file is Lastname_Title.docx, the title before its subtitle, letters and digits only', () => {

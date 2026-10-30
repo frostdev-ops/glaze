@@ -9,7 +9,7 @@ const vm = require('node:vm');
 const run = async (lock) => {
   let launches = 0, locked = false;
   const errors = [], proc = { argv: ['node', 'pointer-check.js'], pid: process.pid, exitCode: 0 };
-  const dir = path.resolve(__dirname, '../scripts');
+  const dir = path.resolve(__dirname, '../../checks/looks');
   const context = vm.createContext({
     __dirname: dir, process: proc, URL, setTimeout,
     console: { log() {}, error: (e) => errors.push(String(e)) },
@@ -19,8 +19,8 @@ const run = async (lock) => {
         locked = fs.existsSync(path.join(lock, 'owner'));
         throw new Error('synthetic launch failure');
       } } };
-      if (name === './check-env.js') return { lockPath: () => lock, chromeLaunch: () => ({}), staged: (src) => src };
-      if (name === './wait-for-browser.js') return async () => {};
+      if (name === '../../tools/dev/check-env.js') return { lockPath: () => lock, chromeLaunch: () => ({}), staged: (src) => src };
+      if (name === '../../tools/dev/wait-for-browser.js') return async () => {};
       return require(name.startsWith('.') ? path.resolve(dir, name) : name);
     },
   });

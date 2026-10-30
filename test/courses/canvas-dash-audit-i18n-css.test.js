@@ -3,11 +3,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-require('../lib/i18n.js');
-const read = (f) => fs.readFileSync(require.resolve(`../${f}`), 'utf8');
+require('../../extension/lib/i18n.js');
+const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 const sources = ['content-canvas.js', 'features/folders.js', 'features/widgets.js', 'features/coursecards.js', 'features/coursemenu.js'].map(read);
 
-// Follow test/i18n.test.js: scan only the first argument, including conditional literal keys.
+// Follow test/platform/i18n.test.js: scan only the first argument, including conditional literal keys.
 const literalKeys = (js) => {
   const out = [];
   for (const m of js.matchAll(/\bt\s*\(/g)) {

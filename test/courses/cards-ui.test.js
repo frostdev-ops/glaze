@@ -7,9 +7,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const K = require('../lib/cards.js');
+const K = require('../../extension/lib/cards.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const A = 'canvas:https://school.instructure.com/25';
 const B = 'canvas:https://school.instructure.com/26';
@@ -208,7 +208,7 @@ test('two tabs picking at once can never pass the cap together, and neither lose
 });
 
 test('the background worker takes card writes from this extension only, one at a time', async () => {
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   // bb.school.edu is a site Glaze has found to be Ultra (content-ultra.js reported it; lib/background.js fromUltra).
   const store = { sync: {}, local: { 'cardImg:cccccccccccc': `data:image/webp;base64,${'C'.repeat(3491977)}`, ultra: ['https://bb.school.edu'] } };
   store.sync.cards = { [C]: { k: 'image', i: 'cccccccccccc' } };
@@ -370,8 +370,8 @@ test('Ultra paints its isolated styles on new cards and opens the same editor fr
 });
 
 test('a card pass after Glaze was reloaded under the tab does nothing (no extension context)', async () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '../features/cards.js'), 'utf8');
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../../extension/features/cards.js'), 'utf8');
   assert.match(src, /const paint = async \(\) => \{\n\s+if \(!chrome\.runtime\?\.id\) return;/);
-  const core = require('fs').readFileSync(require('path').join(__dirname, '../content.js'), 'utf8');
+  const core = require('fs').readFileSync(require('path').join(__dirname, '../../extension/content.js'), 'utf8');
   assert.match(core, /if \(!chrome\.runtime\?\.id\) \{ observer\?\.disconnect\(\); observer = null; return; \}/, 'the main watcher stops itself');
 });

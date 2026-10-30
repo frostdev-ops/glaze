@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // The owner's tool for the mod blocklist (lib/blocklist.js). Run it on the owner's own computer, offline: the private key
 // never goes on a server, in the repo or in a backup the key's owner doesn't control (RELEASING.md).
-//   node scripts/blocklist-sign.mjs keygen <keyfile>
+//   node tools/release/blocklist-sign.mjs keygen <keyfile>
 //       Makes the Ed25519 key pair. The private key goes in <keyfile> (mode 600, outside the repo, never overwritten);
 //       the public key is printed, to paste over PENDING_OWNER_KEY in lib/blocklist.js.
-//   node scripts/blocklist-sign.mjs sign <keyfile> <list.json> [<signed.json>] [--force-unpinned]
+//   node tools/release/blocklist-sign.mjs sign <keyfile> <list.json> [<signed.json>] [--force-unpinned]
 //       Signs the list in <list.json> { mods: [id], bundles: [hash], authors: [key], reasons: { entry: text }, seq }:
 //       seq one higher than the file's (and written back to it), issued now, expires 30 days later. <signed.json>
 //       (default: <list>.signed.json) is what `gallery.mjs --blocklist` takes.
@@ -14,8 +14,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const B = createRequire(import.meta.url)('../lib/blocklist.js');
-const repo = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const B = createRequire(import.meta.url)('../../extension/lib/blocklist.js');
+const repo = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'));
 const LIFETIME = 30 * 864e5;
 
 export const keygen = (file) => {

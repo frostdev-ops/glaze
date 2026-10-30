@@ -9,17 +9,17 @@
 // package (v3.3.8) keeps every site. The schools are the check's own pages over https, through a local proxy with
 // a throwaway certificate (Firefox can't route requests as Playwright does); every other request is refused. Any error in
 // Glaze's own files (Firefox's console service and console API) fails the check.
-//   FIREFOX=<Firefox.app> nice node scripts/firefox-check.mjs
+//   FIREFOX=<Firefox.app> nice node checks/firefox/firefox-check.mjs
 // PACKAGE=<a Firefox package zip> tests that package instead of one built from this checkout; OLD_REF (default v3.3.8) is the
 // <all_urls> version updated from.
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import http from 'node:http'; import https from 'node:https';
 import net from 'node:net'; import { spawn, execFileSync } from 'node:child_process'; import { createRequire } from 'node:module'; import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const G = require('../defaults.js');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
+const G = require('../../extension/defaults.js');
 const app = process.env.FIREFOX;
-if (!app) { console.error('usage: FIREFOX=<Firefox.app> nice node scripts/firefox-check.mjs'); process.exit(2); }
+if (!app) { console.error('usage: FIREFOX=<Firefox.app> nice node checks/firefox/firefox-check.mjs'); process.exit(2); }
 const bin = app.endsWith('.app') ? path.join(app, 'Contents/MacOS/firefox') : app;
 const ID = 'glaze@frostdev.io', UUID = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b', EXT = `moz-extension://${UUID}/`;
 const WIDGET = 'glaze_frostdev_io-browser-action';
@@ -45,14 +45,14 @@ const until = async (fn, label, ms = 15000) => {
 };
 // A loaded machine's bound, for a wait a quiet one ends in well under a second.
 const SLOW = 60000;
-const fixture = (f) => fs.readFileSync(path.join(root, 'test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(root, '../test/fixtures', f), 'utf8');
 
 // ---- The packages ---------------------------------------------------------------------------------------------------
 const unpack = (zip, name) => { const dir = path.join(tmp, name); fs.mkdirSync(dir); execFileSync('unzip', ['-q', zip, '-d', dir]); return dir; };
 const pack = (cwd) => {
   const dist = fs.mkdtempSync(path.join(tmp, 'dist-'));
   const { ZIP, ZIPOPT, ...env } = process.env; // zip reads both as its own options
-  execFileSync('sh', ['scripts/package-firefox.sh', '--development'], { cwd, env: { ...env, DIST: dist }, stdio: 'pipe' });
+  execFileSync('sh', ['../tools/build/package-firefox.sh', '--development'], { cwd, env: { ...env, DIST: dist }, stdio: 'pipe' });
   return path.join(dist, fs.readdirSync(dist).find((f) => f.endsWith('-firefox.zip')));
 };
 const OLD_REF = process.env.OLD_REF || 'v3.3.8';
@@ -308,8 +308,8 @@ const afterAllow = (b, c, fn, label) => {
 
 const run = async () => {
   packages();
-  galleryCode = await require('../lib/share.js').encode(G.GZ_SANITIZE({ preset: 'Frost', colors: { ...G.GZ_PRESETS.find(([n]) => n === 'Frost')[1] } }), {}, null);
-  await require('./wait-for-browser.js')();
+  galleryCode = await require('../../extension/lib/share.js').encode(G.GZ_SANITIZE({ preset: 'Frost', colors: { ...G.GZ_PRESETS.find(([n]) => n === 'Frost')[1] } }), {}, null);
+  await require('../../tools/dev/wait-for-browser.js')();
   await serve();
   const manifest = JSON.parse(fs.readFileSync(path.join(fresh, 'manifest.json'), 'utf8'));
 
@@ -560,7 +560,7 @@ const run = async () => {
     // saves through the frame's own link and its Import through the frame's own file input. The .docx lands in the downloads
     // folder, the click opens the file dialog, and a Word file chosen there is saved through the frame's claimed pass.
     const KEY = `doc:${crypto.randomUUID()}`, word = path.join(tmp, 'Imported notes.docx');
-    fs.writeFileSync(word, Buffer.concat(require('../lib/zip.js').zip([{ name: 'word/document.xml', data: Buffer.from('<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Brought in from Word.</w:t></w:r></w:p></w:body></w:document>') }])));
+    fs.writeFileSync(word, Buffer.concat(require('../../extension/lib/zip.js').zip([{ name: 'word/document.xml', data: Buffer.from('<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Brought in from Word.</w:t></w:r></w:p></w:body></w:document>') }])));
     const papersTab = await b.open(`${EXT}papers.html`);
     ok(await b.value(`browser.storage.sync.get('navbar').then((r) => browser.storage.sync.set({ navbar: { ...r.navbar, on: true }, navbarItems: { glaze: ['settings', 'documents'] } }))
       .then(() => browser.runtime.sendMessage({ type: 'glaze:writerPapers', op: 'save', args: [${JSON.stringify(KEY)}, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Notes from the archive.' }] }] }, format: 'plain', title: 'Field notes', named: true }] }))

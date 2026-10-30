@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const O = require('../lib/oauth.js');
+const O = require('../../extension/lib/oauth.js');
 
 test('PKCE S256 matches RFC 7636 Appendix B', async () => {
   assert.equal(await O.challenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'), 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM');

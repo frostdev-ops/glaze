@@ -9,18 +9,18 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const ROOT = path.join(__dirname, '..');
-const PKG = path.join(ROOT, 'mcp');
+const ROOT = path.join(__dirname, '../../extension');
+const PKG = path.join(__dirname, '../../mcp');
 const MANIFEST = path.join(PKG, 'mcpb', 'manifest.json');
-const B = require('../mcp/lib/browsers.js');
-const I = require('../mcp/lib/install.js');
-const D = require('../mcp/lib/doctor.js');
-const L = require('../mcp/lib/launcher.js');
-const NATIVE = require('../mcp/lib/native.js');
-const CLI = require('../mcp/bin/glaze-mcp.js');
-const LINK = require('../lib/agent-link.js');
-const { runner } = require('./helpers/mcp-reg.cjs');
-const VERSION = require('../mcp/package.json').version;
+const B = require('../../mcp/lib/browsers.js');
+const I = require('../../mcp/lib/install.js');
+const D = require('../../mcp/lib/doctor.js');
+const L = require('../../mcp/lib/launcher.js');
+const NATIVE = require('../../mcp/lib/native.js');
+const CLI = require('../../mcp/bin/glaze-mcp.js');
+const LINK = require('../../extension/lib/agent-link.js');
+const { runner } = require('../helpers/mcp-reg.cjs');
+const VERSION = require('../../mcp/package.json').version;
 const ORIGIN = 'chrome-extension://jmmaeoajomodnbnlmdikjooalmcilooh/';
 const MISSING = 'Install Node.js 18+ for browsers to start the helper';
 const NO_NODE = { t: 'error', why: 'no-node' };
@@ -28,9 +28,9 @@ const POSIX = process.platform !== 'win32';
 const posixOnly = (why) => (POSIX ? false : why);
 const windowsOnly = (why) => (POSIX ? why : false);
 // Loaded per test, so a missing module fails that test alone.
-const N = () => require('../mcp/lib/nodes.js');
-const M = () => require('../mcp/lib/mcpb.js');
-const P = () => require('../mcp/scripts/pack-mcpb.js');
+const N = () => require('../../mcp/lib/nodes.js');
+const M = () => require('../../mcp/lib/mcpb.js');
+const P = () => require('../../mcp/scripts/pack-mcpb.js');
 
 const scratch = (t) => {
   const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-mcpb-')));
@@ -145,13 +145,13 @@ test('pack-mcpb validates and packs with @anthropic-ai/mcpb 2.1.2 into dist/, wh
   const p = P();
   assert.equal(p.MCPB, '@anthropic-ai/mcpb@2.1.2');
   const out = p.output(VERSION);
-  assert.equal(out, path.join(ROOT, 'dist', `glaze-mcp-${VERSION}.mcpb`));
+  assert.equal(out, path.join(__dirname, '../../dist', `glaze-mcp-${VERSION}.mcpb`));
   const steps = p.steps('/s', out);
   assert.deepEqual(steps.map(([, args]) => args.slice(0, 3)), [['-y', p.MCPB, 'validate'], ['-y', p.MCPB, 'pack'], ['-y', p.MCPB, 'unpack']]);
   assert.equal(steps[0][1][3], path.join('/s', 'manifest.json'));
   assert.deepEqual(steps[1][1].slice(3), ['/s', out]);
   assert.equal(steps[2][1][3], out);
-  assert.ok(fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8').split(/\r?\n/).includes('dist/'));
+  assert.ok(fs.readFileSync(path.join(__dirname, '../../.gitignore'), 'utf8').split(/\r?\n/).includes('dist/'));
   const pkg = json(path.join(PKG, 'package.json'));
   assert.deepEqual(pkg.files, ['bin', 'lib', 'LICENSE'], 'the npm package leaves the bundle\'s files out');
 });
@@ -532,7 +532,7 @@ test('the command: --from=mcpb sets up, then runs agent mode; any other --from i
 });
 
 // ---- the worker's state ----------------------------------------------------------------------------------------------
-// A worker's link with a fake connectNative (as test/agent-link.test.js has it, cut down): ports, storage and timers.
+// A worker's link with a fake connectNative (as test/agents/agent-link.test.js has it, cut down): ports, storage and timers.
 const linkWorld = () => {
   const ports = [], session = {}, local = { mcp: { on: true } }, jobs = new Map();
   let id = 0;

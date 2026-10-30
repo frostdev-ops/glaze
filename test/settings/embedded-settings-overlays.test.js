@@ -1,13 +1,13 @@
 // Settings over the page (features/settingspage.js): nothing of the page draws over it or takes the pointer, Glaze's own
 // overlays included (the pet's world beside <body>, the sidebar's buttons, floating tiles), whenever they come; closing puts back
-// exactly what it changed. In a browser: scripts/embedded-settings-check.js.
+// exactly what it changed. In a browser: checks/settings/embedded-settings-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const { El } = require('../stand-in-dom.js');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 test('Settings stills and hides every overlay of the page, before and while it is open, and gives each back as it was', async () => {
   const doc = { activeElement: null };

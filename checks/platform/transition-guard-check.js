@@ -1,21 +1,21 @@
 // Cross-world view-transition regressions: exercise the worker's real MAIN-world guard in a bare extension.
-// Run on the browser runner: node scripts/transition-guard-check.js /out
+// Run on the browser runner: node checks/platform/transition-guard-check.js /out
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const out = process.argv[2];
-const source = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
 const start = source.indexOf('const transitionGuard = ');
 if (start < 0) throw Error('missing transitionGuard');
 const guard = source.slice(start, source.indexOf('\n};', start) + 3);
-const motion = fs.readFileSync(path.join(__dirname, '..', 'lib/motion.js'), 'utf8');
+const motion = fs.readFileSync(path.join(__dirname, '../../extension/lib/motion.js'), 'utf8');
 const handOver = motion.slice(motion.indexOf('  const handOver = '), motion.indexOf('  const swap = '));
 const rows = [];
 const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}: ${JSON.stringify(detail)}`); };
 
 (async () => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-transition-guard-'));
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   let context, held = false;
   try {
     fs.mkdirSync(lock); held = true;
@@ -55,7 +55,7 @@ const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.l
         else if (mode !== 'timeout' && mode !== 'nested') vt.skipTransition();
       });
     `);
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), { ...chromeLaunch, headless: true,
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking'] });
     await context.route('https://vt.test/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Transition guard</title><h1>Page</h1>' }));

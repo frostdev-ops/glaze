@@ -6,20 +6,20 @@
 // an assessment is never reopened or started by a warm switch; the strip above, between and below the bar's rows, on an item panel and above a page, never over
 // Ultra's own controls; a stand-in drawn from the course's sketch covers a frame while it first loads; the sketches and frames are dropped when the tabs are switched off and when another account signs in; and no
 // warm return reloads its document or resources. Screenshots: each placement, Frost (dark) and Paper (light), 1280 and 375 px wide.
-//   NODE_PATH=/path/to/node_modules node scripts/ultra-tabs-check.js [out dir for screenshots]   (needs playwright)
+//   NODE_PATH=/path/to/node_modules node checks/navigation/ultra-tabs-check.js [out dir for screenshots]   (needs playwright)
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const G = require('../defaults.js');
-const CTABS = require('../lib/coursetabs.js');
+const G = require('../../extension/defaults.js');
+const CTABS = require('../../extension/lib/coursetabs.js');
 
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-tabs-'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
-let PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-course.html'), 'utf8');
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
+let PAGE = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
 const SITE = 'https://bb.school.test';
 const CSS_URL = 'https://cdn.school.test/ultra/uiv4001.0.0-rel.37_abc/app.css';
 const COURSES = [['_101_1', 'Computer Science I', 'FA26-CS101-01', 1], ['_102_1', 'Spanish 110', 'FA26-SPAN110-02', 2], ['_103_1', 'Calculus II', 'FA26-MATH201-01', 4],
@@ -32,7 +32,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'b8-'));
-  await require('./wait-for-browser.js')();
+  await require('../../tools/dev/wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
     ...chromeLaunch, headless: true, viewport: { width: 1280, height: 860 },
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
@@ -127,7 +127,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       return result.result.value;
     };
     await settings();
-    await require('./check-env.js').ultraReady(opts);
+    await require('../../tools/dev/check-env.js').ultraReady(opts);
     page = await ctx.newPage();
     page.setDefaultTimeout(10000);
     let target = page;

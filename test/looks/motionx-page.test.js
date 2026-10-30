@@ -4,9 +4,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../lib/motionx.js');
+const M = require('../../extension/lib/motionx.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const ENTER = { s: [{ at: 0, y: 20, o: 0 }, { at: 1, y: 0, o: 1 }], ms: 500, ease: 'spring', delay: 0, stagger: 80 };
 
 // ---- features/motionx.js ----------------------------------------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs');
-const G = require('../defaults.js'), S = require('../lib/share.js');
+const G = require('../../extension/defaults.js'), S = require('../../extension/lib/share.js');
 test('old Looks retain role-specific opacity, no frost, palette colors and existing depth', () => {
   for (const look of G.GZ_LOOKS.filter((l) => l.name !== 'Frostdev')) {
     const settings = G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, look), vars = G.GZ_SURFACE_VARS(settings);
@@ -33,17 +33,17 @@ test('theme codes round-trip custom surfaces and restore surface defaults from o
 test('catalogued content fills and radii use shared variables; no new row blur is introduced', () => {
   const files = ['sharing/quick.css', 'options.html', 'popup.html', 'theme.css', 'canvas.css', 'moodle.css', 'extras.css', 'features/apps.css', 'features/lookx.css', 'ui.css'];
   for (const file of files) {
-    const source = fs.readFileSync(require.resolve(`../${file}`), 'utf8');
+    const source = fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
     const css = file.endsWith('.html') ? [...source.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n') : source;
     for (const m of css.matchAll(/border-radius:([^;{}]+);/g)) if (/\b\d+(?:\.\d+)?px\b/.test(m[1]) && !/999px/.test(m[1])) assert.match(m[1], /--gz-(?:radius|card-radius)/, `${file}: ${m[0]}`);
     for (const m of css.matchAll(/(?:background|background-color):([^;{}]+);/g)) if (/var\(--gz-surface(?:-2)?(?:\)|,)/.test(m[1])) assert.match(m[1], /--gz-surface-(?:fill|paint)/, `${file}: ${m[0]}`);
   }
-  assert.doesNotMatch(fs.readFileSync(require.resolve('../features/surfaces.css'), 'utf8'), /backdrop-filter\s*:/);
+  assert.doesNotMatch(fs.readFileSync(require.resolve('../../extension/features/surfaces.css'), 'utf8'), /backdrop-filter\s*:/);
 });
 
 test('every extension HTML entry loads the shared surface schema before defaults', () => {
   for (const file of ['options.html', 'popup.html', 'preview.html', 'sharing/quick.html']) {
-    const html = fs.readFileSync(require.resolve(`../${file}`), 'utf8');
+    const html = fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
     const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
     const defaults = scripts.findIndex((s) => s.endsWith('defaults.js'));
     const surfaces = scripts.findIndex((s) => s.endsWith('lib/surfaces.js'));
@@ -54,8 +54,8 @@ test('every extension HTML entry loads the shared surface schema before defaults
 
 test('the editor and popup keep a solid readable ground and apply global depth', () => {
   const vm = require('node:vm'), style = {}, attrs = {};
-  const UI = vm.runInNewContext(fs.readFileSync(require.resolve('../ui.js'), 'utf8') + ';GZ_UI', {
-    ...G, GZ_COLOR: require('../lib/color.js'), chrome: { storage: { sync: {} } }, matchMedia: () => ({ matches: false }),
+  const UI = vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/ui.js'), 'utf8') + ';GZ_UI', {
+    ...G, GZ_COLOR: require('../../extension/lib/color.js'), chrome: { storage: { sync: {} } }, matchMedia: () => ({ matches: false }),
     document: { documentElement: { style: { setProperty: (k, v) => { style[k] = v; } }, setAttribute: (k, v) => { attrs[k] = v; } } },
   });
   UI.paint(G.GZ_SANITIZE({ bg: { kind: 'scene' }, look: { surfaceOpacity: 20, depth: 0, glass: 3 } }));
@@ -66,11 +66,11 @@ test('the editor and popup keep a solid readable ground and apply global depth',
 });
 
 test('the Notes share panel reads the Look palette, rejects stale answers, and keeps the last successful paint', async () => {
-  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../sharing/quick.js'), 'utf8');
+  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../../extension/sharing/quick.js'), 'utf8');
   const code = source.slice(source.indexOf('  const LOOK_KEYS'), source.indexOf('  const say'));
   const style = {}, attrs = {}, reads = [], sync = { get: () => new Promise((resolve) => reads.push(resolve)) };
   const api = vm.runInNewContext(`let dead = false; ${code}; ({paintLook, stop: () => { dead = true; }})`, {
-    ...G, GZ_FONTS: require('../lib/fonts.js'), GZ_COLOR: require('../lib/color.js'), Date, setTimeout, clearTimeout,
+    ...G, GZ_FONTS: require('../../extension/lib/fonts.js'), GZ_COLOR: require('../../extension/lib/color.js'), Date, setTimeout, clearTimeout,
     chrome: { runtime: { id: 'glaze' }, storage: { sync, onChanged: { addListener() {} } } }, matchMedia: () => ({ matches: false, addEventListener() {} }),
     document: { documentElement: { style: { setProperty: (k, v) => { style[k] = v; }, removeProperty: (k) => { delete style[k]; } }, setAttribute: (k, v) => { attrs[k] = v; } } },
   });
@@ -84,7 +84,7 @@ test('the Notes share panel reads the Look palette, rejects stale answers, and k
 });
 
 test('the Notes share panel permits the local frost texture without allowing network connections', () => {
-  const html = fs.readFileSync(require.resolve('../sharing/quick.html'), 'utf8');
+  const html = fs.readFileSync(require.resolve('../../extension/sharing/quick.html'), 'utf8');
   const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
   assert.match(csp, /(?:^|; )img-src 'self' data:(?:;|$)/);
   assert.match(csp, /(?:^|; )connect-src 'none'(?:;|$)/);
@@ -92,7 +92,7 @@ test('the Notes share panel permits the local frost texture without allowing net
 });
 
 test('Moodle cards layer local frost over the shared panel fill', () => {
-  const css = fs.readFileSync(require.resolve('../moodle.css'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../../extension/moodle.css'), 'utf8');
   const card = css.match(/html \.card \{([^}]+)\}/)[1];
   assert.match(card, /background: var\(--gz-surface-grain, none\), var\(--gz-panel\)/);
 });
@@ -107,7 +107,7 @@ test('course surface colors use only known valid records, with picks winning ind
   list[key].color = 'currentColor';
   assert.equal(G.GZ_COURSE_COLOR(s, list, key), '');
   assert.equal(G.GZ_COURSE_COLOR(s, list, null), '');
-  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
   const line = source.match(/^  const surfaceCourse = .*;$/m)[0];
   for (const site of ['ultra', 'canvas', 'moodle']) {
     const c = vm.createContext({ chrome: { runtime: { id: 'glaze' } }, GZ_COURSE_COLOR: G.GZ_COURSE_COLOR, settings: s, courseList: list, ultra: site === 'ultra', courseId: () => key, canvasCourseKey: () => key });

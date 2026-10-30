@@ -8,22 +8,22 @@
 // picture in the boards' Course cards dialog (B10); a widget floating over every page, once, on
 // a course's page clear of the nav and its top bar, and an old (B5) float carried over; and the opt-in landing (once,
 // never on a reload). Screenshots: both boards and a course page, light and dark, 1280 and 375.
-//   NODE_PATH=/path/to/node_modules node scripts/ultra-boards-check.js [out dir for screenshots]   (needs playwright)
+//   NODE_PATH=/path/to/node_modules node checks/courses/ultra-boards-check.js [out dir for screenshots]   (needs playwright)
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const zlib = require('zlib');
-const G = require('../defaults.js');
-require('../lib/widgets.js'); // its settings in GZ_SPEC
+const G = require('../../extension/defaults.js');
+require('../../extension/lib/widgets.js'); // its settings in GZ_SPEC
 
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-boards-'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const O = 'https://bb.school.test';
-const fx = (n) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', `ultra-${n}.json`), 'utf8');
+const fx = (n) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', `ultra-${n}.json`), 'utf8');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0;
 // A tiny picture for the Course cards dialog's "Choose a picture": a 4×4 PNG, drawn here (two colors in stripes).
@@ -112,7 +112,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
   let ctx;
   const errors = [];
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
       ...chromeLaunch, headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
@@ -140,7 +140,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     }, [s, local]).then(async () => {
       const worker = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
       await worker.evaluate(() => queue);
-      await require('./check-env.js').ultraReady(opts);
+      await require('../../tools/dev/check-env.js').ultraReady(opts);
     });
     const layout = () => opts.evaluate(() => chrome.storage.local.get('widgetLayout').then((r) => r.widgetLayout));
     const page = await ctx.newPage();
@@ -159,7 +159,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     const rect = (sel) => page.evaluate((s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return r && { left: r.left, top: r.top + scrollY, right: r.right, bottom: r.bottom + scrollY, width: r.width }; }, sel);
     const tile = (id) => `section.gz-w[data-tile="${id}"]`;
     // Default card width has no data-gz-card-width override. Its grid must still fill each track.
-    await store(settingsFor('Paper', { enhance: { notes: false, widgets: false, todo: false } }), { widgetLayout: require('../lib/widgets.js').kept(false) });
+    await store(settingsFor('Paper', { enhance: { notes: false, widgets: false, todo: false } }), { widgetLayout: require('../../extension/lib/widgets.js').kept(false) });
     await page.goto(`${O}/ultra/course`);
     await until(() => page.evaluate(() => getComputedStyle(document.querySelector('.term-group')).display), (v) => v === 'grid', 'native course grid did not load');
     for (const dir of ['ltr', 'rtl']) for (const width of [1600, 1280, 768, 390]) {
@@ -200,7 +200,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       }
     };
     // These interaction cases use the retained legacy layout; fresh installs use the 2026-10-20 starter layout.
-    const notes = { widgetLayout: require('../lib/widgets.js').layout({ todo: true }), [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
+    const notes = { widgetLayout: require('../../extension/lib/widgets.js').layout({ todo: true }), [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
 
     if (!process.env.B10_ONLY) {
     // ---- light: both boards as they start, wide and narrow ---------------------------------------------------------
@@ -523,7 +523,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await fresh.close();
     }
     // ---- B10: course cards use the boards, never React's nodes or a new reader ---------------------------------
-    const base = require('../lib/widgets.js').layout({ todo: true });
+    const base = require('../../extension/lib/widgets.js').layout({ todo: true });
     for (const board of ['courses', 'dash', 'pages']) for (const x of base.boards[board]) x.on = false;
     const courseTile = 'section.gz-w[data-tile^="course:"]';
     for (const preset of ['Paper', 'Frost']) for (const width of [1280, 375]) {
@@ -653,7 +653,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display !== 'none'), 'B10: removing every card restores Ultra');
     }
     // The To Do resized by its corner keeps its height independently beside the course-card layout fields.
-    const todoLayout = require('../lib/widgets.js').layout(base);
+    const todoLayout = require('../../extension/lib/widgets.js').layout(base);
     for (const board of ['courses', 'dash']) todoLayout.boards[board].find((x) => x.id === 'todo').on = true;
     await store(settingsFor('Paper', { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: true } }), { widgetLayout: todoLayout });
     await page.setViewportSize({ width: 1280, height: 1400 });

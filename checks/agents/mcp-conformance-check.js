@@ -1,5 +1,5 @@
 // MCP conformance (C17): the official TypeScript SDK client (@modelcontextprotocol/client, pinned exactly below; npm installs
-// it into a scratch folder at check time and scripts/npm-integrity.js holds every package to its pinned integrity before it
+// it into a scratch folder at check time and tools/vendor/npm-integrity.js holds every package to its pinned integrity before it
 // runs) talking to Glaze through the real path: glaze-mcp agent → glaze-mcp host → Chromium's worker, on Linux. As in
 // agent-link-check, Glaze is staged with nativeMessaging required (headless can't answer its prompt) and glaze-mcp setup
 // installs the helper under a scratch HOME whose Chromium folder is the profile; the caches are the production writers'
@@ -17,20 +17,20 @@
 //   9 Off: the subscription ends gracefully, every agent is let go and the host goes.
 // Evidence in the folder given: results.json (checks, s3, s4), log.txt, each client's wire-<label>.jsonl and stderr, setup,
 // and the approval windows.
-//   glaze-remote -o <evidence dir> -- node scripts/mcp-conformance-check.js /out        (with FULL=1: -e FULL=1 -t 2400)
+//   glaze-remote -o <evidence dir> -- node checks/agents/mcp-conformance-check.js /out        (with FULL=1: -e FULL=1 -t 2400)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const { execFileSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 const { isDeepStrictEqual: same } = require('node:util');
-const C = require('../test/helpers/mcp-caches.cjs');
-const ST = require('../lib/mcp/tools-study.js'), W = require('../lib/mcp/wire.js'), A = require('../lib/mcp/approve.js'), MT = require('../lib/modtools.js');
-const IDS = require('../mcp/lib/ids.js'), BR = require('../mcp/lib/browsers.js'), RV = require('../mcp/lib/rendezvous.js');
-const NPM = require('./npm-integrity.js'), G = require('../lib/mcp/grants.js');
+const C = require('../../test/helpers/mcp-caches.cjs');
+const ST = require('../../extension/lib/mcp/tools-study.js'), W = require('../../extension/lib/mcp/wire.js'), A = require('../../extension/lib/mcp/approve.js'), MT = require('../../extension/lib/modtools.js');
+const IDS = require('../../mcp/lib/ids.js'), BR = require('../../mcp/lib/browsers.js'), RV = require('../../mcp/lib/rendezvous.js');
+const NPM = require('../../tools/vendor/npm-integrity.js'), G = require('../../extension/lib/mcp/grants.js');
 
-const src = fs.realpathSync(path.join(__dirname, '..'));
-const BIN = path.join(src, 'mcp', 'bin', 'glaze-mcp.js');
-const VERSION = require('../manifest.json').version;
+const src = fs.realpathSync(path.join(__dirname, '../../extension'));
+const BIN = path.join(__dirname, '../../mcp/bin/glaze-mcp.js');
+const VERSION = require('../../extension/manifest.json').version;
 const OUT = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-conformance-out-')));
 const FULL = process.env.FULL === '1';
 const NODE = fs.realpathSync(process.execPath);
@@ -187,9 +187,9 @@ function auditWire() {
 }
 
 // ---- the browser --------------------------------------------------------------------------------------------------------
-// The staged copy: the checkout's files as links (scripts/check-env.js staged), its manifest with nativeMessaging required.
+// The staged copy: the checkout's files as links (tools/dev/check-env.js staged), its manifest with nativeMessaging required.
 function stage() {
-  const dir = require('./check-env.js').staged(src, [], scratch), file = path.join(dir, 'manifest.json');
+  const dir = require('../../tools/dev/check-env.js').staged(src, [], scratch), file = path.join(dir, 'manifest.json');
   const m = JSON.parse(fs.readFileSync(file, 'utf8'));
   m.permissions = [...m.permissions, 'nativeMessaging'];
   m.optional_permissions = (m.optional_permissions || []).filter((p) => p !== 'nativeMessaging');
@@ -207,13 +207,13 @@ function setup() {
   return row.data;
 }
 async function browse(prof) {
-  await require('./wait-for-browser.js')();
-  const context = await chromium.launchPersistentContext(prof, { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1000, height: 700 }, env: envFor(HOME),
+  await require('../../tools/dev/wait-for-browser.js')();
+  const context = await chromium.launchPersistentContext(prof, { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1000, height: 700 }, env: envFor(HOME),
     handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false,
     args: [`--disable-extensions-except=${EXT.dir}`, `--load-extension=${EXT.dir}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'] });
   contexts.add(context);
   context.setDefaultTimeout(15000);
-  require('./check-env.js').noFirstRun(context);
+  require('../../tools/dev/check-env.js').noFirstRun(context);
   await context.route('**/*', (r) => (new URL(r.request().url()).protocol === 'chrome-extension:' ? r.continue() : r.abort()));
   const opt = await context.newPage();
   await opt.goto(`chrome-extension://${EXT.id}/options.html`);
@@ -568,7 +568,7 @@ const guard = async (name, fn) => { if (halt.signal.aborted) return; await bound
   if (e.code === 'CHECK_TIMEOUT') halt.abort(e);
 }); save(); };
 
-const lock = require('./check-env.js').lockPath();
+const lock = require('../../tools/dev/check-env.js').lockPath();
 let held = false, cleaning;
 // Linux runner processes are identified by PID and start time. Capture children before closing their parents, including
 // Chromium helpers without a profile argument and the SDK's short-lived discovery agents.
@@ -640,7 +640,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(signal, () =>
     fs.mkdirSync(HOME);
     try { sdk = install(path.join(scratch, 'sdk')); } catch (e) { ok('0', `${SDK} installs and every package matches its pinned integrity`, false, String(e.stderr || e.message || e)); throw e; }
     ok('0', `${SDK} installs and every package matches its pinned integrity`, sdk.verified.length === NPM.parsePins(PINS).size, sdk.verified);
-    try { R.chrome = execFileSync(require('./check-env.js').chromePath() || chromium.executablePath(), ['--version'], { timeout: 10000, encoding: 'utf8' }).trim(); } catch (e) { R.chrome = String(e); }
+    try { R.chrome = execFileSync(require('../../tools/dev/check-env.js').chromePath() || chromium.executablePath(), ['--version'], { timeout: 10000, encoding: 'utf8' }).trim(); } catch (e) { R.chrome = String(e); }
     R.platform = `${os.platform()} ${os.release()}`;
     say('chrome', R.chrome, 'sdk', SDK, FULL ? 'FULL: with the 600 s wait' : '');
     STORE = { todoCache: await C.canvasPlan('5', PLAN), seenCourses: await C.canvasSeen(SEEN) };

@@ -2,14 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const G = require('../lib/gcal.js');
+const G = require('../../extension/lib/gcal.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const paragraphs = (text) => text.split(/\n\s*\n/).map((s) => s.replace(/\s+/g, ' '));
 const sentences = (text) => paragraphs(text).flatMap((s) => s.split(/(?<=[.!?])\s+(?=[A-Z])/u));
-const policy = read('PRIVACY.md');
-const summary = read('docs/privacy.md');
+const policy = read('../PRIVACY.md');
+const summary = read('../docs/privacy.md');
 
 // Accept either an explanation in the short guide or a link to the actual detailed section.
 const topics = [
@@ -34,7 +34,7 @@ const unavailable = /unavailable|not (?:yet )?available|not enabled|disabled|com
 for (const file of ['README.md', 'docs/privacy.md']) {
   test(`GZ-04: ${file} does not advertise disabled Google Calendar sync as connectable`, () => {
     if (G.ON) return;
-    const claims = sentences(read(file)).filter((s) => /Google Calendar sync/i.test(s));
+    const claims = sentences(read(`../${file}`)).filter((s) => /Google Calendar sync/i.test(s));
     const unqualified = claims.filter((s) => !unavailable.test(s));
     assert.deepEqual(unqualified, [],
       'Google Calendar sync is disabled at build time; current feature claims must disclose that or be removed');
@@ -49,7 +49,7 @@ test('GZ-04 control: availability wording distinguishes a build gate from an ord
 
 test('GZ-07: named contributor and feature-decision documents resolve in a fresh checkout', () => {
   const missing = [];
-  for (const file of ['CONTRIBUTING.md', 'lib/gcal.js']) {
+  for (const file of ['../CONTRIBUTING.md', 'lib/gcal.js']) {
     for (const name of new Set(read(file).match(/\b[A-Z][A-Z0-9_-]*\.md\b/g) || [])) {
       if (!fs.existsSync(path.join(root, name))) missing.push(`${file} refers to missing ${name}`);
     }
@@ -78,11 +78,11 @@ test('WP-B1 item 12: the policy states the request queue\'s limits', () => {
 });
 
 test('WP-B1 item 10: the policy states the relay\'s expiry periods', () => {
-  const relay = code('server/relay.js');
+  const relay = code('../server/relay.js');
   assert.match(relay, /expiryDays = 365, idleDays = 730, emptyDays = 2/, 'relay expiry defaults changed: update PRIVACY.md, docs/features.md and this test');
   assert.match(policy, /nobody has used for two years is deleted \(one year if its creator chose/);
   assert.match(policy, /never written to is removed after two unused days/);
-  assert.match(code('docs/features.md'), /nobody has used for two years is deleted \(one year if its creator opted/);
+  assert.match(code('../docs/features.md'), /nobody has used for two years is deleted \(one year if its creator opted/);
   assert.match(relay, /stored: \[2 \*\* 30, DAY, 1\]/, 'daily stored budget changed: update PRIVACY.md (1 GiB a day)');
   assert.match(policy, /daily amount of new stored data, 1 GiB/);
 });
@@ -93,9 +93,9 @@ test('BLD-5: the permission text matches the manifest and the packaging scripts'
   assert.ok(!/doesn't ask for unlimited/i.test(policy));
   assert.match(policy, /Glaze asks the browser for\s+`unlimitedStorage`/);
   assert.equal(G.ON, false, 'Google Calendar sync is built off, so released builds omit identity');
-  assert.match(code('package.sh'), /filter\(\(p\) => p !== "identity"\)/);
-  assert.match(code('scripts/package-firefox.sh'), /filter\(\(p\) => p !== 'identity'\)/);
-  assert.match(code('scripts/safari-manifest.sh'), /p != 'identity'/);
+  assert.match(code('../tools/build/package.sh'), /filter\(\(p\) => p !== "identity"\)/);
+  assert.match(code('../tools/build/package-firefox.sh'), /filter\(\(p\) => p !== 'identity'\)/);
+  assert.match(code('../tools/build/safari-manifest.sh'), /p != 'identity'/);
   assert.match(policy, /`identity` \(Chrome only, optional\) — not requested by released builds/);
   assert.match(policy, /Chrome sync \(or Firefox Sync\)/);
   assert.match(policy, /\*\*Music widget\*\* \(Canvas and Blackboard Ultra/);

@@ -8,11 +8,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-info.js');
-require('../lib/sheet-fn-financial2.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-info.js');
+require('../../extension/lib/sheet-fn-financial2.js');
 
 const book = (rows = []) => {
   const wb = M.workbook();
@@ -44,7 +44,7 @@ const prints = (e, rows) => {
 
 test('the functions are registered, and nothing sets a timer', () => {
   for (const name of ['VDB', 'ISPMT', 'DOLLARDE', 'DOLLARFR']) assert.ok(C.fn(name), name);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-financial2.js'), 'utf8')));
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-financial2.js'), 'utf8')));
 });
 
 test('VDB: Microsoft\'s examples', () => {
@@ -109,7 +109,7 @@ test('VDB handles long asset lives without allocating a schedule per period', ()
   const { execFileSync } = require('node:child_process');
   const script = `const F = require('./lib/sheet-fn-financial2.js');
     console.log(JSON.stringify([F.VDB.fn([1000,100,1e9,0,1e9,2,false], {}), F.VDB.fn([1000,100,1e9,0,1e9,0,true], {}), F.VDB.fn([1000,100,1e30,0,9e29,2,false], {})]));`;
-  const result = execFileSync(process.execPath, [...process.execArgv, '-e', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8', timeout: 3000 });
+  const result = execFileSync(process.execPath, [...process.execArgv, '-e', script], { cwd: path.join(__dirname, '../../extension'), encoding: 'utf8', timeout: 3000 });
   const values = JSON.parse(result);
   assert.deepEqual(values.slice(0, 2), [900, 0]);
   assert.ok(Number.isFinite(values[2]) && values[2] > 0 && values[2] < 900);

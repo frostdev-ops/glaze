@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-    <img src="assets/logo.svg" alt="Glaze" width="360">
+    <img src="extension/assets/logo.svg" alt="Glaze" width="360">
   </picture>
 </p>
 
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/store/screenshots/1-blackboard-frost.jpg" alt="Blackboard Ultra's Courses page in Glaze's Frost Look" width="800">
+  <img src="store/art/screenshots/1-blackboard-frost.jpg" alt="Blackboard Ultra's Courses page in Glaze's Frost Look" width="800">
 </p>
 
 Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right
@@ -47,12 +47,12 @@ them on the device). Sharing is optional and encrypted on your device before it 
 
 <table>
   <tr>
-    <td><img src="assets/store/screenshots/3-canvas-dashboard.jpg" alt="Canvas Dashboard with Glaze's widgets and course cards"></td>
-    <td><img src="assets/store/screenshots/2-canvas-modules.jpg" alt="Canvas Modules with progress and new-item badges"></td>
+    <td><img src="store/art/screenshots/3-canvas-dashboard.jpg" alt="Canvas Dashboard with Glaze's widgets and course cards"></td>
+    <td><img src="store/art/screenshots/2-canvas-modules.jpg" alt="Canvas Modules with progress and new-item badges"></td>
   </tr>
   <tr>
-    <td><img src="assets/store/screenshots/4-halloween-pumpkin-patch.jpg" alt="The Pumpkin Patch Halloween Look"></td>
-    <td><img src="assets/store/screenshots/5-backgrounds-editor.jpg" alt="The backgrounds editor with a live preview"></td>
+    <td><img src="store/art/screenshots/4-halloween-pumpkin-patch.jpg" alt="The Pumpkin Patch Halloween Look"></td>
+    <td><img src="store/art/screenshots/5-backgrounds-editor.jpg" alt="The backgrounds editor with a live preview"></td>
   </tr>
 </table>
 

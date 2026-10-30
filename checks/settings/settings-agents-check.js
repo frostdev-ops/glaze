@@ -6,13 +6,13 @@
 // the activity list, 320px, search, and Forget all apps' question; a restart left in storage.session leaves Starting… after the page's one wait (light: the
 // real worker answers; dark: an answer of restart stood in, which gets the restart line). Each state is shot in light and
 // dark, each scheme in a browser of its own. No network.
-// NODE_PATH=<playwright> nice -n 10 node scripts/settings-agents-check.js [shots folder]
+// NODE_PATH=<playwright> nice -n 10 node checks/settings/settings-agents-check.js [shots folder]
 // AGENTS_CASE selects one check, AGENTS_SCHEME one scheme ('light' or 'dark'); EXT selects the checkout under test.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
-const env = require('./check-env.js');
-const lock = require('./check-env.js').lockPath();
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
+const env = require('../../tools/dev/check-env.js');
+const lock = require('../../tools/dev/check-env.js').lockPath();
 const shots = process.argv[2] ? path.resolve(process.argv[2]) : '';
 const HOST = 'io.frostdev.glaze_mcp';
 const A = 'aaaaaaaaaaaaaaaa', C = 'cccccccccccccccc', MOD = 'bbbbbbbbbbbbbbbb';
@@ -68,15 +68,15 @@ async function pass(scheme) {
     fs.chmodSync(home, 0o700);
     const launcher = (name, body) => { const f = path.join(bin, `${name}.sh`); fs.writeFileSync(f, `#!/bin/sh\n${body}\n`, { mode: 0o755 }); return f; };
     const quits = launcher('quits', 'exit 0');
-    const real = launcher('glaze-mcp', `HOME='${home}' exec '${process.execPath}' '${path.join(root, 'mcp/bin/glaze-mcp.js')}' host "$@"`);
+    const real = launcher('glaze-mcp', `HOME='${home}' exec '${process.execPath}' '${path.join(__dirname, '../../mcp/bin/glaze-mcp.js')}' host "$@"`);
     const helper = (file, origins) => {
       const f = path.join(hosts, `${HOST}.json`);
       if (!file) return fs.rmSync(f, { force: true });
       fs.writeFileSync(f, JSON.stringify({ name: HOST, description: 'Glaze settings-agents-check', path: file, type: 'stdio', allowed_origins: origins.map((id) => `chrome-extension://${id}/`) }, null, 2));
     };
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(profile, {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 1800 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 1800 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking',
         '--proxy-server=http://127.0.0.1:0', '--proxy-bypass-list=<-loopback>', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
@@ -227,7 +227,7 @@ async function pass(scheme) {
     });
 
     await check('bounded', async () => {
-      const { WAIT } = require('../lib/editor-agents.js'), stuck = scheme === 'dark';
+      const { WAIT } = require('../../extension/lib/editor-agents.js'), stuck = scheme === 'dark';
       if (stuck) await page.evaluate(() => {
         const send = chrome.runtime.sendMessage;
         chrome.runtime.sendMessage = (m, ...rest) => (m?.type === 'glaze:mcp-config' && m.op === 'state' ? Promise.resolve({ ok: true, on: true, link: { state: 'restart', at: Date.now() } }) : send(m, ...rest));

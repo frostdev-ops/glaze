@@ -6,11 +6,11 @@
 // formulas; a renamed sheet's references follow it; freeze, sort, undo and redo; closing and opening again keeps it
 // all; Export writes the file; the keyboard's paths through the grid; a 640 px layout. No page errors, no network, no
 // timer under a minute. Screenshots at 1280 and 640 px.
-// NODE_PATH=<playwright> nice -n 10 node scripts/sheets-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/documents/sheets-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const M = require(path.join(root, 'lib/sheet-model.js'));
 const SD = require(path.join(root, 'sheet-data.js'));
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-sheets-check');
@@ -36,7 +36,7 @@ const seeded = (key, wb = M.workbook()) => {
 
 (async () => {
   let context, held = false, tmp, passed = false;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nsheets-check\n`); break; }
@@ -47,8 +47,8 @@ const seeded = (key, wb = M.workbook()) => {
     const csv = path.join(tmp, 'Scores.csv');
     fs.writeFileSync(csv, '﻿Name,Score\r\nAda,91\r\nGrace,88\r\n');
     const ext = env.staged(root, []);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US',
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US',
       reducedMotion: 'reduce', acceptDownloads: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     const first = env.noFirstRun(context); context.setDefaultTimeout(15000);
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:' || u.protocol === 'blob:' || u.protocol === 'data:') return r.continue(); requests.push(u.href); return r.abort(); });
@@ -438,7 +438,7 @@ const seeded = (key, wb = M.workbook()) => {
     // ---- an .xlsx through Glaze: a golden workbook (Excel's own, test/fixtures/sheets/info.xlsx) imported, one cell typed,
     // exported, and the export read back by the codec equal to it but for that cell, the parts Glaze keeps still there; the
     // export imported again holds as many cells
-    const XL = require('../lib/sheet-xlsx.js'), golden = path.join(root, 'test/fixtures/sheets/info.xlsx');
+    const XL = require('../../extension/lib/sheet-xlsx.js'), golden = path.join(__dirname, '../../test/fixtures/sheets/info.xlsx');
     const original = await XL.read(new Uint8Array(fs.readFileSync(golden)));
     const count = (wb) => wb.sheets.reduce((n, sh) => n + [...sh.rows.values()].reduce((m, row) => m + row.size, 0), 0);
     await openHome();
@@ -491,7 +491,7 @@ const seeded = (key, wb = M.workbook()) => {
     // opens with all five drawn at their anchors, the radar as its titled frame; a typed value redraws its bar; a row
     // inserted moves the charts and undo brings them back; 640 px; the dark Look's words on the chart's ground; no motion;
     // and the export keeps the chart parts byte for byte.
-    const FX = require(path.join(root, 'test/fixtures/sheets/charts.js'));
+    const FX = require(path.join(__dirname, '../../test/fixtures/sheets/charts.js'));
     const chartsFile = path.join(tmp, 'Charts.xlsx');
     fs.writeFileSync(chartsFile, FX.workbook());
     await openHome();

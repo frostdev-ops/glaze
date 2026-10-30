@@ -1,11 +1,11 @@
 // Writer completions at native-input boundaries, in WebKit (the default) or Chromium. All text and AI replies are
 // invented; the actual Writer frame, ProseMirror editor and keyboard input run without an extension, provider or LMS.
-// NODE_PATH=<playwright> node scripts/writer-completion-check.js [webkit|chromium]
+// NODE_PATH=<playwright> node checks/writer/writer-completion-check.js [webkit|chromium]
 // WRITER_AI_SOURCE may name a saved writer-ai.js to verify the same regression against an earlier implementation.
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
 const engines = require('playwright');
-const root = path.resolve(__dirname, '..'), site = 'https://writer.test', engine = process.argv[2] || 'webkit';
+const root = path.resolve(__dirname, '../../extension'), site = 'https://writer.test', engine = process.argv[2] || 'webkit';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const STUB = `(() => {
   const ai = window.__ai = { settings: { on: true, mode: 'advanced', tune: { completion: { pause: 100 } }, features: { completion: true, writing: false } },
@@ -34,11 +34,11 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 
 (async () => {
   assert.ok(['webkit', 'chromium'].includes(engine), 'choose webkit or chromium');
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   fs.mkdirSync(lock); fs.writeFileSync(path.join(lock, 'pid'), String(process.pid));
   let browser, checks = 0, failures = 0;
   try {
-    browser = await engines[engine].launch({ headless: true, ...(engine === 'chromium' ? require('./check-env.js').chromeLaunch() : {}) });
+    browser = await engines[engine].launch({ headless: true, ...(engine === 'chromium' ? require('../../tools/dev/check-env.js').chromeLaunch() : {}) });
     const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1100, height: 800 } }), errors = [];
     await context.addInitScript(STUB);
     await context.route('**/*', (r) => {

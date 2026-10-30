@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const root = process.env.GZ_B8_REPO || path.join(__dirname, '..');
+const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
 const source = fs.readFileSync(path.join(root, 'features/coursetabs.js'), 'utf8');
 const L = require(path.join(root, 'lib/coursetabs.js'));
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
@@ -390,7 +390,7 @@ test('a sketch delayed across an in-page course switch is forgotten instead of c
 });
 
 test('the stand-in: a sketch drawn at once over a frame still loading, blurred under the spinner, with no picture in it', () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   const doc = { activeElement: null };
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   const host = new El('div', doc); doc.body.append(host);
@@ -419,7 +419,7 @@ test('the stand-in: a sketch drawn at once over a frame still loading, blurred u
 });
 
 test('the stand-in keeps Canvas navigation room, window matching, still motion and each reveal gesture', () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   for (const site of ['ultra', 'canvas']) for (const motion of ['off', 'expressive']) for (const event of ['wheel', 'pointerdown', 'touchstart']) {
     const doc = { activeElement: null };
     doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
@@ -462,7 +462,7 @@ test('closing the surrounding course keeps the next course’s existing edited f
 });
 
 test('closing the open course’s tab by its keys gives focus to the next tab once the page puts the strip back', () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   const doc = { activeElement: null };
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   const bar = new El('div', doc), strip = new El('div', doc), list = new El('div', doc);

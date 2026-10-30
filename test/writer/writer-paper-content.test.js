@@ -5,7 +5,7 @@
 // caret's line on screen, a sheet takes the paper's height, and Ultra's Submit sends the last edit first.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const content = require('./helpers/writer-content.cjs');
+const content = require('../helpers/writer-content.cjs');
 
 const paper = async (full = true) => {
   const c = content({ fixture: 'attempt', writer: { full } });

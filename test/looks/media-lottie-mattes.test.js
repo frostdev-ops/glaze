@@ -3,10 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const M = require('../lib/media.js');
+const M = require('../../extension/lib/media.js');
 
 // Exercise the shipped canvas layer constructor with tiny stand-in canvases: no decoder or pixel buffers are created.
-const player = fs.readFileSync(path.join(__dirname, '../lib/lottie/lottie_light_canvas.js'), 'utf8');
+const player = fs.readFileSync(path.join(__dirname, '../../extension/lib/lottie/lottie_light_canvas.js'), 'utf8');
 const start = player.indexOf('createContainerElements: function createContainerElements() {\n      // If the layer is masked');
 const end = player.indexOf(',\n    createContent: function createContent()', start);
 assert.ok(start > 0 && end > start);

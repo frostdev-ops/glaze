@@ -2,9 +2,9 @@
 // stdin's chunks in any sizes; the writer keeps to the frame limit. Vectors: fixtures/agent-frames.json.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const N = require('../mcp/lib/native.js');
-const F = require('../mcp/lib/agent-frames.js');
-const V = require('./fixtures/agent-frames.json');
+const N = require('../../mcp/lib/native.js');
+const F = require('../../mcp/lib/agent-frames.js');
+const V = require('../fixtures/agent-frames.json');
 
 const read = (chunks, opts) => {
   const got = [], push = N.reader((m) => got.push(m), opts);

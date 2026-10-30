@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 8) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const ORIGIN = 'https://school.instructure.com';
@@ -28,7 +28,7 @@ const worker = () => {
     URL, console, setTimeout, clearTimeout, TextEncoder, crypto: require('node:crypto').webcrypto,
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), ctx); },
     chrome: {
-      runtime: { id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
+      runtime: { id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local, sync, onChanged: none },
       scripting: { executeScript: () => Promise.resolve([]) },
     },
@@ -72,7 +72,7 @@ test('two courses\' scales saved at once both reach the GPA', async () => {
 
 test('a GPA change that would push another course out of the full synced item is refused, never truncated', async () => {
   // Codex's witness: the synced item close to its 8 KB cap, then one course given a long scale.
-  const C = require('../lib/gradecalc.js');
+  const C = require('../../extension/lib/gradecalc.js');
   const raw = {};
   for (let i = 0; i < 100; i++) {
     const k = `canvas:${ORIGIN}/${10000 + i}`;
@@ -138,7 +138,7 @@ const page = (extra = {}) => {
     document: { body, activeElement: null, createElement: (t) => new El(t), getElementById: () => null, querySelector: () => null },
     location: { origin: ORIGIN, pathname: '/courses/25/modules' },
     chrome: undefined,
-    GZ_I18N: require('../lib/i18n.js'),
+    GZ_I18N: require('../../extension/lib/i18n.js'),
     GZ_CTX: {
       t: (k) => k, locale: () => 'en', settings: () => state.settings, on: () => state.on, canvasCourseId: () => state.cid,
       profile: () => Promise.resolve({ id: 3 }), canvasCourses: () => Promise.resolve([{ id: '25' }]),

@@ -2,8 +2,8 @@
 // they raise, anchored on document positions through lib/writer-schema.js text().
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../lib/writer-cite.js');
-const W = require('../lib/writer-schema.js');
+const C = require('../../extension/lib/writer-cite.js');
+const W = require('../../extension/lib/writer-schema.js');
 
 const d = (y) => ({ 'date-parts': [[y]] });
 const MORRISON = { id: 'morrison', type: 'book', author: [{ family: 'Morrison', given: 'Toni' }], title: 'Beloved', publisher: 'Alfred A. Knopf', issued: d(1987) };
@@ -130,7 +130,7 @@ test('review: MLA title-led organization reports match the title used by the for
 
 for (const style of ['mla9', 'apa7', 'chicago17']) {
   test(`${style}: typed paper references satisfy citations without saved source metadata`, () => {
-    const FX = require('./fixtures/writer-paper-fixtures.js');
+    const FX = require('../fixtures/writer-paper-fixtures.js');
     const node = W.paper.nodeFromJSON(FX.papers[style]());
     assert.deepEqual(C.check(node, [], style), []);
   });
@@ -159,8 +159,8 @@ test('paper format checks can own citation shape while cite checks still find mi
 });
 
 test('recovering unreviewed bibliography metadata does not invent uncited-source warnings', () => {
-  const B = require('../lib/writer-bibliography.js');
-  const FX = require('./fixtures/writer-paper-fixtures.js');
+  const B = require('../../extension/lib/writer-bibliography.js');
+  const FX = require('../fixtures/writer-paper-fixtures.js');
   for (const style of ['mla9', 'apa7', 'chicago17']) {
     const node = W.paper.nodeFromJSON(FX.papers[style]());
     const recovered = B.entries(node).map(B.parse);

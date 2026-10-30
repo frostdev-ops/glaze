@@ -5,11 +5,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const P = require('../lib/parts.js');
-const G = require('../defaults.js');
-const F = require('../lib/fonts.js');
-const LX = require('../lib/lookx.js');
-const C = require('../lib/color.js');
+const P = require('../../extension/lib/parts.js');
+const G = require('../../extension/defaults.js');
+const F = require('../../extension/lib/fonts.js');
+const LX = require('../../extension/lib/lookx.js');
+const C = require('../../extension/lib/color.js');
 
 test('the registry: dotted names per LMS, a selector and label each, containers shared by what may move together', () => {
   assert.ok(P.PARTS.size > 60);
@@ -131,7 +131,7 @@ test('a plan folds the rules for one LMS in order: later wins, styles merge, val
 });
 
 test('features/rules.css has a rule for every style key, and reads only its own variables', () => {
-  const css = fs.readFileSync(path.join(__dirname, '..', 'features/rules.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = fs.readFileSync(path.join(__dirname, '../../extension/features/rules.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   for (const k of P.BOX) assert.match(css, new RegExp(`\\[data-gz-r-st~="${k}"\\][^{]*\\{[^}]*var\\(--gz-r-${k}\\)`), k);
   assert.match(css, /\[data-gz-r-hide\][^{]*\{ display: none !important; \}/);
   assert.deepEqual([...new Set(css.match(/var\(--[\w-]+/g))].sort(), P.BOX.map((k) => `var(--gz-r-${k}`).sort());
@@ -197,7 +197,7 @@ const page = (site, build, at = '/', extra = {}) => {
   const ctx = { site, on: () => on, parts: () => x, need: () => Promise.resolve() };
   const fonts = [];
   const c = vm.createContext({ GZ_CTX: ctx, GZ_PARTS: P, GZ_LX: LX, GZ_COLOR: C, GZ_FONTS: { load: (f) => fonts.push(f) }, document: doc, location: { pathname: at }, NodeFilter: { SHOW_TEXT: 4 }, chrome: { runtime: { getURL: (f) => `ext/${f}` } }, ...extra });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'features/rules.js'), 'utf8'), c);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/features/rules.js'), 'utf8'), c);
   return { doc, body, fonts, R: c.GZ_RULES, wear: (rules) => { x = rules && { rules }; c.GZ_RULES.sync(); }, go: (at) => { c.location.pathname = at; c.GZ_RULES.sync(); }, off: () => { on = false; c.GZ_RULES.sync(); }, sheet: () => doc.getElementById('gz-rules-css') };
 };
 

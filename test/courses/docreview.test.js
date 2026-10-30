@@ -3,13 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const { parse } = require('./fixture-dom.js');
+const { El } = require('../stand-in-dom.js');
+const { parse } = require('../fixture-dom.js');
 El.prototype.matches ||= function (sel) { return this.closest(sel) === this; };
-const G = require('../defaults.js');
-const R = require('../features/docreview.js');
-const source = fs.readFileSync(path.join(__dirname, '../features/docreview.js'), 'utf8');
-const fixture = fs.readFileSync(path.join(__dirname, 'fixtures/ultra-docreview.html'), 'utf8');
+const G = require('../../extension/defaults.js');
+const R = require('../../extension/features/docreview.js');
+const source = fs.readFileSync(path.join(__dirname, '../../extension/features/docreview.js'), 'utf8');
+const fixture = fs.readFileSync(path.join(__dirname, '../fixtures/ultra-docreview.html'), 'utf8');
 const origin = 'https://school.blackboard.com', route = '/ultra/courses/_1_1/assessment/_2_1/overview/student-submission-view';
 const page = (raw = {}, html = fixture, site = 'ultra', pathname = route) => {
   const doc = { activeElement: null }; doc.root = new El('html', doc); doc.body = parse(html, doc); doc.head = new El('head', doc); doc.root.prepend(doc.head);
@@ -93,7 +93,7 @@ test('relay accepts only a boolean review operation from the showing owned frame
   assert.ok(R.relayable(good, origin, source, true)); assert.ok(R.relayable({ ...good, data: { gzCtab: 'review', on: false } }, origin, source, true));
   for (const e of [{ ...good, origin: 'https://evil.example' }, { ...good, source: {} }, { ...good, data: { gzCtab: 'review', on: 1 } }, { ...good, data: { gzCtab: 'review', on: true, url: '/' } }, { ...good, data: { gzCtab: 'sidebar', on: true } }]) assert.equal(R.relayable(e, origin, source, true), false);
   assert.equal(R.relayable(good, origin, source, false), false);
-  const tabs = fs.readFileSync(path.join(__dirname, '../features/coursetabs.js'), 'utf8');
+  const tabs = fs.readFileSync(path.join(__dirname, '../../extension/features/coursetabs.js'), 'utf8');
   assert.match(tabs, /const current = \(\) => currentFrame\(from, src\) && src.el.contentDocument === doc/); assert.ok(tabs.includes("el.allow = 'fullscreen;"));
 });
 test('teardown, all settings off, frame hide, and structure mismatch restore native layout', async () => {
@@ -120,7 +120,7 @@ test('each setting survives sanitize / JSON round trip and has an editor checkbo
   const want = { compact: false, fullscreen: false, focus: true, hideBars: false, remember: true };
   assert.deepEqual(G.GZ_SANITIZE(JSON.parse(JSON.stringify(G.GZ_SANITIZE({ docreview: want })))).docreview, want);
   assert.deepEqual(G.GZ_SANITIZE({ docreview: { compact: 'no', unknown: true } }).docreview, G.GZ_DEFAULTS.docreview);
-  const options = fs.readFileSync(path.join(__dirname, '../options.html'), 'utf8');
+  const options = fs.readFileSync(path.join(__dirname, '../../extension/options.html'), 'utf8');
   for (const key of Object.keys(want)) assert.match(options, new RegExp(`type="checkbox" data-key="docreview.${key}"`));
 });
 test('focus memory is session-scoped, opt-in, and the hide-bars preference updates while focused', () => {
@@ -129,13 +129,13 @@ test('focus memory is session-scoped, opt-in, and the hide-bars preference updat
   const q = page(); q.ui.sync(); q.ui.enter(); assert.equal(q.store.size, 0);
 });
 test('print restores the native layout and no feature code reparents, clones or reloads the viewer', () => {
-  const css = fs.readFileSync(path.join(__dirname, '../features/docreview.css'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../../extension/features/docreview.css'), 'utf8');
   assert.match(css, /@media screen/); assert.match(css, /@media print \{ \[data-gz-review-ui\]/);
   assert.doesNotMatch(source, /cloneNode|\.src\s*=|append\(a\.|append\(active\.|replaceWith/);
 });
 
 test('the actual course-tab relay rechecks document ownership after lazy loading', async () => {
-  const tabs = fs.readFileSync(path.join(__dirname, '../features/coursetabs.js'), 'utf8');
+  const tabs = fs.readFileSync(path.join(__dirname, '../../extension/features/coursetabs.js'), 'utf8');
   const code = tabs.slice(tabs.indexOf('  const relayReview = '), tabs.indexOf('  const relayTimer = '));
   const doc = { location: { pathname: route }, documentElement: { hasAttribute: () => true } }, source = {}, src = { el: { contentWindow: source, contentDocument: doc } }, calls = [];
   let current = true, release;
@@ -155,7 +155,7 @@ test('source replacement and removal of owned controls exit focus without touchi
   }
 });
 test('all five translated catalogues include the new review settings and actions', () => {
-  require('../lib/i18n.js');
+  require('../../extension/lib/i18n.js');
   for (const code of ['de', 'es', 'fr', 'nl', 'pt-BR']) for (const key of ['Document review', 'Compact submission header', 'Full-screen document button', 'Focus document button', 'Hide Glaze bars in focus', 'Remember document focus for this session', 'Grade and feedback', 'Exit focus']) assert.equal(typeof globalThis.GZ_LANGS[code][key], 'string', `${code}: ${key}`);
 });
 
@@ -175,10 +175,10 @@ test('Canvas canvadocs with comment controls stays entirely native; a read-only 
 // test/fixtures/canvas-submission.html is a real Canvas submission page. Like every student's, it carries the comment box
 // (a textarea, Save, Attach File) and a Re-submit link, which review's rule keeps native; docs/features.md says so.
 test('a real Canvas submission page stays native for its comment box and Re-submit link, and its header and grade are recognised without them', () => {
-  const real = fs.readFileSync(path.join(__dirname, 'fixtures/canvas-submission.html'), 'utf8');
+  const real = fs.readFileSync(path.join(__dirname, '../fixtures/canvas-submission.html'), 'utf8');
   const where = '/courses/31/assignments/213/submissions/3';
   // The docs make no promise the page can't keep: they say a comment box and a Re-submit link keep Canvas's page native.
-  const promise = fs.readFileSync(path.join(__dirname, '../docs/features.md'), 'utf8').split('\n').find((l) => l.startsWith('- **Document review**'));
+  const promise = fs.readFileSync(path.join(__dirname, '../../docs/features.md'), 'utf8').split('\n').find((l) => l.startsWith('- **Document review**'));
   assert.match(promise, /Canvas's usual submission page has a comment box and a Re-submit link, so it stays native/);
   assert.doesNotMatch(promise, /read-only Canvas canvadocs previews also qualify/);
   const p = page({}, real, 'canvas', where);

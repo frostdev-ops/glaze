@@ -2,7 +2,7 @@
 // writes a backup's records.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const worker = require('./helpers/worker-env.cjs');
+const worker = require('../helpers/worker-env.cjs');
 
 const EXT = 'chrome-extension://x', SITE = 'https://school.instructure.com';
 const editor = { id: 'glaze', frameId: 0, url: `${EXT}/options.html`, origin: EXT, tab: { id: 2, url: `${EXT}/options.html` } };
@@ -28,7 +28,7 @@ test("Settings in its own tab restores a backup's records; its frame, a school p
 });
 
 test('the Firefox package loads the backup library with the worker', () => {
-  const src = require('node:fs').readFileSync(require.resolve('../lib/background.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8');
   assert.match(src, /importScripts\('backup\.js'\)/);
 });
 

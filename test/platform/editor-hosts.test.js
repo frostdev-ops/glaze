@@ -7,9 +7,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../lib/modbundle.js');
+const M = require('../../extension/lib/modbundle.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 // Web Crypto (a mod's signature and hashes) finishes off the main thread, after any fixed number of turns on a busy machine:
 // settling waits for it too.
 let inCrypto = 0;
@@ -87,7 +87,7 @@ const editor = (chromeRig, data = {}) => {
   const chrome = { ...chromeRig.chrome, storage: { local, onChanged: { addListener() {} } } };
   chrome.runtime.getManifest = ((m) => () => ({ ...m(), sandbox: {} }))(chrome.runtime.getManifest);
   const ctx = vm.createContext({ chrome, document, URL, Promise, console, TextEncoder, TextDecoder, crypto: globalThis.crypto, Uint8Array, atob, btoa, Blob, structuredClone,
-    requestAnimationFrame: (f) => f(), confirm: () => true, GZ_MODBUNDLE: M, GZ_XPARTS: require('../lib/lookparts.js'), GZ_MODAPI: require('../lib/modapi.js') });
+    requestAnimationFrame: (f) => f(), confirm: () => true, GZ_MODBUNDLE: M, GZ_XPARTS: require('../../extension/lib/lookparts.js'), GZ_MODAPI: require('../../extension/lib/modapi.js') });
   vm.runInContext(read('lib/site.js'), ctx);
   vm.runInContext(read('lib/editor-mods.js'), ctx);
   ctx.GZ_MODSEDIT.mount({ t, and: (a) => a.join(' and '), when: String, show() {} });

@@ -2,10 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const { El, matches } = require('./stand-in-dom.js');
-const G = require('../defaults.js'), M = require('../lib/navbar.js');
-const L = require('../lib/navlayout.js'), N = require('../lib/nav-items.js');
-const read = (file) => fs.readFileSync(require.resolve(`../${file}`), 'utf8');
+const { El, matches } = require('../stand-in-dom.js');
+const G = require('../../extension/defaults.js'), M = require('../../extension/lib/navbar.js');
+const L = require('../../extension/lib/navlayout.js'), N = require('../../extension/lib/nav-items.js');
+const read = (file) => fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const origin = 'https://school.instructure.com';
 
@@ -305,7 +305,7 @@ test('same-site custom navbar links preserve running Canvas frames', async () =>
   // Exercise that real fallback too: it cannot rescue a shadow-root anchor.
   const source = read('features/coursetabs.js');
   const outerClick = vm.runInNewContext(source.slice(source.indexOf('  const onCourseLink ='), source.indexOf('  // A course page in its course')) + '\nonCourseLink;', {
-    L: require('../lib/coursetabs.js'), Element: NavEl, on: true, preview: false, framed: '', PAGE: 'page', showing: '',
+    L: require('../../extension/lib/coursetabs.js'), Element: NavEl, on: true, preview: false, framed: '', PAGE: 'page', showing: '',
     document: h.document, location: h.document.location, frames: new Map([['12', {}]]), here: () => '',
     openPage: (url) => h.routed.push(origin + url), openAt: (_, url) => h.routed.push(origin + url),
   });

@@ -6,16 +6,16 @@
 // publish path, Insights read afresh while it is on, an assignment read in the tab (its text, files and rubric, through the
 // libraries the page loads on demand, and no submission), Canvas's planner mark with the page's CSRF token, no tab for
 // another account, a quiz page or no tab at all.
-//   NODE_PATH=<playwright> nice -n 10 node scripts/mcp-refresh-check.js [evidence folder]   (EXT selects the checkout)
+//   NODE_PATH=<playwright> nice -n 10 node checks/agents/mcp-refresh-check.js [evidence folder]   (EXT selects the checkout)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const env = require('./check-env.js');
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js');
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const G = require(path.join(root, 'defaults.js'));
 const I = require(path.join(root, 'lib/insights.js'));
 const CANVAS = 'https://school.instructure.com', ULTRA = 'https://bb.school.test';
 const A = `${CANVAS}/5`, UL = `${ULTRA}/_900_1`;
-const fixture = (n) => JSON.parse(fs.readFileSync(path.join(root, 'test/fixtures', n), 'utf8'));
+const fixture = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '../../test/fixtures', n), 'utf8'));
 // The worker's refresh, for the check to call.
 const SHIM = `
 globalThis.refreshCheck = (account, group) => { if (typeof GZ_MCP_TABS === 'undefined') mcpFiles(); return mcpRefresh(account, group, {}); };
@@ -68,7 +68,7 @@ const check = async (name, test) => {
 };
 
 (async () => {
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-mcp-refresh-'));
   const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'gz-mcp-refresh'));
   fs.mkdirSync(out, { recursive: true });
@@ -78,14 +78,14 @@ const check = async (name, test) => {
       try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nmcp-refresh-check\n`);
-    const ext = require('./check-env.js').staged(root, [`${ULTRA}/*`], scratch);
+    const ext = require('../../tools/dev/check-env.js').staged(root, [`${ULTRA}/*`], scratch);
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
     const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
     fs.rmSync(path.join(ext, 'lib/background.js'));
     fs.writeFileSync(path.join(ext, 'lib/background.js'), worker0 + SHIM);
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
     env.noFirstRun(context);

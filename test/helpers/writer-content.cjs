@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { El, parser } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
-const U = require('../../lib/writer-ultra.js');
+const U = require('../../extension/lib/writer-ultra.js');
 // writer: the student's Writer settings as the page reads them (writer.full: an assignment opens its full view).
 module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recovery = false, pathname = null, account = async () => '_900_1', writer = {} } = {}) => {
   const doc = { activeElement: null, listeners: [] }, timers = new Map(), observers = [], ports = [], messages = [], clicks = [], kept = [], offers = [];
@@ -47,7 +47,7 @@ module.exports = ({ fixture = 'discussion', helper = 'ok', insert = false, recov
     if (mode === 'ok' && html !== null) ed.innerHTML = html;
     if (mode !== 'absent') doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: mode !== 'fail' && html !== null, html }) }));
   });
-  vm.runInContext(fs.readFileSync(process.env.WRITER_CONTENT_SOURCE || path.join(__dirname, '../../features/writer.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(process.env.WRITER_CONTENT_SOURCE || path.join(__dirname, '../../extension/features/writer.js'), 'utf8'), ctx);
   const boot = async (frame) => {
     frame.dispatchEvent({ type: 'load' });
     doc.dispatchEvent({ type: 'message', source: frame.contentWindow, origin: 'chrome-extension://x', data: { type: 'glaze:writer:hello' } });

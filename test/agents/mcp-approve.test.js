@@ -1,15 +1,15 @@
 // The approval window for agent apps (lib/mcp/approve.js): one popup serves every ask, oldest first; only that window's tab
 // decides, and each ask once; the 600 s timeout, a cancel and a closed window end an ask; at most 5 wait per app; progress
 // every 15 s; a worker restart sweeps what was waiting or running. The page (lib/mcp/approve.html, approve-page.js) is
-// checked here for what it may read and write; scripts/mcp-approve-check.js drives it in Chromium.
+// checked here for what it may read and write; checks/agents/mcp-approve-check.js drives it in Chromium.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const A = require('../lib/mcp/approve.js');
+const A = require('../../extension/lib/mcp/approve.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const URL_ = 'chrome-extension://glaze/lib/mcp/approve.html';
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r)); };
@@ -135,7 +135,7 @@ test('a kind or view Glaze never sends is a programming error', async () => {
 // The groups are lib/ai/tools.js's: each one a tool may name is one the window asks about and names, and one Settings
 // switches and names, so a new group can't be refused at its first call or left without a word.
 test('every group a tool may name is asked about and named in the window, and switched and named in Settings', async () => {
-  const TL = require('../lib/ai/tools.js'), E = require('../lib/editor-agents.js');
+  const TL = require('../../extension/lib/ai/tools.js'), E = require('../../extension/lib/editor-agents.js');
   const page = read('lib/mcp/approve-page.js');
   for (const group of TL.GROUPS) {
     const e = env();
@@ -537,7 +537,7 @@ test('the page renders from storage.session and sends only its decision', () => 
 });
 
 test('the approval page is not reachable from web pages', () => {
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   const listed = (m.web_accessible_resources || []).flatMap((w) => w.resources);
   assert.ok(!listed.some((r) => /^lib\/(?:mcp\/|\*)|approve/.test(r)), listed.join(', '));
 });

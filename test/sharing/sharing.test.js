@@ -1,11 +1,11 @@
 // Share sessions' pure parts (lib/sharing.js, spike S6): links, sealing and tampering, the merge (any order converges,
-// clocks far ahead are held, untrusted values are cleaned), edits, and conflict copies. test/relay.test.js runs
+// clocks far ahead are held, untrusted values are cleaned), edits, and conflict copies. test/sharing/relay.test.js runs
 // devices against a local relay.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../lib/sharing.js');
-const D = require('../defaults.js');
-const L = require('../lib/share.js');
+const G = require('../../extension/lib/sharing.js');
+const D = require('../../extension/defaults.js');
+const L = require('../../extension/lib/share.js');
 
 const bytes = (n, x = 7) => new Uint8Array(n).fill(x);
 const editKeys = () => G.keys({ sid: crypto.getRandomValues(new Uint8Array(16)), seed: crypto.getRandomValues(new Uint8Array(32)) });
@@ -242,7 +242,7 @@ test('adapters work as classic scripts, without require()', async () => {
   const ctx = vm.createContext({ crypto, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, URL, console });
   // The worker's order (lib/background.js importScripts), then this file.
   for (const f of ['lib/color.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/cards.js', 'lib/lookparts.js', 'lib/share.js', 'lib/doctext.js', 'lib/notes.js', 'lib/sharing.js']) {
-    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), ctx, { filename: f });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), ctx, { filename: f });
   }
   const code = await L.encode(D.GZ_SANITIZE({}));
   assert.equal(await vm.runInContext('GZ_SHARING.ADAPTERS.look.clean', ctx)('code', code), code);

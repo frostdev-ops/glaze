@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const T = require('../lib/todo.js');
+const D = require('../../extension/defaults.js');
+const T = require('../../extension/lib/todo.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
 const KEY = 'todo:https://canvas.test/3';
 const NOW = Date.now();

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const K = require(path.join(process.env.GZ_B6_REPO || path.join(__dirname, '..'), 'lib/cards.js'));
+const K = require(path.join(process.env.GZ_B6_REPO || path.join(__dirname, '../../extension'), 'lib/cards.js'));
 const U = 'ultra:https://bb.school.edu/_25_1', C = 'canvas:https://school.instructure.com/7';
 const saveUltra = (op, area) => (K.ultraChange || K.change)(op, area);
 const image = 'data:image/png;base64,AAAA';

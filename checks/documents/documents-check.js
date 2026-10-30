@@ -8,13 +8,13 @@
 // back with the list as it was, glides, menus, the toast; Expressive, Subtle, Off and reduced motion). Screenshots at 1280
 // and 640 px in English and German, look-*.png on four Looks, and motion-*.png frames of the motion. Synthetic records
 // only; the browser reaches no network (a Look's fonts are refused and counted apart, the photo is served here).
-// NODE_PATH=<playwright> nice -n 10 node scripts/documents-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/documents/documents-check.js [evidence directory]
 // DOCUMENTS_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-documents).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-documents-check');
 const shots = process.env.DOCUMENTS_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-documents');
 const checks = [], errors = [], requests = [], fontRequests = [];
@@ -90,7 +90,7 @@ const PROBE = ({ lang }) => {
 
 (async () => {
   let context, held = false, tmp, ext;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\ndocuments-check\n`); break; }
@@ -99,9 +99,9 @@ const PROBE = ({ lang }) => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-documents-'));
     fs.mkdirSync(out, { recursive: true });
     fs.mkdirSync(shots, { recursive: true });
-    ext = require('./check-env.js').staged(root, []);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, locale: 'en-US', timezoneId: 'America/New_York',
+    ext = require('../../tools/dev/check-env.js').staged(root, []);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, locale: 'en-US', timezoneId: 'America/New_York',
       reducedMotion: 'reduce', acceptDownloads: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     // A Look's web fonts load from their CDNs (lib/fonts.js): refused here like everything else, and counted apart.

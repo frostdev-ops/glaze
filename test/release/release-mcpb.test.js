@@ -8,10 +8,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const VERSION = JSON.parse(read('manifest.json')).version;
-const store = () => import('../scripts/store-release.mjs');
+const store = () => import('../../tools/release/store-release.mjs');
 const scratch = (t) => {
   const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-release-mcpb-')));
   t.after(() => fs.rmSync(d, { recursive: true, force: true }));
@@ -32,7 +32,7 @@ test('the helper and its bundle must carry Glaze\'s version', async () => {
 });
 
 test('a release checks the helper\'s committed version before it builds anything', () => {
-  const source = read('scripts/store-release.mjs');
+  const source = read('../tools/release/store-release.mjs');
   const check = source.indexOf("if (['release', 'build', 'plan'].includes(opt.command) && publicStores(opt.stores)) helperVersions(show, version);");
   assert.ok(check > 0, 'release, build and plan check it whenever both store ZIPs are selected');
   assert.ok(check < source.indexOf("const saved = path.join(out, 'release.json');"), 'before any build starts');
@@ -56,9 +56,9 @@ esac
 // The release clone, as far as pack-mcpb.js reads it, and the release workspace with its logs folder.
 const release = (t) => {
   const base = scratch(t), source = path.join(base, 'source'), out = path.join(base, 'out'), bin = path.join(base, 'bin');
-  fs.cpSync(path.join(root, 'mcp'), path.join(source, 'mcp'), { recursive: true });
-  fs.mkdirSync(path.join(source, 'icons'));
-  fs.copyFileSync(path.join(root, 'icons/icon128.png'), path.join(source, 'icons/icon128.png'));
+  fs.cpSync(path.join(__dirname, '../../mcp'), path.join(source, 'mcp'), { recursive: true });
+  fs.mkdirSync(path.join(source, 'extension/icons'), { recursive: true });
+  fs.copyFileSync(path.join(root, 'icons/icon128.png'), path.join(source, 'extension/icons/icon128.png'));
   fs.mkdirSync(path.join(out, 'logs'), { recursive: true });
   fs.mkdirSync(bin);
   fakeNpx(bin);
@@ -98,7 +98,7 @@ test('a failed mcpb validate stops the release build, and no bundle is packed or
 });
 
 test('build packs the bundle whenever it builds both store ZIPs: after the suite, before the Firefox and Apple steps', () => {
-  const source = read('scripts/store-release.mjs');
+  const source = read('../tools/release/store-release.mjs');
   const body = source.slice(source.indexOf('async function build('), source.indexOf('export function verify('));
   const pack = body.indexOf("if (publicStores(opt.stores)) artifact('mcpb', await buildMcpb(source, out, env, manifest.version));");
   assert.ok(pack > 0, 'recorded as the mcpb artifact');

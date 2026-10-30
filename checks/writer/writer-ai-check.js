@@ -5,11 +5,11 @@
 // consumes it, any other key, a click or an IME composition cancels it and the run in flight; Tab still indents a list
 // item; nothing with completion off or in a test's box; Check with AI (⌘⇧K) gives anchored issues; the chip's menu, the ⋯
 // entry, Feedback over the chip, and the autocorrect hook. Screenshots beside the mockups.
-// NODE_PATH=<playwright> nice -n 10 lockf -k <heavy lock> node scripts/writer-ai-check.js [screenshot directory]
+// NODE_PATH=<playwright> nice -n 10 lockf -k <heavy lock> node checks/writer/writer-ai-check.js [screenshot directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const root = path.resolve(__dirname, '..'), site = 'https://writer.test';
+const root = path.resolve(__dirname, '../../extension'), site = 'https://writer.test';
 const shots = process.argv[2] || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-ai');
 const MAC = process.platform === 'darwin', MOD = MAC ? 'Meta' : 'Control', WORD = MAC ? 'Alt+ArrowRight' : 'Control+ArrowRight';
 const AI_FILES = ['lib/writer-sources.js', 'lib/writer-cite.js', ...['schema', 'request', 'stream', 'failure', 'endpoint', 'text', 'providers', 'tools', 'loop', 'task', 'providers/mock',
@@ -88,8 +88,8 @@ const PARAS = (n, size) => Array.from({ length: n }, (_, i) => {
 const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)\n>>>\1/;
 
 (async () => {
-  await require('./wait-for-browser.js')();
-  const browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch() });
+  await require('../../tools/dev/wait-for-browser.js')();
+  const browser = await chromium.launch({ headless: true, ...require('../../tools/dev/check-env.js').chromeLaunch() });
   let failures = 0, checks = 0;
   const errors = [];
   try {
@@ -555,13 +555,13 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
     });
 
     // The paper's Feedback and Outline tabs as mockups E draw them: every state, Frost and Paper, wide and narrow.
-    const looks = { dark: { dark: true, motion: 'subtle' }, light: { dark: false, motion: 'subtle', tokens: Object.fromEntries(Object.entries(require('../defaults.js').GZ_PRESETS.find((x) => x[0] === 'Paper')[1]).filter(([k]) => k.startsWith('--gz-'))) } };
+    const looks = { dark: { dark: true, motion: 'subtle' }, light: { dark: false, motion: 'subtle', tokens: Object.fromEntries(Object.entries(require('../../extension/defaults.js').GZ_PRESETS.find((x) => x[0] === 'Paper')[1]).filter(([k]) => k.startsWith('--gz-'))) } };
     const built = path.join(shots, 'feedback-outline');
     fs.mkdirSync(built, { recursive: true });
     const level = (id, label, points, a, b) => ({ id, label, points, cells: [{ level: '_1_1', detail: 'Exemplary work.', value: a }, { level: '_2_1', detail: 'Developing work.', value: b }] });
     const RUBRIC = { title: 'Essay rubric', levels: [{ id: '_1_1', label: 'Proficient' }, { id: '_2_1', label: 'Developing' }],
       criteria: [level('_10_1', 'Thesis and argument', 10, 9, 6), level('_11_1', 'Use of evidence', 10, 9, 6), level('_12_1', 'Works Cited', 5, 5, 2), level('_13_1', 'MLA format', 5, 5, 3)] };
-    const FX = require('../test/fixtures/writer-paper-fixtures.js');
+    const FX = require('../../test/fixtures/writer-paper-fixtures.js');
     for (const [name, look] of Object.entries(looks)) for (const [wide, size] of [['wide', { width: 1440, height: 900 }], ['narrow', { width: 760, height: 1000 }]]) {
       await check(`Feedback and Outline as mockups E (${name}, ${wide}): head row, states, cards, levels, pages, Outline, focus ring`, async () => {
         const q = await frame({ mode: 'paper', kind: 'assignment', full: true, html: `<p>${LAST}</p>`, ctx: { kind: 'assignment', assignment: { title: 'Essay 2', instructions: 'Write 1,200 words on memory in Beloved.', rubric: RUBRIC } } });

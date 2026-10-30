@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const modules = fs.readdirSync(path.join(root, 'lib/pdfjs')).filter((f) => /\.m?js$/.test(f));
 // A call of the old global escape or unescape function; not a method (RegExp.escape), core-js's $escape, or its definition.
@@ -37,12 +37,12 @@ test("core-js's old-IE fallback is gone from every module", () => {
 });
 
 test('each module names the pinned version and the script that built it', () => {
-  const version = read('scripts/vendor-pdfjs.sh').match(/^version=(\S+)$/m)[1];
+  const version = read('../tools/vendor/vendor-pdfjs.sh').match(/^version=(\S+)$/m)[1];
   for (const f of modules) assert.equal(read(`lib/pdfjs/${f}`).split('\n')[0], `// pdf.js ${version} legacy build (Apache-2.0, lib/pdfjs/LICENSE). Built by scripts/vendor-pdfjs.sh.`);
 });
 
 test('the core-js bundled into each module ships its pinned MIT permission notice', () => {
-  const script = read('scripts/vendor-pdfjs.sh');
+  const script = read('../tools/vendor/vendor-pdfjs.sh');
   const license = read('lib/pdfjs/LICENSE_CORE_JS');
   const version = script.match(/^core_js=(\S+)$/m)[1];
   for (const f of modules) assert.ok(read(`lib/pdfjs/${f}`).includes(`license: 'https://github.com/zloirock/core-js/blob/v${version}/LICENSE'`), f);
@@ -68,14 +68,14 @@ test('the viewer keeps Fluent overlays without the HTML sinks Firefox Add-ons fl
   assert.deepEqual(found, []);
 });
 
-// The worker's Brotli decoder ships no packed data (scripts/vendor-pdfjs-brotli.js): it reads Brotli's dictionary from
+// The worker's Brotli decoder ships no packed data (tools/vendor/vendor-pdfjs-brotli.js): it reads Brotli's dictionary from
 // google/brotli's dictionary.bin beside it, and its tables are numbers. It still undoes real Brotli: Node's own
 // compressor, at its best setting, leans on that dictionary and its transforms.
 test("the worker's Brotli decoder reads the pinned dictionary file, keeps no packed strings, and still undoes Brotli", () => {
   const crypto = require('node:crypto');
   const vm = require('node:vm');
   const zlib = require('node:zlib');
-  const script = read('scripts/vendor-pdfjs.sh');
+  const script = read('../tools/vendor/vendor-pdfjs.sh');
   const dictionary = fs.readFileSync(path.join(root, 'lib/pdfjs/brotli-dictionary.bin'));
   assert.equal(crypto.createHash('sha256').update(dictionary).digest('hex'), script.match(/^brotli_dictionary_sha256=(\S+)$/m)[1]);
   assert.match(read('lib/pdfjs/LICENSE_BROTLI'), /by the Brotli Authors/);
@@ -94,11 +94,11 @@ test("the worker's Brotli decoder reads the pinned dictionary file, keeps no pac
   }
   // Without the file, a Brotli stream fails on its own; nothing else needs it.
   assert.throws(() => decoder(null)(new Int8Array(4)), /Brotli dictionary unavailable/);
-  assert.match(script, /\nnode scripts\/vendor-pdfjs-brotli\.js lib\/pdfjs\/pdf\.worker\.mjs lib\/pdfjs\/brotli-dictionary\.bin\n/);
+  assert.match(script, /\nnode \.\.\/tools\/vendor\/vendor-pdfjs-brotli\.js lib\/pdfjs\/pdf\.worker\.mjs lib\/pdfjs\/brotli-dictionary\.bin\n/);
 });
 
 // pdf.js used the old escape and unescape functions for UTF-8, file names and the viewer's link hashes;
-// scripts/vendor-pdfjs.sh writes them out. Each replacement gives what the original gave, and throws where it threw, on
+// tools/vendor/vendor-pdfjs.sh writes them out. Each replacement gives what the original gave, and throws where it threw, on
 // text built to hit every edge.
 test("pdf.js's escape and unescape calls are written out and decode exactly as before", () => {
   const vm = require('node:vm');
@@ -157,7 +157,7 @@ const load = () => loaded ||= (async () => {
 
 test('pdf.mjs, its worker and the viewer load in node, the viewer with only a stub of the page it styles', async () => {
   const { pdfjs, worker, viewer } = await load();
-  assert.equal(pdfjs.version, read('scripts/vendor-pdfjs.sh').match(/^version=(\S+)$/m)[1]);
+  assert.equal(pdfjs.version, read('../tools/vendor/vendor-pdfjs.sh').match(/^version=(\S+)$/m)[1]);
   for (const name of ['getDocument', 'AnnotationEditorType', 'AnnotationMode', 'GlobalWorkerOptions']) assert.ok(pdfjs[name], name);
   assert.equal(typeof worker.WorkerMessageHandler, 'function');
   for (const name of ['PDFViewer', 'EventBus', 'PDFLinkService', 'PDFFindController', 'PDFScriptingManager', 'GenericL10n', 'AnnotationLayerBuilder', 'TextLayerBuilder']) {
@@ -166,7 +166,7 @@ test('pdf.mjs, its worker and the viewer load in node, the viewer with only a st
 });
 
 test('the viewer stylesheet ships with every picture it names, each only a picture, under the licences beside them', () => {
-  const script = read('scripts/vendor-pdfjs.sh');
+  const script = read('../tools/vendor/vendor-pdfjs.sh');
   const css = read('lib/pdfjs/pdf_viewer.css');
   assert.equal(css.split('\n')[0], `/* pdf.js ${script.match(/^version=(\S+)$/m)[1]} legacy viewer styles (Apache-2.0, lib/pdfjs/LICENSE). Built by scripts/vendor-pdfjs.sh. */`);
   assert.doesNotMatch(css, /@import|url\(\s*["']?(?:[a-z]+:)?\/\//i, 'the stylesheet reaches nothing outside the extension');
@@ -188,7 +188,7 @@ test('the viewer stylesheet ships with every picture it names, each only a pictu
 });
 
 // A PDF can carry JavaScript for its forms, which pdf.js runs in a sandbox it imports (pdf.sandbox.mjs, not shipped).
-// scripts/vendor-pdfjs.sh cuts that import: the viewer imports nothing, and a document with scripts opens without them.
+// tools/vendor/vendor-pdfjs.sh cuts that import: the viewer imports nothing, and a document with scripts opens without them.
 test('the viewer runs no PDF scripts: its import of the form-script sandbox is cut', async () => {
   const src = read('lib/pdfjs/pdf_viewer.mjs');
   assert.doesNotMatch(src, /\bimport\s*\(|QuickJSSandbox/);
@@ -259,7 +259,7 @@ test('extractPages rearranges pages in node: reorder, delete, duplicate, merge, 
     ['A1 0', ' 0', 'A2 90', 'A3 0'], 'blank page');
 });
 
-// The one patch to pdf.js's code (scripts/vendor-pdfjs.sh): an entry's rotations[i] turns its source page i further.
+// The one patch to pdf.js's code (tools/vendor/vendor-pdfjs.sh): an entry's rotations[i] turns its source page i further.
 test("extractPages turns pages by each entry's rotations: /Rotate is the page's own turn plus the extra, mod 360", async () => {
   assert.deepEqual(await pagesOf(await fromA([{ document: null, rotations: [90, 270, -90] }, { document: B.slice(), rotations: { 0: 90 } }])),
     ['A1 90', 'A2 0', 'A3 270', 'B1 270']);

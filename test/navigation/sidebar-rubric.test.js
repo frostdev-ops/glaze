@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { page, record, natives, unmoved, settle, read } = require('./sidebar-ultra-page.js');
+const { page, record, natives, unmoved, settle, read } = require('../sidebar-ultra-page.js');
 const snapshot = (e) => JSON.stringify([e.className, e.attrs, e.dataset, Object.entries(e.style).filter(([, v]) => typeof v === 'string'), e.children.map((x) => x.tagName ? snapshot(x) : x.textContent)]);
 const review = ({ width = 1800, savedWidth = 352 } = {}) => {
   const p = page({ at: 'stream', width, stored: record({ width: savedWidth, chose: { width: true }, dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
@@ -136,13 +136,13 @@ test('review styles never inset or narrow the full-window layer', () => {
 });
 
 test('release documentation describes visual Rubric absorption and the native attempt fallback', () => {
-  for (const file of ['docs/features.md', 'CHANGELOG.md']) {
+  for (const file of ['../docs/features.md', '../CHANGELOG.md']) {
     const text = read(file);
     assert.match(text, /attempt panels stay native/i, file);
     assert.match(text, /Rubric[^.]*visually/i, file);
     assert.match(text, /document review/i, file);
   }
   // The release that ships it names the Rubric in its own section, not a later one.
-  const [, notes] = read('CHANGELOG.md').split(/\n## \[3\.3\.0\][^\n]*\n/);
+  const [, notes] = read('../CHANGELOG.md').split(/\n## \[3\.3\.0\][^\n]*\n/);
   assert.match(notes.split(/\n## /)[0], /Rubric[^.]*visually/i);
 });

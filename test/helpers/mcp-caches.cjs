@@ -1,4 +1,4 @@
-// Glaze's caches for the MCP read tools' tests (test/mcp-tools-*.test.js), made by the code that writes them, from the
+// Glaze's caches for the MCP read tools' tests (test/agents/mcp-tools-*.test.js), made by the code that writes them, from the
 // live-shaped fixtures: Canvas's planner items through features/todo.js load and lib/todo.js change, and its gradebooks (test/fixtures/canvas-grades.json,
 // read from a local Canvas) through lib/insights.js, as features/todo.js and features/insights.js keep them; Ultra's
 // memberships, To Do and gradebook rows (test/fixtures/ultra-*.json) through lib/ultra.js; course caches through the actual
@@ -6,10 +6,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const T = require('../../lib/todo.js');
-const U = require('../../lib/ultra.js');
-const I = require('../../lib/insights.js');
-const { GZ_COURSES } = require('../../defaults.js');
+const T = require('../../extension/lib/todo.js');
+const U = require('../../extension/lib/ultra.js');
+const I = require('../../extension/lib/insights.js');
+const { GZ_COURSES } = require('../../extension/defaults.js');
 
 const load = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', n), 'utf8'));
 const CANVAS = 'https://school.instructure.com', ULTRA = 'https://lms.example.edu', ULTRA_UID = '_900_1';
@@ -18,7 +18,7 @@ const TZ = 'UTC';
 const O = Object.fromEntries(Object.entries(T.SPEC).map(([k, [d]]) => [k, d])); // the to-do list's defaults
 // Execute the production writer without starting its page UI. Boundaries fail loudly if it moves.
 const part = (file, from, to) => {
-  const src = fs.readFileSync(path.join(__dirname, '..', '..', file), 'utf8'), a = src.indexOf(from), b = src.indexOf(to, a);
+  const src = fs.readFileSync(path.join(__dirname, '../../extension', file), 'utf8'), a = src.indexOf(from), b = src.indexOf(to, a);
   if (a < 0 || b <= a) throw new Error(`Missing writer in ${file}`);
   return src.slice(a, b);
 };
@@ -37,7 +37,7 @@ const planCache = async (origin, uid, at, scope) => {
   return store.todoCache;
 };
 
-// One item of Canvas's /api/v1/planner/items, as test/todo.test.js writes them.
+// One item of Canvas's /api/v1/planner/items, as test/planner/todo.test.js writes them.
 const planner = ({ type = 'assignment', id, course = 25, name = 'BIO 1100', title, at, sub = {}, ov = null, details }) => ({
   plannable_type: type, plannable_id: id, course_id: course, context_name: name, plannable_date: at,
   html_url: type === 'planner_note' ? `${CANVAS}/api/v1/planner_notes/${id}` : `${CANVAS}/courses/${course}/assignments/${id}`,
@@ -48,7 +48,7 @@ const planner = ({ type = 'assignment', id, course = 25, name = 'BIO 1100', titl
 // storage.local todoCache, as features/todo.js load() makes it on each site.
 const canvasPlan = (uid, raw, at = NOW - 60e3) => planCache(CANVAS, uid, at, {
   ultra: false, pages: async () => raw, ctx: { canvasCourses: async () => [] },
-  GZ_CANVAS_DUE_WEEK: require('../../defaults.js').GZ_CANVAS_DUE_WEEK,
+  GZ_CANVAS_DUE_WEEK: require('../../extension/defaults.js').GZ_CANVAS_DUE_WEEK,
 });
 const memberships = () => load('ultra-memberships.json').results;
 const ultraPlan = (at = NOW - 120e3, complete = true) => {

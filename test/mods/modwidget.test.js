@@ -3,10 +3,10 @@
 // to Glaze's own actions, and a widget bundle's round trip through lib/modbundle.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const W = require('../lib/modwidget.js');
-const API = require('../lib/modapi.js');
-const B = require('../lib/modbroker.js');
-const M = require('../lib/modbundle.js');
+const W = require('../../extension/lib/modwidget.js');
+const API = require('../../extension/lib/modapi.js');
+const B = require('../../extension/lib/modbroker.js');
+const M = require('../../extension/lib/modbundle.js');
 
 const enc = new TextEncoder();
 const NOW = Date.UTC(2026, 9, 17, 12, 0, 0);
@@ -570,7 +570,7 @@ test('builder provenance requires the local author and code-less blocks without 
 
 test('the API links the block format and documents the ring maximum correctly', () => {
   const fs = require('node:fs'), path = require('node:path');
-  const read = (f) => fs.readFileSync(path.join(__dirname, '..', 'docs', f), 'utf8');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../docs', f), 'utf8');
   assert.match(read('mods-api.md'), /\]\(mods-widgets\.md\)/);
   assert.match(read('mods-widgets.md'), /non-positive maximum/);
 });

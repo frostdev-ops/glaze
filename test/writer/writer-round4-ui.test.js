@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const L = require('../lib/writer-submit.js');
-const source = fs.readFileSync(require.resolve('../writer-paper.js'), 'utf8');
+const { El } = require('../stand-in-dom.js');
+const L = require('../../extension/lib/writer-submit.js');
+const source = fs.readFileSync(require.resolve('../../extension/writer-paper.js'), 'utf8');
 
 test('Export names the same paper exactly as Submit does', () => {
   const a = source.indexOf('    const fileName = '), b = source.indexOf('    const exportFile = ', a);
@@ -24,7 +24,7 @@ test('header tab leaders fill the gap before the tabbed text', () => {
 });
 
 test('autocorrect Undo does not intercept an issue at a different caret position', () => {
-  const proof = fs.readFileSync(require.resolve('../writer-proof.js'), 'utf8');
+  const proof = fs.readFileSync(require.resolve('../../extension/writer-proof.js'), 'utf8');
   const a = proof.indexOf('  const openNext = '), b = proof.indexOf('  // ---- the autocorrect pop', a);
   let card = false, focused = false;
   const view = { state: { selection: { head: 30 } } };
@@ -36,7 +36,7 @@ test('autocorrect Undo does not intercept an issue at a different caret position
 });
 
 test('clicking the far half of a footnote opens the note at its node position', () => {
-  const S = require('../lib/writer-schema.js');
+  const S = require('../../extension/lib/writer-schema.js');
   const a = source.indexOf('    const watch = new PM.state.Plugin('), b = source.indexOf('    ed.addPlugins(', a);
   let opened;
   const plugin = vm.runInNewContext(`${source.slice(a, b)} watch`, { PM: globalThis.GZ_PM, editNote: (pos) => { opened = pos; } });
@@ -46,7 +46,7 @@ test('clicking the far half of a footnote opens the note at its node position', 
 });
 
 test('the page-foot highlight selects the same footnote letters that Find matched', () => {
-  const S = require('../lib/writer-schema.js'), FIND = require('../writer-find.js');
+  const S = require('../../extension/lib/writer-schema.js'), FIND = require('../../extension/writer-find.js');
   const content = '<p>First<br>line.</p><p>Second target.</p>';
   const doc = S.paper.node('doc', null, S.paper.node('paragraph', null, [S.paper.text('Body'), S.paper.node('footnote_ref', { content })]));
   const hit = FIND.search(doc, 'target')[0];
@@ -54,7 +54,7 @@ test('the page-foot highlight selects the same footnote letters that Find matche
   let at = 0, from, to;
   const range = { setStart: (n, off) => { from = [text.indexOf(n), off]; }, setEnd: (n, off) => { to = [text.indexOf(n), off]; } };
   const document = { querySelectorAll: () => [{ firstChild: { textContent: '1' } }], createTreeWalker: () => ({ nextNode: () => text[at++] }), createRange: () => range };
-  const findSource = fs.readFileSync(process.env.WRITER_FIND_SOURCE || require.resolve('../writer-find.js'), 'utf8');
+  const findSource = fs.readFileSync(process.env.WRITER_FIND_SOURCE || require.resolve('../../extension/writer-find.js'), 'utf8');
   const a = findSource.indexOf('  const noteMark = '), b = findSource.indexOf('  F.plugin(plugin());', a);
   vm.runInNewContext(`${findSource.slice(a, b)} noteMark(v, s)`, { document, v: { state: { doc } }, s: { hits: [hit], current: 0 },
     CSS: { highlights: new Map() }, Highlight: class {}, NodeFilter: { SHOW_TEXT: 4 }, requestAnimationFrame: (fn) => fn(), noteRange: FIND.noteRange });

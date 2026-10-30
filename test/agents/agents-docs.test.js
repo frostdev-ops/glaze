@@ -5,22 +5,22 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const plain = (text) => text.replace(/\*\*/g, '').replace(/\s+/g, ' ');
-const agents = () => plain(read('docs/agents.md'));
-const policy = () => plain(read('PRIVACY.md'));
-const section = () => plain(read('PRIVACY.md').split('\n## Agent access\n')[1]?.split('\n## ')[0] || '');
+const agents = () => plain(read('../docs/agents.md'));
+const policy = () => plain(read('../PRIVACY.md'));
+const section = () => plain(read('../PRIVACY.md').split('\n## Agent access\n')[1]?.split('\n## ')[0] || '');
 
 test('the docs mirror and the docs index list docs/agents.md', () => {
-  assert.match(read('scripts/docs-mirror.js'), /'docs\/agents\.md': \['Agents', 'agents', '[^']+'\]/);
-  assert.match(read('docs/README.md'), /\]\(agents\.md\)/);
-  assert.match(read('docs/agents.md'), /^# Agents\n/);
+  assert.match(read('../tools/dev/docs-mirror.js'), /'docs\/agents\.md': \['Agents', 'agents', '[^']+'\]/);
+  assert.match(read('../docs/README.md'), /\]\(agents\.md\)/);
+  assert.match(read('../docs/agents.md'), /^# Agents\n/);
 });
 
 test('the policy names every place agent access keeps something, as the code names it', () => {
-  const G = require('../lib/mcp/grants.js'), A = require('../lib/mcp/tools-assign.js'), P = require('../lib/mcp/approve.js');
-  const L = require('../lib/agent-link.js');
+  const G = require('../../extension/lib/mcp/grants.js'), A = require('../../extension/lib/mcp/tools-assign.js'), P = require('../../extension/lib/mcp/approve.js');
+  const L = require('../../extension/lib/agent-link.js');
   const worker = read('lib/background.js');
   assert.ok(worker.includes("indexedDB.open('glaze-mcp-settings'"), 'the switch is kept in glaze-mcp-settings');
   assert.ok(worker.includes('`mcpConn:${c}`'), "Safari's connections are kept as mcpConn:<c>");
@@ -46,11 +46,11 @@ test('the policy states what agent access sends, what waits for the student and 
     /Turn off[^.]*clears the kept assignment reads/, /Forget all apps[^.]*clears[^.]*assignment reads/,
     /Reset everything clears them all/, /`websiteContent`/]) assert.match(text, fact);
   for (const group of ['Courses, to-dos and schedule', 'Grades', 'Assignments and rubrics', 'Writer documents']) assert.ok(text.includes(group), group);
-  assert.match(plain(read('docs/privacy.md')), /\]\(\.\.\/PRIVACY\.md#agent-access\)/);
+  assert.match(plain(read('../docs/privacy.md')), /\]\(\.\.\/PRIVACY\.md#agent-access\)/);
 });
 
 test("the activity list's outcomes in docs/agents.md are the ones Settings shows", () => {
-  const E = require('../lib/editor-agents.js'), I = require('../lib/i18n.js');
+  const E = require('../../extension/lib/editor-agents.js'), I = require('../../extension/lib/i18n.js');
   const list = agents().match(/how it ended \(([^)]*)\)/)?.[1] || '';
   const said = list.split(/, | or /);
   const labels = E.OUTCOMES.map((o) => E.outcome(o, (k, v) => I.t(k, v, 'en')));
@@ -88,12 +88,12 @@ test('docs/agents.md covers each helper state and its command', () => {
 });
 
 test('the helper state table explains the browser restart immediately after Allow', () => {
-  assert.match(read('docs/agents.md'), /\| Allow Glaze to start the helper \| Press \*\*Allow\*\*\. \|\n\| Restart your browser to start the helper \| Quit the browser and open it again\. \|/);
+  assert.match(read('../docs/agents.md'), /\| Allow Glaze to start the helper \| Press \*\*Allow\*\*\. \|\n\| Restart your browser to start the helper \| Quit the browser and open it again\. \|/);
 });
 
 
 test('agent docs distinguish local transport from school reads and mod network grants', () => {
-  for (const file of ['PRIVACY.md', 'docs/privacy.md', 'docs/agents.md']) {
+  for (const file of ['../PRIVACY.md', '../docs/privacy.md', '../docs/agents.md']) {
     const text = file === 'PRIVACY.md' ? section() : plain(read(file));
     assert.doesNotMatch(text, /Glaze talks only to a helper|Glaze sends nothing to FrostDev/);
     assert.match(text, /Agent access sends no data to FrostDev/);
@@ -104,7 +104,7 @@ test('agent docs distinguish local transport from school reads and mod network g
 });
 
 test('approval retention includes action text and cleanup is conditional on later activity', () => {
-  const text = section(), P = require('../lib/mcp/approve.js');
+  const text = section(), P = require('../../extension/lib/mcp/approve.js');
   assert.equal(P.KEEP, 3600e3);
   assert.match(text, /action summary[^.]*document text or citation details/);
   assert.match(text, /eligible for cleanup an hour after creation/);
@@ -117,11 +117,11 @@ test('agent retention describes usage eviction and the settings that survive res
   assert.match(text, /100 used last[^;]*no time-based expiry/);
   assert.match(text, /Site removal and Reset everything leave the agent switch, apps, grants and activity unchanged/);
   assert.match(text, /Revoke leaves the activity list/);
-  assert.match(plain(read('docs/privacy.md')), /Reset everything[^.]*switch, apps, grants and activity/);
+  assert.match(plain(read('../docs/privacy.md')), /Reset everything[^.]*switch, apps, grants and activity/);
 });
 
 test('agent identity and helper uninstall claims do not promise verified identities or complete erasure', () => {
-  for (const file of ['PRIVACY.md', 'docs/agents.md', 'mcp/README.md']) {
+  for (const file of ['../PRIVACY.md', '../docs/agents.md', '../mcp/README.md']) {
     const text = file === 'PRIVACY.md' ? section() : plain(read(file));
     assert.match(text, /self-reported and unverified/);
     assert.match(text, /Windows[^.]*no program path/);
@@ -133,33 +133,33 @@ test('agent identity and helper uninstall claims do not promise verified identit
 });
 
 test('all agent Settings paths include AI, including the helper and mod permission copy', () => {
-  for (const file of ['docs/mods-api.md', 'docs/agents.md', 'PRIVACY.md', 'docs/privacy.md', 'mcp/README.md',
-    'mcp/lib/agent.js', 'lib/editor-mods.js', 'lib/modtools.js']) {
+  for (const file of ['../docs/mods-api.md', '../docs/agents.md', '../PRIVACY.md', '../docs/privacy.md', '../mcp/README.md',
+    '../mcp/lib/agent.js', 'lib/editor-mods.js', 'lib/modtools.js']) {
     assert.doesNotMatch(read(file), /Settings → Agents/, file);
     assert.match(read(file), /Settings → AI → Agents/, file);
   }
 });
 
 test('features lists Agents and the AI harness describes the active Writer bridge', () => {
-  assert.match(read('docs/features.md'), /\[Agents\]\(agents\.md\)/);
-  const text = plain(read('docs/ai-harness.md'));
+  assert.match(read('../docs/features.md'), /\[Agents\]\(agents\.md\)/);
+  const text = plain(read('../docs/ai-harness.md'));
   assert.doesNotMatch(text, /for a later MCP integration|nothing offers them to a model yet/);
   assert.match(text, /lib\/mcp\/writer\.js/);
   assert.match(text, /Settings → AI → Agents/);
 });
 
 test('helper uninstall documents removal of otherwise empty Windows host keys', () => {
-  assert.match(plain(read('mcp/README.md')), /otherwise empty host key/);
+  assert.match(plain(read('../mcp/README.md')), /otherwise empty host key/);
 });
 
 test("helper uninstall says a helper already running stops only when the browser restarts", () => {
-  const section = plain(read('mcp/README.md').split('\n## Uninstall\n')[1]?.split('\n## ')[0] || '');
+  const section = plain(read('../mcp/README.md').split('\n## Uninstall\n')[1]?.split('\n## ')[0] || '');
   assert.match(section, /Restart your browser to stop a helper that is still running/);
 });
 
 
 test('Forget all apps clears activity in every agent privacy page', () => {
-  for (const file of ['PRIVACY.md', 'docs/privacy.md', 'docs/agents.md', 'mcp/README.md']) {
+  for (const file of ['../PRIVACY.md', '../docs/privacy.md', '../docs/agents.md', '../mcp/README.md']) {
     const text = file === 'PRIVACY.md' ? section() : plain(read(file));
     assert.match(text, /Forget all apps[^.]*clears the activity list/, file);
     assert.doesNotMatch(text, /Revoke and Forget all apps leave the activity list|activity[^.]*until you uninstall/i, file);

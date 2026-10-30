@@ -4,13 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 test('glass frame check removes the base page before waiting for transparency', () => {
-  const src = fs.readFileSync(path.join(process.env.EXT || path.join(__dirname, '..'), 'scripts/ctab-strip-glass-check.js'), 'utf8');
+  const src = fs.readFileSync(path.join(process.env.EXT || path.join(__dirname, '../../extension'), '../checks/navigation/ctab-strip-glass-check.js'), 'utf8');
   const remove = src.indexOf("document.querySelector('#main-content')?.remove()");
   const wait = src.indexOf("await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-gz-through')");
   assert.ok(remove >= 0 && wait > remove, 'remove the base page before waiting for the course-only frame to become transparent');
 });
 
-const { page, record } = require('./sidebar-ultra-page.js');
+const { page, record } = require('../sidebar-ultra-page.js');
 test('Ultra sidebar clears full announcement and item panel headers', async () => {
   for (const kind of ['announcement', 'item']) {
     const p = page({ at: 'stream', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });

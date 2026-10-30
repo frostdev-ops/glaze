@@ -1,11 +1,11 @@
 // Real MV3 worker/storage migration in disposable profiles; unit tests cover install/update dispatch.
 // No LMS, account, server or external network.
-// NODE_PATH=/path/to/node_modules nice -n 10 node scripts/motion-default-check.js
+// NODE_PATH=/path/to/node_modules nice -n 10 node checks/looks/motion-default-check.js
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js');
-const lock = require('./check-env.js').lockPath();
+const env = require('../../tools/dev/check-env.js');
+const lock = require('../../tools/dev/check-env.js').lockPath();
 let context, ext, tmp, held = false, checks = 0;
 const ok = (value, label) => { assert.ok(value, label); checks++; console.log(`ok ${label}`); };
 const until = async (fn) => { for (let i = 0; i < 100; i++) { if (await fn()) return; await new Promise((r) => setTimeout(r, 100)); } throw Error('worker migration did not settle'); };
@@ -17,14 +17,14 @@ const until = async (fn) => { for (let i = 0; i < 100; i++) { if (await fn()) re
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nmotion-default-check\n${new Date().toISOString()}\n`);
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-motion-default-'));
-    ext = env.staged(path.resolve(__dirname, '..'), []);
+    ext = env.staged(path.resolve(__dirname, '../../extension'), []);
     for (const [name, motion, expected] of [
       ['subtle', { level: 'subtle', followSystem: true, enter: false, hover: true, transitions: false }, 'expressive'],
       ['off', { level: 'off', followSystem: false, enter: true, hover: true, transitions: true }, 'off'],
       ['legacy-off', { enter: false, hover: false, transitions: false, followSystem: true }, 'off'],
     ]) {
-      await require('./wait-for-browser.js')();
-      context = await chromium.launchPersistentContext(path.join(tmp, name), { ...require('./check-env.js').chromeLaunch(), headless: true,
+      await require('../../tools/dev/wait-for-browser.js')();
+      context = await chromium.launchPersistentContext(path.join(tmp, name), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true,
         args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND'] });
       env.noFirstRun(context);
       await context.route('**/*', (r) => r.request().url().startsWith('chrome-extension:') ? r.continue() : r.abort());

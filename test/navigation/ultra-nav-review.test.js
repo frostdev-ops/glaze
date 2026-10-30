@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const source = (file) => process.env.GZ_B7C_REVIEW_BASE
   ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_B7C_REVIEW_BASE}:${file}`], { cwd: root, encoding: 'utf8' })
   : fs.readFileSync(path.join(root, file), 'utf8');
@@ -16,7 +16,7 @@ test('the known Ultra entry provisionally blocks before a head marker or body ex
   const sheets = [], timers = [];
   const head = { appendChild: (l) => { sheets.push(l); } };
   const document = { contentType: 'text/html', body: null, head, createElement: () => ({ attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; } }) };
-  const c = vm.createContext({ document, location: { protocol: 'https:', hostname: 'school.blackboard.com', pathname: '/ultra/course' }, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, chrome: { runtime: { getURL: (f) => `extension://${f}` } }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); } });
+  const c = vm.createContext({ document, location: { protocol: 'https:', hostname: 'school.blackboard.com', pathname: '/ultra/course' }, GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN, chrome: { runtime: { getURL: (f) => `extension://${f}` } }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); } });
   vm.runInContext(source('content-ultra.js'), c);
   assert.equal(sheets.length, 4);
   assert.ok(sheets.every((l) => l.attrs.blocking === 'render'));
@@ -54,7 +54,7 @@ test('provisional load/error settling before core reuse releases blocking withou
   const document = { contentType: 'text/html', body: null, head: { appendChild(l) { l.isConnected = true; sheets.push(l); } },
     createElement: () => ({ attrs: {}, set rel(v) { writes++; }, set href(v) { writes++; },
       setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; }, addEventListener: (n) => events.push(n) }) };
-  const c = vm.createContext({ document, location: { protocol: 'https:', hostname: 'school.blackboard.com', pathname: '/ultra/course' }, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, chrome: { runtime: { getURL: (f) => f } },
+  const c = vm.createContext({ document, location: { protocol: 'https:', hostname: 'school.blackboard.com', pathname: '/ultra/course' }, GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN, chrome: { runtime: { getURL: (f) => f } },
     setTimeout: (fn, ms) => timers.push({ fn, ms }), notUltra: false, links: [], ultra: true, SHEETS: ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'], html: {}, tintKey() {}, reapply() {} });
   vm.runInContext(source('content-ultra.js'), c);
   sheets[0].onload(); sheets[1].onerror();
@@ -194,7 +194,7 @@ test('the compact clock accessible name includes the date even when its detail i
 test('a refused completed timer advance is attempted only once for that stored state', () => {
   const src = source('features/nav.js'), a = src.indexOf("      if (w.id === 'timer' && W"), b = src.indexOf('\n    }\n    if (config.widgets', a);
   let attempts = 0;
-  const W = require('../lib/widgets.js'), node = { options: { work: 25, rest: 5 }, go: { setAttribute() {} }, time: {} };
+  const W = require('../../extension/lib/widgets.js'), node = { options: { work: 25, rest: 5 }, go: { setAttribute() {} }, time: {} };
   const c = vm.createContext({ w: { id: 'timer' }, W, node, now: 5000, local: { widgetTimer: { phase: 'work', end: 1000, left: 0 } }, advanced: '', timerFailed: '', timerAction: () => { attempts++; }, send: () => { attempts++; }, X: { t: (s) => s }, setText() {} });
   vm.runInContext(src.slice(a, b), c); vm.runInContext(src.slice(a, b), c); assert.equal(attempts, 1);
 });
@@ -238,10 +238,10 @@ test('the shared planner reuses only this account covered fresh cache, otherwise
 
 
 test('item URL validation and ordering are loaded only when the rail UI is needed', () => {
-  const manifest = require('../manifest.json'), initial = manifest.content_scripts.find((c) => c.js.includes('content-ultra.js')).js;
+  const manifest = require('../../extension/manifest.json'), initial = manifest.content_scripts.find((c) => c.js.includes('content-ultra.js')).js;
   assert.ok(initial.includes('lib/nav.js')); assert.ok(!initial.includes('lib/nav-items.js'));
   const src = source('lib/nav.js'); assert.ok(!src.includes('const link =')); assert.ok(!src.includes('const clean =')); assert.ok(!src.includes('const sequence ='));
-  const N = require('../lib/nav-items.js'); assert.equal(N.link({ id: 'aaaaaaaaaaaa', n: 'Safe', u: 'javascript:alert(1)' }), null); assert.equal(N.clean().widgets.length, 4);
+  const N = require('../../extension/lib/nav-items.js'); assert.equal(N.link({ id: 'aaaaaaaaaaaa', n: 'Safe', u: 'javascript:alert(1)' }), null); assert.equal(N.clean().widgets.length, 4);
 });
 
 test('the document view\'s column is tagged as it is drawn and untagged once its document goes', () => {

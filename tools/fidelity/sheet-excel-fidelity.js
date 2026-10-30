@@ -1,20 +1,20 @@
-// Does Microsoft Excel open the .xlsx Glaze writes as Glaze meant it? The workbooks of scripts/sheet-fidelity-books.js
+// Does Microsoft Excel open the .xlsx Glaze writes as Glaze meant it? The workbooks of tools/fidelity/sheet-fidelity-books.js
 // (the 13 golden workbooks read and written again by lib/sheet-xlsx.js, one built in Glaze from scratch, or the files
-// given) open in Excel on this Mac (hidden, no alerts; scripts/sheet-excel.js) through JXA. A file fails when Excel
+// given) open in Excel on this Mac (hidden, no alerts; tools/fidelity/sheet-excel.js) through JXA. A file fails when Excel
 // repaired it ("Repaired" in the workbook's or window's name, or no answer while a repair prompt waits), or when Excel
 // shows other than the model: sheets and their order, the date system, each cell's value after Excel's own full
 // calculation, formula and number format, merged cells, frozen panes and hidden columns, and as many charts on each sheet
 // as Glaze draws there (lib/sheet-chart-xml.js): charts-kept.xlsx (Excel-shaped charts, test/fixtures/sheets/charts.js,
 // read and written again with two rows inserted, their references and anchors moved) and charts-inserted.xlsx (a
 // column, bar, line, pie and scatter chart made by Insert on a workbook built in Glaze, one dragged, one deleted).
-// Mac only, the one heavy job running: nice -n 10 node scripts/sheet-excel-fidelity.js [--keep dir] [file.xlsx …]
+// Mac only, the one heavy job running: nice -n 10 node tools/fidelity/sheet-excel-fidelity.js [--keep dir] [file.xlsx …]
 const fs = require('node:fs'), path = require('node:path');
 const { jxa: run, start, quit, box } = require('./sheet-excel.js');
 const { books, expect, agree, stored } = require('./sheet-fidelity-books.js');
-const M = require('../lib/sheet-model.js');
-const { cases } = require('../test/fixtures/sheets/cases.js');
-const X = require('../lib/sheet-xlsx.js'), C = require('../lib/sheet-calc.js'), CX = require('../lib/sheet-chart-xml.js');
-const FX = require('../test/fixtures/sheets/charts.js');
+const M = require('../../extension/lib/sheet-model.js');
+const { cases } = require('../../test/fixtures/sheets/cases.js');
+const X = require('../../extension/lib/sheet-xlsx.js'), C = require('../../extension/lib/sheet-calc.js'), CX = require('../../extension/lib/sheet-chart-xml.js');
+const FX = require('../../test/fixtures/sheets/charts.js');
 
 // The two chart workbooks: Excel's shapes kept through Glaze, and charts Insert made.
 const chartBooks = async () => {

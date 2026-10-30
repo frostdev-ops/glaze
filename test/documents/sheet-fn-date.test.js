@@ -10,11 +10,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-text.js');
-require('../lib/sheet-fn-date.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-text.js');
+require('../../extension/lib/sheet-fn-date.js');
 
 // June 15, 2011, 9:30 AM on the machine's clock: DATEVALUE("5-JUL")'s example assumes the clock says 2011.
 const CLOCK = new Date(2011, 5, 15, 9, 30, 0).getTime();
@@ -46,7 +46,7 @@ test('the date functions are registered, NOW and TODAY volatile, and nothing set
   for (const name of NAMES) assert.ok(C.fn(name), name);
   assert.ok(C.fn('NOW').volatile && C.fn('TODAY').volatile);
   assert.ok(!C.fn('DATE').volatile);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-date.js'), 'utf8')));
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-date.js'), 'utf8')));
 });
 
 test('DATE: years 0-1899 count from 1900, months and days roll over and back, out of range is #NUM!', () => {

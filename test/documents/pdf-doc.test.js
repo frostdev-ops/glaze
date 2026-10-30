@@ -1,13 +1,13 @@
-// lib/pdf-doc.js on pdf.js in node, against the fixtures of scripts/pdf-fixtures.js: each fixture is first read back to
+// lib/pdf-doc.js on pdf.js in node, against the fixtures of tools/fidelity/pdf-fixtures.js: each fixture is first read back to
 // show it is what it claims, then every operation is round-tripped and the result read back with pdf.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const F = require('../scripts/pdf-fixtures.js');
+const F = require('../../tools/fidelity/pdf-fixtures.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 let loaded = null;
 const load = () => loaded ||= (async () => {
   const url = (f) => pathToFileURL(path.join(root, 'lib/pdfjs', f)).href;
@@ -106,7 +106,7 @@ test('fixture downloads are bounded and leave no download directory on failure',
         return new Response('pinned PDF bytes');
       };`);
       const expected = crypto.createHash('sha256').update(mode === 'mismatch' ? 'different' : 'pinned PDF bytes').digest('hex');
-      const r = spawnSync(process.execPath, ['--require', preload, path.join(root, 'scripts/pdf-fixtures.js'), dir,
+      const r = spawnSync(process.execPath, ['--require', preload, path.join(__dirname, '../../tools/fidelity/pdf-fixtures.js'), dir,
         '--xfa-url', 'https://fixtures.invalid/form.pdf', '--xfa-sha256', expected], { env: { ...process.env, TMPDIR: tmp }, encoding: 'utf8', timeout: 60000 });
       assert.equal(r.status, mode === 'ok' ? 0 : 1, r.stderr);
       if (['oversize', 'chunked'].includes(mode)) assert.match(r.stderr, /50 MB/, 'refuse before buffering the whole download');
@@ -117,7 +117,7 @@ test('fixture downloads are bounded and leave no download directory on failure',
   });
 });
 
-const D = require('../lib/pdf-doc.js');
+const D = require('../../extension/lib/pdf-doc.js');
 const api = async () => D.use(await load());
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const THREE = ['Alpha page one 0', 'Bravo page two 0', 'Charlie page three 0'];
@@ -501,7 +501,7 @@ test('text reads a page in order, bounded; thumbnail says why it drew nothing wh
 });
 const LABELS3 = () => F.LABELS.map((label) => ({ label }));
 
-// ---- scripts/pdf-fidelity.js: how it reads the other readers, and what it calls a difference --------------------------
+// ---- tools/fidelity/pdf-fidelity.js: how it reads the other readers, and what it calls a difference --------------------------
 test('fidelity fails on unexpected open refusals and keeps Swift caches in its temporary directory', () => {
   const fs = require('node:fs'), os = require('node:os'), { spawnSync } = require('node:child_process');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-fidelity-test-'));
@@ -513,7 +513,7 @@ test('fidelity fails on unexpected open refusals and keeps Swift caches in its t
         return ['which', 'xcrun'].includes(cmd) ? { status: 0, stdout: '', stderr: '' } : { status: 1, stdout: '', stderr: 'fixture reader unavailable' };
       };
       require(${JSON.stringify(path.join(root, 'lib/pdf-doc.js'))}).use = () => ({ open: async () => { const e = Error('unexpected refusal'); e.name = 'PdfInvalidError'; throw e; } });`);
-    const r = spawnSync(process.execPath, ['--require', preload, path.join(root, 'scripts/pdf-fidelity.js'), path.join(tmp, 'outputs'), '--small'],
+    const r = spawnSync(process.execPath, ['--require', preload, path.join(__dirname, '../../tools/fidelity/pdf-fidelity.js'), path.join(tmp, 'outputs'), '--small'],
       { encoding: 'utf8', env: { ...process.env, TMPDIR: tmp }, timeout: 60000 });
     assert.equal(r.status, 1, 'an unexpected editor refusal must fail the fidelity run');
     assert.match(r.stdout, /open refused: PdfInvalidError/);
@@ -528,13 +528,13 @@ test('fidelity fails on unexpected open refusals and keeps Swift caches in its t
 });
 
 test('fidelity checks zero annotations and signatures as well as positive counts', () => {
-  const V = require('../scripts/pdf-fidelity.js');
+  const V = require('../../tools/fidelity/pdf-fidelity.js');
   assert.deepEqual(V.notesOf({ notes: 0, signatures: 0, encrypted: true, printing: false },
     { notes: 1, signatures: 1, encrypted: false, printing: true }), ['encrypted false, not true', 'printing allowed again', '1 FreeText, not 0', '1 signatures, not 0']);
 });
 
 test('the fidelity script reads pdfinfo and pdftotext, and marks what a reader shows differently from what was asked', () => {
-  const V = require('../scripts/pdf-fidelity.js');
+  const V = require('../../tools/fidelity/pdf-fidelity.js');
   assert.deepEqual(V.parseInfo('Pages:           2\nEncrypted:       yes (print:no copy:yes change:yes addNotes:yes algorithm:RC4)\nPage    1 size:  300 x 200 pts\nPage    1 rot:   90\nPage    2 size:  300 x 200 pts\nPage    2 rot:   0\n'),
     { pages: 2, rotations: [90, 0], encrypted: true, printing: false });
   assert.deepEqual(V.parseInfo('Pages:           1\nEncrypted:       no\nPage    1 rot:   0\n'), { pages: 1, rotations: [0], encrypted: false, printing: true });

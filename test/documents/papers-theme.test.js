@@ -4,7 +4,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const theme = async ({ whole = false, reduced = false } = {}) => {
-  const raw = fs.readFileSync(path.join(__dirname, '..', 'papers.js'), 'utf8');
+  const raw = fs.readFileSync(path.join(__dirname, '../../extension/papers.js'), 'utf8');
   const body = raw.slice(raw.indexOf('  const theme = async () => {'), raw.indexOf('  theme().catch'));
   const pending = [], events = {}, errors = [], painted = [], posted = [], listeners = [];
   const attrs = new Map();

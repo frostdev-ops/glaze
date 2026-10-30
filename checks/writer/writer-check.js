@@ -1,16 +1,16 @@
 // Glaze Writer in the real unpacked extension, on the synthetic Ultra boxes (test/fixtures/ultra-writer-*), each running the
 // real Quill 1.3.7 (fetched, pinned by SHA-256) with Ultra's enabled-state and word count reproduced around it, so sync is
 // tested against a real Quill. GETs only; no account or outside network from the browser.
-// NODE_PATH=<playwright> nice -n 10 node scripts/writer-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/writer/writer-check.js [evidence directory]
 // WRITER_SHOTS names where the screenshots go (default /tmp/gz-writer-shots).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const ROUTES = {
   '/ultra/courses/_101_1/discussion/_9_1': 'ultra-writer-discussion.html', '/ultra/messages/create': 'ultra-writer-messages.html',
   '/ultra/courses/_101_1/assessment/_7_1/attempt/create': 'ultra-writer-attempt.html', '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1': 'ultra-writer-test.html',
@@ -20,7 +20,7 @@ const ROUTES = {
 // refuses it) and right-to-left text in the reply (the quick look refuses it).
 const KEPT = (html) => html.replace('data-placeholder="Type a post"><p><br></p>', 'data-placeholder="Type a post"><ul data-checked="true"><li>Read chapter 4</li></ul>')
   .replace('data-placeholder="Type a reply"><p><br></p>', 'data-placeholder="Type a reply"><p class="ql-direction-rtl ql-align-right">نهر الذاكرة</p>');
-const out = process.argv[2], shots = process.env.WRITER_SHOTS || '/tmp/gz-writer-shots', lock = require('./check-env.js').lockPath();
+const out = process.argv[2], shots = process.env.WRITER_SHOTS || '/tmp/gz-writer-shots', lock = require('../../tools/dev/check-env.js').lockPath();
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
 const checks = [], requests = [], errors = []; let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -69,9 +69,9 @@ const HARNESS = `(() => {
     fs.writeFileSync(path.join(tmp, 'quill.min.js'), quill);
     check(true, `real Quill 1.3.7 fetched and pinned (sha256 ${got.slice(0, 12)}…)`);
 
-    ext = require('./check-env.js').staged(root, [`${site}/*`]);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(10000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json'));
     await context.route('**/*', async (r) => {
@@ -279,7 +279,7 @@ const HARNESS = `(() => {
     await worker.evaluate(() => chrome.runtime.onMessage.addListener((m) => { if (m?.type === 'glaze:attempt-kind') (globalThis.__kinds ||= []).push(m.kind); }));
     p = await open('/ultra/courses/_101_1/assessment/_7_1/attempt/create');
     const paper = await box(p, 'assignment');
-    check(await paper.fr.evaluate(() => document.documentElement.dataset.mode === 'paper' && document.documentElement.dataset.kind === 'assignment' && document.querySelector('.ProseMirror').textContent.includes("Toni Morrison's Beloved treats memory less as a record than as a debt.")), 'assignment attempt mounts in paper mode with the saved text in its body (scripts/writer-paper-check.js checks the paper)');
+    check(await paper.fr.evaluate(() => document.documentElement.dataset.mode === 'paper' && document.documentElement.dataset.kind === 'assignment' && document.querySelector('.ProseMirror').textContent.includes("Toni Morrison's Beloved treats memory less as a record than as a debt.")), 'assignment attempt mounts in paper mode with the saved text in its body (checks/writer/writer-paper-check.js checks the paper)');
     check(await p.evaluate(() => getComputedStyle(document.querySelector('[class*="makeStylespreview-"]')).display !== 'none'), 'its file area stays Ultra\'s, in view');
     check(await p.evaluate(() => !document.querySelector('[data-analytics-id="assignment.attempt.authoring.footer.submit"]').disabled), 'Submit enabled with the imported text');
     await paper.fr.click('.ProseMirror'); await p.keyboard.press(`${MOD}+Enter`); await pause(400);

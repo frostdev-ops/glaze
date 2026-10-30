@@ -6,10 +6,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/media.js');
+const M = require('../../extension/lib/media.js');
 
-const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures/media', f)));
-const text = (f) => fs.readFileSync(path.join(__dirname, 'fixtures/media', f), 'utf8');
+const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
+const text = (f) => fs.readFileSync(path.join(__dirname, '../fixtures/media', f), 'utf8');
 const u32 = (n) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255];
 const u24 = (n) => [n & 255, (n >> 8) & 255, (n >> 16) & 255];
 const ascii = (s) => [...Buffer.from(s, 'latin1')];
@@ -115,7 +115,7 @@ const movingAvif = (w, h, n) => Uint8Array.from([...ftyp('avis', 'avif'), ...met
 test('AVIF: the real animated file is read, and the walker follows boxes to their ends', () => {
   const real = M.check(fx('anim.avif'), 'bg');
   assert.deepEqual([real.type, real.mime, real.w, real.h, real.frames, real.animated], ['image', 'image/avif', 48, 48, 3, true]);
-  // Kept without the names an encoder left in its boxes (test/media-metadata.test.js), and the same length: nothing moved.
+  // Kept without the names an encoder left in its boxes (test/looks/media-metadata.test.js), and the same length: nothing moved.
   assert.equal(real.bytes.length, fx('anim.avif').length);
   assert.doesNotMatch(Buffer.from(real.bytes).toString('latin1'), /PictureHandler|Lavc/);
   eq(M.check(real.bytes, 'bg').bytes, real.bytes);
@@ -182,7 +182,7 @@ test('what only looks like a video is refused', () => {
 const good = () => JSON.parse(text('spin.json'));
 const layer = (extra = {}) => ({ ddd: 0, ind: 1, ty: 4, nm: 'l', ks: {}, ip: 0, op: 60, st: 0, shapes: [], ...extra });
 const withLayers = (layers, extra = {}) => ({ ...good(), layers, ...extra });
-const PNG = 'data:image/png;base64,' + fs.readFileSync(path.join(__dirname, '../icons/icon16.png')).toString('base64');
+const PNG = 'data:image/png;base64,' + fs.readFileSync(path.join(__dirname, '../../extension/icons/icon16.png')).toString('base64');
 
 test('Lottie: a real file is cleaned to what draws it, and cleaning twice changes nothing', () => {
   const got = M.lottie(text('spin.json'));
@@ -431,9 +431,9 @@ test('check refuses what is not a media file, and the limits for a sticker are t
 // ---- the vendored player ------------------------------------------------------------------------------------------------
 test('the Lottie player in lib/lottie/ is the pinned official readable light canvas build, with one comment line, one cut and its licence', () => {
   const crypto = require('node:crypto');
-  const script = fs.readFileSync(path.join(__dirname, '../scripts/vendor-lottie.sh'), 'utf8');
+  const script = fs.readFileSync(path.join(__dirname, '../../tools/vendor/vendor-lottie.sh'), 'utf8');
   const version = /^version=(\S+)$/m.exec(script)[1], out = /^out_sha256=([0-9a-f]{64})$/m.exec(script)[1];
-  const file = fs.readFileSync(path.join(__dirname, '../lib/lottie/lottie_light_canvas.js'), 'utf8');
+  const file = fs.readFileSync(path.join(__dirname, '../../extension/lib/lottie/lottie_light_canvas.js'), 'utf8');
   assert.equal(file.split('\n')[0], `// lottie-web ${version} light canvas build (MIT, lib/lottie/LICENSE), as published after this line but for one cut. Fetched by scripts/vendor-lottie.sh.`);
   assert.equal(crypto.createHash('sha256').update(file).digest('hex'), out, 'the file is what the script builds from the pinned release');
   assert.match(/^file_sha256=([0-9a-f]{64})$/m.exec(script)[1], /^[0-9a-f]{64}$/);
@@ -443,7 +443,7 @@ test('the Lottie player in lib/lottie/ is the pinned official readable light can
   // The one cut: lottie's optional Web Worker, built from a function's own text, is gone.
   assert.match(file, /scripts\/vendor-lottie\.sh cut the Web Worker/);
   assert.doesNotMatch(file, /new Worker\(|fn\.toString\(\)/);
-  assert.match(fs.readFileSync(path.join(__dirname, '../lib/lottie/LICENSE'), 'utf8'), /^\s*The MIT License \(MIT\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/lib/lottie/LICENSE'), 'utf8'), /^\s*The MIT License \(MIT\)/);
   // The light build has no expressions: nothing in it turns text into code, and it fetches or imports nothing of its own accord.
   assert.doesNotMatch(file, /\beval\s*\(|new\s+Function\s*\(|\bFunction\s*\(\s*["'`]|importScripts|\bimport\s*\(/);
   assert.match(file, /runExpressions/, 'it is the build that knows expressions exist, and leaves them out');
@@ -451,14 +451,14 @@ test('the Lottie player in lib/lottie/ is the pinned official readable light can
 });
 
 test('the page may load the player and the media module, and the first script loads neither', () => {
-  const manifest = require('../manifest.json');
+  const manifest = require('../../extension/manifest.json');
   const web = manifest.web_accessible_resources.flatMap((e) => e.resources);
   for (const f of ['lib/scene-media.js', 'lib/lottie/lottie_light_canvas.js']) {
     assert.ok(web.includes(f), `${f} is web-accessible`);
-    assert.ok(fs.existsSync(path.join(__dirname, '..', f)), `${f} exists`);
+    assert.ok(fs.existsSync(path.join(__dirname, '../../extension', f)), `${f} exists`);
     assert.ok(!manifest.content_scripts.some((c) => c.js.includes(f)), `${f} is not in a content script's list`);
   }
-  const content = fs.readFileSync(path.join(__dirname, '../content.js'), 'utf8');
+  const content = fs.readFileSync(path.join(__dirname, '../../extension/content.js'), 'utf8');
   assert.ok(!/lottie/i.test(content), 'content.js does not know Lottie');
   assert.match(content, /import\(chrome\.runtime\.getURL\((?:file|`\$\{file\}[^`]*`)\)(?: \+ `[^`]*`)?\)/);
 });
@@ -497,10 +497,10 @@ test('a kept Lottie cannot bypass cleaning by naming unclean bytes with their ow
 });
 
 test('PNG stickers are accepted, bounded and stripped of metadata before display', () => {
-  const png = new Uint8Array(fs.readFileSync(path.join(__dirname, '../icons/icon16.png')));
+  const png = new Uint8Array(fs.readFileSync(path.join(__dirname, '../../extension/icons/icon16.png')));
   const got = M.check(png, 'sticker');
   assert.deepEqual([got?.type, got?.mime, got?.w, got?.h, got?.animated], ['image', 'image/png', 16, 16, false]);
-  const crc = require('../lib/zip.js').crc32;
+  const crc = require('../../extension/lib/zip.js').crc32;
   const part = (id, bytes) => Uint8Array.from([...be(bytes.length), ...ascii(id), ...bytes, ...be(crc(Uint8Array.from([...ascii(id), ...bytes])))]);
   const textChunk = part('tEXt', ascii('Comment\0private information'));
   const dirty = Uint8Array.from([...png.subarray(0, 33), ...textChunk, ...png.subarray(33)]);
@@ -517,7 +517,7 @@ test('PNG stickers are accepted, bounded and stripped of metadata before display
 });
 
 test('embedded Lottie pictures use their real bounded dimensions and are cleaned before loading', () => {
-  const png = new Uint8Array(fs.readFileSync(path.join(__dirname, '../icons/icon16.png')));
+  const png = new Uint8Array(fs.readFileSync(path.join(__dirname, '../../extension/icons/icon16.png')));
   const picture = (bytes, mime = 'png') => withLayers([layer({ ty: 2, refId: 'image' })], { assets: [{ id: 'image', w: 1, h: 1, e: 1, p: `data:image/${mime};base64,${b64(bytes)}` }] });
   const huge = png.slice();
   huge.set(be(100000), 16);
@@ -527,7 +527,7 @@ test('embedded Lottie pictures use their real bounded dimensions and are cleaned
   assert.ok(got);
   assert.deepEqual([got.json.assets[0].w, got.json.assets[0].h], [16, 16]);
   const secret = Buffer.from('private text');
-  const crc = require('../lib/zip.js').crc32;
+  const crc = require('../../extension/lib/zip.js').crc32;
   const chunk = Uint8Array.from([...be(secret.length), ...ascii('tEXt'), ...secret, ...be(crc(Uint8Array.from([...ascii('tEXt'), ...secret])))]);
   const dirty = Uint8Array.from([...png.subarray(0, 33), ...chunk, ...png.subarray(33)]);
   const clean = M.lottie(picture(dirty));
@@ -573,7 +573,7 @@ test('MP4 validates nested movie boxes and sample dimensions before accepting th
 });
 
 test('Lottie bounds the total decoded pixels of all embedded pictures', () => {
-  const bytes = new Uint8Array(fs.readFileSync(path.join(__dirname, '../icons/icon16.png')));
+  const bytes = new Uint8Array(fs.readFileSync(path.join(__dirname, '../../extension/icons/icon16.png')));
   bytes.set(be(4096), 16); bytes.set(be(2048), 20);
   const image = (id) => ({ id, e: 1, p: `data:image/png;base64,${b64(bytes)}` });
   assert.ok(M.lottie(withLayers([], { assets: [image('one')] })));

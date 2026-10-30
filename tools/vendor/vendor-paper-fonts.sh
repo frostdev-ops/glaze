@@ -7,9 +7,9 @@
 # Like the other vendor scripts it trusts nothing it downloads: exact versions, each tarball checked against the SHA-512
 # integrity pinned below, and the result against the SHA-256 of the checked-in files. To upgrade, pick the new versions,
 # copy their integrity from `npm view @fontsource/<font>@<version> dist.integrity`, run this once, and record the hashes.
-# Usage: scripts/vendor-paper-fonts.sh
+# Usage: tools/vendor/vendor-paper-fonts.sh
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../extension"
 
 version=5.3.0
 integrity=$(cat <<'EOF'

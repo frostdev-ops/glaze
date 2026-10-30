@@ -3,27 +3,27 @@
 // the context the frame gets, the target ring and sources pill, the Quote pop over a classmate's post (mouse and
 // keyboard), Markdown and Ctrl/Cmd+Enter beside the ring, a message's plain word count, Settings → Writer's Markdown,
 // word target and Quote switches off and on, and Cite's sources kept per discussion (its post and reply share them, live
-// and after a reload) and per course new message. Real Quill 1.3.7 (pinned) in the page, as scripts/writer-check.js runs
+// and after a reload) and per course new message. Real Quill 1.3.7 (pinned) in the page, as checks/writer/writer-check.js runs
 // it. GETs only; no account or outside network from the browser (the DOI lookup's doi.org and Crossref answered here).
-// glaze-remote -e TZ=UTC -o <evidence directory> -- node scripts/writer-compose-check.js /out (CLAUDE.md)
+// glaze-remote -e TZ=UTC -o <evidence directory> -- node checks/writer/writer-compose-check.js /out (CLAUDE.md)
 // WRITER_SHOTS names where the screenshots go (default /tmp/gz-writer-compose-shots).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const json = (f) => JSON.parse(fixture(f));
 const PAGES = { '/ultra/courses/_101_1/discussion/_9_1': 'ultra-writer-discussion.html', '/ultra/courses/_101_1/discussion/_11_1': 'ultra-writer-discussion.html', '/ultra/messages/create': 'ultra-writer-messages.html' };
 const FORUM = '/learn/api/v1/courses/_101_1/discussionboards/default/forums/';
-// doi.org's answer as scripts/writer-cite-check.js gives it: a redirect to Crossref's CSL-JSON.
+// doi.org's answer as checks/writer/writer-cite-check.js gives it: a redirect to Crossref's CSL-JSON.
 const LOOKUP = {
   'https://doi.org/10.5555/gz.2026.001': { status: 302, headers: { location: 'https://api.crossref.org/v1/works/10.5555%2Fgz.2026.001/transform' } },
-  'https://api.crossref.org/v1/works/10.5555%2Fgz.2026.001/transform': { contentType: 'application/vnd.citationstyles.csl+json', body: fs.readFileSync(path.join(__dirname, '../test/fixtures/writer-cite-doi.json'), 'utf8') },
+  'https://api.crossref.org/v1/works/10.5555%2Fgz.2026.001/transform': { contentType: 'application/vnd.citationstyles.csl+json', body: fs.readFileSync(path.join(__dirname, '../../test/fixtures/writer-cite-doi.json'), 'utf8') },
 };
-const out = process.argv[2], shots = process.env.WRITER_SHOTS || '/tmp/gz-writer-compose-shots', lock = require('./check-env.js').lockPath();
+const out = process.argv[2], shots = process.env.WRITER_SHOTS || '/tmp/gz-writer-compose-shots', lock = require('../../tools/dev/check-env.js').lockPath();
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
 const checks = [], requests = [], lookups = [], errors = []; let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -34,7 +34,7 @@ const until = async (fn, label, ms = 10000) => {
 };
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 
-// The same page-world harness as scripts/writer-check.js: a real Quill on each writable box, Ultra's enabled-state and
+// The same page-world harness as checks/writer/writer-check.js: a real Quill on each writable box, Ultra's enabled-state and
 // word count around it, every button click counted.
 const HARNESS = `(() => {
   window.__clicks = [];
@@ -75,9 +75,9 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     if (got !== QUILL.sha256) throw Error(`Quill 1.3.7 hash mismatch: ${got}`);
     check(true, `real Quill 1.3.7 fetched and pinned (sha256 ${got.slice(0, 12)}…)`);
 
-    ext = require('./check-env.js').staged(root, [`${site}/*`]);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(10000);
     const grades = book(), list = json('ultra-writer-thread-discussions.json'), page1 = json('ultra-writer-thread.json'), page2 = json('ultra-writer-thread-2.json'), replies = json('ultra-writer-thread-replies.json');
     // Reply targets are explicit; a post target alone must not become a reply requirement.

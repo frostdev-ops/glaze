@@ -1,4 +1,4 @@
-// The practice window's one way out (scripts/writer-practice.js): an HTTP proxy on this computer that its Chromium must use,
+// The practice window's one way out (tools/dev/writer-practice.js): an HTTP proxy on this computer that its Chromium must use,
 // letting through only an AI connection Glaze holds (its address, with Glaze's grant for that host), so Writer's AI works in
 // practice while everything else stays offline. Pages never get here: their requests end at the practice's routes; only
 // the extension's worker, whose requests Playwright can't route, comes here. With a model (--ai mock), the proxy's own

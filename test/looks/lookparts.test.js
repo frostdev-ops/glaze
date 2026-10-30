@@ -3,10 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const X = require('../lib/lookparts.js');
-const MX = require('../lib/motionx.js');
-const S = require('../lib/share.js');
-const G = require('../defaults.js');
+const X = require('../../extension/lib/lookparts.js');
+const MX = require('../../extension/lib/motionx.js');
+const S = require('../../extension/lib/share.js');
+const G = require('../../extension/defaults.js');
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const SHADER = 'float ring(vec2 p) {\n  return smoothstep(0.3, 0.29, length(p - 0.5));\n}\nvec4 scene(vec2 uv) {\n  return vec4(uC1, ring(uv));\n}';
@@ -222,7 +222,7 @@ test('with the part registry loaded the rules are cleaned by it, and a code that
 test('with the real registry, a rule must name a part that can take it, in a code too', async () => {
   const was = globalThis.GZ_PARTS;
   try {
-    globalThis.GZ_PARTS = require('../lib/parts.js');
+    globalThis.GZ_PARTS = require('../../extension/lib/parts.js');
     const ok = { rules: [{ p: 'ultra.course-card.title', do: 'style', st: { fg: 'accent', o: 50 } }, { p: 'ultra.course-card', do: 'hide' }] };
     assert.ok(X.clean(clone(ok)));
     assert.equal(X.clean({ rules: [{ p: 'ultra.no-such-part', do: 'hide' }] }), null);
@@ -404,7 +404,7 @@ test('decoding bounds the original text before stripping pasted whitespace', asy
   assert.ok((await S.decode(padded)).parts.x.cursor);
   await assert.rejects(S.decode(padded + ' '), /damaged/);
   await assert.rejects(S.decode(' '.repeat(limit * 100) + code), /damaged/);
-  const adapter = require('../lib/sharing.js').ADAPTERS.look;
+  const adapter = require('../../extension/lib/sharing.js').ADAPTERS.look;
   assert.equal(await adapter.clean('code', padded), padded);
   assert.equal(await adapter.clean('code', padded + ' '), undefined);
 });
@@ -553,7 +553,7 @@ test('all displayed part labels remove controls and bidi characters, with the re
   assert.equal(got.nav.links[0].n, 'abc');
   const was = globalThis.GZ_PARTS;
   try {
-    globalThis.GZ_PARTS = require('../lib/parts.js');
+    globalThis.GZ_PARTS = require('../../extension/lib/parts.js');
     const x = { rules: [{ p: 'ultra.course-card.title', do: 'label', t: dirty }] };
     assert.equal(X.clean(x).rules[0].t, 'a bc');
     await assert.rejects(S.decode(await make('glaze2:', { c: C, x })), /can't use/);
@@ -614,7 +614,7 @@ test('a committed clear succeeds even if removing its unused local copy fails', 
 });
 
 test('packing writes bytes straight into the compression stream, never through a Blob stream (Safari content scripts refuse its chunks)', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/lookparts.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/lookparts.js'), 'utf8');
   assert.doesNotMatch(src, /\.stream\(\)\.pipeThrough/);
   assert.match(src, /writer\.write\(new Uint8Array\(bytes\)\)/);
 });

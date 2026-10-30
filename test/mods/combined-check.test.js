@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const source = fs.readFileSync(path.join(__dirname, '..', 'scripts/mods-combined-check.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../checks/mods/mods-combined-check.js'), 'utf8');
 
 test('quiz exclusion assertions reject a page whose extension runtime never loaded', () => {
   for (const label of ['a quiz page of the same site gets none of it', 'an assessment page of the same site gets none of it']) {

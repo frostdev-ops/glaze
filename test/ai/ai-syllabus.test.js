@@ -4,12 +4,12 @@
 // AI's values with lib/syllabus.js and puts them beside extract()'s: extract()'s values stay, AI fills only what is empty.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-globalThis.GZ_CLASSES = require('../lib/classes.js');
-const T = require('../lib/ai/task.js');
-require('../lib/ai/providers/mock.js');
-const { task, LIMIT } = require('../lib/ai/tasks/syllabus-read.js');
-const L = require('../lib/syllabus.js');
-const A = require('../lib/syllabus-ai.js');
+globalThis.GZ_CLASSES = require('../../extension/lib/classes.js');
+const T = require('../../extension/lib/ai/task.js');
+require('../../extension/lib/ai/providers/mock.js');
+const { task, LIMIT } = require('../../extension/lib/ai/tasks/syllabus-read.js');
+const L = require('../../extension/lib/syllabus.js');
+const A = require('../../extension/lib/syllabus-ai.js');
 
 const TEXT = [
   'CHEM 1210 General Chemistry I',
@@ -33,7 +33,7 @@ const OPTS = { start: Date.UTC(2026, 7, 24), md: true, hint: 'en' };
 // ---- the task -----------------------------------------------------------------------------------------------------
 test('syllabus.read is added to the harness, and its answer is a strict schema', () => {
   assert.equal(T.get('syllabus.read'), task);
-  assert.equal(require('../lib/ai/schema.js').strict(task.output), true);
+  assert.equal(require('../../extension/lib/ai/schema.js').strict(task.output), true);
   assert.deepEqual(task.output.properties.dates.items.properties.kind.enum, ['exam', 'due', 'other'], 'a closed list');
 });
 
@@ -363,7 +363,7 @@ test('context budgeting includes instructions, schema and the reserved answer be
   assert.equal(tooSmall.seen.length, 0, 'even an empty input part cannot fit the overhead and answer');
   const cfg = { caps: { context: 3000 }, seen: [], replies: () => answer({}) };
   await T.run(task, { text }, { provider: 'mock', cfg });
-  const X = require('../lib/ai/text.js');
+  const X = require('../../extension/lib/ai/text.js');
   for (const req of cfg.seen) assert.ok(X.estimateTokens({ messages: req.messages, schema: req.schema }) + req.maxTokens <= 3000, 'every request fits the existing token estimate plus its reserved answer');
 });
 

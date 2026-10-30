@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const Excel = require('../scripts/sheet-excel.js');
-const root = path.join(__dirname, '..');
+const Excel = require('../../tools/fidelity/sheet-excel.js');
+const root = path.join(__dirname, '../../extension');
 
 const execute = async (name, options = {}) => {
   const logs = [], writes = new Map(), scripts = [], removed = [], quits = [];
@@ -20,16 +20,16 @@ const execute = async (name, options = {}) => {
     readFileSync: () => Buffer.alloc(0), writeFileSync: (file, data) => writes.set(path.basename(file), data),
     rmSync: (dir) => removed.push(dir), statSync: () => ({ size: 100 }),
   };
-  const file = path.join(root, 'scripts', name);
+  const file = path.join(root, '../tools/fidelity', name);
   const context = {
     __dirname: path.dirname(file), process: { argv: ['node', file, ...(options.args || [])] },
     console: { log: (s) => logs.push(s), error: (s) => logs.push(s) },
     require: (id) => {
       if (id === 'node:fs') return disk;
       if (id === './sheet-excel.js') return excel;
-      if (id === './sheet-fidelity-books.js') return { ...require('../scripts/sheet-fidelity-books.js'), books: async () => [{ name: 'a.xlsx', bytes: new Uint8Array(1), model: options.model || { sheets: [], active: 0, date1904: false } }] };
+      if (id === './sheet-fidelity-books.js') return { ...require('../../tools/fidelity/sheet-fidelity-books.js'), books: async () => [{ name: 'a.xlsx', bytes: new Uint8Array(1), model: options.model || { sheets: [], active: 0, date1904: false } }] };
       if (id.includes('fixtures/sheets/cases')) return { cases: list, families };
-      if (id.includes('xlsx-cache')) return { ...require('./helpers/xlsx-cache.cjs'), read: async () => ({ sheets: families.math.sheets.map((sheet) => ({
+      if (id.includes('xlsx-cache')) return { ...require('../helpers/xlsx-cache.cjs'), read: async () => ({ sheets: families.math.sheets.map((sheet) => ({
         name: sheet, cells: new Map(list.filter((c) => c.sheet === sheet).map((c) => [c.cell, { f: c.formula.slice(1), t: 'n', v: 2 }])),
       })) }) };
       return require(id);
@@ -110,7 +110,7 @@ const helper = ({ writeError = false } = {}) => {
     } };
     return require(id);
   } };
-  vm.runInNewContext(fs.readFileSync(path.join(root, 'scripts/sheet-excel.js'), 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../tools/fidelity/sheet-excel.js'), 'utf8'), context);
   return { ...context.module.exports, killed, removed };
 };
 
@@ -127,7 +127,7 @@ test('Excel helper: a script write failure removes the temporary directory', () 
 });
 
 test('fidelity: a missing error reading and an unexpected formula difference fail the run', async () => {
-  const M = require('../lib/sheet-model.js');
+  const M = require('../../extension/lib/sheet-model.js');
   for (const cell of [{ t: 'e', v: '#VALUE!' }, { t: 'n', v: 5, f: '2+3' }]) {
     const model = M.workbook();
     model.sheets[0].rows.set(0, new Map([[0, cell]]));
@@ -138,14 +138,14 @@ test('fidelity: a missing error reading and an unexpected formula difference fai
 });
 
 test('fidelity: expected models come from the source, before serialization', async () => {
-  const M = require('../lib/sheet-model.js');
+  const M = require('../../extension/lib/sheet-model.js');
   let reads = 0;
-  const context = { __dirname: path.join(root, 'scripts'), module: { exports: {} }, require: (id) => {
+  const context = { __dirname: path.join(root, '../tools/fidelity'), module: { exports: {} }, require: (id) => {
     if (id === 'node:fs') return { readdirSync: (p) => p.endsWith('/lib') ? [] : ['sample.xlsx'], readFileSync: () => new Uint8Array() };
-    if (id === '../lib/sheet-xlsx.js') return { read: async () => { const wb = M.workbook(); wb.sheets[0].rows.set(0, new Map([[0, { t: 'n', v: ++reads }]])); return wb; }, write: async () => new Uint8Array() };
+    if (id === '../../extension/lib/sheet-xlsx.js') return { read: async () => { const wb = M.workbook(); wb.sheets[0].rows.set(0, new Map([[0, { t: 'n', v: ++reads }]])); return wb; }, write: async () => new Uint8Array() };
     return require(id);
   } };
-  vm.runInNewContext(fs.readFileSync(path.join(root, 'scripts/sheet-fidelity-books.js'), 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../tools/fidelity/sheet-fidelity-books.js'), 'utf8'), context);
   const list = await context.module.exports.books();
   assert.equal(M.cell(list[0].model.sheets[0], 0, 0).v, 1);
 });
@@ -159,8 +159,8 @@ test('fidelity: only the workbook at the probe path can be read or closed', asyn
 test('Numbers helper: refused events after launch clean up the owned process', () => {
   const killed = [];
   let opened = false;
-  const context = { __dirname: path.join(root, 'scripts'), module: { exports: {} }, process: { platform: 'darwin', kill: (...args) => killed.push(args) }, require: (id) => {
-    if (id === './sheet-fidelity-books.js') return require('../scripts/sheet-fidelity-books.js');
+  const context = { __dirname: path.join(root, '../tools/fidelity'), module: { exports: {} }, process: { platform: 'darwin', kill: (...args) => killed.push(args) }, require: (id) => {
+    if (id === './sheet-fidelity-books.js') return require('../../tools/fidelity/sheet-fidelity-books.js');
     if (id === 'node:fs') return { existsSync: () => true };
     if (id === 'node:child_process') return { execFileSync: (cmd) => {
       if (cmd === 'open') { opened = true; return ''; }
@@ -169,7 +169,7 @@ test('Numbers helper: refused events after launch clean up the owned process', (
     } };
     return require(id);
   } };
-  const source = fs.readFileSync(path.join(root, 'scripts/sheet-numbers-fidelity.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../tools/fidelity/sheet-numbers-fidelity.js'), 'utf8');
   vm.runInNewContext(source.replace(/main\(\)\.catch\([\s\S]*$/, 'module.exports = { start };'), context);
   assert.throws(() => context.module.exports.start(), /events refused/);
   assert.deepEqual(killed, [[123, 'SIGTERM']]);

@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const latest = read('CHANGELOG.md').split('## [3.3.6]')[1]?.split(/^## /m)[0] || '';
+const latest = read('../CHANGELOG.md').split('## [3.3.6]')[1]?.split(/^## /m)[0] || '';
 
 test('3.3.6 release claims keep typing effects private and the pointer choice out of codes', () => {
   assert.match(latest, /never read what you type/);
@@ -15,7 +15,7 @@ test('3.3.6 release claims keep typing effects private and the pointer choice ou
   assert.match(latest, /Safari: Settings opened inside/);
 });
 
-const listing = (lang) => read(`store/listing${lang ? `-${lang}` : ''}.md`);
+const listing = (lang) => read(`../store/listing${lang ? `-${lang}` : ''}.md`);
 const part = (text, heading) => text.split(`\n## ${heading}`)[1].replace(/^[^\n]*\n\n/, '').split(/\n## /)[0];
 const description = (lang) => part(listing(lang), 'Detailed description');
 
@@ -41,7 +41,7 @@ for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || '
   for (const term of ['instructure.com', 'blackboard.com', 'moodlecloud.com', 'share.frostdev.io', ...expected]) assert.ok(text.toLowerCase().includes(term.toLowerCase()), term);
   for (const term of disclosures[lang]) assert.ok(text.includes(term), term);
   for (const store of ['firefox', 'app-store']) {
-    assert.ok(read(`store/${store}${lang ? `-${lang}` : ''}.md`).includes(disclosures[lang][0]), `${store}: collect and sell`);
+    assert.ok(read(`../store/${store}${lang ? `-${lang}` : ''}.md`).includes(disclosures[lang][0]), `${store}: collect and sell`);
   }
   assert.ok(!/(?:ten tabs|zehn Tabs|diez pestañas|dix onglets|tien tabbladen|dez abas)/.test(listing(lang)), 'no settings editor in ten tabs');
 });
@@ -84,12 +84,12 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
 
 test('4.0.0 versions agree and the exact pure notes transform fits Apple', () => {
   assert.equal(JSON.parse(read('manifest.json')).version, '4.0.0');
-  assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.0');
+  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.0');
   // The helper and its Claude Desktop bundle, glaze-mcp-4.0.0.mcpb on the GitHub release, carry Glaze's version.
-  assert.equal(JSON.parse(read('mcp/package.json')).version, '4.0.0');
-  assert.equal(JSON.parse(read('mcp/mcpb/manifest.json')).version, '4.0.0');
+  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.0');
+  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.0');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
-  const script = read('scripts/store-release.mjs');
+  const script = read('../tools/release/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
   assert.ok(body.startsWith('function notes(source) {'));
   const notes = vm.runInNewContext(`(${body})`, {
@@ -97,7 +97,7 @@ test('4.0.0 versions agree and the exact pure notes transform fits Apple', () =>
     json: (file) => JSON.parse(fs.readFileSync(file, 'utf8')),
     requireValue: (value) => { assert.ok(value); return value; },
   });
-  const result = notes(root);
+  const result = notes(path.join(root, '..'));
   assert.ok(result.length <= 4000, `${result.length} characters`);
   assert.match(result, /^Added\n/);
   assert.ok(result.length <= 3000, `AMO: ${result.length} characters`);
@@ -105,19 +105,19 @@ test('4.0.0 versions agree and the exact pure notes transform fits Apple', () =>
 });
 
 test('review: Step 4 copy discloses redirected Download all files in every language\'s description', () => {
-  for (const file of ['PRIVACY.md', 'CHANGELOG.md', 'store/listing.md']) assert.match(read(file), /redirected files/i, file);
+  for (const file of ['../PRIVACY.md', '../CHANGELOG.md', '../store/listing.md']) assert.match(read(file), /redirected files/i, file);
   for (const [lang, term] of Object.entries({ '': 'redirected files', de: 'Weitergeleitete Dateien', es: 'archivos redirigidos', fr: 'fichiers redirigés', nl: 'omgeleide bestanden', 'pt-BR': 'arquivos redirecionados' })) {
     assert.ok(description(lang).toLowerCase().includes(term.toLowerCase()), `${lang || 'en'}: redirected file limit`);
   }
 });
 
 test('Writer disclosures describe the complete Feedback material budget and automatic picture preparation', () => {
-  const budget = require('../lib/ai/tasks/writer-feedback.js').LIMIT.material;
+  const budget = require('../../extension/lib/ai/tasks/writer-feedback.js').LIMIT.material;
   assert.equal(budget, 200000);
-  const policy = read('PRIVACY.md').split('**Feedback**')[1].split('- **PDFs')[0];
+  const policy = read('../PRIVACY.md').split('**Feedback**')[1].split('- **PDFs')[0];
   assert.match(policy, /200,000 characters/);
   assert.doesNotMatch(policy, /24,000 characters|12,000 characters/);
-  const harness = read('docs/ai-harness.md').split('| `writer.feedback`')[1].split('\n')[0];
+  const harness = read('../docs/ai-harness.md').split('| `writer.feedback`')[1].split('\n')[0];
   assert.match(harness, /200,000 characters/);
   assert.doesNotMatch(harness, /12,000 characters|24,000 in all/);
   for (const lang of ['', 'de', 'es', 'fr', 'nl', 'pt-BR']) {

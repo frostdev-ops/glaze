@@ -3,14 +3,14 @@
 // asks a frame that reopened again, presses Ultra's button once (found again if Ultra redrew it), and lets go when the
 // box is no longer Writer's; Submit waits for a frame to open the sheet in. Before the frame is up (features/writer.js
 // hold): the compact box's press waits for the frame and its view, then asks it to save; the full view's waits for the
-// submit step. Ultra's button is marked busy meanwhile. In the browser: scripts/writer-submit-check.js.
+// submit step. Ultra's button is marked busy meanwhile. In the browser: checks/writer/writer-submit-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const L = require('../lib/writer-submit.js');
-const page = require('./helpers/writer-submit-page.cjs');
-const content = require('./helpers/writer-content.cjs');
+const { El } = require('../stand-in-dom.js');
+const L = require('../../extension/lib/writer-submit.js');
+const page = require('../helpers/writer-submit-page.cjs');
+const content = require('../helpers/writer-content.cjs');
 
 const SAVE = '[data-analytics-id="course.content.assessment.footer.buttons.saveAndClose"]', SUBMIT = '[data-analytics-id="assignment.attempt.authoring.footer.submit"]';
 const asks = (sent) => sent.filter((m) => m.type === 'submit:save');
@@ -271,7 +271,7 @@ test('full: a held click handed off after Ultra disables Submit still opens the 
   const b = c.doc.querySelector(SUBMIT); b.disabled = true; b.click = () => {};
   delete c.ctx.GZ_WRITER_SUBMIT;
   c.ctx.GZ_WRITER_SUBMIT_LIB = L;
-  vm.runInContext(require('node:fs').readFileSync(require.resolve('../features/writer-submit.js'), 'utf8'), c.ctx);
+  vm.runInContext(require('node:fs').readFileSync(require.resolve('../../extension/features/writer-submit.js'), 'utf8'), c.ctx);
   c.ctx.GZ_WRITER_SUBMIT.hear(box, { type: 'submit:arm' }, c.ctx.GZ_CTX, () => true);
   c.tick(100);
   assert.equal(c.clicks.length, 0);

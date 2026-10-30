@@ -4,9 +4,9 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const assert = require('node:assert/strict');
-const source = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const source = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const output = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'glaze-ultra-perf.json'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const origin = 'https://ultra.fixture.test';
 const reps = Number(process.env.PERF_REPS || 3);
 const D = require(path.join(source, 'defaults.js'));
@@ -107,8 +107,8 @@ const listeners = async (cdp) => {
   let context;
   try {
     for (const instrumented of [false, true]) {
-      // The fixture's host, as the student's grant holds it (scripts/check-env.js staged).
-      let ext = instrumented ? '' : require('./check-env.js').staged(source, ['https://ultra.fixture.test/*']);
+      // The fixture's host, as the student's grant holds it (tools/dev/check-env.js staged).
+      let ext = instrumented ? '' : require('../../tools/dev/check-env.js').staged(source, ['https://ultra.fixture.test/*']);
       if (instrumented) {
         ext = path.join(scratch, 'extension'); fs.mkdirSync(ext);
         const files = execFileSync('git', ['ls-files', '-z'], { cwd: source, encoding: 'utf8' }).split('\0').filter(Boolean);
@@ -121,7 +121,7 @@ const listeners = async (cdp) => {
         m.host_permissions.push('https://ultra.fixture.test/*');
         fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
       }
-      await require('./wait-for-browser.js')();
+      await require('../../tools/dev/wait-for-browser.js')();
       context = await chromium.launchPersistentContext(path.join(scratch, instrumented ? 'instrumented-profile' : 'plain-profile'), {
         ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce',
         args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1', '--disable-background-networking'],

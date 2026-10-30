@@ -1,7 +1,7 @@
 // B8b review: the URL can lead native main replacement during links and Back/Forward. Values are invented.
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const root = process.env.GZ_B8_REPO || path.join(__dirname, '..');
+const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
 const source = fs.readFileSync(path.join(root, 'features/coursetabs.js'), 'utf8');
 const L = require(path.join(root, 'lib/coursetabs.js'));
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));

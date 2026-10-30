@@ -3,13 +3,13 @@
 // site on the list is registered on its /ultra pages while its host is held, and gets Glaze there; one whose host isn't held
 // stays on the list, unregistered, and gets nothing; MoodleCloud gets Glaze's Moodle bundle from the manifest's own entry,
 // with nothing registered for it.
-// NODE_PATH=<installed playwright> nice node scripts/registered-hosts-check.js [evidence directory]
+// NODE_PATH=<installed playwright> nice node checks/platform/registered-hosts-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const held = 'https://bb.school.test', other = 'https://bb.other.test', moodle = 'https://school.moodlecloud.com';
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${held}/*`]);
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), [`${held}/*`]);
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-registered-hosts-'));
 const out = process.argv[2];
@@ -26,9 +26,9 @@ const sheets = (page) => page.evaluate(() => [...document.querySelectorAll('link
 (async () => {
   let ctx;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(),
+      ...require('../../tools/dev/check-env.js').chromeLaunch(),
       headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../features/writer-quote.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/features/writer-quote.js'), 'utf8');
 const harness = ({ postInForm = false } = {}) => {
   const listeners = new Map(), frames = new Map(); let seq = 0, enabled = true;
   const add = (name, fn) => { const f = listeners.get(name) || new Set(); f.add(fn); listeners.set(name, f); };

@@ -10,9 +10,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const R = require('../mcp/lib/rendezvous.js');
-const H = require('../mcp/lib/handshake.js');
-const P = require('../mcp/lib/peer.js');
+const R = require('../../mcp/lib/rendezvous.js');
+const H = require('../../mcp/lib/handshake.js');
+const P = require('../../mcp/lib/peer.js');
 
 const POSIX = process.platform !== 'win32';
 const posixOnly = (why) => (POSIX ? false : why);
@@ -220,7 +220,7 @@ test('sweep removes run files whose host is gone, with their sockets, and leaves
   // The socket of a host that went without cleaning up: bound by a process that then exited.
   const sock = path.join(d, 'chrome.gone.sock');
   if (POSIX) {
-    const rv = JSON.stringify(require.resolve('../mcp/lib/rendezvous.js'));
+    const rv = JSON.stringify(require.resolve('../../mcp/lib/rendezvous.js'));
     const r = spawnSync(process.execPath, ['-e', `require(${rv}).listen(require('net').createServer(), ${JSON.stringify(sock)}).then(() => process.exit(0))`]);
     assert.equal(r.status, 0, String(r.stderr));
     assert.ok(fs.lstatSync(sock).isSocket());
@@ -405,7 +405,7 @@ test('sweep cannot delete a live record published during its stale check', (t) =
   let writer;
   process.kill = function (pid, signal) {
     if (pid === dead && !writer) {
-      const code = `const R=require(${JSON.stringify(require.resolve('../mcp/lib/rendezvous.js'))});try{R.write(${JSON.stringify(d)},${JSON.stringify(live)})}catch(e){process.stderr.write(e.code);process.exitCode=1}`;
+      const code = `const R=require(${JSON.stringify(require.resolve('../../mcp/lib/rendezvous.js'))});try{R.write(${JSON.stringify(d)},${JSON.stringify(live)})}catch(e){process.stderr.write(e.code);process.exitCode=1}`;
       writer = spawnSync(process.execPath, ['-e', code]);
     }
     return kill.call(this, pid, signal);
@@ -568,7 +568,7 @@ test('handshake: a probe is accepted as such, and the peer is cut down to what t
 });
 
 test('handshake: proofs are compared in constant time', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'mcp', 'lib', 'handshake.js'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
+  const src = fs.readFileSync(path.join(__dirname, '../../mcp/lib/handshake.js'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
   assert.match(src, /timingSafeEqual\(/);
   assert.equal(H.mac('AAAA', 'a', 'n'), hmac('AAAA', 'an'));
   assert.equal(H.same('abc', 'abc'), true);

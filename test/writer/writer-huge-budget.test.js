@@ -5,7 +5,7 @@ const fs = require('node:fs'), vm = require('node:vm');
 // Exercise the check's actual budget calculation without launching Chromium. The observations are synthetic, but
 // their times and state deliberately include long tasks unrelated to the switch.
 const budget = (w) => {
-  const source = fs.readFileSync(require.resolve('../scripts/writer-huge-check.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../checks/writer/writer-huge-check.js'), 'utf8');
   const from = source.indexOf('    const own ='), to = source.indexOf('    check(w.keys.length', from);
   assert.ok(from >= 0 && to > from);
   return vm.runInNewContext(source.slice(from, to) + '\n({ late, during });', { w, KEY_MS: 300 });

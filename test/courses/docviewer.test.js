@@ -1,15 +1,15 @@
 // The DocViewer: its manifest entry, its budget, and what the Canvas page tells a canvadocs frame (features/docs.js,
 // run in a VM with stand-ins, and content.js's hook). The frame's side and the drawing run in
-// a headless browser against test/fixtures/canvas-docviewer.html (scripts/docviewer-check.js); the math is test/ink.test.js.
+// a headless browser against test/fixtures/canvas-docviewer.html (checks/courses/docviewer-check.js); the math is test/looks/ink.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const m = require('../manifest.json');
-const D = require('../defaults.js');
+const m = require('../../extension/manifest.json');
+const D = require('../../extension/defaults.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const DOCS = ['https://canvadocs.instructure.com/*']; // what Canvas's own entry leaves out: the US host
 // The viewer entry matches every instructure.com host, so the regional ones (canvadocs-syd, canvadocs-eu…) get it too; the
 // script keeps to canvadocs hostnames itself. Match patterns can't say "canvadocs-*", and a list of regions would go stale.

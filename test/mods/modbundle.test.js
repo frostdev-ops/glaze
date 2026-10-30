@@ -8,8 +8,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const zlib = require('node:zlib');
 const nodeCrypto = require('node:crypto');
-const M = require('../lib/modbundle.js');
-const { crc32 } = require('../lib/zip.js');
+const M = require('../../extension/lib/modbundle.js');
+const { crc32 } = require('../../extension/lib/zip.js');
 
 const enc = new TextEncoder();
 const u8 = (s) => enc.encode(s);
@@ -161,7 +161,7 @@ test('zip bombs: overlapping entries, lying sizes and huge declarations are refu
   // Two central entries naming one local entry.
   await assert.rejects(M.read(rawZip(tiny([{ name: 'a.txt', data: 'x' }, { name: 'a.txt', data: 'x', at: first, skip: true }]))), DAMAGED, 'one entry twice');
   // Inflation is told to stop at each entry's declared size.
-  const X = require('../lib/lookparts.js'), inflate = X.inflate, caps = [];
+  const X = require('../../extension/lib/lookparts.js'), inflate = X.inflate, caps = [];
   X.inflate = (b, cap) => { caps.push(cap); return inflate(b, cap); };
   try { await M.read(rawZip(tiny([{ name: 'a.txt', data: 'a'.repeat(5000), method: 8 }]))); } finally { X.inflate = inflate; }
   assert.deepEqual(caps, [5000]);
@@ -497,8 +497,8 @@ test('WebCrypto Ed25519: detect support once and refuse signed and dev installs 
     };
     return typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop];
   } });
-  const context = vm.createContext({ crypto: { subtle }, TextEncoder, TextDecoder, Uint8Array, atob, btoa, require: (f) => require(`../lib/${f}`) });
-  const old = vm.runInContext(fs.readFileSync(path.join(__dirname, '../lib/modbundle.js'), 'utf8'), context);
+  const context = vm.createContext({ crypto: { subtle }, TextEncoder, TextDecoder, Uint8Array, atob, btoa, require: (f) => require(`../../extension/lib/${f}`) });
+  const old = vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/modbundle.js'), 'utf8'), context);
   const r = await vector(), bare = { ...r.files };
   delete bare['mod.sig'];
   for (const files of [r.files, bare]) await assert.rejects(old.bundle(Object.entries(files)), /[Uu]pdate your browser/);
@@ -555,7 +555,7 @@ test('plan: TOFU on the key, newer versions only, prompts when permissions grow,
 });
 
 // ---- the worker's broker ---------------------------------------------------------------------------------------------
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 // globals: more for the worker's global scope (a stand-in GZ_BLOCKLIST).
 // own: clone messages and stored values inside the worker's realm, as real ones arrive (the cleaners check plain objects by
 // prototype); the default clones outside it.
@@ -573,7 +573,7 @@ const worker = (local = {}, globals = {}, own = false) => {
     Blob, CompressionStream, DecompressionStream, DOMException, setTimeout, clearTimeout, ...globals,
     importScripts: (...files) => { for (const f of files) { imported.push(f); vm.runInContext(read(`lib/${f}`), context); } },
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
       tabs: { query: async () => [] },

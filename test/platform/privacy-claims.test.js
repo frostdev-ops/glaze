@@ -2,13 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const read = (file) => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-const policy = read('PRIVACY.md');
+const read = (file) => fs.readFileSync(path.join(__dirname, '../../extension', file), 'utf8');
+const policy = read('../PRIVACY.md');
 
 test('media policy bounds container cleanup and preserves the local-only legacy exception', () => {
   assert.match(policy, /removed from the file’s container/);
   assert.match(policy, /saved before 3\.3\.5[^.]*not shared/);
-  assert.match(read('docs/privacy.md'), /saved before 3\.3\.5[^.]*not shared/);
+  assert.match(read('../docs/privacy.md'), /saved before 3\.3\.5[^.]*not shared/);
 });
 
 test('Moodle navigation retention names the actual site and user cache dimensions', () => {
@@ -27,13 +27,13 @@ test('LMS request limits describe the document-local bulk queue and header bound
 });
 
 test('relay storage limits do not promise lifetime ownership quotas or persisted counters', () => {
-  assert.match(read('server/relay.js'), /stored: \[2 \*\* 30, DAY, 1\]/);
+  assert.match(read('../server/relay.js'), /stored: \[2 \*\* 30, DAY, 1\]/);
   assert.match(policy, /counters reset when the relay restarts/);
   assert.match(policy, /not a lifetime storage quota/);
 });
 
 test('share identifier wording separates derived ids from staged protocol enforcement', () => {
-  assert.match(read('server/relay.js'), /gzs2 = process.env.GZS2 === '1'/);
+  assert.match(read('../server/relay.js'), /gzs2 = process.env.GZS2 === '1'/);
   assert.match(policy, /`GZS2=1`/);
   assert.match(policy, /off by default/);
   assert.match(policy, /older members[^.]*update/);
@@ -44,11 +44,11 @@ test('kept background backups and older-browser reset limits are disclosed', () 
   assert.match(policy, /Settings backups omit[^.]*background file bytes/);
   assert.match(policy, /same computer[^.]*gradient/);
   assert.match(policy, /without[\s\S]{0,70}getKeys[\s\S]{0,70}unknown legacy/);
-  assert.match(read('docs/privacy.md'), /background file bytes/);
+  assert.match(read('../docs/privacy.md'), /background file bytes/);
 });
 
 test('optional Google Drive is disclosed in both privacy texts, with its scope, picker hosts and Limited Use', () => {
-  for (const file of ['PRIVACY.md', 'docs/privacy.md']) {
+  for (const file of ['../PRIVACY.md', '../docs/privacy.md']) {
     const text = read(file);
     const limited = text.split(/\n\n|\n(?=Google )/).find((part) => part.includes('Limited Use')) || '';
     assert.match(text, /`(?:https:\/\/www\.googleapis\.com\/auth\/)?drive\.file`/, file);
@@ -71,13 +71,13 @@ const grants = { '': /granted hosts/, de: /genehmigte Hosts/, es: /hosts autoriz
   fr: /hôtes autorisés/, nl: /goedgekeurde hosts/, 'pt-BR': /hosts autorizados/ };
 for (const [lang, account] of Object.entries(languages)) {
   test(`listing ${lang || 'en'} explains automatic/previous approvals and synced identifiers`, () => {
-    const text = read(`store/listing${lang ? `-${lang}` : ''}.md`);
+    const text = read(`../store/listing${lang ? `-${lang}` : ''}.md`);
     assert.match(text, /instructure\.com/);
     assert.match(text, /blackboard\.com/);
     assert.match(text, account);
   });
   test(`listing ${lang || 'en'} discloses granted mod data transfers in its privacy paragraph`, () => {
-    const text = read(`store/listing${lang ? `-${lang}` : ''}.md`);
+    const text = read(`../store/listing${lang ? `-${lang}` : ''}.md`);
     const start = text.search(/^(?:PRIVACY|DATENSCHUTZ|PRIVACIDAD|CONFIDENTIALITÉ|PRIVACIDADE)$/m);
     const paragraph = text.slice(start).split('\n\n')[1];
     assert.match(paragraph, grants[lang]);

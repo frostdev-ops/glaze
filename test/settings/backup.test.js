@@ -1,18 +1,18 @@
 // One backup file (lib/backup.js): made on one device, read, checked and restored on another, category by category.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const B = require('../lib/backup.js');
-const N = require('../lib/notes.js');
-const Z = require('../lib/zip.js');
-const S = require('../lib/sessions.js');
-const W = require('../lib/widgets.js');
-const C = require('../lib/classes.js');
-const G = require('../lib/gpa.js');
-const T = require('../lib/todo.js');
-const D = require('../defaults.js');
-const SHARE = require('../lib/sharing.js');
+const B = require('../../extension/lib/backup.js');
+const N = require('../../extension/lib/notes.js');
+const Z = require('../../extension/lib/zip.js');
+const S = require('../../extension/lib/sessions.js');
+const W = require('../../extension/lib/widgets.js');
+const C = require('../../extension/lib/classes.js');
+const G = require('../../extension/lib/gpa.js');
+const T = require('../../extension/lib/todo.js');
+const D = require('../../extension/defaults.js');
+const SHARE = require('../../extension/lib/sharing.js');
 const SHARE_KEY = SHARE.exportKeys(SHARE.create('collection'));
-const SR = require('../lib/writer-sources.js');
+const SR = require('../../extension/lib/writer-sources.js');
 const SOURCES = SR.key({ school: 'https://bb.school.test', user: '_900_1', course: '_101_1', item: '_7_1' });
 const source = (title, id) => SR.normalize({ id, type: 'book', title, author: [{ family: 'Doe', given: 'Jane' }], issued: { 'date-parts': [[2020]] } });
 
@@ -63,7 +63,7 @@ const seeded = async () => {
   });
   await a.send('notesFile', { key: ACCOUNT, file: { id: id(9), note: id(1), kind: 'image', name: 'pic.png', data: N.b64(PNG) } });
   assert.equal((await a.notes({ op: 'save', id: id(1), base: 0, sid: 'a', title: 'MARK-NOTE', html: `<p>MARK-NOTE-BODY</p><p><img data-gz-file="${id(9)}" alt=""></p>` })).ok, true);
-  await require('../lib/writer-papers.js').open(a.local, () => NOW).save('bb.school.test|_900_1|_101_1|_7_1', { title: 'MARK-PAPER', format: 'mla9', doc: require('../lib/writer-schema.js').parse(require('../lib/writer-schema.js').paper, '<p>MARK-PAPER-BODY</p>').toJSON() });
+  await require('../../extension/lib/writer-papers.js').open(a.local, () => NOW).save('bb.school.test|_900_1|_101_1|_7_1', { title: 'MARK-PAPER', format: 'mla9', doc: require('../../extension/lib/writer-schema.js').parse(require('../../extension/lib/writer-schema.js').paper, '<p>MARK-PAPER-BODY</p>').toJSON() });
   a.keys.push(SHARE_KEY);
   return a;
 };
@@ -108,7 +108,7 @@ const restore = async (dev, file, ticked, account) => {
 const reasonOf = (p) => p.then(() => 'read', (e) => e.why);
 
 test('Papers, their JSON documents, versions and presets survive a backup restore', async () => {
-  const PA = require('../lib/writer-papers.js'), key = 'bb.school.test|_900_1|_101_1|_7_1';
+  const PA = require('../../extension/lib/writer-papers.js'), key = 'bb.school.test|_900_1|_101_1|_7_1';
   const doc = { type: 'doc', content: [{ type: 'paragraph', attrs: { first: 0 }, content: [{ type: 'text', text: 'Paper before backup.' }] }] };
   const a = device(), P = PA.open(a.local);
   await P.save(key, { doc, format: 'mla9', title: 'Kept paper' });
@@ -126,7 +126,7 @@ test('Papers, their JSON documents, versions and presets survive a backup restor
 });
 
 test('a paper with page setup and a paste preference survives a backup restore', async () => {
-  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js'), ST = require('../lib/writer-styles.js');
+  const PA = require('../../extension/lib/writer-papers.js'), SC = require('../../extension/lib/writer-schema.js'), ST = require('../../extension/lib/writer-styles.js');
   const key = 'bb.school.test|_900_1|_101_1|_7_1', a = device(), b = device();
   try {
     const node = SC.parse(SC.paper, '<p>Imported paper.</p>');
@@ -139,7 +139,7 @@ test('a paper with page setup and a paste preference survives a backup restore',
 });
 
 test('a doc: paper backs up and restores', async () => {
-  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const PA = require('../../extension/lib/writer-papers.js'), SC = require('../../extension/lib/writer-schema.js');
   const key = PA.newKey(), a = device(), b = device();
   try {
     let clock = NOW;
@@ -159,7 +159,7 @@ test('a doc: paper backs up and restores', async () => {
 });
 
 test('a document in Trash backs up and restores still in Trash, with when it was trashed and its versions', async () => {
-  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const PA = require('../../extension/lib/writer-papers.js'), SC = require('../../extension/lib/writer-schema.js');
   const key = PA.newKey(), kept = PA.newKey(), a = device(), b = device();
   try {
     let clock = NOW;
@@ -178,7 +178,7 @@ test('a document in Trash backs up and restores still in Trash, with when it was
 });
 
 test('a record of an unknown kind is skipped on restore', async () => {
-  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const PA = require('../../extension/lib/writer-papers.js'), SC = require('../../extension/lib/writer-schema.js');
   const paper = 'bb.school.test|_900_1|_101_1|_7_1', sheet = PA.newKey(), later = PA.newKey(), a = device(), b = device();
   try {
     const P = PA.open(a.local, () => NOW);
@@ -202,7 +202,7 @@ test('a record of an unknown kind is skipped on restore', async () => {
 // Trash and a later build's kind. What restores is the backup's, what the device alone holds stays, the index lists every
 // record it should and no other, and the 30 days of the restored Trash run from when it was trashed.
 test('a mixed set restores onto a device that has documents of its own', async () => {
-  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js'), DAY = 864e5;
+  const PA = require('../../extension/lib/writer-papers.js'), SC = require('../../extension/lib/writer-schema.js'), DAY = 864e5;
   const p = (text) => SC.parse(SC.paper, `<p>${text}</p>`).toJSON(), text = (r) => SC.text(SC.paper.nodeFromJSON(r.doc)).text;
   const paper = 'bb.school.test|_900_1|_101_1|_7_1', both = PA.newKey(), binned = PA.newKey(), sheet = PA.newKey(), mine = PA.newKey(), slides = PA.newKey();
   const a = device(), b = device();
@@ -240,7 +240,7 @@ test('a mixed set restores onto a device that has documents of its own', async (
 });
 
 test('backups accept the maximum selectable version count', async () => {
-  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const PA = require('../../extension/lib/writer-papers.js'), SC = require('../../extension/lib/writer-schema.js');
   const key = 'bb.school.test|_900_1|_101_1|_7_1', a = device(), b = device();
   try {
     let clock = NOW;
@@ -255,7 +255,7 @@ test('backups accept the maximum selectable version count', async () => {
 });
 
 test('backups retain papers with several individually bounded pictures', async () => {
-  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const PA = require('../../extension/lib/writer-papers.js'), SC = require('../../extension/lib/writer-schema.js');
   const key = 'bb.school.test|_900_1|_101_1|_7_1', a = device(), b = device();
   try {
     const image = () => SC.paper.node('image', { src: `data:image/png;base64,${Buffer.alloc(900000).toString('base64')}`, width: 24 });
@@ -335,7 +335,7 @@ test('a backup of every category comes back whole on a new device', async () => 
     assert.deepEqual(Object.keys(raw).sort(), ['classes', 'dashNotes', 'format', 'glaze', 'gpa', 'made', 'notes', 'papers', 'settings', 'sources', 'tasks', 'version', 'widgets', 'writerWords']);
   } finally { a.stop(); b.stop(); }
 });
-const unzipped = async (file) => require('../lib/doctext.js').unzip(file.bytes);
+const unzipped = async (file) => require('../../extension/lib/doctext.js').unzip(file.bytes);
 
 test('a course\'s saved or gallery Look comes back with the settings, in its own synced item beside the built-in ones', async () => {
   const a = device(), b = device();
@@ -766,7 +766,7 @@ test('Back up carries assignment source host keys, ports and local document keys
 });
 
 test('Back up restores discussion, journal and new-message sources under each student and course', async () => {
-  const C = require('../lib/writer-context-discussion.js');
+  const C = require('../../extension/lib/writer-context-discussion.js');
   const keys = [];
   for (const uid of ['_42_1', '_43_1']) for (const cid of ['_101_1', '_102_1']) {
     for (const [kind, path] of [['reply', `/ultra/courses/${cid}/outline/discussion/_9_1`], ['journal', `/ultra/courses/${cid}/outline/journal/_12_1`], ['message', '/ultra/messages/create']]) {
@@ -788,7 +788,7 @@ test('Back up restores discussion, journal and new-message sources under each st
 // Spreadsheets, PDFs and slide decks back up with papers: a spreadsheet's record with its bands, a PDF's or deck's with its
 // file, each one's versions by kind.
 const kinds = async (dev, clock = { t: NOW }) => {
-  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js'), zlib = require('node:zlib');
+  const PA = require('../../extension/lib/writer-papers.js'), SC = require('../../extension/lib/writer-schema.js'), zlib = require('node:zlib');
   const P = PA.open(dev.local, () => ++clock.t);
   const sheet = `doc:${id(81)}`, pdf = `doc:${id(82)}`, deck = `doc:${id(83)}`;
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify({ sheets: [{ id: 1, rows: [[0, [[0, 'n', 42]]]] }] }))).toString('base64');
@@ -825,7 +825,7 @@ test('Back up keeps spreadsheets with their bands, PDFs and decks with their fil
     // A deck's earlier file, kept as a version, comes back as the deck.
     const first = b.store[`writerVersions:${deck}`].find((v) => v.kind === 'slides' && v.file === 'UEsDBBQAAAAI');
     assert.ok(first, 'the first deck is a version');
-    const back = await require('../lib/writer-papers.js').open(b.local).restore(deck, first.id);
+    const back = await require('../../extension/lib/writer-papers.js').open(b.local).restore(deck, first.id);
     assert.deepEqual([back.paper.kind, back.paper.file, back.paper.ext, back.paper.slides], ['slides', 'UEsDBBQAAAAI', '.pptx', 2]);
     // A stale band (a cleanup the worker hadn't finished) stays out.
     a.store[`writerSheet:${sheet}:1:9`] = { rows: [], rev: 1 };
@@ -839,7 +839,7 @@ test('a spreadsheet already on this device stays as it is; its history joins the
   try {
     const { sheet } = await kinds(a);
     const file = await backUp(a);
-    const PA = require('../lib/writer-papers.js');
+    const PA = require('../../extension/lib/writer-papers.js');
     const here = PA.open(b.local, () => NOW + 1e6);
     await here.save(sheet, { kind: 'sheet', doc: null, text: 'MINE', cells: 1, sheets: 1 }, { parts: { '1:0': { rows: [[0, [[0, 's', 'MINE']]]] } }, changed: true });
     const before = structuredClone(b.store[`writerPaper:${sheet}`]);
@@ -856,7 +856,7 @@ test('a newer PDF in a backup replaces the paper here, which is kept as a versio
   const a = device(), b = device();
   try {
     const { pdf } = await kinds(a, { t: NOW + 5e6 });
-    const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+    const PA = require('../../extension/lib/writer-papers.js'), SC = require('../../extension/lib/writer-schema.js');
     await PA.open(b.local, () => NOW).save(pdf, { doc: SC.parse(SC.paper, '<p>MARK-HERE</p>').toJSON() });
     const { out } = await restore(b, await backUp(a), ['papers']);
     assert.deepEqual(out.failed, []);
@@ -869,7 +869,7 @@ test('a newer PDF in a backup replaces the paper here, which is kept as a versio
 
 test('a kind this build does not know stays out, and a damaged spreadsheet or file refuses the backup', async () => {
   const later = `doc:${id(84)}`, paper = `doc:${id(85)}`;
-  const SC = require('../lib/writer-schema.js'), doc = SC.parse(SC.paper, '<p>MARK-KEPT</p>').toJSON();
+  const SC = require('../../extension/lib/writer-schema.js'), doc = SC.parse(SC.paper, '<p>MARK-KEPT</p>').toJSON();
   const local = { [`writerPaper:${later}`]: { key: later, kind: 'board', updated: NOW, doc: null }, [`writerVersions:${later}`]: [{ id: 'v1', at: NOW, kind: 'board' }],
     [`writerPaper:${paper}`]: { key: paper, doc, updated: NOW, revision: 1 } };
   const plan = await B.read(await zipFile(B.pack({ settings: SETTINGS, tasks: {}, local })));
@@ -894,7 +894,7 @@ test('a kind this build does not know stays out, and a damaged spreadsheet or fi
 });
 
 test('the kinds a backup keeps are the Documents home\'s', () => {
-  assert.deepEqual([...B.KINDS].sort(), Object.keys(require('../lib/doc-kinds.js').KINDS).sort());
+  assert.deepEqual([...B.KINDS].sort(), Object.keys(require('../../extension/lib/doc-kinds.js').KINDS).sort());
 });
 
 for (const [label, damage] of [
@@ -918,7 +918,7 @@ for (const kind of ['pdf', 'deck']) test(`replaying an older ${kind} backup does
   const a = device(), b = device();
   try {
     const keys = await kinds(a), k = keys[kind];
-    const P = require('../lib/writer-papers.js').open(b.local, () => NOW + 1e6);
+    const P = require('../../extension/lib/writer-papers.js').open(b.local, () => NOW + 1e6);
     const incoming = a.store[`writerPaper:${k}`];
     await P.save(k, { ...incoming, file: 'TkVX', size: 3 }, { reason: 'import' });
     const file = await backUp(a);
@@ -953,7 +953,7 @@ for (const kind of ['pdf', 'deck']) test(`an older ${kind} already versioned in 
   try {
     const keys = await kinds(a), k = keys[kind];
     await keys.P.save(k, {}, { reason: 'sending' });
-    const P = require('../lib/writer-papers.js').open(b.local, () => NOW + 1e6);
+    const P = require('../../extension/lib/writer-papers.js').open(b.local, () => NOW + 1e6);
     await P.save(k, { ...a.store[`writerPaper:${k}`], file: 'TkVX', size: 3 }, { reason: 'import' });
     assert.deepEqual((await restore(b, await backUp(a), ['papers'])).out.failed, []);
     assert.deepEqual(b.store[`writerVersions:${k}`].map((v) => v.id).sort(), a.store[`writerVersions:${k}`].map((v) => v.id).sort(), 'the existing backup version already retains the older file');
@@ -962,7 +962,7 @@ for (const kind of ['pdf', 'deck']) test(`an older ${kind} already versioned in 
 
 test('Back up refuses a spreadsheet that cannot fit through the restore write fence', () => {
   assert.equal(B.LIMIT.command, 32 << 20);
-  assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/background.js'), 'utf8'), /JSON\.stringify\(m\.restore\)\.length > \(32 << 20\)/, 'the worker fence is the same bound');
+  assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/background.js'), 'utf8'), /JSON\.stringify\(m\.restore\)\.length > \(32 << 20\)/, 'the worker fence is the same bound');
   const key = `doc:${id(87)}`, rows = Array.from({ length: 100 }, (_, r) => [r, Array.from({ length: 11 }, (_, c) => [c, 's', 'x'.repeat(32000)])]);
   const local = { [`writerPaper:${key}`]: { key, kind: 'sheet', updated: NOW, book: { sheets: [{ id: 1, name: 'Large' }] }, parts: { '1:0': 1 } },
     [`writerSheet:${key}:1:0`]: { rev: 1, rows } };

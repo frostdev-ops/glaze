@@ -1,8 +1,8 @@
 // Ultra sidebar geometry and live widget continuity on synthetic pages, without an LMS or external requests.
-// NODE_PATH=<installed playwright> nice -n 15 node scripts/sidebar-ultra-check.js
+// NODE_PATH=<installed playwright> nice -n 15 node checks/navigation/sidebar-ultra-check.js
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const root = process.env.EXT || path.join(__dirname, '..');
+const root = process.env.EXT || path.join(__dirname, '../../extension');
 const out = process.argv[2];
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sidebar-ultra-'));
 let checks = 0, fails = 0;
@@ -10,8 +10,8 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
 (async () => {
   let browser;
   try {
-    await require('./wait-for-browser.js')();
-    browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch(), args: ['--host-resolver-rules=MAP * ~NOTFOUND'], chromiumSandbox: false });
+    await require('../../tools/dev/wait-for-browser.js')();
+    browser = await chromium.launch({ headless: true, ...require('../../tools/dev/check-env.js').chromeLaunch(), args: ['--host-resolver-rules=MAP * ~NOTFOUND'], chromiumSandbox: false });
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
     const shot = async (name) => { if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, `${name}.png`) }); } };
     await page.route('**/*', (r) => r.request().url().startsWith('https://bb.school.test/ultra/') ? r.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }) : r.abort());
@@ -486,7 +486,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       await page.waitForTimeout(100);
       check(await page.evaluate(() => { const panel = document.querySelector('.course-content-container > .panel-wrap'); return Math.abs(panel.getBoundingClientRect().right - parseFloat(getComputedStyle(panel).paddingInlineEnd) + 16 - document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left) <= 1; }), `${tool}: the course tool content keeps the sidebar's gap`);
     }
-    await require('./ultra-offcanvas-fixture.js')({ page, root, check, shot });
+    await require('../mocks/ultra-offcanvas-fixture.js')({ page, root, check, shot });
     console.log(JSON.stringify({ checks, fails }));
     process.exitCode = fails ? 1 : 0;
   } finally { await browser?.close(); fs.rmSync(tmp, { recursive: true, force: true }); }

@@ -5,11 +5,11 @@
 process.env.TZ = 'UTC';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('./helpers/mcp-caches.cjs');
-const H = require('./helpers/mcp-tabs.cjs');
-const T = require('../lib/ai/tools.js');
-const TABS = require('../lib/mcp/tabs.js');
-const AS = require('../lib/mcp/tools-assign.js');
+const C = require('../helpers/mcp-caches.cjs');
+const H = require('../helpers/mcp-tabs.cjs');
+const T = require('../../extension/lib/ai/tools.js');
+const TABS = require('../../extension/lib/mcp/tabs.js');
+const AS = require('../../extension/lib/mcp/tools-assign.js');
 
 const A = `${C.CANVAS}/5`, UL = `${C.ULTRA}/${C.ULTRA_UID}`;
 const CANVAS_A = C.load('canvas-assignment-api.json');
@@ -17,7 +17,7 @@ const ULTRA_ROWS = C.load('ultra-writer-gradebook.json'), ULTRA_ITEM = C.load('u
 const COLUMN = { ...ULTRA_RUBRIC.column, id: '_810_1', contentId: '_7_1', rubricAssociations: ULTRA_RUBRIC.column.rubricAssociations.map((a) => ({ ...a, entityId: '_810_1' })) };
 // Ultra's planner as lib/ultra.js planner() makes it, To Do joined with each course's gradebook rows, kept as the list keeps it.
 const ultraPlan = async () => {
-  const U = require('../lib/ultra.js'), L = require('../lib/todo.js');
+  const U = require('../../extension/lib/ultra.js'), L = require('../../extension/lib/todo.js');
   const rows = { _101_1: C.ultraRows('grades'), _102_1: C.ultraRows('grades-status') };
   const at = C.NOW - 60e3, key = `todo:${UL}`, data = {};
   const cache = { key, at, start: new Date(at - 8 * 864e5).toISOString(), end: new Date(at + 30 * 864e5).toISOString(), teach: true, progress: true,
@@ -255,11 +255,11 @@ test('a read begun during a rubric purge cannot recreate the cleared index', asy
 });
 
 test('rubric numbers come back as the site means them, not with float noise (live Ultra, 2026-10-30: 0.7000000000000001)', () => {
-  const r = require('../lib/mcp/tools-assign.js').clean({ title: 'T', points: 5.000000000000001,
+  const r = require('../../extension/lib/mcp/tools-assign.js').clean({ title: 'T', points: 5.000000000000001,
     rubric: { title: 'R', total: 5, levels: [{ id: 'a', label: 'Proficient' }], criteria: [{ id: 'c', label: 'Create the first table', points: 0.14 * 5, weight: 14.000000000000002,
       cells: [{ level: 'a', detail: '', value: 0.1 + 0.2 }] }] } });
   assert.equal(r.points, 5);
   assert.deepEqual([r.rubric.criteria[0].points, r.rubric.criteria[0].weight, r.rubric.criteria[0].cells[0].value], [0.7, 14, 0.3]);
   // Only the float noise goes: a value the site really has, like 20.2 / 20.1, keeps its digits for the app to round as Glaze does.
-  assert.equal(require('../lib/mcp/tools-assign.js').clean({ rubric: { criteria: [{ points: 20.2 / 20.1 }] } }).rubric.criteria[0].points, 1.00497512438);
+  assert.equal(require('../../extension/lib/mcp/tools-assign.js').clean({ rubric: { criteria: [{ points: 20.2 / 20.1 }] } }).rubric.criteria[0].points, 1.00497512438);
 });

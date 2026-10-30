@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { relay, LIMIT, s3Store } = require('../server/relay.js');
+const { relay, LIMIT, s3Store } = require('../../server/relay.js');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const clients = new WeakMap();
@@ -165,7 +165,7 @@ test('SHR-6 review: spool open/write/read failures release admission and remove 
 });
 
 test('SHR-11 review: a database error releasing the lease cannot reject the close callback or wedge shutdown', { timeout: 5000 }, async (t) => {
-  const code = `const {relay} = require(${JSON.stringify(path.join(__dirname, '../server/relay.js'))});
+  const code = `const {relay} = require(${JSON.stringify(path.join(__dirname, '../../server/relay.js'))});
     (async () => {
       const r = relay({db: ':memory:'});
       await r.listen(0, '127.0.0.1');

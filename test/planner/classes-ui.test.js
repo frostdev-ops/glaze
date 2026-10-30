@@ -6,11 +6,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const C = require('../lib/classes.js');
-const T = require('../lib/todo.js');
-const I = require('../lib/ics.js');
+const C = require('../../extension/lib/classes.js');
+const T = require('../../extension/lib/todo.js');
+const I = require('../../extension/lib/ics.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 const ORIGIN = 'https://canvas.test';
 const KEY = C.storeKey(ORIGIN, '3');
@@ -205,7 +205,7 @@ test('the worker: a Save held before the queue, then Delete all, then the Save: 
     URL, console, setTimeout, clearTimeout, crypto,
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), ctx); },
     chrome: {
-      runtime: { id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
+      runtime: { id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local, sync: { get: () => Promise.resolve({}), set: () => Promise.resolve() }, onChanged: none },
       scripting: { executeScript: () => Promise.resolve([]) },
     },
@@ -561,7 +561,7 @@ test('a calendar link past the size limit stops being read once it passes it, an
 });
 
 test('a calendar the reader refuses says so in the page\'s language, and anything unexpected still reads as a failure', async () => {
-  require('../i18n/fr.js');
+  require('../../extension/i18n/fr.js');
   const FR = globalThis.GZ_LANGS.fr;
   const fr = (k, v) => (FR[k] ?? k).replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? '');
   const paste = async (p, ics) => {
@@ -624,7 +624,7 @@ test('a calendar response without a body is refused without buffering a fallback
 });
 
 for (const how of ['fetch', 'body', 'file', 'dependency', 'text', 'document', 'known']) test(`schedule ${how} errors use translated student-facing words`, async () => {
-  require('../i18n/fr.js');
+  require('../../extension/i18n/fr.js');
   const FR = globalThis.GZ_LANGS.fr, p = page();
   p.c.GZ_CTX.t = (k, v) => (FR[k] ?? k).replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? '');
   const fail = () => { throw new TypeError('untranslated browser or parser error'); };

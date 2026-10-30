@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const zlib = require('node:zlib');
-const D = require('../lib/doctext.js');
+const D = require('../../extension/lib/doctext.js');
 
 // A zip whose entries are deflated (method 8), as Word and PowerPoint write them; `stored` names stay method 0.
 const zipOf = (files, stored = []) => {
@@ -313,6 +313,6 @@ test('review: a zip whose CRC, local header or sizes disagree is refused as dama
 });
 
 test('inflating an entry writes into the stream directly, never through a Blob stream (Safari content scripts refuse its chunks)', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/doctext.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/doctext.js'), 'utf8');
   assert.doesNotMatch(src, /\.stream\(\)\.pipeThrough/);
 });

@@ -1,17 +1,17 @@
 // The browser gate: verified Chromium, settings, popup, site permissions and the student's pointer, one check at a time.
-//   NODE_PATH=<pinned playwright> PLAYWRIGHT_BROWSERS_PATH=<dir> nice -n 10 node scripts/ci-browser-checks.js <out dir>
+//   NODE_PATH=<pinned playwright> PLAYWRIGHT_BROWSERS_PATH=<dir> nice -n 10 node tools/dev/ci-browser-checks.js <out dir>
 // Holds the shared lock throughout cleanup. Each check gets its own lock and temporary directory.
 const { spawn, execFileSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { lockPath } = require('./check-env.js');
 
 const CHECKS = [
-  { name: 'settings', script: 'settings-ia-check.js', limit: 6 * 60 * 1000, env: (dir) => ({ IA_OUT: dir }) },
-  { name: 'backup', script: 'backup-check.js', limit: 60 * 1000, args: (dir) => [dir] },
-  { name: 'popup', script: 'popup-check.js', args: (dir) => [dir] },
-  { name: 'sites', script: 'sites-check.js', args: (dir) => [dir] },
-  { name: 'pointer', script: 'pointer-check.js', args: (dir) => [dir] },
-  { name: 'register-update', script: 'register-update-check.js', limit: 60 * 1000, args: (dir) => [dir] },
+  { name: 'settings', script: 'checks/settings/settings-ia-check.js', limit: 6 * 60 * 1000, env: (dir) => ({ IA_OUT: dir }) },
+  { name: 'backup', script: 'checks/settings/backup-check.js', limit: 60 * 1000, args: (dir) => [dir] },
+  { name: 'popup', script: 'checks/settings/popup-check.js', args: (dir) => [dir] },
+  { name: 'sites', script: 'checks/settings/sites-check.js', args: (dir) => [dir] },
+  { name: 'pointer', script: 'checks/looks/pointer-check.js', args: (dir) => [dir] },
+  { name: 'register-update', script: 'checks/platform/register-update-check.js', limit: 60 * 1000, args: (dir) => [dir] },
 ];
 const LIMIT = 2 * 60 * 1000, BUDGET = 11 * 60 * 1000;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -50,7 +50,7 @@ async function run(check, out, lock, limit = check.limit || LIMIT) {
   const dir = path.join(out, check.name), scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ci-check-'));
   fs.mkdirSync(dir, { recursive: true });
   const log = fs.createWriteStream(path.join(out, `${check.name}.log`)), start = Date.now();
-  const child = spawn(process.execPath, [path.resolve(__dirname, check.script), ...(check.args?.(dir) || [])], {
+  const child = spawn(process.execPath, [path.resolve(__dirname, '../..', check.script), ...(check.args?.(dir) || [])], {
     env: { ...process.env, ...check.env?.(dir), GLAZE_LOCK: lock, TMPDIR: scratch, TMP: scratch, TEMP: scratch },
     stdio: ['ignore', 'pipe', 'pipe'], detached: true,
   });

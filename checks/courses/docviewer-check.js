@@ -5,21 +5,21 @@
 // keyboard, drawing, highlighting, undo and redo, the eraser, export, clear, import, the page picture, a page drawn
 // again, zoom, rotation, and German words. There is no canvadocs on a local Canvas: a real signed-in viewer is still a
 // check by hand before release.
-//   NODE_PATH=/path/to/node_modules node scripts/docviewer-check.js [out dir for screenshots]   (needs playwright)
+//   NODE_PATH=/path/to/node_modules node checks/courses/docviewer-check.js [out dir for screenshots]   (needs playwright)
 //   CHROME=/path/to/chrome runs that browser instead of Playwright's Chromium.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const G = require('../defaults.js');
-const C = require('../lib/color.js');
+const G = require('../../extension/defaults.js');
+const C = require('../../extension/lib/color.js');
 const opaqueHex = (value) => { const c = C.parse(value); return c?.a === 1 ? C.hex(c) : null; };
 
-const ext = path.join(__dirname, '..');
+const ext = path.join(__dirname, '../../extension');
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docviewer-'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
-const fx = (f) => fs.readFileSync(path.join(ext, 'test/fixtures', f), 'utf8');
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
+const fx = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const BLOB = encodeURIComponent(JSON.stringify({ user_id: 170000000000042, attachment_id: 21, type: 'canvadoc' }));
 const KEY = 'ink:https://school.instructure.com/170000000000042/21';
@@ -27,7 +27,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
 
 (async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'w9-'));
-  await require('./wait-for-browser.js')();
+  await require('../../tools/dev/wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
     ...chromeLaunch, headless: true, viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce', colorScheme: 'dark',
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
@@ -39,7 +39,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
       // Canvas frames /api/v1/canvadoc_session?blob=…, which redirects to canvadocs; playwright doesn't route a
-      // redirect's second request, so the frame opens canvadocs directly with the same blob (test/docviewer.test.js
+      // redirect's second request, so the frame opens canvadocs directly with the same blob (test/courses/docviewer.test.js
       // reads the real address).
       if (u.host === 'school.instructure.com' && /^\/courses\/25\/files\/21/.test(u.pathname)) {
         const body = fx('canvas-file-preview.html').replace(/<iframe src="\/\/docs\.google\.com[^"]*"/, `<iframe id="file-preview-iframe" src="https://canvadocs.instructure.com/1/sessions/abc/view?from=/api/v1/canvadoc_session&amp;blob=${BLOB}&amp;hmac=x"`).replace('<html dir="ltr" lang="en"', `<html dir="ltr" lang="${lang}"`);

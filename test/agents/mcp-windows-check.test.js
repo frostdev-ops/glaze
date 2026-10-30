@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const script = path.join(__dirname, '../scripts/mcp-windows-check.js');
+const script = path.join(__dirname, '../../checks/agents/mcp-windows-check.js');
 
 test('the Windows native-host check requires CI or explicit registry consent, including in dry mode', () => {
   const probe = `

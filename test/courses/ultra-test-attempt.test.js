@@ -6,7 +6,7 @@
 // cascade (test/helpers/css-cascade.cjs) picks each property from theme.css's rules as the browser would.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { chain, cssRules, winner } = require('./helpers/css-cascade.cjs');
+const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
 
 const theme = cssRules('theme.css');
 const bg = (el) => winner(theme, el, 'background(?:-color)?') || ['(none)', ''];
@@ -146,7 +146,7 @@ test('an assignment attempt scrolls as one page: its title goes up with it, Save
   assert.equal(winner(theme, foot, 'inset-block-end')[0], '0');
   assert.match(bg(foot)[0], SURFACE, 'what passes under Save and Submit is behind a dock');
   // The title has no room kept for a course strip: on a page with a breadcrumb row, the strip goes there.
-  const extras = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'extras.css'), 'utf8');
+  const extras = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/extras.css'), 'utf8');
   for (const rule of extras.match(/^html\[data-gz-ctabs[^\n]*\[class\*="headerRoot"\]:not\(:has\(#gz-ctabs\)\)[^\n]*$/gm)) {
     assert.match(rule, /\.routed-page\.bb-offcanvas-container:not\(:has\(content-page-header > header\)\)/, rule);
   }

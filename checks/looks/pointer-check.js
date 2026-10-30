@@ -7,20 +7,20 @@
 // synthetic Ultra page with the real content script: the student's pointer worn over the Look's or with no Look parts at
 // all, the system's with the switch off, none with Glaze off, text fields keeping the I-beam, the animation switch, and the
 // command palette's switch. No network: every request outside the extension (and the synthetic page) is aborted.
-//   NODE_PATH=/path/to/node_modules nice -n 10 node scripts/pointer-check.js [out-dir for screenshots]
+//   NODE_PATH=/path/to/node_modules nice -n 10 node checks/looks/pointer-check.js [out-dir for screenshots]
 // With an out dir it also saves the section in a light and a dark editor and at phone width, each with the switch on and off
 // (pointer-setting-light.png, -dark.png, -phone.png, and -off after each name).
 // Holds GLAZE_LOCK (check-env.js) and waits while another browser runs. The profile is temporary and removed.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['https://bb.school.test/*']);
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const out = process.argv[2] && path.resolve(process.argv[2]);
-const chromeLaunch = require('./check-env.js').chromeLaunch();
-const lock = require('./check-env.js').lockPath();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
+const lock = require('../../tools/dev/check-env.js').lockPath();
 const G = require(path.join(ext, 'defaults.js'));
-const PAGE = fs.readFileSync(path.join(ext, 'test/fixtures/ultra-courses.html'), 'utf8');
+const PAGE = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-courses.html'), 'utf8');
 const SITE = 'https://bb.school.test';
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -53,7 +53,7 @@ const animates = async (frame, at, bound = 20000) => {
   try {
     fs.mkdirSync(lock); held = true;
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\npointer-check\n`);
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...chromeLaunch, headless: true, viewport: { width: 1400, height: 1000 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],

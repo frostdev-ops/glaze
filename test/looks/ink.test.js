@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const I = require('../lib/ink.js');
+const I = require('../../extension/lib/ink.js');
 
 test('a key per Canvas site, person and file; signed out is the site\'s "anon"; a person not known has none', () => {
   assert.equal(I.storeKey('https://school.instructure.com', '170000000000123', '4567'), 'ink:https://school.instructure.com/170000000000123/4567');

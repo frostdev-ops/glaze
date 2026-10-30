@@ -3,9 +3,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const W = require('../lib/widgets.js');
-const { El } = require('./stand-in-dom.js');
+const D = require('../../extension/defaults.js');
+const W = require('../../extension/lib/widgets.js');
+const { El } = require('../stand-in-dom.js');
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 const page = ({ more = {}, ctxMore = {} } = {}) => {
@@ -20,7 +20,7 @@ const page = ({ more = {}, ctxMore = {} } = {}) => {
   const ctx = { site: 'ultra', on: () => enabled, t: (s) => s, locale: () => 'en', nickOf: () => '', courseList: () => ({ _101_1: { name: 'Biology', site: 'https://bb.test', slot: '3' } }), courseColors: () => ({ _101_1: color }), canvasPeek: () => peek, settings: () => settings,
     need: (file) => { assert.ok(['lib/todo.js', 'features/cards.js', 'features/cardtasks.js'].includes(file), `unexpected reader ${file}`); return file === 'features/cardtasks.js' ? new Promise((r) => waiting.push(r)) : Promise.resolve(); }, ...ctxMore };
   const c = { GZ_CTX: ctx, GZ_WIDGETS: W, GZ_SANITIZE: D.GZ_SANITIZE, GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_TODO: { clean: (v) => v || {}, gradescope: () => () => [] }, GZ_CARD_UI: { paint() {} }, GZ_CARD_TASKS: { render: (...args) => renders.push(args) }, document: doc, location: { origin: 'https://bb.test' }, chrome: { runtime: { id: 'x' }, storage: { local: { get: (keys, cb) => reads.push(() => cb(local)) }, sync: { get: (keys, cb) => cb({}) }, onChanged: { addListener: (f) => listeners.push(f) } } }, URL, console, ...more };
-  const ui = vm.runInNewContext(fs.readFileSync(require.resolve('../features/coursecards.js'), 'utf8'), c);
+  const ui = vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/features/coursecards.js'), 'utf8'), c);
   ui.sync();
   const mount = (body = doc.createElement('div')) => ui.fill(body, { id: 'course:https://bb.test/_101_1', term: () => '' });
   const body = doc.createElement('div'), tile = mount(body);
@@ -87,7 +87,7 @@ test("Canvas: a board's card is drawn as Canvas's own, from what its page shows,
     canvasCourses: () => rows.promise, need: (f) => { needs.push(f); return Promise.resolve(); } };
   const c = { GZ_CTX: ctx, GZ_WIDGETS: W, GZ_SANITIZE: D.GZ_SANITIZE, GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_CARD_UI: { paint() {} }, document: doc, location: { origin: 'https://canvas.test' },
     chrome: { runtime: { id: 'x' }, storage: { onChanged: { addListener() {} } } }, URL, console };
-  const ui = vm.runInNewContext(fs.readFileSync(require.resolve('../features/coursecards.js'), 'utf8'), c);
+  const ui = vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/features/coursecards.js'), 'utf8'), c);
   ui.sync();
   assert.deepEqual(JSON.parse(JSON.stringify(ui.list().map((x) => [x.key, x.name, x.term]))), [['course:https://canvas.test/27', 'Calc (mine)', 'Fall 2026'], ['course:https://canvas.test/31', 'History', '']], "this site's courses only, its cards' order first");
   const body = doc.createElement('div');
@@ -117,7 +117,7 @@ test("Canvas: a board's card is drawn as Canvas's own, from what its page shows,
 });
 
 // ---- a Look's card rules on the board's cards (lib/parts.js names each piece, features/rules.js wears them) ----
-const P = require('../lib/parts.js');
+const P = require('../../extension/lib/parts.js');
 const tileOf = (doc) => { const tile = doc.createElement('section'), body = doc.createElement('div'); tile.className = 'gz-w'; body.className = 'gz-w-body'; tile.append(body); return { tile, body }; };
 
 test("Ultra: each course-card part's board piece is in the card the board draws, and only there", async () => {
@@ -138,7 +138,7 @@ test("Canvas: each dashboard-card part's board piece is in the card the board dr
   const doc = { createElement: (tag) => { const el = new El(tag, doc); el.style = {}; return el; }, querySelectorAll: () => [] };
   const ctx = { site: 'canvas', on: () => true, t: (s) => s, nickOf: () => '', settings: () => D.GZ_SANITIZE({}), courseList: () => ({ 'canvas:https://canvas.test/27': { name: 'Calculus I', code: 'MATH 1350', canvas: true } }),
     canvasCourses: () => new Promise(() => {}), need: () => Promise.resolve() };
-  const ui = vm.runInNewContext(fs.readFileSync(require.resolve('../features/coursecards.js'), 'utf8'), { GZ_CTX: ctx, GZ_WIDGETS: W, GZ_SANITIZE: D.GZ_SANITIZE, GZ_COURSE_VARS: D.GZ_COURSE_VARS,
+  const ui = vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/features/coursecards.js'), 'utf8'), { GZ_CTX: ctx, GZ_WIDGETS: W, GZ_SANITIZE: D.GZ_SANITIZE, GZ_COURSE_VARS: D.GZ_COURSE_VARS,
     GZ_CARD_UI: { paint() {} }, document: doc, location: { origin: 'https://canvas.test' }, chrome: { runtime: { id: 'x' }, storage: { onChanged: { addListener() {} } } }, URL, console });
   ui.sync();
   const { tile, body } = tileOf(doc);

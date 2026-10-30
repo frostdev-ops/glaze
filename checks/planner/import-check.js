@@ -8,24 +8,24 @@
 // browser's decoding, not node's), and whether anything asked for an address other than localhost and the extension.
 // Saves the class schedule's list, light and dark, as test/fixtures/import/canvas-schedule-{light,dark}.png. Writes
 // nothing to Canvas: what Save keeps goes to the throwaway profile's extension storage.
-//   NODE_PATH=/path/to/node_modules node scripts/import-check.js [out dir]   (needs playwright)
+//   NODE_PATH=/path/to/node_modules node checks/planner/import-check.js [out dir]   (needs playwright)
 //   CHROME=/path/to/chrome runs that browser instead of Playwright's Chromium.
 const { chromium } = require('playwright');
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const G = require('../defaults.js');
-const I = require('../lib/i18n.js');
-for (const l of ['de', 'es', 'fr', 'nl', 'pt-BR']) require(`../i18n/${l}.js`);
+const G = require('../../extension/defaults.js');
+const I = require('../../extension/lib/i18n.js');
+for (const l of ['de', 'es', 'fr', 'nl', 'pt-BR']) require(`../../extension/i18n/${l}.js`);
 const { SCORE } = require('./import-truth.js');
 
-const root = path.join(__dirname, '..');
-const FX = path.join(root, 'test/fixtures/import');
+const root = path.join(__dirname, '../../extension');
+const FX = path.join(__dirname, '../../test/fixtures/import');
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-import-'));
 const BASE = 'http://localhost:3000';
 const CREDS = path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const NOT_EXTENSION = new Set(['assets', 'safari', 'scripts', 'store', 'test', 'docs', 'dist', 'release', 'node_modules']);
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) process.exitCode = 1; };
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -40,13 +40,13 @@ const frames = (page) => page.evaluate(() => document.querySelectorAll('iframe[s
   for (const f of fs.readdirSync(root)) if (f !== 'manifest.json' && !f.startsWith('.') && !NOT_EXTENSION.has(f) && !/\.(md|sh)$/.test(f)) fs.cpSync(path.join(root, f), path.join(ext, f), { recursive: true });
   const m = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   // Glaze's first script is one entry per site (content-ultra.js, content-canvas.js): localhost gets Canvas's, as
-  // scripts/canvas-shots.js does.
+  // tools/dev/canvas-shots.js does.
   const glaze = m.content_scripts.filter((e) => e.js.at(-1) === 'content.js');
   for (const e of [...m.content_scripts.filter((x) => !glaze.includes(x)), ...m.web_accessible_resources]) e.matches.push('http://localhost/*');
   m.content_scripts.push({ ...glaze.find((e) => e.matches.includes('https://*.instructure.com/*')), matches: ['http://localhost/*'], exclude_matches: undefined });
   m.host_permissions.push('http://localhost/*');
   fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
-  await require('./wait-for-browser.js')();
+  await require('../../tools/dev/wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
     ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1,
     reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York', args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],

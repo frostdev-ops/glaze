@@ -9,10 +9,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const { chain, cssRules, winner } = require('./helpers/css-cascade.cjs');
+const { El } = require('../stand-in-dom.js');
+const { chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 const load = (kind = 'progress') => {
   const doc = { activeElement: null };

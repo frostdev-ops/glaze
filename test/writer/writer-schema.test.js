@@ -6,9 +6,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const S = require('../lib/writer-schema.js');
+const S = require('../../extension/lib/writer-schema.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const C = S.compose, P = S.paper;
 const out = (html, schema = C) => S.serialize(schema, S.parse(schema, html));
 const sorted = (h) => h.replace(/class="([^"]*)"/g, (_, c) => `class="${c.split(' ').sort().join(' ')}"`);

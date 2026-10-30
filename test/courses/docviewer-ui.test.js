@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const CANVAS = 'https://school.instructure.com';
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(setImmediate); };
 
@@ -59,8 +59,8 @@ const viewer = () => {
     requestAnimationFrame: (f) => { f(); return 0; },
     MutationObserver: class { observe() {} disconnect() {} },
     DOMPoint: class { constructor(x, y) { this.x = x; this.y = y; } matrixTransform() { return { x: this.x, y: this.y }; } },
-    GZ_INK: require('../lib/ink.js'),
-    GZ_SURFACES: require('../lib/surfaces.js'),
+    GZ_INK: require('../../extension/lib/ink.js'),
+    GZ_SURFACES: require('../../extension/lib/surfaces.js'),
     chrome: { runtime: { id: 'glaze', getURL: (path) => `chrome-extension://test/${path}` }, storage: {
       onChanged: { addListener() {} },
       local: {
@@ -120,7 +120,7 @@ test('a Canvas tool picked by keyboard (a click without a pointer) puts Glaze\'s
 const file = (pages) => {
   let resolve;
   const text = new Promise((y) => { resolve = y; });
-  return { f: { size: 100, text: () => text }, done: () => resolve(require('../lib/ink.js').exportFile('21', pages)) };
+  return { f: { size: 100, text: () => text }, done: () => resolve(require('../../extension/lib/ink.js').exportFile('21', pages)) };
 };
 const MARK = { 1: [{ t: 'pen', c: '#e11d48', w: 3, p: [1, 1, 9, 9] }] };
 
@@ -196,7 +196,7 @@ test('a held storage read cannot replace the latest open of the same document', 
   const v = viewer(), reads = [];
   v.chrome.storage.local.get = () => new Promise((resolve) => reads.push(resolve));
   await v.tell(); await v.tell({ ink: false }); await v.tell();
-  const key = require('../lib/ink.js').storeKey(CANVAS, '5', '21');
+  const key = require('../../extension/lib/ink.js').storeKey(CANVAS, '5', '21');
   reads[1]({ [key]: { pages: MARK } }); await settle();
   assert.equal(v.svg().firstChild.children[0].attrs.stroke, '#e11d48');
   reads[0]({ [key]: { pages: { 1: [{ ...MARK[1][0], c: '#112233' }] } } }); await settle();

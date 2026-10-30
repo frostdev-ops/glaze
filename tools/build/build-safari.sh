@@ -2,7 +2,7 @@
 # Build a universal Developer ID release of the Safari Mac app. Use NOTARY_PROFILE or ASC_KEY_* to notarize.
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 cd "$root"
 if [ "$(uname)" != Darwin ]; then
   echo "build-safari: macOS and Xcode are required." >&2
@@ -11,14 +11,14 @@ fi
 
 identity=${SAFARI_SIGN_IDENTITY:-Developer ID Application: James Kueller (22AAZFMTV8)}
 team=${SAFARI_TEAM_ID:-22AAZFMTV8}
-version=$(node -p 'require("./manifest.json").version')
+version=$(node -p 'require("./extension/manifest.json").version')
 out=release/$version
 # Deleting an older indexed build can make Safari remove the installed extension's data.
 if [ -e "$out/build/Glaze.app" ] || [ -L "$out/build/Glaze.app" ]; then
   echo "build-safari: $out/build/Glaze.app must be removed with a Safari data backup before building." >&2
   exit 1
 fi
-./package.sh
+tools/build/package.sh
 
 # Build from a copy, so the checked-in project's native code and any local Xcode edits stay as they are.
 stage=$(mktemp -d)
@@ -40,10 +40,10 @@ app="$stage/release/Glaze.app"
 # The public half of the Sparkle signing key (generate_keys, login Keychain account "ed25519"); not a secret.
 export SAFARI_UPDATE_PUBLIC_KEY="${SAFARI_UPDATE_PUBLIC_KEY:-0lbeC9MO1QDsjSGjs6iyxSBwXKMpEiKVoB+5wZwQEqY=}"
 # Only the DMG project contains Sparkle. Stage-only usage never reaches signing/notarization.
-python3 scripts/stage-safari-dmg.py "$stage"
-python3 scripts/safari-build-ids.py project "$stage/Glaze/Glaze.xcodeproj/project.pbxproj"
+python3 tools/build/stage-safari-dmg.py "$stage"
+python3 tools/build/safari-build-ids.py project "$stage/Glaze/Glaze.xcodeproj/project.pbxproj"
 # The app bundles only what the Xcode project lists: stop before building if the package has something it doesn't.
-node scripts/safari-resources.js "$stage/Glaze/Glaze Extension/Resources"
+node tools/build/safari-resources.js "$stage/Glaze/Glaze Extension/Resources"
 case "${SAFARI_UPDATE_PUBLIC_KEY:-}" in
   ''|REPLACE_*) echo "build-safari: set SAFARI_UPDATE_PUBLIC_KEY from Sparkle generate_keys before releasing." >&2; exit 1 ;;
 esac
@@ -66,7 +66,7 @@ fi
 # The release copy, under Glaze's own ids.
 mkdir "$stage/release"
 ditto "$built" "$app"
-python3 scripts/safari-build-ids.py app "$app"
+python3 tools/build/safari-build-ids.py app "$app"
 
 # Check package integration and URL registration before final re-signing and packaging.
 test -d "$app/Contents/Frameworks/Sparkle.framework" || { echo "build-safari: Sparkle framework is missing" >&2; exit 1; }
@@ -90,7 +90,7 @@ for bundle in "$sparkle/XPCServices/Downloader.xpc" "$sparkle/XPCServices/Instal
     case "$bundle" in
       "$extension" | "$app")
         codesign -d --entitlements - --xml "$bundle" > "$stage/built.entitlements" 2>/dev/null
-        python3 scripts/safari-build-ids.py entitlements "$stage/built.entitlements" "$stage/release.entitlements"
+        python3 tools/build/safari-build-ids.py entitlements "$stage/built.entitlements" "$stage/release.entitlements"
         set -- --entitlements "$stage/release.entitlements" --preserve-metadata=flags ;;
       *) set -- --preserve-metadata=entitlements,flags ;;
     esac
@@ -161,5 +161,5 @@ ditto -c -k --sequesterRsrc --keepParent "$app" "$out/github/$name.zip"
 (cd "$out/github" && shasum -a 256 "$name.zip" > "$name.sha256")
 echo "Built $out/github/$name.zip"
 if [ -n "${NOTARY_PROFILE:-}${ASC_KEY_PATH:-}" ]; then
-  sh scripts/make-dmg.sh "$app" "$out/github/$name.dmg"
+  sh tools/build/make-dmg.sh "$app" "$out/github/$name.dmg"
 fi

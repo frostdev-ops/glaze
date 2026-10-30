@@ -2,18 +2,18 @@
 // local category goes into a real download, and a new profile restores it through the restore list: its labels, keyboard
 // use and a 320px width, Cancel changing nothing, then every marker back. External requests are blocked; no school or user
 // profile. EXT selects the checkout under test; the folder argument keeps the list's screenshots, light and dark.
-// NODE_PATH=<playwright> nice -n 10 node scripts/backup-check.js [screenshot folder]
+// NODE_PATH=<playwright> nice -n 10 node checks/settings/backup-check.js [screenshot folder]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
-const env = require('./check-env.js'), lock = require('./check-env.js').lockPath(), chromeLaunch = require('./check-env.js').chromeLaunch();
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
+const env = require('../../tools/dev/check-env.js'), lock = require('../../tools/dev/check-env.js').lockPath(), chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const shots = process.argv[2];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 let scratch, held = false, open = null;
 
 // A new profile, installed, on Settings' Backup and reset.
 const launch = async (dir) => {
-  await require('./wait-for-browser.js')();
+  await require('../../tools/dev/wait-for-browser.js')();
   const context = await chromium.launchPersistentContext(dir, {
     ...chromeLaunch, headless: true, viewport: { width: 1440, height: 1000 },
     args: [`--disable-extensions-except=${root}`, `--load-extension=${root}`, '--disable-background-networking'],

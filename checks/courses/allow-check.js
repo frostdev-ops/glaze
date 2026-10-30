@@ -5,14 +5,14 @@
 // answer its permission prompt, so the staged copy holds the schools' hosts (the student's grant) and the first screen's
 // chrome.permissions is the check's: it says what is held and grants each request. The schools are synthetic pages routed by
 // the check: bb.school.edu answers as Blackboard, canvas.school.edu as Canvas, www.school.edu as a school's main website.
-// NODE_PATH=<installed playwright> nice node scripts/allow-check.js [evidence directory]
+// NODE_PATH=<installed playwright> nice node checks/courses/allow-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const BB = 'https://bb.school.edu', CANVAS = 'https://canvas.school.edu', WWW = 'https://www.school.edu';
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${BB}/*`, `${CANVAS}/*`, `${WWW}/*`]);
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), [`${BB}/*`, `${CANVAS}/*`, `${WWW}/*`]);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-allow-'));
 const out = process.argv[2];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -50,9 +50,9 @@ const stub = () => {
 (async () => {
   let ctx;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 },
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
     const seen = [];

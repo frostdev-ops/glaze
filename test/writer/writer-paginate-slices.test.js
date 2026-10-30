@@ -2,10 +2,10 @@
 // (settled: the breaks and pages later blocks can't move, so a slice may draw them), a line's first character found by
 // halving its text node (firstOn), and where a textblock's DOM text nodes and atoms start, read from ProseMirror's own
 // view of the block (startsOf). The slices in the editor, and their pages against a whole layout's, are
-// scripts/writer-huge-check.js.
+// checks/writer/writer-huge-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../lib/writer-paginate.js');
+const P = require('../../extension/lib/writer-paginate.js');
 
 const LH = 36.8, geo = { body: 864, stride: 1082.4, sep: 18.4, noteLine: 18.4 }; // 23 double-spaced lines a page
 // A seeded stream (mulberry32), so a failure names the paper that made it.
@@ -110,7 +110,7 @@ for (const kind of ['bidi', 'mixed heights']) test(`measure: ${kind} uses the vi
     },
     GZ_WRITER_STYLES: { blockBox: () => ({ line: 40, after: 0, before: 0 }) },
   });
-  const source = fs.readFileSync(require.resolve('../lib/writer-paginate.js'), 'utf8').replace('return { plan, settled,', 'return { measure, plan, settled,');
+  const source = fs.readFileSync(require.resolve('../../extension/lib/writer-paginate.js'), 'utf8').replace('return { plan, settled,', 'return { measure, plan, settled,');
   vm.runInContext(source, ctx);
   const view = { nodeDOM: () => dom, posAtCoords: () => { hits++; return { pos: 9 }; } };
   const lines = ctx.GZ_WRITER_PAGINATE.measure(view, { node, pos: 0, kind: 'text' }, {}, 1).lines;

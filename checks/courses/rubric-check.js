@@ -1,13 +1,13 @@
 // Real unpacked extension, synthetic student assignments, GETs only. No account or outside network.
-// NODE_PATH=<playwright> nice -n 10 node scripts/rubric-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/courses/rubric-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const site = 'https://bb.school.test', canvas = 'https://rubric.instructure.com';
 const assessment = '/ultra/courses/_101_1/assessment/_8120_1/overview';
-const html = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-assessment-rubric.html'), 'utf8');
-const out = process.argv[2], shots = process.env.RUBRIC_SHOTS || '/tmp/gz-rubric-shots', lock = require('./check-env.js').lockPath();
+const html = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-assessment-rubric.html'), 'utf8');
+const out = process.argv[2], shots = process.env.RUBRIC_SHOTS || '/tmp/gz-rubric-shots', lock = require('../../tools/dev/check-env.js').lockPath();
 const checks = [], requests = [], nativeRequests = [], errors = []; let passed = false;
 const run = name => !process.env.RUBRIC_CASE || process.env.RUBRIC_CASE.split(',').includes(name);
 const pause = ms => new Promise(r => setTimeout(r, ms));
@@ -83,9 +83,9 @@ const tableInfo = function () {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock,'owner'), `${process.pid}\nrubric-check\n`); break; }
       catch (e) { if (e.code !== 'EEXIST' || i >= 240) throw e; if (i % 12 === 0) console.error('[rubric-check] waiting for heavy lock'); await pause(5000); }
     }
-    ext = require('./check-env.js').staged(root, [`${site}/*`, `${canvas}/*`]); tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-rubric-'));
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp,'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width:1440,height:900 }, args: [`--disable-extensions-except=${ext}`,`--load-extension=${ext}`,'--host-resolver-rules=MAP * ~NOTFOUND','--disable-background-networking'] });
+    ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`, `${canvas}/*`]); tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-rubric-'));
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp,'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width:1440,height:900 }, args: [`--disable-extensions-except=${ext}`,`--load-extension=${ext}`,'--host-resolver-rules=MAP * ~NOTFOUND','--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(10000);
     let scenario = 'normal', slowSeen = false;
     await context.route('**/*', async r => {
@@ -97,7 +97,7 @@ const tableInfo = function () {
       if (req.method() !== 'GET' || ![site,canvas].includes(u.origin)) return r.abort();
       if (u.origin === site && u.pathname === '/frame-shell') return r.fulfill({ contentType:'text/html',body:`<!doctype html><style>body{margin:0}iframe{width:100%;height:900px;border:0}</style><iframe name="gz-ctab:_101_1" src="${site}${assessment}"></iframe>` });
       if (req.isNavigationRequest() && u.origin === site && /\/(discussion|attempt)\//.test(u.pathname)) return r.fulfill({ contentType:'text/html',body:hostHTML(u.pathname.includes('/discussion/') ? 'discussion' : 'attempt') });
-      if (req.isNavigationRequest()) return r.fulfill({ contentType:'text/html',body:u.origin === canvas ? canvasHTML(scenario) : scenario === 'review' ? fs.readFileSync(path.join(__dirname,'../test/fixtures/ultra-docreview.html'),'utf8').replace('<head>','<head><base href="/ultra/">') : html });
+      if (req.isNavigationRequest()) return r.fulfill({ contentType:'text/html',body:u.origin === canvas ? canvasHTML(scenario) : scenario === 'review' ? fs.readFileSync(path.join(__dirname,'../../test/fixtures/ultra-docreview.html'),'utf8').replace('<head>','<head><base href="/ultra/">') : html });
       if (u.pathname.endsWith('/rubric.css')) return r.fulfill({contentType:'text/css',body:''});
       let data = { results:[] };
       if (u.pathname.endsWith('/users/me') || u.pathname.endsWith('/users/self/profile')) data = { id:u.origin === canvas ? '42' : '_42_1',name:'Synthetic student' };

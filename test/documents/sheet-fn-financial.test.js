@@ -6,10 +6,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-financial.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-financial.js');
 
 const book = (cells = {}) => {
   const wb = M.workbook();
@@ -47,7 +47,7 @@ const NAMES = 'PMT IPMT PPMT NPER RATE PV FV NPV IRR XNPV XIRR MIRR SLN SYD DB D
 test('the financial functions are registered', () => {
   assert.equal(NAMES.length, 23);
   for (const name of NAMES) assert.ok(C.fn(name), name);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-financial.js'), 'utf8')), 'no timers');
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-financial.js'), 'utf8')), 'no timers');
 });
 
 test('PMT, PV, FV with Microsoft\'s data; rate 0; type 1', () => {

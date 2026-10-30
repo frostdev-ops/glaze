@@ -1,14 +1,14 @@
 // Announcements in Glaze's pop-up: lib/announce.js (settings, clicks, references, each site's answer) and lib/popup.js
 // (the safe HTML path, the preview's place, the pop-up's motion), against hostile input. The page side is
-// test/announce-ui.test.js.
+// test/courses/announce-ui.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const D = require('../defaults.js');
-const P = require('../lib/popup.js');
-const A = require('../lib/announce.js');
-const N = require('../lib/notes.js');
-const { El } = require('./stand-in-dom.js');
+const D = require('../../extension/defaults.js');
+const P = require('../../extension/lib/popup.js');
+const A = require('../../extension/lib/announce.js');
+const N = require('../../extension/lib/notes.js');
+const { El } = require('../stand-in-dom.js');
 
 const O = 'https://school.instructure.com';
 const doc = { createElement: (t) => new El(t, doc) };
@@ -118,7 +118,7 @@ test('Ultra: the public announcement, its embedded files on this site, no author
   assert.deepEqual(imgs.map((e) => P.picture(e)), [`${U}/bbcswebdav/xid-1_1`]);
   assert.equal(A.SITES.ultra.mark(r, it), null);
   // Ultra's private list shape (test/fixtures/ultra-announcements.json): its body object and read state are read too.
-  const priv = JSON.parse(fs.readFileSync(require.resolve('./fixtures/ultra-announcements.json'), 'utf8')).results[0];
+  const priv = JSON.parse(fs.readFileSync(require.resolve('../fixtures/ultra-announcements.json'), 'utf8')).results[0];
   const p = A.SITES.ultra.item(priv, U);
   assert.equal(p.html, '<p>Lab 3 is posted.</p>');
   assert.equal(p.unread, true);

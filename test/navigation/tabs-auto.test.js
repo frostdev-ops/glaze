@@ -6,9 +6,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-require('../lib/coursetabs.js');
-const D = require('../defaults.js');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+require('../../extension/lib/coursetabs.js');
+const D = require('../../extension/defaults.js');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const between = (src, a, b) => { const i = src.indexOf(a); assert.ok(i >= 0, a); const j = src.indexOf(b, i); assert.ok(j > i, b); return src.slice(i, j); };
 const S = (navbar = {}, enhance = {}, tabs = {}) => D.GZ_SANITIZE({ navbar: { on: true, ...navbar }, enhance: { tabs: true, ...enhance }, tabs });
 
@@ -101,7 +101,7 @@ const worker = (sync, local = {}) => {
   const ctx = vm.createContext({ URL, TextEncoder, TextDecoder, structuredClone, console: { ...console, warn() {} }, crypto, atob, btoa, setTimeout, clearTimeout, Date, navigator: {},
     GZ_SESSIONS: { make: () => ({ handle: async () => ({ ok: true }), connect: () => () => {}, stop() {}, changed() {} }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: none, onConnect: none, onInstalled: { addListener: (f) => listeners.installed.push(f) }, onStartup: none },
     tabs: { onRemoved: none, query: async () => [] }, storage: { local: area(local), sync: area(sync), onChanged: none },
     scripting: { unregisterContentScripts: async () => {}, registerContentScripts: async () => {}, getRegisteredContentScripts: async () => [] },
