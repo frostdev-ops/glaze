@@ -103,53 +103,73 @@ The creator can delete a session at any time. Otherwise, on the default relay, a
 
 ## Agent access
 
-Agent access is off by default; **Settings → AI → Agents** turns it on. While it is on, Glaze talks only to a helper
-program on this computer: `glaze-mcp` on Chrome, Edge and the other Chromium browsers and on Firefox, and the downloaded
-Glaze Mac app on Safari (the Mac App Store app has no agent access). AI apps you run on this computer, such as Claude
-Desktop, Claude Code, Cursor or VS Code, reach Glaze through it over MCP. The helper opens no network connection for
-this: it passes messages between the app and Glaze through a private socket (a named pipe on Windows) that only your
-user account can open, and keeps nothing of what passes through it. Glaze sends nothing to FrostDev. The receiving app may send what
-it gets to its own AI service, under that app's own privacy policy.
+Agent access is off by default; **Settings → AI → Agents** turns it on. Apps on this computer reach Glaze through a
+helper program on this computer: `glaze-mcp` on Chrome, Edge and the other Chromium browsers and on Firefox, and the
+downloaded Glaze Mac app on Safari (the Mac App Store app has no agent access). The helper relays MCP messages through a
+local socket (a named pipe on Windows), authenticated with a random token. It opens no network connections and holds
+messages in memory while relaying them, without saving their contents to disk. Agent access sends no data to FrostDev.
+The receiving app may send what it gets to its own AI service, under that app's own privacy policy.
 
-An app gets data only after you allow it in Glaze's own window, per app and per group: Courses, to-dos and schedule;
-Grades; Assignments and rubrics; Writer documents; and each mod's tools. The window names the app as it reports itself
-and the program that started it. **Don't allow**, or closing the window, is remembered, so Glaze doesn't ask again until
-you change it in Settings. An app receives what Glaze already keeps from your Canvas or Blackboard Ultra site, dated,
-with a note that the school's text was written by others. When that account's school site is open in a tab, Glaze first
-reads it again there, at most once a minute per account and group, with the read-only requests Better To Do and Insights
-make. Reading one assignment is done in that tab, or answered from the last read kept below: its title, due date,
-points, instructions, the names of the files it attaches and its rubric's criteria and levels, never your scores or
-feedback. Writer documents reach an app under keys that change each browser session and hold no school or student
-identifier.
+Glaze asks you to allow access per app and per group: Courses, to-dos and schedule; Grades; Assignments and rubrics;
+Writer documents; and each mod's tools. The app's name is reported by the app. On Chrome, Edge and Firefox, its program
+identity is also self-reported and unverified; on macOS it may be a bundle identifier, and Windows normally supplies no
+program path. Other programs running under your account can reach the helper: these reported identities are not proof of
+who an app is. For pairing or a group request, **Don't allow**, or closing the window, is remembered until you change
+access in Settings or forget the app. A timeout or cancellation is not a remembered decline.
 
-Every change waits for your OK in that window, in Glaze's own words from its own data: marking a to-do done (Glaze's own
-mark or, with **Tick off in Canvas too** on, your Canvas planner's, through your open Canvas tab, as Canvas's List View
-does), inserting a citation or applying a fix in a document open in Writer, and every call to a mod's code tool. Glaze
-never submits work, posts, sends messages or changes grades for an app.
+An app receives data from Glaze's Canvas and Blackboard Ultra caches with its read time and a note that the school's
+text was written by others. Planner and Insights refreshes are attempted through that account's open school tab, at most
+once a minute per account and group; if they fail or no matching tab is open, Glaze uses what it has kept. Reading one
+assignment is a separate tab request, or answered from the last read kept below: its title, due date, points,
+instructions, attached file names and rubric criteria and levels. That answer excludes your scores and feedback. Writer
+documents reach an app under keys that change each browser session and contain no school or student identifier; the
+document's contents and metadata can still identify you or your school.
+
+Every built-in change waits for your OK in Glaze's window, in Glaze's own words from its own data: marking a to-do done
+(Glaze's own mark or, with **Tick off in Canvas too** on, your Canvas planner's, through your open Canvas tab),
+inserting a citation or applying a fix in a document open in Writer. Glaze's built-in agent tools never submit work,
+post, send messages or change grades.
+
+Every call to a mod's code tool also waits for your OK. It runs with the mod's existing permissions: a mod with network
+access can send the app's arguments and any data it has permission to read to its approved hosts. Glaze's per-app group
+grants do not narrow those mod permissions. Declarative mod tools read Glaze's caches without running the mod's code.
 
 Kept on this device:
+
 - the apps you paired and the groups each may use, with each Don't allow, in the worker's own IndexedDB `glaze-mcp`:
-  each app's name as it reports itself, its program's path, and when it was paired and last used;
+  each app's reported name and program identity (when supplied), verification flag, pairing and last-use times. These
+  records have no time-based expiry;
 - the switch, in the worker's IndexedDB `glaze-mcp-settings`, mirrored as `mcp` in `chrome.storage.local`;
-- the activity list, `mcpCalls` in `chrome.storage.local`: the last 200 calls, each with its time, app, tool, group,
-  kind, outcome and duration, never what was asked or answered;
+- the activity list, `mcpCalls` in `chrome.storage.local`: the last 200 calls, each with its time, app id, tool, group,
+  kind, outcome and duration, never what was asked or answered. It has no time-based expiry;
 - assignment reads, `mcpRubric:<site>/<account>/<course>/<assignment>` with their index `mcpRubrics` in
-  `chrome.storage.local`: the 100 read last, so an app can still read them, dated, with no tab open;
-- a random id for this browser profile, `mcpInstance` in `chrome.storage.local`, so an app can tell browsers apart;
-- for the browser session only, in `chrome.storage.session`: the helper's state (`mcpLink`), requests waiting for you
-  (`mcpAsk:<id>` and `mcpAskWindow`; an answered one goes about an hour after it was made), on Safari each
-  connection's protocol state (`mcpConn:<n>`), and the salt of Writer documents' keys (`mcpDocSalt`).
+  `chrome.storage.local`: the 100 used last, with no time-based expiry, so an app can read them, dated, with no tab
+  open;
+- a random id for this browser profile, `mcpInstance` in `chrome.storage.local`, so an app can tell browsers apart. It
+  stays when agent access is turned off;
+- for the browser session only, in `chrome.storage.session`: the helper's state (`mcpLink`); approval records
+  (`mcpAsk:<id>`) with app and tool details, the group or action summary, times and answer; the approval window's id
+  (`mcpAskWindow`); on Safari each connection's protocol state (`mcpConn:<n>`); and the salt of Writer documents' keys
+  (`mcpDocSalt`). An action summary can include document text or citation details. Records no longer waiting become
+  eligible for cleanup an hour after creation. Cleanup runs on later requests and agent-worker startup, so records can
+  remain until the browser session ends.
 
-The helper keeps its own copies, launchers and browser manifests in a `glaze-mcp` folder in your user's application
-data, and while a browser runs, a run file with a random token beside its socket; none of them hold course data.
-`npx glaze-mcp uninstall` removes the helper.
+The helper's versioned copies, launchers and saved extension ids stay in a `glaze-mcp` folder in your user's application
+data until removed or replaced by setup; native-messaging manifests also live in browser-specific locations, with
+registrations under your Windows user's registry. While a helper runs, a run file beside its socket holds its process
+id, browser, profile id, start time and random token, without course data. Normal shutdown removes the socket and run
+file; a crash can leave them for the next host or agent to clean up. `npx glaze-mcp uninstall` removes owned manifests,
+launchers, saved extension ids and unchanged versioned copies; it leaves the run folder and modified copies alone.
 
-**Turn off** ends every connection, declines every request waiting for you, clears the kept assignment reads and, on
-Chrome, Edge and Firefox, gives back the permissions below; the apps and their groups stay. **Revoke** forgets one app,
-which then asks to pair again. **Forget all apps** forgets every app with its groups and declines, and clears the kept
-assignment reads. Removing a site in **Settings → Privacy and data → Sites** clears that site's kept assignment reads,
-and Reset everything clears them all. The activity list stays, 200 calls at most, until you uninstall Glaze, which
-removes all of it.
+**Turn off** ends every connection, cancels requests still waiting for you, clears the kept assignment reads and, on
+Chrome, Edge and Firefox, gives back the permissions below; the apps, groups and remembered declines stay. A change
+already started can finish. **Revoke** forgets one app with its groups and declines, so it asks to pair again. **Forget
+all apps** forgets every app with its groups and declines, and clears the kept assignment reads. Revoke and Forget all
+apps leave the activity list, agent switch and profile id. Neither uninstalls the helper.
+
+Removing a site in **Settings → Privacy and data → Sites** clears that site's kept assignment reads, and Reset
+everything clears them all. Site removal and Reset everything leave the agent switch, apps, grants and activity
+unchanged. Uninstalling the extension does not uninstall the helper or erase copies an app or its AI service kept.
 
 On Firefox, Glaze's listing declares that it collects no data, with website content (`websiteContent`) as optional data
 collection, because agent access passes what Glaze read from your school's site to another program. Glaze asks for it in
@@ -777,7 +797,7 @@ you import) are bundled. It makes requests in these cases:
   Insights reads Better To Do and Insights make; one assignment with its rubric (on Canvas
   `/api/v1/courses/<course>/assignments/<assignment>`, on Ultra as Writer reads it); and, once you allow it in Glaze's
   window with **Tick off in Canvas too** on, a to-do's mark in your Canvas planner. Beyond Glaze's own caches, what
-  these return goes only to that app (see "Agent access").
+  these return is sent to that app. A mod's code tool can also contact its approved network hosts (see "Agent access").
 - **Glaze Writer** (Blackboard Ultra, on by default). For a box's prompt, targets, thread and rubric it asks your own
   Blackboard site, read-only, signed in as you, for your profile (`users/me`) and course list, the course's discussion
   and its posts, and an assignment's gradebook column with its rubric; when you ask for Feedback, the files the assignment's
@@ -1041,8 +1061,9 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
 - `unlimitedStorage` — requested at install, so the browser doesn't clear your notes, pictures, attachments and the
   files kept for Look backgrounds to free space. Nothing more is stored or sent because of it; Chrome shows no warning
   for it.
-- `nativeMessaging` — on Safari, requested at install: to ask the containing Mac app to check for updates (the App
-  Store apps ignore this request) and, with agent access on, to reach the downloaded Mac app's agent helper. On Chrome,
+- `nativeMessaging` — on Safari, requested at install: to use on-device AI through the containing app, to ask the Mac
+  app to check for updates (the App Store apps ignore update requests) and, with agent access on, to reach the downloaded
+  Mac app's agent helper. On Chrome,
   Edge and Firefox, optional: asked for only when you turn on agent access in **Settings → AI → Agents**, and given back
   when you turn it off. It lets the browser start the `glaze-mcp` helper on this computer (see "Agent access").
 - `activeTab` (Chrome, Edge and Firefox) — when you open Glaze's toolbar popup, the browser lets Glaze into that one tab: the popup reads its

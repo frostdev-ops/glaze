@@ -34,16 +34,22 @@ Settings → AI, to the model you chose for it: Tab completion sends the text ar
 or assignment, and in a discussion your classmates' posts with their names; Feedback sends your draft with the
 assignment's instructions and rubric. Nothing goes to AI from a test.
 
-[Agent access](../PRIVACY.md#agent-access) (Settings → AI → Agents) is off by default. When it's on, Glaze talks only
-to a helper program on this computer: `glaze-mcp`, or the downloaded Glaze Mac app on Safari. An AI app there gets data
-only after you allow it in Glaze's window, per app and per group: Courses, to-dos and schedule; Grades; Assignments and
-rubrics; Writer documents; each mod's tools. Every change (marking a to-do done, a Writer fix, a citation insert) waits
-for your OK there, and Glaze never submits work. Glaze sends nothing to FrostDev; the app may send what it gets to its
-own AI service, under that app's own policy. On this device Glaze keeps the apps and their groups, the switch, an
-activity list of the last 200 calls (time, app, tool and outcome, never content) and the last 100 assignment reads.
-Turning it off and Forget all apps clear the kept assignment reads, and removing a site clears that site's; the apps
-stay until you Revoke or forget them. On Firefox, turning it on also asks to share website content, which turning it off
-gives back.
+[Agent access](../PRIVACY.md#agent-access) (Settings → AI → Agents) is off by default. Apps on this computer connect
+through a local helper: `glaze-mcp`, or the downloaded Glaze Mac app on Safari. Glaze asks you to allow each app
+identity and data group: Courses, to-dos and schedule; Grades; Assignments and rubrics; Writer documents; each mod's
+tools. App names are self-reported, and program identities can be too. Every built-in change and every call to a
+mod's code tool waits for your OK in Glaze's window. Built-in agent tools never submit work. A mod's code tool can send
+the app's arguments and data the mod may read to its approved hosts. Agent access sends no data to FrostDev; the app may
+send what it gets to its own AI service, under that app's own policy.
+
+Glaze keeps app identities, grants and declines, the switch and profile id locally without a timed expiry, the last 200
+calls' metadata (never their content), and the 100 assignment reads used last. Session-only approval records can include
+document text in action summaries; records no longer waiting become eligible for cleanup an hour after creation, on
+later requests or agent-worker startup, and may remain until session end. Turn off cancels waiting requests and clears
+assignment reads, keeping apps and grants; a change already started can finish. Revoke forgets one app; Forget all apps
+forgets all apps, grants and declines and clears assignment reads. Removing a site clears its assignment reads; Reset
+everything clears all assignment reads, keeping the switch, apps, grants and activity. None of these erases copies an
+app kept. On Firefox, turning agent access on also asks to share website content, which turning it off gives back.
 
 Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
 you set in a course's menu. These follow Chrome sync (or Firefox Sync) when it's on; Safari keeps them on this device only.

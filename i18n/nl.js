@@ -3587,7 +3587,7 @@
   "The input fit, but the model exhausted its context while producing the answer.": "De invoer paste, maar het model verbruikte zijn context tijdens het maken van het antwoord.",
   "The model exceeded this request’s output limit.": "Het model overschreed de uitvoerlimiet voor dit verzoek.",
   "{n} bytes": "{n} bytes",
-  "Agent apps you connect in Settings → Agents can use this mod’s tools.": "Agent-apps die je koppelt in Instellingen → Agents kunnen de tools van deze mod gebruiken.",
+  "Agent apps you connect in Settings → AI → Agents can use this mod’s tools.": "Agent-apps die je koppelt in Instellingen → AI → Agents kunnen de tools van deze mod gebruiken.",
   "Tool “{title}” — gives agent apps your to-dos, as Glaze last read them.": "Tool “{title}” — geeft agent-apps je taken, zoals Glaze ze het laatst las.",
   "Tool “{title}” — gives agent apps your to-dos with due dates, as Glaze last read them.": "Tool “{title}” — geeft agent-apps je taken met een inleverdatum, zoals Glaze ze het laatst las.",
   "Tool “{title}” — gives agent apps your courses, as Glaze last read them.": "Tool “{title}” — geeft agent-apps je cursussen, zoals Glaze ze het laatst las.",

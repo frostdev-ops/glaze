@@ -3587,7 +3587,7 @@
   "The input fit, but the model exhausted its context while producing the answer.": "Die Eingabe passte, aber das Modell schöpfte seinen Kontext beim Erzeugen der Antwort aus.",
   "The model exceeded this request’s output limit.": "Das Modell hat die Ausgabelänge für diese Anfrage überschritten.",
   "{n} bytes": "{n} Bytes",
-  "Agent apps you connect in Settings → Agents can use this mod’s tools.": "Agenten-Apps, die du in Einstellungen → Agenten verbindest, können die Werkzeuge dieses Mods nutzen.",
+  "Agent apps you connect in Settings → AI → Agents can use this mod’s tools.": "Agenten-Apps, die du in Einstellungen → KI → Agenten verbindest, können die Werkzeuge dieses Mods nutzen.",
   "Tool “{title}” — gives agent apps your to-dos, as Glaze last read them.": "Werkzeug „{title}“ — gibt Agenten-Apps deine Aufgaben, so wie Glaze sie zuletzt gelesen hat.",
   "Tool “{title}” — gives agent apps your to-dos with due dates, as Glaze last read them.": "Werkzeug „{title}“ — gibt Agenten-Apps deine Aufgaben mit Fälligkeitsdatum, so wie Glaze sie zuletzt gelesen hat.",
   "Tool “{title}” — gives agent apps your courses, as Glaze last read them.": "Werkzeug „{title}“ — gibt Agenten-Apps deine Kurse, so wie Glaze sie zuletzt gelesen hat.",

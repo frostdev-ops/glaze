@@ -1,4 +1,4 @@
-// Mod tools: mod.json's `tools`, which agent apps the student connects (Settings → Agents) may call on a mod's behalf. A
+// Mod tools: mod.json's `tools`, which agent apps the student connects (Settings → AI → Agents) may call on a mod's behalf. A
 // tool is declarative, { name, title, description, from, select?, where?, sort?, limit?, input? }, answered by Glaze from
 // what it keeps (lib/modbroker.js's todo, schedule, courses and grades answers) with none of the mod's code, or
 // { name, title, description, code: true, input? }, answered by the mod's Worker. clean checks them as strictly as
