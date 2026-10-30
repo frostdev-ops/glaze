@@ -157,3 +157,31 @@ test('Drive\'s status tells Documents and Writer whether Google\'s Picker works 
   assert.deepEqual(await ask({ ok: true, flow: 'chrome', email: null, picker: true }), { ok: true, connected: false, picker: false }, 'not connected');
   assert.deepEqual(await ask({ ok: false, why: 'setup' }), { ok: true, connected: false, picker: false });
 });
+
+test('a daily snapshot holds Notes and hidden course folders as Back up… does, and never share keys', async () => {
+  const { context, records, local } = worker();
+  const B = require('../../extension/background/backup.js');
+  Object.assign(context, {
+    GZ_BACKUP: B, GZ_TODO: require('../../extension/planner/todo.js'), GZ_PET: require('../../extension/pet/pet.js'), GZ_SANITIZE: require('../../extension/content/defaults.js').GZ_SANITIZE,
+    GZ_HISTORY: require('../../extension/looks/history.js'), GZ_ZIP: require('../../extension/core/zip.js'), GZ_DOC_KINDS: require('../../extension/documents/doc-kinds.js'),
+    GZ_FOLDERS: require('../../extension/courses/folders.js'), Blob, URL,
+  });
+  context.chrome.runtime.getManifest = () => ({ version: '4.0.1' });
+  context.openDocFiles = () => ({ read: async () => { throw new Error('no files'); } });
+  const get = local.get;
+  local.get = async (k) => (k === null ? Object.fromEntries(await Promise.all((await local.getKeys()).map(async (x) => [x, (await get(x))[x]]))) : get(k));
+  const acct = 'notesIdx:https://school.instructure.com/42', id = '00000000-0000-4000-8000-000000000001', pic = '00000000-0000-4000-8000-000000000500';
+  const png = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex').toString('base64');
+  const brokered = context.brokerArea('local');
+  assert.ok((await N.run({ key: acct, op: 'file', id: pic, kind: 'image', name: 'cell.png', data: png, note: id }, { local: brokered }, context.NOTES_DB)).ok);
+  assert.ok((await N.run({ key: acct, op: 'save', id, base: 0, sid: 's1', html: `<p>Cells</p><img data-gz-file="${pic}">`, title: 'Cells' }, { local: brokered }, context.NOTES_DB)).ok);
+  const hidden = { ids: ['101'], show: false };
+  await local.set({ 'hiddenFolders:https://school.instructure.com/42/7': hidden });
+  const made = await records.snapshot();
+  const r = await B.read(Object.assign(new Blob([made.bytes]), { name: made.name }));
+  assert.deepEqual(r.cats.notes?.map((n) => [n.account, n.count]), [[acct, 1]], 'the Notes account and its note');
+  assert.ok(r.zip.names.some((n) => /^notes\/1\/files\//.test(n)), 'with its picture');
+  assert.equal(r.cats.shareKeys, undefined);
+  assert.ok(!r.zip.names.some((n) => /share-keys/.test(n)), 'no share keys');
+  assert.deepEqual(JSON.parse(await r.zip.text('glaze-backup.json')).settings.folders, { 'hiddenFolders:https://school.instructure.com/42/7': hidden }, 'the hidden course folders');
+});
