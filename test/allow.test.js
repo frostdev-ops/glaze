@@ -45,7 +45,7 @@ const covers = (p, o) => {
 };
 
 // `held`: the optional hosts granted at the start; `net`: url (or prefix*) → answer; `tabs`: the open tabs.
-const worker = ({ m = manifest, held = [], local = {}, sync = {}, net = {}, tabs = [], dc = true } = {}) => {
+const worker = ({ m = manifest, held = [], local = {}, sync = {}, net = {}, tabs = [], dc = true, iconError = false } = {}) => {
   const store = { local: structuredClone(local), sync: structuredClone(sync), session: {} };
   const listeners = [], changed = [], installed = [], added = [], removed = [];
   const w = { store, ran: [], opened: [], installed, registered: [], fetched: [], removedGrants: [], icons: [], rules: null, removedRules: 0, tabs, now: Date.now() };
@@ -111,7 +111,7 @@ const worker = ({ m = manifest, held = [], local = {}, sync = {}, net = {}, tabs
           return [{ result: o.files ? {} : /typeof GZ_I18N|window\.__gzGlaze/.test(String(o.func)) ? false : true }];
         },
       },
-      action: { setIcon: async (o) => { w.icons.push(plain(o)); } },
+      action: { setIcon: async (o) => { w.icons.push(plain(o)); if (iconError) throw Error('No tab with id: 7'); } },
       ...(dc && {
         declarativeContent: {
           PageStateMatcher: class { constructor(o) { Object.assign(this, { matcher: plain(o) }); } },
@@ -396,6 +396,14 @@ test('content.js tells the worker each page and frame Glaze starts in', () => {
   const line = js.slice(js.indexOf('if (!site) return;')).split('\n').find((l) => l.includes("sendMessage({ type: 'glaze:here' })"));
   assert.ok(line && /!isPreview/.test(line), 'not from Glaze\'s own preview');
   assert.doesNotMatch(line, /window\.top === window/, 'a frame starts crossfades of its own (content-ultra.js), so it needs the guard too');
+});
+
+test('a tab closing during glaze:here leaves no unhandled icon rejection in the worker', async () => {
+  const w = worker({ iconError: true });
+  await w.send({ type: 'glaze:here' }, page('https://school.blackboard.com/ultra/stream'));
+  await settle(); // node:test also fails on any unhandled rejection from the real message listener.
+  assert.equal(w.icons.length, 1, 'the icon update was attempted');
+  assert.ok(w.ran.some((r) => /activeViewTransition/.test(r.func || '')), 'guard installation is independent of the closing tab\'s icon');
 });
 
 test('a page Glaze runs in, and each frame of one, gets the page-world guard for its crossfades; nothing else does', async () => {
