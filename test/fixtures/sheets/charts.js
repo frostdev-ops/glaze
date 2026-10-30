@@ -61,4 +61,28 @@ const workbook = ({ kinds = ['column', 'line', 'pie', 'scatter', 'radar'], over 
   return pack(parts);
 };
 
-module.exports = { workbook, CHARTS, PLACES, MONTHS, SALES, COSTS, XS, YS, pack, rels, space, ser, axes, fill, rich, strCache, numCache, C_NS };
+// A DOM just big enough for lib/sheet-chart.js's layer (its holders and SVG) in node, and a layer on a workbook's sheet with
+// the grid's default sizes: for inserting charts as the grid does (test/sheet-chart-insert.test.js, the Excel fidelity
+// script).
+const fakeDom = () => {
+  const el = () => {
+    const e = { kids: [], style: {}, dataset: {}, attrs: {}, parentNode: null, textContent: '', className: '' };
+    Object.assign(e, {
+      setAttribute(k, v) { e.attrs[k] = String(v); }, getAttribute: (k) => e.attrs[k] ?? null, hasAttribute: (k) => k in e.attrs,
+      toggleAttribute(k, on) { if (on) e.attrs[k] = ''; else delete e.attrs[k]; }, querySelector: () => null,
+      append(...xs) { for (const x of xs) { if (x.parentNode) x.remove(); x.parentNode = e; e.kids.push(x); } },
+      remove() { if (e.parentNode) { e.parentNode.kids = e.parentNode.kids.filter((x) => x !== e); e.parentNode = null; } }, cloneNode: () => el(),
+    });
+    return e;
+  };
+  globalThis.document ??= { createElement: el, createElementNS: (ns, name) => Object.assign(el(), { name }) };
+  return el;
+};
+const layerOn = (wb, sh = wb.sheets[0]) => {
+  const el = fakeDom();
+  const G = require('../../../sheet-grid.js'), CH = require('../../../lib/sheet-chart.js');
+  const geo = { R: new G.Sizes(2000, 20), C: new G.Sizes(200, 64), FR: 0, FC: 0, FW: 0, FH: 0 };
+  return CH.layer({ panes: { br: { el: { hidden: false }, inner: el(), fr: false, fc: false } }, wb: () => wb, sheet: () => sh, geo: () => geo, t: (s) => s });
+};
+
+module.exports = { fakeDom, layerOn, workbook, CHARTS, PLACES, MONTHS, SALES, COSTS, XS, YS, pack, rels, space, ser, axes, fill, rich, strCache, numCache, C_NS };

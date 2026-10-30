@@ -532,6 +532,44 @@ const seeded = (key, wb = M.workbook()) => {
     const same = [];
     for (const n of chartParts) if (zout.names.includes(n) && (await zin.text(n)) === (await zout.text(n))) same.push(n);
     check(chartParts.length === 7 && same.length === chartParts.length, `the export keeps the drawing and chart parts byte for byte (${same.length} of ${chartParts.length})`);
+    // Insert → Column on A1:C5: a sixth chart, chosen, at E1 (a column clear of the data); dragged 128 px right; Delete takes it,
+    // Ctrl+Z brings it back; the export holds it with its references, and Excel's file reads it back.
+    await go('A1');
+    await page.keyboard.down('Shift');
+    for (const k of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowRight']) await page.keyboard.press(k);
+    await page.keyboard.up('Shift');
+    await page.click('#gx-chart');
+    const kinds = await page.evaluate(() => [...document.querySelectorAll('.gx-menu [data-act^="chart-"]')].map((b) => b.textContent));
+    check(kinds.join() === 'Column,Bar,Line,Pie,Scatter', `the Chart menu offers ${kinds.join(', ')}`);
+    await page.click('.gx-menu [data-act="chart-column"]');
+    const made = await until(async () => { const l = await chartsNow(); return l.length === 6 ? l : null; }, 'the inserted chart');
+    const mine = await page.evaluate(() => { const el = document.querySelector('#gx-grid .gx-chart[data-on]'); if (!el) return null; const b = el.getBoundingClientRect(); return { id: el.dataset.chart, x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height), bars: el.querySelectorAll('.gc-bar').length }; });
+    const atE1 = await cellBox(0, 4);
+    check(mine && near(mine, atE1) && mine.w === 480 && mine.h === 288 && mine.bars === 8 && made.length === 6, `Insert → Column charts A1:C5 at E1, chosen, 480×288 (${JSON.stringify({ mine, E1: atE1 })})`);
+    await page.mouse.move(mine.x + 200, mine.y + 150);
+    await page.mouse.down();
+    await page.mouse.move(mine.x + 264, mine.y + 150, { steps: 4 });
+    await page.mouse.move(mine.x + 328, mine.y + 150, { steps: 4 });
+    await page.mouse.up();
+    const dragged = await until(async () => { const l = await chartsNow(); const c = l.find((x) => x.id === mine.id); return c && c.x === mine.x + 128 ? c : null; }, 'the chart dragged');
+    check(dragged.y === mine.y && dragged.w === 480, `dragging the chart moves it two columns right (${mine.x} → ${dragged.x})`);
+    await page.keyboard.press('Delete');
+    await until(async () => (await chartsNow()).length === 5, 'Delete takes the chart');
+    check(await cell(1, 1) === '80', 'Delete with a chart chosen leaves the cells alone');
+    await page.keyboard.press('Control+z');
+    const undeleted = await until(async () => { const l = await chartsNow(); const c = l.find((x) => x.id === mine.id); return l.length === 6 && c && c.x === mine.x + 128 ? c : null; }, 'Ctrl+Z brings it back');
+    check(!!undeleted, 'Ctrl+Z brings the deleted chart back where it was dragged');
+    await saved(ckey);
+    await page.click('#gx-more');
+    const [idl] = await Promise.all([page.waitForEvent('download'), page.click('.gx-menu [data-act="export"]')]);
+    const ifile = path.join(tmp, `inserted-${idl.suggestedFilename()}`);
+    await idl.saveAs(ifile);
+    const CXL = require(path.join(root, 'lib/sheet-chart-xml.js'));
+    const ibook = await XL.read(new Uint8Array(fs.readFileSync(ifile)));
+    const ilist = CXL.charts(ibook, ibook.sheets[0]);
+    const sixth = ilist[5]?.chart.groups?.[0];
+    check(ibook.keep.problems.length === 0 && ilist.length === 6 && sixth?.type === 'bar' && sixth.series.map((s) => s.val.f).join() === 'Data!$B$2:$B$5,Data!$C$2:$C$5' && ilist[5].anchor.from.col === 6,
+      `the export holds the inserted chart, its references and its dragged anchor (${JSON.stringify({ problems: ibook.keep.problems, n: ilist.length, refs: sixth?.series.map((s) => s.val.f), col: ilist[5]?.anchor.from.col })})`);
 
     const intervals = await page.evaluate(() => globalThis.gzIntervals || []);
     check(intervals.every((ms) => ms >= 60000), `no interval under a minute (${JSON.stringify(intervals)})`);

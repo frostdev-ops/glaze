@@ -81,6 +81,8 @@
 .gc-grid { stroke: var(--gx-line); }
 .gc-axis { stroke: var(--gz-line-strong); }
 .gc-slice { stroke: var(--gx-cell); }
+.gx-chart[data-on] { outline: 2px solid var(--gz-accent); outline-offset: -1px; }
+.gx-chart-h { position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px; background: var(--gz-accent); border: 1px solid var(--gx-cell); }
 
 /* Writing in a cell */
 .gx-edit { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; padding: 2px 4px; resize: none; overflow: hidden; border: 2px solid var(--gz-accent); border-radius: 0;

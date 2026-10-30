@@ -3,13 +3,40 @@
 // given) open in Excel on this Mac (hidden, no alerts; scripts/sheet-excel.js) through JXA. A file fails when Excel
 // repaired it ("Repaired" in the workbook's or window's name, or no answer while a repair prompt waits), or when Excel
 // shows other than the model: sheets and their order, the date system, each cell's value after Excel's own full
-// calculation, formula and number format, merged cells, frozen panes and hidden columns.
+// calculation, formula and number format, merged cells, frozen panes and hidden columns, and as many charts on each sheet
+// as Glaze draws there (lib/sheet-chart-xml.js): charts-kept.xlsx (Excel-shaped charts, test/fixtures/sheets/charts.js,
+// read and written again with two rows inserted, their references and anchors moved) and charts-inserted.xlsx (a
+// column, bar, line, pie and scatter chart made by Insert on a workbook built in Glaze, one dragged, one deleted).
 // Mac only, the one heavy job running: nice -n 10 node scripts/sheet-excel-fidelity.js [--keep dir] [file.xlsx …]
 const fs = require('node:fs'), path = require('node:path');
 const { jxa: run, start, quit, box } = require('./sheet-excel.js');
 const { books, expect, agree, stored } = require('./sheet-fidelity-books.js');
 const M = require('../lib/sheet-model.js');
 const { cases } = require('../test/fixtures/sheets/cases.js');
+const X = require('../lib/sheet-xlsx.js'), C = require('../lib/sheet-calc.js'), CX = require('../lib/sheet-chart-xml.js');
+const FX = require('../test/fixtures/sheets/charts.js');
+
+// The two chart workbooks: Excel's shapes kept through Glaze, and charts Insert made.
+const chartBooks = async () => {
+  const kept = await X.read(FX.workbook());
+  const e = C.engine(kept);
+  e.recalc();
+  const ins = { op: 'insert', sheet: kept.sheets[0].id, axis: 'row', at: 0, n: 2 };
+  e.apply(ins); X.track(kept, ins);
+  const keptBytes = await X.write(kept, { engine: e });
+  const made = M.workbook(), sh = made.sheets[0];
+  [['Month', 'Sales', 'Costs'], ['Jan', 10, 5], ['Feb', 20, 15], ['Mar', 30, 10], ['Apr', 40, 20]]
+    .forEach((row, r) => sh.rows.set(r, new Map(row.map((v, c) => [c, typeof v === 'number' ? { t: 'n', v } : { t: 's', v }]))));
+  C.engine(made).recalc();
+  const L = FX.layerOn(made, sh);
+  for (const kind of ['column', 'bar', 'line', 'pie', 'scatter']) { L.draw(); L.apply(L.insert(kind, { r0: 0, c0: 0, r1: 4, c1: 2 })); }
+  L.draw();
+  L.apply(L.move(L.list()[1].id, { x: 0, y: 140, w: 400, h: 240 }));
+  L.draw();
+  L.apply(L.remove(L.list()[3].id));
+  const madeBytes = await X.write(made);
+  return [{ name: 'charts-kept.xlsx', bytes: keptBytes, model: await X.read(keptBytes) }, { name: 'charts-inserted.xlsx', bytes: madeBytes, model: await X.read(madeBytes) }];
+};
 const ENGINE_TODO = new Set(['financial.rate.2', 'financial.xirr.1', 'financial.xirr.2']);
 
 // The JXA that opens one file and reports what Excel shows, as JSON. ask: per sheet, the cells whose shown text (errors)
@@ -56,6 +83,8 @@ try {
     for (const at of a.fmt) s.fmt[at] = ws.ranges[at].numberFormat();
     for (const g of a.merges) s.merges[g] = { merged: ws.ranges[g].mergeCells(), area: app.getAddress(ws.ranges[g.split(':')[0]].mergeArea) };
     for (const c of a.hidden) s.hidden[c] = ws.ranges[c].entireColumn.hidden();
+    step = a.name + ' charts';
+    try { s.charts = ws.chartObjects.length; s.chartTypes = []; for (let i = 0; i < s.charts; i++) { try { s.chartTypes.push(String(ws.chartObjects[i].chart.chartType())); } catch (e) { s.chartTypes.push('?'); } } } catch (e) { s.charts = { error: e.message }; }
     step = a.name + ' panes';
     if (a.visible) {
       const panes = (w) => ({ on: w.freezePanes(), rows: w.splitRow(), cols: w.splitColumn() });
@@ -120,6 +149,9 @@ const compare = (model, got) => {
       if (!m?.merged || String(m.area).replace(/\$/g, '') !== g) problems.push(`${sh.name}!${g}: merged ${JSON.stringify(m)}`);
     }
     for (const c of sh.hidden) if (s.hidden[M.columnName(c) + '1'] !== true) problems.push(`${sh.name}: column ${M.columnName(c)} not hidden`);
+    const charts = CX.charts(model, model.sheets[k]).length;
+    if (s.charts?.error) unchecked.push(`${sh.name}: charts not readable (${s.charts.error})`);
+    else if (s.charts !== charts) problems.push(`${sh.name}: ${s.charts} charts in Excel, ${charts} in Glaze (${JSON.stringify(s.chartTypes)})`);
     if (s.freeze?.error) unchecked.push(`${sh.name}: panes not readable (${s.freeze.error})`);
     else if (s.freeze) {
       const f = sh.freeze ?? { rows: 0, cols: 0 };
@@ -150,6 +182,7 @@ const main = async () => {
   const k = args.indexOf('--keep');
   const keepDir = k >= 0 ? path.resolve(args.splice(k, 2)[1]) : null;
   const list = await books(args.map((f) => path.resolve(f)));
+  if (!args.length) list.push(...await chartBooks());
   const excel = start();
   let tmp;
   const rows = [];
