@@ -133,7 +133,7 @@ const run = async (o = {}) => {
       file = v;
       via = `${b.keys[0]} → `;
     } else {
-      if (!exists(file) && !(set && here.includes(b))) { if (here.includes(b)) others.push(b); continue; }
+      if (!exists(file) && !set) { if (here.includes(b)) others.push(b); continue; }
       judged++;
     }
     const warns = [], problems = await check(b, file, warns);
