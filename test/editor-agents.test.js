@@ -11,6 +11,7 @@ const L = require('../lib/agent-link.js');
 
 const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 const settle = async () => { for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
 const RUNTIME_ID = 'abcdefghijklmnopabcdefghijklmnop';
 const URLS = { chrome: `chrome-extension://${RUNTIME_ID}/`, firefox: 'moz-extension://5d4c3b2a-0000-4000-8000-000000000000/', safari: 'safari-web-extension://8F2E1D3C-0000-4000-8000-000000000000/' };
@@ -21,7 +22,7 @@ const tEn = (k, v) => I.t(k, v, 'en');
 //   on: the worker's consent; link: storage.session mcpLink; apps: the worker's paired apps (lib/mcp/grants.js records);
 //   mods: glaze:mods list's records; calls: storage.local mcpCalls; grant: the browser's answer to the permission request;
 //   fail: config ops the worker refuses.
-const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mods = [], calls, grant = true, fail = [], embedded = false, next } = {}) => {
+const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mods = [], calls, grant = true, fail = [], embedded = false, next, reply = (m, r) => r, readStorage = (area, keys, r) => r } = {}) => {
   const ids = new Map(), sent = [], asked = [], removed = [], copied = [], listeners = [], log = [];
   let gesture = false;
   const doc = { activeElement: null };
@@ -42,7 +43,7 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
   Object.assign(doc, { createElement: el, getElementById: byId, addEventListener() {}, querySelector: () => null });
   const area = (name, data) => ({
     data,
-    get: async (keys) => structuredClone(Object.fromEntries([].concat(keys).filter((k) => Object.hasOwn(data, k)).map((k) => [k, data[k]]))),
+    get: async (keys) => readStorage(name, keys, structuredClone(Object.fromEntries([].concat(keys).filter((k) => Object.hasOwn(data, k)).map((k) => [k, data[k]])))),
     set: async (patch) => { Object.assign(data, structuredClone(patch)); for (const f of listeners) f(Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, { newValue: structuredClone(v) }])), name); },
   });
   const local = area('local', { mcp: { on }, ...(calls && { mcpCalls: structuredClone(calls) }) });
@@ -77,7 +78,7 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
         sent.push(structuredClone(m));
         log.push(`send ${m.type} ${m.op}`);
         if (m.type === 'glaze:mods') return m.op === 'list' ? { ok: true, mods: structuredClone(mods) } : { ok: false };
-        return m.type === 'glaze:mcp-config' ? config(m) : undefined;
+        return m.type === 'glaze:mcp-config' ? reply(m, await config(m)) : undefined;
       },
     },
     storage: { local, session, onChanged: { addListener: (f) => listeners.push(f) } },
@@ -160,6 +161,63 @@ test('a worker that can\'t save leaves the switch as it was and says so', async 
   assert.equal(p.$('agents-on').checked, false);
   assert.equal(p.$('agents-said').hidden, false);
   assert.equal(text(p.$('agents-said')), 'Could not save. Try again.');
+});
+
+test('a set that fails after saving shows the consent the worker actually holds', async () => {
+  for (const on of [false, true]) {
+    const p = await open({ on, link: { state: on ? 'connected' : 'off', at: 1 }, reply: (m, r) => m.op === 'set' ? { ok: false } : r });
+    await p.toggle('agents-on');
+    assert.equal(p.worker.on, !on);
+    assert.equal(p.$('agents-on').checked, !on, `saved ${!on}, even though the set reply failed`);
+    assert.equal(text(p.$('agents-said')), 'Could not save. Try again.');
+    assert.equal(p.$('agents-state').hidden, on);
+  }
+  const p = await open({ on: true, link: { state: 'connected', at: 1 }, fail: ['set'] });
+  await p.toggle('agents-on');
+  assert.equal(p.$('agents-on').checked, true, 'failed before saving: still on');
+  assert.deepEqual(p.removed, [], 'the worker still holds on: keep its permission');
+});
+
+test('an opening state reply cannot undo a completed click', async () => {
+  const gate = deferred();
+  let first = true;
+  const p = page({ reply: async (m, r) => {
+    if (m.op === 'state' && first) { first = false; await gate.promise; }
+    return r;
+  } });
+  await settle();
+  await p.toggle('agents-on');
+  assert.equal(p.$('agents-on').checked, true);
+  gate.resolve();
+  await settle();
+  assert.equal(p.$('agents-on').checked, p.worker.on, 'the opening snapshot is older than the click');
+  assert.equal(p.line(), 'Starting…');
+});
+
+test('opening storage snapshots cannot replace newer link and activity events', async () => {
+  const gate = deferred();
+  const p = page({ on: true, link: { state: 'restart', at: 1 }, calls: [], readStorage: async (area, keys, r) => { await gate.promise; return r; } });
+  await settle();
+  await p.linked('connected');
+  await p.local.set({ mcpCalls: [{ at: 100, app: A, tool: 'courses_list', outcome: 'ok' }] });
+  await settle();
+  gate.resolve();
+  await settle();
+  assert.equal(p.line(), 'Ready', 'the live session event wins over the opening snapshot');
+  assert.deepEqual(p.rows(), ['courses_list | @100 · Done']);
+});
+
+test('another Settings tab can turn access off while this tab awaits its set reply', async () => {
+  const gate = deferred();
+  const p = await open({ reply: async (m, r) => { if (m.op === 'set') await gate.promise; return r; } });
+  await p.toggle('agents-on');
+  p.worker.on = false;
+  await p.local.set({ mcp: { on: false } });
+  await p.linked('off');
+  gate.resolve();
+  await settle();
+  assert.equal(p.$('agents-on').checked, false, 'the worker has since turned off');
+  assert.equal(p.$('agents-state').hidden, true);
 });
 
 test('turning off has the worker let go first, then gives the permission back', async () => {
