@@ -227,7 +227,7 @@ GZ_UI.load().then((s) => {
     const colors = scheme === 'current' ? null : GZ_PRESET(scheme === 'light' ? 'Paper' : 'Frost');
     const shown = previewSite === 'ultra' && course ? { ...settings, courses: { ...settings.courses, tinted: GZ_COURSE_TINTED(settings.courses, id, courses) ? [id] : [] } } : settings;
     frame.contentWindow?.postMessage({ gzPreviewContext: { site: previewSite, page: previewPage, viewport: $('#preview-size').value } }, location.origin);
-    const coursePointer = settings !== base && GZ_LOOK_PARTS({ name: base.courses.looks[id] })?.x?.pointer;
+    const coursePointer = settings !== base && GZ_LOOK_PARTS({ name: GZ_COURSE_LOOK_ID(base, id, catalog) })?.x?.pointer;
     frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) }, gzPreviewParts: settings === base ? base.parts ?? null : coursePointer ? { x: { pointer: coursePointer } } : null }, location.origin);
     renderNav(); renderContrast(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
     paintBackdrop();
@@ -1005,11 +1005,11 @@ GZ_UI.load().then((s) => {
       look.dataset.settingControl = 'courses.looks';
       look.setAttribute('aria-label', look.title);
       look.append(new Option(t('Your theme'), ''), ...lookOptions());
-      look.value = catalog.some((E) => E.id === cc.looks[id]) ? cc.looks[id] : '';
+      look.value = GZ_COURSE_LOOK_ID(s, id, catalog);
       look.addEventListener('change', () => {
-        if (look.value) cc.looks[id] = look.value; else delete cc.looks[id];
+        GZ_COURSE_EDIT.look(cc, id, look.value, s.courseLooks);
         refresh();
-        save(['courses']);
+        save(['courses', 'courseLooks']);
       });
       li.append(input, name, look, tint);
       if (!own) li.append(reset);

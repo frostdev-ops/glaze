@@ -296,7 +296,7 @@ test('a course Look preview receives its own pointer without the global Look par
   const lines = read('options.js').split('\n');
   const message = lines.find((line) => line.includes('frame.contentWindow?.postMessage({ gzPreview:') && line.includes('gzPreviewParts:'));
   const pointer = lines.find((line) => line.includes('const coursePointer =')) || '';
-  vm.runInNewContext(`${pointer}\n${message}`, { GZ_LOOK_PARTS: require('../lib/lookset.js'), id: '_1_1', frame: { contentWindow: { postMessage: (m) => sent.push(m) } }, base, settings, shown: settings, nav: settings.nav, colors: null, location: { origin: 'chrome-extension://x' } });
+  vm.runInNewContext(`${pointer}\n${message}`, { GZ_LOOK_PARTS: require('../lib/lookset.js'), GZ_COURSE_LOOK_ID: G.GZ_COURSE_LOOK_ID, catalog: [], id: '_1_1', frame: { contentWindow: { postMessage: (m) => sent.push(m) } }, base, settings, shown: settings, nav: settings.nav, colors: null, location: { origin: 'chrome-extension://x' } });
   assert.deepEqual(JSON.parse(JSON.stringify(sent[0].gzPreviewParts)), { x: { pointer: 'terminal' } });
 });
 

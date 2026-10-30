@@ -62,7 +62,7 @@ var GZ_XPARTS_PAGE = globalThis.GZ_XPARTS_PAGE || (() => {
     for (const x of Array.isArray(a?.parts) ? a.parts : []) { await libs(x); const c = L.clean(x); if (c) out.push(c); }
     return out;
   };
-  // From storage: sync `lookX`, or local's when sync says so, and the mods'; on a course wearing a Look of its own (courses.looks),
+  // From storage: sync `lookX`, or local's when sync says so, and the mods'; on a course wearing a Look of its own (GZ_COURSE_LOOK_ID),
   // that Look's, which the worker gives by its id (lib/background.js looks). The latest read wins, whatever order they finish in.
   const read = async () => {
     const mine = ++seq, id = course();

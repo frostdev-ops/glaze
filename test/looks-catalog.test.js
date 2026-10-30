@@ -111,10 +111,10 @@ test('removing a kept Look takes it off the courses that wore it, and nothing el
   const { favorites } = await fixtures();
   const cat = await C.build(favorites, S.decode);
   const [study, lib] = cat.looks.map((E) => E.id);
-  const courses = G.GZ_SANITIZE({ courses: { looks: { _1_1: study, _2_1: lib, _3_1: study, _4_1: 'Terminal' } } }).courses;
-  assert.equal(C.unmap(courses, study), true);
-  assert.deepEqual(courses.looks, { _2_1: lib, _4_1: 'Terminal' });
-  assert.equal(C.unmap(courses, study), false, 'none left to take off');
+  const { courses, courseLooks } = G.GZ_SANITIZE({ courses: { looks: { _1_1: study, _4_1: 'Terminal' } }, courseLooks: { _2_1: lib, _3_1: study } });
+  assert.equal(C.unmap(courses, study, courseLooks), true);
+  assert.deepEqual([courses.looks, courseLooks], [{ _4_1: 'Terminal' }, { _2_1: lib }]);
+  assert.equal(C.unmap(courses, study, courseLooks), false, 'none left to take off');
   // Once its favorite is gone, the catalogue no longer has it, so a course still naming it wears the theme.
   const left = await C.build(favorites.slice(1), S.decode, cat);
   assert.equal(C.find(C.list(left), study), null);
@@ -291,7 +291,7 @@ test('two Settings tabs keep and remove Looks through one worker turn without lo
   assert.deepEqual([removed, added], [{ ok: true }, { ok: true }]);
   assert.deepEqual(w.local.lookFavorites.map((f) => f.code).sort(), [favorites[1].code, favorites[2].code].sort());
   assert.deepEqual(w.local.rotateLooks, [C.idOf(favorites[1].code), 'Library']);
-  assert.deepEqual(w.sync.courses.looks, { _2_1: favorites[2].id });
+  assert.deepEqual([w.sync.courses.looks, w.sync.courseLooks], [{}, { _2_1: favorites[2].id }]);
   assert.equal(w.local.lookCatalog.sig, C.sig(w.local.lookFavorites), 'reply waits for the final catalogue');
   assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'remove', id: favorites[2].id }, w.popup), { ok: false, error: 'sender' });
 });
@@ -373,6 +373,10 @@ test('the worker moves kept course Looks out of courses.looks once, in one write
   const s = G.GZ_SANITIZE(sync);
   assert.equal(G.GZ_COURSE_LOOK_ID(s, '_2_1', [{ id: K1 }]), K1);
   assert.equal(G.GZ_COURSE_LOOK_ID(s, '_1_1'), 'Library');
+  // A restore of a backup from an earlier 4.0 writes one back: moved as it lands.
+  await w.chrome.storage.sync.set({ courses: { ...sync.courses, looks: { _1_1: 'Library', _5_1: K2 } } });
+  assert.ok(await w.until(() => sync.courseLooks._5_1 === K2 && !sync.courses.looks._5_1), 'moved as it lands');
+  assert.deepEqual(sync.courses.looks, { _1_1: 'Library' });
 });
 
 test('removing a kept Look from Settings unmaps the courses wearing it in courses.looks and courseLooks, in one write', async () => {

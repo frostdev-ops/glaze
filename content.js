@@ -1201,7 +1201,7 @@
   // Glaze is reloaded or updated under the tab, this script is cut off from storage (no runtime id) and
   // would keep switching to looks since removed: it wears none until the page loads again. Nor does one of the
   // student's own this device doesn't keep (looks): the theme, parts and all.
-  const lookHere = () => { const id = chrome.runtime?.id && settings.courses.looks[ultra ? courseId() : canvasCourseKey()]; return id && (!id.startsWith('c:') || looks.some((e) => e.id === id)) ? id : null; };
+  const lookHere = () => (chrome.runtime?.id && GZ_COURSE_LOOK_ID(settings, ultra ? courseId() : canvasCourseKey(), looks)) || null;
   let looked = null; // the course look painted now
   let looks = []; // the saved and gallery Looks a course can wear (lib/looks.js), read when one does (load)
   let worn = settings; // the settings painted now: the student's, or a course's look over them
@@ -1571,7 +1571,7 @@
     // The palette, the keys, the course menu, the previews and Download all (W0c).
     site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, courseId, toggleOf, askCmd,
     nickOf: (cid) => X.nickOf(cid), courseList: () => courseList, courseColors, varText, cardUI, looks: () => looks,
-    setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
+    setCourses: (c, kept = settings.courseLooks) => { settings = { ...settings, courses: c, courseLooks: kept }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
     // A course's own Look's parts replace the theme's (features/lookparts.js).
@@ -1597,7 +1597,7 @@
       const s = GZ_SANITIZE(raw, fresh);
       try { sessionStorage.setItem(KEPT, JSON.stringify(firstPaint(s))); } catch { /* blocked or full */ }
       // A course wearing a saved or gallery Look needs the catalogue (lib/looks.js), read only then.
-      if (!Object.values(s.courses.looks).some((v) => v.startsWith('c:'))) { looks = []; return s; }
+      if (![...Object.values(s.courses.looks), ...Object.values(s.courseLooks)].some((v) => v.startsWith('c:'))) { looks = []; return s; }
       return new Promise((res) => { try { chrome.storage.local.get('lookCatalog', (r) => res(r?.lookCatalog?.looks)); } catch { res(); } })
         .then((l) => (n !== settingsRead ? settingsPending : (looks = Array.isArray(l) ? l.filter((e) => e?.colors && e.look && e.bg) : [], s)));
     }));

@@ -37,24 +37,31 @@ test('a 3.x device editing courses and saving everything it knows leaves 4.0\'s 
   assert.deepEqual(sync.courses.looks, { _1_1: 'Library' }, 'only built-in names where 3.x reads');
   assert.deepEqual(sync.courseLooks, { _2_1: K1, [canvas]: K2 });
   edit3x(sync, (c) => old.GZ_COURSE_EDIT.color(c, '_3_1', '#ff0000'));
-  edit3x(sync, (c) => old.GZ_COURSE_EDIT.look(c, '_4_1', 'Midnight'));
+  edit3x(sync, (c) => old.GZ_COURSE_EDIT.look(c, '_4_1', 'Synthwave'));
   edit3x(sync, (c) => old.GZ_COURSE_EDIT.name(c, '_2_1', 'Bio'));
+  const later = structuredClone(sync);
   save3x(sync);
   const back = G.GZ_SANITIZE(sync);
   assert.equal(G.GZ_COURSE_LOOK_ID(back, '_2_1', saved), K1);
   assert.equal(G.GZ_COURSE_LOOK_ID(back, canvas, saved), K2);
   assert.equal(G.GZ_COURSE_LOOK_ID(back, '_1_1', saved), 'Library');
-  assert.equal(G.GZ_COURSE_LOOK_ID(back, '_4_1', saved), 'Midnight', 'and what the 3.x device picked');
+  assert.equal(G.GZ_COURSE_LOOK_ID(back, '_4_1', saved), 'Synthwave', 'and what the 3.x device picked');
   assert.equal(back.courses.colors._3_1, '#ff0000');
   assert.equal(back.courses.names._2_1, 'Bio');
-  assert.deepEqual(old.GZ_SANITIZE(sync).courses.looks, { _1_1: 'Library', _4_1: 'Midnight' }, 'the 3.x device reads its built-in names');
+  assert.deepEqual(structuredClone(old.GZ_SANITIZE(sync).courses.looks), { _1_1: 'Library', _4_1: 'Synthwave' }, 'the 3.x device reads its built-in names');
+  // The 3.x device then picks a built-in Look for a course wearing a kept one: every device wears its pick.
+  edit3x(later, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', 'Terminal'));
+  assert.equal(G.GZ_COURSE_LOOK_ID(G.GZ_SANITIZE(later), '_2_1', saved), 'Terminal');
 });
 
-test('a course wears its kept Look where this device has it, else its built-in one, else the theme', () => {
-  const s = G.GZ_SANITIZE({ courses: { looks: { _1_1: 'Library', _2_1: 'Terminal', _5_1: K1 } }, courseLooks: { _2_1: K1, _3_1: GONE, _4_1: K2 } });
-  assert.equal(G.GZ_COURSE_LOOK_ID(s, '_2_1', saved), K1, 'a kept Look over a built-in one');
-  assert.equal(G.GZ_COURSE_LOOK_ID(s, '_2_1', []), 'Terminal', 'a kept Look this device hasn\'t: its built-in one');
+// 4.0 clears one map as it writes the other: only a 3.x device leaves a built-in beside a kept Look, and its pick is the newer.
+test('a course wears its built-in Look, else its kept one where this device has it, else the theme', () => {
+  const s = G.GZ_SANITIZE({ courses: { looks: { _1_1: 'Library', _2_1: 'Terminal', _5_1: K1, _6_1: K1 } }, courseLooks: { _2_1: K1, _3_1: GONE, _4_1: K2, _6_1: K2 } });
+  assert.equal(G.GZ_COURSE_LOOK_ID(s, '_2_1', saved), 'Terminal', 'a built-in a 3.x device picked over the kept Look before it');
+  assert.equal(G.GZ_COURSE_LOOK_ID(s, '_2_1', []), 'Terminal');
   assert.equal(G.GZ_COURSE_LOOK_ID(s, '_2_1'), 'Terminal', 'no catalogue given: the same');
+  assert.equal(G.GZ_COURSE_LOOK_ID(s, '_4_1', []), '', 'a kept Look this device hasn\'t: the theme');
+  assert.equal(G.GZ_COURSE_LOOK_ID(s, '_6_1', saved), K2, 'courseLooks over a kept id still in courses.looks');
   assert.equal(G.GZ_COURSE_LOOK_ID(s, '_1_1', saved), 'Library');
   assert.equal(G.GZ_COURSE_LOOK_ID(s, '_3_1', saved), '', 'a kept Look gone everywhere, and no built-in: the theme');
   assert.equal(G.GZ_COURSE_LOOK_ID(s, '_4_1', saved), K2);
@@ -63,9 +70,9 @@ test('a course wears its kept Look where this device has it, else its built-in o
   assert.equal(G.GZ_COURSE_LOOK_ID(s, '_9_1', saved), '');
   assert.equal(G.GZ_COURSE_LOOK_ID(s, undefined, saved), '');
   // GZ_COURSE_LOOK wears what the resolver names.
-  const entries = [{ id: K1, colors: G.GZ_PRESET('Forest'), look: { radius: 3 }, bg: { kind: 'solid' } }];
-  assert.deepEqual(G.GZ_COURSE_LOOK(s, '_2_1', entries).colors, G.GZ_PRESET('Forest'));
-  assert.ok(G.GZ_LOOK_ON(G.GZ_COURSE_LOOK(s, '_2_1', []), G.GZ_LOOKS.find((L) => L.name === 'Terminal')));
+  const entries = [{ id: K2, colors: G.GZ_PRESET('Forest'), look: { radius: 3 }, bg: { kind: 'solid' } }];
+  assert.deepEqual(G.GZ_COURSE_LOOK(s, '_4_1', entries).colors, G.GZ_PRESET('Forest'));
+  assert.ok(G.GZ_LOOK_ON(G.GZ_COURSE_LOOK(s, '_2_1', entries), G.GZ_LOOKS.find((L) => L.name === 'Terminal')));
   assert.equal(G.GZ_COURSE_LOOK(s, '_3_1', entries), s);
 });
 
@@ -96,14 +103,15 @@ test('courseLooks keeps kept ids by course id, within one sync item; anything el
 
 test('kept ids in courses.looks move to courseLooks once; one courseLooks has for the course stays', () => {
   const s = G.GZ_SANITIZE({ courses: { looks: { _1_1: 'Library', _2_1: K1, _3_1: K2 } }, courseLooks: { _3_1: K1 } });
-  assert.equal(G.GZ_COURSE_LOOKS_MOVE(s), true);
+  assert.equal(C.move(s), true);
   assert.deepEqual(s.courses.looks, { _1_1: 'Library' });
   assert.deepEqual(s.courseLooks, { _3_1: K1, _2_1: K1 });
-  assert.equal(G.GZ_COURSE_LOOKS_MOVE(s), false, 'nothing left to move');
-  assert.equal(G.GZ_COURSE_LOOKS_MOVE(G.GZ_SANITIZE({})), false);
-  // One that would take courseLooks past its sync item stays where it is.
-  const full = G.GZ_SANITIZE({ courseLooks: Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`canvas:https://a-long-school-name.instructure.com/${100000 + i}`, K1])), courses: { looks: { _7_1: K2 } } });
-  G.GZ_COURSE_LOOKS_MOVE(full);
+  assert.equal(C.move(s), false, 'nothing left to move');
+  assert.equal(C.move(G.GZ_SANITIZE({})), false);
+  // One that would take courseLooks past what it keeps stays where it is.
+  const full = G.GZ_SANITIZE({ courseLooks: Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`_${1000 + i}_1`, K1])), courses: { looks: { _7_1: K2 } } });
+  assert.equal(Object.keys(full.courseLooks).length, 200);
+  C.move(full);
   assert.deepEqual(full.courses.looks, { _7_1: K2 });
   assert.ok(G.GZ_SYNC_BYTES('courseLooks', full.courseLooks) <= G.GZ_SYNC_ITEM_MAX);
 });

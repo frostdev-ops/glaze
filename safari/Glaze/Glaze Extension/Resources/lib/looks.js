@@ -2,8 +2,8 @@
 // themes they saved and the gallery's they installed or saved, kept on this device in storage.local `lookFavorites`
 // ({ code, name, author, at, id, from }; lib/history.js favor). A Look is known by its id, never by its name, which two can
 // share: a built-in Look's id is its name (never translated, and what an older Glaze on another device reads in the synced
-// courses.looks); a kept one's is `c:` and a hash of its code, so the same gallery Look installed on two devices is the
-// same Look on both, and a rename keeps it. The worker decodes the codes (lib/background.js) into storage.local
+// courses.looks); a kept one's is `c:` and a hash of its code (in the synced courseLooks, which an older Glaze leaves alone),
+// so the same gallery Look installed on two devices is the same Look on both, and a rename keeps it. The worker decodes the codes (lib/background.js) into storage.local
 // `lookCatalog`, { sig, looks }, and every page reads that, never the codes: each kept Look's palette, look and background
 // as its code wears them (the keys it carries; the rest stay the student's, as lib/lookx.js wearCode has it), a hash of its
 // parts, and its kind: 'saved', 'gallery', or 'background' (a gallery Look whose background moves). Mods that bring a
@@ -13,7 +13,7 @@
 var GZ_CATALOG = globalThis.GZ_CATALOG || (() => {
   const G = typeof GZ_LOOKS !== 'undefined' ? { GZ_LOOKS, GZ_LOOK_ON } : require('../defaults.js');
   const KEY = 'lookCatalog';
-  const ID = /^c:[0-9a-z]{14}$/; // as defaults.js's courses.looks
+  const ID = /^c:[0-9a-z]{14}$/; // as defaults.js's courseLooks
   // Two 32-bit FNV-1a passes with different primes, as 14 base36 characters. keptAll refuses a known collision.
   const hash = (text) => {
     let a = 2166136261, b = 2166136261;
@@ -88,14 +88,33 @@ var GZ_CATALOG = globalThis.GZ_CATALOG || (() => {
     const by = new Map(keptAll(favorites).map((e) => [e.code, e.id]));
     return Array.isArray(chosen) ? chosen.map((v) => (typeof v === 'string' && by.has(v) ? by.get(v) : v)) : [];
   };
-  // Takes Look `id` off every course that wears it (settings.courses, changed in place): back to the student's theme.
-  const unmap = (courses, id) => {
+  // Takes Look `id` off every course that wears it (settings.courses and settings.courseLooks, changed in place): back to the
+  // student's theme.
+  const unmap = (courses, id, kept) => {
     let n = 0;
-    for (const [cid, v] of Object.entries(courses.looks)) if (v === id) { delete courses.looks[cid]; n++; }
+    for (const map of [courses.looks, kept]) for (const [cid, v] of Object.entries(map)) if (v === id) { delete map[cid]; n++; }
     return n > 0;
   };
 
-  return { KEY, ID, hash, idOf, kept, keptAll, make, sig, build, looks, list, find, groups, on, worn, tone, ids, unmap };
+  // Kept ids an earlier 4.0 left in courses.looks, moved to courseLooks where it has room (one it has for the course stays), so
+  // a 3.x device on the same sync account doesn't write them away (lib/background.js): whether any moved. `s` sanitized,
+  // changed in place.
+  const move = (s) => {
+    const D = typeof GZ_SYNC_BYTES !== 'undefined' ? { GZ_SYNC_BYTES, GZ_SYNC_ITEM_MAX } : require('../defaults.js');
+    let moved = false;
+    for (const [cid, v] of Object.entries(s.courses.looks)) {
+      if (!ID.test(v)) continue;
+      if (!Object.hasOwn(s.courseLooks, cid)) {
+        if (Object.keys(s.courseLooks).length >= 200 || D.GZ_SYNC_BYTES('courseLooks', { ...s.courseLooks, [cid]: v }) > D.GZ_SYNC_ITEM_MAX) continue;
+        s.courseLooks[cid] = v;
+      }
+      delete s.courses.looks[cid];
+      moved = true;
+    }
+    return moved;
+  };
+
+  return { KEY, ID, hash, idOf, kept, keptAll, make, sig, build, looks, list, find, groups, on, worn, tone, ids, unmap, move };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_CATALOG; else GZ_CATALOG;
