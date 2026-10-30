@@ -2,7 +2,7 @@
 // WebDriver BiDi. Firefox runs the worker as an event page, with extensions.background.idle.timeout at 3 s here, and answers
 // permissions.request itself (extensions.webextOptionalPermissionPrompts off). The check shows:
 //   1. nativeMessaging granted from a trusted click in Settings reaches the event page that started without it, whose
-//      runtime has connectNative before and after, and its link connects with no reload (Chrome's running worker has no
+//      runtime gains connectNative, and its link connects with no reload (Chrome's running worker has no
 //      connectNative until it restarts, so its link shows restart: progress.md, spike Q2);
 //   2. the open native port keeps the event page up through 60 s with no traffic at all (bug 1770696), and an agent's
 //      round trip works after it, on the connection it opened before and on a new one; the helper killed reads as exited
@@ -32,20 +32,22 @@ const MANIFEST = path.join(HOSTS, `${NAME}.json`);
 const HELPER = path.join(root, 'mcp/bin/glaze-mcp.js');
 const IDLE = 60e3, TIMEOUT = 3000;
 const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'glaze-agent-firefox-'));
-const OUT = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'glaze-agent-firefox-out-')));
-fs.mkdirSync(OUT, { recursive: true });
+const OUT = path.resolve(process.argv[2] || `${tmp}-out`);
 const home = path.join(tmp, 'home'), launches = path.join(tmp, 'launches.log'), launcher = path.join(tmp, 'glaze-mcp-host');
 const run = path.join(home, 'Library/Application Support/glaze-mcp/run');
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const R = { firefox: null, name: NAME, manifest: MANIFEST, idleTimeout: TIMEOUT, idleMs: IDLE };
 const lines = [], failed = [];
 let checks = 0;
+let stopping = false;
+const running = () => { if (stopping) throw new Error('the check is stopping'); };
 const say = (s) => { lines.push(`${new Date().toISOString()} ${s}`); console.log(s); };
 const ok = (value, label) => { if (value) { checks++; say(`ok   ${label}`); } else { failed.push(label); say(`FAIL ${label}`); } return !!value; };
-const until = async (fn, label, ms = 15000) => { const end = Date.now() + ms; for (;;) { const v = await fn().catch(() => null); if (v) return v; if (Date.now() > end) throw new Error(`timed out: ${label}`); await pause(100); } };
+const until = async (fn, label, ms = 15000) => { const end = Date.now() + ms; for (;;) { running(); const v = await fn().catch(() => null); if (v) return v; if (Date.now() > end) throw new Error(`timed out: ${label}`); await pause(100); } };
 
 // ---- The package, the helper's launcher and its manifest ------------------------------------------------------------
 const stage = () => {
+  running();
   const dist = fs.mkdtempSync(path.join(tmp, 'dist-'));
   const { ZIP, ZIPOPT, ...env } = process.env; // zip reads both as its own options
   execFileSync('sh', ['scripts/package-firefox.sh', '--development'], { cwd: root, env: { ...env, DIST: dist }, stdio: 'pipe' });
@@ -69,29 +71,47 @@ const stage = () => {
 // temp HOME. The launcher's pid is the helper's (exec).
 const q = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
 const writeLauncher = () => {
+  running();
   fs.mkdirSync(home, { mode: 0o700 });
   fs.writeFileSync(launcher, `#!/bin/sh\nprintf '%s %s\\n' "$$" "$*" >> ${q(launches)}\nHOME=${q(home)}\nexport HOME\nexec ${q(process.execPath)} ${q(HELPER)} host --browser=firefox "$@"\n`, { mode: 0o755 });
 };
 const started = () => (fs.existsSync(launches) ? fs.readFileSync(launches, 'utf8').trim().split('\n').filter(Boolean).map((l) => { const [pid, ...args] = l.split(' '); return { pid: +pid, args: args.join(' ') }; }) : []);
-let present = false;
+let present = null;
 const made = []; // folders the check made for the manifest, outermost first
+const mkdir = (d) => {
+  try { if (!fs.lstatSync(d).isDirectory()) throw new Error(`${d} is not a directory`); return; }
+  catch (e) { if (e.code !== 'ENOENT') throw e; }
+  mkdir(path.dirname(d));
+  try { fs.mkdirSync(d); made.push(d); }
+  catch (e) { if (e.code !== 'EEXIST' || !fs.lstatSync(d).isDirectory()) throw e; }
+};
 const writeManifest = (allowed) => {
+  running();
   if (path.basename(MANIFEST) === `${REAL}.json`) throw new Error('refusing the real host name');
-  for (let d = HOSTS; !fs.existsSync(d); d = path.dirname(d)) made.unshift(d);
-  fs.mkdirSync(HOSTS, { recursive: true });
-  fs.writeFileSync(MANIFEST, `${JSON.stringify({ name: NAME, description: 'glaze-mcp (agent-link-firefox-check)', path: launcher, type: 'stdio', allowed_extensions: allowed }, null, 2)}\n`, { flag: present ? 'w' : 'wx' });
-  present = true;
+  mkdir(HOSTS);
+  const fd = fs.openSync(MANIFEST, 'wx', 0o600);
+  try {
+    present = fs.fstatSync(fd); // own even a partial write, but never a replacement file
+    fs.writeFileSync(fd, `${JSON.stringify({ name: NAME, description: 'glaze-mcp (agent-link-firefox-check)', path: launcher, type: 'stdio', allowed_extensions: allowed }, null, 2)}\n`);
+  } finally { fs.closeSync(fd); }
 };
 const removeManifest = () => {
-  if (present) { try { fs.unlinkSync(MANIFEST); } catch (e) { if (e.code !== 'ENOENT') throw e; } present = false; }
+  if (!present) return;
+  try {
+    const st = fs.lstatSync(MANIFEST);
+    if (st.dev !== present.dev || st.ino !== present.ino) throw new Error(`${MANIFEST} was replaced; leaving it alone`);
+    fs.unlinkSync(MANIFEST);
+  } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  present = null;
 };
 const runFiles = () => (fs.existsSync(run) ? fs.readdirSync(run).filter((f) => /^firefox\.[0-9a-f]{20}\.json$/.test(f)).map((f) => ({ file: f, ...JSON.parse(fs.readFileSync(path.join(run, f), 'utf8')) })) : []);
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-const isHelper = (pid) => { try { return execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' }).includes(`${HELPER} host --browser=firefox`); } catch { return false; } };
+const isHelper = (pid) => { try { return execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' }).trim() === `${process.execPath} ${HELPER} host --browser=firefox ${MANIFEST} ${ID}`; } catch { return false; } };
 
 // ---- Agents ---------------------------------------------------------------------------------------------------------
 const agents = new Set();
 const agent = (label) => {
+  running();
   const p = spawn(process.execPath, [HELPER, 'agent', '--browser', 'firefox'], { env: { ...process.env, HOME: home }, stdio: ['pipe', 'pipe', 'pipe'] });
   agents.add(p);
   let buf = '', err = '';
@@ -130,6 +150,7 @@ const handshake = async (a) => {
 // ---- Firefox --------------------------------------------------------------------------------------------------------
 let ff = null, ws = null, sink = null, log = '';
 const firefox = async () => {
+  running();
   const profile = path.join(tmp, 'profile');
   fs.mkdirSync(profile);
   sink = net.createServer((s) => s.destroy()); // the proxy for every request: nothing leaves the Mac
@@ -147,6 +168,7 @@ const firefox = async () => {
   };
   fs.writeFileSync(path.join(profile, 'user.js'), Object.entries(prefs).map(([k, v]) => `user_pref(${JSON.stringify(k)}, ${JSON.stringify(v)});`).join('\n'));
   const port = 9400 + Math.floor(Math.random() * 400);
+  running();
   ff = spawn(bin, ['--headless', '--no-remote', '--profile', profile, '--remote-debugging-port', String(port), '-remote-allow-system-access', 'about:blank'], { stdio: ['ignore', 'pipe', 'pipe'] });
   ff.stdout.on('data', (d) => { log += d; }); ff.stderr.on('data', (d) => { log += d; });
   const at = await until(async () => /WebDriver BiDi listening on (ws:\/\/[\d.:]+)/.exec(log)?.[1], 'Firefox to listen', 30000);
@@ -241,6 +263,7 @@ const BG = (hold) => `(async () => {
 })()`;
 
 const checkRun = async () => {
+  fs.mkdirSync(OUT, { recursive: true });
   R.firefox = execFileSync(bin, ['--version'], { encoding: 'utf8' }).trim();
   const pkg = stage();
   writeLauncher();
@@ -306,7 +329,7 @@ const checkRun = async () => {
   const why = during.filter((e) => e.ev === 'background-script-reset-idle').reduce((o, e) => ({ ...o, [e.reason]: (o[e.reason] || 0) + 1 }), {});
   R.idle = { from: idleFrom, ms: Date.now() - idleFrom, state: page2.state, child: page2.child, nativePorts: page2.nativePorts, timeout: page2.timeout, events: tally(during), restarts: restarts(during),
     resets: during.filter((e) => e.ev === 'background-script-reset-idle').map((e) => [e.reason, e.at - idleFrom]) };
-  ok(page2.state === 'running' && page2.child === page0.child && restarts(during).length === 0,
+  ok(R.idle.ms >= IDLE && page2.timeout === TIMEOUT && page2.state === 'running' && page2.child === page0.child && restarts(during).length === 0,
     `after ${Math.round(R.idle.ms / 1000)} s at a ${page2.timeout} ms idle timeout the event page still runs, in context ${page2.child}, never stopped`);
   ok((why.nativeapp || 0) >= Math.floor(IDLE / TIMEOUT / 2) && page2.nativePorts, `the open native port held it: ${JSON.stringify(why)}`);
   const list = await a.ask(LIST(2));
@@ -326,7 +349,7 @@ const checkRun = async () => {
   const back = await until(async () => { const l = await link(b, c); return l?.state === 'connected' && l.at > exited.at && l; }, 'the link to reconnect', 15000);
   const gone = await Promise.all([a.exited, b2.exited]);
   R.exited = { error: exited.error ?? null, then: back, launches: started().map((s) => s.pid), agents: gone.map((g, i) => ({ ...g, stderr: [a, b2][i].err() })) };
-  ok(exited.state === 'exited', `the helper killed reads as exited (error ${JSON.stringify(exited.error ?? null)})`);
+  ok(exited.state === 'exited' && exited.error == null, `the helper killed reads as exited with no port error (error ${JSON.stringify(exited.error ?? null)})`);
   ok(back.state === 'connected' && started().length === 2 && started()[1].pid !== host.pid, `and the link reconnects to a new helper ${started()[1]?.pid}`);
   ok(gone.every((g) => g.code === 1), `both agents exit 1 as the helper's socket closes (${JSON.stringify(gone)})`);
 
@@ -339,8 +362,9 @@ const checkRun = async () => {
   await b.close(c);
   const offAt = Date.now();
   const stopped = await until(async () => { const p = await b.inChrome(PAGE); return p.log.slice(before).some((e) => e.ev === 'shutdown-background-script') && p; }, 'the event page to stop with no port open', 30000);
-  R.control = { ms: Date.now() - offAt, state: stopped.state, events: tally(stopped.log.slice(before)) };
-  ok(true, `control: with no port open the event page stopped ${Math.round(R.control.ms / 100) / 10} s after its last page closed (${stopped.state})`);
+  R.control = { ms: Date.now() - offAt, state: stopped.state, timeout: stopped.timeout, nativePorts: stopped.nativePorts, events: tally(stopped.log.slice(before)) };
+  ok(stopped.state === 'stopped' && !stopped.nativePorts && stopped.timeout === TIMEOUT,
+    `control: with no port open the event page stopped ${Math.round(R.control.ms / 100) / 10} s after its last page closed (${stopped.state}, timeout ${stopped.timeout} ms)`);
 
   // 3. What the port says as it closes, from agent access off each time, so each answer is a new state.
   R.errors = {};
@@ -372,29 +396,93 @@ const checkRun = async () => {
 };
 
 // ---- Cleanup: everything the check started or wrote, also on a signal or a crash ------------------------------------
-let cleaned = false;
-const cleanup = () => {
-  if (cleaned) return;
-  cleaned = true;
-  for (const p of agents) try { p.kill('SIGKILL'); } catch { /* gone */ }
-  try { ws?.close(); } catch { /* gone */ }
-  try { if (ff && ff.exitCode === null) ff.kill('SIGKILL'); } catch { /* gone */ }
-  for (const { pid } of started()) if (alive(pid) && isHelper(pid)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
-  try { sink?.close(); } catch { /* closed */ }
-  try { removeManifest(); } catch (e) { console.error(`could not remove ${MANIFEST}: ${e.message}`); }
-  for (const d of [...made].reverse()) try { fs.rmdirSync(d); } catch { /* not empty: not only the check's */ }
-  fs.rmSync(tmp, { recursive: true, force: true });
+let cleaned = false, cleaning = null;
+const owned = new Map();
+const processes = () => new Map(execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8' }).split('\n').flatMap((l) => {
+  const m = /^\s*(\d+)\s+(\d+)\s+(.+)$/.exec(l);
+  return m ? [[+m[1], { ppid: +m[2], command: m[3] }]] : [];
+}));
+// Capture descendants before their parent leaves, then retain their exact command after reparenting. Never select a
+// browser by its name, or a helper by its script alone: other checks and the owner's Firefox may be running.
+const remaining = () => {
+  const table = processes();
+  for (const p of [ff, ...agents]) if (p && p.exitCode === null && p.signalCode === null && table.has(p.pid)) owned.set(p.pid, table.get(p.pid).command);
+  for (const { pid } of started()) if (table.has(pid) && isHelper(pid)) owned.set(pid, table.get(pid).command);
+  let added;
+  do {
+    added = false;
+    for (const [pid, p] of table) if (!owned.has(pid) && owned.has(p.ppid) && owned.get(p.ppid) === table.get(p.ppid)?.command) {
+      owned.set(pid, p.command); added = true;
+    }
+  } while (added);
+  return [...owned].filter(([pid, cmd]) => table.get(pid)?.command === cmd).map(([pid]) => pid);
 };
+const signalOwned = (signal) => {
+  for (const pid of remaining()) try { process.kill(pid, signal); } catch (e) { if (e.code !== 'ESRCH') throw e; }
+};
+const waitOwned = async (ms) => {
+  const end = Date.now() + ms;
+  while (remaining().length && Date.now() < end) await pause(100);
+  return remaining();
+};
+const cleanupFiles = () => {
+  // Attempt every removal even if one fails; rmdir preserves any unrelated contents added to a shared folder.
+  const errors = [];
+  try { removeManifest(); } catch (e) { errors.push(e.message); }
+  for (const d of [...made].reverse()) try { fs.rmdirSync(d); } catch (e) { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(e.code)) errors.push(e.message); }
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { errors.push(e.message); }
+  if (errors.length) throw new Error(errors.join('; '));
+};
+const cleanup = () => cleaning ||= (async () => {
+  stopping = true;
+  try {
+    remaining();
+    try { ws?.close(); } catch { /* gone */ }
+    for (const p of agents) p.stdin.end();
+    if (ff && ff.exitCode === null && ff.signalCode === null) ff.kill('SIGTERM');
+    if ((await waitOwned(5000)).length) {
+      signalOwned('SIGTERM');
+      if ((await waitOwned(3000)).length) signalOwned('SIGKILL');
+    }
+    const pids = await waitOwned(3000);
+    if (sink?.listening) await new Promise((resolve, reject) => sink.close((e) => e ? reject(e) : resolve()));
+    R.leftover = { pids, helpers: started().filter(({ pid }) => alive(pid) && isHelper(pid)).map(({ pid }) => pid) };
+    if (pids.length) throw new Error(`check processes still alive: ${pids.join(', ')}`);
+  } finally {
+    cleanupFiles();
+    cleaned = true;
+    R.leftover ||= {};
+    R.leftover.manifestRemoved = !fs.existsSync(MANIFEST);
+    R.leftover.foldersPreserved = made.filter((d) => fs.existsSync(d));
+  }
+})();
 const save = () => {
   R.ok = checks; R.failed = failed;
   fs.writeFileSync(path.join(OUT, 'results.json'), `${JSON.stringify(R, null, 2)}\n`);
   fs.writeFileSync(path.join(OUT, 'check.log'), `${lines.join('\n')}\n`);
   fs.writeFileSync(path.join(OUT, 'firefox.log'), log);
 };
-process.on('exit', cleanup);
-process.on('SIGINT', () => process.exit(130));
-process.on('SIGTERM', () => process.exit(143));
-const watchdog = setTimeout(() => { failed.push('watchdog: the check ran over 8 minutes'); save(); process.exit(124); }, 8 * 60e3);
+// Only a last resort for an explicit process.exit; signals, exceptions and the watchdog await normal cleanup.
+process.on('exit', () => {
+  if (cleaned) return;
+  try { signalOwned('SIGKILL'); } catch (e) { console.error(e.message); }
+  try { cleanupFiles(); } catch (e) { console.error(e.message); }
+});
+let ending = false;
+const interrupt = async (code, why) => {
+  if (ending) return;
+  ending = true;
+  clearTimeout(watchdog);
+  failed.push(why);
+  try { await cleanup(); } catch (e) { failed.push(`cleanup: ${e.message}`); }
+  try { save(); } catch (e) { console.error(e.message); }
+  process.exit(code);
+};
+process.on('SIGINT', () => { void interrupt(130, 'SIGINT'); });
+process.on('SIGTERM', () => { void interrupt(143, 'SIGTERM'); });
+process.on('uncaughtException', (e) => { void interrupt(1, e.stack || String(e)); });
+process.on('unhandledRejection', (e) => { void interrupt(1, e?.stack || String(e)); });
+const watchdog = setTimeout(() => { void interrupt(124, 'watchdog: the check ran over 8 minutes'); }, 8 * 60e3);
 try {
   await checkRun();
 } catch (e) {
@@ -402,18 +490,8 @@ try {
   failed.push(String(e.message || e));
 } finally {
   clearTimeout(watchdog);
-  for (const p of agents) p.stdin.end();
-  try { ws?.close(); } catch { /* gone */ }
-  if (ff && ff.exitCode === null) {
-    ff.kill('SIGTERM');
-    await new Promise((r) => { ff.once('exit', r); setTimeout(r, 8000); });
-  }
-  // The helpers leave as Firefox closes their stdin.
-  await until(async () => started().every(({ pid }) => !alive(pid)), 'the helpers to exit', 5000).catch(() => say('note a helper outlived Firefox; killed'));
-  R.leftover = { helpers: started().filter(({ pid }) => alive(pid)).map(({ pid }) => pid), manifestRemoved: null };
-  cleanup();
-  R.leftover.manifestRemoved = !fs.existsSync(MANIFEST);
-  ok(R.leftover.manifestRemoved && made.every((d) => !fs.existsSync(d) || fs.readdirSync(d).length), `${path.basename(MANIFEST)} removed${made.length ? `, with the folders made for it (${made.join(', ')})` : ''}`);
+  try { await cleanup(); } catch (e) { failed.push(`cleanup: ${e.message}`); }
+  ok(R.leftover?.manifestRemoved && made.every((d) => !fs.existsSync(d) || fs.readdirSync(d).length), `${path.basename(MANIFEST)} removed; ${R.leftover?.pids?.length ?? 'unknown'} processes left, ${R.leftover?.foldersPreserved?.length ?? 'unknown'} nonempty shared folders preserved`);
   say(`${checks} ok, ${failed.length} failed, ${R.firefox || 'Firefox'} headless over WebDriver BiDi; evidence in ${OUT}`);
   save();
 }

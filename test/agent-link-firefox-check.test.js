@@ -42,12 +42,9 @@ const harness = (t, overrides = {}) => {
     fs, os: { homedir: () => home, tmpdir: () => scratch }, path, net: {},
     process: proc, fileURLToPath: () => file, createRequire: () => require, execFileSync,
     console: { log() {}, error() {} }, setTimeout, clearTimeout,
-    Date: { now: () => now, prototype: Date.prototype },
+    Date: class extends Date { static now() { return now; } },
     ...overrides,
   });
-  // say() also uses the Date constructor.
-  vm.runInContext('Date = class extends globalThis.RealDate { static now() { return clock(); } }',
-    Object.assign(context, { RealDate: Date, clock: () => now }));
   const definitions = source.slice(source.indexOf('const require = '), source.indexOf("process.on('exit'"))
     .replaceAll('import.meta.url', JSON.stringify(pathToFileURL(file).href));
   const api = vm.runInContext(`${definitions}\n({ writeManifest, removeManifest, cleanup, isHelper, made, R, failed,
