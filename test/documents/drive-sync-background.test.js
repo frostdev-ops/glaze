@@ -114,15 +114,20 @@ test('a daily snapshot whose files are past one upload is no snapshot, its files
 });
 
 test('while Sync is off for its account, each record\'s time of change is still kept for when it is turned on again', async () => {
-  const { local, changed } = worker();
+  const { context, local, changed } = worker();
   await local.set({ driveSync: { on: false, off: true, account: 'student@school.edu', folder: 'f', token: '9' } });
   for (const f of changed.fns) f({ writerWords: { oldValue: ['Alpha'], newValue: ['Alpha', 'Beta'] } }, 'local');
   await new Promise((r) => setTimeout(r, 20));
   assert.ok(Number.isFinite((await local.get('driveSyncStamps')).driveSyncStamps?.['local:writerWords']), 'stamped while off');
   // Never connected, or its account forgotten: nothing loads, nothing is kept.
   await local.remove(['driveSyncStamps']);
-  await local.set({ driveSync: { on: false, off: true, problem: 'account' } });
-  for (const f of changed.fns) f({ writerWords: { oldValue: ['Alpha'], newValue: ['Gamma'] } }, 'local');
-  await new Promise((r) => setTimeout(r, 20));
+  let loaded = 0;
+  context.googleLib = () => { loaded++; return { ON: true }; };
+  for (const st of [undefined, { on: false, off: true, problem: 'account' }]) {
+    await (st ? local.set({ driveSync: st }) : local.remove(['driveSync']));
+    for (const f of changed.fns) f({ writerWords: { oldValue: ['Alpha'], newValue: ['Gamma'] } }, 'local');
+    await new Promise((r) => setTimeout(r, 20));
+  }
   assert.equal((await local.get('driveSyncStamps')).driveSyncStamps, undefined);
+  assert.equal(loaded, 0, 'Google\'s libraries never loaded for it');
 });
