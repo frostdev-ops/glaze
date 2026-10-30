@@ -349,6 +349,18 @@ test('custGeom: what a file leaves out or gets wrong draws something sensible an
   assert.equal(G.custom({ pathLst: [{ fill: 'sparkly', cmds: [] }] }, 10, 10).paths[0].fill, 'norm');
 });
 
+test('custGeom: non-finite numeric strings and stretched coordinates become zero', () => {
+  assert.deepEqual(G.custom({
+    pathLst: [{ w: 1, h: 1, cmds: [moveTo('1e309', '-1e309'), lnTo('1e308', '1e308')] }],
+    rect: { l: '1e309', t: '-1e309', r: Infinity, b: NaN },
+    cxnLst: [{ x: '1e309', y: -Infinity, ang: '1e309' }],
+  }, 10, 10), {
+    paths: [{ d: 'M 0 0 L 0 0', fill: 'norm', stroke: true }],
+    rect: { l: 0, t: 0, r: 0, b: 0 },
+    cxn: [{ x: 0, y: 0, ang: 0 }],
+  });
+});
+
 // ---- snapshots -----------------------------------------------------------------------------------------------------
 
 test('CI refuses snapshot regeneration before writing any fixture', () => {
