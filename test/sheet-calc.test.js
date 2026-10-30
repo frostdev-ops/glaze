@@ -554,3 +554,21 @@ test('functions reach the workbook through ctx: sheetNamed, evalName, extent, fo
   e.wb.styles.push({ fmt: '0.00' });
   assert.equal(calc(e, 'TESTCTX()'), 'Sheet2|0.05|3,2|2*3|2|0.00');
 });
+
+// Excel 16.114.1: criteria text without * or ? is compared as it is, tildes and all; with them, ~ takes the next
+// character as itself and a ~ at the end is dropped. Each string marks which of the cells COUNTIF counts.
+test('criteria: tildes are literal unless the text has a wildcard', () => {
+  const run = (cells, rows) => {
+    const e = book(Object.fromEntries(cells.map((v, i) => [`A${i + 1}`, `'${v}`])));
+    for (const [p, want] of rows) assert.equal(cells.map((_, i) => calc(e, `COUNTIF(A${i + 1},"${p}")`)).join(''), want, p);
+  };
+  run(['a~', 'a~b', 'a~~b', 'ab', 'a*b', 'a~*b', '~', '~~'], [
+    ['a~', '10000000'], ['a~b', '01000000'], ['a~~b', '00100000'], ['a~~', '00000000'], ['~', '00000010'], ['~~', '00000001'],
+    ['a~*b', '00001000'], ['a~~*b', '01100100'], ['*~', '11111111'], ['~*', '00000000'], ['a~?b', '00000000'], ['a?b', '01001000'], ['a*b', '01111100'],
+  ]);
+  run(['a~b', 'ab', 'a~bc', 'abc', 'a~~b', '~ab', 'a~', 'a~~'], [
+    ['a~b*', '01010000'], ['*a~b', '01000100'], ['a~bc?', '00000000'], ['~a*', '11111011'], ['a*~', '11111011'], ['a*~~', '00000011'], ['?~', '00000000'], ['a~~?', '10000001'],
+  ]);
+  assert.equal(C.lib.wildcard('a~*')('A*'), true);
+  assert.equal(C.lib.wildcard('a~*')('ab'), false);
+});
