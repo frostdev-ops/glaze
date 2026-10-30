@@ -56,20 +56,24 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   let docLib = null;
   const pdfdoc = () => (typeof globalThis.GZ_PDF_DOC?.use === 'function' ? (docLib ||= pdfjs().then((P) => GZ_PDF_DOC.use(P, GET))) : null);
   // bytes (a copy goes to the worker) → { task, doc }, or a RangeError(UNREAD) for a file that is no PDF, is locked, has
-  // too many pages or is pure XFA.
+  // too many pages, is pure XFA or has no first page to show (pdf.js's viewer would wait for it).
   const read = async (bytes) => {
     const lib2 = pdfdoc();
+    let task, doc;
     if (lib2) {
       const pdf = await lib2;
-      try { const { doc } = await pdf.open(bytes); return { task: doc.loadingTask, doc }; } catch { throw new RangeError(UNREAD); }
+      try { ({ doc } = await pdf.open(bytes)); task = doc.loadingTask; } catch { throw new RangeError(UNREAD); }
+    } else {
+      const P = await pdfjs();
+      task = P.getDocument({ ...GET, data: bytes.slice() });
+      try { doc = await task.promise; } catch { await task.destroy().catch(() => {}); throw new RangeError(UNREAD); }
     }
-    const P = await pdfjs();
-    const task = P.getDocument({ ...GET, data: bytes.slice() });
-    let doc;
-    try { doc = await task.promise; } catch { await task.destroy().catch(() => {}); throw new RangeError(UNREAD); }
     try {
-      const [{ info }, fields] = await Promise.all([doc.getMetadata(), doc.getFieldObjects()]);
-      if (doc.numPages > PAGES || pureXfa(info, fields)) throw new RangeError(UNREAD);
+      if (!lib2) {
+        const [{ info }, fields] = await Promise.all([doc.getMetadata(), doc.getFieldObjects()]);
+        if (doc.numPages > PAGES || pureXfa(info, fields)) throw new RangeError(UNREAD);
+      }
+      await doc.getPage(1);
     } catch (e) { await task.destroy().catch(() => {}); throw e instanceof RangeError ? e : new RangeError(UNREAD); }
     return { task, doc };
   };
