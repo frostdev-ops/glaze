@@ -48,6 +48,43 @@ test('a record without a kind still versions as a paper', async () => {
   assert.equal(version.kind, 'paper');
 });
 
+test('file versions retain bytes and metadata through kind switches and restores', async () => {
+  let time = 1000;
+  const P = PA.open(store(), () => ++time);
+  const draft = doc('Before the PDF.');
+  await P.save(KEY, { doc: draft, format: 'mla9' });
+  const pdf = { kind: 'pdf', doc: null, file: 'JVBERi0=', size: 5, pages: 2, thumb: 'data:image/png;base64,AA==' };
+  const imported = await P.save(KEY, pdf, { reason: 'import' });
+  const sending = (await P.save(KEY, {}, { reason: 'sending' })).version;
+  assert.equal(sending.file, pdf.file, 'a submitted PDF version contains its file');
+  assert.ok(sending.bytes >= pdf.file.length, 'the version cap counts the file');
+  assert.equal((await P.versions(KEY)).find((v) => v.id === sending.id).file, undefined, 'version listings omit file payloads');
+  const back = await P.restore(KEY, imported.version.id);
+  assert.equal(back.paper.kind, 'paper');
+  assert.deepEqual(back.paper.doc, draft);
+  assert.equal(back.paper.file, null, 'a restored paper has no leftover PDF');
+  assert.equal(back.version.file, pdf.file, 'the replaced PDF is restorable too');
+  const again = await P.restore(KEY, sending.id);
+  for (const [field, value] of Object.entries(pdf)) assert.deepEqual(again.paper[field], value, field);
+  const deck = { kind: 'slides', doc: null, file: 'UEsDBA==', size: 4, ext: '.ppsx', slides: 3, text: 'Deck words', words: 2 };
+  const changed = await P.save(KEY, deck, { reason: 'import' });
+  assert.equal(changed.version.kind, 'pdf');
+  assert.equal(changed.version.file, pdf.file, 'PDF to deck retains the PDF');
+  const deckVersion = (await P.save(KEY, {}, { reason: 'sending' })).version;
+  await P.restore(KEY, sending.id);
+  assert.equal((await P.get(KEY)).ext, null, 'the PDF has no leftover slideshow extension');
+  const restored = await P.restore(KEY, deckVersion.id);
+  for (const [field, value] of Object.entries(deck)) assert.deepEqual(restored.paper[field], value, field);
+});
+
+test('a legacy file version without its payload cannot replace the current record', async () => {
+  const s = store(), P = PA.open(s, () => 1000);
+  await P.save(KEY, { doc: doc('Keep this draft.') });
+  await s.set({ [`writerVersions:${KEY}`]: [{ id: 'old-pdf', kind: 'pdf', doc: null, at: 1, bytes: 4 }] });
+  assert.equal(await P.restore(KEY, 'old-pdf'), null);
+  assert.deepEqual((await P.get(KEY)).doc, doc('Keep this draft.'));
+});
+
 // writer-kinds.js in a frame of its own: the frame, the settings and the submit library it reads.
 const kinds = (w = {}) => {
   const ctx = vm.createContext({ console, setTimeout, clearTimeout, document: { querySelector: () => null, getElementById: () => null },
