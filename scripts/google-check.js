@@ -278,6 +278,22 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
     await own.close();
     await lms.close();
 
+    // Safari's native flow, the worker's answers stood in for: Settings asks for no identity permission (Safari has none), and
+    // asks again while the app's sign-in is pending.
+    await sw.evaluate(() => {
+      globalThis.__gzNative = { status: google.status, connect: google.connect, connects: 0 };
+      google.status = async () => ({ ok: true, flow: 'native', email: __gzNative.connects >= 3 ? 'student@icloud.com' : null });
+      google.connect = async () => (++__gzNative.connects < 3 ? { ok: false, why: 'pending' } : { ok: true, email: 'student@icloud.com' });
+    });
+    await open();
+    await until(() => row.isVisible(), 'the row, native');
+    await page.locator('#gdrive-connect').click();
+    await until(async () => (await page.locator('#gdrive-who').textContent()) === 'student@icloud.com', 'connected, native', 30000);
+    ok(await sw.evaluate(() => __gzNative.connects) === 3, 'native: Settings asks again while the sign-in is pending, until it\'s done');
+    ok(JSON.stringify(await page.evaluate(() => __gz.asked)) === '[]', 'and asks for no identity permission');
+    ok(!(await page.locator('#hint').textContent()).includes("didn't connect"), 'and shows no failure while it waits');
+    await sw.evaluate(() => { google.status = __gzNative.status; google.connect = __gzNative.connect; });
+
     // Who may ask: a page Glaze doesn't trust for this (the pop-up) is refused.
     const popup = await ctx.newPage();
     await popup.goto(`chrome-extension://${id}/popup.html`);

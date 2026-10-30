@@ -453,6 +453,12 @@ test('pick: frostdev.io first, its GitHub Pages copy when it doesn\'t load, the 
   assert.deepEqual(await harness().g.pick(), { ok: false, why: 'connect' });
 });
 
+test('the worker gives lib/google.js a way to open the sign-in tab the student taps (iOS), from the worker', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
+  const env = src.slice(src.indexOf('google = GZ_GOOGLE.create({'), src.indexOf('});', src.indexOf('google = GZ_GOOGLE.create({')));
+  assert.match(env, /open: \(url\) => chrome\.tabs\.create\(\{ url \}\)/);
+});
+
 test('the worker answers glaze:google from Settings only (pick from Glaze\'s own pages), loading lib/google.js on first use', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
   assert.match(src, /globalThis\.addEventListener\?\.\('install', \(\) => importScripts\('oauth\.js', 'google-config\.js', 'google\.js'\)\)/);
