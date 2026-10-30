@@ -6,12 +6,13 @@
 //                 look { look }, context { context }, focus, html { html } (Ultra changed its own editor: a post went, a
 //                 draft came back); and for the frame's later parts (handle): quote (writer-compose.js), ai and
 //                 attachments (writer-ai.js), focus-mode (writer-paper.js), import:file (writer-import.js), submit:*
-//                 (writer-submit.js);
+//                 (writer-submit.js); in view mode (a Blackboard preview, features/bbpreview.js) init { mode: 'view', kind,
+//                 view { url, expires, name, href }, look, locale } and view:url (writer-kinds.js);
 //   frame → page: ready, height { px }, change { html, text, words, delta } (compose's; a paper's compact box sends its
 //                 own: writer-paper.js; delta: its Quill ops, what the page writes into Ultra's editor), send (Mod-Enter),
 //                 native (back to Blackboard's editor; with a reason, the box holds what Writer can't keep and nothing was
 //                 written); and the later parts' attachments, focus-mode, view { full, px, from, to }, room { on } and
-//                 submit:*.
+//                 submit:*; in view mode view:shown, view:failed, view:renew and view:esc.
 // Besides that pass it asks the extension only for the student's Writer settings (lib/writer-settings.js); its later
 // parts keep the paper (lib/writer-papers.js) and ask for proofing and AI on their own channels.
 (() => {
@@ -47,11 +48,12 @@
     locale = typeof tag === 'string' && tag ? tag : 'en';
     const file = GZ_I18N.file(locale);
     label();
-    if (!file || globalThis.GZ_LANGS?.[file.slice(5, -3)]) return;
+    if (!file || globalThis.GZ_LANGS?.[file.slice(5, -3)]) return Promise.resolve();
     const s = document.createElement('script');
     s.src = file;
-    s.onload = label;
+    const loaded = new Promise((ok) => { s.onload = () => { label(); ok(); }; s.onerror = ok; });
     document.head.append(s);
+    return loaded;
   };
   let px = 0;
   const height = () => {
@@ -147,8 +149,11 @@
   };
   const ON = {
     init: (m) => {
-      if (ed || refused) return;
+      if (ed || refused || root.dataset.mode === 'view') return;
       look(m.look);
+      // A file shown by its address (features/bbpreview.js: a Blackboard preview), no editor: its kind's viewer
+      // (writer-kinds.js), once the page's words are in.
+      if (m.mode === 'view') { root.dataset.mode = 'view'; root.dataset.kind = ''; lang(m.locale).then(() => emit('view', m)); return; }
       root.dataset.mode = m.mode === 'paper' ? 'paper' : 'compose';
       root.dataset.kind = typeof m.kind === 'string' ? m.kind : '';
       setContext(m.context);
@@ -177,10 +182,10 @@
     },
   };
   // What later parts of the frame (proofing, targets, AI) build on: each is its own script after this one in writer.html.
-  // on(event, fn): 'count' (words; owns the target slot), 'ready' (editor, init), 'change' (onChange's report), 'context' (context), 'look' (look); handle(type, fn)
+  // on(event, fn): 'count' (words; owns the target slot), 'ready' (editor, init), 'change' (onChange's report), 'context' (context), 'look' (look), 'view' (init, view mode); handle(type, fn)
   // takes a page → frame message type this file doesn't; plugin(p) adds a ProseMirror plugin (before the editor exists, it
   // goes in at create); slot(name) is a bottom-bar or toolbar slot; item(label, fn) adds a ⋯ menu entry.
-  const hooks = { ready: [], change: [], context: [], look: [], count: [] }, plugins = [];
+  const hooks = { ready: [], change: [], context: [], look: [], count: [], view: [] }, plugins = [];
   const emit = (ev, ...a) => { for (const fn of hooks[ev]) try { fn(...a); } catch (e) { console.error(e); } };
   globalThis.GZ_WRITER_FRAME = {
     editor: () => ed, context: () => context, say, t, mode: () => root.dataset.mode, kind: () => root.dataset.kind,

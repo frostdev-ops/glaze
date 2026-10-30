@@ -915,7 +915,7 @@
   // Round buttons in the bottom-right gutter, top frame only: dark documents while a file preview is on screen (dark
   // palettes only), focus mode on a course document. features/docs.js, loaded where they can appear: a course document
   // with the switch on, or a file preview (on Ultra, in any frame: a same-origin preview's images are turned back).
-  const PREVIEWS = ultra ? '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe' : '#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe';
+  const PREVIEWS = ultra ? '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv)' : '#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe';
   const DOC = ultra ? '#site-wrap .document-content-root' : '#wiki_page_show .show-content, #assignment_show .description';
   const ICONS = { dark: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z', focus: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5', paint: 'M12 3.5c3.4 4 6 7 6 10.2a6 6 0 0 1-12 0c0-3.2 2.6-6.2 6-10.2z' };
   const docButton = (key, label, onClick) => {
@@ -943,6 +943,9 @@
     try { chrome.storage.sync.get('enhance', (r) => chrome.runtime.lastError || save !== darkSave || chrome.storage.sync.set({ enhance: { ...r.enhance, docPages: v } })); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
+    // Ultra's previews in Glaze's PDF viewer (features/bbpreview.js; not .gz-pv, its frame, in PREVIEWS); off restores.
+    if (globalThis.GZ_BB_PREVIEW_UI) GZ_BB_PREVIEW_UI.sync();
+    else if (ultra && observer && settings.enhance.bbPreviews && settings.writer.pdf && document.querySelector(PREVIEWS)) need('features/bbpreview.js', () => globalThis.GZ_BB_PREVIEW_UI).then(() => GZ_BB_PREVIEW_UI.sync(), () => {});
     // Read-only review is independently lazy, including when the reading tools are off.
     if (observer && /\/(?:student-submission-view|submissions\/\d+)\/?$/.test(location.pathname)) need('features/docreview.js', () => globalThis.GZ_DOCREVIEW).then(() => GZ_DOCREVIEW.sync(!!observer), () => {});
     else globalThis.GZ_DOCREVIEW?.sync(false);

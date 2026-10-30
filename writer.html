@@ -2,8 +2,9 @@
 <html lang="en">
 <meta charset="utf-8">
 <!-- Nothing but Glaze's own files: what is written here goes only to the page that opened the frame, over its channel. A PDF's
-     decoders may compile WebAssembly (pdf.js's local worker fallback) and a deck's pictures are blob: URLs (writer-kinds.js). -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+     decoders may compile WebAssembly (pdf.js's local worker fallback) and a deck's pictures are blob: URLs (writer-kinds.js). A
+     Blackboard preview's PDF is read from its presigned S3 address (features/bbpreview.js), the only other place it connects. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://*.amazonaws.com; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Glaze Writer</title>
 <link rel="stylesheet" href="lib/pm.css">
 <link rel="stylesheet" href="writer.css">

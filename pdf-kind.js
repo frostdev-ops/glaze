@@ -11,6 +11,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const url = (f) => chrome.runtime.getURL(f);
   const UNREAD = 'That file could not be read.', TOO_BIG = 'Choose a PDF smaller than 3 MB.';
   const PAGES = 500;
+  const TOO_BIG_SAVE = 'This PDF is too big to save.';
 
   // ---- storage: the one place a PDF's bytes are kept and read back. For now a base64 `file` field in the paper record
   // (chrome.storage.local through the worker, lib/writer-papers.js), within the record's 4 MB: at most 3 MB of PDF. The
@@ -158,15 +159,19 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
   // ---- the viewer. host: an assignment's frame (writer-kinds.js view): { mount, t, title, tools }, the viewer in mount with
   // the assignment's title and the frame's tools (Submit…) before ⋯, no way back to Documents; → its surface.
-  // o: papers.js's { fresh } (a kind that opens a new document empty), or view's { host }.
-  const edit = async (key, { host = null } = {}) => {
+  // o: papers.js's { fresh } (a kind that opens a new document empty), or view's { host }, or show's { host, src }: a PDF
+  // at an address (src { url, expires, name, href }: a Blackboard preview, writer-kinds.js) read straight by pdf.js, its
+  // ranges as needed, nothing kept and no size cap, its fields shown but not filled; Open original (href) and Save to
+  // Documents (the bytes through importFile, the kind's cap) in place of ⋯. host then also has renew() (→ a fresh
+  // { url, expires } or null: the address lasts an hour), shown() once page 1 is drawn, failed(reason), esc().
+  const edit = async (key, { host = null, src = null } = {}) => {
     const root = document.documentElement;
     const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'pdf';
     await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/pdf-l10n.js']);
     const sheet = (href) => new Promise((ok) => { document.head.append(h('link', { rel: 'stylesheet', href, onload: ok, onerror: ok })); });
     const st = papers(), PA = GZ_WRITER_PAPERS;
-    let rec = await st.get(key);
+    let rec = src ? null : await st.get(key);
     const [P, V] = await Promise.all([pdfjs(), viewerjs(), sheet('lib/pdfjs/pdf_viewer.css')]);
 
     // The chrome: Documents and the title, the save state; zoom, find and ⋯; the pages.
@@ -178,17 +183,22 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const zoomLabel = h('span'), zoomB = btn({ id: 'gq-zoom', class: 'gp-box', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Zoom') }, zoomLabel, icon('caret'));
     const zoomIn = btn({ id: 'gq-zoom-in', class: 'gq-ib', title: t('Zoom in'), 'aria-label': t('Zoom in') }, icon('plus'));
     const findB = btn({ id: 'gq-find-b', class: 'gq-ib', title: t('Find'), 'aria-label': t('Find'), 'aria-expanded': 'false', 'aria-controls': 'gq-find' }, icon('search'));
-    const moreB = btn({ class: 'gq-ib gq-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('More'), 'aria-label': t('More') }, icon('dots'));
+    const moreB = src ? null : btn({ class: 'gq-ib gq-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('More'), 'aria-label': t('More') }, icon('dots'));
+    // The page you're on, and a page to go to: Enter or leaving the box jumps; Esc puts it back.
+    const pageIn = h('input', { id: 'gq-page', class: 'gq-page', type: 'text', inputmode: 'numeric', autocomplete: 'off', spellcheck: 'false', size: '3', 'aria-label': t('Page number') });
+    const pageOf = h('span', { id: 'gq-pages', class: 'gq-pages' });
+    const origB = src && /^https?:/.test(src.href || '') ? btn({ class: 'gp-tbtn', 'data-act': 'original' }, t('Open original')) : null;
+    const saveB = src ? btn({ class: 'gp-submit', 'data-act': 'save' }, t('Save to Documents')) : null;
     const q = h('input', { id: 'gq-find-q', type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: t('Find'), 'aria-label': t('Find') });
     const count = h('span', { id: 'gq-find-n', class: 'gq-find-n', role: 'status' });
     const prevB = btn({ class: 'gq-ib', title: t('Previous'), 'aria-label': t('Previous') }, icon('up')), nextB = btn({ class: 'gq-ib', title: t('Next'), 'aria-label': t('Next') }, icon('down'));
     const closeFind = btn({ class: 'gq-ib', title: t('Close'), 'aria-label': t('Close') }, icon('x'));
     const findBar = h('div', { id: 'gq-find', class: 'gq-find', role: 'search', hidden: true }, q, count, prevB, nextB, closeFind);
-    const pagesEl = h('div', { class: 'pdfViewer' }), scroll = h('div', { class: 'gq-scroll', role: 'region', tabindex: '0', 'aria-label': rec?.title || t('PDF') }, pagesEl);
+    const pagesEl = h('div', { class: 'pdfViewer' }), scroll = h('div', { class: 'gq-scroll', role: 'region', tabindex: '0', 'aria-label': src?.name || rec?.title || t('PDF') }, pagesEl);
     const said = h('p', { class: 'gq-said', role: 'alert', hidden: true });
     const ui = h('div', { class: 'gp gp-standalone gq' },
       h('header', { class: 'gp-top' }, back, h('h1', {}, titleIn || host?.title?.() || rec?.title || t('Untitled document')), h('span', { class: 'grow' }), state),
-      h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('PDF') }, zoomOut, zoomB, zoomIn, h('span', { class: 'gp-sepv' }), findB, h('span', { class: 'grow' }), ...(host?.tools || []), moreB),
+      h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('PDF') }, zoomOut, zoomB, zoomIn, h('span', { class: 'gp-sepv' }), pageIn, pageOf, h('span', { class: 'gp-sepv' }), findB, h('span', { class: 'grow' }), ...(host?.tools || []), origB, saveB, moreB),
       findBar, h('div', { class: 'gq-work' }, scroll, said));
     (host?.mount || document.body).append(ui);
     if (titleIn) titleIn.value = rec?.title || '';
@@ -198,20 +208,53 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const bus = new V.EventBus(), links = new V.PDFLinkService({ eventBus: bus, externalLinkTarget: V.LinkTarget.BLANK, externalLinkRel: 'noopener noreferrer nofollow' });
     const finder = new V.PDFFindController({ eventBus: bus, linkService: links });
     const l10n = GZ_PDF_L10N.make({ t, lang: locale() });
-    const viewer = new V.PDFViewer({ container: scroll, viewer: pagesEl, eventBus: bus, linkService: links, findController: finder, l10n, annotationMode: P.AnnotationMode.ENABLE_FORMS,
+    const viewer = new V.PDFViewer({ container: scroll, viewer: pagesEl, eventBus: bus, linkService: links, findController: finder, l10n, annotationMode: src ? P.AnnotationMode.ENABLE : P.AnnotationMode.ENABLE_FORMS,
       annotationEditorMode: P.AnnotationEditorType.DISABLE, enablePermissions: true, imageResourcesPath: url('lib/pdfjs/images/'), removePageBorders: false });
     links.setViewer(viewer);
     l10n.translate(scroll);
-    const refuse = () => { said.textContent = t(UNREAD); said.hidden = false; for (const b of [zoomOut, zoomB, zoomIn, findB]) b.disabled = true; };
-    const bytes = STORE.get(rec);
+    const refuse = () => { said.textContent = t(UNREAD); said.hidden = false; for (const b of [zoomOut, zoomB, zoomIn, findB, pageIn, saveB]) if (b) b.disabled = true; };
+    // An address: renewed first when it is about to end, and once more when pdf.js is refused (it ran out meanwhile).
+    // total: the file's length as pdf.js learns it, so Save to Documents refuses a file past the cap before reading it.
+    let total = 0;
+    const fetched = async (again = true) => {
+      if (src.expires && src.expires - Date.now() < 30e3) Object.assign(src, await host.renew?.() || {});
+      const t2 = P.getDocument({ ...GET, url: src.url, withCredentials: false });
+      t2.onProgress = ({ total: n }) => { if (n > 0) total = n; };
+      try {
+        const d = await t2.promise;
+        const [{ info }, fields] = await Promise.all([d.getMetadata(), d.getFieldObjects()]);
+        if (pureXfa(info, fields)) throw new RangeError(UNREAD);
+        await d.getPage(1);
+        return { task: t2, doc: d };
+      } catch (e) {
+        await t2.destroy().catch(() => {});
+        const fresh = again && !(e instanceof RangeError) && await host.renew?.();
+        if (fresh) { Object.assign(src, fresh); return fetched(false); }
+        throw e;
+      }
+    };
+    const bytes = src ? null : STORE.get(rec);
     let task = null, doc = null;
-    try { if (!bytes) throw new RangeError(UNREAD); ({ task, doc } = await read(bytes)); } catch { refuse(); }
+    try { if (src) ({ task, doc } = await fetched()); else { if (!bytes) throw new RangeError(UNREAD); ({ task, doc } = await read(bytes)); } } catch { refuse(); }
     const inited = new Promise((ok) => bus.on('pagesinit', ok, { once: true }));
+    const drawn = new Promise((ok) => bus.on('pagerendered', ok, { once: true }));
     if (doc) {
       bus.on('pagesinit', () => { viewer.currentScaleValue = 'page-width'; });
       viewer.setDocument(doc);
       links.setDocument(doc, null);
     }
+
+    // ---- the page box: the current page as you scroll, and / the count
+    const pageShow = () => { if (document.activeElement !== pageIn) pageIn.value = doc ? String(viewer.currentPageNumber || 1) : ''; pageOf.textContent = doc ? `/ ${doc.numPages}` : ''; };
+    const jump = () => { const n = Number.parseInt(pageIn.value, 10); if (doc && n >= 1 && n <= doc.numPages && n !== viewer.currentPageNumber) viewer.currentPageNumber = n; pageIn.value = doc ? String(viewer.currentPageNumber || 1) : ''; };
+    bus.on('pagechanging', pageShow);
+    bus.on('pagesinit', pageShow);
+    pageIn.addEventListener('focus', () => pageIn.select());
+    pageIn.addEventListener('change', jump);
+    pageIn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); jump(); pageIn.select(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); pageIn.value = doc ? String(viewer.currentPageNumber || 1) : ''; scroll.focus({ preventScroll: true }); }
+    });
 
     // ---- zoom: −, the box (Page width, Whole page, percents), +; Ctrl or ⌘ with + and −
     const PRESETS = [['page-width', 'Page width'], ['page-fit', 'Whole page']], STEPS = [50, 75, 100, 125, 150, 200, 300];
@@ -248,7 +291,26 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     zoomB.addEventListener('click', () => openMenu(zoomB, [...PRESETS.map(([v, label]) => [t(label), () => { viewer.currentScaleValue = v; }, { 'data-zoom': v }]),
       ...STEPS.map((n) => [`${n}%`, () => { viewer.currentScaleValue = String(n / 100); }, { 'data-zoom': String(n) }])]));
     // ⋯: Export .pdf (the pages panel's bake and the tools come in later steps).
-    moreB.addEventListener('click', () => openMenu(moreB, [[t('Export .pdf'), () => { flush().then((ok) => ok && exportFile(key)).catch(() => say(t(UNREAD))); }, { 'data-act': 'export' }]]));
+    moreB?.addEventListener('click', () => openMenu(moreB, [[t('Export .pdf'), () => { flush().then((ok) => ok && exportFile(key)).catch(() => say(t(UNREAD))); }, { 'data-act': 'export' }]]));
+    // An address's file: the original in a new tab; the PDF into Documents as a new document, as an import makes one.
+    origB?.addEventListener('click', () => { window.open(src.href, '_blank', 'noopener,noreferrer'); });
+    saveB?.addEventListener('click', async () => {
+      if (!doc || saveB.disabled) return;
+      saveB.disabled = true;
+      say(t('Saving…'));
+      try {
+        if (total > STORE.max) throw new RangeError(TOO_BIG_SAVE);
+        const data = await doc.getData();
+        if (data.length > STORE.max) throw new RangeError(TOO_BIG_SAVE);
+        await importFile(new File([data], src.name || 'Document.pdf', { type: 'application/pdf' }));
+        say(t('Saved to Documents'));
+      } catch (e) {
+        const big = e instanceof RangeError && (e.message === TOO_BIG || e.message === TOO_BIG_SAVE);
+        if (!big) console.error(e);
+        say(t(big ? TOO_BIG_SAVE : 'Not saved. Try again in a moment.'));
+        saveB.disabled = false;
+      }
+    });
 
     // ---- find: pdf.js's find controller over the text layer, every hit highlighted, the current one counted
     const find = (type, back = false) => bus.dispatch('find', { source: findBar, type, query: q.value, caseSensitive: false, entireWord: false, matchDiacritics: false, highlightAll: true, findPrevious: back });
@@ -273,6 +335,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     document.addEventListener('keydown', (e) => {
       if (!e.defaultPrevented && e.key === 'Escape' && !findBar.hidden) { e.preventDefault(); e.stopPropagation(); showFind(false); }
     }, { signal });
+    // An address's viewer hands back an Esc nothing in it took (a menu, find, the page box): focus goes back to the page.
+    if (src) document.addEventListener('keydown', (e) => { if (!e.defaultPrevented && e.key === 'Escape') { e.preventDefault(); host.esc?.(); } }, { signal });
     // Ahead of the page's own: in an assignment's frame the parked paper's find (writer-find.js) takes Ctrl+F at the document.
     addEventListener('keydown', (e) => {
       if (e.defaultPrevented || !doc || !(MAC ? e.metaKey : e.ctrlKey) || e.altKey) return;
@@ -308,7 +372,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       })().finally(() => { saving = null; });
       return saving;
     };
-    if (doc) {
+    if (doc && !src) {
       const modified = () => { dirty = true; say(''); clearTimeout(timer); timer = setTimeout(flush, 1000); };
       doc.annotationStorage.onSetModified = modified;
       // pdf.js only calls onSetModified once until its current save finishes. Track each input as well, so a field
@@ -348,6 +412,10 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     if (doc) await inited;
     // papers-motion.js holds the page hidden until a document has drawn.
     globalThis.GZ_PAPERS_MOTION?.shown?.('paper');
+    if (src) {
+      const ok = !!doc && await Promise.race([drawn.then(() => true), new Promise((r) => setTimeout(r, 20000, false))]);
+      if (ok) host.shown?.(); else host.failed?.(doc ? 'draw' : 'read');
+    }
     // What an assignment's submit sheet sends (writer-submit.js): the PDF as saved, its fields filled.
     return { pages: () => doc?.numPages || 0, say, ready: () => !!doc, save: flush, dispose,
       file: async () => { if (!await flush()) throw new Error('not saved'); rec = await st.get(key); const bytes = STORE.get(rec); if (!bytes) throw new Error('no file'); return { bytes, mime: 'application/pdf', ext: '.pdf' }; } };
@@ -373,7 +441,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
   const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(DEFAULTS)))
     .then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.pdf === true, () => false);
-  GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: (key, host) => edit(key, { host }), into, says: { size: TOO_BIG, read: UNREAD }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
+  GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: (key, host) => edit(key, { host }), show: (src, host) => edit(null, { host, src: { ...src } }), into, says: { size: TOO_BIG, read: UNREAD }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
 
   return { STORE, pureXfa };
 })();
