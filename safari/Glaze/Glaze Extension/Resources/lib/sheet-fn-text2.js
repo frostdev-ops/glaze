@@ -156,7 +156,8 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
     } },
     SUBSTITUTE: { p: ['v', 'v', 'v', 'v'], min: 3, max: 4, fn: ([t, old, rep, instance], ctx) => {
       const s = text(t), o = text(old), r = text(rep);
-      if (!given(instance)) return o === '' ? s : capped(s.split(o).join(r));
+      // Left out, every instance; given empty, 0 (#VALUE!), as Excel takes it.
+      if (instance === undefined) return o === '' ? s : capped(s.split(o).join(r));
       const n = whole(instance, ctx);
       if (n < 1) throw ERR.VALUE;
       if (o === '') return s;
@@ -180,10 +181,15 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
     SEARCH: locate(true),
     SEARCHB: locate(true, true),
     EXACT: { p: ['v', 'v'], min: 2, max: 2, fn: ([a, b]) => text(a) === text(b) },
-    // Each letter after a non-letter upper case, every other letter lower.
+    // Each letter after a non-letter upper case, every other letter lower; one whose case is more than one character (ß)
+    // stays, as UPPER and LOWER keep it.
     PROPER: { p: ['v'], min: 1, max: 1, fn: ([t]) => {
       let s = '', prev = false;
-      for (const ch of text(t)) { const letter = /\p{L}/u.test(ch); s += letter ? (prev ? ch.toLowerCase() : ch.toUpperCase()) : ch; prev = letter; }
+      for (const ch of text(t)) {
+        const letter = /\p{L}/u.test(ch), x = letter ? (prev ? ch.toLowerCase() : ch.toUpperCase()) : ch;
+        s += [...x].length === 1 ? x : ch;
+        prev = letter;
+      }
       return capped(s);
     } },
     // Use CLEAN's documented portable ASCII 0-31 set. Mac Excel additionally strips U+0080-U+009F.

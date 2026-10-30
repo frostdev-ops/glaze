@@ -415,11 +415,16 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     };
     const cellAt = (r, c, sh = S()) => sh.rows.get(r)?.get(c) ?? null;
     const shownAt = (r, c) => display(cellAt(r, c), c)?.text ?? '';
+    const formulaCell = (f, r, c) => {
+      const cell = { t: 'n', v: 0, f: F.normalize(f) };
+      try { if (eng.dynamic(F.parse(f, r, c), S(), r, c)) Object.assign(cell, { a: M.cellName(r, c), cm: '1' }); } catch { /* keep invalid formulas as errors */ }
+      return cell;
+    };
     // What editing a cell starts from: its formula, or its value as it would be typed.
     const editText = (r, c) => {
       const x = cellAt(r, c);
       if (!x) return '';
-      if (x.f !== undefined) return `=${x.f}`;
+      if (x.f !== undefined) return `=${x.a === undefined ? eng.legacy(x.f, S(), r, c) : x.f}`;
       if (x.t === 'b') return x.v ? 'TRUE' : 'FALSE';
       if (x.t === 'e') return String(x.v);
       if (x.t === 'n') {
@@ -1406,7 +1411,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       const cells = [];
       for (const [r, c] of hits) {
         const x = cellAt(r, c), p = M.parseInput(swap(editText(r, c)), { date1904: wb.date1904 }), keep = x.s !== undefined ? { s: x.s } : {};
-        cells.push([r, c, !p ? (x.s !== undefined ? { t: 'z', s: x.s } : null) : p.f !== undefined ? { t: 'n', v: 0, f: F.normalize(p.f), ...keep } : { t: p.t, v: p.v, ...keep }]);
+        cells.push([r, c, !p ? (x.s !== undefined ? { t: 'z', s: x.s } : null) : p.f !== undefined ? { ...formulaCell(p.f, r, c), ...keep } : { t: p.t, v: p.v, ...keep }]);
       }
       if (!apply({ op: 'cells', sheet: S().id, cells }, { big: cells.length >= 100 })) return;
       say(t('{n} replaced', { n: cells.length }));
@@ -1441,12 +1446,12 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     document.addEventListener('cut', (e) => copyOut(e, true), { signal });
     const cellOf = (x, r, c) => {
       const formatted = (cell) => { if (x.fmt && cell.t === 'n') cell.s = M.internStyle(wb, { fmt: x.fmt }); return cell; };
-      if (x.formula) return formatted({ t: 'n', v: 0, f: F.normalize(fromR1C1(x.formula, r, c)) });
+      if (x.formula) return formatted(formulaCell(fromR1C1(x.formula, r, c), r, c));
       if (x.value !== undefined) return formatted(typeof x.value === 'number' ? { t: 'n', v: x.value } : typeof x.value === 'boolean' ? { t: 'b', v: x.value } : { t: 's', v: x.value });
       if (x.fmt === '@') return x.text ? { t: 's', v: x.text, s: M.internStyle(wb, { fmt: '@' }) } : null;
       const p = M.parseInput(x.text, { date1904: wb.date1904 });
       if (!p) return null;
-      const out = p.f !== undefined ? { t: 'n', v: 0, f: F.normalize(p.f) } : { t: p.t, v: p.v };
+      const out = p.f !== undefined ? formulaCell(p.f, r, c) : { t: p.t, v: p.v };
       const fmt = x.fmt && x.fmt !== 'General' ? x.fmt : p.fmt;
       if (fmt && out.t === 'n') out.s = M.internStyle(wb, { fmt });
       return out;

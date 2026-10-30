@@ -44,12 +44,13 @@ var GZ_SHEET_FN_MATH2 = globalThis.GZ_SHEET_FN_MATH2 || (() => {
     return Math.abs(r - k) < 1e-12 * Math.max(1, Math.abs(k)) && base ** k === x ? k : r;
   };
   const gcd = (a, b) => { while (b) [a, b] = [b, a % b]; return a; };
-  // GCD and LCM's arguments: whole numbers from 0 to 2^53; text or booleans in a range are #VALUE!.
+  const trig = (x, f) => { if (Math.abs(x) >= 2 ** 27) throw ERR.NUM; return f(x); };
+  // GCD and LCM's arguments: whole numbers from 0 to 2^53; a boolean, or text in a range, is #VALUE!.
   const naturals = (args, ctx) => {
     const out = [];
     for (const a of args) each(a, ctx, (v, direct) => {
       if (isErr(v)) throw v;
-      if (!direct && typeof v !== 'number') throw ERR.VALUE;
+      if ((!direct && typeof v !== 'number') || typeof v === 'boolean') throw ERR.VALUE;
       const n = Math.trunc(direct ? num(v, ctx) : v);
       if (n < 0 || n >= MAX_INT) throw ERR.NUM;
       out.push(n);
@@ -122,7 +123,11 @@ var GZ_SHEET_FN_MATH2 = globalThis.GZ_SHEET_FN_MATH2 || (() => {
     if (!xs.length || k <= 0 || k >= 1 || h < 1 || h > xs.length) throw ERR.NUM;
     return lo < xs.length ? xs[lo - 1] + (h - lo) * (xs[lo] - xs[lo - 1]) : xs[lo - 1];
   };
-  const ranked = (xs, k, desc) => { const i = Math.ceil(k); if (i < 1 || i > xs.length) throw ERR.NUM; return desc ? xs[xs.length - i] : xs[i - 1]; };
+  // k as LARGE and SMALL take it: below 1 or past the count refused, then LARGE's rounded up and SMALL's truncated.
+  const ranked = (xs, k, desc) => {
+    if (k < 1 || k > xs.length) throw ERR.NUM;
+    return desc ? xs[xs.length - Math.ceil(k)] : xs[Math.trunc(k) - 1];
+  };
   // Functions 1-13 by number, on the values a reference gives; 14-19 also take k.
   const AGG = {
     1: (vals) => { const xs = numeric(vals); if (!xs.length) throw ERR.DIV0; return sum(xs) / xs.length; },
@@ -238,7 +243,8 @@ var GZ_SHEET_FN_MATH2 = globalThis.GZ_SHEET_FN_MATH2 || (() => {
     PI: { p: [], min: 0, max: 0, fn: () => Math.PI },
     RADIANS: unary((x) => (x * Math.PI) / 180),
     DEGREES: unary((x) => (x * 180) / Math.PI),
-    SIN: unary(Math.sin), COS: unary(Math.cos), TAN: unary(Math.tan), ATAN: unary(Math.atan),
+    // Excel refuses SIN, COS and TAN of a magnitude from 2^27 up, as COT, CSC and SEC.
+    SIN: unary((x) => trig(x, Math.sin)), COS: unary((x) => trig(x, Math.cos)), TAN: unary((x) => trig(x, Math.tan)), ATAN: unary(Math.atan),
     ASIN: domain((x) => x >= -1 && x <= 1, Math.asin),
     ACOS: domain((x) => x >= -1 && x <= 1, Math.acos),
     // Excel's order: the x coordinate first.

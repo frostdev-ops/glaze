@@ -15,6 +15,8 @@ var GZ_SHEET_FN_TEXT = globalThis.GZ_SHEET_FN_TEXT || (() => {
   const part = (s, from, n) => { const cs = chars(s); return typeof cs === 'string' ? cs.substr(from, n) : cs.slice(from, from + n).join(''); };
   const count = (v, ctx) => { const n = Math.trunc(num(v, ctx)); if (n < 0) throw ERR.VALUE; return n; };
 
+  // Upper or lower case a character at a time, as Excel does: a character whose case is more than one (ß, ﬁ) stays.
+  const cased = (s, up) => { let out = ''; for (const ch of s) { const x = up ? ch.toUpperCase() : ch.toLowerCase(); out += [...x].length === 1 ? x : ch; } return out; };
   const FNS = {
     CONCAT: { p: ['r'], min: 1, fn: (args, ctx) => {
       let s = '';
@@ -35,8 +37,8 @@ var GZ_SHEET_FN_TEXT = globalThis.GZ_SHEET_FN_TEXT || (() => {
     LEN: { p: ['v'], min: 1, max: 1, fn: ([s]) => chars(text(s)).length },
     // Excel's TRIM takes only the space character: none at either end, one between words.
     TRIM: { p: ['v'], min: 1, max: 1, fn: ([s]) => text(s).replace(/ {2,}/g, ' ').replace(/^ | $/g, '') },
-    UPPER: { p: ['v'], min: 1, max: 1, fn: ([s]) => text(s).toUpperCase() },
-    LOWER: { p: ['v'], min: 1, max: 1, fn: ([s]) => text(s).toLowerCase() },
+    UPPER: { p: ['v'], min: 1, max: 1, fn: ([s]) => cased(text(s), true) },
+    LOWER: { p: ['v'], min: 1, max: 1, fn: ([s]) => cased(text(s), false) },
     TEXT: { p: ['v', 'v'], min: 2, max: 2, fn: ([v, fmt], ctx) => {
       const code = text(fmt);
       let value = v;

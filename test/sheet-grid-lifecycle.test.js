@@ -61,13 +61,17 @@ const frame = (options = {}) => {
 };
 
 test('beforeunload protects uncommitted cell text with the browser prompt and saves it; clean views do not prompt', async () => {
-  const f = frame();
+  let release;
+  const compression = new Promise((resolve) => { release = resolve; });
+  const f = frame({ SD: { ...SD, pack: async (wb) => { await compression; return SD.pack(wb); } } });
   assert.equal(f.unload().prevented, false);
   f.type('draft');
   const leaving = f.unload();
   assert.equal(leaving.prevented, true);
   assert.equal(leaving.returnValue, '', 'only the browser supplies prompt text');
+  release();
   const got = await until(() => SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY));
+  assert.ok(got?.wb, 'the unload save finishes');
   assert.equal(got.wb.sheets[0].rows.get(0).get(0).v, 'draft');
   assert.equal(f.unload().prevented, false);
 });
@@ -122,6 +126,53 @@ test('HTML paste retains number formats on Google Sheets numeric values and form
   assert.equal(f.wb.styles[row.get(0).s]?.fmt, '0%');
   assert.equal(f.wb.styles[row.get(1).s]?.fmt, '0%');
   assert.equal(row.get(1).f, 'A1*2');
+});
+
+test('plain text and HTML formula paste use dynamic evaluation and keep dependencies through undo and redo', () => {
+  for (const html of ['', '<table><tr><td data-sheets-formula="=SUM((R1C1:R5C1&gt;2)*R1C2:R5C2)">0</td></tr></table>']) {
+    const wb = M.workbook(), sh = wb.sheets[0];
+    for (let r = 0; r < 5; r++) sh.rows.set(r, new Map([[0, { t: 'n', v: r + 1 }], [1, { t: 'n', v: 10 }]]));
+    const f = frame({ wb });
+    f.key('Tab'); f.key('Tab');
+    f.fire(f.el('gx-grid'), 'paste', { clipboardData: { getData: (kind) => kind === 'text/html' ? html : '=SUM((A1:A5>2)*B1:B5)' } });
+    assert.deepEqual(sh.rows.get(0).get(2), { t: 'n', v: 30, f: html ? 'SUM(($A$1:$A$5>2)*$B$1:$B$5)' : 'SUM((A1:A5>2)*B1:B5)', a: 'C1', cm: '1' });
+    f.key('z', { ctrlKey: true }); assert.equal(sh.rows.get(0).get(2), undefined);
+    f.key('y', { ctrlKey: true }); assert.equal(sh.rows.get(0).get(2).v, 30);
+    f.key('ArrowLeft'); f.key('ArrowDown'); f.key('ArrowDown'); f.type('20'); f.key('Enter');
+    assert.equal(sh.rows.get(0).get(2).v, 40, 'a precedent outside the formula row recalculates it');
+    f.key('z', { ctrlKey: true }); assert.equal(sh.rows.get(0).get(2).v, 30);
+    f.key('y', { ctrlKey: true }); assert.equal(sh.rows.get(0).get(2).v, 40);
+  }
+});
+
+test('editing a legacy range formula shows explicit intersection and preserves its row unless @ is removed', () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  sh.rows.set(0, new Map([[1, { t: 'n', v: 3 }]]));
+  sh.rows.set(4, new Map([[0, { t: 'n', v: 0, f: 'B:B*2' }], [1, { t: 'n', v: 7 }]]));
+  const f = frame({ wb });
+  for (let i = 0; i < 4; i++) f.key('ArrowDown');
+  assert.equal(sh.rows.get(4).get(0).v, 14);
+  assert.equal(f.el('gx-formula').value, '=@B:B*2');
+  f.key('F2'); assert.equal(f.el('gx-edit').value, '=@B:B*2'); f.key('Enter');
+  assert.equal(sh.rows.get(4).get(0).v, 14);
+  assert.equal(sh.rows.get(4).get(0).a, undefined);
+  f.key('ArrowUp'); f.type('=B:B*2'); f.key('Enter');
+  assert.equal(sh.rows.get(4).get(0).v, 6, 'removing @ opts into dynamic evaluation');
+  assert.equal(sh.rows.get(4).get(0).a, 'A5');
+  f.key('z', { ctrlKey: true }); assert.equal(sh.rows.get(4).get(0).v, 14);
+});
+
+test('Replace all keeps a dynamic formula dynamic and recalculates the replaced expression', () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  for (let r = 0; r < 3; r++) sh.rows.set(r, new Map([[0, { t: 'n', v: r + 1 }], [1, { t: 'n', v: 10 }]]));
+  const f = frame({ wb });
+  f.key('Tab'); f.key('Tab'); for (let r = 0; r < 4; r++) f.key('ArrowDown');
+  f.type('=SUM((A1:A3>2)*B1:B3)'); f.key('Enter');
+  f.el('gx-find-q').value = '>2'; f.fire(f.el('gx-find-q'), 'input');
+  f.el('gx-rep-q').value = '>1'; f.fire(f.el('gx-rep-all'), 'click');
+  assert.deepEqual(sh.rows.get(4).get(2), { t: 'n', v: 20, f: 'SUM((A1:A3>1)*B1:B3)', a: 'C5', cm: '1' });
+  f.key('z', { ctrlKey: true }); assert.equal(sh.rows.get(4).get(2).v, 10);
+  f.key('y', { ctrlKey: true }); assert.equal(sh.rows.get(4).get(2).v, 20);
 });
 
 test('the last shown sheet cannot be deleted while every other sheet is hidden', () => {
