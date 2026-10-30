@@ -345,6 +345,21 @@ const fixture = (extra = []) => {
     check(pv.pages === 9 && pv.size === '1280px 720px' && pv.printed === 3, `Ctrl+P prints the slides (${JSON.stringify(pv)})`);
     check(await afterPrint(), 'and its view goes after');
 
+    // A picture that never fires load or error still releases printing at the bounded wait.
+    await page.evaluate(() => {
+      globalThis.printImageListen = Element.prototype.addEventListener;
+      Element.prototype.addEventListener = function (type, ...args) {
+        if (this.matches('img, image') && this.closest('.gs-print') && ['load', 'error'].includes(type)) return;
+        return globalThis.printImageListen.call(this, type, ...args);
+      };
+    });
+    await page.focus('#gs-canvas');
+    await page.keyboard.press('Control+p');
+    pv = await until(printView, 'printing despite a picture with no load or error event', 30000);
+    check(pv.printed === 4 && pv.loaded < pv.pics, 'a picture that never loads cannot hang printing');
+    check(await afterPrint(), 'the timed-out picture leaves no print rule behind');
+    await page.evaluate(() => { Element.prototype.addEventListener = globalThis.printImageListen; delete globalThis.printImageListen; });
+
     // ---- the ⋯ menu: Export .pptx gives back the bytes
     await page.click('.gs-more');
     const items = await until(() => page.evaluate(() => [...document.querySelectorAll('.gs-menu [role="menuitem"]')].map((b) => b.textContent)), 'the ⋯ menu');

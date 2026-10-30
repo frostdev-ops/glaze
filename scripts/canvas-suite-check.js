@@ -129,6 +129,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     const seen = () => page.evaluate(() => JSON.stringify({ glaze: [...document.documentElement.attributes].map((a) => a.name).filter((n) => n.startsWith('data-gz')).length, tools: document.getElementById('gz-doc-tools')?.outerHTML.slice(0, 300) || null,
       buttons: document.querySelectorAll('.gz-co, [data-gz="open"]').length, preview: !!document.querySelector('#doc_preview iframe') })).then((x) => `${x}; errors ${JSON.stringify(errors)}`);
     const shot = async (name) => { await page.screenshot({ path: path.join(out, name) }); };
+    const storedDocs = () => sw.evaluate(async () => Object.fromEntries(Object.entries(await chrome.storage.local.get(null)).filter(([k]) => /^writer(?:Paper|Versions|Sheet)/.test(k))));
     const frameOf = async (sel = 'iframe.gz-co-frame') => { const el = await page.$(sel); return el && el.contentFrame(); };
     const gz = (sel = 'iframe.gz-co-frame') => page.evaluate((sel) => { const f = document.querySelector(sel); if (!f) return null; const cs = getComputedStyle(f); return { shown: cs.display === 'block' && cs.opacity === '1' && f.getBoundingClientRect().height > 300, n: document.querySelectorAll('iframe.gz-co-frame').length }; }, sel);
 
@@ -176,6 +177,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     await until(() => page.evaluate(() => document.querySelectorAll('.gz-co').length === 5), async () => `buttons by the five rows Glaze opens (${await page.evaluate(() => document.querySelectorAll('.gz-co').length)})`);
     const rows = await page.evaluate(() => [80, 81, 82, 83, 84, 85].map((n) => document.querySelector(`#context_module_item_${n} .gz-co`)?.textContent || ''));
     check(JSON.stringify(rows) === JSON.stringify(['Open in Glaze', 'Open in Glaze', 'Open in Glaze', 'Open in Glaze', '', 'Open in Glaze']), `Open in Glaze by the .pptx, .pdf and .csv rows, none by the .docx (${JSON.stringify(rows)})`);
+    const beforeDeck = await storedDocs();
     await page.click(rowB(80));
     await until(async () => (await gz())?.shown, 'the slides viewer below the deck\'s row');
     fr = await until(() => frameOf(), 'the slides viewer\'s document');
@@ -189,6 +191,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     await fr.press('#gs-canvas', 'Escape');
     await until(() => page.evaluate(() => document.activeElement === document.querySelector('#context_module_item_80 .gz-co')), 'Esc in the viewer returns to the button');
     check(true, 'Esc in the viewer returns to the row\'s button');
+    check(JSON.stringify(await storedDocs()) === JSON.stringify(beforeDeck), 'the unsaved deck writes no papers, versions, parts or thumbnails');
     // Save to Documents keeps the deck as a document of the slides kind.
     await fr.click('[data-act="save"]');
     await until(() => fr.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent === 'Saved to Documents'), async () => `Saved to Documents (says "${await fr.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent)}"; errors ${JSON.stringify(errors)})`);
@@ -200,6 +203,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     // The CSV: the grid from memory, an edit kept nowhere, Save to Documents a spreadsheet.
     const papersNow = () => sw.evaluate(async () => Object.entries(await chrome.storage.local.get(null)).filter(([k]) => k.startsWith('writerPaper:')).map(([, v]) => ({ kind: v.kind || 'paper', title: v.title })));
     const had = (await papersNow()).length;
+    const beforeSheet = await storedDocs();
     await page.click(rowB(85));
     await until(async () => (await gz())?.shown, 'the grid below the CSV\'s row');
     fr = await until(() => frameOf(), 'the grid\'s document');
@@ -215,6 +219,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     await until(async () => (await cell(1, 1)) === '95', 'the edit on the screen');
     const afterEdit = await fr.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent || '');
     check(afterEdit === '' && (await papersNow()).length === had, `an edit shows and is kept nowhere, nor said to be saving (state "${afterEdit}")`);
+    check(JSON.stringify(await storedDocs()) === JSON.stringify(beforeSheet), 'the unsaved sheet edit writes no papers, versions, parts or thumbnails');
     await fr.click('[data-act="save"]');
     await until(() => fr.evaluate(() => document.querySelector('.gx-said')?.textContent === 'Saved to Documents'), async () => `the CSV saved to Documents (says "${await fr.evaluate(() => document.querySelector('.gx-said')?.textContent)}"; errors ${JSON.stringify(errors)})`);
     const sheets = (await papersNow()).filter((p) => p.kind === 'sheet');
@@ -237,12 +242,27 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
       'a page\'s API file link without a class opens the deck below its paragraph');
 
     // ---- Settings → Writer → Slides and Spreadsheets off: no button by the deck or the CSV; the PDF keeps its own
+    // An SPA redraw retires the old view and places only one replacement button.
+    await page.evaluate(() => {
+      const p = document.querySelector('#content .show-content p:has(.gz-co)');
+      const next = p.cloneNode(true);
+      next.querySelector('.gz-co').remove();
+      p.replaceWith(next);
+    });
+    await until(() => page.evaluate(() => document.querySelectorAll('#content .show-content .gz-co').length === 1 && !document.querySelector('iframe.gz-co-frame')), 'one button after an SPA redraw');
+    check(true, 'an SPA redraw removes the old viewer and keeps exactly one button');
+    await page.click('#content .show-content .gz-co');
+    await until(async () => (await gz())?.shown, 'the replacement link opens one viewer');
     await set({ writer: { slides: false, sheets: false } });
+    await until(() => page.evaluate(() => !document.querySelector('iframe.gz-co-frame') && !document.querySelector('#content .show-content .gz-co')), 'Slides off removes the open viewer and its button');
+    check(true, 'turning Slides off closes an existing viewer');
     await page.goto(`${O}/courses/25/modules`);
     await until(() => page.locator(rowB(81)).count(), 'the PDF row\'s button with Slides off');
     check(await page.locator(rowB(80)).count() === 0 && await page.locator(rowB(85)).count() === 0, 'Slides and Spreadsheets off: no Open in Glaze by the deck or the CSV');
     // ---- Previews in Glaze off: none at all (Download all's buttons show the page's pass ran)
     await set({ enhance: { bbPreviews: false, download: true } });
+    await until(() => page.evaluate(() => !document.querySelector('.gz-co')), 'Previews in Glaze off removes existing buttons');
+    check(true, 'turning Previews in Glaze off removes existing buttons');
     await page.goto(`${O}/courses/25/modules`);
     await until(() => page.locator('.gz-dl').count(), 'Download all on the page with Previews in Glaze off');
     check(await page.locator('.gz-co').count() === 0, 'Previews in Glaze off: no Open in Glaze on Canvas');
