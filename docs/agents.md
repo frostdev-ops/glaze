@@ -78,6 +78,8 @@ account can reach the helper; these identities are not proof of who an app is. *
 - A change shows Glaze's own sentence for it, from Glaze's data, never the app's words.
 - Closing the window counts as **Don't allow**. For a pairing or a group, Glaze remembers it and doesn't ask again.
 - With no answer in 10 minutes, nothing is done, and Glaze asks again next time.
+- Some apps, Claude Desktop among them, stop waiting for an answer after about a minute. The window then closes and
+  nothing is done; ask the app again.
 - An app can have 5 requests waiting at once, 20 across all apps; more are refused as Busy.
 
 ## Apps, groups and Revoke
