@@ -64,8 +64,9 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
   // ---- pdf.js, imported the first time a PDF is read
   let lib = null, viewerLib = null;
-  const pdfjs = () => (lib ||= import(url('lib/pdfjs/pdf.mjs')).then((P) => { P.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.mjs'); return P; }));
-  const viewerjs = () => (viewerLib ||= pdfjs().then(() => import(url('lib/pdfjs/pdf_viewer.mjs'))));
+  // Firefox's linter accepts a dynamic import only of a literal or straight through chrome.runtime.getURL.
+  const pdfjs = () => (lib ||= import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs')).then((P) => { P.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.mjs'); return P; }));
+  const viewerjs = () => (viewerLib ||= pdfjs().then(() => import(chrome.runtime.getURL('lib/pdfjs/pdf_viewer.mjs'))));
   // lib/pdf-doc.js over this pdf.js (papers.html loads it before this file), or null where it isn't loaded: then pdf.js
   // directly, the same checks.
   const GET = { wasmUrl: url('lib/pdfjs/'), isEvalSupported: false, enableXfa: false, verbosity: 0 };
