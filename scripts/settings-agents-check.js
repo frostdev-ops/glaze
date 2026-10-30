@@ -3,7 +3,9 @@
 // click's user activation is still live when it is called, then off before the permission goes; the link's states from real
 // helpers in the profile's NativeMessagingHosts (none, one that doesn't list this copy, one that exits at once, the real
 // glaze-mcp host under a scratch HOME) and every other state lib/agent-link.js reports as the page shows it; an app's card,
-// the activity list, 320px and search. Each state is shot in light and dark, each scheme in a browser of its own. No network.
+// the activity list, 320px and search; a restart left in storage.session leaves Starting… after the page's one wait (light: the
+// real worker answers; dark: an answer of restart stood in, which gets the restart line). Each state is shot in light and
+// dark, each scheme in a browser of its own. No network.
 // NODE_PATH=<playwright> nice -n 10 node scripts/settings-agents-check.js [shots folder]
 // AGENTS_CASE selects one check, AGENTS_SCHEME one scheme ('light' or 'dark'); EXT selects the checkout under test.
 const { chromium } = require('playwright');
@@ -222,6 +224,31 @@ async function pass(scheme) {
         await shoot(state);
       }
       await page.evaluate(async () => chrome.storage.session.set({ mcpLink: { state: 'not-installed', at: Date.now() } }));
+    });
+
+    await check('bounded', async () => {
+      const { WAIT } = require('../lib/editor-agents.js'), stuck = scheme === 'dark';
+      if (stuck) await page.evaluate(() => {
+        const send = chrome.runtime.sendMessage;
+        chrome.runtime.sendMessage = (m, ...rest) => (m?.type === 'glaze:mcp-config' && m.op === 'state' ? Promise.resolve({ ok: true, on: true, link: { state: 'restart', at: Date.now() } }) : send(m, ...rest));
+      });
+      const before = (await log()).length;
+      await page.evaluate(async () => chrome.storage.session.set({ mcpLink: { state: 'restart', at: Date.now() } }));
+      await saying('Starting…');
+      await pause(WAIT + 2000);
+      if (stuck) {
+        await saying('Restart Glaze to start the helper');
+        assert.equal(await page.locator('#agents-restart').isVisible(), true);
+        assert.equal(await page.locator('#agents-state').getAttribute('data-tone'), 'bad');
+        await shoot('restart-stuck');
+        await page.evaluate(async () => chrome.storage.session.set({ mcpLink: { state: 'not-installed', at: Date.now() } }));
+        await saying(/^In Claude Desktop/);
+      } else {
+        // The worker holds nativeMessaging and no helper: its own state, not-installed, answers the one ask.
+        await saying(/^In Claude Desktop/);
+        assert.deepEqual((await log()).slice(before).filter((x) => x.sent).map((x) => x.sent), ['state'], 'one ask');
+      }
+      assert.equal(await page.locator('#agents-restart').isVisible(), false);
     });
 
     await check('apps', async () => {

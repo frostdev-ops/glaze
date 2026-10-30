@@ -3187,6 +3187,8 @@
   "Update the helper: {command}": "Mettez à jour l’utilitaire : {command}",
   "Install Node.js 18+ for browsers to start the helper": "Installez Node.js 18+ pour que les navigateurs puissent démarrer l’utilitaire",
   "Allow Glaze to start the helper": "Autorisez Glaze à démarrer l’utilitaire",
+  "Restart Glaze to start the helper": "Redémarrez Glaze pour démarrer l’utilitaire",
+  "Restart": "Redémarrer",
   "Agent access in Safari needs the Glaze app from frostdev.io": "L’accès des agents dans Safari nécessite l’app Glaze de frostdev.io",
   "Update the Glaze app from frostdev.io": "Mettez à jour l’app Glaze depuis frostdev.io",
   "The Glaze app stopped; Glaze is retrying.": "L’app Glaze s’est arrêtée ; Glaze réessaie.",

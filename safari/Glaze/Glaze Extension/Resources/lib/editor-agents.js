@@ -1,14 +1,15 @@
 // Settings → Agents: agent access's switch, the glaze-mcp helper's link, the apps the student paired with the groups each may
 // use, and the activity list. The worker keeps all of it (lib/background.js 'glaze:mcp-config': state once as the page
 // opens, set, apps, grant, revoke, forget; from this top frame only), and the student's consent in its own database. The link
-// is storage.session mcpLink (lib/agent-link.js status), read here and followed through storage.onChanged, never asked of the
-// worker again: a page left open must not wake it into another try at a helper. Turning on asks the browser for
-// nativeMessaging first, in the click, as Firefox loses the gesture across an await (Safari holds it from the start). On
-// Chrome only the first worker after a grant connects (the owner's restart decision), so until then the link says restart;
-// Firefox connects at once. Turning off lets the worker end the link before the permission goes. Firefox says not-installed
-// for a helper that doesn't list Glaze too, and nothing about why one exited, so no line rests on forbidden or the error.
-// The activity list is storage.local mcpCalls (lib/mcp/grants.js record), metadata only. Every word reaches the page as
-// textContent.
+// is storage.session mcpLink (lib/agent-link.js status), read here and followed through storage.onChanged. The worker hears
+// from this page as it opens (state is a trigger there, so a helper installed since connects) and, on Chrome, once more
+// after WAIT of Starting…; otherwise never, so a page left open doesn't wake it into another try at a helper. Turning on
+// asks the browser for nativeMessaging first, in the click, as Firefox loses the gesture across an await (Safari holds it
+// from the start). On Chrome only a worker started after the grant connects (the owner's restart decision), so until then
+// the link says restart; Firefox connects at once. Turning off lets the worker end the link before the permission goes.
+// Firefox says not-installed for a helper that doesn't list Glaze too, and nothing about why one exited, so no line rests on
+// forbidden or the error. The activity list is storage.local mcpCalls (lib/mcp/grants.js record), metadata only. Every word
+// reaches the page as textContent.
 // Extension options page only (mount); the pure helpers are for node tests.
 var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
   const TYPE = 'glaze:mcp-config', LINK = 'mcpLink', CALLS = 'mcpCalls', SETTING = 'mcp';
@@ -20,6 +21,10 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
   // lib/agent-link.js's no-node: the browser-started helper found no Node.js of the system's own (Claude's runtime can't be
   // one). Tried again on triggers only.
   const NO_NODE = 'no-node';
+  // Chrome stops an idle worker about 30-40 s after its last event and starts one only for the next, which this page doesn't
+  // send while it shows Starting…: after WAIT it asks once. A worker started for that ask has connectNative and connects at
+  // its start; one that still answers restart is kept up by something else, and the line offers Glaze's reload instead.
+  const WAIT = 60e3;
   // Glaze's groups (lib/ai/tools.js GROUPS), named as the approval window names them; a mod's group is mod:<id>.
   const GROUPS = ['courses', 'grades', 'writer', 'assignments'];
   // What lib/mcp/grants.js records of a call's end.
@@ -30,12 +35,14 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
 
   const browserOf = (url) => (/^safari-web-extension:/i.test(url) ? 'safari' : /^moz-extension:/i.test(url) ? 'firefox' : 'chrome');
   // What Settings says of the link (status: lib/agent-link.js status()) → { tone: 'ok' | 'wait' | 'bad', text, command?,
-  // act? }, or null while it is off. The command goes where text says {command}; act: 'allow' (ask for nativeMessaging) or
-  // 'site' (the page's link to frostdev.io/glaze, for the DMG build of the Glaze app, the one with the agent bridge). On
-  // Safari the helper is that app, which starts by itself: nothing to run there.
-  const line = (status, { browser = 'chrome', id = '' } = {}, t) => {
+  // act? }, or null while it is off. The command goes where text says {command}; act: 'allow' (ask for nativeMessaging),
+  // 'reload' (Glaze's reload, once WAIT's ask still found restart: stuck) or 'site' (the page's link to frostdev.io/glaze, for
+  // the DMG build of the Glaze app, the one with the agent bridge). On Safari the helper is that app, which starts by itself:
+  // nothing to run there.
+  const line = (status, { browser = 'chrome', id = '', stuck = false } = {}, t) => {
     const s = isObj(status) ? status.state : 'off';
     if (s === 'connected') return { tone: 'ok', text: t('Ready') };
+    if (s === 'restart' && stuck && browser === 'chrome') return { tone: 'bad', text: t('Restart Glaze to start the helper'), act: 'reload' };
     if (s === 'connecting' || s === 'restart') return { tone: 'wait', text: t('Starting…') };
     if (browser === 'safari') {
       return s === 'not-installed' ? { tone: 'bad', text: t('Agent access in Safari needs the Glaze app from frostdev.io'), act: 'site' }
@@ -87,6 +94,8 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
     // the one the line shows.
     let on = false, link = null, apps = [], mods = [], calls = [], busy = false, unsaved = false, command = '';
     let stateRead = 0, linkVersion = 0, callsVersion = 0;
+    // Starting… on Chrome: the state it began with (waiting), its one timer, and whether WAIT's ask still found restart.
+    let waiting = '', wait = 0, stuck = false;
     // A part is drawn again only when what it shows changed, so the link's line isn't announced again and a card keeps its
     // focus when something else moves.
     const drawn = {};
@@ -94,11 +103,12 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
 
     // ---- the switch and the link ---------------------------------------------------------------------------------------
     const renderLine = () => {
-      const l = on ? line(link, { browser, id: c.runtime.id }, t) : null, box = $('agents-state'), p = $('agents-line');
+      const l = on ? line(link, { browser, id: c.runtime.id, stuck }, t) : null, box = $('agents-state'), p = $('agents-line');
       box.hidden = !l;
       command = l?.command || '';
       $('agents-copy').hidden = !command;
       $('agents-allow').hidden = l?.act !== 'allow';
+      $('agents-restart').hidden = l?.act !== 'reload';
       $('agents-app').hidden = l?.act !== 'site';
       if (!l) return void p.replaceChildren();
       box.dataset.tone = l.tone;
@@ -116,6 +126,22 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
       const turn = ++stateRead, r = await send({ op: 'state' });
       if (r.ok && turn === stateRead) { on = r.on === true; render(); }
       return r;
+    };
+    // WAIT's one ask (see WAIT), whose answer stands unless the worker has written since.
+    const recheck = async () => {
+      wait = 0;
+      const version = linkVersion, r = await loadState();
+      if (r.ok && version === linkVersion && isObj(r.link)) { link = r.link; ++linkVersion; }
+      stuck = link?.state === 'restart';
+      render();
+    };
+    // Each Starting… on Chrome gets one wait; any other state, or off, ends it.
+    const bound = () => {
+      const s = on && browser === 'chrome' && ['restart', 'connecting'].includes(link?.state) ? link.state : '';
+      if (s === waiting) return;
+      clearTimeout(wait);
+      waiting = s; stuck = false;
+      wait = s ? setTimeout(recheck, WAIT) : 0;
     };
     const toggle = async (want, asked) => {
       busy = true;
@@ -140,6 +166,7 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
       toggle(want, asked);
     });
     $('agents-allow').addEventListener('click', () => { ask(); });
+    $('agents-restart').addEventListener('click', () => { try { c.runtime.reload(); } catch { /* nothing to restart */ } });
     $('agents-copy').addEventListener('click', async () => {
       const text = command;
       try { await navigator.clipboard.writeText(text); hint(t('Copied.')); }
@@ -229,7 +256,8 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
       if (!busy) $('agents-on').checked = on; // a switch on its way keeps showing where the student put it
       $('agents-said').hidden = !unsaved;
       $('agents-said').textContent = unsaved ? t('Could not save. Try again.') : '';
-      once('line', [on, link?.state], renderLine);
+      bound();
+      once('line', [on, link?.state, stuck], renderLine);
       once('apps', [apps, mods], renderApps);
       once('calls', [calls, apps.map((a) => [a.id, a.name])], renderCalls);
     };
@@ -256,6 +284,6 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
     });
   };
 
-  return { NATIVE, FIREFOX, SETUP, DOCTOR, UPDATE, NO_NODE, GROUPS, OUTCOMES, browserOf, line, groupName, outcome, rows, appsOf, switches, mount };
+  return { NATIVE, FIREFOX, SETUP, DOCTOR, UPDATE, NO_NODE, WAIT, GROUPS, OUTCOMES, browserOf, line, groupName, outcome, rows, appsOf, switches, mount };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AGENTSEDIT;

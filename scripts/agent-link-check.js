@@ -12,8 +12,8 @@
 //   5 The host killed: the link shows exited, then connects to a new host.
 //   6 Agent access off: the host goes and the run folder is emptied.
 //   7 The shipped manifest (nativeMessaging optional), headed under Xvfb, the prompt answered with XTEST keys, the manifest
-//     and launcher written by hand: restart with no host, then a natural idle stop and an ordinary page message with
-//     DevTools detached.
+//     and launcher written by hand: restart with no host, then, DevTools detached, a natural idle stop and Settings' one ask
+//     after its wait on Starting… (lib/editor-agents.js WAIT), which starts the worker that connects.
 // Evidence in the folder given: results.json, log.txt, each agent's lines, the bare browsers' logs, the probe's reports,
 // the approval window and the prompt.
 //   glaze-remote -o <evidence dir> -- node scripts/agent-link-check.js /out
@@ -31,6 +31,7 @@ const VERSION = require('../mcp/package.json').version;
 const OUT = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'agent-link-out-')));
 const IDLE = process.env.SLOW ? 360e3 : 70e3;
 const WAIT = IDLE + 15e3; // the probe page's wait: the idle, plus the agent's first call after the page opens
+const ASK = require('../lib/editor-agents.js').WAIT; // Settings' wait on Starting…, then its one ask
 const PROBE = 'io.frostdev.glaze_t9_probe';
 const NODE = fs.realpathSync(process.execPath);
 const CLIENT = { name: 'Glaze T9 check', version: '1.0.0' };
@@ -65,6 +66,7 @@ function t9Worker() {
   const me = globalThis.T9 = { nonce: crypto.randomUUID(), born: Date.now() };
   const kept = chrome.storage.local.get('t9Starts').then(({ t9Starts = [] }) => chrome.storage.local.set({ t9Starts: [...t9Starts, me] }));
   chrome.runtime.onMessage.addListener((m, s, reply) => {
+    me.first ||= { type: m?.type ?? null, op: m?.op ?? null, t9: m?.t9 ?? null, url: s?.url ?? '', at: Date.now() }; // what woke this worker
     if (m?.t9 !== 'who') return false;
     kept.then(() => reply(me), () => reply(me));
     return true;
@@ -621,29 +623,32 @@ async function restart() {
     const waiting = ph.waiting = { link: await linkOf(opt), worker: await who(opt), run: runFolder(home) };
     ok('7', 'and it waits there: the same worker, no host started', waiting.link?.state === 'restart' && waiting.worker.nonce === born.nonce && !waiting.run?.length, waiting);
     await x.shot(path.join(OUT, 'restart-after.png'));
-    // A page opened after the grant has the native reporting API; the already open page, like the worker, does not.
-    const probe = await context.newPage();
-    await probe.goto(`chrome-extension://${ext.id}/options.html`);
+    // Settings opened after the grant: it has the native reporting API (the already open page, like the worker, does not),
+    // and it is the only page left, so its wait on Starting… begins just before DevTools detaches.
+    const opened = Date.now(), probe = await context.newPage();
+    await probe.goto(`chrome-extension://${ext.id}/options.html#ai/agents`);
+    await opt.close();
     const ready = await probe.evaluate(() => chrome.runtime.sendNativeMessage('io.frostdev.glaze_t9_probe', { t: 'ready' }));
     ok('7', 'the fresh page can report without holding a native port', ready?.ok === true, ready);
-    // This page reads storage only while idle. Its one ordinary message after IDLE wakes the naturally stopped worker.
+    ok('7', 'Settings shows Starting…', await until(() => probe.evaluate(() => document.getElementById('agents-line')?.textContent === 'Starting…'), 5000), await probe.locator('#agents-line').textContent());
+    // The check reads storage only (no message), so the one ask after Settings' wait is what wakes the stopped worker.
     await probe.evaluate((ms) => {
       const armed = Date.now();
-      setTimeout(async () => {
+      (async () => {
         const report = (m) => chrome.runtime.sendNativeMessage('io.frostdev.glaze_t9_probe', { t: 'restart', ...m });
         try {
-          const before = await chrome.storage.local.get('t9Starts');
-          const asked = Date.now(), worker = await chrome.runtime.sendMessage({ t9: 'who' });
-          let link;
-          for (const end = Date.now() + 20000; Date.now() < end;) {
+          let link, line;
+          for (const end = armed + ms; Date.now() < end;) {
             link = (await chrome.storage.session.get('mcpLink')).mcpLink;
-            if (link?.state === 'connected') break;
-            await new Promise((r) => setTimeout(r, 100));
+            line = document.getElementById('agents-line')?.textContent;
+            if (link?.state === 'connected' && line === 'Ready') break;
+            await new Promise((r) => setTimeout(r, 250));
           }
-          await report({ armed, asked, worker, link, before: before.t9Starts, starts: (await chrome.storage.local.get('t9Starts')).t9Starts });
+          const seen = Date.now(), worker = await chrome.runtime.sendMessage({ t9: 'who' });
+          await report({ armed, seen, worker, link, line, starts: (await chrome.storage.local.get('t9Starts')).t9Starts });
         } catch (e) { await report({ error: String(e.stack || e) }); }
-      }, ms);
-    }, IDLE + 5000);
+      })();
+    }, ASK + 30000);
     await browser.close(); // connectOverCDP: disconnects from the independently owned browser
     owned.attachments.delete(browser);
     const peers = () => ['tcp', 'tcp6'].flatMap((f) => fs.readFileSync(`/proc/net/${f}`, 'utf8').trim().split('\n').slice(1))
@@ -654,15 +659,16 @@ async function restart() {
     const report = await until(() => {
       if (peers().length) attached.push(Date.now());
       return probeLog('restart').find((e) => e.m?.t === 'restart') || raw.proc.exitCode !== null;
-    }, IDLE + 35000, 250);
+    }, ASK + 45000, 250);
     const next = ph.next = report?.m;
-    ph.detached = { at: detached, browserPid: raw.proc.pid, attached, report: next };
-    const host = hosts(home)[0];
-    ok('7', 'after a natural idle stop, an ordinary page message reaches a new worker with no DevTools attached', !!next?.worker?.nonce && next.worker.nonce !== born.nonce
-      && next.asked - detached >= IDLE && next.before?.length === 1 && next.before[0].nonce === born.nonce
-      && next.starts?.length === 2 && next.starts[1].nonce === next.worker.nonce && next.worker.born >= next.asked
+    ph.detached = { at: detached, opened, browserPid: raw.proc.pid, attached, report: next };
+    const host = hosts(home)[0], woke = next?.worker?.first;
+    ok('7', 'after a natural idle stop, Settings\' one ask after its wait reaches a new worker, with no DevTools attached', !!next?.worker?.nonce && next.worker.nonce !== born.nonce
+      && next.starts?.length === 2 && next.starts[0].nonce === born.nonce && next.starts[1].nonce === next.worker.nonce && next.worker.born - detached >= 30e3
+      && woke?.type === 'glaze:mcp-config' && woke.op === 'state' && /\/options\.html/.test(woke.url) && woke.at - opened >= ASK
       && !attached.length && raw.proc.exitCode === null, ph.detached);
-    ok('7', 'the new worker connects without a forced restart', next?.link?.state === 'connected' && next.link.host === VERSION && !!host && cmdline(host.rec.pid)?.includes(IDS.origin(ext.id)), { next, host: host?.rec.pid });
+    ok('7', 'the new worker connects without a forced restart, and Settings says Ready', next?.link?.state === 'connected' && next.line === 'Ready' && next.link.host === VERSION
+      && !!host && cmdline(host.rec.pid)?.includes(IDS.origin(ext.id)), { next, host: host?.rec.pid });
     const a = agent('restart', home), d = await a.modern('server/discover'), t = await a.modern('tools/list');
     ok('7', 'and an agent reaches it', !!d.result && names(t)?.includes('todo_list'), names(t));
     await a.end();
