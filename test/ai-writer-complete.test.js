@@ -247,3 +247,15 @@ test('completion privacy disclosure names the full document, per-pause transmiss
   assert.match(completion, /40/);
   assert.match(completion, /memory only/);
 });
+
+
+test('frame caps on document text and remembered suggestions never start with half a surrogate pair', () => {
+  const AI = require('../writer-ai.js');
+  for (const cap of [600, 1000000]) {
+    const text = 'prefix 😀' + 'a'.repeat(cap - 1);
+    const cut = AI.tailText(text, cap);
+    assert.ok(cut.length <= cap);
+    assert.ok(cut.isWellFormed());
+    assert.equal(cut, 'a'.repeat(cap - 1));
+  }
+});
