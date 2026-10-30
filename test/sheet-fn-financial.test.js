@@ -289,3 +289,12 @@ test('RATE preserves the observed convergence boundaries for distant guesses', (
 test('IRR accepts an exact repeated root and XIRR handles balanced same-day flows', () => {
   cases(book(), [['IRR({-100,200,-100},0)', 0], ['XIRR({-100,100},{1,1})', 0], ['RATE(10,0,0)', '#NUM!']]);
 });
+
+// The values Excel 16.114.1 cached (test/fixtures/sheets/golden.json), each within 1e-13 of the true root.
+test('RATE converges to the last digits Excel shows', () => {
+  const e = book();
+  for (const [f, want] of [['RATE(48,-200,8000)', 0.007701472488201368], ['RATE(360,-1073.64,200000)*12', 0.04999973443614707]]) {
+    const got = calc(e, f);
+    assert.ok(Math.abs(got - want) <= 1e-12 * want, `${f} → ${got}, Excel ${want}`);
+  }
+});
