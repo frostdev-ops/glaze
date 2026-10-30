@@ -239,6 +239,19 @@ test('Drive\'s errors and the sign-in\'s become fixed reasons', async () => {
   assert.equal(D.WHY.includes('network') && D.WHY.includes('size'), true);
 });
 
+test('a Google file larger than Drive exports says so, as Drive answers it now (400) and did (403), not "try again"', async () => {
+  for (const [code, body] of [[400, ERRORS.exportSize], [403, ERRORS.exportSizeLimitExceeded]]) {
+    const h = harness([json(200, FILES.doc), json(code, body)]);
+    await fails(h.drive.open(FILES.doc.id, ALL), 'export');
+    assert.match(h.log.fetch[1].url, /\/export\?/, `${code}: the export itself refused`);
+    const r = harness([json(200, FILES.sheet), json(code, body)]);
+    await fails(r.drive.raw(FILES.sheet.id), 'export');
+  }
+  assert.ok(D.WHY.includes('export'), 'the port carries it');
+  await fails(harness([json(400, ERRORS.exportSize)]).drive.meta(FILES.docx.id), 'export');
+  await fails(harness([json(400, {})]).drive.meta(FILES.docx.id), 'bad');
+});
+
 // A runtime port pair, as chrome.runtime.connect gives each side: messages cloned and delivered later, in order.
 const ports = () => {
   const side = () => ({ msg: [], gone: [], peer: null, closed: false,
@@ -463,4 +476,108 @@ test('Disconnect stops a download even inside a large network chunk', async () =
     if (done) who = null;
   }), 'connect');
   assert.equal(received, D.CHUNK, 'only the chunk acknowledged before Disconnect was delivered');
+});
+
+// The pages' part (page), run as a page runs it: drive.js in a realm with a document, the runtime's messages and ports.
+// status: the worker's answer to glaze:drive status (background.js: connected, and picker, whether Google's Picker works
+// in this browser); changed(): storage.local's google changing, which asks again.
+const pageOf = ({ files, drive, path = '/writer.html', status = { ok: true, connected: true, picker: true } }) => {
+  const vm = require('node:vm'), fs = require('node:fs');
+  const notes = [], heard = [];
+  const ctx = vm.createContext({
+    console, setTimeout, clearTimeout, setInterval, clearInterval, URLSearchParams, TextEncoder, File, atob, btoa, crypto, document: {}, location: { pathname: path },
+    GZ_I18N: { t: (k) => k },
+    chrome: {
+      runtime: {
+        sendMessage: async (m) => (m.type === 'glaze:drive' ? { ...status } : { ok: true, files }),
+        connect: () => { const [page, worker] = ports(); D.serve(worker, { drive, allowed: async () => true }); return page; },
+      },
+      storage: { onChanged: { addListener: (f) => heard.push(f) } }, i18n: { getUILanguage: () => 'en' },
+    },
+  });
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/documents/drive.js'), 'utf8'), ctx);
+  const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r)); };
+  const changed = async (next) => { Object.assign(status, next); for (const f of heard) f({ google: {} }, 'local'); await settle(); };
+  return { page: ctx.GZ_DRIVE.page, api: { notify: (m) => notes.push(m) }, notes, settle, changed };
+};
+
+test('the paper\'s From Google Drive brings a file under a name a file can have, which Writer\'s import takes', async () => {
+  const L = require('../../extension/writer/writer-submit.js');
+  const meta = { ...FILES.doc, name: 'Lab report 10/30' };
+  const h = harness([json(200, meta), stream(2048).res]);
+  const p = pageOf({ files: [{ id: meta.id, name: meta.name, mimeType: meta.mimeType }], drive: h.drive });
+  for (let i = 0; i < 10 && !p.page.connected(); i++) await new Promise((r) => setImmediate(r));
+  let brought = null;
+  const [item] = p.page.items(p.api, (f) => { brought = f; });
+  assert.equal(item.label, 'From Google Drive');
+  await item.run();
+  assert.ok(brought, JSON.stringify(p.notes));
+  assert.equal(brought.name, 'Lab report 10_30.docx');
+  assert.equal(brought.size, 2048);
+  assert.equal(L.fileError(brought), null, 'on an assignment, writer-import.js takes it rather than saying it could not be read');
+});
+
+// Save to Drive above Drive's multipart size (SMALL, 5 MB) goes resumable through Sync's own path (put): a session, its
+// address only ever Drive's upload address, then one PUT of the bytes; at or below, one multipart request. Against the
+// stand-in Drive that keeps state (test/helpers/drive-standin.cjs).
+test('save: a 6 MB PDF goes resumable, through the same Location check Sync\'s uploads have; 5 MB stays multipart', async () => {
+  const { standin } = require('../helpers/drive-standin.cjs');
+  const sd = standin(), elsewhere = [];
+  let move = false;
+  const fetch = async (url, init) => {
+    if (!url.startsWith('https://www.googleapis.com/')) { elsewhere.push(url); throw new TypeError('Failed to fetch'); }
+    const r = await sd.fetch(url, init);
+    if (!move || !r.headers.get('location')) return r;
+    return new Response(null, { status: 200, headers: { location: r.headers.get('location').replace('https://www.googleapis.com/', 'https://uploads.example/') } });
+  };
+  const drive = D.create({ fetch, token: async () => 'tok-1', boundary: () => 'B0und4ry' });
+  const asked = () => sd.log.map((x) => [x.method, x.path, x.query.uploadType, x.query.supportsAllDrives && 'all'].filter(Boolean).join(' '));
+  const pdf = new Uint8Array(6e6).fill(5);
+
+  const made = await drive.save({ name: 'Reading.pdf', mime: MIME.pdf, bytes: pdf });
+  assert.deepEqual(asked(), ['POST /upload/drive/v3/files resumable', 'PUT /upload/drive/v3/files resumable'], 'a session, then its bytes; no multipart');
+  assert.equal(made.fresh, false);
+  const f = sd.files.get(made.id);
+  assert.equal(f.bytes.length, 6e6); assert.equal(f.meta.name, 'Reading.pdf'); assert.equal(f.meta.mimeType, MIME.pdf);
+  assert.equal(sd.log[0].type, 'application/json; charset=UTF-8');
+
+  sd.log.length = 0;
+  const again = await drive.save({ name: 'Reading.pdf', mime: MIME.pdf, bytes: pdf, id: made.id });
+  assert.deepEqual(again, { id: made.id, fresh: false }, 'the same file updated');
+  assert.deepEqual(asked(), [`GET /drive/v3/files/${made.id} all`, `PATCH /upload/drive/v3/files/${made.id} resumable all`, `PUT /upload/drive/v3/files/${made.id} resumable`], 'the session\'s own address takes the bytes');
+  assert.equal(sd.files.get(made.id).meta.version, '2', 'one new revision');
+
+  sd.log.length = 0;
+  await drive.save({ name: 'Small.pdf', mime: MIME.pdf, bytes: new Uint8Array(D.SMALL).fill(1) });
+  assert.deepEqual(asked(), ['POST /upload/drive/v3/files multipart'], 'at 5 MB, one multipart request');
+
+  // A session whose address isn't Drive's upload address: refused, the bytes and the token go nowhere else.
+  sd.log.length = 0; move = true;
+  await fails(drive.save({ name: 'Reading.pdf', mime: MIME.pdf, bytes: pdf }), 'bad');
+  assert.deepEqual(asked(), ['POST /upload/drive/v3/files resumable']);
+  assert.deepEqual(elsewhere, []);
+});
+
+// Google's Picker doesn't work everywhere Drive connects (Safari's app sign-in; a build without the Picker's key): the worker
+// says so (status picker: false). Open from Drive shows only where it works; Save to Google Drive needs only the connection.
+test('From Google Drive shows only where the Picker works; Save to Google Drive whenever Drive is connected', async () => {
+  const p = pageOf({ files: [], drive: harness([]).drive, path: '/papers.html', status: { ok: true, connected: true, picker: false } });
+  const live = new Map();
+  const D = { item: (slot, label) => { const el = { slot, label, remove: () => live.delete(el) }; live.set(el, true); return el; } };
+  const shown = () => [...live.keys()].map((x) => `${x.slot} ${x.label}`).sort();
+  await p.settle();
+  p.page.home(D, { bring: () => {}, say: () => {} });
+  assert.equal(p.page.connected(), true);
+  assert.equal(typeof p.page.picker, 'function', 'the pages can ask');
+  assert.equal(p.page.picker(), false);
+  assert.deepEqual(shown(), ['card Save to Google Drive'], 'connected without the Picker: Save only');
+  assert.deepEqual(p.page.items(p.api, () => {}).length, 0, 'no From Google Drive in the paper\'s menu');
+  await p.changed({ picker: true });
+  assert.equal(p.page.picker(), true);
+  assert.deepEqual(shown(), ['card Save to Google Drive', 'toolbar From Google Drive']);
+  assert.equal(p.page.items(p.api, () => {}).length, 1);
+  await p.changed({ connected: false, picker: true });
+  assert.equal(p.page.picker(), false, 'never without the connection');
+  assert.deepEqual(shown(), []);
+  assert.equal(p.page.items(p.api, () => {}).length, 0);
 });

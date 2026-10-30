@@ -814,7 +814,9 @@ you import) are bundled. It makes requests in these cases:
     or file contents.
   - **Open from Drive**: Glaze downloads the file you picked, or exports a Google Doc as .docx, a Sheet as .xlsx and
     Slides as .pptx, and imports it into Documents on this device.
-  - **Save to Drive**: Glaze uploads the document's exported file, or saves it as a Google Doc if you choose.
+  - **Save to Drive**: Glaze uploads the document's exported file to My Drive, or saves it as a Google Doc if you choose,
+    and keeps that file's Drive id on the document: the next Save updates that file while Glaze may still edit it, and
+    otherwise makes a new one. A file opened from Drive is never written back: its first Save makes a new file.
   - **Sync to Google Drive** (on once you connect; you can turn it off in Settings): Glaze keeps a folder named Glaze in
     your Drive in step with this device, from Glaze's background worker, every time it runs (when you turn it on, when the
     browser starts or comes back online, when Documents or Writer opens, and a few seconds after you change something):

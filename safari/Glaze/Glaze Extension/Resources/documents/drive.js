@@ -11,7 +11,8 @@
 // neither side runs ahead; a page pings while it waits so the worker stays up through a long upload. No page here reaches
 // the browser's tab or window APIs (test/frame-tabs.test.js): writer.html and Documents run framed in a school's page.
 // The pages' part (page): From Google Drive beside Documents' Import and in the paper's ⋯ menu, Save to Google Drive in a
-// Documents card's ⋯ menu, each only while Drive is connected.
+// Documents card's ⋯ menu, each only while Drive is connected, From Google Drive only where Google's Picker works (the
+// worker's status picker: not Safari's app sign-in yet).
 // Classic script for the worker and the pages; module.exports for node.
 var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   const API = 'https://www.googleapis.com/drive/v3/files';
@@ -35,8 +36,9 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   const BUSY = new Set(['userRateLimitExceeded', 'rateLimitExceeded', 'dailyLimitExceeded', 'sharingRateLimitExceeded']);
   const FULL = new Set(['storageQuotaExceeded', 'activeItemCreationLimitExceeded']);
   // Every reason a request ends with: the sign-in's (background/google.js), the Picker's, Drive's, the port's.
+  // export: a Google file larger than Drive exports (its 10 MB).
   const WHY = ['off', 'connect', 'setup', 'account', 'auth', 'permission', 'cancel', 'scope', 'browser', 'unsupported', 'state', 'picker', 'offline',
-    'network', 'missing', 'denied', 'busy', 'quota', 'size', 'type', 'bad', 'sender'];
+    'network', 'missing', 'denied', 'busy', 'quota', 'size', 'export', 'type', 'bad', 'sender'];
   const ID = /^[\w-]{1,256}$/, MIME = /^[\w.+-]{1,127}\/[\w.+-]{1,127}$/;
   class Fail extends Error { constructor(why) { super(why); this.why = why; } }
   const kinds = () => globalThis.GZ_DOC_KINDS || require('./doc-kinds.js');
@@ -58,6 +60,16 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     } catch { throw new Fail('bad'); }
   };
   const join = (parts, n) => { const out = new Uint8Array(n); let at = 0; for (const p of parts) { out.set(p, at); at += p.length; } return out; };
+  // A Drive name as one any file can have (writer/writer-submit.js asIsName, what Blackboard's upload takes): Drive's may hold
+  // a slash (a date in a title), a backslash or a control character, each made _ as a browser's download does, and run past
+  // 255 characters, cut before its extension.
+  const fileName = (name) => {
+    let n = String(name).replace(/[/\\\u0000-\u001f\u007f]/g, '_');
+    if (/^\.*$/.test(n.trim())) n = `_${n}`;
+    const all = [...n];
+    if (all.length > 255) { const ext = /\.[^.]{1,16}$/.exec(n)?.[0] || ''; n = all.slice(0, 255 - [...ext].length).join('') + ext; }
+    return n;
+  };
 
   // A files.get reply for id, as Glaze asked for it.
   const valid = (m, id) => !!m && typeof m === 'object' && m.id === id && typeof m.name === 'string' && m.name.length > 0 && m.name.length <= 1000
@@ -94,7 +106,9 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     const send = (url, init) => env.fetch(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store' });
     const reason = async (r) => {
       const j = await r.json().catch(() => null);
-      const why = Array.isArray(j?.error?.errors) ? j.error.errors.map((e) => e?.reason) : [];
+      const errs = Array.isArray(j?.error?.errors) ? j.error.errors : [], why = errs.map((e) => e?.reason);
+      // An export past Drive's 10 MB: 400 badRequest at export.size now, 403 exportSizeLimitExceeded before (test/fixtures/drive/v3.js).
+      if ((r.status === 400 || r.status === 403) && errs.some((e) => e?.location === 'export.size' || e?.reason === 'exportSizeLimitExceeded')) return 'export';
       if (r.status === 401) return 'auth';
       if (r.status === 404) return 'missing';
       if (r.status === 429 || r.status >= 500) return 'busy';
@@ -176,7 +190,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       if (m.capabilities?.canDownload === false) throw new Fail('denied');
       const as = kind ? kinds().KINDS[kind].mime : null, size = as || m.size === undefined ? null : Number(m.size);
       if (size !== null && size > max) throw new Fail('size');
-      await on.head?.({ name: kind ? m.name + EXT[kind] : m.name, mime: as || m.mimeType, size });
+      await on.head?.({ name: fileName(kind ? m.name + EXT[kind] : m.name), mime: as || m.mimeType, size });
       const r = await call(as ? `${API}/${id}/export?${q({ mimeType: as })}` : `${API}/${id}?${q({ alt: 'media', supportsAllDrives: 'true' })}`, { signal: on.signal });
       return pour(r, max, on, on.signal);
     };
@@ -201,10 +215,8 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
           if (m.trashed !== true && m.capabilities?.canEdit !== false && m.mimeType === target) to = id;
         } catch (e) { if (e.why !== 'missing' && e.why !== 'denied') throw e; }
       }
-      const { type, body } = multipart(to ? {} : { name: as === 'doc' ? name.replace(/\.docx$/i, '') : name, mimeType: target }, mime, bytes);
-      const r = await call(to ? `${UPLOAD}/${to}?${q({ uploadType: 'multipart', fields: SAVED, supportsAllDrives: 'true' })}` : `${UPLOAD}?${q({ uploadType: 'multipart', fields: SAVED })}`,
-        { method: to ? 'PATCH' : 'POST', headers: { 'content-type': type }, body });
-      const j = await r.json().catch(() => null);
+      // Sync's upload (put): multipart up to SMALL, else resumable.
+      const j = await put({ id: to, meta: to ? {} : { name: as === 'doc' ? name.replace(/\.docx$/i, '') : name, mimeType: target }, mime, bytes, fields: SAVED, all: !!to });
       if (typeof j?.id !== 'string' || !ID.test(j.id) || (to && j.id !== to)) throw new Fail('bad');
       return { id: j.id, fresh: !!id && !to };
     };
@@ -258,15 +270,17 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       return join(parts, n);
     };
     // A file's content and metadata: a new file (no id) or a new revision of id. Up to SMALL in one multipart request, else
-    // a resumable session (its address only ever Drive's own upload address) and one PUT of the bytes.
-    const put = async ({ id = null, meta = {}, mime, bytes, fields = SYNC }) => {
+    // a resumable session (its address only ever Drive's own upload address) and one PUT of the bytes. all: the file may be
+    // in a shared drive (Save to Drive's update of a file the student moved).
+    const put = async ({ id = null, meta = {}, mime, bytes, fields = SYNC, all = false }) => {
       if ((id !== null && (typeof id !== 'string' || !ID.test(id))) || typeof mime !== 'string' || !MIME.test(mime) || !(bytes instanceof Uint8Array) || bytes.length > kinds().FILE * 4) throw new Fail('bad');
+      const more = all ? { supportsAllDrives: 'true' } : {};
       if (bytes.length <= SMALL) {
         const { type, body } = multipart(meta, mime, bytes);
-        return json(await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'multipart', fields })}` : `${UPLOAD}?${q({ uploadType: 'multipart', fields })}`,
+        return json(await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'multipart', fields, ...more })}` : `${UPLOAD}?${q({ uploadType: 'multipart', fields, ...more })}`,
           { method: id ? 'PATCH' : 'POST', headers: { 'content-type': type }, body }));
       }
-      const r = await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'resumable', fields })}` : `${UPLOAD}?${q({ uploadType: 'resumable', fields })}`, {
+      const r = await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'resumable', fields, ...more })}` : `${UPLOAD}?${q({ uploadType: 'resumable', fields, ...more })}`, {
         method: id ? 'PATCH' : 'POST', headers: { 'content-type': JSON_TYPE, 'x-upload-content-type': mime, 'x-upload-content-length': String(bytes.length) }, body: JSON.stringify(meta),
       });
       r.body?.cancel().catch(() => {});
@@ -444,7 +458,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     // A framed Documents is answered once its document has claimed its pass: until then 'sender', asked again after 0.5,
     // 1, 2, 4 and 8 seconds.
     // A change while one is asked is asked again once it answers, its answer then set aside as stale.
-    let connected = false, asking = null, again = false;
+    let connected = false, picker = false, asking = null, again = false;
     const shown = new Set();
     const ask = (n = 0) => {
       if (asking) { again = true; return asking; }
@@ -452,8 +466,8 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         asking = null;
         if (again) { again = false; ask(); return; }
         if (r?.why === 'sender' && n < 5) setTimeout(() => ask(n + 1), 500 * 2 ** n);
-        const on = r?.connected === true;
-        if (on !== connected) { connected = on; for (const f of shown) try { f(); } catch (e) { console.error(e); } }
+        const on = r?.connected === true, can = on && r?.picker === true; // picker: Google's Picker works here (not Safari yet)
+        if (on !== connected || can !== picker) { connected = on; picker = can; for (const f of shown) try { f(); } catch (e) { console.error(e); } }
       });
       return asking;
     };
@@ -464,7 +478,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     // What a page says of a reason, in English (the caller translates); nothing for a Picker the student closed.
     const SIGN_IN = new Set(['off', 'connect', 'setup', 'account', 'auth', 'permission', 'scope', 'browser', 'unsupported', 'state']);
     const SAYS = { missing: "Glaze can't reach this file in Google Drive.", denied: "Glaze can't reach this file in Google Drive.", busy: 'Google Drive is busy. Try again in a moment.',
-      quota: 'Your Google Drive is full.', type: 'That file could not be read.', size: 'That file is too large.' };
+      quota: 'Your Google Drive is full.', type: 'That file could not be read.', size: 'That file is too large.', export: 'That file is too large.' };
     const says = (why) => (why === 'cancel' ? '' : SAYS[why] || (SIGN_IN.has(why) ? 'Connect Google Drive again in Settings.' : "Couldn't reach Google Drive. Try again in a moment."));
     const pick = async () => {
       const r = await chrome.runtime.sendMessage({ type: 'glaze:google', op: 'pick' }).catch(() => null);
@@ -523,8 +537,8 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         } catch (e) { say(t(says(fail(e)) || 'Not saved. Try again in a moment.')); } finally { busy = false; }
       };
       const show = () => {
-        if (connected && !items) items = [D.item('toolbar', t('From Google Drive'), () => { fromDrive(); }), D.item('card', t('Save to Google Drive'), (doc) => { if (doc) toDrive(doc); })];
-        else if (!connected && items) { for (const x of items) x?.remove(); items = null; }
+        for (const x of items || []) x?.remove();
+        items = connected ? [picker ? D.item('toolbar', t('From Google Drive'), () => { fromDrive(); }) : null, D.item('card', t('Save to Google Drive'), (doc) => { if (doc) toDrive(doc); })] : null;
       };
       shown.add(show);
       show();
@@ -533,18 +547,20 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     // The paper's ⋯ menu (writer-paper.js), beside Import…: [{ label, run }] while connected. The picked file goes where a
     // file brought to the paper goes (bring: on an assignment writer-import.js's card, else a Word file's import); a paper
     // in Writer takes Word files and the kinds that open there (writer-kinds.js).
-    const items = (api, bring) => (connected ? [{ label: t('From Google Drive'), run: async () => {
+    const items = (api, bring) => (connected && picker ? [{ label: t('From Google Drive'), run: async () => {
       try {
         const [f] = await pick();
         if (!f) return;
         const takes = location.pathname.endsWith('/writer.html') ? ['paper', ...(globalThis.GZ_WRITER_KINDS?.opens?.() || [])] : ['paper'];
         api?.notify?.('Reading…');
-        bring(await client().open(f.id, takes));
+        // On an assignment it goes on to Blackboard's upload (writer-import.js), which takes only a name a file can have.
+        const got = await client().open(f.id, takes), name = fileName(got.name);
+        bring(name === got.name ? got : new File([got], name, { type: got.type }));
       } catch (e) { const w = says(fail(e)); if (w) api?.notify?.(w); }
     } }] : []);
-    return { home, items, connected: () => connected };
+    return { home, items, connected: () => connected, picker: () => picker };
   })();
 
-  return { API, UPLOAD, CHANGES, PORT, CHUNK, META, SYNC, SMALL, DOC, WHY, Fail, b64, unb64, plan, create, serve, client, page };
+  return { API, UPLOAD, CHANGES, PORT, CHUNK, META, SYNC, SMALL, DOC, WHY, Fail, b64, unb64, fileName, plan, create, serve, client, page };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_DRIVE;

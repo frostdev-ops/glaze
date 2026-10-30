@@ -26,7 +26,7 @@ const pair = () => {
 };
 
 // Drive as the stand-in holds it: id → { meta, bytes, hold (a promise the second piece waits on), stall (no piece after the
-// first, ever) }. asked: each request, `${id} meta|media|export <type>`; ended: each body cancelled before its end.
+// first, ever), refuse (Drive's error body for its bytes) }. asked: each request, `${id} meta|media|export <type>`; ended: each body cancelled before its end.
 const standIn = () => {
   const files = new Map(), asked = [], ended = [];
   const fetch = async (url) => {
@@ -35,6 +35,7 @@ const standIn = () => {
     asked.push(`${id} ${what}`);
     if (!f) return new Response(JSON.stringify(ERRORS[404]), { status: 404 });
     if (what === 'meta') return Response.json({ trashed: false, capabilities: { canEdit: true, canDownload: true }, ...f.meta });
+    if (f.refuse) return Response.json(f.refuse, { status: f.refuse.error.code });
     let at = 0;
     const body = new ReadableStream({
       async pull(c) {
@@ -50,7 +51,7 @@ const standIn = () => {
   return { files, asked, ended, drive: D.create({ fetch, token: async () => 'ya29.unit' }) };
 };
 
-const setup = ({ connected = true, picked = [], pick = null } = {}) => {
+const setup = ({ connected = true, picker = connected, picked = [], pick = null } = {}) => {
   const s = sheet(), d = standIn(), store = new Map(), ports = [];
   let n = 0;
   s.picks = [];
@@ -65,7 +66,7 @@ const setup = ({ connected = true, picked = [], pick = null } = {}) => {
     },
   } };
   // The page's client connects as the frame's chrome does (drive.js runs in this realm, the sheet in its own).
-  s.ctx.GZ_DRIVE = { ...D, client: () => D.client(() => s.ctx.chrome.runtime.connect({ name: D.PORT })), page: { connected: () => connected } };
+  s.ctx.GZ_DRIVE = { ...D, client: () => D.client(() => s.ctx.chrome.runtime.connect({ name: D.PORT })), page: { connected: () => connected, picker: () => picker } };
   s.ctx.GZ_DOC_KINDS = K;
   s.ctx.AbortController = AbortController; // a frame has it; the helper's context doesn't
   s.ctx.GZ_DOC_FILES = { client: () => ({ put: async (b) => { store.set(++n, b); return n; }, get: async (r) => store.get(r) }) };
@@ -78,13 +79,16 @@ const settle = async (s, n = 6) => { for (let i = 0; i < n; i++) await s.flush()
 const bytes = (n, b = 7) => new Uint8Array(n).fill(b);
 const file = (id, name, mimeType, size) => ({ id, name, mimeType, ...(size != null && { size: String(size) }) });
 
-test('From Google Drive shows only while Drive is connected', async () => {
+test('From Google Drive shows only while Drive is connected and the Picker works here', async () => {
   const off = setup({ connected: false });
   await off.open();
   assert.equal(off.doc.querySelector('.gs-drive'), null);
   const on = setup();
   await on.open();
   assert.equal(on.doc.querySelector('.gs-drive').textContent, 'From Google Drive');
+  const safari = setup({ picker: false });
+  await safari.open();
+  assert.equal(safari.doc.querySelector('.gs-drive'), null, 'connected where the Picker doesn\'t work (Safari): no button');
   const none = sheet();
   await none.open();
   assert.equal(none.doc.querySelector('.gs-drive'), null, 'no Drive script: no button');
@@ -266,4 +270,32 @@ test('a closed Picker says nothing and a sign-in to redo says so, without a requ
   await setupFail.open(); setupFail.builds[0].resolve(); await setupFail.flush();
   setupFail.click('.gs-drive'); await settle(setupFail);
   assert.equal(err(setupFail), 'Connect Google Drive again in Settings.'); assert.deepEqual(setupFail.d.asked, []);
+});
+
+test('a Drive title with a slash (a date) or a control character is attached, under a name a file can have', async () => {
+  const doc = file('1Slash', 'Lab report 10/30', MIME.gdoc), heic = file('1Heic', 'Scan 10/30\u0007.heic', 'image/heic', 900);
+  const s = setup({ picked: [doc, heic] });
+  s.d.files.set(doc.id, { meta: doc, bytes: bytes(1000, 1) });
+  s.d.files.set(heic.id, { meta: heic, bytes: bytes(900, 2) });
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-drive'); await settle(s, 30);
+  assert.equal(err(s), '', 'neither is refused as unreadable');
+  const r = rows(s).map((x) => x.name);
+  assert.equal(r.length, 2);
+  assert.match(r[0], /LabReport1030\.docx$/);
+  assert.equal(r[1], 'Scan 10_30_.heic');
+  s.click('.gs-primary'); await settle(s);
+  const go = s.messages.find((m) => m.type === 'submit:go');
+  assert.equal(JSON.stringify(go.files.map((f) => f.name)), JSON.stringify(r));
+});
+
+test('a Google file larger than Drive exports names itself as too large, not as unreadable', async () => {
+  const big = file('1BigDoc', 'Lab notes', MIME.gdoc), s = setup({ picked: [big] });
+  s.d.files.set(big.id, { meta: big, bytes: bytes(10), refuse: ERRORS.exportSize });
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-drive'); await settle(s, 20);
+  assert.deepEqual(s.d.asked, [`1BigDoc meta`, `1BigDoc export ${MIME.docx}`]);
+  assert.equal(rows(s).length, 0);
+  assert.equal(err(s), 'Lab notes: That file is too large.');
+  assert.equal(submitOff(s), false);
 });

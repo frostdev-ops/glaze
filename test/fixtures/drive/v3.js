@@ -41,6 +41,11 @@ const ERRORS = {
   storageQuotaExceeded: error(403, 'storageQuotaExceeded', "The user's Drive storage quota has been exceeded."),
   404: { error: { errors: [{ domain: 'global', reason: 'notFound', message: 'File not found {fileId}' }], code: 404, message: 'File not found: {fileId}' } },
   429: error(429, 'rateLimitExceeded', 'Rate Limit Exceeded', 'usageLimits'),
+  // files.export past its 10 MB, which the guide doesn't list: Drive's answer as googleapis/google-api-nodejs-client#3446
+  // (2024-02-28) printed it whole, and the older 403 as Google's Go client logged it ("googleapi: Error 403: This file is too
+  // large to be exported., exportSizeLimitExceeded", rclone and TrueNAS reports; its domain is the format's usual one).
+  exportSize: error(400, 'badRequest', 'This file is too large to be exported.', 'global', { location: 'export.size', locationType: 'other' }),
+  exportSizeLimitExceeded: error(403, 'exportSizeLimitExceeded', 'This file is too large to be exported.'),
 };
 // Sync Documents (lib/drive-sync.js), from the same discovery document's schemas (revision 20261028; the parts it uses
 // copied to glaze-plans/release-4.0.1/e5/drive-v3-sync-shapes-2026-10-30.json): StartPageToken, ChangeList, Change and
