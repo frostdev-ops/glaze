@@ -78,7 +78,7 @@ test('ROUND, ROUNDUP, ROUNDDOWN, INT, MOD, ABS, SQRT, POWER', () => {
     ['ROUND("2.5",)', 3], ['ROUND(TRUE,0)', 1], ['ROUND("x",0)', '#VALUE!'],
     ['INT(8.9)', 8], ['INT(-8.9)', -9], ['MOD(3,2)', 1], ['MOD(-3,2)', 1], ['MOD(3,-2)', -1], ['MOD(-3,-2)', -1], ['MOD(3,0)', '#DIV/0!'],
     ['ABS(2)', 2], ['ABS(-2)', 2], ['SQRT(16)', 4], ['SQRT(-16)', '#NUM!'], ['SQRT(ABS(-16))', 4],
-    ['POWER(5,2)', 25], ['POWER(0,0)', '#NUM!'], ['POWER(0,-1)', '#DIV/0!'], ['POWER(-8,1/3)', '#NUM!'], ['POWER(-2,3)', -8], ['POWER(10,400)', '#NUM!'],
+    ['POWER(5,2)', 25], ['POWER(0,0)', '#NUM!'], ['POWER(0,-1)', '#DIV/0!'], ['POWER(-8,1/2)', '#NUM!'], ['POWER(-2,3)', -8], ['POWER(10,400)', '#NUM!'],
   ]);
   near(calc(e, 'POWER(98.6,3.2)'), 2401077.222, 1e-9);
   near(calc(e, 'POWER(4,5/4)'), 5.656854249, 1e-9);
@@ -163,7 +163,7 @@ test('operators: arithmetic, the seven errors, Excel\'s comparison order, blank 
   cases(e, [
     ['1/0', '#DIV/0!'], ['#N/A+1', '#N/A'], ['NOSUCH(1)', '#NAME?'], ['Nowhere*2', '#NAME?'], ['Sheet9!A1', '#REF!'], ['A1:A2 B1:B2', '#NULL!'],
     ['"a"+1', '#VALUE!'], ['SQRT(-1)', '#NUM!'], ['B1*2', '#VALUE!'], ['B2*2', 14], ['"1,000"+1', 1001], ['"3/4/2025"+0', 45720], ['""+1', '#VALUE!'],
-    ['TRUE+TRUE', 2], ['-2^2', 4], ['2^3^2', 64], ['2^-1', 0.5], ['50%', 0.5], ['A1%*100', 3], ['10^309', '#NUM!'], ['(-8)^(1/3)', '#NUM!'],
+    ['TRUE+TRUE', 2], ['-2^2', 4], ['2^3^2', 64], ['2^-1', 0.5], ['50%', 0.5], ['A1%*100', 3], ['10^309', '#NUM!'], ['(-8)^(1/2)', '#NUM!'],
     ['"a"="A"', true], ['1<"a"', true], ['"z"<TRUE', true], ['FALSE<TRUE', true], ['"abc"<"abd"', true], ['"B">"a"', true], ['2>"1"', false],
     ['Z1=0', true], ['Z1=""', true], ['Z1=FALSE', true], ['Z1+1', 1], ['"x"&Z1', 'x'], ['Z1', 0], ['-Z1', 0], ['+B1', 'abc'],
     ['0.1+0.2=0.3', true], ['(0.5-0.4-0.1)', 0.5 - 0.4 - 0.1], ['0.5-0.4-0.1', 0],
@@ -607,5 +607,14 @@ test('MOD refuses a quotient of 1.1259E+12 or more', () => {
     ['MOD(1E+15,7)', '#NUM!'], ['MOD(1125899999999,1)', 0], ['MOD(1125900000000,1)', '#NUM!'], ['MOD(-1125900000000,1)', '#NUM!'],
     ['MOD(1125900000000,-1)', '#NUM!'], ['MOD(2251799999998,2)', 0], ['MOD(2251800000000,2)', '#NUM!'], ['MOD(2^30,2^-10)', 0], ['MOD(2^30,2^-11)', '#NUM!'],
     ['MOD(1,2^-40)', 0], ['MOD(1,2^-41)', '#NUM!'], ['MOD(2^40+0.5,1)', 0.5],
+  ]);
+});
+
+// Excel 16.114.1: a negative number to a power whose reciprocal is an odd whole number (to 15 digits) is its real root.
+test('a negative base takes an odd root', () => {
+  cases(book(), [
+    ['POWER(-8,1/3)', -2], ['(-8)^(1/3)', -2], ['(-27)^(1/3)', -3], ['POWER(-32,0.2)', -2], ['POWER(-8,-1/3)', -0.5], ['POWER(-1,1/3)', -1],
+    ['ROUND(POWER(-8,0.333333333333333),10)', -2], ['POWER(-8,2/3)', '#NUM!'], ['POWER(-8,0.5)', '#NUM!'], ['POWER(-32,0.6)', '#NUM!'], ['POWER(-8,1/3+1E-15)', '#NUM!'],
+    ['ROUND((-8)^(1/7),7)', -1.3459002], ['ROUND(POWER(-2,1/9),7)', -1.0800597], ['POWER(0,1/3)', 0],
   ]);
 });

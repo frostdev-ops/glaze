@@ -389,7 +389,6 @@ const excel = (g) => (g.t === 'e' && g.text !== g.v ? { t: 'e', v: g.text } : { 
 
 // Cases the engine answers otherwise, and why. A function not built is a todo by itself.
 const TODO = {
-  'math.power.2': 'Excel gives a negative base to the power 1/odd its real root, -2 for POWER(-8,1/3); the engine #NUM!',
   'text.len.9': 'Excel 16.114.1 counts a character outside the BMP once in LEN, LEFT, RIGHT and MID; the engine counts UTF-16 units',
   'text.mid.5': 'Excel 16.114.1 counts a character outside the BMP once in LEN, LEFT, RIGHT and MID; the engine counts UTF-16 units',
   'financial.rate.1': 'the engine\'s RATE stops 4e-12 short of the root that Excel reaches to 1e-13',
