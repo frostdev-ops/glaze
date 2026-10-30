@@ -637,11 +637,11 @@
 
     // ---- files dropped anywhere on the page or chosen with Import .docx…: one new document each, at most 20
     // A kind other than the paper says its own refusals (its says: { size, read }, slides-kind.js's; pdf-kind.js's here: the
-    // PDF size the record holds for now, and a file that is no PDF or a form only XFA can show); a file no kind takes gets
-    // the Word one, or the plain one while another kind takes files too.
-    const REFUSALS = new Set(['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.', 'Choose a PDF smaller than 3 MB.', 'That file could not be read.']);
+    // PDF size its kind opens, lib/doc-kinds.js big, and a file that is no PDF or a form only XFA can show); a file no kind
+    // takes gets the Word one, or the plain one while another kind takes files too.
+    const REFUSALS = new Set(['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.', DK.KINDS.pdf.big, 'That file could not be read.']);
     const PAPER_SAYS = { size: 'Choose a Word file smaller than 15 MB.', read: 'That file could not be read as a Word document.' };
-    const KIND_SAYS = { pdf: { size: 'Choose a PDF smaller than 3 MB.', read: 'That file could not be read.' } };
+    const KIND_SAYS = { pdf: { size: DK.KINDS.pdf.big, read: 'That file could not be read.' } };
     const saysOf = (id) => (id && id !== 'paper' && (DK.get(id)?.says || KIND_SAYS[id])) || PAPER_SAYS;
     const unread = many ? 'That file could not be read.' : PAPER_SAYS.read;
     const bring = async (list) => {
