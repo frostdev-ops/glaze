@@ -1,5 +1,5 @@
-// PDFs on the Documents page (papers.html, pdf-kind.js) in the real unpacked extension: with Settings → Writer → PDFs off
-// (writer.pdf false) a .pdf is refused as before, while a PDF already kept still opens; on, it imports as a card with its first page drawn, opens in the
+// PDFs on the Documents page (papers.html, pdf-kind.js) in the real unpacked extension: with Settings → Writer → PDFs turned
+// off (writer.pdf, on by default; Spreadsheets and Slides off throughout) a .pdf is refused as before, while a PDF already kept still opens; on, it imports as a card with its first page drawn, opens in the
 // viewer (pdf.js's PDFViewer: three pages, zoom, the text layer's find, AcroForm fields) whose filled field is still filled
 // after closing and opening it again, Export .pdf downloads the filled file, and Esc and Back behave as a paper's. pdf.js
 // runs its own worker (never the fake one in the page), the page stays white under a dark Look while its chrome wears it,
@@ -85,7 +85,7 @@ const scan = () => {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
     // Frost: a dark Look, so the chrome is dark while the page stays paper-white.
-    const settings = (pdf) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, pdf } });
+    const settings = (pdf) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, sheets: false, slides: false, pdf } });
     await worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings(false));
     const HOME = `chrome-extension://${id}/papers.html`;
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
