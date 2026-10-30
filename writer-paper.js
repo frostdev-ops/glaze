@@ -1357,7 +1357,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       try { r = await store.restore(key, id); } catch (e) { console.error(e); }
       if (!r) { toast(t('Not saved. Try again in a moment.')); return; }
       paper = r.paper; keep = paper.keep === true; outlineSaved = paper.outline || null;
-      if (await hand(paper)) return;
+      if (paper.kind && paper.kind !== 'paper' && await hand(paper)) return;
       await setFormat(ST.get(paper.format), { save: false, restyle: false }); setDoc(paper.doc); toast(t('Version restored'));
     };
     const open2 = (page2) => { try { window.open(chrome.runtime.getURL(page2), '_blank', 'noopener'); } catch { /* no extension context */ } };
