@@ -57,9 +57,13 @@
   const widths = (book) => {
     const sh = book?.sheets?.[book.active] || book?.sheets?.[0], pairs = sh?.colW?.$map;
     if (!Array.isArray(pairs)) return null;
-    const at = new Map(pairs.filter((p) => Array.isArray(p) && p[0] >= 0 && p[0] < 6 && Number.isFinite(p[1]) && p[1] >= 0));
-    const ws = LETTERS.map((_, i) => (at.has(i) ? Math.trunc(((256 * at.get(i) + Math.trunc(128 / 7)) / 256) * 7) : 64));
-    return ws.some((w) => w !== ws[0]) && ws.some((w) => w > 0) ? ws : null;
+    const at = new Map();
+    for (const p of pairs) if (Array.isArray(p) && Number.isInteger(p[0]) && p[0] >= 0 && p[0] < 6 && Number.isFinite(p[1]) && p[1] >= 0) at.set(p[0], p[1]);
+    // Work in digit units above the pixel formula's safe range; its subpixel rounding is then immaterial. Dividing by
+    // the largest keeps CSS's fractions finite even for huge stored widths, with a sum of at least one to fill the card.
+    const ws = LETTERS.map((_, i) => { const w = at.get(i); return w === undefined ? 64 / 7 : w > Number.MAX_SAFE_INTEGER / 256 ? w : Math.trunc(((256 * w + Math.trunc(128 / 7)) / 256) * 7) / 7; });
+    const largest = Math.max(...ws);
+    return ws.some((w) => w !== ws[0]) && largest > 0 ? ws.map((w) => w / largest) : null;
   };
   const thumb = (rec) => {
     if (rec) codecs().catch((e) => console.error(e));
