@@ -200,6 +200,25 @@ const photo = () => {
     await page.click('#gq-find-b');
     await until(async () => (await inSight()).room === sight.room, 'find bar closed');
     check(whole(sight) && whole(sightFind), `whole page: page 1 in sight from the top, filling the room (${JSON.stringify(sight)}), and with find open (${JSON.stringify(sightFind)})`);
+    // At exactly 75%, pdf.js emits no scalechanging event for the numeric choice. It must still leave the fit.
+    await page.setViewportSize({ width: 1280, height: 900 + 824 - sight.room });
+    await until(async () => { const g = await inSight(); return g.room === 824 && g.h === 792; }, 'whole page at exactly 75%');
+    await page.click('#gq-zoom'); await page.click('[data-zoom="75"]');
+    const percent = await inSight(), percentWidth = await width();
+    check(percent.label === '75%', `an equal percentage leaves Whole page (${JSON.stringify(percent)})`);
+    await page.setViewportSize({ width: 1280, height: 820 });
+    await until(async () => (await inSight()).room === 710, 'the smaller percent room');
+    check((await inSight()).label === '75%' && await width() === percentWidth, 'a percentage keeps its scale when the room resizes');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    for (const action of ['#gq-zoom-in', '#gq-zoom-out', 'Control+=', 'Control+-']) {
+      await page.click('#gq-zoom'); await page.click('[data-zoom="page-fit"]');
+      if (action.startsWith('#')) await page.click(action); else await page.keyboard.press(action);
+      const label = (await inSight()).label, beforeResize = await width();
+      await page.setViewportSize({ width: 1280, height: 850 });
+      await until(async () => (await inSight()).room === 740, 'zoomed room resize');
+      check(/\d+%/.test(label) && (await inSight()).label === label && await width() === beforeResize, `${action} leaves Whole page and stays at its percentage on resize (${label})`);
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
     await page.click('#gq-zoom');
     await page.click('[data-zoom="page-width"]');
     const wide = await until(() => page.evaluate(() => { const p = document.querySelector('.pdfViewer .page[data-page-number="1"]').getBoundingClientRect(), s = document.querySelector('.gq-scroll').getBoundingClientRect(); return p.width > s.width * 0.85 && p.width <= s.width ? { p: p.width, s: s.width } : null; }), 'page width');
@@ -474,6 +493,31 @@ const photo = () => {
     await page.goto(`${HOME}?pdf=${encodeURIComponent(brokenKey)}`);
     const brokenView = await until(() => page.evaluate(() => { const s = document.querySelector('.gq-said'); return s && !s.hidden ? { said: s.textContent, zoom: document.getElementById('gq-zoom').disabled } : null; }), 'the kept broken PDF says it could not be read');
     check(brokenView.said === 'That file could not be read.' && brokenView.zoom, `a kept PDF whose first page can't be read says so (${JSON.stringify(brokenView)})`);
+
+    // Page-view dimensions already include /Rotate. Whole page must fit both the height-limited and width-limited room.
+    await openHome();
+    const F = require('./pdf-fixtures.js'), rotatedFile = path.join(tmp, 'Rotated page.pdf');
+    fs.writeFileSync(rotatedFile, F.write(F.pagesOf([{ size: [612, 792], rotate: 90, label: 'Rotated page' }]).objects));
+    await page.setInputFiles('#gd-file', rotatedFile);
+    const rotatedCard = page.locator('.gd-card').filter({ has: page.locator('.gd-title', { hasText: 'Rotated page' }) });
+    await rotatedCard.locator('.gd-title').click();
+    await until(() => page.evaluate(() => document.querySelector('.pdfViewer .page')?.querySelector('canvas')), 'rotated page drawn');
+    await page.click('#gq-zoom'); await page.click('[data-zoom="page-fit"]');
+    const rotatedGeometry = () => page.evaluate(() => {
+      const s = document.querySelector('.gq-scroll'), b = s.getBoundingClientRect(), p = document.querySelector('.pdfViewer .page').getBoundingClientRect();
+      return { top: p.top - b.top, bottom: b.top + s.clientHeight - p.bottom, left: p.left - b.left, right: b.left + s.clientWidth - p.right, w: p.width, h: p.height, roomW: s.clientWidth, roomH: s.clientHeight, label: document.getElementById('gq-zoom').textContent };
+    });
+    const rotatedFits = (g) => g.label === 'Whole page' && g.w > g.h && Math.min(g.top, g.bottom, g.left, g.right) >= -1 && (Math.abs(g.h - (g.roomH - 32)) <= 2 || Math.abs(g.w - (g.roomW - 40)) <= 2);
+    const rotated = await until(async () => { const g = await rotatedGeometry(); return rotatedFits(g) && g; }, 'rotated whole page');
+    check(rotatedFits(rotated), `a rotated page fits the height (${JSON.stringify(rotated)})`);
+    await page.click('#gq-find-b');
+    const rotatedFind = await until(async () => { const g = await rotatedGeometry(); return g.roomH < rotated.roomH && rotatedFits(g) && g; }, 'rotated fit with find');
+    check(rotatedFits(rotatedFind), `a rotated page refits with find (${JSON.stringify(rotatedFind)})`);
+    await page.click('#gq-find-b');
+    await page.setViewportSize({ width: 640, height: 900 });
+    const rotatedNarrow = await until(async () => { const g = await rotatedGeometry(); return g.roomW === 640 && rotatedFits(g) && g; }, 'rotated narrow fit');
+    check(rotatedFits(rotatedNarrow), `a rotated page refits to the width on resize (${JSON.stringify(rotatedNarrow)})`);
+    await page.setViewportSize({ width: 1280, height: 900 });
     // pdf.js's own reports of that page (its worker's FormatError, uncaught in pdf.js, and the refusal papers.js logs);
     // nothing else may error.
     const theirs = errors.splice(erred).filter((e) => !/^page: FormatError$|^console: RangeError: That file could not be read\./.test(e));

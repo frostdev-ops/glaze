@@ -162,6 +162,18 @@ const holds = (bytes, value) => {
     check(vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper'), `the paper kept as a version first (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
     check(await fr.evaluate(() => { const shown = (x) => !!x && x.getClientRects().length > 0; return !shown(document.querySelector('#gw')) && !shown(document.querySelector('.gp:not(.gp-standalone)')) && shown(document.querySelector('.gk .gp-submit')) && !document.querySelector('.gk .gp-top a[href]'); }),
       `the viewer in the paper's place, its own Submit…, no way to Documents (frame ${h0}px → ${h1}px)`);
+    await tap(fr, '#gq-zoom'); await tap(fr, '[data-zoom="page-fit"]');
+    const fitInFrame = () => fr.evaluate(() => {
+      const s = document.querySelector('.gq-scroll'), b = s.getBoundingClientRect(), pg = document.querySelector('.pdfViewer .page').getBoundingClientRect();
+      return { top: pg.top - b.top, bottom: b.top + s.clientHeight - pg.bottom, left: pg.left - b.left, right: b.left + s.clientWidth - pg.right, w: pg.width, h: pg.height, roomW: s.clientWidth, room: s.clientHeight, label: document.getElementById('gq-zoom').textContent };
+    });
+    const frameFits = (g) => g.label === 'Whole page' && Math.min(g.top, g.bottom, g.left, g.right) >= -1 && (g.h >= g.room - 48 || g.w >= g.roomW - 56);
+    const frameFit = await until(async () => { const g = await fitInFrame(); return frameFits(g) && g; }, 'whole page in the assignment frame');
+    await tap(fr, '#gq-find-b');
+    const frameFind = await until(async () => { const g = await fitInFrame(); return g.room < frameFit.room && frameFits(g) && g; }, 'whole page under the frame find bar');
+    await tap(fr, '#gq-find-b');
+    await until(async () => { const g = await fitInFrame(); return g.room === frameFit.room && frameFits(g); }, 'whole page after frame find closes');
+    check(frameFits(frameFit) && frameFits(frameFind), `Whole page fits writer.html with find closed and open (frame ${h1}px; ${JSON.stringify({ frameFit, frameFind })})`);
     await shot(p, 'kinds-pdf-1440.png');
     // Fill the form's text field: saved.
     const input = fr.locator('.gk .page[data-page-number="1"] .annotationLayer input').first();

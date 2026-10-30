@@ -285,15 +285,17 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       return Math.min((scroll.clientWidth - 40) / pv.width, down / pv.height) * pv.scale;
     };
     const zoomTo = (v) => {
-      if (v !== 'page-fit') { viewer.currentScaleValue = v; return; }
+      // A numeric choice can equal the current scale: pdf.js then emits no scalechanging event.
+      if (v !== 'page-fit') { fit = PRESETS.some(([p]) => p === v) ? v : null; viewer.currentScaleValue = v; sayZoom(viewer.currentScale); return; }
       const s = wholePage();
       if (!(s > 0)) return;
       fit = v; fitting = true;
       try { viewer.currentScaleValue = String(s); } finally { fitting = false; }
       sayZoom(s);
     };
-    zoomIn.addEventListener('click', () => viewer.increaseScale());
-    zoomOut.addEventListener('click', () => viewer.decreaseScale());
+    const zoomBy = (up) => { fit = null; if (up) viewer.increaseScale(); else viewer.decreaseScale(); sayZoom(viewer.currentScale); };
+    zoomIn.addEventListener('click', () => zoomBy(true));
+    zoomOut.addEventListener('click', () => zoomBy(false));
     // A fit follows the room it fits (the window, the find bar), as pdf.js's own app re-applies it.
     const sizing = new ResizeObserver(() => { if (doc && fit) zoomTo(fit); });
     sizing.observe(scroll);
@@ -322,7 +324,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     };
     document.addEventListener('pointerdown', (e) => { if (menu && !menu.el.contains(e.target) && !menu.opener.contains(e.target)) closeMenu(); }, { capture: true, signal });
     zoomB.addEventListener('click', () => openMenu(zoomB, [...PRESETS.map(([v, label]) => [t(label), () => { zoomTo(v); }, { 'data-zoom': v }]),
-      ...STEPS.map((n) => [`${n}%`, () => { viewer.currentScaleValue = String(n / 100); }, { 'data-zoom': String(n) }])]));
+      ...STEPS.map((n) => [`${n}%`, () => { zoomTo(String(n / 100)); }, { 'data-zoom': String(n) }])]));
     // ⋯: Export .pdf (the pages panel's bake and the tools come in later steps).
     moreB?.addEventListener('click', () => openMenu(moreB, [[t('Export .pdf'), () => { flush().then((ok) => ok && exportFile(key)).catch(() => say(t(UNREAD))); }, { 'data-act': 'export' }]]));
     // An address's file: the original in a new tab; the PDF into Documents as a new document, as an import makes one.
@@ -373,8 +375,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       if (e.defaultPrevented || !doc || !(MAC ? e.metaKey : e.ctrlKey) || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === 'f') showFind(true);
-      else if (k === '=' || k === '+') viewer.increaseScale();
-      else if (k === '-') viewer.decreaseScale();
+      else if (k === '=' || k === '+') zoomBy(true);
+      else if (k === '-') zoomBy(false);
       else return;
       e.preventDefault(); e.stopPropagation();
     }, { capture: true, signal });
