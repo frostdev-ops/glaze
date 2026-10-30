@@ -384,12 +384,13 @@ test('the document buttons load on a course document or a file preview, with the
     ['a Canvas file preview', false, true, ['preview'], 1], ['nothing there', false, true, [], 0],
     ['an Ultra preview, switched off (its images are turned back)', true, false, ['preview'], 1],
     // Open in Glaze (features/canvasopen.js, through docs.js): a Canvas file link or preview with Previews in Glaze on, whatever the buttons' switch.
-    ['a Canvas file link, buttons off, Previews in Glaze on', false, false, ['link'], 1, true], ['a Canvas file link, Previews in Glaze off', false, false, ['link'], 0, false],
+    ['a Canvas file link, buttons off, Previews in Glaze on', false, false, ['link'], 1, true],
+    ['a Canvas API file link without a class, buttons off', false, false, ['apiLink'], 1, true], ['a Canvas file link, Previews in Glaze off', false, false, ['link'], 0, false],
     ['an Ultra file link is not Canvas\'s', true, false, ['link'], 0, true]]) {
     const h = hooks('  // ---- document buttons (Extras)', '  // ---- keyboard shortcuts (Extras)', { ultra, addEventListener() {}, api: 'syncDocTools' });
     h.ctx.settings.enhance.toggles = toggles;
     h.ctx.settings.enhance.bbPreviews = previews;
-    h.ctx.document.querySelector = (sel) => (has.some((k) => ({ doc: /document-content-root|show-content/, preview: /iframe/, link: /instructure_file_link/ })[k].test(sel)) ? {} : null);
+    h.ctx.document.querySelector = (sel) => (has.some((k) => ({ doc: /document-content-root|show-content/, preview: /iframe/, link: /instructure_file_link/, apiLink: /data-api-returntype/ })[k].test(sel)) ? {} : null);
     h.ctx.api.syncDocTools();
     assert.equal(h.loads.length, loads, why);
   }

@@ -82,7 +82,7 @@ const MODULES = (() => {
   return page.replace(row, rows);
 })();
 // A page with a file link to the deck, as the rich content editor writes one.
-const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-content[^"]*"[^>]*>)/, `$1<p>Read <a class="instructure_file_link" title="Week 3.pptx" href="/courses/25/files/22?wrap=1" data-api-returntype="File">Week 3.pptx</a> first.</p>`);
+const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-content[^"]*"[^>]*>)/, `$1<p>Read <a title="Week 3.pptx" href="/courses/25/files/22?wrap=1" data-api-returntype="File">Week 3.pptx</a> first.</p>`);
 
 (async () => {
   let ctx, held = false, tmp, passed = false;
@@ -234,7 +234,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     await until(async () => (await gz())?.shown, 'the slides viewer below the link');
     fr = await until(() => frameOf(), 'the link\'s viewer document');
     check(await until(() => fr.evaluate(() => document.getElementById('gs-at')?.textContent === '1 / 10')) && await page.evaluate(() => document.querySelector('#content .show-content p .gz-co') && document.querySelector('#content .show-content p').nextElementSibling?.classList.contains('gz-co-frame')),
-      'a page\'s file link opens the deck below its paragraph');
+      'a page\'s API file link without a class opens the deck below its paragraph');
 
     // ---- Settings → Writer → Slides and Spreadsheets off: no button by the deck or the CSV; the PDF keeps its own
     await set({ writer: { slides: false, sheets: false } });
