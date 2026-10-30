@@ -167,12 +167,12 @@ const stub = (required) => {
     check(await until(async () => !(await state()).rows.some(([h]) => h === 'canvas.school.edu')), 'Remove takes the site off the list');
     check(await until(async () => JSON.stringify(await gz(() => __gz.removed.at(-1))) === `["${CANVAS}/*"]`), 'and hands its grant back');
     check(!(await local()).canvas?.includes(`${CANVAS}/*`), 'the worker forgot it');
-    check((await state()).status === 'Removed canvas.school.edu. Glaze no longer runs there.', 'and says so');
+    check(await until(async () => (await state()).status === 'Removed canvas.school.edu. Glaze no longer runs there.'), 'Remove reports completion for canvas.school.edu');
     await shot('settings-8-removed');
     await gz((p) => { __gz.required = [...__gz.required, p]; }, `${BB}/*`);
     await removeRow('bb.school.edu');
     check(await until(async () => (await state()).rows.length === 0), 'a site on a required host is removed from the list');
-    await until(async () => (await state()).status === 'Removed bb.school.edu. Glaze no longer runs there.');
+    check(await until(async () => (await state()).status === 'Removed bb.school.edu. Glaze no longer runs there.'), 'Remove reports completion for bb.school.edu');
     const kept = await gz(() => __gz.removed);
     check(kept.length === before + 1 && JSON.stringify(kept.at(-1)) === `["${CANVAS}/*"]` && await gz((p) => __gz.held.has(p), `${BB}/*`), `and its grant stays (${JSON.stringify(kept)})`);
 
