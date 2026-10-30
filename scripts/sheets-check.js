@@ -1,11 +1,11 @@
 // Spreadsheets on the Documents page (papers.html, sheet-kind.js, sheet-grid.js) in the real unpacked extension. With
-// Settings → Writer → Spreadsheets stored off (writer.sheets false) the New band has no Spreadsheet tile, a .csv is refused
-// with the Word string, and a spreadsheet already stored still opens. On: the tile opens a blank workbook; values and
-// formulas typed into it compute; the fill handle continues a series and shifts a formula; copy and paste (Glaze's own copy
-// keeping formulas, Excel's HTML with its number formats); rows inserted and deleted move formulas; a renamed sheet's
-// references follow it; freeze, sort, undo and redo; closing and opening again keeps it all; Export writes the file; the
-// keyboard's paths through the grid; a 640 px layout. No page errors, no network, no timer under a minute. Screenshots at
-// 1280 and 640 px.
+// Settings → Writer → Spreadsheets switched off (writer.sheets, on by default) the New band has no Spreadsheet tile, a
+// .csv is refused with the Word string, and a spreadsheet already stored still opens. On: the tile opens a blank
+// workbook; values and formulas typed into it compute; the fill handle continues a series and shifts a formula; copy
+// and paste (Glaze's own copy keeping formulas, Excel's HTML with its number formats); rows inserted and deleted move
+// formulas; a renamed sheet's references follow it; freeze, sort, undo and redo; closing and opening again keeps it
+// all; Export writes the file; the keyboard's paths through the grid; a 640 px layout. No page errors, no network, no
+// timer under a minute. Screenshots at 1280 and 640 px.
 // NODE_PATH=<playwright> nice -n 10 node scripts/sheets-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -54,7 +54,7 @@ const seeded = (key, wb = M.workbook()) => {
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:' || u.protocol === 'blob:' || u.protocol === 'data:') return r.continue(); requests.push(u.href); return r.abort(); });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
-    const settings = (sheets) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, sheets } });
+    const settings = (sheets) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, pdf: false, slides: false, sheets } });
     const HOME = `chrome-extension://${id}/papers.html`;
     const page = await context.newPage();
     // Every interval the page starts, with its delay: none may fire more often than once a minute.
