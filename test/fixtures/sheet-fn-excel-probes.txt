@@ -33,7 +33,8 @@ blank batches demonstrate why treating that display value as a number is wrong.
 TRIMMEAN's initial symmetric input did not distinguish cutoffs; the asymmetric
 edge/blank batches do. Decimal literals are shown as Excel stored them.
 
-Documentation read before probes:
+Documentation consulted (initial pages before the first full batch; VAR.S,
+RANK.AVG and PERCENTILE.EXC checked again before closing the review):
 https://support.microsoft.com/en-us/excel/functions/stdev-s-function
 https://support.microsoft.com/en-us/excel/functions/var-s-function
 https://support.microsoft.com/en-us/excel/functions/pearson-function

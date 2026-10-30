@@ -10,7 +10,7 @@
 // Classic script; module.exports for node.
 var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
   const C = typeof GZ_SHEET_CALC !== 'undefined' ? GZ_SHEET_CALC : require('./sheet-calc.js');
-  const { ERR, isErr, num, bool, round, same, each, view, criteria } = C.lib;
+  const { ERR, isErr, num, bool, same, each, view, criteria } = C.lib;
 
   // ── Reading arguments ───────────────────────────────────────────────────────────────────────────────────────────────
   const numbers = (args, ctx) => {
@@ -22,11 +22,14 @@ var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
     }, true);
     return out;
   };
-  const values = (args, ctx) => {
+  const values = (args, ctx, arrayText = false) => {
     const out = [];
     for (const a of args) each(a, ctx, (v, direct) => {
       if (isErr(v)) throw v;
       if (typeof v === 'number') out.push(v);
+      // Excel's A functions count text and logicals in references, but array constants give numbers only.
+      // AVERAGEA alone also counts an array's text as zero.
+      else if (Array.isArray(a)) { if (arrayText && typeof v === 'string') out.push(0); }
       else if (typeof v === 'boolean') out.push(v ? 1 : 0);
       else if (direct) out.push(v === null ? 0 : num(v, ctx));
       else out.push(0);
@@ -34,6 +37,24 @@ var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
     return out;
   };
   const ascending = (xs) => xs.sort((a, b) => a - b);
+  // Keep the smaller tail in a heap, with its least desirable value at the root. No full sort, recursion, or
+  // input-dependent quadratic partitioning: O(n log min(k, n-k+1)) work and the collected input's storage only.
+  const select = (xs, index) => {
+    const upper = index > (xs.length - 1) / 2, size = upper ? xs.length - index : index + 1;
+    const worse = upper ? (a, b) => a < b : (a, b) => a > b;
+    const sift = (root) => {
+      const x = xs[root];
+      for (let child = root * 2 + 1; child < size; child = root * 2 + 1) {
+        if (child + 1 < size && worse(xs[child + 1], xs[child])) child++;
+        if (!worse(xs[child], x)) break;
+        xs[root] = xs[child]; root = child;
+      }
+      xs[root] = x;
+    };
+    for (let i = (size >> 1) - 1; i >= 0; i--) sift(i);
+    for (let i = size; i < xs.length; i++) if (worse(xs[0], xs[i])) { xs[0] = xs[i]; sift(0); }
+    return xs[0];
+  };
   // Two ranges or arrays of one size (else #N/A), as the numbers at the positions where both hold one.
   const pairs = (a, b, ctx) => {
     const A = view(a, ctx), B = view(b, ctx);
@@ -72,6 +93,7 @@ var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
   const finite = (r) => (Number.isFinite(r) ? r : ERR.NUM);
   const sum = (xs) => { let s = 0; for (const x of xs) s += x; return s; };
   const mean = (xs) => sum(xs) / xs.length;
+  const extreme = (xs, largest) => { let best = xs[0] ?? 0; for (const x of xs) if (largest ? x > best : x < best) best = x; return best; };
   const devsq = (xs) => { const m = mean(xs); let s = 0; for (const x of xs) s += (x - m) * (x - m); return s; };
   const variance = (xs, sample) => { const n = xs.length; if (n < (sample ? 2 : 1)) throw ERR.DIV0; return devsq(xs) / (sample ? n - 1 : n); };
   // Σ(x - x̄)(y - ȳ), Σ(x - x̄)², Σ(y - ȳ)² and the means of paired values.
@@ -83,7 +105,7 @@ var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
     for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
     return { n, mx, my, sxy, sxx, syy };
   };
-  const correl = (xs, ys) => { const m = moments(xs, ys); if (!m.sxx || !m.syy) throw ERR.DIV0; return m.sxy / Math.sqrt(m.sxx * m.syy); };
+  const correl = (xs, ys) => { const m = moments(xs, ys); if (!m.sxx || !m.syy) throw ERR.DIV0; return (m.sxy / Math.sqrt(m.sxx)) / Math.sqrt(m.syy); };
   const line = (ys, xs) => { const m = moments(xs, ys); if (!m.sxx) throw ERR.DIV0; const slope = m.sxy / m.sxx; return { slope, intercept: m.my - slope * m.mx }; };
 
   // Percentiles of sorted xs: INC places k over [x1, xn] at rank k(n-1); EXC over rank k(n+1), refusing ranks outside
@@ -139,7 +161,11 @@ var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
     return x < 0 ? 2 - r : r;
   };
   const cdf = (z) => 0.5 * erfc(-z / Math.SQRT2);
-  const pdf = (z) => Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+  const pdf = (z) => {
+    const square = z * z;
+    if (!Number.isFinite(square)) throw ERR.NUM;
+    return Math.exp(-0.5 * square) / Math.sqrt(2 * Math.PI);
+  };
   // The inverse of cdf from M. J. Wichura, "Algorithm AS 241: The percentage points of the normal distribution",
   // Applied Statistics 37 (1988) 477-484 (PPND16, about 16 digits), with its coefficients as CPython's statistics module
   // gives them.
@@ -172,9 +198,10 @@ var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
   const nonempty = (xs, e = ERR.NUM) => { if (!xs.length) throw e; return xs; };
   const positive = (xs) => { if (!xs.length || xs.some((x) => x <= 0)) throw ERR.NUM; return xs; };
   const nth = (largest) => ({ p: ['r', 'v'], min: 2, max: 2, fn: ([a, k], ctx) => {
-    const xs = ascending(numbers([a], ctx)), i = Math.ceil(num(k, ctx));
-    if (i < 1 || i > xs.length) throw ERR.NUM;
-    return largest ? xs[xs.length - i] : xs[i - 1];
+    const xs = numbers([a], ctx), rank = num(k, ctx);
+    if (rank < 1 || rank > xs.length) throw ERR.NUM;
+    const i = largest ? Math.ceil(rank) : Math.trunc(rank);
+    return select(xs, largest ? xs.length - i : i - 1);
   } });
   const ranking = (average) => ({ p: ['v', 'r', 'v'], min: 2, max: 3, fn: ([x, ref, order], ctx) => {
     const n = num(x, ctx), up = order !== undefined && num(order, ctx) !== 0;
@@ -188,7 +215,8 @@ var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
   } });
   const percentile = (pick) => ({ p: ['r', 'v'], min: 2, max: 2, fn: ([a, k], ctx) => finite(pick(ascending(numbers([a], ctx)), num(k, ctx))) });
   const quartile = (pick, lo, hi) => ({ p: ['r', 'v'], min: 2, max: 2, fn: ([a, q], ctx) => {
-    const quart = Math.trunc(num(q, ctx));
+    const raw = num(q, ctx), quart = Math.trunc(raw);
+    if (raw < 0) throw ERR.NUM;
     if (quart < lo || quart > hi) throw ERR.NUM;
     return finite(pick(ascending(numbers([a], ctx)), quart / 4));
   } });
@@ -200,12 +228,12 @@ var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
   } };
 
   const FNS = {
-    AVERAGEA: over(values, (xs) => mean(nonempty(xs, ERR.DIV0))),
+    AVERAGEA: over((args, ctx) => values(args, ctx, true), (xs) => mean(nonempty(xs, ERR.DIV0))),
     AVERAGEIFS: ifs((xs) => (xs.length ? finite(mean(xs)) : ERR.DIV0)),
-    MAXA: over(values, (xs) => (xs.length ? Math.max(...xs) : 0)),
-    MINA: over(values, (xs) => (xs.length ? Math.min(...xs) : 0)),
-    MAXIFS: ifs((xs) => (xs.length ? Math.max(...xs) : 0)),
-    MINIFS: ifs((xs) => (xs.length ? Math.min(...xs) : 0)),
+    MAXA: over(values, (xs) => extreme(xs, true)),
+    MINA: over(values, (xs) => extreme(xs, false)),
+    MAXIFS: ifs((xs) => extreme(xs, true)),
+    MINIFS: ifs((xs) => extreme(xs, false)),
     MEDIAN: over(numbers, (xs) => {
       const s = ascending(nonempty(xs)), h = s.length >> 1;
       return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2;
@@ -236,12 +264,12 @@ var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
     'QUARTILE.INC': quartile(inc, 0, 4),
     'QUARTILE.EXC': quartile(exc, 1, 3),
     GEOMEAN: over(numbers, (xs) => Math.exp(sum(positive(xs).map(Math.log)) / xs.length)),
-    HARMEAN: over(numbers, (xs) => xs.length / sum(positive(xs).map((x) => 1 / x))),
+    HARMEAN: over(numbers, (xs) => xs.length / sum(positive(nonempty(xs, ERR.NA)).map((x) => 1 / x))),
     // Drops the same count from each end: percent of the points, rounded down to an even number.
     TRIMMEAN: { p: ['r', 'v'], min: 2, max: 2, fn: ([a, pct], ctx) => {
       const xs = ascending(numbers([a], ctx)), p = num(pct, ctx);
       if (p < 0 || p >= 1 || !xs.length) throw ERR.NUM;
-      const cut = round((xs.length * p) / 2, 0, 'down');
+      const cut = Math.floor((xs.length * p) / 2);
       return finite(mean(xs.slice(cut, xs.length - cut)));
     } },
     AVEDEV: over(numbers, (xs) => { const m = mean(nonempty(xs)); return sum(xs.map((x) => Math.abs(x - m))) / xs.length; }),
@@ -269,18 +297,22 @@ var GZ_SHEET_FN_STATS = globalThis.GZ_SHEET_FN_STATS || (() => {
       return finite(d / spread(s, ctx));
     } },
     PERMUT: { p: ['v', 'v'], min: 2, max: 2, fn: ([a, b], ctx) => {
-      const n = Math.trunc(num(a, ctx)), k = Math.trunc(num(b, ctx));
-      if (n <= 0 || k < 0 || n < k) throw ERR.NUM;
+      const rawN = num(a, ctx), rawK = num(b, ctx);
+      if (rawN < 0 || rawK < 0) throw ERR.NUM;
+      const n = Math.trunc(rawN), k = Math.trunc(rawK);
+      if (n < k) throw ERR.NUM;
       let r = 1;
       for (let i = 0; i < k && Number.isFinite(r); i++) r *= n - i;
       return finite(r);
     } },
     COMBIN: { p: ['v', 'v'], min: 2, max: 2, fn: ([a, b], ctx) => {
-      const n = Math.trunc(num(a, ctx)), k0 = Math.trunc(num(b, ctx));
-      if (n < 0 || k0 < 0 || n < k0) throw ERR.NUM;
+      const rawN = num(a, ctx), rawK = num(b, ctx);
+      if (rawN < 0 || rawK < 0) throw ERR.NUM;
+      const n = Math.trunc(rawN), k0 = Math.trunc(rawK);
+      if (n < k0) throw ERR.NUM;
       const k = Math.min(k0, n - k0);
       let r = 1;
-      for (let i = 1; i <= k && Number.isFinite(r); i++) r = (r * (n - k + i)) / i;
+      for (let i = 1; i <= k && Number.isFinite(r); i++) r = (r / i) * (n - k + i);
       return finite(r < 2 ** 53 ? Math.round(r) : r);
     } },
     // A column one longer than the bins: how many values fall at or below each bin and above the next lower one, then

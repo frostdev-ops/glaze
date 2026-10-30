@@ -32,11 +32,10 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
     const cell = sheet.rows.get(r)?.get(c);
     if (cell?.f !== undefined) return cell;
     if (!cell) return null;
-    for (const head of new Set(ctx.eng.members.values())) {
-      const node = ctx.eng.nodes.get(head), s = node?.span;
-      if (node.sheet === sheet && s && r >= s.r0 && r <= s.r1 && c >= s.c0 && c <= s.c1) return node.cell;
-    }
-    return null;
+    // The engine already indexes every array member and links it to its master. Use its cell key directly until
+    // it exposes a formulaAt accessor, rather than walking every member for each formula inspection.
+    const key = (sheet.id * M.MAX_ROWS + r) * M.MAX_COLS + c;
+    return ctx.eng.nodes.get(key)?.master?.cell ?? null;
   };
 
   // CELL("format"): Excel's code for a number format's first section: G, F, ",", C, P or S with its decimals, D1-D9 for
@@ -60,17 +59,28 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
     return out;
   };
   const formatCode = (fmt) => {
-    const [first, negative] = sections(NF.code(fmt)), t = first.text.toLowerCase();
+    const code = NF.code(fmt), [first, negative] = sections(code), t = first.text.toLowerCase().trim();
     const suffix = (negative?.color ? '-' : '') + (/\(/.test(first.text + first.literal) ? '()' : '');
     if (t.trim() === 'general') return 'G' + suffix;
     if (/[ydhs]/.test(t) || /m/.test(t.replace(/am\/pm/g, ''))) {
-      const y = t.includes('y'), d = t.includes('d'), mmm = t.includes('mmm');
-      if (y || d) return (mmm ? (y && d ? 'D1' : d ? 'D2' : 'D3') : y ? 'D4' : 'D5') + suffix;
-      if (mmm) return 'D3' + suffix;
-      const ampm = /am\/pm|a\/p/.test(t);
-      return (t.includes('s') ? (ampm ? 'D6' : 'D8') : ampm ? 'D7' : 'D9') + suffix;
+      // CELL describes format families, not whether the formatter can render a date. Token-only, ISO and elapsed
+      // formats return G in Excel. Locale-prefixed dates have their own legacy D2 classification.
+      let kind = 'G';
+      if (!/\[[hms]+\]/i.test(code)) {
+        if (/^\[\$-[\da-f]+\]/i.test(code) && /[mdy]/.test(t)) kind = 'D2';
+        else if (/^m{1,4}[^a-z]+d{1,2}[^a-z]+y/.test(t)) kind = 'D4';
+        else if (/^d{1,2}[^a-z]+m{3,4}[^a-z]+y/.test(t)) kind = 'D1';
+        else if (/^d{1,4}[^a-z]+m{3,4}/.test(t)) kind = 'D2';
+        else if (/^m{3,4}[^a-z]+y/.test(t)) kind = 'D3';
+        else if (/^m{1,2}\/d{1,2}$/.test(t)) kind = 'D5';
+        else if (/^h{1,2}:mm/.test(t)) {
+          const ampm = /am\/pm|a\/p/.test(t);
+          kind = t.includes('s') ? (ampm ? 'D6' : 'D8') : ampm ? 'D7' : 'D9';
+        }
+      }
+      return kind + suffix;
     }
-    if (!/[0#?]/.test(t) && t.includes('@')) return '@';
+    if (!/[0#?]/.test(t) && t.includes('@')) return 'G';
     if (/[0#?]\s*\/\s*[0-9#?]/.test(t)) return 'G' + suffix;
     const mantissa = t.split(/e[+-]/)[0], dot = mantissa.indexOf('.');
     const decimals = dot < 0 ? 0 : (mantissa.slice(dot + 1).match(/[0#?]/g) || []).length;
@@ -115,7 +125,7 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
     T: { p: ['v'], min: 1, max: 1, fn: ([v]) => (typeof v === 'string' ? v : '') },
     TYPE: { p: ['r'], min: 1, max: 1, fn: ([v], ctx) => {
       if (v instanceof Areas) return 16;
-      if (v instanceof Ref) { if (v.rows * v.cols > 1) return 64; v = ctx.read(v.sheet, v.r0, v.c0); }
+      if (v instanceof Ref) v = ctx.value(v);
       if (Array.isArray(v)) return 64;
       if (typeof v === 'string') return 2;
       if (typeof v === 'boolean') return 4;
@@ -131,11 +141,11 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
         case 'col': return c + 1;
         case 'row': return r + 1;
         case 'contents': return ctx.read(sheet, r, c);
-        // "l" for a text constant, "v" for anything else, a formula too.
+        // Excel classifies text results, including text formulas, as labels.
         case 'type': {
           const cell = sheet.rows.get(r)?.get(c);
           if (!cell || cell.t === 'z') return 'b';
-          return cell.t === 's' && !formulaAt(ctx, sheet, r, c) ? 'l' : 'v';
+          return cell.t === 's' ? 'l' : 'v';
         }
         case 'format': { const s = sheet.rows.get(r)?.get(c)?.s; return formatCode(s === undefined ? 0 : ctx.eng.wb.styles[s]?.fmt); }
         default: throw ERR.VALUE;
@@ -159,7 +169,7 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
       if (isErr(v)) return v;
       if (v instanceof Areas) return new Set(v.list.map((ref) => ref.sheet)).size;
       if (v instanceof Ref) return 1;
-      throw ERR.REF;
+      throw ERR.NA;
     } },
     // A range's rows (a column) or columns (a row) as an array; one cell's alone.
     ROW: { p: ['r'], min: 0, max: 1, fn: ([v], ctx) => {
