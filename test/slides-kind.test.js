@@ -71,7 +71,7 @@ test('defaults.js loads through need() only where the page lacks it', async () =
   const need = async (files) => { asked.push(...files); if (files.includes('defaults.js')) ctx.GZ_SANITIZE = sanitizer(true); };
   ({ ctx } = load(undefined, { GZ_SANITIZE: undefined, GZ_WRITER_PAPER: { need } }));
   assert.equal(await imports(ctx.GZ_DOC_KINDS), true);
-  assert.deepEqual(asked, ['defaults.js']);
+  assert.deepEqual(asked, ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'], 'what defaults.js uses at load, first');
   asked.length = 0;
   ({ ctx } = load(undefined, { GZ_SANITIZE: sanitizer(true), GZ_WRITER_PAPER: { need } }));
   assert.equal(await imports(ctx.GZ_DOC_KINDS), true);

@@ -524,9 +524,11 @@
   };
 
   // Viewing stays registered; only import follows the switch, read through defaults.js as every Writer setting is (a device
-  // with no stored choice gets the default). writer.html has defaults.js already; loading it twice would redeclare its
-  // consts. The page waits before it routes or draws.
-  const sanitizer = () => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(['defaults.js']));
+  // with no stored choice gets the default). papers.html loads defaults.js on demand, after the scripts it uses at load (in
+  // papers.js's order, so the loads are shared); writer.html has it already, and a second load would redeclare its consts.
+  // The page waits before it routes or draws.
+  const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
+  const sanitizer = () => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(DEFAULTS));
   const on = Promise.resolve().then(sanitizer).then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.slides === true).catch(() => false);
   DK.wait(on.then((yes) => DK.register('slides', { edit, view: (key, host) => edit(key, { host }), into, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
   globalThis.GZ_SLIDES_KIND = Object.freeze({ STORE });
