@@ -59,14 +59,22 @@ const frame = (options = {}) => {
 };
 
 test('beforeunload protects uncommitted cell text with the browser prompt and saves it; clean views do not prompt', async () => {
-  const f = frame();
+  let release;
+  const compression = new Promise((resolve) => { release = resolve; });
+  const f = frame({ SD: { ...SD, pack: async (wb) => { await compression; return SD.pack(wb); } } });
   assert.equal(f.unload().prevented, false);
   f.type('draft');
   const leaving = f.unload();
   assert.equal(leaving.prevented, true);
   assert.equal(leaving.returnValue, '', 'only the browser supplies prompt text');
   await settle();
-  const got = await SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY);
+  release();
+  let got;
+  const deadline = Date.now() + 5000;
+  while (!(got = await SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY)) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.ok(got?.wb, 'the unload save finishes');
   assert.equal(got.wb.sheets[0].rows.get(0).get(0).v, 'draft');
   assert.equal(f.unload().prevented, false);
 });
