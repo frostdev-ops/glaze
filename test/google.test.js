@@ -404,7 +404,7 @@ test('packages: switched on, the shipped config gives Chrome Calendar\'s client 
 // ---- the build-time switch (lib/google.js ON): off on this branch, as Calendar's is, until the release that ships Drive ----
 test('Drive is switched off: the worker refuses, Settings has no row, and the packages carry neither oauth2 nor identity', async () => {
   assert.equal(G.ON, false);
-  const h = harness({ on: undefined });
+  const h = harness({ on: G.ON }); // the shipped switch
   assert.deepEqual(await h.g.status(), { ok: false, why: 'off' });
   assert.deepEqual(await h.g.connect(), { ok: false, why: 'off' });
   assert.deepEqual(await h.g.pick(), { ok: false, why: 'off' });

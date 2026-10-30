@@ -49,8 +49,9 @@ const imports = [...fs.readFileSync(background, 'utf8').matchAll(/importScripts\
   .flatMap(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.join('lib', f)));
 m.background = { scripts: ['lib/firefox-background.js', ...new Set(imports), 'lib/background.js'] };
 delete m.minimum_chrome_version;
-// Google (scripts/oauth-manifest.js): no oauth2 key, which is getAuthToken's; identity only once Drive's Web client is real.
-const google = require(path.join(process.cwd(), 'scripts/oauth-manifest.js')).oauth(m, { target: 'firefox', calendar: false, config: require(path.join(process.cwd(), 'lib/google-config.js')) });
+// Google (scripts/oauth-manifest.js): no oauth2 key, which is getAuthToken's; identity only for Drive, switched on (lib/google.js ON)
+// with its Web client real.
+const google = require(path.join(process.cwd(), 'scripts/oauth-manifest.js')).oauth(m, { target: 'firefox', calendar: false, drive: require(path.join(process.cwd(), 'lib/google.js')).ON === true, config: require(path.join(process.cwd(), 'lib/google-config.js')) });
 for (const k of ['oauth2', 'optional_permissions']) if (k in google) m[k] = google[k]; else delete m[k];
 for (const entry of m.web_accessible_resources || []) delete entry.use_dynamic_url;
 // Firefox has no declarativeContent (Chrome's lit button) and no addHostAccessRequest; AMO's linter flags both, the second
