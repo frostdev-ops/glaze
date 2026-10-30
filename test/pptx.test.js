@@ -415,3 +415,13 @@ test('placeholder idx defaults to zero before type fallback', async () => {
   assert.deepEqual(title.bounds, named((await deck()).slides[1], 'Title 1').bounds);
   assert.equal(title.text.paragraphs[0].runs[0].size, 44);
 });
+
+test('long malformed attribute names do not cause quadratic attribute scans', async () => {
+  const slide = fixture('ppt/slides/slide3.xml').replace('name="Default"', `name="Default" ${'x'.repeat(64000)}`);
+  const bytes = pack({ 'ppt/slides/slide3.xml': slide });
+  const cpu = process.cpuUsage();
+  const d = await P.read(bytes);
+  const used = process.cpuUsage(cpu);
+  assert.equal(named(d.slides[2], 'Default').type, 'shape');
+  assert.ok(used.user + used.system < 500000, `attribute scan used ${used.user + used.system} microseconds of CPU`);
+});
