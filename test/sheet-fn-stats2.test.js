@@ -250,3 +250,87 @@ test('the continuous distributions far into their tails, against 60-digit values
     ['T.INV(0.9,1)', 3.0776835371752534], ['T.INV(0.999,2)', 22.3271247701198754],
   ]);
 });
+
+// Review regression: both calls must handle the engine's 250,000-cell budget without spreading it into arguments.
+test('MODE.MULT accepts 250,000 values', () => {
+  const n = 250000, ctx = { value: (v) => v };
+  const values = Array.from({ length: n }, (_, i) => [i]);
+  assert.throws(() => C.fn('MODE.MULT').fn([values], ctx), (e) => e === C.lib.ERR.NA);
+});
+
+test('LINEST accepts 250,000 observations', () => {
+  const n = 250000, ctx = {};
+  const values = Array.from({ length: n }, (_, i) => [i]);
+  const ys = values.map(([x]) => [3 * x + 2]);
+  const fit = C.fn('LINEST').fn([ys, values, true, false], ctx);
+  assert.ok(Math.abs(fit[0][0] - 3) < 1e-12);
+  assert.ok(Math.abs(fit[0][1] - 2) < 1e-7);
+});
+
+test('distribution endpoints and gamma range limits agree with Excel', () => {
+  const e = book();
+  cases(e, [['CHISQ.DIST(0,1,FALSE)', '#NUM!'], ['CHISQ.DIST(0,2,FALSE)', 0.5], ['CHISQ.DIST(0,3,FALSE)', 0],
+    ['GAMMA(1.1E-308)', '#NUM!'], ['GAMMALN(1E-308)', '#NUM!']]);
+  close(e, [['GAMMALN(1E-307)', 706.893623549172]]);
+});
+
+test('incomplete distributions converge before returning and preserve small tails', () => {
+  const e = book();
+  close(e, [['GAMMA.DIST(1E10,1E10,1,TRUE)', 0.5000013298076014], ['CHISQ.DIST(1E10,1E10,TRUE)', 0.5000018806319452],
+    ['POISSON.DIST(10000000000,10000000000,TRUE)', 0.5000026596152026], ['BETA.DIST(0.5,1E10,1E10,TRUE)', 0.5]]);
+  const S = require('../lib/sheet-fn-stats2.js');
+  for (const [a, x, q] of [[1e-10, 1, 2.1938393441796778e-11], [1e-8, 0.5, 5.597735977099587e-9]]) {
+    const got = S.incgamma(a, x)[1];
+    assert.ok(Math.abs(got - q) <= Math.abs(q) * 1e-12, `${a}, ${x}: Q=${got}; 60-digit reference ${q}`);
+  }
+  assert.throws(() => S.incgamma(1e30, 1e30), (error) => error === C.lib.ERR.NUM, 'iteration exhaustion must be explicit');
+});
+
+test('inverse brackets retain finite roots in both extreme tails', () => {
+  close(book(), [['T.INV.2T(1E-100,1)', 6.366197723675814e99], ['F.INV.RT(1E-100,1,1)', 4.052847345693495e199],
+    ['GAMMA.INV(1E-100,0.5,1)', 7.853981633974483e-201], ['BETA.INV(1E-100,0.5,2)', 4.444444444444384e-201]]);
+});
+
+test('LINEST reports perfect fits and zero degrees of freedom as Excel does', () => {
+  const e = book();
+  for (const f of ['LINEST({2;4},{1;2},TRUE,TRUE)', 'LINEST({2;4;6},{1;2;3},TRUE,TRUE)', 'LINEST({1;1;1},{1;2;3},TRUE,TRUE)']) {
+    cases(e, [[`INDEX(${f},2,1)`, 0], [`INDEX(${f},2,2)`, 0], [`INDEX(${f},3,1)`, 1], [`INDEX(${f},3,2)`, 0], [`INDEX(${f},4,1)`, '#NUM!'], [`INDEX(${f},5,2)`, 0]]);
+  }
+  cases(e, [['INDEX(LINEST({2;4},{1;2},TRUE,TRUE),4,2)', 0],
+    ['INDEX(LINEST({2;4},{1,2;2,1},TRUE,TRUE),1,2)', 0]]);
+  close(e, [['INDEX(LINEST({2;4},{1,2;2,1},TRUE,TRUE),1,1)', -2]]);
+  // Excel's constant-X residuals/df do not describe the fitted intercept. Keep the well-defined intercept-only fit.
+  const constantX = 'LINEST({2;4;5},{1;1;1},TRUE,TRUE)';
+  cases(e, [[`INDEX(${constantX},4,2)`, 2], [`INDEX(${constantX},3,1)`, 0]]);
+  close(e, [[`INDEX(${constantX},5,2)`, 14 / 3], [`INDEX(${constantX},3,2)`, Math.sqrt(7 / 3)]]);
+});
+
+test('GAMMA accepts finite results above 1e308 and follows Excel normal-input bounds', () => {
+  close(book(), [['GAMMA(171.55)', 1.2263532731698625e308], ['GAMMA(171.6)', 1.5858969096672508e308], ['GAMMA(171.624)', 1.7942117599248174e308]]);
+  cases(book(), [['GAMMA(2.225073858507202E-308)', '#NUM!'], ['GAMMALN(2.2250738585072014E-308)', '#NUM!']]);
+});
+
+test('discrete distributions reject negative counts before truncation', () => {
+  cases(book(), ['BINOM.DIST(-0.5,2,0.5,FALSE)', 'BINOM.DIST(0,-0.5,0.5,FALSE)', 'BINOM.INV(-0.5,0.5,0.5)',
+    'POISSON.DIST(-0.5,2,FALSE)', 'NEGBINOM.DIST(-0.5,2,0.5,FALSE)', 'NEGBINOMDIST(-0.5,2,0.5)',
+    'HYPGEOM.DIST(-0.5,2,2,5,FALSE)', 'BINOM.DIST.RANGE(5,0.5,-0.5)'].map((f) => [f, '#NUM!']));
+});
+
+test('incomplete beta preserves the small tail with a tiny shape', () => {
+  const S = require('../lib/sheet-fn-stats2.js');
+  // mpmath at 60 digits, using the exact doubles supplied below.
+  for (const [a, b, x, index, want] of [[1e-10, 0.1, 0.1, 1, 1.20545519894815e-9], [1e-10, 1000, 0.0001, 1, 1.8233312140731544e-10],
+    [100, 1e-10, 0.999, 0, 1.827003617274029e-10], [0.001, 3, 0.1, 1, 0.0009975335256324026]]) {
+    const got = S.incbeta(a, b, x, 1 - x)[index];
+    assert.ok(Math.abs(got - want) <= 1e-12 * Math.abs(want), `${a}, ${b}, ${x}: ${got}; want ${want}`);
+  }
+});
+
+test('discrete count functions terminate beyond integer precision', () => {
+  const { execFileSync } = require('node:child_process');
+  const source = `const C = require('./lib/sheet-calc.js'); require('./lib/sheet-fn-stats2.js');
+    const cases = [['BINOM.INV',[1e100,0.5,0.5]], ['BINOM.DIST.RANGE',[1e100,0.5,5e99]], ['HYPGEOM.DIST',[2.5e99,5e99,5e99,1e100,true]]];
+    console.log(JSON.stringify(cases.map(([name,args]) => { try { return C.fn(name).fn(args, {}); } catch (e) { return e.code; } })));`;
+  const got = execFileSync(process.execPath, [...process.execArgv, '-e', source], { cwd: path.join(__dirname, '..'), encoding: 'utf8', timeout: 3000 });
+  assert.deepEqual(JSON.parse(got), ['#NUM!', '#NUM!', '#NUM!']);
+});
