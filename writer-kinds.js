@@ -44,9 +44,11 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
   const mount = async (id, key, paper) => {
     const k = await kind(id).catch((e) => { console.error(e); return null; });
     if (typeof k?.view !== 'function' || !key) return null;
-    const root = document.documentElement, el = document.createElement('div');
+    const root = document.documentElement, el = document.createElement('div'), was = root.dataset.view;
     el.className = 'gk';
     document.body.append(el);
+    // The page first: the hidden paper's next height report would fold a compact frame to 40 px while the viewer builds.
+    frame.say({ type: 'view', full: true });
     root.dataset.doc = id;
     root.dataset.view = 'full';
     let v = null;
@@ -73,10 +75,13 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     submitB.addEventListener('click', () => P().submit?.(surface));
     try {
       v = await k.view(key, { mount: el, t, title: () => paper.context()?.assignment?.title || '', tools: [submitB] });
-    } catch (e) { console.error(e); el.remove(); delete root.dataset.doc; return null; }
+    } catch (e) {
+      console.error(e); el.remove(); delete root.dataset.doc;
+      if (was !== 'full') { if (was) root.dataset.view = was; else delete root.dataset.view; frame.say({ type: 'view', full: false }); }
+      return null;
+    }
     if (typeof P().submit === 'function') submitB.disabled = false;
     shown = { id, key, el, surface, paper, viewer: v };
-    frame.say({ type: 'view', full: true });
     return surface;
   };
   const unmount = async () => {

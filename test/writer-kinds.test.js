@@ -231,3 +231,19 @@ test('the page hears the full view before the paper is hidden for a viewer', asy
   assert.ok(await mounting, 'the viewer mounts');
   assert.deepEqual(said.filter((m) => m.type === 'view').map((m) => m.full), [true], 'one full view, said once');
 });
+
+test('a viewer that fails gives the page back the compact view it had', async () => {
+  const said = [], el = () => ({ dataset: {}, append() {}, remove() {}, addEventListener() {} }), root = el();
+  root.dataset.view = 'compact';
+  const P = PA.open(store(), () => Date.now());
+  await P.save(KEY, { kind: 'sheet', doc: null });
+  const DK = require('../lib/doc-kinds.js');
+  const ctx = vm.createContext({ console: { error() {} }, document: { documentElement: root, body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: el },
+    GZ_WRITER_PAPERS: { open: () => P }, GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], view: async () => { throw new Error('no grid'); } }) },
+    GZ_WRITER_FRAME: { t: (s) => s, say: (m) => said.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ sheets: true }) },
+    GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'writer-kinds.js'), 'utf8'), ctx);
+  assert.equal(await ctx.GZ_WRITER_KINDS.mount('sheet', KEY, { key: () => KEY, context: () => ({}), paper: () => ({}) }), null);
+  assert.deepEqual(said.map((m) => `${m.type}:${m.full}`), ['view:true', 'view:false']);
+  assert.deepEqual({ ...root.dataset }, { view: 'compact' }, 'the paper shown again, compact');
+});
