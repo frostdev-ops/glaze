@@ -796,3 +796,38 @@ test('legacy counting decodes an unchanged part only once and invalidates a repl
   assert.equal(badgeCount(k.thumb(rec)), 0);
   assert.equal(decoded, 2);
 });
+
+test('more than 32 charts keep an exact count and prioritize markers that reach the card', async () => {
+  const X = require('../lib/sheet-xlsx.js'), CX = require('../lib/sheet-chart-xml.js'), FX = require('./fixtures/sheets/charts.js');
+  const wb = await X.read(FX.workbook({ kinds: ['column'] }));
+  const part = wb.keep.parts['xl/drawings/drawing1.xml'], xml = new TextDecoder().decode(part.data);
+  const a = /<xdr:twoCellAnchor\b[\s\S]*?<\/xdr:twoCellAnchor>/.exec(xml)[0];
+  const inside = a.replace('<xdr:col>6</xdr:col>', '<xdr:col>1</xdr:col>').replace('<xdr:row>1</xdr:row>', '<xdr:row>0</xdr:row>');
+  part.data = xml.replace(a, a.repeat(39) + inside);
+  globalThis.GZ_SHEET_CHART_XML = CX;
+  try {
+    assert.equal(SD.charts(wb).length, 40, 'no charts disappear at the descriptor limit');
+    const s = store(), P = PA.open(s), out = await SD.write(P, KEY, wb, new Map());
+    const rec = out.saved.paper, k = await cardKind();
+    assert.equal(rec.chartCount, 40);
+    assert.ok(rec.charts.length <= 32 && JSON.stringify(rec.charts).length < 8000, 'bounded stored descriptors');
+    const box = k.thumb(rec);
+    assert.equal(box.children.filter((e) => e.className === 'gx-th-chart').length, 1, 'chart 40 reaches the card');
+    assert.equal(badgeCount(box), 39);
+    const { DK } = load({ sheets: true }, { local: s, GZ_SHEET_DATA: SD });
+    await DK.settled();
+    const copy = await DK.get('sheet').copy(rec);
+    assert.equal(copy.chartCount, 40);
+    assert.deepEqual(copy.charts, rec.charts);
+    const B = require('../lib/backup.js');
+    const entries = B.pack({ settings: {}, tasks: {}, local: s.data });
+    const restored = store(), R = PA.open(restored);
+    const papers = Object.fromEntries(entries.filter((e) => /^papers\/\d+\.json$/.test(e.name)).map((e) => {
+      const value = JSON.parse(new TextDecoder().decode(e.data));
+      return [value.key ? `writerPaper:${value.key}` : `writerVersions:${KEY}`, value];
+    }));
+    await R.merge(papers);
+    assert.equal((await R.get(KEY)).chartCount, 40);
+    assert.deepEqual((await R.get(KEY)).charts, rec.charts);
+  } finally { delete globalThis.GZ_SHEET_CHART_XML; }
+});
