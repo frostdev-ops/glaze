@@ -82,7 +82,7 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
       const documents = list !== everything && list[0].id === 'documents';
       $('writer-clear-title').textContent = list === everything ? t('Clear all papers and documents?') : documents ? t('Clear documents?') : t('Clear {course}’s papers?', { course: list[0].name });
       $('writer-clear-note').textContent = `${t(list === everything ? '{n} papers and documents' : documents ? '{n} documents' : '{n} papers', { n })}. ${t('They and their versions are deleted from this device. What you submitted stays in Blackboard.')}`;
-      $('writer-clear-ok').textContent = list === everything ? t('Clear all') : t('Clear papers');
+      $('writer-clear-ok').textContent = list === everything ? t('Clear all') : documents ? t('Clear documents') : t('Clear papers');
       dialog.returnValue = '';
       dialog.showModal();
       $('writer-clear-cancel').focus(); // not autofocus: Settings can be a frame of a school page, where browsers refuse it
@@ -93,9 +93,10 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
       if (dialog.returnValue !== 'ok' || !list) return;
       let failed = 0;
       for (const k of list.flatMap((c) => c.keys)) { try { await papers().remove(k); } catch (e) { failed++; console.error(e); } }
-      // Clear all's one entry, not `list === everything`: each removal redraws, which replaces everything.
-      const all = list[0].id === '';
-      o.hint(failed ? t(all ? 'Some papers and documents could not be cleared. Try again.' : 'Some papers could not be cleared. Try again.') : t(all ? 'Papers and documents cleared.' : 'Papers cleared.'), !!failed);
+      // By the entry's id, not `list === everything`: each removal redraws, which replaces everything.
+      const all = list[0].id === '', documents = list[0].id === 'documents';
+      o.hint(failed ? t(all ? 'Some papers and documents could not be cleared. Try again.' : documents ? 'Some documents could not be cleared. Try again.' : 'Some papers could not be cleared. Try again.')
+        : t(all ? 'Papers and documents cleared.' : documents ? 'Documents cleared.' : 'Papers cleared.'), !!failed);
       drawPapers();
     });
     $('writer-clear-all').addEventListener('click', () => ask(everything));
