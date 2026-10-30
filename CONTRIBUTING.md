@@ -11,6 +11,8 @@ extension reload. Run `node --test` before sending a change.
 
 ## Layout
 
+The whole tree, with diagrams: [docs/layout.md](docs/layout.md).
+
 - `extension/` — the extension as the stores ship it; the paths below are inside it. `checks/` holds the browser checks and `test/` the unit tests, each by feature area; `tools/` the build, release, vendor, fidelity and dev scripts.
 - `content/content.js` — runs on Ultra, Canvas and Moodle pages: adds the stylesheets, applies settings, the DOM sweep, tooltips and the extras. What only one site does is in its part, `content/content-ultra.js` or `content/content-canvas.js`, listed before `content.js` for that site (Moodle has none); each site's first script has its own budget (`test/platform/perf-budget.test.js`).
 - `content/theme.css` (palette and page polish), `content/motion.css` (motion levels), `content/extras.css` (backgrounds and extras).
