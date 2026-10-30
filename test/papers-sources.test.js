@@ -152,3 +152,24 @@ test('a removed or purged paper takes its saved sources with it', async () => {
   assert.deepEqual(await S.load(dk, area), [], 'Trash\'s 30 days: the document\'s sources go too');
   assert.equal((await S.load(other, area)).length, 1, 'another document\'s stay');
 });
+
+test('Clear and purge also sweep the local source store used by an assignment with incomplete identity', async () => {
+  for (const op of ['remove', 'purge']) {
+    const data = {}, area = {
+      get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in data).map((x) => [x, structuredClone(data[x])])),
+      set: async (v) => { Object.assign(data, structuredClone(v)); },
+      remove: async (keys) => { for (const k of [].concat(keys)) delete data[k]; },
+    };
+    let now = 1e12;
+    const api = PA.open(area, () => now), key = PA.keyOf({ school: `${HOST}:8443`, user: '_900_1', course: '_101_1', content: '_7_1' });
+    await api.save(key, { title: 'Legacy paper', doc: { type: 'doc', content: [{ type: 'paragraph' }] } });
+    const ctx = await standalone(key, { [key]: await api.get(key) }), sk = S.keyOf(ctx);
+    assert.equal(sk, localKey(key));
+    const siblings = ['_8_1', '_9_1'].map((item) => S.key({ school: `${HOST}:8443`, user: '_900_1', course: '_101_1', item }));
+    for (const k of [sk, ...siblings]) await S.save(k, [{ id: 'source-a', title: 'A source' }], area);
+    if (op === 'purge') { await api.trash(key); now += 31 * 864e5; await api.purge(); }
+    else await api.remove(key);
+    assert.deepEqual(await S.load(sk, area), [], `${op}: the store Documents actually opened is deleted`);
+    for (const k of siblings) assert.equal((await S.load(k, area)).length, 1, 'discussion and journal sources stay');
+  }
+});
