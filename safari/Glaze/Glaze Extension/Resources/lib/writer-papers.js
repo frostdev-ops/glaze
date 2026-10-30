@@ -143,7 +143,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       if (expectedKind && (prev?.kind || 'paper') !== expectedKind) throw new Error('document kind changed');
       // A paper save already queued in another frame may arrive after Open in Glaze. Only an explicit import or restore
       // can take the record back; its editor's session copy still holds any unsaved typing.
-      if (prev?.kind && prev.kind !== 'paper' && patch.doc && (patch.kind || 'paper') === 'paper' && !['import', 'restore'].includes(reason)) throw new Error('document kind changed');
+      if (prev?.kind && prev.kind !== 'paper' && patch.doc && patch.kind === 'paper' && !['import', 'restore'].includes(reason)) throw new Error('document kind changed');
       const cleared = patch.kind && patch.kind !== (prev?.kind || 'paper') ? Object.fromEntries(FILE_FIELDS.map((f) => [f, null])) : {};
       const paper = { ...(prev || { key: k, created: t }), ...cleared, ...patch, key: k, updated: t, revision: (prev?.revision || 0) + 1 };
       // An autosave carries the name it last read. Only an explicit title edit can replace a later rename.
