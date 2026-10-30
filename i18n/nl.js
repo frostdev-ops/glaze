@@ -3751,5 +3751,7 @@
   "Don't allow": "Niet toestaan",
   "Unnamed app": "Naamloze app",
   "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde.",
-  "Print with notes…": "Afdrukken met notities…"
+  "Print with notes…": "Afdrukken met notities…",
+  "This file isn't available to you right now.": "Dit bestand is nu niet voor je beschikbaar.",
+  "Couldn't open this file in Glaze.": "Dit bestand kon niet in Glaze worden geopend."
 };

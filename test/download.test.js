@@ -19,7 +19,15 @@ test('only our content script on a course Modules page, or in a frame of one on 
   assert.equal(D.sender(frame, 'ours'), true);
   assert.equal(D.sender({ ...frame, url: 'https://canvas.example/courses/25' }, 'ours'), true);
   for (const patch of [{ tab: { id: 1 } }, { tab: { id: 1, url: 'https://canvas.school.edu/' } }, { tab: { id: 1, url: 'bad' } }, { url: 'https://canvas.school.edu/courses/25/modules' },
-    { url: 'https://canvas.example/courses/25/files' }, { frameId: undefined }, { frameId: -1 }, { frameId: 1.5 }, { url: 'about:blank', tab: { id: 1, url: 'about:blank' } }]) assert.equal(D.sender({ ...frame, ...patch }, 'ours'), false, JSON.stringify(patch));
+    { url: 'https://canvas.example/courses/25/settings' }, { frameId: undefined }, { frameId: -1 }, { frameId: 1.5 }, { url: 'about:blank', tab: { id: 1, url: 'about:blank' } }]) assert.equal(D.sender({ ...frame, ...patch }, 'ours'), false, JSON.stringify(patch));
+});
+test('Open in Glaze reads one file through the same port from a course page that shows or links one, and nowhere else', () => {
+  const s = { id: 'ours', tab: { id: 1 }, frameId: 0 };
+  for (const p of ['/courses/25/files', '/courses/25/files/21', '/courses/25/files/folder/week%203', '/courses/25/modules/items/272', '/courses/25/pages/week-3', '/courses/25/wiki',
+    '/courses/25/assignments/7', '/courses/25/assignments/syllabus', '/courses/25/discussion_topics/9', '/courses/25/announcements'])
+    assert.equal(D.sender({ ...s, url: `https://canvas.example${p}?preview=21` }, 'ours'), true, p);
+  for (const p of ['/courses/25/settings', '/courses/25/grades', '/courses/25/gradebook', '/courses/25/users', '/files/21', '/courses/25/files/21/download', '/courses/x/files'])
+    assert.equal(D.sender({ ...s, url: `https://canvas.example${p}` }, 'ours'), false, p);
 });
 test('the byte budget counts actual chunks across files and stops at 250 MiB', () => {
   assert.equal(D.bytes(0, 0), 0);

@@ -3751,5 +3751,7 @@
   "Don't allow": "Nicht erlauben",
   "Unnamed app": "Unbenannte App",
   "Glaze restarted before you answered.": "Glaze wurde neu gestartet, bevor du geantwortet hast.",
-  "Print with notes…": "Mit Notizen drucken…"
+  "Print with notes…": "Mit Notizen drucken…",
+  "This file isn't available to you right now.": "Diese Datei ist für dich gerade nicht verfügbar.",
+  "Couldn't open this file in Glaze.": "Diese Datei konnte nicht in Glaze geöffnet werden."
 };
