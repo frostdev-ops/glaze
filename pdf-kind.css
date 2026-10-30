@@ -24,6 +24,8 @@
 .gp .gq-scroll:focus-visible { outline-offset: -2px; }
 .gq-scroll .pdfViewer { color-scheme: light; padding: 16px 0 32px; }
 .gq-scroll .pdfViewer .page { box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.18); border: 0; margin: 0 auto 16px; }
+/* Motion off: a page still drawing stays plain white, without pdf.js's spinning picture. */
+:root[data-motion="off"] .gq-scroll .pdfViewer .page.loadingIcon::after { background-image: none; }
 .gq-said { position: absolute; inset: 24px 24px auto; margin: 0; font-size: 14px; color: var(--gz-err); text-align: center; }
 .gq-said[hidden] { display: none; }
 .gq-menu { position: fixed; z-index: 30; }
