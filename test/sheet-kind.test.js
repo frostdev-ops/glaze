@@ -393,3 +393,16 @@ test('opening a torn spreadsheet refuses the view instead of mounting a blank wo
   await assert.rejects(DK.get('sheet').view(KEY, {}), /torn/);
   assert.equal(mounted, false);
 });
+
+test('import into an existing spreadsheet keeps the workbook it replaces as an import version', async () => {
+  const s = store(), P = PA.open(s, () => 1000), wb = book();
+  await SD.write(P, KEY, wb, new Map());
+  const { DK } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD,
+    GZ_SHEET_GRID: require('../sheet-grid.js'), GZ_SHEET_CALC: require('../lib/sheet-calc.js'), GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js') });
+  await DK.settled();
+  const bytes = new TextEncoder().encode('replacement\n');
+  await DK.get('sheet').into(KEY, { name: 'new.csv', size: bytes.length, arrayBuffer: async () => bytes.buffer });
+  const versions = await P.versions(KEY), prior = versions.find((v) => v.reason === 'import');
+  assert.ok(prior, 'an import checkpoint holds the replaced workbook');
+  same(await SD.unpack((await P.version(KEY, prior.id)).gz), wb);
+});
