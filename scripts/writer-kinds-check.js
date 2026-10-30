@@ -230,6 +230,11 @@ const holds = (bytes, value) => {
     ({ p, el, fr } = await open());
     await until(() => fr.evaluate(() => [...document.querySelectorAll('.gk-choose .gk-pick')].map((b) => b.textContent).join('|') === 'Document|Spreadsheet'), 'the choice', 30000);
     check(await fr.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => b.textContent === 'New spreadsheet')), 'Spreadsheets on: an empty attempt offers Document or Spreadsheet, and ⋯ has New spreadsheet');
+    await worker.evaluate(async () => { const { writer } = await chrome.storage.sync.get('writer'); await chrome.storage.sync.set({ writer: { ...writer, sheets: false } }); });
+    await until(() => fr.evaluate(() => GZ_WRITER_SETTINGS.now().sheets === false), 'Spreadsheets off received', 60000);
+    check(await fr.evaluate(() => !document.querySelector('.gk-choose') && ![...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => b.textContent === 'New spreadsheet')), 'turning Spreadsheets off removes the live chooser and New spreadsheet');
+    await worker.evaluate(async () => { const { writer } = await chrome.storage.sync.get('writer'); await chrome.storage.sync.set({ writer: { ...writer, sheets: true } }); });
+    await until(() => fr.evaluate(() => !!document.querySelector('.gk-choose')), 'the choice returns with Spreadsheets on', 60000);
     await tap(fr, '.gk-pick[data-kind="sheet"]');
     const A1 = '.gk #gx-grid .gx-c[data-r="0"][data-c="0"]';
     await until(() => fr.evaluate((a1) => document.documentElement.dataset.doc === 'sheet' && !!document.querySelector(a1), A1), 'the grid', 40000,
@@ -259,6 +264,10 @@ const holds = (bytes, value) => {
     const body = Buffer.from(sup[0]?.bytes || []);
     check(sup.length === 1 && sup[0].name === `Rivera_Essay2${sx}` && sup[0].type === (sx === '.csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') && (sx !== '.csv' || /Trial[\s\S]*42[\s\S]*58/.test(body.toString('utf8'))),
       `the spreadsheet's file attached once, Ultra's Submit once (${sup.map((u) => `${u.name} ${u.type} ${u.bytes.length}`).join('; ')})`);
+    vs = await versions();
+    const submittedBook = vs.find((v) => v.kind === 'sheet' && v.reason === 'submit' && v.gz);
+    const packedText = submittedBook ? require('node:zlib').gunzipSync(Buffer.from(submittedBook.gz, 'base64')).toString('utf8') : '';
+    check(/Trial/.test(packedText) && /42/.test(packedText) && /58/.test(packedText), 'the Submitted spreadsheet version contains the workbook values');
     await p.close();
 
     // ---- a .csv on Ultra's file area: Open in Glaze → the grid with its values
