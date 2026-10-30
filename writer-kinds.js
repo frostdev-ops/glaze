@@ -126,7 +126,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       arriving = paper;
       const rec = await k.into(key, f, { progress });
       progress.end();
-      if (shown) { await unmount(); const s = await mount(id, key, paper); if (!s) throw new Error('no viewer'); paper.take(s); }
+      if (shown) { await unmount(); const s = await mount(id, key, paper); if (!s) { frame.say({ type: 'native', reason: 'kind' }); throw new Error('no viewer'); } paper.take(s); }
       else if (!await paper.hand(rec)) throw new Error('no viewer');
       if (rec?.notice) shown?.surface.notify(rec.notice);
     } catch (e) {
