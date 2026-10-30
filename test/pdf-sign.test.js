@@ -88,3 +88,17 @@ test('closing a signature releases the picture, including a decode delivered aft
     assert.equal(file.value, '', 'no selected picture remains');
   }
 });
+
+test('overlapping signature writes keep every new outline and remain within five', async (t) => {
+  const previous = global.chrome; let saved = [];
+  global.chrome = { storage: { local: {
+    get: async () => { const value = structuredClone(saved); await UI.tick(); return { [S.KEY]: value }; },
+    set: async (v) => { await UI.tick(); saved = structuredClone(v[S.KEY]); },
+  } } };
+  t.after(() => { if (previous === undefined) delete global.chrome; else global.chrome = previous; });
+  const data = await S.encode(drawn);
+  await Promise.all(Array.from({ length: 7 }, (_, i) => S.add({ id: `s${i}`, at: i, name: 'name', kind: 'draw', data })));
+  assert.deepEqual(saved.map((x) => x.id), ['s6', 's5', 's4', 's3', 's2']);
+  await Promise.all([S.remove('s5'), S.add({ id: 's7', at: 7, name: 'name', kind: 'draw', data })]);
+  assert.deepEqual(saved.map((x) => x.id), ['s7', 's6', 's4', 's3', 's2']);
+});
