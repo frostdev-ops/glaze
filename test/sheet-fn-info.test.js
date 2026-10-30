@@ -107,6 +107,9 @@ test('N, T, TYPE, ERROR.TYPE, NA', () => {
     ['ERROR.TYPE(SQRT(-1))', 6], ['ERROR.TYPE(NA())', 7], ['ERROR.TYPE(1)', '#N/A'], ['ERROR.TYPE("x")', '#N/A'], ['IF(ERROR.TYPE(A3)<3,"The divisor is zero")', 'The divisor is zero'],
     ['NA()', '#N/A'], ['NA(1)', '#VALUE!'],
   ]);
+  // The newer errors' numbers, from Microsoft's ERROR.TYPE page: #SPILL! (a file's cache) 9 and #CALC! 14.
+  er.apply({ op: 'set', sheet: er.wb.sheets[0].id, r: 0, c: 1, cell: { t: 'e', v: '#SPILL!' } });
+  cases(er, [['ERROR.TYPE(B1)', 9], ['ERROR.TYPE(SEQUENCE(0))', 14], ['ERROR.TYPE(FILTER({1},{FALSE}))', 14]]);
 });
 
 test('CELL: address, col, row, contents, type and format; the rest and INFO are refused', () => {
