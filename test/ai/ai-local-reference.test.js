@@ -157,6 +157,24 @@ test('one batch, chunks and single tokens give the same logits, and the last row
   assert.throws(() => R.session(m).forward([C.V]), /token 40/);
 });
 
+test('embeddings fed in place of tokens, alone or between token parts, give the same logits', async () => {
+  const m = await load();
+  const V = require('../../extension/ai/local/vision-reference.js');
+  const rows = (ids) => { const x = new Float32Array(ids.length * C.E); ids.forEach((id, t) => x.set(W('token_embd.weight').subarray(id * C.E, (id + 1) * C.E), t * C.E)); return x; };
+  const parts = [PROMPT.slice(0, 3), PROMPT.slice(3, 6), PROMPT.slice(6)];
+  const s = R.session(m), want = [];
+  for (const p of parts) want.push(...s.forward(p, { logits: 'all' }));
+  const e = R.session(m), got = [...e.forward(parts[0], { logits: 'all' }), ...e.forwardEmbeddings(rows(parts[1]), { logits: 'all' }), ...e.forward(parts[2], { logits: 'all' })];
+  assert.deepEqual(got, want);
+  assert.equal(e.pos, PROMPT.length);
+  // feed: images as embeddings among token parts, the text parts' rows in order
+  const f = V.feed(R.session(m), [parts[0], rows(parts[1]), parts[2]], { logits: 'text' });
+  assert.deepEqual([...f], [...want.slice(0, 3 * C.V), ...want.slice(6 * C.V)]);
+  assert.deepEqual([...V.feed(R.session(m), [parts[0], rows(parts[1]), parts[2]])], want.slice(want.length - C.V));
+  assert.throws(() => V.feed(R.session(m), [parts[0], rows(parts[1])]), /must end in text/);
+  assert.throws(() => R.session(m).forwardEmbeddings(new Float32Array(C.E + 1)), /not whole rows/);
+});
+
 test('greedy, top and top-k sampling', () => {
   const lg = Float32Array.of(0.5, 2, -1, 2, 1.5);
   assert.equal(R.greedy(lg), 1);
