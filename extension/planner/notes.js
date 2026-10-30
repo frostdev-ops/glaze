@@ -343,7 +343,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   // a new revision's body is written beside the last one, the index then points at it, and only then does the last
   // one go, so a failed save leaves the note as it was. What's left behind by any step that failed (a body nothing
   // points at, a file nothing uses, bytes without a file) goes at the next clean-up ('tidy', each time Notes opens).
-  const run = async (m, { local }, db, now = Date.now()) => {
+  const run = async (m, { local, onChange }, db, now = Date.now()) => {
     if (typeof m?.key !== 'string' || !KEY.test(m.key)) return { ok: false, error: 'bad' };
     const scope = m.key.slice('notesIdx:'.length);
     const bk = (id, rev) => `${scope}/${id}/${rev}`;
@@ -352,7 +352,12 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
     try { const got = await local.get(m.key); before = JSON.stringify(got?.[m.key] ?? null); idx = clean(got?.[m.key]); } catch { return { ok: false, error: 'read' }; }
     const purged = expire(idx, now);
     const old = []; // bodies a committed change supersedes
-    const save = async () => (JSON.stringify(idx) === before || await local.set({ [m.key]: idx }));
+    const save = async () => {
+      if (JSON.stringify(idx) === before) return true;
+      // Drive records the exact index transition inside the broker turn, before storage can deliver its event.
+      onChange?.(clean(JSON.parse(before)), idx);
+      return local.set({ [m.key]: idx });
+    };
     // Bodies the index doesn't point at (an earlier revision, a failed save's, a note gone for good). Pictures and
     // attachments no note's text uses: those a note deleted for good had at once, the rest after a day (an undo can bring
     // a removed picture back, and a file is stored before the note that uses it is saved: a backup restoring a deleted

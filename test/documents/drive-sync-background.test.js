@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const C = require('../../extension/planner/classes.js');
 const G = require('../../extension/planner/gpa.js');
+const N = require('../../extension/planner/notes.js');
 
 // Run the actual sync wiring as a restarted classic worker: install handlers have not loaded optional libraries.
 const worker = () => {
@@ -16,6 +17,14 @@ const worker = () => {
     };
   };
   const listener = { addListener() {} }, local = area(), sync = area();
+  const stores = { bodies: new Map(), files: new Map(), blobs: new Map() };
+  const db = {
+    get: async (s, k) => structuredClone(stores[s].get(k)),
+    put: async (s, k, v) => { stores[s].set(k, structuredClone(v)); },
+    del: async (s, ks) => { for (const k of ks) stores[s].delete(k); },
+    scan: async (s, prefix) => [...stores[s]].filter(([k]) => k.startsWith(prefix)),
+    keys: async (s, prefix) => [...stores[s].keys()].filter((k) => k.startsWith(prefix)),
+  };
   let documents, records;
   const context = vm.createContext({
     console, TextEncoder, TextDecoder,
@@ -23,7 +32,7 @@ const worker = () => {
     GZ_CARDS: { queue: () => { let tail = Promise.resolve(); return (fn) => { const p = tail.then(fn); tail = p.catch(() => {}); return p; }; } },
     GZ_DRIVE_SYNC: { create: (env) => { documents = env; return {}; } }, brokerTurn: null,
     driveLib: () => {}, googleLib: () => ({ ON: true }),
-    NOTES_DB: {}, brokerArea: () => ({}), GZ_NOTES: require('../../extension/planner/notes.js'),
+    NOTES_DB: db, brokerArea: () => ({ get: local.get, set: async (o) => { await local.set(o); return true; } }), GZ_NOTES: N,
     brokerIn: (name) => { assert.equal(name, 'backup'); context.GZ_CLASSES = C; context.GZ_GPA = G; },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../../extension/background/drive-store.js'), 'utf8'), context);
@@ -60,4 +69,27 @@ test('a remote record compares with current storage inside the broker queue', as
   assert.deepEqual((await local.get(key))[key], ['Local edit']);
   assert.equal(await records.area('local').replace(key, ['Local edit'], ['Remote edit']), true);
   assert.deepEqual((await local.get(key))[key], ['Remote edit']);
+});
+
+test('a remote note compares after an earlier queued rename before replacing or deleting it', async () => {
+  for (const remove of [false, true]) {
+    const { context, records } = worker();
+    const acct = 'notesIdx:https://school.instructure.com/42', id = '00000000-0000-4000-8000-000000000001', key = `${acct}|${id}`;
+    const notes = records.area('notes');
+    await notes.set({ [key]: { note: { title: 'Original', at: 10 }, html: '<p>Original</p>' } });
+    const expected = (await notes.get(key))[key];
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const earlier = context.brokerTurn(async () => {
+      await gate;
+      return N.run({ key: acct, op: 'meta', id, title: 'Local rename' }, { local: context.brokerArea('local') }, context.NOTES_DB);
+    });
+    const pending = notes.replace(key, expected, remove ? undefined : { note: { title: 'Remote', at: 20 }, html: '<p>Remote</p>' });
+    // Let the adapter read the old metadata while the earlier broker operation is held.
+    await new Promise(setImmediate);
+    release();
+    assert.equal((await earlier).ok, true);
+    assert.equal(await pending, false, 'the queued local rename invalidates the remote compare');
+    assert.equal((await notes.get(key))[key].note.title, 'Local rename');
+  }
 });

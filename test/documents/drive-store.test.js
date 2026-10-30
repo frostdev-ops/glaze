@@ -56,8 +56,9 @@ const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse
   let q = Promise.resolve();
   // As the worker's broker area: a write says whether it worked.
   const brokered = { get: (k) => local.get(k), set: async (o) => { await local.set(o); return true; } };
-  const run = (m) => { const p = q.then(() => N.run(m, { local: brokered }, db, now())); q = p.catch(() => {}); return p; };
-  const notes = ST.notesArea({ local, db, run });
+  const turn = (f) => { const p = q.then(f); q = p.catch(() => {}); return p; };
+  const run = (m, onChange) => N.run(m, { local: brokered, onChange }, db, now());
+  const notes = ST.notesArea({ local, db, run, turn });
   const store = ST.create({
     area: (n) => (n === 'sync' ? sync : n === 'notes' ? notes : local), store: local, hash: async (s) => sha(s), now,
     snapshot: snapshots ? async () => ({ name: `glaze-backup-2026-10-${String(30 + snaps).padStart(2, '0')}-${++snaps}.zip`, bytes: new TextEncoder().encode(`PK snapshot ${snaps}`) }) : null,
@@ -76,8 +77,8 @@ const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse
   const on = async () => { who.on = true; await settle(); const r = await sync2.set(true); await settle(); return r; };
   // The test's own writes, each heard (stamped) before the clock moves on.
   const heardAfter = (x) => ({ ...x, set: async (o) => { await x.set(o); await settle(); }, remove: async (k) => { await x.remove(k); await settle(); } });
-  const notesOp = async (m) => { const r = await run(m); await settle(); return r; };
-  return { db, notesOp, local: heardAfter(local), settings: heardAfter(sync), papers, sync: sync2, store, who, log, clock, on, run: async (o) => { await settle(); const r = await sync2.run(o); await settle(); return r; } };
+  const notesOp = async (m) => { const r = await turn(() => run(m)); await settle(); return r; };
+  return { db, notes, notesOp, local: heardAfter(local), settings: heardAfter(sync), papers, sync: sync2, store, who, log, clock, on, run: async (o) => { await settle(); const r = await sync2.run(o); await settle(); return r; } };
 };
 const TODO = 'todo:https://school.instructure.com/42', NOTE = 'notes:https://school.instructure.com/42', CLASSES = 'classes:https://school.instructure.com/42';
 const T = require('../../extension/planner/todo.js');
@@ -339,11 +340,45 @@ test('Gradescope: the student\'s placings and answers sync; what was read from G
   assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
   const here = (await a.local.get('gradescope')).gradescope;
   assert.equal(here.hide, true, 'B\'s answer reached A');
+  assert.deepEqual(here.courses, {}, 'B cleared the course placing, so A must drop its cached rows');
   // A reads Gradescope again: no upload, since nothing the student chose changed.
   const n = drive.log.filter((x) => x.upload).length;
   clock.t += 1000; await a.local.set({ gradescope: { ...here, courses: { 111: { at: 9, bad: 0, rows: [{ id: '10', title: 'Lab 2' }] } } } });
   assert.ok((await a.run()).ok);
   assert.equal(drive.log.filter((x) => x.upload).length, n, 'a fresh reading sends nothing');
+});
+
+test('Gradescope downloads invalidate cached rows when their account or course placing changes', async () => {
+  for (const change of ['account', 'placing', 'compatible']) {
+    const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+    const acct = { id: 'a'.repeat(24), name: 'Sam' }, to = 'canvas:https://school.instructure.com/7';
+    const original = GS.clean({ acct, map: { 111: { to, name: 'Biology' } }, courses: { 111: { at: 5, rows: [{ id: '9', title: 'Private assignment' }] } } });
+    await a.local.set({ gradescope: original });
+    await a.on(); await b.on();
+    await b.local.set({ gradescope: original });
+    clock.t += 1000;
+    await a.local.set({ gradescope: GS.clean({ ...original, courses: {}, ...(change === 'account' ? { acct: { id: 'b'.repeat(24), name: 'Alex' } } : change === 'placing' ? { map: { 111: { to: 'canvas:https://school.instructure.com/8', name: 'Other class' } } } : { hide: true }) }) });
+    assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+    assert.deepEqual((await b.local.get('gradescope')).gradescope.courses, change === 'compatible' ? original.courses : {}, `${change}: keep rows only for the same account and course placing`);
+  }
+});
+
+test('Notes re-download an immutable picture after local cleanup when a later remote edit uses it again', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const id = nid(1), picture = nid(500), fileKey = `https://school.instructure.com/42/${picture}`;
+  await a.notesOp({ key: ACCT, op: 'file', id: picture, kind: 'image', name: 'cell.png', data: PNG.toString('base64'), note: id });
+  await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'a1', html: `<p>Picture</p><img data-gz-file="${picture}">` });
+  await a.on(); await b.on();
+  // Remove the picture from B's text, then let Notes' own cleanup collect the unused bytes after a day.
+  clock.t += 1000;
+  await b.notesOp({ key: ACCT, op: 'save', id, base: (await idxOf(b)).notes[id].rev, sid: 'b1', html: '<p>Picture removed</p>' });
+  clock.t += 86400001;
+  assert.ok((await b.notesOp({ key: ACCT, op: 'tidy' })).ok);
+  assert.equal(b.db.stores.blobs.get(fileKey), undefined, 'cleanup collected the unused picture');
+  clock.t += 1000;
+  await a.notesOp({ key: ACCT, op: 'save', id, base: (await idxOf(a)).notes[id].rev, sid: 'a2', html: `<p>Picture again</p><img data-gz-file="${picture}">` });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  assert.deepEqual(Buffer.from(b.db.stores.blobs.get(fileKey) || []), PNG, 'the existing Drive picture is restored');
 });
 
 test('Notes: folders, notes and their pictures reach another device; edits interleave; the later edit wins; deletes and Trash follow', async () => {
@@ -410,4 +445,74 @@ test('Notes on a fresh device: its own notes stay; the folder\'s come in; one on
   assert.ok((await a.run()).ok);
   assert.match(await noteOf(a, nid(2)), /Mine/);
   assert.match(await noteOf(a, nid(3)), /newer/);
+});
+
+test('Notes first meeting keeps newer metadata and Trash when the other device has newer text', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock }), id = nid(1);
+  await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'a1', title: 'Original', html: '<p>Original</p>' });
+  await b.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'b1', title: 'Original', html: '<p>Original</p>' });
+  clock.t += 1000;
+  await a.notesOp({ key: ACCT, op: 'save', id, base: 1, sid: 'a2', html: '<p>Newer text</p>' });
+  await a.on();
+  clock.t += 1000;
+  await b.notesOp({ key: ACCT, op: 'meta', id, title: 'Newer title' });
+  await b.notesOp({ key: ACCT, op: 'trash', ids: [id] });
+  assert.ok((await b.on()).ok);
+  assert.match(await noteOf(b, id), /Newer text/, 'the newer text is joined');
+  assert.equal((await idxOf(b)).notes[id].title, 'Newer title', 'the newer title survives');
+  assert.ok((await idxOf(b)).notes[id].del, 'joining newer text does not restore the note from Trash');
+});
+
+test('Notes first meeting joins newer folder fields instead of overwriting them with an old local copy', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock }), id = nid(900);
+  await a.notesOp({ key: ACCT, op: 'folder', id, name: 'Original' });
+  await b.notesOp({ key: ACCT, op: 'folder', id, name: 'Original' });
+  await a.on();
+  clock.t += 1000;
+  await a.notesOp({ key: ACCT, op: 'folder', id, name: 'Renamed on A' });
+  assert.ok((await a.run()).ok);
+  assert.ok((await b.on()).ok);
+  assert.equal((await idxOf(b)).folders[id].name, 'Renamed on A', 'the newer name is joined on first meeting');
+  assert.ok((await a.run()).ok);
+  assert.equal((await idxOf(a)).folders[id].name, 'Renamed on A');
+});
+
+test('Notes keeps the timestamp of a local rename that invalidates an incoming remote write', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock }), id = nid(1);
+  await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'a1', title: 'Original', html: '<p>Original</p>' });
+  await a.on(); await b.on();
+  clock.t += 1000;
+  await a.notesOp({ key: ACCT, op: 'save', id, base: (await idxOf(a)).notes[id].rev, sid: 'a2', html: '<p>Remote edit</p>' });
+  await a.run();
+  const replace = b.notes.replace;
+  b.notes.replace = async (...args) => {
+    b.notes.replace = replace;
+    clock.t += 1000;
+    await b.notesOp({ key: ACCT, op: 'meta', id, title: 'Local rename' });
+    return replace(...args);
+  };
+  assert.equal((await b.run()).why, 'stale');
+  assert.equal((await b.local.get(ST.STAMPS))[ST.STAMPS][`notes:${ACCT}|${id}`], clock.t, 'the failed remote apply must not swallow the local event');
+  clock.t = (await b.local.get(S.STATE))[S.STATE].wait + 1;
+  assert.ok((await b.run()).ok);
+  assert.equal((await idxOf(b)).notes[id].title, 'Local rename', 'the later local edit wins on retry');
+});
+
+test('Notes keeps a local timestamp when an edit follows a remote apply before its bookkeeping finishes', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock }), id = nid(1);
+  await a.notesOp({ key: ACCT, op: 'save', id, base: 0, sid: 'a1', title: 'Original', html: '<p>Original</p>' });
+  await a.on(); await b.on();
+  clock.t += 1000;
+  await a.notesOp({ key: ACCT, op: 'save', id, base: (await idxOf(a)).notes[id].rev, sid: 'a2', html: '<p>Remote edit</p>' });
+  await a.run();
+  const replace = b.notes.replace;
+  b.notes.replace = async (...args) => {
+    b.notes.replace = replace;
+    const result = await replace(...args);
+    clock.t += 1000;
+    await b.notesOp({ key: ACCT, op: 'meta', id, title: 'Local rename' });
+    return result;
+  };
+  assert.ok((await b.run()).ok);
+  assert.equal((await b.local.get(ST.STAMPS))[ST.STAMPS][`notes:${ACCT}|${id}`], clock.t, 'bookkeeping must preserve the later local time');
 });
