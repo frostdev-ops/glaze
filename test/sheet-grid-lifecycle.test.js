@@ -441,6 +441,23 @@ test('sorting from a cell or a whole column keeps rows whole and the header row 
   assert.equal([0, 1, 2].map((r) => f.wb.sheets[0].rows.get(r).get(0).v).join(), 'Ab,Bo,Cy');
 });
 
+test('sorting keeps the header when it contains a formatted empty cell', async () => {
+  for (const from of ['B2', 'B:B']) {
+    const wb = M.workbook(), sh = wb.sheets[0];
+    sh.rows.set(0, new Map([[0, { t: 's', v: 'Name' }], [1, { t: 's', v: 'Score' }], [2, { t: 'z', s: M.internStyle(wb, { fmt: '0%' }) }]]));
+    sh.rows.set(1, new Map([[0, { t: 's', v: 'Zoe' }], [1, { t: 'n', v: 90 }]]));
+    sh.rows.set(2, new Map([[0, { t: 's', v: 'Adam' }], [1, { t: 'n', v: 70 }]]));
+    const f = frame({ wb });
+    f.el('gx-name').value = 'B2'; f.fire(f.el('gx-name'), 'keydown', { key: 'Enter' });
+    if (from === 'B:B') f.key(' ', { ctrlKey: true });
+    f.fire(f.el('gx-sort-az'), 'click');
+    assert.deepEqual([0, 1, 2].map((r) => sh.rows.get(r).get(0).v), ['Name', 'Adam', 'Zoe'], `header stays when sorting ${from}`);
+    assert.equal(sh.rows.get(0).get(2).t, 'z', 'the empty header cell retains its format');
+    assert.equal(await f.view.save(), true);
+    await f.view.dispose();
+  }
+});
+
 test('a cell starts with a character typed with AltGr or the Mac\'s Option; Windows\' Alt+letter stays the browser\'s', () => {
   const altGr = (m) => m === 'AltGraph';
   const pc = frame({ ctx: { navigator: { platform: 'Win32' } } });
