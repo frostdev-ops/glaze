@@ -109,7 +109,7 @@ test('two PDF editors saving from the same revision keep the overwritten file as
   clock.t++;
   await other.save(k, { file: b }, { expectedKind: 'pdf' });
   assert.equal(store.data[`writerPaper:${k}`].file.hash, b.hash);
-  assert.ok((await P.versions(k)).some((v) => v.reason === 'conflict' && v.file.hash === a.hash), 'the other editor did not lose its filled form');
+  assert.ok(store.data[`writerVersions:${k}`].some((v) => v.reason === 'conflict' && v.file.hash === a.hash), 'the other editor did not lose its filled form');
 });
 
 test('versions keep at most CAP.files bytes of files, the submitted one and the newest always', async () => {
