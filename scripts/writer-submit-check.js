@@ -895,6 +895,8 @@ const HARNESS = `(() => {
     await until(async () => (await bar(fr))?.text === 'Too long for Ultra’s text box. Use Full writer.', 'the reason in the compact bar');
     const b1 = await bar(fr);
     check(b1.lines === 1 && b1.nowrap && b1.offer && (await p.evaluate(() => __text())) === 'Short start.\n', 'the compact bar says "Too long for Ultra’s text box. Use Full writer." on one line, the Full writer switch marked; Ultra\'s box keeps what last fit');
+    await p.emulateMedia({ reducedMotion: 'reduce' });
+    check(await fr.evaluate(() => [...document.querySelector('.gw-bar .gp-full').getAnimations({ subtree: true })].every((a) => a.playState !== 'running')), 'the offered Full writer ring has no motion under reduced motion');
     await until(() => fr.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'the long paper saved');
     await p.click(SUBMIT);
     await until(() => fr.evaluate(() => document.hasFocus() && !!document.activeElement?.matches('.gw-bar .gp-full')), 'Full writer focused');
@@ -903,6 +905,12 @@ const HARNESS = `(() => {
     await p.keyboard.press('Space');
     await until(async () => (await fullSet()) === true && await fr.evaluate(() => document.documentElement.dataset.view === 'full' && document.querySelectorAll('.gp-sheet').length > 1), 'Full writer from the switch', 60000);
     check(true, 'Space on it turns Full writer on (writer.full saved): the paper in its pages, for a .docx');
+    await tap(fr, '.gp-submit'); await sheetOpen(fr);
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => __clicks.length === 1 && __uploads.length === 1), 'the over-limit paper submitted as a Word file', 60000);
+    const longRun = await p.evaluate(() => ({ clicks: __clicks, uploads: __uploads, text: __text() }));
+    const longText = squash(await DT.docx(new Uint8Array(longRun.uploads[0].bytes)));
+    check(longRun.clicks.join() === 'assignment.attempt.authoring.footer.submit' && longRun.uploads[0].type === MIME && longText.replace(/\s/g, '').length === 26000 && !longRun.text.includes('Short start.'), 'Full writer submits the entire over-limit paper as one .docx, once; the stale compact text is absent');
     await p.close();
     await setFull(false);
     await blankPaper();
