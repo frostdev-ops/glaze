@@ -95,6 +95,36 @@ emit(["old": oldResult, "token": token.token, "revokes": await transport.sent.fi
   assert.deepEqual(r, { old: 'signin', token: 'access-new', revokes: 0 });
 });
 
+test('native drop forgets only the refused access token and renews with the saved grant', { skip }, async () => {
+  const r = await run(String.raw`
+_ = vault.write("refresh.p", try! JSONEncoder().encode(G.Engine.Saved(refresh: "refresh-old", sub: "student", email: "student@example.edu")))
+let first = Task { try await engine.token(profile: "p", sub: "student") }
+await transport.waitFor(1)
+await transport.answer(0, grant("old"))
+let old = try await first.value
+let request = G.Request(["type": "google.drop", "token": "someone-else"], profile: nil)!
+let ignored = await G.reply(to: request, engine: engine)
+if ignored["ok"] as? Bool != true { emit(["drop": false]); exit(0) }
+// Use this profile's public native-message path as the worker does.
+let profile = UUID()
+_ = vault.write("refresh." + profile.uuidString, try! JSONEncoder().encode(G.Engine.Saved(refresh: "refresh-new", sub: "student", email: "student@example.edu")))
+let held = Task { try await engine.token(profile: profile.uuidString, sub: "student") }
+await transport.waitFor(2)
+await transport.answer(1, grant("held"))
+let heldToken = try await held.value
+_ = await G.reply(to: G.Request(["type": "google.drop", "token": "someone-else"], profile: profile)!, engine: engine)
+let same = try await engine.token(profile: profile.uuidString, sub: "student")
+let dropped = await G.reply(to: G.Request(["type": "google.drop", "token": heldToken.token], profile: profile)!, engine: engine)
+let fresh = Task { try await engine.token(profile: profile.uuidString, sub: "student") }
+await transport.waitFor(3)
+await transport.answer(2, grant("fresh"))
+let next = try await fresh.value
+emit(["drop": dropped["ok"] as? Bool == true, "same": same.token, "next": next.token,
+      "refresh": await transport.sent.last!["refresh_token"]!, "oldProfile": old.token])
+`);
+  assert.deepEqual(r, { drop: true, same: 'access-held', next: 'access-fresh', refresh: 'refresh-new', oldProfile: 'access-old' });
+});
+
 test('Connect waits for an already dispatched revocation before starting a new authorization', { skip }, async () => {
   const r = await run(String.raw`
 _ = vault.write("refresh.p", try! JSONEncoder().encode(G.Engine.Saved(refresh: "refresh-old", sub: "student", email: "student@example.edu")))
@@ -122,6 +152,28 @@ try await connect.value
 emit(["beforeRevoked": before, "afterRevoked": await progress.connected])
 `);
   assert.deepEqual(r, { beforeRevoked: false, afterRevoked: true });
+});
+
+for (const early of [false, true]) test(`a disconnected profile cannot revoke a newer authorization in another profile: newer Connect ${early ? 'before' : 'after'} the old exchange`, { skip }, async () => {
+  const r = await run(String.raw`
+let oldSignIn = try await start("old")
+` + (early ? '_ = try await start("new")\n' : '') + String.raw`
+// The fixed test clock is later than file mtimes; deliver the callback after both Connects have swept old files.
+_ = slot.put(oldSignIn.state, try! JSONSerialization.data(withJSONObject: ["url": G.redirect + "?state=" + oldSignIn.state + "&code=old"]))
+let old = Task { await reason { try await engine.finish(profile: "old", wait: 0) } }
+await transport.waitFor(1)
+_ = await engine.disconnect(profile: "old")
+` + (!early ? '_ = try await start("new")\n' : '') + String.raw`
+let fresh = Task { try await engine.finish(profile: "new", wait: 0) }
+await transport.waitFor(2)
+await transport.answer(1, grant("new"))
+_ = try await fresh.value
+await transport.answer(0, grant("old"))
+let result = await old.value
+let token = try await engine.token(profile: "new", sub: nil)
+emit(["old": result, "token": token.token, "revokes": await transport.sent.filter { $0["url"] == G.revokeURL.absoluteString }.count])
+`);
+  assert.deepEqual(r, { old: 'signin', token: 'access-new', revokes: 0 });
 });
 
 for (const response of ['invalid_grant', 'scope', 'success']) {

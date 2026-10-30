@@ -17,7 +17,7 @@ const BLANK = { ...C, chrome: 'PLACEHOLDER-chrome.apps.googleusercontent.com', w
 const REAL = { ...C, chrome: '111-chrome.apps.googleusercontent.com', web: '222-web.apps.googleusercontent.com', ios: '333-ios.apps.googleusercontent.com', apiKey: 'AIzaTestKey', appId: '123456789012' };
 
 // A worker: flow, config, what Google answers (google(details) → the redirect URL; userinfo), which picker pages load.
-const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, firefox = false, client = REAL.chrome, keep = false, up = [true, true], email = 'student@school.edu' } = {}) => {
+const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, firefox = false, client = REAL.chrome, keep = false, up = [true, true], email = 'student@school.edu', native = async () => null } = {}) => {
   const local = {}, sync = {};
   const who = { sub: '1', email }; // the account Google's userinfo names for any token: changed to model another account
   const owners = {}, gate = { picker: null }; // gate.picker: what the picker page's HEAD waits on
@@ -75,7 +75,8 @@ const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, fi
     manifest: () => ({ oauth2: { client_id: client } }),
     storage: area(local),
     fetch,
-    native: async (m) => { log.native.push(m); return null; },
+    native: async (m) => { log.native.push(m); return native(m); },
+    open: async () => {},
     keep: async () => keep,
     now: () => clock,
   });
@@ -371,6 +372,114 @@ test('Disconnect stops a Pick under way: no picker opens with the token, and no 
     assert.deepEqual(await picking, { ok: false, why: 'connect' }, `keep ${keep}`);
     assert.ok(!h.log.launch.length, 'the picker page never opened');
   }
+});
+
+test('a delayed token cannot survive Disconnect or replace a reconnected account', async () => {
+  for (const flow of ['chrome', 'web']) for (const reconnect of [false, true]) {
+    const h = harness({ flow, keep: true });
+    await h.g.connect();
+    h.tick(3600 * 1000);
+    let release, entered;
+    const waiting = new Promise((r) => { entered = r; });
+    const gate = new Promise((r) => { release = r; });
+    const method = flow === 'web' ? 'answer' : 'getAuthToken';
+    const original = h.identity[method];
+    h.identity[method] = async (d) => {
+      h.identity[method] = original;
+      const answer = await original(d);
+      entered();
+      await gate;
+      return answer;
+    };
+    const late = assert.rejects(h.g.token(), (e) => e.why === 'connect');
+    await waiting;
+    await h.g.disconnect();
+    if (reconnect) {
+      Object.assign(h.who, { sub: 'B', email: 'b@school.edu' });
+      await h.g.connect();
+    }
+    release();
+    await late;
+    if (reconnect) assert.equal(typeof await h.g.token(), 'string', `${flow}: the new account still works`);
+    else await assert.rejects(h.g.token(), (e) => e.why === 'connect');
+  }
+});
+
+test('Disconnect stops a failed silent renewal from opening another sign-in', async () => {
+  const h = harness({ flow: 'web', keep: true });
+  await h.g.connect();
+  h.tick(3600 * 1000);
+  let release, entered;
+  const waiting = new Promise((r) => { entered = r; });
+  const original = h.identity.answer;
+  h.identity.answer = async () => {
+    h.identity.answer = original;
+    entered();
+    await new Promise((r) => { release = r; });
+    throw new Error('silent renewal needs interaction');
+  };
+  const picking = h.g.pick();
+  await waiting;
+  await h.g.disconnect();
+  release();
+  assert.deepEqual(await picking, { ok: false, why: 'connect' });
+  assert.equal(h.log.launch.length, 2, 'only Connect and the silent renewal; no prompt after Disconnect');
+});
+
+test('native Disconnect cancels a pending sign-in even before an account is saved', async () => {
+  const h = harness({ flow: 'native', config: { ...REAL, native: true }, native: async (m) => {
+    if (m.type === 'google.status') return { ok: true };
+    if (m.type === 'google.connect') return { ok: true, open: 'io.frostdev.glaze-google://signin', opened: true };
+    if (m.type === 'google.finish') return { ok: false, why: 'pending' };
+    if (m.type === 'google.disconnect') return { ok: true, revoked: false, had: false };
+    throw new Error(m.type);
+  } });
+  assert.deepEqual(await h.g.connect(), { ok: false, why: 'pending' });
+  assert.deepEqual(await h.g.disconnect(), { ok: true, revoked: false, had: false });
+  assert.equal(h.log.native.filter((m) => m.type === 'google.disconnect').length, 1);
+  await h.g.connect();
+  assert.equal(h.log.native.filter((m) => m.type === 'google.connect').length, 2, 'the old pending attempt is not resumed');
+  assert.deepEqual(h.log.permRemoved, [], 'Safari has no identity permission');
+});
+
+test('a stale native revoked response cannot erase a newer connection', async () => {
+  let release, entered, account = { sub: 'A', email: 'a@school.edu' };
+  const waiting = new Promise((r) => { entered = r; });
+  const h = harness({ flow: 'native', config: { ...REAL, native: true }, native: async (m) => {
+    if (m.type === 'google.status') return { ok: true };
+    if (m.type === 'google.connect') return { ok: true, open: 'io.frostdev.glaze-google://signin', opened: true };
+    if (m.type === 'google.finish') return { ok: true, ...account };
+    if (m.type === 'google.token') {
+      entered();
+      return new Promise((r) => { release = r; });
+    }
+    throw new Error(m.type);
+  } });
+  await h.g.connect();
+  const late = assert.rejects(h.g.token(), (e) => e.why === 'connect');
+  await waiting;
+  account = { sub: 'B', email: 'b@school.edu' };
+  assert.equal((await h.g.connect()).ok, true);
+  release({ ok: false, why: 'revoked' });
+  await late;
+  assert.equal(await h.g.account(), 'b@school.edu');
+});
+
+test('native drop forwards the refused token so the handler can renew it', async () => {
+  let token = 'native-old';
+  const h = harness({ flow: 'native', config: { ...REAL, native: true }, native: async (m) => {
+    if (m.type === 'google.status') return { ok: true };
+    if (m.type === 'google.connect') return { ok: true, open: 'io.frostdev.glaze-google://signin', opened: true };
+    if (m.type === 'google.finish') return { ok: true, sub: 'A', email: 'a@school.edu' };
+    if (m.type === 'google.token') return { ok: true, token };
+    if (m.type === 'google.drop') { if (m.token === token) token = 'native-new'; return { ok: true }; }
+    throw new Error(m.type);
+  } });
+  await h.g.connect();
+  await h.g.drop('someone-else');
+  assert.equal(await h.g.token(), 'native-old');
+  await h.g.drop('native-old');
+  assert.equal(await h.g.token(), 'native-new');
 });
 
 test('Disconnect after a worker restart, when silent renewal fails, says Google may still hold the grant', async () => {

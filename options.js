@@ -1149,8 +1149,7 @@ GZ_UI.load().then((s) => {
       if ($('#gcal-bye').returnValue !== 'ok') return $('#gcal-disconnect').focus();
       const r = await gcalOp({ op: 'disconnect', drop: $('#gcal-drop').checked });
       if (!r.ok) return hint(t("Couldn't delete the Glaze calendar, so nothing changed. Try again, or disconnect without deleting it."), true);
-      // Nothing stays behind: the permission goes too, until the next Connect asks again, unless Google Drive still uses it.
-      if (!r.shared) await chrome.permissions.remove({ permissions: ['identity'] }).catch(() => {});
+      // The worker released identity in its grant queue unless Drive still holds it.
       gcalRender(null);
       $('#gcal-connect').focus();
       hint(r.had && !r.revoked ? t("Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.") : t('Disconnected.'), r.had && !r.revoked);

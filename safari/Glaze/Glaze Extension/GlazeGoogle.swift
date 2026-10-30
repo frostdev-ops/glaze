@@ -17,6 +17,7 @@
 //    { type: 'google.token', sub? } → { ok: true, token, expiresAt (ms since 1970) } | { ok: false, why: 'signin' |
 //      'account' (sub isn't the connected account's) | 'network' | 'revoked' (Google refused the refresh token: forgotten) }
 //    { type: 'google.disconnect' } → { ok: true, revoked, had }: the grant revoked with its refresh token, everything forgotten
+//    { type: 'google.drop', token } → { ok: true }: forget this refused access token, retaining the refresh token
 //  Any other failure is { ok: false, why: 'request' | 'setup' }. Nothing here logs; replies carry fixed reasons only.
 //
 
@@ -168,6 +169,9 @@ nonisolated enum GlazeGoogle {
         /// Only an explicit Disconnect may revoke a late exchange. Google's revocation also invalidates newer grants
         /// for the same account/client, so a superseding Connect must only discard the old answer.
         private var disconnected: Set<String> = []
+        // Revocation covers the client across profiles. A late exchange must not revoke an authorization begun later
+        // in another profile, just as it must not revoke a superseding Connect in its own profile.
+        private var authorization: String?
         private var revoking = 0
         private var revocationWaiters: [CheckedContinuation<Void, Never>] = []
         private func bump(_ profile: String) { generation[profile, default: 0] += 1 }
@@ -190,6 +194,7 @@ nonisolated enum GlazeGoogle {
             if let hint, !validEmail(hint) { throw Fail.request }
             guard let state = random(), let verifier = random() else { throw Fail.setup }
             bump(profile)
+            authorization = state
             disconnected.remove(profile)
             let started = generation[profile, default: 0]
             // A revoke already sent to Google cannot be canceled. Do not start another authorization until it ends.
@@ -228,7 +233,7 @@ nonisolated enum GlazeGoogle {
             let g: Grant
             do { g = try grant(status: status, body: body, now: now()) } catch Fail.revoked { throw Fail.auth } // a spent code
             guard generation[profile, default: 0] == started else {
-                if disconnected.contains(profile), let r = g.refresh { _ = await revoke(r) }
+                if disconnected.contains(profile), authorization == p.state, let r = g.refresh { _ = await revoke(r) }
                 throw Fail.signin
             }
             guard let refresh = g.refresh, let account = g.account else { throw Fail.auth }
@@ -255,6 +260,10 @@ nonisolated enum GlazeGoogle {
             if let a = g.account, a.sub != s.sub { throw Fail.account }
             held[profile] = (g.access, g.expires, s.sub)
             return (g.access, g.expires)
+        }
+
+        func drop(profile: String, token: String) {
+            if held[profile]?.token == token { held[profile] = nil }
         }
 
         func disconnect(profile: String) async -> (revoked: Bool, had: Bool) {
@@ -418,13 +427,14 @@ nonisolated enum GlazeGoogle {
 
     /// A google.* message, its fields checked before anything awaits.
     struct Request: Sendable {
-        let type: String, profile: String, hint: String?, sub: String?, wait: TimeInterval
+        let type: String, profile: String, hint: String?, sub: String?, token: String?, wait: TimeInterval
         init?(_ message: Any?, profile: UUID?) {
             guard let m = message as? [String: Any], let type = m["type"] as? String, type.hasPrefix("google.") else { return nil }
             self.type = type
             self.profile = profile?.uuidString ?? "default"
             hint = m["hint"] as? String
             sub = m["sub"] as? String
+            token = m["token"] as? String
             wait = ((m["wait"] as? NSNumber)?.doubleValue ?? 0) / 1000
         }
     }
@@ -450,6 +460,10 @@ nonisolated enum GlazeGoogle {
             case "google.disconnect":
                 let d = await engine.disconnect(profile: r.profile)
                 return ["ok": true, "revoked": d.revoked, "had": d.had]
+            case "google.drop":
+                guard let token = r.token, !token.isEmpty, token.utf8.count <= 4096 else { return fail(.request) }
+                await engine.drop(profile: r.profile, token: token)
+                return ["ok": true]
             default: return fail(.request)
             }
         } catch let f as Fail { return fail(f) } catch { return fail(.auth) }
