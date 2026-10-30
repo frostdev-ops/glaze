@@ -279,3 +279,11 @@ test('installed accepts a finished empty profile without requiring a catalogue c
   await installed(page, 0);
   assert.equal('lookCatalog' in local, false, 'a read must not manufacture an empty cache');
 });
+
+test('the pointer check waits for whole attempts at the pointer animation, polled from Node, and says what it missed', () => {
+  const source = fs.readFileSync(path.join(scripts, 'pointer-check.js'), 'utf8');
+  assert.doesNotMatch(source, /until\((trail|glow), \d+\)/, 'one 5 s attempt inside a 4 s limit is a single try on a loaded runner');
+  const uses = source.match(/await animates\(/g) || [];
+  assert.equal(uses.length, 6, 'every "it plays" step: three in the preview, three on the Ultra page');
+  assert.match(source, /const animates = async \(frame, at, bound = \d{5}\)/);
+});
