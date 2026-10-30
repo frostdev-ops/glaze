@@ -304,3 +304,14 @@ test('LINEST reports perfect fits and zero degrees of freedom as Excel does', ()
   cases(e, [[`INDEX(${constantX},4,2)`, 2], [`INDEX(${constantX},3,1)`, 0]]);
   close(e, [[`INDEX(${constantX},5,2)`, 14 / 3], [`INDEX(${constantX},3,2)`, Math.sqrt(7 / 3)]]);
 });
+
+test('GAMMA accepts finite results above 1e308 and follows Excel normal-input bounds', () => {
+  close(book(), [['GAMMA(171.55)', 1.2263532731698625e308], ['GAMMA(171.6)', 1.5858969096672508e308], ['GAMMA(171.624)', 1.7942117599248174e308]]);
+  cases(book(), [['GAMMA(2.225073858507202E-308)', '#NUM!'], ['GAMMALN(2.2250738585072014E-308)', '#NUM!']]);
+});
+
+test('discrete distributions reject negative counts before truncation', () => {
+  cases(book(), ['BINOM.DIST(-0.5,2,0.5,FALSE)', 'BINOM.DIST(0,-0.5,0.5,FALSE)', 'BINOM.INV(-0.5,0.5,0.5)',
+    'POISSON.DIST(-0.5,2,FALSE)', 'NEGBINOM.DIST(-0.5,2,0.5,FALSE)', 'NEGBINOMDIST(-0.5,2,0.5)',
+    'HYPGEOM.DIST(-0.5,2,2,5,FALSE)', 'BINOM.DIST.RANGE(5,0.5,-0.5)'].map((f) => [f, '#NUM!']));
+});
