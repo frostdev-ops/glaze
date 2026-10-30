@@ -13,8 +13,8 @@ test('General fits 11 characters, then scientific', () => {
     ['General', 0.1 + 0.2, '0.3'], ['General', 1 / 3, '0.333333333'], ['General', 2 / 3, '0.666666667'],
     ['General', 123456789012, '1.23457E+11'], ['General', 12345678901, '12345678901'], ['General', 99999999999, '99999999999'],
     ['General', 999999999999, '1E+12'], ['General', 1e20, '1E+20'], ['General', 1.5e300, '1.5E+300'],
-    ['General', 0.0001, '0.0001'], ['General', 0.00001, '1E-05'], ['General', 0.000123456789, '0.000123457'],
-    ['General', -0.0000123, '-1.23E-05'], ['General', 1e-10, '1E-10'], ['General', 123456.123456789, '123456.1235'],
+    ['General', 0.0001, '0.0001'], ['General', 0.00001, '0.00001'], ['General', 0.000123456789, '0.000123457'],
+    ['General', -0.0000123, '-0.0000123'], ['General', 1e-10, '1E-10'], ['General', 123456.123456789, '123456.1235'],
     ['General', 12345678.9012, '12345678.9'], ['General', -1234567.891, '-1234567.891'], ['General', -0, '0'],
     ['General', 'text', 'text'], ['General', true, 'TRUE'], ['General', false, 'FALSE'], ['General', null, ''],
   ]);
@@ -24,9 +24,9 @@ test('General fits 11 characters, then scientific', () => {
 });
 
 test('a number as text carries 15 significant digits', () => {
-  for (const [v, want] of [[1 / 3, '0.333333333333333'], [0.1 + 0.2, '0.3'], [1e15, '1E+15'], [123456789012345, '123456789012345'],
-    [0.00001, '1E-05'], [0.0001, '0.0001'], [1234.5, '1234.5'], [-0, '0'], [2 ** 53, '9.00719925474099E+15'], [1e21, '1E+21'],
-    [12345678901234567890, '1.23456789012346E+19'], [-2.5, '-2.5'], [1e-300, '1E-300']]) assert.equal(F.numberText(v), want, String(v));
+  for (const [v, want] of [[1 / 3, '0.333333333333333'], [0.1 + 0.2, '0.3'], [1e15, '1000000000000000'], [123456789012345, '123456789012345'],
+    [0.00001, '0.00001'], [0.0001, '0.0001'], [1234.5, '1234.5'], [-0, '0'], [2 ** 53, '9007199254740990'], [1e21, '1E+21'],
+    [12345678901234567890, '12345678901234600000'], [-2.5, '-2.5'], [1e-300, '1E-300']]) assert.equal(F.numberText(v), want, String(v));
 });
 
 test('digit placeholders 0 # ? with the decimal point, thousands and scaling', () => {
@@ -116,7 +116,7 @@ test('dates and times', () => {
     ['mm:ss', 0.5 + 75 / 86400, '01:15'], ['hh:mm:ss.00', 0.5 + 1.25 / 86400, '12:00:01.25'], ['mm:ss.0', 0.5 + 0.06 / 86400, '00:00.1'],
     ['m/d/yyyy', 60, '2/29/1900'], ['m/d/yyyy', 0, '1/0/1900'], ['m/d/yyyy', 61, '3/1/1900'], ['m/d/yyyy', 1, '1/1/1900'],
     ['m/d/yyyy', 0, '1/1/1904', { date1904: true }], ['General', day, '45720'], ['yy', 1, '00'],
-    ['m/d/yyyy h:mm:ss', day + 0.999999999, '3/5/2025 0:00:00'], ['h:mm', 0.5 + 59.6 / 86400, '12:00'],
+    ['m/d/yyyy h:mm:ss', day + 0.999999999, '3/5/2025 0:00:00'], ['h:mm', 0.5 + 59.6 / 86400, '12:01'],
     ['h:mm:ss', 0.5 + 59.6 / 86400, '12:01:00'], ['[$-409]h:mm AM/PM', 0.75, '6:00 PM'], ['dd"th"', day, '04th'],
     ['mmm d', 'Mar', 'Mar'], ['yyyy;@', 'x', 'x'], ['d\\-m', day, '4-3'],
   ]);
@@ -147,4 +147,36 @@ test('built-in format ids 0-49 are kept as ids', () => {
 
 test('a malformed code throws; TEXT turns that into #VALUE!', () => {
   for (const bad of ['"open', '0;0;0;0;0', '[Purple]0', '[h', '0.0E']) assert.throws(() => F.format(1, bad), (e) => e.code === 'format', bad);
+});
+
+// Formula-only oracle: Excel for Mac 16.114.1, 2026-10-30. TEXT(...,"General") and value&"".
+test('Excel scientific boundaries differ between General and number-to-text coercion', () => {
+  assert.equal(F.general(1e-9), '0.000000001');
+  assert.equal(F.general(1e-10), '1E-10');
+  assert.equal(F.numberText(1e-18), '0.000000000000000001');
+  assert.equal(F.numberText(1e-19), '1E-19');
+  assert.equal(F.numberText(1e19), '10000000000000000000');
+  assert.equal(F.numberText(1e20), '1E+20');
+  assert.equal(F.format(0.5 + 59.4 / 86400, 'h:mm'), '12:00');
+  assert.equal(F.format(0.5 + 59.6 / 86400, '[h]:mm'), '12:01');
+  assert.equal(F.format(0.25, '# ?/?'), ' 1/4');
+});
+
+// Microsoft number-format guidelines; conditional signs and comma placement also checked in Excel 16.114.1.
+test('conditional fallback keeps the sign and scaling commas may precede the decimal point', () => {
+  table([
+    ['[>100]0;0', -5, '-5'], ['[<0]0', -5, '5'], ['[>100]0;[<-100]0;0', -5, '-5'],
+    ['0,,.0', 12000000, '12.0'], ['0,.00', 12000, '12.00'],
+  ]);
+});
+
+test('fraction approximation work does not grow with the denominator limit', () => {
+  const original = Math.round;
+  let calls = 0;
+  Math.round = (v) => {
+    if (++calls > 1000) throw new Error('denominator scan exceeded 1000 candidates');
+    return original(v);
+  };
+  try { assert.equal(typeof F.format(0.123456789, '# ?????????/?????????'), 'string'); }
+  finally { Math.round = original; }
 });
