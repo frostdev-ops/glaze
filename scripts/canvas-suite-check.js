@@ -94,7 +94,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     }
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-canvas-suite-'));
     fs.mkdirSync(out, { recursive: true });
-    check(/show-content/.test(WIKI) && WIKI.includes('instructure_file_link') && (MODULES.match(/class="context_module_item [^"]*attachment/g) || []).length >= 6 && FILE_PAGE(21).includes('canvas-own'), 'the saved pages carry the preview, the five File rows and the file link');
+    check(/show-content/.test(WIKI) && WIKI.includes('data-api-returntype="File"') && (MODULES.match(/class="context_module_item [^"]*attachment/g) || []).length >= 6 && FILE_PAGE(21).includes('canvas-own'), 'the saved pages carry the preview, the five File rows and the file link');
     const ext = env.staged(root, [`https://${HOST}/*`]);
     const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
     await require('./wait-for-browser.js')();
