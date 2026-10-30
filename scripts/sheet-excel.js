@@ -35,8 +35,8 @@ const num = (x) => {
 const osa = (script, timeout = 120000) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-excel-'));
   const file = path.join(dir, 'run.applescript');
-  fs.writeFileSync(file, script);
   try {
+    fs.writeFileSync(file, script);
     return execFileSync('osascript', [file], { encoding: 'utf8', timeout, maxBuffer: 64 << 20 }).replace(/\n$/, '');
   } catch (err) {
     const why = `${err.stderr || ''}`.trim() || err.message;
@@ -58,9 +58,11 @@ const start = () => {
   try {
     osa('with timeout of 110 seconds\ntell application "Microsoft Excel" to get version\nend timeout');
   } catch (err) {
+    self.pid ||= pid();
     quit(self);
     throw err;
   }
+  self.pid ||= pid();
   return self;
 };
 // Quits Excel if start() launched it: asked first; the process it launched is stopped if it can't be asked.
