@@ -24,12 +24,12 @@ const until = async (fn, label, ms = 15000) => {
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 
 // A spreadsheet stored as Documents stores one (sheet-data.js): its record, its index row and its parts.
-const seeded = (key) => {
-  const wb = M.workbook(), sh = wb.sheets[0];
+const seeded = (key, wb = M.workbook()) => {
+  const sh = wb.sheets[0];
   sh.rows.set(0, new Map([[0, { t: 's', v: 'Seeded' }], [1, { t: 'n', v: 42 }]]));
   const { book, parts } = SD.split(wb);
   const rec = { key, kind: 'sheet', title: 'Kept sheet', named: true, created: 1, updated: Date.now(), revision: 1, edited: 1, book, parts: Object.fromEntries([...parts.keys()].map((n) => [n, 1])),
-    grid: SD.glance(wb), text: SD.text(wb), cells: 2, sheets: 1 };
+    grid: SD.glance(wb), text: SD.text(wb), ...SD.measure(wb) };
   return { [`writerPaper:${key}`]: rec, writerPapers: [{ key, kind: 'sheet', named: true, title: 'Kept sheet', course: '', url: '', words: 0, updated: rec.updated, submitted: null, grid: rec.grid }],
     ...Object.fromEntries([...parts].map(([n, rows]) => [`writerSheet:${key}:${n}`, { rows, rev: 1 }])) };
 };
@@ -360,6 +360,28 @@ const seeded = (key) => {
     await page.keyboard.press('Control+z');
     await until(async () => (await tabsNow()) === 'Data,Sheet2,Sheet2 (2)', 'undo delete');
     check(true, 'a sheet duplicates, hides, unhides, deletes and comes back with Ctrl+Z');
+
+    // Keyboard access after a grid edit: Escape releases the next Tab to native focus order, and the format menu's
+    // custom field is reachable from its presets without a pointer.
+    await page.keyboard.press('Escape'); await page.keyboard.press('Shift+Tab');
+    check(await page.evaluate(() => document.activeElement?.id) === 'gx-formula', 'Escape then Shift+Tab reaches the formula bar');
+    await page.keyboard.press('Escape');
+    await page.focus('#gx-format'); await page.keyboard.press('Enter'); await page.keyboard.press('Tab');
+    check(await page.evaluate(() => document.activeElement?.id) === 'gx-fmt-code', 'Tab from a format preset reaches Custom format');
+    await page.keyboard.press('Escape');
+    await saved(key);
+
+    // The model's largest workbook still draws only a viewport of pooled cells, and scrolling reuses those elements.
+    const bigKey = 'doc:00000000-0000-4000-8000-00000000b16b', big = M.workbook();
+    for (let r = 0; r < 1000; r++) big.sheets[0].rows.set(r, new Map(Array.from({ length: 250 }, (_, c) => [c, { t: 'n', v: r * 250 + c }])));
+    await worker.evaluate(async (o) => { await chrome.storage.local.set(o); }, seeded(bigKey, big));
+    const opened = Date.now();
+    await page.goto(`${HOME}?sheet=${encodeURIComponent(bigKey)}`); await grid(); await painted();
+    const render = await page.evaluate(() => { window.gzPool = [...document.querySelectorAll('#gx-grid .gx-c')]; return window.gzPool.length; });
+    check(render > 200 && render < 2500, `250,000 cells: a viewport pool (${render} cells, ${Date.now() - opened} ms to paint)`);
+    await page.evaluate(() => { const s = document.querySelector('.gx-scroll'); s.scrollTop = 10000; });
+    await until(() => page.evaluate(() => document.querySelector('#gx-grid .gx-c[data-r="500"]')), 'large workbook scrolled');
+    check(await page.evaluate(() => window.gzPool.some((el) => el.isConnected) && document.querySelectorAll('#gx-grid .gx-c').length < 2500), '250,000 cells: scrolling reuses pooled elements');
 
     const intervals = await page.evaluate(() => globalThis.gzIntervals || []);
     check(intervals.every((ms) => ms >= 60000), `no interval under a minute (${JSON.stringify(intervals)})`);

@@ -77,6 +77,7 @@ test('Escape then Tab or Shift+Tab releases the grid to native keyboard focus na
   f.key('Escape');
   assert.ok(!f.key('Tab').defaultPrevented, 'Tab can reach the sheet tabs');
   f.key('Escape');
+  f.key('Shift');
   assert.ok(!f.key('Tab', { shiftKey: true }).defaultPrevented, 'Shift+Tab can reach the formula bar and toolbar');
 });
 
