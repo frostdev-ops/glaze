@@ -568,7 +568,7 @@ test('concurrent import and submit wait for one codec load, preserving the XLSX 
 test('failed or missing codecs reject file creation with a named error and can be retried', async () => {
   for (const missing of [false, true]) {
     let loads = 0;
-    const { DK, ctx } = load({ sheets: true }, { GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'),
+    const { DK, ctx } = load({ sheets: true }, { GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'), GZ_SHEET_GRID: require('../sheet-grid.js'),
       console: { error() {} }, GZ_WRITER_PAPER: { need: async () => { loads++; if (!missing) throw new Error('lib/zip.js did not load'); } } });
     await DK.settled();
     await assert.rejects(ctx.GZ_SHEET_KIND.fileOf(M.workbook(), 'Lab'), (e) => e.code === 'codecs' && /load/i.test(e.message));
