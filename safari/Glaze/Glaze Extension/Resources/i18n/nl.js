@@ -3750,5 +3750,15 @@
   "as the app reports itself": "zoals de app zichzelf noemt",
   "Don't allow": "Niet toestaan",
   "Unnamed app": "Naamloze app",
-  "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde."
+  "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde.",
+  "Glaze on-device AI": "Lokale AI van Glaze",
+  "Model size": "Modelgrootte",
+  "Auto": "Automatisch",
+  "{n} GB": "{n} GB",
+  "This browser has no WebGPU, which Glaze’s on-device model needs.": "Deze browser heeft geen WebGPU, dat de lokale AI van Glaze nodig heeft.",
+  "This computer’s graphics can’t run Glaze’s on-device model.": "De grafische kaart van deze computer kan de lokale AI van Glaze niet draaien.",
+  "Glaze’s on-device model could not start.": "De lokale AI van Glaze kon niet starten.",
+  "Glaze’s on-device model stopped. Try again.": "De lokale AI van Glaze is gestopt. Probeer het opnieuw.",
+  "There isn’t enough free space for the model.": "Er is niet genoeg vrije ruimte voor het model.",
+  "The download lost its connection. Try again.": "De download verloor de verbinding. Probeer het opnieuw."
 };
