@@ -66,8 +66,8 @@ test('golden: sheet, style and package facts', async () => {
   assert.deepEqual(wb.styles, [{}, { quote: true }, { fmt: 8 }, { fmt: 9 }]);
   assert.equal(wb.active, 1, 'Excel saved with the second tab active');
   const cases1 = wb.sheets[0];
-  assert.equal(cases1.colW.get(0), 566, 'width 80.83203125 is 566 px');
-  assert.deepEqual(cases1.keep.defaults, { colW: 75, rowH: 64 / 3 }, 'baseColWidth 10, defaultRowHeight 16 pt');
+  assert.equal(cases1.colW.get(0), 80.83203125, 'the file\'s width, in its characters');
+  assert.deepEqual(cases1.keep.defaults, { colW: 10.7109375, rowH: 16 }, 'baseColWidth 10 with its padding, defaultRowHeight 16 pt');
   assert.equal(cases1.freeze, null);
   assert.deepEqual(cases1.merges, []);
   assert.deepEqual(cases1.keep.xml.map((x) => x.name), ['sheetFormatPr', 'pageMargins']);
@@ -281,7 +281,8 @@ test('synthetic: sheets, names, sizes, merges, freeze panes, filter and sort, ke
   assert.equal(wb.date1904, true);
   assert.deepEqual(wb.sheets.map((s) => [s.name, s.id]), [['One', 5], ['Two', 2], ['Split view', 9]]);
   assert.equal(wb.active, 2, 'activeTab 3 counts the chart sheet');
-  assert.equal(M.getSheet(wb, 'Two').keep.state, 'hidden');
+  assert.equal(M.getSheet(wb, 'Two').keep.hidden, true);
+  assert.equal(M.getSheet(wb, 'Two').keep.state, undefined, 'only veryHidden says so');
   assert.deepEqual(wb.names, [
     { name: '_xlnm._FilterDatabase', ref: 'One!$A$1:$H$9', sheet: 5, hidden: true },
     { name: 'Rate', ref: '0.25', attrs: { comment: 'tax' } },
@@ -289,13 +290,13 @@ test('synthetic: sheets, names, sizes, merges, freeze panes, filter and sort, ke
     { name: 'Pick', ref: 'XLOOKUP(1,One!$A:$A,One!$B:$B)' },
   ]);
   const one = M.getSheet(wb, 'One');
-  assert.deepEqual([...one.colW], [[0, 145], [1, 0], [2, 0], [4, 64]], "Excel's 20.00 (145 pixels) and 8.43 (64 pixels)");
+  assert.deepEqual([...one.colW], [[0, 20.7109375], [1, 0], [2, 0], [4, 9.140625]], 'widths as the file has them');
   assert.deepEqual([...one.hidden.cols], [1, 2]);
   assert.deepEqual([...one.keep.colAttrs], [[4, { style: '3' }]]);
-  assert.deepEqual([...one.rowH], [[0, 40]], 'custom heights only: 30 pt is 40 px');
+  assert.deepEqual([...one.rowH], [[0, 30]], 'custom heights only, in points');
   assert.deepEqual([...one.hidden.rows], [1]);
   assert.deepEqual([...one.keep.rowAttrs], [[2, { ht: '12.75', s: '4', outlineLevel: '1' }]]);
-  assert.deepEqual(one.keep.defaults, { colW: 64, rowH: 20 });
+  assert.deepEqual(one.keep.defaults, { colW: 8.7109375, rowH: 15 }, 'eight characters when the file names no width');
   assert.deepEqual(one.merges, [{ r0: 4, c0: 6, r1: 5, c1: 7 }, { r0: 6, c0: 0, r1: 7, c1: 2 }]);
   assert.deepEqual(one.freeze, { rows: 1, cols: 2 });
   assert.deepEqual(M.getSheet(wb, 'Two').freeze, { rows: 3, cols: 0 });
@@ -397,7 +398,7 @@ const fields = (wb) => ({
   date1904: wb.date1904, active: wb.active, names: wb.names, styles: wb.styles,
   sheets: wb.sheets.map((sh) => ({
     id: sh.id, name: sh.name, freeze: sh.freeze, filter: sh.filter, merges: sh.merges, colW: [...sh.colW].sort((a, b) => a[0] - b[0]), rowH: [...sh.rowH].sort((a, b) => a[0] - b[0]),
-    hidden: { rows: [...sh.hidden.rows].sort((a, b) => a - b), cols: [...sh.hidden.cols].sort((a, b) => a - b) }, state: sh.keep.state,
+    hidden: { rows: [...sh.hidden.rows].sort((a, b) => a - b), cols: [...sh.hidden.cols].sort((a, b) => a - b) }, sheetHidden: sh.keep.hidden, state: sh.keep.state,
     cells: [...sh.rows].sort((a, b) => a[0] - b[0]).flatMap(([r, row]) => [...row].sort((a, b) => a[0] - b[0])
       .filter(([, x]) => !(x.t === 'z' && x.s === undefined && x.f === undefined))
       .map(([c, x]) => [M.cellName(r, c), x.t === 'e' ? { ...x, v: stored(x.v) } : x])),
@@ -498,10 +499,6 @@ test('write: Excel\'s element order, character widths, point heights, shared str
   assert.equal(p['xl/calcChain.xml'], undefined);
   assert.match(p['[Content_Types].xml'], /<Default Extension="png" ContentType="image\/png"\/>/);
   assert.match(p['[Content_Types].xml'], /<Override PartName="\/custom\/thing.xml" ContentType="application\/x-glaze-test\+xml"\/>/);
-  assert.equal(X.widthFromPx(145), 20.7109375);
-  assert.equal(X.widthFromPx(64), 9.140625);
-  for (let px = 0; px <= 2000; px++) assert.equal(X.pxFromWidth(X.widthFromPx(px)), px, `${px} px`);
-  for (let px = 0; px <= 600; px += 0.25) assert.equal(X.pxFromPt(X.ptFromPx(px)), X.pxFromPt(X.ptFromPx(X.pxFromPt(X.ptFromPx(px)))), `${px} px row`);
 });
 
 test('write: a workbook built in Glaze from scratch reads back as built', async () => {
@@ -523,8 +520,10 @@ test('write: a workbook built in Glaze from scratch reads back as built', async 
   e.apply({ op: 'prop', sheet: id, key: 'merges', value: [{ r0: 6, c0: 0, r1: 7, c1: 2 }] });
   e.apply({ op: 'prop', sheet: id, key: 'freeze', value: { rows: 1, cols: 1 } });
   e.apply({ op: 'prop', sheet: id, key: 'filter', value: { r0: 0, c0: 0, r1: 3, c1: 3 } });
-  e.apply({ op: 'size', sheet: id, axis: 'col', i: 0, size: 120 });
-  e.apply({ op: 'size', sheet: id, axis: 'row', i: 0, size: 28 });
+  e.apply({ op: 'size', sheet: id, axis: 'col', i: 0, size: 16.7109375 });
+  e.apply({ op: 'size', sheet: id, axis: 'row', i: 0, size: 21 });
+  e.apply({ op: 'addSheet', name: 'Hidden one' });
+  M.getSheet(wb, 'Hidden one').keep = { hidden: true };
   e.apply({ op: 'hide', sheet: id, axis: 'col', i: 7, hidden: true });
   e.apply({ op: 'name', name: 'Total', ref: 'Sheet1!$D$4' });
   const out = await X.write(wb, { date: DATE, engine: e });
@@ -701,7 +700,7 @@ test('csv: byte-order marks and encodings', () => {
   assert.equal(sheetOf(X.readDelimited(be)).B1.v, 'y');
   const latin = Uint8Array.from([0x63, 0x61, 0x66, 0xe9, 0x2c, 0x31]);
   assert.equal(sheetOf(X.readDelimited(latin)).A1.v, 'café', 'not UTF-8: Windows-1252');
-  assert.equal(sheetOf(X.readDelimited('﻿a,b')).A1.v, 'a');
+  assert.equal(sheetOf(X.readDelimited('\ufeffa,b')).A1.v, 'a');
 });
 
 test('csv: an unclosed quote and the cell cap degrade, listed in the problems', () => {
@@ -718,9 +717,9 @@ test('csv: written as Excel saves CSV UTF-8: shown text, quotes where needed, CR
   const one = M.getSheet(wb, 'One');
   const csv = X.writeDelimited(wb, { sheet: one.id });
   const lines = csv.split('\r\n');
-  assert.equal(csv[0], '﻿');
-  assert.equal(lines[0], '﻿plain & simple,Bold blue sub,日本,a\rb_x0041_,,in,Bc,');
-  assert.equal(lines[1], '1.5,TRUE,#N/A,10/31/2026 12:00,-4E+300,x1.5,TRUE,#DIV/0!', 'formats shown: General, the ISO date in its General cell');
+  assert.equal(csv[0], '\ufeff');
+  assert.equal(lines[0], '\ufeffplain & simple,Bold blue sub,日本,"a\rb_x0041_",,in,Bc,', 'a carriage return is quoted too');
+  assert.equal(lines[1], '1.5,TRUE,#N/A,44863.5,-4E+300,x1.5,TRUE,#DIV/0!', 'shown as their formats show them: the ISO date has no date format');
   assert.equal(lines.at(-1), '', 'a line end after the last row');
   const tsv = X.writeDelimited(wb, { sheet: 'One', delimiter: '\t', bom: false });
   assert.equal(tsv.split('\r\n')[1].split('\t').length, 8);
