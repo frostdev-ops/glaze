@@ -279,8 +279,13 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   const SAVE_WAIT = 30000;
   frame.handle('submit:save', async (m) => {
     const api = P()?.current() || await paper();
+    const doc = api?.editor?.view?.state.doc, key = api?.key();
     let ok = false;
-    try { ok = !!(api && await Promise.race([api.save(), new Promise((r) => setTimeout(r, SAVE_WAIT, null))])); } catch (e) { console.error(e); }
+    let timer;
+    try {
+      ok = !!(api && await Promise.race([api.save(), new Promise((r) => { timer = setTimeout(r, SAVE_WAIT, null); })]));
+      ok = ok && P()?.current() === api && api.key() === key && api.editor.view.state.doc === doc;
+    } catch (e) { console.error(e); } finally { clearTimeout(timer); }
     if (!ok) api?.notify?.('Not saved. Try again in a moment.');
     frame.say({ type: 'submit:saved', request: m.request, ok });
   });
