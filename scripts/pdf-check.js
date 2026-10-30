@@ -724,6 +724,18 @@ const photo = () => {
     await until(() => page.evaluate(() => document.querySelectorAll('.pdfViewer .page').length === 3), 'the viewer on the pages before');
     check(pUndone.pages === 3 && (await readBack(pUndone)).join('|') === 'This is page 1|This is page 2|This is page 3', 'Undo takes the whole Done back to the file before it');
 
+    // ---- Versions: the file Done made is a version now (the undo kept it); restoring it opens it.
+    await until(() => page.evaluate(() => document.querySelector('[data-act="versions"]')?.disabled === false), 'Versions on');
+    await page.click('[data-act="versions"]');
+    const vItems = await until(() => page.evaluate(() => { const l = [...document.querySelectorAll('.gq-menu [data-act="restore"]')].map((b) => ({ id: b.dataset.version, label: b.textContent })); return l.length ? l : null; }), 'the versions menu');
+    const vList = await local(`writerVersions:${pKey}`), six = vList.find((v) => v.file.hash === pAfter.file.hash);
+    await shot('versions-1280.png');
+    check(vItems.length === vList.filter((v) => v.kind === 'pdf').length && !!six && vItems.some((v) => v.id === six.id), `Versions lists the PDF's versions by date (${JSON.stringify(vItems.map((v) => v.label))})`);
+    await page.click(`.gq-menu [data-version="${six.id}"]`);
+    const restored = await until(async () => { const r = await local(`writerPaper:${pKey}`); return r.file.hash === pAfter.file.hash ? r : null; }, 'the restore', 30000);
+    await until(() => page.evaluate(() => document.querySelectorAll('.pdfViewer .page').length === 6), 'the viewer on the restored file');
+    check(restored.pages === 6 && (await local(`writerVersions:${pKey}`)).some((v) => v.reason === 'restore' && v.file.hash === pBefore.file.hash), 'a version restored opens again, the file it replaced kept first');
+
     // ---- a signed file: Pages off, saying why.
     const signedPdf = path.join(tmp, 'Signed form.pdf');
     fs.writeFileSync(signedPdf, Buffer.from(require('./pdf-fixtures.js').FIXTURES.signed()));

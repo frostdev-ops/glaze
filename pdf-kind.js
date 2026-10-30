@@ -136,7 +136,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   };
   const btn = (props, ...kids) => h('button', { type: 'button', ...props }, ...kids);
   const PATHS = { minus: 'M5 12h14', plus: 'M12 5v14M5 12h14', search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4', dots: 'M5 12h.01M12 12h.01M19 12h.01', caret: 'm6 9 6 6 6-6',
-    up: 'm6 15 6-6 6 6', down: 'm6 9 6 6 6-6', x: 'M6 6l12 12M18 6 6 18', pages: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' };
+    up: 'm6 15 6-6 6 6', down: 'm6 9 6 6 6-6', x: 'M6 6l12 12M18 6 6 18', clock: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', pages: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' };
   const icon = (name) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'gp-ico'); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', PATHS[name]); s.append(p); return s; };
   const nameOf = (rec) => `${String(rec?.title || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Document'}.pdf`;
 
@@ -216,6 +216,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const zoomLabel = h('span'), zoomB = btn({ id: 'gq-zoom', class: 'gp-box', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Zoom') }, zoomLabel, icon('caret'));
     const zoomIn = btn({ id: 'gq-zoom-in', class: 'gq-ib', title: t('Zoom in'), 'aria-label': t('Zoom in') }, icon('plus'));
     const findB = btn({ id: 'gq-find-b', class: 'gq-ib', title: t('Find'), 'aria-label': t('Find'), 'aria-expanded': 'false', 'aria-controls': 'gq-find' }, icon('search'));
+    // Versions: the file as it was at each kept point (lib/writer-papers.js), one to go back to.
+    const versB = src ? null : btn({ class: 'gq-ib', 'data-act': 'versions', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Versions'), 'aria-label': t('Versions') }, icon('clock'));
     const moreB = src ? null : btn({ class: 'gq-ib gq-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('More'), 'aria-label': t('More') }, icon('dots'));
     // The page you're on, and a page to go to: Enter or leaving the box jumps; Esc puts it back.
     const pageIn = h('input', { id: 'gq-page', class: 'gq-page', type: 'text', inputmode: 'numeric', autocomplete: 'off', spellcheck: 'false', size: '3', 'aria-label': t('Page number') });
@@ -231,7 +233,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const said = h('p', { class: 'gq-said', role: 'alert', hidden: true });
     const ui = h('div', { class: 'gp gp-standalone gq' },
       h('header', { class: 'gp-top' }, back, h('h1', {}, titleIn || host?.title?.() || rec?.title || t('Untitled document')), h('span', { class: 'grow' }), state),
-      h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('PDF') }, zoomOut, zoomB, zoomIn, h('span', { class: 'gp-sepv' }), pageIn, pageOf, h('span', { class: 'gp-sepv' }), findB, h('span', { class: 'grow' }), ...(host?.tools || []), origB, saveB, moreB),
+      h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('PDF') }, zoomOut, zoomB, zoomIn, h('span', { class: 'gp-sepv' }), pageIn, pageOf, h('span', { class: 'gp-sepv' }), findB, h('span', { class: 'grow' }), ...(host?.tools || []), origB, saveB, versB, moreB),
       findBar, h('div', { class: 'gq-work' }, scroll, said));
     (host?.mount || document.body).append(ui);
     if (titleIn) titleIn.value = rec?.title || '';
@@ -424,7 +426,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const say = (text) => { if (state.textContent !== text) state.textContent = text; };
     // Leaving: a signature being chosen is cancelled, and what the tools hold (a drawing, a note being typed) is kept.
     const leaveNow = () => { signs?.cancel(); tools?.commit(true); };
-    let dirty = false, saving = null, timer = 0;
+    // The first save of a visit keeps the file as it was opened as a version ('edit'); the rest replace it ('auto').
+    let dirty = false, saving = null, timer = 0, first = true;
     const save = async () => {
       tools?.commit();
       // A signature being chosen leaves pdf.js an empty editor: the save waits for the dialog (signs done).
@@ -434,7 +437,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       try {
         const lib2 = pdfdoc(), out = lib2 ? (await (await lib2).save(doc)).bytes : await doc.saveDocument();
         const thumbUrl = await picture(doc).catch(() => null);
-        ({ paper: rec } = await st.save(key, { ...await STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }, { expectedKind: 'pdf' }));
+        ({ paper: rec } = await st.save(key, { ...await STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }, { expectedKind: 'pdf', reason: first ? 'edit' : 'auto' }));
+        first = false;
         say(dirty ? '' : t('Saved'));
         return true;
       } catch (e) { console.error(e); if (e?.cause) console.error(e.cause); dirty = true; say(t(e instanceof FileError ? e.message : e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); return false; }
@@ -500,6 +504,15 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       panel = GZ_PDF_PAGES.panel({ P, doc, t, h, btn, mount: ui.querySelector('.gq-work'), bytes: rec?.size || 0, wasmUrl: GET.wasmUrl,
         allows: { add: !!facts?.allows?.add, why: facts?.encrypted ? PROTECTED : null }, apply: applyPages,
         close: () => { panel = null; delete ui.dataset.panel; pagesB.focus(); } });
+    });
+    versB?.addEventListener('click', async () => {
+      if (menu?.opener === versB) { closeMenu(true); return; }
+      // By when each was kept; two in the same minute tell their seconds.
+      const when = new Intl.DateTimeFormat(locale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      const exact = new Intl.DateTimeFormat(locale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+      const list = (await st.versions(key).catch(() => [])).filter((v) => v.kind === 'pdf'), labels = list.map((v) => when.format(v.at));
+      openMenu(versB, list.length ? list.map((v, i) => [labels.indexOf(labels[i]) !== labels.lastIndexOf(labels[i]) ? exact.format(v.at) : labels[i], () => { restoreTo(v.id); }, { 'data-act': 'restore', 'data-version': v.id }])
+        : [[t('No versions yet'), () => {}, { 'data-act': 'none', disabled: true }]]);
     });
     back?.addEventListener('click', (e) => {
       leaveNow();

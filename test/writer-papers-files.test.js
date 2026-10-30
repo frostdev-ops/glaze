@@ -194,3 +194,22 @@ test('a PDF saved with reason edit (the pages panel\'s Done, a viewer\'s first s
   assert.equal(back.paper.pages, 3);
   assert.ok(store.data[`writerVersions:${k}`].some((v) => v.reason === 'restore' && v.file.hash === f2.hash), 'what the restore replaced is a version too');
 });
+
+test('a 40 MB PDF saved six times: versions hold at most CAP.files of files, the submitted one and the newest always', async () => {
+  const { P, files, clock, store } = make();
+  const k = key(), size = 40e6, fake = (i) => ({ hash: sha(Buffer.from(`forty-${i}`)), size, type: 'application/pdf' });
+  const real = files.own;
+  files.own = async () => ({ missing: [] });
+  try {
+    await P.save(k, { kind: 'pdf', file: fake(0), size, pages: 300 }, { reason: 'import' });
+    await P.save(k, {}, { reason: 'submit', expectedKind: 'pdf' });
+    for (let i = 1; i <= 6; i++) { clock.t += 60e3; await P.save(k, { file: fake(i), size, pages: 300 }, { reason: 'edit', expectedKind: 'pdf' }); }
+  } finally { files.own = real; }
+  const list = store.data[`writerVersions:${k}`], held = new Map(list.map((v) => [v.file.hash, v.file.size]));
+  const total = [...held.values()].reduce((n, x) => n + x, 0);
+  assert.ok(total <= PA.CAP.files, `files in versions: ${total / 1e6} MB`);
+  assert.ok(list.some((v) => v.reason === 'submit' && v.file.hash === fake(0).hash), 'the submitted version stays');
+  assert.equal([...list].sort((a, b) => b.at - a.at)[0].file.hash, fake(5).hash, 'the newest stays: the file the last save replaced');
+  assert.equal(held.size, 5, `five files of 40 MB: ${list.map((v) => `${v.reason}:${v.file.hash.slice(0, 6)}`).join(' ')}`);
+  assert.equal(store.data[`writerPaper:${k}`].file.hash, fake(6).hash);
+});
