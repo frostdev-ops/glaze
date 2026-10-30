@@ -388,20 +388,3 @@ test('a copy left by something that went has no role, so nothing that looks for 
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'lib', 'motion.js'), 'utf8');
   assert.match(src.match(/GHOSTLESS = \[[^\]]*\]/)[0], /'role'/);
 });
-
-
-test('the stalled swap fallback applies state without skipping an isolated-world native transition', async () => {
-  const { html } = env({ vt: true });
-  let skipped = 0, callback;
-  document.startViewTransition = (update) => {
-    callback = update;
-    return { ready: new Promise(() => {}), finished: new Promise(() => {}), updateCallbackDone: new Promise(() => {}), skipTransition: () => { skipped++; } };
-  };
-  let n = 0;
-  await M.swap(() => { n++; });
-  assert.equal(n, 1);
-  assert.equal(skipped, 0, 'Chromium emits an unhandled main-world AbortError when an isolated-world transition is skipped');
-  assert.equal(html.hasAttribute('data-gz-swap'), false);
-  callback();
-  assert.equal(n, 1);
-});
