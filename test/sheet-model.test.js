@@ -355,6 +355,14 @@ test('typed input: numbers, percent, currency, dates, times, booleans, errors, f
   assert.deepEqual(p('Mar-99'), { t: 'n', v: M.toSerial(1999, 3, 1), fmt: 'mmm-yy' });
   assert.deepEqual(p('Mar 32'), { t: 'n', v: M.toSerial(1932, 3, 1), fmt: 'mmm-yy' });
   assert.deepEqual(p('1/2/3'), { t: 'n', v: M.toSerial(2003, 1, 2), fmt: 'm/d/yyyy' }, 'a one-digit year is 200x');
+  // Excel 16 on the Mac: any number that isn't a day of that month (this year's) is the year, 0 too.
+  assert.deepEqual(p('2/30'), { t: 'n', v: M.toSerial(1930, 2, 1), fmt: 'mmm-yy' });
+  assert.deepEqual(p('2/29'), { t: 'n', v: M.toSerial(2029, 2, 1), fmt: 'mmm-yy' }, '2025 has no Feb 29');
+  assert.deepEqual(p('2/29', { year: 2028 }), { t: 'n', v: M.toSerial(2028, 2, 29), fmt: 'd-mmm' });
+  assert.deepEqual(p('4/31'), { t: 'n', v: M.toSerial(1931, 4, 1), fmt: 'mmm-yy' });
+  assert.deepEqual(p('3/0'), { t: 'n', v: M.toSerial(2000, 3, 1), fmt: 'mmm-yy' });
+  assert.deepEqual(p('Mar 0'), { t: 'n', v: M.toSerial(2000, 3, 1), fmt: 'mmm-yy' });
+  assert.deepEqual(p('Feb-30'), { t: 'n', v: M.toSerial(1930, 2, 1), fmt: 'mmm-yy' });
   assert.deepEqual(p('13:30'), { t: 'n', v: 0.5625, fmt: 'h:mm' });
   assert.deepEqual(p('1:30 PM'), { t: 'n', v: 0.5625, fmt: 'h:mm AM/PM' });
   assert.deepEqual(p('12:00:30 am'), { t: 'n', v: 30 / 86400, fmt: 'h:mm:ss AM/PM' });
