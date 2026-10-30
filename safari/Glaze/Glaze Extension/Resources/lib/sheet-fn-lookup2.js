@@ -1,6 +1,6 @@
 // Glaze Sheets' array-shaping functions: AREAS TAKE DROP CHOOSECOLS CHOOSEROWS VSTACK HSTACK EXPAND TOCOL TOROW
 // WRAPROWS WRAPCOLS, registered with the calc engine (sheet-calc.js define). All but AREAS give 2D arrays; a range
-// arrives whole (to lib.used's extent, so a whole column ends at the sheet's last used row) and its blanks stay blank,
+// arrives to lib.used's extent, except TAKE/DROP which slice the complete reference first; blanks stay blank,
 // which a cell shows as 0. Counts truncate toward zero; a negative one counts from the end; past the size is the whole
 // array. An empty result is #CALC!, one past the engine's cell cap #NUM!. An index of 0 or past the size is #VALUE!;
 // a shorter array stacks or wraps padded with #N/A (or pad_with, an error or a blank kept as given). AREAS counts a
@@ -94,6 +94,23 @@ var GZ_SHEET_FN_LOOKUP2 = globalThis.GZ_SHEET_FN_LOOKUP2 || (() => {
     return rows ? out : out[0].map((_, j) => out.map((line) => line[j]));
   } });
 
+  // Slice references before materializing them: whole columns retain their trailing blanks, and a small selection
+  // never allocates the whole input. Results over the engine's cell budget fail explicitly.
+  const slice = (drop) => ({ p: ['a', 'r', 'r'], min: 2, max: 3, fn: ([a, r, c], ctx) => {
+    const ref = a instanceof Ref, g = ref ? a : grid(a, ctx);
+    const rows = ref ? a.rows : g.length, cols = ref ? a.cols : g[0].length;
+    const part = (n, len) => n === null ? [0, len] : drop
+      ? n >= 0 ? [Math.min(n, len), len] : [0, Math.max(0, len + n)]
+      : n >= 0 ? [0, Math.min(n, len)] : [Math.max(0, len + n), len];
+    return sizes([r, c], ctx, (rn, cn) => {
+      const [r0, r1] = part(rn, rows), [c0, c1] = part(cn, cols);
+      if (r1 <= r0 || c1 <= c0) return empty();
+      capped(r1 - r0, c1 - c0);
+      return ref ? Array.from({ length: r1 - r0 }, (_, i) => Array.from({ length: c1 - c0 }, (__, j) => ctx.read(a.sheet, a.r0 + r0 + i, a.c0 + c0 + j)))
+        : block(g, r0, r1, c0, c1);
+    });
+  } });
+
   const FNS = {
     // A union's areas, all on one sheet; a reference across sheets is #VALUE!.
     AREAS: { p: ['r'], min: 1, max: 1, fn: ([ref]) => {
@@ -102,16 +119,8 @@ var GZ_SHEET_FN_LOOKUP2 = globalThis.GZ_SHEET_FN_LOOKUP2 || (() => {
       if (ref instanceof Areas && ref.list.every((x) => x.sheet === ref.list[0].sheet)) return ref.list.length;
       throw ERR.VALUE;
     } },
-    TAKE: { p: ['a', 'r', 'r'], min: 2, max: 3, fn: ([a, r, c], ctx) => {
-      const g = grid(a, ctx);
-      const part = (n, len) => (n === null ? [0, len] : n >= 0 ? [0, Math.min(n, len)] : [Math.max(0, len + n), len]);
-      return sizes([r, c], ctx, (rn, cn) => block(g, ...part(rn, g.length), ...part(cn, g[0].length)));
-    } },
-    DROP: { p: ['a', 'r', 'r'], min: 2, max: 3, fn: ([a, r, c], ctx) => {
-      const g = grid(a, ctx);
-      const part = (n, len) => (n === null ? [0, len] : n >= 0 ? [Math.min(n, len), len] : [0, Math.max(0, len + n)]);
-      return sizes([r, c], ctx, (rn, cn) => block(g, ...part(rn, g.length), ...part(cn, g[0].length)));
-    } },
+    TAKE: slice(false),
+    DROP: slice(true),
     CHOOSECOLS: { p: ['a', 'a'], min: 2, fn: ([a, ...ks], ctx) => {
       const g = grid(a, ctx), js = positions(ks, g[0].length, ctx);
       capped(g.length, js.length);

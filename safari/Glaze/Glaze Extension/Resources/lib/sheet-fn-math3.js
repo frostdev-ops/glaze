@@ -131,12 +131,16 @@ var GZ_SHEET_FN_MATH3 = globalThis.GZ_SHEET_FN_MATH3 || (() => {
 
     // Combinations with repetition, C(n+k-1, k); none chosen from none is 1.
     COMBINA: { p: ['v', 'v'], min: 2, max: 2, fn: ([n, k], ctx) => {
-      const a = whole(n, ctx), b = whole(k, ctx);
+      const rawN = num(n, ctx), rawK = num(k, ctx);
+      if (rawN < 0 || rawK < 0) throw ERR.NUM;
+      const a = Math.trunc(rawN), b = Math.trunc(rawK);
       if (a < 0 || b < 0 || (a === 0 && b > 0) || a >= MAX_INT || a - 1 >= MAX_INT - b) throw ERR.NUM;
       return a === 0 ? 1 : finite(choose(a + b - 1, b));
     } },
     PERMUTATIONA: { p: ['v', 'v'], min: 2, max: 2, fn: ([n, k], ctx) => {
-      const a = whole(n, ctx), b = whole(k, ctx);
+      const rawN = num(n, ctx), rawK = num(k, ctx);
+      if (rawN < 0) throw ERR.NUM;
+      const a = Math.trunc(rawN), b = Math.trunc(rawK);
       if (a < 0 || b < 0 || a >= INT_LIMIT || b >= INT_LIMIT) throw ERR.NUM;
       return finite(a ** b);
     } },

@@ -59,7 +59,7 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
     let y = x, ser = 0.999999999999997092;
     const t = x + 5.24218750000000000;
     for (const c of LANCZOS) ser += c / ++y;
-    return (x + 0.5) * Math.log(t) - t + Math.log((2.5066282746310005 * ser) / x);
+    return (x + 0.5) * Math.log(t) - t + (Math.log(2.5066282746310005 * ser) - Math.log(x));
   };
   // sin(πx), exact at whole and half numbers.
   const sinpi = (x) => {
@@ -134,19 +134,44 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
   };
 
   // ── Incomplete gamma and beta ───────────────────────────────────────────────────────────────────────────────────────
-  const TINY = 1e-300, LIMIT = 100000;
+  const TINY = 1e-300, LIMIT = 1000000;
+  // ln Γ(1+a), a <= .01, from its convergent zeta series. Keep the factor a explicit near zero.
+  const lgamma1p = (a) => {
+    const zeta = [1.6449340668482264, 1.2020569031595943, 1.0823232337111382, 1.03692775514337,
+      1.0173430619844491, 1.008349277381923, 1.0040773561979443, 1.0020083928260822, 1.000994575127818];
+    let s = -0.5772156649015329 * a, power = a;
+    for (let k = 2; k <= 10; k++) { power *= -a; s -= zeta[k - 2] * power / k; }
+    return s;
+  };
   // [P(a, x), Q(a, x)], the regularized lower and upper incomplete gamma, the smaller computed directly.
   const incgamma = (a, x) => {
     if (x <= 0) return [0, 1];
     if (x === Infinity) return [1, 0];
+    // For tiny shape, P is almost one even below the series/fraction crossover. Compute log(P) without subtracting
+    // nearly equal numbers, then Q with expm1. This is the alternating lower-gamma series on x <= 1.
+    if (a < 0.01 && x <= 1) {
+      let term = -x, s = term / (a + 1);
+      for (let n = 2; n < LIMIT; n++) {
+        term *= -x / n;
+        const next = s + term / (a + n);
+        if (next === s) break;
+        s = next;
+      }
+      const logp = a * Math.log(x) - lgamma1p(a) + Math.log1p(a * s);
+      return [Math.exp(logp), -Math.expm1(logp)];
+    }
     const f = dpois(a, x);
+    if (f === 0) return x < a ? [0, 1] : [1, 0];
     if (x < a + 1) {
       let term = 1, s = 1;
-      for (let n = 1; n < LIMIT && term > s * 1e-17; n++) { term *= x / (a + n); s += term; }
+      let n = 1;
+      for (; n < LIMIT && term > s * 1e-17; n++) { term *= x / (a + n); s += term; }
+      if (n === LIMIT) throw ERR.NUM;
       const p = f * s;
       return [p, 1 - p];
     }
     let b = x + 1 - a, c = 1 / TINY, d = 1 / b, h = d;
+    let converged = false;
     for (let i = 1; i < LIMIT; i++) {
       const an = -i * (i - a);
       b += 2;
@@ -155,8 +180,9 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
       d = 1 / d;
       const del = d * c;
       h *= del;
-      if (Math.abs(del - 1) < 1e-16) break;
+      if (Math.abs(del - 1) <= Number.EPSILON) { converged = true; break; }
     }
+    if (!converged) throw ERR.NUM;
     const q = a * f * h;
     return [1 - q, q];
   };
@@ -179,15 +205,44 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
       d = 1 / d;
       const del = d * c;
       h *= del;
-      if (Math.abs(del - 1) < 1e-16) break;
+      if (Math.abs(del - 1) <= Number.EPSILON) return h;
     }
-    return h;
+    throw ERR.NUM;
+  };
+  // ln Γ(b+a) - ln Γ(b), without subtracting two almost equal logarithms. Shift to b >= 16 and use the
+  // Stirling correction differences directly (DLMF 5.11); a is below .01 here.
+  const gammaDelta = (b, a) => {
+    let correction = 0;
+    while (b < 16) { correction -= Math.log1p(a / b); b++; }
+    const l = Math.log1p(a / b);
+    let delta = a * Math.log(b) + (b + a - 0.5) * l - a;
+    const coefficients = [1 / 12, -1 / 360, 1 / 1260, -1 / 1680, 1 / 1188, -691 / 360360];
+    for (let i = 0; i < coefficients.length; i++) { const n = 2 * i + 1; delta += (coefficients[i] / b ** n) * Math.expm1(-n * l); }
+    return delta + correction;
+  };
+  // I_x(a,b) = x^a/(a B(a,b)) times its hypergeometric series (DLMF 8.17.7). On x <= 1/2 and bx <= 1 it
+  // converges rapidly without large alternating terms. Computing log(I) keeps a tiny complementary tail intact.
+  const smallBeta = (a, b, x) => {
+    let term = (1 - b) * x, s = term / (a + 1);
+    for (let n = 2; n < LIMIT; n++) {
+      term *= ((n - b) * x) / n;
+      const next = s + term / (a + n);
+      if (next === s) {
+        const logp = a * Math.log(x) - lgamma1p(a) + gammaDelta(b, a) + Math.log1p(a * s);
+        return [Math.exp(logp), -Math.expm1(logp)];
+      }
+      s = next;
+    }
+    throw ERR.NUM;
   };
   // [I_x(a, b), 1 − I_x(a, b)] for x and y = 1 − x, each given exactly: x^a y^b / B(a, b) as Loader's term times the
   // continued fraction on the side where it converges.
   const incbeta = (a, b, x, y) => {
     if (x <= 0) return [0, 1];
     if (y <= 0) return [1, 0];
+    if (a === b && x === y) return [0.5, 0.5];
+    if (a < 0.01 && x <= 0.5 && b * x <= 1) return smallBeta(a, b, x);
+    if (b < 0.01 && y <= 0.5 && a * y <= 1) return smallBeta(b, a, y).reverse();
     const front = (dbinom(a, a + b, x, y) * a * b) / (a + b);
     if (x < (a + 1) / (a + b + 2)) { const i = (front * betacf(a, b, x)) / a; return [i, 1 - i]; }
     const j = (front * betacf(b, a, y)) / b;
@@ -255,11 +310,11 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
       const h = Math.log(tail) - goal;
       if ((h < 0) === low) lo = x; else hi = x;
       let next = x - h / (((low ? 1 : -1) * dist.pdf(x)) / tail);
-      if (!(next > lo && next < hi)) next = !Number.isFinite(hi) ? Math.max(2 * x, 1) : lo > 0 ? Math.sqrt(lo * hi) : hi / 2;
+      if (!(next > lo && next < hi)) next = !Number.isFinite(hi) ? Math.max(2 * x, 1) : lo > 0 ? Math.sqrt(lo) * Math.sqrt(hi) : hi / 2;
       if (Math.abs(next - x) <= 1e-15 * Math.abs(next) || (Number.isFinite(hi) && hi - lo <= 1e-15 * hi)) return next;
       x = next;
     }
-    return x;
+    throw ERR.NUM;
   };
 
   // ── Regression ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -281,24 +336,38 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
     if (xr === yr && xc === yc) return { y, rows: X.flat().map((v) => [v]), k: 1, across: false, shape: [xr, xc] };
     throw ERR.REF;
   };
+  // Compensated dot products and scaled norms keep long columns accurate without argument spreads or overflow.
+  const dot = (a, b, from = 0) => {
+    let s = 0, carry = 0;
+    for (let i = from; i < a.length; i++) { const x = a[i] * b[i] - carry, next = s + x; carry = (next - s) - x; s = next; }
+    return s;
+  };
+  const norm = (a, from = 0) => {
+    let scale = 0;
+    for (let i = from; i < a.length; i++) scale = Math.max(scale, Math.abs(a[i]));
+    if (!scale) return 0;
+    let s = 0, carry = 0;
+    for (let i = from; i < a.length; i++) { const x = (a[i] / scale) ** 2 - carry, next = s + x; carry = (next - s) - x; s = next; }
+    return scale * Math.sqrt(s);
+  };
   // The least-squares fit of y on the rows' variables (and an intercept): coefficients, intercept, rank, and the
   // statistics LINEST reports.
   const regress = ({ y, rows, k }, intercept) => {
     const n = y.length;
     const my = intercept ? mean(y) : 0, mx = Array.from({ length: k }, (_, j) => (intercept ? mean(rows.map((r) => r[j])) : 0));
     const cols = Array.from({ length: k }, (_, j) => rows.map((r) => r[j] - mx[j]));
-    const b = y.map((v) => v - my), length0 = cols.map((c) => Math.hypot(...c));
+    const b = y.map((v) => v - my), length0 = cols.map((c) => norm(c));
     const order = [], R = [];
     let rest = cols.map((_, j) => j);
     for (let s = 0; s < Math.min(n, k); s++) {
-      const tail = (j) => { let t = 0; for (let i = s; i < n; i++) t += cols[j][i] * cols[j][i]; return Math.sqrt(t); };
+      const tail = (j) => norm(cols[j], s);
       rest = rest.filter((j) => tail(j) > 1e-12 * length0[j]);
       if (!rest.length) break;
-      const j = rest.reduce((best, c) => (tail(c) > tail(best) ? c : best));
+      const j = rest.reduce((best, c) => (tail(c) >= tail(best) ? c : best));
       rest = rest.filter((c) => c !== j);
       const col = cols[j], alpha = (col[s] > 0 ? -1 : 1) * tail(j);
-      const v = col.map((x, i) => (i < s ? 0 : i === s ? x - alpha : x)), vv = v.reduce((t, x) => t + x * x, 0);
-      const reflect = (c) => { let d = 0; for (let i = s; i < n; i++) d += v[i] * c[i]; const f = (2 * d) / vv; for (let i = s; i < n; i++) c[i] -= f * v[i]; };
+      const v = col.map((x, i) => (i < s ? 0 : i === s ? x - alpha : x)), vv = dot(v, v, s);
+      const reflect = (c) => { const f = (2 * dot(v, c, s)) / vv; for (let i = s; i < n; i++) c[i] -= f * v[i]; };
       for (const c of rest) reflect(cols[c]);
       reflect(b);
       R.push({ diag: alpha, row: new Map(rest.map((c) => [c, cols[c][s]])) });
@@ -321,8 +390,12 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
     const w = [];
     for (let s = 0; s < rank; s++) { let t = mx[order[s]]; for (let u = 0; u < s; u++) t -= at(u, s) * w[u]; w.push(t / at(s, s)); }
     const fitted = rows.map((r) => my + r.reduce((t, x, j) => t + coef[j] * (x - mx[j]), 0));
-    const ssresid = y.reduce((t, v, i) => t + (v - fitted[i]) ** 2, 0), ssreg = fitted.reduce((t, v) => t + (v - my) ** 2, 0);
-    const dof = n - rank - (intercept ? 1 : 0), sey = Math.sqrt(ssresid / dof);
+    let ssresid = y.reduce((t, v, i) => t + (v - fitted[i]) ** 2, 0);
+    const ssreg = fitted.reduce((t, v) => t + (v - my) ** 2, 0);
+    // A perfect fit's residual can consist only of QR roundoff. With no residual degrees of freedom Excel reports
+    // zero errors, and #NUM! for F; a constant response also has r² = 1.
+    if (Math.sqrt(ssresid) <= 16 * Number.EPSILON * norm(y)) ssresid = 0;
+    const dof = n - rank - (intercept ? 1 : 0), sey = dof > 0 ? Math.sqrt(ssresid / dof) : 0;
     const se = new Array(k).fill(0);
     order.forEach((j, s) => { let t = 0; for (let c = 0; c < rank; c++) t += inv[s][c] ** 2; se[j] = sey * Math.sqrt(t); });
     return {
@@ -335,7 +408,7 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
     const top = [...fit.coef.map(transform).reverse(), transform(fit.b)];
     if (!stats) return [top.map(number)];
     const pad = (a) => [...a, ...new Array(k + 1 - a.length).fill(NA)];
-    const r2 = fit.ssreg / (fit.ssreg + fit.ssresid), f = fit.ssreg / fit.rank / (fit.ssresid / fit.dof);
+    const r2 = fit.ssreg + fit.ssresid === 0 ? 1 : fit.ssreg / (fit.ssreg + fit.ssresid), f = fit.ssreg / fit.rank / (fit.ssresid / fit.dof);
     return [top, [...fit.se.slice().reverse(), fit.seb], pad([r2, fit.sey]), pad([f, fit.dof]), pad([fit.ssreg, fit.ssresid])]
       .map((row) => row.map((x) => (isErr(x) ? x : number(x))));
   };
@@ -406,16 +479,20 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
   };
   const binomCdf = (k, n, p) => (k >= n ? 1 : incbeta(n - k, k + 1, 1 - p, p)[0]);
   const binomArgs = ([k, n, p], ctx) => {
-    const trials = whole(n, ctx), x = whole(k, ctx), pr = num(p, ctx);
+    const count = num(k, ctx), size = num(n, ctx);
+    if (count < 0 || size < 0) throw ERR.NUM;
+    const trials = Math.trunc(size), x = Math.trunc(count), pr = num(p, ctx);
     if (x < 0 || x > trials || pr < 0 || pr > 1) throw ERR.NUM;
     return [x, trials, pr];
   };
   const hypgeomArgs = ([x, n, M, N], ctx) => {
+    if (num(x, ctx) < 0) throw ERR.NUM;
     const s = whole(x, ctx), draws = whole(n, ctx), succ = whole(M, ctx), pop = whole(N, ctx);
     if (pop <= 0 || draws <= 0 || draws > pop || succ <= 0 || succ > pop || s < Math.max(0, draws - pop + succ) || s > Math.min(draws, succ)) throw ERR.NUM;
     return [s, draws, succ, pop];
   };
   const negbinomArgs = ([f, s, p], ctx) => {
+    if (num(f, ctx) < 0) throw ERR.NUM;
     const fails = whole(f, ctx), succ = whole(s, ctx), pr = num(p, ctx);
     if (fails < 0 || succ < 1 || pr < 0 || pr > 1) throw ERR.NUM;
     return [fails, succ, pr];
@@ -487,7 +564,8 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
     'MODE.MULT': { ...SHAPE, fn: (args, ctx) => {
       const counts = new Map();
       for (const x of numbers(args, ctx)) counts.set(x, (counts.get(x) ?? 0) + 1);
-      const most = Math.max(0, ...counts.values());
+      let most = 0;
+      for (const count of counts.values()) if (count > most) most = count;
       if (most < 2) throw ERR.NA;
       return [...counts].filter(([, c]) => c === most).map(([x]) => [x]);
     } },
@@ -557,8 +635,8 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
     // tails 1 or 2; type 1 paired, 2 equal variances, 3 unequal (Welch's degrees of freedom).
     'T.TEST': { p: ['r', 'r', 'v', 'v'], min: 4, max: 4, fn: (args, ctx) => finite(tTest(args, ctx)) },
 
-    GAMMA: fn(['x'], ([x], ctx) => { const r = gamma(num(x, ctx)); if (!(Math.abs(r) < 1e308)) throw ERR.NUM; return r; }),
-    GAMMALN: fn(['x'], ([x], ctx) => lgamma(positive(num(x, ctx)))),
+    GAMMA: fn(['x'], ([x], ctx) => { const v = num(x, ctx); if (Number(Math.abs(v).toPrecision(15)) < 2.2250738585072014e-308) throw ERR.NUM; return gamma(v); }),
+    GAMMALN: fn(['x'], ([x], ctx) => { const v = positive(num(x, ctx)); if (Number(v.toPrecision(15)) < 2.2250738585072014e-308) throw ERR.NUM; return lgamma(v); }),
     'GAMMA.DIST': fn(['x', 'a', 'b', 'c'], ([x, a, b, c], ctx) => {
       const [v, shape, scale] = gammaArgs(x, a, b, ctx), cum = bool(c);
       if (v < 0) throw ERR.NUM;
@@ -589,6 +667,7 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
     }),
     // The least k whose cumulative probability reaches alpha.
     'BINOM.INV': fn(['n', 'p', 'a'], ([n, p, a], ctx) => {
+      if (num(n, ctx) < 0) throw ERR.NUM;
       const trials = whole(n, ctx), pr = unit(num(p, ctx)), alpha = unit(num(a, ctx));
       if (trials < 0) throw ERR.NUM;
       let k = Math.max(0, Math.min(trials, Math.floor(trials * pr + quantile(alpha) * Math.sqrt(trials * pr * (1 - pr)))));
@@ -597,6 +676,7 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
       return k;
     }),
     'BINOM.DIST.RANGE': fn(['n', 'p', 's', 's2'], ([n, p, s, s2], ctx) => {
+      if (num(n, ctx) < 0 || num(s, ctx) < 0 || (given(s2) && num(s2, ctx) < 0)) throw ERR.NUM;
       const trials = whole(n, ctx), pr = num(p, ctx), from = whole(s, ctx), to = given(s2) ? whole(s2, ctx) : from;
       if (trials < 0 || pr < 0 || pr > 1 || from < 0 || from > trials || to < from || to > trials) throw ERR.NUM;
       if (to - from > 100000) return binomCdf(to, trials, pr) - (from ? binomCdf(from - 1, trials, pr) : 0);
@@ -615,6 +695,7 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
     }),
     HYPGEOMDIST: fn(['x', 'n', 'M', 'N'], (args, ctx) => hypgeom(...hypgeomArgs(args, ctx))),
     'POISSON.DIST': fn(['x', 'm', 'c'], ([x, m, c], ctx) => {
+      if (num(x, ctx) < 0) throw ERR.NUM;
       const k = whole(x, ctx), lambda = num(m, ctx);
       if (k < 0 || lambda < 0) throw ERR.NUM;
       return bool(c) ? incgamma(k + 1, lambda)[1] : dpois(k, lambda);
@@ -641,7 +722,7 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
     'CHISQ.DIST': fn(['x', 'k', 'c'], ([x, k, c], ctx) => {
       const [v, n] = chiArgs([x, k], ctx);
       if (bool(c)) return incgamma(n / 2, v / 2)[0];
-      if (v === 0) { if (n <= 2) throw ERR.NUM; return 0; }
+      if (v === 0) { if (n < 2) throw ERR.NUM; return n === 2 ? 0.5 : 0; }
       return dgamma(v, n / 2, 2);
     }),
     'CHISQ.DIST.RT': fn(['x', 'k'], (args, ctx) => { const [v, n] = chiArgs(args, ctx); return incgamma(n / 2, v / 2)[1]; }),
