@@ -14,8 +14,7 @@ const { cases, families } = require('./fixtures/sheets/cases.js');
 
 const DIR = path.join(__dirname, 'fixtures/sheets');
 const GOLDEN = path.join(DIR, 'golden.json');
-// Volatile, or naming the workbook (which is "Book1" or "Book2" when Excel calculates it).
-const VOLATILE = /(?<![\w.])(NOW|TODAY|RAND|RANDBETWEEN|RANDARRAY|INFO)\(|CELL\("filename"|CELL\("address",[^)]*!/i;
+const VOLATILE = /(?<![\w.])(NOW|TODAY|RAND|RANDBETWEEN|RANDARRAY|INFO|CELL|OFFSET|INDIRECT)\s*\(/i;
 // Excel's file prefixes for functions newer than the file format, LAMBDA/LET parameters and unknown functions.
 const bare = (f) => f.replace(/_xl(fn|ws|pm|udf)\./g, '');
 
@@ -214,7 +213,9 @@ test('cases: deterministic formulas within Excel limits', () => {
   for (const c of cases) {
     assert.match(c.formula, /^=/, c.id);
     assert.ok(c.formula.length <= 8192, c.id);
-    assert.doesNotMatch(c.formula, VOLATILE, `${c.id} is volatile`);
+    for (const f of [c.formula, ...Object.values(c.inputs).filter((v) => v?.f).map((v) => v.f)]) {
+      assert.doesNotMatch(f.replace(/"(?:[^"]|"")*"/g, ''), VOLATILE, `${c.id} is volatile`);
+    }
     assert.doesNotMatch(c.formula, /_xl(fn|ws|pm|udf)\./, `${c.id}: written as typed, without file prefixes`);
     if (c.unsupported != null) assert.ok(typeof c.unsupported === 'string' && c.unsupported, `${c.id}: unsupported holds Excel's message`);
   }
