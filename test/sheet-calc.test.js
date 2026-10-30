@@ -572,3 +572,18 @@ test('criteria: tildes are literal unless the text has a wildcard', () => {
   assert.equal(C.lib.wildcard('a~*')('A*'), true);
   assert.equal(C.lib.wildcard('a~*')('ab'), false);
 });
+
+// Microsoft's LET page: LET(x, 5, SUM(x, 1)) is 6; each value sees the names bound before it, the calculation all.
+test('LET binds names for the values after them and the calculation', () => {
+  const e = book({ A1: 3, A2: 4, A3: 5, B1: '=LET(v,A1*2,v+1)' }, { names: [{ name: 'x', ref: '100' }, { name: 'Twice', ref: 'x*2' }] });
+  cases(e, [
+    ['LET(x,5,SUM(x,1))', 6], ['LET(x,2,y,x*3,x+y)', 8], ['LET(a,A1:A3,SUM(a))', 12], ['LET(a,A1:A3,COUNT(a))', 3], ['LET(x,1,LET(x,2,x)+x)', 3],
+    ['LET(x,1,x)', 1], ['x', 100], ['LET(x,1,Twice)', 200], ['LET(s,"a",s&s)', 'aa'], ['LET(y,1,z)', '#NAME?'],
+    ['LET(A1,1,A1)', '#NAME?'], ['LET(Sheet1!q,1,2)', '#NAME?'], ['LET(x,1)', '#VALUE!'], ['LET(x,1,y,2)', '#VALUE!'], ['LET(x,1/0,x+1)', '#DIV/0!'],
+  ]);
+  assert.equal(val(e, 'B1'), 7);
+  e.edit(e.wb.sheets[0].id, 0, 0, '10');
+  assert.equal(val(e, 'B1'), 21, 'a value\'s references are the cell\'s precedents');
+  e.apply({ op: 'set', sheet: e.wb.sheets[0].id, r: 0, c: 2, cell: { t: 'n', v: 0, f: 'LET(r,A1:A3,r*2)', a: 'C1:C3' } });
+  assert.deepEqual(['C1', 'C2', 'C3'].map((at) => val(e, at)), [20, 8, 10], 'in an array formula the bound range is whole');
+});
