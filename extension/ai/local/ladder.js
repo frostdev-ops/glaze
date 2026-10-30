@@ -46,7 +46,8 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
 
   // Estimated decode tokens a second for a quant, from a bench result.
   const decodeSpeed = (model, bench) => {
-    if (!bench || !(bench.bandwidth > 0) || !(bench.overheadMs >= 0)) return 0;
+    if (!bench || !Number.isFinite(bench.bandwidth) || !(bench.bandwidth > 0)
+      || !Number.isFinite(bench.overheadMs) || !(bench.overheadMs >= 0)) return 0;
     return 1000 / (K_OVER * bench.overheadMs + 1000 * model.size / (K_BW * bench.bandwidth));
   };
 
@@ -109,28 +110,49 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
     const rows = Math.floor(Math.min(128 << 20, lim.maxStorageBufferBindingSize, lim.maxBufferSize) / rowBytes);
     const made = [];
     const buf = (size, usage) => { const b = device.createBuffer({ size, usage }); made.push(b); return b; };
+    const filters = ['internal', 'out-of-memory', 'validation'], checks = [];
+    // Close each scope before yielding: another user of this device must not pop our scopes.
+    const checked = (fn) => {
+      for (const filter of filters) device.pushErrorScope(filter);
+      try { return fn(); } finally { for (const _ of filters) checks.push(device.popErrorScope()); }
+    };
+    const checkErrors = async () => {
+      const errors = await Promise.all(checks.splice(0));
+      const error = errors.find(Boolean);
+      if (error) fail(error.message);
+    };
     try {
       const module = device.createShaderModule({ code: await kernel(source) });
       const [gemv, tick, fill] = await Promise.all(['gemv', 'tick', 'fill'].map((entryPoint) =>
         device.createComputePipelineAsync({ layout: 'auto', compute: { module, entryPoint } })));
-      const P = buf(16, S.UNIFORM | S.COPY_DST);
-      device.queue.writeBuffer(P, 0, new Uint32Array([COLS, rows, 0x9e3779b9, 0]));
-      const W = buf(rows * rowBytes, S.STORAGE);
-      const X = buf(COLS * 16, S.STORAGE | S.COPY_DST);
-      device.queue.writeBuffer(X, 0, Float32Array.from({ length: COLS * 4 }, (_, i) => ((i * 37) % 17) / 64 - 0.125));
-      const Y = buf(rows * 4, S.STORAGE | S.COPY_SRC);
-      const R = buf(4, S.MAP_READ | S.COPY_DST);
       const group = (pipe, entries) => device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: entries.map(([binding, buffer]) => ({ binding, resource: { buffer } })) });
-      const gFill = group(fill, [[0, P], [4, W]]), gGemv = group(gemv, [[0, P], [1, W], [2, X], [3, Y]]), gTick = group(tick, [[3, Y]]);
+      const { Y, R, gFill, gGemv, gTick } = checked(() => {
+        const P = buf(16, S.UNIFORM | S.COPY_DST);
+        device.queue.writeBuffer(P, 0, new Uint32Array([COLS, rows, 0x9e3779b9, 0]));
+        const W = buf(rows * rowBytes, S.STORAGE);
+        const X = buf(COLS * 16, S.STORAGE | S.COPY_DST);
+        device.queue.writeBuffer(X, 0, Float32Array.from({ length: COLS * 4 }, (_, i) => ((i * 37) % 17) / 64 - 0.125));
+        const Y = buf(rows * 4, S.STORAGE | S.COPY_SRC);
+        const R = buf(4, S.MAP_READ | S.COPY_DST);
+        return { Y, R, gFill: group(fill, [[0, P], [4, W]]), gGemv: group(gemv, [[0, P], [1, W], [2, X], [3, Y]]), gTick: group(tick, [[3, Y]]) };
+      });
+      await checkErrors();
       const grid = (n) => { const x = Math.min(n, 32768); return [x, Math.ceil(n / x)]; };
-      const run = (pipe, bg, [x, y], times = 1) => {
+      const run = (pipe, bg, [x, y], times = 1) => checked(() => {
         const enc = device.createCommandEncoder(), pass = enc.beginComputePass();
         pass.setPipeline(pipe);
         for (let i = 0; i < times; i++) { pass.setBindGroup(0, bg); pass.dispatchWorkgroups(x, y); }
         pass.end();
         return enc;
+      });
+      const timed = async (enc) => {
+        const t = now();
+        checked(() => device.queue.submit([enc.finish()]));
+        await device.queue.onSubmittedWorkDone();
+        const elapsed = now() - t;
+        await checkErrors();
+        return elapsed;
       };
-      const timed = async (enc) => { const t = now(); device.queue.submit([enc.finish()]); await device.queue.onSubmittedWorkDone(); return now() - t; };
 
       await timed(run(fill, gFill, grid(Math.ceil(rows * COLS / 256))));
       await timed(run(gemv, gGemv, grid(rows))); // warm-up
@@ -143,15 +165,18 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
       while (now() - start < ms || steps.length < 3) {
         const t = now();
         const enc = run(tick, gTick, [1, 1], DISPATCHES);
-        enc.copyBufferToBuffer(Y, 0, R, 0, 4);
-        device.queue.submit([enc.finish()]);
+        checked(() => { enc.copyBufferToBuffer(Y, 0, R, 0, 4); device.queue.submit([enc.finish()]); });
         await R.mapAsync(GPUMapMode.READ);
         R.unmap();
         steps.push(now() - t);
+        await checkErrors();
       }
-      return { bandwidth: median(rates), overheadMs: median(steps), bytes: rows * rowBytes, reps, rounds: rates.length, steps: steps.length };
+      const bandwidth = median(rates), overheadMs = median(steps);
+      if (!Number.isFinite(bandwidth) || bandwidth <= 0 || !Number.isFinite(overheadMs) || overheadMs < 0) fail('bench clock did not resolve timings');
+      return { bandwidth, overheadMs, bytes: rows * rowBytes, reps, rounds: rates.length, steps: steps.length };
     } finally {
       for (const b of made) b.destroy();
+      await checkErrors();
     }
   };
 
@@ -176,8 +201,11 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
     const limits = { maxBufferSize: adapter.limits.maxBufferSize, maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize };
     const out = { ...base, adapter: { isFallbackAdapter: info.isFallbackAdapter }, info, features, limits, bench: null };
     if (refusal(out)) return out;
-    const device = await adapter.requestDevice({ requiredLimits: limits });
-    try { out.bench = await bench(device, opts); } catch (e) { out.benchError = String(e?.message || e); } finally { device.destroy(); }
+    let device;
+    try {
+      device = await adapter.requestDevice({ requiredLimits: limits });
+      out.bench = await bench(device, opts);
+    } catch (e) { out.benchError = String(e?.message || e); } finally { device?.destroy(); }
     return out;
   };
 

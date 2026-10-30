@@ -185,6 +185,16 @@ test('the highest tier at 15 tok/s or more; speed falls with size', () => {
   assert.deepEqual(pickOf(run({ ...M5, bench: () => null })), { tier: 1, reason: 'unmeasured' });
 });
 
+test('non-finite benchmark measurements cannot select a larger model', () => {
+  for (const bench of [
+    { bandwidth: Infinity, overheadMs: 0 },
+    { bandwidth: BENCH.m5pro.bandwidth, overheadMs: Infinity },
+  ]) {
+    assert.equal(L.decodeSpeed(models[0], bench), 0);
+    assert.equal(run({ ...M5, bench: () => bench }).reason, 'unmeasured');
+  }
+});
+
 const pickOf = (r) => ({ tier: r.tier, reason: r.reason });
 
 test('a student may choose another size, never a refused one', () => {
