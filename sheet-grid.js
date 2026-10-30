@@ -512,6 +512,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       for (const p of Object.values(Q)) drawPane(p, all);
       for (const hd of Object.values(HD)) drawHead(hd, all);
       overlay();
+      charts?.draw();
       if (editing && editing.surface === editor) placeEditor();
       const id = `gx-c-${sel.active[0]}-${sel.active[1]}`;
       if (document.getElementById(id)) gridEl.setAttribute('aria-activedescendant', id); else gridEl.removeAttribute('aria-activedescendant');
@@ -553,6 +554,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     }, { passive: true });
     const sizing = new ResizeObserver(() => { layout(); draw(true); });
     sizing.observe(gridEl);
+    // The sheet's charts (lib/sheet-chart.js, loaded with the grid): a layer in each pane, placed as the cells are drawn.
+    const charts = globalThis.GZ_SHEET_CHART?.layer({ panes: Q, wb: () => wb, sheet: S, geo: () => ({ R, C, FR, FC, FW, FH }), t }) ?? null;
 
     // Scrolls the cell into view, past the frozen panes.
     const reveal = (r, c) => {
@@ -670,6 +673,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (shapes.includes(op.op) || res.rebuild) { if (!wb.sheets[wb.active] || S().keep?.hidden) wb.active = wb.sheets.findIndex((s) => !s.keep?.hidden); sizes(); layout(); tabsDraw(); }
       circular();
       told();
+      charts?.changed();
       drawNow(true);
     };
     const undo = (redo = false) => {
@@ -1536,6 +1540,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       blurTimers.clear();
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
+      charts?.dispose();
       closeMenu();
       view.remove();
     };
