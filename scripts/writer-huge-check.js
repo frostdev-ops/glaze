@@ -10,8 +10,9 @@
 // PROFILE=1 also records a CPU profile of the frame across the switch (profile.json, the top functions printed);
 // PROFILE=trace a timeline trace of every process (trace.json, its events of 20 ms or more printed); QUIET=<ms> types
 // nothing and watches the frame that long after the switch (as a student who waits: the checks run 250 ms after layout).
-// Chromium with accessibility on (a Mac with an assistive or automation app running) follows each layout of a paper
-// this size for about half a second; the runner has none. GETs only, synthetic.
+// Chromium's renderer accessibility is off (HUGE_AX=1 leaves it on): with an assistive or automation app running, as on
+// the owner's Mac, it follows each layout of a paper this size for about half a second and slows Playwright's own key
+// presses to one a second, too few to type through the layout; the runner has none. GETs only, synthetic.
 // NODE_PATH=<playwright> nice -n 10 node scripts/writer-huge-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -112,7 +113,7 @@ const top = (profile, n = 25) => {
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
     ext = require('./check-env.js').staged(root, [`${site}/*`]);
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', ...(process.env.HUGE_AX ? [] : ['--disable-renderer-accessibility'])] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json'));
     const members = JSON.parse(fixture('ultra-memberships.json'));
