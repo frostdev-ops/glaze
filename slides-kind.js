@@ -431,7 +431,7 @@
       presenting = dialog;
       addEventListener('resize', paint);
       document.addEventListener('fullscreenchange', left);
-      dialog.requestFullscreen?.().then(() => { full = true; }, () => {});
+      document.documentElement.requestFullscreen?.().then(() => { full = true; }, () => {});
     };
     presentB.addEventListener('click', present);
 
