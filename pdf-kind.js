@@ -243,7 +243,13 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     // A preview's bytes are read as a kept PDF's are (a copy: pdf.js takes what it is given; Save keeps the original).
     try { bytes = src ? (src.bytes?.length ? src.bytes.slice() : null) : await STORE.get(rec); if (!bytes) throw new RangeError(UNREAD); ({ task, doc } = await read(bytes)); } catch (e) { refuse(e); }
     const inited = new Promise((ok) => bus.on('pagesinit', ok, { once: true }));
-    const drawn = new Promise((ok) => bus.on('pagerendered', ok, { once: true }));
+    let drawTimer = 0, drawFailed = false;
+    // pdf.js also emits pagerendered on a failed canvas draw. Only a successful first page may replace Blackboard;
+    // a later failed draw hands back too, while ordinary Documents viewers keep their own error handling.
+    const drawn = src && new Promise((ok) => bus.on('pagerendered', (e) => {
+      if (e.error) { drawFailed = true; host.failed?.('draw'); ok(false); }
+      else if (e.pageNumber === 1 && !e.cssTransform && !e.isDetailView) ok(true);
+    }, { signal }));
     if (doc) {
       bus.on('pagesinit', () => { viewer.currentScaleValue = 'page-width'; });
       viewer.setDocument(doc);
@@ -395,7 +401,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     // Native tab navigation cannot await a promise. Protect unsaved work until the write acknowledges it.
     addEventListener('beforeunload', (e) => { if (dirty || saving) { flush(); e.preventDefault(); e.returnValue = ''; } }, { signal });
     const dispose = async () => {
-      life.abort(); clearTimeout(timer); sizing.disconnect(); l10n.destroy(); closeMenu();
+      life.abort(); clearTimeout(timer); clearTimeout(drawTimer); sizing.disconnect(); l10n.destroy(); closeMenu();
       viewer.setDocument(null); links.setDocument(null); finder.setDocument(null);
       if (doc) doc.annotationStorage.onSetModified = null;
       await task?.destroy().catch(() => {});
@@ -417,8 +423,9 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     // papers-motion.js holds the page hidden until a document has drawn.
     globalThis.GZ_PAPERS_MOTION?.shown?.('paper');
     if (src) {
-      const ok = !!doc && await Promise.race([drawn.then(() => true), new Promise((r) => setTimeout(r, 20000, false))]);
-      if (ok) host.shown?.(); else host.failed?.(doc ? 'draw' : 'read');
+      const ok = !!doc && await Promise.race([drawn, new Promise((r) => { drawTimer = setTimeout(r, 20000, false); })]);
+      clearTimeout(drawTimer);
+      if (!drawFailed) { if (ok) host.shown?.(); else host.failed?.(doc ? 'draw' : 'read'); }
     }
     // What an assignment's submit sheet sends (writer-submit.js): the PDF as saved, its fields filled.
     return { pages: () => doc?.numPages || 0, say, ready: () => !!doc, save: flush, dispose,
