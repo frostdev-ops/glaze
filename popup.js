@@ -133,7 +133,7 @@ GZ_UI.load().then((s) => {
     }).catch(ready);
   });
   show();
-})().catch(() => {});
+})().catch(() => {}).finally(() => $('#here').setAttribute('data-settled', '')); // The row's decision is final, shown or not.
 
 // Due this week, as Blackboard, Canvas or Moodle last told the content script (the popup can't ask them): the count and
 // the next three, to read. Each site keeps its own list (content.js dueWeek, `dueWeek:<origin>`): the one of the site in this

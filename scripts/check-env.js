@@ -79,12 +79,16 @@ const installed = async (page, timeout = 10000) => {
 };
 
 // Glaze opens its first screen (features/welcome.html) in a tab of its own when it is installed on Chrome. A check that
-// counts on its own tabs alone closes it, now or when it opens.
+// counts on its own tabs alone closes it, now or when it opens. → a promise of the first one closed: the install's tab opens
+// seconds into a run, as the active tab, and a check driving the active tab or a popup over it starts after it.
 const noFirstRun = (ctx) => {
-  const close = (p) => { if (/^chrome-extension:\/\/[a-p]{32}\/features\/welcome\.html/.test(p.url())) p.close().catch(() => {}); };
+  let closed;
+  const first = new Promise((r) => { closed = r; });
+  const close = (p) => { if (/^chrome-extension:\/\/[a-p]{32}\/features\/welcome\.html/.test(p.url())) p.close().catch(() => {}).then(closed); };
   const watch = (p) => { close(p); p.waitForURL(/\/features\/welcome\.html/, { timeout: 10000 }).then(() => close(p), () => {}); };
   ctx.pages().forEach(watch);
   ctx.on('page', watch);
+  return first;
 };
 
 module.exports = { lockPath, chromePath, chromeLaunch, staged, ultraReady, installed, noFirstRun };
