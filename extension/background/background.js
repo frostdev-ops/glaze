@@ -3178,6 +3178,8 @@ const gcalTurn = (f) => { const p = gcalQueue.then(f); gcalQueue = p.catch(() =>
 // sees whether the other still holds the grant, and the last one revokes it and gives identity back.
 let grantQueue = Promise.resolve();
 const grantTurn = (f) => { const p = grantQueue.then(f); grantQueue = p.catch(() => {}); return p; };
+// The one permission the worker ever gives back: Google's identity API, once neither Calendar nor Drive holds it.
+const releaseIdentity = () => chrome.permissions.remove({ permissions: ['identity'] });
 const gcalState = async () => (await chrome.storage.local.get('gcal')).gcal;
 const gcalOps = {
   connect: async (m) => {
@@ -3212,7 +3214,7 @@ const gcalOps = {
     const revoked = !!token && await GZ_GCAL.revoke(gcalEnv, token);
     await Promise.resolve().then(() => GZ_GCAL_AUTH.clear()).catch(() => {});
     // Release inside grantTurn, before another Connect can acquire identity. A delayed Settings reply owns no grant.
-    if (!driveOn) await Promise.resolve().then(() => chrome.permissions.remove({ permissions: ['identity'] })).catch(() => {});
+    if (!driveOn) await Promise.resolve().then(releaseIdentity).catch(() => {});
     await chrome.storage.local.remove(['gcal', 'gcalSync']);
     serial(ensure);
     return { ok: true, revoked, had: !!token };
@@ -3313,7 +3315,7 @@ const openGoogle = () => {
       config: GZ_GOOGLE_CONFIG, flow: GZ_GOOGLE.flowOf({ protocol, brands: navigator.userAgentData?.brands }), firefox: protocol === 'moz-extension:',
       // While Calendar sync is connected it signs in with identity too: Drive's Disconnect leaves the permission to it.
       identity: () => chrome.identity, manifest: () => chrome.runtime.getManifest(), storage: chrome.storage.local,
-      permissions: { contains: (p) => chrome.permissions.contains(p), remove: async (p) => (await calendarOn() ? false : chrome.permissions.remove(p)) },
+      permissions: { contains: (p) => chrome.permissions.contains(p), remove: async () => (await calendarOn() ? false : releaseIdentity()) },
       fetch: (u, init) => fetch(u, init),
       native: (message) => chrome.runtime.sendNativeMessage(GZ_GOOGLE.APP, message),
       // iOS: the sign-in tab the student taps (the worker opens it, never a framed page).
