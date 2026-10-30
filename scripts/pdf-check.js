@@ -215,6 +215,27 @@ const fixture = () => {
     check(!errors.some((e) => /fake worker/i.test(e)), 'pdf.js never fell back to a fake worker');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);
     check(requests.length === 0, `no network (${requests.join(', ')})`);
+    // A browser that refuses module workers uses pdf.js's in-page worker. Its image decoders still need WebAssembly.
+    const fallback = await context.newPage();
+    try {
+      await fallback.goto(HOME);
+      await until(() => fallback.evaluate(() => !document.getElementById('list').hidden), 'fallback home');
+      const result = await fallback.evaluate(async (key) => {
+        globalThis.Worker = class { constructor() { throw new Error('module workers unavailable'); } };
+        const P = await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs'));
+        P.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdfjs/pdf.worker.mjs');
+        const rec = (await chrome.storage.local.get(`writerPaper:${key}`))[`writerPaper:${key}`];
+        const data = Uint8Array.from(atob(rec.file), (c) => c.charCodeAt(0));
+        const task = P.getDocument({ data, isEvalSupported: false, verbosity: 0 });
+        try {
+          const doc = await task.promise;
+          let wasm = false;
+          try { await WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])); wasm = true; } catch { /* the assertion reports CSP refusal */ }
+          return { pages: doc.numPages, port: task._worker.port.constructor.name, wasm };
+        } finally { await task.destroy(); }
+      }, key);
+      check(result.pages === 3 && result.port === 'LoopbackPort' && result.wasm, `module-worker refusal: the local fallback opens and can compile its image decoders (${JSON.stringify(result)})`);
+    } finally { await fallback.close(); }
     passed = true;
   } catch (e) {
     console.error(e);
