@@ -362,6 +362,10 @@ const run = async () => {
     ok(!await holds(b, settings, `https://${FILES}/*`), `Glaze doesn't hold ${FILES}`);
     const mods = await b.open(`${INST}/courses/25/modules`);
     await until(() => b.value(`document.querySelectorAll('.gz-dl').length >= 1 && !!document.getElementById('gz-dl-73')`, mods), 'Download all buttons');
+    // Glaze's entrance (motion.css) carries the module and its button for most of a second after the page draws them, and a
+    // loaded machine can reach the button inside it. Here the module moves for a second, farther and steadily, so a click
+    // measured while it moves lands beside the button on every run.
+    await b.value(`(document.getElementById('context_module_73').animate([{ translate: 'none' }, { translate: '0 -400px' }], 1000), 1)`, mods);
     await b.hover(mods, '#context_module_73 .ig-header');
     await b.click(mods, '#gz-dl-73');
     const frame = await until(() => b.frame(mods, `${EXT}features/allow.html`), 'the Allow frame');
