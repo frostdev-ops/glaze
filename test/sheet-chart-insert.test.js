@@ -221,3 +221,28 @@ test('a duplicated sheet: its charts stay its original\'s, and a chart inserted 
   const back = await X.read(await X.write(wb, { date: DATE }));
   assert.deepEqual(back.sheets.map((s) => CX.charts(back, s).map((c) => c.chart.groups[0].type)), [['bar'], ['line']]);
 });
+
+test('chart room: imported anchors and an inserted chart extend beyond the initial grid columns', async () => {
+  const G = require('../sheet-grid.js'), el = FX.fakeDom();
+  const mounted = (wb) => {
+    const geo = { R: new G.Sizes(1000, 20), C: new G.Sizes(26, 64), FR: 0, FC: 0, FW: 0, FH: 0 };
+    const L = CH.layer({ panes: { br: { el: { hidden: false }, inner: el(), fr: false, fc: false } }, wb: () => wb,
+      sheet: () => wb.sheets[0], geo: () => geo, reach: (r, c) => { geo.R.grow(Math.max(geo.R.n, r + 200)); geo.C.grow(Math.max(geo.C.n, c + 6)); } });
+    return L;
+  };
+  const wb = await X.read(FX.workbook({ kinds: ['column'] }));
+  const drawing = wb.keep.parts['xl/drawings/drawing1.xml'];
+  drawing.data = new TextEncoder().encode(CX.partText(drawing.data).replace('<xdr:col>6</xdr:col>', '<xdr:col>40</xdr:col>').replace('<xdr:col>12</xdr:col>', '<xdr:col>46</xdr:col>'));
+  const imported = mounted(wb);
+  imported.draw();
+  assert.deepEqual(imported.list()[0].box, { x: 2560, y: 20, w: 384, h: 280 });
+  imported.dispose();
+  const fresh = book();
+  for (const row of fresh.sh.rows.values()) { const cells = [...row]; row.clear(); for (const [c, x] of cells) row.set(c + 23, x); }
+  const L = mounted(fresh.wb);
+  L.draw();
+  L.apply(L.insert('column', { r0: 0, c0: 23, r1: 4, c1: 25 }));
+  L.draw();
+  assert.deepEqual(L.list()[0].box, { x: 27 * 64, y: 0, w: 480, h: 288 });
+  L.dispose();
+});
