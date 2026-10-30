@@ -340,13 +340,13 @@ test('embedded Settings without the permissions API (Firefox): a control that ne
   assert.deepEqual(s.posted, [{ gzSettings: 'close' }]);
 });
 
-test('embedded Settings with the APIs (Chrome): reach asks from the frame (no way out), and its own tab opens as before', async () => {
+test('embedded Settings with the APIs (Chrome, Safari): reach asks from the frame (no way out); its own tab opens through the worker, never the frame\'s tabs API', async () => {
   const s = embeddedSettings({ permissions: true, tabs: true });
   assert.equal(s.g.GZ_SITE.elsewhere, undefined);
   for (const f of s.g.$('#embed-tab').listeners.click || []) f({ isTrusted: true });
   await settle();
-  assert.deepEqual(s.created, [{ url: `${EXT}/options.html#look/palette` }]);
-  assert.deepEqual(s.sent.filter((m) => m.type === 'glaze:settings-tab'), []);
+  assert.deepEqual(s.created, [], 'Safari kills the page\'s process when a frame in it calls tabs');
+  assert.deepEqual(s.sent.filter((m) => m.type === 'glaze:settings-tab'), [{ type: 'glaze:settings-tab', hash: '#look/palette' }]);
   assert.deepEqual(s.posted, [{ gzSettings: 'close' }]);
 });
 
