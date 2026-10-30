@@ -1468,8 +1468,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         case mod && (k === 'r' || k === 'R'): e.preventDefault(); copyAlong('col'); return;
         case mod && k === ' ': e.preventDefault(); setSel({ active: sel.active, anchor: [0, g.c0], ranges: [range(0, g.c0, ext.rows - 1, g.c1)] }, { scroll: false }); return;
         case e.shiftKey && !mod && k === ' ': e.preventDefault(); setSel({ active: sel.active, anchor: [g.r0, 0], ranges: [range(g.r0, 0, g.r1, ext.cols - 1)] }, { scroll: false }); return;
-        case mod && (k === '+' || (k === '=' && e.shiftKey)): e.preventDefault(); shape('insert', whole('col') ? 'col' : 'row', 'before'); return;
-        case mod && k === '-': e.preventDefault(); shape('delete', whole('col') ? 'col' : 'row'); return;
+        // On whole rows or columns; over cells these are the browser's zoom.
+        case mod && (k === '+' || (k === '=' && e.shiftKey)) && (whole('row') || whole('col')): e.preventDefault(); shape('insert', whole('col') ? 'col' : 'row', 'before'); return;
+        case mod && k === '-' && (whole('row') || whole('col')): e.preventDefault(); shape('delete', whole('col') ? 'col' : 'row'); return;
         default:
       }
       if (k.length === 1 && !mod && !e.altKey) { e.preventDefault(); startEdit(k, 'enter'); return; }

@@ -174,7 +174,7 @@ test('the grid tracks each applied operation with the codec and refuses a struct
   f.key('z', { ctrlKey: true }); f.key('y', { ctrlKey: true });
   assert.equal(calls.filter(([k]) => k === 'track').length, 3, 'undo and redo too');
   const before = calls.length;
-  f.key('+', { ctrlKey: true });
+  f.key(' ', { shiftKey: true }); f.key('+', { ctrlKey: true });
   assert.equal(calls.length, before, 'a locked insert is not applied or tracked');
   await settle();
 });
@@ -275,4 +275,19 @@ test('while an input method composes, Enter, Tab, Escape and the arrows stay wit
   f.key('Enter');
   assert.equal(f.wb.sheets[0].rows.get(0).get(0).v, 'かな', 'Enter after it commits');
   assert.equal(f.el('gx-name').value, 'A2');
+});
+
+test('Ctrl+minus and Ctrl+plus over cells are the browser\'s zoom; over whole rows they delete and insert', () => {
+  const f = frame();
+  f.type('keep'); f.key('Enter'); f.key('ArrowUp');
+  for (const [k, more] of [['-', { ctrlKey: true }], ['-', { metaKey: true }], ['+', { ctrlKey: true, shiftKey: true }], ['=', { metaKey: true, shiftKey: true }]]) {
+    assert.ok(!f.key(k, more).defaultPrevented, `${JSON.stringify(more)} ${k} zooms`);
+    assert.equal(f.wb.sheets[0].rows.get(0)?.get(0)?.v, 'keep', `${k} leaves row 1`);
+  }
+  f.key(' ', { shiftKey: true });
+  assert.ok(f.key('+', { ctrlKey: true, shiftKey: true }).defaultPrevented);
+  assert.equal(f.wb.sheets[0].rows.get(1)?.get(0)?.v, 'keep', 'a row inserted above');
+  f.key(' ', { shiftKey: true });
+  assert.ok(f.key('-', { ctrlKey: true }).defaultPrevented);
+  assert.equal(f.wb.sheets[0].rows.get(0)?.get(0)?.v, 'keep', 'and deleted');
 });
