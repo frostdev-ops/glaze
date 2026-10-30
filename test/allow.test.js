@@ -412,6 +412,61 @@ test('a page Glaze runs in, and each frame of one, gets the page-world guard for
   }
 });
 
+const pageGuard = async (document) => {
+  const w = worker();
+  await w.send({ type: 'glaze:here' }, page('https://school.blackboard.com/ultra/stream'));
+  await settle();
+  const guard = w.ran.find((r) => /activeViewTransition/.test(r.func || ''));
+  assert.ok(guard, 'the worker injects the real guard');
+  const listeners = [];
+  const context = vm.createContext({ document, addEventListener: (...args) => listeners.push(args) });
+  const install = () => vm.runInContext(`(${guard.func})()`, context);
+  install();
+  return { listeners, install, send: (cancelable = false) => {
+    const e = new Event('glaze:transition', { cancelable });
+    for (const [, listener] of listeners) listener(e);
+    return e.defaultPrevented;
+  } };
+};
+
+test('the page-world guard handles handoffs before page bubble listeners, once per document', async () => {
+  for (let i = 0; i < 2; i++) {
+    const g = await pageGuard({ activeViewTransition: null });
+    g.install();
+    assert.equal(g.listeners.length, 1, 'repeated installation in this document adds no listener');
+    assert.equal(g.listeners[0][0], 'glaze:transition');
+    assert.equal(g.listeners[0][2], true, 'capture runs before an earlier page bubble listener can replace the transition');
+  }
+});
+
+test('a guard presence probe never handles the school\'s transition; only the handoff handles ready', async () => {
+  let handled = 0;
+  const g = await pageGuard({ activeViewTransition: { ready: { then: (ok, fail) => { assert.equal(ok, undefined); assert.equal(typeof fail, 'function'); handled++; } } } });
+  assert.equal(g.send(true), true, 'a visible page can crossfade');
+  assert.equal(handled, 0, 'the school owns the transition present before Glaze starts');
+  g.send();
+  assert.equal(handled, 1, 'the handoff marks the newly started transition handled synchronously');
+});
+
+test('the guard refuses a hidden page, whose transition would skip before activeViewTransition is assigned', async () => {
+  const document = { activeViewTransition: null, hidden: true };
+  const g = await pageGuard(document);
+  assert.equal(g.send(true), false, 'leave the native click/update alone when no snapshot can be shown');
+  document.hidden = false;
+  assert.equal(g.send(true), true, 'the same document can crossfade again after activation');
+});
+
+test('page changes to the active transition or ready cannot make the guard throw into the school', async () => {
+  const document = { activeViewTransition: null };
+  const g = await pageGuard(document);
+  for (const value of [{ get ready() { throw Error('page getter'); } }, { ready: { then() { throw Error('page instrumentation'); } } }]) {
+    document.activeViewTransition = value;
+    assert.doesNotThrow(() => g.send());
+  }
+  Object.defineProperty(document, 'activeViewTransition', { get() { throw Error('page property'); } });
+  assert.doesNotThrow(() => g.send());
+});
+
 test('lib/detect.js reports Ultra on an /ultra page by its base, as content.js knows it', () => {
   const run = (url, head) => {
     const sent = [];
