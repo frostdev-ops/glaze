@@ -10,7 +10,7 @@ const { MIME, FILES, SAVED, ERRORS } = require('./fixtures/drive/v3.js');
 
 const API = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
-const META = 'id,name,mimeType,size,trashed,capabilities(canEdit,canDownload)';
+const META = 'id%2Cname%2CmimeType%2Csize%2Ctrashed%2Ccapabilities%28canEdit%2CcanDownload%29';
 const ALL = ['paper', 'sheet', 'pdf', 'slides'];
 const json = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=UTF-8', ...headers } });
 // A body that streams n bytes in pieces, counting how much was read and whether it was cancelled.
@@ -24,7 +24,7 @@ const stream = (n, piece = 1 << 20, headers = {}) => {
   return { res: new Response(body, { status: 200, headers }), seen };
 };
 
-// A worker's Drive: answers in order (a Response, an Error to throw, or fn(url, init)), tokens handed out in order.
+// A worker's Drive: answers in order (a Response, an Error to throw, or fn(url, init)); the same token until one is dropped.
 const harness = (answers = [], { tokens = ['tok-1', 'tok-2', 'tok-3'], fail = null } = {}) => {
   const log = { fetch: [], token: [], drop: [] };
   const queue = [...answers];
@@ -36,7 +36,7 @@ const harness = (answers = [], { tokens = ['tok-1', 'tok-2', 'tok-3'], fail = nu
       if (a instanceof Error) throw a;
       return typeof a === 'function' ? a(url, init) : a;
     },
-    token: async (o) => { log.token.push(o); if (fail) throw Object.assign(new Error(fail), { why: fail }); return tokens[log.token.length - 1]; },
+    token: async (o) => { log.token.push(o); if (fail) throw Object.assign(new Error(fail), { why: fail }); return tokens[log.drop.length]; },
     drop: async (t) => { log.drop.push(t); },
     boundary: () => 'B0und4ry',
   });
@@ -61,7 +61,7 @@ test('files.get asks for exactly the fields Glaze reads, with the token and no c
   const { drive, log } = harness([json(200, FILES.docx)]);
   const m = await drive.meta('1AbC_d-EfGh');
   assert.deepEqual(m, FILES.docx);
-  assert.equal(log.fetch[0].url, `${API}/1AbC_d-EfGh?fields=${encodeURIComponent(META)}&supportsAllDrives=true`);
+  assert.equal(log.fetch[0].url, `${API}/1AbC_d-EfGh?fields=${META}&supportsAllDrives=true`);
   assert.deepEqual(log.fetch[0].init.headers, { authorization: 'Bearer tok-1' });
   assert.deepEqual(plain(log.fetch[0].init), SAFE);
   assert.equal(log.fetch[0].init.method, undefined);
@@ -89,7 +89,7 @@ test('a binary file downloads with alt=media; a Google Doc, Sheet or Slides deck
   }
   // A Word file whose name lost its extension opens by its type, named for it.
   h = harness([json(200, { ...FILES.docx, name: 'Essay' }), stream(10).res]);
-  assert.deepEqual((await opened(h.drive, FILES.docx.id)).head, { kind: 'paper', name: 'Essay.docx', mime: MIME.docx, size: 10 });
+  assert.deepEqual((await opened(h.drive, FILES.docx.id)).head, { kind: 'paper', name: 'Essay.docx', mime: MIME.docx, size: 24576 });
 });
 
 test('a file no switched-on kind takes, or larger than its kind opens, is refused before any byte is asked for', async () => {
@@ -160,7 +160,7 @@ test('save again: the same Drive file is updated once it is confirmed there, edi
   let h = harness([json(200, FILES.docx), json(200, { ...SAVED.file, id: FILES.docx.id })]);
   let r = await h.drive.save({ name: 'Essay.docx', mime: MIME.docx, bytes, as: 'file', id: FILES.docx.id });
   assert.deepEqual(r, { id: FILES.docx.id, fresh: false });
-  assert.equal(h.log.fetch[0].url, `${API}/${FILES.docx.id}?fields=${encodeURIComponent(META)}&supportsAllDrives=true`);
+  assert.equal(h.log.fetch[0].url, `${API}/${FILES.docx.id}?fields=${META}&supportsAllDrives=true`);
   const u = h.log.fetch[1];
   assert.equal(u.url, `${UPLOAD}/${FILES.docx.id}?uploadType=multipart&fields=id%2Cname%2CmimeType&supportsAllDrives=true`);
   assert.equal(u.init.method, 'PATCH');
@@ -228,7 +228,7 @@ const ports = () => {
 
 test('the port: a page opens a picked file in chunks, each acknowledged, and gets a File', async () => {
   const n = D.CHUNK * 2 + 5;
-  const h = harness([json(200, FILES.pdf), stream(n, 100000).res]);
+  const h = harness([json(200, { ...FILES.pdf, size: String(n) }), stream(n, 100000).res]);
   const [page, worker] = ports();
   let posted = 0;
   const post = worker.postMessage.bind(worker);

@@ -371,6 +371,9 @@ const FAST_INTERVALS = [
   // Agent access in Safari: a 20 s keep-alive to the Glaze app only while the link is live (connecting, connected or
   // retrying); cleared when it goes off or waits for a trigger. Never on Chrome or Firefox.
   ['lib/agent-link.js', 'setInterval(beat, 20000)', 1, /\bclearInterval\s*\(\s*keep\s*\)/],
+  // Google Drive's files: a 15 s keep-alive to the service worker only while a page's open or save is under way (a 50 MB
+  // upload outlasts the worker's 30 s idle stop); cleared when the request ends or its port closes.
+  ['lib/drive.js', 'setInterval(beat, 15000)', 1, /\bclearInterval\s*\(\s*ping\s*\)/],
 ];
 
 test('no setInterval fires faster than once a minute unless it is reviewed, and its clear is still there', () => {

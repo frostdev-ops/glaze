@@ -3755,5 +3755,15 @@
   "Glaze needs the browser's sign-in permission to connect.": "Glaze heeft de aanmeldtoestemming van de browser nodig om te verbinden.",
   "Connect again and allow Google Drive access.": "Verbind opnieuw en sta toegang tot Google Drive toe.",
   "Google Drive didn't connect. Try again in a moment.": "Google Drive kon niet verbinden. Probeer het zo opnieuw.",
-  "Couldn't disconnect. Try again in a moment.": "Kon niet loskoppelen. Probeer het zo opnieuw."
+  "Couldn't disconnect. Try again in a moment.": "Kon niet loskoppelen. Probeer het zo opnieuw.",
+  "From Google Drive": "Uit Google Drive",
+  "Save to Google Drive": "Opslaan in Google Drive",
+  "Word file": "Word-bestand",
+  "Google Doc": "Google-document",
+  "Saved to Google Drive.": "Opgeslagen in Google Drive.",
+  "Glaze can't reach this file in Google Drive.": "Glaze kan dit bestand in Google Drive niet bereiken.",
+  "Google Drive is busy. Try again in a moment.": "Google Drive is bezet. Probeer het zo opnieuw.",
+  "Your Google Drive is full.": "Je Google Drive is vol.",
+  "Connect Google Drive again in Settings.": "Verbind Google Drive opnieuw in Instellingen.",
+  "Couldn't reach Google Drive. Try again in a moment.": "Google Drive was niet bereikbaar. Probeer het zo opnieuw."
 };
