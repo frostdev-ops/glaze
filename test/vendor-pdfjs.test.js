@@ -269,3 +269,68 @@ test("extractPages turns pages by each entry's rotations: /Rotate is the page's 
     'each copy of a page turns on its own');
   for (const bad of [45, 1.5, '90']) assert.equal(await fromA([{ document: null, rotations: [bad] }]), null, `${JSON.stringify(bad)} is refused, as pdf.js refuses a bad entry`);
 });
+
+test('rotation entries accept arrays and objects, normalize whole turns, and never change the source', async () => {
+  const doc = await opened(A);
+  try {
+    for (const extra of [-720, -450, -360, -90, 0, 90, 360, 450, 720]) {
+      const expected = `A2 ${(90 + extra % 360 + 360) % 360}`;
+      for (const rotations of [{ 1: extra }, [undefined, extra]]) {
+        const bytes = await doc.extractPages([{ document: null, includePages: [1], rotations }]);
+        assert.deepEqual(await pagesOf(bytes), [expected]);
+      }
+    }
+    assert.equal((await doc.getPage(2)).rotate, 90);
+    const ownRotation = pdfOf([{ label: 'own', rotate: 270 }]);
+    const bytes = await doc.extractPages([{ document: ownRotation, rotations: { 0: -360 } }, { document: B.slice(), rotations: [-450] }]);
+    assert.deepEqual(await pagesOf(bytes), ['own 270', 'B1 90'], 'merged pages retain direct and inherited rotations');
+    for (const bad of [NaN, Infinity, -Infinity, false, '360', -45]) {
+      assert.equal(await doc.extractPages([{ document: null, includePages: [1], rotations: { 1: bad } }]), null);
+    }
+  } finally { await doc.loadingTask.destroy(); }
+});
+
+test('rotated extraction preserves incremental form edits, and later incremental saves preserve the rotation', async () => {
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R /AcroForm 6 0 R >>',
+    '<< /Type /Pages /Kids [5 0 R] /Count 1 /Rotate 180 >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Length 0 >>\nstream\n\nendstream',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R /Annots [7 0 R] >>',
+    '<< /Fields [7 0 R] /DA (/F1 12 Tf 0 g) /DR << /Font << /F1 3 0 R >> >> >>',
+    '<< /Type /Annot /Subtype /Widget /FT /Tx /T (answer) /V (before) /Rect [20 20 100 40] /P 5 0 R >>',
+  ];
+  let source = '%PDF-1.7\n';
+  const offsets = objects.map((body, i) => { const at = source.length; source += `${i + 1} 0 obj\n${body}\nendobj\n`; return at; });
+  const xref = source.length;
+  source += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((at) => `${String(at).padStart(10, '0')} 00000 n \n`).join('')}`;
+  const original = new TextEncoder().encode(`${source}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  const state = async (doc) => {
+    const page = await doc.getPage(1);
+    return [page.rotate, (await page.getAnnotations())[0].fieldValue];
+  };
+  const edit = async (doc, value) => {
+    const [field] = await (await doc.getPage(1)).getAnnotations();
+    doc.annotationStorage.setValue(field.id, { value });
+  };
+  const sourceDoc = await opened(original);
+  let savedDoc, extractedDoc, resavedDoc;
+  try {
+    await edit(sourceDoc, 'edited');
+    const saved = await sourceDoc.saveDocument();
+    assert.deepEqual(saved.subarray(0, original.length), original, 'the save appends to the original PDF');
+    savedDoc = await opened(saved);
+    assert.deepEqual(await state(savedDoc), [180, 'edited']);
+    // extractPages copies persisted widget values; form edits must be saved and reopened first (upstream behavior).
+    const extracted = await savedDoc.extractPages([{ document: null, rotations: [90] }]);
+    extractedDoc = await opened(extracted);
+    assert.deepEqual(await state(extractedDoc), [270, 'edited']);
+    assert.equal((await savedDoc.getPage(1)).rotate, 180, 'extraction does not rotate the open source');
+    await edit(extractedDoc, 'resaved');
+    resavedDoc = await opened(await extractedDoc.saveDocument());
+    assert.deepEqual(await state(resavedDoc), [270, 'resaved']);
+    assert.deepEqual(await pagesOf(await resavedDoc.extractPages([{ document: null, rotations: [-90] }])), [' 180']);
+  } finally {
+    for (const doc of [resavedDoc, extractedDoc, savedDoc, sourceDoc]) await doc?.loadingTask.destroy();
+  }
+});
