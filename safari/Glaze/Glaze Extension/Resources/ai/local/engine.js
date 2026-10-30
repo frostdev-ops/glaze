@@ -8,7 +8,7 @@
 // (`subgroups`, checked on the device first) for the GEMV's row sums; workgroup memory otherwise (Firefox).
 // One token: GEMV per matrix (ffn_gate and ffn_up together, SwiGLU applied); several: tiled GEMM. Sliding layers keep
 // a ring of window + chunk positions; full layers every position up to the session's context.
-// Classic script; node exports (the pure parts run in Node: plan, preprocess, grid, ropeTable).
+// Classic script; node exports (the pure parts run in Node: plan, preprocess, grid, splits, ropeTable).
 var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   let reference = null;
   const REF = () => reference || (reference = typeof GZ_AI_REFERENCE !== 'undefined' ? GZ_AI_REFERENCE : require('./reference.js'));
@@ -87,6 +87,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     if (y > max) fail(`${n} workgroups`);
     return [Math.ceil(n / y), y];
   };
+
+  // How many ways a big-tile GEMM of rows × cols for T tokens splits along k (each split's sums added in order after),
+  // so a matrix with few tiles still fills a GPU: about 320 workgroups (an 80-SM GPU's 4 waves; more splits measured
+  // slower on a 3080 Ti), at most 8, whole sub-blocks of 32 each; rows a multiple of 4 (the sum reads vec4).
+  const splits = (rows, cols, T) => (rows % 4 ? 1 : Math.max(1, Math.min(8, cols / 32, Math.floor(320 / (Math.ceil(rows / 128) * Math.ceil(T / 128))))));
 
   // cos and sin of NeoX RoPE for positions from..from + count − 1, as the reference computes them (θ in double, then
   // rounded to f32): rows of n / 2 (cos, sin) pairs.
@@ -177,11 +182,18 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     if (f16 && !device.features.has('shader-f16')) bail(Object.assign(new Error('engine: the device has no shader-f16'), { reason: 'webgpu' }));
     // The GEMM's tiles: 2 × 576 vec4 of H.
     if (device.limits.maxComputeWorkgroupStorageSize < 2 * 576 * (f16 ? 8 : 16)) bail(Object.assign(new Error('engine: the device allows too little workgroup storage'), { reason: 'webgpu' }));
-    // The big GEMM tile (2 × 1024 vec4 of H) where the device allows it: opts.gemm 'auto' (for matrices of 1024 rows or
-    // more), 'big' or 'small'.
-    // A prompt step of more than 64 tokens takes the big tiles (for matrices of 1024 rows or more under 'auto').
-    const bigTile = device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * (f16 ? 8 : 16) && opts.gemm !== 'small';
-    const bigRows = opts.gemm === 'big' ? 1 : 1024;
+    // The big GEMM tile (2 × 1024 vec4: f32, or H on the f16 path unless tf32) where the device allows it: opts.gemm
+    // 'auto', 'big' or 'small'. A prompt step of more than 64 tokens takes the big tiles.
+    // Measured per GPU (prefill of 512 tokens): on a 3080 Ti the f16 path's big tiles are faster in f32 (2,802 tok/s
+    // against 2,603 in f16) and a split along k fills its 80 SMs; on an M5 Pro f16 tiles and no split are (its few cores
+    // fill without, and the splits' sum costs more than it gains). opts.tiles 'auto' | 'f32' | 'h'; opts.split false
+    // turns the split off.
+    const apple = adapter.info?.vendor === 'apple';
+    const tf32 = f16 && device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * 16 && (opts.tiles === 'f32' || (opts.tiles !== 'h' && !apple));
+    const split = opts.split ?? !apple;
+    const bigTile = device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * (f16 && !tf32 ? 8 : 16) && opts.gemm !== 'small';
+    // Without the split, matrices of under 1024 rows take the 64 × 64 tiles, for more workgroups.
+    const bigRows = opts.gemm === 'big' || split ? 1 : 1024;
     let lost = null;
     device.lost.then((info) => { lost = info; });
     try {
@@ -403,6 +415,12 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         big: mk(chunk * hidden), up: mk(chunk * F), q: mk(chunk * H * hd), k: mk(chunk * kvHeads * hd), v: mk(chunk * kvHeads * hd), g: mk(chunk * H),
         last: mk(V), raw: mk(V), lastIds: mk(1), mask: mk(Math.ceil(V / 32)), pen: mk(64), apart: mk(H * Math.ceil(ctx / 128) * (hd + 2)), part: mk(Math.ceil(V / 4096) * 2 * chunk), cand: mk(Math.ceil(V / 2048) * 64 * 2), top: mk(64 * 2),
       };
+      // The splits' sums of a big-tile GEMM split along k.
+      if (bigTile && chunk > 64 && split) {
+        let most = 0;
+        for (const t of infos) if (t.type !== 'F32') for (const r of layout.at[t.name]) if (r.rows >= bigRows) { const z = splits(r.rows, t.cols, chunk); if (z > 1) most = Math.max(most, z * r.rows); }
+        if (most) B.split = mk(chunk * most);
+      }
       let all = null; // chunk × V logits, made on first use
       const state = c.layers.map((kind, i) => {
         if (kind === 'conv') return { conv: mk(K * E) };
@@ -431,8 +449,10 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         for (const r of t.runs) {
           if (one) await op(list, 'matvec', { [t.type]: true }, { 0: r.bind, 1: X, 2: Y }, () => PARAMS.matvec({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, xOff: xOff(), yOff: yOff + r.row }), () => grid(Math.ceil(r.rows / (256 / tpr))));
           else {
-            const big = bigList && bigTile && r.rows >= bigRows, tile = big ? 128 : 64;
-            await op(list, 'matmul', { [t.type]: true, BIG: big }, { 0: r.bind, 1: X, 2: Y }, (T) => PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, xOff: xOff(), ldy, yOff: yOff + r.row }), (T) => [Math.ceil(r.rows / tile), Math.ceil(T / tile)]);
+            const big = bigList && bigTile && r.rows >= bigRows, tile = big ? 128 : 64, z = big && Y && split ? splits(r.rows, t.cols, chunk) : 1;
+            const into = z > 1 ? B.split : Y;
+            await op(list, 'matmul', { [t.type]: true, BIG: big, TF32: big && tf32 }, { 0: r.bind, 1: X, 2: into }, (T) => PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, xOff: xOff(), ldy: z > 1 ? r.rows : ldy, yOff: z > 1 ? 0 : yOff + r.row }), (T) => [Math.ceil(r.rows / tile), Math.ceil(T / tile), z]);
+            if (z > 1) await op(list, 'matmul', { SUM: true }, { 1: B.split, 2: Y }, (T) => PARAMS.matmul({ rows: r.rows, K: z, rowBytes: 0, T, xStride: 0, ldy, yOff: yOff + r.row }), (T) => grid(Math.ceil((T * r.rows) / 4 / 256)));
           }
         }
       };
@@ -465,7 +485,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
               const tiles = (pos) => Math.ceil((swa ? Math.min(c.window, pos + 1) : pos + 1) / 128);
               await op(list, 'attention', { SPLIT: true }, { 0: B.q, 1: s.K, 2: s.V, 6: B.apart }, (T, pos) => att(T, pos, tiles(pos)), (T, pos) => [H, 1, tiles(pos)]);
               await op(list, 'attention', { COMBINE: true }, { 3: B.g, 4: B.y, 6: B.apart }, (T, pos) => att(T, pos, tiles(pos)), () => [H, 1]);
-            } else await op(list, 'attention', {}, { 0: B.q, 1: s.K, 2: s.V, 3: B.g, 4: B.y }, (T, pos) => att(T, pos, 1), (T) => [H, T]);
+            } else await op(list, 'attention', { BLOCK: true }, { 0: B.q, 1: s.K, 2: s.V, 3: B.g, 4: B.y }, (T, pos) => att(T, pos, 1), (T) => [H, Math.ceil(T / 16)]);
             await mm(list, blk(i, 'attn_output'), zero, B.y, B.a, 0, at(E));
           }
           const post = byName.has(blk(i, 'post_attention_norm'));
@@ -728,11 +748,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     };
 
     return {
-      config: c, device, adapter, f16, subgroups: sg, subgroupsOff: sgWhy, tpr, layout, session,
+      config: c, device, adapter, f16, tf32, split, subgroups: sg, subgroupsOff: sgWhy, tpr, layout, session,
       get lost() { return lost; },
       destroy: () => { destroyed = true; for (const close of sessions) close(); for (const b of wbufs) b.destroy(); if (own) device.destroy?.(); },
       // For the checks: the kernels one dispatch at a time, on the engine's own pipelines and weights.
-      _k: { pipe, dispatch, upload, read, buffer, tensor, PARAMS, grid, get tpr() { return tpr; } },
+      _k: { pipe, dispatch, upload, read, buffer, tensor, PARAMS, grid, tf32, get tpr() { return tpr; } },
     };
     } catch (e) {
       if (!e?.reason && !opts.signal?.aborted) e = Object.assign(e instanceof Error ? e : new Error(String(e)), { reason: lost ? 'lost' : /kernel /.test(e?.message) ? 'webgpu' : 'model' });
@@ -883,6 +903,6 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     return model;
   };
 
-  return { create, load, sample, plan, preprocess, grid, ropeTable, PARAMS, QUANT, KERNELS };
+  return { create, load, sample, plan, preprocess, grid, splits, ropeTable, PARAMS, QUANT, KERNELS };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_ENGINE; else GZ_AI_ENGINE;

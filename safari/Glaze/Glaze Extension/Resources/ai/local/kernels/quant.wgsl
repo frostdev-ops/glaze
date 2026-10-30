@@ -4,6 +4,10 @@
 // sub-scale ≤ 8, a quant ≤ 6), so only Q4_K's and Q5_K's "− min" rounds, once, fused or not: the values equal ggml's.
 // grp(rb, c) is the row's c-th run of 32 values in storage order (four consecutive words of quants, so consecutive runs
 // are consecutive bytes: the GEMV's lanes read coalesced, one scale decode per 32 values): v[0..4] at ka.., v[4..8] at kb...
+// A GEMM's row stream, for values 4w..4w + 3 of sub-block s alone (lanes share a row's words, each reading its own) and
+// the next words read before the values are made: hd(rb, s), the words of its scales (its superblock's for the K
+// types); sc(h, rb, s) → (d·scale, dmin·min), or Q6_K's two scales; qw(rb, s, w), the quant words; v4(q, k, rb, s, w),
+// the values: v4(qw(rb, s, w), sc(hd(rb, s), rb, s), rb, s, w) is deq32(rb, s)[w], bit for bit.
 // Needs `W: array<u32>` bound by the kernel.
 struct G { v: array<vec4<f32>, 8>, ka: u32, kb: u32 }
 
@@ -40,6 +44,14 @@ fn deq32(rb: u32, s: u32) -> array<vec4<f32>, 8> {
   return o;
 }
 fn grp(rb: u32, c: u32) -> G { return G(deq32(rb, c), c * 32u, c * 32u + 16u); }
+fn hd(rb: u32, s: u32) -> vec4<u32> { return vec4<u32>(W[(rb + s * 34u) >> 2u], 0u, 0u, 0u); }
+fn sc(h: vec4<u32>, rb: u32, s: u32) -> vec2<f32> { return vec2<f32>(h2f((h.x >> (((rb + s * 34u) & 2u) * 8u)) & 65535u), 0.0); }
+fn qw(rb: u32, s: u32, w: u32) -> vec4<u32> { let i = (rb + s * 34u + 2u + 4u * w) >> 2u; return vec4<u32>(W[i], W[i + 1u], 0u, 0u); }
+fn v4(q: vec4<u32>, k: vec2<f32>, rb: u32, s: u32, w: u32) -> vec4<f32> {
+  let x = select((q.x >> 16u) | (q.y << 16u), q.x, ((rb + s * 34u + 2u) & 2u) == 0u);
+  let v = vec4<i32>(bitcast<i32>(x << 24u), bitcast<i32>(x << 16u), bitcast<i32>(x << 8u), bitcast<i32>(x)) >> vec4<u32>(24u);
+  return k.x * vec4<f32>(v);
+}
 //#endif
 
 //#if Q4_K || Q5_K
@@ -97,6 +109,15 @@ fn grp(rb: u32, c: u32) -> G {
   g.kb = g.ka + 32u;
   return g;
 }
+fn hd(rb: u32, s: u32) -> vec4<u32> { let b = (rb + (s >> 3u) * 144u) >> 2u; return vec4<u32>(W[b], W[b + 1u], W[b + 2u], W[b + 3u]); }
+fn sc(h: vec4<u32>, rb: u32, s: u32) -> vec2<f32> {
+  let m = scmin(h.yzw, s & 7u);
+  return vec2<f32>(h2f(h.x & 65535u) * f32(m.x), h2f(h.x >> 16u) * f32(m.y));
+}
+fn qw(rb: u32, s: u32, w: u32) -> vec4<u32> { return vec4<u32>(W[((rb + (s >> 3u) * 144u) >> 2u) + 4u + 8u * ((s & 7u) >> 1u) + w], 0u, 0u, 0u); }
+fn v4(q: vec4<u32>, k: vec2<f32>, rb: u32, s: u32, w: u32) -> vec4<f32> {
+  return k.x * vec4<f32>((bytes4(q.x) >> vec4<u32>((s & 1u) * 4u)) & vec4<u32>(15u)) - k.y;
+}
 //#endif
 
 //#if Q5_K
@@ -143,6 +164,20 @@ fn grp(rb: u32, c: u32) -> G {
   g.ka = (c >> 3u) * 256u + 64u * j + 4u * (w0 & 7u);
   g.kb = g.ka + 32u;
   return g;
+}
+fn hd(rb: u32, s: u32) -> vec4<u32> { let b = (rb + (s >> 3u) * 176u) >> 2u; return vec4<u32>(W[b], W[b + 1u], W[b + 2u], W[b + 3u]); }
+fn sc(h: vec4<u32>, rb: u32, s: u32) -> vec2<f32> {
+  let m = scmin(h.yzw, s & 7u);
+  return vec2<f32>(h2f(h.x & 65535u) * f32(m.x), h2f(h.x >> 16u) * f32(m.y));
+}
+fn qw(rb: u32, s: u32, w: u32) -> vec4<u32> {
+  let b = (rb + (s >> 3u) * 176u) >> 2u;
+  return vec4<u32>(W[b + 12u + 8u * ((s & 7u) >> 1u) + w], W[b + 4u + w], 0u, 0u);
+}
+fn v4(q: vec4<u32>, k: vec2<f32>, rb: u32, s: u32, w: u32) -> vec4<f32> {
+  let lo = (bytes4(q.x) >> vec4<u32>((s & 1u) * 4u)) & vec4<u32>(15u);
+  let hi = ((bytes4(q.y) >> vec4<u32>(s & 7u)) & vec4<u32>(1u)) << vec4<u32>(4u);
+  return k.x * vec4<f32>(lo + hi) - k.y;
 }
 //#endif
 
@@ -193,5 +228,32 @@ fn grp(rb: u32, c: u32) -> G {
   g.ka = (c >> 3u) * 256u + 128u * n + 32u * hq + l;
   g.kb = g.ka + 64u;
   return g;
+}
+// sc: the scales of values 0..15 and 16..31.
+fn hd(rb: u32, s: u32) -> vec4<u32> {
+  let bb = rb + (s >> 3u) * 210u;
+  return vec4<u32>(W[(bb + 208u) >> 2u], W[(bb + 192u + 8u * ((s >> 2u) & 1u) + 2u * (s & 3u)) >> 2u], 0u, 0u);
+}
+fn sc(h: vec4<u32>, rb: u32, s: u32) -> vec2<f32> {
+  let bb = rb + (s >> 3u) * 210u;
+  let c = bb + 192u + 8u * ((s >> 2u) & 1u) + 2u * (s & 3u);
+  let d = h2f((h.x >> (((bb + 208u) & 2u) * 8u)) & 65535u);
+  let two = h.y >> ((c & 3u) * 8u);
+  return vec2<f32>(d * f32(bitcast<i32>((two & 255u) << 24u) >> 24u), d * f32(bitcast<i32>(((two >> 8u) & 255u) << 24u) >> 24u));
+}
+fn qw(rb: u32, s: u32, w: u32) -> vec4<u32> {
+  let bb = rb + (s >> 3u) * 210u;
+  let n = (s >> 2u) & 1u;
+  let l = (bb + 64u * n + 32u * (s & 1u) + 4u * w) >> 2u;
+  let h = (bb + 128u + 32u * n + 4u * w) >> 2u;
+  return vec4<u32>(W[l], W[l + 1u], W[h], W[h + 1u]);
+}
+fn v4(q: vec4<u32>, k: vec2<f32>, rb: u32, s: u32, w: u32) -> vec4<f32> {
+  let qq = s & 3u;
+  let odd = ((rb + (s >> 3u) * 210u) & 2u) != 0u;
+  let l = select(q.x, (q.x >> 16u) | (q.y << 16u), odd);
+  let h = select(q.z, (q.z >> 16u) | (q.w << 16u), odd);
+  let v = ((bytes4(l) >> vec4<u32>(4u * (qq >> 1u))) & vec4<u32>(15u)) | (((bytes4(h) >> vec4<u32>(2u * qq)) & vec4<u32>(3u)) << vec4<u32>(4u));
+  return select(k.y, k.x, w < 4u) * vec4<f32>(vec4<i32>(v) - vec4<i32>(32));
 }
 //#endif
