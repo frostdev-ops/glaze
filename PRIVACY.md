@@ -1,6 +1,6 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-29_
+_Last updated: 2026-10-30_
 
 ## User-installed mods
 
@@ -385,6 +385,12 @@ not those unknown legacy copies or unrelated stickers.
   event ends, a hash of what was written and Google's version tag for it; Google's sync cursor; and the IDs of deadline
   events you deleted in Google Calendar, so Glaze doesn't put them back. No sign-in token: Chrome keeps that itself.
   **Disconnect** deletes all of it.
+- **Google Drive** (off until you connect), unavailable in this build while Google verification is pending. In a future
+  build that enables it, `chrome.storage.local` holds one record, `google`, on this device only: the email address of
+  the Google account you connected (shown as the connected account), which sign-in flow Glaze used and when you
+  connected (`{ email, flow, at }`). No access token: Chrome keeps it in its own sign-in cache; Edge, Brave and Firefox
+  hold it only in the memory of Glaze's background worker; Safari will keep it in the Keychain. **Disconnect** deletes
+  the record.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
   which Canvas or Blackboard course each of your Gradescope courses goes with (by its Gradescope course id and short name, or "none of
@@ -525,7 +531,9 @@ not those unknown legacy copies or unrelated stickers.
   file's hash, size, page or slide count and first page's picture; where that store isn't available, a file up to 3 MB
   stays in the record itself. A file goes when no document or version points at it. An assignment attempt you open as one
   of these is kept the same way under the assignment's key. Glaze reads and draws these files on this device, from the
-  extension's own files, and sends them nowhere. Delete there moves a paper or document to Trash, which keeps it and its versions on this device; 30 days later
+  extension's own files, and sends them nowhere. Google Drive (below) is unavailable in this build while Google
+  verification is pending. In a future build that enables it, a document goes to your own Google Drive only when you
+  connect Drive and choose Save to Drive or turn on Sync Documents. Delete there moves a paper or document to Trash, which keeps it and its versions on this device; 30 days later
   it is deleted for good, with its versions and saved sources, the next time the browser starts or Documents opens, unless
   you restore it first; Delete forever and Settings' Clear delete them at once. A paper's edits
   not yet saved wait in the writer frame's own
@@ -775,6 +783,37 @@ you import) are bundled. It makes requests in these cases:
   - Uninstalling Glaze deletes what it stored on the device but doesn't revoke Google's access by itself:
     disconnect first, or remove it at https://myaccount.google.com/connections.
   - Edge, Brave, Safari and Firefox don't offer it; Export calendar (.ics) works everywhere.
+- **Google Drive** (off until you connect). Unavailable in this build while Google verification is pending, and this
+  build can't make any of these requests. In a future build that enables it, the requests go directly between your
+  browser and Google: `https://accounts.google.com` to sign in, `https://openidconnect.googleapis.com` for your
+  account's email address, `https://www.googleapis.com` for Drive and `https://oauth2.googleapis.com` to revoke access.
+  To pick a file, Glaze also opens a static picker page (below). There is no Glaze server, and nothing goes to Frostdev.
+  - **Connect** (your click in Glaze's settings): the browser asks for the `identity` permission and Google shows its own
+    sign-in and consent for three scopes: `https://www.googleapis.com/auth/drive.file`, `openid` and `email`. With
+    `drive.file` Glaze can reach only the Drive files it creates and the files you pick in Google's Picker; it can't
+    list or open anything else in your Drive. The email address is used to show which account is connected. Glaze never
+    stores the access token: Chrome keeps it in its own sign-in cache (`getAuthToken`); Edge, Brave and Firefox hold it
+    only in the background worker's memory (`launchWebAuthFlow`); Safari will use the system's sign-in sheet and keep it
+    in the Keychain.
+  - **The picker page**: to pick a file, Glaze opens `https://frostdev.io/glaze/drive-picker/`, or its copy at
+    `https://frostdev-ops.github.io/glaze-drive-picker/` when frostdev.io doesn't answer. The page loads Google's
+    Picker. The access token reaches it in the address's fragment, which browsers don't send to servers, and the page
+    sends the token only to Google. The ids, names and types of the files you pick come back to Glaze in the redirect's
+    fragment. frostdev.io and GitHub see an ordinary page request (your IP address and browser headers), never the token
+    or file contents.
+  - **Open from Drive**: Glaze downloads the file you picked, or exports a Google Doc as .docx, a Sheet as .xlsx and
+    Slides as .pptx, and imports it into Documents on this device.
+  - **Save to Drive**: Glaze uploads the document's exported file, or saves it as a Google Doc if you choose.
+  - **Sync Documents** (a setting, off by default): Glaze keeps a folder named Glaze in your Drive with each document's
+    file and a JSON copy of the document and its record. When both copies changed, both versions are kept.
+  - **Submit from Drive**: Glaze downloads the Drive file you pick and attaches it to your Blackboard Ultra assignment's
+    hand-in.
+  - **Disconnect**: Glaze asks Google to revoke its access (the token goes in the request body), has the browser forget
+    its cached tokens, removes the `identity` permission and deletes the `google` record. While Google Calendar sync
+    still uses the same access, Glaze doesn't revoke it, and only Drive's record goes. You can also remove Glaze's
+    access at https://myaccount.google.com/permissions.
+  - Uninstalling Glaze doesn't revoke Google's access by itself, and files in your Drive stay there: disconnect first,
+    or remove access at https://myaccount.google.com/permissions.
 - **Tasks on course cards** (Canvas, off by default). On the Dashboard's card view, Glaze asks your own Canvas site
   for your profile (user id and time zone; one request a page, shared with Better To Do) and uses Better To Do's copy
   of your planner items. Only when that copy is missing or more than two minutes old and the To Do list isn't on the
@@ -1064,7 +1103,7 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
 ## Permissions
 
 - `storage` — to save the settings, GPA choices, past terms and goal, the Insights summary, course names, places, what-if scores, due list, Better To Do's tasks and plans, your class schedule, reminder and streak state, marks on documents,
-  typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, Google Calendar sync's state, and Safari update-check timestamp described above.
+  typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, Google Calendar sync's state, Google Drive's connected account, and Safari update-check timestamp described above.
   Notes' text, pictures and attachments are in the extension's own IndexedDB.
 - No permission for reading PDFs and photos. The extension's own pages may compile WebAssembly (`'wasm-unsafe-eval'` in
   its content security policy), which the OCR engine needs; the reader runs only code that ships in the package, and
@@ -1076,7 +1115,10 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
   client, from the manifest they ship. In a build that enables the sync it is asked for only when you press Connect in
   Google Calendar sync, and removed on Disconnect. It lets Chrome sign Glaze in to Google Calendar with the Google
   account in your browser; Chrome shows no warning for it. Glaze never asks for `identity.email` and never sees your
-  password.
+  password. Google Drive uses it too, on Chrome, Edge, Brave and Firefox: unavailable in this build while Google
+  verification is pending. In a future build that enables it, it is asked for when you press Connect for Google Drive
+  and removed on Disconnect, unless Google Calendar sync still uses it. Chrome signs in with the Google account in your
+  browser; Edge, Brave and Firefox open Google's own sign-in page.
 - `unlimitedStorage` — requested at install, so the browser doesn't clear your notes, pictures, attachments and the
   files kept for Look backgrounds to free space. Nothing more is stored or sent because of it; Chrome shows no warning
   for it.
@@ -1132,12 +1174,14 @@ press it (see Glaze Writer above). Glaze never changes grades.
 
 ## Google user data
 
-Google Calendar sync is unavailable in the current build while Google verification is pending. The following describes its use of Google data in a future build that enables this optional feature; calendar file export does not require it.
+Google Calendar sync and Google Drive are unavailable in the current build while Google verification is pending. The following describes their use of Google data in a future build that enables these optional features; calendar file export does not require them.
 
 Glaze's use and transfer of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including
 the Limited Use requirements. Glaze uses Google Calendar access only to keep the Glaze calendar in step with your
-Canvas work, as described above. It doesn't sell, share or use this data for advertising or to train AI models, no
+Canvas work, as described above. It uses Google Drive access (`drive.file`, `openid` and `email`) only to open the
+files you pick, save and sync your documents to your own Drive, attach a Drive file you pick to an assignment you hand
+in, and show which account is connected, as described above. It doesn't sell, share or use this data for advertising or to train AI models, no
 person reads it, and none of it goes to frostdev or anyone else.
 
 ## Hosting
