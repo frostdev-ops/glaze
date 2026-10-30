@@ -224,8 +224,11 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     b = await bar(reply.fr);
     const words = await reply.fr.evaluate(() => GZ_WRITER_FRAME.editor().words());
     check(b.target === `${words} / 250` && words > 60, `the ring follows the Markdown edits (${b.target})`);
-    await p.keyboard.press(`${MOD}+Enter`); await pause(400);
-    check((await p.evaluate(() => __clicks.slice())).filter((c) => c === 'Reply').length === 1, 'Ctrl/Cmd+Enter beside the ring clicks the native Reply once');
+    await p.keyboard.press(`${MOD}+Enter`);
+    const replyClicks = () => p.evaluate(() => __clicks.filter((c) => c === 'Reply').length);
+    await until(async () => (await replyClicks()) > 0, 'the native Reply clicked', 30000);
+    await pause(400); // window: a second click would land within it
+    check((await replyClicks()) === 1, 'Ctrl/Cmd+Enter beside the ring clicks the native Reply once');
     await p.close();
 
     // ---- ok and over: a 10–20 word prompt ----
@@ -257,7 +260,8 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     check(!b.ring && !/250/.test(b.title), 'word target off before the frame loads: the plain count, no ring, though the prompt asks for 250');
     await sr.fr.click('.ProseMirror');
     await p.keyboard.type('- item **bold** ', { delay: 5 });
-    await pause(300);
+    await until(() => sr.fr.evaluate(() => GZ_WRITER_FRAME.editor().view.state.doc.textContent === '- item **bold** '), 'the typed line in the frame', 30000);
+    await pause(300); // window: an input rule would turn it into a list or bold within it
     check(await sr.fr.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view; return v.state.doc.textContent === '- item **bold** ' && !v.dom.querySelector('ul, strong'); }), 'Markdown shortcuts off: "- " and **…** stay as typed');
     const selectPost = async () => {
       await p.evaluate(() => { document.activeElement.blur?.(); getSelection().removeAllRanges(); });
@@ -270,7 +274,7 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
       await p.mouse.move(at.from.x, at.from.y); await p.mouse.down(); await p.mouse.move(at.to.x, at.to.y, { steps: 8 }); await p.mouse.up();
     };
     await selectPost();
-    await pause(800);
+    await pause(800); // window: the Quote pop would show within it
     check(await p.evaluate((q) => getSelection().toString() === q && !document.querySelector('.gz-writer-quote')?.isConnected, quoted), 'Quote while replying off: a selection in a post shows no Quote pop');
     await setW(W0);
     b = await until(async () => { const v = await bar(sr.fr); return v.ring && /\/ 250$/.test(v.target) && v; }, 'ring back live');
@@ -311,12 +315,22 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     const holds = async (read, value, label) => { let last; try { await until(async () => (last = JSON.stringify(await read())) === value, label); } catch (e) { throw Error(`${e.message} (${last})`); } };
     const DOI = '["10.5555/gz.2026.001"]';
     // ⋯ → Sources: the entries the popover lists, as the student sees them.
+    // Bound to the popover's state: ⋯ → Sources again whenever it isn't open, until it lists an entry.
     const listed = async (fr) => {
-      await until(async () => { if (await fr.evaluate(() => document.getElementById('menu').hidden)) await fr.click('#more'); return fr.evaluate(() => !document.getElementById('menu').hidden); }, 'menu open');
-      await fr.click('#menu >> text=Sources');
-      const entries = await until(() => fr.evaluate(() => !document.querySelector('.gz-cite').hidden && [...document.querySelectorAll('.gz-cite .gzc-list .gzc-src')].map((b) => b.textContent)), 'Sources popover');
+      const state = () => fr.evaluate(() => ({ menu: !document.getElementById('menu').hidden, popover: !document.querySelector('.gz-cite').hidden,
+        entries: [...document.querySelectorAll('.gz-cite .gzc-list .gzc-src')].map((b) => b.textContent) }));
+      let last;
+      try {
+        await until(async () => {
+          last = await state();
+          if (last.popover) return last.entries.length > 0;
+          if (!last.menu) await fr.click('#more');
+          else await fr.click('#menu >> text=Sources', { timeout: 5000 });
+          return false;
+        }, 'Sources popover listing an entry', 30000);
+      } catch (e) { throw Error(`${e.message} (menu ${last?.menu ? 'open' : 'shut'}, popover ${last?.popover ? 'open' : 'shut'}, ${last?.entries.length ?? 0} entries)`); }
       await fr.press('.gzc-in', 'Escape');
-      return entries;
+      return last.entries;
     };
     await dropDrafts();
     p = await open('/ultra/courses/_101_1/discussion/_9_1');

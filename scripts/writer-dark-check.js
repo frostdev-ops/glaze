@@ -109,7 +109,7 @@ const READ = () => {
         await page.evaluate(async () => { await document.fonts.ready; document.activeElement?.blur?.(); });
         // The drawn caret blinks; nothing else on the page moves.
         await page.evaluate(() => { const s = new CSSStyleSheet(); s.replaceSync('.gp-cursor { display: none !important; }'); document.adoptedStyleSheets = [...document.adoptedStyleSheets, s]; });
-        await pause(400);
+        await pause(400); // settle before the caller's reads and screenshots
       };
       const sheetShot = async (file) => {
         const box = await page.evaluate(() => { const r = document.querySelector('.gp-zoom .gp-sheet').getBoundingClientRect(); return { x: r.x + 2, y: r.y + 2, width: Math.min(r.width, innerWidth - r.x) - 4, height: Math.min(r.height, innerHeight - r.y) - 4 }; });

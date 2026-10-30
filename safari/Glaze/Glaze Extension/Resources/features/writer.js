@@ -249,16 +249,15 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       // Saved: Ultra's own button goes on with the text (Ultra may have drawn its footer again meanwhile), or the compact
       // bar says why not. A paper too long for Ultra's box: the frame has said so and focused Full writer itself (focusing
       // the frame from here would put its focus back on its body).
-      let why = null;
+      let why = null, on = false;
       try {
         if (m.ok === true) {
-          const b = f.button.isConnected ? f.button : [...box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || []].find((x) => x.getAttribute('data-analytics-id') === f.id);
+          const b = flushButton(box, f);
           if (box.full || !sameBox(box) || !b) why = 'page';
           else if (typeof m.html !== 'string' || !Array.isArray(m.delta) || !sync(box, m.html, m.delta)) why = 'text';
-          else if (!U().enabled(b)) why = f.action === 'submit' ? 'submit' : 'page';
-          else { passing = b; try { b.click(); } finally { passing = null; } }
+          else on = true;
         }
-      } finally { endFlush(box, why); }
+      } finally { if (on) turnOn(box, f, Date.now()); else endFlush(box, why); }
     }
     else if (m.type === 'view' || m.type === 'room') { if (box.mode === 'paper') { if (m.type === 'view') box.viewedOn = box.port; view(box, m); } }
     else if (box.mode === 'paper' && box.full) { if (m.type === 'focus-mode') focusMode(box, m.on === true); else if (m.type === 'native') { drop(box); declined.add(box.editor); } }
@@ -323,6 +322,19 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // saves and holds editing until the native click is dispatched (its bar says Saving…). A lost save gives editing back
   // after a minute with a visible failure; its late acknowledgement can never dispatch Ultra's button.
   let passing = null;
+  // The flush's button, or the one Ultra drew in its place.
+  const flushButton = (box, f) => (f.button.isConnected ? f.button : [...box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || []].find((x) => x.getAttribute('data-analytics-id') === f.id));
+  // Saved and in Ultra's box: Ultra turns its button on once it has drawn that text, so the flush (Saving…, the button
+  // busy) lasts until it does, SUBMIT_ON at most, then Ultra's own button goes once.
+  const SUBMIT_ON = 15000;
+  const turnOn = (box, f, since) => {
+    if (box.flushing !== f) return;
+    const b = flushButton(box, f);
+    if (box.full || !sameBox(box) || !b) { endFlush(box, 'page'); return; }
+    if (U().enabled(b)) { try { passing = b; b.click(); } finally { passing = null; endFlush(box); } return; }
+    if (Date.now() - since >= SUBMIT_ON) { endFlush(box, f.action === 'submit' ? 'submit' : 'page'); return; }
+    setTimeout(() => turnOn(box, f, since), 100);
+  };
   const endFlush = (box, reason = null) => {
     const f = box.flushing;
     if (!f) return;

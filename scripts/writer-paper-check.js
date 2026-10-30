@@ -292,15 +292,15 @@ const HARNESS = `(() => {
 
     // ---- format checks on the page
     await load(fr, FX.seeded.mla9().find(([r]) => r === 'heading-order')[1], 'mla9');
-    await pause(400);
-    check(await fr.evaluate(() => !!document.querySelector('.gp-issue[data-rule="heading-order"] .gp-sbtn')), 'a heading-order issue spanning paragraphs keeps its Checks card and Fix');
+    const orderCard = await until(() => fr.evaluate(() => !!document.querySelector('.gp-issue[data-rule="heading-order"] .gp-sbtn')), 'heading-order Checks card with Fix', 30000).catch(() => false);
+    check(orderCard, 'a heading-order issue spanning paragraphs keeps its Checks card and Fix');
     await fr.click('.gp-issue[data-rule="heading-order"] .gp-sbtn');
     await until(() => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.child(0).textContent === 'Alex Rivera'), 'heading order fixed');
     check(true, 'Fix restores heading order through the shared issues integration');
     for (const fid of ['mla9', 'apa7', 'chicago17']) {
       await load(fr, FX.papers[fid](), fid);
       check(await fr.evaluate(() => GZ_WRITER_CITE.style() === ({ mla: 'mla9', apa: 'apa7', chicago: 'chicago17' })[GZ_WRITER_PAPER.current().format().cite]), `${fid}: citations follow the paper's format`);
-      await pause(400);
+      await pause(400); // past runChecksSoon's 250 ms debounce; a clean paper must stay clean
       const issues = await fr.evaluate(() => GZ_WRITER_ISSUES.list().map(({ source, message, rule }) => ({ source, message, rule })));
       const clean = await fr.evaluate(() => document.querySelectorAll('.gp-issue[data-rule]').length);
       check(clean === 0 && !issues.some((i) => ['format', 'cite'].includes(i.source)), `${fid}: a clean paper has no format or citation issues in Checks (${clean} cards; ${JSON.stringify(issues)})`);
@@ -323,7 +323,7 @@ const HARNESS = `(() => {
     await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let at = 0; v.state.doc.descendants((n, pos) => { if (!at && n.isText && n.text.includes('(Morrison 35)')) at = pos + n.text.indexOf('(Morrison 35)'); }); v.dispatch(v.state.tr.insertText('(Morrison, 42)', at, at + '(Morrison 35)'.length)); });
     await until(() => fr.evaluate(() => [...document.querySelectorAll('.gp-issue')].some((c) => c.textContent.includes('(Morrison 42)'))), 'citation card');
     check(true, 'MLA citation "(Morrison, 42)" gets a card with the fix "(Morrison 42)"');
-    await pause(700);
+    await pause(700); // a second card for the same citation would land in this window
     const duplicates = await fr.evaluate(() => [...document.querySelectorAll('.gp-issue')].filter((c) => c.textContent.includes('(Morrison 42)')).length);
     check(duplicates === 1, `paper format and cite checks share one MLA citation card (${duplicates})`);
     // In the attempt panel, then in Focus (the frame fills the window): the mockup's 1440px view.
@@ -508,7 +508,7 @@ const HARNESS = `(() => {
     check(await d.evaluate(() => GZ_WRITER_PAPER.current().format().id === 'mla9' && document.querySelector('.gp-sheet .gp-hdr').textContent === '1'), '?format=mla9 opens a new MLA document');
     check(await d.evaluate(() => document.querySelector('.gp-top a').textContent === 'Documents'), 'the back link reads Documents');
     check(await d.evaluate(() => { const i = document.querySelector('.gp-top h1 input'); return i && i.getAttribute('aria-label') === 'Title' && i.placeholder === 'Untitled document' && !i.readOnly && document.querySelector('.gp-state').textContent === ''; }), 'its title is a field, Untitled document, and nothing says Saved');
-    await pause(1500);
+    await pause(1500); // past the 800 ms autosave: an untouched document must not save
     await d.close();
     check((await rows()).papers.length === 0 && (await rows()).index.length === 0, 'an untouched new document leaves nothing behind');
 
@@ -541,7 +541,8 @@ const HARNESS = `(() => {
     await d.click('.gp-top h1 input', { clickCount: 3 });
     await d.keyboard.type('My own title');
     await until(() => d.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'title saved');
-    await pause(300);
+    let titleSeen;
+    await until(async () => (titleSeen = (await stored(k2))?.title) === 'My own title', 'typed title in storage', 30000).catch((e) => { throw Error(`${e.message} (last: ${JSON.stringify(titleSeen)})`); });
     rec = await stored(k2);
     check(rec.title === 'My own title' && rec.named === true && await d.evaluate(() => document.querySelector('.gp-top h1 input').value === 'My own title'), 'a title typed in the editor is saved and stays');
     await d.fill('.gp-top h1 input', 'Title still being typed');

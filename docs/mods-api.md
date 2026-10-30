@@ -186,8 +186,8 @@ the call; once dispatched, it runs to its answer or the 15 s timeout. Each broke
 `parts` holds the same data as a theme code's parts, cleaned by `lib/lookparts.js`, which has every field and limit.
 An installed mod's `parts` apply while it is on (and not blocklisted; a development copy only while development mode is on),
 on every browser: a mod with only `parts` and no code is a whole mod, and a code mod's parts apply in Firefox and Safari
-too, where its code can't run. They go where a Look's parts go, including live course tabs, never on quiz or tool pages, nor on a course that wears
-a Look of its own. The student's Look is the base; each mod's parts lay over it in the student's mod order: the first
+too, where its code can't run. They go where a Look's parts go, including live course tabs, never on quiz or tool pages. The
+student's Look is the base, or on a course that wears a Look of its own, that Look; each mod's parts lay over it in the student's mod order: the first
 mod to set a key (`bg`, `anim`, `fx`, `cursor`, `pointer`, `type`, `nav`) wins it whole, and `rules` add up, the Look's first, to 64 in
 all. A mod's background is drawn whatever kind of background the student chose. `glaze.look.override()` layers from
 running code go on top of all of these. Turning the mod off, removing it or reordering applies at once:

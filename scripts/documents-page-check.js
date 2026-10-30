@@ -144,6 +144,12 @@ const check = async (name, test) => {
     // The entry the page was at before Documents opened.
     const mark = (p) => p.evaluate(() => { history.replaceState({ check: 1 }, ''); return history.length; });
     const atMark = (p) => until(() => p.evaluate(() => history.state?.check === 1 && !history.state.gzSettings), 'the tab back at the entry it opened from', 5000);
+    // The bar laid out for a phone: its bottom tabs drawn, with Documents among what shows.
+    const phoneBar = (p) => until(async () => {
+      const t = await p.evaluate(() => { const e = document.getElementById('gz-navbar')?.shadowRoot?.querySelector('.tabs'), b = e?.getBoundingClientRect(); return b ? `${getComputedStyle(e).display} ${b.width}x${b.height} at ${b.y}` : 'no tabs'; });
+      if (!/^flex /.test(t) || / 0x|x0 /.test(t) || !(await item(p, 'glaze:documents').count())) throw Error(`tabs ${t}`);
+      return true;
+    }, 'the phone bar at 640', 30000);
     const openFromBar = async (p) => { await item(p, 'glaze:documents').click(); await until(() => hosted(p), 'the page host'); return shown(p); };
 
     await page.goto(`${ULTRA}/ultra/course`);
@@ -431,7 +437,7 @@ const check = async (name, test) => {
       await page.evaluate((src) => { const r = document.createElement('iframe'); r.id = 'check-rogue'; r.src = src; document.body.append(r); }, PAPERS);
       const rogue = await until(() => framed(page), 'the rogue frame');
       await until(() => rogue.evaluate(() => document.readyState === 'complete'), 'loaded');
-      await pause(1500);
+      await pause(1500); // a window for a claim or veil lift that must not come
       assert.deepEqual(await rogue.evaluate(() => [document.documentElement.style.getPropertyValue('opacity'), document.body.inert]), ['0', true]);
       const r = await rogue.evaluate((k) => chrome.runtime.sendMessage({ type: 'glaze:writerPapers', op: 'save', args: [k, { doc: { type: 'doc', content: [{ type: 'paragraph' }] } }] }), PA.newKey());
       assert.deepEqual(r, { ok: false, error: 'sender' });
@@ -440,7 +446,7 @@ const check = async (name, test) => {
     });
     await check('ultra at 640: Documents and a document fill the page above the bar', async () => {
       await page.setViewportSize({ width: 640, height: 860 });
-      await pause(300);
+      await phoneBar(page);
       f = await openFromBar(page);
       const h = await hosted(page), b = await item(page, 'glaze:documents').boundingBox();
       console.log(`     640: page host ${JSON.stringify(h)}, bar item ${JSON.stringify(b)}`);
@@ -484,7 +490,7 @@ const check = async (name, test) => {
         });
         await check(`${site} at 640`, async () => {
           await p.setViewportSize({ width: 640, height: 860 });
-          await pause(300);
+          await phoneBar(p);
           await shoot(p, await openFromBar(p), `inpage-${site}-640`);
           await p.evaluate(() => history.back());
           await closed(p);

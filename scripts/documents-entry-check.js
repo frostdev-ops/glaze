@@ -92,7 +92,8 @@ const check = async (name, test) => {
       await popup.setViewportSize({ width: 360, height: 900 });
       await popup.goto(`${base}/popup.html${query}`);
       await until(() => popup.evaluate(() => !!document.querySelector('#look-name').textContent && !!document.querySelector('#motion-name').textContent), 'popup drawn');
-      await pause(250);
+      // At rest: its fonts in and the tiles' 0.2s transitions run out, before sizes and pictures are read.
+      await until(async () => { const r = await popup.evaluate(() => `fonts ${document.fonts.status}, ${document.getAnimations().filter((a) => a.playState === 'running').length} running`); if (r !== 'fonts loaded, 0 running') throw Error(r); return true; }, 'popup at rest', 30000);
     };
     const pill = () => popup.getByRole('button', { name: 'Documents', exact: true });
     // The popup's natural height: its body's, as the browser sizes the popup to it.
