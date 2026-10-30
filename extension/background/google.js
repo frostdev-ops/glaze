@@ -103,6 +103,8 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
     const fails = (f) => async (...a) => {
       try { return await f(...a); } catch (e) { if (e instanceof Fail) return { ok: false, why: e.why }; throw e; }
     };
+    // A sign-in that failed while the browser knows it is offline: 'network', never a reason to connect again.
+    const offline = () => globalThis.navigator?.onLine === false;
 
     // Safari's handler: one google.* message, its answer or null.
     const native = (message) => Promise.resolve().then(() => env.native(message)).catch(() => null);
@@ -135,11 +137,17 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const details = { url, interactive };
       // Google's prompt=none answer can take a page or two: Chromium waits for it rather than giving up at the first load.
       if (!env.firefox && !interactive) Object.assign(details, { abortOnLoadForNonInteractive: false, timeoutMsForNonInteractive: 10000 });
-      try { return await i.launchWebAuthFlow(details); } catch { throw new Fail(interactive ? 'cancel' : 'auth'); }
+      try { return await i.launchWebAuthFlow(details); } catch { throw new Fail(offline() ? 'network' : interactive ? 'cancel' : 'auth'); }
+    };
+    // The browser's redirect URL; the identity API is gone with its permission (Firefox's add-on settings can take it back).
+    const own = () => {
+      const i = id();
+      if (typeof i?.getRedirectURL !== 'function') throw new Fail('permission');
+      return i.getRedirectURL();
     };
     // Google accepts no redirect on Firefox's own domain; Firefox's loopback form for this add-on is the one it allows.
     const redirect = () => {
-      const r = id().getRedirectURL();
+      const r = own();
       return env.firefox ? `http://127.0.0.1/mozoauth2/${new URL(r).hostname.split('.')[0]}` : r;
     };
 
@@ -148,7 +156,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       if (typeof i?.getAuthToken !== 'function') throw new Fail('permission');
       let r;
       try { r = await i.getAuthToken({ interactive, scopes: c().scopes }); } catch (e) {
-        throw new Fail(/support/i.test(String(e?.message || e)) ? 'unsupported' : interactive ? 'cancel' : 'auth');
+        throw new Fail(/support/i.test(String(e?.message || e)) ? 'unsupported' : offline() ? 'network' : interactive ? 'cancel' : 'auth');
       }
       const token = typeof r === 'string' ? r : r?.token;
       if (typeof token !== 'string' || !token) throw new Fail('auth');
@@ -171,7 +179,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
         return grant(answer, state, now());
       };
       let g = null;
-      if (hint) g = await once('none', false).catch((e) => { if (!interactive || e.why === 'state' || e.why === 'connect') throw e; return null; });
+      if (hint) g = await once('none', false).catch((e) => { if (!interactive || ['state', 'connect', 'network', 'permission'].includes(e.why)) throw e; return null; });
       else if (!interactive) throw new Fail('auth');
       g ||= await once(hint ? '' : 'select_account', true);
       held = g;
@@ -318,7 +326,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       still();
       if (!base) return { ok: false, why: 'offline' };
       const state = O.random();
-      const url = await launch(pickerUrl(base, { token: t, state, redirect: id().getRedirectURL(), key: c().apiKey, appId: c().appId }), true);
+      const url = await launch(pickerUrl(base, { token: t, state, redirect: own(), key: c().apiKey, appId: c().appId }), true);
       still();
       return { ok: true, files: picked(url, state) };
     });
