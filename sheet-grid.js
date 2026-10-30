@@ -92,7 +92,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
   const LISTS = [...DAYS, ...MONTHS];
   const caseOf = (s) => (s === s.toUpperCase() ? 'up' : s === s.toLowerCase() ? 'low' : 'cap');
   const inCase = (s, k) => (k === 'up' ? s.toUpperCase() : k === 'low' ? s : s[0].toUpperCase() + s.slice(1));
-  const TAIL = /^(.*?)(\d+)(\D*)$/;
+  const TAIL = /^(.*?)(-?\d+)(\D*)$/;
   const steady = (xs) => xs.every((x, i) => i === 0 || Math.abs(x - xs[i - 1] - (xs[1] - xs[0])) < 1e-12);
   // A source column or row (cells or null) and how many cells come after it. o: back (up or left: the series runs the other
   // way, the nearest cell first), dr and dc (one step of the fill's way, for moving formulas), isDate(cell). → [{ cell, from }]
@@ -120,8 +120,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         const ok = L === 1 || at.every((x, i) => i === 0 || (x - at[i - 1] + list.length) % list.length === step);
         if (ok) { const k = caseOf(src[0].v); value = (p) => inCase(list[(((at[0] + step * p) % list.length) + list.length) % list.length], k); }
       } else if (m && m.every((x) => x && x[1] === m[0][1] && x[3] === m[0][3])) {
-        const nums = m.map((x) => Number(x[2])), width = m[0][2].length, step = L === 1 ? 1 : nums[1] - nums[0];
-        if (L === 1 || steady(nums)) value = (p) => `${m[0][1]}${String(Math.abs(nums[0] + step * p)).padStart(width, '0')}${m[0][3]}`;
+        const nums = m.map((x) => Number(x[2])), width = m[0][2].replace(/^-/, '').length, step = L === 1 ? 1 : nums[1] - nums[0];
+        if (L === 1 || steady(nums)) value = (p) => { const n = nums[0] + step * p; return `${m[0][1]}${n < 0 ? '-' : ''}${String(Math.abs(n)).padStart(width, '0')}${m[0][3]}`; };
       }
     }
     const out = [];
