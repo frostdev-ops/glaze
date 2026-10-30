@@ -147,6 +147,11 @@ test('helper uninstall documents removal of otherwise empty Windows host keys', 
   assert.match(plain(read('mcp/README.md')), /otherwise empty host key/);
 });
 
+test("helper uninstall says a helper already running stops only when the browser restarts", () => {
+  const section = plain(read('mcp/README.md').split('\n## Uninstall\n')[1]?.split('\n## ')[0] || '');
+  assert.match(section, /Restart your browser to stop a helper that is still running/);
+});
+
 
 test('Forget all apps clears activity in every agent privacy page', () => {
   for (const file of ['PRIVACY.md', 'docs/privacy.md', 'docs/agents.md', 'mcp/README.md']) {

@@ -940,6 +940,10 @@ test('the command: setup, doctor and uninstall through the same context, and the
   const un = io(ctx);
   assert.equal(await CLI.main(['uninstall'], un), 0, un.err());
   assert.equal(fs.existsSync(path.join(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts', `${HOST}.json`)), false);
+  assert.match(un.out(), /^Restart your browser to stop a helper that is still running\.$/m, 'a host already running outlives its files');
+  const again = io(ctx);
+  assert.equal(await CLI.main(['uninstall'], again), 0, again.err());
+  assert.doesNotMatch(again.out(), /Restart/, 'nothing removed, nothing to restart for');
   const after = io(ctx);
   assert.equal(await CLI.main(['doctor'], after), 1);
 });

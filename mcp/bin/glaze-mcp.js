@@ -114,6 +114,8 @@ const main = async (args, io = {}) => {
         if (m.args.length) { stderr.write(`glaze-mcp: unknown option ${m.args[0]}\n${USAGE}`); return 2; }
         const r = await require('../lib/install.js').uninstall(ctx);
         stdout.write(r.removed.length ? `Removed ${r.removed.length} glaze-mcp files and keys.\n` : 'Nothing of glaze-mcp\'s to remove.\n');
+        // A host the browser started before this keeps running until the browser ends its port.
+        if (r.removed.length) stdout.write('Restart your browser to stop a helper that is still running.\n');
         for (const k of r.kept) stdout.write(`Left alone (not glaze-mcp's own copy): ${k}\n`);
         return 0;
       }
