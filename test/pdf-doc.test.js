@@ -415,7 +415,7 @@ test('bake refuses what would break or unlock a file, or pass the limits', async
   await assert.rejects(pdf.bake(new Uint8Array(50e6 + 1), turn), refused('PdfTooLargeError'));
   const many = F.write(F.pagesOf(Array.from({ length: 498 }, () => ({}))).objects);
   await assert.rejects(pdf.bake(three, [{ op: 'merge', bytes: many }]), refused('PdfTooManyPagesError'));
-  assert.equal((await pdf.bake(three, [{ op: 'merge', bytes: many }, { op: 'delete', pages: [0] }])).pages, 500, 'exactly the limit');
+  assert.equal((await pdf.bake(three, [{ op: 'delete', pages: [0] }, { op: 'merge', bytes: many }])).pages, 500, 'delete first to stay within the limit throughout');
   await assert.rejects(pdf.bake(three, [{ op: 'delete', pages: [0, 1, 2] }]), RangeError);
   await assert.rejects(pdf.bake(three, { op: 'delete' }), TypeError);
 });
