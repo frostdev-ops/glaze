@@ -398,24 +398,24 @@ const checkRun = async () => {
 // ---- Cleanup: everything the check started or wrote, also on a signal or a crash ------------------------------------
 let cleaned = false, cleaning = null;
 const owned = new Map();
-const processes = () => new Map(execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8' }).split('\n').flatMap((l) => {
-  const m = /^\s*(\d+)\s+(\d+)\s+(.+)$/.exec(l);
-  return m ? [[+m[1], { ppid: +m[2], command: m[3] }]] : [];
+const processes = () => new Map(execFileSync('ps', ['-axo', 'pid=,ppid=,lstart=,command='], { encoding: 'utf8' }).split('\n').flatMap((l) => {
+  const m = /^\s*(\d+)\s+(\d+)\s+((?:\S+\s+){4}\S+)\s+(.+)$/.exec(l);
+  return m ? [[+m[1], { ppid: +m[2], start: m[3].replace(/\s+/g, ' '), command: m[4] }]] : [];
 }));
-// Capture descendants before their parent leaves, then retain their exact command after reparenting. Never select a
+// Capture descendants before their parent leaves; their start time survives reparenting and exec. Never select a
 // browser by its name, or a helper by its script alone: other checks and the owner's Firefox may be running.
 const remaining = () => {
   const table = processes();
-  for (const p of [ff, ...agents]) if (p && p.exitCode === null && p.signalCode === null && table.has(p.pid)) owned.set(p.pid, table.get(p.pid).command);
-  for (const { pid } of started()) if (table.has(pid) && isHelper(pid)) owned.set(pid, table.get(pid).command);
+  for (const p of [ff, ...agents]) if (p && p.exitCode === null && p.signalCode === null && table.has(p.pid) && !owned.has(p.pid)) owned.set(p.pid, table.get(p.pid).start);
+  for (const { pid } of started()) if (table.has(pid) && isHelper(pid) && !owned.has(pid)) owned.set(pid, table.get(pid).start);
   let added;
   do {
     added = false;
-    for (const [pid, p] of table) if (!owned.has(pid) && owned.has(p.ppid) && owned.get(p.ppid) === table.get(p.ppid)?.command) {
-      owned.set(pid, p.command); added = true;
+    for (const [pid, p] of table) if (owned.get(pid) !== p.start && owned.has(p.ppid) && owned.get(p.ppid) === table.get(p.ppid)?.start) {
+      owned.set(pid, p.start); added = true;
     }
   } while (added);
-  return [...owned].filter(([pid, cmd]) => table.get(pid)?.command === cmd).map(([pid]) => pid);
+  return [...owned].filter(([pid, start]) => table.get(pid)?.start === start).map(([pid]) => pid);
 };
 const signalOwned = (signal) => {
   for (const pid of remaining()) try { process.kill(pid, signal); } catch (e) { if (e.code !== 'ESRCH') throw e; }
