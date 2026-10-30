@@ -189,6 +189,14 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
     ok(log.auth.length === 2, 'the held token served both picks: no new sign-in');
     await noToken('after picking');
 
+    // A Disconnect the worker didn't carry out is no Disconnect.
+    await sw.evaluate(() => { globalThis.__gzDisconnect = google.disconnect; google.disconnect = async () => ({ ok: false, why: 'network' }); });
+    await page.locator('#gdrive-disconnect').click();
+    await until(async () => (await page.locator('#hint').textContent()).includes("Couldn't disconnect"), 'failed disconnect');
+    ok(await page.locator('#hint').evaluate((h) => h.classList.contains('err')), 'a failed Disconnect says so, as an error');
+    ok(await page.locator('#gdrive-disconnect').isVisible() && (await page.locator('#gdrive-who').textContent()) === 'student@school.edu', 'and the account and Disconnect stay');
+    await sw.evaluate(() => { google.disconnect = __gzDisconnect; });
+
     // Disconnect.
     await page.locator('#gdrive-disconnect').click();
     await until(async () => await page.locator('#gdrive-connect').isVisible(), 'disconnected');

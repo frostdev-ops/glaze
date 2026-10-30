@@ -242,12 +242,16 @@ test('disconnect revokes the grant, clears the cached tokens, gives identity bac
   await assert.rejects(w.g.token(), (e) => e.why === 'connect', 'the token is gone from memory');
   assert.deepEqual(w.log.permRemoved, [{ permissions: ['identity'] }]);
 
-  // Calendar sync connected: its permission and Chrome's cache stay.
-  const k = harness({ keep: true });
-  await k.g.connect();
-  await k.g.disconnect();
-  assert.deepEqual([k.log.cleared, k.log.permRemoved], [0, []]);
-  assert.deepEqual(k.local, {});
+  // Calendar sync connected: the grant they share isn't revoked, and its permission and Chrome's cache stay.
+  for (const flow of ['chrome', 'web']) {
+    const k = harness({ flow, keep: true });
+    await k.g.connect();
+    assert.deepEqual(await k.g.disconnect(), { ok: true, revoked: false, had: false });
+    assert.ok(!k.log.fetch.some((f) => f.url === G.REVOKE), `${flow}: nothing revoked while Calendar uses the grant`);
+    assert.deepEqual([k.log.cleared, k.log.permRemoved], [0, []]);
+    assert.deepEqual(k.local, {});
+    await assert.rejects(k.g.token(), (e) => e.why === 'connect', `${flow}: Drive's own state is gone`);
+  }
 });
 
 test('the picker\'s answer: our state, files with an id, a name and a type, or a cancel', () => {
@@ -265,6 +269,7 @@ test('the picker\'s answer: our state, files with an id, a name and a type, or a
   assert.equal(why(at({ state: s, action: 'picked', files: '[' })), 'picker');
   assert.equal(why(at({ state: s, action: 'picked', files: '[]' })), 'picker');
   assert.equal(why(at({ state: s, action: 'picked', files: JSON.stringify([{ ...file, id: '../x' }]) })), 'picker');
+  for (const id of [undefined, null, 123, true, ['abc'], { id: 'abc' }]) assert.equal(why(at({ state: s, action: 'picked', files: JSON.stringify([{ ...file, id }]) })), 'picker', `id ${JSON.stringify(id)}`);
   assert.equal(why(at({ state: s, action: 'picked', files: JSON.stringify([{ ...file, mimeType: 'pdf' }]) })), 'picker');
   assert.equal(why(at({ state: s, action: 'picked', files: JSON.stringify([{ ...file, name: '' }]) })), 'picker');
   assert.equal(why(at({ state: s, action: 'picked', files: JSON.stringify(Array(101).fill(file)) })), 'picker');
