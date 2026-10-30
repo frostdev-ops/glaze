@@ -353,7 +353,12 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // The one gate for changes. A workbook from memory is read-only (Save to Documents makes the copy to edit): every path to
     // the workbook asks here first (apply, undo and redo, a cell's commit, Replace), and so do the editor, a tab's rename, a
     // paste and a number format before they open or build cells.
-    const writable = () => { if (!o.memory) return true; say(t('Save to Documents to edit.')); return false; };
+    const writable = () => {
+      if (!o.memory) return true;
+      const text = t('Save to Documents to edit.');
+      if (said.textContent !== text) say(text);
+      return false;
+    };
 
     // ---- the sheet's room: its used range and a margin, grown as it is scrolled or reached (a page can't be 17.9M px)
     const rooms = new Map();
