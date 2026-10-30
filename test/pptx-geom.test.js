@@ -157,6 +157,10 @@ test('arcTo starts on its ellipse at the pen, so the pen and the start angle pla
 test('arcTo angles are angles seen from the ellipse centre, not the ellipse parameter', () => {
   // A 2:1 ellipse, centre (2e6, 1e6), from angle 0 through 45°: the end is on the 45° ray from the centre,
   // (2e6, 1e6) + (2e6, 2e6) / √5. Read as the parameter it would be (2e6, 1e6) + (√2e6, √2e6 / 2) = (3414214, 1707107).
+  // PowerPoint 16.114.1, local PDF export of this custGeom with path w=4000000 h=2000000, put the endpoint at
+  // (2894427.20, 1894427.00) EMU (PDF coordinates translated back to the shape origin), confirming the centre angle.
+  // Apache POI documents the same conversion in ArcToCommand.convertOoxml2AwtAngle:
+  // https://github.com/apache/poi/blob/trunk/poi/src/main/java/org/apache/poi/sl/draw/geom/ArcToCommand.java
   assert.equal(one([moveTo(4000000, 1000000), arcTo(2000000, 1000000, 0, 'cd8')], 4000000, 2000000),
     'M 4000000 1000000 A 2000000 1000000 0 0 1 2894427 1894427');
 });
@@ -211,6 +215,19 @@ const arcs = (d) => {
   }
   return out;
 };
+
+test('large and negative swings keep their sweep and cover at most one turn', () => {
+  for (const degrees of [179, 181, 359, 360, 720, -179, -181, -359, -360, -720]) {
+    const d = one([moveTo(4000000, 2000000), arcTo(2000000, 2000000, 0, degrees * 60000)], 4000000, 4000000);
+    const parts = arcs(d);
+    near(parts.reduce((sum, a) => sum + a.turn, 0), Math.max(-360, Math.min(360, degrees)), 0.001, `${degrees}°`);
+    for (const a of parts) { near(a.x, 2000000, 2); near(a.y, 2000000, 2); }
+    for (const [c, ...n] of segments(d)) if (c === 'A') {
+      assert.equal(n[3], 0, 'subdivision keeps the large-arc flag clear');
+      assert.equal(n[4], degrees > 0 ? 1 : 0);
+    }
+  }
+});
 
 test('every preset arc ends on its own ellipse and turns at most a quarter, so its SVG flags are unambiguous', () => {
   for (const prst of PRESETS) for (const [w, h] of SIZES) for (const avLst of [undefined, ADJUSTED[prst]]) {
@@ -294,6 +311,30 @@ test('every non-default adjust changes its preset', () => {
     const [w, h] = SIZES[0];
     assert.notDeepEqual(G.path({ prst, avLst, w, h }), G.path({ prst, w, h }), prst);
   }
+});
+
+test('preset adjust lists match objects, including negative callout positions and clamped corners', () => {
+  for (const [prst, avLst] of Object.entries(ADJUSTED)) {
+    const list = Object.entries(avLst).map(([name, n]) => gd(name, `val ${n}`));
+    assert.deepEqual(G.path({ prst, avLst, w: 2000000, h: 1000000 }), G.path({ prst, avLst: list, w: 2000000, h: 1000000 }), prst);
+  }
+  const at = (avLst) => G.path({ prst: 'roundRect', avLst, w: 2000000, h: 1000000 });
+  assert.deepEqual(at([gd('adj', 'val -1')]), at({ adj: 0 }));
+  assert.deepEqual(at([gd('adj', 'val 999999')]), at({ adj: 50000 }));
+  assert.deepEqual(at({ notAnAdjust: 999999, w: 0 }), at());
+});
+
+test('zero and tiny shapes retain finite whole-EMU output and one-EMU lines', () => {
+  for (const [w, h] of [[0, 0], [0, 10000000], [1, 10000000], [10000000, 1], [1, 1]]) for (const prst of PRESETS) {
+    const out = G.path({ prst, w, h });
+    for (const p of out.paths) {
+      assert.doesNotMatch(p.d, /NaN|Infinity/, `${prst} ${w}×${h}`);
+      for (const [, ...n] of segments(p.d)) assert.ok(n.every(Number.isInteger), `${prst}: whole EMU`);
+    }
+    for (const n of Object.values(out.rect)) assert.ok(Number.isFinite(n) && Number.isInteger(n));
+    for (const c of out.cxn) assert.ok(Number.isInteger(c.x) && Number.isInteger(c.y) && Number.isFinite(c.ang));
+  }
+  assert.equal(G.path({ prst: 'line', w: 1, h: 1 }).paths[0].d, 'M 0 0 L 1 1');
 });
 
 test('the multi-part presets keep each part\'s fill and stroke', () => {
@@ -384,6 +425,13 @@ test('custGeom: paths sharing a coordinate size evaluate their guides once', () 
   const out = G.custom(model, 1000, 2000);
   assert.ok(out.paths.every((p) => p.d === 'M 500 1000'));
   assert.equal(evaluations, 2, 'one shape scope and one shared path scope, independent of the number of paths');
+});
+
+test('custGeom: every fill mode and XML boolean stroke value survives', () => {
+  const fills = ['norm', 'none', 'lighten', 'lightenLess', 'darken', 'darkenLess'];
+  const out = G.custom({ pathLst: fills.map((fill, i) => ({ fill, stroke: [false, 0, 'false', '0', true, '1'][i] })) }, 1, 1);
+  assert.deepEqual(out.paths.map((p) => p.fill), fills);
+  assert.deepEqual(out.paths.map((p) => p.stroke), [false, false, false, false, true, true]);
 });
 
 // ---- snapshots -----------------------------------------------------------------------------------------------------
