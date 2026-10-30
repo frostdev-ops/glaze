@@ -79,3 +79,12 @@ test('authorization, throttle and server failures stop reply fanout for this rea
     assert.equal(asked.length, 2, `HTTP ${status} ends the batch`);
   }
 });
+
+test('a query-only navigation starts a live context watcher for newly opened boxes', async () => {
+  const h = harness(); h.api.watch(h.box(), h.X); await h.flush();
+  const before = h.sent.length;
+  h.sandbox.location.search = '?view=discussions';
+  h.api.watch(h.box(), h.X); await h.flush();
+  assert.ok(h.sent.length > before, 'a new box must receive context on the new query');
+  assert.equal(h.sent.at(-1).context.user.id, '_42_1');
+});

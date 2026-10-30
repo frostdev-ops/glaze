@@ -93,3 +93,23 @@ test('the store\'s parts never reach the AI', async () => {
     assert.doesNotMatch(JSON.stringify([W.clean(ctx), input.context]), /bb\.school|_42_1|_101_1|_9_1|_12_1|new-message/, box.kind);
   }
 });
+
+test('a journal prompt reaches the AI review context from its native box', async () => {
+  const [journal] = tab({ pathname: JOURNAL }).boxes('ultra-writer-journal.html');
+  await flush();
+  const review = require('../lib/ai/tasks/writer-review.js');
+  const input = review.task.input({ text: 'The river image stayed with me.', mode: 'compose', kind: 'journal', context: journal.context() });
+  assert.equal(input.context.prompt, journal.context().prompt);
+  const request = review.task.build(input, { text: { request: (r) => r } });
+  assert.ok(request.context.some((b) => b.text === journal.context().prompt));
+  assert.doesNotMatch(JSON.stringify(request.context), /bb\.school|_42_1|_101_1|_12_1/);
+  assert.equal(W.clean({ prompt: { text: '<p>Read carefully.</p>' } }).prompt, 'Read carefully.');
+});
+
+test('a second student in the same browser gets a separate discussion store', async () => {
+  const [a] = tab({ pathname: DISCUSSION }).boxes('ultra-writer-discussion.html');
+  const [b] = tab({ pathname: DISCUSSION, me: async () => '_43_1' }).boxes('ultra-writer-discussion.html');
+  await flush();
+  assert.equal(keyOf(b), 'writer:sources:bb.school.test|_43_1|_101_1|_9_1');
+  assert.notEqual(keyOf(a), keyOf(b));
+});

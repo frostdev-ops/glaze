@@ -15,12 +15,12 @@ const frame = (options = {}) => {
   const view = { dom: new El('div', doc), composing: false, hasFocus: () => true, focus() {}, coordsAtPos: () => ({ left: 10, top: 10, bottom: 25 }),
     dispatch(tr) { const prev = this.state; this.state = this.state.apply(tr); for (const p of hooks) p.spec.view?.().update?.(this, prev); } };
   const issues = { ...I.bind(view), look: I.look };
-  const context = options.context || {};
+  let context = options.context || {};
   const defaults = require('../defaults.js').GZ_DEFAULTS.writer;
   let preferences = { ...defaults }, follow;
   const settings = { now: () => preferences, clean: () => defaults, follow: (fn) => { follow = fn; } };
   const configure = (patch) => { const was = preferences; preferences = { ...was, ...patch }; follow(preferences, was); };
-  const api = { t: (k) => k, kind: () => 'reply', context: () => context, slot: () => null,
+  const api = { t: (k) => k, kind: () => options.kind || 'reply', context: () => context, slot: () => null,
     plugin: (p) => hooks.push(p), on: (k, f) => { events[k] = f; } };
   const makePort = () => { const p = { sent: [], postMessage(m) { this.sent.push(m); }, start() {}, close() { this.closed = true; }, terminate() { this.terminated = true; }, addEventListener() {} }; ports.push(p); return p; };
   const ctx = vm.createContext({ GZ_WRITER_FRAME: api, GZ_WRITER_SETTINGS: settings, GZ_WRITER_PROOF: proof, GZ_WRITER_ISSUES: issues, GZ_PM,
@@ -37,8 +37,46 @@ const frame = (options = {}) => {
   const run = async (ms) => { for (const [id, t] of [...timers]) if (t.ms === ms) { timers.delete(id); t.fn(); } await flush(); };
   const reply = (p, m) => p.onmessage?.({ data: m });
   const lint = (p = ports.at(-1)) => p.sent.findLast((m) => m.op === 'lint');
-  return { proof, view, issues, ports, run, reply, lint, life, events, doc, configure };
+  return { proof, view, issues, ports, run, reply, lint, life, events, doc, configure,
+    context: (next, merge = false) => {
+      if (merge) { for (const k of Object.keys(context)) if (!Object.hasOwn(next, k)) delete context[k]; Object.assign(context, next); }
+      else context = next;
+      events.context(context);
+    } };
 };
+
+const ruling = async (context) => {
+  const f = frame({ html: '<p></p>', kind: 'journal', context }); await flush();
+  const plugin = f.view.state.plugins.find((p) => p.spec.key === P.key);
+  for (const ch of 'Their going home. ') {
+    const { from, to } = f.view.state.selection;
+    if (!plugin.props.handleTextInput(f.view, from, to, ch)) f.view.dispatch(f.view.state.tr.insertText(ch));
+  }
+  let resolve;
+  f.proof.decide = () => new Promise((r) => { resolve = r; });
+  await f.run(150);
+  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [{ start: 0, end: 5, kind: 'Grammar', problem: 'Their', suggestions: [{ k: 0, t: "They're" }] }] });
+  assert.equal(typeof resolve, 'function');
+  return { f, finish: async () => { resolve('apply'); await flush(); } };
+};
+
+test('journal source identity re-sends cannot discard an in-flight proofing ruling', async () => {
+  for (const merge of [false, true]) {
+    const own = { prompt: 'Reading Journal' }, { f, finish } = await ruling(own);
+    const full = { ...own, school: 'bb.school.test', course: { id: '_101_1' }, item: { id: '_12_1' }, user: null };
+    f.context(full, merge);
+    f.context({ ...full, user: { id: '_42_1' } }, merge);
+    await finish();
+    assert.equal(f.view.state.doc.textContent, "They're going home. ");
+  }
+});
+
+test('proofing rejects a ruling when the same context object gains a different prompt', async () => {
+  const { f, finish } = await ruling({ prompt: 'Reading Journal' });
+  f.context({ prompt: 'A different journal prompt' }, true);
+  await finish();
+  assert.equal(f.view.state.doc.textContent, 'Their going home. ');
+});
 
 test('a first lint after idle reconnect is sent only once', async () => {
   const f = frame(); await flush();
