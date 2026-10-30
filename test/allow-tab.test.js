@@ -250,12 +250,13 @@ test('worker: only Glaze\'s Allow frame, in a tab, for the host it shows and the
 
 // ---- embedded Settings ---------------------------------------------------------------------------------------------------
 // Settings framed in a school's tab, claimed with its ticket (restored from session storage, as after the worker slept).
-const settingsFrame = (more = {}) => ({ id: ID, url: `${EXT}/options.html#study/todo`, origin: EXT, frameId: 4, documentId: 'doc-s', tab: { id: 7, index: 2 }, ...more });
+const settingsFrame = (more = {}) => ({ id: ID, url: `${EXT}/options.html#study/todo`, origin: EXT, frameId: 4, documentId: 'doc-s', tab: { id: 7, index: 2, windowId: 9 }, ...more });
 test('worker: claimed embedded Settings opens Settings\' own tab at a section, beside its tab; nothing else does', async () => {
   const w = worker({ session: { 'settingsFrame:7': { frameId: 4, documentId: 'doc-s' } } });
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(await w.send({ type: 'glaze:settings-tab', hash: '#study/todo' }, settingsFrame()), { ok: true });
-  assert.deepEqual(w.created.map(({ url, openerTabId, index }) => ({ url, openerTabId, index })), [{ url: `${EXT}/options.html#study/todo`, openerTabId: 7, index: 3 }]);
+  // In the frame's own window: Chrome refuses an opener from another window, and the student may have switched since.
+  assert.deepEqual(w.created.map(({ url, openerTabId, index, windowId }) => ({ url, openerTabId, index, windowId })), [{ url: `${EXT}/options.html#study/todo`, openerTabId: 7, index: 3, windowId: 9 }]);
   for (const [m, s] of [
     [{ type: 'glaze:settings-tab', hash: '#study/todo' }, settingsFrame({ frameId: 5 })], // a frame that never claimed
     [{ type: 'glaze:settings-tab', hash: '#study/todo' }, settingsFrame({ documentId: 'doc-other' })],
@@ -265,6 +266,29 @@ test('worker: claimed embedded Settings opens Settings\' own tab at a section, b
     [{ type: 'glaze:settings-tab', hash: '#a?b=c' }, settingsFrame()],
   ]) assert.deepEqual(await w.send(m, s), { ok: false }, JSON.stringify([m, s]));
   assert.equal(w.created.length, 1);
+});
+
+// A Glaze page framed in a site with no Settings claim of its own (Writer, the Notes share panel) asks the worker for Settings
+// at one of a few sections: Safari kills the page when such a frame calls tabs itself.
+test('worker: a framed Glaze page opens Settings at an allowed section beside its tab; sites and other sections get nothing', async () => {
+  const w = worker();
+  const writer = { id: ID, url: `${EXT}/writer.html?k=1`, origin: EXT, frameId: 6, tab: { id: 7, index: 2, windowId: 9 } };
+  const panel = { ...writer, url: `${EXT}/sharing/quick.html` };
+  assert.deepEqual(await w.send({ type: 'glaze:settings-at', hash: '#ai/setup' }, writer), { ok: true });
+  assert.deepEqual(await w.send({ type: 'glaze:settings-at', hash: '#sharing/sessions' }, panel), { ok: true });
+  assert.deepEqual(w.created.map(({ url, openerTabId, index, windowId }) => ({ url, openerTabId, index, windowId })), [
+    { url: `${EXT}/options.html#ai/setup`, openerTabId: 7, index: 3, windowId: 9 },
+    { url: `${EXT}/options.html#sharing/sessions`, openerTabId: 7, index: 3, windowId: 9 },
+  ]);
+  for (const [m, s] of [
+    [{ type: 'glaze:settings-at', hash: '#backup/notes' }, writer], // not a section a framed page links to
+    [{ type: 'glaze:settings-at', hash: 'javascript:alert(1)' }, writer],
+    [{ type: 'glaze:settings-at' }, writer],
+    [{ type: 'glaze:settings-at', hash: '#ai/setup' }, { ...writer, url: 'https://school.instructure.com/courses/1' }],
+    [{ type: 'glaze:settings-at', hash: '#ai/setup' }, { ...writer, origin: 'https://school.instructure.com' }],
+    [{ type: 'glaze:settings-at', hash: '#ai/setup' }, { ...writer, id: 'other' }],
+  ]) assert.deepEqual(await w.send(m, s), { ok: false }, JSON.stringify([m, s]));
+  assert.equal(w.created.length, 2);
 });
 
 test('worker: claimed Settings can carry legacy section hashes into its own tab', async () => {
@@ -340,13 +364,13 @@ test('embedded Settings without the permissions API (Firefox): a control that ne
   assert.deepEqual(s.posted, [{ gzSettings: 'close' }]);
 });
 
-test('embedded Settings with the APIs (Chrome): reach asks from the frame (no way out), and its own tab opens as before', async () => {
+test('embedded Settings with the APIs (Chrome, Safari): reach asks from the frame (no way out); its own tab opens through the worker, never the frame\'s tabs API', async () => {
   const s = embeddedSettings({ permissions: true, tabs: true });
   assert.equal(s.g.GZ_SITE.elsewhere, undefined);
   for (const f of s.g.$('#embed-tab').listeners.click || []) f({ isTrusted: true });
   await settle();
-  assert.deepEqual(s.created, [{ url: `${EXT}/options.html#look/palette` }]);
-  assert.deepEqual(s.sent.filter((m) => m.type === 'glaze:settings-tab'), []);
+  assert.deepEqual(s.created, [], 'Safari kills the page\'s process when a frame in it calls tabs');
+  assert.deepEqual(s.sent.filter((m) => m.type === 'glaze:settings-tab'), [{ type: 'glaze:settings-tab', hash: '#look/palette' }]);
   assert.deepEqual(s.posted, [{ gzSettings: 'close' }]);
 });
 
