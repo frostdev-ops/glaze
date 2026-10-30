@@ -201,3 +201,33 @@ test('the grid uses its kind\'s packed version for submit and before a file repl
   await surface.importFile({ name: 'new.pdf' });
   assert.deepEqual(calls.versions, [[KEY, 'sending'], [KEY, 'import']]);
 });
+
+// The page sizes the frame from what it hears (features/writer.js view, height): a compact frame follows the paper's
+// height reports (writer.js), never under 40 px. Hiding the paper for a viewer (:root[data-doc], writer-paper.css) makes
+// its next report the 40 px floor, so the page hears the full view before the paper is hidden, not once the viewer is
+// built: else the frame folds to 40 px while the grid draws (writer-kinds-check: the grid's rows gone after it showed).
+test('the page hears the full view before the paper is hidden for a viewer', async () => {
+  const said = [];
+  let built, hiddenSaid = null;
+  const el = () => ({ dataset: {}, append() {}, remove() {}, addEventListener() {} });
+  const root = el();
+  root.dataset = new Proxy({ view: 'compact' }, { set: (o, k, v) => { if (k === 'doc' && hiddenSaid === null) hiddenSaid = said.map((m) => `${m.type}:${m.full}`); o[k] = v; return true; } });
+  const document = { documentElement: root, body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: el };
+  const P = PA.open(store(), () => Date.now());
+  await P.save(KEY, { kind: 'sheet', doc: null });
+  const DK = require('../lib/doc-kinds.js');
+  const ctx = vm.createContext({ console: { error() {} }, document, GZ_WRITER_PAPERS: { open: () => P },
+    GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], view: () => new Promise((ok) => { built = ok; }) }) },
+    GZ_WRITER_FRAME: { t: (s) => s, say: (m) => said.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ sheets: true }) },
+    GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'writer-kinds.js'), 'utf8'), ctx);
+  const paper = { key: () => KEY, context: () => ({}), paper: () => ({}) };
+  const mounting = ctx.GZ_WRITER_KINDS.mount('sheet', KEY, paper);
+  for (let i = 0; i < 50 && !built; i++) await new Promise((r) => setImmediate(r));
+  assert.equal(typeof built, 'function', 'the viewer is being built');
+  assert.equal(root.dataset.doc, 'sheet', 'the paper is hidden while the viewer is built');
+  assert.deepEqual(hiddenSaid, ['view:true'], 'the page was told the frame is full before the paper was hidden');
+  built({ save: async () => true, file: async () => null, dispose() {} });
+  assert.ok(await mounting, 'the viewer mounts');
+  assert.deepEqual(said.filter((m) => m.type === 'view').map((m) => m.full), [true], 'one full view, said once');
+});
