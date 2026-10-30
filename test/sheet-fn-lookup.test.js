@@ -422,3 +422,36 @@ test('lookups lifted over arrays, and which error comes first', () => {
     ['INDEX(INDEX({1,2;3,4},{1;2},{2,1}),2,2)', 3], ['INDEX(OFFSET(Y1,{0,1},{0;1}),2,2)', 4],
   ]);
 });
+
+// Excel 16.114.1: when the lookup value is an array, VLOOKUP/HLOOKUP take only the first index; an index array still
+// lifts for a scalar lookup value. range_lookup arrays keep their ordinary broadcasting.
+test('table lookups intersect an index array when lookup values lift', () => {
+  const e = book({ A1: 1, A2: 2, A3: 3, B1: 10, B2: 20, B3: 30, C1: 100, C2: 200, C3: 300 });
+  cases(e, [
+    ['SUM(VLOOKUP({1;2},A1:C3,{2,3},FALSE))', 30],
+    ['SUM(VLOOKUP({1,2},A1:C3,{2,3},FALSE))', 30],
+    ['SUM(VLOOKUP({1;2},A1:C3,{2;3},FALSE))', 30],
+    ['SUM(VLOOKUP(1,A1:C3,{2,3},FALSE))', 110],
+    ['SUM(VLOOKUP({1;2},A1:C3,2,{FALSE,TRUE}))', 60],
+    ['SUM(HLOOKUP({1,2},{1,2,3;10,20,30;100,200,300},{2;3},FALSE))', 30],
+    ['SUM(HLOOKUP(1,{1,2,3;10,20,30;100,200,300},{2;3},FALSE))', 110],
+  ]);
+  e.apply({ op: 'set', sheet: e.wb.sheets[0].id, r: 5, c: 0, cell: { t: 'n', v: 0, f: 'VLOOKUP({1;2},A1:C3,{2,3},FALSE)', a: 'A6:B7' } });
+  assert.deepEqual(['A6','B6','A7','B7'].map((at) => val(e, at)), [10,10,20,20]);
+});
+
+// The first index taken from an array is validated as Excel's table index: an error or nonnumeric text is #REF!.
+// A scalar error index retains its identity, and errors in later, unused array positions do not matter.
+test('a lifted table lookup validates the first array index', () => {
+  const e = book({ A1: 1, A2: 2, B1: 10, B2: 20, C1: 100, C2: 200 });
+  cases(e, [
+    ['VLOOKUP({1;2},A1:C2,{#N/A,2},FALSE)', '#REF!'],
+    ['VLOOKUP({1;2},A1:C2,{#DIV/0!,2},FALSE)', '#REF!'],
+    ['VLOOKUP({1;2},A1:C2,{"x",2},FALSE)', '#REF!'],
+    ['VLOOKUP({1;2},A1:C2,#N/A,FALSE)', '#N/A'],
+    ['VLOOKUP(1,A1:C2,{#N/A,2},FALSE)', '#N/A'],
+    ['VLOOKUP(1/0,A1:C2,{#N/A,2},FALSE)', '#DIV/0!'],
+    ['SUM(VLOOKUP({1;2},A1:C2,{2,#N/A},FALSE))', 30],
+    ['VLOOKUP({1;2},A1:C2,{0,2},FALSE)', '#VALUE!'],
+  ]);
+});

@@ -384,8 +384,14 @@ const run = async (family, list) => {
     return [c.id, x && x.t !== 'z' ? { t: x.t, v: x.v } : { t: 'n', v: 0 }];
   }));
 };
-// Excel caches an error named after Excel 2016 (#CALC!) as #VALUE! and shows its name, which is its answer.
-const excel = (g) => (g.t === 'e' && g.text !== g.v ? { t: 'e', v: g.text } : { t: g.t, v: g.v });
+// Excel stores #CALC! as #VALUE!. Only that known alias uses display text; other errors keep their cached identity.
+const excel = (g) => ({ t: g.t, v: g.t === 'e' && g.v === '#VALUE!' && g.text === '#CALC!' ? '#CALC!' : g.v });
+
+test("only Excel's #CALC! storage alias uses display text as its error", () => {
+  assert.deepEqual(excel({ t: 'e', v: '#VALUE!', text: '#CALC!' }), { t: 'e', v: '#CALC!' });
+  assert.deepEqual(excel({ t: 'e', v: '#DIV/0!', text: '' }), { t: 'e', v: '#DIV/0!' });
+  assert.deepEqual(excel({ t: 'e', v: '#N/A', text: '#VALUE!' }), { t: 'e', v: '#N/A' });
+});
 
 // Cases the engine answers otherwise, and why. A function not built is a todo by itself.
 const TODO = {
@@ -398,14 +404,29 @@ test('every todo names a case', () => {
   assert.deepEqual(Object.keys(TODO).filter((id) => !golden[id]), []);
 });
 
+const todoFor = (c, ok, got) => {
+  const missing = [...new Set(F.tokenize(c.formula).filter((k) => k.k === 'fn' && !C.fn(k.name)).map((k) => k.name))];
+  // An unbuilt call produces #NAME?. Its mere presence in an unused branch cannot excuse a wrong built result.
+  return ok ? undefined : TODO[c.id] ?? (missing.length && got?.t === 'e' && got.v === '#NAME?' ? `not built: ${missing.join(', ')}` : undefined);
+};
+
+test('automatic todos cannot cover a built function result or a colliding name', () => {
+  const c = { id: 'review.sum.1', formula: '=IF(TRUE,SUM(1,2),NOSUCHFN(0))' };
+  assert.equal(todoFor(c, false, { t: 'n', v: 4 }), undefined, 'an unused unknown call cannot excuse a wrong number');
+  assert.equal(todoFor({ ...c, formula: '=SUM(1,2)' }, false, { t: 'e', v: '#NAME?' }), undefined);
+  assert.equal(todoFor({ ...c, formula: '=SUMIFS(A1,A1,1)' }, false, { t: 'n', v: 9 }), undefined);
+  assert.equal(todoFor({ ...c, formula: '=SUMIFSX(A1,A1,1)' }, false, { t: 'e', v: '#NAME?' }), 'not built: SUMIFSX');
+  assert.equal(todoFor({ ...c, formula: '=CONCAT("NOSUCHFN(",1)' }, false, { t: 's', v: 'wrong' }), undefined);
+  assert.equal(todoFor(c, true, { t: 'n', v: 3 }), undefined);
+});
+
 for (const [family, list] of byFamily) {
   test(`engine against Excel: ${family}`, async (t) => {
     const got = await run(family, list);
     for (const c of list) {
       if (c.unsupported != null) continue;
       const want = excel(golden[c.id]), ok = same(want, got.get(c.id));
-      const missing = [...new Set(F.tokenize(c.formula).filter((k) => k.k === 'fn' && !C.fn(k.name)).map((k) => k.name))];
-      const todo = ok ? undefined : TODO[c.id] ?? (missing.length ? `not built: ${missing.join(', ')}` : undefined);
+      const todo = todoFor(c, ok, got.get(c.id));
       await t.test(c.id, { todo }, () => {
         assert.ok(!(ok && TODO[c.id]), `${c.id} agrees with Excel now: drop its todo`);
         assert.ok(ok, `${c.formula}: Excel ${JSON.stringify(want)}, engine ${JSON.stringify(got.get(c.id))}`);
