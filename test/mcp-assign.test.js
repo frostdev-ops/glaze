@@ -236,3 +236,18 @@ test('worker wiring purges rubric data on agent off, Forget all apps and site re
     } finally { await H.off(env); }
   }
 });
+
+test('a read begun during a rubric purge cannot recreate the cleared index', async () => {
+  const key = `mcpRubric:${A}/25/171`, { s, local, ctx } = store({ [key]: { at: C.NOW, title: 'Private' }, mcpRubrics: [key] });
+  let release, started;
+  const gate = new Promise((res) => { release = res; }), removing = new Promise((res) => { started = res; }), remove = local.remove;
+  local.remove = async (keys) => { started(); await gate; return remove(keys); };
+  const clearing = AS.clear({ local });
+  await removing;
+  const reading = reg({}).get('assignment_read').run({ course: '25', assignment: '171' }, ctx(A));
+  await H.pause(5);
+  release();
+  await clearing;
+  await reading;
+  assert.deepEqual(s, {});
+});
