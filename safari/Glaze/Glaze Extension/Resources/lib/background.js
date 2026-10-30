@@ -2577,22 +2577,38 @@ const mcpFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.
 globalThis.addEventListener?.('install', () => { agentFiles(); mcpFiles(); });
 // The local setting is a UI mirror, writable by content scripts. Only an options message may persist consent in this
 // extension-origin database. A forged local on cannot reconnect a previously paired app after the owner switched off.
+// The profile's instance (lib/agent-link.js INSTANCE), which names the helper's run file, is kept here too.
 let mcpConsentDB = null;
-const mcpConsent = async (on) => {
+// key's value, or with value given, put → what was read or put.
+const mcpSetting = async (key, ...value) => {
   mcpConsentDB ||= new Promise((resolve, reject) => {
     const r = indexedDB.open('glaze-mcp-settings', 1);
     r.onupgradeneeded = () => r.result.createObjectStore('settings');
     r.onsuccess = () => { r.result.onversionchange = () => { r.result.close(); mcpConsentDB = null; }; resolve(r.result); };
     r.onerror = () => reject(r.error);
   }).catch((e) => { mcpConsentDB = null; throw e; });
-  const tx = (await mcpConsentDB).transaction('settings', on === undefined ? 'readonly' : 'readwrite');
-  let value = false;
+  const tx = (await mcpConsentDB).transaction('settings', value.length ? 'readwrite' : 'readonly');
+  let got = value[0];
   const store = tx.objectStore('settings');
-  if (on === undefined) { const r = store.get('on'); r.onsuccess = () => { value = r.result === true; }; }
-  else { store.put(on === true, 'on'); value = on === true; }
-  return new Promise((resolve, reject) => { tx.oncomplete = () => resolve(value); tx.onerror = tx.onabort = () => reject(tx.error); });
+  if (value.length) store.put(value[0], key);
+  else { const r = store.get(key); r.onsuccess = () => { got = r.result; }; }
+  return new Promise((resolve, reject) => { tx.oncomplete = () => resolve(got); tx.onerror = tx.onabort = () => reject(tx.error); });
 };
+const mcpConsent = async (on) => (on === undefined ? (await mcpSetting('on')) === true : mcpSetting('on', on === true));
 const mcpOn = async () => (await chrome.storage.local.get('mcp')).mcp?.on === true && await mcpConsent().catch(() => false);
+// 4.0.0 kept the instance in storage.local. It moves here once, and only while an app is paired (in the worker's own
+// glaze-mcp): with none, no app has used it, and a page may have written it.
+const mcpInstance = async () => {
+  const id = await mcpSetting(GZ_AGENT_LINK.INSTANCE);
+  if (GZ_AGENT_LINK.ID.test(id)) return id;
+  const legacy = (await chrome.storage.local.get(GZ_AGENT_LINK.INSTANCE))[GZ_AGENT_LINK.INSTANCE];
+  if (legacy === undefined) return undefined;
+  if (typeof GZ_MCP_GRANTS === 'undefined') grantFiles();
+  const used = GZ_AGENT_LINK.ID.test(legacy) && (await mcpGrants().list().catch(() => [])).length > 0;
+  if (used) await mcpSetting(GZ_AGENT_LINK.INSTANCE, legacy);
+  await chrome.storage.local.remove(GZ_AGENT_LINK.INSTANCE);
+  return used ? legacy : undefined;
+};
 let mcpGrantStore = null;
 const mcpGrants = () => (mcpGrantStore ||= GZ_MCP_GRANTS.open());
 // Only Safari's helper, the Glaze app, outlives this worker and announces its connections to the next one, so only there
@@ -2736,7 +2752,12 @@ const mcpEnsure = async () => {
   if (!mcpLink) {
     if (typeof GZ_AGENT_LINK === 'undefined') agentFiles();
     mcpLink = (() => {
-      const local = { get: async (keys) => ({ ...await chrome.storage.local.get(keys), mcp: { on: await mcpOn() && await glazeOn() } }), set: (v) => chrome.storage.local.set(v) };
+      // The link's setting and instance, from the worker's own state only.
+      const I = GZ_AGENT_LINK.INSTANCE;
+      const local = {
+        get: async () => ({ [GZ_AGENT_LINK.SETTING]: { on: await mcpOn() && await glazeOn() }, [I]: await mcpInstance() }),
+        set: async (v) => { if (GZ_AGENT_LINK.ID.test(v?.[I])) await mcpSetting(I, v[I]); },
+      };
       const link = GZ_AGENT_LINK.make({ runtime: chrome.runtime, permissions: chrome.permissions, storage: { local, session: chrome.storage.session }, browser: MCP_BROWSER });
       link.attach({ open: mcpOpen, line: mcpLine, close: mcpClose });
       return link;

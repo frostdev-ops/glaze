@@ -114,7 +114,9 @@ const PROBE = ({ lang }) => {
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
     const watch = (pg, tag) => {
       pg.on('pageerror', (e) => errors.push(`${tag}: ${e.message}`));
-      pg.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|intentional review refusal|Error: not a zip file/.test(m.text())) errors.push(`${tag} console: ${m.text()}`); });
+      // The import cases' own refusals (a store with no room, a file that is no PDF) are logged as every failed import is.
+      const meant = tag === 'import' ? /^RangeError: (There isn't enough room in this browser for this file\.|That file could not be read\.|The file didn't finish copying\. Try again\.)\n/ : /$^/;
+      pg.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|intentional review refusal|Error: not a zip file/.test(m.text()) && !meant.test(m.text())) errors.push(`${tag} console: ${m.text()}`); });
     };
     const openHome = async (lang = null, tag = 'home') => {
       const pg = await context.newPage();
@@ -128,7 +130,7 @@ const PROBE = ({ lang }) => {
     const card = (key) => `.gd-card[data-key="${key}"]`;
     const said = (pg) => pg.evaluate(() => document.getElementById('gd-count').textContent);
     const focused = (pg) => pg.evaluate(() => document.activeElement?.closest('.gd-card')?.dataset.key || document.activeElement?.id || document.activeElement?.className || '');
-    const shot = async (pg, name) => { await pause(200); const f = path.join(shots, name); await pg.screenshot({ path: f }); saved.push(f); return f; };
+    const shot = async (pg, name) => { const f = path.join(shots, name); await pg.screenshot({ path: f, animations: 'disabled' }); saved.push(f); return f; };
     const saved = [];
     const total = seeds.length;
 
@@ -534,6 +536,10 @@ const PROBE = ({ lang }) => {
     await drop(home, [{ name: 'Broken.docx', bytes: [1, 2, 3] }]);
     await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'That file could not be read as a Word document.'), 'broken Word refusal');
     check((await shown()).length === before + 3, 'a broken .docx reports its failure in the status line and creates no document');
+    const brokenCard = await home.evaluate(() => { const el = document.querySelector('#gd-docs > .gd-pending[data-failed]'); return el && `${el.querySelector('.gd-title').textContent}: ${el.querySelector('.gd-meta').textContent}`; });
+    check(brokenCard === 'Broken.docx: That file could not be read as a Word document.', `and on its card, which Remove takes away (${brokenCard})`);
+    await home.click('.gd-pending [data-act="remove"]');
+    await until(() => home.evaluate(() => !document.querySelector('#gd-docs > .gd-pending')), 'the broken file\'s card removed');
     const beforeBatch = (await shown()).length;
     await drop(home, Array.from({ length: 23 }, (_, i) => ({ name: `Batch ${i}.docx`, bytes: docx })));
     await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'Choose up to 20 files at a time.'), 'batch limit');
@@ -1344,6 +1350,203 @@ const PROBE = ({ lang }) => {
       log = await mo.evaluate(() => globalThis.__mo);
       check(log.vt && log.all.some((x) => x.route === 'fade' && x.first.opacity === 0 && x.last.opacity === 1), 'motion: Pop-up Fade crossfades the native pictures');
       await mo.close();
+    }
+
+    // ---- an import shows itself (papers.js bring, lib/doc-kinds.js progress): a card at once with the file's name, one
+    // stage word at a time over a bar fed by the real stages and bytes, its menu off; then the document's own card. A failed
+    // one says why on its card with Retry and Remove. The same for a deck.
+    {
+      const im = await openHome(null, 'import');
+      // Every state an importing card shows, and what the count's live region says, as they change.
+      const recordImports = () => im.evaluate(() => {
+        const R = globalThis.__imp = { states: [], spoken: [], firstPending: 0, firstCard: {} };
+        const look = () => {
+          for (const el of document.querySelectorAll('#gd-docs > .gd-pending')) {
+            R.firstPending ||= performance.now();
+            const bar = el.querySelector('.gd-progress');
+            const s = { name: el.querySelector('.gd-title').textContent, meta: el.querySelector('.gd-meta').textContent, now: Number(bar.getAttribute('aria-valuenow')), failed: el.hasAttribute('data-failed'),
+              menuOff: el.querySelector('.gd-more').disabled, acts: !el.querySelector('.gd-acts').hidden, bar: !bar.hidden, first: document.querySelector('#gd-docs').firstElementChild === el };
+            const l = R.states.at(-1);
+            if (!l || l.meta !== s.meta || l.now !== s.now || l.failed !== s.failed || l.name !== s.name) R.states.push(s);
+          }
+          for (const c of document.querySelectorAll('#gd-docs > .gd-card')) R.firstCard[c.querySelector('.gd-title').textContent] ??= performance.now();
+        };
+        new MutationObserver(look).observe(document.getElementById('gd-docs'), { subtree: true, childList: true, characterData: true, attributes: true });
+        const count = document.getElementById('gd-count');
+        new MutationObserver(() => R.spoken.push(count.textContent)).observe(count, { childList: true, characterData: true, subtree: true });
+      });
+      const imports = () => im.evaluate(() => globalThis.__imp);
+      const pdfBytes = require('./pdf-fixtures.js').large({ count: 30, size: 12e6 }), pdfPath = path.join(tmp, 'Course reader.pdf');
+      fs.writeFileSync(pdfPath, pdfBytes);
+      await recordImports();
+      await im.setInputFiles('#gd-file', pdfPath);
+      const pdfKey = await until(() => im.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].find((c) => c.querySelector('.gd-title').textContent === 'Course reader')?.dataset.key), 'the 12 MB PDF\'s card', 60000);
+      const pdfThumb = await until(() => im.evaluate((k) => { const img = document.querySelector(`.gd-card[data-key="${k}"] .gd-pic img`); return img?.complete && img.naturalWidth > 0 ? img.naturalWidth : 0; }, pdfKey), 'the PDF card\'s first page', 30000);
+      let R = await imports();
+      const pdfStates = R.states.filter((x) => x.name === 'Course reader.pdf'), metas = pdfStates.map((x) => x.meta);
+      const order = ['Reading…', 'Preparing pages…', 'Copying…', 'Saving…'].map((w) => metas.findIndex((m) => m.startsWith(w)));
+      const copies = metas.filter((m) => /^Copying… [\d.]+ \/ 1[12](\.\d)? MB$/.test(m));
+      console.log(`     the PDF's importing card: ${metas.length} states (${[...new Set(metas)].slice(0, 6).join(' | ')} …), card after ${Math.round(R.firstCard['Course reader'] - R.firstPending)} ms`);
+      check(pdfStates.length > 0 && pdfStates[0].first && pdfStates.every((x) => x.menuOff && x.bar && !x.acts && !x.failed) && R.firstPending < R.firstCard['Course reader'],
+        'importing a 12 MB PDF shows its card at once, first in the list, with the file\'s name, a bar and its menu off, before the document\'s own card');
+      check(order.every((i) => i >= 0) && order.every((i, n) => n === 0 || i > order[n - 1]) && copies.length >= 2,
+        `one status word at a time in the order the import goes, the bytes counted while copying (${[...new Set(metas)].length} words: ${copies.slice(0, 3).join(', ')} …)`);
+      const nows = pdfStates.map((x) => x.now);
+      check(nows.every((v, i) => i === 0 || v >= nows[i - 1]) && nows.at(-1) === 100 && new Set(nows).size >= 4, `the bar only moves forward, by the real stages and bytes, and reaches the end (${[...new Set(nows)].join(' → ')})`);
+      check(['Reading…', 'Preparing pages…', 'Copying…', 'Saving…'].every((w) => R.spoken.includes(w)) && !R.spoken.some((x) => /MB/.test(x)), `the live region speaks each stage once, without the bytes (${R.spoken.join(' | ')})`);
+      const pdfRec = await local(`writerPaper:${pdfKey}`);
+      check(pdfThumb > 0 && /^data:image\/(png|jpeg);base64,/.test(pdfRec?.thumb || '') && pdfRec.thumb.length <= 64e3 && pdfRec.size === pdfBytes.length && !(await im.evaluate(() => document.querySelector('#gd-docs > .gd-pending'))),
+        `then the document's card, its first page within the thumbnail budget (${(pdfRec?.thumb || '').length} chars), and the importing card gone`);
+
+      // The store refuses the bytes once (no room): the reason on the card, Retry and Remove; Retry imports it.
+      await im.evaluate(async () => {
+        await GZ_WRITER_PAPER.need(['lib/doc-files.js']);
+        const real = GZ_DOC_FILES.client;
+        GZ_DOC_FILES.client = (...a) => { GZ_DOC_FILES.client = real; const c = real(...a); return { ...c, put: async () => { throw GZ_DOC_FILES.fail('quota'); } }; };
+      });
+      const fullPath = path.join(tmp, 'Lab manual.pdf');
+      fs.writeFileSync(fullPath, require('./pdf-fixtures.js').FIXTURES.three());
+      await im.setInputFiles('#gd-file', fullPath);
+      const room = "There isn't enough room in this browser for this file.";
+      const failed = await until(() => im.evaluate(() => { const el = [...document.querySelectorAll('#gd-docs > .gd-pending')].find((x) => x.querySelector('.gd-title').textContent === 'Lab manual.pdf');
+        return el?.hasAttribute('data-failed') ? { meta: el.querySelector('.gd-meta').textContent, acts: [...el.querySelectorAll('.gd-acts:not([hidden]) button')].map((b) => b.textContent), bar: !el.querySelector('.gd-progress').hidden, said: document.getElementById('gd-said').textContent } : null; }), 'the refused import\'s card');
+      check(failed.meta === room && failed.acts.join() === 'Retry,Remove' && !failed.bar && failed.said === room, `a failed import says why on its card, with Retry and Remove (${JSON.stringify(failed)})`);
+      await im.screenshot({ path: path.join(out, 'import-failed-1280-en.png'), animations: 'disabled' });
+      check(!((await local('writerPapers')) || []).some((r) => r.title === 'Lab manual'), 'and keeps no document');
+      await im.click('.gd-pending [data-act="retry"]');
+      const retried = await until(() => im.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].find((c) => c.querySelector('.gd-title').textContent === 'Lab manual')?.dataset.key), 'the retried import\'s card', 30000);
+      check(!!retried && !(await im.evaluate(() => document.querySelector('#gd-docs > .gd-pending'))) && await until(() => im.evaluate(() => document.getElementById('gd-said').textContent === ''), 'Retry clears the reason', 3000), 'Retry imports it: the document\'s card in its place, the reason gone');
+      check(await im.evaluate((k) => document.activeElement?.closest('.gd-card')?.dataset.key === k, retried), 'and the focus Retry had goes to the document');
+
+      // A file that is no PDF: Remove takes its card away and gives the focus to Import.
+      const brokenPath = path.join(tmp, 'Scan.pdf');
+      fs.writeFileSync(brokenPath, 'not a pdf at all');
+      await im.setInputFiles('#gd-file', brokenPath);
+      const broken = await until(() => im.evaluate(() => { const el = document.querySelector('#gd-docs > .gd-pending[data-failed]'); return el && { name: el.querySelector('.gd-title').textContent, meta: el.querySelector('.gd-meta').textContent }; }), 'the broken PDF\'s card');
+      check(broken.name === 'Scan.pdf' && broken.meta === 'That file could not be read.', `a file that is no PDF says so on its card (${JSON.stringify(broken)})`);
+      await im.click('.gd-pending [data-act="retry"]');
+      await until(() => im.evaluate(() => document.querySelector('.gd-pending[data-failed] [data-act="retry"]') === document.activeElement), 'failed Retry keeps focus');
+      check(await im.evaluate(() => document.querySelector('.gd-pending .gd-meta').textContent === 'That file could not be read.'), 'a repeated failure keeps focus on Retry and its reason on the card');
+      await im.focus('.gd-pending [data-act="remove"]');
+      await im.keyboard.press('Enter');
+      await until(() => im.evaluate(() => !document.querySelector('#gd-docs > .gd-pending')), 'Remove');
+      check(await im.evaluate(() => document.activeElement?.id === 'gd-import') && await until(() => im.evaluate(() => document.getElementById('gd-said').textContent === ''), 'Remove clears the reason', 3000), 'Remove takes the card away, its reason with it, and the focus goes to Import');
+
+      // Held halfway through copying, for a picture of the importing card.
+      await im.evaluate(async () => {
+        await GZ_WRITER_PAPER.need(['lib/doc-files.js']);
+        const real = GZ_DOC_FILES.client, gate = new Promise((r) => { globalThis.__gate = r; });
+        GZ_DOC_FILES.client = (...a) => { GZ_DOC_FILES.client = real; const c = real(...a); return { ...c, put: async (bytes, type, sent) => { sent(bytes.length / 2, bytes.length); await gate; return c.put(bytes, type, sent); } }; };
+      });
+      const heldPath = path.join(tmp, 'Week 4 reading.pdf');
+      fs.writeFileSync(heldPath, require('./pdf-fixtures.js').large({ count: 10, size: 6e6 }));
+      await im.setInputFiles('#gd-file', heldPath);
+      await until(() => im.evaluate(() => /^Copying… [\d.]+ \/ [\d.]+ MB$/.test(document.querySelector('#gd-docs > .gd-pending .gd-meta')?.textContent || '')), 'the held import halfway');
+      await im.screenshot({ path: path.join(out, 'import-copying-1280-en.png'), animations: 'disabled' });
+      await im.evaluate(() => globalThis.__gate());
+      await until(() => im.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].some((c) => c.querySelector('.gd-title').textContent === 'Week 4 reading') && !document.querySelector('#gd-docs > .gd-pending')), 'the held import done', 60000);
+
+      // A deck shows the same, its own word for the middle stage.
+      const Z = require(path.join(root, 'lib/zip.js'));
+      const deckDir = path.join(root, 'test/fixtures/pptx/deck');
+      const walk = (d, base = '') => fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
+        .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), `${base}${e.name}/`) : [{ name: `${base}${e.name}`, data: new Uint8Array(fs.readFileSync(path.join(d, e.name))), date: new Date(2026, 9, 29, 12) }]));
+      const deckPath = path.join(tmp, 'Cell Biology week 3.pptx');
+      fs.writeFileSync(deckPath, Buffer.concat(Z.zip([...walk(deckDir), { name: 'ppt/media/filler.bin', data: new Uint8Array(crypto.randomBytes(3e6)), date: new Date(2026, 9, 29, 12) }])));
+      await recordImports();
+      await im.setInputFiles('#gd-file', deckPath);
+      await until(() => im.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].some((c) => c.querySelector('.gd-title').textContent === 'Cell Biology week 3')), 'the deck\'s card', 60000);
+      R = await imports();
+      const deckMetas = R.states.filter((x) => x.name === 'Cell Biology week 3.pptx').map((x) => x.meta), deckNows = R.states.filter((x) => x.name === 'Cell Biology week 3.pptx').map((x) => x.now);
+      check(['Reading…', 'Preparing slides…', 'Copying…', 'Saving…'].every((w) => deckMetas.some((m) => m.startsWith(w))) && deckMetas.some((m) => /^Copying… [\d.]+ \/ 3(\.\d)? MB$/.test(m)) && deckNows.at(-1) === 100 && R.firstPending < R.firstCard['Cell Biology week 3'],
+        `a deck shows the same: its card at once, Preparing slides…, its bytes copied, the bar to the end, then its own card (${[...new Set(deckMetas)].join(' | ')})`);
+
+      // Two separate drops can copy at once. Hold both at different fractions, then finish the newer one first.
+      await im.evaluate(() => {
+        const real = GZ_DOC_FILES.client;
+        globalThis.__copies = [];
+        GZ_DOC_FILES.client = (...a) => {
+          const c = real(...a);
+          return { ...c, put: async (bytes, type, sent) => {
+            const n = __copies.length;
+            if (n === 1) GZ_DOC_FILES.client = real;
+            sent(bytes.length * (n ? .75 : .25), bytes.length);
+            await new Promise((r) => __copies.push(r));
+            return c.put(bytes, type, sent);
+          } };
+        };
+      });
+      const parallel = ['Parallel A.pdf', 'Parallel B.pdf'].map((name) => { const p = path.join(tmp, name); fs.copyFileSync(heldPath, p); return p; });
+      await recordImports();
+      await im.setInputFiles('#gd-file', parallel[0]);
+      await until(() => im.evaluate(() => __copies.length === 1), 'first copy held');
+      await im.setInputFiles('#gd-file', parallel[1]);
+      await until(() => im.evaluate(() => __copies.length === 2), 'second copy held');
+      const together = await im.evaluate(() => [...document.querySelectorAll('.gd-pending')].map((el) => ({ id: el.dataset.import, name: el.querySelector('.gd-title').textContent, now: Number(el.querySelector('[role="progressbar"]').getAttribute('aria-valuenow')) })));
+      check(together.length === 2 && new Set(together.map((x) => x.id)).size === 2 && together.find((x) => x.name === 'Parallel A.pdf')?.now === 37 && together.find((x) => x.name === 'Parallel B.pdf')?.now === 76,
+        `simultaneous drops have separate cards and progress (${JSON.stringify(together)})`);
+      await im.evaluate(() => document.querySelector('.gd-pending [data-act="remove"]').click());
+      check(await im.locator('.gd-pending').count() === 2, 'Remove cannot discard an import while it is running');
+      await im.evaluate(() => __copies[1]());
+      await until(() => im.evaluate(() => [...document.querySelectorAll('.gd-card')].some((c) => c.querySelector('.gd-title').textContent === 'Parallel B') && document.querySelectorAll('.gd-pending').length === 1), 'second copy finishes first');
+      check(await im.evaluate(() => document.querySelector('.gd-pending .gd-title').textContent === 'Parallel A.pdf' && document.querySelector('.gd-pending [role="progressbar"]').getAttribute('aria-valuenow') === '37'), 'finishing one import leaves the other card and its progress intact');
+      await im.evaluate(() => __copies[0]());
+      await until(() => im.evaluate(() => !document.querySelector('.gd-pending')), 'both copies done');
+      R = await imports();
+      check(['Parallel A.pdf', 'Parallel B.pdf'].every((name) => { const n = R.states.filter((x) => x.name === name).map((x) => x.now); return n.at(-1) === 100 && n.every((v, i) => v <= 100 && (i === 0 || v >= n[i - 1])); }), 'both bars stay bounded and forward when earlier copy acknowledgements arrive after later progress');
+
+      // A mid-copy failure must settle the card. Retry reads the same File again; moving focus while it copies wins.
+      await im.evaluate(() => {
+        const real = GZ_DOC_FILES.client, read = File.prototype.arrayBuffer;
+        globalThis.__reread = [];
+        File.prototype.arrayBuffer = function () { if (this.name === 'Interrupted.pdf') __reread.push(this); return read.call(this); };
+        let tries = 0;
+        GZ_DOC_FILES.client = (...a) => {
+          const c = real(...a);
+          return { ...c, put: async (bytes, type, sent) => {
+            sent(bytes.length / 2, bytes.length);
+            if (++tries === 1) throw GZ_DOC_FILES.fail('interrupted');
+            GZ_DOC_FILES.client = real;
+            await new Promise((r) => { globalThis.__retryCopy = r; });
+            return c.put(bytes, type, sent);
+          } };
+        };
+      });
+      const interruptedPath = path.join(tmp, 'Interrupted.pdf');
+      fs.copyFileSync(heldPath, interruptedPath);
+      await im.setInputFiles('#gd-file', interruptedPath);
+      await until(() => im.evaluate(() => document.querySelector('.gd-pending[data-failed] .gd-meta')?.textContent === "The file didn't finish copying. Try again."), 'interrupted copy settles');
+      check(await im.evaluate(() => !document.querySelector('.gd-pending .gd-acts').hidden && document.querySelector('.gd-pending .gd-progress').hidden), 'a mid-copy interruption leaves a failed card with actions, rather than an endless importing card');
+      await im.click('.gd-pending [data-act="retry"]');
+      await until(() => im.evaluate(() => typeof __retryCopy === 'function'), 'retry copy held');
+      check(await im.evaluate(() => __reread.length === 2 && __reread[0] === __reread[1]), 'Retry reads the same File object a second time');
+      await im.focus('#gd-q');
+      await im.evaluate(() => __retryCopy());
+      await until(() => im.evaluate(() => !document.querySelector('.gd-pending') && [...document.querySelectorAll('.gd-card')].some((c) => c.querySelector('.gd-title').textContent === 'Interrupted')), 'interrupted file retried');
+      check(await im.evaluate(() => document.activeElement?.id === 'gd-q'), 'Retry preserves focus moved elsewhere while the import was running');
+
+      // All twenty accepted files get a named, readable progress card immediately, including those still in the queue.
+      await im.evaluate((bytes) => {
+        const k = GZ_DOC_KINDS.get('pdf');
+        GZ_DOC_KINDS.register('pdf', { ...k, importFile: async (f, opts) => {
+          GZ_DOC_KINDS.register('pdf', k);
+          opts.progress({ stage: 'read' });
+          await new Promise((r) => { globalThis.__batchRead = r; });
+          return k.importFile(f, opts);
+        } });
+        const dt = new DataTransfer();
+        for (let i = 1; i <= 20; i++) dt.items.add(new File([new Uint8Array(bytes)], `Queued ${i}.pdf`, { type: 'application/pdf' }));
+        document.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      }, Array.from(require('./pdf-fixtures.js').FIXTURES.three()));
+      await until(() => im.evaluate(() => typeof __batchRead === 'function'), 'batch reading');
+      const queued = await im.evaluate(() => [...document.querySelectorAll('.gd-pending')].map((el) => el.querySelector('.gd-meta').textContent));
+      check(queued.length === 20 && queued.every((s) => s === 'Reading…'), `twenty dropped files each show a stage immediately (${JSON.stringify(queued)})`);
+      await im.evaluate(() => __batchRead());
+      await until(() => im.evaluate(() => !document.querySelector('.gd-pending')), 'batch imported', 60000);
+      const batch = await im.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card .gd-title')].map((el) => el.textContent).filter((title) => /^Queued \d+$/.test(title)));
+      check(batch.length === 20, `all twenty queued imports become their own documents (${batch.length})`);
+      await shot(im, 'import-done-1280-en.png');
+      await im.close();
     }
 
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');

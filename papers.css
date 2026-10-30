@@ -19,7 +19,7 @@
 .gd-home { max-width: 1160px; margin: 0 auto; padding: 32px 24px 72px; display: grid; gap: 18px; position: relative; }
 .gd-home .ico { width: 16px; height: 16px; flex: none; }
 .gd-top, .gd-bar { border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gd-radius); background: var(--gd-panel); box-shadow: var(--gz-rest-shadow, none); }
-:root[data-gz-bg]:not([data-gz-bg="solid"]) :is(.gd-top, .gd-bar, .gd-card, .gd-menu, .gd-toast) { backdrop-filter: blur(var(--gd-glass)) saturate(1.4); }
+:root[data-gz-bg]:not([data-gz-bg="solid"]) :is(.gd-top, .gd-bar, .gd-card, .gd-pending, .gd-menu, .gd-toast) { backdrop-filter: blur(var(--gd-glass)) saturate(1.4); }
 
 /* The heading and New: a tile per format, each its first page */
 .gd-top { display: grid; gap: 14px; padding: 22px 24px 20px; }
@@ -62,10 +62,10 @@
 
 /* The documents: cards in a grid, or rows */
 .gd-docs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--gd-column), 100%), 1fr)); gap: 16px; }
-.gd-card { position: relative; display: grid; grid-template-rows: auto 1fr; min-width: 0; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gd-radius); background: var(--gd-panel); overflow: hidden;
+:is(.gd-card, .gd-pending) { position: relative; display: grid; grid-template-rows: auto 1fr; min-width: 0; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gd-radius); background: var(--gd-panel); overflow: hidden;
   box-shadow: var(--gz-rest-shadow, none); transition: var(--gz-card-transition); }
 .gd-card:hover { border-color: color-mix(in srgb, var(--gz-accent) 55%, var(--gz-border-strong, var(--gz-line-strong))); box-shadow: var(--gz-shadow, 0 8px 24px rgb(0 0 0 / .3)); transform: var(--gd-lift); }
-.gd-card:focus-within { border-color: var(--gz-accent); }
+:is(.gd-card, .gd-pending):focus-within { border-color: var(--gz-accent); }
 .gd-pic { height: calc(214px * var(--gd-thumb)); display: flex; justify-content: center; padding-top: 16px; overflow: hidden; border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
   background: color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) 55%, transparent); }
 .gd-pic .gt-thumb { zoom: var(--gd-thumb); background: var(--sheet); border-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
@@ -97,6 +97,20 @@
 .gd-home[data-view="list"] .gd-meta { font-size: 13px; -webkit-line-clamp: 1; }
 .gd-home[data-view="list"] .gd-badge { position: static; }
 .gd-home[data-view="list"] .gd-more { margin: 0; }
+
+/* An import under way (papers.js bring): a blank page where the document's will be, the file's name, its stage, and a bar
+   filling as the import goes; failed, the reason with Retry and Remove. */
+.gd-blank { width: calc(204px * var(--gd-thumb)); background: var(--sheet); border-radius: 2px 2px 0 0; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+:root:not([data-dark]) .gd-blank { box-shadow: 0 1px 3px rgba(15,23,42,.16), 0 0 0 1px rgba(15,23,42,.06); }
+.gd-progress { height: 4px; margin-top: 8px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--gz-ink-muted) 24%, transparent); }
+.gd-fill { display: block; height: 100%; border-radius: inherit; background: var(--gz-accent); transform: scaleX(0); transform-origin: left; transition: transform var(--gz-t-move, .2s) ease-out; }
+:root[dir="rtl"] .gd-fill { transform-origin: right; }
+.gd-pending .gd-title::after { content: none; }
+.gd-pending[data-failed] .gd-meta { color: var(--gz-err); -webkit-line-clamp: 3; }
+.gd-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.gd-acts[hidden] { display: none; }
+.gd-acts .gd-btn { height: 28px; padding: 0 12px; font-size: 12px; }
+.gd-pending .gd-more:disabled { opacity: .4; cursor: default; }
 
 /* Files over the page: the page is the drop target */
 .gd-home::after { content: ""; position: fixed; inset: 8px; z-index: 4; border: 2px dashed var(--gz-accent); border-radius: var(--gd-radius); background: color-mix(in srgb, var(--gz-accent) 8%, transparent); pointer-events: none; }

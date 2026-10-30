@@ -138,7 +138,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const toolGrow = h('span', { class: 'grow' });
     // The status bar's word count opens the counts (writer-counts.js, where loaded).
     wordsL.addEventListener('click', () => globalThis.GZ_WRITER_COUNTS?.open(wordsL));
-    const status = h('div', { class: 'gp-status' }, pageL, wordsL, h('span', { class: 'grow' }), fontL, versionsB);
+    // A file arriving (Open in Glaze, writer-kinds.js): its stage and bytes, a bar filling as it goes, the stage spoken.
+    const arriveText = h('span', { 'aria-hidden': 'true' }), arriveSay = h('span', { class: 'gp-sr', role: 'status' }), arriveFill = h('span', { class: 'gp-fill' });
+    const arriveBar = h('span', { class: 'gp-progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, arriveFill);
+    const arrive = h('span', { class: 'gp-arrive', hidden: true }, arriveText, arriveBar, arriveSay);
+    const status = h('div', { class: 'gp-status' }, pageL, wordsL, arrive, h('span', { class: 'grow' }), fontL, versionsB);
     const tabs = {}, panes = {}, badges = {};
     for (const [id, label] of [['checks', 'Checks'], ['sources', 'Sources'], ['feedback', 'Feedback'], ['outline', 'Document outline']]) {
       badges[id] = h('span', { class: 'gp-badge' });
@@ -1725,6 +1729,25 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       // over the viewer).
       hold: () => { if (!parked) { parked = { holding: true }; clearTimeout(saveTimer); } }, release: () => { if (parked?.holding) parked = null; },
       hand: (rec) => hand(rec, true), take: (surface) => { parked = surface; current = surface; }, unpark: () => { parked = null; current = api; },
+      // arriving(p): the file's stage while it arrives ({ name, text, spoken, fraction }), null once it has or hasn't. In
+      // the compact box, the bar's line says it.
+      arriving: (p) => {
+        if (compact && said) {
+          // Bytes remain visible; only a change of stage reaches the separate live region.
+          said.setAttribute('aria-live', p ? 'off' : 'polite');
+          if (p) tell('importing', p.text); else if (saying === 'importing') tell('');
+          const spoken = p?.spoken || '';
+          if (compactArriveSay.textContent !== spoken) compactArriveSay.textContent = spoken;
+          return;
+        }
+        arrive.hidden = !p;
+        if (!p) { arriveSay.textContent = ''; return; }
+        arriveText.textContent = p.text;
+        if (arriveSay.textContent !== p.spoken) arriveSay.textContent = p.spoken;
+        arriveBar.setAttribute('aria-label', p.name || '');
+        arriveBar.setAttribute('aria-valuenow', String(Math.round(p.fraction * 100)));
+        arriveFill.style.transform = `scaleX(${p.fraction})`;
+      },
       // Nothing written past the format's opening yet (an import then needs no word about the paper it replaces).
       blank: () => { const text = view.state.doc.textContent.trim(); return !text || text === S.paper.nodeFromJSON(F.template(format, values())).textContent.trim(); },
       // The page ended Focus (a click on its dim).
@@ -1754,6 +1777,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // until the next edit; and, while the paper is past what Ultra's text box takes (compose's input limit: project()
     // null, so nothing more goes into it), that, the Full writer switch beside it marked, whose .docx has no such limit.
     const said = boxEl ? h('span', { class: 'gp-said', role: 'status' }) : null;
+    const compactArriveSay = boxEl ? h('span', { class: 'gp-sr', role: 'status' }) : null;
     let saying = '';
     const tell = (kind, text = '') => {
       if (!said) return;
@@ -1880,7 +1904,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // the caret, Versions, Open from Documents and Documents, labelled again in the page's language as it opens.
     const more = boxEl && document.getElementById('more');
     if (more) {
-      more.before(said, fullSwitch());
+      more.before(said, compactArriveSay, fullSwitch());
       const panel = async (name) => { await setView(true, { save: true }); if (!compact) { tabs[name].click(); tabs[name].focus(); } };
       const items = [['Checks', () => panel('checks')], ['Feedback', () => panel('feedback')], ['Cite', () => globalThis.GZ_WRITER_CITE?.open?.({ anchor: more })], ['Versions', () => versions(more)], ['Open from Documents', () => fromDocsSheet()], ['Documents', () => open2('papers.html')]]
         .map(([label, run]) => [host.item?.(t(label), run), label]);

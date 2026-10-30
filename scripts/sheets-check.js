@@ -610,6 +610,50 @@ const seeded = (key, wb = M.workbook()) => {
     check(ibook.keep.problems.length === 0 && ilist.length === 6 && sixth?.type === 'bar' && sixth.series.map((s) => s.val.f).join() === 'Data!$B$2:$B$5,Data!$C$2:$C$5' && ilist[5].anchor.from.col === 6,
       `the export holds the inserted chart, its references and its dragged anchor (${JSON.stringify({ problems: ibook.keep.problems, n: ilist.length, refs: sixth?.series.map((s) => s.val.f), col: ilist[5]?.anchor.from.col })})`);
 
+    // ---- 3-D charts: a workbook with a 3-D pie (its second slice exploded, percent labels) and a 3-D clustered column
+    // chart (value labels, the side and back walls) draws both projected: the pie's four tops, the rim of its three front
+    // slices and the two cut faces its explosion shows; the columns' eight fronts with a top and a side each; the
+    // dark Look's labels read; 640 px; screenshots of each.
+    const file3d = path.join(tmp, 'Charts 3D.xlsx');
+    fs.writeFileSync(file3d, FX.workbook({ kinds: ['pie3d', 'col3d'] }));
+    await openHome();
+    const cards3d = await page.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    await page.setInputFiles('#gd-file', file3d);
+    const key3d = await until(() => page.evaluate((was) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).find((k) => !was.includes(k)), cards3d), 'the 3-D chart workbook card');
+    await until(() => local(`writerPaper:${key3d}`), 'the 3-D chart workbook record');
+    await page.click(`.gd-card[data-key="${key3d}"] .gd-title`);
+    await grid();
+    const count3d = () => page.evaluate(() => [...document.querySelectorAll('#gx-grid .gx-chart')].map((el) => {
+      const n = (s) => el.querySelectorAll(s).length;
+      return { id: el.dataset.chart, title: [...el.querySelectorAll('.gc-title')].map((t) => t.textContent).join(' '), kind: el.querySelector('.gc-kind')?.textContent ?? null, tops: n('.gc-slice'), sides: n('.gc-side'),
+        bars: n('.gc-bar'), faces: n('.gc-face'), walls: n('.gc-wall'), plabels: [...el.querySelectorAll('.gc-plabel')].map((t) => t.textContent), labels: [...el.querySelectorAll('.gc-label')].map((t) => t.textContent) };
+    }));
+    const three = await until(async () => { const l = await count3d(); return l.length === 2 ? l : null; }, 'two 3-D charts drawn');
+    const pie3 = three.find((c) => c.title === 'Share in 3-D'), col3 = three.find((c) => c.title === 'Sales in 3-D');
+    check(pie3 && !pie3.kind && pie3.tops === 4 && pie3.sides === 5 && pie3.plabels.join() === '10%,20%,30%,40%',
+      `a 3-D pie draws its four tops, three front rims and two cut faces, with percent labels (${JSON.stringify(pie3)})`);
+    check(col3 && !col3.kind && col3.bars === 8 && col3.faces === 16 && col3.walls === 2 && col3.labels.join() === '10,20,30,40',
+      `a 3-D clustered column chart draws eight bars, each with a top and a side, on its two walls, with value labels (${JSON.stringify(col3)})`);
+    const ink3 = await page.evaluate(() => {
+      const el = document.querySelector('#gx-grid .gx-chart .gc-label'), bg = document.querySelector('#gx-grid .gx-chart .gc-bg'), wall = document.querySelector('#gx-grid .gx-chart .gc-wall');
+      return { dark: document.documentElement.hasAttribute('data-dark'), label: getComputedStyle(el).fill, ground: getComputedStyle(bg).fill, wall: getComputedStyle(wall).fill };
+    });
+    check(ink3.dark && ratio(ink3.label, ink3.ground) >= 4.5 && ink3.wall !== ink3.ground && !/^rgb\(0, 0, 0\)$/.test(ink3.wall),
+      `dark Look: a 3-D chart's value labels read on its ground and its walls take the Look (${JSON.stringify(ink3)}; ${ratio(ink3.label, ink3.ground).toFixed(1)}:1)`);
+    await shot('charts-3d-1280.png');
+    for (const [title, name] of [['Share in 3-D', 'charts-3d-pie.png'], ['Sales in 3-D', 'charts-3d-column.png']]) {
+      const id = three.find((c) => c.title === title).id;
+      const f = path.join(out, name);
+      await page.locator(`#gx-grid .gx-chart[data-chart="${id}"]`).first().screenshot({ path: f });
+      shots.push(f);
+    }
+    await page.setViewportSize({ width: 640, height: 900 });
+    const narrow3 = await until(async () => { const l = await count3d(); const g = await cellBox(1, 6); const b = await page.evaluate(() => { const el = document.querySelector('#gx-grid .gx-chart[data-chart$="#0"]'); if (!el) return null; const r = el.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top) }; }); return l.length === 2 && near(b, g) ? l : null; }, '3-D charts at 640 px');
+    const over3 = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    check(over3 <= 0 && narrow3.find((c) => c.title === 'Share in 3-D')?.tops === 4, `640 px: the 3-D pie stays at G2 and draws, no page overflow (overflow ${over3})`);
+    await shot('charts-3d-640.png');
+    await page.setViewportSize({ width: 1280, height: 900 });
+
     const intervals = await page.evaluate(() => globalThis.gzIntervals || []);
     check(intervals.every((ms) => ms >= 60000), `no interval under a minute (${JSON.stringify(intervals)})`);
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
