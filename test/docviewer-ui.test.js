@@ -175,6 +175,23 @@ test('a delayed own clear notification preserves an undo already applied', async
   assert.equal(v.svg().firstChild.children[0].attrs.stroke, '#112233');
 });
 
+test('Undo waits for a pending clear removal before saving its restored marks', async () => {
+  const v = await drawn();
+  const remove = v.chrome.storage.local.remove;
+  let finish;
+  v.chrome.storage.local.remove = (k) => new Promise((resolve) => { finish = async () => { await remove(k); resolve(); }; });
+  v.bar().find('Clear page').click();
+  await settle();
+  assert.equal(typeof finish, 'function');
+  v.bar().find('Undo').click();
+  await settle();
+  await finish();
+  await settle();
+  v.flushStorage();
+  assert.equal(v.store[`ink:${CANVAS}/5/21`]?.pages['1']?.length, 1, 'the clear cannot delete the newer undo save');
+  assert.equal(v.svg().firstChild.children.length, 1);
+});
+
 for (const [what, change] of [
   ['another file opens', (v) => v.tell({ file: '22' })],
   ['annotations go off and on again', async (v) => { await v.tell({ ink: false }); await v.tell(); }],
