@@ -326,7 +326,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       if (doc && sheet === mine) mine.addDoc(doc);
     });
     // From Google Drive (shown while Drive is connected): the files picked in Google's Picker (the worker opens it), each
-    // read through the worker's Drive port as Open from Drive reads it (lib/drive.js: a Google file exported as .docx, .xlsx
+    // read through the worker's Drive port as Open from Drive reads it (documents/drive.js: a Google file exported as .docx, .xlsx
     // or .pptx), one at a time in the attachments' queue, its row saying Reading… until it's staged. Remove, Cancel or the
     // sheet closing ends its read (the port closed, the worker stops). A file that can't come names itself and leaves the list.
     const SIGN_IN = ['off', 'connect', 'setup', 'account', 'auth', 'permission', 'scope', 'browser', 'unsupported', 'state'];
@@ -393,7 +393,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         if (sheet !== mine || mine.busy || mine.cancelled) return;
         if (!r?.ok || !Array.isArray(r.files)) { tell(driveWhy(r?.why || 'network')); return; }
         if (!r.files.length) return; // the Picker closed
-        await P().need(['lib/doc-kinds.js']);
+        await P().need(['documents/doc-kinds.js']);
         if (sheet !== mine || mine.busy || mine.cancelled) return;
         const takes = Object.keys(GZ_DOC_KINDS.KINDS);
         for (const f of r.files) {
