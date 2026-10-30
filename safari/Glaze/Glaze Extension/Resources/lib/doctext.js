@@ -750,7 +750,7 @@ var GZ_DOCTEXT = globalThis.GZ_DOCTEXT || (() => {
     return { text: tidy(text.join('\n')), conf: n ? Math.round(sum / n) : 0, unsure };
   };
 
-  return { unzip, docx, pptx, html, decode, tokens, LIMITS, READ, kind, imageSize, pgm, pdfText, ocrText };
+  return { unzip, docx, pptx, html, decode, tokens, rels, LIMITS, READ, kind, imageSize, pgm, pdfText, ocrText };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_DOCTEXT; else GZ_DOCTEXT;
