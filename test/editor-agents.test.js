@@ -91,7 +91,8 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
     },
   };
   const navigator = { clipboard: { writeText: async (s) => { copied.push(s); } } };
-  const window = {}; window.top = embedded ? {} : window;
+  const lifecycle = {};
+  const window = { addEventListener: (type, f) => { (lifecycle[type] ||= []).push(f); } }; window.top = embedded ? {} : window;
   const hints = [];
   // The page's timers run only when a test says the time has passed (elapse).
   const setTimeout = (f, ms) => { timers.set(++timer, { f, ms }); return timer; }, clearTimeout = (id) => { timers.delete(id); };
@@ -105,6 +106,8 @@ const page = ({ browser = 'chrome', os = 'mac', on = false, link, apps = [], mod
   const p = {
     $, sent, asked, removed, copied, hints, log, worker, local, session, walk, reloads, doc,
     waits: () => [...timers.values()].map((x) => x.ms),
+    timerIds: () => [...timers.keys()],
+    lifecycle: async (type, event = {}) => { for (const f of lifecycle[type] || []) f(event); await settle(); },
     elapse: async () => { for (const [k, x] of [...timers]) { timers.delete(k); x.f(); } await settle(); },
     ops: () => sent.filter((m) => m.type === 'glaze:mcp-config').map((m) => m.op),
     all,
@@ -347,6 +350,62 @@ test('opening Settings on a restart left by an earlier worker waits again from t
   const p = await open({ on: true, link: { state: 'restart', at: 1 } });
   assert.deepEqual(p.ops().filter((o) => o === 'state'), ['state'], 'asked once as it opens, a trigger in the worker');
   assert.equal(p.waits().length, 1);
+});
+
+test('connecting and restart share one Starting… wait and one ask', async () => {
+  const p = await open({ on: true, link: { state: 'restart', at: 1 } });
+  const timer = p.timerIds();
+  await p.linked('connecting');
+  assert.deepEqual(p.timerIds(), timer, 'the same Starting… line keeps its original deadline');
+  p.worker.link = { state: 'restart', at: 20 };
+  const before = p.ops().length;
+  await p.elapse();
+  assert.equal(p.line(), 'Restart Glaze to start the helper', 'the one answer of restart offers Restart at once');
+  assert.deepEqual(p.waits(), [], 'the answer never starts a second wait');
+  await p.linked('restart');
+  await p.elapse();
+  assert.deepEqual(p.ops().slice(before), ['state'], 'still only one ask in this Starting… episode');
+});
+
+test('a recheck from an earlier Starting… episode cannot offer Restart in a fresh one', async () => {
+  const gate = deferred();
+  const p = await open({ on: true, link: { state: 'restart', at: 1 }, reply: async (m, r) => {
+    if (m.op === 'state' && gate.armed) { gate.armed = false; await gate.promise; }
+    return r;
+  } });
+  gate.armed = true;
+  const asking = p.elapse();
+  await p.toggle('agents-on');
+  await p.toggle('agents-on');
+  assert.equal(p.line(), 'Starting…');
+  gate.resolve();
+  await asking;
+  assert.equal(p.line(), 'Starting…', 'the old answer cannot consume the new episode\'s wait');
+  assert.equal(p.$('agents-restart').hidden, true);
+  assert.deepEqual(p.waits(), [E().WAIT]);
+});
+
+test('leaving Settings cancels its wait, including late opening reads, and a restored page waits afresh', async () => {
+  const p = await open({ on: true, link: { state: 'restart', at: 1 } });
+  const before = p.ops().length;
+  await p.lifecycle('pagehide');
+  assert.deepEqual(p.waits(), [], 'no timer survives pagehide');
+  await p.linked('connecting');
+  await p.elapse();
+  assert.deepEqual(p.ops().slice(before), [], 'a hidden page cannot re-arm the wait');
+  await p.lifecycle('pageshow', { persisted: true });
+  assert.deepEqual(p.waits(), [E().WAIT], 'a restored page has one fresh wait');
+
+  const gate = deferred();
+  const q = page({ on: true, link: { state: 'restart', at: 1 }, reply: async (m, r) => {
+    if (m.op === 'state') await gate.promise;
+    return r;
+  } });
+  await settle();
+  await q.lifecycle('pagehide');
+  gate.resolve();
+  await settle();
+  assert.deepEqual(q.waits(), [], 'an opening reply after pagehide cannot start a wait');
 });
 
 test('Firefox and Safari keep their lines: no wait, no ask, no restart', async () => {
