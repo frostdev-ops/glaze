@@ -168,11 +168,12 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           h('div', { class: 'gs-file' }, h('span', { class: 'gs-doc', 'data-kind': kind, 'aria-hidden': 'true', text: L().tag(name) }), h('div', {}, h('span', { class: 'gs-name', text: name }), size))),
         h('div', { class: 'gs-form' },
           h('h2', { id: 'gs-title', text: title ? t('Submit {title}', { title }) : t('Submit') }),
+          h('div', { class: 'gs-body' },
           h('div', { class: 'gs-field' }, h('label', { for: 'gs-note', text: instructor ? t('Note to {name}', { name: instructor }) : t('Note to your instructor') }), note),
           file || other || only ? null : h('label', { class: 'gs-toggle', for: 'gs-paste' }, h('span', { text: t('Also paste the text in the text box') }), sw),
           atts, attachB,
           review ? h('div', { class: 'gs-open' }, h('span', { class: 'gs-dot' }), h('span', { class: 'gs-grow', text: t('{n} checks open', { n: issues }) }), review) : null,
-          err, native,
+          err, native),
           h('div', { class: 'gs-foot' }, cancel, submit))));
     const inert = [...document.body.children].map((el) => [el, el.inert]);
     for (const [el] of inert) el.inert = true;

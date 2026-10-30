@@ -1032,6 +1032,26 @@ const HARNESS = require('./ultra-attempt-harness.js');
       const again = expect(surname, [main, ...names], [[kinds.sheet, '.xlsx']])[0];
       check(twice.map((r) => r.name).join('|') === [...names, again].join('|') && twice.map((r) => r.tag).join('|') === 'DOCX|XLSX|PDF|XLSX' && again.endsWith('_2.xlsx'), `each listed as Lastname_Title with its size, the same one twice de-duplicated (${twice.map((r) => `${r.name} ${r.size}`).join('; ')})`);
       fs.writeFileSync(path.join(out, 'attach-sheet.png'), await p.screenshot());
+      // Ten rows must leave both actions visible without scrolling the page to find them.
+      for (let n = 5; n <= 10; n++) await attachOne(fr, kinds.sheet.key, n);
+      for (const width of [1280, 640]) {
+        await p.setViewportSize({ width, height: 720 });
+        await stillAll(p);
+        const geometry = await fr.evaluate(() => {
+          const rect = (s) => { const r = document.querySelector(s).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; };
+          return { title: rect('#gs-title'), submit: rect('.gs-primary'), cancel: rect('.gs-foot .gs-btn'), height: innerHeight };
+        });
+        const frameBox = await el.boundingBox();
+        check([geometry.title, geometry.submit, geometry.cancel].every((r) => r.top >= 0 && r.bottom <= geometry.height && frameBox.y + r.top >= 0 && frameBox.y + r.bottom <= 720), `ten attachments: title, Submit and Cancel inside the viewport at ${width}x720 (${JSON.stringify(geometry)})`);
+        // A real trusted click, intercepted in the frame before the submission handler.
+        await fr.evaluate(() => { globalThis.__submitHit = false; document.querySelector('.gs-primary').addEventListener('click', (e) => { e.stopImmediatePropagation(); globalThis.__submitHit = e.isTrusted; }, { capture: true, once: true }); });
+        await tap(fr, '.gs-primary');
+        check(await fr.evaluate(() => globalThis.__submitHit), `ten attachments: Submit clickable at ${width}x720`);
+        fs.writeFileSync(path.join(out, `attach-sheet-10-${width}.png`), await p.screenshot());
+      }
+      await p.setViewportSize({ width: 1280, height: 900 });
+      for (let n = 10; n > 4; n--) await tap(fr, '.gs-att:last-child .gs-att-x');
+
       await tap(fr, '.gs-att:last-child .gs-att-x');
       const left = await ready(fr, 3, 'one removed');
       check(left.map((r) => r.name).join('|') === names.join('|') && await fr.evaluate(() => document.activeElement?.matches('.gs-att:last-child .gs-att-x')), 'Remove takes it off the list, focus to the row before');
