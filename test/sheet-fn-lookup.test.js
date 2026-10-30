@@ -439,3 +439,19 @@ test('table lookups intersect an index array when lookup values lift', () => {
   e.apply({ op: 'set', sheet: e.wb.sheets[0].id, r: 5, c: 0, cell: { t: 'n', v: 0, f: 'VLOOKUP({1;2},A1:C3,{2,3},FALSE)', a: 'A6:B7' } });
   assert.deepEqual(['A6','B6','A7','B7'].map((at) => val(e, at)), [10,10,20,20]);
 });
+
+// The first index taken from an array is validated as Excel's table index: an error or nonnumeric text is #REF!.
+// A scalar error index retains its identity, and errors in later, unused array positions do not matter.
+test('a lifted table lookup validates the first array index', () => {
+  const e = book({ A1: 1, A2: 2, B1: 10, B2: 20, C1: 100, C2: 200 });
+  cases(e, [
+    ['VLOOKUP({1;2},A1:C2,{#N/A,2},FALSE)', '#REF!'],
+    ['VLOOKUP({1;2},A1:C2,{#DIV/0!,2},FALSE)', '#REF!'],
+    ['VLOOKUP({1;2},A1:C2,{"x",2},FALSE)', '#REF!'],
+    ['VLOOKUP({1;2},A1:C2,#N/A,FALSE)', '#N/A'],
+    ['VLOOKUP(1,A1:C2,{#N/A,2},FALSE)', '#N/A'],
+    ['VLOOKUP(1/0,A1:C2,{#N/A,2},FALSE)', '#DIV/0!'],
+    ['SUM(VLOOKUP({1;2},A1:C2,{2,#N/A},FALSE))', 30],
+    ['VLOOKUP({1;2},A1:C2,{0,2},FALSE)', '#VALUE!'],
+  ]);
+});
