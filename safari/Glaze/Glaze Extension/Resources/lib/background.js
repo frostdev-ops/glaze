@@ -750,36 +750,37 @@ const backgroundPage = async (s) => {
   const site = await fromLms({ ...s, url: addressOf(s), frameId: 0 });
   return site && (s.frameId === 0 || s.tab?.url?.startsWith(`${site}/`)) ? site : null;
 };
-// Resolve only this document's Look, never the files assigned to other courses or tabs. Sender URLs of warm Ultra
-// frames can still be about:blank; Moodle keeps its course and installation path in two small DOM fields. Pin that
-// read to the sending document where supported, and fail closed if it has gone. No page-supplied id grants a file.
+// Resolve only this document's Look, never the files assigned to other courses or tabs. Sender URLs can predate SPA
+// navigation (or still be about:blank); Moodle keeps its course and installation path in two small DOM fields. Pin the
+// current-page read to the sending document where supported, and fail closed if it has gone. No page-supplied id grants a file.
 const backgroundParts = async (s, area) => {
+  const courses = GZ_SANITIZE(await area.sync.get('courses')).courses.looks;
+  const theme = async () => GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local);
+  if (!Object.keys(courses).length) return theme();
   let u = new URL(addressOf(s)), key;
-  if (s.url === 'about:blank' || await approved('moodle', u)) {
-    const [got] = await chrome.scripting.executeScript({ target: { tabId: s.tab.id,
-      ...(s.documentId ? { documentIds: [s.documentId] } : { frameIds: [s.frameId] }) }, func: () => ({
-      href: location.href,
-      moodle: document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1],
-      styles: document.querySelector('link[href*="/theme/styles"]')?.href,
-    }) });
-    const at = new URL(got.result.href);
-    if (at.origin !== u.origin || modQuiet(at.pathname)) throw Error('sender');
-    u = at;
-    if (got.result.moodle && got.result.styles) {
-      const base = new URL(got.result.styles.split('/theme/')[0]);
-      if (base.origin === u.origin) key = `moodle:${base.href.replace(/\/$/, '')}/${got.result.moodle}`;
-    }
+  const [current] = await chrome.scripting.executeScript({ target: { tabId: s.tab.id,
+    ...(s.documentId ? { documentIds: [s.documentId] } : { frameIds: [s.frameId] }) }, func: () => ({
+    href: location.href,
+    moodle: document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1],
+    styles: document.querySelector('link[href*="/theme/styles"]')?.href,
+  }) });
+  const at = new URL(current.result.href);
+  if (at.origin !== u.origin || !await fromLms({ ...s, frameId: 0, url: at.href })) throw Error('sender');
+  u = at;
+  if (await approved('moodle', u) && current.result.moodle && current.result.styles) {
+    const base = new URL(current.result.styles.split('/theme/')[0]);
+    if (base.origin === u.origin) key = `moodle:${base.href.replace(/\/$/, '')}/${current.result.moodle}`;
   }
   const ultra = /^\/ultra\/courses\/(_\d+_\d+)\//.exec(u.pathname)?.[1];
   const canvas = /^\/courses\/(\d+)(?:\/|$)/.exec(u.pathname)?.[1];
   key ||= ultra || (canvas && `canvas:${u.origin}/${canvas}`);
-  const id = GZ_SANITIZE(await area.sync.get('courses')).courses.looks[key];
+  const id = courses[key];
   const builtin = GZ_LOOKS.find((l) => l.name === id);
   if (builtin) return GZ_LOOK_PARTS(builtin);
   const kept = id && GZ_CATALOG.keptAll((await area.local.get('lookFavorites')).lookFavorites).find((f) => f.id === id);
   const got = kept && await GZ_SHARE.decode(kept.code).catch(() => null);
   if (got && !GZ_XPARTS.outside(got.parts).length) return got.parts;
-  return GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local);
+  return theme();
 };
 // A kept file for a page's background (lib/scene-media.js): as it was kept (checked and named when it was put), for the file
 // the worn Look names only; the editor and its preview frame may have any. Read outside the broker's queue: only a file an
