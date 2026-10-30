@@ -54,6 +54,12 @@ const fixture = () => {
     const settings = (slides) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, slides } });
     const HOME = `chrome-extension://${id}/papers.html`;
     const page = await context.newPage();
+    await page.addInitScript(() => {
+      const request = Element.prototype.requestFullscreen;
+      if (request) Element.prototype.requestFullscreen = function (...args) {
+        return request.apply(this, args).then((v) => { globalThis.fullscreenResult = { ok: true }; return v; }, (e) => { globalThis.fullscreenResult = { ok: false, error: e.message }; throw e; });
+      };
+    });
     page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
     page.on('console', (m) => { const x = m.text(); if (m.type() === 'error' && !/Failed to load resource/.test(x)) errors.push(`console: ${x}`); });
     await page.goto(HOME);
@@ -215,6 +221,8 @@ const fixture = () => {
     await page.click('#gs-present');
     await until(() => page.evaluate(() => !!document.querySelector('dialog.gs-present[open] .gs-slide')), 'the presentation');
     const pc = () => page.evaluate(() => ({ n: document.querySelector('dialog.gs-present .gs-present-n')?.textContent, text: document.querySelector('dialog.gs-present .gs-slide')?.textContent || '' }));
+    const full = await until(() => page.evaluate(() => globalThis.fullscreenResult), 'fullscreen request settled');
+    check(full.ok && await page.evaluate(() => !!document.fullscreenElement), `Present enters fullscreen from the button gesture (${JSON.stringify(full)})`);
     check((await pc()).n === '1 / 9', 'Present: 9 slides, the hidden one left out');
     const presentFit = await page.evaluate(() => { const r = document.querySelector('dialog.gs-present .gs-stage').getBoundingClientRect(); return { w: r.width, h: r.height, iw: innerWidth, ih: innerHeight }; });
     check(presentFit.w <= presentFit.iw + 1 && presentFit.h <= presentFit.ih + 1 && (Math.abs(presentFit.w - presentFit.iw) < 2 || Math.abs(presentFit.h - presentFit.ih) < 2), `the slide fills the screen (${JSON.stringify(presentFit)})`);
