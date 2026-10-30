@@ -320,6 +320,14 @@ const scan = () => {
     await page.click(`.gd-card[data-key="${key}"] .gd-title`);
     const afterRace = await until(() => page.evaluate(() => document.querySelector('.annotationLayer input')?.value || null), 'overlapping edits reopened');
     check(afterRace === 'Second edit', `an edit made during a save is persisted before leaving (${afterRace})`);
+    // Closing a viewer in place (an assignment's frame unmounting it) ends pdf.js's worker with it.
+    await openHome();
+    const pdfWorkers = () => page.workers().filter((w) => w.url().endsWith('/lib/pdfjs/pdf.worker.mjs')).length;
+    await until(() => pdfWorkers() === 0, 'no PDF worker on the home');
+    await page.evaluate(async (key) => { document.getElementById('list').hidden = true; globalThis.pdfCheckView = await GZ_DOC_KINDS.get('pdf').edit(key); }, key);
+    const open = await until(() => pdfWorkers() || null, 'the viewer\'s worker');
+    await page.evaluate(async () => { await globalThis.pdfCheckView.dispose(); delete globalThis.pdfCheckView; });
+    check(open === 1 && await until(() => pdfWorkers() === 0, 'the viewer\'s worker ended', 5000), `closing the viewer ends its pdf.js worker (${open} → ${pdfWorkers()})`);
 
     // A scan's card shows its page sharp: drawn at the card's size on a 2× screen, not a postage stamp scaled up.
     await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(true));
