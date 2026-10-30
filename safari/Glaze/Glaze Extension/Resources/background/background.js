@@ -3495,7 +3495,7 @@ const openDriveSync = () => {
   return driveSync;
 };
 // Whether Sync is on, read as each trigger fires: nothing of it loads for someone who never turned it on.
-const driveSyncOn = async () => googleLib().ON && (await chrome.storage.local.get('driveSync')).driveSync?.on === true;
+const driveSyncOn = async () => (await chrome.storage.local.get('driveSync')).driveSync?.on === true && googleLib().ON;
 const driveSyncPoke = () => { driveSyncOn().then((on) => on && openDriveSync().poke()).catch((e) => console.warn('Sync to Google Drive:', e)); };
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:driveSync' || m.op !== 'set' || typeof m.on !== 'boolean') return;
