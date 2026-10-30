@@ -3,10 +3,11 @@
 // by pixel: a pixel differs when its channels differ by more than --tolerance in sum (default 96 of 765), a slide passes
 // when under --max of its pixels differ (default 0.02: a different slide of mostly white differs by as little as 3%; set
 // it from the first PowerPoint run). Writes ppt-<n>.png, glaze-<n>.png, diff-<n>.png (the differing
-// pixels in red over a faint copy of PowerPoint's) and fidelity.json. PowerPoint runs without dialogs; the deck is closed
+// pixels in red over a faint copy of PowerPoint's) and fidelity.json. The deck is closed
 // unsaved; PowerPoint quits only if this script started it, and the script won't start while PowerPoint is running
 // (--force overrides: it then opens the deck in the session in use).
-// NEEDS POWERPOINT FREE: not run while PowerPoint was busy with other work (2026-10-30). Without PowerPoint:
+// The terminal running it needs macOS's Automation permission for PowerPoint (System Settings → Privacy & Security →
+// Automation); its prompt was unanswered at the first run (2026-10-30), so no export has run end to end yet. Without PowerPoint:
 //   --render-only writes the Glaze PNGs alone; --reference <folder> compares with PNGs already made (Slide1.png, … or any
 //   names numbered consecutively from 1, including hidden slides) instead of exporting. Incomplete references are refused.
 // NODE_PATH=<playwright> node scripts/slides-fidelity.js <deck.pptx | unzipped deck folder> [out folder] [--reference <folder>]
@@ -55,10 +56,9 @@ const exportWithPowerPoint = (bytes) => {
   const started = !running();
   try {
     osa(`tell application "Microsoft PowerPoint"
-  set display alerts to alerts none
   open POSIX file "${deck}"
   set p to active presentation
-  save p in POSIX file "${pngs}" as save as PNG
+  save p in POSIX file "${pngs}" as save as PNG file
   close p saving no
 end tell`);
     const files = numbered(fs.existsSync(pngs) ? pngs : tmp);
