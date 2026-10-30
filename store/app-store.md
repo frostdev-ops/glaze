@@ -24,19 +24,19 @@ YOUR LOOK
 Pick a Look or set your palette, fonts, spacing, corners and surfaces. Add a gradient, picture or animated background. Preview in the settings editor, pair light and dark palettes, and share a theme code. Motion follows your reduced-motion setting.
 
 YOUR WORKSPACE
-On Blackboard Ultra and Canvas, arrange course cards and widgets on a Glaze Dashboard. Keep Better To Do and compatible widgets in a sidebar that becomes a drawer on narrow screens. Open courses in tabs, customize navigation, and find courses, pages and settings with the command palette.
+On Blackboard Ultra and Canvas, arrange course cards and widgets on a Glaze Dashboard. Keep Better To Do and compatible widgets in a sidebar. Open courses in tabs, customize navigation, and find courses, pages and settings with the command palette.
 
 PLAN AND STUDY
-Better To Do brings due work together with your own tasks, steps and plans. Keep notes with folders, pictures and attachments, use a focus timer, and choose an animated study companion that reacts to your focus sessions and finished tasks. Import a class schedule or syllabus for review on your device, then export your plans as a calendar file.
+Better To Do brings due work together with your own tasks, steps and plans. Keep notes with folders, pictures and attachments, use a focus timer, and choose an animated study companion. Import a class schedule or syllabus for review on your device, then export your plans as a calendar file.
 
-See due-date status, course progress, new-content and grade badges, and try what-if scores without changing real grades. Helpers depend on the platform and what your school shares.
+See due-date status, course progress, new-content and grade badges, and try what-if scores without changing real grades.
 
-Announcements open in a Glaze pop-up from Better To Do, Ctrl+K or the sites' own lists, with hover previews. Assignment rubrics show your published scores and feedback, in the page on Blackboard Ultra when there's room, otherwise in the pop-up.
+Announcements open in a Glaze pop-up, with hover previews. Assignment rubrics show your published scores and feedback, in the page on Blackboard Ultra when there's room, otherwise in the pop-up.
 
 Moodle Boost gets the same Looks, course totals when available, a due list from Timeline and keyboard shortcuts.
 
 GLAZE WRITER AND DOCUMENTS
-On Blackboard Ultra, Glaze Writer replaces the editor in discussions, journals, messages, assignments and tests. Spelling and grammar checks run on your device; tests get proofing only. Full writer adds pages in MLA, APA, Chicago or your own format, with citations, footnotes, versions and .docx files. Documents keeps papers and documents together; deleted items stay in Trash for 30 days. AI is optional and off until set up. Tab completion only finishes the current sentence; Feedback assesses your work. Glaze never drafts.
+On Blackboard Ultra, Glaze Writer replaces the editor in discussions, journals, messages, assignments and tests. Spelling and grammar checks run on your device; tests get proofing only. Full writer adds pages in MLA, APA, Chicago or your own format, with citations, footnotes, versions and .docx files. Documents keeps papers, spreadsheets with Excel formulas and charts, fillable PDFs and PowerPoint decks; deleted items stay in Trash for 30 days. An assignment can start as a spreadsheet, and an uploaded PDF, deck or spreadsheet is submitted as itself. AI is optional and off until set up; Glaze never drafts.
 
 PRIVACY AND CONTROL
 Glaze is free, with no ads, analytics or Glaze account. Glaze settings, notes, tasks, coursework records, papers and documents stay on your device. Optional share sessions start only when you create, join or resume one, and encrypt content before it goes through your chosen relay. Fonts, media, external players and AI providers you choose, and citation lookups you click, can make network requests, as the privacy policy explains. Glaze does not collect or sell your data.

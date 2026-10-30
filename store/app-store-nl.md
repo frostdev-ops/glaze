@@ -24,19 +24,19 @@ JOUW LOOK
 Kies een Look of stel je palet, lettertypen, ruimte, hoeken en vlakken in. Voeg een verloop, afbeelding of geanimeerde achtergrond toe. Bekijk alles vooraf in de instellingeneditor, koppel lichte en donkere paletten en deel een themacode. Beweging volgt je instelling voor minder beweging.
 
 JOUW WERKPLEK
-Zet op Blackboard Ultra en Canvas cursuskaarten en widgets op een Glaze-dashboard. Houd Better To Do en geschikte widgets in een zijbalk die op smalle schermen een lade wordt. Open cursussen in tabbladen, pas de navigatie aan en vind cursussen, pagina's en instellingen met het opdrachtenpalet.
+Zet op Blackboard Ultra en Canvas cursuskaarten en widgets op een Glaze-dashboard. Houd Better To Do en geschikte widgets in een zijbalk. Open cursussen in tabbladen, pas de navigatie aan en vind cursussen, pagina's en instellingen met het opdrachtenpalet.
 
 PLANNEN EN STUDEREN
-Better To Do bundelt werk met een deadline, eigen taken, stappen en plannen. Maak notities met mappen, afbeeldingen en bijlagen, gebruik een focustimer en kies een geanimeerd studiemaatje dat reageert op focussessies en afgeronde taken. Bekijk een geïmporteerd lesrooster of syllabus op je apparaat en exporteer je plannen als agendabestand.
+Better To Do bundelt werk met een deadline, eigen taken, stappen en plannen. Maak notities met mappen, afbeeldingen en bijlagen, gebruik een focustimer en kies een geanimeerd studiemaatje. Bekijk een geïmporteerd lesrooster of syllabus op je apparaat en exporteer je plannen als agendabestand.
 
-Bekijk deadlinestatus, cursusvoortgang en meldingen van nieuwe inhoud en cijfers, en probeer wat-als-scores zonder echte cijfers te wijzigen. De hulpmiddelen hangen af van het platform en wat je school deelt.
+Bekijk deadlinestatus, cursusvoortgang en meldingen van nieuwe inhoud en cijfers, en probeer wat-als-scores zonder echte cijfers te wijzigen.
 
-Aankondigingen openen in een pop-up van Glaze vanuit Better To Do, Ctrl+K of de lijsten van de sites, met een voorbeeld bij aanwijzen. Beoordelingsschema’s tonen je gepubliceerde scores en feedback: op Blackboard Ultra in de pagina als er ruimte is, anders in de pop-up.
+Aankondigingen openen in een pop-up van Glaze, met een voorbeeld bij aanwijzen. Beoordelingsschema’s tonen je gepubliceerde scores en feedback: op Blackboard Ultra in de pagina als er ruimte is, anders in de pop-up.
 
 Moodle Boost krijgt dezelfde Looks, cursustotalen waar beschikbaar, een deadlinelijst uit de Tijdlijn en sneltoetsen.
 
 GLAZE WRITER EN DOCUMENTEN
-Op Blackboard Ultra vervangt Glaze Writer de editor in discussies, dagboeken, berichten, opdrachten en toetsen. Spelling en grammatica worden op je apparaat gecontroleerd; toetsen krijgen alleen tekstcontrole. Volledige Writer biedt pagina’s in MLA, APA, Chicago of je eigen opmaak, met bronverwijzingen, voetnoten, versies en .docx-bestanden. Documenten bundelt werkstukken en documenten; verwijderde items blijven 30 dagen in de Prullenbak. AI is optioneel en staat uit tot je het instelt. Aanvullen met Tab maakt alleen de huidige zin af; Feedback beoordeelt je werk. Glaze schrijft nooit een tekst voor je.
+Op Blackboard Ultra vervangt Glaze Writer de editor in discussies, dagboeken, berichten, opdrachten en toetsen. Spelling en grammatica worden op je apparaat gecontroleerd; toetsen krijgen alleen tekstcontrole. Volledige Writer biedt pagina’s in MLA, APA, Chicago of je eigen opmaak, met bronverwijzingen, voetnoten, versies en .docx-bestanden. Documenten bundelt werkstukken, spreadsheets met Excel-formules en grafieken, invulbare PDF’s en PowerPoint-presentaties; verwijderde items blijven 30 dagen in de Prullenbak. Een opdracht kan beginnen als spreadsheet, en een geüploade PDF, presentatie of spreadsheet wordt in zijn eigen formaat ingeleverd. AI is optioneel en staat uit tot je het instelt; Glaze schrijft nooit een tekst voor je.
 
 PRIVACY EN CONTROLE
 Glaze is gratis, zonder advertenties, analyses of Glaze-account. Glaze-instellingen, notities, taken, cursusgegevens, werkstukken en documenten blijven op je apparaat. Optionele gedeelde sessies beginnen pas als je er een aanmaakt, eraan deelneemt of hervat, en versleutelen inhoud voordat die via de relay van je keuze gaat. Gekozen lettertypen, media, externe spelers en AI-aanbieders, en bronnen die je met een klik opzoekt, kunnen netwerkverzoeken doen, zoals het privacybeleid uitlegt. Glaze verzamelt en verkoopt je gegevens niet.

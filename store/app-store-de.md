@@ -24,19 +24,19 @@ DEIN AUSSEHEN
 Wähle einen Look oder eigene Farben, Schriften, Abstände, Ecken und Oberflächen. Ergänze Verläufe, Bilder oder animierte Hintergründe. Prüfe alles im Editor, kombiniere helle und dunkle Paletten und teile einen Designcode. Bewegung folgt deiner Einstellung für reduzierte Bewegung.
 
 DEIN ARBEITSBEREICH
-Ordne auf Blackboard Ultra und Canvas Kurskarten und Widgets auf einem Glaze-Dashboard an. Nutze Better To Do und passende Widgets in einer Seitenleiste, die auf schmalen Bildschirmen zur Schublade wird. Öffne Kurs-Tabs, passe die Navigation an und finde Kurse, Seiten und Einstellungen mit der Befehlspalette.
+Ordne auf Blackboard Ultra und Canvas Kurskarten und Widgets auf einem Glaze-Dashboard an. Nutze Better To Do und passende Widgets in einer Seitenleiste. Öffne Kurs-Tabs, passe die Navigation an und finde Kurse, Seiten und Einstellungen mit der Befehlspalette.
 
 PLANEN UND LERNEN
-Better To Do bündelt fällige Arbeiten, eigene Aufgaben, Schritte und Pläne. Notizen bieten Ordner, Bilder und Anhänge, dazu kommen ein Fokus-Timer und ein animierter Lernbegleiter, der auf Fokuszeiten und erledigte Aufgaben reagiert. Prüfe importierte Stundenpläne und Syllabi auf deinem Gerät und exportiere Pläne als Kalenderdatei.
+Better To Do bündelt fällige Arbeiten, eigene Aufgaben, Schritte und Pläne. Notizen bieten Ordner, Bilder und Anhänge, dazu kommen ein Fokus-Timer und ein animierter Lernbegleiter. Prüfe importierte Stundenpläne und Syllabi auf deinem Gerät und exportiere Pläne als Kalenderdatei.
 
-Sieh Fristenstatus, Kursfortschritt sowie Hinweise auf neue Inhalte und Noten, und teste Was-wäre-wenn-Punkte, ohne echte Noten zu ändern. Die Hilfen hängen von Plattform und Freigaben deiner Schule ab.
+Sieh Fristenstatus, Kursfortschritt sowie Hinweise auf neue Inhalte und Noten, und teste Was-wäre-wenn-Punkte, ohne echte Noten zu ändern.
 
-Ankündigungen öffnen sich im Pop-up von Glaze, aus Better To Do, mit Strg+K oder aus den Listen der Websites, mit Vorschau beim Darüberfahren. Bewertungsraster zeigen deine veröffentlichten Punktzahlen und dein Feedback, auf Blackboard Ultra bei genügend Platz direkt auf der Seite, sonst im Pop-up.
+Ankündigungen öffnen sich im Pop-up von Glaze, mit Vorschau beim Darüberfahren. Bewertungsraster zeigen deine veröffentlichten Punktzahlen und dein Feedback, auf Blackboard Ultra bei genügend Platz direkt auf der Seite, sonst im Pop-up.
 
 Moodle Boost bekommt dieselben Looks, Kursgesamtwerte, wenn verfügbar, eine Fristenliste aus der Zeitleiste und Tastenkürzel.
 
 GLAZE WRITER UND DOKUMENTE
-Auf Blackboard Ultra ersetzt Glaze Writer den Editor in Diskussionen, Journalen, Nachrichten, Aufgaben und Tests. Rechtschreibung und Grammatik werden auf deinem Gerät geprüft; Tests bekommen nur Korrekturhilfen. Voller Writer bietet Seiten in MLA, APA, Chicago oder deinem Format, mit Zitaten, Fußnoten, Versionen und .docx-Dateien. Dokumente bündelt Arbeiten und Dokumente; Gelöschtes bleibt 30 Tage im Papierkorb. KI ist optional und aus, bis du sie einrichtest. Tab-Vervollständigung beendet nur den aktuellen Satz; Feedback bewertet deine Arbeit. Glaze verfasst keine Entwürfe.
+Auf Blackboard Ultra ersetzt Glaze Writer den Editor in Diskussionen, Journalen, Nachrichten, Aufgaben und Tests. Rechtschreibung und Grammatik werden auf deinem Gerät geprüft; Tests bekommen nur Korrekturhilfen. Voller Writer bietet Seiten in MLA, APA, Chicago oder deinem Format, mit Zitaten, Fußnoten, Versionen und .docx-Dateien. Dokumente bündelt Arbeiten, Tabellen mit Excel-Formeln und Diagrammen, ausfüllbare PDFs und PowerPoint-Präsentationen; Gelöschtes bleibt 30 Tage im Papierkorb. Eine Aufgabe kann als Tabelle beginnen, und eine hochgeladene PDF, Präsentation oder Tabelle wird in ihrem eigenen Format abgegeben. KI ist optional und aus, bis du sie einrichtest; Glaze verfasst keine Entwürfe.
 
 DATENSCHUTZ UND KONTROLLE
 Glaze ist kostenlos, ohne Werbung, Analysen oder Glaze-Konto. Glaze-Einstellungen, Notizen, Aufgaben, Kursdaten, Arbeiten und Dokumente bleiben auf deinem Gerät. Optionale geteilte Sitzungen beginnen erst, wenn du eine erstellst, ihr beitrittst oder sie fortsetzt, und verschlüsseln Inhalte vor dem Versand über das von dir gewählte Relay. Gewählte Schriften, Medien, externe Player und KI-Anbieter sowie Quellensuchen auf deinen Klick können Netzwerkanfragen stellen; Details stehen in der Datenschutzerklärung. Glaze sammelt und verkauft deine Daten nicht.

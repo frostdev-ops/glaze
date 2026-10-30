@@ -24,19 +24,19 @@ VOTRE STYLE
 Choisissez un Look ou réglez palette, polices, espacement, coins et surfaces. Ajoutez un dégradé, une image ou un fond animé. Prévisualisez dans l’éditeur, associez palettes claires et sombres et partagez un code de thème. Les animations respectent le réglage de mouvement réduit.
 
 VOTRE ESPACE DE TRAVAIL
-Sur Blackboard Ultra et Canvas, organisez cartes et widgets sur un tableau de bord Glaze. Gardez Better To Do et les widgets compatibles dans une barre latérale qui devient un tiroir sur écran étroit. Ouvrez des onglets de cours, personnalisez la navigation et cherchez cours, pages et réglages dans la palette de commandes.
+Sur Blackboard Ultra et Canvas, organisez cartes et widgets sur un tableau de bord Glaze. Gardez Better To Do et les widgets compatibles dans une barre latérale. Ouvrez des onglets de cours, personnalisez la navigation et cherchez cours, pages et réglages dans la palette de commandes.
 
 PLANIFIER ET ÉTUDIER
-Better To Do réunit devoirs, tâches, étapes et plans. Notes avec dossiers, images et pièces jointes, minuteur de concentration et compagnon animé qui réagit aux sessions et tâches terminées. Vérifiez sur votre appareil un emploi du temps ou programme de cours importé, puis exportez vos plans en fichier de calendrier.
+Better To Do réunit devoirs, tâches, étapes et plans. Notes avec dossiers, images et pièces jointes, minuteur de concentration et compagnon animé. Importez un emploi du temps ou un programme de cours, lu sur votre appareil, et exportez vos plans en calendrier.
 
-Consultez échéances, progression, nouveautés et nouvelles notes, et simulez des notes sans modifier les vraies. Les outils dépendent de la plateforme et des données de votre établissement.
+Consultez échéances, progression, nouveautés et nouvelles notes, et simulez des notes sans modifier les vraies.
 
-Les annonces s’ouvrent dans une fenêtre Glaze depuis Better To Do, Ctrl+K ou les listes des sites, avec aperçu au survol. Les grilles d’évaluation affichent vos notes et commentaires publiés dans la page sur Blackboard Ultra s’il y a la place, sinon dans une fenêtre.
+Les annonces s’ouvrent dans une fenêtre Glaze, avec aperçu au survol. Les grilles d’évaluation affichent vos notes et commentaires publiés dans la page sur Blackboard Ultra s’il y a la place, sinon dans une fenêtre.
 
 Moodle Boost profite des mêmes Looks, des totaux de cours si disponibles, des échéances de la Chronologie et de raccourcis clavier.
 
 GLAZE WRITER ET DOCUMENTS
-Sur Blackboard Ultra, Glaze Writer remplace l’éditeur dans les discussions, journaux, messages, devoirs et tests. Orthographe et grammaire sont vérifiées sur votre appareil ; les tests n’ont que la correction. Writer complet offre des pages en MLA, APA, Chicago ou votre format, avec citations, notes de bas de page, versions et fichiers .docx. Documents réunit travaux et documents ; les éléments supprimés restent 30 jours dans la Corbeille. L’IA est facultative et désactivée tant que vous ne la configurez pas. La fonction Complétion avec Tab termine seulement la phrase en cours ; le panneau Commentaires évalue votre travail. Glaze ne rédige jamais à votre place.
+Sur Blackboard Ultra, Glaze Writer remplace l’éditeur dans les discussions, journaux, messages, devoirs et tests. Orthographe et grammaire sont vérifiées sur votre appareil ; les tests n’ont que la correction. Writer complet offre des pages en MLA, APA, Chicago ou votre format, avec citations, notes de bas de page, versions et fichiers .docx. Documents réunit travaux, feuilles de calcul avec formules et graphiques Excel, PDF à remplir et présentations PowerPoint ; les éléments supprimés restent 30 jours dans la Corbeille. Un devoir peut commencer en feuille de calcul, et un PDF, une présentation ou une feuille de calcul déposés sont remis dans leur propre format. L’IA est facultative et désactivée tant que vous ne la configurez pas ; Glaze ne rédige jamais à votre place.
 
 CONFIDENTIALITÉ ET CONTRÔLE
 Glaze est gratuit, sans publicité, statistiques ni compte Glaze. Les réglages Glaze, les notes, les tâches, les données de cours, les travaux et les documents restent sur votre appareil. Les sessions de partage, en option, ne démarrent qu’à votre initiative et chiffrent le contenu avant de l’envoyer au relais choisi. Polices, médias, lecteurs externes et fournisseurs d’IA choisis, et recherches de citations lancées d’un clic, peuvent faire des requêtes réseau, comme l’explique la politique de confidentialité. Glaze ne collecte ni ne vend vos données.
