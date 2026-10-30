@@ -510,7 +510,7 @@
       if (act === 'rename') rename(k);
       else if (act === 'copy') copy(k).catch((e) => { console.error(e); say(t('Not saved. Try again in a moment.')); });
       // A paper Word can't take (a picture kept in a form Word has no place for) is said on the page, not logged.
-      else if (act === 'export') { const id = DK.kindOf(cards.get(k)?.row); DK.get(id).exportFile(k).catch((e) => { console.error(e); say(t(id === 'paper' ? 'The .docx could not be made.' : id === 'sheet' ? 'Not saved. Try again in a moment.' : 'That file could not be read.')); }); }
+      else if (act === 'export') { const id = DK.kindOf(cards.get(k)?.row); DK.get(id).exportFile(k).catch(() => { say(t(id === 'paper' ? 'The .docx could not be made.' : id === 'sheet' ? 'Not saved. Try again in a moment.' : 'That file could not be read.')); }); }
       else if (act === 'delete') del(k);
       else if (act === 'restore') out(k);
       else if (act === 'forever') forever(k);
