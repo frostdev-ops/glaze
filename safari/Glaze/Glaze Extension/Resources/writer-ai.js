@@ -223,6 +223,10 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const trackers = new Set();
   const track = () => { const m = new Mapping(); trackers.add(m); return { m, done: () => trackers.delete(m) }; };
   let score = 0.5, timer = 0, flight = 0, shown = 0;
+  // The sentences as the gray text shown here would have finished them, the newest 40: the model is told them and the task
+  // refuses them again (lib/ai/tasks/writer-complete.js input past). In memory only, for one document: a new editor state
+  // (another paper) or a document replaced whole (the page's own text, a version restored) starts it again.
+  const past = [];
   // The gray text's model, readied as the box opens, on focus a minute later, and every 90 s while focused, so the first
   // pause is as quick as the next (the owner, 2026-10-27; lib/ai/broker.js op warm: nothing is asked of the model). After a
   // space and mid-word it reads different instructions (lib/ai/tasks/writer-complete.js), so both are readied.
@@ -264,8 +268,9 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const plugin = new Plugin({
     key: KEY,
     state: {
-      init: () => null,
+      init: () => { past.length = 0; return null; },
       apply(tr, g, old, now) {
+        if (tr.steps.some((st, i) => st.slice && st.from === 0 && st.to === tr.docs[i].content.size)) past.length = 0;
         const meta = tr.getMeta(KEY);
         if (meta !== undefined) return meta;
         if (!g) return null;
@@ -343,9 +348,9 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const st = v.state, { selection } = st;
     if (!selection.empty || !selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code || quoted(selection.$head)) return;
     const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
-    const before = tx.text.slice(Math.max(0, off - 8000), off), after = tx.text.slice(off, off + 2000);
+    const before = tx.text.slice(Math.max(0, off - 1e6), off), after = tx.text.slice(off, off + 4000);
     if (!fits(before, after)) return;
-    const r = run('completion', 'writer.complete', { before, after, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context() });
+    const r = run('completion', 'writer.complete', { before, after, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context(), past: past.slice() });
     flight = r.id;
     const end = await r;
     if (flight !== r.id) return;
@@ -354,6 +359,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const now = v.state;
     if (now.doc !== st.doc || !now.selection.eq(selection) || v.composing || !v.hasFocus()) return;
     set(v, { pos: selection.head, text: end.output, fresh: true, id: ++shown });
+    if (past.push(`${sentence(before)}${end.output}`.slice(-600)) > 40) past.shift();
     say(t('Suggestion: {text}', { text: end.output.trim() }));
   };
 
@@ -369,7 +375,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code) return 'not at this caret';
     if (quoted(selection.$head)) return 'in a quotation';
     const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
-    if (!fits(tx.text.slice(Math.max(0, off - 8000), off), tx.text.slice(off, off + 2000))) return 'not at this caret';
+    if (!fits(tx.text.slice(Math.max(0, off - 1e6), off), tx.text.slice(off, off + 4000))) return 'not at this caret';
     return KEY.getState(st) ? 'showing' : flight ? 'asking' : timer ? 'waiting for the pause' : 'ready: type a letter or a space';
   };
 
