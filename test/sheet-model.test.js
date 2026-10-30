@@ -425,7 +425,7 @@ test('an unprefixed slash is a date while a mixed fraction is numeric', () => {
 });
 
 test('undo restores the exact serialized Map and Set order as well as cell and layout values', () => {
-  const { serialize } = require('node:v8');
+  const serialize = (wb) => Buffer.from(JSON.stringify(wb, (key, value) => value instanceof Map || value instanceof Set ? [...value] : value));
   for (const op of [
     { op: 'clear', sheet: 1, r0: 0, c0: 0, r1: 2, c1: 0 },
     { op: 'delete', sheet: 1, axis: 'row', at: 1, n: 2 },
