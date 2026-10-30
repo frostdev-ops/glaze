@@ -730,3 +730,14 @@ test('the card draws a chart over the cells it covers and counts the charts outs
   const none = DK.get('sheet').thumb({ kind: 'sheet', book: JSON.parse(JSON.stringify(SD.split(plain).book)), grid: SD.glance(plain), charts: [] });
   assert.ok(!none.children.some((e) => /gx-th-(chart|more)/.test(e.className)));
 });
+
+test('starting an empty spreadsheet clears charts left by a prior spreadsheet kind', async () => {
+  const s = store(), P = PA.open(s), wb = M.workbook();
+  await SD.write(P, KEY, wb, new Map());
+  await P.save(KEY, { charts: [{ kind: 'column', anchor: [0, 0, 2, 2], colours: ['#156082'] }] });
+  await P.save(KEY, { kind: 'paper', doc: { type: 'doc', content: [] } }, { reason: 'import' });
+  const { DK } = load({ sheets: true });
+  await DK.settled();
+  await P.save(KEY, { kind: 'sheet', doc: null, ...DK.get('sheet').empty() }, { reason: 'import' });
+  assert.deepEqual((await P.get(KEY)).charts, []);
+});
