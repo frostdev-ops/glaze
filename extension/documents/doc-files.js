@@ -6,7 +6,7 @@
 // points at its file as { hash, size, type } (writer/writer-papers.js); the worker keeps, per document, the hashes its
 // record and versions point at (owners), and a file goes once no document points at it. One object store, string keys:
 // f:<hash> a file (its chunks' id and count, its owners), c:<id>:<n> a chunk, u:<id> an upload under way, o:<document>
-// the hashes a document holds.
+// the hashes a document holds, r: files let go within HOLD of their put, to go once it has passed.
 // Classic script for the worker and the pages; module.exports for node.
 var GZ_DOC_FILES = globalThis.GZ_DOC_FILES || (() => {
   const PORT = 'glaze:docFiles';
@@ -202,19 +202,28 @@ var GZ_DOC_FILES = globalThis.GZ_DOC_FILES || (() => {
     // The hashes document `owner` points at now (its record and versions). A file it no longer points at, and no other
     // document does, goes. add: only those joining (before a record points at them: a refusal then refuses the save, so
     // no record points at a file it doesn't own). → { missing: the hashes it points at that aren't kept }.
-    const own = (owner, hashes, { add = false } = {}) => serial(async () => {
+    // A file let go within HOLD of its put is listed (r:) and goes at a later call once HOLD has passed, if nothing owns it
+    // by then: a PDF's autosaves, seconds apart, would otherwise leave each file before them in the store.
+    const own = (owner, hashes, { add = false, expected } = {}) => serial(async () => {
       if (typeof owner !== 'string' || !owner) throw fail('bad');
-      const was = (await db.get(`o:${owner}`)) || [], next = [...new Set([...(add ? was : []), ...hashes])].filter((h) => HASH.test(h));
-      const all = [...new Set([...was, ...next])], metas = all.length ? await db.many(all.map((h) => `f:${h}`)) : [];
-      const puts = [], dels = [], dead = [], missing = [];
+      const [mine, listed] = await db.many([`o:${owner}`, 'r:']);
+      const was = mine || [], later = Array.isArray(listed) ? listed : [], next = [...new Set([...(add ? was : []), ...hashes])].filter((h) => HASH.test(h));
+      // A closing viewer may only release the Undo it knew, never a later Done's replacement hold.
+      if (expected !== undefined && (!Array.isArray(expected) || expected.length !== was.length || expected.some((h) => !was.includes(h)))) return { missing: [] };
+      const all = [...new Set([...was, ...next, ...later])], metas = all.length ? await db.many(all.map((h) => `f:${h}`)) : [];
+      const puts = [], dels = [], dead = [], missing = [], wait = [];
       all.forEach((h, i) => {
         const f = metas[i], wanted = next.includes(h);
         if (!f) { if (wanted) missing.push(h); return; }
         const owners = new Set(f.owners || []), had = owners.has(owner);
         if (wanted) owners.add(owner); else owners.delete(owner);
         if (!wanted && !owners.size && !(now() - (f.at || 0) < HOLD)) { dels.push(`f:${h}`); dead.push(f.id); }
-        else if (had !== wanted) puts.push([`f:${h}`, { ...f, owners: [...owners] }]);
+        else {
+          if (!owners.size) wait.push(h);
+          if (had !== wanted) puts.push([`f:${h}`, { ...f, owners: [...owners] }]);
+        }
       });
+      if (wait.length) { if (JSON.stringify(wait) !== JSON.stringify(later)) puts.push(['r:', wait]); } else if (later.length) dels.push('r:');
       if (next.length) { if (JSON.stringify(next) !== JSON.stringify(was)) puts.push([`o:${owner}`, next]); } else if (was.length) dels.push(`o:${owner}`);
       if (puts.length || dels.length) await db.write(puts, dels);
       for (const id of dead) await dropChunks(id);
@@ -225,11 +234,15 @@ var GZ_DOC_FILES = globalThis.GZ_DOC_FILES || (() => {
     // of them points at. → how many files went.
     const sweep = ({ live = null } = {}) => serial(async () => {
       const t = now(), files = await db.entries('f:'), ups = await db.entries('u:'), keep = new Set();
+      const listed = await db.get('r:'), released = new Set(Array.isArray(listed) ? listed : []), wait = [];
       let gone = 0;
       for (const [k, u] of ups) { const id = k.slice(2); if (uploads.has(id) || !(t - (u?.at || 0) > GRACE)) keep.add(id); else await db.write([], [k]); }
       for (const [k, f] of files) {
-        if (live && !(f.owners || []).length && !live.has(f.hash) && t - (f.at || 0) > GRACE) { await db.write([], [k]); gone++; } else keep.add(f.id);
+        const free = !(f.owners || []).length, pending = released.has(f.hash);
+        if (free && !live?.has(f.hash) && (pending ? t - (f.at || 0) >= HOLD : live && t - (f.at || 0) > GRACE)) { await db.write([], [k]); gone++; }
+        else { keep.add(f.id); if (pending && free) wait.push(f.hash); }
       }
+      if (released.size) await db.write(wait.length ? [['r:', wait]] : [], wait.length ? [] : ['r:']);
       const stray = (await db.keys('c:')).filter((k) => !keep.has(k.split(':')[1]));
       if (stray.length) await db.write([], stray);
       return gone;
