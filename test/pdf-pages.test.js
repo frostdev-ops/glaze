@@ -92,3 +92,16 @@ test('the reducer\'s operations through layout and entries: the panel\'s Done in
   const e = D.entries(run(s));
   assert.deepEqual(e, [{ source: 1, includePages: [0], pageIndices: [0], rotations: { 0: 0 } }, { source: 0, includePages: [0, 2], pageIndices: [1, 2], rotations: { 0: 90, 2: 0 } }]);
 });
+
+test('Done applies deletions before additions at the 500-page limit', () => {
+  for (const type of ['blank', 'merge']) {
+    let s = R.reduce(R.start(500), { type: 'remove', at: [1] });
+    s = R.reduce(s, type === 'blank' ? { type } : { type, pages: 1, bytes: new Uint8Array(1) });
+    assert.equal(s.tiles.length, 500);
+    assert.deepEqual(at(run(s)), want(s), type);
+  }
+  let s = R.reduce(R.start(1), { type: 'merge', pages: 499, bytes: new Uint8Array(1) });
+  s = R.reduce(s, { type: 'remove', at: Array.from({ length: 499 }, (_, i) => i + 1) });
+  s = R.reduce(s, { type: 'merge', pages: 499, bytes: new Uint8Array(1) });
+  assert.deepEqual(at(run(s)), want(s), 'deleted pages from an earlier merge do not occupy capacity');
+});
