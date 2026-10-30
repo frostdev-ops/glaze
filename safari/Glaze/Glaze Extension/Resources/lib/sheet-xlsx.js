@@ -23,7 +23,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   const dep = (name, file) => (typeof globalThis[name] !== 'undefined' ? globalThis[name] : typeof module !== 'undefined' ? require(file) : fail('deps', `${file} is not loaded`));
   let M, F, NF, D, MAX_ROWS, MAX_COLS, CAP, INDEXED;
   const deps = () => {
-    if (M) return;
+    if (CAP) return;
     M = dep('GZ_SHEET_MODEL', './sheet-model.js'); F = dep('GZ_SHEET_FORMULA', './sheet-formula.js');
     NF = dep('GZ_SHEET_NUMFMT', './sheet-numfmt.js'); D = dep('GZ_DOCTEXT', './doctext.js');
     ({ MAX_ROWS, MAX_COLS, CAP } = M);
@@ -74,6 +74,13 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   const attrText = (a) => Object.entries(a).filter(([, v]) => v !== undefined && v !== null && v !== false).map(([k, v]) => ` ${k}="${esc(v === true ? '1' : v)}"`).join('');
   const tag = (name, a, body) => (body === undefined || body === '' ? `<${name}${attrText(a)}/>` : `<${name}${attrText(a)}>${body}</${name}>`);
   const HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  // Kept roots may be prefixed or self-closing. Generated children use the default namespace and r: relationships.
+  const rootTags = (raw, name) => {
+    let open = (raw ?? `<${name}>`).replace(/\s*\/>$/, '>');
+    if (!/\sxmlns=/.test(open)) open = open.replace(/>$/, ` xmlns="${SML}">`);
+    if (!/\sxmlns:r=/.test(open)) open = open.replace(/>$/, ` xmlns:r="${OD}">`);
+    return { open, close: `</${/^<([^\s>]+)/.exec(open)[1]}>` };
+  };
 
   // ── Package ─────────────────────────────────────────────────────────────────────────────────────────────────────────
   const OD = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -88,9 +95,21 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   const kindOf = (type) => type.slice(type.lastIndexOf('/') + 1);
   const dirOf = (path) => path.slice(0, path.lastIndexOf('/') + 1);
   const relsPath = (path) => `${dirOf(path)}_rels/${path.slice(dirOf(path).length)}.rels`;
+  // Decode current kept bytes, including UTF-16 and XML declarations; chart editors may replace them after import.
+  const partText = (data) => {
+    if ((data[0] === 0xff && data[1] === 0xfe) || (data[0] === 0x3c && data[1] === 0)) return new TextDecoder('utf-16le').decode(data);
+    if ((data[0] === 0xfe && data[1] === 0xff) || (data[0] === 0 && data[1] === 0x3c)) return new TextDecoder('utf-16be').decode(data);
+    const head = new TextDecoder().decode(data.subarray(0, 4096));
+    const label = /^\uFEFF?<\?xml\s[^?]*\bencoding\s*=\s*["']([^"']+)["']/.exec(head)?.[1];
+    return new TextDecoder(label ?? 'utf-8').decode(data);
+  };
   const resolve = (from, target) => {
+    if (/^[a-z][\w+.-]*:|[\\?#]/i.test(target)) return null;
     const out = [];
-    for (const p of (target.startsWith('/') ? target.slice(1) : dirOf(from) + target).split('/')) if (p === '..') out.pop(); else if (p !== '.' && p !== '') out.push(p);
+    for (const p of (target.startsWith('/') ? target.slice(1) : dirOf(from) + target).split('/')) {
+      if (p === '..') { if (!out.length) return null; out.pop(); }
+      else if (p !== '.' && p !== '') out.push(p);
+    }
     return out.join('/');
   };
   // A target relative to the part that names it, as Excel writes one.
@@ -251,7 +270,8 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       return s;
     });
     const keep = { root: root ? x.slice(root.at, root.open) : null, fonts: fonts.map((f) => f.xml), fills: fills.map((f) => f.xml), borders: borders.map((f) => f.xml),
-      numFmts, colors: Object.fromEntries(ctx.seen), palette: kid(root, 'colors') ? raw(kid(root, 'colors')) : null };
+      numFmts, colors: Object.fromEntries(ctx.seen), palette: kid(root, 'colors') ? raw(kid(root, 'colors')) : null,
+      cellXfs: kids(kid(root, 'cellXfs'), 'xf').map((xf, i) => ({ xml: raw(xf), key: stable(styles[i]) })) };
     for (const n of ['cellStyleXfs', 'cellStyles', 'dxfs', 'tableStyles', 'extLst']) if (kid(root, n)) keep[n] = raw(kid(root, n));
     return { styles: styles.length ? styles : [{}], keep, ctx, base };
   };
@@ -359,9 +379,9 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       }
       if (k.f !== undefined || k.fkind) {
         cell ??= { t: 'z' };
-        if (k.fkind === 'dataTable') cell.dt = k.fraw;
+        if (k.fkind === 'dataTable') { cell.dt = k.fraw; keep.dataTables = true; }
         else if (k.fkind === 'shared' && !k.f) sharedKids.push([k.r, k.c, k.si]);
-        else if (k.f.length > CAP.formula) ctx.problem(sh, 'formula', `${M.cellName(k.r, k.c)}: formula too long`);
+        else if (!k.f || k.f.length > CAP.formula) ctx.problem(sh, 'formula', `${M.cellName(k.r, k.c)}: formula empty or too long`);
         else {
           cell.f = k.f;
           if (k.fkind === 'shared' && k.si !== undefined) shared.set(k.si, { f: k.f, r: k.r, c: k.c });
@@ -373,6 +393,14 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       }
       if (cell && k.cm !== undefined) cell.cm = k.cm;
       if (cell && k.vm !== undefined) cell.vm = k.vm;
+      if (cell?.t === 's' && cell.v.length > CAP.text) {
+        ctx.problem(sh, 'text', `${M.cellName(k.r, k.c)}: text past 32,767 characters was left out`);
+        cell.v = cell.v.slice(0, CAP.text);
+        if (cell.rich) {
+          let left = CAP.text;
+          cell.rich = cell.rich.flatMap((run) => { const text = run.text.slice(0, left); left -= text.length; return text ? [{ ...run, text }] : []; });
+        }
+      }
       const s = k.s > 0 && k.s < ctx.styleCount ? k.s : 0;
       if (!cell) { if (!s) return; cell = { t: 'z' }; }
       if (s) cell.s = s;
@@ -526,12 +554,14 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     }
   };
 
-  const relsOf = (xml, from) => {
+  const relsOf = (xml, from, problem) => {
     const out = [];
     for (const n of kids(kid(tree(xml ?? ''), 'Relationships'), 'Relationship')) {
       const { Id: id, Type: type = '', Target: target, TargetMode: mode } = n.a;
       if (!id || target === undefined) continue;
-      out.push({ id, type, kind: kindOf(type), target, mode, path: mode === 'External' ? null : resolve(from, target) });
+      const path = mode === 'External' ? null : resolve(from, target);
+      if (mode !== 'External' && !path) { problem?.(null, 'relationship', `${from}: invalid relationship target ${target}`); continue; }
+      out.push({ id, type, kind: kindOf(type), target, mode, path });
     }
     return out;
   };
@@ -548,8 +578,12 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
 
   // .xlsx bytes → the workbook model. opts.limits lowers doctext's archive limits.
   const read = async (bytes, opts = {}) => {
-    const z = D.unzip(bytes, opts);
-    const byLow = new Map(z.names.filter((n) => !n.endsWith('/')).map((n) => [n.toLowerCase(), n]));
+    const z = D.unzip(bytes, { ...opts, limits: { ...opts.limits, duplicates: true } });
+    const byLow = new Map();
+    for (const n of z.names.filter((n) => !n.endsWith('/'))) {
+      if (byLow.has(n.toLowerCase())) fail('not-workbook', `ambiguous duplicate package part: ${n}`);
+      byLow.set(n.toLowerCase(), n);
+    }
     const real = (p) => byLow.get(String(p).toLowerCase()) ?? null;
     const used = new Set();
     const problems = [];
@@ -560,10 +594,11 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       if (own) used.add(name);
       try { return await z.text(name); } catch (e) { problem(null, 'part', `${p}: ${e.message}`); return null; }
     };
-    const relsFor = async (p) => relsOf(await text(relsPath(p)), p);
+    const relsFor = async (p) => relsOf(await text(relsPath(p)), p, problem);
 
     const types = { defaults: {}, overrides: {} };
     const ct = await text('[Content_Types].xml');
+    if (!kid(tree(ct ?? ''), 'Types')) problem(null, 'content-types', '[Content_Types].xml is missing or unreadable');
     for (const n of kid(tree(ct ?? ''), 'Types')?.kids ?? []) {
       if (local(n.name) === 'Default' && n.a.Extension) types.defaults[n.a.Extension.toLowerCase()] = n.a.ContentType;
       if (local(n.name) === 'Override' && n.a.PartName) types.overrides[n.a.PartName.replace(/^\//, '').toLowerCase()] = n.a.ContentType;
@@ -621,6 +656,13 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       const px = await text(r.path, false);
       const src = px && kid(kid(kid(tree(px), 'pivotCacheDefinition'), 'cacheSource'), 'worksheetSource');
       if (src?.a.sheet) pivotSources.add(src.a.sheet.toLowerCase());
+      else if (src?.a.name) {
+        let found = false;
+        for (const n of kids(kid(book, 'definedNames'), 'definedName').filter((n) => n.a.name?.toLowerCase() === src.a.name.toLowerCase())) {
+          try { for (const t of F.tokenize(fromFile(textOf(n)))) if (t.k === 'ref' && t.sheet && !t.sheet2) { pivotSources.add(t.sheet.toLowerCase()); found = true; } } catch { /* an unresolved source locks every sheet */ }
+        }
+        if (!found) for (const el of sheetEls) if (el.a.name) pivotSources.add(el.a.name.toLowerCase());
+      }
     }
     for (const [i, el] of sheetEls.entries()) {
       const rid = el.a['r:id'] ?? Object.entries(el.a).find(([k]) => local(k) === 'id' && k.includes(':'))?.[1];
@@ -635,7 +677,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       if (!Number.isInteger(id) || id < 1 || ids.has(id)) id = Math.max(0, ...ids) + 1;
       ids.add(id);
       const sh = M.sheet(name, id);
-      Object.assign(sh.keep, { path: real(rel.path) ?? rel.path, rels: [], xml: [], rowAttrs: new Map(), colAttrs: new Map(), defaults: { colW: fileWidth(8), rowH: 15 }, lastRank: -1, locks: [] });
+      Object.assign(sh.keep, { path: real(rel.path) ?? rel.path, sourceId: id, rels: [], xml: [], rowAttrs: new Map(), colAttrs: new Map(), defaults: { colW: fileWidth(8), rowH: 15 }, lastRank: -1, locks: [] });
       if (el.a.state === 'hidden' || el.a.state === 'veryHidden') sh.keep.hidden = true;
       if (el.a.state === 'veryHidden') sh.keep.state = 'veryHidden';
       wb.sheets.push(sh);
@@ -658,6 +700,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       if (budget.over) { problem(sh, 'cap-cells', `${name}: a workbook holds 250,000 cells; the rest were left out`); budget.over = false; }
       if (/x14:slicerList|x15:timelineRefs/.test(sx)) sh.keep.locks.push('slicer');
       for (const row of sh.rows.values()) for (const cell of row.values()) if (cell.f !== undefined && /(^|[^\w.])\[\d+\]/.test(cell.f)) { if (!sh.keep.locks.includes('external')) sh.keep.locks.push('external'); }
+      if (sh.keep.dataTables) sh.keep.locks.push('dataTable');
       sh.keep.locks = [...new Set(sh.keep.locks)];
       delete sh.keep.lastRank;
     }
@@ -717,12 +760,14 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     const parts = {};
     for (const name of byLow.values()) {
       if (used.has(name) || name === '[Content_Types].xml') continue;
-      try { parts[name] = { type: typeOf(name), data: new Uint8Array(await z.bytes(name)) }; } catch (e) { problem(null, 'part', `${name}: ${e.message}`); }
+      try {
+        parts[name] = { type: typeOf(name), data: new Uint8Array(await z.bytes(name)) };
+      } catch (e) { problem(null, 'part', `${name}: ${e.message}`); }
     }
     // A drawing's charts, for the charts lane (lib/sheet-chart-xml.js) to read from keep.parts.
     for (const sh of wb.sheets) {
       const d = sh.keep.drawing, rp = d && relsPath(d.path);
-      if (d) d.charts = parts[rp] ? relsOf(new TextDecoder().decode(parts[rp].data), d.path).filter((r) => r.kind === 'chart' && r.path).map((r) => real(r.path) ?? r.path) : [];
+      if (d) d.charts = relsOf(await text(rp, false), d.path, problem).filter((r) => r.kind === 'chart' && r.path).map((r) => real(r.path) ?? r.path);
     }
     for (const p of Object.keys(parts)) {
       if (/^xl\/pivotTables\//i.test(p)) flags.pivots = true;
@@ -748,21 +793,30 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     const keep = (wb.keep ??= { parts: {} });
     const log = (keep.log ??= []);
     const push = (e) => { if (inverse(log.at(-1), e)) log.pop(); else log.push(e); };
-    const was = keep.sheetNames ?? {};
+    const was = new Map(Object.entries(keep.sheetNames ?? {}).map(([id, name]) => [Number(id), name]));
     const now = new Map(wb.sheets.map((s) => [s.id, s.name]));
-    for (const [id, name] of Object.entries(was)) if (now.get(Number(id)) !== name) push({ op: 'rename', sheet: Number(id), from: name, to: now.get(Number(id)) ?? null });
-    for (const [id, name] of now) if (!Object.hasOwn(was, id)) { const last = log.at(-1); if (last?.op === 'rename' && last.sheet === id && last.to === null && last.from === name) log.pop(); }
-    keep.sheetNames = Object.fromEntries(now);
+    const rename = (id, to) => {
+      const from = was.get(id);
+      if (from !== undefined && from !== to) push({ op: 'rename', sheet: id, from, to });
+      if (from === undefined) { const last = log.at(-1); if (last?.op === 'rename' && last.sheet === id && last.to === null && last.from === to) log.pop(); }
+      if (to === null) was.delete(id); else was.set(id, to);
+    };
     const walk = (o) => {
       if (!o) return;
       if (o.op === 'batch') { for (const x of o.ops) walk(x); return; }
-      if ((o.op === 'insert' || o.op === 'delete') && now.has(o.sheet)) push({ op: 'shift', sheet: o.sheet, name: now.get(o.sheet), axis: o.axis, at: o.at, n: o.op === 'insert' ? o.n : -o.n });
+      if (o.op === 'rename') rename(o.sheet, o.name);
+      else if (o.op === 'removeSheet') rename(o.sheet, null);
+      else if (o.op === 'addSheet' && o.sheet) rename(o.sheet.id, o.sheet.name);
+      else if ((o.op === 'insert' || o.op === 'delete') && (was.has(o.sheet) || now.has(o.sheet))) push({ op: 'shift', sheet: o.sheet, name: was.get(o.sheet) ?? now.get(o.sheet), axis: o.axis, at: o.at, n: o.op === 'insert' ? o.n : -o.n });
     };
     walk(op);
+    for (const [id] of was) if (!now.has(id)) rename(id, null);
+    for (const [id, name] of now) if (was.get(id) !== name) rename(id, name);
+    keep.sheetNames = Object.fromEntries(now);
   };
   // Why the grid must refuse a structural operation (inserting or deleting rows or columns), or null: what refers to the
   // sheet's cells by address and isn't moved here.
-  const REASONS = { pivot: 'a pivot table uses this sheet', slicer: 'a slicer uses this sheet', query: 'a query table fills this sheet', external: 'this sheet links to another workbook', macros: 'the workbook has macros', table: 'a table on this sheet would lose its columns' };
+  const REASONS = { pivot: 'a pivot table uses this sheet', slicer: 'a slicer uses this sheet', query: 'a query table fills this sheet', external: 'this sheet links to another workbook', macros: 'the workbook has macros', table: 'a table on this sheet would lose its columns', dataTable: 'a data table uses this sheet' };
   const locked = (wb, op) => {
     if (!op) return null;
     if (op.op === 'batch') { for (const x of op.ops) { const why = locked(wb, x); if (why) return why; } return null; }
@@ -779,22 +833,14 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   const moveIndex = (k, e) => (k < e.at ? k : e.n < 0 && k < e.at - e.n ? null : k + e.n < maxOf(e.axis) ? k + e.n : null);
   const own = (log, id) => log.filter((e) => e.op === 'shift' && e.sheet === id);
   const moveKey = (k, axis, entries) => { for (const e of entries) { if (e.axis !== axis) continue; k = moveIndex(k, e); if (k === null) return null; } return k; };
-  const moveRange = (g, entries) => {
-    for (const e of entries) {
-      const s = M.shiftSpan(e.axis === 'row' ? g.r0 : g.c0, e.axis === 'row' ? g.r1 : g.c1, e.at, e.n, maxOf(e.axis));
-      if (!s) return null;
-      g = e.axis === 'row' ? { ...g, r0: s[0], r1: s[1] } : { ...g, c0: s[0], c1: s[1] };
-    }
-    return g;
-  };
   const moveRefList = (text, entries) => {
     if (!entries.length) return text;
     const out = [];
     for (const part of String(text).split(/\s+/).filter(Boolean)) {
-      const g = M.rangePosition(part.replace(/\$/g, ''));
-      if (!g) { out.push(part); continue; }
-      const m = moveRange(g, entries);
-      if (m) out.push(M.rangeName(m.r0, m.c0, m.r1, m.c1));
+      // The formula rewriter also handles whole rows/columns and absolute markers. Qualified refs stay untouched.
+      let moved = part;
+      for (const e of entries) moved = F.shift(moved, { sheet: '_', axis: e.axis, at: e.at, n: e.n }, '_');
+      if (!moved.includes('#REF!')) out.push(moved);
     }
     return out.length ? out.join(' ') : null;
   };
@@ -807,7 +853,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     }
     return f;
   };
-  const FORMULA_TEXT = new Set(['formula', 'formula1', 'formula2', 'f']);
+  const FORMULA_TEXT = new Set(['formula', 'formula1', 'formula2', 'f', 'calculatedColumnFormula', 'totalsRowFormula']);
   // One kept piece of XML with its references moved. how: { entries (this sheet's shifts), log, host, anchors: a drawing's
   // from/to rows and columns (clamped), vml: a comment shape's x:Row / x:Column (deleted with its cell) }. Elements whose
   // ref or sqref is deleted go, and a container left with no children goes too (→ '').
@@ -822,7 +868,11 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
         const n = top ? local(top.name) : '';
         const parent = stack.at(-2) ? local(stack.at(-2).name) : '';
         let next = null;
-        if (top && (FORMULA_TEXT.has(n) || n === 'location')) next = escBody(moveFormula(s, log, host));
+        if (top && (FORMULA_TEXT.has(n) || n === 'location')) {
+          const moved = moveFormula(s, log, host);
+          next = escBody(moved);
+          if (how.chart && n === 'f' && moved !== s && stack.at(-2)) stack.at(-2).changed = true;
+        }
         else if (top && n === 'sqref') { const m = moveRefList(s, entries); if (m === null) top.drop = true; else next = escBody(m); }
         else if (top && how.anchors && (n === 'row' || n === 'col') && (parent === 'from' || parent === 'to')) {
           let k = Number(s);
@@ -848,17 +898,17 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
         if (k < 0) { out.push(xml.slice(tk.at, tk.end)); continue; }
         const el = stack[k];
         stack.length = k;
-        if (el.drop) { out.length = el.out; continue; }
-        if (el.kids && !el.left && el.container) { out.length = el.out; continue; }
+        if (el.drop || (el.kids && !el.left && el.container)) { out.length = el.out; if (stack.at(-1)) stack.at(-1).n--; continue; }
         out.push(xml.slice(tk.at, tk.end));
         const parent = stack.at(-1);
         if (parent) parent.left = true;
-        if (el.counted && el.left) out[el.out] = out[el.out].replace(/\bcount="\d+"/, `count="${el.n}"`);
+        if (el.counted && el.left) out[el.out] = out[el.out].replace(/\bcount=(?:"\d+"|'\d+')/, `count="${el.n}"`);
         continue;
       }
       let start = xml.slice(tk.at, tk.end);
-      let drop = false;
-      start = start.replace(/(\s)(ref|sqref|location)="([^"]*)"/g, (m, sp, k, v) => {
+      let drop = !!(how.chart && stack.at(-1)?.changed && /^(numCache|strCache|multiLvlStrCache)$/.test(local(tk.name)));
+      start = start.replace(/(\s)(ref|sqref|location)=(?:"([^"]*)"|'([^']*)')/g, (m, sp, k, double, single) => {
+        const v = double ?? single;
         if (k === 'location') return `${sp}${k}="${esc(moveFormula(D.decode(v), log, host))}"`;
         const moved = moveRefList(D.decode(v), entries);
         if (moved === null) { drop = true; return m; }
@@ -869,12 +919,12 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
         if (k === null) drop = true; else start = start.replace(/\bid="\d+"/, `id="${k}"`);
       }
       const parent = stack.at(-1);
-      if (parent) { parent.kids = true; if (!drop) parent.n = (parent.n ?? 0) + 1; }
+      if (parent) { parent.kids = true; if (!drop || !tk.empty) parent.n = (parent.n ?? 0) + 1; }
       if (tk.empty) {
         if (!drop) { out.push(start); if (parent) parent.left = true; }
         continue;
       }
-      stack.push({ name: tk.name, out: out.length, drop, container: !how.part && stack.length === 0, counted: /\bcount="\d+"/.test(start) });
+      stack.push({ name: tk.name, out: out.length, drop, container: !how.part && stack.length === 0, counted: /\bcount=(?:"\d+"|'\d+')/.test(start) });
       out.push(start);
     }
     return out.join('');
@@ -947,15 +997,17 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     const baseFont = keep.fonts?.length ? fontOf(tree(keep.fonts[0]).kids[0], ctx) : FRESH_FONT;
     const numFmts = [...(keep.numFmts ?? [])];
     const byCode = new Map(numFmts.filter((f) => f.id >= 164).map((f) => [f.code, f.id]));
+    let lastFmt = numFmts.reduce((n, f) => Math.max(n, f.id), 163);
     const fmtId = (fmt) => {
       if (fmt === undefined || fmt === null || fmt === 0) return 0;
       if (typeof fmt === 'number') return fmt;
       if (fmt === 'General') return 0;
-      if (!byCode.has(fmt)) { const id = Math.max(163, ...numFmts.map((f) => f.id)) + 1; numFmts.push({ id, code: fmt }); byCode.set(fmt, id); }
+      if (!byCode.has(fmt)) { const id = ++lastFmt; numFmts.push({ id, code: fmt }); byCode.set(fmt, id); }
       return byCode.get(fmt);
     };
-    const xfs = (wb.styles.length ? wb.styles : [{}]).map((s) => {
+    const xfs = (wb.styles.length ? wb.styles : [{}]).map((s, i) => {
       s = s ?? {};
+      if (keep.cellXfs?.[i]?.key === stable(s)) return keep.cellXfs[i].xml;
       const font = { ...baseFont };
       for (const k of FONT_KEYS) if (Object.hasOwn(s, k)) { if (s[k] === null || s[k] === undefined || s[k] === false) delete font[k]; else font[k] = s[k]; }
       const fontId = fonts.id(font, (o) => `<font>${fontBody(o, colors, 'name')}</font>`);
@@ -972,9 +1024,8 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
         applyNumberFormat: numFmtId ? '1' : undefined, applyFont: fontId ? '1' : undefined, applyFill: fillId ? '1' : undefined,
         applyBorder: borderId ? '1' : undefined, applyAlignment: hasAlign ? '1' : undefined, applyProtection: prot ? '1' : undefined }, body);
     });
-    const root = keep.root ?? `<styleSheet xmlns="${SML}">`;
-    const rootName = /^<([^\s>]+)/.exec(root)[1];
-    return HEAD + root
+    const root = rootTags(keep.root, 'styleSheet');
+    return HEAD + root.open
       + (numFmts.length ? `<numFmts count="${numFmts.length}">${numFmts.map((f) => tag('numFmt', { numFmtId: f.id, formatCode: f.code })).join('')}</numFmts>` : '')
       + `<fonts count="${fonts.list.length}">${fonts.list.map((f) => f.xml).join('')}</fonts>`
       + `<fills count="${fills.list.length}">${fills.list.map((f) => f.xml).join('')}</fills>`
@@ -984,7 +1035,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       + (keep.cellStyles ?? '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>')
       + (keep.dxfs ?? '<dxfs count="0"/>')
       + (keep.tableStyles ?? '<tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>')
-      + (keep.palette ?? '') + (keep.extLst ?? '') + `</${rootName}>`;
+      + (keep.palette ?? '') + (keep.extLst ?? '') + root.close;
   };
 
   // Shared strings, each text (or rich run list) once.
@@ -1078,8 +1129,8 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     }
     parts.sort((a, b) => a.rank - b.rank);
     // A copy isn't the sheet Excel's revision id names.
-    const root = keep.root && w.copy ? keep.root.replace(/\sxr:uid="[^"]*"/, '') : keep.root;
-    return HEAD + (root ?? `<worksheet xmlns="${SML}" xmlns:r="${OD}">`) + parts.map((p) => p.xml).join('') + '</worksheet>';
+    const root = rootTags(keep.root && w.copy ? keep.root.replace(/\sxr:uid="[^"]*"/, '') : keep.root, 'worksheet');
+    return HEAD + root.open + parts.map((p) => p.xml).join('') + root.close;
   };
 
   const cellXml = (x, r, c, w) => {
@@ -1121,6 +1172,8 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     const keepOld = refresh(wb, opts);
     const keep = wb.keep ?? {};
     const kept = { ...(keep.parts ?? {}) };
+    const keptPaths = new Map(Object.keys(kept).map((p) => [p.toLowerCase(), p]));
+    const keptPath = (p) => p && (keptPaths.get(p.toLowerCase()) ?? p);
     const macros = opts.macros !== false && !!keep.flags?.macros && Object.keys(kept).some((p) => /vbaProject\.bin$/i.test(p));
     if (!macros) for (const p of Object.keys(kept)) if (/vbaProject\.bin$/i.test(p)) delete kept[p];
     const log = keep.log ?? [];
@@ -1129,13 +1182,14 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     const dir = dirOf(bookPath);
     const files = new Map();
     const put = (path, text) => files.set(path, typeof text === 'string' ? new TextEncoder().encode(text) : text);
-    const metadata = !!(keep.book?.rels ?? []).find((r) => kindOf(r.type) === 'sheetMetadata' && kept[resolve(bookPath, r.target)]);
+    const metadata = !!(keep.book?.rels ?? []).find((r) => kindOf(r.type) === 'sheetMetadata' && kept[keptPath(resolve(bookPath, r.target))]);
     // Sheet parts: the path each came from, unless an earlier sheet (a copy) or a kept part has it.
     const taken = new Set(Object.keys(kept).map((p) => p.toLowerCase()));
+    const originals = new Map(wb.sheets.filter((sh) => sh.keep?.sourceId === sh.id && sh.keep?.path).map((sh) => [sh.keep.path.toLowerCase(), sh]));
     const sst = stringTable();
     const sheetFiles = wb.sheets.map((sh) => {
       const path = sh.keep?.path, low = path?.toLowerCase();
-      if (!path || taken.has(low)) return { sh, path: null, copy: !!path };
+      if (!path || taken.has(low) || (originals.has(low) && originals.get(low) !== sh)) return { sh, path: null, copy: !!path };
       taken.add(low);
       return { sh, path };
     });
@@ -1148,13 +1202,13 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     }
     // Kept relationships of each sheet; a part two sheets would share stays with the first.
     const owner = new Map();
-    for (const f of sheetFiles) {
+    for (const f of [...sheetFiles].sort((a, b) => Number(!!a.copy) - Number(!!b.copy))) {
       f.rels = [];
       f.dropped = new Set();
       for (const r of f.sh.keep?.rels ?? []) {
         if (r.mode === 'External') { f.rels.push(r); continue; }
         const from = f.sh.keep.path ?? f.path;
-        const target = resolve(from, r.target);
+        const target = keptPath(resolve(from, r.target));
         if (owner.has(target)) { f.dropped.add(r.id); continue; }
         owner.set(target, f.sh);
         f.rels.push({ ...r, target: relative(f.path, target) });
@@ -1205,7 +1259,8 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       { rank: BOOK_RANK.get('calcPr'), xml: tag('calcPr', { ...(bk.calcPr ?? {}), calcId: bk.calcPr?.calcId ?? '191029', fullCalcOnLoad: '1' }) },
       ...(bk.xml ?? []).map((x) => ({ rank: x.rank, xml: x.xml })),
     ].sort((a, b) => a.rank - b.rank);
-    put(bookPath, HEAD + (bk.root ?? `<workbook xmlns="${SML}" xmlns:r="${OD}">`) + bookParts.map((p) => p.xml).join('') + '</workbook>');
+    const bookRoot = rootTags(bk.root, 'workbook');
+    put(bookPath, HEAD + bookRoot.open + bookParts.map((p) => p.xml).join('') + bookRoot.close);
     put(relsPath(bookPath), relsXml(bookRels));
     put(`${dir}styles.xml`, writeStyles(wb));
     put(`${dir}sharedStrings.xml`, sst.xml(colors));
@@ -1221,12 +1276,12 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     const visit = (rels, from, how) => {
       for (const r of rels) {
         if (r.mode === 'External') continue;
-        const path = resolve(from, r.target);
+        const path = keptPath(resolve(from, r.target));
         if (!kept[path] || reach.has(path)) continue;
         const kind = kindOf(r.type);
         reach.set(path, { ...how, kind });
-        const rp = relsPath(path);
-        if (kept[rp]) { reach.set(rp, { kind: 'rels' }); visit(relsOf(new TextDecoder().decode(kept[rp].data), path), path, how); }
+        const rp = keptPath(relsPath(path));
+        if (kept[rp]) { reach.set(rp, { kind: 'rels' }); visit(relsOf(partText(kept[rp].data), path), path, how); }
       }
     };
     visit(pkg, '', {});
@@ -1238,11 +1293,11 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       let data = part.data;
       const shifting = log.length && /^(comments|threadedComment|table|vmlDrawing|drawing|chart|chartsheet)$/.test(how.kind);
       if (shifting) {
-        const xml = new TextDecoder().decode(data);
+        const xml = partText(data);
         const entries = how.sheet ? own(log, how.sheet.id) : [];
         let moved = xml;
-        if (how.kind === 'chart') moved = moveXml(xml, { entries: [], log, host: null, part: true });
-        else if (how.sheet) moved = moveXml(xml, { entries, log: [], host: how.sheet.keep?.name ?? how.sheet.name, anchors: how.kind === 'drawing', vml: how.kind === 'vmlDrawing', part: true });
+        if (how.kind === 'chart') moved = moveXml(xml, { entries: [], log, host: null, part: true, chart: true });
+        else if (how.sheet) moved = moveXml(xml, { entries, log, host: how.sheet.keep?.name ?? how.sheet.name, anchors: how.kind === 'drawing', vml: how.kind === 'vmlDrawing', part: true });
         if (moved && moved !== xml && !(how.sheet && !moved.trim())) data = new TextEncoder().encode(moved);
       }
       files.set(path, data);
@@ -1376,16 +1431,20 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   // a field quoted when it holds the delimiter, a quote or a line break, CRLF after every row, a byte-order mark
   // (opts.bom: false leaves it out). opts.delimiter: '\t' for TSV. → text.
   const writeDelimited = (wb, opts = {}) => {
+    const keepOld = refresh(wb, opts);
     const sh = opts.sheet === undefined ? wb.sheets[wb.active] ?? wb.sheets[0] : M.getSheet(wb, opts.sheet);
     if (!sh) fail('sheet', `no sheet ${opts.sheet}`);
     const d = opts.delimiter ?? ',';
     let r1 = -1, c1 = -1;
     for (const [r, row] of sh.rows) for (const [c, x] of row) if (x.t !== 'z') { r1 = Math.max(r1, r); c1 = Math.max(c1, c); }
+    if ((r1 + 1) * (c1 + 1) > CAP.cells) fail('cap-cells', 'CSV export exceeds 250,000 fields');
     const shown = (x) => {
       if (!x || x.t === 'z') return '';
+      const style = wb.styles[x.s ?? 0];
+      x = keepOld.get(x) ?? x;
       if (x.t === 'b') return x.v ? 'TRUE' : 'FALSE';
       if (x.t === 'e') return String(x.v);
-      const fmt = x.s ? wb.styles[x.s]?.fmt : 0;
+      const fmt = style?.fmt ?? 0;
       let out = null;
       try { out = NF.format(x.v, fmt ?? 0, { date1904: wb.date1904 }); } catch { out = null; }
       return out ?? String(x.v);
