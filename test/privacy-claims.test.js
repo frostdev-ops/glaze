@@ -63,6 +63,17 @@ test('optional Google Drive is disclosed in both privacy texts, with its scope, 
   assert.match(google, /Google Drive access \(`drive\.file`/);
 });
 
+test('Google Drive storage disclosures include the account id and Safari refresh token', () => {
+  const stored = policy.slice(policy.indexOf('- **Google Drive**'), policy.indexOf('- **Gradescope in To Do**'));
+  assert.match(stored, /\{ email, sub, flow, at \}/);
+  for (const text of [stored, read('docs/privacy.md')]) {
+    assert.match(text, /refresh token[^.]*Keychain/i);
+    assert.match(text, /access tokens?[^.]*memory/i);
+  }
+  assert.match(read('docs/privacy.md'), /Google account id/);
+  assert.doesNotMatch(policy, /Safari will (?:keep it|use[^.]*keep it)\s+in the Keychain/);
+});
+
 const languages = {
   '': /account identifiers/, de: /Kontokennungen/, es: /identificadores de escuela, curso y cuenta/,
   fr: /identifiants d’établissement, de cours et de compte/, nl: /account-ID/, 'pt-BR': /identificadores de escola, curso e conta/,

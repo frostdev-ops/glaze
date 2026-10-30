@@ -387,10 +387,11 @@ not those unknown legacy copies or unrelated stickers.
   **Disconnect** deletes all of it.
 - **Google Drive** (off until you connect), unavailable in this build while Google verification is pending. In a future
   build that enables it, `chrome.storage.local` holds one record, `google`, on this device only: the email address of
-  the Google account you connected (shown as the connected account), which sign-in flow Glaze used and when you
-  connected (`{ email, flow, at }`). No access token: Chrome keeps it in its own sign-in cache; Edge, Brave and Firefox
-  hold it only in the memory of Glaze's background worker; Safari will keep it in the Keychain. **Disconnect** deletes
-  the record.
+  the Google account you connected (shown as the connected account), its Google account id (`sub`, used to keep access
+  bound to that account), which sign-in flow Glaze used and when you connected (`{ email, sub, flow, at }`). No access
+  token is stored there: Chrome keeps it in its own sign-in cache; Edge, Brave and Firefox hold it only in the memory
+  of Glaze's background worker. Safari's access tokens stay only in native extension memory; its refresh token stays
+  in the extension's own Keychain, on this device only. **Disconnect** deletes the record and Safari's Keychain grant.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
   which Canvas or Blackboard course each of your Gradescope courses goes with (by its Gradescope course id and short name, or "none of
@@ -792,9 +793,9 @@ you import) are bundled. It makes requests in these cases:
     sign-in and consent for three scopes: `https://www.googleapis.com/auth/drive.file`, `openid` and `email`. With
     `drive.file` Glaze can reach only the Drive files it creates and the files you pick in Google's Picker; it can't
     list or open anything else in your Drive. The email address is used to show which account is connected. Glaze never
-    stores the access token: Chrome keeps it in its own sign-in cache (`getAuthToken`); Edge, Brave and Firefox hold it
-    only in the background worker's memory (`launchWebAuthFlow`); Safari will use the system's sign-in sheet and keep it
-    in the Keychain.
+    stores the access token in extension storage: Chrome keeps it in its own sign-in cache (`getAuthToken`); Edge, Brave
+    and Firefox hold it only in the background worker's memory (`launchWebAuthFlow`). Safari uses the Glaze app's system
+    sign-in sheet, holds access tokens in native extension memory and keeps its refresh token in the extension's Keychain.
   - **The picker page**: to pick a file, Glaze opens `https://frostdev.io/glaze/drive-picker/`, or its copy at
     `https://frostdev-ops.github.io/glaze-drive-picker/` when frostdev.io doesn't answer. The page loads Google's
     Picker. The access token reaches it in the address's fragment, which browsers don't send to servers, and the page
