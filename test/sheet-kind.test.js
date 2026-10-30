@@ -117,6 +117,22 @@ const store = () => {
 };
 const KEY = 'doc:00000000-0000-4000-8000-000000000001';
 
+test('grid writes cannot reclaim a record held by another kind, including unchanged plans', async () => {
+  for (const changed of [false, true]) {
+    const s = store(), P = PA.open(s), wb = book();
+    await SD.write(P, KEY, wb, new Map());
+    const got = await SD.read((ks) => s.get(ks), KEY);
+    await P.save(KEY, { kind: 'pdf', doc: null, file: 'JVBERi0=', size: 5 }, { reason: 'import' });
+    // The grid's storage listener can observe the new revision before its next save. A revision match cannot confer
+    // ownership of a different kind, even if only a title or packed version is being saved.
+    const current = await P.get(KEY), before = JSON.stringify(s.data);
+    if (changed) put(wb.sheets[0], 0, 0, { t: 's', v: 'late grid edit' });
+    await assert.rejects(SD.write(P, KEY, wb, got.sigs, { base: current.revision, patch: { title: 'late title' },
+      version: { reason: 'auto', gz: await SD.pack(wb), cells: SD.measure(wb).cells } }), /kind/);
+    assert.equal(JSON.stringify(s.data), before, 'no record, history or bands written');
+  }
+});
+
 test('a sheet save writes its changed parts, the record and the index in one set(), each part under the record\'s revision', async () => {
   let t = 1000;
   const s = store(), P = PA.open(s, () => t, { versions: async () => 40 });
