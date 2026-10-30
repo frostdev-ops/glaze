@@ -253,6 +253,20 @@ test('the presets are the ones Slides draws', () => {
   assert.ok(Object.isFrozen(G.presets));
 });
 
+test('the preset transcription can be regenerated from DrawingML XML', () => {
+  const xml = `<presetShapeDefinitons><rect xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+    <a:cxnLst><a:cxn ang="3cd4"><a:pos x="hc" y="t"/></a:cxn><a:cxn ang="cd2"><a:pos x="l" y="vc"/></a:cxn>
+      <a:cxn ang="cd4"><a:pos x="hc" y="b"/></a:cxn><a:cxn ang="0"><a:pos x="r" y="vc"/></a:cxn></a:cxnLst>
+    <a:rect l="l" t="t" r="r" b="b"/><a:pathLst><a:path extrusionOk="false"><a:moveTo><a:pt x="l" y="t"/></a:moveTo>
+      <a:lnTo><a:pt x="r" y="t"/></a:lnTo><a:lnTo><a:pt x="r" y="b"/></a:lnTo><a:lnTo><a:pt x="l" y="b"/></a:lnTo>
+      <a:close/></a:path></a:pathLst></rect></presetShapeDefinitons>`;
+  const child = spawnSync('python3', [path.join(__dirname, 'pptx-geom-presets.py'), '-', 'rect'], { input: xml, encoding: 'utf8' });
+  assert.ifError(child.error);
+  assert.equal(child.status, 0, child.stderr);
+  const source = fs.readFileSync(path.join(__dirname, '../lib/pptx-geom.js'), 'utf8');
+  assert.equal(child.stdout.trimEnd(), `  const PRESETS = {\n${source.match(/    rect: \{[\s\S]*?\n    \},/)[0]}\n  };`);
+});
+
 test('an unknown preset draws as rect and says which name it did not know', () => {
   const out = G.path({ prst: 'wave', w: 1000, h: 500 });
   assert.equal(out.prst, 'rect');
