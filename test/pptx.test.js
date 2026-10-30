@@ -76,12 +76,15 @@ test('placeholders inherit position, body properties and list styles master → 
   const body = named(s2, 'Content Placeholder 2');
   assert.equal(body.placeholder, 'obj');
   assert.deepEqual(body.bounds, { x: 838200, y: 1825625, w: 10515600, h: 4351338 }); // layout idx 1 → master body by type
+  const caption = named((await deck()).slides[3], 'Caption');
+  assert.deepEqual(caption.bounds, { x: 6172200, y: 1825625, w: 5181600, h: 4351338 }); // idx 2, not the layout's first content placeholder
+  assert.equal(caption.text.paragraphs[0].runs[0].size, 28);
 
   const num = named(s2, 'Slide Number Placeholder 3');
   assert.equal(num.placeholder, 'sldNum');
   assert.deepEqual(num.bounds, { x: 8610600, y: 6356350, w: 2743200, h: 365125 });
   assert.equal(textOf(num), '2'); // the field's stored "9" is stale
-  assert.deepEqual(pick(num.text.paragraphs[0], ['align']), { align: 'right' });
+  assert.deepEqual(pick(num.text.paragraphs[0], ['align', 'bullet', 'marL']), { align: 'right', bullet: null, marL: 0 }); // other style, not body
   assert.deepEqual(pick(num.text.paragraphs[0].runs[0], ['size', 'color', 'field']), { size: 12, color: '#898989', field: 'slidenum' });
 });
 
