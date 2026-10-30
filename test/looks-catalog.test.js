@@ -287,3 +287,9 @@ test('catalogue rebuilds settle on the latest of consecutive favorites writes', 
   assert.ok(await w.until(() => w.local.lookCatalog?.sig === C.sig(w.local.lookFavorites)));
   assert.deepEqual(w.local.lookCatalog.looks.map((e) => e.id), favorites.slice(1, 3).map((f) => C.idOf(f.code)));
 });
+
+test('a device with no favorites needs no empty catalogue write', async () => {
+  const w = worker();
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'build' }, w.popup), { ok: true });
+  assert.equal(w.local.lookCatalog, undefined, 'fresh install readiness must not be followed by an unnecessary local write');
+});
