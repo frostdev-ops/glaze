@@ -26,7 +26,7 @@
 //   connecting        waiting up to 30 s for the helper's hello; a retry keeps showing the last answer instead
 //   connected
 //
-// Safari Swift contract (DMG bridge, T12/T13): batches {type:'agent.frames', i, s, seq, frames}, sent through
+// Safari Swift contract (the DMG app's GlazeAgentBridge.swift and GlazeAgentHost.swift): batches {type:'agent.frames', i, s, seq, frames}, sent through
 // runtime.sendNativeMessage(SAFARI, batch), one in flight. i is the stable profile instance; s is a fresh 128-bit hex
 // nonce at each connection, and seq starts at 1. The app must scope its queue and replies to both i and s, and dispatch
 // with dispatchMessage("agent.frames", {i, s, frames}). On the connectNative event port this becomes
