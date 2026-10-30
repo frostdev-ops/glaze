@@ -63,7 +63,8 @@ const packages = () => {
   fresh = unpack(process.env.PACKAGE ? path.resolve(process.env.PACKAGE) : pack(root), 'glaze');
   const oldSrc = path.join(tmp, 'old-src');
   fs.mkdirSync(oldSrc);
-  execFileSync('sh', ['-c', `git -C "${root}" archive "${OLD_REF}" | tar -x -C "${oldSrc}"`]);
+  // From the repo root: git archive run inside extension/ takes only that folder, which an old release doesn't have.
+  execFileSync('sh', ['-c', `git -C "${path.join(root, '..')}" archive "${OLD_REF}" | tar -x -C "${oldSrc}"`]);
   old = unpack(pack(oldSrc), 'glaze-old');
   fs.rmSync(oldSrc, { recursive: true, force: true });
   // The old package as an older version, so the one under test is its update whatever its own version.
