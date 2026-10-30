@@ -705,3 +705,35 @@ test('a snapshot cut short by a note saved while it was read is tried again on t
   assert.equal(made, 2);
   assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot').length, 1);
 });
+
+test('two devices that each made a Glaze folder at once end in one: the other\'s files move in, nothing in Drive\'s trash', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  // A makes its Glaze folder only once B has looked for one and found none: each makes its own.
+  let looked;
+  const held = new Promise((r) => { looked = r; });
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  const gateA = { ...drive, fetch: async (u, i = {}) => { if (i.method === 'POST' && /\/drive\/v3\/files\?/.test(u) && text(i.body).includes('"glaze":"root"')) await held; return drive.fetch(u, i); } };
+  const gateB = { ...drive, fetch: async (u, i) => { const r = await drive.fetch(u, i); if (u.includes('/drive/v3/files?') && decodeURIComponent(u).includes("value='root'")) looked(); return r; } };
+  const a = device(gateA, { clock }), b = device(gateB, { clock });
+  await a.papers.save('doc:00000000-0000-4000-8000-0000000000a1', { doc: { type: 'doc', content: [] }, title: 'From A', named: true });
+  await b.papers.save('doc:00000000-0000-4000-8000-0000000000b1', { doc: { type: 'doc', content: [] }, title: 'From B', named: true });
+  await a.local.set({ writerWords: ['Alpha'] });
+  await b.local.set({ writerWords: ['Beta'] });
+  const first = a.on();
+  await new Promise((r) => setTimeout(r, 30));
+  await Promise.all([first, b.on()]);
+  assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'root').length, 2, 'two Glaze folders made');
+  for (let i = 0; i < 3; i++) { assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); }
+  const live = (tag) => [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === tag && !drive.view(f.meta.id).trashed);
+  assert.equal(live('root').length, 1, 'one Glaze folder');
+  const root = live('root')[0].meta.id, top = [...drive.files.values()].filter((f) => f.meta.parents.includes('0AroOt') && f.meta.mimeType === drive.FOLDER && !drive.view(f.meta.id).trashed);
+  assert.deepEqual(top.map((f) => f.meta.id), [root], 'the other one is not left beside it');
+  assert.equal(live('data').length, 1, 'one Data folder');
+  assert.ok(live('doc').every((f) => f.meta.parents.includes(root)) && live('doc').length === 2, 'both documents\' copies in it');
+  assert.deepEqual((await a.papers.list()).map((r) => r.title).sort(), ['From A', 'From B']);
+  assert.deepEqual((await b.papers.list()).map((r) => r.title).sort(), ['From A', 'From B']);
+  assert.deepEqual((await a.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta']);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta']);
+  assert.ok([...drive.files.values()].every((f) => !f.meta.explicitlyTrashed), 'nothing moved to Drive\'s trash');
+  noDeletes(drive);
+});

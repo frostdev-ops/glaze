@@ -830,3 +830,32 @@ test('a device that stopped between a new document\'s file and its JSON copy reu
   assert.equal(files.length, 1, 'one Essay.docx in Drive');
   assert.equal(sidecarJson(drive, key).file, files[0].meta.id);
 });
+
+test('after two copies of one document converge, the Glaze folder shows it once and the other copy is put away, not trashed', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  let listed;
+  const held = new Promise((r) => { listed = r; });
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  const gateA = { ...drive, fetch: async (u, i = {}) => { if (u.includes('/upload/') && i.method === 'POST' && /"glaze":"(doc|file)"/.test(text(i.body))) await held; return drive.fetch(u, i); } };
+  const gateB = { ...drive, fetch: async (u, i) => { const r = await drive.fetch(u, i); if (u.includes('/drive/v3/files?') && decodeURIComponent(u).includes("value='doc'")) listed(); return r; } };
+  const a = device(gateA, { clock }), b = device(gateB, { clock });
+  const key = 'school.blackboard.com|_1_1|_2_1|_3_1';
+  await a.papers.save(key, { doc: doc('From A'), title: 'Essay', named: true });
+  clock.t += 1000;
+  await b.papers.save(key, { doc: doc('From B'), title: 'Essay', named: true });
+  const first = a.sync.set(true);
+  await new Promise((r) => setTimeout(r, 20));
+  await Promise.all([first, b.sync.set(true)]);
+  assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'doc').length, 2, 'two copies made');
+  for (let i = 0; i < 2; i++) { assert.ok((await a.sync.run()).ok); assert.ok((await b.sync.run()).ok); }
+  const root = glazeFolder(drive).meta.id, inRoot = [...drive.files.values()].filter((f) => f.meta.parents.includes(root) && f.meta.mimeType !== drive.FOLDER);
+  assert.deepEqual(inRoot.map((f) => f.meta.name).sort(), ['Essay.docx', 'Essay.glaze.json'], 'Essay.docx once');
+  assert.ok([...drive.files.values()].every((f) => !f.meta.explicitlyTrashed), 'nothing in Drive\'s trash');
+  // Both still follow each other.
+  clock.t += 60e3;
+  await b.papers.save(key, { doc: doc('B, later') });
+  await b.sync.touched(key); await b.fire();
+  assert.ok((await a.sync.run()).ok);
+  assert.equal(textOf((await a.papers.get(key)).doc), 'B, later');
+  noDeletes(drive);
+});
