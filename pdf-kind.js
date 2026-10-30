@@ -364,9 +364,11 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
   // ---- registration: a PDF already kept lists and opens either way; only Settings → Writer → PDFs on (writer.pdf) lets
   // Documents import new ones (its Import, file chooser and drops: GZ_DOC_KINDS.opens). The page routes once this has answered.
-  // The switch as Settings shows it: the stored value through defaults.js (static in writer.html, loaded here on papers.html
-  // only where it isn't yet: a second copy would redeclare its constants), so no stored key means the default.
-  const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(['defaults.js'])))
+  // The switch as Settings shows it: the stored value through defaults.js, so no stored key means the default. writer.html
+  // has defaults.js already (a second copy would redeclare its constants); papers.html loads it on demand, after the three
+  // scripts it reads as it loads, in papers.js's order (need() shares their loads).
+  const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
+  const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(DEFAULTS)))
     .then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.pdf === true, () => false);
   GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: (key, host) => edit(key, { host }), into, says: { size: TOO_BIG, read: UNREAD }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
 
