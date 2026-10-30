@@ -833,6 +833,8 @@
     };
     globalThis.GZ_DOCUMENTS = Object.freeze(D);
     hooks.change.push(() => globalThis.GZ_MODS?.documents.change());
+    // Google Drive (lib/drive.js): From Google Drive beside Import, Save to Google Drive in the ⋯ menu, while connected.
+    globalThis.GZ_DRIVE?.page?.home(D, { bring, say });
 
     // ---- mods: the Workers of the mods granted documents run here as on a school page (features/mods.js: its host, its
     // watchdog), on this page's calls: what the worker's answer carries is done through GZ_DOCUMENTS. Their items show with
