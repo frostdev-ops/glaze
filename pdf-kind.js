@@ -401,7 +401,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
     // ---- saving: a field filled (pdf.js's annotation storage) saves a second after the last change, and before the page
     // leaves for Documents; the bytes pdf.js writes (an incremental update) replace the record's, with page 1 drawn again.
-    const say = (text) => { state.textContent = text; };
+    const say = (text) => { if (state.textContent !== text) state.textContent = text; };
     let dirty = false, saving = null, timer = 0;
     const save = async () => {
       if (!doc || !dirty) return true;
