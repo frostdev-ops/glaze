@@ -544,3 +544,13 @@ test('formulaAt: a formula\'s cell, or the head of the array formula covering it
   assert.equal(e.formulaAt(sh, 9, 9), null);
   assert.equal(e.formulaAt(999, 0, 0), null);
 });
+
+test('functions reach the workbook through ctx: sheetNamed, evalName, extent, formulaAt, sheets, style', () => {
+  C.define('TESTCTX', { p: [], min: 0, max: 0, fn: (args, ctx) => [
+    ctx.sheetNamed('SHEET2')?.name, ctx.evalName({ k: 'name', name: 'rate', sheet: null }), ctx.extent(ctx.sheet).join(','),
+    ctx.formulaAt(ctx.sheet, 0, 0)?.f, ctx.sheets.length, ctx.style(1)?.fmt,
+  ].join('|') });
+  const e = book({ A1: '=2*3', C4: 1, 'Sheet2!A1': 1 }, { sheets: ['Sheet1', 'Sheet2'], names: [{ name: 'Rate', ref: '0.05' }] });
+  e.wb.styles.push({ fmt: '0.00' });
+  assert.equal(calc(e, 'TESTCTX()'), 'Sheet2|0.05|3,2|2*3|2|0.00');
+});
