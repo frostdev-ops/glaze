@@ -58,3 +58,43 @@ test('open refuses what isn\'t the box\'s or is switched off, and says when the 
   assert.equal(await C.open(big.X, big.box, 'attachment-2', L), false, 'past the bound by its length');
   assert.deepEqual(big.port.sent.map(({ m }) => [m.type, m.name]), [['import:failed', 'Week 3.pptx']]);
 });
+
+test('a slideshow attachment reaches the opener through the real attachment-link parser', () => {
+  const item = require('./fixtures/ultra-writer-attach-content.json');
+  const html = item.contentDetail['resource/x-bb-asmt-test-link'].test.assessment.instructions.rawText
+    .replaceAll('Essay 2 prompt.docx', 'Week 3.ppsx').replaceAll('wordprocessingml.document', 'presentationml.slideshow');
+  const files = C.attached([html], 'https://bb.school.example.edu');
+  assert.deepEqual(C.openable(files, { slides: true }, L).map((f) => f.name), ['Week 3.ppsx']);
+});
+
+test('turning a kind off during its GET prevents delivery to the frame', async () => {
+  const p = page({ [FILES[0].url]: new Uint8Array([37, 80, 68, 70, 45]) });
+  let enabled = true;
+  p.X.settings = () => ({ writer: { pdf: enabled } });
+  const fetch0 = globalThis.fetch;
+  globalThis.fetch = async (...args) => { const r = await fetch0(...args); enabled = false; return r; };
+  assert.equal(await C.open(p.X, p.box, 'attachment-1', L), false);
+  assert.deepEqual(p.port.sent, []);
+});
+
+test('every matching link keeps a stable opener, and changed hrefs lose theirs', () => {
+  const p = page({});
+  const links = [FILES[0].url, FILES[0].url, 'https://other.test/bbcswebdav/not-listed'].map((href) => ({ href, isConnected: true,
+    after(b) { b.previousElementSibling = this; b.isConnected = true; this.button = b; } }));
+  let created = 0;
+  const doc = { querySelectorAll: () => links, createElement: () => { created++; return { dataset: {}, style: { setProperty() {} }, addEventListener() {},
+    remove() { this.isConnected = false; if (this.previousElementSibling?.button === this) this.previousElementSibling.button = null; } }; } };
+  p.X.t = (s) => s;
+  C.decorate(p.X, p.box, L, doc);
+  assert.ok(links[0].button?.isConnected && links[1].button?.isConnected, 'both links get the action');
+  assert.equal(links[2].button, undefined, 'a page-injected address gets none');
+  C.decorate(p.X, p.box, L, doc);
+  assert.equal(created, 2, 'a second pass changes no DOM');
+  links[0].href = links[2].href;
+  C.decorate(p.X, p.box, L, doc);
+  assert.equal(links[0].button, null, 'a changed href loses its action');
+  p.X.settings = () => ({ writer: {} });
+  C.decorate(p.X, p.box, L, doc);
+  assert.equal(p.box.openers.size, 0);
+  assert.equal(links[1].button, null);
+});
