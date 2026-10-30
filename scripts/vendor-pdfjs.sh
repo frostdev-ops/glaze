@@ -4,6 +4,7 @@
 # JBIG2/CCITT and JPEG 2000 decoders scanned pages are often stored in (wasm, BSD; their licenses beside them). And
 # pdf.js's viewer layer, for PDF documents: pdf_viewer.mjs, pdf_viewer.css and the pictures that stylesheet names
 # (lib/pdfjs/images; pdf.js's own, and one of Firefox's under the MPL-2.0, lib/pdfjs/LICENSE_MPL).
+# The modules also bundle core-js (MIT, lib/pdfjs/LICENSE_CORE_JS).
 # The legacy build, because the modern one calls Promise.try, Map.prototype.getOrInsertComputed and friends
 # unpolyfilled, which Chrome 116 and Safari 17 lack. Even the legacy build skips Promise.withResolvers (Chrome 119,
 # Safari 17.4), so a one-line fallback goes on top of each module. The readable modules, not the minified ones: the
@@ -35,6 +36,9 @@ brotli_license_sha256=3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8
 # The MPL-2.0's text, from SPDX's licence list at v3.29.0, for the viewer's one picture under it.
 spdx=31ba1a50e5397e00a304dbadc76531740e89ee48
 mpl_license_sha256=66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172
+# The version recorded in each module's core-js metadata; retain its copyright and permission notice too.
+core_js=3.50.0
+core_js_license_sha256=b87653fff2d44426ab5cd4723cee3b1364dc8d35a0acdf098c54689543123bf8
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -46,6 +50,7 @@ fetch "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-$version.tgz" "$sha256
 fetch "https://raw.githubusercontent.com/google/brotli/$brotli/c/common/dictionary.bin" "$brotli_dictionary_sha256" brotli-dictionary.bin
 fetch "https://raw.githubusercontent.com/google/brotli/$brotli/LICENSE" "$brotli_license_sha256" LICENSE_BROTLI
 fetch "https://raw.githubusercontent.com/spdx/license-list-data/$spdx/text/MPL-2.0.txt" "$mpl_license_sha256" LICENSE_MPL
+fetch "https://raw.githubusercontent.com/zloirock/core-js/v$core_js/LICENSE" "$core_js_license_sha256" LICENSE_CORE_JS
 tar -xzf "$tmp/pdfjs.tgz" -C "$tmp"
 src="$tmp/package"
 
@@ -137,7 +142,7 @@ patch('      copyLevel\n    } = this.oldPages[pageIndex];\n', '      copyLevel,\
 patch('    pageDict.set("Rotate", rotate);\n', '    pageDict.set("Rotate", (rotate + extraRotate) % 360);\n');
 fs.writeFileSync(file, src);
 EOF
-cp "$tmp/brotli-dictionary.bin" "$tmp/LICENSE_BROTLI" "$tmp/LICENSE_MPL" lib/pdfjs/
+cp "$tmp/brotli-dictionary.bin" "$tmp/LICENSE_BROTLI" "$tmp/LICENSE_MPL" "$tmp/LICENSE_CORE_JS" lib/pdfjs/
 node scripts/vendor-pdfjs-brotli.js lib/pdfjs/pdf.worker.mjs lib/pdfjs/brotli-dictionary.bin
 cp "$src/LICENSE" lib/pdfjs/LICENSE
 for f in jbig2.wasm openjpeg.wasm LICENSE_JBIG2 LICENSE_PDFJS_JBIG2 LICENSE_OPENJPEG LICENSE_PDFJS_OPENJPEG; do cp "$src/wasm/$f" lib/pdfjs/; done
