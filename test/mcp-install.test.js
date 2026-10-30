@@ -205,22 +205,31 @@ test('ids: the store id, an unpacked folder\'s id as Chrome derives it, validati
 });
 
 // ---- launchers --------------------------------------------------------------------------------------------------------
-test('launchers: sh with absolute, quoted paths and exec; a .bat with CRLF, %* and its % doubled', () => {
-  assert.equal(L.sh({ node: "/opt/o'k/node", script: '/a b/glaze-mcp.js', browser: 'brave' }),
-    `#!/bin/sh\nexec '/opt/o'\\''k/node' '/a b/glaze-mcp.js' host --browser=brave "$@"\n`);
-  const bat = L.bat({ node: 'C:\\Program Files\\nodejs\\node.exe', script: 'C:\\Users\\100%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js', browser: 'edge' });
+test('launchers: each node they name tried in turn, by absolute, quoted paths, then the no-node message; a .bat with CRLF, %* and its % doubled', () => {
+  const sh = L.sh({ node: "/opt/o'k/node", also: ['/usr/local/bin/node'], script: '/a b/glaze-mcp.js', browser: 'brave' });
+  assert.equal(sh, `#!/bin/sh\nfor n in '/opt/o'\\''k/node' '/usr/local/bin/node'; do\n  [ -f "$n" ] && [ -x "$n" ] && exec "$n" '/a b/glaze-mcp.js' host --browser=brave "$@"\ndone\n`
+    + L.sh({ node: null, script: '/a b/glaze-mcp.js', browser: 'brave' }).split('\n').slice(2).join('\n'));
+  const bat = L.bat({ node: 'C:\\Program Files\\nodejs\\node.exe', also: ['C:\\nvm4w\\node.exe'], script: 'C:\\Users\\100%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js', browser: 'edge' });
   // `& exit /b` on the same line: cmd reads a .bat line by line from where it left off, so a rewrite while a host runs
   // must leave nothing after the command for it to read.
-  assert.equal(bat, '@echo off\r\n@setlocal DisableDelayedExpansion\r\n"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b\r\n');
+  const none = L.bat({ node: null, script: 'C:\\Users\\100%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js', browser: 'edge' }).split('\r\n')[3];
+  assert.equal(bat, '@echo off\r\n@setlocal DisableDelayedExpansion\r\n'
+    + 'if exist "C:\\Program Files\\nodejs\\node.exe" ("C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b)\r\n'
+    + 'if exist "C:\\nvm4w\\node.exe" ("C:\\nvm4w\\node.exe" "C:\\Users\\100%%\\glaze-mcp\\0.1.0\\bin\\glaze-mcp.js" host --browser=edge %* & exit /b)\r\n'
+    + `${none}\r\n`);
+  assert.match(none, /& exit \/b 1$/);
   assert.equal(/[^\r]\n/.test(bat), false, 'every line ends in CRLF');
   assert.equal(L.text('win32', { node: 'C:\\n.exe', script: 'C:\\s.js', browser: 'b' }), L.bat({ node: 'C:\\n.exe', script: 'C:\\s.js', browser: 'b' }));
   assert.equal(L.text('linux', { node: '/n', script: '/s', browser: 'b' }), L.sh({ node: '/n', script: '/s', browser: 'b' }));
   assert.equal(L.file('win32', '/h', 'chrome'), path.join('/h', 'chrome.bat'));
   assert.equal(L.file('darwin', '/h', 'chrome'), path.join('/h', 'chrome'));
-  for (const o of [{ node: "/opt/o'k/node", script: '/a b/glaze-mcp.js', browser: 'brave' }, { node: 'C:\\n\\node.exe', script: 'C:\\100%\\g.js', browser: 'edge' }]) {
+  for (const o of [{ node: "/opt/o'k/node", also: [], script: '/a b/glaze-mcp.js', browser: 'brave' }, { node: 'C:\\n\\node.exe', also: ['C:\\100%\\n.exe', 'D:\\n.exe'], script: 'C:\\100%\\g.js', browser: 'edge' }]) {
     assert.deepEqual(L.parse(L.sh(o)), o);
     assert.deepEqual(L.parse(L.bat(o)), o);
   }
+  // A one-node launcher from a prerelease is still ours.
+  assert.deepEqual(L.parse(`#!/bin/sh\nexec '/n' '/s' host --browser=chrome "$@"\n`), { node: '/n', also: [], script: '/s', browser: 'chrome' });
+  assert.equal(L.parse(sh.replace('exit 1', 'exit 0')), null, 'an edited one is not');
   assert.equal(L.parse('#!/bin/sh\necho hi\n'), null);
   assert.throws(() => L.sh({ node: 'node', script: '/s', browser: 'b' }), /absolute/);
 });
@@ -236,6 +245,50 @@ test('the sh launcher setup writes runs node on the copied script with host --br
   const out = spawnSync(launcher, [ORIGIN], { encoding: 'utf8' });
   assert.equal(out.status, 0, out.stderr);
   assert.deepEqual(out.stdout.split('\n'), [path.join(AS(home), 'glaze-mcp', VERSION, 'bin', 'glaze-mcp.js'), 'host', '--browser=chrome', ORIGIN, '']);
+});
+
+test('a launcher runs its own node, then the others setup found, then says there is no node; doctor says to run setup again', { skip: posixOnly('sh launchers run on POSIX; the .bat text is checked above') }, async (t) => {
+  const home = scratch(t);
+  mk(AS(home), 'Google', 'Chrome');
+  // Stand-ins for node that say which they are and what they were given, and their version when asked.
+  const stand = (name) => {
+    const f = path.join(mk(home, `${name} bin`), 'node');
+    fs.writeFileSync(f, `#!/bin/sh\n[ "$1" = --version ] && { echo v22.11.0; exit 0; }\nprintf "%s\\n" ${name} "$@"\n`, { mode: 0o755 });
+    return f;
+  };
+  const pinned = stand('pinned'), other = stand('other');
+  const ctx = mac(home, { node: pinned, also: [other] });
+  await I.setup(ctx);
+  const launcher = path.join(AS(home), 'glaze-mcp', 'hosts', 'chrome');
+  const script = path.join(AS(home), 'glaze-mcp', VERSION, 'bin', 'glaze-mcp.js');
+  assert.deepEqual(L.parse(fs.readFileSync(launcher, 'utf8')), { node: pinned, also: [other], script, browser: 'chrome' });
+  const runs = () => spawnSync(launcher, [ORIGIN]);
+  assert.deepEqual(runs().stdout.toString().split('\n'), ['pinned', script, 'host', '--browser=chrome', ORIGIN, '']);
+  const ok = await D.run(ctx);
+  assert.equal(ok.ok, true, D.text(ok));
+  assert.ok(!ok.rows.some((r) => r.level === 'warn'), D.text(ok));
+
+  fs.rmSync(pinned);
+  assert.deepEqual(runs().stdout.toString().split('\n'), ['other', script, 'host', '--browser=chrome', ORIGIN, '']);
+  const moved = await D.run(ctx);
+  assert.equal(moved.ok, true, D.text(moved));
+  const warn = moved.rows.find((r) => r.level === 'warn' && r.what === 'Google Chrome');
+  assert.ok(warn && warn.detail.includes(pinned) && warn.detail.includes(other), D.text(moved));
+  assert.match(warn.detail, /Run setup again: npx glaze-mcp setup/);
+
+  fs.rmSync(other);
+  const none = runs();
+  assert.equal(none.status, 1);
+  assert.deepEqual(JSON.parse(none.stdout.subarray(4).toString()), L.NO_NODE, 'the no-node message, as with no node at all');
+  assert.equal(none.stdout.readUInt32LE(0), none.stdout.length - 4);
+  const dead = await D.run(ctx);
+  assert.equal(dead.ok, false);
+  assert.ok(dead.rows.some((r) => r.level === 'fail' && r.detail.includes(pinned) && /Run setup again: npx glaze-mcp setup/.test(r.detail)), D.text(dead));
+
+  // Too old where it stands: the launcher would run it, so doctor fails it, with the same fix.
+  stand('pinned');
+  const aged = await D.run({ ...ctx, run: runner({ nodeVersion: 'v16.20.0' }).run });
+  assert.ok(aged.rows.some((r) => r.level === 'fail' && /16\.20\.0/.test(r.detail) && /Run setup again: npx glaze-mcp setup/.test(r.detail)), D.text(aged));
 });
 
 test('launchers name node by the PATH entry that leads to it, so a Homebrew upgrade doesn\'t break them', { skip: posixOnly('POSIX symlinks; the junction test covers Windows') }, (t) => {
@@ -306,7 +359,8 @@ test('setup on macOS: a versioned copy, one launcher and one manifest per presen
   assert.deepEqual(json(firefox), { name: HOST, description: DESCRIPTION, path: path.join(root, 'hosts', 'firefox'), type: 'stdio', allowed_extensions: ['glaze@frostdev.io'] });
   for (const b of ['chrome', 'firefox']) {
     const f = path.join(root, 'hosts', b);
-    assert.equal(fs.readFileSync(f, 'utf8'), `#!/bin/sh\nexec '/opt/node/bin/node' '${script}' host --browser=${b} "$@"\n`);
+    assert.equal(fs.readFileSync(f, 'utf8'), L.sh({ node: '/opt/node/bin/node', script, browser: b }));
+    assert.deepEqual(L.parse(fs.readFileSync(f, 'utf8')), { node: '/opt/node/bin/node', also: [], script, browser: b });
     if (POSIX) assert.equal(mode(f), 0o755, b);
   }
   if (POSIX) for (const d of [root, path.join(root, 'hosts'), path.join(root, VERSION)]) assert.equal(mode(d), 0o700, d);
@@ -364,7 +418,8 @@ test('setup on Windows: manifests and .bat launchers in LOCALAPPDATA, one reg.ex
     assert.equal(m.name, HOST);
     assert.equal(m.path, path.join(hosts, `${b}.bat`));
     assert.deepEqual(b === 'firefox' ? m.allowed_extensions : m.allowed_origins, b === 'firefox' ? ['glaze@frostdev.io'] : [ORIGIN]);
-    assert.equal(fs.readFileSync(m.path, 'utf8'), `@echo off\r\n@setlocal DisableDelayedExpansion\r\n"C:\\Program Files\\nodejs\\node.exe" "${script}" host --browser=${b} %* & exit /b\r\n`);
+    assert.equal(fs.readFileSync(m.path, 'utf8'), L.bat({ node: 'C:\\Program Files\\nodejs\\node.exe', script, browser: b }));
+    assert.match(fs.readFileSync(m.path, 'utf8'), /\r\nif exist "C:\\Program Files\\nodejs\\node\.exe" \("C:\\Program Files\\nodejs\\node\.exe" "[^"]+" host --browser=[a-z-]+ %\* & exit \/b\)\r\n/);
   }
   assert.equal(fs.existsSync(path.join(hosts, 'vivaldi.json')), false);
   assert.equal(fs.existsSync(path.join(hosts, 'vivaldi.bat')), false);
@@ -426,7 +481,7 @@ test('reruns: setup twice leaves the same files; ensure({ifNeeded}) writes nothi
   const moved = await I.ensure({ ...ctx, node: '/usr/local/bin/node', ifNeeded: true });
   assert.equal(moved.changed, true);
   assert.deepEqual([...moved.wrote].sort(), [path.join(root, 'hosts', 'chrome'), path.join(root, 'hosts', 'firefox')].sort());
-  assert.match(fs.readFileSync(path.join(root, 'hosts', 'chrome'), 'utf8'), /^exec '\/usr\/local\/bin\/node' /m);
+  assert.match(fs.readFileSync(path.join(root, 'hosts', 'chrome'), 'utf8'), /^for n in '\/usr\/local\/bin\/node';/m);
 
   // A new version: a new copy beside the old one, and the launchers move to it.
   const v1 = pkgAt(t, '90.0.0'), v2 = pkgAt(t, '90.0.1');
@@ -870,12 +925,12 @@ test('batch launchers reject quote and line injection, preserve carets and perce
     assert.throws(() => L.bat({ node: p, script: 'C:\\s.js', browser: 'chrome' }), /invalid|path|character/i);
     assert.throws(() => L.bat({ node: 'C:\\n.exe', script: p, browser: 'chrome' }), /invalid|path|character/i);
   }
-  const o = { node: 'C:\\a ^ b\\node.exe', script: 'C:\\100% !name!\\s.js', browser: 'chrome' };
+  const o = { node: 'C:\\a ^ b\\node.exe', also: [], script: 'C:\\100% !name!\\s.js', browser: 'chrome' };
   const text = L.bat(o);
   assert.match(text, /setlocal DisableDelayedExpansion/i);
   assert.match(text, /"C:\\a \^ b\\node.exe"/);
   assert.match(text, /100%% !name!/);
-  assert.ok(text.endsWith('%* & exit /b\r\n'));
+  assert.ok(text.includes('%* & exit /b)\r\n'));
   assert.deepEqual(L.parse(text), o);
 });
 

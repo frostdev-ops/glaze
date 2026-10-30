@@ -1,6 +1,8 @@
 // The small script a host manifest points at: browsers start it with no PATH worth trusting, so it names node by its
 // absolute path and passes on what the browser gave it. sh on macOS and Linux (mode 0755), a .bat on Windows.
-// With no node (node: null; Claude Desktop's bundle found none, nodes.js) it writes one native message,
+// It runs the first of node (the one setup ran with or chose) and also (the other nodes nodes.js found safe and new
+// enough, in its order) that is still there, so a node upgraded or removed since doesn't break it. With none of them, or
+// no node at all (node: null; Claude Desktop's bundle found none, nodes.js), it writes one native message,
 // {t:'error',why:'no-node'}, which the worker shows as no-node (lib/agent-link.js), and exits 1. It still names the script
 // it would run, so setup, uninstall and doctor know it as theirs.
 'use strict';
@@ -24,30 +26,35 @@ const wire = () => {
 };
 const octal = (buf) => [...buf].map((b) => (b >= 0x20 && b < 0x7f && b !== 0x25 && b !== 0x5c && b !== 0x27 ? String.fromCharCode(b) : `\\${b.toString(8).padStart(3, '0')}`)).join('');
 
-const sh = ({ node, script, browser }) => (node === null
+const sh = ({ node, also = [], script, browser }) => (node === null
   ? `#!/bin/sh\n: no node for ${q(abs(script))} host --browser=${id(browser)}\nprintf '${octal(wire())}'\nexit 1\n`
-  : `#!/bin/sh\nexec ${q(abs(node))} ${q(abs(script))} host --browser=${id(browser)} "$@"\n`);
+  : `#!/bin/sh\nfor n in ${[node, ...also].map((n) => q(abs(n))).join(' ')}; do\n  [ -f "$n" ] && [ -x "$n" ] && exec "$n" ${q(abs(script))} host --browser=${id(browser)} "$@"\ndone\nprintf '${octal(wire())}'\nexit 1\n`);
 // cmd expands % even inside quotes, so it is doubled. cmd reads a .bat a line at a time from where it left off, so the
 // command ends the file's reading itself (`& exit /b`): a launcher rewritten while its host runs is never read further.
-const bat = ({ node, script, browser }) => {
+// PowerShell writes the no-node bytes: cmd has no way to write a NUL. %SystemRoot% is the browser's own.
+const PS = '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -Command';
+const PS_WRITE = () => `"$o=[Console]::OpenStandardOutput();$b=[byte[]](${[...wire()].join(',')});$o.Write($b,0,$b.Length);$o.Flush()"`;
+const bat = ({ node, also = [], script, browser }) => {
   const w = (p) => {
     if (/["\x00-\x1f]/.test(abs(p))) throw new Error(`invalid character in launcher path: ${p}`);
     return `"${p.replace(/%/g, '%%')}"`;
   };
-  if (node === null) {
-    // PowerShell writes the bytes: cmd has no way to write a NUL. %SystemRoot% is the browser's own.
-    const ps = '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -Command';
-    const write = `"$o=[Console]::OpenStandardOutput();$b=[byte[]](${[...wire()].join(',')});$o.Write($b,0,$b.Length);$o.Flush()"`;
-    return `@echo off\r\n@setlocal DisableDelayedExpansion\r\nrem no node for ${w(script)} host --browser=${id(browser)}\r\n${ps} ${write} & exit /b 1\r\n`;
-  }
-  return `@echo off\r\n@setlocal DisableDelayedExpansion\r\n${w(node)} ${w(script)} host --browser=${id(browser)} %* & exit /b\r\n`;
+  if (node === null) return `@echo off\r\n@setlocal DisableDelayedExpansion\r\nrem no node for ${w(script)} host --browser=${id(browser)}\r\n${PS} ${PS_WRITE()} & exit /b 1\r\n`;
+  const run = (n) => `if exist ${w(n)} (${w(n)} ${w(script)} host --browser=${id(browser)} %* & exit /b)\r\n`;
+  return `@echo off\r\n@setlocal DisableDelayedExpansion\r\n${[node, ...also].map(run).join('')}${PS} ${PS_WRITE()} & exit /b 1\r\n`;
 };
 const text = (platform, o) => (platform === 'win32' ? bat(o) : sh(o));
 const file = (platform, hosts, browser) => path.join(hosts, platform === 'win32' ? `${id(browser)}.bat` : id(browser));
 
-// What a launcher of ours runs, or null for anything else.
+// What a launcher of ours runs ({ node, also, script, browser }; { node: null, script, browser } with none), or null for
+// anything else. SH and BAT are the one-node launchers of glaze-mcp's prereleases, which still count as ours.
 const SH = /^#!\/bin\/sh\nexec '((?:[^']|'\\'')*)' '((?:[^']|'\\'')*)' host --browser=([a-z][a-z-]*) "\$@"\n$/;
 const BAT = /^@echo off\r\n(?:@setlocal DisableDelayedExpansion\r\n)?"([^"\x00-\x1f]*)" "([^"\x00-\x1f]*)" host --browser=([a-z][a-z-]*) %\* & exit \/b\r\n$/;
+// A launcher with nodes is ours only as text() writes it.
+const Q = String.raw`'((?:[^']|'\\'')*)'`, W = '"([^"\x00-\x1f]*)"';
+const SH_FOR = new RegExp(`^#!/bin/sh\nfor n in ((?:${Q} ?)+); do\n  \\[ -f "\\$n" \\] && \\[ -x "\\$n" \\] && exec "\\$n" ${Q} host --browser=([a-z][a-z-]*) "\\$@"\n`);
+const BAT_IF = new RegExp(`^@echo off\r\n@setlocal DisableDelayedExpansion\r\n((?:if exist ${W} \\(${W} ${W} host --browser=([a-z][a-z-]*) %\\* & exit /b\\)\r\n)+)`);
+const nodesOf = (list, re, un) => [...list.matchAll(re)].map((m) => un(m[1]));
 // A launcher with no node is ours only as text() writes it.
 const NONE = /^(?:#!\/bin\/sh\n: no node for '((?:[^']|'\\'')*)' host --browser=([a-z][a-z-]*)\n|@echo off\r\n@setlocal DisableDelayedExpansion\r\nrem no node for "([^"\x00-\x1f]*)" host --browser=([a-z][a-z-]*)\r\n)/;
 const parse = (t) => {
@@ -57,10 +64,24 @@ const parse = (t) => {
     const o = { node: null, script: win ? none[3].replace(/%%/g, '%') : none[1].replace(/'\\''/g, "'"), browser: win ? none[4] : none[2] };
     try { return (win ? bat(o) : sh(o)) === t ? o : null; } catch { return null; }
   }
+  const unSh = (s) => s.replace(/'\\''/g, "'"), unBat = (s) => s.replace(/%%/g, '%');
+  const back = (o, make) => { try { return make(o) === t ? o : null; } catch { return null; } };
+  let f = typeof t === 'string' && SH_FOR.exec(t);
+  if (f) {
+    const [node, ...also] = nodesOf(f[1], new RegExp(Q, 'g'), unSh);
+    return back({ node, also, script: unSh(f[f.length - 2]), browser: f[f.length - 1] }, sh);
+  }
+  f = typeof t === 'string' && BAT_IF.exec(t);
+  if (f) {
+    const line = new RegExp(`if exist ${W} \\(${W} ${W} host --browser=([a-z][a-z-]*) %\\* & exit /b\\)\r\n`, 'g');
+    const lines = [...f[1].matchAll(line)];
+    const [node, ...also] = lines.map((m) => unBat(m[1]));
+    return back({ node, also, script: unBat(lines[0][3]), browser: lines[0][4] }, bat);
+  }
   let m = typeof t === 'string' && SH.exec(t);
-  if (m) return { node: m[1].replace(/'\\''/g, "'"), script: m[2].replace(/'\\''/g, "'"), browser: m[3] };
+  if (m) return { node: unSh(m[1]), also: [], script: unSh(m[2]), browser: m[3] };
   m = typeof t === 'string' && BAT.exec(t);
-  if (m) return { node: m[1].replace(/%%/g, '%'), script: m[2].replace(/%%/g, '%'), browser: m[3] };
+  if (m) return { node: unBat(m[1]), also: [], script: unBat(m[2]), browser: m[3] };
   return null;
 };
 

@@ -59,7 +59,7 @@ const macHome = (t) => {
 };
 const startAt = (h, env = {}, over = {}) => {
   const err = sink();
-  return M().start({ platform: 'darwin', env: { HOME: h.home, ...env }, stderr: err, run: runner().run, execPath: h.node, versions: { node: '22.11.0' }, ...over })
+  return M().start({ platform: 'darwin', env: { HOME: h.home, ...env }, stderr: err, run: runner().run, execPath: h.node, versions: { node: '22.11.0' }, list: [], ...over })
     .then((r) => ({ ...r, log: err.text() }));
 };
 
@@ -231,6 +231,26 @@ test('find takes the first candidate that is a safe executable file saying v18 o
   assert.equal(await find({ platform: 'darwin', env: {}, run, list: [broken, chatty, later] }), later);
 });
 
+test('all lists every candidate find would take, in order, past the ones to skip', { skip: posixOnly('POSIX modes and sh stand-ins') }, async (t) => {
+  const { all } = N();
+  const d = scratch(t);
+  const missing = path.join(d, 'missing', 'node');
+  const old = fakeNode(path.join(d, 'old'), 'v16.20.2');
+  const claudeApp = fakeNode(path.join(d, 'Claude.app', 'Contents', 'Resources'), 'v22.0.0');
+  const good = fakeNode(path.join(d, 'good'), 'v20.18.0');
+  const later = fakeNode(path.join(d, 'later'), 'v24.0.0');
+  const pinned = fakeNode(path.join(d, 'pinned'), 'v22.0.0');
+  const got = await all({ platform: 'darwin', env: {}, run: I.runFile, list: [missing, pinned, old, claudeApp, good, later], skip: [pinned] });
+  assert.deepEqual(got, [good, later]);
+});
+
+test('start writes the other nodes it finds into the launchers, after its own', { skip: posixOnly('POSIX modes and sh stand-ins') }, async (t) => {
+  const h = macHome(t);
+  const other = fakeNode(path.join(h.home, 'other', 'bin'));
+  await startAt(h, {}, { list: [h.node, other] });
+  assert.deepEqual(L.parse(fs.readFileSync(path.join(h.hosts, 'chrome'), 'utf8')).also, [other]);
+});
+
 test('choose keeps a plain node by its stable PATH name, and under Claude finds a system one or none', async (t) => {
   const { choose } = N();
   const d = scratch(t);
@@ -351,7 +371,7 @@ test('start sets up every present browser with this node, once; a second start w
   assert.deepEqual([...first.setup.browsers].sort(), ['chrome', 'firefox']);
   assert.equal(first.setup.changed, true);
   const l = L.parse(fs.readFileSync(path.join(h.hosts, 'chrome'), 'utf8'));
-  assert.deepEqual(l, { node: h.node, script: path.join(h.root, VERSION, 'bin', 'glaze-mcp.js'), browser: 'chrome' });
+  assert.deepEqual(l, { node: h.node, also: [], script: path.join(h.root, VERSION, 'bin', 'glaze-mcp.js'), browser: 'chrome' });
   assert.equal(json(path.join(AS(h.home), 'Google', 'Chrome', 'NativeMessagingHosts', `${B.HOST}.json`)).path, path.join(h.hosts, 'chrome'));
   const again = await startAt(h);
   assert.equal(again.setup.changed, false);
