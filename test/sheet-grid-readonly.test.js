@@ -22,7 +22,8 @@ const chartLayer = (asked) => ({ layer: () => {
 } });
 
 const frame = () => {
-  const doc = { activeElement: null, hidden: false, listeners: [] }, changes = new Set(), writes = [], asked = [];
+  const doc = { activeElement: null, hidden: false, listeners: [] }, changes = new Set(), writes = [], asked = [], timers = new Map();
+  let tick = 0;
   const store = { get: async () => ({}), set: async (v) => { writes.push(['set', v]); }, remove: async (k) => { writes.push(['remove', k]); } };
   const element = (tag) => {
     const el = new El(tag, doc), set = el.setAttribute.bind(el);
@@ -56,7 +57,7 @@ const frame = () => {
     chrome: { storage: { local: store, onChanged: { addListener: (f) => changes.add(f), removeListener: (f) => changes.delete(f) } } },
     getComputedStyle: () => ({ fontSize: '13px', fontFamily: 'Arial' }),
     ResizeObserver: class { observe() {} disconnect() {} }, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
-    setTimeout: () => 0, clearTimeout() {}, addEventListener() {} });
+    setTimeout: (fn, ms) => { timers.set(++tick, { fn, ms }); return tick; }, clearTimeout: (id) => timers.delete(id), addEventListener() {} });
   vm.runInContext(source, ctx);
   // Two sheets, numbers and text, a formula: what a Canvas .xlsx brings.
   const wb = M.workbook(), sh = wb.sheets[0];
@@ -70,7 +71,7 @@ const frame = () => {
   const el = (id) => doc.getElementById(id), key = (name, more = {}) => fire(doc.activeElement, 'keydown', { key: name, ...more });
   const said = () => doc.querySelector('.gx-said').textContent;
   const snap = () => { const was = wb.active; wb.active = 0; const s = SD.serialize(wb); wb.active = was; return s; };
-  return { doc, view, wb, fire, el, key, said, snap, writes, changes, asked, scroller: doc.querySelector('.gx-scroll'), grid: el('gx-grid') };
+  return { doc, view, wb, fire, el, key, said, snap, writes, changes, asked, timers, scroller: doc.querySelector('.gx-scroll'), grid: el('gx-grid') };
 };
 
 // The cell B2 and the corner of the selection at A1, on the grid's face (headers 46 × 24, cells 64 × 20).
@@ -190,4 +191,24 @@ test('a workbook from memory still selects, moves, copies, finds and switches sh
   assert.equal(f.wb.active, 1, 'another sheet shows');
   assert.equal(f.snap(), before);
   assert.equal(f.said(), '', 'none of it is refused');
+});
+
+test('repeated read-only attempts leave the current status announcement and its expiry alone', () => {
+  const f = frame(), said = f.doc.querySelector('.gx-said');
+  const text = Object.getOwnPropertyDescriptor(El.prototype, 'textContent');
+  let writes = 0;
+  Object.defineProperty(said, 'textContent', {
+    get() { return text.get.call(this); },
+    set(value) { writes++; text.set.call(this, value); },
+  });
+  f.key('x');
+  const expiry = [...f.timers].find(([, timer]) => timer.ms === 6000);
+  assert.ok(expiry, 'the first refusal expires');
+  for (const key of ['y', 'z', 'F2', 'Process', 'Dead']) f.key(key);
+  assert.equal(writes, 1, 'one live-region update while the same refusal is already visible');
+  assert.ok(f.timers.has(expiry[0]), 'repeated attempts do not postpone the current announcement');
+  expiry[1].fn();
+  assert.equal(f.said(), '');
+  f.key('x');
+  assert.equal(f.said(), REFUSED, 'an attempt after expiry can explain the refusal again');
 });
