@@ -25,26 +25,25 @@ const quit = ({ started, pid: was }) => {
   if (was && pid() === was) try { process.kill(was, 'SIGTERM'); } catch { /* already gone */ }
 };
 
-// What Numbers shows of one file: each sheet's first table, its cells' values row by row (dates as ISO text, so the
-// local day survives JSON) and shown text.
-const read = (file) => `
+// What Numbers shows of one file: each sheet's first table and, for each cell Glaze holds (ask: sheet name → cell names),
+// its value (a date as its local parts, so the day survives JSON) and shown text. A cell at a time: a whole table's
+// values in one Apple event outlast Numbers' reply.
+const read = (file, ask) => `
 const app = Application('Numbers');
 const doc = app.open(Path(${JSON.stringify(file)}));
 try {
+  const ask = ${JSON.stringify(ask)};
   const out = { sheets: [] };
   for (const sh of doc.sheets()) {
-    const t = sh.tables()[0];
-    if (!t) { out.sheets.push({ name: sh.name(), rows: [] }); continue; }
-    const cols = t.columnCount(), rows = [], vals = t.cells.value(), texts = t.cells.formattedValue();
-    for (let r = 0; r < t.rowCount(); r++) {
-      const row = [];
-      for (let c = 0; c < cols; c++) {
-        const v = vals[r * cols + c];
-        row.push({ v: v instanceof Date ? { date: [v.getFullYear(), v.getMonth() + 1, v.getDate(), v.getHours(), v.getMinutes(), v.getSeconds()] } : v, text: texts[r * cols + c] });
-      }
-      rows.push(row);
+    const t = sh.tables()[0], s = { name: sh.name(), cells: {} };
+    out.sheets.push(s);
+    if (!t) continue;
+    s.rows = t.rowCount(); s.cols = t.columnCount(); s.header = t.headerRowCount();
+    for (const at of ask[s.name] || []) {
+      let v, text;
+      try { const c = t.cells.byName(at); v = c.value(); text = c.formattedValue(); } catch (e) { v = { missing: e.message }; }
+      s.cells[at] = { v: v instanceof Date ? { date: [v.getFullYear(), v.getMonth() + 1, v.getDate(), v.getHours(), v.getMinutes(), v.getSeconds()] } : v, text };
     }
-    out.sheets.push({ name: sh.name(), table: t.name(), headerRows: t.headerRowCount(), rows });
   }
   JSON.stringify(out);
 } finally { doc.close({ saving: 'no' }); }`;
@@ -62,11 +61,11 @@ const compare = (model, got) => {
     if (!s) continue;
     for (const [at, x] of sh.cells) {
       if (x.t === 'z') continue;
-      const [r, c] = M.cellPosition(at), g = s.rows[r]?.[c];
+      const g = s.cells[at];
       cells++;
       const off = x.f !== undefined ? engine : problems;
       const where = `${sh.name}!${at}${x.f ? ` ${x.f}` : ''}`;
-      if (!g) { off.push(`${where}: outside Numbers' table`); continue; }
+      if (!g || (g.v && g.v.missing)) { off.push(`${where}: not in Numbers' table${g ? ` (${g.v.missing})` : ''}`); continue; }
       let v = g.v;
       if (v && typeof v === 'object' && v.date) v = serial(v.date, model.date1904);
       if (x.t === 'n') { if (!agree('n', x.v, v) && !(typeof v === 'number' && Math.abs(x.v - v) <= 1e-9 * Math.max(1, Math.abs(x.v)))) off.push(`${where}: ${JSON.stringify(g.v)}, not ${x.v}`); }
@@ -92,7 +91,8 @@ const main = async () => {
       fs.writeFileSync(file, b.bytes);
       if (keepDir) { fs.mkdirSync(keepDir, { recursive: true }); fs.writeFileSync(path.join(keepDir, b.name), b.bytes); }
       let got;
-      try { got = JSON.parse(jxa(read(file))); } catch (err) { rows.push({ name: b.name, opened: 'no', cells: 0, problems: [String(err.stderr || err.message).trim().slice(0, 300)], engine: [] }); continue; }
+      const ask = Object.fromEntries(expect(b.model).map((sh) => [sh.name, [...sh.cells].filter(([, x]) => x.t !== 'z').map(([at]) => at)]));
+      try { got = JSON.parse(jxa(read(file, ask), 900000)); } catch (err) { rows.push({ name: b.name, opened: 'no', cells: 0, problems: [String(err.stderr || err.message).trim().slice(0, 300)], engine: [] }); continue; }
       rows.push({ name: b.name, opened: 'yes', ...compare(b.model, got) });
     }
   } finally {
