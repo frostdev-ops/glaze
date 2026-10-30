@@ -388,3 +388,64 @@ test('a copy left by something that went has no role, so nothing that looks for 
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'lib', 'motion.js'), 'utf8');
   assert.match(src.match(/GHOSTLESS = \[[^\]]*\]/)[0], /'role'/);
 });
+
+test('in a school\'s page a crossfade waits for the page world\'s guard, then hands it the transition it starts', async () => {
+  // Chrome rejects a skipped or timed-out transition's ready in the page's own world as well, where only the page can
+  // handle it: lib/background.js puts a guard there that answers glaze:transition.
+  const saved = ['chrome', 'location', 'dispatchEvent'].map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)]);
+  let runs = [], guarded = false;
+  const events = [];
+  try {
+    globalThis.chrome = { runtime: { getURL: (p = '') => `chrome-extension://glaze/${p}` } };
+    globalThis.dispatchEvent = (e) => { events.push([e.type, e.cancelable, runs.length]); if (guarded && e.cancelable) e.preventDefault(); return !e.defaultPrevented; };
+    const page = (origin, active = true) => {
+      globalThis.location = { origin };
+      ({ runs } = env({ vt: true }));
+      if (active) document.activeViewTransition = null;
+      events.length = 0;
+    };
+    let n = 0;
+    page('https://school.instructure.com');
+    await M.swap(() => { n++; });
+    assert.deepEqual([n, runs.length], [1, 0], 'no guard in the page\'s world yet: the change runs at once, with no transition');
+    guarded = true;
+    const done = async () => { await runs[0].finished; await new Promise(setImmediate); };
+    page('https://school.instructure.com');
+    M.swap(() => { n++; });
+    assert.equal(runs.length, 1, 'with the guard there, it crossfades');
+    assert.deepEqual(events, [['glaze:transition', true, 0], ['glaze:transition', false, 1]], 'asked before it starts, then told once it has');
+    await done();
+    guarded = false;
+    page('https://school.instructure.com', false);
+    M.swap(() => { n++; });
+    assert.equal(runs.length, 1, 'a browser with no activeViewTransition crossfades as before');
+    await done();
+    page('chrome-extension://glaze');
+    M.swap(() => { n++; });
+    assert.equal(runs.length, 1, 'Glaze\'s own pages handle their own transitions');
+    await done();
+  } finally {
+    for (const [k, d] of saved) { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; }
+  }
+});
+
+
+test('the handoff carries the exact transition through a native event when supported', async () => {
+  const saved = ['PageRevealEvent', 'dispatchEvent'].map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)]);
+  try {
+    class PageRevealEvent extends Event { constructor(type, init) { super(type); this.viewTransition = init.viewTransition; } }
+    globalThis.PageRevealEvent = PageRevealEvent;
+    const events = [];
+    globalThis.dispatchEvent = (e) => { events.push(e); return true; };
+    const { runs } = env({ vt: true });
+    await M.swap(() => {});
+    await runs[0].finished;
+    await new Promise(setImmediate);
+    assert.equal(events.length, 1);
+    assert.ok(events[0] instanceof PageRevealEvent, 'a native ViewTransition slot creates the receiving world\'s wrapper; CustomEvent detail retains the isolated wrapper');
+    assert.equal(events[0].type, 'glaze:transition');
+    assert.equal(events[0].viewTransition, runs[0]);
+  } finally {
+    for (const [k, d] of saved) { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; }
+  }
+});
