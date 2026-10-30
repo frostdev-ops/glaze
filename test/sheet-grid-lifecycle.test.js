@@ -27,6 +27,8 @@ const frame = (options = {}) => {
     el.scrollLeft = el.scrollTop = 0;
     el.box = { left: 0, top: 0, width: 640, height: 400 };
     if (tag === 'canvas') el.getContext = () => ({ measureText: (s) => ({ width: s.length * 7 }) });
+    // Kept out of what a failed assertion prints (it walks only enumerable keys): the way back up to the page.
+    for (const k of ['doc', 'parentNode']) Object.defineProperty(el, k, { enumerable: false });
     return el;
   };
   doc.root = doc.documentElement = element('html'); doc.body = element('body'); doc.root.append(doc.body);
