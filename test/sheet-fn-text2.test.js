@@ -139,7 +139,7 @@ test('FIND, FINDB, SEARCH, SEARCHB with Microsoft\'s data', () => {
   cases(e, [
     ['FIND("M",A2)', 1], ['FIND("m",A2)', 6], ['FIND("M",A2,3)', 8],
     ['MID(B2,1,FIND(" #",B2,1)-1)', 'Ceramic Insulators'], ['MID(B3,1,FIND(" #",B3,1)-1)', 'Copper Coils'], ['MID(B4,1,FIND(" #",B4,1)-1)', 'Variable Resistors'],
-    ['FIND("",A2)', 1], ['FIND("",A2,5)', 5], ['FIND("z",A2)', '#VALUE!'], ['FIND("M",A2,0)', '#VALUE!'], ['FIND("M",A2,16)', '#VALUE!'], ['FIND("*",A2)', '#VALUE!'],
+    ['FIND("",A2)', 1], ['FIND("",A2,5)', 5], ['FIND("z",A2)', '#VALUE!'], ['FIND("M",A2,0)', '#VALUE!'], ['FIND("M",A2,16)', '#VALUE!'], ['FIND("",A2,16)', '#VALUE!'], ['FIND("",A2,15)', 15], ['FIND("*",A2)', '#VALUE!'],
     ['FINDB("m",A2)', 6], ['FIND(1,12321,2)', 5],
     ['SEARCH("e",C2,6)', 7], ['SEARCH(C4,C3)', 8], ['REPLACE(C3,SEARCH(C4,C3),6,"Amount")', 'Profit Amount'], ['MID(C3,SEARCH(" ",C3)+1,4)', 'Marg'],
     ['SEARCH("""",C5)', 5], ['MID(C5,SEARCH("""",C5)+1,SEARCH("""",C5,SEARCH("""",C5)+1)-SEARCH("""",C5)-1)', 'boss'],
@@ -154,7 +154,7 @@ test('EXACT, PROPER, CLEAN, CHAR, CODE, UNICHAR, UNICODE with Microsoft\'s data'
     ['EXACT(A2,B2)', true], ['EXACT(A3,B3)', false], ['EXACT(A4,B4)', false], ['EXACT(1,"1")', true],
     ['PROPER(C2)', 'This Is A Title'], ['PROPER(C3)', '2-Way Street'], ['PROPER(C4)', '76Budget'], ['PROPER("don\'t")', 'Don\'T'], ['PROPER("élan VITAL")', 'Élan Vital'],
     ['CLEAN(D2)', 'Monthly report'], ['LEN(CLEAN(CHAR(127)&"a"))', 2],
-    ['CHAR(65)', 'A'], ['CHAR(33)', '!'], ['CHAR(0)', '#VALUE!'], ['CHAR(256)', '#VALUE!'], ['CHAR(65.9)', 'A'], ['CHAR(128)', '€'], ['CHAR(233)', 'é'],
+    ['CHAR(65)', 'A'], ['CHAR(33)', '!'], ['CHAR(0)', '#VALUE!'], ['CHAR(256)', '#VALUE!'], ['CHAR(65.9)', 'A'], ['CHAR(128)', '€'], ['CHAR(150)', '–'], ['CHAR(151)', '—'], ['CODE("—")', 151], ['CODE("Ā")', 63], ['CHAR(233)', 'é'],
     ['CODE("A")', 65], ['CODE("!")', 33], ['CODE("Apple")', 65], ['CODE("")', '#VALUE!'], ['CODE("€")', 128], ['CODE(CHAR(200))', 200], ['CODE(CHAR(150))', 150],
     ['UNICHAR(66)', 'B'], ['UNICHAR(32)', ' '], ['UNICHAR(0)', '#VALUE!'], ['UNICHAR(55296)', '#N/A'], ['UNICHAR(1114112)', '#VALUE!'], ['UNICHAR(128512)', '😀'],
     ['UNICODE(" ")', 32], ['UNICODE("B")', 66], ['UNICODE("😀")', 128512], ['UNICODE("")', '#VALUE!'], ['UNICODE(UNICHAR(8364))', 8364],
