@@ -25,14 +25,18 @@ const SITE = 'https://bb.school.test';
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const probe = require('./pointer-probe.cjs');
-const animation = (frame, enabled) => {
+const animation = (frame, enabled, isolated = null) => {
   let step = 0;
-  return probe(() => frame.evaluate((x) => {
+  return probe(async () => {
+    const state = isolated && await isolated();
+    const drawn = await frame.evaluate((x) => {
     const ctx = globalThis.GZ_CTX, extras = ctx?.settings().extras;
     dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientX: x, clientY: 200, bubbles: true }));
     const moving = /^(subtle|expressive)$/.test(document.documentElement.getAttribute('data-gz-motion') || '');
     return { ready: !!globalThis.GZ_MOTIONX && !!ctx?.parts()?.cursor, enabled: moving && extras?.pointerOn !== false && extras?.pointerAnim !== false, drawn: !!document.getElementById('gz-fx') };
-  }, 200 + (++step % 12) * 15), enabled);
+    }, 200 + (++step % 12) * 15);
+    return state ? { ...drawn, ...state } : drawn;
+  }, enabled);
 };
 let fails = 0;
 const check = (name, ok, detail = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `  ${detail}`}`); if (!ok) fails++; };
@@ -265,7 +269,16 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('Glaze off: the page is left with the system\'s', await shows('system') && await lms.evaluate(() => !document.documentElement.style.getPropertyValue('--gz-cursor')), await onPage());
     await page.evaluate(() => chrome.storage.sync.set({ enabled: true }));
     check('  and on again, the student\'s is back', await shows('neon'), await onPage());
-    const glow = (enabled = true) => animation(lms, enabled);
+    const sw = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+    const glow = (enabled = true) => animation(lms, enabled, () => sw.evaluate(async (url) => {
+      const [tab] = await chrome.tabs.query({ url });
+      const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => {
+        const ctx = globalThis.GZ_CTX, extras = ctx?.settings().extras;
+        const moving = /^(subtle|expressive)$/.test(document.documentElement.getAttribute('data-gz-motion') || '');
+        return { ready: !!globalThis.GZ_MOTIONX && !!ctx?.parts()?.cursor, enabled: moving && extras?.pointerOn !== false && extras?.pointerAnim !== false };
+      } });
+      return r.result;
+    }, lms.url()));
     check('the Look\'s pointer animation plays around the student\'s pointer', await glow());
     await extras({ pointerAnim: false });
     check('  Pointer animation off: nothing drawn around it', await glow(false));
