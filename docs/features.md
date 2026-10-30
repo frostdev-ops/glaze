@@ -139,7 +139,7 @@ On by default on Blackboard Ultra (Settings → Writer → Writer → **Glaze Wr
 - **Tests** get compose mode with proofing on this device only: no completion, no AI, no paper, no submit sheet.
 - **Tab** writes a tab, as Word and Blackboard's editor do (in a list it indents, and Shift+Tab outdents); press Esc, then Tab, to leave the editor.
 
-**Back up…** carries your papers and documents (Trash's too), their versions and presets, your dictionary and saved sources.
+**Back up…** carries your papers and Word documents (Trash's too), their versions and presets, your dictionary and saved sources. Slide decks are excluded until the blob store handles their backup; keep the original .pptx or export it.
 
 Settings → Writer, one line each (on by default but Light page, Full writer and Slides; MLA 9, Fit, 40 versions and American English to start):
 - **Glaze Writer** and **Open uploads in Writer**: Writer itself, and an assignment's upload area going to Writer first.
