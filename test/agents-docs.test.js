@@ -67,7 +67,7 @@ test('docs/agents.md names the approval window\'s groups and buttons as Glaze sh
 
 // Settings → AI → Agents (lib/editor-agents.js, branch mcp-options until it merges): every line its link state shows.
 const editor = path.join(root, 'lib/editor-agents.js');
-test('docs/agents.md quotes every line Settings shows for the helper', { skip: !fs.existsSync(editor) && 'lib/editor-agents.js is not on this branch yet' }, () => {
+test('docs/agents.md covers each helper state and its command', { skip: !fs.existsSync(editor) && 'lib/editor-agents.js is not on this branch yet' }, () => {
   const E = require(editor), text = agents(), id = 'abcdefghijklmnopabcdefghijklmnop';
   const states = ['connected', 'connecting', 'restart', 'not-installed', 'forbidden', 'exited', 'old-helper', E.NO_NODE, 'needs-permission'];
   for (const browser of ['chrome', 'firefox', 'safari']) for (const state of states) {
@@ -94,7 +94,8 @@ test('approval retention includes action text and cleanup is conditional on late
   const text = section(), P = require('../lib/mcp/approve.js');
   assert.equal(P.KEEP, 3600e3);
   assert.match(text, /action summary[^.]*document text or citation details/);
-  assert.match(text, /next request or worker startup[^.]*at least an hour old/);
+  assert.match(text, /eligible for cleanup an hour after creation/);
+  assert.match(text, /Cleanup runs on later requests and agent-worker startup/);
   assert.doesNotMatch(text, /goes about an hour/);
 });
 
@@ -131,4 +132,8 @@ test('features lists Agents and the AI harness describes the active Writer bridg
   assert.doesNotMatch(text, /for a later MCP integration|nothing offers them to a model yet/);
   assert.match(text, /lib\/mcp\/writer\.js/);
   assert.match(text, /Settings → AI → Agents/);
+});
+
+test('helper uninstall documents removal of otherwise empty Windows host keys', () => {
+  assert.match(plain(read('mcp/README.md')), /otherwise empty host key/);
 });
