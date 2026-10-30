@@ -1732,7 +1732,14 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       // arriving(p): the file's stage while it arrives ({ name, text, spoken, fraction }), null once it has or hasn't. In
       // the compact box, the bar's line says it.
       arriving: (p) => {
-        if (compact && said) { if (p) tell('importing', p.text); else if (saying === 'importing') tell(''); return; }
+        if (compact && said) {
+          // Bytes remain visible; only a change of stage reaches the separate live region.
+          said.setAttribute('aria-live', p ? 'off' : 'polite');
+          if (p) tell('importing', p.text); else if (saying === 'importing') tell('');
+          const spoken = p?.spoken || '';
+          if (compactArriveSay.textContent !== spoken) compactArriveSay.textContent = spoken;
+          return;
+        }
         arrive.hidden = !p;
         if (!p) { arriveSay.textContent = ''; return; }
         arriveText.textContent = p.text;
@@ -1770,6 +1777,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // until the next edit; and, while the paper is past what Ultra's text box takes (compose's input limit: project()
     // null, so nothing more goes into it), that, the Full writer switch beside it marked, whose .docx has no such limit.
     const said = boxEl ? h('span', { class: 'gp-said', role: 'status' }) : null;
+    const compactArriveSay = boxEl ? h('span', { class: 'gp-sr', role: 'status' }) : null;
     let saying = '';
     const tell = (kind, text = '') => {
       if (!said) return;
@@ -1896,7 +1904,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // the caret, Versions, Open from Documents and Documents, labelled again in the page's language as it opens.
     const more = boxEl && document.getElementById('more');
     if (more) {
-      more.before(said, fullSwitch());
+      more.before(said, compactArriveSay, fullSwitch());
       const panel = async (name) => { await setView(true, { save: true }); if (!compact) { tabs[name].click(); tabs[name].focus(); } };
       const items = [['Checks', () => panel('checks')], ['Feedback', () => panel('feedback')], ['Cite', () => globalThis.GZ_WRITER_CITE?.open?.({ anchor: more })], ['Versions', () => versions(more)], ['Open from Documents', () => fromDocsSheet()], ['Documents', () => open2('papers.html')]]
         .map(([label, run]) => [host.item?.(t(label), run), label]);
