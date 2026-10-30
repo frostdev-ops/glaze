@@ -4,8 +4,7 @@
 // repaired it ("Repaired" in the workbook's or window's name, or no answer while a repair prompt waits), or when Excel
 // shows other than the model: sheets and their order, the date system, each cell's value after Excel's own full
 // calculation, formula and number format, merged cells, frozen panes and hidden columns.
-// Mac only, the one heavy job running:
-//   nice -n 10 node scripts/sheet-excel-fidelity.js [--keep dir] [file.xlsx …], under the Mac's heavy-job lock (CLAUDE.md)
+// Mac only, the one heavy job running: nice -n 10 node scripts/sheet-excel-fidelity.js [--keep dir] [file.xlsx …]
 const fs = require('node:fs'), path = require('node:path');
 const { jxa: run, start, quit, box } = require('./sheet-excel.js');
 const { books, expect, agree, stored } = require('./sheet-fidelity-books.js');

@@ -3,8 +3,7 @@
 // when Numbers won't open it, its sheets aren't Glaze's, or a value Glaze stored as such (text, a number, a date, a
 // boolean) reads otherwise. Formulas Numbers calculates with its own functions: where its answer differs from the value
 // Glaze cached, that is listed apart and doesn't fail the file. Google Sheets stays a manual check.
-// Mac only, the one heavy job running:
-//   nice -n 10 node scripts/sheet-numbers-fidelity.js [--keep dir] [file.xlsx …], under the Mac's heavy-job lock (CLAUDE.md)
+// Mac only, the one heavy job running: nice -n 10 node scripts/sheet-numbers-fidelity.js [--keep dir] [file.xlsx …]
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { books, expect, agree } = require('./sheet-fidelity-books.js');
