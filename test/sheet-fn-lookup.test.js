@@ -408,3 +408,17 @@ test('X binary searches place blanks after values instead of treating them as ze
     ['XMATCH("b",D1:D3,-1,2)', 1], ['XMATCH("b",D1:D3,1,2)', 2], ['XMATCH(TRUE,E1:E3,0,2)', '#N/A'],
   ]);
 });
+
+// Live Microsoft Excel 16.114.1: the lookup value's error comes before the other arguments' faults, and a lookup lifted
+// over an array gives each element's value, an array's top-left one.
+test('lookups lifted over arrays, and which error comes first', () => {
+  const e = book({ Y1: 1, Y2: 2, Z1: 3, Z2: 4 });
+  cases(e, [
+    ['VLOOKUP(1/0,{1,2},5,FALSE)', '#DIV/0!'], ['HLOOKUP(1/0,{1,2},5,FALSE)', '#DIV/0!'], ['XLOOKUP(1/0,{1,2},{1,2,3})', '#DIV/0!'],
+    ['MATCH(1/0,{1,2},"x")', '#DIV/0!'], ['XMATCH(#N/A,{1,2},5)', '#N/A'], ['XLOOKUP(#N/A,{1,2},{1,2},,5)', '#N/A'], ['XLOOKUP(1/0,{1,2},{1,2},,9)', '#DIV/0!'],
+    ['INDEX(1/0,#N/A)', '#DIV/0!'], ['INDIRECT(1/0,#N/A)', '#DIV/0!'], ['LOOKUP(1/0,1/0)', '#DIV/0!'], ['VLOOKUP(1/0,1/0,2)', '#DIV/0!'],
+    ['INDEX(XLOOKUP({1;2},{1;2},{10,11;20,21}),2,1)', 20], ['INDEX(OFFSET(Y1,{0,1},0),1,2)', 2], ['SUM(OFFSET(Y1,{0,1},0))', 3],
+    ['SUM(INDEX(Y1:Z2,{1,2},1))', 3], ['INDEX(INDIRECT({"Y1","Y2"}),1,2)', 2], ['INDEX(MATCH({2,1},{1,2},0),1,1)', 2],
+    ['INDEX(INDEX({1,2;3,4},{1;2},{2,1}),2,2)', 3], ['INDEX(OFFSET(Y1,{0,1},{0;1}),2,2)', 4],
+  ]);
+});

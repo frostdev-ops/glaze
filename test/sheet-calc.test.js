@@ -587,3 +587,16 @@ test('LET binds names for the values after them and the calculation', () => {
   e.apply({ op: 'set', sheet: e.wb.sheets[0].id, r: 0, c: 2, cell: { t: 'n', v: 0, f: 'LET(r,A1:A3,r*2)', a: 'C1:C3' } });
   assert.deepEqual(['C1', 'C2', 'C3'].map((at) => val(e, at)), [20, 8, 10], 'in an array formula the bound range is whole');
 });
+
+// Excel 16.114.1: INDEX(OFFSET(Y1,{0,1},0),1,2) is Y2's value and INDEX(SEQUENCE({2,3}),1,2) is 1, each element of a
+// lifted call taking its one cell's value or its array's top-left value.
+test('a function lifted over an array gives values: a one-cell reference\'s, an array\'s top-left', () => {
+  const { Ref } = C.lib;
+  C.define('TESTREF', { p: ['v', 'v'], min: 1, max: 2, fn: ([i, h = 1], ctx) => new Ref(ctx.sheet, i - 1, 0, i + h - 2, 0) });
+  C.define('TESTSEQ', { p: ['v'], min: 1, max: 1, fn: ([i]) => [[i], [i + 1]] });
+  const e = book({ A1: 1, A2: 10, A3: 100 });
+  cases(e, [
+    ['SUM(TESTREF({1,2,3}))', 111], ['SUM(TESTREF(2))', 10], ['SUM(TESTREF(1,3))', 111], ['SUM(TESTSEQ({1,5}))', 6],
+    ['IFERROR(TESTREF({1,2},2),"e")', 'e'], ['SUM(IFERROR(TESTREF({1,2},2),0))', 0],
+  ]);
+});
