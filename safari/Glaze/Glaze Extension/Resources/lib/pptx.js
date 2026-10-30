@@ -34,10 +34,11 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   // A part as a tree of { n: local name, a: raw attributes, kids }, plus `text` for a:t and a:tableStyleId. A stray end
   // tag is dropped and an unclosed element ends with its parent. mc:AlternateContent keeps its Fallback (PowerPoint's
   // picture of an equation, a newer chart or ink), each node marked with what the Choice held; with no Fallback, the Choice.
-  // More than max elements is refused: a few kilobytes of deflated <a:p/> are millions of them.
+  // More than max elements is refused: a few kilobytes of deflated <a:p/> are millions of them. The presentation keeps
+  // its prefix instead, so trailing content over the cap cannot refuse a whole deck.
   const local = (q) => q.slice(q.lastIndexOf(':') + 1);
   const TEXT = new Set(['t', 'tableStyleId']);
-  const parse = (src, max = Infinity) => {
+  const parse = (src, max = Infinity, onLimit = null) => {
     const T = D(), root = { n: '', a: '', kids: [] }, stack = [root], open = new Map();
     let nodes = 0;
     const pop = () => {
@@ -57,7 +58,10 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
         if (open.get(n)) for (let done = false; !done;) done = pop().n === n;
         continue;
       }
-      if (++nodes > max) throw new RangeError('document too large');
+      if (++nodes > max) {
+        if (!onLimit) throw new RangeError('document too large');
+        onLimit(); break;
+      }
       const node = { n, a: tk.attrs, kids: [] };
       if (TEXT.has(n)) node.text = '';
       top.kids.push(node);
@@ -945,7 +949,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
 
     const main = typed(await relsOf(''), 'officeDocument') || 'ppt/presentation.xml';
     const src = await boundedText(main);
-    const pres = src == null ? null : parse(src, L.nodes);
+    const pres = src == null ? null : parse(src, L.nodes, () => count('parts'));
     if (!pres || pres.n !== 'presentation') throw new Error('not a PowerPoint presentation');
     const prels = await relsOf(main);
     const sizeOf = (node, w, h) => ({ w: round(clamp(num(at(node, 'cx'), w), 914400, 51206400)), h: round(clamp(num(at(node, 'cy'), h), 914400, 51206400)) });
