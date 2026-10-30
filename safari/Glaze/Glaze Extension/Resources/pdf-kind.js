@@ -78,20 +78,23 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     return { task, doc };
   };
   // Page 1 as a small picture (a data URL), as filled in: what the home's card shows (204 px wide, 408 on a 2× screen).
-  // lib/pdf-doc.js's PNG (24 KB at most) where that is loaded and it fits near that size, else a JPEG drawn here: a scan or
-  // a photo fits 24 KB of PNG only as a postage stamp.
+  // Try lib/pdf-doc.js's PNG (24 KB at most) once at full size, else a JPEG drawn here: a scan or a photo fits 24 KB of
+  // PNG only as a postage stamp. At most two draws, including the JPEG.
   const picture = async (doc) => {
     const lib2 = pdfdoc(), page = await doc.getPage(1);
-    if (lib2) { const { png } = await (await lib2).thumbnail(page, 528, { minPx: 396 }); if (png) return `data:image/png;base64,${b64(png)}`; }
+    if (lib2) { const { png } = await (await lib2).thumbnail(page, 528, { minPx: 528 }); if (png) return `data:image/png;base64,${b64(png)}`; }
     const P = await pdfjs(), one = page.getViewport({ scale: 1 });
     const viewport = page.getViewport({ scale: 408 / Math.max(1, one.width) });
     const canvas = Object.assign(document.createElement('canvas'), { width: Math.ceil(viewport.width), height: Math.min(Math.ceil(viewport.height), 1200) });
     // The page is the viewer's too (one proxy per page): the viewer cleans it up.
-    await page.render({ canvas, viewport, background: '#fff', annotationMode: P.AnnotationMode.ENABLE_STORAGE }).promise;
-    let out = '';
-    for (const q of [0.78, 0.6, 0.45]) if ((out = canvas.toDataURL('image/jpeg', q)).length <= 64e3) break;
-    canvas.width = canvas.height = 0;
-    return out;
+    try {
+      await page.render({ canvas, viewport, background: '#fff', annotationMode: P.AnnotationMode.ENABLE_STORAGE }).promise;
+      for (const q of [0.78, 0.6, 0.45, 0.3, 0.15, 0.05]) {
+        const out = canvas.toDataURL('image/jpeg', q);
+        if (out.length <= 64e3) return out;
+      }
+      return null;
+    } finally { canvas.width = canvas.height = 0; }
   };
 
   let store = null;
@@ -310,8 +313,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       doc.annotationStorage.onSetModified = modified;
       // pdf.js only calls onSetModified once until its current save finishes. Track each input as well, so a field
       // changed during that save cannot be mistaken for the value its worker already captured.
-      ui.addEventListener('input', (e) => { if (e.target.closest?.('.annotationLayer')) modified(); });
-      ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } });
+      ui.addEventListener('input', (e) => { if (e.target.closest?.('.annotationLayer')) modified(); }, { signal });
+      ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } }, { signal });
     }
     back?.addEventListener('click', (e) => {
       if (!dirty && !saving) return;

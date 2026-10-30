@@ -73,13 +73,14 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   // The files an assignment attaches: Ultra's attachment links in its HTML, <a data-bbtype="attachment" data-bbfile="{…}"
   // href="…/bbcswebdav/…"> (seen live 2026-10-27: an image, render "inline", isDecorative true however it was meant, so
   // that flag gates nothing). The href on the site's own /bbcswebdav/ is the file; data-bbfile's resourceUrl is a session's.
-  // Pictures Writer can send a model (PNG, JPEG, GIF, WebP) and documents lib/doctext.js or the reader can read; others
-  // are left out. → [{ url, name, image }], each file once, ATTACH.files at most.
+  // Pictures Writer can send a model (PNG, JPEG, GIF, WebP), documents lib/doctext.js or the reader can read, and
+  // spreadsheets (Open in Glaze's, never read for Feedback); others are left out. → [{ url, name, image }], each file once,
+  // ATTACH.files at most.
   // Bytes: one document, one picture, the pictures (8 MB as base64, what the worker keeps and well within the broker's
   // message), everything read; a picture's shorter side; a document's characters.
   const ATTACH = { files: 6, file: 20 << 20, picture: 3 << 20, pictures: 6 << 20, total: 40 << 20, side: 32, text: MATERIAL };
   const ATT = { quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", '#39': "'" };
-  const PICTURE = /\.(png|jpe?g|gif|webp)$/i, DOCUMENT = /\.(docx|pptx|ppsx|pdf|txt|text|md|html?)$/i;
+  const PICTURE = /\.(png|jpe?g|gif|webp)$/i, DOCUMENT = /\.(docx|pptx|ppsx|pdf|txt|text|md|html?)$/i, SHEET = /\.(xlsx|csv|tsv)$/i;
   const attached = (htmls, origin) => {
     const out = [];
     let incomplete = false;
@@ -97,7 +98,7 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
           const name = str(bf?.fileName || bf?.displayName || bf?.linkName || decodeURIComponent(url.pathname.split('/').pop()), 200);
           const mime = typeof bf?.mimeType === 'string' ? bf.mimeType.toLowerCase() : '';
           const image = PICTURE.test(name) || /^image\/(png|jpeg|gif|webp)$/.test(mime);
-          if (name && (image || DOCUMENT.test(name))) out.push({ url: url.href, name, image });
+          if (name && (image || DOCUMENT.test(name) || SHEET.test(name))) out.push({ url: url.href, name, image });
           else incomplete = true;
         } catch { incomplete = true; /* An attachment that cannot be identified is still unavailable material. */ }
       }
@@ -120,6 +121,7 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
     if (files.incomplete || files.length > ATTACH.files) omitted();
     for (const f of files.slice(0, ATTACH.files)) {
       if (f.image && (!images || album <= 0)) { omitted(); continue; }
+      if (!f.image && SHEET.test(f.name)) { omitted(); continue; } // a spreadsheet opens in Glaze; Feedback has no text of it
       const max = Math.min(f.image ? Math.min(ATTACH.picture, album) : ATTACH.file, left);
       if (max <= 0) { omitted(); break; }
       const bytes = await settle(() => get(f.url, max));
@@ -259,9 +261,9 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
     return out;
   }, 1);
 
-  // ---- an attached PDF or deck opened in Glaze. openable: the box's files of a kind whose Settings → Writer switch is on
-  // (w: storage.sync writer; L: lib/writer-submit.js), never a picture or a Word file (Feedback reads those).
-  const OPENS = ['pdf', 'slides'];
+  // ---- an attached PDF, deck or spreadsheet opened in Glaze. openable: the box's files of a kind whose Settings → Writer
+  // switch is on (w: storage.sync writer; L: lib/writer-submit.js), never a picture or a Word file (Feedback reads those).
+  const OPENS = ['pdf', 'slides', 'sheet'];
   const openable = (files, w, L) => (Array.isArray(files) ? files : []).filter((f) => !f.image && OPENS.includes(L.kindOf(f.name)) && L.switched(w).includes(L.kindOf(f.name)));
   // The file's bytes to the paper's frame as import:file { open } (writer-import.js opens it in Glaze, the paper kept as a
   // version first), or import:failed when it can't be read within ATTACH.file. → whether it went.

@@ -544,7 +544,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       else if (box.kind === 'post' && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
       else if (box.kind === 'journal' && !U().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
       else if (box.frame && !box.frame.isConnected) { if (box.unsynced || box.mode === 'paper') reopen(box); else drop(box); }
-      // An attached PDF or deck: Open in Glaze beside its link while its switch is on (lib/writer-context-assignment.js).
+      // An attached PDF, deck or spreadsheet: Open in Glaze beside its link while its switch is on
+      // (lib/writer-context-assignment.js).
       else if (box.mode === 'paper' && (box.files?.length || box.openers?.size)) globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT?.decorate(X, box);
     }
     if (!U()) { X.need('lib/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
