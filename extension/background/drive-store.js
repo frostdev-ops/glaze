@@ -301,11 +301,15 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (canon(d.view(raw)) !== canon(expected)) throw new Fail('stale');
         before = raw; write = got.value === undefined ? undefined : d.merge(raw, got.value);
       }
-      applying.set(id, canon(write ?? null));
-      try {
-        const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => owned.set(id, transition(got.key, old, next)) : undefined;
-        if (!await a.replace(got.key, before, write, onChange)) throw new Fail('stale');
-      } catch (e) { applying.delete(id); owned.delete(id); throw e; }
+      // Already the value here: nothing written. Storage tells no one of an equal write, which would leave applying waiting
+      // to pass over the student's own later change back to this value.
+      if (canon(write ?? null) !== canon(before ?? null)) {
+        applying.set(id, canon(write ?? null));
+        try {
+          const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => owned.set(id, transition(got.key, old, next)) : undefined;
+          if (!await a.replace(got.key, before, write, onChange)) throw new Fail('stale');
+        } catch (e) { applying.delete(id); owned.delete(id); throw e; }
+      }
       await restamp({ [id]: got.at }, { [id]: stampBefore });
       // A later local write is still dirty even if it lands before the sync bookkeeping finishes.
       await put(h, { area: got.area, key: got.key, cat: got.cat, id: R.id, lsum: await sumOf(got.area, got.key, got.value), rsum: got.sum, at: got.at, seen: got.at }, was);
