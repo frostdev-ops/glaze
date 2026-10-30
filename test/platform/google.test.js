@@ -613,7 +613,7 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
     runtime: {
       lastError: undefined,
       sendMessage: (m, reply) => {
-        sent.push(m);
+        sent.push(structuredClone(m));
         const r = m.type === 'glaze:google' ? (m.op === 'status' ? { ok: true, flow: 'chrome', email: local.google?.email || null } : m.op === 'connect' ? connect : { ok: true }) : { ok: true };
         if (m.type === 'glaze:google' && m.op === 'connect' && r.ok) local.google = { email: r.email };
         setTimeout(() => reply(r), 0);
