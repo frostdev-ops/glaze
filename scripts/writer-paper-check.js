@@ -261,6 +261,7 @@ const HARNESS = `(() => {
         ['direction marks', para([text(repeat('Plain words ')), text(repeat('שלום עולם '), [S.marks.direction.create({ dir: 'rtl' })]), text(repeat(' after words '))])],
         ['wide and soft hyphen', para([text(repeat('漢字🙂a\u00adb\u00adc wides '), [bold])])],
         ['hard breaks and notes', para([text(repeat('Words before ')), S.node('hard_break'), S.node('footnote_ref', { content: 'A note.' }), text(repeat(' words after '))])],
+        ['inline image', para([text(repeat('Words before ')), S.node('image', { src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', width: 84, alt: 'Pixel' }), text(repeat(' words after '))])],
         ['mixed heights', para([text(repeat('normal ')), text(repeat('large '), [S.marks.text_style.create({ size: 26 })]), text(repeat(' small '))])],
         ['tab stops', para([text('left\tcentre\tright'), S.node('hard_break'), text(repeat('words '))], { tabs: [[1, 'l'], [3, 'c'], [6, 'r']] })],
       ];
