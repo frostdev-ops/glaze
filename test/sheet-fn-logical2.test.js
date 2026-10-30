@@ -11,6 +11,8 @@ const C = require('../lib/sheet-calc.js');
 require('../lib/sheet-fn-math.js');
 require('../lib/sheet-fn-logical.js');
 require('../lib/sheet-fn-date.js');
+require('../lib/sheet-fn-info.js');
+require('../lib/sheet-fn-lookup.js');
 require('../lib/sheet-fn-logical2.js');
 
 const book = (cells = {}) => {
