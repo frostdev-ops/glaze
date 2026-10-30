@@ -618,3 +618,11 @@ test('a negative base takes an odd root', () => {
     ['ROUND((-8)^(1/7),7)', -1.3459002], ['ROUND(POWER(-2,1/9),7)', -1.0800597], ['POWER(0,1/3)', 0],
   ]);
 });
+
+// Excel 16.114.1: LEN(UNICHAR(128512)) is 1 and LEFT, RIGHT and MID count that character once, as FIND and SEARCH do.
+test('LEN, LEFT, RIGHT and MID count a character outside the BMP once', () => {
+  cases(book(), [
+    ['LEN("😀")', 1], ['LEN("a😀b")', 3], ['LEFT("😀b",1)', '😀'], ['LEN(LEFT("😀b",1))', 1], ['RIGHT("a😀",1)', '😀'], ['RIGHT("😀😀b",2)', '😀b'],
+    ['MID("a😀b",2,2)', '😀b'], ['MID("a😀b",3,1)', 'b'], ['MID("😀",2,1)', ''], ['LEFT("😀")', '😀'], ['LEN("abc")', 3],
+  ]);
+});
