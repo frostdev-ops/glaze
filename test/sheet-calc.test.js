@@ -631,3 +631,18 @@ test('LEN, LEFT, RIGHT and MID count a character outside the BMP once', () => {
 test('TEXT with an empty format', () => {
   cases(book(), [['TEXT(1,"")', ''], ['TEXT(0,"")', ''], ['TEXT(-1,"")', '-'], ['TEXT("a","")', 'a'], ['TEXT("12","")', '']]);
 });
+
+// A LET binding hides a workbook name in dependency analysis just as it does in evaluation. Following the hidden
+// name can mark the entire cell opaque, preserving a stale file cache instead of evaluating the local calculation.
+test('LET locals hide workbook names in the dependency graph', () => {
+  for (const ref of ['Table1[Amount]', '[1]Sheet1!A1']) {
+    const e = book({ A1: '=LET(x,5,x+1)', A2: '=LET(x,2,LET(y,x+1,y)+x)' }, { names: [{ name: 'x', ref }] });
+    assert.equal(val(e, 'A1'), 6, ref);
+    assert.equal(val(e, 'A2'), 5, ref);
+  }
+  const e = book({ A1: 3, B1: '=LET(x,5,x+1)', B2: '=LET(y,x,x,2,x+y)' }, { names: [{ name: 'x', ref: 'Sheet1!$A$1' }] });
+  assert.equal(val(e, 'B2'), 5, 'a value before the binding still reads the defined name');
+  e.edit(1, 0, 0, '7');
+  assert.equal(val(e, 'B1'), 6);
+  assert.equal(val(e, 'B2'), 9);
+});
