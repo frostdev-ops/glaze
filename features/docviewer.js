@@ -122,8 +122,9 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   } catch { /* extension reloaded under the frame */ }
 
   let mo = null, ro = null, queued = 0;
+  const observed = new Set();
   const schedule = () => { if (key && !queued) queued = requestAnimationFrame(() => { queued = 0; mountAll(); }); };
-  let opened = 0; // each file opened, or annotations turned off: what an import still reading belongs to
+  let opened = 0; // imports belong to this open
   const open = (k) => {
     key = k;
     opened++;
@@ -133,6 +134,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
     if (!k) {
       mo?.disconnect(); mo = null;
       ro?.disconnect(); ro = null;
+      observed.clear();
       if (queued) { cancelAnimationFrame(queued); queued = 0; }
       hideBar();
       for (const s of document.querySelectorAll('.gz-ink')) s.remove();
@@ -144,7 +146,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
       pages = I.clean(r[k]?.pages);
       mo ||= new MutationObserver((rs) => { if (rs.some((x) => !x.target.closest?.('.gz-ink'))) schedule(); });
       mo.observe(html, { childList: true, subtree: true });
-      ro ||= new ResizeObserver((es) => { for (const e of es) if (!e.target.isConnected) ro.unobserve(e.target); schedule(); });
+      ro ||= new ResizeObserver(schedule);
       if (!bar) showBar(false);
       mountAll();
     }, () => {});
@@ -165,7 +167,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   const mount = (page) => {
     const n = page.id.slice(5);
     const w = page.clientWidth, hh = page.clientHeight;
-    ro?.observe(page);
+    if (ro && !observed.has(page)) { ro.observe(page); observed.add(page); }
     if (!/^[1-9]\d{0,4}$/.test(n) || !w || !hh) return;
     const r = turn(page);
     const h = Math.round(I.W * (r % 2 ? w / hh : hh / w));
@@ -188,7 +190,11 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
     svg.dataset.sig = sig;
     svg.dataset.n = n;
   };
-  const mountAll = () => { if (!key || !chrome.runtime?.id) return; for (const page of document.querySelectorAll('.Page[id^="page-"]')) mount(page); };
+  const mountAll = () => {
+    if (!key || !chrome.runtime?.id) return;
+    for (const p of observed) if (!p.isConnected) { ro.unobserve(p); observed.delete(p); }
+    for (const page of document.querySelectorAll('.Page[id^="page-"]')) mount(page);
+  };
 
   const changed = (n) => {
     ver[n] = (ver[n] || 0) + 1;
