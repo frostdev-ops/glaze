@@ -11,6 +11,7 @@ test('papers.html loads the kind registry first and pdf-kind.js after papers.js;
   const at = (src) => html.indexOf(`<script src="${src}"></script>`);
   assert.ok(at('lib/doc-kinds.js') > 0 && at('lib/doc-kinds.js') < at('papers.js'), 'the registry before papers.js');
   assert.ok(at('pdf-kind.js') > at('papers.js'), 'pdf-kind.js after papers.js');
+  assert.ok(at('lib/pdf-doc.js') > 0 && at('lib/pdf-doc.js') < at('pdf-kind.js'), 'lib/pdf-doc.js (open, save, thumbnail) before pdf-kind.js');
   const pkg = read('package.sh').split('\n').filter((l) => / papers\.js /.test(l));
   assert.equal(pkg.length, 2, 'chmod and zip');
   for (const line of pkg) for (const f of ['pdf-kind.js', 'pdf-kind.css']) assert.ok(line.includes(` ${f} `), `${f} in: ${line.slice(0, 40)}…`);

@@ -2,8 +2,8 @@
 // (writer.pdf), a .pdf imports as a document whose record holds the file (STORE below), shows its first page on the home's
 // card, exports as itself, and opens in pdf.js's own viewer (lib/pdfjs: pdf.mjs and pdf_viewer.mjs, imported only when a
 // PDF is first read; pdf.js parses in its module worker, pdf.worker.mjs): the visible pages drawn, zoom, the text layer and
-// pdf.js's find, AcroForm fields filled and kept (saved as pdf.js writes them, or by lib/pdf-doc.js's GZ_PDF_DOC.save where
-// that is loaded), the file's permissions honoured, and a form only XFA can show refused. The page itself stays white, a
+// pdf.js's find, AcroForm fields filled and kept (saved by lib/pdf-doc.js, or as pdf.js writes them where that isn't
+// loaded), the file's permissions honoured, and a form only XFA can show refused. The page itself stays white, a
 // print document; its chrome is the paper's (writer-paper.css: the top bar, the toolbar, ⋯) in the student's Look.
 // Off, Documents takes Word files only, as before, and a PDF already kept still lists, opens and fills. pdf.js's words are
 // Glaze's (lib/pdf-l10n.js).
@@ -43,11 +43,21 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   let lib = null, viewerLib = null;
   const pdfjs = () => (lib ||= import(url('lib/pdfjs/pdf.mjs')).then((P) => { P.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.mjs'); return P; }));
   const viewerjs = () => (viewerLib ||= pdfjs().then(() => import(url('lib/pdfjs/pdf_viewer.mjs'))));
+  // lib/pdf-doc.js over this pdf.js (papers.html loads it before this file), or null where it isn't loaded: then pdf.js
+  // directly, the same checks.
+  const GET = { wasmUrl: url('lib/pdfjs/'), isEvalSupported: false, enableXfa: false, verbosity: 0 };
+  let docLib = null;
+  const pdfdoc = () => (typeof globalThis.GZ_PDF_DOC?.use === 'function' ? (docLib ||= pdfjs().then((P) => GZ_PDF_DOC.use(P, GET))) : null);
   // bytes (a copy goes to the worker) → { task, doc }, or a RangeError(UNREAD) for a file that is no PDF, is locked, has
   // too many pages or is pure XFA.
   const read = async (bytes) => {
+    const lib2 = pdfdoc();
+    if (lib2) {
+      const pdf = await lib2;
+      try { const { doc } = await pdf.open(bytes); return { task: doc.loadingTask, doc }; } catch { throw new RangeError(UNREAD); }
+    }
     const P = await pdfjs();
-    const task = P.getDocument({ data: bytes.slice(), wasmUrl: url('lib/pdfjs/'), isEvalSupported: false, enableXfa: false, verbosity: 0 });
+    const task = P.getDocument({ ...GET, data: bytes.slice() });
     let doc;
     try { doc = await task.promise; } catch { await task.destroy().catch(() => {}); throw new RangeError(UNREAD); }
     try {
@@ -56,11 +66,12 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     } catch (e) { await task.destroy().catch(() => {}); throw e instanceof RangeError ? e : new RangeError(UNREAD); }
     return { task, doc };
   };
-  // Page 1 as a small picture (a JPEG data URL), as filled in: what the home's card shows. lib/pdf-doc.js's thumbnail,
-  // where that is loaded.
+  // Page 1 as a small picture (a data URL), as filled in: what the home's card shows. lib/pdf-doc.js's PNG (24 KB at most)
+  // where that is loaded and it fits, else a JPEG drawn here.
   const picture = async (doc) => {
-    if (typeof globalThis.GZ_PDF_DOC?.thumbnail === 'function') return GZ_PDF_DOC.thumbnail(doc);
-    const P = await pdfjs(), page = await doc.getPage(1), one = page.getViewport({ scale: 1 });
+    const lib2 = pdfdoc(), page = await doc.getPage(1);
+    if (lib2) { const { png } = await (await lib2).thumbnail(page, 528); if (png) return `data:image/png;base64,${b64(png)}`; }
+    const P = await pdfjs(), one = page.getViewport({ scale: 1 });
     const viewport = page.getViewport({ scale: 408 / Math.max(1, one.width) });
     const canvas = Object.assign(document.createElement('canvas'), { width: Math.ceil(viewport.width), height: Math.min(Math.ceil(viewport.height), 1200) });
     // The page is the viewer's too (one proxy per page): the viewer cleans it up.
@@ -211,9 +222,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     document.addEventListener('pointerdown', (e) => { if (menu && !menu.el.contains(e.target) && !menu.opener.contains(e.target)) closeMenu(); }, true);
     zoomB.addEventListener('click', () => openMenu(zoomB, [...PRESETS.map(([v, label]) => [t(label), () => { viewer.currentScaleValue = v; }, { 'data-zoom': v }]),
       ...STEPS.map((n) => [`${n}%`, () => { viewer.currentScaleValue = String(n / 100); }, { 'data-zoom': String(n) }])]));
-    // ⋯: Export .pdf; what lib/pdf-doc.js adds (GZ_PDF_DOC.items) where it is loaded.
-    moreB.addEventListener('click', () => openMenu(moreB, [[t('Export .pdf'), () => { flush().then(() => exportFile(key)).catch(() => say(t(UNREAD))); }, { 'data-act': 'export' }],
-      ...(typeof globalThis.GZ_PDF_DOC?.items === 'function' ? GZ_PDF_DOC.items({ key, doc, t }) : [])]));
+    // ⋯: Export .pdf (the pages panel's bake and the tools come in later steps).
+    moreB.addEventListener('click', () => openMenu(moreB, [[t('Export .pdf'), () => { flush().then(() => exportFile(key)).catch(() => say(t(UNREAD))); }, { 'data-act': 'export' }]]));
 
     // ---- find: pdf.js's find controller over the text layer, every hit highlighted, the current one counted
     const find = (type, back = false) => bus.dispatch('find', { source: findBar, type, query: q.value, caseSensitive: false, entireWord: false, matchDiacritics: false, highlightAll: true, findPrevious: back });
@@ -252,7 +262,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       dirty = false; clearTimeout(timer);
       say(t('Saving…'));
       try {
-        const out = await (typeof globalThis.GZ_PDF_DOC?.save === 'function' ? GZ_PDF_DOC.save(doc) : doc.saveDocument());
+        const lib2 = pdfdoc(), out = lib2 ? (await (await lib2).save(doc)).bytes : await doc.saveDocument();
         const thumbUrl = await picture(doc).catch(() => null);
         ({ paper: rec } = await st.save(key, { ...STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }));
         say(dirty ? '' : t('Saved'));
