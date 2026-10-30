@@ -63,6 +63,16 @@ const scan = () => {
   objects[refs[0] - 1] = objects[refs[0] - 1].replace('%IMG%', `${img} 0 R`);
   return Buffer.from(F.write(objects, { id: 'scan' }));
 };
+// A noisy colour photo needs more JPEG compression than a worksheet, even at the same card dimensions.
+const photo = () => {
+  const F = require('./pdf-fixtures.js'), zlib = require('node:zlib'), w = 408, h = 528, px = Buffer.alloc(w * h * 3);
+  let seed = 17;
+  for (let i = 0; i < px.length; i++) { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; px[i] = seed & 255; }
+  const { objects, refs, add } = F.pagesOf([{ size: [612, 792], content: 'q 612 0 0 792 0 0 cm /Im1 Do Q', resources: ' /XObject << /Im1 %IMG% >>' }]);
+  const img = add({ dict: `<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode >>`, stream: zlib.deflateSync(px) });
+  objects[refs[0] - 1] = objects[refs[0] - 1].replace('%IMG%', `${img} 0 R`);
+  return Buffer.from(F.write(objects, { id: 'photo' }));
+};
 
 (async () => {
   let context, held = false, tmp, passed = false, page = null;
@@ -356,6 +366,11 @@ const scan = () => {
     check(scanCard.w >= 300 && scanCard.src < 96e3, `a scanned page's card picture keeps its detail (${JSON.stringify(scanCard)})`);
     const draws = await page.evaluate(() => { globalThis.pdfCheckStopDraws(); return globalThis.pdfCheckDraws; });
     check(draws.length <= 2 && scanCard.w === 408 && scanCard.h === 528 && scanCard.src <= 64e3, `a scanned card takes at most two draws at full size (${JSON.stringify({ draws, card: scanCard })})`);
+    const photographed = path.join(tmp, 'Colour photo.pdf');
+    fs.writeFileSync(photographed, photo());
+    await page.setInputFiles('#gd-file', photographed);
+    const photoCard = await until(() => page.evaluate(() => { const c = [...document.querySelectorAll('.gd-card')].find((x) => x.querySelector('.gd-title')?.textContent === 'Colour photo'), img = c?.querySelector('.gd-pic img'); return img?.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.length, jpeg: img.src.startsWith('data:image/jpeg;') } : null; }), 'the photo\'s card');
+    check(photoCard.jpeg && photoCard.w === 408 && photoCard.h === 528 && photoCard.src <= 64e3, `a colour photo's full-size JPEG stays within 64 KB (${JSON.stringify(photoCard)})`);
     // A PDF whose first page can't be read (its page tree points at nothing) is refused at import; one already kept says
     // so in the viewer instead of an empty viewer waiting for pages that never come.
     const broken = Buffer.from(fixture().toString('latin1').replace(/\/Kids \[(\d+) 0 R/, '/Kids [99 0 R'), 'latin1');
