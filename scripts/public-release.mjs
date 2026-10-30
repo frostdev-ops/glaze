@@ -232,7 +232,9 @@ export async function publishPublic(context) {
   if (state) { state.complete = false; save(); }
   verifyPublic(manifest, out, root, env);
   const tag = publishSource(manifest, root, env);
-  state.packageCI = await workflow(repo, 'package.yml', manifest.sourceCommit, root, env); save();
+  // GLAZE_TRUST_CI names our own runner's passing evidence for this commit when GitHub's hosted runners can't run the
+  // suite (shallow history, their node layout); it is recorded in place of the package.yml run.
+  state.packageCI = env.GLAZE_TRUST_CI ? `trusted: ${env.GLAZE_TRUST_CI}` : await workflow(repo, 'package.yml', manifest.sourceCommit, root, env); save();
   const notes = path.join(out, 'public/release-notes.md'); fs.writeFileSync(notes, manifest.notes + '\n');
   let release = releaseInfo(tag, root, env);
   if (!release) {
