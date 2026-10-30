@@ -110,3 +110,14 @@ test('keyboard movement skips hidden rows and columns in both directions', () =>
   f.key('Tab'); assert.equal(f.el('gx-name').value, 'C1');
   f.key('Tab', { shiftKey: true }); assert.equal(f.el('gx-name').value, 'A1');
 });
+
+test('HTML paste retains number formats on Google Sheets numeric values and formulas', () => {
+  const f = frame();
+  const html = '<table><tr><td data-sheets-value=\'{"1":3,"3":0.5}\' style="mso-number-format:Percent">50%</td>'
+    + '<td data-sheets-formula="=R[0]C[-1]*2" style="mso-number-format:Percent">100%</td></tr></table>';
+  f.fire(f.el('gx-grid'), 'paste', { clipboardData: { getData: (type) => type === 'text/html' ? html : '50%\t100%' } });
+  const row = f.wb.sheets[0].rows.get(0);
+  assert.equal(f.wb.styles[row.get(0).s]?.fmt, '0%');
+  assert.equal(f.wb.styles[row.get(1).s]?.fmt, '0%');
+  assert.equal(row.get(1).f, 'A1*2');
+});
