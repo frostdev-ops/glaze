@@ -76,6 +76,12 @@ test('ROUND, ROUNDUP, ROUNDDOWN, INT, MOD, ABS, SQRT, POWER', () => {
     ['ROUNDUP(3.2,0)', 4], ['ROUNDUP(76.9,0)', 77], ['ROUNDUP(3.14159,3)', 3.142], ['ROUNDUP(-3.14159,1)', -3.2], ['ROUNDUP(31415.92654,-2)', 31500],
     ['ROUNDDOWN(3.2,0)', 3], ['ROUNDDOWN(76.9,0)', 76], ['ROUNDDOWN(3.14159,3)', 3.141], ['ROUNDDOWN(-3.14159,1)', -3.1], ['ROUNDDOWN(31415.92654,-2)', 31400],
     ['ROUND("2.5",)', 3], ['ROUND(TRUE,0)', 1], ['ROUND("x",0)', '#VALUE!'],
+    // Rounding past a number's 15 digits keeps it, however far that is (1E+21 and up once wrote "1e+21e-15", NaN).
+    ['ROUND(1234567.891,15)', 1234567.891], ['ROUND(1000000,15)', 1000000], ['ROUNDUP(5000000,15)', 5000000], ['ROUNDDOWN(2E+6,15)', 2e6],
+    // A literal past 15 digits keeps 15, the rest zeros, as Excel reads a typed number (Excel 16 on the Mac).
+    ['123456789012345678&""', '123456789012345000'], ['123456789012345678', 123456789012345000], ['0.1234567890123456789', 0.123456789012345],
+    ['1.23456789012345678E+20', 1.23456789012345e20], ['-9.99999999999999999', -9.99999999999999],
+    ['ROUND(1E+21,0)', 1e21], ['ROUND(-1E+21,1)', -1e21], ['ROUND(1E+25,-3)', 1e25], ['ROUND(0.1+0.2,15)', 0.3], ['ROUND(-12.3456789012345678,14)', -12.3456789012345], ['ROUND(-12.345678901234567,14)', -12.3456789012345],
     ['INT(8.9)', 8], ['INT(-8.9)', -9], ['MOD(3,2)', 1], ['MOD(-3,2)', 1], ['MOD(3,-2)', -1], ['MOD(-3,-2)', -1], ['MOD(3,0)', '#DIV/0!'],
     ['ABS(2)', 2], ['ABS(-2)', 2], ['SQRT(16)', 4], ['SQRT(-16)', '#NUM!'], ['SQRT(ABS(-16))', 4],
     ['POWER(5,2)', 25], ['POWER(0,0)', '#NUM!'], ['POWER(0,-1)', '#DIV/0!'], ['POWER(-8,1/2)', '#NUM!'], ['POWER(-2,3)', -8], ['POWER(10,400)', '#NUM!'],
@@ -148,7 +154,7 @@ test('text: CONCAT, CONCATENATE, LEFT, RIGHT, MID, LEN, TRIM, UPPER, LOWER, TEXT
     ['MID("Fluid Flow",1,5)', 'Fluid'], ['MID("Fluid Flow",7,20)', 'Flow'], ['MID("Fluid Flow",20,5)', ''], ['LEFT("abc",-1)', '#VALUE!'],
     ['MID("abc",0,1)', '#VALUE!'], ['LEFT(12345,2)', '12'], ['RIGHT(TRUE,2)', 'UE'],
     ['LEN("Phoenix, AZ")', 11], ['LEN("")', 0], ['LEN("     One   ")', 11], ['LEN(Z9)', 0], ['LEN(1/3)', 17],
-    ['TRIM(" First Quarter Earnings ")', 'First Quarter Earnings'], ['TRIM("a   b")', 'a b'], ['UPPER("total")', 'TOTAL'], ['LOWER("E. E. Cummings")', 'e. e. cummings'],
+    ['TRIM(" First Quarter Earnings ")', 'First Quarter Earnings'], ['TRIM("a   b")', 'a b'], ['UPPER("total")', 'TOTAL'], ['UPPER("straße")', 'STRAßE'], ['LOWER("E. E. Cummings")', 'e. e. cummings'],
     ['TEXT(1234.567,"$#,##0.00")', '$1,234.57'], ['TEXT(0.285,"0.0%")', '28.5%'], ['TEXT(4.34,"# ?/?")', '4 1/3'],
     ['TEXT(1234567898,"[<=9999999]###-####;(###) ###-####")', '(123) 456-7898'], ['TEXT(1234,"0000000")', '0001234'],
     ["TEXT(123456,\"##0° 00' 00''\")", "12° 34' 56''"], ['TEXT(45720,"dddd")', 'Tuesday'], ['TEXT("12","0.00")', '12.00'], ['TEXT("abc","0")', 'abc'],
@@ -209,6 +215,101 @@ test('an array formula evaluates its ranges whole and fills its range', () => {
   e.apply({ op: 'clear', sheet: sh.id, r0: 0, c0: 3, r1: 3, c1: 3 });
   assert.equal(v('D2'), null);
   assert.equal(v('E1'), 1);
+});
+
+test('a typed formula that reads a range where one value belongs is evaluated whole, as Excel 365 does', () => {
+  const e = book({ A1: 'a', A2: 'b', A3: 'a', A4: 'c', A5: 'a', B1: 10, B2: 20, B3: 30, B4: 40, B5: 50 });
+  const sh = e.wb.sheets[0];
+  const put = (ref, text) => { const res = e.edit(sh.id, ...M.cellPosition(ref), text); assert.ok(!res.error, ref); };
+  const at = (ref) => M.cell(sh, ...M.cellPosition(ref));
+  put('C1', '=SUM((B1:B5>20)*B1:B5)'); put('C3', '=SUM(--(B1:B5>20))'); put('C4', '=MAX(IF(A1:A5="a",B1:B5))'); put('C5', '=B1:B5');
+  put('C6', '=AVERAGE(IF(B1:B5>20,B1:B5))'); put('C7', '=SUM(IF(A1:A5="a",B1:B5))'); put('C8', '=Total*2');
+  put('D1', '=SUM(B1:B5)'); put('D2', '=B2*2'); put('D3', '=@B1:B5'); put('D4', '=SUMIF(A1:A5,"a",B1:B5)'); put('D5', '=COUNTIF(B1:B5,">20")');
+  // Row 3 lies inside B1:B5: intersecting there would quietly give 1 (C3) where Excel 365 counts 3.
+  assert.deepEqual(['C1', 'C3', 'C4', 'C5', 'C6', 'C7'].map((x) => val(e, x)), [120, 3, 50, 10, 40, 90]);
+  assert.deepEqual(at('C1'), { t: 'n', v: 120, f: 'SUM((B1:B5>20)*B1:B5)', a: 'C1', cm: '1' }, 'kept as a dynamic array over its own cell');
+  assert.deepEqual(['D1', 'D2', 'D3', 'D4', 'D5'].map((x) => val(e, x)), [150, 40, 30, 90, 3], 'explicit @ and whole-range arguments intersect nothing new');
+  for (const x of ['D1', 'D2', 'D3', 'D4', 'D5']) assert.equal(at(x).a, undefined, `${x} stays a plain formula`);
+  // An array result spills in Excel 365: dynamic too, its first value shown here. A scalar from an array stays plain.
+  put('E1', '={1,2,3}'); put('E2', '=B1:B2*{1,2}'); put('E3', '=SUM({1,2,3})'); put('E4', '=MAX({1,2,3}*2)');
+  assert.deepEqual(['E1', 'E2', 'E3', 'E4'].map((x) => [val(e, x), at(x).a ?? null]), [[1, 'E1'], [10, 'E2'], [6, null], [6, null]]);
+  e.edit(sh.id, 1, 1, '25');
+  assert.equal(val(e, 'C1'), 145, 'recalculated whole');
+  e.apply({ op: 'name', name: 'Total', ref: 'Sheet1!$B$1:$B$5' });
+  assert.equal(val(e, 'C8'), '#VALUE!', 'typed before the name meant a range, it intersects (row 8 is outside it)');
+  put('C8', '=Total*2');
+  assert.deepEqual([val(e, 'C8'), at('C8').a], [20, 'C8'], 'a name for a range is a range');
+});
+
+test('dynamic typing examines untaken branches and single-element array results', () => {
+  const e = book({ A1: false, B1: 2, B2: 3, B3: 4 }), sh = e.wb.sheets[0];
+  e.edit(sh.id, 4, 2, '=SUM(IF(A1,B1:B3*2,0))');
+  assert.equal(M.cell(sh, 4, 2).a, 'C5');
+  assert.equal(e.value(sh.id, 4, 2), 0);
+  e.edit(sh.id, 0, 0, 'TRUE');
+  assert.equal(e.value(sh.id, 4, 2), 18);
+  const moved = e.apply({ op: 'insert', sheet: sh.id, axis: 'row', at: 0, n: 1 });
+  assert.equal(M.cell(sh, 5, 2).a, 'C6');
+  assert.equal(e.value(sh.id, 5, 2), 18);
+  e.apply(moved.inverse);
+  assert.equal(M.cell(sh, 4, 2).a, 'C5');
+  assert.equal(e.value(sh.id, 4, 2), 18);
+  e.edit(sh.id, 4, 3, '={7}');
+  assert.equal(M.cell(sh, 4, 3).a, 'D5', 'an array of one is still an array');
+  e.edit(sh.id, 0, 0, 'FALSE');
+  e.edit(sh.id, 4, 4, '=IF(A1,{7;8},0)');
+  assert.equal(M.cell(sh, 4, 4).a, 'E5', 'a conditional array stays dynamic before its condition changes');
+  e.edit(sh.id, 4, 5, '=LET(x,B1:B3,SUM(IF(A1,x*2,0)))');
+  assert.equal(M.cell(sh, 4, 5).a, 'F5', 'local range names work in an untaken branch too');
+  e.edit(sh.id, 0, 0, 'TRUE');
+  assert.equal(e.value(sh.id, 4, 5), 18);
+});
+
+test('legacy formula editing makes scalar references explicit without recalculating aggregate ranges', () => {
+  const e = book({ B1: 3, B5: 7 }), sh = e.wb.sheets[0];
+  require('../lib/sheet-fn-lookup.js');
+  require('../lib/sheet-fn-math2.js');
+  for (const [f, want] of [
+    ['B:B*2', '@B:B*2'], ['SUM(B:B)', 'SUM(B:B)'], ['SUM(B:B*2)', 'SUM(@B:B*2)'],
+    ['ABS(B:B)', 'ABS(@B:B)'], ['@B:B*2', '@B:B*2'], ['(B:B)*2', '@(B:B)*2'],
+    ['IF(FALSE,B:B,2)', '@IF(FALSE,B:B,2)'], ['IF(FALSE,B:B*2,2)', 'IF(FALSE,@B:B*2,2)'],
+    ['SUMPRODUCT(B:B*2)', 'SUMPRODUCT(B:B*2)'],
+    ['INDEX(B:B,0)*2', '@INDEX(B:B,0)*2'], ['{1;2}', '@{1;2}'],
+  ]) {
+    assert.equal(e.legacy(f, sh, 4, 0), want, f);
+    const before = e.evaluate(f, sh.id, 4, 0);
+    e.edit(sh.id, 4, 0, `=${want}`);
+    assert.deepEqual(e.value(sh.id, 4, 0), before, f);
+  }
+});
+
+test('a dynamic array\'s formula is edited at its first cell, as Excel 365 allows; a legacy array\'s is refused', () => {
+  const wb = M.workbook();
+  const sh = wb.sheets[0];
+  const set = (ref, cell) => { const [r, c] = M.cellPosition(ref); M.apply(wb, { op: 'set', sheet: sh.id, r, c, cell }); };
+  set('A1', { t: 'n', v: 1 }); set('A2', { t: 'n', v: 2 }); set('A3', { t: 'n', v: 3 });
+  set('B1', { t: 'n', v: 0, f: 'A1:A3*2', a: 'B1:B3', cm: '1' }); set('B3', { t: 'n', v: 6, s: 1 });
+  set('C1', { t: 'n', v: 0, f: 'A1:A3*3', a: 'C1:C3' });
+  const e = C.engine(wb);
+  e.recalc();
+  const v = (ref) => out(e.value(sh.id, ...M.cellPosition(ref)));
+  const at = (ref) => M.cell(sh, ...M.cellPosition(ref));
+  assert.deepEqual(['B1', 'B2', 'B3'].map(v), [2, 4, 6]);
+  assert.throws(() => e.edit(sh.id, 1, 1, '9'), (x) => x.code === 'array-part', 'a cell of the spill stays part of it');
+  const res = e.edit(sh.id, 0, 1, '=A2:A3*10');
+  assert.deepEqual(['B1', 'B2', 'B3'].map(v), [20, null, null], 'the old spill goes; the new formula shows its first value');
+  assert.deepEqual(at('B1'), { t: 'n', v: 20, f: 'A2:A3*10', a: 'B1', cm: '1' }, 'still a dynamic array, evaluated whole');
+  assert.deepEqual(at('B3'), { t: 'z', s: 1 }, 'a spill cell keeps its format');
+  const redo = e.apply(res.inverse).inverse;
+  assert.deepEqual(['B1', 'B2', 'B3'].map(v), [2, 4, 6], 'undo brings the array back');
+  assert.equal(at('B1').a, 'B1:B3');
+  e.apply(e.apply(redo).inverse);
+  assert.deepEqual(['B1', 'B2', 'B3'].map(v), [2, 4, 6], 'redo and undo again: the batch covers the whole array');
+  assert.throws(() => e.apply({ op: 'batch', ops: [{ op: 'set', sheet: sh.id, r: 1, c: 1, cell: null }, { op: 'set', sheet: sh.id, r: 0, c: 0, cell: null }] }),
+    (x) => x.code === 'array-part', 'a batch covering part of an array is still refused');
+  e.edit(sh.id, 0, 1, '7');
+  assert.deepEqual(['B1', 'B2', 'B3'].map(v), [7, null, null], 'a value replaces the array');
+  assert.throws(() => e.edit(sh.id, 0, 2, '=1'), (x) => x.code === 'array-part', 'Excel refuses part of a Ctrl+Shift+Enter array');
 });
 
 test('an array formula\'s range moves with it when rows or columns are inserted or deleted', () => {
@@ -454,6 +555,17 @@ test('reverse range queries skip disjoint row intervals', () => {
   e.dependents(sh.id, 5000, 0, (k) => found.push(k));
   assert.equal(found.length, 1);
   assert.ok(visited <= 21, `visited ${visited} disjoint intervals`);
+});
+
+test('guarding a change across many arrays visits their membership only linearly', () => {
+  const wb = M.workbook(), sh = wb.sheets[0], count = 1000;
+  for (let i = 0; i < count; i++) sh.rows.set(i * 2, new Map([[0, { t: 'n', v: 1, f: '{1;2}', a: `A${i * 2 + 1}:A${i * 2 + 2}`, cm: '1' }]]));
+  const e = C.engine(wb), iterator = e.members[Symbol.iterator].bind(e.members);
+  let visited = 0;
+  e.members[Symbol.iterator] = function* () { for (const entry of iterator()) { visited++; yield entry; } };
+  e.guard({ op: 'clear', sheet: sh.id, r0: 0, c0: 0, r1: count * 2 - 1, c1: 0 });
+  assert.ok(visited <= count * 2, `${visited} membership visits for ${count} arrays`);
+  assert.throws(() => e.guard({ op: 'clear', sheet: sh.id, r0: 1, c0: 0, r1: count * 2 - 1, c1: 0 }), (x) => x.code === 'array-part');
 });
 
 test('creating an array through apply undoes its generated cells as well as its head', () => {

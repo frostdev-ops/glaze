@@ -516,7 +516,9 @@ var GZ_SHEET_FN_STATS2 = globalThis.GZ_SHEET_FN_STATS2 || (() => {
     if (!n || digits < 1) throw ERR.NUM;
     if (v < xs[0] || v > xs[n - 1]) throw ERR.NA;
     let r;
-    if (v === xs[0]) r = exclusive ? 1 / (n + 1) : 0;
+    // One value ranks 1, INC and EXC alike (Excel 16 on the Mac).
+    if (n === 1) r = 1;
+    else if (v === xs[0]) r = exclusive ? 1 / (n + 1) : 0;
     else {
       let i = 1;
       while (i < n && xs[i] < v) i++;
