@@ -3348,6 +3348,7 @@
   "Check with AI": "Controleren met AI",
   "Checking…": "Controleren…",
   "Source removed": "Bron verwijderd",
+  "Sources could not be saved.": "De bronnen konden niet worden opgeslagen.",
   "Use a DOI, ISBN or web address.": "Gebruik een DOI, ISBN of webadres.",
   "Looking up…": "Opzoeken…",
   "This page redirects. Use its final address or add it manually.": "Deze pagina verwijst door. Gebruik het uiteindelijke adres of voeg haar handmatig toe.",
