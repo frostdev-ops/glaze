@@ -86,7 +86,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
 
 (async () => {
   let ctx, held = false, tmp, passed = false;
-  const lock = env.lockPath();
+  const lock = require('./check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\ncanvas-suite-check\n`); break; }
@@ -98,7 +98,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     const ext = env.staged(root, [`https://${HOST}/*`]);
     const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
     await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US', reducedMotion: 'reduce',
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(ctx);
     await ctx.route('**/*', (r) => {

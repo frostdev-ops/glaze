@@ -949,7 +949,7 @@
     globalThis.GZ_KEYS?.sync();
     if (globalThis.GZ_DOCS) return GZ_DOCS.sync();
     if (observer && ((ultra && document.querySelector(PREVIEWS)) || (solo && settings.enhance.toggles && document.querySelector(`${DOC}, ${PREVIEWS}`))
-      || (solo && site === 'canvas' && settings.enhance.bbPreviews && document.querySelector(`${PREVIEWS},.attachment,.instructure_file_link`)))) {
+      || (solo && !ultra && !moodle && settings.enhance.bbPreviews && document.querySelector(`${PREVIEWS},.attachment,.instructure_file_link`)))) {
       need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.sync(), () => {});
     }
   };
