@@ -292,8 +292,8 @@
   .ai-effort .tick { inset-inline-start: calc(var(--k) / var(--steps) * 100%); }
   .ai-effort .thumb { position: absolute; inset-block-start: 50%; inset-inline-start: calc(var(--i) / (var(--steps)) * 100%); inline-size: 18px; block-size: 18px; margin-block-start: -9px; margin-inline-start: -9px; border-radius: 50%;
     background: var(--gz-surface-fill, var(--gz-surface)); border: 2px solid var(--gz-accent); box-shadow: 0 1px 4px rgb(0 0 0 / .25); transition: inset-inline-start .22s var(--gz-ease); }
-  .ai-effort .stops { position: relative; block-size: 16px; }
-  .ai-effort .stops button { position: absolute; inset-inline-start: calc(var(--k) / (var(--steps)) * 100%); transform: translateX(-50%); border: 0; background: none; padding: 0; font-size: calc(11.5px * var(--gz-scale, 1)); color: var(--gz-ink-faint); white-space: nowrap; }
+  .ai-effort .stops { position: relative; block-size: calc(16px * var(--gz-scale, 1)); }
+  .ai-effort .stops button { position: absolute; inset-inline-start: calc(var(--k) / (var(--steps)) * 100%); transform: translateX(-50%); border: 0; background: none; padding: 0; font-size: calc(11.5px * var(--gz-scale, 1)); line-height: calc(16px * var(--gz-scale, 1)); color: var(--gz-ink-faint); white-space: nowrap; }
   .ai-effort .stops button.on { color: var(--gz-ink); font-weight: 600; }
   .ai-effort .stops button:first-child { transform: translateX(-9px); }
   .ai-effort .stops button:last-child { transform: translateX(calc(-100% + 9px)); }
@@ -308,7 +308,8 @@
   .ai-calls small { color: var(--gz-ink-faint); font-size: calc(11.5px * var(--gz-scale, 1)); overflow-wrap: anywhere; }
   .ai-calls small.bad { color: var(--gz-err); }
   #ai-activity .section-heading > #ai-calls-clear { margin-inline-start: auto; }
-  @media (max-width: 900px) { .ai-fh { display: none; } .ai-feat > .row, .ai-tune { grid-template-columns: minmax(0, 1fr); } .ai-tune .g { grid-column: 1; grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 900px) { .ai-fh { display: none; } .ai-feat > .row, .ai-tune { grid-template-columns: minmax(0, 1fr); } .ai-tune .g { grid-column: 1; grid-template-columns: minmax(0, 1fr); } .ai-tune .g > button { grid-column: 1; } }
+  @media (max-width: 600px) { .ai-tune .field { grid-template-columns: minmax(0, 1fr) 4.2rem; row-gap: .35rem; } }
   html[data-gz-motion="off"] :is(.ai-fold, .ai-picker, .ai-tune .g) { animation: none; }
   html[data-gz-motion="off"] :is(.ai-prov, .ai-prov .bar i, .ai-effort .fill, .ai-effort .thumb) { transition: none; }
   html[data-gz-motion="off"] .ai-prov:hover { transform: none; }
