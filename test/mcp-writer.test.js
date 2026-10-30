@@ -657,3 +657,118 @@ test('the wired worker admits Writer\'s port as it does the AI\'s, only while ag
   await until(() => q.ports[0]?.worker.hungUp, 'refused with agent access off');
   assert.equal(q.ports[0].worker.posted.length, 0);
 });
+
+test('from paging reaches all 300 stored sources and every open issue beyond the old 200-row limit', async () => {
+  const env = await opened({ html: `<p>${'word '.repeat(350)}</p>` });
+  const sources = Array.from({ length: 300 }, (_, n) => ({ id: `s-source-${n}`, type: 'book', title: `Book ${n}` }));
+  await SRC.save(SRC.key({ school: 'bb.school.test', user: '_900_1', course: '_101_1', item: '_7_1' }), sources, env.a);
+  env.p.issues.set('ai', Array.from({ length: 300 }, (_, n) => ({ from: 1 + n * 5, to: 5 + n * 5, kind: 'grammar', message: `Issue ${n}`, suggestions: ['term'] })));
+  for (const name of ['document_sources', 'document_issues']) {
+    const ids = [];
+    let from = 0;
+    do {
+      const r = await env.run(name, { document: env.key, from });
+      assert.equal(r.total, 300, name);
+      assert.ok(JSON.stringify(r).length <= M.LIMIT.answer);
+      ids.push(...r.items.map((i) => i.id));
+      assert.ok(r.next === null || r.next > from, 'paging makes progress');
+      from = r.next;
+    } while (from !== null);
+    assert.equal(new Set(ids).size, 300, name);
+  }
+});
+
+test('one oversized source has an explicit omission, stays within the call cap, and does not hide later sources', async () => {
+  const env = await make();
+  const source = { id: 's-huge', type: 'book', title: 'Many authors', author: Array.from({ length: 60 }, () => ({ family: 'f'.repeat(120), given: 'g'.repeat(120) })) };
+  await SRC.save(SRC.key({ school: 'bb.school.test', user: '_900_1', course: '_101_1', item: '_7_1' }), [source, { id: 's-next', type: 'book', title: 'Next source' }], env.a);
+  const document = await keyOf(env, 'Essay 2: Memory in Beloved');
+  const grants = G.open(fakeIDB().indexedDB);
+  await grants.pair(PEER, 'Writer client', ['writer']);
+  const calls = CALLS.create({ registry: R, state: async () => ({ tools: env.reg }), grants, approve: { ask: async () => 'no' },
+    settings: async () => ({ on: true }), enabled: async () => true, accounts: async () => [], refresh: async () => null,
+    local: env.a, keys: async () => Object.keys(env.a.s), now: () => NOW, record: () => {}, turn: env.queue });
+  const r = await calls.call({ name: 'document_sources', args: { document }, peer: PEER, client: { name: 'Writer client' } });
+  assert.equal(r.isError, undefined);
+  assert.ok(r.content[0].text.length <= 12000);
+  assert.equal(r.structuredContent.omitted, undefined, 'the whole answer must not become a receipt');
+  assert.equal(r.structuredContent.total, 2);
+  assert.deepEqual(r.structuredContent.items.map((i) => i.id), ['s-huge', 's-next']);
+  assert.equal(r.structuredContent.items[0].omitted, true);
+});
+
+test('document_read pages JSON-escaped text without exceeding the cap or dropping text', async () => {
+  const s = await seed(), text = '\u0001'.repeat(2999) + '😀' + '\\"'.repeat(1800);
+  await s.store.save(NOTES, { doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] } });
+  const env = await make({ s }), document = await keyOf(env, 'Reading notes'), out = [];
+  for (let page = 1, pages = 1; page <= pages; page++) {
+    const r = await env.run('document_read', { document, page });
+    assert.ok(JSON.stringify(r).length <= M.LIMIT.answer, `page ${page}`);
+    assert.ok(!/[\ud800-\udbff]$/.test(r.text) && !/^[\udc00-\udfff]/.test(r.text), 'no split surrogate pair');
+    out.push(r.text);
+    pages = r.pages;
+  }
+  assert.equal(out.join(''), text);
+});
+
+test('approval shows all the issue words and replacement, including the part past 120 characters', async () => {
+  const text = 'a'.repeat(160) + ' old ending', suggestion = 'b'.repeat(160) + ' new ending';
+  const env = await opened({ html: `<p>${text}</p>` });
+  env.p.issues.set('ai', [harper(env.p.pm, text, [suggestion])]);
+  const t = env.reg.get('fix_apply'), ctx = { document: env.key, local: env.a };
+  const args = { issueId: env.p.issues.list()[0].id, suggestion };
+  assert.equal(await t.summarize(args, ctx), `Change ${JSON.stringify(text)} to ${JSON.stringify(suggestion)}.`);
+  assert.equal((await t.run(args, ctx)).ok, true);
+  assert.equal(env.p.pm.state.doc.textContent, suggestion);
+});
+
+test('citation approval shows the complete Chicago note and rejects a note too long for the approval window', async () => {
+  const book = { id: 's-long-title', type: 'book', title: 'A long title '.repeat(25), author: [{ family: 'Rivera', given: 'Alex' }], publisher: 'Press', issued: { 'date-parts': [[2026]] } };
+  const env = await opened({ sources: [book], style: 'chicago17' });
+  const t = env.reg.get('citation_insert'), ctx = { document: env.key, local: env.a };
+  const c = await env.h.hub.call(ESSAY, 'cite', { sourceId: book.id });
+  assert.equal(await t.summarize({ sourceId: book.id }, ctx), `Insert the citation ${c.inText} for ${JSON.stringify(book.title)} at the caret.`);
+  env.p.page.sources = [{ ...book, title: 't'.repeat(600), publisher: 'p'.repeat(600), 'publisher-place': 'l'.repeat(600), edition: 'e'.repeat(600) }];
+  await assert.rejects(t.summarize({ sourceId: book.id }, { ...ctx }), /too long/i);
+});
+
+test('an approved change refuses a document trashed, removed, or changed to an unknown kind while approval waited', async () => {
+  const book = { id: 's-morrison', type: 'book', title: 'Beloved', author: [{ family: 'Morrison', given: 'Toni' }] };
+  for (const name of ['fix_apply', 'citation_insert']) for (const changed of ['trash', 'remove', 'kind']) {
+    const env = await opened({ sources: [book] });
+    env.p.issues.set('harper', [harper(env.p.pm, 'definately', ['definitely'])]);
+    const t = env.reg.get(name), ctx = { document: env.key, local: env.a };
+    const args = name === 'fix_apply' ? { issueId: env.p.issues.list()[0].id, suggestion: 'definitely' } : { sourceId: book.id };
+    await t.summarize(args, ctx);
+    if (changed === 'trash') await env.store.trash(ESSAY);
+    else if (changed === 'remove') await env.store.remove(ESSAY);
+    else await env.store.save(ESSAY, { kind: 'sheet' });
+    const before = env.p.pm.state.doc.toJSON(), r = await env.queue(() => t.run(args, ctx));
+    assert.equal(r.ok, false, `${name}: ${changed}`);
+    assert.match(r.error, /no document by that key/i);
+    assert.deepEqual(env.p.pm.state.doc.toJSON(), before);
+  }
+});
+
+test('a change needs its own summary and cannot reuse its approved arguments for a different change', async () => {
+  const env = await opened();
+  env.p.issues.set('harper', [harper(env.p.pm, 'definately', ['definitely', 'defiantly'])]);
+  const t = env.reg.get('fix_apply'), ctx = { document: env.key, local: env.a };
+  const args = { issueId: env.p.issues.list()[0].id, suggestion: 'definitely' };
+  const before = env.p.pm.state.doc.toJSON();
+  assert.equal((await t.run(args, ctx)).ok, false, 'a listed handle alone is not an approval');
+  await t.summarize(args, ctx);
+  assert.equal((await t.run({ ...args, suggestion: 'defiantly' }, ctx)).ok, false, 'bind the replacement too');
+  assert.deepEqual(env.p.pm.state.doc.toJSON(), before);
+});
+
+test('open-page discovery rechecks admission before asking for any document key', async () => {
+  const h = hubbed(), p = writerPage({ link: h.link });
+  p.ready();
+  await until(() => h.hub.size() === 1, 'admitted');
+  h.allow.ok = false;
+  const before = h.pairs[0].worker.posted.length;
+  assert.deepEqual(await h.hub.call(null, 'open'), []);
+  assert.equal(h.pairs[0].worker.posted.length, before);
+  assert.equal(h.hub.size(), 0);
+});
