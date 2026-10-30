@@ -6,7 +6,7 @@
 // typed in) or { f: '=…' } (a formula). fill: the range one formula was filled over, which Excel saves as a shared
 // formula; array: a legacy (Ctrl+Shift+Enter) array formula's range; unsupported: Excel's message when it refused the
 // formula. Every other formula is entered as a dynamic-array formula and returns one value (no spills). Deterministic
-// only: no NOW, TODAY, RAND, INFO, or CELL that names the workbook. Text and dates read as en-US, Excel's locale here.
+// only: no NOW, TODAY, RAND, INFO, CELL, OFFSET or INDIRECT. Text and dates read as en-US, checked by the harness.
 
 const colName = (c) => { let s = ''; for (; c > 0; c = Math.floor((c - 1) / 26)) s = String.fromCharCode(65 + ((c - 1) % 26)) + s; return s; };
 const colNumber = (s) => [...s].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
@@ -547,21 +547,6 @@ const ROWS = {
     ['=XMATCH("ch*",Data!E1:E6,2)', 'words'],
     ['=XMATCH(95,Data!M2:M6,0,-1)', 'table'],
     ['=XMATCH(99,Data!N1:N6)', 'asc'],
-    ['=OFFSET(Data!A1,2,0)', 'nums'],
-    ['=OFFSET(Data!A1,0,1)', 'nums ys'],
-    ['=SUM(OFFSET(Data!A1,1,0,3,1))', 'nums'],
-    ['=SUM(OFFSET(Data!A1:A2,1,1))', 'nums ys'],
-    ['=SUM(OFFSET(Data!A1,0,0,2,2))', 'nums ys'],
-    ['=OFFSET(Data!A1,-1,0)', 'nums'],
-    ['=ROWS(OFFSET(Data!A1,0,0,4,3))', 'nums'],
-    ['=OFFSET(Data!A1,2,0,1,1)*2', 'nums'],
-    ['=INDIRECT("Data!A3")', 'nums'],
-    ['=INDIRECT("Data!R3C1",FALSE)', 'nums'],
-    ['=SUM(INDIRECT("Data!A1:A5"))', 'nums'],
-    ['=INDIRECT("\'Data\'!B2")', 'ys'],
-    ['=INDIRECT("nonsense")', ''],
-    ['=INDIRECT("Data!A"&2+1)', 'nums'],
-    ['=SUM(INDIRECT("Data!A1:A"&3))', 'nums'],
     ['=CHOOSE(2,Data!A1,Data!B1)', 'nums ys'],
     ['=SUM(CHOOSE(2,Data!A1:A3,Data!B1:B3))', 'nums ys'],
     ['=ADDRESS(2,3)', ''],
@@ -911,7 +896,6 @@ const ROWS = {
     ['=ISNA(Data!G2)', 'errs'],
     ['=ISREF(Data!A1)', 'nums'],
     ['=ISREF("Data!A1")', ''],
-    ['=ISREF(INDIRECT("Data!A1"))', 'nums'],
     ['=ISFORMULA(Data!AF1)', 'fx'],
     ['=ISFORMULA(Data!AF2)', 'fx'],
     ['=ISEVEN(4)', ''],
@@ -943,13 +927,6 @@ const ROWS = {
     ['=ERROR.TYPE(1)', ''],
     ['=ERROR.TYPE(Data!G2)', 'errs'],
     ['=NA()', ''],
-    ['=CELL("row",Data!C7)', 'mixed'],
-    ['=CELL("col",Data!D1)', 'dec'],
-    ['=CELL("contents",Data!A1)', 'nums'],
-    ['=CELL("type",Data!E1)', 'words'],
-    ['=CELL("type",Data!H1)', 'blank'],
-    ['=CELL("type",Data!A1)', 'nums'],
-    ['=CELL("format",Data!A1)', 'nums'],
     ['=SHEET()', ''],
     ['=SHEET(Data!A1)', 'nums'],
     ['=SHEETS()', ''],
