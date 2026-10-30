@@ -272,6 +272,23 @@ const holds = (bytes, value) => {
     check((await cardOf(fr)).tiles.join('|') === 'Open in Glaze|Submit as is', 'a .pptx asks Open in Glaze or Submit as is');
     await tap(fr, '.gi-default');
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'slides' && document.querySelectorAll('.gk .gs-rail-b').length === 10 && !!document.querySelector('.gk #gs-canvas [role="group"]')), 'the slides viewer', 40000);
+    // Replacing an already-open deck must show the arriving file's stage in that viewer too.
+    await fr.evaluate((bytes) => {
+      const k = GZ_DOC_KINDS.get('slides');
+      GZ_DOC_KINDS.register('slides', { ...k, into: async (key, f, opts) => {
+        GZ_DOC_KINDS.register('slides', k);
+        opts.progress({ stage: 'read' });
+        await new Promise((r) => { globalThis.__deckRead = r; });
+        return k.into(key, f, opts);
+      } });
+      globalThis.__deckReplaced = false;
+      GZ_WRITER_PAPER.current().importFile(new File([new Uint8Array(bytes)], 'Replacement.pptx', { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })).then(() => { globalThis.__deckReplaced = true; });
+    }, Array.from(deckBytes));
+    await until(() => fr.evaluate(() => typeof __deckRead === 'function'), 'replacement deck reading');
+    const deckStage = await fr.evaluate(() => document.querySelector('.gk .gp-state')?.textContent);
+    check(deckStage === 'Reading…', `an import over a slide viewer shows its stage (${deckStage})`);
+    await fr.evaluate(() => __deckRead());
+    await until(() => fr.evaluate(() => __deckReplaced && document.querySelectorAll('.gk .gs-rail-b').length === 10), 'replacement deck shown');
     rec = await record(); vs = await versions();
     check(rec.kind === 'slides' && rec.slides === 10 && sha((await bytesOf(rec))) === sha(deckBytes) && vs.some((v) => v.reason === 'import'), `the record is the deck, its bytes as brought, the paper a version first (${JSON.stringify({ kind: rec.kind, slides: rec.slides })})`);
     // Ctrl+F (⌘F) over the viewer is the viewer's own find, never the hidden paper's (writer-find.js).
