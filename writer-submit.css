@@ -62,3 +62,18 @@
 .gs-big::before { content: ""; position: absolute; top: -1px; right: -1px; width: 34px; height: 34px; background: linear-gradient(225deg, var(--gz-surface-2) 50%, var(--edge) 50%); border-bottom-left-radius: 6px; }
 .gs-big .gs-doc { width: auto; height: auto; padding: 6px 12px; border-radius: 6px; font: 700 14px/1 var(--gz-font); letter-spacing: .04em; }
 .gs-clip { position: absolute; left: 16px; top: -12px; width: 22px; height: 40px; fill: none; stroke: var(--gz-ink-muted); stroke-width: 2; stroke-linecap: round; }
+
+/* The attached files (Attach from Documents): each its badge, name and size, and its remove button. */
+.gs-atts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+.gs-atts:empty { display: none; }
+.gs-att { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border: 1px solid var(--gz-line-strong); border-radius: 10px; font-size: 13px; min-width: 0; }
+.gs-att > div { flex: 1; min-width: 0; }
+.gs-att small { display: block; color: var(--gz-ink-faint); font-size: 12px; }
+.gs-att-x { width: 28px; height: 28px; flex: none; border-radius: 8px; color: var(--gz-ink-muted); font-size: 18px; line-height: 1; }
+.gs-att-x:hover { background: color-mix(in srgb, var(--gz-ink-faint) 16%, transparent); }
+.gs-attach { justify-self: start; color: var(--gz-accent-hi); font-weight: 600; }
+:root:not([data-dark]) .gs-attach { color: var(--gz-accent); }
+.gs-sheet .gs-doc:is([data-kind="xlsx"], [data-kind="xlsm"], [data-kind="csv"], [data-kind="tsv"]) { background: #16a34a; }
+.gs-sheet .gs-doc:is([data-kind="pptx"], [data-kind="ppsx"]) { background: #ea580c; }
+/* The compact box's sheet: the files alone, no preview. */
+.gs-sheet.gs-only { width: min(520px, 100%); grid-template-columns: minmax(0, 1fr); }

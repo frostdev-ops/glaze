@@ -3751,5 +3751,12 @@
   "Don't allow": "Ne pas autoriser",
   "Unnamed app": "App sans nom",
   "Glaze restarted before you answered.": "Glaze a redémarré avant votre réponse.",
-  "Export .xlsm": "Exporter .xlsm"
+  "Export .xlsm": "Exporter .xlsm",
+  "Attach from Documents": "Joindre depuis Documents",
+  "{name} could not be made.": "Impossible de créer {name}.",
+  "{name} is larger than 50 MB.": "{name} dépasse 50 Mo.",
+  "Attach up to {n} documents.": "Joignez jusqu’à {n} documents.",
+  "Attached: {names}": "Pièces jointes : {names}",
+  "A file is larger than 50 MB. Nothing was submitted.": "Un fichier dépasse 50 Mo. Rien n’a été remis.",
+  "A file could not be read. Nothing was submitted.": "Un fichier n’a pas pu être lu. Rien n’a été remis."
 };

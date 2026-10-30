@@ -3751,5 +3751,12 @@
   "Don't allow": "Niet toestaan",
   "Unnamed app": "Naamloze app",
   "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde.",
-  "Export .xlsm": ".xlsm exporteren"
+  "Export .xlsm": ".xlsm exporteren",
+  "Attach from Documents": "Bijvoegen uit Documenten",
+  "{name} could not be made.": "{name} kon niet worden gemaakt.",
+  "{name} is larger than 50 MB.": "{name} is groter dan 50 MB.",
+  "Attach up to {n} documents.": "Voeg maximaal {n} documenten toe.",
+  "Attached: {names}": "Bijgevoegd: {names}",
+  "A file is larger than 50 MB. Nothing was submitted.": "Een bestand is groter dan 50 MB. Er is niets ingeleverd.",
+  "A file could not be read. Nothing was submitted.": "Een bestand kon niet worden gelezen. Er is niets ingeleverd."
 };

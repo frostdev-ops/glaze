@@ -134,7 +134,8 @@
     const X = await codecs(), bytes = await X.write(wb), ext = extOf(wb);
     return { name: `${name}${ext}`, mime: ext === '.xlsm' ? XLSM : DK.KINDS.sheet.mime, bytes };
   };
-  const file = async (key) => {
+  const file = async (key, { progress = null } = {}) => {
+    progress?.({ stage: 'prepare' });
     await need([...ENGINE, 'sheet-grid.js']);
     const got = await GZ_SHEET_DATA.read(get, key);
     return got ? fileOf(got.wb, got.rec.title) : null;
@@ -150,12 +151,12 @@
   const exportFile = async (key) => { const f = await file(key); if (f) download(f); };
 
   // The frame's submit and kind-change checkpoints keep the complete workbook, as the grid's own Versions do.
-  const version = async (key, reason) => {
+  const version = async (key, reason, { attached = null } = {}) => {
     await need(ENGINE);
     const got = await GZ_SHEET_DATA.read(get, key);
     if (got?.rec.kind !== 'sheet') throw new Error('document kind changed');
     const gz = await GZ_SHEET_DATA.pack(got.wb);
-    return papers().save(key, {}, { expectedKind: 'sheet', base: got.rec.revision, version: { reason, gz, cells: GZ_SHEET_DATA.measure(got.wb).cells } });
+    return papers().save(key, {}, { expectedKind: 'sheet', base: got.rec.revision, version: { reason, gz, cells: GZ_SHEET_DATA.measure(got.wb).cells }, ...(attached && { attached }) });
   };
 
   // ---- the grid

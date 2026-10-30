@@ -3751,5 +3751,12 @@
   "Don't allow": "Não permitir",
   "Unnamed app": "App sem nome",
   "Glaze restarted before you answered.": "O Glaze reiniciou antes da sua resposta.",
-  "Export .xlsm": "Exportar .xlsm"
+  "Export .xlsm": "Exportar .xlsm",
+  "Attach from Documents": "Anexar de Documentos",
+  "{name} could not be made.": "Não foi possível criar {name}.",
+  "{name} is larger than 50 MB.": "{name} tem mais de 50 MB.",
+  "Attach up to {n} documents.": "Anexe até {n} documentos.",
+  "Attached: {names}": "Anexos: {names}",
+  "A file is larger than 50 MB. Nothing was submitted.": "Um arquivo tem mais de 50 MB. Nada foi enviado.",
+  "A file could not be read. Nothing was submitted.": "Não foi possível ler um arquivo. Nada foi enviado."
 };

@@ -140,3 +140,41 @@ test('review: listing requires an exact name, including a full title on visually
   row.textContent = 'Rivera_Ess…'; row.setAttribute('title', 'Rivera_Essay2.docx');
   assert.equal(S.listed(area, 'Rivera_Essay2.docx'), 1, 'the full title proves a truncated listing');
 });
+
+// The hand-in (features/writer-submit.js handIn): a file from any source, { name, mime, bytes }, bounded by Blackboard's
+// 50 MB per file; Documents' attachments named Lastname_Title as the attempt's own file is, never twice.
+test('the hand-in takes { name, mime, bytes } up to 50 MB, from an ArrayBuffer or its view', () => {
+  const ok = { name: 'Rivera_Notes.docx', mime: S.MIME, bytes: new ArrayBuffer(10) };
+  assert.equal(S.MAX_FILE, 50e6);
+  assert.equal(S.handInError(ok), null);
+  assert.equal(S.handInError({ ...ok, bytes: new Uint8Array(3) }), null);
+  assert.equal(S.handInError({ ...ok, bytes: { byteLength: 50e6 } }), 'file', 'not bytes at all');
+  const big = { byteLength: 50e6 + 1 };
+  Object.setPrototypeOf(big, ArrayBuffer.prototype);
+  assert.equal(S.handInError({ ...ok, bytes: big }), 'large', 'past 50 MB');
+  for (const bad of [{ ...ok, bytes: new ArrayBuffer(0) }, { ...ok, name: '../x.docx' }, { ...ok, name: '' }, { ...ok, mime: null }, { ...ok, mime: 'x'.repeat(201) }, null, {}]) assert.equal(S.handInError(bad), 'file', JSON.stringify(bad));
+  assert.equal(S.MAX_ATTACH, 10);
+});
+
+test('an attached document is Lastname_Title with its kind\'s extension, de-duplicated against the names taken', () => {
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Lab notes', name: 'Lab notes.docx' }), 'Rivera_LabNotes.docx');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Grades: term 1', name: 'Grades term 1.xlsx' }), 'Rivera_Grades.xlsx', 'the title before its subtitle');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Budget', name: 'Budget.xlsm' }), 'Rivera_Budget.xlsm');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Field trip', name: 'Field trip.pdf' }), 'Rivera_FieldTrip.pdf');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Week 3', name: 'Week 3.pptx' }), 'Rivera_Week3.pptx');
+  assert.equal(S.attachName({ title: '', name: 'x.docx', fallback: 'Document' }), 'Document.docx');
+  const taken = ['Rivera_Essay2.docx'];
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Essay 2', name: 'a.docx', taken }), 'Rivera_Essay2_2.docx', 'beside the attempt\'s own file');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Essay 2', name: 'a.docx', taken: ['rivera_essay2.DOCX', 'Rivera_Essay2_2.docx'] }), 'Rivera_Essay2_3.docx', 'any case');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Essay 2', name: 'a.pdf', taken }), 'Rivera_Essay2.pdf', 'another extension is another name');
+  const long = S.attachName({ surname: 'x'.repeat(200), title: 'y'.repeat(200), name: 'a.docx', taken: [S.attachName({ surname: 'x'.repeat(200), title: 'y'.repeat(200), name: 'a.docx' })] });
+  assert.ok(long.endsWith('_2.docx') && S.safeName(long, 'paper'), `still a built file's name (${long.length})`);
+  assert.equal(S.attachName({ name: 'Photo of lab.png', taken: ['photo of lab.png'] }), 'Photo of lab_2.png', 'a type no kind has keeps its own name');
+});
+
+test('the note names the attached files on a line after it', () => {
+  assert.equal(S.noteWith('Here is my essay.', ['Rivera_Notes.docx', 'Rivera_Data.xlsx']), 'Here is my essay.\n\nAttached: Rivera_Notes.docx, Rivera_Data.xlsx');
+  assert.equal(S.noteWith('', ['a.pdf'], 'Angehängt: {names}'), 'Angehängt: a.pdf');
+  assert.equal(S.noteWith('Hi  \n', []), 'Hi');
+  assert.ok(S.MAX_NOTE >= 4000 + 10 * 255);
+});
