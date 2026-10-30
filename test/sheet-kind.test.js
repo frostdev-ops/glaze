@@ -366,3 +366,21 @@ test('band cleanup survives an interrupted removal, retry, revival and Delete fo
     assert.deepEqual(Object.keys(s.data).filter((k) => k.includes(KEY)), []);
   }
 });
+
+test('packed version limits include empty spreadsheets and refuse an oversized pinned history atomically', async () => {
+  let t = 0;
+  const s = store(), P = PA.open(s, () => ++t), wb = M.workbook();
+  const first = await SD.write(P, KEY, wb, new Map());
+  for (let i = 0; i < 3; i++) await P.save(KEY, {}, { version: { gz: 'A'.repeat(6e6), cells: i } });
+  assert.deepEqual((await P.versions(KEY)).map((v) => v.cells), [2, 1], 'an empty book also uses the 16 MB cap');
+  await P.save(KEY, {}, { version: { gz: 'A'.repeat(SD.VERSIONS_CAP), cells: 0 } });
+  assert.equal((await P.versions(KEY)).reduce((n, v) => n + v.bytes, 0), SD.VERSIONS_CAP, 'exactly at the cap is accepted');
+  let before = JSON.stringify(s.data);
+  await assert.rejects(P.save(KEY, { title: 'must not publish' }, { version: { gz: 'A'.repeat(SD.VERSIONS_CAP + 4) } }), /version.*limit/i);
+  assert.equal(JSON.stringify(s.data), before);
+  await P.save(KEY, {}, { version: { reason: 'submit', gz: 'A'.repeat(8e6) } });
+  before = JSON.stringify(s.data);
+  await assert.rejects(P.save(KEY, {}, { version: { gz: 'A'.repeat(9e6) } }), /version.*limit/i);
+  assert.equal(JSON.stringify(s.data), before, 'neither the submitted checkpoint nor the workbook can be evicted by a refusal');
+  assert.ok(first.saved);
+});
