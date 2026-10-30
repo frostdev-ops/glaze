@@ -136,7 +136,7 @@ const viewer = async () => {
   const P = PA.open(store(), () => Date.now());
   await P.save(KEY, { kind: 'pdf', doc: null, file: 'JVBERi0=', size: 5 });
   const calls = { save: 0, dispose: 0 }, paper = { key: () => KEY, context: () => ({}), paper: () => ({}),
-    unpark() {}, take() {}, release() {}, notify() {}, importFile: async () => null };
+    hold() {}, unpark() {}, take() {}, release() {}, notify() {}, importFile: async () => null };
   const el = () => ({ dataset: {}, append() {}, remove() {}, addEventListener() {} });
   const document = { documentElement: el(), body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: el };
   const implementation = { view: async () => ({ save: async () => { calls.save++; return true; }, file: async () => ({ bytes: new Uint8Array([1]) }), dispose: () => { calls.dispose++; } }),
