@@ -276,6 +276,9 @@ test('engine comparison: 1e-12 relative, types strict', () => {
   assert.ok(same({ t: 'e', v: '#N/A' }, { t: 'e', v: '#N/A' }));
   assert.ok(!same({ t: 'b', v: true }, { t: 'n', v: 1 }));
   assert.ok(!same({ t: 'n', v: 1 }, undefined));
+  for (const v of [Infinity, -Infinity, NaN, '1', null]) {
+    assert.ok(!same({ t: 'n', v: 1 }, { t: 'n', v }), `invalid engine number ${v}`);
+  }
 });
 
 // The engine's entry, wired once lane A's calc (lib/sheet-calc.js, S4) lands: the family's inputs and formulas in, each
