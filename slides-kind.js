@@ -417,6 +417,12 @@
       frame.addEventListener('click', () => go(1));
       dialog.addEventListener('keydown', (e) => {
         e.stopPropagation();
+        if (e.key === 'Tab') {
+          const buttons = [...dialog.querySelectorAll('button')], at = buttons.indexOf(document.activeElement);
+          if ((!e.shiftKey && at === buttons.length - 1) || (e.shiftKey && at <= 0)) {
+            e.preventDefault(); buttons[e.shiftKey ? buttons.length - 1 : 0].focus();
+          }
+        }
         if (NEXT.includes(e.key)) { e.preventDefault(); go(1); }
         if (BACK.includes(e.key)) { e.preventDefault(); go(-1); }
         if (e.key === 'Home') { e.preventDefault(); go(-seq.length); }
