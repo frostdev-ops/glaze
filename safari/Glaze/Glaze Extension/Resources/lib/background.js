@@ -2364,7 +2364,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const MCP_BROWSER = SAFARI ? 'safari' : new URL(chrome.runtime.getURL('')).protocol === 'moz-extension:' ? 'firefox' : 'chrome';
 const agentFiles = () => importScripts('agent-frames.js', 'agent-link.js');
 const grantFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'mcp/grants.js');
-const mcpFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'ai/failure.js', 'ai/loop.js', 'modapi.js', 'modwidget.js', 'modbroker.js', 'modtools.js', 'mcp/grants.js', 'mcp/registry.js', 'mcp/tools-study.js', 'mcp/tools-grades.js', 'mcp/wire.js', 'mcp/approve.js', 'mcp/calls.js');
+const mcpFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'ai/failure.js', 'ai/loop.js', 'modapi.js', 'modwidget.js', 'modbroker.js', 'modtools.js', 'mcp/grants.js', 'mcp/registry.js', 'mcp/tools-study.js', 'mcp/tools-grades.js', 'doc-home.js', 'writer-sources.js', 'writer-tools.js', 'mcp/writer.js', 'mcp/wire.js', 'mcp/approve.js', 'mcp/calls.js');
 globalThis.addEventListener?.('install', () => { agentFiles(); mcpFiles(); });
 // The local setting is a UI mirror, writable by content scripts. Only an options message may persist consent in this
 // extension-origin database. A forged local on cannot reconnect a previously paired app after the owner switched off.
@@ -2394,8 +2394,14 @@ const MCP_KEEP = MCP_BROWSER === 'safari';
 // Group D's stubs: each step replaces its own here, and nothing else in this worker.
 // C11: an account's caches for a group read afresh through an open LMS tab → { ok, source: 'tab' }, or null with none open.
 const mcpRefresh = async (account, group, { signal, tool } = {}) => null;
-// C13: Writer's document tools that need an open Writer page (port glaze:mcp-writer) → the page's answer, or null with none.
-const mcpWriter = async (key, op, args, { signal } = {}) => null;
+// C13: Writer's document tools that need an open Writer page (writer-mcp.js) reach it over port glaze:mcp-writer, admitted
+// with the AI port's sender rules while agent access is on (lib/mcp/writer.js pages) → the page's answer, or null with none.
+let mcpWriterHub = null;
+const mcpWriterPages = () => { if (typeof GZ_MCP_WRITER === 'undefined') importScripts('mcp/writer.js'); return (mcpWriterHub ||= GZ_MCP_WRITER.pages({ runtime: chrome.runtime })); };
+const mcpWriter = (key, op, args, o) => mcpWriterPages().call(key, op, args, o);
+chrome.runtime.onConnect.addListener((p) => {
+  if (p.name === 'glaze:mcp-writer') mcpWriterPages().connect(p, async () => await mcpOn() && await glazeOn() && await aiSender(p.sender || {}, { op: 'run', feature: 'writing' }) === true);
+});
 // C14: a mod's code tool (the registry state's code), answered by its Worker through an open LMS tab.
 const mcpCode = async (mod, name, args, ctx) => ({ ok: false, error: "This mod's agent tools are not available yet." });
 
@@ -2423,6 +2429,8 @@ const mcpKept = new Map(); // Safari: c → { peer, snap }, as the last worker k
 const mcpCore = () => (mcpMade ||= (() => {
   if (typeof GZ_MCP_CALLS === 'undefined') mcpFiles();
   if (!GZ_AI_TOOLS.get('accounts_list')) { GZ_MCP_STUDY.register(GZ_AI_TOOLS); GZ_MCP_GRADES.register(GZ_AI_TOOLS); }
+  if (!GZ_AI_TOOLS.get('documents_list')) GZ_MCP_WRITER.register(GZ_AI_TOOLS, { papers: (f) => (brokerTurn ||= GZ_CARDS.queue())(() => f(openPapers())), bridge: mcpWriter });
+  mcpWriterPages().wake();
   const approve = GZ_MCP_APPROVE.create({ windows: chrome.windows, tabs: chrome.tabs, storage: { session: chrome.storage.session }, runtime: chrome.runtime,
     now: Date.now, timers: globalThis, url: chrome.runtime.getURL('lib/mcp/approve.html') });
   chrome.windows?.onRemoved?.addListener((id) => approve.closed(id));
