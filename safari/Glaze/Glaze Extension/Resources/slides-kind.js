@@ -483,10 +483,14 @@
     moreB.addEventListener('click', () => { if (menu) closeMenu(true); else openMenu(); });
     document.addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target) && !moreB.contains(e.target)) closeMenu(); }, { capture: true, signal });
 
-    // ---- keys: the slides by arrows, Page Up and Down, Home and End; Ctrl+F finds
+    // ---- keys: the slides by arrows, Page Up and Down, Home and End; Ctrl+F finds, ahead of the parked paper's find in an
+    // assignment's frame (writer-find.js listens on the document)
+    addEventListener('keydown', (e) => {
+      if (e.defaultPrevented || presenting || menu || !deck) return;
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); q.focus(); q.select(); }
+    }, { capture: true, signal });
     document.addEventListener('keydown', (e) => {
       if (e.defaultPrevented || presenting || menu || !deck) return;
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); q.focus(); q.select(); return; }
       if (isField(e.target) || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const to = { ArrowRight: cur + 1, ArrowDown: cur + 1, PageDown: cur + 1, ArrowLeft: cur - 1, ArrowUp: cur - 1, PageUp: cur - 1, Home: 0, End: n - 1 }[e.key];
       if (to === undefined) return;

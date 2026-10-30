@@ -217,6 +217,10 @@ const holds = (bytes, value) => {
     rec = await record(); vs = await versions();
     check(rec.kind === 'slides' && rec.slides === 10 && sha(Buffer.from(rec.file, 'base64')) === sha(deckBytes) && vs.some((v) => v.reason === 'import'), `the record is the deck, its bytes as brought, the paper a version first (${JSON.stringify({ kind: rec.kind, slides: rec.slides })})`);
     await shot(p, 'kinds-slides-1440.png');
+    await fr.focus('.gk #gs-canvas');
+    await p.keyboard.press('Control+f');
+    await until(() => fr.evaluate(() => document.activeElement?.id === 'gs-find-q'), 'the deck\'s find on Ctrl+F');
+    check(await fr.evaluate(() => [...document.querySelectorAll('.ge-find')].every((b) => b.hidden)), 'Ctrl+F in the deck opens its own find, not the parked paper\'s');
     await tap(fr, '.gk .gp-submit');
     await until(() => sheetOf(fr), 'the deck\'s sheet');
     check((await sheetOf(fr)).name === 'Rivera_Essay2.pptx', `the sheet names the deck Lastname_Title.pptx (${(await sheetOf(fr)).name})`);
