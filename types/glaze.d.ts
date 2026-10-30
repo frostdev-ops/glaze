@@ -56,6 +56,8 @@ interface Glaze {
   look: GlazeLook;
   /** Send data to this mod's other Worker and frames on the page (not back to the sender). At most 64 KiB. */
   broadcast(data?: unknown): Promise<unknown>;
+  /** Answer agent apps' calls to this mod's code tools (mod.json `tools` with `code: true`). Worker only. */
+  tools: GlazeTools;
   /** The student's documents, on the Documents page only. Needs `documents` (and `documents.read` for their text); Worker only. */
   documents: GlazeDocuments;
 }
@@ -183,6 +185,8 @@ interface GlazeEvents {
   'canvas.size': { slot: string; w: number; h: number; dpr: number };
   /** Worker only: nothing of the slot's canvases shows (page hidden, motion off, or no canvas on the page); animation frames are on hold. */
   'canvas.pause': { paused: boolean };
+  /** Worker only: an agent app called one of this mod's code tools, with its arguments. `tools.handle` answers this for you. */
+  'tool.call': { id: string; name: string; args: Record<string, unknown> };
 }
 
 interface GlazePage {
@@ -600,6 +604,13 @@ interface GlazeDocuments {
   remove(slot: GlazeDocumentSlot, id: string): Promise<{ slot: GlazeDocumentSlot; id: string }>;
   /** Sets the page's --gd-* hooks while the mod runs; `null` withdraws them. The first mod in the student's order to set one wins it. `documents`. */
   style(vars: GlazeDocumentStyle | null): Promise<GlazeDocumentStyle | null>;
+}
+
+// ---- agent tools ------------------------------------------------------------------------------------------------------
+
+interface GlazeTools {
+  /** Answer the code tool `name` of mod.json: `fn` gets the app's arguments, checked against its `input`, and returns JSON or a promise of it within 15 s; what it throws is the call's error. Throws for a name mod.json doesn't declare as a code tool. Worker only. */
+  handle(name: string, fn: (args: Record<string, any>) => unknown): void;
 }
 
 // ---- mod.json tools --------------------------------------------------------------------------------------------------

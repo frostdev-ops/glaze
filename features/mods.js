@@ -14,7 +14,8 @@
 // rules, a nav layout or Look parts laid over the student's Look while the mod runs (GZ_CTX.parts reads parts()), and
 // effects. Slots: tiles on the widget boards (features/widgets.js declare), rail widgets on the nav (features/nav.js),
 // and, where the student turned the replacement on (modReplace, the worker's list says which), the nav and the background.
-// Where two mods claim one, the student's order (modOrder) decides, and transforms are taken in that order.
+// Where two mods claim one, the student's order (modOrder) decides, and transforms are taken in that order. Agent apps'
+// calls to a mod's code tools reach its Worker from the worker here ('glaze:modtool', lib/mcp/modroute.js).
 var GZ_MODS = globalThis.GZ_MODS || (() => {
   const BEAT = 2000, HANG = 5000, SLOW = 2000, RESTARTS = 3, INFLIGHT = 64, MIB = 1 << 20;
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
@@ -62,6 +63,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     gone.set(id, why);
     stats.stopped[id] = why;
     forget(id);
+    toolsGone(id);
     if (alive()) chrome.runtime.sendMessage({ type: 'glaze:modpage', op: 'stopped', mod: id, why }).catch(() => {});
   };
   const closeSlot = (sh) => { sh.closed = true; sh.port.close(); sh.mount.remove(); };
@@ -71,6 +73,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     const { timer, port, mount, slots } = run;
     run = null;
     clearTimeout(timer);
+    toolsGone();
     for (const sh of slots.values()) closeSlot(sh);
     const end = () => { port.close(); mount.remove(); };
     if (grace) setTimeout(end, 100); else end();
@@ -116,7 +119,11 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     if (!alive()) return stop();
     r.waiting.set(d.mod, n + 1);
     chrome.runtime.sendMessage({ type: 'glaze:mod', mod: d.mod, via: d.via, call: d.call, args: d.args, doc: globalThis.__gzDoc })
-      .then(async (x) => { const own = x?.ok === true && current() && !gone.has(d.mod) ? await apply(d.mod, d.via, d.call, x.value) : null; reply(own || x); })
+      .then(async (x) => {
+        if (d.call === 'tools.result') { toolTaken(d.mod, d.args?.[0], x); return reply(x); }
+        const own = x?.ok === true && current() && !gone.has(d.mod) ? await apply(d.mod, d.via, d.call, x.value) : null;
+        reply(own || x);
+      })
       .catch(() => reply({ error: 'failed' }))
       .finally(() => r.waiting.set(d.mod, r.waiting.get(d.mod) - 1));
   };
@@ -201,8 +208,8 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     });
     h.frame.src = `${chrome.runtime.getURL('mods/host.html')}#${h.nonce}`;
     document.documentElement.append(h.mount);
-    // The Workers only: a frame UI starts in its slot's own host (startSlot).
-    h.port.postMessage({ op: 'start', mods: mods.filter((m) => m.worker !== null).map((m) => ({ id: m.id, name: m.name, worker: m.worker, frames: [], text: {} })), boot: chrome.runtime.getURL('mods/boot.js') });
+    // The Workers only, each with the code tools it may handle: a frame UI starts in its slot's own host (startSlot).
+    h.port.postMessage({ op: 'start', mods: mods.filter((m) => m.worker !== null).map((m) => ({ id: m.id, name: m.name, worker: m.worker, frames: [], text: {}, ...(m.tools && { tools: m.tools }) })), boot: chrome.runtime.getURL('mods/boot.js') });
     stats.began = now;
     stats.hosts++;
     r.timer = setTimeout(() => beat(r), BEAT);
@@ -212,6 +219,54 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     const live = !!run && alive();
     if (live) run.port.postMessage({ event: 'stop' });
     teardown(live && grace);
+  };
+
+  // ---- agent apps' calls to code tools --------------------------------------------------------------------------------------
+  // From the worker (lib/mcp/modroute.js) to this top frame: 'call' hands an agent app's call to a running mod's Worker as a
+  // 'tool.call' event, for a code tool its mod.json declares, when this page is the account's on that school's site (Glaze's
+  // own GZ_CTX.account, as the worker's account checks read it), and says at once whether it did. 'wait' answers when the call
+  // has ended here: its answer taken by the worker's checks (forward), refused there (the code), the mod stopped, or TOOL_WAIT.
+  // The page going ends it too: the worker's channel closes. The answer itself goes only through the broker ('tools.result').
+  const TOOL_WAIT = 15000, ACCOUNT_WAIT = 1500;
+  const toolCalls = new Map(); // call id → { mod, timer, end (how it ended, kept a while for the worker's 'wait'), waiter }
+  const toolEnd = (id, r) => {
+    const c = toolCalls.get(id);
+    if (!c || c.end) return;
+    c.end = r;
+    clearTimeout(c.timer);
+    if (c.waiter) { toolCalls.delete(id); c.waiter(r); } else c.timer = setTimeout(() => toolCalls.delete(id), TOOL_WAIT);
+  };
+  const toolsGone = (mod) => { for (const [id, c] of [...toolCalls]) if (mod === undefined || c.mod === mod) toolEnd(id, { ok: false, error: 'stopped' }); };
+  const toolTaken = (mod, id, x) => { if (toolCalls.get(id)?.mod === mod) toolEnd(id, x?.ok === true ? { ok: true } : { ok: false, error: typeof x?.error === 'string' ? x.error : 'failed' }); };
+  const toolCall = async (m) => {
+    const r = run, mod = list.find((x) => x.id === m.mod);
+    const runs = () => !!r && r === run && runtime !== false && !quiet() && !gone.has(m.mod) && r.seen.has(m.mod);
+    if (!runs() || !Array.isArray(mod?.tools) || !mod.tools.includes(m.name)) return { ok: false, error: 'mod' };
+    if (toolCalls.has(m.call) || toolCalls.size >= INFLIGHT) return { ok: false, error: 'busy' };
+    const at = m.account.lastIndexOf('/');
+    if (at < 0 || m.account.slice(0, at) !== location.origin) return { ok: false, error: 'account' };
+    let timer;
+    const uid = await Promise.race([Promise.resolve().then(() => ctx()?.account()), new Promise((res) => { timer = setTimeout(() => res(null), ACCOUNT_WAIT); })])
+      .catch(() => null).finally(() => clearTimeout(timer));
+    if (typeof uid !== 'string' || uid !== m.account.slice(at + 1)) return { ok: false, error: 'account' };
+    if (!runs()) return { ok: false, error: 'mod' };
+    if (toolCalls.has(m.call) || toolCalls.size >= INFLIGHT) return { ok: false, error: 'busy' };
+    toolCalls.set(m.call, { mod: m.mod, end: null, waiter: null, timer: setTimeout(() => toolEnd(m.call, { ok: false, error: 'timeout' }), TOOL_WAIT) });
+    r.port.postMessage({ event: 'tool.call', mod: m.mod, data: { id: m.call, name: m.name, args: m.args } });
+    return { ok: true };
+  };
+  const toolAsked = (m, s, reply) => {
+    if (m?.type !== 'glaze:modtool' || s?.id !== chrome.runtime.id || s.tab || typeof m.call !== 'string' || m.call.length > 64) return;
+    if (m.op === 'wait') {
+      const c = toolCalls.get(m.call);
+      if (c && !c.end) { c.waiter = reply; return true; }
+      if (c) { clearTimeout(c.timer); toolCalls.delete(m.call); }
+      reply(c?.end || { ok: false, error: 'stopped' });
+      return;
+    }
+    if (m.op !== 'call' || typeof m.mod !== 'string' || typeof m.name !== 'string' || typeof m.account !== 'string') return;
+    toolCall(m).then(reply, () => reply({ ok: false, error: 'failed' }));
+    return true;
   };
 
   // ---- events to mods -------------------------------------------------------------------------------------------------------
@@ -680,6 +735,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   let wired = false;
   const wire = () => {
     wired = true;
+    chrome.runtime.onMessage.addListener(toolAsked);
     document.addEventListener('visibilitychange', () => {
       if (!run) return;
       if (!document.hidden) {

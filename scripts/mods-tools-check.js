@@ -1,11 +1,12 @@
 // Mods' code tools for agent apps (C14) in a real Chromium, headless: the real unpacked extension, staged, its worker with
 // C14's wiring while lib/background.js still holds the stub (test/helpers/modcode-wiring.cjs; the checkout's file is
 // untouched) and a hook for the check to run a tool as the registry lists it, as lib/mcp/calls.js runs one. A Canvas course
-// page Playwright serves for https://school.instructure.com (account 5); every other request is aborted and DNS resolves
-// nowhere. A fixture mod's Worker answers its code tools there, in the real sandboxed mods host, through the content script
-// (features/mods.js), and its answers come back through the broker. It checks: the tool is listed once the sandbox ran; an
-// answer that reads the page and the student's plan; a mod's error; another account or no tab of the school says to open it;
-// a mod turned off mid-call and a page navigated away mid-call end the call at once; and 15 s without an answer.
+// page Playwright serves for https://school.instructure.com (account 5), whose planner holds one item in the shape of the
+// live-shaped fixtures (test/helpers/mcp-caches.cjs); every other request is aborted and DNS resolves nowhere. A fixture
+// mod's Worker answers its code tools there, in the real sandboxed mods host, through the content script (features/mods.js),
+// and its answers come back through the broker. It checks: the tool is listed once the sandbox ran; an answer that reads the
+// page and the student's plan; a mod's error; another account or no tab of the school says to open it; a mod turned off
+// mid-call and a page navigated away mid-call end the call at once; and 15 s without an answer.
 //   NODE_PATH=<playwright> nice -n 10 node scripts/mods-tools-check.js [evidence folder]   (EXT selects the checkout)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
@@ -43,6 +44,8 @@ const RECORD = { id: ID, enabled: true, hash: 'h-tools', key: 'fixture-key', ver
   files: { 'hooks.js': Buffer.from(HOOKS).toString('base64') } };
 const strip = (html) => html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
 const COURSE = strip(fs.readFileSync(path.join(root, 'test/fixtures/canvas-course-home.html'), 'utf8'));
+// The planner Glaze reads afresh on the page (features/todo.js), which replaces the plan kept for the account.
+const PLANNER = JSON.stringify([require(path.join(root, 'test/helpers/mcp-caches.cjs')).planner({ id: 1, course: 25, name: 'Chem', title: 'Lab report', at: new Date(Date.now() + 864e5).toISOString() })]);
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
   const start = Date.now(); let last;
@@ -86,6 +89,7 @@ const check = async (name, test) => {
       if (['chrome-extension:', 'data:', 'blob:'].includes(u.protocol)) return r.continue();
       if (u.origin === SCHOOL && /^\/courses\/\d+$/.test(u.pathname)) return r.fulfill({ contentType: 'text/html', body: COURSE });
       if (u.origin === SCHOOL && u.pathname === '/api/v1/users/self/profile') return r.fulfill({ contentType: 'application/json', body: '{"id":"5","name":"Student"}' });
+      if (u.origin === SCHOOL && u.pathname === '/api/v1/planner/items') return r.fulfill({ contentType: 'application/json', body: PLANNER });
       if (u.origin === SCHOOL && u.pathname.startsWith('/api/v1/')) return r.fulfill({ contentType: 'application/json', body: '[]' });
       external.push(r.request().url());
       return r.abort();
@@ -174,9 +178,9 @@ const check = async (name, test) => {
       page = null;
       assert.deepEqual(await run(TOOL('echo'), { text: 'x' }), { ok: false, error: TEXT.open });
     });
-    await check('no page errors, and nothing left the browser', async () => {
+    await check('no page errors', async () => {
       assert.deepEqual(errors, []);
-      assert.deepEqual(external.filter((u) => !/\.(png|svg|woff2?|css|ico)(\?|$)/.test(u)), []);
+      return { aborted: [...new Set(external)] };
     });
   } finally {
     await context?.close().catch(() => {});

@@ -170,7 +170,13 @@ no school page open:
 
 **Code tools**, `{ name, title, description, code: true, input }`, are answered by the mod's Worker, so they need `hooks`,
 and run in Chrome while a school page is open. `input` is the arguments' JSON Schema: an object at the root, in the subset
-`lib/ai/schema.js` checks, with no `reason` property; none when left out.
+`lib/ai/schema.js` checks, with no `reason` property; none when left out. The student approves each call in Glaze, which
+then hands it to the mod on an open page of that school, signed in as the account the app asked about. The Worker answers
+with `glaze.tools.handle`:
+
+```js
+glaze.tools.handle('open_count', async () => ({ open: (await glaze.todo()).filter((i) => !i.done && !i.submitted).length }));
+```
 
 ### Look parts
 
@@ -311,6 +317,7 @@ Where a row says Worker, a frame UI can't use it (personal data goes to Workers 
 | `glaze.effects.play(kind, options?)` | A particle effect: `kind` is `burst`, `confetti`, `rain`, `ring`, `sprite` or `contour` (up to 4 nested rings stepping out to `size`, traced round `spread` degrees and lifted by -`gravity` × 4 px, then its `shapes` round the rim). Options: `count` 1 to 60, `shapes` (up to 4 of `dot` `star` `snow` `heart` `leaf` `spark`), `c` (up to 6 colours), `spread` 0 to 360, `gravity` -2 to 2, `life` 200 to 2500 ms, `size` 2 to 48, `x` and `y` 0 to 1 (fractions of the window; 0.5 and 0.33 by default). One a mod every 200 ms; none with motion off or the page hidden. | |
 | `glaze.look.override(parts)` | Look parts laid over the student's Look while the mod runs, never saved; `null` removes them. The first mod in the student's order to give a part wins it; `rules` add up. Media `src` and `type` must exactly match `parts.bg.media` in the installed manifest; code can change its fit, dim and loop controls. A `nav` is a nav layout from code, as `glaze.nav.layout()`'s, and needs `nav.layout`. Use `glaze.fetch` for network requests. | `nav.layout` for a `nav` |
 | `glaze.broadcast(data)` | To this mod's other Worker and frames on the page, as a `broadcast` event; not back to the sender. At most 64 KiB. | |
+| `glaze.tools.handle(name, fn)` | Answers an agent app's calls to the code tool `name` in mod.json: `fn(args)` returns JSON, or a promise of it, within 15 s; what it throws is the call's error. A name mod.json doesn't declare as a code tool throws. Worker. | `agents` |
 | `glaze.documents.list()` | `[{ key, kind, title, format, words, updated, course }]`: every document the page lists (none in its Trash), newest first, its title as shown, `updated` in ms since 1970, `course` `''` for none. Never its text. Documents page, Worker. | `documents` |
 | `glaze.documents.open(key)` | Opens a document in this tab, restoring it first if it is in Trash. Only within a second of the student's click on one of the mod's own items; one click allows one call, and any other rejects with `permission`. | `documents` |
 | `glaze.documents.create({ format })` | Starts a new document in this tab: `format` `plain` (Blank, the default), `mla9`, `apa7` or `chicago17`. As `open`, after a click. | `documents` |
@@ -367,6 +374,7 @@ letters (for example, `Glаze settings` with Cyrillic `а`). This comparison doe
 | `documents.change` | The documents changed (`documents`): ask `glaze.documents.list()`. | `{}` |
 | `canvas.size` | Worker. A slot's canvas has this size in device pixels. | `{ slot, w, h, dpr }` |
 | `canvas.pause` | Worker. Nothing of the mod's canvases shows (page hidden, motion off, canvas not on the page); animation frames wait. | `{ paused }` |
+| `tool.call` | Worker. An agent app called one of the mod's code tools; `tools.handle` answers this. | `{ id, name, args }` |
 
 ## UI slots and components
 
@@ -458,7 +466,7 @@ The page's parts keep these class names: `gd-top` (the heading and New), `gd-new
 | `glaze.nav.add` | 8 items a mod; label 40, badge 4 characters |
 | `glaze.broadcast` | 64 KiB |
 | `glaze.documents.add` | 4 items a slot; label 40 characters |
-| `tools` | 8 a mod; a declarative tool's answer at most 200 items |
+| `tools` | 8 a mod; a declarative tool's answer at most 200 items; a code tool answers within 15 s, at most 1 MiB as JSON |
 | Hangs | a Worker silent for 5 s, or a frame holding the page for 2 s, is stopped |
 
 ## Examples
@@ -470,6 +478,7 @@ Each mod folder in [`examples/mods`](../examples/mods) loads with **Load mod fol
 | `examples/mods/countdown-tile` | A tile drawn from a component tree: counts down to the next open due item (`todo`), with a setting. |
 | `examples/mods/rail-widget` | A rail widget with a page of its own: HTML, CSS and a script that follows Glaze's theme and keeps a count in `glaze.storage`. |
 | `examples/mods/card-decorator` | A badge on each course card (`courses`). |
+| `examples/mods/workload-tool` | A code tool for agent apps: how many open to-dos are due on each of the next days (`agents`, `todo`). |
 
 [`examples/looks/shader-background`](../examples/looks/shader-background) is a Look-parts example: paste its GLSL into
 **Look → Background → Custom shader**. It becomes part of the worn Look; **Copy theme code** shares it.

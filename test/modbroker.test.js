@@ -544,6 +544,7 @@ test('tools.result: a code tool\'s answer from the mod\'s Worker, with agents de
   // None waiting for it, or no agent calls here at all.
   assert.deepEqual(await call(e, 'tools.result', ['call-2', 1]), { ok: false, error: 'call' });
   assert.deepEqual(await call({ ...e, tool: undefined }, 'tools.result', ['call-1', 1]), { ok: false, error: 'call' });
+  const reached = took.length;
   // A frame UI never answers one; nor a mod without agents declared and granted.
   for (const via of ['frame:tile:x', undefined]) assert.deepEqual(await call(e, 'tools.result', ['call-1', 1], { via }), { ok: false, error: 'permission' }, String(via));
   assert.deepEqual(await call({ ...env(), tool: () => true }, 'tools.result', ['call-1', 1]), { ok: false, error: 'permission' }, 'not declared');
@@ -557,7 +558,7 @@ test('tools.result: a code tool\'s answer from the mod\'s Worker, with agents de
   assert.deepEqual(await call(e, 'tools.result', ['call-1', 'x'.repeat(B.LIMIT.args)]), { ok: false, error: 'size' });
   // Never on the Documents page, which has no school account.
   assert.deepEqual(await call({ ...e, site: 'documents', record: async () => agents({ grants: { ...agents().grants, documents: true }, manifest: { ...agents().manifest, permissions: [...agents().manifest.permissions, { id: 'documents', why: 'w' }] } }) }, 'tools.result', ['call-1', 1]), { ok: false, error: 'call' });
-  assert.equal(took.length, 5);
+  assert.equal(took.length, reached, 'what is refused never reaches the hand-off');
 });
 
 test('the page is told each mod\'s code tools by name, declared, for its Worker\'s glaze.tools.handle', async () => {

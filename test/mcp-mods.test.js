@@ -459,7 +459,7 @@ test('the real worker, wired: the registry\'s code tool runs in the school\'s ta
   assert.equal(inWorker('typeof GZ_MCP_MODROUTE'), 'object', 'loaded with the agent files');
   // The Worker's answer took the worker's own route (lib/background.js glaze:mod), as the tab's top frame.
   assert.ok(s.sent.some((m) => m.call === 'tools.result'));
-  assert.deepEqual(await run(`mod_${MOD}_boom`, {}), fail("The mod's tool failed: boom"));
+  assert.deepEqual(plain(await run(`mod_${MOD}_boom`, {})), fail("The mod's tool failed: boom"));
   // An answer from no agent call, or from a frame UI, is refused there.
   assert.deepEqual(plain(await s.ctx.chrome.runtime.sendMessage({ type: 'glaze:mod', mod: MOD, via: 'worker', call: 'tools.result', args: ['nope', 1] })), fail('call'));
   assert.deepEqual(plain(await s.ctx.chrome.runtime.sendMessage({ type: 'glaze:mod', mod: MOD, via: 'frame:tile:x', call: 'tools.result', args: ['nope', 1] })), fail('permission'));
@@ -468,13 +468,13 @@ test('the real worker, wired: the registry\'s code tool runs in the school\'s ta
 test('the real worker, wired: with the school\'s tab closed, the app is told to open it', async () => {
   const { w, run } = await wiredWorker();
   w.context.chrome.tabs.query = async () => [];
-  assert.deepEqual(await run(`mod_${MOD}_echo`, { text: 'hi' }), fail(TEXT.open));
+  assert.deepEqual(plain(await run(`mod_${MOD}_echo`, { text: 'hi' })), fail(TEXT.open));
 });
 
 test('a code tool whose handler writes the mod\'s storage answers when it runs as a change, in the broker\'s turn', {
   todo: 'lib/mcp/calls.js runs a confirm tool inside brokerTurn, where the handler\'s glaze.storage.set waits until the call times out',
 }, async () => {
   const { run, inWorker } = await wiredWorker();
-  inWorker('GZ_MCP_MODROUTE.LIMIT.timeout = 500');
+  inWorker("if (typeof GZ_MCP_MODROUTE === 'undefined') mcpFiles(); GZ_MCP_MODROUTE.LIMIT.timeout = 500;");
   assert.deepEqual(plain(await run(`mod_${MOD}_keep`, { text: 'x' }, { turn: true })), { kept: 'x' });
 });
