@@ -1,18 +1,23 @@
-// Google sign-in for Drive (lib/google.js): the OAuth clients, the Picker's key and project, the scopes and the picker pages.
-// Every PLACEHOLDER is a value the owner creates in Google Cloud. Until the ones a flow needs are real (GZ_GOOGLE.ready),
-// the worker answers why: 'setup', Settings shows no Google Drive row, and the packages carry no Drive oauth2 key or
-// identity permission (scripts/oauth-manifest.js). Worker only; classic script, module.exports for node.
+// Google sign-in for Drive (lib/google.js): the OAuth clients of Google Cloud project glaze-511715 (1071735898350), the
+// Picker's key, the scopes and the picker pages. Client ids and the browser key are public by design: the key is restricted
+// in Google Cloud to the Picker API and the picker pages' referrers. A client a flow signs in with set to PLACEHOLDER
+// makes the worker answer why: 'setup' (no Settings row, no oauth2 key or identity in the packages: scripts/oauth-manifest.js);
+// the key or project number unset, only Pick does. Worker only; classic script, module.exports for node.
 var GZ_GOOGLE_CONFIG = globalThis.GZ_GOOGLE_CONFIG || {
-  // "Chrome extension" client, tied to the store item's id: Google Chrome's getAuthToken. The package writes it into the
-  // manifest's oauth2.client_id; an unpacked copy signs in this way only when its manifest holds the same id.
-  chrome: 'PLACEHOLDER-chrome.apps.googleusercontent.com',
-  // "Web application" client: launchWebAuthFlow's implicit flow on Edge, Brave, other Chromium browsers and Firefox.
-  web: 'PLACEHOLDER-web.apps.googleusercontent.com',
-  // "iOS" client: Safari, through the app (lib/google.js native; not wired yet).
-  ios: 'PLACEHOLDER-ios.apps.googleusercontent.com',
+  // "Chrome extension" client of store item jmmaeoajomodnbnlmdikjooalmcilooh, shared with Calendar sync: Google Chrome's
+  // getAuthToken. The package writes it into the manifest's oauth2.client_id; an unpacked copy signs in this way only when
+  // its manifest holds the same id and Chrome gives it the store item's id.
+  chrome: '1071735898350-o14e1vjmrvkmrfl8bb8e8qbcpue5i5qq.apps.googleusercontent.com',
+  // "Web application" client: launchWebAuthFlow's implicit flow on Edge, Brave, other Chromium browsers and Firefox. Its
+  // redirect URIs: https://jmmaeoajomodnbnlmdikjooalmcilooh.chromiumapp.org/ (the store item, which Edge and Brave install
+  // too) and Firefox's http://127.0.0.1/mozoauth2/3a273a94baf709b1c4095e46230f7ab56b7ad073.
+  web: '1071735898350-r3pnkbe9c38i9j5lvkggf84lfhb6pasj.apps.googleusercontent.com',
+  // "iOS" client, bundle io.frostdev.Glaze: Safari, through the app (lib/google.js native; not wired yet). Its callback
+  // scheme: com.googleusercontent.apps.1071735898350-h5i3v4abnj2o4btvn270vq9689585eeh.
+  ios: '1071735898350-h5i3v4abnj2o4btvn270vq9689585eeh.apps.googleusercontent.com',
   // The Picker's browser API key and the Cloud project number (Picker setAppId, which lets drive.file open what's picked).
-  apiKey: 'PLACEHOLDER',
-  appId: 'PLACEHOLDER',
+  apiKey: 'AIzaSyAJaEwp76_apj8iixjxdeqGcrYNDJuRg-A',
+  appId: '1071735898350',
   // Safari: true once the app answers 'google-auth' (lib/google.js native).
   native: false,
   scopes: ['https://www.googleapis.com/auth/drive.file', 'openid', 'email'],
