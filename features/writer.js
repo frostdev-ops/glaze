@@ -211,7 +211,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const selection = typing && box.mode === 'compose' && !box.recovered ? main('get', { id: box.id }).find((r) => r?.ok && r.html === ed.innerHTML && r.selection)?.selection : null;
     if (box.mode === 'paper') box.context = { ...box.context, recovery: location.origin + location.pathname };
     box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, html: box.latest, selection, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
-    if (['post', 'reply', 'message'].includes(box.kind)) X.need('lib/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
+    if (['post', 'reply', 'message', 'journal'].includes(box.kind)) X.need('lib/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
     if (box.kind === 'reply') X.need('features/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});
     box.display ||= [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
     box.root.style.setProperty('display', 'none', 'important');
@@ -245,12 +245,19 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (m.type === 'compact:flushed') {
       const f = box.flushing;
       if (!f || m.request !== f.request) return;
+      // Saved: Ultra's own button goes on with the text (Ultra may have drawn its footer again meanwhile), or the compact
+      // bar says why not. A paper too long for Ultra's box: the frame has said so and focused Full writer itself (focusing
+      // the frame from here would put its focus back on its body).
+      let why = null;
       try {
-        if (!box.full && m.ok === true && typeof m.html === 'string' && Array.isArray(m.delta) && sameBox(box) && f.button.isConnected && U().enabled(f.button) && sync(box, m.html, m.delta)) {
-          passing = f.button;
-          try { f.button.click(); } finally { passing = null; }
+        if (m.ok === true) {
+          const b = f.button.isConnected ? f.button : [...box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || []].find((x) => x.getAttribute('data-analytics-id') === f.id);
+          if (box.full || !sameBox(box) || !b) why = 'page';
+          else if (typeof m.html !== 'string' || !Array.isArray(m.delta) || !sync(box, m.html, m.delta)) why = 'text';
+          else if (!U().enabled(b)) why = f.action === 'submit' ? 'submit' : 'page';
+          else { passing = b; try { b.click(); } finally { passing = null; } }
         }
-      } finally { endFlush(box); }
+      } finally { endFlush(box, why); }
     }
     else if (m.type === 'view' || m.type === 'room') { if (box.mode === 'paper') view(box, m); }
     else if (box.mode === 'paper' && box.full) { if (m.type === 'focus-mode') focusMode(box, m.on === true); else if (m.type === 'native') { drop(box); declined.add(box.editor); } }
@@ -312,14 +319,14 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (box.text) box.retry = setTimeout(() => { box.retry = null; if (boxes.get(box.editor) === box) send(box, until); }, 60);
   };
   // A compact native action must read the frame's current document, not merely its last delivered change. The frame
-  // saves and holds editing until the native click is dispatched; late or failed acknowledgements never click Ultra.
+  // saves and holds editing until the native click is dispatched, however long the save takes (its bar says Saving…);
+  // a failed one never clicks Ultra, and the bar says why (reason: text, submit or page; the frame's own it says itself).
   let passing = null;
-  const endFlush = (box) => {
+  const endFlush = (box, reason = null) => {
     const f = box.flushing;
     if (!f) return;
-    clearTimeout(f.timer);
     box.flushing = null;
-    box.port?.postMessage({ type: 'compact:resume', request: f.request });
+    box.port?.postMessage({ type: 'compact:resume', request: f.request, ...(reason && { reason }) });
   };
   // A normal native Post/Reply/Send has the same flush and clear lifecycle as the shortcut.
   document.addEventListener('click', (e) => {
@@ -341,9 +348,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       if (box.mode !== 'paper' || box.full || !/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || !box.editor.closest('bb-assignment-attempt-authoring-panel')?.contains(b) || !sameBox(box)) continue;
       e.preventDefault(); e.stopImmediatePropagation();
       if (!box.ready || !box.port || box.flushing) return;
-      const request = crypto.randomUUID();
-      box.flushing = { request, button: b, timer: setTimeout(() => endFlush(box), 4000) };
-      box.port.postMessage({ type: 'compact:flush', request });
+      const request = crypto.randomUUID(), id = b.getAttribute('data-analytics-id'), action = /submit$/.test(id) ? 'submit' : 'save';
+      box.flushing = { request, button: b, id, action };
+      box.port.postMessage({ type: 'compact:flush', request, action });
     }
   }, true);
   // Ultra collapses an empty new Post when its editor loses focus, and the frame taking the typing is such a loss. While

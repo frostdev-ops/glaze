@@ -5,8 +5,9 @@
 // The student's dictionary is chrome.storage.local 'writerWords' (a list of words, the newest last), shared by every box;
 // each box adds its context's words (course, prompt, names in the thread) to its own.
 // Settings → Writer (lib/writer-settings.js): proofing on or off, the dialect Harper reads and the autocorrect classes
-// (writer.autocorrect), each followed at once. Smart quotes and dashes and compose's Markdown shortcuts are
-// lib/writer-editor.js's input rules, which read their settings themselves (ruleOff).
+// (writer.autocorrect), each followed at once; while it proofs, the browser's own spellcheck is off. Smart quotes and
+// dashes and compose's Markdown shortcuts are lib/writer-editor.js's input rules, which read their settings themselves
+// (ruleOff).
 (() => {
   const F = globalThis.GZ_WRITER_FRAME, P = GZ_WRITER_PROOF, I = GZ_WRITER_ISSUES;
   if (!F) return;
@@ -18,6 +19,7 @@
   const allow = (cls) => pref()?.autocorrect?.[cls] !== false;
   const allowRule = (rule) => !P.CLASS?.[rule] || allow(P.CLASS[rule]);
   let view = null, port = null, started = false, ids = 0, seen = 0, dirty = [], blockTimer = 0, docTimer = 0;
+  const respell = () => view?.setProps?.({}); // the editor's attributes (spellcheck, below) read again
   let context = [], dict = new Set();
   const pending = new Map(), asked = new Set(), stats = new Map();
 
@@ -37,6 +39,7 @@
       broken = true; pending.clear();
       for (const resolve of stats.values()) resolve(null);
       stats.clear();
+      respell();
     };
     try {
       if (!sharedFailed && typeof SharedWorker === 'function') {
@@ -91,8 +94,12 @@
   P.stats = () => new Promise((resolve) => { const id = ++ids; stats.set(id, resolve); post({ op: 'stats', id }); });
 
   // ---- asking ------------------------------------------------------------------------------------------------------
+  // p.line: the editor state's line, as the plugin keeps it. A state made from scratch (the paper replaced whole: another
+  // tab's save adopted, a version restored over it) counts its changes from 0 again, so what was asked of the one before
+  // never lands on it.
   const ask = (p, text) => {
     const id = ++ids;
+    p.line = P.key.getState(view.state).line;
     p.msg = { op: 'lint', id, key: p.key, text };
     pending.set(id, p);
     post(p.msg);
@@ -144,7 +151,7 @@
 
   // ---- landing: lints → issues, then the sure fixes ---------------------------------------------------------------
   const land = (p, lints) => {
-    const maps = P.since(view.state, p.ver);
+    const maps = p.line === P.key.getState(view.state).line && P.since(view.state, p.ver);
     if (!maps) return;
     const doc = view.state.doc;
     // A spelling lint on a word that reads as a name (lib/writer-proof.js nameLike) is left out: the heading block's names
@@ -202,13 +209,15 @@
       rule(i);
     }
   };
+  // The same bounded context the AI reads: source identity arriving is harmless; a changed prompt or thread isn't.
+  const rulingContext = (c) => JSON.stringify(GZ_AI_WRITER.clean(c));
   const rule = async (i) => {
-    const version = ver(), contextAtAsk = F.context();
+    const version = ver(), contextAtAsk = structuredClone(F.context()), contextKey = rulingContext(contextAtAsk);
     const $from = view.state.doc.resolve(i.from), start = $from.start();
     let said = null;
     try { said = await P.decide({ text: P.blockText($from.parent), from: i.from - start, to: i.to - start, suggestions: i.suggestions.slice(), context: contextAtAsk }); } catch (e) { console.error(e); }
     const v = P.verdict(said, i.suggestions.length), now = view && I.list().find((x) => x.id === i.id);
-    if (stopped || view.composing || ver() !== version || F.context() !== contextAtAsk || !v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
+    if (stopped || view.composing || ver() !== version || rulingContext(F.context()) !== contextKey || !v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
     if (v.verdict === 'apply' && allowRule(now.rule)) { const made = P.autofix(view, now, now.suggestions[v.choice]); if (made) showFix(made); return; }
     // 'suggest': the choice first on the card.
     const list = now.suggestions.slice(), [pick] = list.splice(v.choice, 1), bare = (x) => ({ ...x, id: x.id.replace(/^harper:/, '') });
@@ -401,6 +410,9 @@
 
   // ---- wiring ---------------------------------------------------------------------------------------------------------
   F.plugin(P.plugin({ onFix: (_v, f) => showFix(f), onUpdate, allow }));
+  // While Harper reads the text the browser's own spellcheck stays off, so its underline never sits beside Harper's and a
+  // word in the student's dictionary stays clear; proofing off (or Harper unable to start here) gives it back.
+  F.plugin(new GZ_PM.state.Plugin({ props: { attributes: () => (proofOn() && !broken ? { spellcheck: 'false' } : {}) } }));
 
   // Proofing switched off: nothing more is asked and what was found goes; on again, the whole document is read.
   W?.follow((w, was) => {
@@ -408,6 +420,7 @@
     if (w.proofing !== was.proofing) {
       if (!w.proofing) { clearTimeout(blockTimer); clearTimeout(docTimer); blockTimer = docTimer = 0; dirty = []; pending.clear(); I.clear('harper'); closeCard(); }
       else if (started) { connect(); lintDoc(); } else if (view?.hasFocus()) start();
+      respell();
     }
     if (w.dialect !== was.dialect) {
       pending.clear(); asked.clear(); I.clear('harper'); closeCard();

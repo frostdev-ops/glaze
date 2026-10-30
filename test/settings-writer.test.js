@@ -54,6 +54,18 @@ test('backup: the export (Settings, sanitised) carries writer, and a restore rea
   assert.match(read('options.js'), /const next = \{ \.\.\.GZ_SANITIZE\(raw\)/);
 });
 
+test('only two numeric endpoints declare a range; mixed choices keep their types', () => {
+  const spec = D.GZ_SPEC.writer.versions, rule = spec[1];
+  try {
+    spec[1] = [10, 'all'];
+    for (const n of spec[1]) assert.equal(D.GZ_SANITIZE({ writer: { versions: n } }).writer.versions, n);
+    assert.equal(D.GZ_SANITIZE({ writer: { versions: 25 } }).writer.versions, 40);
+    spec[1] = [10, 100];
+    assert.equal(D.GZ_SANITIZE({ writer: { versions: 55 } }).writer.versions, 55);
+    assert.equal(D.GZ_SANITIZE({ writer: { versions: '55' } }).writer.versions, 40);
+  } finally { spec[1] = rule; }
+});
+
 // ---- lib/writer-settings.js -------------------------------------------------------------------------------------------
 const reader = (stored) => {
   const listeners = [];

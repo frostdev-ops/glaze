@@ -200,6 +200,22 @@ const frame = ({ claim = true, host = 'https://school.blackboard.com', readyStat
 const INIT = { type: 'init', mode: 'compose', kind: 'reply', html: '<p>Hi there</p>', placeholder: 'Type a reply', context: { post: { id: '_201_1' } }, locale: 'en',
   look: { tokens: { '--gz-accent': '#17c8f4', '--gz-font': '"Glaze Inter", sans-serif', '--gz-bad': 'url(https://x.test/a)', '--other': 'red', '--gz-ink': 'red;}body{' }, dark: true, motion: 'off' } };
 
+test('frame: context re-sends keep the object and clear omitted identity fields', async () => {
+  const f = frame(), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, { ...INIT, kind: 'journal', context: { prompt: 'Reading Journal' } });
+  const api = f.ctx.GZ_WRITER_FRAME, original = api.context();
+  const full = { prompt: 'Reading Journal', school: 'bb.school.test', user: { id: '_42_1' }, course: { id: '_101_1' }, item: { id: '_12_1' } };
+  let heard;
+  api.on('context', (c) => { heard = c; });
+  f.to(p, { type: 'context', context: full });
+  assert.equal(api.context(), original);
+  assert.equal(heard, original);
+  assert.deepEqual(JSON.parse(JSON.stringify(original)), full);
+  f.to(p, { type: 'context', context: { prompt: 'Reading Journal', user: null } });
+  assert.equal(api.context(), original);
+  assert.deepEqual(JSON.parse(JSON.stringify(original)), { prompt: 'Reading Journal', user: null });
+});
+
 test('frame: boot is announced after load finishes, to the exact public host origin without a pass', () => {
   const f = frame({ host: 'https://bb.wpunj.edu' });
   assert.deepEqual(f.announced, [], 'later Writer scripts must register before the host is contacted');

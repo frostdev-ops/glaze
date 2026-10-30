@@ -299,6 +299,21 @@ const TAP = () => {
           await pg.click('#gp-sources .gzc-form [data-do="remove"]');
           await until(async () => { const s = await stored(ATTEMPT_SOURCES); return s?.sources?.length === 1 && s.sources[0].id === SAVED.id; }, 'removed from the attempt\'s store');
         });
+        await step(`${tag}: two open editors follow source additions, edits and removals`, async () => {
+          const peer = await context.newPage();
+          peer.on('pageerror', (e) => errors.push(`source peer: ${e.message}`));
+          try {
+            await peer.goto(pg.url());
+            await until(() => peer.evaluate(() => globalThis.GZ_WRITER_CITE?.sources().length === 1), 'the peer loads the saved source');
+            await pg.evaluate(() => GZ_WRITER_CITE.setSources([...GZ_WRITER_CITE.sources(), { id: 'source-peer', type: 'book', title: 'Shared source' }]));
+            await until(() => peer.evaluate(() => GZ_WRITER_CITE.sources().some((s) => s.id === 'source-peer')), 'the peer sees the addition');
+            await peer.evaluate(() => GZ_WRITER_CITE.setSources(GZ_WRITER_CITE.sources().map((s) => s.id === 'source-peer' ? { ...s, title: 'Reviewed shared source' } : s)));
+            await until(() => pg.evaluate(() => GZ_WRITER_CITE.sources().some((s) => s.title === 'Reviewed shared source')), 'the first editor sees the edit');
+            await pg.evaluate(() => GZ_WRITER_CITE.setSources(GZ_WRITER_CITE.sources().filter((s) => s.id !== 'source-peer')));
+            await until(() => peer.evaluate(() => GZ_WRITER_CITE.sources().length === 1), 'the peer sees the removal');
+            assert.equal(await stored(LOCAL_SOURCES(d.key)), null);
+          } finally { await peer.close(); }
+        });
       } else {
         await step(`${tag}: Sources stay its own`, async () => {
           assert.deepEqual(await pg.evaluate(() => [GZ_WRITER_SOURCES.keyOf(GZ_WRITER_FRAME.context()), GZ_WRITER_CITE.sources().length]), [LOCAL_SOURCES(d.key), 0]);

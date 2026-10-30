@@ -6,6 +6,10 @@ module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
   const fixture = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-offcanvas.html'), 'utf8');
   await page.route('**/*', (r) => r.request().url().startsWith('https://bb.school.test/') ? r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body></body></html>' }) : r.abort());
   await page.route('https://annotate-us.foundations.blackboard.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><label>Annotation <input id="annotation"></label><div style="height:1400px">Document</div>' }));
+  const painted = () => page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  });
   const setup = async ({ width = 1800, rail = 'open', rtl = false, kind = 'submission', savedWidth = 352, editor = null } = {}) => {
     await page.setViewportSize({ width, height: 987 });
     await page.goto(`https://bb.school.test/ultra/courses/_101_1/${kind === 'submission' ? 'assessment/_7_1/overview/student-submission-view' : 'outline/edit/document/_9_1'}`);
@@ -62,9 +66,9 @@ module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
     await page.addScriptTag({ path: path.join(root, 'features/widgets.js') });
     await page.evaluate(() => GZ_WIDGETS_UI.sync(true));
     await page.waitForSelector('[data-tile="notes"]', { state: 'attached' });
-    await page.waitForTimeout(150);
+    await painted();
     await page.evaluate(() => GZ_SIDEBAR_UI.sync(true));
-    await page.waitForTimeout(100);
+    await painted();
   };
   const report = () => page.evaluate(() => {
     const layer = document.querySelector('.bb-offcanvas-panel'), wrap = layer.firstElementChild, rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, right: r.right, bottom: r.bottom }; };
@@ -125,7 +129,7 @@ module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
       check(r.w.x === 0 && r.w.y === 80 && r.l.y === 0 && r.hits, 'top bar: only the content moves below the bar');
     }
     await page.evaluate(() => { document.documentElement.setAttribute('data-gz-review-immersive', ''); window.GZ_SIDEBAR_UI?.cover(); });
-    await page.waitForTimeout(100);
+    await page.waitForFunction(() => !document.getElementById('gz-sb-absorb'));
     const immersive = await report();
     check(immersive.w.x === 0 && immersive.w.y === 0 && immersive.w.width === width && immersive.w.bottom === immersive.l.bottom, `${width}: immersive content clears no hidden bars`);
     await page.evaluate(() => {
@@ -155,8 +159,8 @@ module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
     if (how === 'rerender') await page.evaluate(() => document.querySelector('#criterion-2').setAttribute('aria-expanded', 'true'));
     if (how === 'overflow') await page.evaluate(() => { const e = document.createElement('p'); e.style.height = '2000px'; document.querySelector('.rubric-inline-container').append(e); });
     if (how === 'modal') await page.locator('#rubric-detail').click();
-    await page.waitForTimeout(100);
-    check(!(await report()).projected, `${how}: native Rubric restored immediately`);
+    await page.waitForFunction(() => !document.getElementById('gz-sb-absorb'), null, { timeout: 3000 });
+    check(!(await report()).projected, `${how}: native Rubric restored`);
     if (!['rerender', 'overflow'].includes(how)) check((await report()).native, `${how}: native attributes and inline styles restored byte for byte`);
     if (how === 'modal') {
       check(await page.locator('#native-modal-close').evaluate((e) => { const r = e.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === e; }), 'native rubric dialog stacks above sidebar and remains clickable');
