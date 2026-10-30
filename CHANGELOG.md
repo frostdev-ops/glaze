@@ -14,6 +14,7 @@ All notable changes to Glaze are documented here. The format follows
 - **Documents**: every paper and document in one place, from the popup, Ctrl/⌘+K or Glaze's bar in Blackboard, Canvas and Moodle. Start one (Blank, MLA, APA, Chicago) or import a Word file; search, filter by course, rename, copy, export a .docx. Deleted documents wait 30 days in **Trash**. The page wears your Look.
 - Writer's pages follow a dark Look; **Light page** keeps them white.
 - Mods: `glaze.documents`, with the `documents` and `documents.read` permissions.
+- Agents (off by default): AI apps on your computer can read your courses, to-dos, grades and drafts once you allow them, and ask before any change.
 
 ### Changed
 
@@ -27,11 +28,11 @@ All notable changes to Glaze are documented here. The format follows
 
 - Blackboard: the rubric shows on a saved draft's attempt page, and going back to an assignment left with its rubric open shows the assignment. Blackboard's side panels open over Glaze's column.
 - Blackboard: **soon** and **today** chips are right across a clock change; impossible gradebook dates are no longer read as due dates.
-- Blackboard: Content leaves folder expansion and scrolling to Blackboard; search follows Blackboard's own links; turning Remember your place off cancels a pending restore.
+- Blackboard: Content leaves folders and scrolling to Blackboard; search follows its links; Remember your place off cancels a pending restore.
 - The sidebar covers its card beside a scrollbar, and the rubric opening lines up in right-to-left layouts.
 - Writer: a visible caret on a dark page, no doubled spelling marks in Chrome, and the status bar names the page on screen.
 - Settings → Writer: Versions kept saves 50 and 100; Saved papers wraps at narrow widths.
-- Your buddy's page no longer throws errors when Glaze updates while it is open.
+- Your buddy's page no longer errors when Glaze updates while it's open.
 
 ## [3.4.6] — 2026-10-26
 
