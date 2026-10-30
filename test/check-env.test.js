@@ -178,3 +178,23 @@ test('ultraReady polls the page until Glaze has registered its Ultra script, and
   assert.deepEqual(answers, []);
   await assert.rejects(ultraReady({ evaluate: async () => false }, 250), /not registered/);
 });
+
+test('installed polls a new profile until each install task has made its last write, and says so when one never does', async () => {
+  const { installed } = require('../scripts/check-env.js');
+  const vm = require('node:vm');
+  const done = { fresh: true, pending: false };
+  const states = [{}, { freshDefaults: { fresh: true, pending: true } }, { freshDefaults: done, migrated: ['tabs-auto'] }, { freshDefaults: done, channelKeysMoved: true },
+    { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true }];
+  let polls = 0;
+  const page = { evaluate: async (f) => {
+    const local = states[Math.min(polls++, states.length - 1)];
+    return vm.runInContext(`(${f})()`, vm.createContext({ chrome: { storage: { local: { get: async () => local } } } }));
+  } };
+  await installed(page);
+  assert.equal(polls, states.length, 'ready at the last write, not before');
+  await assert.rejects(installed({ evaluate: async () => false }, 250), /install/);
+});
+
+test('the backup check lets each new profile finish installing before it seeds or compares storage', () => {
+  assert.match(fs.readFileSync(path.join(scripts, 'backup-check.js'), 'utf8'), /await env\.installed\(page\)/);
+});
