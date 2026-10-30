@@ -9,7 +9,7 @@
 // Classic script; module.exports for node.
 var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   const D = () => globalThis.GZ_DOCTEXT || require('./doctext.js');
-  const LIMITS = { slides: 2000, shapes: 50000, depth: 16, cells: 10000, text: 4 << 20, part: 8 << 20, nodes: 400000, paragraphs: 100000, runs: 400000, allCells: 50000, guides: 100000, commands: 300000 };
+  const LIMITS = { slides: 2000, shapes: 50000, depth: 16, cells: 10000, text: 4 << 20, part: 8 << 20, nodes: 400000, paragraphs: 100000, runs: 400000, allCells: 50000, guides: 100000, guideWork: 1000000, commands: 300000 };
   const MAX = 1e9; // EMUs, about 1,000 inches: anything further out is junk
 
   // ---- values -----------------------------------------------------------------------------------------------------
@@ -611,10 +611,12 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   // { cmd: 'close' }] }] }, its values as written (a number or a guide name).
   const PATH_FILLS = new Set(['none', 'norm', 'lighten', 'lightenLess', 'darken', 'darkenLess']);
   // Custom geometry's guides and commands count against the deck's budgets (X.budget): past them a shape keeps what fit.
-  const guides = (list, X) => {
-    const n = Math.max(0, Math.min(1000, X.L.guides - X.budget.guides)), all = kids(list, 'gd');
+  const guides = (list, X, spaces) => {
+    const n = Math.max(0, Math.min(1000, X.L.guides - X.budget.guides, Math.floor((X.L.guideWork - X.budget.guideWork) / spaces))), all = kids(list, 'gd');
     if (all.length > n) X.count('shapes');
-    X.budget.guides += Math.min(all.length, n);
+    const kept = Math.min(all.length, n);
+    X.budget.guides += kept;
+    X.budget.guideWork += kept * spaces;
     return all.slice(0, n).map((g) => ({ name: (at(g, 'name') || '').slice(0, 64), fmla: (at(g, 'fmla') || '').slice(0, 256) }));
   };
   const geometryOf = (g, X) => {
@@ -636,9 +638,12 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
       });
       X.budget.commands += room - budget;
       if (!budget && X.budget.commands >= X.L.commands) X.count('shapes');
+      // The renderer evaluates every guide again for each distinct path size, as well as the shape's own size.
+      // Count the default space once; a fixed path size equal to the shape's may conservatively count twice.
+      const spaces = new Set(['0,0', ...pathLst.map((p) => `${p.w},${p.h}`)]).size;
       const cxnLst = kids(kid(g, 'cxnLst'), 'cxn').slice(0, 256).map((c) => ({ ang: at(c, 'ang') ?? '0', x: at(kid(c, 'pos'), 'x') ?? '0', y: at(kid(c, 'pos'), 'y') ?? '0' }));
       return {
-        avLst: guides(kid(g, 'avLst'), X), gdLst: guides(kid(g, 'gdLst'), X), cxnLst,
+        avLst: guides(kid(g, 'avLst'), X, spaces), gdLst: guides(kid(g, 'gdLst'), X, spaces), cxnLst,
         rect: { l: at(rect, 'l') ?? 'l', t: at(rect, 't') ?? 't', r: at(rect, 'r') ?? 'r', b: at(rect, 'b') ?? 'b' }, pathLst,
       };
     }
@@ -923,7 +928,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   const read = async (bytes, opts = {}) => {
     const L = { ...LIMITS, ...opts.limits }, T = D();
     const z = T.unzip(bytes, { limits: { ...opts.limits, duplicates: true } });
-    const names = new Set(z.names), cut = {}, budget = { shapes: 0, text: 0, paragraphs: 0, runs: 0, cells: 0, guides: 0, commands: 0 }, media = new Map();
+    const names = new Set(z.names), cut = {}, budget = { shapes: 0, text: 0, paragraphs: 0, runs: 0, cells: 0, guides: 0, guideWork: 0, commands: 0 }, media = new Map();
     const count = (k, n = 1) => { cut[k] = (cut[k] || 0) + n; };
     const take = (s) => {
       if (budget.text + s.length <= L.text) { budget.text += s.length; return s; }
