@@ -38,7 +38,7 @@ const popup = ({ url = 'https://bb.school.edu/ultra/stream', tabId = 7, hosts = 
     permissions: {
       contains: async ({ origins }) => { calls.push(['contains', origins]); return access; },
       request: ({ origins }) => { calls.push(['request', origins, gesture]); if (granted) access = true; return Promise.resolve(granted); },
-      ...(hostAccess ? { addHostAccessRequest: (o) => { calls.push(['hostAccess', o]); return Promise.resolve(); } } : {}),
+      ...(hostAccess ? { addHostAccessRequest: (o) => { calls.push(['hostAccess', o]); return typeof hostAccess === 'function' ? hostAccess(o) : Promise.resolve(); } } : {}),
     },
     scripting: { executeScript: (o) => { calls.push(['exec', o]); return execFails ? Promise.reject(new Error('Cannot access contents of the page')) : Promise.resolve([{ result: kind }]); } },
     storage: {
@@ -195,6 +195,20 @@ test('popup: with Glaze off the row waits, and shows once Glaze is on', async ()
   await tick();
   assert.equal(p.el('#here').hidden, false);
   assert.deepEqual(p.of('hostAccess').map(([, o]) => o), [{ tabId: 7 }]);
+});
+
+test('popup: the site row settles after Chrome finishes its Allow entry, including a refused entry', async () => {
+  for (const fails of [false, true]) {
+    let finish;
+    const p = popup({ hostAccess: () => new Promise((resolve, reject) => { finish = fails ? () => reject(new Error('entry refused')) : resolve; }) });
+    await tick();
+    assert.equal(p.el('#here').hidden, false);
+    assert.equal(p.of('hostAccess').length, 1);
+    assert.equal(p.el('#here').getAttribute('data-settled'), null, 'the browser has not finished the entry');
+    finish();
+    await tick();
+    assert.equal(p.el('#here').getAttribute('data-settled'), '', 'settled even when the browser refuses the entry');
+  }
 });
 
 test('popup: the detector in the popup page itself watches nothing (lib/detect.js runs its watcher on web pages only)', async () => {
