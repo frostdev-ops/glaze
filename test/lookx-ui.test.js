@@ -286,7 +286,7 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
   const runTimers = () => { for (const [id, f] of [...fns]) if (timers.get(id) <= 1000) { timers.delete(id); fns.delete(id); f(); } };
   const fire = (type, e = {}) => { for (const f of win[type] || []) f(e); };
   return { lx: context.GZ_LOOKX, location: context.location, runTimers, fire, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; }, wear: (x) => { parts = x; },
-    setOn: (v) => { on = v; }, setPartsOn: (v) => { partsOn = v; }, setCourseLook: (v) => { courseLook = v; partsOn = !v; }, emit: (t) => { for (const f of docOn[t] || []) f({ type: t }); }, stored: (c) => { for (const f of changed) f(c, 'local'); }, local, synced };
+    setOn: (v) => { on = v; }, setPartsOn: (v) => { partsOn = v; }, setCourseLook: (v) => { courseLook = v; parts = v ? require('../lib/lookset.js')({ name: v }).x : null; }, emit: (t) => { for (const f of docOn[t] || []) f({ type: t }); }, stored: (c) => { for (const f of changed) f(c, 'local'); }, local, synced };
 };
 
 test('page: a picture read that answers after Hide doesn\'t draw the stickers back', async () => {

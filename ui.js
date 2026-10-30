@@ -124,25 +124,32 @@ const GZ_UI = (() => {
     return ['colors', 'preset', 'auto'];
   };
 
-  // One card per look: its name in its own text color on its own surface, fading into its background's
-  // colors, with its accent down the edge; pressed when it is what the page is wearing.
-  const looks = (box, s, onPick) => {
+  // One card per Look of `all` (lib/looks.js list: built in, then the student's saved and gallery Looks, under a heading each
+  // when more than one group has any): its name in its own text color on its own surface, fading into its background's
+  // colors (GZ_CATALOG.tone), with its accent down the edge; pressed when it is the one the page is wearing. onPick(E).
+  const looks = (box, s, onPick, all = GZ_CATALOG.list()) => {
+    const focused = box.contains(document.activeElement) ? document.activeElement?.dataset.look : null;
+    const worn = GZ_CATALOG.worn(s, all), groups = GZ_CATALOG.groups(all), t = (k) => GZ_I18N.t(k, {}, GZ_I18N.ui());
+    const heads = { builtin: t('Built in'), saved: t('Saved'), gallery: t('Gallery') };
     box.replaceChildren();
-    for (const L of GZ_LOOKS) {
-      const c = L.colors;
-      // The strip: the background's own colors, else the palette's accents (a solid look stays plain).
-      const tint = L.bg.colors?.length ? L.bg.colors : L.bg.kind === 'solid' ? [c['--gz-surface-2']] : [c['--gz-accent'], c['--gz-accent-hi']];
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'look';
-      b.textContent = L.name;
-      b.setAttribute('translate', 'no');
-      b.setAttribute('aria-pressed', String(GZ_LOOK_ON(s, L)));
-      b.style.color = c['--gz-ink'];
-      b.style.borderColor = c['--gz-line-strong'];
-      b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 4px, transparent 4px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${tint.join(', ')})`;
-      b.addEventListener('click', () => onPick(L));
-      box.append(b);
+    for (const [group, list] of groups) {
+      if (groups.length > 1) box.append(Object.assign(document.createElement('h4'), { className: 'looks-head', textContent: heads[group] }));
+      for (const E of list) {
+        const c = E.colors;
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'look';
+        b.textContent = E.name;
+        b.dataset.look = E.id;
+        b.setAttribute('translate', 'no');
+        b.setAttribute('aria-pressed', String(E === worn));
+        b.style.color = c['--gz-ink'];
+        b.style.borderColor = c['--gz-line-strong'];
+        b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 4px, transparent 4px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${GZ_CATALOG.tone(E).join(', ')})`;
+        b.addEventListener('click', () => onPick(E));
+        box.append(b);
+        if (focused === E.id) b.focus({ preventScroll: true });
+      }
     }
   };
 
@@ -156,8 +163,8 @@ const GZ_UI = (() => {
     return ['colors', 'preset', 'auto', 'look', 'bg', 'parts', ...(L.card ? ['card'] : [])];
   };
 
-  // A theme's name in the history and favorites: the Look it is, else its palette's name.
-  const themeName = (th) => GZ_LOOKS.find((L) => GZ_LOOK_ON(th, L))?.name || th.preset || GZ_I18N.t('Custom theme', {}, GZ_I18N.ui());
+  // A theme's name in the history and favorites: the Look it is (of `all`, lib/looks.js), else its palette's name.
+  const themeName = (th, all = GZ_CATALOG.list()) => GZ_CATALOG.worn(th, all)?.name || th.preset || GZ_I18N.t('Custom theme', {}, GZ_I18N.ui());
 
   // ---- contrast, as the pages draw it ----
   // features/surfaces.css paints every surface and the ground as color-mix(in srgb, tint X%, surface color): a custom surface

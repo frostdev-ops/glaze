@@ -63,12 +63,14 @@
   .here[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
   .hint { margin: 10px 2px 0; }
   body.off .tiles > :not(.power, .editor) { opacity: 0.45; }
-  /* All eight looks, over the tiles. */
+  /* The Look picker fills the popup; only its cards scroll. */
   #sheet { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 14px; border: 0; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
-  #sheet header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+  #sheet[open] { display: flex; flex-direction: column; overflow: hidden; }
+  #sheet header { flex: none; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
   #sheet #previous { margin-left: auto; }
   #sheet .back { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; }
-  #sheet .looks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #sheet .looks { grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: auto; padding: 4px; min-height: 0; }
+  #sheet .look { min-height: 44px; }
   /* Safari on iPhone shows the popup as a full-width sheet; on iPad, a popover sized to this minimum. */
   @media (hover: none) and (pointer: coarse) { body { width: auto; min-width: 360px; } .tile { padding: 12px 14px; } }
   @media (hover: none) { button.tile:hover { transform: none; } }
@@ -135,6 +137,7 @@
   <script src="lib/surfaces.js"></script>
 <script src="defaults.js"></script>
 <script src="lib/lookset.js"></script>
+<script src="lib/looks.js"></script>
   <script src="lib/cards.js"></script>
   <script src="lib/nav.js"></script>
   <script src="lib/nav-items.js"></script>
