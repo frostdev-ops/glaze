@@ -294,7 +294,7 @@ test('the detector that Safari runs on every other https page stays under 2 KB',
 // Every first-party script Glaze ships, at any depth (features/, lib/, i18n/ and the root), whether it is in the
 // first content script, loaded on demand or in the extension's pages. Not the vendored three.js, ProseMirror, OCR engine or Harper, nor the tools,
 // tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
-const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server']);
+const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server', 'mcp']);
 const VENDORED = new Set(['lib/three.js', 'lib/pm.js', 'lib/tesseract/tesseract-core-simd-lstm.js', 'lib/lottie/lottie_light_canvas.js', 'lib/harper/index.js', 'lib/harper/BinaryModule-S5UABkWQ.js', 'lib/harper/slimBinary.js']); // pdf.js is .mjs, not scanned
 // Only what git tracks: releases are packaged from a fresh checkout, so an untracked folder (another project's build) isn't Glaze.
 const shipped = (top) => execFileSync('git', ['ls-files', '-z', '--', '*.js'], { cwd: top, encoding: 'utf8' }).split('\0').filter((f) => {
@@ -354,6 +354,9 @@ const review = (list, seen, what) => {
 const FAST_INTERVALS = [
   // Download all: a 15 s keep-alive to the service worker only while a zip streams; cleared when its port closes.
   ['features/download.js', "setInterval(() => { if (!closed) post({ type: 'ping' }); }, 15000)", 1, /\bclearInterval\s*\(\s*ping\s*\)/],
+  // Agent access in Safari: a 20 s keep-alive to the Glaze app only while the link is live (connecting, connected or
+  // retrying); cleared when it goes off or waits for a trigger. Never on Chrome or Firefox.
+  ['lib/agent-link.js', 'setInterval(beat, 20000)', 1, /\bclearInterval\s*\(\s*keep\s*\)/],
 ];
 
 test('no setInterval fires faster than once a minute unless it is reviewed, and its clear is still there', () => {

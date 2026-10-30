@@ -4,6 +4,7 @@
 // worker's own (indexedDB). chrome.permissions answers as
 // the browser would for the manifest's hosts plus `grants` (a Set the test may change); `revoked` takes required hosts
 // away, as Firefox lets a student do. `perms` records what was requested and removed; `registered`, the content scripts.
+// `base` is the extension's own address (safari-web-extension://x/ runs it as Safari's).
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -19,7 +20,7 @@ const covers = (p, want) => {
   const host = a[2] === '*' || a[2] === b[2] || (a[2].startsWith('*.') && (b[2] === a[2].slice(2) || b[2].endsWith(a[2].slice(1))));
   return (a[1] === '*' ? /^https?$/.test(b[1]) : a[1] === b[1]) && host && (!a[3] || a[3] === b[3]);
 };
-module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [] }, session: {} }, session = true, sessionArea, fetch, grants = new Set(), revoked = [], manifest: edit, globals = {}, background = read('lib/background.js') } = {}) => {
+module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [] }, session: {} }, session = true, sessionArea, fetch, grants = new Set(), revoked = [], manifest: edit, globals = {}, background = read('lib/background.js'), base = 'chrome-extension://x/' } = {}) => {
   const manifest = JSON.parse(read('manifest.json'));
   if (edit) edit(manifest);
   const perms = { requested: [], removed: [], added: [], gone: [] };
@@ -51,7 +52,7 @@ module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, 
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, Intl, setTimeout, clearTimeout, crypto: globalThis.crypto, AbortController, AbortSignal, DOMException, Response, btoa, atob, fetch, navigator: {}, ...globals,
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => manifest,
+      runtime: { id: 'glaze', getURL: (f = '') => `${base}${f}`, getManifest: () => manifest,
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener: (f) => startup.push(f) },
         onConnect: { addListener: (f) => connects.push(f) } },
       tabs: { onRemoved: { addListener: (f) => removed.push(f) }, onUpdated: { addListener: (f) => updated.push(f) }, query: async () => [] },

@@ -1,0 +1,24 @@
+{
+  "glaze": 1,
+  "name": "Workload",
+  "version": "1.0.0",
+  "author": { "name": "Your name" },
+  "permissions": [
+    { "id": "agents", "why": "Lets the agent apps you connect ask how much is due on each of the next days." },
+    { "id": "todo", "why": "Reads your to-do list to count what is due each day." }
+  ],
+  "hooks": "hooks.js",
+  "tools": [
+    {
+      "name": "workload",
+      "title": "Workload by day",
+      "description": "How many open to-dos are due on each of the next days, busiest day first.",
+      "code": true,
+      "input": {
+        "type": "object",
+        "properties": { "days": { "type": "integer", "minimum": 1, "maximum": 60, "description": "How many days ahead to count; 7 when left out." } },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

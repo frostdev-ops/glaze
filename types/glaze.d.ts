@@ -56,6 +56,8 @@ interface Glaze {
   look: GlazeLook;
   /** Send data to this mod's other Worker and frames on the page (not back to the sender). At most 64 KiB. */
   broadcast(data?: unknown): Promise<unknown>;
+  /** Answer agent apps' calls to this mod's code tools (mod.json `tools` with `code: true`). Worker only. */
+  tools: GlazeTools;
   /** The student's documents, on the Documents page only. Needs `documents` (and `documents.read` for their text); Worker only. */
   documents: GlazeDocuments;
 }
@@ -183,6 +185,8 @@ interface GlazeEvents {
   'canvas.size': { slot: string; w: number; h: number; dpr: number };
   /** Worker only: nothing of the slot's canvases shows (page hidden, motion off, or no canvas on the page); animation frames are on hold. */
   'canvas.pause': { paused: boolean };
+  /** Worker only: an agent app called one of this mod's code tools, with its arguments. `tools.handle` answers this for you. */
+  'tool.call': { id: string; name: string; args: Record<string, unknown> };
 }
 
 interface GlazePage {
@@ -600,4 +604,84 @@ interface GlazeDocuments {
   remove(slot: GlazeDocumentSlot, id: string): Promise<{ slot: GlazeDocumentSlot; id: string }>;
   /** Sets the page's --gd-* hooks while the mod runs; `null` withdraws them. The first mod in the student's order to set one wins it. `documents`. */
   style(vars: GlazeDocumentStyle | null): Promise<GlazeDocumentStyle | null>;
+}
+
+// ---- agent tools ------------------------------------------------------------------------------------------------------
+
+interface GlazeTools {
+  /** Answer the code tool `name` of mod.json: `fn` gets the app's arguments, checked against its `input`, and returns JSON or a promise of it within 15 s; what it throws is the call's error. Throws for a name mod.json doesn't declare as a code tool. Worker only. */
+  handle(name: string, fn: (args: Record<string, any>) => unknown): void;
+}
+
+// ---- mod.json tools --------------------------------------------------------------------------------------------------
+// Not on the `glaze` object: the shape of mod.json's `tools`, for agent apps the student connects (docs/mods-api.md).
+
+/** A tool in mod.json `tools`: answered by Glaze from what it keeps, or (`code: true`) by the mod's Worker. Needs `agents`. */
+type GlazeTool = GlazeTodoTool | GlazeCourseTool | GlazeGradeTool | GlazeCodeTool;
+
+/** The fields of `glaze.todo()`'s items, for `from: 'todo'` and `'schedule'`. */
+type GlazeTodoField = 'id' | 'type' | 'courseId' | 'course' | 'title' | 'due' | 'url' | 'done' | 'submitted' | 'graded' | 'late' | 'missing';
+/** The fields of `glaze.courses()`'s items. */
+type GlazeCourseField = 'id' | 'name' | 'code' | 'color';
+/** The fields of `glaze.grades()`'s items. */
+type GlazeGradeField = 'courseId' | 'name' | 'percent' | 'at';
+
+/** `eq`: the field is that value exactly (`null` for no date, grade or colour). `days`, on `due` or `at`: within that many days from now, -366 to 366, not 0; negative looks back. */
+type GlazeToolWhere<F extends string> = { field: F; eq: string | number | boolean | null } | { field: F; days: number };
+
+interface GlazeToolBase {
+  /** `[a-z][a-z0-9_]`, at most 24 characters, unique in the mod. */
+  name: string;
+  /** One line, at most 60 characters. Apps show "<mod name> (mod): <title>". */
+  title: string;
+  /** One line, at most 500 characters, for the app's model. Apps get it after "Written by the mod's author, not Glaze." */
+  description: string;
+}
+
+/** What the app may pass: `course`, one course's items by its id; `days`, 1 to 60 days ahead (for grades, back). */
+interface GlazeToolInput {
+  course?: true;
+  days?: true;
+}
+
+/** A tool Glaze answers from the cached plan: every to-do, or (`schedule`) those with a due date. Needs `todo`. */
+interface GlazeTodoTool extends GlazeToolBase {
+  from: 'todo' | 'schedule';
+  /** The fields each answer has, in this order; all of them when left out. */
+  select?: GlazeTodoField[];
+  /** At most 8; an item passes all of them. */
+  where?: GlazeToolWhere<GlazeTodoField>[];
+  /** Empty values last; ties keep the plan's order. */
+  sort?: { field: GlazeTodoField; order: 'asc' | 'desc' };
+  /** 1 to 200; 200 when left out. */
+  limit?: number;
+  input?: GlazeToolInput;
+}
+
+/** A tool Glaze answers from the courses it has seen. Needs `courses`. */
+interface GlazeCourseTool extends GlazeToolBase {
+  from: 'courses';
+  select?: GlazeCourseField[];
+  where?: GlazeToolWhere<GlazeCourseField>[];
+  sort?: { field: GlazeCourseField; order: 'asc' | 'desc' };
+  limit?: number;
+  /** `course` only: courses have no date. */
+  input?: { course?: true };
+}
+
+/** A tool Glaze answers from each course's latest grade. Needs `grades`. */
+interface GlazeGradeTool extends GlazeToolBase {
+  from: 'grades';
+  select?: GlazeGradeField[];
+  where?: GlazeToolWhere<GlazeGradeField>[];
+  sort?: { field: GlazeGradeField; order: 'asc' | 'desc' };
+  limit?: number;
+  input?: GlazeToolInput;
+}
+
+/** A tool the mod's Worker (`hooks`) answers, in Chrome, while a school page is open. */
+interface GlazeCodeTool extends GlazeToolBase {
+  code: true;
+  /** The arguments' JSON Schema: an object at the root, in the subset lib/ai/schema.js checks, with no `reason` property. None when left out. */
+  input?: { type: 'object'; [keyword: string]: unknown };
 }

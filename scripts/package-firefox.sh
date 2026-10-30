@@ -70,8 +70,9 @@ delete m.sandbox;
 delete m.content_security_policy?.sandbox;
 m.web_accessible_resources = (m.web_accessible_resources || []).map((e) => ({ ...e, resources: e.resources.filter((r) => !r.startsWith('mods/')) })).filter((e) => e.resources.length);
 // 140 (ESR) reads data_collection_permissions; 127+ grants host permissions at install. Glaze sends nothing anywhere
-// on its own: shared sessions and the Looks gallery go out only when the user starts them.
-m.browser_specific_settings = { gecko: { id: 'glaze@frostdev.io', strict_min_version: '140.0', data_collection_permissions: { required: ['none'] } } };
+// on its own: shared sessions and the Looks gallery go out only when the user starts them. Agent access gives course data to
+// an app on this computer, outside the browser, so it asks for website content when it is turned on (lib/editor-agents.js).
+m.browser_specific_settings = { gecko: { id: 'glaze@frostdev.io', strict_min_version: '140.0', data_collection_permissions: { required: ['none'], optional: ['websiteContent'] } } };
 fs.writeFileSync(file, JSON.stringify(m, null, 2) + '\n');
 JS
 rm -rf "$stage/mods" "$stage/features/mods.js"

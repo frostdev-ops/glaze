@@ -250,7 +250,7 @@ test('Google only: the addresses, the one scope, and the manifest\'s client aski
   const m = require('../manifest.json');
   assert.deepEqual(m.oauth2.scopes, [G.SCOPE]);
   assert.match(m.oauth2.client_id, /^\d+-\w+\.apps\.googleusercontent\.com$/);
-  assert.deepEqual(m.optional_permissions, ['identity']);
+  assert.ok(m.optional_permissions.includes('identity'));
   assert.ok(!m.permissions.includes('identity') && !m.permissions.includes('identity.email') && !('key' in m), 'optional, never identity.email, no dev key');
 });
 
@@ -308,7 +308,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
     importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`lib/${f}`), on && f === 'gcal.js'), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
-        onInstalled: { addListener: (f) => listeners.installed = f }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+        onInstalled: { addListener: (f) => (listeners.installed ||= []).push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area('local', store.local), sync: area('sync', store.sync), onChanged: { addListener: (f) => heard.push(f) } },
       identity,
       permissions: { contains: async () => true }, // the student granted every host (Chrome)
@@ -324,7 +324,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
   const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(structuredClone(m), sender, (r) => res(structuredClone(r))); });
   // change(): a change made elsewhere (the popup, the editor), heard as Chrome tells it.
   const change = (name, patch) => { const c = Object.fromEntries(Object.keys(patch).map((k) => [k, { oldValue: store[name][k], newValue: patch[k] }])); Object.assign(store[name], patch); fire(name, c); };
-  return { store, identity, asked, send, hooks, change, registered: () => registered, install: () => listeners.installed() };
+  return { store, identity, asked, send, hooks, change, registered: () => registered, install: () => { for (const f of listeners.installed) f(); } };
 };
 // What the page sends with its batch (lib/calexport.js consent), worked out from the worker's storage as it is now.
 const D = require('../defaults.js');
@@ -437,11 +437,11 @@ test('the store package leaves Google sync out while the switch is off; scripts/
     const repo = require('../manifest.json');
     const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
     const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
-    const { oauth2, optional_permissions: _, ...rest } = repo;
-    assert.deepEqual(packed, rest, 'the store manifest: the same, without oauth2 and the optional identity permission');
+    const { oauth2, optional_permissions: optional, ...rest } = repo, store = optional.filter((p) => p !== 'identity');
+    assert.deepEqual(packed, store.length ? { ...rest, optional_permissions: store } : rest, 'the store manifest: the same, without oauth2 and the optional identity permission');
     assert.match(execFileSync('unzip', ['-p', zip, 'lib/gcal.js']).toString(), /\n {2}const ON = false;\n/);
     const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
-    assert.deepEqual([dev.oauth2, dev.optional_permissions, dev.key], [oauth2, ['identity'], fs.readFileSync(keyFile, 'utf8')]);
+    assert.deepEqual([dev.oauth2, dev.optional_permissions, dev.key], [oauth2, repo.optional_permissions, fs.readFileSync(keyFile, 'utf8')]);
     assert.match(fs.readFileSync(path.join(dir, 'dev/lib/gcal.js'), 'utf8'), /\n {2}const ON = true;\n/);
     assert.equal(G.ON, false, "the repo's switch is untouched");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }

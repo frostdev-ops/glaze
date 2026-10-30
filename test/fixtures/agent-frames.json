@@ -1,0 +1,103 @@
+{
+  "limits": {"piece": 160000, "frame": 1000000, "line": 67108864, "string": 4096, "nativeIn": 67108864, "nativeOut": 1000000},
+  "split": [
+    {"name": "an empty line", "text": "", "pieces": [0], "bytes": [25], "json": "{\"t\":\"line\",\"c\":1,\"d\":\"\"}"},
+    {"name": "control characters, quotes, a backslash and line separators", "text": "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\"\\/\u007f\u2028\u2029\ufeff", "pieces": [39], "bytes": [212], "json": "{\"t\":\"line\",\"c\":1,\"d\":\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000b\\f\\r\\u000e\\u000f\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f\\\"\\\\/\u007f\u2028\u2029\ufeff\"}"},
+    {"name": "a lone surrogate is escaped, a pair is not", "text": "\ud800 \udfff \ud83d\ude00", "pieces": [6], "bytes": [43], "json": "{\"t\":\"line\",\"c\":1,\"d\":\"\\ud800 \\udfff \ud83d\ude00\"}"},
+    {"name": "control characters fill pieces up to the frame limit", "c": 9007199254740991, "build": [["\u0001", 400000]], "pieces": [160000, 160000, 80000], "bytes": [960046, 960046, 480040]},
+    {"name": "lone surrogates fill a piece up to the frame limit", "c": 9007199254740991, "build": [["\udc00", 160000]], "pieces": [160000], "bytes": [960040]},
+    {"name": "a piece of exactly 160,000 units is one frame", "build": [["a", 160000]], "pieces": [160000], "bytes": [160025]},
+    {"name": "one unit more is two frames", "build": [["a", 160001]], "pieces": [160000, 1], "bytes": [160031, 26]},
+    {"name": "an emoji across the cut moves the cut back one unit", "build": [["a", 159999], ["\ud83d\ude00", 1], ["b", 9]], "pieces": [159999, 11], "bytes": [160030, 38]},
+    {"name": "an emoji that ends a piece stays in it", "build": [["a", 159998], ["\ud83d\ude00", 1], ["b", 1]], "pieces": [160000, 1], "bytes": [160033, 26]},
+    {"name": "a lone high surrogate at the cut is cut", "build": [["a", 159999], ["\ud83d", 1], ["b", 1]], "pieces": [160000, 1], "bytes": [160036, 26]},
+    {"name": "a lone low surrogate after the cut is cut", "build": [["a", 160000], ["\ude00", 1]], "pieces": [160000, 1], "bytes": [160031, 31]},
+    {"name": "a 5 MiB line", "build": [["abcdefghi\ud83d\ude00j\u00e9\u4e2d\u0001", 262144]], "pieces": [159999, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 160000, 92161], "bytes": [266690, 266701, 266696, 266696, 266701, 266696, 266696, 266701, 266696, 266696, 266701, 266696, 266696, 266701, 266696, 266696, 266701, 266696, 266696, 266701, 266696, 266696, 266701, 266696, 153631], "utf8": 5242880}
+  ],
+  "frames": {
+    "toWorker": {
+      "valid": [
+        {"frame": {"t": "hello", "v": 1, "host": "1.0.0", "os": "darwin", "browser": "chrome", "node": "v22.11.0"}},
+        {"frame": {"t": "open", "c": 1, "peer": {"verified": false}}},
+        {"frame": {"t": "open", "c": 9007199254740991, "peer": {"name": "Claude", "exe": "/Applications/Claude.app/Contents/MacOS/Claude", "ppid": 4242, "verified": true}}},
+        {"frame": {"t": "open", "c": 2, "peer": {"ppid": 0, "verified": false, "name": ""}}},
+        {"frame": {"t": "line", "c": 1, "d": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}"}},
+        {"frame": {"t": "line", "c": 1, "d": "", "m": 1}},
+        {"frame": {"t": "close", "c": 1, "why": "eof"}},
+        {"frame": {"t": "error", "why": "rendezvous"}},
+        {"frame": {"t": "error"}, "fill": {"key": "why", "build": [["x", 4096]]}},
+        {"frame": {"t": "line", "c": 1}, "fill": {"key": "d", "build": [["\u0001", 160000]]}}
+      ],
+      "invalid": [
+        {"name": "not an object", "frame": null},
+        {"name": "an array", "frame": [{"t": "bye"}]},
+        {"name": "a string", "frame": "bye"},
+        {"name": "no type", "frame": {"why": "x"}},
+        {"name": "an unknown type", "frame": {"t": "ping"}},
+        {"name": "an inherited name as the type", "frame": {"t": "constructor"}},
+        {"name": "the worker's hello", "frame": {"t": "hello", "v": 1, "glaze": "4.0.0", "instance": "x"}},
+        {"name": "the worker's bye", "frame": {"t": "bye"}},
+        {"name": "hello v2", "frame": {"t": "hello", "v": 2, "host": "1.0.0", "os": "darwin", "browser": "chrome", "node": "v22.11.0"}},
+        {"name": "hello without node", "frame": {"t": "hello", "v": 1, "host": "1.0.0", "os": "darwin", "browser": "chrome"}},
+        {"name": "hello with an extra key", "frame": {"t": "hello", "v": 1, "host": "1.0.0", "os": "darwin", "browser": "chrome", "node": "v22", "x": 1}},
+        {"name": "hello with a number for a string", "frame": {"t": "hello", "v": 1, "host": 1, "os": "darwin", "browser": "chrome", "node": "v22"}},
+        {"name": "a string over 4096 units", "frame": {"t": "error"}, "fill": {"key": "why", "build": [["x", 4097]]}},
+        {"name": "open without a peer", "frame": {"t": "open", "c": 1}},
+        {"name": "a peer without verified", "frame": {"t": "open", "c": 1, "peer": {"name": "Claude"}}},
+        {"name": "a peer with verified as a string", "frame": {"t": "open", "c": 1, "peer": {"verified": "yes"}}},
+        {"name": "a peer with an extra key", "frame": {"t": "open", "c": 1, "peer": {"verified": true, "pid": 7}}},
+        {"name": "a negative ppid", "frame": {"t": "open", "c": 1, "peer": {"verified": true, "ppid": -1}}},
+        {"name": "a fractional ppid", "frame": {"t": "open", "c": 1, "peer": {"verified": true, "ppid": 1.5}}},
+        {"name": "a null peer", "frame": {"t": "open", "c": 1, "peer": null}},
+        {"name": "connection 0", "frame": {"t": "line", "c": 0, "d": ""}},
+        {"name": "a connection as a string", "frame": {"t": "line", "c": "1", "d": ""}},
+        {"name": "a fractional connection", "frame": {"t": "line", "c": 1.5, "d": ""}},
+        {"name": "a connection past the safe integers", "frame": {"t": "line", "c": 9007199254740992, "d": ""}},
+        {"name": "a line without d", "frame": {"t": "line", "c": 1}},
+        {"name": "a line with d as a number", "frame": {"t": "line", "c": 1, "d": 5}},
+        {"name": "m as 0", "frame": {"t": "line", "c": 1, "d": "", "m": 0}},
+        {"name": "m as true", "frame": {"t": "line", "c": 1, "d": "", "m": true}},
+        {"name": "m as 2", "frame": {"t": "line", "c": 1, "d": "", "m": 2}},
+        {"name": "a line with an extra key", "frame": {"t": "line", "c": 1, "d": "", "id": 3}},
+        {"name": "a piece over 160,000 units", "frame": {"t": "line", "c": 1}, "fill": {"key": "d", "build": [["a", 160001]]}},
+        {"name": "close without why", "frame": {"t": "close", "c": 1}},
+        {"name": "an error with a connection", "frame": {"t": "error", "c": 1, "why": "x"}}
+      ]
+    },
+    "toHost": {
+      "valid": [
+        {"frame": {"t": "hello", "v": 1, "glaze": "4.0.0", "instance": "q2v7"}},
+        {"frame": {"t": "line", "c": 3, "d": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}"}},
+        {"frame": {"t": "line", "c": 3, "d": "{", "m": 1}},
+        {"frame": {"t": "close", "c": 3, "why": "off"}},
+        {"frame": {"t": "bye"}}
+      ],
+      "invalid": [
+        {"name": "the host's hello", "frame": {"t": "hello", "v": 1, "host": "1.0.0", "os": "darwin", "browser": "chrome", "node": "v22.11.0"}},
+        {"name": "the host's open", "frame": {"t": "open", "c": 1, "peer": {"verified": false}}},
+        {"name": "the host's error", "frame": {"t": "error", "why": "x"}},
+        {"name": "hello without instance", "frame": {"t": "hello", "v": 1, "glaze": "4.0.0"}},
+        {"name": "hello v0", "frame": {"t": "hello", "v": 0, "glaze": "4.0.0", "instance": "x"}},
+        {"name": "bye with a reason", "frame": {"t": "bye", "why": "off"}},
+        {"name": "a piece over 160,000 units", "frame": {"t": "line", "c": 1}, "fill": {"key": "d", "build": [["a", 160001]]}},
+        {"name": "m as \"1\"", "frame": {"t": "line", "c": 1, "d": "", "m": "1"}},
+        {"name": "close with a numeric why", "frame": {"t": "close", "c": 1, "why": 3}}
+      ]
+    }
+  },
+  "native": [
+    {"name": "the worker's hello", "message": {"t": "hello", "v": 1, "glaze": "4.0.0", "instance": "q2v7"}, "hex": "350000007b2274223a2268656c6c6f222c2276223a312c22676c617a65223a22342e302e30222c22696e7374616e6365223a2271327637227d"},
+    {"name": "a line piece with UTF-8 and an escaped control character", "message": {"t": "line", "c": 1, "d": "\u00e9\ud83d\ude00\u0001\u2028", "m": 1}, "hex": "2e0000007b2274223a226c696e65222c2263223a312c2264223a22c3a9f09f98805c7530303031e280a8222c226d223a317d"},
+    {"name": "a close", "message": {"t": "close", "c": 12, "why": "eof"}, "hex": "200000007b2274223a22636c6f7365222c2263223a31322c22776879223a22656f66227d"}
+  ],
+  "nativeRefused": [
+    {"name": "a zero length", "hex": "00000000", "code": "empty"},
+    {"name": "a length one byte over 64 MiB, refused before its body", "hex": "01000004", "code": "too-large"},
+    {"name": "a body that is not JSON", "hex": "020000007b2c", "code": "bad-json"},
+    {"name": "an invalid UTF-8 byte inside a JSON string", "hex": "0300000022ff22", "code": "bad-json"},
+    {"name": "an overlong UTF-8 sequence inside a JSON string", "hex": "0400000022c08022", "code": "bad-json"},
+    {"name": "a UTF-8 encoded surrogate inside a JSON string", "hex": "0500000022eda08022", "code": "bad-json"},
+    {"name": "a UTF-8 code point past U+10FFFF inside a JSON string", "hex": "0600000022f490808022", "code": "bad-json"},
+    {"name": "an incomplete UTF-8 sequence inside a JSON string", "hex": "0400000022e28222", "code": "bad-json"}
+  ]
+}

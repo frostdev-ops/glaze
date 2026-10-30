@@ -49,10 +49,10 @@ for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || '
 const writerRelease = {
   '': ['NEW IN 4.0.0', 'Spelling, grammar and autocorrect', 'no AI or completion', 'rubric and instructions', 'explains estimated grades or why no score is available', 'Glaze never drafts.'],
   de: ['NEU IN 4.0.0', 'Rechtschreibung, Grammatik und Autokorrektur', 'ohne KI oder Textvervollständigung', 'Bewertungsraster und Anweisungen', 'erklärt geschätzte Noten oder warum keine Punktzahl möglich ist', 'Glaze verfasst keine Entwürfe.'],
-  es: ['NOVEDADES DE 4.0.0', 'La ortografía, la gramática y la autocorrección', 'sin IA ni autocompletado', 'la rúbrica y las instrucciones', 'explican las notas estimadas o por qué no hay puntuación', 'Glaze nunca redacta por ti.'],
-  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.0', 'Orthographe, grammaire et correction automatique', 'sans IA ni complétion', 'la grille et les consignes', 'expliquent les notes estimées ou l’absence de score', 'Glaze ne rédige jamais à votre place.'],
+  es: ['NOVEDADES DE 4.0.0', 'La ortografía, la gramática y la autocorrección', 'sin IA ni autocompletado', 'la rúbrica y las instrucciones', 'explica las notas estimadas o por qué no hay puntuación', 'Glaze nunca redacta por ti.'],
+  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.0', 'Orthographe, grammaire et correction automatique', 'sans IA ni complétion', 'la grille et les consignes', 'explique les notes estimées ou l’absence de score', 'Glaze ne rédige jamais à votre place.'],
   nl: ['NIEUW IN 4.0.0', 'Spelling, grammatica en autocorrectie', 'zonder AI of aanvulling', 'het beoordelingsschema en de instructies', 'verklaart geschatte cijfers of waarom er geen score is', 'Glaze schrijft nooit een tekst voor je.'],
-  'pt-BR': ['NOVO NA 4.0.0', 'Ortografia, gramática e correção automática', 'sem IA nem preenchimento de texto', 'a rubrica e as instruções', 'explicam as notas estimadas ou por que não há pontuação', 'O Glaze nunca redige por você.'],
+  'pt-BR': ['NOVO NA 4.0.0', 'Ortografia, gramática e correção automática', 'sem IA nem preenchimento de texto', 'pela rubrica e pelas instruções', 'explica as notas estimadas ou por que não há pontuação', 'O Glaze nunca redige por você.'],
 };
 for (const [lang, expected] of Object.entries(writerRelease)) test(`4.0.0 release notes ${lang || 'en'} describe Writer, local proofing, optional AI feedback and paper backups`, () => {
   const text = listing(lang), block = part(text, 'Release notes');
@@ -85,6 +85,9 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
 test('4.0.0 versions agree and the exact pure notes transform fits Apple', () => {
   assert.equal(JSON.parse(read('manifest.json')).version, '4.0.0');
   assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.0');
+  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.0.mcpb on the GitHub release, carry Glaze's version.
+  assert.equal(JSON.parse(read('mcp/package.json')).version, '4.0.0');
+  assert.equal(JSON.parse(read('mcp/mcpb/manifest.json')).version, '4.0.0');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('scripts/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));

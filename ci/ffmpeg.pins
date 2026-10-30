@@ -1,3 +1,4 @@
 # FFmpeg installed alongside Chromium by the pinned Playwright. Hashes cover the extracted archive tree, as for chromium.pins.
 ffmpeg-1011 - linux-x64 136d61ed89332f597297b957d42b4de934f64f41668ba4016742e6d13de36821
 ffmpeg-1011 - darwin-arm64 94a72272eaec31b9661cc38ebd6139810c1a32369efe6cd0967790dd30f1e196
+ffmpeg-1011 - win32-x64 b839e4e41768896bd721eabb430f9f8daced40a1fb3779780b943fe4f1e17a67

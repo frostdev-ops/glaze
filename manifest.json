@@ -13,7 +13,8 @@
     "declarativeContent"
   ],
   "optional_permissions": [
-    "identity"
+    "identity",
+    "nativeMessaging"
   ],
   "oauth2": {
     "client_id": "1071735898350-o14e1vjmrvkmrfl8bb8e8qbcpue5i5qq.apps.googleusercontent.com",

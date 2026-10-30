@@ -21,9 +21,10 @@ const WANT = {
   'card-decorator': { permissions: ['courses'], hooks: 'hooks.js', slots: [] },
   'countdown-tile': { permissions: ['todo'], hooks: 'hooks.js', slots: ['tiles:next-due'] },
   'rail-widget': { permissions: [], hooks: undefined, slots: ['rail:breathe'] },
+  'workload-tool': { permissions: ['agents', 'todo'], hooks: 'hooks.js', slots: [], tools: ['workload'] },
 };
 
-test('the three mod examples are all here', () => {
+test('the mod examples are all here', () => {
   assert.deepEqual(folders, Object.keys(WANT));
 });
 
@@ -69,6 +70,7 @@ for (const name of folders) {
     for (const p of back.manifest.permissions || []) assert.ok(p.why.length > 20, `${p.id} says why`);
     assert.equal(back.manifest.hooks, want.hooks);
     assert.deepEqual(['tiles', 'rail'].flatMap((k) => (back.manifest.ui?.[k] || []).map((s) => `${k}:${s.id}`)), want.slots);
+    assert.deepEqual((back.manifest.tools || []).map((t) => t.name), want.tools || []);
 
     // Sizes: far inside the caps, and small enough to travel as a pasteable code.
     const total = Object.values(back.files).reduce((n, b) => n + b.length, 0);
@@ -130,8 +132,10 @@ const run = async (name, { local = {}, grants = {}, events = [] } = {}) => {
     mods: [ID], ...local,
   });
   let turn = Promise.resolve();
+  // An agent app's call to a code tool waits for its answer, as lib/mcp/modroute.js settle takes it.
+  const answers = [];
   const env = { site: SITE, local: l, sync: area({}), fetch: async () => { throw new Error('no network'); }, queue: (f) => (turn = turn.then(f, f)), keys: async () => Object.keys(l.data),
-    record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`], blocklist: async () => null, account: async () => '5' };
+    record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`], blocklist: async () => null, account: async () => '5', tool: (call, out) => { answers.push([call, out]); return true; } };
   const heard = [], listeners = [];
   const port = {
     addEventListener: (t, f) => listeners.push(f), start() {},
@@ -150,10 +154,12 @@ const run = async (name, { local = {}, grants = {}, events = [] } = {}) => {
   const ctx = vm.createContext({ setTimeout, performance, console });
   const source = fs.readFileSync(path.join(__dirname, '..', 'mods', 'host.js'), 'utf8').match(/function glazeClient\(port\) \{[\s\S]*?\n    return glaze;\n  \}/)[0];
   vm.runInContext(`(${source})`, ctx)(port);
-  send({ run: [Buffer.from(all[manifest.hooks]).toString('utf8')] });
+  // As the host starts a Worker: its code, and the code tools mod.json declares for it to handle.
+  const tools = (manifest.tools || []).filter((t) => t.code === true).map((t) => t.name);
+  send({ run: [Buffer.from(all[manifest.hooks]).toString('utf8')], ...(tools.length && { tools }) });
   for (const [event, data] of events) send({ event, data });
   for (let i = 0; i < 40; i++) await flush();
-  return { heard, send, flush: async () => { for (let i = 0; i < 40; i++) await flush(); } };
+  return { heard, answers, send, flush: async () => { for (let i = 0; i < 40; i++) await flush(); } };
 };
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
@@ -200,4 +206,28 @@ test('card-decorator: a badge and an accent for each course on the page, all acc
   assert.equal(set.reply.value._2_1.badge, 'A');
   assert.equal(set.reply.value['7'].badge, '?');
   for (const d of Object.values(set.reply.value)) assert.ok(['accent', 'accent-hi', 'ok', 'warn'].includes(d.accent));
+});
+
+test('workload-tool: counts the open to-dos due each day ahead, by the student\'s own day, busiest first, for the days the app asks', async () => {
+  const day = (n, h) => { const d = new Date(); d.setHours(h, 0, 0, 0); d.setDate(d.getDate() + n); return d.getTime(); };
+  const ymd = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const item = (id, at, extra = {}) => ({ type: 'assignment', id, cid: '42', course: 'Chem', title: `Item ${id}`, at, url: `/courses/42/assignments/${id}`, ...extra });
+  const items = [item('1', day(2, 9)), item('2', day(2, 17)), item('3', day(5, 12)), item('4', day(1, 10), { sub: { submitted: true } }), item('5', day(1, 11), { ov: { done: true } }),
+    item('6', day(-1, 12)), item('7', null), item('8', day(9, 12)), item('9', day(1, 23))];
+  const r = await run('workload-tool', { grants: { agents: true, todo: true }, local: { todoCache: { key: `todo:${SITE}/5`, at: 1, items } } });
+  const ask = async (args) => {
+    const id = `call-${r.answers.length}`;
+    r.send({ event: 'tool.call', data: { id, name: 'workload', args } });
+    await r.flush();
+    const [call, out] = r.answers.at(-1);
+    assert.equal(call, id);
+    return plain(out);
+  };
+  assert.deepEqual(await ask({}), { value: { days: [{ day: ymd(day(2, 9)), due: 2 }, { day: ymd(day(1, 23)), due: 1 }, { day: ymd(day(5, 12)), due: 1 }] } });
+  assert.deepEqual(await ask({ days: 3 }), { value: { days: [{ day: ymd(day(2, 9)), due: 2 }, { day: ymd(day(1, 23)), due: 1 }] } });
+  assert.deepEqual(await ask({ days: 14 }), { value: { days: [{ day: ymd(day(2, 9)), due: 2 }, { day: ymd(day(1, 23)), due: 1 }, { day: ymd(day(5, 12)), due: 1 }, { day: ymd(day(9, 12)), due: 1 }] } });
+  // Each answer went through the broker as a call of its own, which the broker took.
+  const results = r.heard.filter((h) => h.call === 'tools.result');
+  assert.equal(results.length, 3);
+  for (const h of results) assert.deepEqual(h.reply, { ok: true, value: true });
 });

@@ -129,7 +129,7 @@ AI (⌘⇧K, the chip's menu and ⋯) sets `GZ_WRITER_ISSUES.set('ai', …)` wit
 began; `GZ_WRITER_AI.feedbackView(container)` is the Feedback panel; `GZ_WRITER_PROOF.decide` answers `{ verdict: 'apply'|'suggest'|'keep', choice }`, the
 choice an index into the candidates (-1 with keep). `GZ_WRITER_AI.requirements(prompt)` and `cite({ text, url })` give the other parts of the
 writer those tasks' outputs, or null. `lib/writer-tools.js` declares editor tools (read: document, issues, sources,
-assignment; confirm: insert a citation, apply a fix) for a later MCP integration; nothing offers them to a model yet.
+assignment; confirm: insert a citation, apply a fix). `lib/mcp/writer.js` exposes them to apps allowed in **Settings → AI → Agents**. Stored-document reads use opaque session keys; reading issues and making changes require an open Writer page, and each change waits for approval in Glaze.
 
 ## Add a provider
 

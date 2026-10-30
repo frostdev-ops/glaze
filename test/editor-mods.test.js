@@ -319,6 +319,47 @@ test('the install prompt discloses remote backgrounds without claiming there is 
   }
 });
 
+test('a file offered after Escape survives the previous dialog close event arriving late', async () => {
+  const source = fs.readFileSync(require.resolve('../lib/editor-mods.js'), 'utf8');
+  const start = source.indexOf("    const dialog = $('mod-prompt');"), end = source.indexOf('    // ---- adding a mod:', start);
+  const ids = new Map(), sent = [], listeners = new Map();
+  const $ = (id) => {
+    if (!ids.has(id)) ids.set(id, { open: false, textContent: '', replaceChildren() {}, focus() {},
+      showModal() { this.open = true; }, addEventListener(name, fn) { listeners.set(`${id}:${name}`, fn); } });
+    return ids.get(id);
+  };
+  let hold = false, release, building = false;
+  const gate = new Promise((r) => { release = r; });
+  const ctx = vm.createContext({ $, t, and, Uint8Array, std: (b) => String(b[0]),
+    B: () => ({ read: async (bytes) => ({ id: 'a', hash: String(bytes[0]), signed: true, manifest: view(), prompt: view() }),
+      plan: () => ({ action: 'install', prompt: true, newPermissions: [] }) }),
+    send: async (m) => { sent.push(m); return { ok: true, mods: [] }; }, local: { get: async () => ({}) },
+    runs: async () => { if (hold) { building = true; await gate; } return true; },
+    lines: E.lines, plain: E.plain, warnings: E.warnings, fingerprint: E.fingerprint, sourceText: E.sourceText,
+    channelNotice: E.channelNotice, grantsFor: E.grantsFor, hostsFor: E.hostsFor, GZ_SITE: { reach: async () => true },
+    h: () => ({}), say() {}, why: String, refusal: String, channel: async () => ({}), takeOffer: async () => {}, a: { show() {} } });
+  vm.runInContext(`${source.slice(start, end)}\nthis.offer = offerBytes; this.waiting = () => pending;`, ctx);
+  assert.equal(await ctx.offer(new Uint8Array([1]), 'file', {}), true);
+  // Escape closes the native dialog now; its close event is queued for a later task.
+  $('mod-prompt').open = false;
+  hold = true;
+  const retry = ctx.offer(new Uint8Array([2]), 'file', {});
+  await settle();
+  assert.equal(building, true, 'the new file must not be discarded while the cancelled prompt waits for close');
+  // Deliver that old event while the new prompt is awaiting the runtime check.
+  listeners.get('mod-prompt:close')();
+  release();
+  assert.equal(await retry, true);
+  assert.equal($('mod-prompt').open, true);
+  assert.equal(ctx.waiting()?.got.hash, '2', 'the old close event must not consume the new consent');
+  assert.equal(sent.some((m) => m.op === 'install'), false);
+  listeners.get('mod-prompt-install:click')({ isTrusted: true });
+  $('mod-prompt').open = false;
+  listeners.get('mod-prompt:close')();
+  await settle();
+  assert.deepEqual(sent.filter((m) => m.op === 'install').map((m) => m.hash), ['2']);
+});
+
 
 test('dev folder scans bound depth and empty directory counts before reading files', async () => {
   const source = fs.readFileSync(require.resolve('../lib/editor-mods.js'), 'utf8');

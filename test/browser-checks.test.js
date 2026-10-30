@@ -46,6 +46,15 @@ test('browser wait fails closed if the probe fails or another browser never exit
   await assert.rejects(waiter(() => '123\n').wait(), /waiting for another browser/);
 });
 
+test('browser wait on Windows, which has no pgrep, goes straight on', async () => {
+  const module = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(path.join(scripts, 'wait-for-browser.js'), 'utf8'), {
+    module, process: { platform: 'win32' },
+    require: () => ({ execFileSync: () => assert.fail('no probe on Windows') }),
+  });
+  await module.exports();
+});
+
 test('the mod channel browser check is available alongside the Mods section check', () => {
   assert.ok(fs.existsSync(path.join(scripts, 'mods-channel-check.js')));
 });

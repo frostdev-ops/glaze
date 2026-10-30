@@ -7,6 +7,8 @@ const browsers = () => {
 
 module.exports = async (signal) => {
   signal?.throwIfAborted();
+  // Windows has no pgrep, and browser checks run there only in CI, one job to a runner.
+  if (typeof process === 'object' && process.platform === 'win32') return;
   for (let i = 0; browsers(); i++) {
     if (i >= 120) throw Error('gave up waiting for another browser');
     if (i % 6 === 0) console.error('[browser-check] another browser is running; waiting');

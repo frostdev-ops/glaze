@@ -1835,6 +1835,9 @@ GZ_UI.load().then((s) => {
   GZ_WRITEREDIT.mount({ t, hint, elsewhere: ownTabAt });
   GZ_AIEDIT.mount({ t, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
     pct: (x) => GZ_I18N.pct(Math.round(x * 100), GZ_I18N.ui()) });
+  // Agents (lib/editor-agents.js): agent access, the helper's link, the paired apps and their groups, and the activity list.
+  GZ_AGENTSEDIT.mount({ t, hint, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
+    day: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at) });
   followSection(editor.route(), editor.part());
 
   // Opening the editor wakes the mod blocklist check, which asks only if one is due (lib/blocklist.js).

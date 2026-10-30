@@ -53,9 +53,17 @@ test('host access: each LMS\'s own hosts, Glaze\'s gallery and share relay; any 
   for (const c of m.content_scripts) for (const p of c.matches) assert.ok(held(p), p);
 });
 
-test('Chrome adds only activeTab and declarativeContent to its permissions, without native messaging', () => {
+// Agent access's on switch asks for native messaging (the glaze-mcp helper); Google Calendar sync asks for identity.
+test('Chrome adds only activeTab and declarativeContent to its permissions; native messaging and identity are asked for when used', () => {
   assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage', 'activeTab', 'declarativeContent']); // notes are never cleared for space (owner, 2026-10-15)
-  assert.ok(!m.permissions.includes('nativeMessaging'));
+  assert.deepEqual(m.optional_permissions, ['identity', 'nativeMessaging']);
+});
+
+test('Safari requires native messaging already, so its manifest drops the optional duplicate and keeps any other optional permission', () => {
+  const s = safari(m);
+  assert.deepEqual(s.permissions.filter((p) => p === 'nativeMessaging'), ['nativeMessaging']);
+  assert.equal(s.optional_permissions, undefined);
+  assert.deepEqual(safari({ ...m, optional_permissions: [...m.optional_permissions, 'bookmarks'] }).optional_permissions, ['bookmarks']);
 });
 
 // content.js, content-ultra.js, options.js and lib/background.js all ask defaults.js GZ_BUILT_IN.
@@ -147,7 +155,8 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
     // A clean Chrome manifest also gains the permission on its first conversion.
     fs.writeFileSync(file, JSON.stringify(m));
     rewrite();
-    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).permissions, ['storage', 'scripting', 'unlimitedStorage', 'nativeMessaging']);
+    const clean = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual([clean.permissions, clean.optional_permissions], [['storage', 'scripting', 'unlimitedStorage', 'nativeMessaging'], undefined]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
