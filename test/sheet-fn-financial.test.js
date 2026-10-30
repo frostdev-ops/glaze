@@ -280,3 +280,9 @@ test('DB truncates month and period after checking positive periods, and bounds 
   const e = book();
   cases(e, [['DB(1000,100,5,1,7.9)', 215.25], ['DB(1000,100,5,0.9)', 369], ['DB(1000,100,5,1,12.9)', 369], ['DB(1000,100,5,6)', '#NUM!']]);
 });
+test('RATE preserves the observed convergence boundaries for distant guesses', () => {
+  const e = book();
+  rel(calc(e, 'RATE(48,-200,8000,0,0,13)'), 0.00770147248820172, 'RATE guess 13');
+  rel(calc(e, 'RATE(360,-1000,100000,0,0,0.42)'), 0.00968924582258194, 'RATE guess 0.42');
+  cases(e, [['RATE(360,-1000,100000,0,0,0.5)', '#NUM!']]);
+});
