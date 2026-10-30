@@ -272,6 +272,19 @@ test('layout: a scatter\'s axes in proportion to x and y', async () => {
   assert.ok(p[3].x < Math.max(...p.map((x) => x.x)) + 1 && marks.ticks.val.at(-1) > 4, 'the last point inside the axes');
 });
 
+test('layout: a reversed scatter x axis reverses its points and tick positions', async () => {
+  const { wb } = await open();
+  const data = drawn(wb)[3].data;
+  const normal = CH.scene(data, 400, 300);
+  const reversed = structuredClone(data);
+  Object.values(reversed.axes).find((a) => a.pos === 'b').reverse = true;
+  const sc = CH.scene(reversed, 400, 300);
+  assert.ok(sc.marks.points[0].x > sc.marks.points[3].x);
+  assert.deepEqual(sc.marks.points.map((p) => p.v), normal.marks.points.map((p) => p.v));
+  const ticks = sc.prims.filter((p) => p.cls === 'gc-tick' && p.a['text-anchor'] === 'middle');
+  assert.ok(ticks[0].a.x > ticks.at(-1).a.x);
+});
+
 test('layout: stacked and 100% stacked columns, horizontal bars, a line\'s gap', async () => {
   const { wb } = await open();
   const [column, line] = drawn(wb);
