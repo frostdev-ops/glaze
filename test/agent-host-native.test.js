@@ -318,9 +318,9 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
       let got = '';
       late.setEncoding('utf8');
       late.on('data', (c) => { got += c; });
-      const gone = new Promise((r) => late.on('close', r));
+      const gone = new Promise((r) => late.on('close', () => r(true)));
       late.resume();
-      await gone;
+      assert.equal(await Promise.race([gone, new Promise((r) => setTimeout(r, 15000, false))]), true, 'the late reader is let go');
       assert.equal(got.length, last.length + 1);
       assert.equal(got, `${last}\n`);
       assert.equal(await G.exit, 1);
