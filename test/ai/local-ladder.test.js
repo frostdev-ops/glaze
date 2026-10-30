@@ -11,8 +11,12 @@ const GB = 1e9;
 // Chromium (f16, subgroups) Q4_K_M 103.3, Q8_0 78.9 tok/s.
 // Bench results (`bench()` in a browser, ai/local/kernels/bench.wgsl), measured for C7 on 2026-10-30:
 const BENCH = {
-  m5pro: { bandwidth: 0, overheadMs: 0 }, // filled in by the measurement below
-  rtx3080ti: { bandwidth: 0, overheadMs: 0 },
+  // Mac: Playwright Chromium 153, new headless, under nice -n 19 taskpolicy -b; median of runs 2–4 of 5 (run 1 was cold:
+  // 129 GB/s, 7.9 ms). Runs: 129.4, 130.9, 175.5, 183.7, 173.4 GB/s; 7.9, 1.5, 1.2, 1.3, 1.0 ms.
+  m5pro: { bandwidth: 175.5e9, overheadMs: 1.2 },
+  // omarchy: glaze-c3-gpu:1 container, --gpus all, Chromium over Vulkan (C3's flags); median of 5 runs, 390.0–417.3
+  // GB/s, every run 2.5 ms.
+  rtx3080ti: { bandwidth: 410.4e9, overheadMs: 2.5 },
 };
 
 const MACHINES = [
@@ -23,7 +27,7 @@ const MACHINES = [
       info: { vendor: 'apple', architecture: 'metal-3', device: '', description: '', isFallbackAdapter: false },
       features: ['shader-f16', 'subgroups', 'subgroup-size-control', 'timestamp-query', 'core-features-and-limits'],
       limits: { maxBufferSize: 4294967292, maxStorageBufferBindingSize: 4294967292 },
-      deviceMemory: 8,
+      deviceMemory: 16,
       // Chrome's quota is 60% of the disk (1 TB here); usage a fresh profile's.
       storageEstimate: { quota: 600 * GB, usage: 0.05 * GB },
       bench: () => BENCH.m5pro,
@@ -48,12 +52,12 @@ const MACHINES = [
   {
     name: 'RTX 3080 Ti, Chrome on Linux',
     // C3's adapter dump on omarchy (Chromium 153, Vulkan, NVIDIA 615.78): subgroups, no shader-f16, 4 GiB buffers,
-    // 2 GiB bindings. 12 GB of VRAM, which no browser reports; deviceMemory is Chrome's cap.
+    // 2 GiB bindings. 12 GB of VRAM, which no browser reports; deviceMemory read 32 in C7's run.
     input: {
       info: { vendor: 'nvidia', architecture: 'ampere', device: '', description: '', isFallbackAdapter: false },
       features: ['subgroups', 'subgroup-size-control', 'timestamp-query', 'core-features-and-limits'],
       limits: { maxBufferSize: 4294967292, maxStorageBufferBindingSize: 2147483644 },
-      deviceMemory: 8,
+      deviceMemory: 32,
       storageEstimate: { quota: 300 * GB, usage: 0.05 * GB },
       bench: () => BENCH.rtx3080ti,
     },
@@ -64,7 +68,8 @@ const MACHINES = [
     // Typical, not measured here: Chrome on Windows (D3D12) reports Intel Xe as vendor intel / architecture gen-12lp
     // with shader-f16 and subgroups, maxBufferSize 2 GiB and bindings 2 GiB − 4. Memory: LPDDR4x-4266 on a 128-bit
     // bus, 68 GB/s peak, shared with the CPU. Bench: that peak times the share of peak the bench reached on the two
-    // measured machines; per-token overhead: a guess, twice the M5 Pro's.
+    // measured machines; per-token overhead: a guess, twice the M5 Pro's. Written before the measurement as Q6_K; the
+    // calibrated model puts Q8_0 at 16.9 tok/s here, so Q8_0.
     input: {
       info: { vendor: 'intel', architecture: 'gen-12lp', device: '', description: '', isFallbackAdapter: false },
       features: ['shader-f16', 'subgroups', 'timestamp-query', 'core-features-and-limits'],
@@ -73,7 +78,7 @@ const MACHINES = [
       storageEstimate: { quota: 150 * GB, usage: 0.05 * GB }, // 256 GB SSD, 60%
       bench: () => ({ bandwidth: 68 * GB * SHARE(), overheadMs: 2 * BENCH.m5pro.overheadMs }),
     },
-    expect: { tier: 3, id: 'lfm3-1.7b-q6_k', reason: 'fastest' },
+    expect: { tier: 4, id: 'lfm3-1.7b-q8_0', reason: 'fastest' },
   },
   {
     name: 'Low-end Chromebook (no shader-f16)',
@@ -143,12 +148,16 @@ test('limits below the buffer the engine binds whole are refused', () => {
 test('without shader-f16 the f32 path runs when it fits memory, and is refused when it does not', () => {
   const noF16 = { ...M5, features: ['subgroups'] };
   assert.equal(run({ ...noF16, deviceMemory: 4 }).tier, 4);
-  // 2 GB of RAM: half of it holds no size even with f16; without f16 the reason is the missing feature.
-  assert.equal(run({ ...noF16, deviceMemory: 2 }).reason, 'no-f16');
+  // f32 doubles the key/value cache: with memory between Q4_K_M's two footprints, f16 runs it and f32 doesn't.
+  const q4 = models.find((x) => x.tier === 1);
+  const [half, full] = [L.footprint(q4, { f16: true }), L.footprint(q4, { f16: false })];
+  assert.ok(full > half);
+  const between = { deviceMemory: (2 * (half + full) / 2) / 2 ** 30 }; // the budget is half of deviceMemory
+  assert.equal(run({ ...M5, ...between }).tier, 1);
+  assert.equal(run({ ...noF16, ...between }).reason, 'no-f16');
+  // 2 GB of RAM: half of it holds no size even with f16.
   assert.equal(run({ ...M5, deviceMemory: 2 }).reason, 'memory');
-  // f32 doubles the key/value cache: a size can fit with f16 and not without.
-  const q8 = models.find((x) => x.tier === 4);
-  assert.ok(L.footprint(q8, { f16: false }) > L.footprint(q8, { f16: true }));
+  assert.equal(run({ ...noF16, deviceMemory: 2 }).reason, 'memory');
 });
 
 test('storage must hold the size plus 20%, unless it is already stored', () => {
@@ -166,11 +175,9 @@ test('the highest tier at 15 tok/s or more; speed falls with size', () => {
   const b = BENCH.m5pro;
   const speeds = models.map((x) => L.decodeSpeed(x, b));
   for (let i = 1; i < speeds.length; i++) assert.ok(speeds[i] < speeds[i - 1]);
-  // A bench just fast enough for Q5_K_M and not for Q6_K.
-  const slow = { bandwidth: 1e9, overheadMs: 0 };
-  const scale = (tps, size) => L.decodeSpeed({ size }, slow) / tps;
+  // A bench just fast enough for Q5_K_M and not for Q6_K (with no overhead, speed is proportional to bandwidth).
   const q5 = models.find((x) => x.tier === 2), q6 = models.find((x) => x.tier === 3);
-  const bw = 1e9 / scale(15, q5.size);
+  const bw = 15e9 / L.decodeSpeed(q5, { bandwidth: 1e9, overheadMs: 0 });
   assert.ok(L.decodeSpeed(q5, { bandwidth: bw, overheadMs: 0 }) >= 15 - 1e-9);
   assert.equal(run({ ...M5, bench: () => ({ bandwidth: bw * 1.001, overheadMs: 0 }) }).tier, 2);
   assert.ok(L.decodeSpeed(q6, { bandwidth: bw * 1.001, overheadMs: 0 }) < 15);
