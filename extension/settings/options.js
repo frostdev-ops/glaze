@@ -1205,8 +1205,9 @@ GZ_UI.load().then((s) => {
     });
     chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.google) gdLoad(); });
 
-    // Sync Documents (lib/drive-sync.js, through the worker: 'glaze:driveSync'): shown while Drive is connected, with one
-    // line of how it stands (storage.local driveSync): syncing, when it last synced, or what stopped it and the fix.
+    // Sync to Google Drive (documents/drive-sync.js and background/drive-store.js, through the worker: 'glaze:driveSync'): shown
+    // while Drive is connected, on once it connects (the worker turns it on) unless turned off here, with one line of how it
+    // stands (storage.local driveSync): syncing, when it last synced, or what stopped it and the fix.
     const SYNC_SAYS = { auth: 'Connect Google Drive again to keep syncing.', connect: 'Connect Google Drive again to keep syncing.', account: 'Connect Google Drive again to keep syncing.',
       scope: 'Connect Google Drive again to keep syncing.', permission: 'Connect Google Drive again to keep syncing.', quota: 'Your Google Drive is full. Free up space to keep syncing.',
       folder: "The Glaze folder is in Google Drive's trash. Restore it to keep syncing.", busy: 'Google Drive is busy. Glaze will try again soon.',

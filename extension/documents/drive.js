@@ -22,7 +22,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   // What Glaze reads of a file (files.get's fields mask), and of one it saved.
   const META = 'id,name,mimeType,size,trashed,capabilities(canEdit,canDownload)';
   const SAVED = 'id,name,mimeType';
-  // What Sync Documents (documents/drive-sync.js) reads of a file: where it is, whether it is in Trash, Glaze's own properties on it,
+  // What Sync to Google Drive (documents/drive-sync.js) reads of a file: where it is, whether it is in Trash, Glaze's own properties on it,
   // and its revisions (version: every change; headRevisionId: every new content).
   const SYNC = 'id,name,mimeType,parents,trashed,explicitlyTrashed,appProperties,headRevisionId,version,size';
   // An upload larger than this goes resumable: Drive's guide gives multipart "5 MB or less".
@@ -81,7 +81,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   // env: { fetch, token({ interactive }) (background/google.js token), drop(token) (background/google.js drop: forget one Drive answered 401 to), account() (the
   // connected account, background/google.js account: one client serves one request, which stops as 'connect' if Drive is
   // connected to another account or none before any of its calls), allowed() (the current sender), boundary(),
-  // interactive (default true: a request the student pressed may ask them to sign in; Sync Documents' never does) }
+  // interactive (default true: a request the student pressed may ask them to sign in; Sync's never does) }
   const create = (env) => {
     const bound = env.account ? Promise.resolve().then(env.account).catch(() => null) : null;
     const still = async () => {
@@ -208,7 +208,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       if (typeof j?.id !== 'string' || !ID.test(j.id) || (to && j.id !== to)) throw new Fail('bad');
       return { id: j.id, fresh: !!id && !to };
     };
-    // ---- Sync Documents' calls (documents/drive-sync.js): each → Drive's JSON answer, or bytes; Drive's errors as reasons (WHY).
+    // ---- Sync to Google Drive's calls (documents/drive-sync.js): each → Drive's JSON answer, or bytes; Drive's errors as reasons (WHY).
     const json = async (r) => { const j = await r.json().catch(() => null); if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Fail('bad'); return j; };
     const idOf = (id) => { if (typeof id !== 'string' || !ID.test(id)) throw new Fail('bad'); return id; };
     const JSON_TYPE = 'application/json; charset=UTF-8';

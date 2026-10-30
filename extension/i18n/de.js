@@ -3768,7 +3768,7 @@
   "Your Google Drive is full.": "Dein Google Drive ist voll.",
   "Connect Google Drive again in Settings.": "Verbinde Google Drive in den Einstellungen erneut.",
   "Couldn't reach Google Drive. Try again in a moment.": "Google Drive war nicht erreichbar. Versuch es gleich noch einmal.",
-  "Sync Documents": "Dokumente synchronisieren",
+  "Sync to Google Drive": "Mit Google Drive synchronisieren",
   "Syncing…": "Wird synchronisiert…",
   "Connect Google Drive again to keep syncing.": "Verbinde Google Drive erneut, um weiter zu synchronisieren.",
   "Your Google Drive is full. Free up space to keep syncing.": "Dein Google Drive ist voll. Gib Speicherplatz frei, um weiter zu synchronisieren.",

@@ -1,10 +1,12 @@
-// Sync Documents (extension/documents/drive-sync.js) in the real extension, headless: a staged copy with Drive's switch on (as
+// Sync to Google Drive (extension/documents/drive-sync.js, extension/background/drive-store.js) in the real extension, headless: a staged copy with Drive's switch on (as
 // tools/dev/dev-drive.sh turns it on) and its real worker, against a stand-in Drive that keeps its state across requests
 // (test/helpers/drive-standin.cjs, Drive v3's shapes from test/fixtures/drive/v3.js, not seen live), served through
 // Playwright's route() and, for what route() can't see, a local HTTPS server www.googleapis.com resolves to; every other
 // host is refused. Sign-in is Chrome's getAuthToken, stood in for.
-//   Settings: no Sync Documents row until Drive connects; then off. On: a Glaze folder with each document's file (the
-//   worker's own .docx and .xlsx, a PDF's bytes) and its JSON copy; the line says when it last synced.
+//   Settings: no Sync to Google Drive row until Drive connects; connecting turns it on: a Glaze folder with each document's
+//   file (the worker's own .docx and .xlsx, a PDF's bytes) and its JSON copy, a file a record for Settings and the rest in
+//   Glaze/Data (another device's dictionary joined with this one's), a snapshot zip in Glaze/Backups; the line says when it
+//   last synced. A Settings change goes up 5 s after.
 //   Another device's change comes in when Documents opens; a document trashed in Glaze goes to Drive's trash 5 s after;
 //   one edited on both sides keeps Drive's as a version; Off sends nothing more. No cookie, no token in storage, nothing
 //   deleted, no other host.
@@ -15,6 +17,7 @@ const env = require('../../tools/dev/check-env.js');
 const { standin } = require('../../test/helpers/drive-standin.cjs');
 const SD = require('../../extension/documents/sheets/sheet-data.js');
 const M = require('../../extension/documents/sheets/sheet-model.js');
+const { canon } = require('../../extension/background/drive-store.js');
 
 const CONFIG = require('../../extension/background/google-config.js');
 const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'), []);
@@ -100,7 +103,7 @@ const fileOf = (key, role) => [...drive.files.values()].find((f) => f.meta.appPr
     const local = (k) => settings.evaluate(async (key) => (await chrome.storage.local.get(key))[key], k);
     const row = settings.locator('#gdrive-sync'), box = settings.locator('#gdrive-sync-on'), said = settings.locator('#gdrive-sync-said');
     await pause(500);
-    ok(!(await row.isVisible()), 'not connected: no Sync Documents');
+    ok(!(await row.isVisible()), 'not connected: no Sync to Google Drive');
 
     // Documents on this device: a paper, a spreadsheet, a PDF, each written as their pages write them.
     const paper = 'doc:00000000-0000-4000-8000-00000000c001', sheet = 'doc:00000000-0000-4000-8000-00000000c002', pdf = 'doc:00000000-0000-4000-8000-00000000c003';
@@ -116,17 +119,33 @@ const fileOf = (key, role) => [...drive.files.values()].find((f) => f.meta.appPr
       await P.save(pdf, { kind: 'pdf', file: ref, size: ref.size, pages: 1, title: 'Reading', named: true });
     }, { paper, sheet, pdf, book: split.book, parts, PDF });
 
+    // Another device's: the Glaze folder, its Data folder and one record there, the personal dictionary.
+    const glaze = drive.seed({ name: 'Glaze', mimeType: drive.FOLDER, appProperties: { glaze: 'root' } });
+    const data = drive.seed({ name: 'Data', mimeType: drive.FOLDER, parents: [glaze.meta.id], appProperties: { glaze: 'data' } });
+    const words = { area: 'local', key: 'writerWords', value: ['Zephyr'] };
+    drive.seed({ name: 'writerWords-x.json', mimeType: 'application/json', parents: [data.meta.id], appProperties: { glaze: 'rec', cat: 'writerWords', key: sha('local\nwriterWords').slice(0, 32), sum: sha(canon(words)), at: '1000' } },
+      JSON.stringify({ glaze: 'record', v: 1, cat: 'writerWords', at: 1000, ...words }));
+    const seeded = drive.log.length;
+    await sw.evaluate(() => chrome.storage.local.set({ writerWords: ['Local'], 'todo:https://school.instructure.com/42': { tasks: [], items: {} } }));
     ok(await settings.evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:google', op: 'connect' })).then((r) => r.ok), 'Drive connects');
-    await until(() => row.isVisible(), 'Sync Documents shows once Drive is connected');
-    ok(!(await box.isChecked()) && (await said.textContent()) === '', 'off by default, nothing said');
-    ok(drive.log.length === 0, 'nothing has reached Drive');
-    await row.screenshot({ path: path.join(out, 'sync-1-off.png') });
+    await until(() => row.isVisible(), 'Sync to Google Drive shows once Drive is connected');
+    ok(drive.log.length >= seeded, 'connected');
 
-    // ---- on: the first upload
-    await box.click();
-    await until(async () => /^Last synced /.test(await said.textContent()), 'Last synced said', 60000);
-    const folder = [...drive.files.values()].find((f) => f.meta.mimeType === drive.FOLDER);
-    ok(folder?.meta.name === 'Glaze' && folder.meta.appProperties.glaze === 'root', 'a folder named Glaze');
+    // ---- connecting turns it on: the first upload, and the other device's restored
+    await until(async () => (await box.isChecked()) && /^Last synced /.test(await said.textContent()), 'on, and Last synced said', 60000);
+    const folder = glaze;
+    ok([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'root').length === 1, 'the Glaze folder another device made, found and used');
+    const rec = (area, key) => [...drive.files.values()].find((f) => f.meta.appProperties.glaze === 'rec' && f.meta.appProperties.key === sha(`${area}\n${key}`).slice(0, 32));
+    ok(JSON.stringify(((await local('writerWords')) || []).slice().sort()) === '["Local","Zephyr"]', 'the other device\'s dictionary joined with this one\'s');
+    ok(JSON.stringify(JSON.parse(rec('local', 'writerWords').bytes.toString('utf8')).value.slice().sort()) === '["Local","Zephyr"]', 'and the joined one goes up');
+    ok(rec('local', 'todo:https://school.instructure.com/42')?.meta.parents[0] === data.meta.id, 'tasks: a record in Glaze/Data');
+    const syncKeys = await settings.evaluate(async () => Object.keys(await chrome.storage.sync.get(null)));
+    ok(syncKeys.length > 0 && syncKeys.every((k) => rec('sync', k)), `Settings, key by key (${syncKeys.filter((k) => !rec('sync', k)).join(', ') || syncKeys.length})`);
+    ok(!rec('local', 'google') && !rec('local', 'driveSync'), 'Drive\'s own sign-in record and sync state stay here');
+    const snap = [...drive.files.values()].find((f) => f.meta.appProperties.glaze === 'snapshot');
+    const backups = [...drive.files.values()].find((f) => f.meta.appProperties.glaze === 'backups');
+    ok(snap && backups?.meta.parents[0] === glaze.meta.id && snap.meta.parents[0] === backups.meta.id && snap.bytes.subarray(0, 2).toString('latin1') === 'PK' && /^glaze-backup-\d{4}-\d\d-\d\d\.zip$/.test(snap.meta.name),
+      `a snapshot zip in Glaze/Backups (${snap?.meta.name})`);
     for (const [key, name, zip] of [[paper, 'RiverEssay.docx', true], [sheet, 'Budget.xlsx', true], [pdf, 'Reading.pdf', false]]) {
       const f = fileOf(key, 'file'), j = fileOf(key, 'doc');
       ok(f && f.meta.parents[0] === folder.meta.id && f.meta.name === name, `${name}: its file in the folder (${f?.meta.name})`);
@@ -156,6 +175,10 @@ const fileOf = (key, role) => [...drive.files.values()].find((f) => f.meta.appPr
     ok(JSON.stringify((await local(`writerPaper:${paper}`)).doc).includes('This side.'), 'this device\'s stays current');
     await until(async () => fileOf(paper, 'doc').bytes.toString('utf8').includes('This side.'), 'and goes up');
 
+    // ---- a Settings change goes up once saving pauses
+    await sw.evaluate(() => chrome.storage.sync.set({ popup: { anim: 'fade' } }));
+    await until(async () => JSON.parse(rec('sync', 'popup')?.bytes.toString('utf8') || '{}').value?.anim === 'fade', 'the Settings change in Drive', 20000);
+
     // ---- Trash in Glaze: Drive's trash, 5 s after
     await sw.evaluate((k) => openPapers().trash(k), sheet);
     await until(async () => fileOf(sheet, 'doc').meta.explicitlyTrashed && fileOf(sheet, 'file').meta.explicitlyTrashed, 'both files in Drive\'s trash', 20000);
@@ -163,7 +186,7 @@ const fileOf = (key, role) => [...drive.files.values()].find((f) => f.meta.appPr
 
     // ---- Off: nothing more
     await box.click();
-    await until(async () => (await local('driveSync'))?.on === false, 'off');
+    await until(async () => (await local('driveSync'))?.on === false && (await local('driveSync'))?.off === true, 'off, and kept off');
     const n = drive.log.length;
     await sw.evaluate(async (k) => { await openPapers().save(k, { title: 'Reading, renamed' }); }, pdf);
     await pause(7000);

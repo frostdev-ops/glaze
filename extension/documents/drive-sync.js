@@ -1,7 +1,8 @@
-// Sync Documents: Glaze's documents kept in step with a folder named Glaze in the student's own Google Drive, in the worker
-// (background/background.js), with drive.file only (documents/drive.js; Glaze sees only the files it made). A setting, off by default and
-// offered only while Drive is connected (settings/options.js); its state is this device's: storage.local driveSync { on, account,
-// folder, token (the Changes API's page token), last, problem, wait, fails, busy }, a record per document
+// Sync to Google Drive: Glaze's documents kept in step with a folder named Glaze in the student's own Google Drive, in the worker
+// (background/background.js), with drive.file only (documents/drive.js; Glaze sees only the files it made); everything else
+// Glaze keeps rides the same runs (env.more: background/drive-store.js). A setting, offered only while Drive is connected
+// (settings/options.js), turned on when Drive connects unless the student turned it off (off); its state is this device's:
+// storage.local driveSync { on, off, account, folder, token (the Changes API's page token), last, problem, wait, fails, busy }, a record per document
 // (driveSyncDoc:<h>: its key, its two files, what each side held when they last agreed) and each file's document
 // (driveSyncFile:<id>). h: the first 32 hex digits of the key's SHA-256, the tag both files carry (appProperties key).
 // Each document is two files in the folder: its kind's file (.docx, .xlsx, .pdf, .pptx, written by the worker's own export:
@@ -71,6 +72,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const random = env.random || Math.random;
     const timer = env.timer || ((fn, ms) => { const t = setTimeout(fn, ms); return () => clearTimeout(t); });
     const locks = env.locks === undefined ? globalThis.navigator?.locks || null : env.locks;
+    // Everything else Glaze keeps (background/drive-store.js): its hooks run in these same runs, after the documents.
+    const more = env.more || null;
     const chains = new Map();
     const queued = (name, fn) => {
       const p = (chains.get(name) || Promise.resolve()).then(fn, fn), tail = p.catch(() => {});
@@ -94,6 +97,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const forget = async () => {
       const keys = (await S.keys()).filter((k) => k.startsWith(DOC) || k.startsWith(FILE) || k === DIRTY);
       if (keys.length) await S.remove(keys);
+      await more?.forget();
     };
     const hk = async (key) => (await env.hash(key)).slice(0, 32);
     // The documents saved since they were last pushed: key → a count, so a save during a push keeps its mark.
@@ -165,7 +169,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const push = async (key, h, l, d, folder) => {
       const kind = kindOf(l.rec), b = body(key, l.rec, l.parts), sum = await env.hash(canon(b));
       let ex = null;
-      try { ex = await env.exportOf(key, l.rec, l.parts); } catch (e) { console.warn('Sync Documents: no file for', kind, e); }
+      try { ex = await env.exportOf(key, l.rec, l.parts); } catch (e) { console.warn('Sync to Google Drive: no file for', kind, e); }
       const base = (ex?.name || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
       let file = d?.file || null, fh = d?.fh || null;
       const up = async (id, meta, mime, bytes) => {
@@ -281,9 +285,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // A document Drive's copy of can't be read is passed over; one that met a write here or a file still moving
     // (stale, or the paper store's refusal) is marked to be tried again next run. Drive's own trouble stops the run.
     const one = (key, h, hint) => held(`doc:${h}`, () => sync(key, h, hint)).catch(async (e) => {
-      if (SKIP.has(e?.why)) { console.warn('Sync Documents: passed over', h, e.why); return; }
+      if (SKIP.has(e?.why)) { console.warn('Sync to Google Drive: passed over', h, e.why); return; }
       if (e instanceof Fail ? e.why !== 'stale' : typeof e?.why === 'string') throw e;
-      console.warn('Sync Documents: again next run', h, e);
+      console.warn('Sync to Google Drive: again next run', h, e);
       const k = key || (await docOf(h))?.key;
       if (k) await mark(k);
     });
@@ -329,6 +333,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       for (const [h, R] of remote) if (!seen.has(h)) { seen.add(h); const d = await docOf(h); await one(null, h, { R: d?.json && d.json !== R.id ? undefined : R, folder }); }
       for (const k of (await S.keys()).filter((x) => x.startsWith(DOC))) if (!seen.has(k.slice(DOC.length))) await one(null, k.slice(DOC.length), { folder });
       for (const [k, n] of Object.entries(dirt)) await unmark(k, n);
+      if (more) await more.full(hooks(folder));
       await setState({ token });
     };
     // What changed in Drive since the token, a page at a time, each page's documents done before the token moves past it.
@@ -358,6 +363,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           if (!d && !x.R) continue;
           await one(null, h, { ...x, folder });
         }
+        if (more) await more.changes(r.changes, hooks(folder));
         token = r.nextPageToken || r.newStartPageToken;
         await setState({ token });
         if (!r.nextPageToken) return;
@@ -371,6 +377,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
     };
 
+    const hooks = (folder) => ({ D, folder, state: setState });
     // ---- runs. o.full: everything (turning it on); o.push: only what was saved here.
     const run = (o = {}) => held('run', async () => {
       let st = await state();
@@ -393,12 +400,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           if (!o.push) await pull(await state(), folder);
         }
         await sweep((await state()).folder);
+        if (more) await more.sweep(hooks((await state()).folder));
         await setState({ last: now(), problem: null, fails: 0, wait: 0, busy: 0 });
         return { ok: true };
       } catch (e) {
         const why = whyOf(e), was = await state();
         if (why === 'off') { await setState({ busy: 0 }); return { ok: false, why }; }
-        if (why === 'stale') console.warn('Sync Documents:', e);
+        if (why === 'stale') console.warn('Sync to Google Drive:', e);
         const fails = (was.fails || 0) + 1;
         await setState({ problem: why, busy: 0, fails, wait: now() + Math.min(WAIT.most, WAIT.run * 2 ** (fails - 1)) });
         return { ok: false, why };
@@ -407,12 +415,12 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
     // Settings' switch. On: bound to the account connected now, and a full run. → that run's answer, or { ok: true } off.
     const set = async (on) => {
-      if (!on) { await setState({ on: false, busy: 0 }); cancel?.(); cancel = null; return { ok: true }; }
+      if (!on) { await setState({ on: false, off: true, busy: 0 }); cancel?.(); cancel = null; return { ok: true }; }
       const who = await Promise.resolve().then(env.account).catch(() => null);
       if (!who) return { ok: false, why: 'connect' };
       const st = await state();
       if (st.account && st.account !== who) { await forget(); await S.set({ [STATE]: { on: false } }); }
-      await setState({ on: true, account: who, problem: null, wait: 0, fails: 0 });
+      await setState({ on: true, off: false, account: who, problem: null, wait: 0, fails: 0 });
       return run({ full: true });
     };
     // A document written here (the worker's storage listener): pushed once saving pauses.
@@ -420,6 +428,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const touched = async (key) => {
       if (!syncable(key) || !(await state()).on) return;
       await mark(key);
+      await nudge();
+    };
+    // Something else Glaze keeps changed (background/drive-store.js stamps it): a push once saving pauses.
+    const nudge = async () => {
+      if (!(await state()).on) return;
       cancel?.();
       cancel = timer(() => { cancel = null; return run({ push: true }); }, WAIT.push);
     };
@@ -432,7 +445,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     };
     // busy: a run under way (one a stopped worker left counts for two minutes at most).
     const status = async () => { const s = await state(); return { on: !!s.on, last: s.last || null, problem: s.problem || null, busy: !!s.busy && now() - s.busy < 120e3 }; };
-    return { set, run, touched, poke, status };
+    return { set, run, touched, nudge, poke, status };
   };
 
   return { STATE, DOC, FILE, DIRTY, WAIT, KINDS, Fail, canon, strip, body, create };

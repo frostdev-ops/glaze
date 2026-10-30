@@ -3768,7 +3768,7 @@
   "Your Google Drive is full.": "Je Google Drive is vol.",
   "Connect Google Drive again in Settings.": "Verbind Google Drive opnieuw in Instellingen.",
   "Couldn't reach Google Drive. Try again in a moment.": "Google Drive was niet bereikbaar. Probeer het zo opnieuw.",
-  "Sync Documents": "Documenten synchroniseren",
+  "Sync to Google Drive": "Synchroniseren met Google Drive",
   "Syncing…": "Synchroniseren…",
   "Connect Google Drive again to keep syncing.": "Verbind Google Drive opnieuw om te blijven synchroniseren.",
   "Your Google Drive is full. Free up space to keep syncing.": "Je Google Drive is vol. Maak ruimte vrij om te blijven synchroniseren.",

@@ -213,6 +213,8 @@ const standin = ({ tokens = null, owner = 'student@school.edu' } = {}) => {
     trash: (id, on = true) => { const f = files.get(id); f.meta.explicitlyTrashed = on; bump(f, false); },
     remove: (id) => { files.delete(id); changed(id); },
     edit: (id, bytes) => { const f = files.get(id); f.bytes = Buffer.from(bytes); bump(f, true); },
+    // A file Glaze made, as another device of the student's left it.
+    seed: (meta, bytes = null) => make(meta, bytes ? Buffer.from(bytes) : null),
     // A file Glaze can't see (drive.file): made by another app.
     foreign: (meta, bytes) => make(meta, bytes, false),
     fail: (status, body, match = null, times = 1) => { for (let i = 0; i < times; i++) faults.push({ status, body, match }); },
