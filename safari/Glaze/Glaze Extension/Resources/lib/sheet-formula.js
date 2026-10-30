@@ -8,6 +8,7 @@
 // (op ':' joins references, ' ' intersects them); union { items }; array { rows } (errors as { err }); empty (an
 // argument left out); table and ext { s } (structured and external references, kept as text: the cell keeps its cached
 // value).
+// grouped marks an explicit parenthesized result (Excel suppresses final-operation cancellation there).
 // Rewrites work on tokens, so a formula's spacing and spelling survive everything but the references they change.
 // Classic script; module.exports for node.
 var GZ_SHEET_FORMULA = globalThis.GZ_SHEET_FORMULA || (() => {
@@ -245,7 +246,7 @@ var GZ_SHEET_FORMULA = globalThis.GZ_SHEET_FORMULA || (() => {
         case '{': return array();
         case '(': {
           const first = expr(0);
-          if (peek()?.k !== ',') { expect(')'); return first; }
+          if (peek()?.k !== ',') { expect(')'); return { ...first, grouped: true }; }
           const items = [first];
           while (peek()?.k === ',') { i++; items.push(expr(0)); }
           expect(')');
@@ -416,7 +417,7 @@ var GZ_SHEET_FORMULA = globalThis.GZ_SHEET_FORMULA || (() => {
       const n = { ...t };
       if (t.whole !== 'col') { if (!ra0) n.r0 += dr; if (!ra1) n.r1 += dr; }
       if (t.whole !== 'row') { if (!ca0) n.c0 += dc; if (!ca1) n.c1 += dc; }
-      if (n.r0 < 0 || n.c0 < 0 || n.r1 >= MAX_ROWS || n.c1 >= MAX_COLS) return `${t.pre}#REF!`;
+      if ([n.r0, n.r1].some((r) => r < 0 || r >= MAX_ROWS) || [n.c0, n.c1].some((c) => c < 0 || c >= MAX_COLS)) return `${t.pre}#REF!`;
       return n.r0 === t.r0 && n.c0 === t.c0 && n.r1 === t.r1 && n.c1 === t.c1 ? null : t.pre + refText(n);
     });
   };

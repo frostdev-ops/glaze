@@ -66,6 +66,27 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
   const index = (v, max) => Number.isInteger(v) && v >= 0 && v < max;
   const inBounds = (r, c) => (index(r, MAX_ROWS) && index(c, MAX_COLS)) || fail('bounds', `no cell at ${r},${c}`);
 
+  // Undo preserves collection iteration order too: it is observable in serialized workbooks.
+  const rememberOrder = (run, sh, kind, r, collection) => {
+    const key = `${sh.id}|${kind}|${r}`;
+    if (!run.order.has(key)) run.order.set(key, [sh.id, kind, r, [...collection.keys()]]);
+  };
+  const restoreOrder = (wb, entries) => {
+    for (const [id, kind, r, keys] of entries || []) {
+      const sh = need(wb, id);
+      const set = kind === 'hiddenRows' || kind === 'hiddenCols';
+      const collection = kind === 'row' ? sh.rows.get(r) : set ? sh.hidden[kind === 'hiddenRows' ? 'rows' : 'cols'] : sh[kind];
+      if (!collection) continue;
+      const next = set ? new Set() : new Map();
+      const add = (k) => { if (set) next.add(k); else next.set(k, collection.get(k)); };
+      for (const k of keys) if (collection.has(k)) add(k);
+      for (const k of collection.keys()) if (!next.has(k)) add(k);
+      if (kind === 'row') sh.rows.set(r, next);
+      else if (set) sh.hidden[kind === 'hiddenRows' ? 'rows' : 'cols'] = next;
+      else sh[kind] = next;
+    }
+  };
+
   // Writes one cell (null clears it) and returns the cell it replaced.
   const put = (wb, sh, r, c, value, run) => {
     inBounds(r, c);
@@ -76,6 +97,8 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
       if (!row) sh.rows.set(r, (row = new Map()));
       row.set(c, { ...value });
     } else if (prev) {
+      rememberOrder(run, sh, 'row', r, row);
+      if (row.size === 1) rememberOrder(run, sh, 'rows', null, sh.rows);
       run.count ??= cellCount(wb);
       run.count--;
       row.delete(c);
@@ -104,12 +127,12 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
   const moved = (k, at, n, max) => (k < at ? k : n < 0 && k < at - n ? null : k + n < max ? k + n : undefined);
   const shiftMap = (map, at, n, max, gone) => {
     const out = new Map();
-    for (const [k, v] of map) { const to = moved(k, at, n, max); if (to === null) gone?.(k, v); else if (to !== undefined) out.set(to, v); }
+    for (const [k, v] of map) { const to = moved(k, at, n, max); if (to === null || to === undefined) gone?.(k, v); else out.set(to, v); }
     return out;
   };
   const shiftSet = (set, at, n, max, gone) => {
     const out = new Set();
-    for (const k of set) { const to = moved(k, at, n, max); if (to === null) gone?.(k); else if (to !== undefined) out.add(to); }
+    for (const k of set) { const to = moved(k, at, n, max); if (to === null || to === undefined) gone?.(k); else out.add(to); }
     return out;
   };
 
@@ -148,12 +171,24 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
     const { at, n: count } = op;
     if (!index(at, max) || !Number.isInteger(count) || count < 1 || (!insert && at + count > max)) fail('bounds', 'no such rows or columns');
     const n = insert ? count : -count;
+    for (const cells of sh.rows.values()) for (const x of cells.values()) {
+      const g = x.a === undefined ? null : rangePosition(x.a);
+      if (!g) continue;
+      const first = row ? g.r0 : g.c0, last = row ? g.r1 : g.c1;
+      const partial = insert ? at > first && at <= last : at <= last && at + count > first && !(at <= first && at + count > last);
+      if (partial) fail('array-part', 'part of an array');
+      if (insert && last >= at && last + count >= max) fail('bounds', 'array would move past the sheet');
+    }
     if (insert) {
       for (const [r, cells] of sh.rows) {
         const edge = Math.max(at, max - count);
         if (row ? r >= edge : [...cells.keys()].some((c) => c >= edge)) fail('bounds', 'cells would move past the last row or column');
       }
     }
+    rememberOrder(run, sh, 'rows', null, sh.rows);
+    for (const [r, cells] of sh.rows) rememberOrder(run, sh, 'row', r, cells);
+    rememberOrder(run, sh, row ? 'rowH' : 'colW', null, row ? sh.rowH : sh.colW);
+    rememberOrder(run, sh, row ? 'hiddenRows' : 'hiddenCols', null, row ? sh.hidden.rows : sh.hidden.cols);
     const restore = { op: 'restore', cells: [], formulas: [], names: null, dims: [], hidden: [], props: props(sh) };
     if (hooks.shift && op.shift !== false) {
       const change = { sheet: sh.name, axis: op.axis, at, n };
@@ -207,12 +242,14 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
     }
     if (op.names) { back.names = wb.names; wb.names = op.names.map((x) => ({ ...x })); }
     for (const [id, axis, i, size] of op.dims || []) {
-      const map = need(wb, id)[axis === 'row' ? 'rowH' : 'colW'];
+      const sh = need(wb, id), kind = axis === 'row' ? 'rowH' : 'colW', map = sh[kind];
+      if (size === null && map.has(i)) rememberOrder(run, sh, kind, null, map);
       back.dims.push([id, axis, i, map.get(i) ?? null]);
       if (size === null) map.delete(i); else map.set(i, size);
     }
     for (const [id, axis, i, on] of op.hidden || []) {
-      const set = need(wb, id).hidden[axis === 'row' ? 'rows' : 'cols'];
+      const sh = need(wb, id), set = sh.hidden[axis === 'row' ? 'rows' : 'cols'];
+      if (!on && set.has(i)) rememberOrder(run, sh, axis === 'row' ? 'hiddenRows' : 'hiddenCols', null, set);
       back.hidden.push([id, axis, i, set.has(i)]);
       if (on) set.add(i); else set.delete(i);
     }
@@ -259,6 +296,13 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
     addSheet: (wb, op, hooks, run) => {
       if (wb.sheets.length >= CAP.sheets) fail('cap-sheets', 'a workbook holds 100 sheets');
       let sh = op.sheet;
+      if (sh) {
+        let count = cellCount(wb);
+        for (const cells of sh.rows.values()) {
+          count += cells.size;
+          if (count > CAP.cells) fail('cap-cells', 'a workbook holds 250,000 cells');
+        }
+      }
       if (!sh) {
         const name = op.name ?? nextSheetName(wb);
         const why = validName(wb, name);
@@ -298,17 +342,19 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
       wb.active = wb.sheets.indexOf(current);
       return { op: 'moveSheet', sheet: sh.id, to: from };
     },
-    size: (wb, op) => {
+    size: (wb, op, hooks, run) => {
       const sh = need(wb, op.sheet);
       const map = op.axis === 'row' ? sh.rowH : op.axis === 'col' ? sh.colW : fail('op', 'axis is row or col');
       const prev = map.get(op.i) ?? null;
+      if (op.size === null && map.has(op.i)) rememberOrder(run, sh, op.axis === 'row' ? 'rowH' : 'colW', null, map);
       if (op.size === null) map.delete(op.i); else map.set(op.i, op.size);
       return { op: 'size', sheet: sh.id, axis: op.axis, i: op.i, size: prev };
     },
-    hide: (wb, op) => {
+    hide: (wb, op, hooks, run) => {
       const sh = need(wb, op.sheet);
       const set = op.axis === 'row' ? sh.hidden.rows : op.axis === 'col' ? sh.hidden.cols : fail('op', 'axis is row or col');
       const prev = set.has(op.i);
+      if (!op.hidden && prev) rememberOrder(run, sh, op.axis === 'row' ? 'hiddenRows' : 'hiddenCols', null, set);
       if (op.hidden) set.add(op.i); else set.delete(op.i);
       return { op: 'hide', sheet: sh.id, axis: op.axis, i: op.i, hidden: prev };
     },
@@ -339,7 +385,20 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
       return { op: 'batch', ops: back.reverse() };
     },
   };
-  const step1 = (wb, op, hooks, run) => (Object.hasOwn(OPS, op?.op) ? OPS[op.op] : fail('op', `no operation ${op?.op}`))(wb, op, hooks, run);
+  const step1 = (wb, op, hooks, run) => {
+    const outer = run.order;
+    run.order = new Map();
+    try {
+      const action = Object.hasOwn(OPS, op?.op) ? OPS[op.op] : fail('op', `no operation ${op?.op}`);
+      const inverse = action(wb, op, hooks, run);
+      if (run.order.size) inverse.order = [...run.order.values()];
+      restoreOrder(wb, op.order);
+      return inverse;
+    } catch (error) {
+      restoreOrder(wb, [...run.order.values()]);
+      throw error;
+    } finally { run.order = outer; }
+  };
   // → { inverse, touched: [[sheetId, r, c]] cells written, rebuild: whether formulas or names changed meaning }.
   const apply = (wb, op, hooks = {}) => {
     const run = { touched: [], rebuild: false, count: undefined };
@@ -398,7 +457,13 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
     const grouped = m[1] !== undefined, decimals = m[3] !== undefined && m[3] !== '', exp = m[4] !== undefined;
     if (exp && (grouped || money || pct)) return null;
     if (money && pct) return null;
-    const digits = s.replace(/,/g, '');
+    const [mantissa, exponent] = s.replace(/,/g, '').split(/[eE]/);
+    let significant = 0;
+    const kept = mantissa.replace(/\d/g, (digit) => {
+      if (digit !== '0' || significant) significant++;
+      return significant > 15 ? '0' : digit;
+    });
+    const digits = kept + (exponent === undefined ? '' : `e${exponent}`);
     let v = Number(pct ? `${digits}e-2` : digits);
     if (!Number.isFinite(v)) return null;
     if (neg) v = -v;
@@ -447,6 +512,15 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
     if (!s) return null;
     const n = number(s);
     if (n) return n;
+    const fraction = /^([+-]?)(\d+)\s+(\d+)\/(\d+)$/.exec(s);
+    if (fraction) {
+      const [, sign, whole, numerator, denominator] = fraction;
+      const value = Number(whole) + Number(numerator) / Number(denominator);
+      if (Number(denominator) > 0 && Number.isFinite(value)) {
+        const slots = '?'.repeat(Math.min(denominator.length, 15));
+        return { v: sign === '-' ? -value : value, fmt: `# ${slots}/${slots}` };
+      }
+    }
     const t = time(s);
     if (t) return { v: t.v, fmt: t.fmt };
     const d = date(s, o);
