@@ -228,6 +228,18 @@ test('3-D pie: large finite values keep their proportions when their sum overflo
   assert.ok(!/NaN|Infinity/.test(JSON.stringify(sc.prims)));
 });
 
+test('3-D pie labels: a whole pie is centred; text that cannot fit a shallow ellipse is omitted', () => {
+  const one = pie3d(); one.groups[0].series[0].vals = [5, 0, null, 0];
+  const sc = CH.scene(one, 480, 300), p = sc.marks.pie3d, slice = sc.marks.slices[0];
+  const label = sc.prims.find((p) => p.cls === 'gc-plabel');
+  assert.ok(near(label.a.x, p.cx + slice.dx) && near(label.a.y - 4, p.cy + slice.dy), '100% belongs at the centre of its ellipse');
+  const shallow = pie3d(view(10, 0)); shallow.title = null; shallow.legend = null;
+  const s = shallow.groups[0].series[0]; s.explode.clear(); s.explosion = 400; s.vals = [10, 10, 10, 10];
+  const small = CH.scene(shallow, 160, 100);
+  assert.ok(small.marks.pie3d.ry < 5, 'the ellipse cannot hold a 10px label');
+  assert.equal(small.prims.filter((p) => p.cls === 'gc-plabel').length, 0);
+});
+
 test('3-D defaults: missing view3D, all explosions, negative pies and zero totals stay finite', () => {
   for (const kind of ['pie3d', 'col3d']) {
     const d = data(FX.CHARTS[kind].replace(/<c:view3D>[\s\S]*?<\/c:view3D>/, ''));
@@ -265,7 +277,7 @@ test('bounded: an oversized 3-D chart is a titled frame; a 3-D pie\'s shapes gro
 test('round trip: a workbook with 3-D charts read, drawn and written untouched keeps their parts byte for byte', async () => {
   const bytes = FX.workbook({ kinds: ['pie3d', 'col3d'] });
   const z = D.unzip(bytes), before = {};
-  for (const n of z.names) before[n] = await z.text(n);
+  for (const n of z.names) before[n] = await z.bytes(n);
   const wb = await X.read(bytes);
   C.engine(wb).recalc();
   const list = CX.charts(wb, wb.sheets[0]).map((c) => CX.resolve(c.chart, CX.lookup(wb)));
@@ -275,5 +287,5 @@ test('round trip: a workbook with 3-D charts read, drawn and written untouched k
   const out = D.unzip(await X.write(wb, { date: new Date(2026, 0, 1) }));
   const names = Object.keys(before).filter((n) => /^xl\/(charts|drawings)\//.test(n));
   assert.equal(names.length, 4);
-  for (const n of names) assert.equal(await out.text(n), before[n], n);
+  for (const n of names) assert.deepEqual(await out.bytes(n), before[n], n);
 });
