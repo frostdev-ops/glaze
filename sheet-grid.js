@@ -1221,7 +1221,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     versB.addEventListener('click', async () => {
       if (menu?.opener === versB) { closeMenu(true); return; }
       commit();
-      const list = await papers.versions(key).catch(() => []);
+      const list = (await papers.versions(key).catch(() => [])).filter((v) => (v.kind || 'paper') === 'sheet');
       openMenu(list.length ? list.map((v) => ({ act: 'restore', label: when.format(v.at), run: () => restore(v.id) })) : [{ act: 'none', label: t('No versions yet'), disabled: true, run: () => {} }], below(versB), { opener: versB, label: t('Versions') });
     });
     const restore = async (id) => {
