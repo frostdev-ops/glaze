@@ -542,10 +542,16 @@ test('cancel during an ask cancels the ask, runs nothing and logs cancelled', as
     // Storage may take more event-loop turns under full-suite load; readiness must come from the ask itself.
     const get = io.grants.get;
     io.grants.get = async (...args) => { for (let i = 0; i < 250; i++) await tick(); return get(...args); };
-    io.decide = (k, v, opts) => new Promise((res) => { opts.signal.addEventListener('abort', () => res('cancelled')); });
+    let entered;
+    const asked = new Promise((res) => { entered = res; });
+    io.decide = (k, v, opts) => new Promise((res) => {
+      opts.signal.addEventListener('abort', () => res('cancelled'));
+      entered();
+    });
     const ac = new AbortController();
     const p = io.call(kind === 'action' ? 'todo_mark_done' : 'due_list', kind === 'action' ? { id: '7' } : {}, { signal: ac.signal });
-    await until(() => io.asks.length === 1, `the ${kind} ask`);
+    await Promise.race([asked, p.then(() => assert.fail(`call ended before the ${kind} ask`))]);
+    assert.equal(io.asks.length, 1);
     assert.equal(io.asks[0].kind, kind);
     ac.abort();
     const r = await p;
