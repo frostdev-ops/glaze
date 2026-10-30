@@ -222,7 +222,9 @@ const HARNESS = `(() => {
 
     ext = require('./check-env.js').staged(root, [`${site}/*`]);
     await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    // Pinned Linux Chromium can route 2x frame clicks at half their CSS coordinates (1083,623 → 541,311). Use 1x there;
+    // the Mac retains Retina coverage. tap still fails on every misroute except a confirmed hit on the page's iframe.
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: process.platform === 'linux' ? 1 : 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json'));
     const members = JSON.parse(fixture('ultra-memberships.json'));
