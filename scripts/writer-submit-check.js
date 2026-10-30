@@ -221,9 +221,9 @@ const HARNESS = `(() => {
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
 
     ext = require('./check-env.js').staged(root, [`${site}/*`]);
-    await require('./wait-for-browser.js')();
     // Pinned Linux Chromium can route 2x frame clicks at half their CSS coordinates (1083,623 → 541,311). Use 1x there;
     // the Mac retains Retina coverage. tap still fails on every misroute except a confirmed hit on the page's iframe.
+    await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: process.platform === 'linux' ? 1 : 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json'));
