@@ -120,7 +120,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     };
     const snapshot = (paper, reason, at) => {
       const doc = paper.doc, m = measure(doc);
-      return { format: paper.format, keep: paper.keep === true, outline: paper.outline || null, id: `${at.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at, reason, words: m.words, bytes: bytes(doc), doc };
+      return { kind: paper.kind || 'paper', format: paper.format, keep: paper.keep === true, outline: paper.outline || null, id: `${at.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at, reason, words: m.words, bytes: bytes(doc), doc };
     };
     const addVersion = async (k, v) => { const list = await cap([v, ...(await versionsOf(k))]); await store.set({ [VERSIONS + k]: list }); return v; };
     const index = async (paper) => {
@@ -194,7 +194,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     const restore = async (k, id) => {
       const v = await version(k, id);
       if (!v) return null;
-      return save(k, { doc: v.doc, words: v.words, keep: v.keep === true, outline: v.outline || null, ...(v.format != null ? { format: v.format } : {}) }, { reason: 'restore' });
+      return save(k, { kind: v.kind || 'paper', doc: v.doc, words: v.words, keep: v.keep === true, outline: v.outline || null, ...(v.format != null ? { format: v.format } : {}) }, { reason: 'restore' });
     };
     const list = async () => ((await get(INDEX)) || []).filter((r) => r && typeof r.key === 'string').map((r) => ({ ...r, kind: r.kind || 'paper', named: r.named === true }));
     const remove = (k) => serial(k, async () => {
