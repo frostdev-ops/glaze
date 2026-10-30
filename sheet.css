@@ -13,6 +13,7 @@
 .gx-tool .gp-tbtn[aria-pressed="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi, var(--gz-ink)); }
 .gx-tool .gp-tbtn:disabled { opacity: .4; }
 .gx-tool .gp-caret, .gx-tool .gp-tbtn > .gp-ico:last-child:not(:first-child) { width: 13px; height: 13px; }
+#gx-more .gp-ico { stroke-width: 3.2; }
 @container gp-tool (max-width: 760px) { .gx-lbl { display: none; } }
 
 /* Formula bar and find */

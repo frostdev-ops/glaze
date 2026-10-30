@@ -1,11 +1,11 @@
 // Spreadsheets on the Documents page (papers.html, sheet-kind.js, sheet-grid.js) in the real unpacked extension. With
-// Settings → Writer → Spreadsheets off (writer.sheets, the default) the New band has no Spreadsheet tile, a .csv is refused
-// with the Word string, and a spreadsheet already stored still opens. On: the tile opens a blank workbook; values and
-// formulas typed into it compute; the fill handle continues a series and shifts a formula; copy and paste (Glaze's own copy
-// keeping formulas, Excel's HTML with its number formats); rows inserted and deleted move formulas; a renamed sheet's
-// references follow it; freeze, sort, undo and redo; closing and opening again keeps it all; Export writes the file; the
-// keyboard's paths through the grid; a 640 px layout. No page errors, no network, no timer under a minute. Screenshots at
-// 1280 and 640 px.
+// Settings → Writer → Spreadsheets switched off (writer.sheets, on by default) the New band has no Spreadsheet tile, a
+// .csv is refused with the Word string, and a spreadsheet already stored still opens. On: the tile opens a blank
+// workbook; values and formulas typed into it compute; the fill handle continues a series and shifts a formula; copy
+// and paste (Glaze's own copy keeping formulas, Excel's HTML with its number formats); rows inserted and deleted move
+// formulas; a renamed sheet's references follow it; freeze, sort, undo and redo; closing and opening again keeps it
+// all; Export writes the file; the keyboard's paths through the grid; a 640 px layout. No page errors, no network, no
+// timer under a minute. Screenshots at 1280 and 640 px.
 // NODE_PATH=<playwright> nice -n 10 node scripts/sheets-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -54,7 +54,7 @@ const seeded = (key, wb = M.workbook()) => {
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:' || u.protocol === 'blob:' || u.protocol === 'data:') return r.continue(); requests.push(u.href); return r.abort(); });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
-    const settings = (sheets) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, sheets } });
+    const settings = (sheets) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, pdf: false, slides: false, sheets } });
     const HOME = `chrome-extension://${id}/papers.html`;
     const page = await context.newPage();
     // Every interval the page starts, with its delay: none may fire more often than once a minute.
@@ -215,6 +215,20 @@ const seeded = (key, wb = M.workbook()) => {
     await page.click('.gx-tab >> text=Sheet2');
     await go('A1');
     check(await formula() === '=Data!A4' && await cell(0, 0) === '30', 'renaming Sheet1 to Data rewrites Sheet2\'s reference');
+    // Another sheet's cells by pointing: the formula stays open over Data, says no error, and lands back in Sheet2.
+    await go('A2');
+    await page.keyboard.type('=SUM(');
+    await page.click('.gx-tab >> text=Data');
+    await until(() => page.evaluate(() => document.querySelector('.gx-tab[aria-selected="true"]')?.textContent === 'Data' && !!document.querySelector('#gx-grid .gx-c[data-r="2"][data-c="0"]')), 'Data while writing');
+    const centre = (r, c) => page.evaluate(([r, c]) => { const b = document.querySelector(`#gx-grid .gx-c[data-r="${r}"][data-c="${c}"]`).getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; }, [r, c]);
+    const [from, to] = [await centre(1, 0), await centre(2, 0)];
+    await page.mouse.move(from.x, from.y); await page.mouse.down(); await page.mouse.move(to.x, to.y, { steps: 2 }); await page.mouse.up();
+    const pointed = { formula: await formula(), said: await page.evaluate(() => document.querySelector('.gx-said').textContent), editor: await page.evaluate(() => document.getElementById('gx-edit').hidden) };
+    check(pointed.formula === '=SUM(Data!A2:A3' && pointed.said === '' && pointed.editor, `pointing at Data's cells from Sheet2 puts them in, without an error (${JSON.stringify(pointed)})`);
+    await page.keyboard.type(')'); await page.keyboard.press('Enter');
+    await until(() => page.evaluate(() => document.querySelector('.gx-tab[aria-selected="true"]')?.textContent === 'Sheet2'), 'back on Sheet2');
+    await go('A2');
+    check(await formula() === '=SUM(Data!A2:A3)' && await cell(1, 0) === '30', 'and the formula lands in Sheet2!A2');
     await page.click('.gx-tab >> text=Data');
     await grid();
 
@@ -323,6 +337,15 @@ const seeded = (key, wb = M.workbook()) => {
     check(await cell(1, 5) === 'Bob', 'Replace all');
     await page.keyboard.press('Escape');
     await until(() => page.evaluate(() => document.getElementById('gx-find').hidden && document.activeElement?.id === 'gx-grid'), 'find closed');
+    // From the toolbar too, Ctrl+F and Ctrl+H are the grid's find and replace.
+    await page.focus('#gx-freeze');
+    await page.keyboard.press('Control+h');
+    await until(() => page.evaluate(() => !document.getElementById('gx-find').hidden && !!document.activeElement?.closest('#gx-find')), 'replace from the toolbar');
+    check(true, 'Ctrl+H from the toolbar opens the grid\'s find and replace');
+    await page.keyboard.press('Escape');
+    await until(() => page.evaluate(() => document.getElementById('gx-find').hidden && document.activeElement?.id === 'gx-grid'), 'find closed');
+    const dots = await page.evaluate(() => getComputedStyle(document.querySelector('#gx-more .gp-ico')).strokeWidth);
+    check(dots === '3.2px', `the ⋯ dots are drawn at the paper's ⋯ stroke (${dots})`);
     await go('J1');
     await page.keyboard.type('=SU');
     const offered = await until(() => page.evaluate(() => { const l = document.getElementById('gx-complete'); return !l.hidden && [...l.querySelectorAll('[role="option"]')].map((o) => o.textContent); }), 'autocomplete');

@@ -263,16 +263,18 @@ test('a sheet\'s versions are its packed copies, kept to 16 MB, the newest alway
   assert.equal(PA.CAP.bytes, 4e6);
 });
 
-// sheet-kind.js in a context of its own: the registry, a storage.sync answering writer.sheets, need() a no-op.
+// sheet-kind.js in a context of its own: the registry, a storage.sync answering writer.sheets, defaults.js's sanitizer (as
+// writer.html has it), need() a no-op that keeps what it was asked for.
+const DEFAULTS = require('../defaults.js');
 const load = (writer, overrides = {}) => {
   delete require.cache[require.resolve('../lib/doc-kinds.js')];
   delete globalThis.GZ_DOC_KINDS;
-  const DK = require('../lib/doc-kinds.js');
-  const ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_WRITER_PAPER: { need: async () => {} }, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,
+  const DK = require('../lib/doc-kinds.js'), needed = [];
+  const ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_WRITER_PAPER: { need: async (files) => { needed.push(...files); } }, GZ_SANITIZE: DEFAULTS.GZ_SANITIZE, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,
     chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) }, local: overrides.local || { get: async () => ({}) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}` } } });
   ctx.globalThis = ctx;
   vm.runInContext(read('sheet-kind.js'), ctx);
-  return { DK, ctx };
+  return { DK, ctx, needed };
 };
 
 test('papers.html loads sheet-kind.js after papers.js with its stylesheet; both package lists ship the sheet files', () => {
@@ -286,18 +288,38 @@ test('papers.html loads sheet-kind.js after papers.js with its stylesheet; both 
   for (const line of pkg) for (const f of ['sheet-kind.js', 'sheet-grid.js', 'sheet-data.js', 'sheet.css']) assert.ok(line.includes(` ${f} `), `${f} in: ${line.slice(0, 40)}…`);
 });
 
-test('off (the default): spreadsheets still open, copy and export; Documents neither creates nor imports them', async () => {
-  for (const writer of [undefined, { sheets: false }, { sheets: 'yes' }, { full: true }]) {
+test('off: spreadsheets still open, copy and export; Documents neither creates nor imports them', async () => {
+  const { DK } = load({ sheets: false });
+  await DK.settled();
+  const k = DK.get('sheet');
+  for (const f of ['edit', 'thumb', 'file', 'exportFile', 'copy', 'text', 'measure']) assert.equal(typeof k[f], 'function', f);
+  assert.equal(k.importFile, undefined);
+  assert.equal(k.create, undefined, 'no Spreadsheet tile');
+  assert.equal(DK.opens('Grades.xlsx'), null);
+  assert.equal(DK.opens('grades.csv'), null);
+  assert.ok(!/xlsx|csv|spreadsheet/.test(DK.accept()));
+});
+
+test('with no switch stored (a fresh install, an update from 3.x) or an invalid one, the kind follows defaults.js', async () => {
+  const want = DEFAULTS.GZ_DEFAULTS.writer.sheets;
+  assert.equal(typeof want, 'boolean');
+  for (const writer of [undefined, { sheets: 'yes' }, { full: true }]) {
     const { DK } = load(writer);
     await DK.settled();
     const k = DK.get('sheet');
-    for (const f of ['edit', 'thumb', 'file', 'exportFile', 'copy', 'text', 'measure']) assert.equal(typeof k[f], 'function', `${f}: ${JSON.stringify(writer)}`);
-    assert.equal(k.importFile, undefined);
-    assert.equal(k.create, undefined, 'no Spreadsheet tile');
-    assert.equal(DK.opens('Grades.xlsx'), null);
-    assert.equal(DK.opens('grades.csv'), null);
-    assert.ok(!/xlsx|csv|spreadsheet/.test(DK.accept()));
+    assert.equal(typeof k.create === 'function', want, `the tile: ${JSON.stringify(writer)}`);
+    assert.equal(typeof k.importFile === 'function', want, `imports: ${JSON.stringify(writer)}`);
+    assert.equal(DK.opens('Grades.xlsx'), want ? 'sheet' : null);
   }
+});
+
+test('defaults.js loads, after what it stands on, only where the page has not loaded it already', async () => {
+  const where = load(undefined, { GZ_SANITIZE: undefined });
+  await where.DK.settled().catch(() => {});
+  assert.deepEqual(where.needed, ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'], 'papers.html: on demand');
+  const frame = load(undefined);
+  await frame.DK.settled();
+  assert.deepEqual(frame.needed, [], 'writer.html: already there, never twice');
 });
 
 test('on: the sheet kind creates and imports', async () => {
