@@ -219,7 +219,7 @@ test('a document replaced whole (a fresh editor state, its versions from 0 again
   assert.match(asked.key, /^b\d+$/, 'the last paragraph\'s own lint, asked at version 1');
   const prev = f.view.state, PMS = globalThis.GZ_PM || require('../lib/pm.js');
   f.view.state = PMS.state.EditorState.create({ doc: E.state({ html: '<p>Short.</p>' }).doc, plugins: prev.plugins });
-  prev.plugins.find((p) => p.spec.key === P.key).spec.view().update(f.view, prev);
+  // ProseMirror makes the plugin views again for a state with a new plugin list, so no update() hears the swap.
   f.view.dispatch(f.view.state.tr.insertText('y', 1)); // the fresh state at version 1 too
   assert.doesNotThrow(() => f.reply(f.ports[0], { op: 'lint', id: asked.id, lints: [{ start: 0, end: 3, kind: 'Spelling', problem: 'teh', suggestions: [{ k: 0, t: 'the' }] }] }));
   assert.equal(f.issues.list().length, 0);
