@@ -229,3 +229,11 @@ test('the Sites check starts after the install and its first screen, and reads e
   assert.match(source, /await welcomed/);
   assert.doesNotMatch(source, /pause\(([2-9]\d{2}|\d{4,})\)/, 'no fixed waits stand in for the page');
 });
+
+test('the translated layout case lets its seed Look reach History before any page measures it', () => {
+  const source = fs.readFileSync(path.join(scripts, 'settings-ia-check.js'), 'utf8');
+  const body = source.slice(source.indexOf("check('translated-large-layout'"), source.indexOf("check('glass-parity'"));
+  const filed = body.search(/GZ_HISTORY\.entries\(.*\.lookHistory\)\[0\]\?\.at >= at/);
+  assert.ok(filed > 0, 'it waits for the worker to file the seed Look');
+  assert.ok(filed < body.indexOf("for (const lang of"), 'before the first language is measured');
+});
