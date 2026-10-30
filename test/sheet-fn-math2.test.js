@@ -160,7 +160,7 @@ test('FACT, FACTDOUBLE, GCD, LCM', () => {
   const e = book({ A1: 24, A2: 36, A3: 'x', B1: 12, B2: 18 });
   cases(e, [
     ['FACT(5)', 120], ['FACT(1.9)', 1], ['FACT(0)', 1], ['FACT(-1)', '#NUM!'], ['FACT(1)', 1], ['FACT(170)>7E306', true], ['FACT(171)', '#NUM!'],
-    ['FACTDOUBLE(6)', 48], ['FACTDOUBLE(7)', 105], ['FACTDOUBLE(0)', 1], ['FACTDOUBLE(7.9)', 105], ['FACTDOUBLE(-1)', '#NUM!'], ['FACTDOUBLE("x")', '#VALUE!'],
+    ['FACTDOUBLE(6)', 48], ['FACTDOUBLE(7)', 105], ['FACTDOUBLE(0)', 1], ['FACTDOUBLE(7.9)', 105], ['FACTDOUBLE(-1)', 1], ['FACTDOUBLE("x")', '#VALUE!'],
     ['GCD(5, 2)', 1], ['GCD(24, 36)', 12], ['GCD(7, 1)', 1], ['GCD(5, 0)', 5], ['GCD(24.9, 36.2)', 12], ['GCD(A1:A2)', 12], ['GCD(A1:A2,B1:B2)', 6],
     ['GCD(-1,2)', '#NUM!'], ['GCD(2^53,2)', '#NUM!'], ['GCD("x",2)', '#VALUE!'], ['GCD(A1:A3)', '#VALUE!'], ['GCD(0,0)', 0],
     ['LCM(5, 2)', 10], ['LCM(24, 36)', 72], ['LCM(A1:A2,B1:B2)', 72], ['LCM(5,0)', 0], ['LCM(-1,2)', '#NUM!'], ['LCM(2^52+1,2^52+3)', '#NUM!'], ['LCM("x",2)', '#VALUE!'],
@@ -239,4 +239,19 @@ test('SERIESSUM with Microsoft\'s data', () => {
   const x = 0.785398163;
   assert.ok(Math.abs(calc(e, 'SERIESSUM(A3,0,2,A4:A7)') - (1 - 0.5 * x ** 2 + 0.041666667 * x ** 4 - 0.001388889 * x ** 6)) < 1e-15);
   cases(e, [['SERIESSUM(2,1,1,{1,1,1})', 14], ['SERIESSUM(2,0,1,C1:C2)', '#VALUE!'], ['SERIESSUM("x",0,1,{1})', '#VALUE!']]);
+});
+
+// Excel 16.114.1: FACT checks the original sign; FACTDOUBLE allows exactly -1.
+test('factorial domains are checked before truncating', () => {
+  cases(book(), [['FACT(-0.5)', '#NUM!'], ['FACTDOUBLE(-1)', 1], ['FACTDOUBLE(-1.9)', '#NUM!']]);
+});
+test('SERIESSUM uses zero coefficients for blank reference positions', () => {
+  cases(book({ A1: 1, A3: 3 }), [['SERIESSUM(2,0,1,A1:A3)', 13], ['SERIESSUM(2,0,1,B1:B2)', 0]]);
+});
+test('AGGREGATE returns each requested rank in an array formula', () => {
+  const e = book();
+  const sh = e.wb.sheets[0];
+  e.apply({ op: 'set', sheet: sh.id, r: 0, c: 3, cell: { t: 'n', v: 0, f: 'AGGREGATE(14,6,{2,4,1,3},{1,2,3,4})', a: 'D1:G1' } });
+  e.recalc();
+  assert.deepEqual(['D1','E1','F1','G1'].map((r) => val(e, r)), [4,3,2,1]);
 });
