@@ -2,6 +2,7 @@
 // connection sites and text box. Formulas, built-in guides, arcTo and paths follow ECMA-376 Part 1, 5th edition (2016),
 // §20.1.9 and §20.1.10.56; the presets are transcribed from its addendum presetShapeDefinitions.xml (in
 // OfficeOpenXML-DrawingMLGeometries.zip), less the adjust handles and extrusionOk, which Slides doesn't use.
+// Reproduce the preset data with test/pptx-geom-presets.py (source URL and checksum there).
 // Lengths in and out are EMU from the shape's top-left corner, rounded to whole EMU; angles are 60000ths of a degree in
 // and degrees out.
 //   path({ prst, avLst, w, h }) → { prst, unknown?, paths: [{ d, fill, stroke }], rect: { l, t, r, b }, cxn: [{ x, y, ang }] }
@@ -46,7 +47,7 @@ var GZ_PPTX_GEOM = globalThis.GZ_PPTX_GEOM || (() => {
   const read = (v, scope) => {
     if (typeof v === 'number') return finite(v);
     const s = typeof v === 'string' ? v.trim() : '';
-    return NUMBER.test(s) ? Number(s) : scope.get(s) ?? 0;
+    return NUMBER.test(s) ? finite(Number(s)) : scope.get(s) ?? 0;
   };
   const formula = (fmla, scope) => {
     if (typeof fmla === 'number' || NUMBER.test(String(fmla).trim())) return read(fmla, scope);
@@ -75,7 +76,7 @@ var GZ_PPTX_GEOM = globalThis.GZ_PPTX_GEOM || (() => {
   // ---- paths (§20.1.9.4, §20.1.9.15) ---------------------------------------------------------------------------------
   const FILLS = new Set(['norm', 'none', 'lighten', 'lightenLess', 'darken', 'darkenLess']);
   const size = (v) => Math.max(0, finite(Number(v)));
-  const emu = (v) => Math.round(v) || 0;
+  const emu = (v) => Math.round(finite(v)) || 0;
   // arcTo's angles are seen from the ellipse's centre; SVG's arc runs on the ellipse's parameter. The parameter for a
   // centre-seen angle, on the same turn.
   const parameter = (a, wR, hR) => {
@@ -84,9 +85,9 @@ var GZ_PPTX_GEOM = globalThis.GZ_PPTX_GEOM || (() => {
   };
   // A path with its own w and h is drawn in that space, its guides worked out at that size (as Apache POI does), then
   // stretched to the shape.
-  const draw = (path, model, shape, W, H) => {
+  const draw = (path, scopeAt, W, H) => {
     const pw = size(path.w), ph = size(path.h);
-    const scope = pw || ph ? scopeFor(model, pw || W, ph || H) : shape;
+    const scope = scopeAt(pw || W, ph || H);
     const sx = pw ? W / pw : 1, sy = ph ? H / ph : 1;
     const xy = (x, y) => `${emu(x * sx)} ${emu(y * sy)}`;
     const point = (p) => [read(p?.x, scope), read(p?.y, scope)];
@@ -137,10 +138,17 @@ var GZ_PPTX_GEOM = globalThis.GZ_PPTX_GEOM || (() => {
   const custom = (model, w, h) => {
     const m = model && typeof model === 'object' ? model : {};
     const W = size(w), H = size(h);
-    const shape = scopeFor(m, W, H);
+    // Paths often share their coordinate space. Evaluate each space once per shape, rather than once per path.
+    const scopes = new Map();
+    const scopeAt = (pw, ph) => {
+      const key = `${pw},${ph}`;
+      if (!scopes.has(key)) scopes.set(key, scopeFor(m, pw, ph));
+      return scopes.get(key);
+    };
+    const shape = scopeAt(W, H);
     const r = m.rect && typeof m.rect === 'object' ? m.rect : { l: 'l', t: 't', r: 'r', b: 'b' };
     return {
-      paths: (Array.isArray(m.pathLst) ? m.pathLst : []).filter((p) => p && typeof p === 'object').map((p) => draw(p, m, shape, W, H)),
+      paths: (Array.isArray(m.pathLst) ? m.pathLst : []).filter((p) => p && typeof p === 'object').map((p) => draw(p, scopeAt, W, H)),
       rect: { l: emu(read(r.l, shape)), t: emu(read(r.t, shape)), r: emu(read(r.r, shape)), b: emu(read(r.b, shape)) },
       cxn: (Array.isArray(m.cxnLst) ? m.cxnLst : []).filter((c) => c && typeof c === 'object').map((c) => ({
         x: emu(read(c.x, shape)), y: emu(read(c.y, shape)), ang: Math.round(read(c.ang, shape) / 60) / 1000 || 0,
