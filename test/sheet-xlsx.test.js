@@ -649,3 +649,86 @@ test('write: cell metadata only where its part is kept; rich values only on the 
   const q = await parts(await X.write(fresh, { date: DATE, recalc: false }));
   assert.doesNotMatch(q['xl/worksheets/sheet1.xml'], / cm=| vm=/, 'without metadata.xml the indices would point at nothing');
 });
+
+// ── CSV and TSV ───────────────────────────────────────────────────────────────────────────────────────────────────────
+const sheetOf = (wb) => { const sh = wb.sheets[0]; const out = {}; for (const [r, row] of sh.rows) for (const [c, x] of row) out[M.cellName(r, c)] = x; return out; };
+
+test('csv: quotes, doubled quotes, line breaks inside quotes, CRLF, LF and CR, a final line end, empty fields', () => {
+  const wb = X.readDelimited('name,note,qty\r\n"Lee, Ann","said ""hi""\nthen left",3\n,,\rlast,"",x\r\n');
+  const c = sheetOf(wb);
+  assert.deepEqual(c.A2, { t: 's', v: 'Lee, Ann' });
+  assert.deepEqual(c.B2, { t: 's', v: 'said "hi"\nthen left' });
+  assert.deepEqual(c.C2, { t: 'n', v: 3 });
+  assert.equal(c.A3, undefined, 'empty fields are blank cells');
+  assert.deepEqual(c.A4, { t: 's', v: 'last' });
+  assert.equal(c.B4, undefined, 'a quoted empty field is blank too');
+  assert.equal(M.getSheet(wb, 'Sheet1').rows.size, 3, 'no row for the final line end');
+});
+
+test('csv: typed values as Excel opens them: numbers, money, percents, dates, booleans, errors, formulas, leading zeros', () => {
+  const wb = X.readDelimited('1.5,"1,200",$5.25,12%,3/4/2025,TRUE,#N/A,=A1*2,0042,  spaced  ,=SUM((,1e3');
+  const c = sheetOf(wb);
+  assert.deepEqual([c.A1, c.B1.v, c.C1.v, c.D1.v, c.E1.v, c.F1, c.G1], [{ t: 'n', v: 1.5 }, 1200, 5.25, 0.12, M.toSerial(2025, 3, 4), { t: 'b', v: true }, { t: 'e', v: '#N/A' }]);
+  assert.deepEqual([wb.styles[c.B1.s].fmt, wb.styles[c.C1.s].fmt, wb.styles[c.D1.s].fmt, wb.styles[c.E1.s].fmt], ['#,##0', '"$"#,##0.00', '0%', 'm/d/yyyy']);
+  assert.deepEqual(c.H1, { t: 'z', f: 'A1*2' });
+  assert.deepEqual(c.I1, { t: 'n', v: 42 }, 'Excel drops the zeros of an unquoted number');
+  assert.deepEqual(c.J1, { t: 's', v: '  spaced  ' });
+  assert.deepEqual(c.K1, { t: 's', v: '=SUM((' }, 'a formula Excel would refuse stays text');
+  assert.deepEqual(c.L1.v, 1000);
+});
+
+test('csv: delimiter sniffing (comma, semicolon, tab, pipe) and the file name', () => {
+  assert.equal(X.sniff('a;b;c\n1;2;3\n4;5;6'), ';');
+  assert.equal(X.sniff('a,b;c\n1,2;3\n4,5;6\n7,8;9'), ',', 'a tie goes to the comma');
+  assert.equal(X.sniff('name\tcity, state\nAnn\tAustin, TX\nBo\tReno, NV'), '\t', 'commas inside fields don\'t count');
+  assert.equal(X.sniff('"a,b"|c\n"d,e"|f'), '|');
+  assert.equal(X.sniff('just one column\nand another line'), ',');
+  assert.equal(X.sniff('x;y\n"1;2";3\n4;5'), ';');
+  const tsv = X.readDelimited('a,b\tc', { name: 'Grades 2026.tsv' });
+  assert.deepEqual(sheetOf(tsv).A1, { t: 's', v: 'a,b' }, '.tsv is tab separated');
+  assert.equal(tsv.sheets[0].name, 'Grades 2026');
+  assert.equal(X.readDelimited('a', { name: 'a:b/c*?.csv' }).sheets[0].name, 'Sheet1', 'a name Excel would refuse');
+  assert.equal(X.readDelimited('a;b', { delimiter: ',' }).sheets[0].rows.get(0).get(0).v, 'a;b');
+});
+
+test('csv: byte-order marks and encodings', () => {
+  const utf8 = Uint8Array.from([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('Ünï,2')]);
+  assert.deepEqual(sheetOf(X.readDelimited(utf8)).A1, { t: 's', v: 'Ünï' });
+  const le = Uint8Array.from([0xff, 0xfe, ...[...'ab\tç\r\n1\t2'].flatMap((ch) => [ch.charCodeAt(0) & 255, ch.charCodeAt(0) >> 8])]);
+  const w = X.readDelimited(le);
+  assert.deepEqual([sheetOf(w).A1.v, sheetOf(w).B1.v, sheetOf(w).B2.v], ['ab', 'ç', 2], 'UTF-16 with a BOM: Excel\'s Unicode Text');
+  const be = Uint8Array.from([0xfe, 0xff, ...[...'x,y'].flatMap((ch) => [ch.charCodeAt(0) >> 8, ch.charCodeAt(0) & 255])]);
+  assert.equal(sheetOf(X.readDelimited(be)).B1.v, 'y');
+  const latin = Uint8Array.from([0x63, 0x61, 0x66, 0xe9, 0x2c, 0x31]);
+  assert.equal(sheetOf(X.readDelimited(latin)).A1.v, 'café', 'not UTF-8: Windows-1252');
+  assert.equal(sheetOf(X.readDelimited('﻿a,b')).A1.v, 'a');
+});
+
+test('csv: an unclosed quote and the cell cap degrade, listed in the problems', () => {
+  const wb = X.readDelimited('a,"b\nc,d');
+  assert.deepEqual(sheetOf(wb).B1, { t: 's', v: 'b\nc,d' });
+  assert.deepEqual(wb.keep.problems.map((p) => p.code), ['quote']);
+  const big = X.readDelimited(`${'1,'.repeat(999)}1\n`.repeat(251));
+  assert.equal(M.cellCount(big), 250000);
+  assert.deepEqual(big.keep.problems.map((p) => p.code), ['cap-cells']);
+});
+
+test('csv: written as Excel saves CSV UTF-8: shown text, quotes where needed, CRLF, a BOM; TSV with tabs', async () => {
+  const wb = await X.read(synthetic());
+  const one = M.getSheet(wb, 'One');
+  const csv = X.writeDelimited(wb, { sheet: one.id });
+  const lines = csv.split('\r\n');
+  assert.equal(csv[0], '﻿');
+  assert.equal(lines[0], '﻿plain & simple,Bold blue sub,日本,a\rb_x0041_,,in,Bc,');
+  assert.equal(lines[1], '1.5,TRUE,#N/A,10/31/2026 12:00,-4E+300,x1.5,TRUE,#DIV/0!', 'formats shown: General, the ISO date in its General cell');
+  assert.equal(lines.at(-1), '', 'a line end after the last row');
+  const tsv = X.writeDelimited(wb, { sheet: 'One', delimiter: '\t', bom: false });
+  assert.equal(tsv.split('\r\n')[1].split('\t').length, 8);
+  const q = M.workbook();
+  q.sheets[0].rows.set(0, new Map([[0, { t: 's', v: 'a,b' }], [1, { t: 's', v: 'say "x"' }], [2, { t: 's', v: 'two\nlines' }], [3, { t: 'n', v: 0.1 + 0.2 }], [4, { t: 'n', v: 1 / 3 }]]));
+  q.sheets[0].rows.set(2, new Map([[1, { t: 'b', v: false }]]));
+  assert.equal(X.writeDelimited(q, { bom: false }), '"a,b","say ""x""","two\nlines",0.3,0.333333333\r\n,,,,\r\n,FALSE,,,\r\n');
+  const back = X.readDelimited(X.writeDelimited(q));
+  assert.deepEqual(sheetOf(back).A1, { t: 's', v: 'a,b' });
+  assert.deepEqual(sheetOf(back).C1, { t: 's', v: 'two\nlines' });
+});
