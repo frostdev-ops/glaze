@@ -45,6 +45,10 @@ const viewer = () => {
   const inputs = [];
   const parent = { postMessage() {} };
   const store = {};
+  const storageListeners = [];
+  const changes = [];
+  const emitStorage = (change) => { for (const f of storageListeners) f(change, 'local'); };
+  const flushStorage = () => { for (const change of changes.splice(0)) emitStorage(change); };
   const document = {
     documentElement: html, head: null, body, contentType: 'text/html', readyState: 'complete', addEventListener() {},
     createElement: (t) => { const e = new El(t); if (t === 'input') inputs.push(e); return e; },
@@ -63,11 +67,18 @@ const viewer = () => {
     GZ_INK: require('../lib/ink.js'),
     GZ_SURFACES: require('../lib/surfaces.js'),
     chrome: { runtime: { id: 'glaze', getURL: (path) => `chrome-extension://test/${path}` }, storage: {
-      onChanged: { addListener() {} },
+      onChanged: { addListener: (f) => storageListeners.push(f) },
       local: {
         get: async (k) => ({ [k]: store[k] }),
-        set: async (o) => { sets.push(JSON.parse(JSON.stringify(o))); Object.assign(store, o); },
-        remove: async (k) => { delete store[k]; },
+        set: async (o) => {
+          const snapshot = JSON.parse(JSON.stringify(o));
+          sets.push(snapshot);
+          for (const [k, newValue] of Object.entries(snapshot)) {
+            changes.push({ [k]: { oldValue: store[k], newValue } });
+            store[k] = newValue;
+          }
+        },
+        remove: async (k) => { if (k in store) changes.push({ [k]: { oldValue: store[k] } }); delete store[k]; },
       },
     } },
   });
@@ -78,7 +89,7 @@ const viewer = () => {
   const bar = () => body.children.find((c) => c.id === 'gz-ink-bar');
   const svg = () => page.children.find((c) => c.attrs.class === 'gz-ink');
   const pointer = (type, id, x, y) => svg().fire(type, { pointerType: 'mouse', button: 0, pointerId: id, clientX: x, clientY: y });
-  return { html, tell, fire, bar, svg, pointer, sets, inputs, chrome: ctx.chrome };
+  return { html, tell, fire, bar, svg, pointer, sets, inputs, store, changes, emitStorage, flushStorage, chrome: ctx.chrome };
 };
 
 test('Esc in the middle of a stroke lets the pointer go and drops the half stroke; the next stroke draws', async () => {
@@ -124,6 +135,45 @@ const file = (pages) => {
   return { f: { size: 100, text: () => text }, done: () => resolve(require('../lib/ink.js').exportFile('21', pages)) };
 };
 const MARK = { 1: [{ t: 'pen', c: '#e11d48', w: 3, p: [1, 1, 9, 9] }] };
+
+const drawn = async () => {
+  const v = viewer();
+  await v.tell();
+  v.bar().find('Annotate').click();
+  v.pointer('pointerdown', 1, 10, 10);
+  v.pointer('pointerup', 1, 20, 20);
+  await settle();
+  v.flushStorage();
+  return v;
+};
+
+test('another tab clearing an already empty file discards redo history', async () => {
+  const v = await drawn();
+  v.bar().find('Undo').click();
+  await settle();
+  v.flushStorage();
+  assert.equal(v.bar().find('Redo').disabled, false);
+  const key = `ink:${CANVAS}/5/21`;
+  v.emitStorage({ [key]: { oldValue: { v: 1, by: 'other', pages: MARK } } });
+  assert.equal(v.bar().find('Redo').disabled, true, 'a foreign clear invalidates redo even without local marks');
+});
+
+test('a delayed own clear notification preserves an undo already applied', async () => {
+  const v = await drawn();
+  v.bar().find('Clear page').click();
+  await settle();
+  assert.equal(Object.keys(v.store).length, 0);
+  v.bar().find('Undo').click();
+  await settle();
+  v.flushStorage();
+  assert.equal(v.svg().firstChild.children.length, 1, 'the restored stroke remains on the page');
+  assert.equal(v.bar().find('Redo').disabled, false, 'the clear is still redoable');
+  const key = `ink:${CANVAS}/5/21`;
+  const foreign = { v: 1, by: 'other', pages: { 1: [{ ...MARK[1][0], c: '#112233' }] } };
+  v.emitStorage({ [key]: { newValue: foreign } });
+  assert.equal(v.bar().find('Redo').disabled, true, 'a subsequent foreign write still resets history');
+  assert.equal(v.svg().firstChild.children[0].attrs.stroke, '#112233');
+});
 
 for (const [what, change] of [
   ['another file opens', (v) => v.tell({ file: '22' })],
