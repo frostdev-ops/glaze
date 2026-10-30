@@ -65,6 +65,11 @@ const SITES = {
   'lib/modbroker.js': [{ at: 'env.fetch(u.href', kind: 'asked', flow: 'a mod\'s network:<host>: its install or its switch asked for the host (lib/editor-mods.js)', guard: /if \(!await env\.reach\(u\.href\)\)/ }],
   // AI: the connection's endpoint, whose host Settings asks for from a click. The broker refuses while the browser doesn't
   // hold it, and the provider and the catalog reach it only through the broker's fetch pinned to that host and generation.
+  'lib/ai/local/store.js': [
+    { at: 'get ||= (...a) => globalThis.fetch(...a);', kind: 'open', host: 'https://huggingface.co', hosts: ['https://huggingface.co', 'https://us.aws.cdn.hf.co'],
+      why: 'the local model\'s weights on the student\'s click: huggingface.co\'s resolve URL echoes the Origin, its CDN answers *; the final host is checked (allowedHost)' },
+    { at: "globalThis.fetch(new URL('/lib/ai/local/models.json'", kind: 'extension' },
+  ],
   'lib/ai/broker.js': [{ at: 'env.fetch(url, init)', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'lib/ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
   'lib/ai/providers/openai.js': [
     { at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'lib/ai/broker.js', guard: /fetch: pinned\(env, use\)/ },
