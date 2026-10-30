@@ -43,7 +43,7 @@ test('the policy states what agent access sends, what waits for the student and 
   for (const fact of [/off by default/i, /through a helper program on this computer/, /`glaze-mcp`/, /downloaded Glaze Mac app/,
     /per app and per group/, /Every built-in change waits for your OK/, /built-in agent tools never submit work/, /Agent access sends no data to FrostDev/,
     /that app's own (?:privacy )?policy/, /never what was asked or answered/,
-    /Turn off[^.]*clears the kept assignment reads/, /Forget all apps[^.]*clears the kept assignment reads/,
+    /Turn off[^.]*clears the kept assignment reads/, /Forget all apps[^.]*clears[^.]*assignment reads/,
     /Reset everything clears them all/, /`websiteContent`/]) assert.match(text, fact);
   for (const group of ['Courses, to-dos and schedule', 'Grades', 'Assignments and rubrics', 'Writer documents']) assert.ok(text.includes(group), group);
   assert.match(plain(read('docs/privacy.md')), /\]\(\.\.\/PRIVACY\.md#agent-access\)/);
@@ -66,9 +66,9 @@ test('docs/agents.md names the approval window\'s groups and buttons as Glaze sh
   for (const button of [...html.matchAll(/<button id="(?:yes|no)"[^>]*>([^<]+)</g)].map((x) => x[1].replace('&#39;', "'"))) assert.ok(text.includes(button), button);
 });
 
-// Settings → AI → Agents (lib/editor-agents.js, branch mcp-options until it merges): every line its link state shows.
+// Settings → AI → Agents: helper states and commands from the merged options page.
 const editor = path.join(root, 'lib/editor-agents.js');
-test('docs/agents.md covers each helper state and its command', { skip: !fs.existsSync(editor) && 'lib/editor-agents.js is not on this branch yet' }, () => {
+test('docs/agents.md covers each helper state and its command', () => {
   const E = require(editor), text = agents(), id = 'abcdefghijklmnopabcdefghijklmnop';
   const states = ['connected', 'connecting', 'restart', 'not-installed', 'forbidden', 'exited', 'old-helper', E.NO_NODE, 'needs-permission'];
   for (const browser of ['chrome', 'firefox', 'safari']) for (const state of states) {
@@ -104,7 +104,7 @@ test('agent retention describes usage eviction and the settings that survive res
   const text = section();
   assert.match(text, /100 used last[^;]*no time-based expiry/);
   assert.match(text, /Site removal and Reset everything leave the agent switch, apps, grants and activity unchanged/);
-  assert.match(text, /Revoke and Forget all apps leave the activity list/);
+  assert.match(text, /Revoke leaves the activity list/);
   assert.match(plain(read('docs/privacy.md')), /Reset everything[^.]*switch, apps, grants and activity/);
 });
 
@@ -137,4 +137,22 @@ test('features lists Agents and the AI harness describes the active Writer bridg
 
 test('helper uninstall documents removal of otherwise empty Windows host keys', () => {
   assert.match(plain(read('mcp/README.md')), /otherwise empty host key/);
+});
+
+
+test('Forget all apps clears activity in every agent privacy page', () => {
+  for (const file of ['PRIVACY.md', 'docs/privacy.md', 'docs/agents.md', 'mcp/README.md']) {
+    const text = file === 'PRIVACY.md' ? section() : plain(read(file));
+    assert.match(text, /Forget all apps[^.]*clears the activity list/, file);
+    assert.doesNotMatch(text, /Revoke and Forget all apps leave the activity list|activity[^.]*until you uninstall/i, file);
+  }
+});
+
+test('Firefox consent documentation matches the merged options permission bundle', () => {
+  const E = require(editor);
+  assert.deepEqual(E.FIREFOX, { permissions: ['nativeMessaging'], data_collection: ['websiteContent'] });
+  const text = section();
+  assert.match(text, /websiteContent/);
+  assert.match(text, /same Firefox prompt as `nativeMessaging`/);
+  assert.match(text, /click that turns Agents on, and gives both back when you turn it off/);
 });
