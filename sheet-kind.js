@@ -133,10 +133,12 @@
   // held kept as a version first (the 'import' save), every part it had before dropped. → the record.
   const into = async (key, f) => {
     const wb = await workbookOf(f), SD = GZ_SHEET_DATA;
-    const had = (await get([`writerPaper:${key}`]))[`writerPaper:${key}`];
+    let had = (await get([`writerPaper:${key}`]))[`writerPaper:${key}`];
+    const prior = had?.kind === 'sheet' ? await SD.read(get, key) : null;
+    if (prior) had = prior.rec;
     const sigs = new Map(Object.keys(had?.parts || {}).map((n) => [n, 'stale']));
-    const gz = await SD.pack(wb);
-    return (await SD.write(papers(), key, wb, sigs, { base: had?.revision || 0, patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: 'start', gz, cells: SD.measure(wb).cells } })).saved.paper;
+    const checkpoint = prior?.wb || wb, gz = await SD.pack(checkpoint);
+    return (await SD.write(papers(), key, wb, sigs, { base: had?.revision || 0, patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: prior ? 'import' : 'start', gz, cells: SD.measure(checkpoint).cells } })).saved.paper;
   };
   // An empty attempt started as a spreadsheet (writer-kinds.js): what its record takes; the grid opens a blank workbook.
   const empty = () => ({ grid: Array.from({ length: 4 }, () => Array(6).fill('')), text: '', cells: 0, sheets: 1 });
