@@ -152,3 +152,17 @@ test('guessed tags in context and data are all redrawn, including a normalized k
   assert.equal(tag(b), 'DATA-555555555555', 'normalization cannot conceal a kept delimiter');
   assert.equal(tag(ask('ordinary text')), tag(b), 'the replacement is kept for the same context');
 });
+
+
+test('a cache boundary splits one fenced user message and keeps its tag without page context', () => {
+  const ask = (caret) => T.request({ system: 'Finish the sentence.', data: [{ label: 'document', text: 'Earlier text.', cache: true }, { label: 'caret', text: caret }] });
+  const a = ask('Our group writes'), b = ask('Our group writes about');
+  assert.ok(R.clean(a));
+  assert.equal(a.messages[1].content.length, 2);
+  assert.deepEqual(a.messages[1].content[0], b.messages[1].content[0]);
+  assert.equal(a.messages[0].content, b.messages[0].content);
+  assert.equal(a.messages[1].content[0].cache, true);
+  assert.equal(a.messages[1].content[1].cache, undefined);
+  assert.match(a.messages[1].content[0].text, /Earlier text/);
+  assert.doesNotMatch(a.messages[1].content[0].text, /Our group writes/);
+});

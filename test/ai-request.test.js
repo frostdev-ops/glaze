@@ -140,3 +140,11 @@ test('request and result tool-call IDs must be strings, never coerced values', (
     assert.equal(R.result({ provider: 'p', finish: 'tool', toolCalls }), null, `result ID ${String(id)}`);
   }
 });
+
+
+test('only a boolean cache marker is accepted on neutral text parts', () => {
+  const marked = { type: 'text', text: 'stable', cache: true };
+  assert.deepEqual(R.clean(user([marked])).messages[0].content, [marked]);
+  for (const cache of [false, 'ephemeral', {}, null]) assert.equal(R.clean(user([{ ...marked, cache }])), null);
+  assert.equal(R.clean(user([{ ...marked, extra: 1 }])), null);
+});

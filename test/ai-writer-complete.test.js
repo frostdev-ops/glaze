@@ -28,7 +28,7 @@ const go = async (input, reply, caps) => {
   const cfg = { replies: [{ text: reply }], seen: [], caps };
   const out = await T.run(C.task, { mode: 'paper', kind: 'assignment', context: ASSIGN, ...input }, { provider: 'mock', cfg, emit() {} }).catch((e) => ({ output: null, code: e.code }));
   const req = cfg.seen[0];
-  return { ...out, req, system: req?.messages[0].content[0].text, data: req?.messages[1].content[0].text, blocks: req ? blocks(req.messages[1].content[0].text) : [] };
+  return { ...out, req, system: req?.messages[0].content[0].text, data: req?.messages[1].content.map((p) => p.text).join('\n\n'), blocks: req ? blocks(req.messages[1].content.map((p) => p.text).join('\n\n')) : [] };
 };
 const block = (r, re) => r.blocks.find((b) => re.test(b.label));
 
@@ -123,7 +123,7 @@ test('the brief prompt for a model on this computer keeps BRIEF\'s bounds', asyn
   const long = { ...ASSIGN, assignment: { ...ASSIGN.assignment, instructions: `Write about memory. ${'Detail. '.repeat(400)}` } };
   const cfg = { replies: [{ text: 'what the town forgets.' }], seen: [], caps: { local: true } };
   await T.run(C.task, { before: `${doc(3)}\n${'word '.repeat(400)}and the river keeps `, context: long, past: Array.from({ length: 10 }, (_, i) => `Suggestion ${i} was shown at this place before now.`) }, { provider: 'mock', cfg });
-  const b = blocks(cfg.seen[0].messages[1].content[0].text);
+  const b = blocks(cfg.seen[0].messages[1].content.map((p) => p.text).join('\n\n'));
   assert.ok(b.find((x) => x.label === 'assignment instructions').body.length <= C.BRIEF.context + 1);
   assert.ok(b.find((x) => x.label === 'the sentence the student is typing').body.length <= C.BRIEF.before);
   const shown = b.find((x) => x.label === 'suggestions already shown').body.split('\n');
@@ -177,4 +177,62 @@ test('a warm request still carries the short stub', () => {
   const b = blocks(req.messages[1].content[0].text);
   assert.ok(!b.some((x) => /^the document so far/.test(x.label)), 'no document in a warm-up');
   assert.equal(b.at(-1).body, 'Words to warm with');
+});
+
+
+test('UTF-8 rolling cuts preserve supplementary characters, including a paragraph with no spaces', () => {
+  for (const source of ['前𠮷末', '😀'.repeat(20), '前。後𠮷末', 'word '.repeat(100) + '𠮷末']) {
+    for (let budget = 0; budget < 40; budget++) {
+      const cut = C.latest(source, budget);
+      assert.ok(cut.isWellFormed(), `${budget}: ${JSON.stringify(cut)}`);
+      assert.ok(bytes(JSON.stringify(cut)) - 2 <= budget, `${budget}: ${bytes(JSON.stringify(cut)) - 2} bytes`);
+    }
+  }
+});
+
+test('a huge unfinished paragraph and CJK caret stay within the run budget', async () => {
+  for (const before of ['detail '.repeat(90000) + CARET, '河流'.repeat(120000) + ' and the river keeps ']) {
+    const r = await go({ before }, 'what the town forgets.', { context: 128000 });
+    assert.equal(r.code, undefined);
+    assert.equal(r.output, 'what the town forgets.');
+    assert.ok(X.estimateTokens(r.req) + 64 <= Math.floor(C.READ.tokens * C.READ.room));
+    assert.ok(r.req.messages.every((m) => m.content.every((p) => p.text.isWellFormed())));
+  }
+});
+
+test('tiny catalog windows refuse before calling a provider; fitting small windows honor headroom and the past share', async () => {
+  const tiny = await go({ before: CARET }, 'what the town forgets.', { context: 256 });
+  assert.equal(tiny.code, 'size');
+  assert.equal(tiny.req, undefined);
+  const r = await go({ before: doc(5) + '\n' + CARET, past: Array.from({ length: 3 }, () => 'A previous suggestion with enough words. '.repeat(10)) }, 'what the town forgets.', { context: 1024 });
+  assert.equal(r.output, 'what the town forgets.');
+  assert.ok(X.estimateTokens(r.req) + 64 <= Math.floor(1024 * 0.9));
+  assert.ok(X.estimateTokens(r.req) + 64 + 128 <= 1024);
+  assert.ok(bytes(block(r, /^suggestions already shown$/)?.body || '') <= 1024 * 4 * 0.05);
+});
+
+test('defined terms and names can recur, while six copied words inside a new finish cannot', () => {
+  const at = (document, before) => C.task.input({ before: document + '\n' + 'An unrelated sentence about local history. '.repeat(15) + '\n' + before });
+  assert.equal(C.finish('attention residue.', C.task.input({ before: 'Attention residue persists after a switch. Our next intervention reduces ' })), 'attention residue.');
+  const term = 'Cognitive load during sustained task switching refers to the effort of changing focus.';
+  assert.equal(C.finish('cognitive load during sustained task switching.', at(term, 'Our experiment measures ')), 'cognitive load during sustained task switching.');
+  const name = 'The United States Department of Veterans Affairs supports this program.';
+  assert.equal(C.finish('the United States Department of Veterans Affairs.', at(name, 'Our partner works with ')), 'the United States Department of Veterans Affairs.');
+  const copied = 'The team returns to the clearing in every chapter, and each return costs something.';
+  assert.equal(C.finish('to the clearing in every chapter for inspiration.', at(copied, 'Morrison also returns ')), null);
+  assert.equal(C.finish('returns to the clearing in every chapter.', at(copied, 'The team ')), null);
+});
+
+test('a stable block ends at the document; suggestions and the caret never carry its cache marker', async () => {
+  const first = await go({ before: doc(5) + '\n' + CARET }, 'what the town forgets.', { context: 128000 });
+  const next = await go({ before: doc(5) + '\n' + CARET + 'what the ', past: [CARET + 'what the town forgets.'] }, 'town would rather forget.', { context: 128000 });
+  const a = first.req.messages[1].content, b = next.req.messages[1].content;
+  assert.equal(a.length, 2);
+  assert.equal(a[0].cache, true);
+  assert.equal(a[1].cache, undefined);
+  assert.deepEqual(a[0], b[0]);
+  assert.match(a[0].text, /Paragraph 5 ends here/);
+  assert.doesNotMatch(a[0].text, /the sentence the student is typing|suggestions already shown/);
+  assert.match(b[1].text, /suggestions already shown/);
+  assert.match(b[1].text, /the sentence the student is typing/);
 });
