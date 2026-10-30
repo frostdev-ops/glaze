@@ -10,7 +10,7 @@ Personalize o Canvas, o Blackboard Ultra e o Moodle com temas e modo escuro. No 
 
 SUA APARÊNCIA
 
-• Aplique um dos onze estilos ou pegue outros, gratuitos, em frostdev.io/glaze/looks.
+• Aplique um dos onze estilos ou pegue outros, gratuitos, em frostdev.io/glaze/looks; os que você salvar ou usar da galeria aparecem onde quer que você escolha um estilo, inclusive para um só curso.
 • Modo escuro: combine uma paleta clara e uma escura com a aparência do sistema ou com um horário.
 • Cores e fontes personalizadas: edite as catorze cores, dê a cada curso sua cor e escolha Lexend, OpenDyslexic ou qualquer Google Font.
 • Fundos: um gradiente, uma imagem sua ou uma das onze cenas animadas.
@@ -82,4 +82,5 @@ NOVO NA 4.0.0
 • Firefox: com Agentes, conecte apps de IA do seu computador aos seus cursos, pendências e notas. Cada app e cada alteração precisam da sua autorização.
 • “Fazer backup…” e “Restaurar…” incluem trabalhos, documentos, versões, seu dicionário e fontes salvas.
 • Blackboard: a rubrica aparece na página da tentativa de um rascunho salvo, os avisos de prazo ficam certos na mudança de horário, a busca segue os links do próprio Blackboard e desligar Lembrar onde você parou cancela uma restauração pendente.
+• Os estilos que você salva ou usa da galeria com “Usar este tema” agora aparecem onde quer que você escolha um estilo, inclusive o de um curso. Configurações os agrupa em Integradas, Salvo e Galeria.
 • Aparência › Movimento começa em Expressivo. A atualização muda Sutil para Expressivo uma vez; Desligado continua desligado.

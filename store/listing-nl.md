@@ -10,7 +10,7 @@ Geef Canvas, Blackboard Ultra en Moodle je eigen thema en donkere modus. Op Canv
 
 JOUW UITERLIJK
 
-• Pas een van elf stijlen toe of haal gratis stijlen op frostdev.io/glaze/looks.
+• Pas een van elf stijlen toe of haal gratis stijlen op frostdev.io/glaze/looks; stijlen die je opslaat of uit de galerie gebruikt, staan overal waar je een stijl kiest, ook voor één cursus.
 • Donkere modus: koppel een licht en een donker palet aan de modus van je systeem of aan een schema.
 • Eigen kleuren en lettertypen: pas alle veertien kleuren aan, geef elke cursus een eigen kleur en kies Lexend, OpenDyslexic of elk Google Font.
 • Achtergronden: een verloop, je eigen afbeelding of een van elf geanimeerde scènes.
@@ -82,4 +82,5 @@ NIEUW IN 4.0.0
 • Firefox: met Agents koppel je AI-apps op je computer aan je cursussen, taken en cijfers. Elke app en elke wijziging heeft jouw toestemming nodig.
 • “Back-up maken…” en “Herstellen…” bevatten werkstukken, documenten, versies, je woordenboek en opgeslagen bronnen.
 • Blackboard: het beoordelingsschema verschijnt op de pagina van een opgeslagen concept, deadlinelabels kloppen ook na het verzetten van de klok, zoeken volgt de eigen links van Blackboard en het uitzetten van Onthoud waar je was annuleert een wachtend herstel van je positie.
+• Stijlen die je opslaat of uit de galerie gebruikt met “Dit thema gebruiken”, staan nu overal waar je een stijl kiest, ook voor één cursus. Instellingen groepeert ze als Ingebouwd, Opgeslagen en Galerie.
 • Uiterlijk › Beweging begint bij Expressief. De update zet Subtiel eenmalig op Expressief; Uit blijft Uit.

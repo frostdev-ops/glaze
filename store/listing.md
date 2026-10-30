@@ -18,7 +18,7 @@ Give Canvas, Blackboard Ultra and Moodle your own theme and dark mode. On Canvas
 
 YOUR LOOK
 
-• Apply one of eleven Looks, or get free ones at frostdev.io/glaze/looks.
+• Apply one of eleven Looks, or get free ones at frostdev.io/glaze/looks; Looks you save or use from the gallery appear wherever you pick one, even for a single course.
 • Dark mode: pair a light and a dark palette with your system's appearance or a schedule.
 • Custom colors and fonts: edit all fourteen colors, give each course its own color, and pick Lexend, OpenDyslexic or any Google Font.
 • Backgrounds: a gradient, your own picture or one of eleven animated scenes.
@@ -90,6 +90,7 @@ NEW IN 4.0.0
 • Firefox: Agents connects AI apps on your computer to your courses, to-dos and grades. Every app and every change needs your OK.
 • Back up… and Restore… include papers, documents, versions, your dictionary and saved sources.
 • Blackboard: the rubric shows on a saved draft's attempt page, due chips stay right across a clock change, search follows Blackboard's own links, and turning Remember your place off cancels a pending restore.
+• Looks you save, or use from the gallery with Use this theme, now appear wherever you pick a Look, a course's own Look included. Settings groups them as Built in, Saved and Gallery.
 • Look › Motion starts at Expressive. Updating moves Subtle to Expressive once; Off stays Off.
 
 ## Single-purpose statement
