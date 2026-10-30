@@ -177,7 +177,7 @@ test('DOLLAR, FIXED, NUMBERVALUE with Microsoft\'s data', () => {
 
 test('a range past the engine\'s cell cap is #NUM!', () => {
   const e = book({ A1: 'a', Z10000: 'b' });
-  cases(e, [['ARRAYTOTEXT(A1:Z10000)', '#NUM!'], ['TEXTJOIN(",",TRUE,A1:Z10000)', '#NUM!'], ['TEXTJOIN(A1:Z10000,TRUE,"x","y")', '#NUM!']]);
+  cases(e, [['ARRAYTOTEXT(A1:Z10000)', '#NUM!'], ['TEXTJOIN(",",TRUE,A1:Z10000)', '#NUM!'], ['TEXTJOIN(A1:Z10000,TRUE,"x","y")', '#NUM!'], ['TEXTBEFORE("a",A1:Z10000)', '#NUM!'], ['TEXTAFTER("a",A1:Z10000)', '#NUM!'], ['TEXTSPLIT("a",A1:Z10000)', '#NUM!'], ['TEXTSPLIT("a",,A1:Z10000)', '#NUM!']]);
 });
 
 test('VALUETOTEXT and ARRAYTOTEXT with Microsoft\'s data', () => {

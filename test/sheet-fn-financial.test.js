@@ -175,7 +175,7 @@ test('XNPV and XIRR with Microsoft\'s data; dates truncated, out of order, misma
 
 test('a range past the engine\'s cell cap is #NUM!', () => {
   const e = book({ A1: -1, Z10000: 1 });
-  cases(e, [['XNPV(0.1,A1:Z10000,A1:Z10000)', '#NUM!'], ['XIRR(A1:Z10000,A1:Z10000)', '#NUM!']]);
+  cases(e, [['XNPV(0.1,A1:Z10000,A1:Z10000)', '#NUM!'], ['XIRR(A1:Z10000,A1:Z10000)', '#NUM!'], ['XNPV(0.1,{-1,1},A1:Z10000)', '#NUM!'], ['XIRR({-1,1},A1:Z10000)', '#NUM!']]);
 });
 
 test('SLN, SYD, DB, DDB with Microsoft\'s data', () => {
