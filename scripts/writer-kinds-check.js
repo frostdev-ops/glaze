@@ -53,6 +53,8 @@ const until = async (fn, label, ms = 20000, state = null) => {
   const was = state ? await Promise.resolve().then(state).then((x) => JSON.stringify(x), (e) => `unreadable: ${e.message}`) : '';
   throw Error(`${label} timed out after ${ms} ms${last ? `: ${last.message}` : ''}${was ? `; at the deadline ${was}` : ''}`);
 };
+// features/writer.js gives a frame 15 s to say ready and reopens it FRAME_RETRIES (2) times before falling back: 45 s, plus margin.
+const FRAME_SHOWN_MS = 50000;
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 const quiet = async (fn, label, ms = 800) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) throw Error(`${label}: it happened`); await pause(80); } return true; };
 const sha = (b) => crypto.createHash('sha256').update(Buffer.from(b)).digest('hex');
@@ -117,14 +119,23 @@ const holds = (bytes, value) => {
     const bytesOf = async (rec) => Buffer.from(await worker.evaluate(async (f) => { if (typeof f === 'string') return f; let s = ''; await openDocFiles().read(f.hash, (c) => { s += GZ_DOC_FILES.b64(c); }); return s; }, rec.file), 'base64');
     const record = async () => { const all = await local(), k = Object.keys(all).find((x) => x.startsWith('writerPaper:')); return k ? all[k] : null; };
     const versions = async () => { const all = await local(), k = Object.keys(all).find((x) => x.startsWith('writerVersions:')); return all[k] || []; };
+    let opens = 0;
     const open = async () => {
-      const p = await context.newPage();
+      const n = ++opens, p = await context.newPage();
       p.on('pageerror', (e) => errors.push(`page: ${e.message}`));
       p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`page console: ${m.text()}`); });
+      const t0 = Date.now();
       await p.goto(`${site}${ATTEMPT}?mode=empty`);
-      const el = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.evaluate((f) => !f.style.opacity) && x; }, 'the frame shown', 30000);
+      const tGoto = Date.now() - t0;
+      // What the page shows of the frame while it is awaited, read at the deadline: each Writer frame's inline opacity (held until the
+      // frame says ready) and the extension addresses the page has framed.
+      const state = () => Promise.race([new Promise((r) => setTimeout(r, 5000, 'unreadable: page busy')), p.evaluate(() => [...document.querySelectorAll('iframe.gz-writer')].map((f) => ({ kind: f.dataset.gzWriterFrame, opacity: f.style.opacity, connected: f.isConnected })))
+        .then((frames) => ({ frames, extensionFrames: p.frames().filter((f) => f.url().startsWith('chrome-extension:')).length }))]);
+      const el = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.evaluate((f) => !f.style.opacity) && x; }, 'the frame shown', FRAME_SHOWN_MS, state);
+      const tShown = Date.now() - t0;
       const fr = await until(() => el.contentFrame(), 'frame document');
       await until(() => fr.evaluate(() => !!globalThis.GZ_WRITER_PAPER?.current()?.key()), 'loaded', 30000);
+      console.log(`open ${n}: frame shown ${tShown} ms after navigation started (goto ${tGoto} ms), paper loaded ${Date.now() - t0} ms`);
       return { p, el, fr };
     };
     const give = (p, name, type, bytes) => p.evaluate(({ name, type, bytes }) => {
