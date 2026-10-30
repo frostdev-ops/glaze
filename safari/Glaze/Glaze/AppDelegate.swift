@@ -14,6 +14,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Override point for customization after application launch.
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { GlazeGoogleSignIn.shared.open(url) }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return true
     }

@@ -16,6 +16,8 @@ const root = path.join(__dirname, '..');
 const bridgeFile = path.join(root, 'safari/Glaze/Glaze Extension/GlazeAgentBridge.swift');
 const hostFile = path.join(root, 'safari/dmg/GlazeAgentHost.swift');
 const appFile = path.join(root, 'safari/dmg/AppDelegate.swift');
+// The DMG app compiles Drive's sign-in too (GlazeGoogleSignIn.swift and the shared GlazeGoogle.swift).
+const googleFiles = ['safari/Glaze/Glaze Extension/GlazeGoogle.swift', 'safari/Glaze/Glaze/GlazeGoogleSignIn.swift'].map((f) => path.join(root, f));
 const code = (src) => src.split(/\r?\n/).filter((l) => !/^\s*\/\//.test(l)).join('\n');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const IDLE = 5, LINE = 1 << 20, QUEUE = 2 << 20;
@@ -369,7 +371,7 @@ test('the host compiles for macOS 12 in the app with complete concurrency checki
 test('the DMG app\'s sources compile together as its target builds them, against a stand-in for Sparkle\'s API', { skip: !S.supported }, () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sparkle-'));
   try {
-    const files = S.sparkleSources([appFile, path.join(root, 'safari/Glaze/Glaze/ViewController.swift'), hostFile, bridgeFile], temp);
+    const files = S.sparkleSources([appFile, path.join(root, 'safari/Glaze/Glaze/ViewController.swift'), hostFile, bridgeFile, ...googleFiles], temp);
     const r = S.typecheck(files, ['-parse-as-library', '-module-name', 'Glaze', '-D', 'GLAZE_DMG', '-default-isolation', 'MainActor']);
     assert.equal(r.status, 0, r.stderr);
     assert.doesNotMatch(r.stderr, /warning:|error:/);
@@ -386,7 +388,8 @@ test('the host is DMG-only, starts no process and opens no network socket; the a
   }
   const app = code(fs.readFileSync(appFile, 'utf8'));
   assert.match(app, /if urls\.contains\(where: \{ \$0\.absoluteString == GlazeAgentBridge\.start \}\) \{ startAgents\(\) \}/);
-  assert.match(app, /guard !userSession, force \|\| agents == nil \|\| forUpdate && agents\?\.canInstallUpdate == true else \{ return \}/, 'a hidden launch stays up until its calls and traffic are quiet');
+  assert.match(app, /guard !userSession, force \|\| signingIn == 0 && \(agents == nil \|\| forUpdate && agents\?\.canInstallUpdate == true\) else \{ return \}/, 'a hidden launch stays up until its calls, traffic and a Google sign-in are done');
+  assert.match(app, /self\.signingIn -= 1\n\s*self\.finishHidden\("google sign-in ended"\)/);
   assert.match(app, /finishHidden\("unexpected interactive extraction", force: true\)/, 'Sparkle\'s safety stop still ends it');
   assert.match(app, /func applicationWillTerminate\(_ notification: Notification\) \{ agents\?\.stop\(\) \}/);
   assert.match(app, /host\.onIdle = \{[^]*self\.agents\?\.stop\(\)[^]*finishHidden\("agents idle"\)/);
@@ -449,7 +452,7 @@ test('a prepared update waits for a long call and its split reply, then quits th
   fs.mkdirSync(group, { mode: 0o700 });
   const HOME = path.join(temp, 'home'), file = path.join(temp, 'Update.swift');
   const app = fs.readFileSync(path.join(__dirname, 'fixtures/sparkle-stand-in.swift'), 'utf8') + fs.readFileSync(appFile, 'utf8').replace(/^import Sparkle$/m, '').replace(/^@main$/m, '');
-  fs.writeFileSync(file, fs.readFileSync(bridgeFile, 'utf8') + fs.readFileSync(hostFile, 'utf8') + app + HARNESS.slice(0, HARNESS.indexOf('let harness =')) + UPDATE_BOOT);
+  fs.writeFileSync(file, fs.readFileSync(bridgeFile, 'utf8') + fs.readFileSync(hostFile, 'utf8') + googleFiles.map((f) => fs.readFileSync(f, 'utf8')).join('') + app + HARNESS.slice(0, HARNESS.indexOf('let harness =')) + UPDATE_BOOT);
   const swift = S.run(file, [R.dir({ platform: 'darwin', env: { HOME } }), group, '60', String(LINE), String(QUEUE)], { flags: ['-D', 'GLAZE_DMG', '-default-isolation', 'MainActor'] });
   const events = [];
   let over = false, a;
