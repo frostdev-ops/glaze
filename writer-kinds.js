@@ -17,6 +17,8 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
   const FRAME = Object.freeze({
     pdf: Object.freeze({ scripts: ['lib/doc-kinds.js', 'lib/pdf-doc.js', 'pdf-kind.js'], css: 'pdf-kind.css' }),
     slides: Object.freeze({ scripts: ['lib/doc-kinds.js', 'slides-kind.js'], css: 'slides-kind.css' }),
+    // The grid (sheet-kind.js loads its engine and sheet-grid.js itself); .xlsx needs GZ_SHEET_XLSX, else a .csv.
+    sheet: Object.freeze({ scripts: ['lib/doc-kinds.js', 'sheet-kind.js'], css: 'sheet.css' }),
   });
   const prefs = () => globalThis.GZ_WRITER_SETTINGS?.now() || {};
   // The kinds a brought file may open as here: in this frame, and switched on.
@@ -54,7 +56,8 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     submitB.disabled = typeof P().submit !== 'function';
     const owns = async () => GZ_DOC_KINDS.kindOf(await store().get(key)) === id;
     const surface = {
-      kind: () => id, key: () => key, ext: () => ext, context: () => paper.context(), paper: () => paper.paper(), compact: () => false, blank: () => false, importing: () => busy,
+      // A spreadsheet's file is .xlsx where the writer is here, else its active sheet as .csv (sheet-kind.js fileOf).
+      kind: () => id, key: () => key, ext: () => (id === 'sheet' ? (globalThis.GZ_SHEET_XLSX ? '.xlsx' : '.csv') : ext), context: () => paper.context(), paper: () => paper.paper(), compact: () => false, blank: () => false, importing: () => busy,
       pages: () => v?.pages?.() || null, notify: (m) => v?.say?.(t(m)), focused: () => {}, resume: () => {}, look: () => null,
       version: async (reason = 'submit') => {
         if (!await surface.save()) return null;
@@ -158,6 +161,8 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     // ⋯ → New spreadsheet, and the choice, once the paper has loaded and only where both are offered.
     (async () => {
       for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100));
+      // The registry says whether this build has the spreadsheet kind (offers).
+      if (Object.hasOwn(FRAME, 'sheet')) await P().need(['lib/doc-kinds.js']);
       const paper = P()?.current();
       if (!paper || paper.kind?.() !== 'paper' || offers().length < 2) return;
       frame.item(t('New spreadsheet'), () => start(paper, 'sheet', { any: true }));
