@@ -43,6 +43,7 @@ const viewer = () => {
   const win = {};
   const sets = [];
   const inputs = [];
+  const mutations = [], resizes = [];
   const parent = { postMessage() {} };
   const store = {};
   const storageListeners = [];
@@ -53,7 +54,7 @@ const viewer = () => {
     documentElement: html, head: null, body, contentType: 'text/html', readyState: 'complete', addEventListener() {},
     createElement: (t) => { const e = new El(t); if (t === 'input') inputs.push(e); return e; },
     createElementNS: (ns, t) => new El(t),
-    querySelectorAll: (sel) => (sel.startsWith('.Page') ? [page] : sel === '.gz-ink' ? page.children.filter((c) => c.attrs.class === 'gz-ink') : []),
+    querySelectorAll: (sel) => (sel.startsWith('.Page') ? [page].filter((p) => p.isConnected) : sel === '.gz-ink' ? page.children.filter((c) => c.attrs.class === 'gz-ink') : []),
     querySelector: () => null,
     getElementById: (id) => (id === 'page-1' ? page : null),
   };
@@ -61,8 +62,13 @@ const viewer = () => {
     document, parent, top: {}, location: { hostname: 'canvadocs.instructure.com', ancestorOrigins: [CANVAS] },
     addEventListener: (t, f) => (win[t] ||= []).push(f),
     requestAnimationFrame: (f) => { f(); return 0; },
-    MutationObserver: class { observe() {} disconnect() {} },
-    ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
+    MutationObserver: class { constructor(callback) { this.callback = callback; mutations.push(this); } observe() {} disconnect() {} },
+    ResizeObserver: class {
+      constructor(callback) { this.callback = callback; this.targets = new Set(); resizes.push(this); }
+      observe(p) { this.targets.add(p); }
+      unobserve(p) { this.targets.delete(p); }
+      disconnect() { this.targets.clear(); }
+    },
     DOMPoint: class { constructor(x, y) { this.x = x; this.y = y; } matrixTransform() { return { x: this.x, y: this.y }; } },
     GZ_INK: require('../lib/ink.js'),
     GZ_SURFACES: require('../lib/surfaces.js'),
@@ -89,8 +95,26 @@ const viewer = () => {
   const bar = () => body.children.find((c) => c.id === 'gz-ink-bar');
   const svg = () => page.children.find((c) => c.attrs.class === 'gz-ink');
   const pointer = (type, id, x, y) => svg().fire(type, { pointerType: 'mouse', button: 0, pointerId: id, clientX: x, clientY: y });
-  return { html, tell, fire, bar, svg, pointer, sets, inputs, store, changes, emitStorage, flushStorage, chrome: ctx.chrome };
+  return { html, body, page, mutations, resizes, tell, fire, bar, svg, pointer, sets, inputs, store, changes, emitStorage, flushStorage, chrome: ctx.chrome };
 };
+
+test('a zero-size page removed before any resize notification is unobserved, and off/on starts fresh', async () => {
+  const v = viewer();
+  v.page.clientWidth = v.page.clientHeight = 0;
+  await v.tell();
+  const ro = v.resizes[0];
+  assert.equal(ro.targets.has(v.page), true);
+  v.page.remove();
+  v.mutations[0].callback([{ target: v.body, removedNodes: [v.page] }]);
+  assert.equal(ro.targets.has(v.page), false, 'removal does not depend on a resize notification that may never arrive');
+  v.body.append(v.page);
+  v.mutations[0].callback([{ target: v.body, removedNodes: [] }]);
+  assert.equal(ro.targets.has(v.page), true);
+  await v.tell({ ink: false });
+  assert.equal(ro.targets.size, 0);
+  await v.tell();
+  assert.equal(v.resizes[1].targets.has(v.page), true);
+});
 
 test('Esc in the middle of a stroke lets the pointer go and drops the half stroke; the next stroke draws', async () => {
   const v = viewer();
