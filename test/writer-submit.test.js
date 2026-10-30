@@ -178,3 +178,26 @@ test('the note names the attached files on a line after it', () => {
   assert.equal(S.noteWith('Hi  \n', []), 'Hi');
   assert.ok(S.MAX_NOTE >= 4000 + 10 * 255);
 });
+
+test('Unicode and long attachment names remain valid filenames, including collision suffixes', () => {
+  for (const title of ['e\u0301tude', '!!!', '𐐀'.repeat(61), '漢'.repeat(200)]) {
+    const first = S.attachName({ surname: '漢'.repeat(40), title, name: 'a.docx' });
+    const next = S.attachName({ surname: '漢'.repeat(40), title, name: 'a.docx', taken: [first.toUpperCase()] });
+    for (const n of [first, next]) {
+      assert.ok(S.safeName(n), n);
+      assert.ok(Buffer.byteLength(n, 'utf8') <= 255, 'fits a filesystem component');
+      assert.equal(n, n.normalize('NFC'));
+    }
+    assert.notEqual(first, next);
+  }
+  assert.equal(S.fileName({ title: 'e\u0301tude' }), 'Étude.docx');
+  const raw = `${'a'.repeat(250)}.bin`;
+  assert.ok(S.asIsName(S.attachName({ name: raw, taken: [raw] })), 'a collision suffix also fits an arbitrary file name');
+});
+
+test('an explicit extension disambiguates listings with the same workbook stem', () => {
+  const body = page(), area = S.areaOf(editorOf(body)), row = new El('span', body.doc);
+  row.textContent = 'Budget'; row.setAttribute('title', 'Budget.xlsx'); area.append(row);
+  assert.equal(S.listed(area, 'Budget.xlsm'), 0);
+  assert.equal(S.listed(area, 'Budget.xlsx'), 1);
+});
