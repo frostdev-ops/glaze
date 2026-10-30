@@ -95,6 +95,8 @@ test('SUMSQ, PRODUCT, QUOTIENT', () => {
     ['SUMSQ(3, 4)', 25], ['SUMSQ(B1:B4)', 25], ['SUMSQ("2",TRUE)', 5], ['SUMSQ("x")', '#VALUE!'], ['SUMSQ({1,2},3)', 14],
     ['PRODUCT(A2:A4)', 2250], ['PRODUCT(A2:A4, 2)', 4500], ['A2*A3*A4', 2250], ['PRODUCT(B1:B4)', 12], ['PRODUCT(Z1:Z3)', 0], ['PRODUCT(1/0,2)', '#DIV/0!'],
     ['QUOTIENT(5, 2)', 2], ['QUOTIENT(4.5, 3.1)', 1], ['QUOTIENT(-10, 3)', -3], ['QUOTIENT(1,0)', '#DIV/0!'], ['QUOTIENT("x",2)', '#VALUE!'],
+    // Excel 16.114.1: unlike SUM's family, PRODUCT passes over an argument left out.
+    ['PRODUCT(2,,3)', 6], ['SUMSQ(2,,3)', 13],
   ]);
 });
 

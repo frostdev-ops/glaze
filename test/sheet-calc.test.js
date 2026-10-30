@@ -509,3 +509,13 @@ test('every function file loads beside the others', () => {
   const out = require('node:child_process').execFileSync(process.execPath, ['-e', `for (const f of ${JSON.stringify(files)}) require(f); console.log(require(${JSON.stringify(path.join(lib, 'sheet-calc.js'))}).fn('ROW') ? 'ok' : 'none')`], { encoding: 'utf8' });
   assert.equal(out.trim(), 'ok');
 });
+
+// Excel 16.114.1: an argument left out is a typed 0 to the aggregates, as to the statistical functions; COUNT and COUNTA
+// count it; AND and OR read it as FALSE.
+test('an argument left out counts as 0', () => {
+  const e = book();
+  cases(e, [
+    ['AVERAGE(1,,3)', 4 / 3], ['MIN(1,,3)', 0], ['MAX(-1,,-3)', 0], ['SUM(1,,2)', 3], ['AVERAGE(,)', 0], ['MAX(,)', 0],
+    ['COUNT(1,,3)', 3], ['COUNTA(1,,3)', 3], ['COUNT(,)', 2], ['COUNTA(,)', 2], ['AND(TRUE,)', false], ['OR(FALSE,)', false],
+  ]);
+});
