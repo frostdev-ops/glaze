@@ -161,3 +161,22 @@ test('Excel scientific boundaries differ between General and number-to-text coer
   assert.equal(F.format(0.5 + 59.6 / 86400, '[h]:mm'), '12:01');
   assert.equal(F.format(0.25, '# ?/?'), ' 1/4');
 });
+
+// Microsoft number-format guidelines; conditional signs and comma placement also checked in Excel 16.114.1.
+test('conditional fallback keeps the sign and scaling commas may precede the decimal point', () => {
+  table([
+    ['[>100]0;0', -5, '-5'], ['[<0]0', -5, '5'], ['[>100]0;[<-100]0;0', -5, '-5'],
+    ['0,,.0', 12000000, '12.0'], ['0,.00', 12000, '12.00'],
+  ]);
+});
+
+test('fraction approximation work does not grow with the denominator limit', () => {
+  const original = Math.round;
+  let calls = 0;
+  Math.round = (v) => {
+    if (++calls > 1000) throw new Error('denominator scan exceeded 1000 candidates');
+    return original(v);
+  };
+  try { assert.equal(typeof F.format(0.123456789, '# ?????????/?????????'), 'string'); }
+  finally { Math.round = original; }
+});

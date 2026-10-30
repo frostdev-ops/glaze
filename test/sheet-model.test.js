@@ -413,3 +413,13 @@ test('typed numbers discard significant digits past the fifteenth', () => {
   assert.equal(M.parseInput('0.1234567890123456').v, 0.123456789012345);
   assert.equal(M.parseInput('-1234567890123456').v, -1234567890123450);
 });
+
+// Microsoft: Control settings in the Format Cells dialog box, Fraction and automatic formats.
+test('an unprefixed slash is a date while a mixed fraction is numeric', () => {
+  assert.deepEqual(M.parseInput('1/2', { year: 2025 }), { t: 'n', v: M.toSerial(2025, 1, 2), fmt: 'd-mmm' });
+  assert.deepEqual(M.parseInput('0 1/2'), { t: 'n', v: 0.5, fmt: '# ?/?' });
+  assert.deepEqual(M.parseInput('1 1/2'), { t: 'n', v: 1.5, fmt: '# ?/?' });
+  assert.deepEqual(M.parseInput('-1 1/2'), { t: 'n', v: -1.5, fmt: '# ?/?' });
+  assert.equal(M.parseInput('$-1,200').v, -1200);
+  assert.deepEqual(M.parseInput("'1/2"), { t: 's', v: '1/2' });
+});
