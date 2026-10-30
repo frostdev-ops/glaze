@@ -203,4 +203,7 @@ test('a refused restore cannot delete a live version file while replaying overla
   assert.equal(out.ok, false);
   assert.deepEqual(a.store, before, 'the live records and versions did not change');
   assert.equal(sha(await a.get(old)), old.hash, 'the live version still has its bytes');
+  a.clock.t += F.GRACE + 1;
+  await a.files.sweep({ live: new Set([old.hash, current.hash]) });
+  assert.equal(await a.files.stat(incoming.hash), null, 'the refused restore cannot leave its unused file owned forever');
 });
