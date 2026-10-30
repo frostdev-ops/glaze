@@ -35,6 +35,23 @@ test('plan: a huge sparse selection is refused before scanning its rectangle', (
   assert.equal(reads, 0);
 });
 
+test('dates: chart labels and numeric ticks honour the workbook\'s 1904 date system', () => {
+  const { wb, sh } = book();
+  wb.date1904 = true;
+  wb.styles.push({ fmt: 'yyyy-mm-dd' });
+  for (let r = 1; r <= 4; r++) sh.rows.get(r).set(0, { t: 'n', v: r - 1, s: 1 });
+  const L = mount(wb);
+  L.draw();
+  L.apply(L.insert('line', { r0: 0, c0: 0, r1: 4, c1: 1 }));
+  L.draw();
+  assert.equal(L.list()[0].marks.ticks.cat[0], '1904-01-01');
+  const data = CX.resolve(CX.chart(FX.CHARTS.scatter), () => null);
+  data.groups[0].series[0].catFmt = 'yyyy';
+  const sc = CH.scene(data, 400, 300, { date1904: true });
+  assert.ok(sc.prims.some((p) => p.cls === 'gc-tick' && p.text === '1904'));
+  L.dispose();
+});
+
 test('plan: series down the columns, names from the header, categories from the text column', () => {
   const { wb, sh } = book();
   const p = CX.plan(wb, sh, { r0: 0, c0: 0, r1: 4, c1: 2 }, 'column', show);
