@@ -94,6 +94,23 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     const seminarCard = (shown || []).find((x) => x.startsWith('Seminar|')) || '';
     check(seminarCard.includes(ids.seminar) && /rgb\(249, 168, 212\)|#f9a8d4/i.test(seminarCard), 'a kept Look\'s card has its id and its swatch colours', seminarCard);
 
+    await cardFocus();
+    async function cardFocus() {
+      const target = a.locator(`#looks .look[data-look="${ids.seminar}"]`);
+      await target.focus();
+      await a.evaluate(async () => {
+        const { lookFavorites } = await chrome.storage.local.get('lookFavorites');
+        await chrome.storage.local.set({ lookFavorites: lookFavorites.map((f) => f.name === 'Seminar' ? { ...f, name: 'Seminar renamed' } : f) });
+      });
+      await until(async () => (await target.textContent()) === 'Seminar renamed');
+      check(await target.evaluate((b) => b === document.activeElement), 'a catalogue update preserves keyboard focus on the same Look');
+      await a.evaluate(async () => {
+        const { lookFavorites } = await chrome.storage.local.get('lookFavorites');
+        await chrome.storage.local.set({ lookFavorites: lookFavorites.map((f) => f.name === 'Seminar renamed' ? { ...f, name: 'Seminar' } : f) });
+      });
+      await until(async () => (await target.textContent()) === 'Seminar');
+    }
+
     // ---- picking each wears it; the popup's tile names it ----
     const ink = (p) => p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-ink').trim());
     const surface = (p) => p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-surface').trim());
@@ -107,7 +124,8 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     };
     const card = (p, id) => p.locator(`#looks .look[data-look="${id}"]`);
     for (const [name, id, s] of [['Seminar', ids.seminar, seminar], ['Night walk', ids.night, night]]) {
-      await card(a, id).click();
+      await card(a, id).focus();
+      await a.keyboard.press('Enter');
       const worn = await until(async () => (await ink(a)) === s.colors['--gz-ink'] && (await surface(a)) === s.colors['--gz-surface']);
       check(worn, `picking ${name} wears it: the page's own colours are its palette`, `${await ink(a)} ${await surface(a)}`);
       check(await until(async () => (await card(a, id).getAttribute('aria-pressed')) === 'true'), `${name} is pressed`);
@@ -127,6 +145,7 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     await pop.locator('#look').click();
     const sheet = await pop.locator('#sheet #looks').evaluate((box) => [...box.children].map((el) => (el.tagName === 'H4' ? `# ${el.textContent}` : el.textContent)));
     check(sheet.includes('# Gallery') && sheet.includes('Seminar') && sheet.includes('Night walk'), 'the popup\'s sheet has the kept Looks, grouped', sheet.join());
+    check(await pop.locator('#sheet .looks-head').evaluateAll((heads) => heads.every((h) => { const r = h.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })), 'Saved and Gallery headings are visible when the popup sheet opens');
     await pop.locator('#sheet .looks-head').nth(1).scrollIntoViewIfNeeded();
     if (out) await pop.screenshot({ path: path.join(out, 'looks-popup-dark.png') });
     await pop.locator(`#sheet .look[data-look="${ids.seminar}"]`).click();
