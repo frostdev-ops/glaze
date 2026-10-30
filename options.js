@@ -1162,7 +1162,9 @@ GZ_UI.load().then((s) => {
   // Hidden until Google's clients are set up for this browser (the worker says why: 'setup' or 'browser').
   {
     const gdOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:google', op }, (r) => res(chrome.runtime.lastError ? { ok: false, why: 'network' } : r || { ok: false })));
+    let gdFlow = '';
     const gdRender = (s) => {
+      gdFlow = s?.flow || '';
       $('#gdrive').hidden = !s?.ok;
       $('#gdrive-who').textContent = s?.email || '';
       $('#gdrive-connect').hidden = !!s?.email;
@@ -1172,16 +1174,21 @@ GZ_UI.load().then((s) => {
     gdLoad();
     let gdBusy = false;
     // Inside the student's click: the browser's identity permission first (optional; nothing is asked before this), then
-    // Google's own screen, from the worker.
+    // Google's own screen, from the worker. Safari signs in through the Glaze app and has no identity permission: Connect
+    // answers 'pending' until the app is done (each answer waits a while), and Settings asks again.
     $('#gdrive-connect').addEventListener('click', async (e) => {
       if (!e.isTrusted || gdBusy) return;
+      const native = gdFlow === 'native';
       // Settings framed in a school's page may have no permissions API (Firefox): its own tab asks, at this section.
-      if (typeof chrome.permissions?.request !== 'function') return GZ_SITE.elsewhere ? GZ_SITE.elsewhere(e.currentTarget) : hint(t("Glaze needs the browser's sign-in permission to connect."), true);
+      if (!native && typeof chrome.permissions?.request !== 'function') return GZ_SITE.elsewhere ? GZ_SITE.elsewhere(e.currentTarget) : hint(t("Glaze needs the browser's sign-in permission to connect."), true);
       gdBusy = true;
       try {
-        const asked = chrome.permissions.request({ permissions: ['identity'] });
-        if (!await Promise.resolve(asked).catch(() => false)) return hint(t("Glaze needs the browser's sign-in permission to connect."), true);
-        const r = await gdOp('connect');
+        if (!native) {
+          const asked = chrome.permissions.request({ permissions: ['identity'] });
+          if (!await Promise.resolve(asked).catch(() => false)) return hint(t("Glaze needs the browser's sign-in permission to connect."), true);
+        }
+        let r = await gdOp('connect');
+        for (let n = 0; native && r.why === 'pending' && n < 40; n++) r = await gdOp('connect');
         if (r.ok) { await gdLoad(); $('#gdrive-disconnect').focus(); return hint(t('Connected.')); }
         hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
       } finally { gdBusy = false; }

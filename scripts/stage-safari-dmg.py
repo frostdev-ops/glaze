@@ -138,7 +138,10 @@ i.update(SUFeedURL='https://frostdev.io/projects/glaze/appcast.xml',
                             'CFBundleURLSchemes': ['io.frostdev.glaze-update']},
                            # GlazeAgentBridge.start: the extension opens the app hidden for agents.
                            {'CFBundleURLName': 'io.frostdev.glaze-agent',
-                            'CFBundleURLSchemes': ['io.frostdev.glaze-agent']}])
+                            'CFBundleURLSchemes': ['io.frostdev.glaze-agent']},
+                           # GlazeGoogle.appScheme: the extension opens the app's Google Drive sign-in.
+                           {'CFBundleURLName': 'io.frostdev.glaze-google',
+                            'CFBundleURLSchemes': ['io.frostdev.glaze-google']}])
 with info.open('wb') as f:
     plistlib.dump(i, f)
 # Exact version plus immutable revision, reviewed together on every Sparkle bump.
