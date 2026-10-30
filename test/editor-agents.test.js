@@ -355,7 +355,7 @@ test('connecting and restart share one Starting… wait and one ask', async () =
   p.worker.link = { state: 'restart', at: 20 };
   const before = p.ops().length;
   await p.elapse();
-  assert.equal(p.line(), 'Restart Glaze to start the helper', 'the one answer of restart offers Restart at once');
+  assert.equal(p.line(), 'Restart your browser to start the helper', 'the one answer of restart says so at once');
   assert.deepEqual(p.waits(), [], 'the answer never starts a second wait');
   await p.linked('restart');
   await p.elapse();

@@ -24,7 +24,8 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
   const NO_NODE = 'no-node';
   // Chrome stops an idle worker about 30-40 s after its last event and starts one only for the next, which this page doesn't
   // send while it shows Starting…: after WAIT it asks once. A worker started for that ask has connectNative and connects at
-  // its start; one that still answers restart is kept up by something else, and the line offers Glaze's reload instead.
+  // its start; one that still answers restart is kept up by something else, and the line says to restart the browser.
+  // Glaze never reloads itself from here: that would reload open documents and Writer frames mid-save.
   const WAIT = 60e3;
   // Glaze's groups (lib/ai/tools.js GROUPS), named as the approval window names them; a mod's group is mod:<id>.
   const GROUPS = ['courses', 'grades', 'writer', 'assignments'];
@@ -37,13 +38,13 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
   const browserOf = (url) => (/^safari-web-extension:/i.test(url) ? 'safari' : /^moz-extension:/i.test(url) ? 'firefox' : 'chrome');
   // What Settings says of the link (status: lib/agent-link.js status()) → { tone: 'ok' | 'wait' | 'bad', text, command?,
   // act? }, or null while it is off. The command goes where text says {command}; act: 'allow' (ask for nativeMessaging),
-  // 'reload' (Glaze's reload, once WAIT's ask still found restart: stuck) or 'site' (the page's link to frostdev.io/glaze, for
+  // or 'site' (the page's link to frostdev.io/glaze, for
   // the DMG build of the Glaze app, the one with the agent bridge). On Safari the helper is that app, which starts by itself:
   // nothing to run there.
   const line = (status, { browser = 'chrome', id = '', stuck = false } = {}, t) => {
     const s = isObj(status) ? status.state : 'off';
     if (s === 'connected') return { tone: 'ok', text: t('Ready') };
-    if (s === 'restart' && stuck && browser === 'chrome') return { tone: 'bad', text: t('Restart Glaze to start the helper'), act: 'reload' };
+    if (s === 'restart' && stuck && browser === 'chrome') return { tone: 'bad', text: t('Restart your browser to start the helper') };
     if (s === 'connecting' || s === 'restart') return { tone: 'wait', text: t('Starting…') };
     if (browser === 'safari') {
       return s === 'not-installed' ? { tone: 'bad', text: t('Agent access in Safari needs the Glaze app from frostdev.io'), act: 'site' }
@@ -109,7 +110,6 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
       command = l?.command || '';
       $('agents-copy').hidden = !command;
       $('agents-allow').hidden = l?.act !== 'allow';
-      $('agents-restart').hidden = l?.act !== 'reload';
       $('agents-app').hidden = l?.act !== 'site';
       if (!l) return void p.replaceChildren();
       box.dataset.tone = l.tone;
@@ -171,10 +171,6 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
       toggle(want, asked);
     });
     $('agents-allow').addEventListener('click', () => { ask(); });
-    $('agents-restart').addEventListener('click', () => {
-      if (browser !== 'chrome' || !on || !stuck || link?.state !== 'restart') return;
-      try { c.runtime.reload(); } catch { /* nothing to restart */ }
-    });
     $('agents-copy').addEventListener('click', async () => {
       const text = command;
       try { await navigator.clipboard.writeText(text); hint(t('Copied.')); }

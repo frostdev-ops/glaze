@@ -237,8 +237,7 @@ async function pass(scheme) {
       await saying('Starting…');
       await pause(WAIT + 2000);
       if (stuck) {
-        await saying('Restart Glaze to start the helper');
-        assert.equal(await page.locator('#agents-restart').isVisible(), true);
+        await saying('Restart your browser to start the helper');
         assert.equal(await page.locator('#agents-state').getAttribute('data-tone'), 'bad');
         await shoot('restart-stuck');
         await page.evaluate(async () => chrome.storage.session.set({ mcpLink: { state: 'not-installed', at: Date.now() } }));
@@ -248,7 +247,6 @@ async function pass(scheme) {
         await saying(/^In Claude Desktop/);
         assert.deepEqual((await log()).slice(before).filter((x) => x.sent).map((x) => x.sent), ['state'], 'one ask');
       }
-      assert.equal(await page.locator('#agents-restart').isVisible(), false);
     });
 
     await check('apps', async () => {

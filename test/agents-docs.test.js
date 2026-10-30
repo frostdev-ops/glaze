@@ -79,8 +79,8 @@ test('docs/agents.md covers each helper state and its command', () => {
   }
 });
 
-test('the helper state table explains Restart immediately after Allow', () => {
-  assert.match(read('docs/agents.md'), /\| Allow Glaze to start the helper \| Press \*\*Allow\*\*\. \|\n\| Restart Glaze to start the helper \| Press \*\*Restart\*\*\. \|/);
+test('the helper state table explains the browser restart immediately after Allow', () => {
+  assert.match(read('docs/agents.md'), /\| Allow Glaze to start the helper \| Press \*\*Allow\*\*\. \|\n\| Restart your browser to start the helper \| Quit the browser and open it again\. \|/);
 });
 
 
