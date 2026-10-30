@@ -1,0 +1,18 @@
+{
+  "_note": "Glaze test fixture: Canvas /api/v1/courses/25/assignments/171, synthetic values. Keys as lib/rubric.js parse.canvas reads them (test/rubric-data.test.js, scripts/rubric-check.js) and as features/rubric.js asks for them. The description's file links are in the shape Canvas's API writes (canvas-lms spec/apis/user_content_spec.rb: absolute href on the school's host, data-api-endpoint, data-api-returntype File; spec/controllers/assignments_controller_spec.rb: class instructure_file_link, a title that may be just 'Link'); not seen live, as the owner has no Canvas account. Glaze keys on the href's path only.",
+  "id": 171,
+  "course_id": 25,
+  "name": "Lab report 2: Enzyme activity",
+  "due_at": "2026-10-23T03:59:00Z",
+  "points_possible": 20,
+  "restrict_quantitative_data": false,
+  "submission_types": ["online_upload"],
+  "description": "<p>Instructions for Lab report 2: Enzyme activity. Follow the rubric &amp; cite the lab manual.</p>\n<p><a class=\"instructure_file_link auto_open\" title=\"Link\" href=\"https://school.instructure.com/courses/25/files/789/download?wrap=1\" target=\"_blank\" rel=\"noopener\" data-canvas-previewable=\"true\" data-api-endpoint=\"https://school.instructure.com/api/v1/courses/25/files/789\" data-api-returntype=\"File\">Lab manual.pdf</a>&nbsp;</p>\n<p><a href=\"https://school.instructure.com/courses/25/files/790?wrap=1\" data-api-endpoint=\"https://school.instructure.com/api/v1/courses/25/files/790\" data-api-returntype=\"File\" title=\"Data sheet.xlsx\"></a></p>\n<p>See <a href=\"https://school.instructure.com/courses/25/pages/lab-safety\" data-api-endpoint=\"https://school.instructure.com/api/v1/courses/25/pages/lab-safety\" data-api-returntype=\"Page\">lab safety</a> and <a href=\"https://outside.example/notes.pdf\">notes.pdf</a>.</p>",
+  "rubric_settings": { "id": 33, "title": "Lab report rubric", "points_possible": 20, "hide_points": false, "hide_score_total": false },
+  "rubric": [
+    { "id": "c0", "points": 10, "description": "Method", "long_description": "Describes the method so it could be repeated.",
+      "ratings": [{ "id": "r00", "points": 10, "description": "Complete", "long_description": "Every step and amount." }, { "id": "r01", "points": 5, "description": "Partial", "long_description": "" }, { "id": "r02", "points": 0, "description": "Missing", "long_description": "" }] },
+    { "id": "c1", "points": 10, "description": "Analysis", "long_description": "Explains the results with the data.",
+      "ratings": [{ "id": "r10", "points": 10, "description": "Complete", "long_description": "" }, { "id": "r11", "points": 5, "description": "Partial", "long_description": "" }, { "id": "r12", "points": 0, "description": "Missing", "long_description": "" }] }
+  ]
+}

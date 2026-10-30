@@ -1,18 +1,25 @@
 // The courses group's tools for agent apps (lib/mcp/*.js): the school accounts Glaze holds data for and, for one of them, its
 // courses, to-do list and schedule, read from Glaze's own caches with lib/modbroker.js's runners, so an app gets the slim
-// shapes a mod gets. Nothing here asks the LMS: the call core refreshes through an open tab first, and adds the note,
-// source and age.
+// shapes a mod gets, and marking a to-do done. Nothing here reads the LMS: the call core refreshes through an open tab first,
+// and adds the note, source and age. An item's done is the LMS's own (Canvas's planner mark); marked is Glaze's own mark on
+// this device, which Glaze's list uses unless Canvas sync is on (then the list follows Canvas's, and marked is null).
+// todo_mark_done marks the way Glaze's list does (features/todo.js mark, lib/todo.js change): with Canvas sync on, Canvas's
+// planner through the account's tab (lib/mcp/tab.js mark, with the page's CSRF token), else Glaze's own mark.
 // An account is '<origin>/<uid>' (Canvas's user id, or Ultra's _N_N), as lib/todo.js and lib/insights.js key theirs.
 // run(args, ctx): ctx { account (the resolved account; accounts_list takes none), local (storage.local's { get }), keys?()
 // (storage.local's keys; else one get(null)), now?() }. → { account, at (the cache's own time in ms, or null where it keeps
 // none), items } (todo_list and schedule_list add covers: the span the planner was read for, and whether it was read whole);
 // with nothing kept for that account, { account, at: null, items: [], missing: what to open in the LMS }; and for an
 // account or arguments Glaze can't use, { ok: false, error }.
+// register(registry, deps?): deps { sync (storage.sync: the list's settings), tabs (lib/mcp/tabs.js create's) }; todo_mark_done
+// is added only with them.
 // The planner cache (storage.local todoCache) is one account's at a time. seenCourses keeps one list a school, which every
 // account signed in there adds to without its identity. Only this account's planner and Insights prove course membership.
 // Classic script for the worker, after lib/ai/tools.js and lib/modbroker.js; module.exports for node.
 var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
   const B = () => (typeof GZ_MODBROKER !== 'undefined' ? GZ_MODBROKER : require('../modbroker.js'));
+  const T = () => (typeof GZ_TODO !== 'undefined' ? GZ_TODO : require('../todo.js'));
+  const Z = () => (typeof GZ_SANITIZE !== 'undefined' ? GZ_SANITIZE : require('../../defaults.js').GZ_SANITIZE);
   const DAY = 864e5;
   // days: the most a to-do list looks ahead and a schedule spans (lib/modbroker.js schedule's); course: an id's characters.
   const LIMIT = { days: 60, course: 40 };
@@ -57,10 +64,52 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
       : m[4] === undefined ? new Date(y, mo - 1, d + (end ? 1 : 0)).getTime() - (end ? 1 : 0) : new Date(y, mo - 1, d, h, mi, s, ms).getTime();
     return at >= 0 ? at : null;
   };
+  // The to-do list's settings (storage.sync todo, cleaned as the list cleans them; lib/todo.js adds their spec), and whether a
+  // mark goes to the site: only Canvas has a planner for it, with sync on (features/todo.js toSite).
+  const prefs = async (deps) => {
+    let raw;
+    try { raw = (await deps?.sync?.get('todo'))?.todo; } catch { /* the defaults */ }
+    T();
+    return Z()({ todo: raw }).todo;
+  };
+  const toSite = (who, o) => who.lms === 'canvas' && o.sync === true;
+  // Glaze's own marks on an account's planner items (storage.local todo:<origin>/<uid>), by '<type>:<id>'; null while the list
+  // doesn't use them.
+  const marks = async (who, ctx, o) => {
+    if (toSite(who, o)) return null;
+    const k = T().storeKey(who.origin, who.uid), d = T().clean((await ctx.local.get(k))[k]);
+    return new Map(Object.entries(d.items).filter(([, v]) => typeof v.done === 'boolean').map(([key, v]) => [key, v.done]));
+  };
+  const marked = (items, m) => items.map((i) => ({ ...i, marked: m?.get(`${i.type}:${i.id}`) ?? null }));
   const course = { type: 'string', minLength: 1, maxLength: LIMIT.course, description: "Only this course's items, by its id (courses_list)." };
   const day = (which) => ({ type: 'string', pattern: ISO.source, description: `The ${which} day (2026-10-29: the student's own day) or moment (2026-10-29T17:00:00Z), ISO 8601.` });
-  const ITEM = 'id, type, courseId, course, title, due (ms since 1970, or null), url, and whether it is done, submitted, graded, late or missing';
-  const tools = () => [
+  const ITEM = "id, type, courseId, course, title, due (ms since 1970, or null), url, whether it is done (the LMS's own mark), submitted, graded, late or missing, and marked (Glaze's own mark on this device: true done, false not done, null none; Glaze's list shows an item done when marked is true, or when done and marked is not false)";
+  const NOTHING = 'Nothing was done.';
+  const DATE = { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+  // The planner item a mark is for, as Glaze last read it, and what marking it does. → { who, item, o, site, store, key, say }
+  // or { error }.
+  const marking = async (args, ctx, deps) => {
+    const who = parse(ctx?.account);
+    if (!who) return { error: 'Unknown account.' };
+    const got = await ctx.local.get('todoCache'), c = plan(who, got);
+    if (!c) return { error: `${none(who, 'to-do list').missing} ${NOTHING}` };
+    const key = `${args?.type}:${args?.id}`, item = c.items.find((i) => isObj(i) && `${i.type}:${i.id}` === key);
+    if (!item) return { error: `That item is not on this account's to-do list as Glaze last read it; todo_list names them. ${NOTHING}` };
+    const o = await prefs(deps), site = toSite(who, o), store = T().storeKey(who.origin, who.uid);
+    const own = site ? undefined : (await marks(who, ctx, o)).get(key);
+    const title = typeof item.title === 'string' && item.title ? item.title.slice(0, 200) : 'Untitled';
+    if (T().isDone(item, o.done, own)) return { error: `“${title}” is already done in Glaze's to-do list. ${NOTHING}` };
+    const at = when(item.at), date = at && (item.allDay ? new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : new Date(at).toLocaleString('en-US', DATE));
+    const about = [typeof item.course === 'string' ? item.course.slice(0, 120) : '', date ? `due ${date}` : ''].filter(Boolean).join(', ');
+    return { who, item, o, site, store, key, title, say: `Mark “${title}”${about ? ` (${about})` : ''} as done in Glaze's to-do list${site ? " and in Canvas's planner" : ''}.` };
+  };
+  const host = (who) => new URL(who.origin).host;
+  const noTab = (who) => `Open ${host(who)} in this browser, signed in as this account, to sync it. ${NOTHING}`;
+  // storage.local as lib/todo.js change writes it: set says whether it worked.
+  const area = (local) => ({ local: { get: (k) => local.get(k), set: (v) => Promise.resolve(local.set(v)).then(() => true, () => false) } });
+  const approved = new WeakMap();
+  const fingerprint = (m) => JSON.stringify([m.who.account, m.key, m.say, m.site, m.item.aid || '', m.item.ov?.id || '']);
+  const tools = (deps) => [
     {
       name: 'accounts_list', kind: 'read', group: 'courses', title: 'School accounts',
       description: "List the school accounts Glaze holds data for in this browser, the one it read last first: account (what the other tools take as account), lms ('canvas', or 'ultra' for Blackboard Ultra), origin (the school's site) and seen (when Glaze last read it, ms since 1970).",
@@ -113,7 +162,7 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
         const now = clock(ctx), { course: id, days } = isObj(args) ? args : {};
         const items = (await B().CALLS.todo.run([], env(who, got)))
           .filter((i) => (!id || i.courseId === id) && (!days || (i.due !== null && i.due >= now && i.due <= now + days * DAY)));
-        return { account: who.account, at: when(c.at) || null, covers: covers(c), items };
+        return { account: who.account, at: when(c.at) || null, covers: covers(c), items: marked(items, await marks(who, ctx, await prefs(deps))) };
       },
     },
     {
@@ -128,12 +177,50 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
         if (to < from || to - from > LIMIT.days * DAY) return fail(`to is after from, and at most ${LIMIT.days} days after it.`);
         const got = await ctx.local.get('todoCache'), c = plan(who, got);
         if (!c) return none(who, 'to-do list');
-        return { account: who.account, at: when(c.at) || null, covers: covers(c), items: await B().CALLS.schedule.run([from, to], env(who, got)) };
+        return { account: who.account, at: when(c.at) || null, covers: covers(c), items: marked(await B().CALLS.schedule.run([from, to], env(who, got)), await marks(who, ctx, await prefs(deps))) };
       },
     },
+    ...(deps?.tabs && deps?.sync ? [{
+      name: 'todo_mark_done', kind: 'write', group: 'courses', scope: 'account', title: 'Mark a to-do done', hints: { idempotent: true },
+      description: "Mark one of an account's to-do items done, by its type and id as todo_list gives them, once the student allows it in Glaze. With Canvas sync on in Glaze's settings, the mark goes to Canvas's planner through the account's Canvas tab open in this browser, and todo_list's done shows it; otherwise it is Glaze's own mark on this device, and todo_list's marked shows it.",
+      parameters: { type: 'object', properties: {
+        type: { type: 'string', pattern: '^[a-z_]{1,40}$', description: "The item's type (todo_list)." },
+        id: { type: 'string', pattern: UID.source, description: "The item's id (todo_list)." },
+      }, required: ['type', 'id'], additionalProperties: false },
+      // Glaze's sentence for the approval window, from the cache alone; a mark that can't happen is said before anyone is asked.
+      summarize: async (args, ctx) => {
+        const m = await marking(args, ctx, deps);
+        if (m.error) throw new Error(m.error);
+        if (m.site && !(await deps.tabs.find(m.who.account))) throw new Error(noTab(m.who));
+        approved.set(ctx, fingerprint(m));
+        return m.say;
+      },
+      // In the broker's turn (lib/mcp/calls.js), with the same edit or the same planner write Glaze's list makes for a tick.
+      run: async (args, ctx) => {
+        const m = await marking(args, ctx, deps);
+        if (m.error) return fail(m.error);
+        if (approved.has(ctx) && approved.get(ctx) !== fingerprint(m)) return fail(`That item or its sync settings changed. Ask again to approve the current mark. ${NOTHING}`);
+        const { who, item, key, store, title } = m, at = clock(ctx);
+        if (!m.site) {
+          // A mark that agrees with the LMS is no mark: the item follows the LMS again.
+          const r = await T().change({ key: store, edits: [['done', key, T().isDone(item, m.o.done) ? null : true]] }, area(ctx.local));
+          if (!r.ok) return fail(`Glaze couldn't save that on this device. ${NOTHING}`);
+          return { account: who.account, at, item: { type: item.type, id: item.id, title, done: !!item.ov?.done, marked: r.data.items[key]?.done ?? null }, where: 'glaze' };
+        }
+        const r = await deps.tabs.run(who.account, 'mark', { type: item.type, id: item.id, aid: typeof item.aid === 'string' ? item.aid : '', ov: item.ov?.id || '' }, {});
+        if (r === null) return fail(noTab(who));
+        const ov = r.ok === true && isObj(r.ov) && r.ov.done === true && /^\d{1,20}$/.test(r.ov.id) ? { id: r.ov.id, done: true, dismissed: r.ov.dismissed === true } : null;
+        if (!ov) return fail(r.error === 'timeout' || r.uncertain === true ? "Canvas didn't confirm the mark, so it may or may not be in its planner; todo_list shows it once Glaze reads the planner again."
+          : `Canvas didn't confirm the mark. ${NOTHING}`);
+        // The kept planner takes Canvas's override, as the list keeps it after a tick (features/todo.js mark).
+        const c = plan(who, await ctx.local.get('todoCache')), it = c?.items.find((i) => isObj(i) && `${i.type}:${i.id}` === key);
+        if (it) { it.ov = ov; await T().change({ key: store, cache: c }, area(ctx.local)); }
+        return { account: who.account, at, item: { type: item.type, id: item.id, title, done: ov.done, marked: null }, where: 'canvas' };
+      },
+    }] : []),
   ];
   // Adds them to a lib/ai/tools.js registry (its define checks each) → the tools as added.
-  const register = (registry) => tools().map((t) => registry.add(t));
+  const register = (registry, deps) => tools(deps).map((t) => registry.add(t));
   return { LIMIT, parse, env, none, tools, register };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_MCP_STUDY; else GZ_MCP_STUDY;
