@@ -7923,7 +7923,9 @@ function translateElement(element, translation) {
       element.textContent = value;
     } else {
       const templateElement = element.ownerDocument.createElementNS("http://www.w3.org/1999/xhtml", "template");
-      templateElement.innerHTML = value;
+      // scripts/vendor-pdfjs.sh: parse Fluent overlays without an HTML assignment sink.
+      const translated = new DOMParser().parseFromString("<body>" + value, "text/html");
+      templateElement.content.append(...translated.body.childNodes);
       overlayChildNodes(templateElement.content, element);
     }
   }
