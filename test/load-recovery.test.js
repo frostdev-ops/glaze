@@ -108,20 +108,34 @@ test('a retry gives up after a few minutes, and refusals and a removed extension
   assert.equal(r.asks.length, 1, 'the extension gone: not asked again');
 });
 
-test("the pop-up's own loads, refused with nobody waiting yet, leave no unhandled rejection", async () => {
+test('a sender refusal stops automatic retries but a later sync can load after permission returns', async () => {
+  let allowed = false;
+  const p = await boot(() => allowed ? { ok: true } : { ok: false, error: 'sender' });
+  await p.wait(60000);
+  assert.equal(p.asks.length, 1, 'no automatic retry after a host refusal');
+  allowed = true;
+  p.change();
+  await p.wait(500);
+  assert.equal(p.asks.length, 2, 'a later sync may ask again after the failed entry expires');
+  assert.ok(p.syncs.length >= 1, 'the restored module syncs');
+});
+
+for (const [label, file, name] of [['pop-up', 'popup', 'GZ_POPUP'], ['announcement feature', 'announce', 'GZ_ANNOUNCE']]) {
+test(`the ${label}'s own loads, refused with nobody waiting yet, leave no unhandled rejection`, async () => {
   const stray = [];
   const seen = (e) => stray.push(e);
   process.on('unhandledRejection', seen);
   try {
-    const c = vm.createContext({ console, document: { documentElement: new El('html') } });
+    const c = vm.createContext({ console, document: { documentElement: new El('html') }, addEventListener() {} });
     c.globalThis = c;
     c.GZ_CTX = { t: (k) => k, need: () => Promise.reject(new Error('Missing host permission for the tab or frames')) };
-    vm.runInContext(read('features/popup.js'), c, { filename: 'features/popup.js' });
-    await new Promise((r) => setTimeout(r, 10));
-    await assert.rejects(c.GZ_POPUP.ready, /Missing host permission/, 'its waiters still see the failed load');
+    vm.runInContext(read(`features/${file}.js`), c, { filename: `features/${file}.js` });
+    await settle();
+    await assert.rejects(c[name].ready, /Missing host permission/, 'its waiters still see the failed load');
   } finally { process.off('unhandledRejection', seen); }
   assert.deepEqual(stray.map((e) => e?.message), []);
 });
+}
 
 test('a retry in flight is the one a sync gets: no file is loaded twice', async () => {
   let release;
