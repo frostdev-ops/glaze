@@ -17,7 +17,7 @@ var GZ_SHEET_FN_DATE = globalThis.GZ_SHEET_FN_DATE || (() => {
   const ymd = (y, m, d, ctx) => M.toSerial(y, m, d, ctx.date1904);
   const leap = (y) => (y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0)) || y === 1900;
   const daysIn = (y, m) => [31, leap(y) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
-  // EDATE/EOMONTH use the Gregorian month end even though DATE accepts serial 60 as February 29, 1900.
+  // EDATE, EOMONTH and YEARFRAC use Gregorian month ends even though DATE accepts February 29, 1900.
   const monthEnd = (y, m) => y === 1900 && m === 2 ? 28 : daysIn(y, m);
   const dow = (n, ctx) => (n + (ctx.date1904 ? SHIFT_1904 : 0) + 6) % 7;
   const whole = (v, ctx) => Math.trunc(num(v, ctx));
@@ -100,7 +100,7 @@ var GZ_SHEET_FN_DATE = globalThis.GZ_SHEET_FN_DATE || (() => {
     return (q.y - p.y) * 360 + (q.m - p.m) * 30 + d2 - d1;
   };
   // YEARFRAC's five bases as Excel computes them (the start is the earlier date).
-  const endOfFeb = (p) => p.m === 2 && p.d === daysIn(p.y, 2);
+  const endOfFeb = (p) => p.m === 2 && p.d === monthEnd(p.y, 2);
   const BASES = [
     (a, b, p, q) => {
       let d1 = p.d, d2 = q.d;
@@ -113,9 +113,14 @@ var GZ_SHEET_FN_DATE = globalThis.GZ_SHEET_FN_DATE || (() => {
     },
     (a, b, p, q, ctx) => {
       const withinYear = p.y === q.y || (p.y + 1 === q.y && (p.m > q.m || (p.m === q.m && p.d >= q.d)));
-      if (!withinYear) return (b - a) / ((ymd(q.y + 1, 1, 1, ctx) - ymd(p.y, 1, 1, ctx)) / (q.y - p.y + 1));
-      const feb29 = (y) => leap(y) && a < ymd(y, 3, 1, ctx) && b >= ymd(y, 3, 1, ctx);
-      const long = p.y === q.y ? leap(p.y) : feb29(p.y) || feb29(q.y) || (q.m === 2 && q.d === 29);
+      // YEARFRAC counts serial 60 in elapsed days, but uses Gregorian years in its denominator.
+      if (!withinYear) {
+        const days = ymd(q.y + 1, 1, 1, ctx) - ymd(p.y, 1, 1, ctx) - (p.y === 1900 ? 1 : 0);
+        return (b - a) / (days / (q.y - p.y + 1));
+      }
+      const feb29 = (y) => y !== 1900 && leap(y) && a < ymd(y, 3, 1, ctx) && b >= ymd(y, 3, 1, ctx);
+      const long = p.y === q.y ? p.y !== 1900 && leap(p.y)
+        : feb29(p.y) || feb29(q.y) || (q.y !== 1900 && q.m === 2 && q.d === 29);
       return (b - a) / (long ? 366 : 365);
     },
     (a, b) => (b - a) / 360,
