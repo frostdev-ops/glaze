@@ -29,3 +29,18 @@
 .gq-said { position: absolute; inset: 24px 24px auto; margin: 0; font-size: 14px; color: var(--gz-err); text-align: center; }
 .gq-said[hidden] { display: none; }
 .gq-menu { position: fixed; z-index: 30; }
+/* The page box: the page you're on, / the count. */
+.gq-page { width: 44px; height: 32px; flex: none; padding: 0 6px; text-align: center; border: 1px solid var(--gz-line-strong); border-radius: 8px; background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; }
+.gq-page:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+.gq-page:disabled { opacity: .55; }
+.gq-pages { flex: none; font-size: 13px; color: var(--gz-ink-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gq-pages:empty { display: none; }
+/* A file shown by its address (writer.html's view mode: a Blackboard preview): the viewer alone, the frame's own size. */
+:root[data-mode="view"] body { padding: 0; overflow: hidden; background: transparent; }
+:root[data-mode="view"] #gw, :root[data-mode="view"] #tb { display: none !important; }
+/* A narrow viewer (a Blackboard preview at 640 px): − and + go (the zoom box and Ctrl or ⌘ with + and − stay), tighter. */
+@container gp-tool (max-width: 640px) {
+  .gq .gp-tool { gap: 4px; padding-inline: 8px; }
+  .gq .gp-tool .gp-sepv, #gq-zoom-out, #gq-zoom-in { display: none; }
+  .gq .gp-tool .gp-box { min-width: 0; }
+}
