@@ -212,4 +212,24 @@ test('zipAsync falls back to zlib where CompressionStream is missing', async () 
   const z = D.unzip(without);
   for (const f of files) assert.deepEqual(new Uint8Array(await z.bytes(f.name)), f.data, f.name);
   assert.deepEqual(Object.values(methods(without)).map((x) => x.method), Object.values(methods(withStream)).map((x) => x.method));
+  assert.deepEqual(without, withStream, 'the node fallback emits identical bytes');
+});
+
+test('zip refuses classic ZIP field overflow before reading or compressing bodies', async () => {
+  const empty = { name: 'a', data: new Uint8Array(0) };
+  const cases = [Array(65536).fill(empty), [{ ...empty, name: 'a'.repeat(65536) }],
+    [{ ...empty, data: { length: 0x100000000 } }],
+    [{ ...empty, data: { length: 0xffffff00 } }, { ...empty, name: 'b', data: { length: 256 } }]];
+  for (const files of cases) {
+    assert.throws(() => Z.zip(files), /zip64|ZIP limit/i);
+    await assert.rejects(Z.zipAsync(files, { deflate: true }), /zip64|ZIP limit/i);
+  }
+});
+
+test('zipAsync uses zlib when node has CompressionStream without deflate-raw', async () => {
+  const files = deflateCases(), saved = globalThis.CompressionStream;
+  const expected = Buffer.concat(await Z.zipAsync(files, { deflate: true }));
+  globalThis.CompressionStream = class { constructor() { throw new TypeError('unsupported format'); } };
+  try { assert.deepEqual(Buffer.concat(await Z.zipAsync(files, { deflate: true })), expected); }
+  finally { globalThis.CompressionStream = saved; }
 });
