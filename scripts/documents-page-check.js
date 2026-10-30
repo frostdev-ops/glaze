@@ -282,10 +282,10 @@ const check = async (name, test) => {
         const index = (await chrome.storage.local.get('writerPapers')).writerPapers || [];
         const rec = { key, kind: 'pdf', title: 'PDF close check', named: true, file, size, pages: 3, revision: 1, updated: Date.now() };
         await chrome.storage.local.set({ [`writerPaper:${key}`]: rec, writerPapers: [...index, rec] });
-        globalThis.pdfCheckSet = chrome.storage.local.set.bind(chrome.storage.local);
+        const set = globalThis.pdfCheckSet = chrome.storage.local.set.bind(chrome.storage.local);
         chrome.storage.local.set = async (items) => {
           if (items[`writerPaper:${key}`]) { globalThis.pdfCheckHeld = true; await new Promise((r) => { globalThis.pdfCheckRelease = r; }); }
-          return globalThis.pdfCheckSet(items);
+          return set(items);
         };
       }, { key, file: Buffer.from(bytes).toString('base64'), size: bytes.length });
       try {
