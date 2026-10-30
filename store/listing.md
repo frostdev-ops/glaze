@@ -89,21 +89,21 @@ NEW IN 4.0.0
 
 ## Single-purpose statement
 
-Glaze customizes how Blackboard Ultra, Canvas and Moodle pages look and read, and helps users plan and keep their own coursework on those pages. Its themes and optional helpers present the user's existing course information, keep the user's own tasks, notes and drafts locally, and save accessible files the user chooses. Every permission serves that purpose.
+Glaze customizes how Blackboard Ultra, Canvas and Moodle pages look and read, and helps users plan, write and keep their own coursework on those pages. Its themes and optional helpers present the user's existing course information, keep the user's own tasks, notes, drafts and documents locally, and save accessible files the user chooses. Every permission serves that purpose.
 
 ## Permission justifications
 
 ### storage
 
-Saves theme and extra settings in chrome.storage.sync, including user-set course nicknames, colors, tint and Looks; these follow Chrome sync when enabled. Local storage keeps course details, seen-grade and content records, the due list, Better To Do's own tasks and plans, the class schedule, reminder and streak state, widget layouts, hidden folders, supported draft backups, what-if scores and course positions, and the sites the user approved. Course tab sketches (boxes, colours and the course's name, with its page path) stay in page memory and chrome.storage.session (memory). Canvas badge records include site, account and course identifiers; some Ultra seen-grade/content records still use course ids without account scoping. Drafts expire after at most 14 days; switching backup off deletes them. Coursework records and draft text are not synced. See the privacy policy for each record's retention and removal behavior.
+Saves theme and extra settings in chrome.storage.sync, including user-set course nicknames, colors, tint and Looks; these follow Chrome sync when enabled. Local storage keeps course details, seen-grade and content records, the due list, Better To Do's own tasks and plans, the class schedule, reminder and streak state, widget layouts, hidden folders, supported draft backups, Writer's papers, documents, versions, dictionary and saved sources, what-if scores and course positions, and the sites the user approved. Course tab sketches (boxes, colours and the course's name, with its page path) stay in page memory and chrome.storage.session (memory). Canvas badge records include site, account and course identifiers; some Ultra seen-grade/content records still use course ids without account scoping. Drafts expire after at most 14 days; switching backup off deletes them. Coursework records, papers and draft text are not synced. The privacy policy gives each record's retention and removal.
 
 ### unlimitedStorage
 
-Notes, their pictures and attachments, course-card pictures and files kept for Look backgrounds are kept in the extension's own storage. This permission stops the browser from deleting them to free space. Nothing more is collected or sent because of it.
+Notes, their pictures and attachments, Writer's papers and documents, course-card pictures and files kept for Look backgrounds are kept in the extension's own storage. This permission stops the browser from deleting them to free space. Nothing more is collected or sent because of it.
 
 ### Host access (1,000 character maximum)
 
-Required hosts: *.instructure.com, *.blackboard.com, *.moodlecloud.com, frostdev.io and share.frostdev.io. https://*/* is optional: the popup checks the page before offering Use Glaze on the site; the first-run and Settings address fields check LMS APIs after the user grants access, returning only new grants if no LMS answers. Browser-menu grants are checked too; failed checks leave that access unused. All sites grants every HTTPS site; Glaze then asks the user first on each new school's pages. Redirected files stop with a Canvas fallback on Chrome/Edge/Firefox. Other hosts are requested as needed: Canvas Download all file servers, Gradescope, Look media, mod network hosts and custom share relays. Local testing uses optional http://localhost/* and http://127.0.0.1/*. On allowed school sites Glaze reads with the user's session and writes only on their click (planner ticks, Canvas nicknames and colors, announcement read marks, Sign out, Moodle's Edit mode).
+Required hosts: *.instructure.com, *.blackboard.com, *.moodlecloud.com, frostdev.io and share.frostdev.io. https://*/* is optional: the popup checks the page before offering Use Glaze on the site; the first-run and Settings address fields check LMS APIs after the user grants access, returning only new grants if no LMS answers. Browser-menu grants are checked too, and unused if checks fail. All sites grants every HTTPS site; Glaze then asks the user first on each new school's pages. Redirected files stop with a Canvas fallback. Other hosts are requested as needed: Canvas Download all file servers, Gradescope, Look media, Cite lookups, AI providers, mod network hosts and custom share relays. Local testing uses optional http://localhost/* and http://127.0.0.1/*. On allowed school sites Glaze reads with the user's session and writes only on their click (planner ticks, Canvas nicknames and colors, announcement read marks, Sign out, Moodle's Edit mode, Writer's Post, Reply, Send, Submit).
 
 ### activeTab
 
@@ -127,7 +127,7 @@ All of Glaze's own code ships in the package. The only code not in it is user-in
 
 ## Data usage (privacy practices tab)
 
-Glaze has no analytics and does not sell user data or use it for unrelated purposes, creditworthiness or lending. Optional share sessions and mod channels send encrypted content to the selected relay. The optional signed blocklist sends a fixed credential-free GET without student identifiers. User-installed mods and linked media may contact other hosts as described above; a mod granted personal data and network access can send that data to its granted hosts. These services receive ordinary connection information such as an IP address. Keep the store's data-use answers consistent with these behaviors and PRIVACY.md.
+Glaze has no analytics and does not sell user data or use it for unrelated purposes, creditworthiness or lending. Optional share sessions and mod channels send encrypted content to the selected relay. The optional signed blocklist sends a fixed credential-free GET without student identifiers. Optional AI sends a feature's context, such as a draft, to the provider or endpoint the user chooses; Writer's citation lookups send a DOI, ISBN or web address only on the user's click. User-installed mods and linked media may contact other hosts as described above; a mod granted personal data and network access can send that data to its granted hosts. These services receive ordinary connection information such as an IP address. Keep the store's data-use answers consistent with these behaviors and PRIVACY.md.
 
 ## Screenshot and promo delivery
 
