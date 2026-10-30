@@ -879,6 +879,9 @@ test('review charts: relationship lookup honours XML encoding and package case',
     ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(await z.text(name), 'utf16le')]) : await z.bytes(name) });
   const wb = await X.read(Buffer.concat(Z.zip(files)));
   assert.deepEqual(wb.sheets[0].keep.drawing.charts, ['xl/charts/chart1.xml']);
+  const out = await parts(await X.write(wb, { recalc: false }));
+  assert.ok(out['xl/charts/chart1.xml'], 'chart remains reachable through UTF-16 relationships');
+  assert.ok(out[rp.toUpperCase()], 'case-variant relationships are retained');
 });
 
 test('review track: undo of a delete-and-rename batch restores the original kept refs', async () => {
