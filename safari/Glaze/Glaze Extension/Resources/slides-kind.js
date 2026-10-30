@@ -10,7 +10,9 @@
   const DK = globalThis.GZ_DOC_KINDS;
   const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return globalThis.navigator?.language || 'en'; } })();
   // lib/i18n.js's GZ_I18N is a page-wide const, not a property of the window.
-  const t = (k, v) => (typeof GZ_I18N !== 'undefined' ? GZ_I18N.t(k, v, locale) : k);
+  // An assignment's frame says its words in the page's language (writer.js t).
+  let words = null;
+  const t = (k, v) => (words ? words(k, v) : typeof GZ_I18N !== 'undefined' ? GZ_I18N.t(k, v, locale) : k);
   const LIBS = ['lib/doctext.js', 'lib/pptx.js', 'lib/pptx-geom.js', 'lib/slides-render.js'];
   const need = (files) => GZ_WRITER_PAPER.need(files);
   // What the page says when it refuses a deck (papers.js translates them).
@@ -230,13 +232,15 @@
   const ZOOMS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3];
   const NOTES = 'gz-slides-notes', PAD = 24, RAIL = 144;
 
-  const edit = async (key) => {
+  // host: an assignment's frame (writer-kinds.js view): { mount, t, title, tools }, the viewer in mount with the
+  // assignment's title and the frame's tools (Submit…) before ⋯, no way back to Documents; → its surface.
+  const edit = async (key, host = null) => {
     const root = document.documentElement;
-    root.dataset.mode = 'slides';
+    if (host) words = host.t || null; else root.dataset.mode = 'slides';
     await need(LIBS);
     const rec = await papers().get(key).catch(() => null), bytes = STORE.get(rec);
     const deck = bytes ? await GZ_PPTX.read(bytes).catch((e) => { console.warn(e); return null; }) : null;
-    const Rr = R(), labels = LABELS(), title = rec?.title || t('Untitled document'), n = deck ? deck.slides.length : 0;
+    const Rr = R(), labels = LABELS(), title = host?.title?.() || rec?.title || t('Untitled document'), n = deck ? deck.slides.length : 0;
     const media = deck ? await blobs(bytes, deck, new Set(deck.media.map((m) => m.path))) : new Map();
     let cur = 0, zoom = 'fit', term = '', hits = [], hit = -1, menu = null, showing = null;
     let notesOpen = false;
@@ -268,11 +272,11 @@
       return b;
     });
     const view = h('div', { class: 'gp gp-standalone gs-view' },
-      h('header', { class: 'gp-top' }, h('a', { href: 'papers.html', text: t('Documents') }), h('h1', { text: title }), h('span', { class: 'grow' }), h('span', { class: 'gp-state', text: deck ? t('{n} slides', { n }) : '' })),
+      h('header', { class: 'gp-top' }, host ? null : h('a', { href: 'papers.html', text: t('Documents') }), h('h1', { text: title }), h('span', { class: 'grow' }), h('span', { class: 'gp-state', text: deck ? t('{n} slides', { n }) : '' })),
       h('div', { class: 'gs-tool' }, h('div', { class: 'gs-group' }, prevB, atEl, nextB), h('div', { class: 'gs-group' }, outB, zoomB, inB),
-        h('div', { class: 'gs-find', role: 'search' }, q, findN, findPrev, findNext), h('span', { class: 'grow' }), notesB, presentB, moreB),
+        h('div', { class: 'gs-find', role: 'search' }, q, findN, findPrev, findNext), h('span', { class: 'grow' }), notesB, presentB, ...(host?.tools || []), moreB),
       h('div', { class: 'gs-work' }, railEl, h('div', { class: 'gs-main' }, canvasEl, notesEl)));
-    document.body.append(view);
+    (host?.mount || document.body).append(view);
     if (!deck) {
       canvasEl.append(h('p', { class: 'gs-said', role: 'status', text: t(SAYS.read) }));
       for (const b of [prevB, nextB, outB, zoomB, inB, q, findPrev, findNext, notesB, presentB]) b.disabled = true;
@@ -483,10 +487,27 @@
 
     draw();
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
+    // What an assignment's submit sheet sends (writer-submit.js): the deck as it was brought.
+    return { pages: () => null, say: () => {}, ready: () => !!deck, save: async () => true,
+      file: async () => { const f = await file(key); if (!f) throw new Error('no file'); return { bytes: f.bytes, mime: f.mime, ext: rec?.ext === '.ppsx' ? '.ppsx' : '.pptx' }; } };
+  };
+  // A deck brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it held
+  // kept as a version first (the 'import' save), its title the assignment's. → the record.
+  const into = async (key, f) => {
+    if (!Number.isSafeInteger(f?.size) || f.size <= 0 || f.size > STORE.max) throw new RangeError(SAYS.size);
+    await need(LIBS);
+    const raw = await f.arrayBuffer();
+    if (!(raw instanceof ArrayBuffer) || raw.byteLength !== f.size) throw new Error('invalid file read');
+    const bytes = new Uint8Array(raw);
+    const deck = await GZ_PPTX.read(bytes).catch(() => null);
+    if (!deck?.slides.length) throw new RangeError(SAYS.read);
+    const thumbUrl = await picture(deck, bytes).catch(() => null), words2 = textOf(deck);
+    return (await papers().save(key, { kind: 'slides', doc: null, ...STORE.put(bytes, /\.ppsx$/i.test(f.name) ? '.ppsx' : '.pptx'), slides: deck.slides.length, text: words2,
+      words: measure({ text: words2 }).words, ...(thumbUrl && { thumb: thumbUrl }) }, { reason: 'import' })).paper;
   };
 
   // Viewing stays registered; only import follows the switch. The page waits before it routes or draws.
   const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.slides === true, () => false);
-  DK.wait(on.then((yes) => DK.register('slides', { edit, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
+  DK.wait(on.then((yes) => DK.register('slides', { edit, view: edit, into, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
   globalThis.GZ_SLIDES_KIND = Object.freeze({ STORE });
 })();

@@ -17,6 +17,9 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   });
   const extOf = (name) => /(\.[^./\\]+)$/.exec(typeof name === 'string' ? name : '')?.[1].toLowerCase() || '';
   const kindOf = (name) => (Object.hasOwn(EXT, extOf(name)) ? EXT[extOf(name)].kind : null);
+  // Each kind's Settings → Writer switch (storage.sync writer), and the kinds switched on in w.
+  const SWITCH = Object.freeze({ pdf: 'pdf', slides: 'slides', sheet: 'sheets' });
+  const switched = (w) => Object.keys(SWITCH).filter((id) => w?.[SWITCH[id]] === true);
   const mimeOf = (name) => (Object.hasOwn(EXT, extOf(name)) ? EXT[extOf(name)].mime : null);
   const squash = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
   // "Essay 2: Memory in Beloved" → "Essay 2": the title before its subtitle, as the mockup's sheet and file name have it.
@@ -117,7 +120,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   };
   const may = (s, name) => step(s) === name;
 
-  return { MIME, EXT, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
+  return { MIME, EXT, SWITCH, switched, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SUBMIT_LIB;
 GZ_WRITER_SUBMIT_LIB;

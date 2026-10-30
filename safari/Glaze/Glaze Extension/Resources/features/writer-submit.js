@@ -19,7 +19,8 @@
 // the paper's frame instead, before Ultra hears it (in the capture phase), which asks what to do with it; Ultra
 // never starts that upload, so nothing of it needs undoing. More than one file, a file over 50 MB, Glaze's own attach and
 // the setting off leave the area to Ultra. A paper in its compact box (features/writer.js box.full false) sends text: its
-// Submit and Save and Close stay Ultra's, and its file area gives Writer a Word file only (Open in Writer or Submit as is).
+// Submit and Save and Close stay Ultra's, and its file area gives Writer a Word file (Open in Writer or Submit as is), and a
+// PDF or deck while its Settings → Writer switch is on (Open in Glaze or Submit as is).
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const L = () => globalThis.GZ_WRITER_SUBMIT_LIB;
@@ -200,8 +201,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const fail = (error) => { say(box, { type: 'submit:done', run: m.run, ok: false, error }); return false; };
     if (running || box.saved || submitted.has(box) || !Number.isSafeInteger(m.run) || m.run <= Math.max(runs.get(box) || 0, cancelled.get(box) || 0)) return fail('busy');
     runs.set(box, m.run);
-    const name = m.name, bytes = m.bytes, key = m.key, asis = m.asis === true;
-    if (!key || key !== L().paperKey(box.context?.paper) || !(asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name)) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
+    // kind: what the frame built (a paper's .docx, a PDF as saved, a deck as brought: writer-kinds.js), named for it.
+    const name = m.name, bytes = m.bytes, key = m.key, asis = m.asis === true, kind = typeof m.kind === 'string' ? m.kind : 'paper';
+    if (!key || key !== L().paperKey(box.context?.paper) || !(asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name, kind)) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || (m.held != null && (typeof m.held !== 'string' || m.held.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
     const user = box.context.paper.user, end = Math.min(m.until, Date.now() + 80e3);
@@ -226,7 +228,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       claimed = true;
       if (!here()) return fail('page');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
-      const file = new File([bytes], name, { type: asis ? m.mime : L().MIME, lastModified: Date.now() });
+      const file = new File([bytes], name, { type: asis ? m.mime : L().mimeOf(name), lastModified: Date.now() });
       const a = await attach(box, file, bytes, here);
       if (a) return fail(a);
       s = L().advance(s, { step: 'attach' });
@@ -275,7 +277,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const hit = zone?.contains(t) && (drop || t === L().uploadInput(area));
       if (!hit) continue;
       const files = drop ? e.dataTransfer?.files : t.files;
-      if (files?.length !== 1 || L().fileError(files[0]) || (!box.full && L().route(files[0].name) !== 'choose')) return;
+      if (files?.length !== 1 || L().fileError(files[0]) || (!box.full && L().route(files[0].name, { kinds: L().switched(X.settings().writer) }) !== 'choose')) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.type === 'input') return;

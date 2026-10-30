@@ -3430,6 +3430,8 @@
   "Saved sources": "Sources enregistrées",
   "Import…": "Importer…",
   "Open in Writer": "Ouvrir dans Writer",
+  "Open in Glaze": "Ouvrir dans Glaze",
+  "The file could not be made. Nothing was submitted.": "Le fichier n’a pas pu être créé. Rien n’a été remis.",
   "Submit as is": "Rendre tel quel",
   "Saves current paper": "Enregistre le travail actuel",
   "Open uploads in Writer": "Ouvrir les envois dans Writer",

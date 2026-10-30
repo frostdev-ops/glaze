@@ -703,7 +703,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const newPaper = () => F.template(compact ? ST.FORMATS.plain : format, values(), initialBody);
     const values = () => ({ name: ctx.user?.name || '', instructor: ctx.instructor || '', course: ctx.course?.name || '', date: ST.dateText(format), dueDate: Number.isFinite(Date.parse(ctx.assignment?.due || paper?.due)) ? ST.dateText(format, new Date(ctx.assignment?.due || paper.due)) : '', title: ctx.assignment?.title || '' });
     // failing: autosaves refused in a row (storage full or unavailable): each tries again later, longer each time.
-    let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false, failing = 0;
+    let saveTimer = 0, dirty = false, edits = 0, initializing = true, sessionSafe = false, failing = 0, parked = null; // parked: another kind's viewer holds the record (hand)
     const initialBody = view.state.doc.content.content.filter((n) => n.textContent.trim() || n.type.name !== 'paragraph').map((n) => n.toJSON());
     const recoveryScope = host.key || ctx.recovery || 'paper', keySlot = `gz-paper-key:${recoveryScope}`;
     // The tab's copy of a paper's unsaved edits, by the paper's key: the next frame on any page of it finds them.
@@ -797,6 +797,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       // Imports write the replacement before showing it: a visibility/pagehide autosave must read the new editor,
       // never queue the outgoing document behind that write. The import's own pre-save runs before this barrier.
       if (replacing) await replacing;
+      // Another kind's viewer has the record (hand, below): the paper writes nothing over it.
+      if (parked) return null;
       clearTimeout(saveTimer);
       if (!key) { setState('Not saved'); return null; }
       const at = edits, nameAt = nameEdits, k = key;
@@ -818,7 +820,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       }
     };
     const changed = () => {
-      if (initializing) return;
+      if (initializing || parked) return;
       titled();
       outlineAI.stop(); sourcesPanel?.pause();
       edits++; dirty = true;
@@ -1562,6 +1564,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const load = () => (loading ||= (async () => {
       key = host.key || PA.keyOf(ctx.paper || {}) || recoveryKey;
       paper = await openPaper(key);
+      if (await hand(paper)) { initializing = false; return; }
       await keepPictures(paper?.doc);
       recovered = key === recoveryKey && !!paper?.doc;
       const copy = pendingOf(key), pending = copy && await complete(copy, key, paper);
@@ -1620,6 +1623,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (target && key === recoveryKey) (async () => {
         await loading;
         if (key !== recoveryKey) return;
+        // The assignment's record is another kind's (a PDF or deck opened in Glaze): it shows; what was typed here stays
+        // under the stand-in key.
+        const there = await store.get(target);
+        if (key !== recoveryKey) return;
+        if (kindOfRec(there) !== 'paper') { if (dirty) await save(); key = target; paper = there; await hand(there); return; }
         const at = edits, written = at > 0 || recovered;
         const existing = written ? null : await openPaper(target);
         const copy = !written && pendingOf(target), pending = copy && await complete(copy, target, existing);
@@ -1655,12 +1663,15 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const newer = (p) => p?.doc && !dirty && !initializing && !importing && (p.revision || 0) > (paper?.revision || 0);
     const elsewhere = async (changes, area) => {
       const next = area === 'local' && key ? changes[PA.KEYS.PAPER + key]?.newValue : null;
+      if (parked) return;
+      if (next && kindOfRec(next) !== 'paper') { await hand(next); return; }
       if (!newer(next) && !PA.renamed(paper, next)) return;
       // While this editor's own write is in flight, its word may be that write: look again once it has answered.
       if (writing) { missed = true; return; }
       await adopt();
     };
     adopt = async () => {
+      if (parked) return;
       const k = key, fresh = await store.get(k);
       if (k !== key) return;
       // Only the name changed (the text is the one here), or this editor holds unsaved typing: the title alone, the
@@ -1686,9 +1697,33 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     counts();
     head();
     setState('');
+    // A record of another kind at the paper's key (a PDF or deck the student opened in Glaze: lib/doc-kinds.js) shows that
+    // kind's viewer in the paper's place (writer-kinds.js), the paper parked: none of its saves, projections or views. A
+    // kind this frame can't show gives the box back to Blackboard's editor, the record untouched. → whether it was handed.
+    const kindOfRec = (r) => (typeof r?.kind === 'string' && r.kind) || 'paper';
+    const hand = async (rec, held = false) => {
+      if (!rec || kindOfRec(rec) === 'paper') return false;
+      if (parked && !(held && parked.holding)) return true;
+      parked = { holding: false, kind: null };
+      clearTimeout(saveTimer);
+      let surface = null;
+      try { surface = await globalThis.GZ_WRITER_KINDS?.mount(kindOfRec(rec), key, api); } catch (e) { console.error(e); }
+      if (!surface) { host.say?.({ type: 'native', reason: 'kind' }); return true; }
+      parked = surface;
+      current = surface;
+      return true;
+    };
     const api = {
       editor: ed, key: () => key, format: () => format, look, paper: () => paper, context: () => ctx,
       docx, save, notify: (message) => toast(t(message)), version: (reason = 'submit') => save(reason), focus: setFocus, refresh: hooks, zoom: setZoom, importFile, importing: () => importing,
+      // What the submit sheet attaches (writer-submit.js): the paper as its .docx. kind: 'paper', as another kind's surface
+      // says its own (writer-kinds.js).
+      kind: () => 'paper', file: async () => { const out = await docx(); return { bytes: out.bytes, mime: out.type || GZ_WRITER_SUBMIT_LIB.MIME, ext: '.docx' }; },
+      // Open in Glaze (writer-kinds.js): hold() stops the paper's writes while the record becomes another kind, release()
+      // gives them back if it didn't, hand(record) shows that kind's viewer, unpark() the paper again (a Word file brought
+      // over the viewer).
+      hold: () => { if (!parked) { parked = { holding: true }; clearTimeout(saveTimer); } }, release: () => { if (parked?.holding) parked = null; },
+      hand: (rec) => hand(rec, true), take: (surface) => { parked = surface; current = surface; }, unpark: () => { parked = null; current = api; },
       // Nothing written past the format's opening yet (an import then needs no word about the paper it replaces).
       blank: () => { const text = view.state.doc.textContent.trim(); return !text || text === S.paper.nodeFromJSON(F.template(format, values())).textContent.trim(); },
       // The page ended Focus (a click on its dim).
@@ -1731,7 +1766,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const offer = () => switches.find((b) => b.getClientRects().length)?.focus({ preventScroll: true });
     // The compact box's text for Ultra's: once per turn of edits, as compose's change (writer.js) is.
     const projectSoon = () => {
-      if (!compact || !loaded || holding || flushing || projecting || !host.say) return;
+      if (!compact || !loaded || holding || flushing || projecting || parked || !host.say) return;
       projecting = true;
       queueMicrotask(() => {
         projecting = false;
@@ -1779,6 +1814,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       host.say?.({ type: 'compact:flushed', request, ok: !!p, ...(p || { reason: saying === 'long' ? 'long' : 'save' }) });
     };
     const setView = async (full, { save: persist = false, from = null } = {}) => {
+      if (parked) return;
       if (switching) return switching.then(() => setView(full, { save: persist, from }));
       if (flushing) { flushing.next = { full, options: { save: persist, from } }; return; }
       const next = !!boxEl && !full;
@@ -1863,7 +1899,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     projectSoon();
     view.setProps({ editable: editable || (() => true) });
 
-    current = api;
+    current = parked ? (typeof parked.kind === 'function' ? parked : null) : api;
     hooks();
     return api;
   };

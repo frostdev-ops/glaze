@@ -3430,6 +3430,8 @@
   "Saved sources": "Opgeslagen bronnen",
   "Import…": "Importeren…",
   "Open in Writer": "Openen in Writer",
+  "Open in Glaze": "Openen in Glaze",
+  "The file could not be made. Nothing was submitted.": "Het bestand kon niet worden gemaakt. Er is niets ingeleverd.",
   "Submit as is": "Inleveren zoals het is",
   "Saves current paper": "Bewaart huidige werkstuk",
   "Open uploads in Writer": "Uploads openen in Writer",

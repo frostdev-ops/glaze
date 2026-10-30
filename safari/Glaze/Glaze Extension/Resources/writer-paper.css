@@ -49,6 +49,8 @@
 :root[data-mode="paper"]:not([data-view="compact"]) body { padding: 0; overflow: hidden; background: transparent; }
 :root[data-mode="paper"]:not([data-view="compact"]) #gw, :root[data-mode="paper"]:not([data-view="compact"]) #tb { display: none !important; }
 :root[data-mode="paper"]:not([data-view="compact"]) .gp, .gp.gp-standalone { display: flex; }
+/* Another kind's viewer in the paper's place (writer-kinds.js): its own chrome, the paper's hidden. */
+:root[data-doc] .gp:not(.gp-standalone), :root[data-doc] #gw { display: none !important; }
 /* In the compact box: compose's text (writer.css) and the paper's own blocks as compose draws its own; none of the paper's
    fonts, sizes or line spacing (Ultra's box gets none of them; the pages show them). */
 :root[data-view="compact"] #gw .ProseMirror :is(h1, h2, h5, h6) { margin: 4px 0 10px; line-height: 1.35; font-weight: 600; font-size: 1.2em; }

@@ -91,7 +91,9 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   let store = null;
   const papers = () => (store ||= GZ_WRITER_PAPERS.open());
   const locale = () => { try { return chrome.i18n.getUILanguage(); } catch { return navigator.language || 'en'; } };
-  const t = (k, v) => GZ_I18N.t(k, v, locale());
+  // An assignment's frame says its words in the page's language (writer.js t).
+  let words = null;
+  const t = (k, v) => (words ? words(k, v) : GZ_I18N.t(k, v, locale()));
   const h = (tag, props = {}, ...kids) => {
     const e = document.createElement(tag);
     for (const [k, v] of Object.entries(props)) {
@@ -145,10 +147,11 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const text = () => '';
   const measure = () => ({ chars: 0, words: 0 });
 
-  // ---- the viewer
-  const edit = async (key) => {
+  // ---- the viewer. host: an assignment's frame (writer-kinds.js view): { mount, t, title, tools }, the viewer in mount with
+  // the assignment's title and the frame's tools (Submit…) before ⋯, no way back to Documents; → its surface.
+  const edit = async (key, host = null) => {
     const root = document.documentElement;
-    root.dataset.mode = 'pdf';
+    if (host) words = host.t || null; else root.dataset.mode = 'pdf';
     await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/pdf-l10n.js']);
     const sheet = (href) => new Promise((ok) => { document.head.append(h('link', { rel: 'stylesheet', href, onload: ok, onerror: ok })); });
     const st = papers(), PA = GZ_WRITER_PAPERS;
@@ -156,10 +159,10 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const [P, V] = await Promise.all([pdfjs(), viewerjs(), sheet('lib/pdfjs/pdf_viewer.css')]);
 
     // The chrome: Documents and the title, the save state; zoom, find and ⋯; the pages.
-    const own = PA.local(key);
+    const own = !host && PA.local(key);
     const titleIn = own ? h('input', { class: 'gp-title-in', type: 'text', maxlength: '120', autocomplete: 'off', spellcheck: 'false', 'aria-label': t('Title'), placeholder: t('Untitled document') }) : null;
     const state = h('span', { class: 'gp-state', role: 'status' });
-    const back = h('a', { href: 'papers.html', text: t('Documents') });
+    const back = host ? null : h('a', { href: 'papers.html', text: t('Documents') });
     const zoomOut = btn({ id: 'gq-zoom-out', class: 'gq-ib', title: t('Zoom out'), 'aria-label': t('Zoom out') }, icon('minus'));
     const zoomLabel = h('span'), zoomB = btn({ id: 'gq-zoom', class: 'gp-box', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Zoom') }, zoomLabel, icon('caret'));
     const zoomIn = btn({ id: 'gq-zoom-in', class: 'gq-ib', title: t('Zoom in'), 'aria-label': t('Zoom in') }, icon('plus'));
@@ -173,10 +176,10 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const pagesEl = h('div', { class: 'pdfViewer' }), scroll = h('div', { class: 'gq-scroll', role: 'region', tabindex: '0', 'aria-label': rec?.title || t('PDF') }, pagesEl);
     const said = h('p', { class: 'gq-said', role: 'alert', hidden: true });
     const ui = h('div', { class: 'gp gp-standalone gq' },
-      h('header', { class: 'gp-top' }, back, h('h1', {}, titleIn || rec?.title || t('Untitled document')), h('span', { class: 'grow' }), state),
-      h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('PDF') }, zoomOut, zoomB, zoomIn, h('span', { class: 'gp-sepv' }), findB, h('span', { class: 'grow' }), moreB),
+      h('header', { class: 'gp-top' }, back, h('h1', {}, titleIn || host?.title?.() || rec?.title || t('Untitled document')), h('span', { class: 'grow' }), state),
+      h('div', { class: 'gp-tool', role: 'toolbar', 'aria-label': t('PDF') }, zoomOut, zoomB, zoomIn, h('span', { class: 'gp-sepv' }), findB, h('span', { class: 'grow' }), ...(host?.tools || []), moreB),
       findBar, h('div', { class: 'gq-work' }, scroll, said));
-    document.body.append(ui);
+    (host?.mount || document.body).append(ui);
     if (titleIn) titleIn.value = rec?.title || '';
 
     // pdf.js's viewer over the pages: only those in view drawn, forms as fields, links in a new tab, the file's own
@@ -298,7 +301,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       ui.addEventListener('input', (e) => { if (e.target.closest?.('.annotationLayer')) modified(); });
       ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } });
     }
-    back.addEventListener('click', (e) => {
+    back?.addEventListener('click', (e) => {
       if (!dirty && !saving) return;
       e.preventDefault();
       flush().then((ok) => { if (ok) location[window.top === window ? 'assign' : 'replace'](back.href); });
@@ -321,16 +324,31 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       titleIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); keep(); scroll.focus(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); titleIn.value = was; scroll.focus(); } });
       titleIn.addEventListener('blur', keep);
     }
-    document.title = rec?.title || t('Untitled document');
+    if (!host) document.title = rec?.title || t('Untitled document');
     if (doc) await inited;
     // papers-motion.js holds the page hidden until a document has drawn.
     globalThis.GZ_PAPERS_MOTION?.shown?.('paper');
+    // What an assignment's submit sheet sends (writer-submit.js): the PDF as saved, its fields filled.
+    return { pages: () => doc?.numPages || 0, say, ready: () => !!doc, save: flush,
+      file: async () => { if (!await flush()) throw new Error('not saved'); rec = await st.get(key); const bytes = STORE.get(rec); if (!bytes) throw new Error('no file'); return { bytes, mime: 'application/pdf', ext: '.pdf' }; } };
+  };
+  // A PDF brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it held
+  // kept as a version first (the 'import' save), its title the assignment's. → the record.
+  const into = async (key, f) => {
+    if (!Number.isSafeInteger(f?.size) || f.size <= 0 || f.size > STORE.max) throw new RangeError(TOO_BIG);
+    await GZ_WRITER_PAPER.need(['lib/writer-papers.js']);
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    if (bytes.length !== f.size) throw new Error('invalid file read');
+    const { task, doc } = await read(bytes);
+    let thumbUrl = null, pages = 0;
+    try { pages = doc.numPages; thumbUrl = await picture(doc).catch(() => null); } finally { await task.destroy().catch(() => {}); }
+    return (await papers().save(key, { kind: 'pdf', doc: null, words: 0, ...STORE.put(bytes), pages, ...(thumbUrl && { thumb: thumbUrl }) }, { reason: 'import' })).paper;
   };
 
   // ---- registration: a PDF already kept lists and opens either way; only Settings → Writer → PDFs on (writer.pdf) lets
   // Documents import new ones (its Import, file chooser and drops: GZ_DOC_KINDS.opens). The page routes once this has answered.
   const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.pdf === true, () => false);
-  GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
+  GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: edit, into, says: { size: TOO_BIG, read: UNREAD }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
 
   return { STORE, pureXfa };
 })();

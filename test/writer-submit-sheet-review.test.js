@@ -94,7 +94,7 @@ test('review: a malformed as-is read cannot cross the channel', async () => {
 
 test('review: a failing document build leaves the sheet usable and sends nothing', async () => {
   const s = sheet();
-  s.api.docx = async () => { throw new Error('document build failed'); };
+  s.api.file = async () => { throw new Error('document build failed'); };
   await s.open(); await s.flush();
   s.click('.gs-primary'); await s.flush();
   assert.equal(s.messages.some((m) => m.type === 'submit:go'), false);

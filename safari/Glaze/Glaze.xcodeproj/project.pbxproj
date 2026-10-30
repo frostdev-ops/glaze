@@ -143,7 +143,9 @@
 		D2400000000000000000A792 /* pdf-kind.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F792 /* pdf-kind.css */; };
 		D2400000000000000000C792 /* pdf-kind.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F792 /* pdf-kind.css */; };
 		D2400000000000000000A7D1 /* slides-kind.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7D1 /* slides-kind.js */; };
+		D2400000000000000000A7E1 /* writer-kinds.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E1 /* writer-kinds.js */; };
 		D2400000000000000000C7D1 /* slides-kind.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7D1 /* slides-kind.js */; };
+		D2400000000000000000C7E1 /* writer-kinds.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E1 /* writer-kinds.js */; };
 		D2400000000000000000A7D2 /* slides-kind.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7D2 /* slides-kind.css */; };
 		D2400000000000000000C7D2 /* slides-kind.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7D2 /* slides-kind.css */; };
 		B0B1000000000000000000A4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
@@ -271,6 +273,7 @@
 		D2400000000000000000F791 /* pdf-kind.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = pdf-kind.js; path = Resources/pdf-kind.js; sourceTree = "<group>"; };
 		D2400000000000000000F792 /* pdf-kind.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = pdf-kind.css; path = Resources/pdf-kind.css; sourceTree = "<group>"; };
 		D2400000000000000000F7D1 /* slides-kind.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = slides-kind.js; path = Resources/slides-kind.js; sourceTree = "<group>"; };
+		D2400000000000000000F7E1 /* writer-kinds.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = writer-kinds.js; path = Resources/writer-kinds.js; sourceTree = "<group>"; };
 		D2400000000000000000F7D2 /* slides-kind.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = slides-kind.css; path = Resources/slides-kind.css; sourceTree = "<group>"; };
 		B0B1000000000000000000F4 /* features */ = {isa = PBXFileReference; lastKnownFileType = folder; name = features; path = Resources/features; sourceTree = "<group>"; };
 		B0B1000000000000000000F5 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
@@ -418,6 +421,7 @@
 				D2400000000000000000F791 /* pdf-kind.js */,
 				D2400000000000000000F792 /* pdf-kind.css */,
 				D2400000000000000000F7D1 /* slides-kind.js */,
+				D2400000000000000000F7E1 /* writer-kinds.js */,
 				D2400000000000000000F7D2 /* slides-kind.css */,
 				D6B0000000000000000000F1 /* sharing */,
 				B0B1000000000000000000F4 /* features */,
@@ -638,6 +642,7 @@
 				D2400000000000000000A791 /* pdf-kind.js in Resources */,
 				D2400000000000000000A792 /* pdf-kind.css in Resources */,
 				D2400000000000000000A7D1 /* slides-kind.js in Resources */,
+				D2400000000000000000A7E1 /* writer-kinds.js in Resources */,
 				D2400000000000000000A7D2 /* slides-kind.css in Resources */,
 				D6B0000000000000000000A1 /* sharing in Resources */,
 				B0B1000000000000000000A4 /* features in Resources */,
@@ -716,6 +721,7 @@
 				D2400000000000000000C791 /* pdf-kind.js in Resources */,
 				D2400000000000000000C792 /* pdf-kind.css in Resources */,
 				D2400000000000000000C7D1 /* slides-kind.js in Resources */,
+				D2400000000000000000C7E1 /* writer-kinds.js in Resources */,
 				D2400000000000000000C7D2 /* slides-kind.css in Resources */,
 				D6B0000000000000000000C1 /* sharing in Resources */,
 				B0B1000000000000000000C4 /* features in Resources */,

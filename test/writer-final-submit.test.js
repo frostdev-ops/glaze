@@ -79,7 +79,7 @@ test('D8: Ultra\'s Submit pressed before the paper has mounted opens the sheet o
   assert.equal(f.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), false);
   const view = { state: { doc: { label: 'x' } } };
   f.mount({ context: () => ({ assignment: { title: 'Essay 2' } }), paper: () => ({}), key: () => 'k', pages: () => 1, format: () => ({ id: 'mla9' }), editor: { view, text: () => '' },
-    docx: () => new Promise(() => {}), version: async () => true, save: async () => true });
+    file: () => new Promise(() => {}), version: async () => true, save: async () => true });
   await f.later(); await f.later();
   assert.equal(f.ctx.GZ_WRITER_SUBMIT_SHEET.opened(), true, 'the press was caught from Ultra: the sheet answers it');
 });
@@ -261,7 +261,7 @@ test('D5: a submit that fails or is cancelled records no submission and no Submi
   for (const how of ['docx', 'attach', 'cancel']) {
     const s = sheet();
     s.api.version = (reason) => P.save(KEY, { doc: paperDoc('The paper.') }, { reason });
-    if (how === 'docx') s.api.docx = async () => { throw new Error('document build failed'); };
+    if (how === 'docx') s.api.file = async () => { throw new Error('document build failed'); };
     await s.open(); for (const b of s.builds) b.resolve(); await s.flush();
     s.click('.gs-primary'); await s.flush();
     const go = s.messages.find((m) => m.type === 'submit:go');
