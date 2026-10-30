@@ -39,6 +39,8 @@ final class GlazeAgentHost {
     private var listener: (source: DispatchSourceRead, ino: UInt64)?
     private var timer: DispatchSourceTimer?
     private var instances: [String: Instance] = [:]
+    // Retain hello nonces even after bye. Bound memory and fail closed until a normal app restart clears the history.
+    private var sessions: Set<String> = []
     private var last = Date()
     private var activity = Date()
     private var updateIdle: (() -> Void)?
@@ -228,6 +230,10 @@ final class GlazeAgentHost {
         activity = last
         if seq == 1, frames.first?["t"] as? String == "hello" {
             guard frames[0]["instance"] as? String == i else { return GlazeAgentBridge.refused("bad-batch") }
+            let key = i + "." + s
+            guard !sessions.contains(key) else { return GlazeAgentBridge.refused("a replayed hello") }
+            guard sessions.count < 8192 else { return GlazeAgentBridge.refused("restart Glaze to begin another agent session") }
+            sessions.insert(key)
             let x = instances[i] ?? Instance(i)
             instances[i] = x
             begin(x, s)
