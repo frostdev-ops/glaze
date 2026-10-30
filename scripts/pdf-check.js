@@ -45,6 +45,24 @@ const fixture = () => {
   pdf += `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(pdf, 'latin1');
 };
+// A scanned worksheet: one Letter page that is a 150 dpi grey picture with the paper's grain and lines of dark words, which
+// a PNG of the page cannot keep small.
+const scan = () => {
+  const F = require('./pdf-fixtures.js'), zlib = require('node:zlib');
+  const w = 1275, h = 1650, px = Buffer.alloc(w * h);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  for (let i = 0; i < px.length; i++) px[i] = 234 + Math.floor(rnd() * 12);
+  for (let y0 = 150; y0 < 1500; y0 += 34) for (let x = 120; x < 1100;) {
+    const len = 20 + Math.floor(rnd() * 90);
+    for (let y = y0; y < y0 + 16; y++) for (let xx = x; xx < Math.min(x + len, 1150); xx++) px[y * w + xx] = 30 + Math.floor(rnd() * 30);
+    x += len + 14;
+  }
+  const { objects, refs, add } = F.pagesOf([{ size: [612, 792], content: 'q 612 0 0 792 0 0 cm /Im1 Do Q', resources: ' /XObject << /Im1 %IMG% >>' }]);
+  const img = add({ dict: `<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode >>`, stream: zlib.deflateSync(px) });
+  objects[refs[0] - 1] = objects[refs[0] - 1].replace('%IMG%', `${img} 0 R`);
+  return Buffer.from(F.write(objects, { id: 'scan' }));
+};
 
 (async () => {
   let context, held = false, tmp, passed = false, page = null;
@@ -286,6 +304,14 @@ const fixture = () => {
     const afterRace = await until(() => page.evaluate(() => document.querySelector('.annotationLayer input')?.value || null), 'overlapping edits reopened');
     check(afterRace === 'Second edit', `an edit made during a save is persisted before leaving (${afterRace})`);
 
+    // A scan's card shows its page sharp: drawn at the card's size on a 2× screen, not a postage stamp scaled up.
+    await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(true));
+    await openHome();
+    const scanned = path.join(tmp, 'Scanned worksheet.pdf');
+    fs.writeFileSync(scanned, scan());
+    await page.setInputFiles('#gd-file', scanned);
+    const scanCard = await until(() => page.evaluate(() => { const c = [...document.querySelectorAll('.gd-card')].find((x) => x.querySelector('.gd-title')?.textContent === 'Scanned worksheet'), img = c?.querySelector('.gd-pic img'); return img?.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.length } : null; }), 'the scan\'s card');
+    check(scanCard.w >= 300 && scanCard.src < 96e3, `a scanned page's card picture keeps its detail (${JSON.stringify(scanCard)})`);
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(!errors.some((e) => /fake worker/i.test(e)), 'pdf.js never fell back to a fake worker');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);
