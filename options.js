@@ -65,11 +65,11 @@ if (embedded) {
   });
   $('.embed-tools').hidden = false;
   const leave = () => window.parent.postMessage({ gzSettings: 'close' }, '*');
-  // Where the frame has no tabs API (Firefox gives an extension page framed in a web page none), the worker opens it.
+  // The worker opens it. Firefox gives an extension page framed in a web page no tabs API, and Safari gives one that kills the
+  // page's process when called (WebKit takes tabs calls only from the extension's own process).
   const ownTab = (hash = location.hash, action) => {
-    const opened = !action && chrome.tabs?.create ? chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + hash })
-      : chrome.runtime.sendMessage({ type: 'glaze:settings-tab', hash, ...(action && { action }) }).then((r) => { if (!r?.ok) throw Error('refused'); });
-    opened.then(leave, () => {});
+    chrome.runtime.sendMessage({ type: 'glaze:settings-tab', hash, ...(action && { action }) })
+      .then((r) => { if (!r?.ok) throw Error('refused'); }).then(leave, () => {});
   };
   ownTabAt = (hash) => ownTab(hash);
   // Nor any permissions API: a control that needs a grant (lib/site.js reach) opens Settings' own tab at its section.

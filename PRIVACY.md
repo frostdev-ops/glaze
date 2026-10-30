@@ -520,8 +520,10 @@ not those unknown legacy copies or unrelated stickers.
   course's new messages. The documents you start or import on Writer's Documents page are kept
   the same way, each under a random key (`doc:<uuid>`) with its text, title, format and versions; Glaze keeps no copy on
   a server. A spreadsheet keeps its cells beside its record (`writerSheet:<key>:<sheet>:<rows>`) and its versions
-  compressed (16 MB in all); a PDF or slide deck keeps the file itself in its record (3 MB at most; a PDF's with the form
-  values you fill), with its size, page or slide count and first page's picture. An assignment attempt you open as one
+  compressed (16 MB in all); a PDF or slide deck (50 MB at most; a PDF's with the form values you fill) is kept in Glaze's
+  own file store on this device (the worker's IndexedDB `glaze-docs`, by the file's SHA-256), its record holding the
+  file's hash, size, page or slide count and first page's picture; where that store isn't available, a file up to 3 MB
+  stays in the record itself. A file goes when no document or version points at it. An assignment attempt you open as one
   of these is kept the same way under the assignment's key. Glaze reads and draws these files on this device, from the
   extension's own files, and sends them nowhere. Delete there moves a paper or document to Trash, which keeps it and its versions on this device; 30 days later
   it is deleted for good, with its versions and saved sources, the next time the browser starts or Documents opens, unless
@@ -816,7 +818,7 @@ you import) are bundled. It makes requests in these cases:
   own buttons, when you post, reply, send or submit (Ctrl/⌘+Enter presses Post, Reply or Send; the submit sheet's
   Submit attaches the paper's .docx, or the PDF, deck or .xlsx open in its place, through Ultra's own upload, writes your
   note and clicks Ultra's Submit once). **Open in Glaze** beside an attached PDF, deck or spreadsheet reads that file from your
-  Blackboard site when you click it (20 MB at most) and keeps it as the attempt's document.
+  Blackboard site when you click it (50 MB at most) and keeps it as the attempt's document.
   Writer's frame may not connect anywhere itself; two things leave the device, each only as described:
   - **Citation lookups**, only when you click Look up in Cite, made by Glaze's worker with no cookies, referrer or cache,
     one 10-second deadline, at most 2 MB read and https all the way: a DOI to `doi.org` (falling back to

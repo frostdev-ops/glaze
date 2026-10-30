@@ -51,8 +51,8 @@ const sharedNote = async (d) => {
   const { sid } = await d.send('create', { kind: 'notes', title: 'Biology', key: NK, ids: [id] });
   return { id, sid };
 };
-const page = async (d, { note = '', relay: selected, observer = 'v2', permissions = true, prefs = G.GZ_DEFAULTS } = {}) => {
-  const doc = { activeElement: null }, ids = new Map(), events = new Map(), calls = [], messages = [], disconnects = [], copied = [], opened = [], changes = [];
+const page = async (d, { note = '', relay: selected, observer = 'v2', permissions = true, prefs = G.GZ_DEFAULTS, dropSettings = false } = {}) => {
+  const doc = { activeElement: null }, ids = new Map(), events = new Map(), calls = [], messages = [], disconnects = [], copied = [], opened = [], created = [], changes = [];
   const sync = area(prefs);
   let clock = 1000, watcher;
   const observed = new Set();
@@ -80,6 +80,8 @@ const page = async (d, { note = '', relay: selected, observer = 'v2', permission
   Object.assign(doc, { createElement: make, querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s) });
   const handle = async (m) => {
     calls.push(clone(m));
+    // The worker opens Settings for the panel (lib/background.js): the port's settings op, or glaze:settings-at.
+    if (m.op === 'settings' || m.type === 'glaze:settings-at') { opened.push(clone(m)); return { ok: true }; }
     if (['leave', 'delete'].includes(m.op)) d.worker.stop();
     await d.hold?.(m);
     try { const value = await d.worker.handle({ ...m, scope: { id: 'panel-ui', key: NK, note } }); if (m.op === 'list' && selected) value.relay = selected; return value; }
@@ -93,9 +95,11 @@ const page = async (d, { note = '', relay: selected, observer = 'v2', permission
     GZ_I18N: { page() {}, ui() {}, t: (k, vars) => k.replace(/\{(\w+)\}/g, (_, key) => vars?.[key] ?? '') }, GZ_RELAY: R,
     ...G, GZ_COLOR: require('../lib/color.js'), GZ_FONTS: require('../lib/fonts.js'),
     matchMedia: () => ({ matches: false, addEventListener() {} }), addEventListener: (name, f) => events.set(name, f),
-    chrome: { storage: { sync, onChanged: { addListener(f) { changes.push(f); } } }, ...(permissions && { permissions: { contains: async () => true, request: async () => true } }), tabs: { create: async (tab) => { opened.push(tab); } },
+    chrome: { storage: { sync, onChanged: { addListener(f) { changes.push(f); } } }, ...(permissions && { permissions: { contains: async () => true, request: async () => true } }), tabs: { create: async (tab) => { created.push(tab); } },
       runtime: { id: 'glaze', getURL: (f) => `chrome-extension://glaze/${f}`, connect: () => ({ onMessage: { addListener: (f) => messages.push(f) }, onDisconnect: { addListener: (f) => disconnects.push(f) }, disconnect() {},
         postMessage: (m) => { if (m.ticket) queueMicrotask(() => messages.forEach((f) => f({ id: m.id, ok: true })));
+          // dropSettings: the worker starts opening Settings, then the port goes before it answers.
+          else if (m.op === 'settings' && dropSettings) { handle(m); queueMicrotask(() => disconnects.forEach((f) => f())); }
           else if (m.op) handle(m).then((r) => messages.forEach((f) => f({ id: m.id, ...r }))); } }), sendMessage: handle },
     },
   });
@@ -103,7 +107,7 @@ const page = async (d, { note = '', relay: selected, observer = 'v2', permission
   events.get('message')?.({ data: { type: 'glaze:quick-start', ticket: 'ab'.repeat(16) } });
   await until(() => calls.some((m) => m.op === 'list') && !ids.get('who').hidden);
   const click = (el, age = 600) => { clock += age; assert.ok(el, 'button exists'); if (el.disabled) return; for (const { type, f } of el.listeners) if (type === 'click') f({ isTrusted: true, target: el, currentTarget: el }); };
-  const p = { doc, calls, copied, opened, observed, changePrefs: async (patch) => { await sync.set(patch); changes.forEach((f) => f(Object.fromEntries(Object.keys(patch).map((k) => [k, {}])), 'sync')); await settle(); }, advance: (ms) => { clock += ms; }, visible: (el, props) => watcher.f([entry(typeof el === 'string' ? ids.get(el) : el, props)]),
+  const p = { doc, calls, copied, opened, created, observed, changePrefs: async (patch) => { await sync.set(patch); changes.forEach((f) => f(Object.fromEntries(Object.keys(patch).map((k) => [k, {}])), 'sync')); await settle(); }, advance: (ms) => { clock += ms; }, visible: (el, props) => watcher.f([entry(typeof el === 'string' ? ids.get(el) : el, props)]),
     record: (el, props) => entry(el, props), deliver: (record) => watcher.f([record]),
     disconnect: () => disconnects.forEach((f) => f()), click: (id, age) => click(typeof id === 'string' ? ids.get(id) : id, age), get: (id) => ids.get(id), message: async () => { for (const f of messages) f({ changed: true }); await settle(); }, button: (text) => doc.root.querySelectorAll('button').find((e) => e.textContent === text) };
   return p;
@@ -129,8 +133,17 @@ test('quick sensitive clicks fail closed without verified IntersectionObserver v
     assert.match(p.get('status').textContent, /visibility protection/);
     p.click('settings'); await settle();
     assert.equal(p.opened.length, 1, 'safe Settings navigation remains available without IOv2');
+    assert.deepEqual(p.created, [], 'the worker opens it: Safari kills the page when this frame calls tabs');
     p.disconnect();
   });
+});
+
+test('the share panel\'s Settings tries the other way only after a definite no, never twice for one click', async (t) => {
+  const server = await start(t), d = device(t, server), id = await seed(d);
+  const p = await page(d, { note: id, dropSettings: true });
+  p.click('settings'); await settle();
+  assert.deepEqual(p.opened.map((m) => m.op || m.type), ['settings'], 'a request that went unanswered may still have opened the tab');
+  assert.deepEqual(p.created, []);
 });
 
 test('quick visibility requires the whole button and resets the dwell for every question', async (t) => {
