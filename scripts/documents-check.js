@@ -130,7 +130,7 @@ const PROBE = ({ lang }) => {
     const card = (key) => `.gd-card[data-key="${key}"]`;
     const said = (pg) => pg.evaluate(() => document.getElementById('gd-count').textContent);
     const focused = (pg) => pg.evaluate(() => document.activeElement?.closest('.gd-card')?.dataset.key || document.activeElement?.id || document.activeElement?.className || '');
-    const shot = async (pg, name) => { await pause(200); const f = path.join(shots, name); await pg.screenshot({ path: f }); saved.push(f); return f; };
+    const shot = async (pg, name) => { const f = path.join(shots, name); await pg.screenshot({ path: f, animations: 'disabled' }); saved.push(f); return f; };
     const saved = [];
     const total = seeds.length;
 
@@ -1411,10 +1411,8 @@ const PROBE = ({ lang }) => {
       const failed = await until(() => im.evaluate(() => { const el = [...document.querySelectorAll('#gd-docs > .gd-pending')].find((x) => x.querySelector('.gd-title').textContent === 'Lab manual.pdf');
         return el?.hasAttribute('data-failed') ? { meta: el.querySelector('.gd-meta').textContent, acts: [...el.querySelectorAll('.gd-acts:not([hidden]) button')].map((b) => b.textContent), bar: !el.querySelector('.gd-progress').hidden, said: document.getElementById('gd-said').textContent } : null; }), 'the refused import\'s card');
       check(failed.meta === room && failed.acts.join() === 'Retry,Remove' && !failed.bar && failed.said === room, `a failed import says why on its card, with Retry and Remove (${JSON.stringify(failed)})`);
-      await pause(300);
-      await im.screenshot({ path: path.join(out, 'import-failed-1280-en.png') });
+      await im.screenshot({ path: path.join(out, 'import-failed-1280-en.png'), animations: 'disabled' });
       check(!((await local('writerPapers')) || []).some((r) => r.title === 'Lab manual'), 'and keeps no document');
-      await pause(300);
       await im.click('.gd-pending [data-act="retry"]');
       const retried = await until(() => im.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].find((c) => c.querySelector('.gd-title').textContent === 'Lab manual')?.dataset.key), 'the retried import\'s card', 30000);
       check(!!retried && !(await im.evaluate(() => document.querySelector('#gd-docs > .gd-pending'))) && await until(() => im.evaluate(() => document.getElementById('gd-said').textContent === ''), 'Retry clears the reason', 3000), 'Retry imports it: the document\'s card in its place, the reason gone');
@@ -1426,7 +1424,9 @@ const PROBE = ({ lang }) => {
       await im.setInputFiles('#gd-file', brokenPath);
       const broken = await until(() => im.evaluate(() => { const el = document.querySelector('#gd-docs > .gd-pending[data-failed]'); return el && { name: el.querySelector('.gd-title').textContent, meta: el.querySelector('.gd-meta').textContent }; }), 'the broken PDF\'s card');
       check(broken.name === 'Scan.pdf' && broken.meta === 'That file could not be read.', `a file that is no PDF says so on its card (${JSON.stringify(broken)})`);
-      await pause(300);
+      await im.click('.gd-pending [data-act="retry"]');
+      await until(() => im.evaluate(() => document.querySelector('.gd-pending[data-failed] [data-act="retry"]') === document.activeElement), 'failed Retry keeps focus');
+      check(await im.evaluate(() => document.querySelector('.gd-pending .gd-meta').textContent === 'That file could not be read.'), 'a repeated failure keeps focus on Retry and its reason on the card');
       await im.focus('.gd-pending [data-act="remove"]');
       await im.keyboard.press('Enter');
       await until(() => im.evaluate(() => !document.querySelector('#gd-docs > .gd-pending')), 'Remove');
@@ -1442,8 +1442,7 @@ const PROBE = ({ lang }) => {
       fs.writeFileSync(heldPath, require('./pdf-fixtures.js').large({ count: 10, size: 6e6 }));
       await im.setInputFiles('#gd-file', heldPath);
       await until(() => im.evaluate(() => /^Copying… [\d.]+ \/ [\d.]+ MB$/.test(document.querySelector('#gd-docs > .gd-pending .gd-meta')?.textContent || '')), 'the held import halfway');
-      await pause(400);
-      await im.screenshot({ path: path.join(out, 'import-copying-1280-en.png') });
+      await im.screenshot({ path: path.join(out, 'import-copying-1280-en.png'), animations: 'disabled' });
       await im.evaluate(() => globalThis.__gate());
       await until(() => im.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].some((c) => c.querySelector('.gd-title').textContent === 'Week 4 reading') && !document.querySelector('#gd-docs > .gd-pending')), 'the held import done', 60000);
 
