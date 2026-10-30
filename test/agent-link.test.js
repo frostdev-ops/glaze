@@ -681,6 +681,29 @@ test('R4: Safari fences immediately and queues bye after the outstanding batch',
   assert.equal(w.link.status().state, 'connecting');
 });
 
+// Agent access off with a subscription open: its end and its notifications/cancelled are queued behind a batch in flight.
+test('Safari: lines still queued at stop go to the app before bye, a frame\'s bytes a batch', async () => {
+  const w = world({ browser: 'safari' });
+  await w.link.ensure();
+  const { i, s } = w.batches[0].msg;
+  w.port().host({ name: 'agent.frames', userInfo: { i, s, frames: [HELLO, { t: 'open', c: 1, peer: { verified: true } }] } });
+  w.batches[0].resolve({ ok: true });
+  await settle();
+  w.link.send(1, 'end');
+  assert.equal(w.batches.length, 2, 'the first line is in flight');
+  w.link.send(1, 'cancelled');
+  w.link.send(1, '\u0001'.repeat(F.PIECE * 2));
+  const stopping = w.link.stop();
+  w.batches[1].resolve({ ok: true });
+  await settle();
+  for (let n = 2; n < 5 && w.batches[n]; n++) { w.batches[n].resolve({ ok: true }); await settle(); }
+  assert.equal((await stopping).state, 'off');
+  const after = w.batches.slice(2).map((x) => x.msg);
+  assert.deepEqual(after.map((m) => m.frames.map((f) => (f.t === 'line' ? `${f.d.slice(0, 9)}${f.m ? '…' : ''}` : f.t))), [['cancelled', '\u0001'.repeat(9) + '…'], ['\u0001'.repeat(9), 'bye']]);
+  assert.deepEqual(after.map((m) => [m.i, m.s, m.seq]), [[i, s, 3], [i, s, 4]]);
+  assert.ok(after.every((m) => m.frames.reduce((n, f) => n + F.bytes(f), 0) <= F.FRAME));
+});
+
 test('R4: a stalled Safari teardown is bounded and cannot send a late bye', async () => {
   const w = world({ browser: 'safari' });
   await w.link.ensure();
