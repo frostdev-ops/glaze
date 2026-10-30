@@ -136,6 +136,15 @@ const scan = () => {
     const chrome1 = await page.evaluate(() => ({ title: document.querySelector('.gp-top h1 input')?.value ?? document.querySelector('.gp-top h1')?.textContent, back: document.querySelector('.gp-top a')?.getAttribute('href'), mode: document.documentElement.dataset.mode }));
     check(chrome1.title === 'Field trip form' && chrome1.back === 'papers.html' && chrome1.mode === 'pdf', `the top bar: Documents, the title (${JSON.stringify(chrome1)})`);
     check(await page.getByRole('region', { name: 'Field trip form', exact: true }).count() === 1, 'the scrollable PDF has a named region');
+    // Motion off (reduced motion here): a page still drawing shows no spinning picture (pdf.js's loading-icon.gif).
+    const spinner = await page.evaluate(() => {
+      const p = Object.assign(document.createElement('div'), { className: 'page loadingIcon loading' });
+      document.querySelector('.pdfViewer').append(p);
+      const s = { motion: document.documentElement.dataset.motion, bg: getComputedStyle(p, '::after').backgroundImage };
+      p.remove();
+      return s;
+    });
+    check(spinner.motion === 'off' && spinner.bg === 'none', `motion off: no spinning picture on a page still drawing (${JSON.stringify(spinner)})`);
     // The page is paper under a dark Look; the bar around it is the Look's.
     const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
     const colours = await page.evaluate(() => ({ dark: document.documentElement.hasAttribute('data-dark'), page: getComputedStyle(document.querySelector('.pdfViewer .page')).backgroundColor, bar: getComputedStyle(document.querySelector('.gp-top')).backgroundColor, ground: getComputedStyle(document.querySelector('.gq-scroll')).backgroundColor }));
