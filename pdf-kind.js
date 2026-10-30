@@ -262,14 +262,18 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     nextB.addEventListener('click', () => find('again', false));
     const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
     document.addEventListener('keydown', (e) => {
-      if (e.defaultPrevented) return;
-      if (e.key === 'Escape' && !findBar.hidden) { e.preventDefault(); e.stopPropagation(); showFind(false); return; }
-      if (!(MAC ? e.metaKey : e.ctrlKey) || e.altKey) return;
-      const k = e.key.toLowerCase();
-      if (k === 'f' && doc) { e.preventDefault(); showFind(true); }
-      else if ((k === '=' || k === '+') && doc) { e.preventDefault(); viewer.increaseScale(); }
-      else if (k === '-' && doc) { e.preventDefault(); viewer.decreaseScale(); }
+      if (!e.defaultPrevented && e.key === 'Escape' && !findBar.hidden) { e.preventDefault(); e.stopPropagation(); showFind(false); }
     }, { signal });
+    // Ahead of the page's own: in an assignment's frame the parked paper's find (writer-find.js) takes Ctrl+F at the document.
+    addEventListener('keydown', (e) => {
+      if (e.defaultPrevented || !doc || !(MAC ? e.metaKey : e.ctrlKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === 'f') showFind(true);
+      else if (k === '=' || k === '+') viewer.increaseScale();
+      else if (k === '-') viewer.decreaseScale();
+      else return;
+      e.preventDefault(); e.stopPropagation();
+    }, { capture: true, signal });
 
     // ---- saving: a field filled (pdf.js's annotation storage) saves a second after the last change, and before the page
     // leaves for Documents; the bytes pdf.js writes (an incremental update) replace the record's, with page 1 drawn again.
