@@ -1021,8 +1021,8 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
 
 On a site you allowed, Glaze reads the school's pages and makes the requests described above with your existing
 session. It writes to a site only on your own click: a planner tick (if you switched "Tick off in Canvas too" on), a
-Canvas course nickname or color, Sign out in Glaze's Canvas bar and Moodle's Edit mode switch in its bar; Glaze
-never changes grades, submits work or sends messages.
+Canvas course nickname or color, Sign out in Glaze's Canvas bar, Moodle's Edit mode switch in its bar, and Glaze
+Writer's Post, Reply, Send or Submit when you press it (see Glaze Writer above). Glaze never changes grades.
 
 ## Google user data
 
