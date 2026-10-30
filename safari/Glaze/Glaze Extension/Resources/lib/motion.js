@@ -190,8 +190,9 @@ var GZ_MOTION = globalThis.GZ_MOTION || (() => {
     const finish = () => { try { run(); } finally { if (swapping === turn) { swapping = null; html.removeAttribute('data-gz-swap'); } } };
     t.finished.then(finish, finish).catch(() => {});
     t.updateCallbackDone.then(run, run).catch(() => {});
-    // A hidden/aborted native transition must never strand the change, even if its callbacks do not settle.
-    if (!ran) timer = setTimeout(() => { try { t.skipTransition?.(); } finally { try { finish(); } catch { /* the update already settled */ } } }, 100);
+    // Apply a stalled update once, leaving the native capture to settle. Chromium's isolated-world skipTransition()
+    // emits an unhandled AbortError in the page's main world even when ready is caught here.
+    if (!ran) timer = setTimeout(() => { try { finish(); } catch { /* the update already settled */ } }, 100);
     return done;
   };
 

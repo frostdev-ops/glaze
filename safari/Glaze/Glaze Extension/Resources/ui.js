@@ -128,6 +128,7 @@ const GZ_UI = (() => {
   // when more than one group has any): its name in its own text color on its own surface, fading into its background's
   // colors (GZ_CATALOG.tone), with its accent down the edge; pressed when it is the one the page is wearing. onPick(E).
   const looks = (box, s, onPick, all = GZ_CATALOG.list()) => {
+    const focused = box.contains(document.activeElement) ? document.activeElement?.dataset.look : null;
     const worn = GZ_CATALOG.worn(s, all), groups = GZ_CATALOG.groups(all), t = (k) => GZ_I18N.t(k, {}, GZ_I18N.ui());
     const heads = { builtin: t('Built in'), saved: t('Saved'), gallery: t('Gallery') };
     box.replaceChildren();
@@ -147,6 +148,7 @@ const GZ_UI = (() => {
         b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 4px, transparent 4px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${GZ_CATALOG.tone(E).join(', ')})`;
         b.addEventListener('click', () => onPick(E));
         box.append(b);
+        if (focused === E.id) b.focus({ preventScroll: true });
       }
     }
   };
