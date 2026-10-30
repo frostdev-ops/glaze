@@ -17,6 +17,7 @@ require('../lib/sheet-fn-math.js');
 require('../lib/sheet-fn-text.js');
 require('../lib/sheet-fn-info.js');
 require('../lib/sheet-fn-date.js');
+require('../lib/sheet-fn-lookup.js');
 require('../lib/sheet-fn-database.js');
 
 // cells: typed input (a string, as a person types it), a number, a boolean, or { s } for text as it is.
@@ -239,4 +240,10 @@ test('computed criteria update with records and refuse untracked shifted referen
   // otherwise return stale results after another record changes; support needs an engine dependency hook.
   const outside = book({ ...grid('A1', [['id'], [1], [2], [3]]), D2: 0, D3: 1, D4: 0, H1: 'computed', H2: '=D2>0' });
   cases(outside, [['DSUM(A1:A4,"id",H1:H2)', '#VALUE!']]);
+});
+
+test('database field arrays keep errors local to each result', () => {
+  const e = book({ ...grid('A1', [['id', 'value'], [1, 2], [2, 3]]), H1: 'id', H2: '>0' });
+  cases(e, [['INDEX(DCOUNT(A1:B3,{"id","bad"},H1:H2),1,1)', 2],
+    ['INDEX(DCOUNT(A1:B3,{"id","bad"},H1:H2),1,2)', '#VALUE!']]);
 });
