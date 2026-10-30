@@ -696,6 +696,27 @@ test('write: a formula typed as Excel 365 takes it is an array formula over its 
   assert.match(excel, /<c r="C901" cm="1"><f t="array" ref="C901">/, 'dynamic, as Excel 365 saves it');
 });
 
+test('write: new dynamic cells use a valid XLDAPR record when other metadata already exists', async () => {
+  for (const hasDynamic of [false, true]) {
+    const wb = M.workbook(), sh = wb.sheets[0];
+    const old = `<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><metadataTypes count="${hasDynamic ? 2 : 1}"><metadataType name="OTHER" cellMeta="1"/>${hasDynamic ? '<metadataType name="XLDAPR" cellMeta="1"/>' : ''}</metadataTypes>`
+      + '<futureMetadata name="OTHER" count="1"><bk/></futureMetadata>'
+      + (hasDynamic ? '<futureMetadata name="XLDAPR" count="1"><bk><extLst><ext uri="{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}"><dynamicArrayProperties xmlns="http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray" fDynamic="1" fCollapsed="0"/></ext></extLst></bk></futureMetadata>' : '')
+      + `<cellMetadata count="${hasDynamic ? 2 : 1}"><bk><rc t="1" v="0"/></bk>${hasDynamic ? '<bk><rc t="2" v="0"/></bk>' : ''}</cellMetadata><valueMetadata count="1"><bk><rc t="1" v="0"/></bk></valueMetadata></metadata>`;
+    wb.keep = { book: { path: 'xl/workbook.xml', rels: [{ id: 'rId8', type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sheetMetadata', target: 'meta.xml' }] },
+      parts: { 'xl/meta.xml': { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml', data: new TextEncoder().encode(old) } } };
+    const e = C.engine(wb); e.edit(sh.id, 0, 0, '={1;2}');
+    sh.rows.get(0).set(1, { t: 'e', v: '#VALUE!', vm: '1' });
+    const bytes = await X.write(wb, { recalc: false, date: DATE }), p = await parts(bytes);
+    assert.match(p['xl/worksheets/sheet1.xml'], /<c r="A1" cm="2"><f t="array" ref="A1">/, 'cm is one-based and must reference XLDAPR, not OTHER');
+    assert.match(p['xl/meta.xml'], /<cellMetadata count="2"><bk><rc t="1" v="0"\/><\/bk><bk><rc t="2" v="0"\/><\/bk><\/cellMetadata>/);
+    assert.ok(p['xl/meta.xml'].includes('<valueMetadata count="1"><bk><rc t="1" v="0"/></bk></valueMetadata>'));
+    assert.match(p['xl/worksheets/sheet1.xml'], /vm="1"/, 'value metadata keeps its independent index');
+    const again = await parts(await X.write(await X.read(bytes), { recalc: false, date: DATE }));
+    assert.equal(again['xl/meta.xml'], p['xl/meta.xml'], 'a second export adds no duplicate metadata');
+  }
+});
+
 // ── CSV and TSV ───────────────────────────────────────────────────────────────────────────────────────────────────────
 const sheetOf = (wb) => { const sh = wb.sheets[0]; const out = {}; for (const [r, row] of sh.rows) for (const [c, x] of row) out[M.cellName(r, c)] = x; return out; };
 
