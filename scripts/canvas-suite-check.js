@@ -211,19 +211,51 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     await until(async () => (await cell(1, 0)) === 'Ada', 'Ada in A2');
     const sheet = await fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, title: document.querySelector('.gp-top h1')?.textContent, versions: !!document.getElementById('gx-versions'), acts: [...document.querySelectorAll('.gx-tool [data-act]')].map((b) => b.dataset.act).join() }));
     check(sheet.doc === 'sheet' && sheet.title === 'Grades.csv' && !sheet.versions && sheet.acts === 'original,save' && await cell(2, 1) === '88', `the CSV opens in Glaze's grid from memory, no Versions, Open original and Save to Documents (${JSON.stringify(sheet)})`);
+    // Read-only from memory: typing, a paste and Delete leave the cells as they came, and nothing is kept.
     await fr.fill('#gx-name', 'B2');
     await fr.press('#gx-name', 'Enter');
     await until(() => fr.evaluate(() => document.activeElement?.id === 'gx-grid'), 'B2 chosen in the Name box');
     await page.keyboard.type('95');
     await page.keyboard.press('Enter');
-    await until(async () => (await cell(1, 1)) === '95', 'the edit on the screen');
-    const afterEdit = await fr.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent || '');
-    check(afterEdit === '' && (await papersNow()).length === had, `an edit shows and is kept nowhere, nor said to be saving (state "${afterEdit}")`);
-    check(JSON.stringify(await storedDocs()) === JSON.stringify(beforeSheet), 'the unsaved sheet edit writes no papers, versions, parts or thumbnails');
+    await until(() => fr.evaluate(() => document.getElementById('gx-name').value === 'B3'), 'Enter moves on from B2');
+    await page.keyboard.press('ArrowUp');
+    await fr.evaluate(() => { const dt = new DataTransfer(); dt.setData('text/plain', '70\t71'); document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); });
+    await page.keyboard.press('Delete');
+    await page.keyboard.press('Backspace');
+    const ro = await fr.evaluate(() => ({ editor: !document.getElementById('gx-edit').hidden, formula: document.getElementById('gx-formula').readOnly, said: document.querySelector('.gx-said')?.textContent, state: document.querySelector('.gp-top .gp-state')?.textContent || '',
+      tools: ['gx-undo', 'gx-format', 'gx-sort-az', 'gx-freeze', 'gx-chart', 'gx-add'].filter((id) => document.getElementById(id)) }));
+    const cells = [await cell(1, 0), await cell(1, 1), await cell(1, 2), await cell(2, 1)];
+    check(JSON.stringify(cells) === JSON.stringify(['Ada', '91', '', '88']) && !ro.editor && ro.formula && ro.said === 'Save to Documents to edit.' && ro.state === '' && !ro.tools.length,
+      `typing, a paste and Delete leave the CSV's cells as they came, with no editing tools (${JSON.stringify({ cells, ...ro })})`);
+    check((await papersNow()).length === had && JSON.stringify(await storedDocs()) === JSON.stringify(beforeSheet), 'the read-only sheet writes no papers, versions, parts or thumbnails');
+    await shot('canvas-modules-sheet-readonly-1280.png');
     await fr.click('[data-act="save"]');
     await until(() => fr.evaluate(() => document.querySelector('.gx-said')?.textContent === 'Saved to Documents'), async () => `the CSV saved to Documents (says "${await fr.evaluate(() => document.querySelector('.gx-said')?.textContent)}"; errors ${JSON.stringify(errors)})`);
     const sheets = (await papersNow()).filter((p) => p.kind === 'sheet');
-    check(sheets.length === 1 && sheets[0].title === 'Grades', `Save to Documents keeps the CSV as a spreadsheet (${JSON.stringify(sheets)})`);
+    check(sheets.length === 1 && sheets[0].title === 'Grades', `Save to Documents keeps the CSV as one spreadsheet (${JSON.stringify(sheets)})`);
+    // Saved: the button becomes Open in Documents, the saved copy, editable.
+    const openB = await until(() => fr.evaluate(() => { const a = document.querySelector('.gx-tool [data-act="open"]'); return a && { tag: a.tagName, text: a.textContent, href: a.getAttribute('href'), target: a.target, save: !!document.querySelector('.gx-tool [data-act="save"]') }; }), 'Open in Documents after saving');
+    const savedKey = await sw.evaluate(async () => Object.entries(await chrome.storage.local.get(null)).find(([k, v]) => k.startsWith('writerPaper:') && v?.kind === 'sheet')?.[0].slice('writerPaper:'.length));
+    check(openB.tag === 'A' && openB.text === 'Open in Documents' && openB.href === `papers.html?sheet=${encodeURIComponent(savedKey)}` && openB.target === '_blank' && !openB.save,
+      `Save to Documents becomes Open in Documents, the saved copy's link (${JSON.stringify({ ...openB, savedKey })})`);
+    await shot('canvas-modules-sheet-saved-1280.png');
+    const [docs] = await Promise.all([ctx.waitForEvent('page'), fr.click('[data-act="open"]')]);
+    docs.on('pageerror', (e) => errors.push(`documents: ${e.message}`));
+    await docs.setViewportSize({ width: 1280, height: 900 });
+    const dcell = (r, c) => docs.evaluate(([r, c]) => document.querySelector(`#gx-grid .gx-c[data-r="${r}"][data-c="${c}"]`)?.textContent ?? null, [r, c]);
+    await until(async () => (await dcell(1, 0)) === 'Ada', async () => `the saved copy in Documents (${docs.url()}; errors ${JSON.stringify(errors)})`);
+    check(docs.url() === `chrome-extension://${id}/papers.html?sheet=${encodeURIComponent(savedKey)}` && await docs.evaluate(() => !!document.getElementById('gx-undo')), `Open in Documents opens the saved copy in Documents' grid (${docs.url()})`);
+    const rev0 = await sw.evaluate(async (k) => (await chrome.storage.local.get(`writerPaper:${k}`))[`writerPaper:${k}`]?.revision, savedKey);
+    await docs.fill('#gx-name', 'B2');
+    await docs.press('#gx-name', 'Enter');
+    await until(() => docs.evaluate(() => document.activeElement?.id === 'gx-grid'), 'B2 chosen in the saved copy');
+    await docs.keyboard.type('95');
+    await docs.keyboard.press('Enter');
+    await until(async () => (await dcell(1, 1)) === '95', 'the edit in the saved copy');
+    const rev1 = await until(() => sw.evaluate(async ([k, r]) => { const v = (await chrome.storage.local.get(`writerPaper:${k}`))[`writerPaper:${k}`]?.revision; return v > r && v; }, [savedKey, rev0]), 'the saved copy keeps the edit');
+    check(rev1 > rev0, `the saved copy is editable and keeps an edit (revision ${rev0} → ${rev1})`);
+    await docs.screenshot({ path: path.join(out, 'canvas-sheet-documents-edit-1280.png') });
+    await docs.close();
     await page.click(rowB(85));
     await until(() => page.evaluate(() => !document.querySelector('iframe.gz-co-frame')), 'the grid closed');
     // A locked file: said on the button, nothing opened.
