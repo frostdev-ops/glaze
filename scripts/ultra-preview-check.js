@@ -254,13 +254,13 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     check(mock.seen.asks.get(LAB.hash) >= 3 && Date.now() - t0 >= 14000, `then asked again on Ultra's 15 s (${mock.seen.asks.get(LAB.hash)} asks with Blackboard's frame's own, ${Math.round((Date.now() - t0) / 1000)} s) and shown`);
     await toggle(LAB);
 
-    // ---- an address that ran out: S3 refuses the first, the frame asks again, and it shows
+    // ---- an address that ran out: S3 refuses the first, Glaze in the page asks the worker again, and it shows
     await load();
     plan[SLIDES.hash] = { s3: 'fail-first' };
     const asks = mock.seen.viewer;
     await toggle(SLIDES);
     fr = await glazeIn(SLIDES, 'after a refused address');
-    check(mock.seen.viewer >= asks + 2 && mock.seen.refused >= 1, `S3 refused the first address (${mock.seen.refused}); the frame asked again (${mock.seen.viewer - asks} viewer asks) and shows`);
+    check(mock.seen.viewer >= asks + 2 && mock.seen.refused >= 1, `S3 refused the first address (${mock.seen.refused}); Glaze asked the worker again (${mock.seen.viewer - asks} viewer asks) and shows`);
     plan[SLIDES.hash] = {};
     await toggle(SLIDES);
 
