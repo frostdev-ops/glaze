@@ -181,6 +181,13 @@ test('an arc with no radius or no swing draws nothing', () => {
   assert.equal(one([moveTo(0, 0), arcTo(1000, 1000, 0, 0), lnTo(5, 5)], 10, 10), 'M 0 0 L 5 5');
 });
 
+test('an arc with one radius runs along its flat ellipse: the pen ends where the arc ends', () => {
+  assert.equal(G.path({ prst: 'can', avLst: { adj: 0 }, w: 200, h: 100 }).paths[0].d,
+    'M 0 0 A 100 0 0 0 0 100 0 A 100 0 0 0 0 200 0 L 200 100 A 100 0 0 0 1 100 100 A 100 0 0 0 1 0 100 Z');
+  assert.equal(one([moveTo(0, 500), arcTo(500, 0, 'cd2', 'cd2'), lnTo(1000, 1000)], 1000, 1000), 'M 0 500 A 500 0 0 0 1 500 500 A 500 0 0 0 1 1000 500 L 1000 1000');
+  assert.equal(one([moveTo(500, 0), arcTo(0, 500, '3cd4', 'cd2'), lnTo(0, 0)], 1000, 1000), 'M 500 0 A 0 500 0 0 1 500 500 A 0 500 0 0 1 500 1000 L 0 0');
+});
+
 test('in a path with its own w and h, arcs are drawn in that space and then stretched to the shape', () => {
   // Path space 2 × 2: a unit circle about (1, 1) from its left through 45°, ending at (1 − √½, 1 − √½), then stretched
   // to 2e6 × 1e6. Reading the angle on the stretched ellipse instead would end at (552786, 52786).
