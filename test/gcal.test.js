@@ -308,7 +308,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
     importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`lib/${f}`), on && f === 'gcal.js'), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
-        onInstalled: { addListener: (f) => listeners.installed = f }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+        onInstalled: { addListener: (f) => (listeners.installed ||= []).push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area('local', store.local), sync: area('sync', store.sync), onChanged: { addListener: (f) => heard.push(f) } },
       identity,
       permissions: { contains: async () => true }, // the student granted every host (Chrome)
@@ -324,7 +324,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
   const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(structuredClone(m), sender, (r) => res(structuredClone(r))); });
   // change(): a change made elsewhere (the popup, the editor), heard as Chrome tells it.
   const change = (name, patch) => { const c = Object.fromEntries(Object.keys(patch).map((k) => [k, { oldValue: store[name][k], newValue: patch[k] }])); Object.assign(store[name], patch); fire(name, c); };
-  return { store, identity, asked, send, hooks, change, registered: () => registered, install: () => listeners.installed() };
+  return { store, identity, asked, send, hooks, change, registered: () => registered, install: () => { for (const f of listeners.installed) f(); } };
 };
 // What the page sends with its batch (lib/calexport.js consent), worked out from the worker's storage as it is now.
 const D = require('../defaults.js');
