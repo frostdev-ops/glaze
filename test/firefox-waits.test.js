@@ -125,5 +125,5 @@ test('every click rests before it measures and presses', async () => {
   assert.equal(pressed.length, 0, 'no press while the button moves');
   button.anims = [];
   await b.click('tab', '#gz-dl-73');
-  assert.deepEqual(pressed, [{ type: 'pointerMove', x: 112, y: 212 }]);
+  assert.equal(JSON.stringify(pressed), JSON.stringify([{ type: 'pointerMove', x: 112, y: 212 }])); // made in the check's realm
 });

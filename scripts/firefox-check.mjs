@@ -208,6 +208,7 @@ const browser = (send, log, events = []) => {
     // The same for the element an expression finds (one in an open shadow root, say).
     clickOn: async (context, element, [within, frameAt] = []) => {
       await send('browsingContext.activate', { context }).catch(() => {}); // not for Glaze's own pages
+      await resting(b, context, element, [within, frameAt]);
       let box = await value(`(() => { const e = ${element}; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`, within || context);
       if (within) {
         const f = await value(`(() => { const r = document.querySelector(${JSON.stringify(frameAt)}).getBoundingClientRect(); return [r.x, r.y]; })()`, context);
@@ -249,19 +250,24 @@ const holds = (b, c, o) => b.value(`browser.permissions.contains({ origins: [${J
 const lists = (b, c) => b.value(`browser.storage.local.get(['canvas', 'moodle', 'ultra'])`, c);
 const registered = (b, c) => b.value(`browser.scripting.getRegisteredContentScripts().then((s) => s.map((x) => x.id).sort())`, c);
 const noErrors = async (b, label) => { const e = await b.errors(); ok(e.length === 0, `${label}: no errors${e.length ? ` (${e.join(' | ')})` : ''}`); };
-// The element `selector` finds in `c`, come to rest: no animation on it or a box around it (Glaze's entrance carries a course
-// page's modules for most of a second) and its box where the last look found it. A trusted click presses 50 ms after it
-// measures, so it waits for this.
-const resting = (b, c, selector) => {
+// clickOn's target come to rest: the element `element` evaluates to in `context` (or, in a frame, in `within`, with the frame's
+// element, `frameAt`, in `context`). Resting is no running animation that ends on it or on a box around it, across shadow
+// roots (Glaze's entrance carries a course page's modules for most of a second), no view transition over its page, and its
+// box (and its frame's) where the last look found it. clickOn presses 50 ms after it measures, so it waits for this.
+const resting = (b, context, element, [within, frameAt] = []) => {
+  const box = (e) => `(() => { const e = ${e}; if (!e) return 'missing';
+    const ends = (a) => a.playState === 'running' && a.effect?.getComputedTiming().endTime < Infinity;
+    if (document.getAnimations().some((a) => ends(a) && a.effect.pseudoElement?.startsWith('::view-transition'))) return 'moving';
+    for (let n = e; n; n = n.parentElement || n.parentNode?.host) if (n.getAnimations().some(ends)) return 'moving';
+    const r = e.getBoundingClientRect(); return [r.x + scrollX, r.y + scrollY, r.width, r.height].map(Math.round).join(); })()`;
   let was = 'not looked at';
   return until(async () => {
-    const box = await b.value(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return 'missing';
-      if (document.getAnimations().some((a) => a.playState === 'running' && a.effect?.target?.contains(e) && a.effect.getComputedTiming().endTime < Infinity)) return 'moving';
-      const r = e.getBoundingClientRect(); return [r.x + scrollX, r.y + scrollY, r.width, r.height].map(Math.round).join(); })()`, c);
-    const still = /^[\d.,-]+$/.test(box) && box === was;
-    was = box;
+    const seen = [await b.value(box(element), within || context)];
+    if (within) seen.push(await b.value(box(`document.querySelector(${JSON.stringify(frameAt)})`), context));
+    const still = seen.every((x) => /^[\d,-]+$/.test(x)) && seen.join(' | ') === was;
+    was = seen.join(' | ');
     return still;
-  }, () => `${selector} to come to rest (${was})`, SLOW);
+  }, () => `${element.length > 100 ? `${element.slice(0, 100)}…` : element} to come to rest (${was})`, SLOW);
 };
 // Download all's Allow frame in `tab`, from the click on module 73's button: the download running, the frame in the module's
 // header, Glaze's page loaded in it, and its button shown (the worker took the frame's ticket). The error names the first
@@ -423,7 +429,6 @@ const run = async () => {
     // loaded machine can reach the button inside it. Here the module moves for a second, farther and steadily: a click
     // measured while it moves lands beside the button, so the click waits for it to rest.
     await b.value(`(document.getElementById('context_module_73').animate([{ translate: 'none' }, { translate: '0 -400px' }], 1000), 1)`, mods);
-    await resting(b, mods, '#gz-dl-73');
     await b.hover(mods, '#context_module_73 .ig-header');
     await b.click(mods, '#gz-dl-73');
     const frame = await allowFrame(b, mods);
@@ -438,7 +443,6 @@ const run = async () => {
     const apis = await b.value(`Object.keys(chrome).sort().join(', ')`, frame);
     ok(!apis.split(', ').includes('permissions'), `the framed Allow page has no permissions API (${apis})`);
     const ALLOW_TAB = `${EXT}features/allow.html#${FILES}`;
-    await resting(b, mods, '.gz-dl-allow');
     await b.click(mods, '#allow', [frame, '.gz-dl-allow']);
     const own = await afterAllow(b, frame, () => b.find(ALLOW_TAB), 'the Allow tab');
     await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && document.activeElement?.id === 'allow'`, own), 'its button', SLOW);
@@ -471,11 +475,9 @@ const run = async () => {
     for (const f of fs.readdirSync(downloads)) fs.rmSync(path.join(downloads, f), { force: true });
     asked.length = 0;
     await b.inChrome(`(Services.prefs.setBoolPref('extensions.webextOptionalPermissionPrompts', true), 1)`);
-    await resting(b, mods, '#gz-dl-73');
     await b.hover(mods, '#context_module_73 .ig-header');
     await b.click(mods, '#gz-dl-73');
     const again = await allowFrame(b, mods);
-    await resting(b, mods, '.gz-dl-allow');
     await b.click(mods, '#allow', [again, '.gz-dl-allow']);
     const own2 = await afterAllow(b, again, () => b.find(ALLOW_TAB), 'the Allow tab again');
     await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && !document.getElementById('allow').hidden`, own2), 'its button', SLOW);
