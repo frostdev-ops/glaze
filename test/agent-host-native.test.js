@@ -516,3 +516,35 @@ test('replayed hellos cannot reset a live session, replace its nonce or resurrec
     fs.rmSync(temp, { recursive: true, force: true });
   }
 });
+
+test('RPC ids that Foundation cannot decode defer a prepared update until the connection closes', { skip: !S.supported }, async () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-update-id-'));
+  const input = path.join(temp, 'request.json'), file = path.join(temp, 'Id.swift');
+  const request = { jsonrpc: '2.0', id: '\ud800', method: 'tools/call', params: { name: 'slow' } };
+  assert.equal(JSON.parse(JSON.stringify(request)).id, request.id, 'wire.js accepts this JSON-RPC string id');
+  fs.writeFileSync(input, JSON.stringify(request));
+  fs.writeFileSync(file, fs.readFileSync(bridgeFile, 'utf8') + fs.readFileSync(hostFile, 'utf8') + `
+extension GlazeAgentHost {
+    func audit(_ text: String) -> [Bool] {
+        let x = Instance("0123456789abcdef0123"), k = Conn(fd: -1, pid: getpid(), inst: x)
+        x.conns[1] = k; instances[x.id] = x
+        prepareUpdate {}
+        request(k, text)
+        let before = canInstallUpdate
+        x.conns = [:]
+        return [before, canInstallUpdate]
+    }
+}
+MainActor.assumeIsolated {
+    var limits = GlazeAgentHost.Limits(); limits.updateQuiet = 0
+    let host = GlazeAgentHost(run: "/unused", group: "/unused", version: "test", limits: limits) { _, done in done(true) }
+    let text = try! String(contentsOfFile: CommandLine.arguments[1], encoding: .utf8)
+    print(String(data: try! JSONSerialization.data(withJSONObject: host.audit(text)), encoding: .utf8)!)
+}
+`);
+  const swift = S.run(file, [input], { flags: ['-D', 'GLAZE_DMG', '-default-isolation', 'MainActor'] });
+  try {
+    assert.deepEqual(await swift.next(), [false, true], 'an untrackable live request cannot be treated as idle');
+    assert.equal(await swift.done, 0, swift.stderr());
+  } finally { await swift.stop(); fs.rmSync(temp, { recursive: true, force: true }); }
+});
