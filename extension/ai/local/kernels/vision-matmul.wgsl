@@ -1,10 +1,11 @@
 // The picture encoder's tiled GEMM: Y[t · rows + r] = W[r] · X[t · K ..] for t < T, r < rows, then + b[r] (BIAS),
 // then GELU with erf (GELU), then added into Y (ACC). W is an F16 matrix, two values a word (WF32: F32), rows of K
 // (a multiple of 16), rows a multiple of 4. A workgroup of 256 makes a 128-row × 64-token tile, 16 deep at a time,
-// both into workgroup memory as H with k outermost; invocation (tx, ty) sums rows 4tx.. and 64 + 4tx.. for tokens 4ty..
+// both into workgroup memory as H with k outermost, each vec4 stored whole by one invocation (component stores by
+// different invocations race in WGSL); invocation (tx, ty) sums rows 4tx.. and 64 + 4tx.. for tokens 4ty..
 // in f32, k in order.
 struct P { rows: u32, K: u32, T: u32, p0: u32 }
-@group(0) @binding(0) var<storage, read> W: array<vec4<u32>>;
+@group(0) @binding(0) var<storage, read> W: array<u32>;
 @group(0) @binding(1) var<storage, read> X: array<vec4<f32>>;
 @group(0) @binding(2) var<storage, read_write> Y: array<vec4<f32>>;
 //#if BIAS
@@ -14,6 +15,16 @@ struct P { rows: u32, K: u32, T: u32, p0: u32 }
 
 var<workgroup> Ws: array<vec4<H>, 512>; // [k 16][row / 4: 32]
 var<workgroup> Xs: array<vec4<H>, 256>; // [k 16][token / 4: 16]
+
+// Two adjacent values from one row, starting at an even column.
+fn pair(row: u32, k: u32) -> vec2<f32> {
+  let at = row * p.K + k;
+//#if WF32
+  return vec2<f32>(bitcast<f32>(W[at]), bitcast<f32>(W[at + 1u]));
+//#else
+  return unpack2x16float(W[at / 2u]);
+//#endif
+}
 
 //#if GELU
 // 0.5 x (1 + erf(x / √2)) = 0.5 x · erfc(−x / √2), with erfc by Numerical Recipes' Chebyshev fit (relative error under
@@ -37,34 +48,32 @@ fn main(@builtin(local_invocation_index) li: u32, @builtin(workgroup_id) wg: vec
   let ty = li / 16u;
   var acc: array<vec4<f32>, 8>; // [row group g: 2][token j: 4], a vec4 over 4 rows
   for (var s = 0u; s < p.K / 16u; s++) {
-    // W: row li / 2, values 8 · (li % 2).. of this slice
+    // W: four rows at a time, two adjacent k's, two whole tile vectors per invocation.
     {
-      let r = li / 2u;
-      let half = li % 2u;
-      var w: array<f32, 8>;
+      let r = (li % 32u) * 4u;
+      let k = (li / 32u) * 2u;
+      var a = vec2<f32>(0.0);
+      var b0 = vec2<f32>(0.0);
+      var c = vec2<f32>(0.0);
+      var d = vec2<f32>(0.0);
       if (r0 + r < p.rows) {
-//#if WF32
-        let a = W[((r0 + r) * p.K) / 4u + s * 4u + half * 2u];
-        let c = W[((r0 + r) * p.K) / 4u + s * 4u + half * 2u + 1u];
-        w = array<f32, 8>(bitcast<f32>(a.x), bitcast<f32>(a.y), bitcast<f32>(a.z), bitcast<f32>(a.w), bitcast<f32>(c.x), bitcast<f32>(c.y), bitcast<f32>(c.z), bitcast<f32>(c.w));
-//#else
-        let a = W[((r0 + r) * p.K) / 8u + s * 2u + half];
-        let a0 = unpack2x16float(a.x);
-        let a1 = unpack2x16float(a.y);
-        let a2 = unpack2x16float(a.z);
-        let a3 = unpack2x16float(a.w);
-        w = array<f32, 8>(a0.x, a0.y, a1.x, a1.y, a2.x, a2.y, a3.x, a3.y);
-//#endif
+        a = pair(r0 + r, s * 16u + k);
+        b0 = pair(r0 + r + 1u, s * 16u + k);
+        c = pair(r0 + r + 2u, s * 16u + k);
+        d = pair(r0 + r + 3u, s * 16u + k);
       }
-      for (var i = 0u; i < 8u; i++) { Ws[(half * 8u + i) * 32u + r / 4u][r % 4u] = H(w[i]); }
+      Ws[k * 32u + r / 4u] = vec4<H>(vec4<f32>(a.x, b0.x, c.x, d.x));
+      Ws[(k + 1u) * 32u + r / 4u] = vec4<H>(vec4<f32>(a.y, b0.y, c.y, d.y));
     }
-    // X: token li / 4, values 4 · (li % 4).. of this slice
+    // X: one k from four adjacent tokens, one whole tile vector per invocation.
     {
-      let t = li / 4u;
-      let k4 = li % 4u;
+      let t = (li % 16u) * 4u;
+      let k = li / 16u;
       var x = vec4<f32>(0.0);
-      if (t0 + t < p.T) { x = X[((t0 + t) * p.K) / 4u + s * 4u + k4]; }
-      for (var i = 0u; i < 4u; i++) { Xs[(k4 * 4u + i) * 16u + t / 4u][t % 4u] = H(x[i]); }
+      for (var j = 0u; j < 4u; j++) {
+        if (t0 + t + j < p.T) { x[j] = X[((t0 + t + j) * p.K) / 4u + s * 4u + k / 4u][k % 4u]; }
+      }
+      Xs[li] = vec4<H>(x);
     }
     workgroupBarrier();
     for (var k = 0u; k < 16u; k++) {

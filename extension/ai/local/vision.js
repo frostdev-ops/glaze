@@ -84,9 +84,11 @@ var GZ_AI_VISION = globalThis.GZ_AI_VISION || (() => {
 
     let device = opts.device, own = false;
     if (!device) {
-      if (typeof navigator === 'undefined' || !navigator.gpu) fail('no WebGPU', 'webgpu');
       let adapter = opts.adapter;
-      if (!adapter) try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); } catch { adapter = null; }
+      if (!adapter) {
+        if (typeof navigator === 'undefined' || !navigator.gpu) fail('no WebGPU', 'webgpu');
+        try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); } catch { adapter = null; }
+      }
       if (!adapter) fail('no WebGPU adapter', 'webgpu');
       const L = adapter.limits, half = opts.precision !== 'f32' && adapter.features.has('shader-f16');
       try {
@@ -100,6 +102,7 @@ var GZ_AI_VISION = globalThis.GZ_AI_VISION || (() => {
     const free = () => { for (const b of owned) b.destroy(); owned.clear(); if (own) device.destroy?.(); };
     let lost = null;
     device.lost.then((info) => { lost = info; });
+    const check = () => { halt(); if (lost) fail(`device lost: ${lost.message}`, 'lost'); };
     try {
       if (f16 && !device.features.has('shader-f16')) fail('the device has no shader-f16', 'webgpu');
       const lim = device.limits, bind = Math.min(lim.maxStorageBufferBindingSize, lim.maxBufferSize);
@@ -189,17 +192,20 @@ var GZ_AI_VISION = globalThis.GZ_AI_VISION || (() => {
       for (const t of infos) { t.buf = buffer(t.bytes, S.STORAGE | S.COPY_DST); owned.add(t.buf); }
       if (await device.popErrorScope?.()) fail('out of memory for the weights', 'memory');
       for (const t of infos) {
-        halt();
-        if (lost) fail(`device lost: ${lost.message}`, 'lost');
+        check();
         if (t.transpose) {
           // conv2d_spatial: [channel][3 × 3] in the file, [3 × 3][channel] for the kernel's vec4 reads
-          const v = new Float32Array((await gguf.read(t.info)).slice().buffer), n = v.length / 9, o = new Float32Array(v.length);
+          const bytes = await gguf.read(t.info);
+          check();
+          const v = new Float32Array(Uint8Array.from(bytes).buffer), n = v.length / 9, o = new Float32Array(v.length);
           for (let e = 0; e < n; e++) for (let k = 0; k < 9; k++) o[k * n + e] = v[e * 9 + k];
           device.queue.writeBuffer(t.buf, 0, o);
           continue;
         }
         for (let o = 0; o < t.bytes; o += STEP) {
+          check();
           let chunk = await gguf.read(t.info, o, Math.min(STEP, t.bytes - o));
+          check();
           if (chunk.byteLength % 4) { const p = new Uint8Array(up(chunk.byteLength, 4)); p.set(chunk); chunk = p; }
           device.queue.writeBuffer(t.buf, o, chunk.buffer, chunk.byteOffset, chunk.byteLength);
         }

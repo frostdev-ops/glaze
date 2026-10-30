@@ -63,6 +63,15 @@ test('every vision kernel is shipped and balanced under every define it uses', (
   }
 });
 
+test('GEMM workgroup vectors are stored whole: concurrent component writes can overwrite other lanes', () => {
+  // WGSL permits a vector-component store to read/write the whole vector, even when other invocations write
+  // different components. A barrier after those writes cannot repair the race. Each tile vector needs one writer.
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/ai/local/kernels/vision-matmul.wgsl'), 'utf8');
+  const tiles = [...src.matchAll(/var<workgroup> (\w+): array<vec4<H>,/g)].map((m) => m[1]);
+  assert.equal(tiles.length, 2);
+  for (const tile of tiles) assert.doesNotMatch(src, new RegExp(`\\b${tile}\\[[^;\\n]+\\]\\[[^;\\n]+\\]\\s*=`), `${tile}: write a complete vector per invocation`);
+});
+
 test('the FFN runs whole, or in chunks of 64 tokens under the binding limit', () => {
   assert.equal(V.ffnChunk(4096, 2560, 2 ** 31), 4096);
   assert.equal(V.ffnChunk(16384, 2560, 128 * 2 ** 20), 13056);
@@ -129,6 +138,49 @@ test('a cancelled load stops reading weights and gives back what it made', async
   ac2.abort();
   await assert.rejects(h2.load(projector(), { signal: ac2.signal }), (e) => e.name === 'AbortError');
   assert.deepEqual(h2.buffers, []);
+});
+
+test('load uses a supplied adapter without navigator.gpu', async () => {
+  const h = host();
+  delete h.context.navigator;
+  const enc = await h.load(projector(), { device: null, adapter: h.adapter });
+  assert.equal(enc.device, h.device);
+  enc.release();
+  assert.equal(h.device.destroyed, true);
+  assert.deepEqual(h.live(), []);
+});
+
+test('a cancelled load stops within a multi-chunk weight before reading or uploading more', async () => {
+  const h = host(), ac = new AbortController();
+  const g = projector({ E: 1024, H: 16, Hkv: 8, mid: 8192, layers: [] }), read = g.read;
+  let chunks = 0, writesAtCancel;
+  g.read = async (...a) => {
+    const bytes = await read(...a);
+    if (a[0].name === 'mm.0.weight') { chunks++; writesAtCancel ??= h.writes.length; ac.abort(new Error('stop chunk')); }
+    return bytes;
+  };
+  await assert.rejects(h.load(g, { signal: ac.signal }), /stop chunk/);
+  assert.equal(chunks, 1, 'no next chunk after cancellation');
+  assert.equal(h.writes.length, writesAtCancel, 'the cancelled read is not uploaded');
+  assert.deepEqual(h.live(), []);
+});
+
+test('spatial weights from a Buffer range upload only that view, transposed channel by channel', async () => {
+  const h = host(), g = projector({ layers: ['conv'] }), read = g.read;
+  const name = 'v.blk.0.conv2d_spatial.weight', t = g.tensor(name), E = t.count / 9;
+  const slab = Buffer.alloc(t.bytes + 8, 0x7f), bytes = slab.subarray(4, 4 + t.bytes);
+  for (let e = 0; e < E; e++) for (let k = 0; k < 9; k++) bytes.writeFloatLE(e * 9 + k + 0.25, (e * 9 + k) * 4);
+  g.read = async (...a) => a[0].name === name ? bytes : read(...a);
+  const write = h.device.queue.writeBuffer, uploads = new Map();
+  h.device.queue.writeBuffer = (b, offset, data, ...rest) => {
+    if (data instanceof Float32Array || Object.prototype.toString.call(data) === '[object Float32Array]') uploads.set(b, Array.from(data));
+    return write(b, offset, data, ...rest);
+  };
+  const enc = await h.load(g), uploaded = uploads.get(enc._k.weight(name).buf);
+  assert.equal(uploaded.length, t.count);
+  for (let k = 0; k < 9; k++) for (let e = 0; e < E; e++) assert.equal(uploaded[k * E + e], e * 9 + k + 0.25);
+  enc.release();
+  assert.deepEqual(h.live(), []);
 });
 
 test('a load that made its own device destroys it on failure and on release', async () => {
