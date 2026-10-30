@@ -764,3 +764,23 @@ test('a conflict on a paper too big for a version keeps Drive\'s side as a docum
   assert.ok((await a.papers.list()).some((r) => r.title === 'Photo essay (Drive copy)'), 'the copy reaches A too');
   noDeletes(drive);
 });
+
+test('back online after a long time offline, the next start, online event or Documents open syncs at once', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-0000000000f2';
+  await a.papers.save(key, { doc: doc('Before'), title: 'Trip', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  // Offline for an afternoon: each pause in typing tries, fails at once, and waits longer, up to an hour.
+  for (let i = 0; i < 8; i++) {
+    clock.t = Math.max(clock.t, (await state(a)).wait || 0) + 1;
+    drive.offline();
+    await a.papers.save(key, { doc: doc(`Offline edit ${i}`) });
+    await a.sync.touched(key);
+    assert.deepEqual(await a.sync.run({ push: true }), { ok: false, why: 'network' });
+  }
+  assert.ok((await state(a)).wait - clock.t >= 30 * 60e3, 'a long wait');
+  clock.t += 60e3;
+  assert.ok((await a.sync.poke())?.ok, 'online again: synced now, not at the end of the wait');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'Offline edit 7');
+  noDeletes(drive);
+});
