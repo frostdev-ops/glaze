@@ -129,6 +129,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       return;
     }
     if (cat === 'noteFiles' || cat === 'gradescope') return;
+    // A Better To Do list on both: every task either side has (this device's where both do), never one side's list whole.
+    if (cat === 'tasks' && key.startsWith('todo:')) {
+      const T = L.todo(), here = T.clean((await local.get(key))[key]), ids = new Set(here.tasks.map((t) => t.id));
+      value = T.clean({ tasks: [...here.tasks, ...value.tasks.filter((t) => !ids.has(t.id))], items: { ...value.items, ...here.items } });
+    }
     const r = cat === 'tasks' ? { tasks: key.startsWith('todo:') ? { tasks: { [key]: value } } : { tasks: {}, pets: { [key]: value } } }
       : ['dashNotes', 'classes', 'gpa'].includes(cat) ? { [cat]: { [key]: value } } : cat === 'widgets' ? { widgets: value }
         : key === 'lookFavorites' ? { favorites: value } : cat === 'writerWords' ? { writerWords: value } : null;
@@ -140,7 +145,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     }
     if (!r) return;
     const out = await L.backup().apply(r, { local: { get: (k) => local.get(k), set: async (o) => { await local.set(o); return true; } } });
-    if (!out?.ok) throw new Fail('stale');
+    // Refused as it stands (more than this device keeps): passed over, each device keeping its own; a failed write is tried again.
+    if (!out?.ok) throw new Fail(out?.error === 'write' ? 'stale' : 'bad');
   };
 
   // Notes as an area of records (keys above): local (storage.local), db (the worker's Notes database, background/background.js
@@ -150,7 +156,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   const notesArea = ({ local, db, run, turn = (f) => f() }) => {
     const N = L.notes();
     const scope = (acct) => acct.slice('notesIdx:'.length);
-    const ok = (r) => { if (!r?.ok) throw new Fail(r?.error === 'big' || r?.error === 'bad' || r?.error === 'type' ? 'bad' : 'stale'); return r; };
+    // Notes' refusals of what came (too big, not one, more than it keeps, no room here) pass the record over; the rest are tried again.
+    const ok = (r) => { if (!r?.ok) throw new Fail(['big', 'bad', 'type', 'many', 'full'].includes(r?.error) ? 'bad' : 'stale'); return r; };
     const read = async (key) => {
       const m = NREC.exec(key);
       if (!m) return undefined;
@@ -306,7 +313,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
 
     // One record, both sides. key and area: when known here; R: its file's metadata (undefined: ask Drive when known).
     const one = async (ctx, h, { area, key, R }) => {
-      const was = await recOf(h);
+      let was = await recOf(h);
+      // Another device's file for the same record, made while this one made its own (first syncs that overlapped): every
+      // device keeps the lowest id, met as a first meeting, so neither side's value is lost and each hears the other's after.
+      if (was?.id && R?.id && !R.removed && R.id !== was.id) {
+        if (R.id < was.id && !R.trashed) { await S.remove([REC + h, FILE + was.id]); was = null; } else R = undefined;
+      }
       area ||= was?.area; key ||= was?.key;
       if (R === undefined) R = was?.id ? await ctx.D((c) => c.file(was.id)).catch((e) => { if (e.why === 'missing') return { removed: true }; throw e; }) : await lookup(ctx, h);
       if (R && !R.removed && R.trashed) R = { removed: true }; // a record file moved to Drive's trash: put back from here
@@ -397,7 +409,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         const h = await hk(area, key);
         seen.add(h);
         const was = await recOf(h), R = remote.get(h) || null;
-        await each(ctx, h, { area, key, R: !was?.id ? R : R?.id === was.id ? R : undefined });
+        await each(ctx, h, { area, key, R: !was?.id || (R && R.id <= was.id) ? R : undefined });
       }
       for (const [h, R] of [...remote].sort(([, a], [, b]) => (ORDER[a.appProperties?.cat] || 0) - (ORDER[b.appProperties?.cat] || 0))) if (!seen.has(h)) { seen.add(h); await each(ctx, h, { R }); }
       for (const k of (await S.keys()).filter((x) => x.startsWith(REC))) if (!seen.has(k.slice(REC.length))) await each(ctx, k.slice(REC.length), {});
@@ -416,7 +428,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         }
         if (f.appProperties?.glaze !== 'rec' || !HASH.test(f.appProperties.key || '') || !(f.parents || []).includes(ctx.data)) continue;
         const was = await recOf(f.appProperties.key);
-        if (was?.id && was.id !== f.id) continue;
+        if (was?.id && was.id !== f.id && (f.id > was.id || f.trashed)) continue;
         await each(ctx, f.appProperties.key, { R: f });
       }
     };
@@ -436,11 +448,16 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     // The daily snapshot: Back up…'s zip in Backups, the newest SNAP.keep kept, older ones moved to Drive's trash.
     const snapshot = async (ctx) => {
       const st = (await S.get(STATE))[STATE] || {};
-      if (st.snap && now() - st.snap < SNAP.every) return;
-      const made = await env.snapshot?.();
-      if (!made) return;
+      if (!env.snapshot || (st.snap && now() - st.snap < SNAP.every)) return;
+      // Tried once a day: one too big for a backup (null), one that can't be built, or one Drive refuses as it stands
+      // (larger than one upload) waits for tomorrow, never failing the run or being built again on every run.
+      const skip = async (e) => { if (e) console.warn('Sync to Google Drive: no snapshot today', e?.why || e); await ctx.state({ snap: now() }); };
+      let made;
+      try { made = await env.snapshot(); } catch (e) { return skip(e); }
+      if (!made) return skip();
       const backups = await sub(ctx, 'backups', 'Backups');
-      await ctx.D((c) => c.put({ meta: { name: made.name, mimeType: ZIP, parents: [backups], appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes }));
+      try { await ctx.D((c) => c.put({ meta: { name: made.name, mimeType: ZIP, parents: [backups], appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes })); }
+      catch (e) { if (e?.why === 'bad' || e?.why === 'size') return skip(e); throw e; }
       await ctx.state({ snap: now() });
       const r = await ctx.D((c) => c.find(`'${backups}' in parents and appProperties has { key='glaze' and value='snapshot' } and trashed=false`, { fields: 'id,name,trashed,appProperties,version', pageSize: 100 }));
       const old = r.files.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : a.id < b.id ? 1 : -1)).slice(SNAP.keep);
