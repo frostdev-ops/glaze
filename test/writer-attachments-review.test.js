@@ -73,3 +73,22 @@ test('streamed files are requested sequentially and final validation precedes th
   p.hear({ type: 'submit:file', run: 1, index: 1, ok: true }); await p.tick();
   assert.equal(p.clicks.length, 1);
 });
+
+test('the actual workbook extension renames the preview and resolves a clash with an attachment', async () => {
+  const s = setup(); let preview;
+  s.api.kind = () => 'sheet'; s.api.ext = () => '.xlsx';
+  s.api.file = () => new Promise((r) => { preview = r; });
+  await s.open();
+  const mime = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+  assert.equal(s.ctx.GZ_WRITER_SUBMIT_SHEET.add({ name: 'Essay2.xlsm', mime, bytes: new Uint16Array([0x1234]) }), true);
+  await s.flush();
+  preview({ name: 'Budget.xlsm', mime, bytes: new Uint8Array([1, 2]) }); await s.flush();
+  assert.equal(s.doc.querySelector('.gs-file .gs-name').textContent, 'Essay2.xlsm');
+  assert.equal(s.doc.querySelector('.gs-att .gs-name').textContent, 'Essay2_2.xlsm');
+  s.click('.gs-primary'); await s.flush(); preview({ name: 'Budget.xlsm', mime, bytes: new Uint8Array([1, 2]) }); await s.flush();
+  const go = s.messages.find((m) => m.type === 'submit:go');
+  assert.equal(go.name, 'Essay2.xlsm'); assert.equal(go.files[0].name, 'Essay2_2.xlsm');
+  assert.equal(go.files[0].mime, mime.toLowerCase(), 'metadata records the type File actually sends');
+  await s.handles['submit:file']({ run: go.run, index: 0 });
+  assert.deepEqual([...new Uint8Array(s.messages.at(-1).bytes)], [0x34, 0x12]);
+});

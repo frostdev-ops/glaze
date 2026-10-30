@@ -147,7 +147,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const surname = (view && F?.surname(view.state.doc, api.format())) || ctx.user?.family || '';
     // Whom the note is for: Ultra's name for them, else the one the student typed in the paper's heading.
     const instructor = String(ctx.instructor || (view && F?.read(view.state.doc, api.format())?.lines.instructor) || '').trim().slice(0, 80);
-    const name = only ? null : file ? file.name : L().fileName({ surname, title, fallback: t('Paper'), ext: other ? api.ext?.() : '.docx' });
+    let name = only ? null : file ? file.name : L().fileName({ surname, title, fallback: t('Paper'), ext: other ? api.ext?.() : '.docx' });
     const pages = api.pages() || (other ? 0 : 1), issues = file || other ? 0 : globalThis.GZ_WRITER_ISSUES?.list?.().length || 0;
     const kind = only ? '' : L().tag(name).toLowerCase();
 
@@ -195,8 +195,19 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       const doc = docNow(), format = formatNow(), key = api.key();
       return api.file().then((out) => { built = { doc, format, key, out }; return out; });
     };
+    const renameOwn = (out) => {
+      const ext = /(\.[^./\\]+)$/.exec(String(out.name || ''))?.[1].toLowerCase();
+      if (!other || !ext || L().kindOf(`x${ext}`) !== kindId) return false;
+      const next = name.replace(/\.[^.]+$/, ext);
+      if (next === name) return false;
+      name = next;
+      layer.querySelector('.gs-file .gs-name').textContent = name;
+      for (const badge of layer.querySelectorAll('.gs-prev .gs-doc')) { badge.textContent = L().tag(name); badge.dataset.kind = L().tag(name).toLowerCase(); }
+      for (const a of list) if (a.ref) take(a, { name: a.sourceName, mime: a.mime, bytes: { byteLength: a.size } });
+      return true;
+    };
     if (file) globalThis.GZ_WRITER_IMPORT?.about(file).then((s) => { if (sheet === mine) size.textContent = s; }, () => {});
-    else if (!only) build().then((out) => { if (sheet === mine) size.textContent = [pages ? t('{n} pages', { n: pages }) : '', t('{n} KB', { n: nf(L().kb(out.bytes.length)) })].filter(Boolean).join(' · '); }, () => {});
+    else if (!only) build().then((out) => { if (sheet === mine && !mine.busy) { renameOwn(out); size.textContent = [pages ? t('{n} pages', { n: pages }) : '', t('{n} KB', { n: nf(L().kb(out.bytes.length)) })].filter(Boolean).join(' · '); } }, () => {});
 
     sw.addEventListener('click', () => { if (!mine.busy) sw.setAttribute('aria-checked', String(sw.getAttribute('aria-checked') !== 'true')); });
     keep.addEventListener('click', () => { if (!mine.busy) keep.setAttribute('aria-checked', String(keep.getAttribute('aria-checked') !== 'true')); });
@@ -246,8 +257,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       ready();
     };
     const take = (a, f) => {
+      a.sourceName = f.name;
       a.name = L().attachName({ surname, title: a.title, fallback: t('Document'), name: f.name, taken: [name, ...list.filter((b) => b !== a && b.name).map((b) => b.name)].filter(Boolean) });
-      a.mime = typeof f.mime === 'string' && f.mime ? f.mime : L().mimeOf(a.name) || 'application/octet-stream';
+      a.mime = (typeof f.mime === 'string' && f.mime ? f.mime : L().mimeOf(a.name) || 'application/octet-stream').toLowerCase();
       a.size = f.bytes.byteLength;
       a.ui.nameEl.textContent = a.name;
       a.ui.el.querySelector('.gs-doc').textContent = L().tag(a.name);
@@ -424,7 +436,8 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         s = L().advance(s, { step: 'build' });
         if (mine.cancelled || !same() || !L().may(s, 'attach') || sheet !== mine) throw 'page';
         // A kind's file names its own extension (a spreadsheet with macros: .xlsm): the one sent says it too.
-        const ext = /(\.[^./\\]+)$/.exec(String(out.name || ''))?.[1].toLowerCase(), sent = other && ext && L().kindOf(`x${ext}`) === kindId && L().kindOf(name) === kindId ? name.replace(/\.[^.]+$/, ext) : name;
+        if (renameOwn(out)) throw 'page'; // the student must review changed names before a fresh Submit
+        const sent = name;
         const mime = out.mime || L().mimeOf(sent);
         built = null;
         const bytes = bufferOf(out.bytes); out = null;
