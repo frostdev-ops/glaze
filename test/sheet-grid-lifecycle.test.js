@@ -89,3 +89,15 @@ test('the format menu lets keyboard users Tab from presets to its custom input',
   assert.equal(f.doc.activeElement?.id, 'gx-fmt-code');
   assert.ok(menu.isConnected);
 });
+
+test('saving keeps dirty cells when version compression fails and retries them later', async () => {
+  let fail = true;
+  const f = frame({ SD: { ...SD, pack: async (wb) => { if (fail) throw new Error('compression refused'); return SD.pack(wb); } } });
+  f.type('keep me'); f.key('Enter');
+  assert.equal(await f.view.save(), false, 'a compression refusal leaves the view unsaved');
+  assert.equal(f.unload().prevented, true);
+  await settle();
+  fail = false;
+  assert.equal(await f.view.save(), true);
+  assert.equal((await SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY)).wb.sheets[0].rows.get(0).get(0).v, 'keep me');
+});
