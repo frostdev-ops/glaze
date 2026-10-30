@@ -17,8 +17,8 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
   const FRAME = Object.freeze({
     pdf: Object.freeze({ scripts: ['lib/doc-kinds.js', 'lib/pdf-doc.js', 'pdf-kind.js'], css: 'pdf-kind.css' }),
     slides: Object.freeze({ scripts: ['lib/doc-kinds.js', 'slides-kind.js'], css: 'slides-kind.css' }),
-    // The grid (sheet-kind.js loads its engine and sheet-grid.js itself); .xlsx needs GZ_SHEET_XLSX, else a .csv.
-    sheet: Object.freeze({ scripts: ['lib/doc-kinds.js', 'sheet-kind.js'], css: 'sheet.css' }),
+    // The grid (sheet-kind.js loads its engine and sheet-grid.js itself) and the .xlsx codecs, so it reads and writes .xlsx.
+    sheet: Object.freeze({ scripts: ['lib/doc-kinds.js', 'lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js', 'sheet-kind.js'], css: 'sheet.css' }),
   });
   const prefs = () => globalThis.GZ_WRITER_SETTINGS?.now() || {};
   // The kinds a brought file may open as here: in this frame, and switched on.
@@ -108,6 +108,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       const rec = await k.into(key, f);
       if (shown) { await unmount(); const s = await mount(id, key, paper); if (!s) throw new Error('no viewer'); paper.take(s); }
       else if (!await paper.hand(rec)) throw new Error('no viewer');
+      if (rec?.notice) shown?.surface.notify(rec.notice);
     } catch (e) {
       console.error(e);
       paper.release();

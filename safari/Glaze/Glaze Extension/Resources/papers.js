@@ -653,7 +653,8 @@
       let why = first ? (first.why === 'size' ? saysOf(DK.forFile(first.file?.name)).size : unread) : '';
       for (const { file: f, kind: id } of take) {
         const says = saysOf(id);
-        try { await DK.get(id).importFile(f); }
+        // An import that kept the file with parts left out says so (sheet-kind.js: { key, notice }).
+        try { const got = await DK.get(id).importFile(f); if (got?.notice) why ||= got.notice; }
         catch (e) { console.error(e); why ||= e instanceof RangeError && (REFUSALS.has(e.message) || Object.values(says).includes(e.message)) ? e.message : says.read; }
       }
       say([why && t(why), limitText].filter(Boolean).join(' '));

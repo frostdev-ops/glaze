@@ -16,6 +16,14 @@
   const ENGINE = ['lib/sheet-model.js', 'lib/sheet-numfmt.js', 'lib/sheet-formula.js', 'lib/sheet-calc.js', ...FNS.map((f) => `lib/sheet-fn-${f}.js`), 'sheet-data.js'];
   const SAYS = { size: 'Choose a spreadsheet smaller than 15 MB.', read: 'That file could not be read.' };
   const xlsx = () => globalThis.GZ_SHEET_XLSX ?? null;
+  // The .xlsx reader and writer and what they stand on, loaded the first time a spreadsheet is listed, opened, imported or
+  // written (never with the page). → the codec, or null where it didn't load (a .csv then).
+  const CODECS = ['lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js'];
+  let codecLoad = null;
+  const codecs = () => (codecLoad ||= need(CODECS).then(() => true, (e) => { console.error(e); codecLoad = null; return false; })).then(() => xlsx());
+  // What a workbook read with parts left out says, once (lib/sheet-xlsx.js keep.problems), in a line Glaze already has.
+  const NOTICE = { 'cap-cells': 'A workbook holds 250,000 cells.', 'cap-sheets': 'A workbook holds 100 sheets.' };
+  const noticeOf = (wb) => { const p = wb?.keep?.problems || []; return p.length ? NOTICE[p.find((x) => NOTICE[x.code])?.code] || 'Some pictures, objects or equations were left out.' : undefined; };
   let store = null;
   const papers = () => (store ||= GZ_WRITER_PAPERS.open());
   const get = (keys) => chrome.storage.local.get(keys);
@@ -40,6 +48,7 @@
   };
   const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
   const thumb = (rec) => {
+    codecs(); // a spreadsheet listed: its menu's Export says .xlsx once the writer is here
     const g = Array.isArray(rec?.grid) ? rec.grid : [];
     const box = h('div', { class: 'gx-thumb', 'aria-hidden': 'true' }, h('span', { class: 'gx-th-h' }), LETTERS.map((l) => h('span', { class: 'gx-th-h', text: l })));
     for (let r = 0; r < 4; r++) {
@@ -91,7 +100,7 @@
     if (!(raw instanceof ArrayBuffer) || raw.byteLength !== file.size) throw new Error('invalid file read');
     let wb = null;
     if (/\.csv$/i.test(file.name)) wb = fromCsv(new TextDecoder().decode(raw));
-    else if (xlsx()) wb = await xlsx().read(new Uint8Array(raw)).catch(() => null);
+    else { const X = await codecs(); if (X) wb = await X.read(new Uint8Array(raw)).catch(() => null); }
     if (!wb?.sheets?.length) throw new RangeError(SAYS.read);
     GZ_SHEET_CALC.engine(wb).recalc();
     return wb;
@@ -100,13 +109,14 @@
     const wb = await workbookOf(file);
     const key = GZ_WRITER_PAPERS.newKey(), title = stem(file.name);
     await saveAll(key, wb, { named: !!title, title }, 'start');
-    return key;
+    const notice = noticeOf(wb);
+    return notice ? { key, notice } : key;
   };
   const safe = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
   // A spreadsheet as its file: .xlsx where the writer is here, else its active sheet as .csv. → { name, mime, bytes } or null.
   const fileOf = async (wb, title) => {
     const name = safe(title) || t('Spreadsheet');
-    if (xlsx()) { const bytes = await xlsx().write(wb); return { name: `${name}.xlsx`, mime: DK.KINDS.sheet.mime, bytes }; }
+    if (await codecs()) { const bytes = await xlsx().write(wb); return { name: `${name}.xlsx`, mime: DK.KINDS.sheet.mime, bytes }; }
     const sh = wb.sheets[wb.active] || wb.sheets[0], show = shower(wb), rows = [];
     let cols = 0;
     for (const [r, row] of sh.rows) { rows[r] = row; for (const c of row.keys()) cols = Math.max(cols, c + 1); }
@@ -147,7 +157,9 @@
     if (prior) had = prior.rec;
     const sigs = new Map(Object.keys(had?.parts || {}).map((n) => [n, 'stale']));
     const checkpoint = prior?.wb || wb, gz = await SD.pack(checkpoint);
-    return (await SD.write(papers(), key, wb, sigs, { base: had?.revision || 0, patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: prior ? 'import' : 'start', gz, cells: SD.measure(checkpoint).cells } })).saved.paper;
+    const paper = (await SD.write(papers(), key, wb, sigs, { base: had?.revision || 0, patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: prior ? 'import' : 'start', gz, cells: SD.measure(checkpoint).cells } })).saved.paper;
+    const notice = noticeOf(wb);
+    return notice ? { ...paper, notice } : paper;
   };
   // An empty attempt started as a spreadsheet (writer-kinds.js): what its record takes; the grid opens a blank workbook.
   const empty = () => ({ grid: Array.from({ length: 4 }, () => Array(6).fill('')), text: '', cells: 0, sheets: 1 });
@@ -158,6 +170,8 @@
     await need([...ENGINE, 'sheet-grid.js']);
     const got = fresh ? null : await GZ_SHEET_DATA.read(get, key);
     const wb = got?.wb || GZ_SHEET_MODEL.workbook();
+    // A workbook from an .xlsx keeps parts whose references the codec moves as the grid edits: it is here before the grid.
+    if (Object.keys(wb.keep?.parts || {}).length || wb.keep?.log?.length) await codecs(); else codecs();
     const v = GZ_SHEET_GRID.mount({ key, wb, rec: got?.rec || null, sigs: got?.sigs || new Map(), fresh: !got, t: host?.t || t, locale, papers: papers(), show: shower,
       local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: () => (xlsx() ? 'Export .xlsx' : 'Export .csv'), host });
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
