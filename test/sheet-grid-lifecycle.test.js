@@ -121,3 +121,10 @@ test('HTML paste retains number formats on Google Sheets numeric values and form
   assert.equal(f.wb.styles[row.get(1).s]?.fmt, '0%');
   assert.equal(row.get(1).f, 'A1*2');
 });
+
+test('the last shown sheet cannot be deleted while every other sheet is hidden', () => {
+  const wb = M.workbook(), hidden = M.sheet('Hidden', 2); hidden.keep.hidden = true; wb.sheets.push(hidden);
+  const f = frame({ wb }), tab = f.el('gx-tab-1');
+  f.fire(tab, 'contextmenu', { clientX: 20, clientY: 20 });
+  assert.equal(f.doc.querySelector('.gx-menu [data-act="delete"]').disabled, true);
+});
