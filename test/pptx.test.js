@@ -373,3 +373,11 @@ test('missing media parts become picture boxes and are not listed as drawable me
   assert.deepEqual(d.media, []);
   assert.equal(await P.media(bytes, 'ppt/media/image1.png'), null);
 });
+
+test('duplicate ZIP part names are refused by the slide and media readers', async () => {
+  const files = [...FILES].map(([name, data]) => ({ name, data: new Uint8Array(data) }));
+  files.push({ name: 'ppt/presentation.xml', data: new Uint8Array(FILES.get('ppt/presentation.xml')) });
+  const bytes = new Uint8Array(Buffer.concat(Z.zip(files)));
+  await assert.rejects(P.read(bytes), /duplicate zip entry/);
+  await assert.rejects(P.media(bytes, 'ppt/media/image1.png'), /duplicate zip entry/);
+});
