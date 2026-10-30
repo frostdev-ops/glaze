@@ -113,8 +113,12 @@ const check = async (name, test) => {
       const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => globalThis.GZ_MODS?.stats() || null }).catch(() => [{ result: null }]);
       return r.result;
     }, page.url());
-    // Its host up (a newer one than `hosts` on this page) with the sandbox found working; a call waits there for the Worker.
-    const running = (page, hosts = 0) => until(async () => { const s = await stats(page); return s?.running && s.runtime === true && s.hosts > hosts && !s.gone?.[ID] && s; }, 'the mod running on the page');
+    // The page finds the sandbox before its readiness message reaches the worker; the registry needs that stored verdict.
+    const running = (page, hosts = 0) => until(async () => {
+      const s = await stats(page);
+      const ready = await sw.evaluate(() => chrome.storage.local.get('modRuntime').then((r) => r.modRuntime?.ok === true));
+      return ready && s?.running && s.runtime === true && s.hosts > hosts && !s.gone?.[ID] && s;
+    }, 'the mod running on the page and recorded by the worker');
     const open = async (url = `${SCHOOL}/courses/25`) => { const p = await context.newPage(); watch(p); await p.goto(url); await running(p); return p; };
     // A call left running in the worker while the check acts on the page; → its answer and how long it took.
     const started = (name) => sw.evaluate(([n, acc]) => {
