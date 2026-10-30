@@ -27,8 +27,12 @@ const run = async (o = {}) => {
   // Anyone who can write a launcher runs code as this user when the browser starts it.
   const loose = (f, st) => {
     if (!modes) return null;
-    if (st.mode & 0o022) return `${f} can be changed by other users (mode ${(st.mode & 0o777).toString(8)}); chmod go-w it`;
-    if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return `${f} belongs to another user`;
+    if (st.uid !== 0 && st.uid !== process.getuid()) return `${f} belongs to another user`;
+    // Homebrew uses user-owned 0775 folders with macOS's admin group. Only directories may share that write bit.
+    const group = st.gid === process.getgid() || ctx.platform === 'darwin' && st.gid === 80;
+    if ((st.mode & 0o002) || (st.mode & 0o020) && !(st.isDirectory() && group)) {
+      return `${f} can be changed by other users (mode ${(st.mode & 0o777).toString(8)}); chmod go-w it`;
+    }
     return null;
   };
   // Check every ancestor of an execution path, including both sides of symlinks (e.g. a stable Node launcher).
@@ -49,9 +53,9 @@ const run = async (o = {}) => {
         // Resolve links before '..', as the OS does; lexical normalization could check a different executable.
         return trustedPath([target, ...names.slice(i + 1)].join(path.sep), links + 1);
       }
-      if ((st.mode & 0o022) && !(i < names.length - 1 && st.isDirectory() && st.uid === 0 && (st.mode & 0o1000))) {
-        return `${part} can be changed by other users (mode ${(st.mode & 0o777).toString(8)}); chmod go-w it`;
-      }
+      const sticky = i < names.length - 1 && st.isDirectory() && st.uid === 0 && (st.mode & 0o1000);
+      const bad = sticky ? null : loose(part, st);
+      if (bad) return bad;
       if (i < names.length - 1 && !st.isDirectory()) return `${part} is not a folder`;
     }
     return null;

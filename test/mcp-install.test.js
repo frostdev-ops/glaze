@@ -990,6 +990,6 @@ test('doctor accepts Homebrew admin and own-group folders and refuses unsafe own
     });
     const report = await module.exports.run({ ...ctx, platform });
     assert.equal(report.ok, ok, D.text(report));
-    assert.deepEqual(calls, ok ? [[link, ['--version']]] : [], D.text(report));
+    assert.deepEqual(calls.map(([f, a]) => [f, Array.from(a)]), ok ? [[link, ['--version']]] : [], D.text(report));
   });
 });
