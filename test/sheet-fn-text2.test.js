@@ -214,3 +214,6 @@ test('TEXTSPLIT distinguishes invalid text from an empty result', () => {
 test('DOLLAR preserves a negative sign when rounded to zero; NUMBERVALUE overflow is VALUE', () => {
   cases(book(), [['DOLLAR(-0.001)', '($0.00)'], ['FIXED(-0.001)', '0.00'], ['NUMBERVALUE("1e309")', '#VALUE!']]);
 });
+test('SEARCH handles literal and trailing tildes without an invalid Unicode regular expression', () => {
+  cases(book(), [['SEARCH("~","a~b")', 1], ['SEARCH("~~","a~b")', 2], ['SEARCH("~*","a*b")', 2], ['SUBSTITUTE("a*b?","*","x")', 'axb?']]);
+});
