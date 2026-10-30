@@ -165,6 +165,11 @@ const until = async (holds, ms = 5000) => { for (const end = Date.now() + ms; !(
     await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
     L = await local();
     ok(L[KEY]?.pages['1'].length === 1 && L[KEY].pages['1'][0].t === 'hl', 'eraser removed the pen stroke only');
+    // Tool down: Ctrl+Z is the viewer's. Glaze's undo would run in the key's own handler, which has run when press()
+    // returns, and would light Redo at once; the eraser's undo record is there to take.
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+z');
+    ok(await bar.locator('button[aria-label="Redo"]').isDisabled() && (await local())[KEY]?.pages?.['1']?.length === 1, 'with no tool picked, Ctrl+Z is left to the viewer');
     // Export, then clear page, then import it back.
     const [dl] = await Promise.all([page.waitForEvent('download'), bar.locator('button[aria-label="Export annotations"]').click()]);
     const file = path.join(out, 'export.json');
@@ -173,11 +178,6 @@ const until = async (holds, ms = 5000) => { for (const end = Date.now() + ms; !(
     await bar.locator('button[aria-label="Clear page"]').click();
     await until(async () => !(KEY in await local()));
     ok(!(KEY in await local()), 'clear page empties the file: key removed');
-    await page.keyboard.press('Escape');
-    // Tool down: Ctrl+Z is the viewer's. Glaze's undo would run in the key's own handler, which has run when press()
-    // returns, and would light Redo at once; the clear's undo record is still there to take.
-    await page.keyboard.press('Control+z');
-    ok(await bar.locator('button[aria-label="Redo"]').isDisabled() && !(KEY in await local()), 'with no tool picked, Ctrl+Z is left to the viewer');
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), bar.locator('button[aria-label="Import annotations"]').click()]);
     await chooser.setFiles(file);
     await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
