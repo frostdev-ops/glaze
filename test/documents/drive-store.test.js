@@ -604,3 +604,24 @@ test('a second device joining keeps its own Better To Do tasks for the same acco
   assert.ok((await a.run()).ok);
   assert.deepEqual(await titles(a), ['Lab report', 'Reading'], 'and A gets B\'s');
 });
+
+test('two devices\' snapshots of one day are one file, so the five kept are five days', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  const client = D.create({ fetch: drive.fetch, token: async () => 'tok-1', interactive: false });
+  const folder = drive.seed({ name: 'Glaze', mimeType: drive.FOLDER, appProperties: { glaze: 'root' } }).meta.id;
+  const day = () => new Date(clock.t).toISOString().slice(0, 10);
+  const devices = ['A', 'B'].map((who) => {
+    const local = device(drive, { clock }).local;
+    const store = ST.create({ area: () => local, store: local, hash: async (s) => sha(s), now: () => clock.t,
+      snapshot: async () => ({ name: `glaze-backup-${day()}.zip`, bytes: new TextEncoder().encode(`PK ${who} ${day()}`) }) });
+    return { store, ctx: { D: (fn) => fn(client), folder, state: async (p) => { await local.set({ driveSync: { ...(await local.get('driveSync')).driveSync, ...p } }); } } };
+  });
+  for (let i = 0; i < 7; i++) {
+    for (const d of devices) await d.store.snapshot(d.ctx);
+    clock.t += ST.SNAP.every + 1;
+  }
+  const live = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot' && !f.meta.explicitlyTrashed);
+  assert.deepEqual(live.map((f) => f.meta.name).sort(), ['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05'].map((d) => `glaze-backup-${d}.zip`));
+  assert.ok(live.every((f) => f.bytes.toString().startsWith('PK B')), 'the day\'s later one');
+  noDeletes(drive);
+});
