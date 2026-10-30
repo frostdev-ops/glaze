@@ -186,6 +186,39 @@ test('noFirstRun says when it has closed Glaze\'s first screen, so a check can s
   assert.equal(tab.gone, true);
 });
 
+test('noFirstRun never reports a failed tab close as a closed first screen', async () => {
+  const { noFirstRun } = require('../scripts/check-env.js');
+  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
+  let onPage, closed = false;
+  const bad = { url: () => welcome, close: async () => { throw new Error('close failed'); }, waitForURL: async () => {} };
+  const first = noFirstRun({ pages: () => [bad], on: (e, f) => { onPage = f; } });
+  first.then(() => { closed = true; });
+  await new Promise(setImmediate);
+  assert.equal(closed, false, 'a failed close must not release the popup check');
+  onPage({ url: () => welcome, close: async () => {}, waitForURL: async () => {} });
+  await first;
+  assert.equal(closed, true);
+});
+
+test('noFirstRun still closes a first screen that navigates after ten seconds under load', async (t) => {
+  const { noFirstRun } = require('../scripts/check-env.js');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let navigate, gone = false;
+  const tab = {
+    at: 'about:blank', url: () => tab.at, close: async () => { gone = true; },
+    waitForURL: (re, { timeout }) => new Promise((resolve, reject) => {
+      if (timeout) setTimeout(() => reject(new Error('navigation timeout')), timeout);
+      navigate = () => { tab.at = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html'; assert.ok(re.test(tab.at)); resolve(); };
+    }),
+  };
+  noFirstRun({ pages: () => [tab], on() {} });
+  t.mock.timers.tick(11000);
+  await new Promise(setImmediate);
+  navigate();
+  await new Promise(setImmediate);
+  assert.equal(gone, true, 'the late first screen was closed');
+});
+
 test('ultraReady polls the page until Glaze has registered its Ultra script, and says so when it never does', async () => {
   const { ultraReady } = require('../scripts/check-env.js');
   const answers = [false, false, true];
