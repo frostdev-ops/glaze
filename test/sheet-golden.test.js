@@ -22,7 +22,7 @@ const xml = (s) => new TextEncoder().encode(s);
 const xlsx = (parts) => Buffer.concat(Z.zip(Object.entries(parts).map(([name, s]) => ({ name, data: xml(s), date: new Date(2026, 0, 1) }))));
 const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 const book = (sheets, extra = {}) => xlsx({
-  'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook ${NS}><workbookPr date1904="1"/><sheets>${Object.keys(sheets).map((n, i) => `<sheet name="${n}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`,
+  'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook ${NS}><workbookPr date1904="1"/><sheets>${Object.keys(sheets).map((n, i) => `<sheet name="${n}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets><extLst><ext uri="{140A7094-0E35-4892-8432-C4D2E57EDEB5}" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext></extLst></workbook>`,
   'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${Object.keys(sheets).map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId99" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>`,
   'xl/sharedStrings.xml': '<sst count="5" uniqueCount="5"><si><t>a &amp; b</t></si><si><r><rPr><b/></rPr><t>bold</t></r><r><t xml:space="preserve"> and plain</t></r></si><si><t>日本</t><rPh sb="0" eb="2"><t>ニホン</t></rPh></si><si><t>line_x000D_break_x005F_x0041_</t></si><si><t/></si></sst>',
   ...Object.fromEntries(Object.values(sheets).map((body, i) => [`xl/worksheets/sheet${i + 1}.xml`, `<worksheet ${NS}><sheetData>${body}</sheetData></worksheet>`])),
@@ -38,7 +38,7 @@ const SHEET1 = '<row r="1"><c r="A1"><v>1.5</v></c><c r="B1" t="str"><f>CONCAT("
 
 test('reader: values, shared strings, shared and array formulas, date1904', async () => {
   const wb = await X.read(book({ One: SHEET1, 'Sheet 2': '<row r="1"><c r="A1"><v>7</v></c></row>' }));
-  assert.equal(wb.date1904, true);
+  assert.equal(wb.date1904, true, 'from the workbook\'s own workbookPr, not the x15 one Excel adds in extLst');
   assert.deepEqual(wb.sheets.map((s) => s.name), ['One', 'Sheet 2']);
   const c = wb.sheets[0].cells, at = (a) => c.get(a);
   assert.deepEqual(at('A1'), { t: 'n', v: 1.5 });
@@ -291,12 +291,10 @@ test('cases: inputs agree within a family and cover every cell a formula names',
 });
 
 // ---- the workbooks Excel saved, and golden.json ---------------------------------------------------------------------
-const golden = fs.existsSync(GOLDEN) ? JSON.parse(fs.readFileSync(GOLDEN, 'utf8')) : null;
-const WAIT = golden ? false : 'golden.json not generated yet: run scripts/sheet-excel-golden.js on a Mac with Excel';
+const golden = JSON.parse(fs.readFileSync(GOLDEN, 'utf8'));
 const input = (v) => (v === null ? undefined : typeof v === 'number' ? { t: 'n', v } : typeof v === 'string' ? { t: 's', v } : typeof v === 'boolean' ? { t: 'b', v } : v.e ? { t: 'e', v: v.e } : null);
 
-test('golden: every case is in its workbook as written, with the value Excel cached', { todo: WAIT }, async () => {
-  assert.ok(golden, WAIT);
+test('golden: every case is in its workbook as written, with the value Excel cached', async () => {
   const ids = new Set(cases.filter((c) => c.unsupported == null).map((c) => c.id));
   assert.deepEqual(Object.keys(golden).filter((id) => !ids.has(id)), [], 'golden.json holds only cases Excel took');
   for (const [family, list] of byFamily) {
@@ -354,20 +352,20 @@ test('engine comparison: 1e-12 relative, types strict', () => {
   }
 });
 
-// The engine's entry, wired once lane A's calc (lib/sheet-calc.js, S4) lands: the family's inputs and formulas in, each
-// case's { t, v } out.
-const ENGINE = fs.existsSync(path.join(__dirname, '../lib/sheet-calc.js'));
-const run = () => { throw Error('not wired'); };
-const REASON = ENGINE ? 'lib/sheet-calc.js exists: wire its entry into run() here' : 'lib/sheet-calc.js is not built yet (lane A, S4)';
+// The engine's entry, (family, case) → the case's { t, v }: the family's inputs and formulas into a workbook, then the
+// case's cell. Not wired yet: the engine (GZ_SHEET_CALC.engine(wb).evaluate(text, sheetId, r, c), branch sheets/model)
+// is still under review.
+const run = null;
+const REASON = 'the engine (GZ_SHEET_CALC.engine(wb).evaluate on sheets/model) is not wired into run() yet';
 
 for (const [family, list] of byFamily) {
   test(`engine against Excel: ${family}`, async (t) => {
     for (const c of list) {
       if (c.unsupported != null) continue;
       await t.test(c.id, { todo: REASON }, () => {
-        if (!ENGINE) return;
+        if (!run) return;
         const got = run(family, c);
-        assert.ok(same(golden?.[c.id], got), `${c.formula}: Excel ${JSON.stringify(golden?.[c.id])}, engine ${JSON.stringify(got)}`);
+        assert.ok(same(golden[c.id], got), `${c.formula}: Excel ${JSON.stringify(golden[c.id])}, engine ${JSON.stringify(got)}`);
       });
     }
   });
