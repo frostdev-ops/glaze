@@ -267,6 +267,24 @@ test('quota exceeded while opening IndexedDB is reported as quota', async () => 
   }
 });
 
+test('a put keeps up to WINDOW chunks on their way, the bytes kept in order', async () => {
+  const { st } = make(), { client, log } = wire(st);
+  const b = bytes(F.CHUNK * 10 + 7, 12), file = await client.put(b, 'application/pdf');
+  let out = 0, most = 0;
+  for (const { from, m } of log[0].sent) { if (from === 'page' && m.op === 'chunk') most = Math.max(most, ++out); if (from === 'worker' && m.ack) out--; }
+  assert.equal(most, 4);
+  assert.equal(out, 0);
+  assert.equal(sha(await client.get(file)), sha(b));
+});
+
+test('a refusal while chunks are on their way is the one said', async () => {
+  const { st } = make();
+  const chunk = st.chunk;
+  let n = 0;
+  st.chunk = (...a) => (++n === 2 ? Promise.reject(Object.assign(new Error('full'), { name: 'QuotaExceededError' })) : chunk(...a));
+  await assert.rejects(wire(st).client.put(bytes(F.CHUNK * 8, 13), 'application/pdf'), (e) => e.why === 'quota');
+});
+
 test('a transfer cut mid-chunk: interrupted, and the worker drops the half upload', async () => {
   const { st, data } = make();
   // The page goes (its tab closed) after its second chunk.
