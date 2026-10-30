@@ -7,8 +7,7 @@
 // Mac only, the one heavy job running:
 //   nice -n 10 lockf -k /private/tmp/claude-501/glaze-heavy.lock node scripts/sheet-excel-fidelity.js [--keep dir] [file.xlsx …]
 const fs = require('node:fs'), path = require('node:path');
-const { execFileSync } = require('node:child_process');
-const { start, quit, box } = require('./sheet-excel.js');
+const { jxa: run, start, quit, box } = require('./sheet-excel.js');
 const { books, expect, agree, stored } = require('./sheet-fidelity-books.js');
 const M = require('../lib/sheet-model.js');
 
@@ -156,9 +155,9 @@ const main = async () => {
       if (keepDir) { fs.mkdirSync(keepDir, { recursive: true }); fs.writeFileSync(path.join(keepDir, b.name), b.bytes); }
       let got;
       try {
-        got = JSON.parse(execFileSync('osascript', ['-l', 'JavaScript', '-e', jxa(file, ask(b.model))], { encoding: 'utf8', timeout: 600000, maxBuffer: 64 << 20 }));
+        got = JSON.parse(run(jxa(file, ask(b.model)), 600000));
       } catch (err) {
-        rows.push({ name: b.name, repaired: 'no answer (a repair prompt?)', cells: 0, problems: [`${String(err.stderr || err.message).trim().slice(0, 300)}`] });
+        rows.push({ name: b.name, repaired: 'no answer (a repair prompt?)', cells: 0, problems: [err.message.trim().slice(0, 300)] });
         continue;
       }
       const repaired = /repaired/i.test(got.name) || /repaired/i.test(got.caption);

@@ -13,6 +13,7 @@ const execute = async (name, options = {}) => {
     str: Excel.str, num: Excel.num, start: () => ({ started: true, pid: 123 }),
     box: () => { if (options.boxError) throw Error('folder refused'); return '/scratch'; },
     quit: (self) => quits.push(self), osa: (s) => { scripts.push(s); return options.output || ''; },
+    jxa: (s) => { scripts.push(s); return options.output || '{"name":"a.xlsx","caption":"a","date1904":false,"active":"Cases","names":["Cases"],"sheets":[]}'; },
   };
   const disk = {
     existsSync: () => name.includes('fidelity'), copyFileSync: () => {},
@@ -26,6 +27,7 @@ const execute = async (name, options = {}) => {
     require: (id) => {
       if (id === 'node:fs') return disk;
       if (id === './sheet-excel.js') return excel;
+      if (id === './sheet-fidelity-books.js') return { ...require('../scripts/sheet-fidelity-books.js'), books: async () => [{ name: 'a.xlsx', bytes: new Uint8Array(1), model: { sheets: [], active: 0, date1904: false } }] };
       if (id.includes('fixtures/sheets/cases')) return { cases: list, families };
       if (id.includes('xlsx-cache')) return { ...require('./helpers/xlsx-cache.cjs'), read: async () => ({ sheets: families.math.sheets.map((sheet) => ({
         name: sheet, cells: new Map(list.filter((c) => c.sheet === sheet).map((c) => [c.cell, { f: c.formula.slice(1), t: 'n', v: 2 }])),
@@ -75,15 +77,15 @@ test('Excel harness: generated fills copy from the first cell in both directions
 });
 
 test('Excel harness: generated scripts restore application flags on errors', async () => {
-  for (const file of ['sheet-excel-golden.js', 'sheet-excel-fidelity.js']) {
-    const s = (await execute(file)).scripts[0];
-    assert.match(s, /set oldAlerts to display alerts/);
-    assert.match(s, /on error m number n[\s\S]*set display alerts to oldAlerts[\s\S]*error m number n/);
-    if (file.includes('golden')) {
-      assert.match(s, /set oldUpdating to screen updating/);
-      assert.match(s, /on error m number n[\s\S]*set screen updating to oldUpdating/);
-    }
-  }
+  const s = (await execute('sheet-excel-golden.js')).scripts[0];
+  assert.match(s, /set oldAlerts to display alerts/);
+  assert.match(s, /on error m number n[\s\S]*set display alerts to oldAlerts[\s\S]*error m number n/);
+  assert.match(s, /set oldUpdating to screen updating/);
+  assert.match(s, /on error m number n[\s\S]*set screen updating to oldUpdating/);
+  // The fidelity script's JXA: the same flag back on its way out, after an error too.
+  const j = (await execute('sheet-excel-fidelity.js')).scripts[0];
+  assert.match(j, /const alerts = app\.displayAlerts\(\);/);
+  assert.match(j, /\} catch \(e\) \{[\s\S]*wb\.close\(\{ saving: 'no' \}\)[\s\S]*app\.displayAlerts = alerts;[\s\S]*throw/);
 });
 
 test('Excel harness: locale-sensitive parsing checks en-US before making a workbook', async () => {
