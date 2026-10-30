@@ -195,7 +195,8 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     const { cid } = m;
     const c = ctx.settings().courses;
     m.tint.checked = GZ_COURSE_TINTED(c, cid, ctx.courseList());
-    for (const b of m.looks) b.setAttribute('aria-pressed', String((m.looks.some((b) => b.dataset.look === c.looks[cid]) ? c.looks[cid] : '') === b.dataset.look));
+    const look = m.looks.some((b) => b.dataset.look === c.looks[cid]) ? c.looks[cid] : '';
+    for (const b of m.looks) b.setAttribute('aria-pressed', String(look === b.dataset.look));
     if (canvas) {
       // Canvas's color for it now, as its cards show it: a swatch of the same color is pressed, else the picker is.
       const now = C.parse(colorOf(numOf(cid)));

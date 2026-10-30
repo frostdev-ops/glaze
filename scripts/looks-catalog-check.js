@@ -239,6 +239,7 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
       const { courses } = await chrome.storage.sync.get('courses');
       await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: id } } });
     }, { site, id: ids.seminar });
+    await a.evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:look', parts: { x: { pointer: 'quill', cursor: { kind: 'sparkle' } } }, patch: { version: 2 } }));
     await require('./check-env.js').ultraReady(a);
     const lms = await ctx.newPage();
     lms.on('pageerror', (e) => errors.push(`ultra: ${e}`));
@@ -247,11 +248,11 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     check(await until(async () => (await ink(lms)) === seminar.colors['--gz-ink']), 'the course wears its saved Look on its page', await ink(lms));
     await a.evaluate(async () => { const { courses } = await chrome.storage.sync.get('courses'); await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: 'c:00000000000000' } } }); });
     check(await until(async () => (await ink(lms)) === field.colors['--gz-ink']), 'a Look this device doesn\'t keep: the student\'s theme', await ink(lms));
-    check(await sw.evaluate(async (url) => {
+    check(await until(() => sw.evaluate(async (url) => {
       const [tab] = await chrome.tabs.query({ url });
       const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ look: GZ_CTX.courseLook(), parts: GZ_CTX.parts(), pointerOn: GZ_CTX.partsOn(true) }) });
-      return result.result.look === null && result.result.pointerOn;
-    }, lms.url()), 'a missing kept Look permits the theme parts and personal pointer');
+      return result.result.look === null && result.result.pointerOn && result.result.parts?.pointer === 'quill';
+    }, lms.url())), 'a missing kept Look permits the theme parts and personal pointer');
     await lms.keyboard.press('ControlOrMeta+k');
     await lms.locator('#gz-cmd input').fill('Look: Night');
     const cmd = lms.locator('#gz-cmd-list li').filter({ hasText: 'Look: Night walk' }).first();

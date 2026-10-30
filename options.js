@@ -1005,7 +1005,7 @@ GZ_UI.load().then((s) => {
       look.dataset.settingControl = 'courses.looks';
       look.setAttribute('aria-label', look.title);
       look.append(new Option(t('Your theme'), ''), ...lookOptions());
-      look.value = cc.looks[id] || '';
+      look.value = catalog.some((E) => E.id === cc.looks[id]) ? cc.looks[id] : '';
       look.addEventListener('change', () => {
         if (look.value) cc.looks[id] = look.value; else delete cc.looks[id];
         refresh();
