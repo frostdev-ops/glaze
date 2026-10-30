@@ -95,8 +95,8 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
     // the one the line shows.
     let on = false, link = null, apps = [], mods = [], calls = [], busy = false, unsaved = false, command = '';
     let stateRead = 0, linkVersion = 0, callsVersion = 0;
-    // Starting… on Chrome: the state it began with (waiting), its one timer, and whether WAIT's ask still found restart.
-    let waiting = '', wait = 0, stuck = false;
+    // One wait for the whole Starting… line, including connecting ↔ restart. Late answers belong to that wait only.
+    let waiting = false, wait = 0, waitVersion = 0, active = true, stuck = false;
     // A part is drawn again only when what it shows changed, so the link's line isn't announced again and a card keeps its
     // focus when something else moves.
     const drawn = {};
@@ -131,19 +131,23 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
     // WAIT's one ask (see WAIT), whose answer stands unless the worker has written since.
     const recheck = async () => {
       wait = 0;
-      const version = linkVersion, r = await loadState();
+      const turn = waitVersion, version = linkVersion, r = await loadState();
+      if (turn !== waitVersion) return;
       if (r.ok && version === linkVersion && isObj(r.link)) { link = r.link; ++linkVersion; }
       stuck = link?.state === 'restart';
       render();
     };
     // Each Starting… on Chrome gets one wait; any other state, or off, ends it.
     const bound = () => {
-      const s = on && browser === 'chrome' && ['restart', 'connecting'].includes(link?.state) ? link.state : '';
+      const s = active && on && browser === 'chrome' && ['restart', 'connecting'].includes(link?.state);
       if (s === waiting) return;
       clearTimeout(wait);
+      ++waitVersion;
       waiting = s; stuck = false;
       wait = s ? setTimeout(recheck, WAIT) : 0;
     };
+    window.addEventListener('pagehide', () => { active = false; bound(); });
+    window.addEventListener('pageshow', (e) => { if (e.persisted) { active = true; render(); } });
     const toggle = async (want, asked) => {
       busy = true;
       render();
