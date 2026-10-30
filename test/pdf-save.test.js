@@ -39,3 +39,14 @@ test('a restore captures its target before a flush can evict that version', asyn
   assert.equal(h.calls[1][1].file.hash, '2', 'the selected version bytes');
   assert.equal(h.calls[1][2].reason, 'restore');
 });
+
+test('a no-op save does not spend the visit\'s first edited-file version', async (t) => {
+  const h = harness(); t.after(h.close);
+  const reasons = [];
+  h.ctx.st.save = async (_key, _patch, options) => {
+    reasons.push(options.reason);
+    return { paper: h.ctx.rec, version: reasons.length === 2 ? { id: 'original' } : null };
+  };
+  for (let i = 0; i < 3; i++) { h.modify(); await h.flush(); }
+  assert.deepEqual(reasons, ['edit', 'edit', 'auto'], 'only a save that kept the old file consumes first');
+});
