@@ -95,13 +95,13 @@ const HEAR = (el) => {
   window.__tap = { el, heard: 0, other: [] };
 };
 const MISS = (f) => {
-  if (!window.__tapOn) { window.__tapOn = true; addEventListener('click', (e) => { if (e.target === window.__tapFrame) window.__tapMiss++; }, true); }
-  window.__tapFrame = f; window.__tapMiss = 0;
+  if (!window.__tapOn) { window.__tapOn = true; addEventListener('click', (e) => { window.__tapMiss.push(e.target === window.__tapFrame ? 'iframe' : `${e.target?.tagName?.toLowerCase()}.${String(e.target?.className || '').slice(0, 40)}`); }, true); }
+  window.__tapFrame = f; window.__tapMiss = [];
 };
 const tap = async (fr, sel, { count = 1 } = {}) => {
   const p = fr.page(), frame = await fr.frameElement();
   for (let attempt = 1; ; attempt++) {
-    let why = 'not in the frame', was = '', at = null, aim = null;
+    let why = 'not in the frame', was = '', same = 0, at = null, aim = null;
     for (const end = Date.now() + 20000; !at; await pause(80)) {
       if (Date.now() > end) throw Error(`${sel}: not clickable (${why})`);
       const h = await fr.$(sel).catch(() => null);
@@ -110,7 +110,9 @@ const tap = async (fr, sel, { count = 1 } = {}) => {
       if (a.why) { why = a.why; was = ''; continue; }
       const place = await frame.evaluate(PLACE, a);
       if (place.why) { why = place.why; was = ''; continue; }
-      if (place.box !== was) { why = 'moving'; was = place.box; continue; }
+      // The same box three polls running: a frame Writer resizes in steps (a view switch, then its box) has settled.
+      if (place.box !== was) { why = 'moving'; was = place.box; same = 0; continue; }
+      if (++same < 2) continue;
       await h.evaluate(HEAR);
       at = place; aim = a;
     }
@@ -122,7 +124,11 @@ const tap = async (fr, sel, { count = 1 } = {}) => {
       const t = await fr.evaluate(() => window.__tap && { heard: window.__tap.heard, other: window.__tap.other.slice() }).catch(() => null);
       if (t?.heard) heard = 'heard';
       else if (t?.other.length) heard = `landed on ${t.other.join(', ')}`;
-      else if (await p.evaluate(() => window.__tapMiss > 0)) heard = 'given to the page\'s <iframe>';
+      else {
+        const miss = await p.evaluate(() => window.__tapMiss);
+        if (miss.includes('iframe')) heard = 'given to the page\'s <iframe>';
+        else if (miss.length) heard = `landed in the page on ${miss.join(', ')}`;
+      }
     }
     if (heard === 'heard') return;
     if (!heard) throw Error(`${sel}: the click reached nothing`);
