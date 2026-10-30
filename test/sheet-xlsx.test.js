@@ -660,7 +660,9 @@ test('write: cell metadata only where its part is kept; rich values only on the 
   const fresh = M.workbook();
   fresh.sheets[0].rows.set(0, new Map([[0, { t: 'n', v: 1, f: 'SEQUENCE(1)', a: 'A1', cm: '1' }], [1, { t: 'e', v: '#VALUE!', vm: '1' }]]));
   const q = await parts(await X.write(fresh, { date: DATE, recalc: false }));
-  assert.doesNotMatch(q['xl/worksheets/sheet1.xml'], / cm=| vm=/, 'without metadata.xml the indices would point at nothing');
+  assert.doesNotMatch(q['xl/worksheets/sheet1.xml'], / vm=/, 'without the kept metadata.xml the rich value index would point at nothing');
+  assert.match(q['xl/worksheets/sheet1.xml'], /<c r="A1" cm="1">/, 'a dynamic array names the XLDAPR entry of the part written for it');
+  assert.match(q['xl/metadata.xml'], /<cellMetadata count="1"><bk><rc t="1" v="0"\/><\/bk><\/cellMetadata>/);
 });
 
 test('write: a formula typed as Excel 365 takes it is an array formula over its own cell, cm where Excel\'s XLDAPR is kept', async () => {
@@ -675,11 +677,18 @@ test('write: a formula typed as Excel 365 takes it is an array formula over its 
     return { ...(await parts(bytes)), bytes };
   };
   const made = await typed(M.workbook()), fresh = made['xl/worksheets/sheet1.xml'];
-  assert.match(fresh, /<c r="C901"><f t="array" ref="C901">SUM\(\(A901:A905&gt;20\)\*A901:A905\)<\/f><v>120<\/v><\/c>/, 'a legacy array where no metadata part says dynamic');
+  assert.match(fresh, /<c r="C901" cm="1"><f t="array" ref="C901">SUM\(\(A901:A905&gt;20\)\*A901:A905\)<\/f><v>120<\/v><\/c>/, 'dynamic, as Excel 365 saves it');
+  // The metadata part Excel writes for dynamic arrays (its XLDAPR entry), named by the workbook and its content type.
+  assert.match(made['xl/metadata.xml'], /<metadataType name="XLDAPR"[^>]*cellMeta="1"\/>.*<xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"\/>.*<cellMetadata count="1"><bk><rc t="1" v="0"\/><\/bk><\/cellMetadata>/);
+  assert.match(made['xl/_rels/workbook.xml.rels'], /Type="http:\/\/schemas.openxmlformats.org\/officeDocument\/2006\/relationships\/sheetMetadata" Target="metadata.xml"/);
+  assert.match(made['[Content_Types].xml'], /<Override PartName="\/xl\/metadata.xml" ContentType="application\/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata\+xml"\/>/);
+  const plain = await parts(await X.write(M.workbook(), { date: DATE }));
+  assert.equal(plain['xl/metadata.xml'], undefined, 'only a workbook with dynamic arrays gets one');
   assert.match(fresh, /<c r="C902"><f>SUM\(A901:A905\)<\/f><v>150<\/v><\/c>/);
-  assert.match(fresh, /<c r="C903"><f t="array" ref="C903">/);
+  assert.match(fresh, /<c r="C903" cm="1"><f t="array" ref="C903">/);
   const back = await X.read(made.bytes);
-  assert.equal(at(back, 'Sheet1', 'C901').a, 'C901');
+  assert.deepEqual([at(back, 'Sheet1', 'C901').a, at(back, 'Sheet1', 'C901').cm], ['C901', '1']);
+  assert.ok(back.keep.parts['xl/metadata.xml'], 'read back, the part is kept and written again as it came');
   M.cell(back.sheets[0], 900, 0).v = 25;
   C.engine(back).recalc();
   assert.equal(at(back, 'Sheet1', 'C901').v, 145, 'read back, it is still evaluated whole');
