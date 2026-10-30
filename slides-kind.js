@@ -1,5 +1,5 @@
-// Slide decks on the Documents page (papers.html), with Settings → Writer → Slides on (writer.slides, off by default; off,
-// this registers nothing and the page is as it was): .pptx and .ppsx files import as documents of the slides kind
+// Slide decks on the Documents page (papers.html). Settings → Writer → Slides (writer.slides, off by default) permits
+// importing .pptx and .ppsx files; existing decks always remain available for viewing. Documents of the slides kind
 // (lib/doc-kinds.js), each card showing slide 1, and open in a viewer: a rail of thumbnails, the slide (lib/slides-render.js
 // on lib/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, and Present (a dialog, full screen
 // where the browser allows, Rimeward's keys, hidden slides skipped). Its chrome wears the Look; the slide stays as authored.
@@ -454,8 +454,8 @@
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
   };
 
-  // Registered only with the switch on, as it reads now; the page waits for this before it routes or draws.
+  // Viewing stays registered; only import follows the switch. The page waits before it routes or draws.
   const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.slides === true, () => false);
-  DK.wait(on.then((yes) => { if (yes) DK.register('slides', { edit, thumb, file, exportFile, text, importFile, measure, copy, says: SAYS, exportLabel: 'Export .pptx' }); }));
+  DK.wait(on.then((yes) => DK.register('slides', { edit, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
   globalThis.GZ_SLIDES_KIND = Object.freeze({ STORE });
 })();
