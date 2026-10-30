@@ -353,6 +353,8 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         if (!alive(a)) return;
         const bytes = new Uint8Array(await file.arrayBuffer());
         if (!alive(a)) return;
+        // Drive adds the export extension to Google titles, which can themselves contain dots.
+        a.title = file.name.replace(/\.[^.]+$/, '');
         await stage(a, { name: file.name, mime: file.type, bytes });
       }).catch((e) => {
         if (!alive(a)) return;
