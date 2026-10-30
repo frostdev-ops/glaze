@@ -10,6 +10,8 @@
 :root[data-dark] { color-scheme: dark; }
 :root[data-mode="pdf"] .gp-page { overflow: hidden; }
 .gq .gp-tool .gp-box { gap: 6px; min-width: 112px; justify-content: space-between; }
+/* The toolbar scrolls when full; its Zoom label must not shrink across the page box. */
+#gq-zoom { flex: none; }
 .gq-ib { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: var(--gz-ink); flex: none; }
 .gq-ib:hover, .gq-ib[aria-expanded="true"] { background: var(--gz-line); }
 .gq-more .gp-ico { stroke-width: 3.2; }
