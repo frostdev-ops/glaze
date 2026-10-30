@@ -64,9 +64,9 @@ test('3-D pie: an exploded slice moves out along its mid-angle; cut faces turn t
   assert.deepEqual([by[0].dx, by[0].dy, by[2].dx, by[3].dy].map((v) => v + 0), [0, 0, 0, 0]);
   // Shrunk to fit: the exploded slice's far edge stays inside the plot.
   assert.ok(cx + by[1].dx + rx <= 480 && cy - ry - 0.18 * ry >= 0);
-  // Faces: the first slice's last edge (36°, right half) and the second's last edge (108°), and the fourth's first (216°).
+  // Faces only at separated boundaries: the first slice's last edge and the exploded second slice's last edge.
   const faces = sc.marks.sides.filter((x) => x.kind === 'face');
-  assert.deepEqual(faces.map((x) => [x.i, x.a]).sort((a, b) => a[0] - b[0]), [[0, 36], [1, 108], [3, 216]]);
+  assert.deepEqual(faces.map((x) => [x.i, x.a]).sort((a, b) => a[0] - b[0]), [[0, 36], [1, 108]]);
   // Unexploded: no cut faces at all.
   const flat = CH.scene(pie3d((x) => x.replace('<c:explosion val="18"/>', '')), 480, 300);
   assert.equal(flat.marks.sides.filter((x) => x.kind === 'face').length, 0);
@@ -152,8 +152,98 @@ test('frames: 3-D line and area charts, and a 3-D chart beside another, name the
   const both = (a, b) => FX.CHARTS.col3d.replace('</c:bar3DChart>', `</c:bar3DChart>${a}`).replace('<c:plotArea><c:layout/>', `<c:plotArea><c:layout/>${b}`);
   assert.equal(CX.chart(both('<c:lineChart><c:grouping val="standard"/><c:axId val="10"/><c:axId val="20"/></c:lineChart>', '')).type, '3-D column chart');
   assert.equal(CX.chart(both('', '<c:pie3DChart><c:varyColors val="1"/></c:pie3DChart>')).type, '3-D pie chart');
+  const pie = FX.CHARTS.pie3d.match(/<c:pie3DChart>[\s\S]*?<\/c:pie3DChart>/)[0];
+  for (const name of ['col3d', 'line', 'radar']) {
+    assert.equal(CX.chart(FX.CHARTS[name].replace('</c:plotArea>', `${pie}</c:plotArea>`)).type, '3-D pie chart', `pie after ${name}`);
+  }
   for (const w of ['3-D pie chart', '3-D column chart', '3-D bar chart', '3-D line chart', '3-D area chart']) assert.ok(CX.WORDS.includes(w), w);
   assert.ok(!CX.WORDS.includes('3-D chart'), 'no frame says only "3-D"');
+});
+
+test('3-D bars: zero values and zero percent totals have no filled faces', () => {
+  for (const dir of ['col', 'bar']) for (const grouping of ['clustered', 'stacked', 'percentStacked', 'standard']) {
+    const d = col3d(), g = d.groups[0];
+    g.dir = dir; g.grouping = grouping;
+    for (const s of g.series) { s.vals = [0, -10, 20, null]; }
+    const sc = CH.scene(d, 480, 300);
+    assert.ok(!sc.marks.faces.some((f) => 's' in f && f.i === 0), `${dir}/${grouping}: zero is not a coloured depth plane`);
+    assert.ok(!/NaN|Infinity/.test(JSON.stringify(sc.prims)), `${dir}/${grouping}: finite geometry`);
+    assert.ok(sc.marks.bars.filter((b) => b.i === 0).every((b) => b.top === 0));
+  }
+});
+
+test('3-D bar labels: negative endpoints, reversed axes and stacked segment centres, above all faces', () => {
+  for (const dir of ['col', 'bar']) for (const reverse of [false, true]) {
+    const d = col3d(), g = d.groups[0];
+    g.dir = dir; g.series = [g.series[0]];
+    g.series[0].vals = [-10, 20];
+    Object.values(d.axes).find((a) => a.kind === 'val').reverse = reverse;
+    const sc = CH.scene(d, 480, 300), b = sc.marks.bars.find((b) => b.i === 0);
+    const label = sc.prims.find((p) => p.cls === 'gc-label' && p.text === '-10');
+    if (dir === 'col') assert.ok(reverse ? label.a.y < b.y : label.a.y > b.y + b.h, `${dir}/${reverse}: ${JSON.stringify({ b, label })}`);
+    else assert.ok(reverse ? label.a.x > b.x + b.w : label.a.x < b.x, `${dir}/${reverse}: ${JSON.stringify({ b, label })}`);
+  }
+  for (const dir of ['col', 'bar']) {
+    const d = col3d(grouping('stacked')); d.groups[0].dir = dir;
+    const sc = CH.scene(d, 480, 300), b = sc.marks.bars.find((b) => b.s === 0 && b.i === 0);
+    const label = sc.prims.find((p) => p.cls === 'gc-label' && p.text === '10');
+    assert.ok(near(label.a.x, b.x + b.w / 2) && near(label.a.y - 3.5, b.y + b.h / 2), `${dir}: the label belongs to its own segment`);
+    assert.ok(sc.prims.findIndex((p) => p.cls === 'gc-label') > sc.prims.findLastIndex((p) => p.cls === 'gc-bar' || p.cls === 'gc-face'), 'later bars cannot erase a label');
+  }
+});
+
+test('3-D pie: rotations are reduced to one turn before geometry work', () => {
+  // This finite XML number makes turn++ stop advancing in the old rim loop.
+  const run = require('node:child_process').spawnSync(process.execPath, ['-e', `
+    const CX = require('./lib/sheet-chart-xml.js'), CH = require('./lib/sheet-chart.js');
+    const FX = require('./test/fixtures/sheets/charts.js');
+    const xml = FX.CHARTS.pie3d.replace('<c:rotY val="0"/>', '<c:rotY val="1.3282328232823282e+22"/>');
+    console.log(JSON.stringify(CH.scene(CX.resolve(CX.chart(xml), () => null), 480, 300).marks));
+  `], { cwd: require('node:path').join(__dirname, '..'), timeout: 2000, encoding: 'utf8' });
+  assert.equal(run.error, undefined, `rotation must finish: ${run.error}`);
+  assert.equal(run.status, 0, run.stderr);
+  const marks = JSON.parse(run.stdout);
+  assert.equal(marks.slices.length, 4);
+  assert.ok(marks.slices.every((s) => s.a0 >= 0 && s.a1 <= 720));
+  assert.ok(marks.sides.filter((s) => s.kind === 'rim').length <= 5);
+});
+
+test('3-D pie: every slice exploded still fits a small plot', () => {
+  const d = pie3d(); d.title = null; d.legend = null;
+  d.groups[0].series[0].explosion = 400;
+  d.groups[0].series[0].explode.clear();
+  const { marks } = CH.scene(d, 40, 40), p = marks.pie3d;
+  for (const s of marks.slices) {
+    assert.ok(p.cx + s.dx - p.rx >= 8 && p.cx + s.dx + p.rx <= 32, JSON.stringify({ p, s }));
+    assert.ok(p.cy + s.dy - p.ry >= 8 && p.cy + s.dy + p.ry + p.depth <= 32, JSON.stringify({ p, s }));
+  }
+});
+
+test('3-D pie: large finite values keep their proportions when their sum overflows', () => {
+  const d = pie3d(), s = d.groups[0].series[0];
+  s.vals = [Number.MAX_VALUE, -Number.MAX_VALUE / 2, 0, null];
+  const sc = CH.scene(d, 480, 300);
+  assert.deepEqual(sc.marks.slices.map((p) => p.a1 - p.a0).sort((a, b) => a - b), [120, 240]);
+  assert.deepEqual(sc.marks.labels, ['67%', '33%']);
+  assert.ok(!/NaN|Infinity/.test(JSON.stringify(sc.prims)));
+});
+
+test('3-D defaults: missing view3D, all explosions, negative pies and zero totals stay finite', () => {
+  for (const kind of ['pie3d', 'col3d']) {
+    const d = data(FX.CHARTS[kind].replace(/<c:view3D>[\s\S]*?<\/c:view3D>/, ''));
+    const s = d.groups[0].series[0];
+    s.vals = [-10, 0, 30, null]; s.explosion = 25; s.explode.clear();
+    const before = JSON.stringify(d), sc = CH.scene(d, 480, 300);
+    assert.ok(!/NaN|Infinity/.test(JSON.stringify(sc.prims)));
+    assert.equal(JSON.stringify(d), before, 'drawing does not mutate the description');
+    if (kind === 'pie3d') {
+      assert.equal(sc.marks.slices.length, 2);
+      assert.ok(sc.marks.slices.every((p) => p.explosion === 0.25));
+      assert.ok(near(sc.marks.pie3d.ry / sc.marks.pie3d.rx, 0.5, 0.005));
+      s.vals = [0, 0, null];
+      assert.equal(CH.scene(d, 480, 300).marks.slices.length, 0);
+    }
+  }
 });
 
 test('bounded: an oversized 3-D chart is a titled frame; a 3-D pie\'s shapes grow by a few per slice', () => {
