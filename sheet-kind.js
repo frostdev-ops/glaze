@@ -63,7 +63,7 @@
     const got = rec?.key ? await GZ_SHEET_DATA.read(get, rec.key) : null;
     if (!got) return {};
     const { book, parts } = GZ_SHEET_DATA.split(got.wb);
-    return { book, grid: rec.grid, text: rec.text, cells: rec.cells, sheets: rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
+    return { book, grid: got.rec.grid, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
   };
 
   // ---- files: .xlsx through GZ_SHEET_XLSX, .csv by the grid's reader
