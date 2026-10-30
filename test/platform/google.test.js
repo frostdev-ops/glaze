@@ -426,6 +426,17 @@ test('Disconnect stops a failed silent renewal from opening another sign-in', as
   assert.equal(h.log.launch.length, 2, 'only Connect and the silent renewal; no prompt after Disconnect');
 });
 
+test('status says where the Picker works, so From Google Drive shows only there: not Safari\'s app flow, nor a build without its key', async () => {
+  for (const flow of ['chrome', 'web']) {
+    assert.equal((await harness({ flow }).g.status()).picker, true, flow);
+    assert.equal((await harness({ flow, config: { ...REAL, apiKey: 'PLACEHOLDER' } }).g.status()).picker, false, `${flow}: no Picker key`);
+  }
+  const s = harness({ flow: 'native', config: { ...REAL, native: true }, native: async (m) => (m.type === 'google.status' ? { ok: true } : null) });
+  s.local.google = { email: 'student@icloud.com', sub: '9', flow: 'native', at: 1 };
+  assert.deepEqual(await s.g.status(), { ok: true, flow: 'native', email: 'student@icloud.com', picker: false }, 'Safari: connected, Save to Drive and Sync work');
+  assert.deepEqual(await s.g.pick(), { ok: false, why: 'browser' }, 'and Pick refuses there, which reconnecting can\'t change');
+});
+
 test('native Disconnect cancels a pending sign-in even before an account is saved', async () => {
   const h = harness({ flow: 'native', config: { ...REAL, native: true }, native: async (m) => {
     if (m.type === 'google.status') return { ok: true };
