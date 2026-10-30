@@ -111,6 +111,8 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     const pageText = (fr, n = 1) => fr.evaluate((n) => document.querySelector(`.pdfViewer .page[data-page-number="${n}"] .textLayer`)?.textContent || '', n);
     const shot = async (name) => { const f = path.join(out, name); await p.screenshot({ path: f }); return f; };
 
+    const reviewCase = process.env.PREVIEW_REVIEW_CASE;
+    if (!reviewCase) {
     // ---- an expanded preview: Blackboard's frame first, then Glaze's with page 1's text, read by Range from the frame
     await load();
     check((await view(SLIDES)).expanded === 'false' && !(await view(SLIDES)).bb, 'the Document page with its two attachments, collapsed');
@@ -275,6 +277,58 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     check(narrow.gzRect.right <= narrow.boxRect.right + 0.5 && narrow.gzRect.left >= narrow.boxRect.left - 0.5, `at 640 px the frame fits its attachment's box (${Math.round(narrow.gzRect.width)} of ${Math.round(narrow.boxRect.width)} px)`);
     check(tools.every((x) => x.left >= 0 && x.right <= x.w + 0.5), `and its toolbar's controls are in view (${JSON.stringify(tools)})`);
     check(Math.abs(narrow.gzRect.height - 680) <= 1, `at an 800 px window it is 680 px tall (${narrow.gzRect.height})`);
+
+    }
+
+    // Repeated references to one file must retain the expanded attachment's own title and focus target.
+    if (!reviewCase || reviewCase === 'duplicate') {
+      await load();
+      await p.evaluate((name) => {
+        const el = [...document.querySelectorAll('[data-bbfile]')].find((x) => JSON.parse(x.dataset.bbfile).linkName === name);
+        const copy = el.cloneNode(true), data = JSON.parse(copy.dataset.bbfile);
+        data.linkName = 'Another reference.docx'; copy.dataset.bbfile = JSON.stringify(data);
+        copy.querySelector('a').textContent = data.linkName;
+        copy.querySelector('button.preview').setAttribute('aria-label', `Preview File ${data.linkName}`);
+        el.before(copy);
+      }, LAB.name);
+      await toggle(LAB);
+      const fr = await glazeIn(LAB, 'duplicate reference');
+      check(await fr.textContent('.gp-top h1') === LAB.name, 'repeated viewerUrl: the expanded attachment owns the title');
+      await fr.focus('#gq-find-b'); await p.keyboard.press('Escape');
+      check(await p.evaluate((name) => document.activeElement?.getAttribute('aria-label') === `Preview File ${name}`, LAB.name), 'repeated viewerUrl: Esc returns to the expanded attachment');
+    }
+
+    // Ultra may reuse an iframe node for a different attachment without changing its class or style.
+    if (!reviewCase || reviewCase === 'source') {
+      await load(); await toggle(SLIDES);
+      const old = await glazeIn(SLIDES, 'before source change');
+      await p.evaluate(({ name, src }) => {
+        const box = [...document.querySelectorAll('[data-bbfile]')].find((x) => JSON.parse(x.dataset.bbfile).linkName === name);
+        box.querySelector('iframe:not(.gz-pv)').src = src;
+      }, { name: SLIDES.name, src: new URL(P.viewerUrlOf(LAB), site).href });
+      await until(async () => !old.isDetached() && await old.textContent('.gp-top h1') === LAB.name || old.isDetached(), 'old preview disposed on source change', 5000, () => view(SLIDES));
+      const fr = await glazeIn(SLIDES, 'after source change');
+      await until(async () => (await pageText(fr)).includes('Alpha page one'), 'the replacement file drawn');
+      check(true, 'a reused Blackboard iframe never keeps the previous file visible');
+    }
+
+    // pdf.js dispatches pagerendered with error even when the draw failed (pdf_viewer.mjs dispatchPageRendered).
+    if (!reviewCase || reviewCase === 'draw') {
+      await p.addInitScript(() => {
+        if (location.protocol !== 'chrome-extension:') return;
+        import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs')).then(() => import(chrome.runtime.getURL('lib/pdfjs/pdf_viewer.mjs'))).then((V) => {
+          const dispatch = V.EventBus.prototype.dispatch;
+          V.EventBus.prototype.dispatch = function (type, data) {
+            if (type === 'pagerendered') data = { ...data, error: new Error('synthetic page draw failure') };
+            return dispatch.call(this, type, data);
+          };
+        });
+      });
+      await load(); await toggle(LAB);
+      await until(async () => ['ended:viewer:draw', 'shown'].includes((await view(LAB)).state), 'draw result');
+      const v = await view(LAB);
+      check(v.bbShown && !v.gz && v.state === 'ended:viewer:draw', `a failed PDF draw keeps Blackboard's frame (${v.state})`);
+    }
 
     check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
     passed = true;
