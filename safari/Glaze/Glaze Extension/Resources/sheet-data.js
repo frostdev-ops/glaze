@@ -35,8 +35,9 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
     return o;
   };
 
-  // A cell as [c, t, v, f, s, a, rich], nothing past its last field; null where a field before it is missing.
-  const FIELDS = ['t', 'v', 'f', 's', 'a', 'rich'];
+  // A cell as [c, t, v, f, s, a, rich, cm, vm, dt], nothing past its last field; null where a field before it is missing.
+  // cm, vm and dt: a dynamic array's and a data table's (lib/sheet-xlsx.js), after the rest so older parts read the same.
+  const FIELDS = ['t', 'v', 'f', 's', 'a', 'rich', 'cm', 'vm', 'dt'];
   const cellOut = (c, x) => {
     const out = [c, ...FIELDS.map((k) => (x[k] === undefined ? null : x[k]))];
     while (out.length > 2 && out[out.length - 1] === null) out.pop();
