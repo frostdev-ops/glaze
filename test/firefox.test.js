@@ -24,7 +24,8 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     assert.equal(m.background.scripts.at(-1), 'lib/background.js');
     for (const f of m.background.scripts) assert.ok(files.has(f), `${f} is a background script but isn't packaged`);
     for (const f of ['lib/relay.js', 'lib/sessions.js', 'defaults.js']) assert.ok(m.background.scripts.includes(f), f);
-    assert.deepEqual(m.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'] });
+    // Nothing without consent; agent access sends the student's course data to an app on this computer, outside the browser.
+    assert.deepEqual(m.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'], optional: ['websiteContent'] });
     assert.equal(m.oauth2, undefined);
     assert.deepEqual(m.optional_permissions, ['nativeMessaging'], 'no identity; agent access asks for native messaging');
     assert.ok(m.web_accessible_resources.every((e) => !('use_dynamic_url' in e)));

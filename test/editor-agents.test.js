@@ -132,6 +132,15 @@ test('off by default: the switch is off, no state shows, and the worker is asked
   assert.match(read('options.html'), /<input type="checkbox" role="switch" id="agents-on" aria-label="Agent access" data-local>/, 'the switch is not checked in the page');
 });
 
+test('on Firefox, the same click also asks for the website-content consent the listing declares, and off gives both back', async () => {
+  const p = await open({ browser: 'firefox' });
+  await p.toggle('agents-on');
+  assert.deepEqual(p.asked[0].p, { permissions: ['nativeMessaging'], data_collection: ['websiteContent'] });
+  assert.equal(p.asked[0].gesture, true, 'asked inside the click, before any await');
+  await p.toggle('agents-on');
+  assert.deepEqual(p.removed, [{ permissions: ['nativeMessaging'], data_collection: ['websiteContent'] }]);
+});
+
 test('turning on asks for nativeMessaging first, in the click, then has the worker turn on; its link state shows', async () => {
   const p = await open();
   const before = p.sent.length;

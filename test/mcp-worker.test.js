@@ -446,9 +446,10 @@ test('glaze:mcp-config: only the editor\'s own top frame, and each op', async ()
   assert.deepEqual(await config(env, { op: 'revoke', app: id }), { ok: true });
   assert.deepEqual((await config(env, { op: 'apps' })).apps, []);
   await G.open(idb).pair(PEER, CLIENT.name, ['courses']);
+  await env.w.context.chrome.storage.local.set({ mcpCalls: [{ at: 1, app: id, tool: 'todo_list', group: 'courses', kind: 'read', outcome: 'ok', ms: 3 }] });
   assert.deepEqual(await config(env, { op: 'forget' }), { ok: true });
   assert.deepEqual((await config(env, { op: 'apps' })).apps, []);
-  assert.deepEqual(await config(env, { op: 'activity' }), { ok: true, rows: [] });
+  assert.deepEqual(await config(env, { op: 'activity' }), { ok: true, rows: [] }, 'Forget all apps clears the activity list too');
 
   const off = await config(env, { op: 'set', on: false });
   assert.equal(off.ok, true);
