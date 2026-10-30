@@ -31,7 +31,10 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const failed = [];
 let checks = 0;
 const ok = (value, label) => { if (value) { checks++; console.log(`ok   ${label}`); } else { failed.push(label); console.log(`FAIL ${label}`); } };
-const until = async (fn, label, ms = 15000) => { const end = Date.now() + ms; for (;;) { const v = await fn().catch(() => null); if (v) return v; if (Date.now() > end) throw new Error(`timed out: ${label}`); await pause(150); } };
+// `label` names the state waited for; a function gives it with what the last look saw.
+const until = async (fn, label, ms = 15000) => { const end = Date.now() + ms; for (;;) { const v = await fn().catch(() => null); if (v) return v; if (Date.now() > end) throw new Error(`timed out: ${typeof label === 'function' ? label() : label}`); await pause(150); } };
+// A loaded machine's bound, for a wait a quiet one ends in well under a second.
+const SLOW = 60000;
 const fixture = (f) => fs.readFileSync(path.join(root, 'test/fixtures', f), 'utf8');
 
 // ---- The packages ---------------------------------------------------------------------------------------------------
@@ -234,6 +237,44 @@ const holds = (b, c, o) => b.value(`browser.permissions.contains({ origins: [${J
 const lists = (b, c) => b.value(`browser.storage.local.get(['canvas', 'moodle', 'ultra'])`, c);
 const registered = (b, c) => b.value(`browser.scripting.getRegisteredContentScripts().then((s) => s.map((x) => x.id).sort())`, c);
 const noErrors = async (b, label) => { const e = await b.errors(); ok(e.length === 0, `${label}: no errors${e.length ? ` (${e.join(' | ')})` : ''}`); };
+// The element `selector` finds in `c`, come to rest: no animation on it or a box around it (Glaze's entrance carries a course
+// page's modules for most of a second) and its box where the last look found it. A trusted click presses 50 ms after it
+// measures, so it waits for this.
+const resting = (b, c, selector) => {
+  let was = 'not looked at';
+  return until(async () => {
+    const box = await b.value(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return 'missing';
+      if (document.getAnimations().some((a) => a.playState === 'running' && a.effect?.target?.contains(e) && a.effect.getComputedTiming().endTime < Infinity)) return 'moving';
+      const r = e.getBoundingClientRect(); return [r.x + scrollX, r.y + scrollY, r.width, r.height].map(Math.round).join(); })()`, c);
+    const still = /^[\d.,-]+$/.test(box) && box === was;
+    was = box;
+    return still;
+  }, () => `${selector} to come to rest (${was})`, SLOW);
+};
+// Download all's Allow frame in `tab`, from the click on module 73's button: the download running, the frame in the module's
+// header, Glaze's page loaded in it, and its button shown (the worker took the frame's ticket). The error names the first
+// of those not reached.
+const allowFrame = (b, tab) => {
+  const states = ['no download running', 'no frame in the module\'s header', `no ${EXT}features/allow.html in the frame`, 'its button not shown (no ticket from the worker)'];
+  let at = 0, says = '';
+  return until(async () => {
+    const [busy, label, added] = await b.value(`(() => { const d = document.getElementById('gz-dl-73'); return [!!d?.hasAttribute('data-busy'), d?.textContent ?? '', !!document.querySelector('.gz-dl-allow')]; })()`, tab);
+    says = label;
+    const frame = added && await b.frame(tab, `${EXT}features/allow.html`);
+    const shown = !!frame && await b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && !document.getElementById('allow').hidden`, frame);
+    at = [busy, added, !!frame, shown].indexOf(false);
+    return at < 0 && frame;
+  }, () => `the Allow frame: ${states[at]}, Download all ${says ? `says "${says}"` : 'idle'}`, SLOW);
+};
+// What follows a click on an Allow page's button (in `c`); the error says whether the button took the click (allow.js marks
+// it aria-disabled at once).
+const afterAllow = (b, c, fn, label) => {
+  let took = false;
+  return until(async () => {
+    took ||= await b.value(`document.getElementById('allow').getAttribute('aria-disabled') === 'true'`, c).catch(() => false);
+    return fn();
+  }, () => `${label} (the button ${took ? 'took the click' : 'never took the click'})`, SLOW);
+};
 
 const run = async () => {
   packages();
@@ -361,16 +402,16 @@ const run = async () => {
       enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), download: true } }))}).then(() => 1)`, settings);
     ok(!await holds(b, settings, `https://${FILES}/*`), `Glaze doesn't hold ${FILES}`);
     const mods = await b.open(`${INST}/courses/25/modules`);
-    await until(() => b.value(`document.querySelectorAll('.gz-dl').length >= 1 && !!document.getElementById('gz-dl-73')`, mods), 'Download all buttons');
+    await until(() => b.value(`document.querySelectorAll('.gz-dl').length >= 1 && !!document.getElementById('gz-dl-73')`, mods), 'Download all buttons', SLOW);
     // Glaze's entrance (motion.css) carries the module and its button for most of a second after the page draws them, and a
-    // loaded machine can reach the button inside it. Here the module moves for a second, farther and steadily, so a click
-    // measured while it moves lands beside the button on every run.
+    // loaded machine can reach the button inside it. Here the module moves for a second, farther and steadily: a click
+    // measured while it moves lands beside the button, so the click waits for it to rest.
     await b.value(`(document.getElementById('context_module_73').animate([{ translate: 'none' }, { translate: '0 -400px' }], 1000), 1)`, mods);
+    await resting(b, mods, '#gz-dl-73');
     await b.hover(mods, '#context_module_73 .ig-header');
     await b.click(mods, '#gz-dl-73');
-    const frame = await until(() => b.frame(mods, `${EXT}features/allow.html`), 'the Allow frame');
+    const frame = await allowFrame(b, mods);
     ok(await b.value('location.hash', frame) === `#${FILES}`, `the module's header shows Glaze's Allow frame for ${FILES}`);
-    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && !document.getElementById('allow').hidden`, frame), 'its button');
     ok(!asked.some((u) => u.includes(FILES)), 'nothing fetched from the file server before the grant');
     // The page's own word, to the content script's window and to the frame: neither counts.
     await b.value(`(postMessage({ gzAllow: '${FILES}', ok: true }, '*'), document.querySelector('.gz-dl-allow').contentWindow.postMessage({ gzAllow: '${FILES}', ok: true }, '*'), 1)`, mods);
@@ -381,9 +422,10 @@ const run = async () => {
     const apis = await b.value(`Object.keys(chrome).sort().join(', ')`, frame);
     ok(!apis.split(', ').includes('permissions'), `the framed Allow page has no permissions API (${apis})`);
     const ALLOW_TAB = `${EXT}features/allow.html#${FILES}`;
+    await resting(b, mods, '.gz-dl-allow');
     await b.click(mods, '#allow', [frame, '.gz-dl-allow']);
-    const own = await until(() => b.find(ALLOW_TAB), 'the Allow tab');
-    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && document.activeElement?.id === 'allow'`, own), 'its button');
+    const own = await afterAllow(b, frame, () => b.find(ALLOW_TAB), 'the Allow tab');
+    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && document.activeElement?.id === 'allow'`, own), 'its button', SLOW);
     ok(true, `the frame's click opens Glaze's Allow tab, its one button "Allow ${FILES}" focused`);
     ok(!await holds(b, settings, `https://${FILES}/*`) && !asked.some((u) => u.includes(FILES)), 'nothing granted or fetched before its click');
     // Read only browser-side lifecycle metadata: no debugger attached to the extension, no extension API calls while idle.
@@ -395,15 +437,17 @@ const run = async () => {
     ok(idle.state === 'running' && idle.stopped === 0 && idle.child === idle.childNow && beats.length >= 4 && beats.at(-1) - beats[0] >= 45000,
       `worker-unload: 65 s, idle timeout ${idle.timeout} ms, same context ${idle.child}, ${idle.stopped} unloads; resets ${JSON.stringify(idle.resets)}`);
     await b.click(own, '#allow');
-    await until(async () => !await b.find(ALLOW_TAB), 'the Allow tab to close');
+    await afterAllow(b, own, async () => !await b.find(ALLOW_TAB), 'the Allow tab to close');
     ok(true, 'its click answered, and the tab closed itself');
-    const said = await until(async () => { const t = await b.value(`document.getElementById('gz-dl-73').textContent`, mods); return /^Saved 1 file|Download failed/.test(t) && t; }, 'the download to end');
+    let says = '';
+    const said = await until(async () => { says = await b.value(`document.getElementById('gz-dl-73').textContent`, mods); return /^Saved 1 file|Download failed/.test(says) && says; }, () => `the download to end (Download all says "${says}")`, SLOW);
     ok(said.startsWith('Saved 1 file') && await holds(b, settings, `https://${FILES}/*`), `Firefox granted ${FILES} and the download went on ("${said}")`);
     ok(asked.includes(FILE.url), 'the worker fetched the file');
-    const zip = await until(async () => fs.readdirSync(downloads).find((f) => f.endsWith('.zip')), 'the saved zip');
+    const zip = await until(async () => fs.readdirSync(downloads).find((f) => f.endsWith('.zip')), 'the saved zip', SLOW);
     const bytes = fs.readFileSync(path.join(downloads, zip));
     ok(bytes.includes(Buffer.from(FILE.name)) && bytes.includes(Buffer.from(FILE.body)), `and the zip saved with ${FILE.name} (${zip}, ${bytes.length} bytes)`);
-    ok(!await b.frame(mods, `${EXT}features/allow.html`), 'the frame is gone');
+    await until(async () => !await b.frame(mods, `${EXT}features/allow.html`), 'the frame to go', SLOW);
+    ok(true, 'the frame is gone');
     await noErrors(b, 'Download all');
 
     // Refused: the grant taken back, Download all again; Firefox's own prompt this time, answered Cancel.
@@ -411,22 +455,24 @@ const run = async () => {
     for (const f of fs.readdirSync(downloads)) fs.rmSync(path.join(downloads, f), { force: true });
     asked.length = 0;
     await b.inChrome(`(Services.prefs.setBoolPref('extensions.webextOptionalPermissionPrompts', true), 1)`);
+    await resting(b, mods, '#gz-dl-73');
     await b.hover(mods, '#context_module_73 .ig-header');
     await b.click(mods, '#gz-dl-73');
-    const again = await until(() => b.frame(mods, `${EXT}features/allow.html`), 'the Allow frame again');
-    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && !document.getElementById('allow').hidden`, again), 'its button');
+    const again = await allowFrame(b, mods);
+    await resting(b, mods, '.gz-dl-allow');
     await b.click(mods, '#allow', [again, '.gz-dl-allow']);
-    const own2 = await until(() => b.find(ALLOW_TAB), 'the Allow tab again');
-    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && !document.getElementById('allow').hidden`, own2), 'its button');
+    const own2 = await afterAllow(b, again, () => b.find(ALLOW_TAB), 'the Allow tab again');
+    await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && !document.getElementById('allow').hidden`, own2), 'its button', SLOW);
     await b.click(own2, '#allow');
     const prompt = `PopupNotifications._currentNotifications.find((n) => n.id === 'addon-webext-permissions')`;
-    await until(() => b.inChrome(`!!${prompt}`), 'Firefox\'s prompt');
+    await afterAllow(b, own2, () => b.inChrome(`!!${prompt}`), 'Firefox\'s prompt');
     await b.inChrome(`(() => { const n = ${prompt}; n.secondaryActions[0].callback(); n.remove(); return 1; })()`);
-    await until(async () => !await b.find(ALLOW_TAB), 'the Allow tab to close');
+    await until(async () => !await b.find(ALLOW_TAB), 'the Allow tab to close', SLOW);
     ok(true, 'Cancel in Firefox\'s prompt: the Allow tab closed itself');
-    const no = await until(async () => { const t = await b.value(`document.getElementById('gz-dl-73').textContent`, mods); return /^Saved|Download failed/.test(t) && t; }, 'the download to end');
+    const no = await until(async () => { says = await b.value(`document.getElementById('gz-dl-73').textContent`, mods); return /^Saved|Download failed/.test(says) && says; }, () => `the download to end (Download all says "${says}")`, SLOW);
     ok(no === 'Download failed' && !await holds(b, settings, `https://${FILES}/*`) && !asked.some((u) => u.includes(FILES)), `refused: the panel says "${no}", nothing granted or fetched`);
-    ok(!await b.frame(mods, `${EXT}features/allow.html`) && !fs.readdirSync(downloads).length, 'the frame is gone and nothing saved');
+    await until(async () => !await b.frame(mods, `${EXT}features/allow.html`), 'the frame to go', SLOW);
+    ok(!fs.readdirSync(downloads).length, 'the frame is gone and nothing saved');
     await b.inChrome(`(Services.prefs.setBoolPref('extensions.webextOptionalPermissionPrompts', false), 1)`);
     await noErrors(b, 'Download all refused');
 
