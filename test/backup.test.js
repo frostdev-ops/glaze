@@ -938,3 +938,12 @@ test('Back up refuses a spreadsheet member larger than its ZIP reader accepts', 
     [`writerSheet:${key}:1:0`]: { rev: 1, rows } };
   assert.throws(() => B.pack({ settings: SETTINGS, local }), (e) => e.why === 'big');
 });
+
+test('Back up refuses a missing spreadsheet band instead of silently leaving the document out', async () => {
+  const a = device();
+  try {
+    const { sheet } = await kinds(a);
+    delete a.store[`writerSheet:${sheet}:1:3`];
+    assert.throws(() => B.pack({ settings: SETTINGS, local: a.store }), (e) => e.why === 'bad');
+  } finally { a.stop(); }
+});
