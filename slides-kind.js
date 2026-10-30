@@ -310,11 +310,17 @@
       findN.textContent = !term ? '' : hits.length ? t('{n} of {m}', { n: hit + 1, m: hits.length }) : t('No results');
       const x = hits[hit];
       if (x && x.slide === cur) {
-        const marks = [...canvasEl.querySelectorAll('mark.gs-hit'), ...notesEl.querySelectorAll('mark.gs-hit')], m = marks[x.nth];
-        if (m) {
-          m.classList.add('gs-hit-cur');
-          if (notesEl.contains(m) && !notesOpen) setNotes(true);
-          m.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        const groups = new Map();
+        for (const m of canvasEl.querySelectorAll('mark.gs-hit')) {
+          const id = m.getAttribute('data-gs-hit');
+          if (!groups.has(id)) groups.set(id, []);
+          groups.get(id).push(m);
+        }
+        const marks = [...groups.values(), ...[...notesEl.querySelectorAll('mark.gs-hit')].map((m) => [m])][x.nth];
+        if (marks?.length) {
+          for (const m of marks) m.classList.add('gs-hit-cur');
+          if (notesEl.contains(marks[0]) && !notesOpen) setNotes(true);
+          marks[0].scrollIntoView({ block: 'nearest', inline: 'nearest' });
         }
       }
     };
