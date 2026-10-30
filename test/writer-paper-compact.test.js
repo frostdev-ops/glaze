@@ -33,6 +33,15 @@ test('project: the paper as Ultra\'s Quill holds it, headings as its own, a quot
   assert.deepEqual(P.project(N.node('doc', null, [N.node('paragraph')])), { html: '<p><br></p>', text: '', delta: [{ insert: '\n' }] });
 });
 
+test('project: past compose\'s input limit (50k tags or 2 MB) nothing is projected, so the compact bar says so and offers Full writer', () => {
+  // Every other run bold: 22 tags a paragraph.
+  const runs = (i) => Array.from({ length: 20 }, (_, j) => t(j % 2 ? ` bold ${j} ` : `plain ${i}.${j}`, j % 2 ? [N.marks.bold.create()] : []));
+  const doc = (n) => N.node('doc', null, Array.from({ length: n }, (_, i) => N.node('paragraph', null, runs(i))));
+  assert.ok(P.project(doc(2000)), '44k tags fit');
+  assert.equal(P.project(doc(2600)), null, '57k tags don\'t');
+  assert.equal(P.project(N.node('doc', null, [N.node('paragraph', null, [t('x'.repeat(S.MAX_INPUT + 1))])])), null, 'nor over 2 MB of text');
+});
+
 // lib/writer-main.js in the page's world, over a stand-in Quill: what it answers for the projection's ops.
 const main = (delta) => {
   const listeners = {}, said = [];

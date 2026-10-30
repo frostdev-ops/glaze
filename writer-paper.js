@@ -1676,7 +1676,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       pages: () => (compact ? null : layout?.pages.length || 0),
       // The view: full(on) as the switch does (writer.full saved); compact() whether the compose box shows the paper.
       full: (on) => setView(on !== false, { save: true }), compact: () => compact,
-      flush: (request) => flush(request), resume: (request) => resume(request),
+      flush: (request, action) => flush(request, action), resume: (request, reason) => resume(request, reason),
       // A question in the paper's toast: items [{ label, run }], the first the default; gone() when it goes unanswered.
       ask: (text, items, gone) => toast(text, null, { ask: '', items, gone }),
       paragraph: (opener) => paraDialog(opener || paraB), pageSetup: pageDialog,
@@ -1694,29 +1694,65 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     let loaded = false, projecting = false, holding = false, switching = null, flushing = null;
     const mine = []; // writer.full values this frame saved, heard back from storage as they went
     const caretY = () => { try { return Math.round(view.coordsAtPos(view.state.selection.head).top); } catch { return null; } };
+    // The compact bar's line, one line: Saving… while Ultra's Submit or Save and Close waits on the save; why one didn't go,
+    // until the next edit; and, while the paper is past what Ultra's text box takes (compose's input limit: project()
+    // null, so nothing more goes into it), that, the Full writer switch beside it marked, whose .docx has no such limit.
+    const said = boxEl ? h('span', { class: 'gp-said', role: 'status' }) : null;
+    let saying = '';
+    const tell = (kind, text = '') => {
+      if (!said) return;
+      saying = kind;
+      said.textContent = said.title = text;
+      said.dataset.kind = kind;
+      for (const b of switches) b.toggleAttribute('data-offer', kind === 'long');
+    };
+    const tooLong = () => tell('long', t('Too long for Ultra’s text box. Use Full writer.'));
     // The compact box's text for Ultra's: once per turn of edits, as compose's change (writer.js) is.
     const projectSoon = () => {
       if (!compact || !loaded || holding || flushing || projecting || !host.say) return;
       projecting = true;
-      queueMicrotask(() => { projecting = false; const p = compact && loaded && !holding && !flushing && project(view.state.doc); if (p) host.say({ type: 'change', ...p }); });
+      queueMicrotask(() => {
+        projecting = false;
+        if (!compact || !loaded || holding || flushing) return;
+        const p = project(view.state.doc);
+        if (p) { host.say({ type: 'change', ...p }); if (saying) tell(''); } else if (saying !== 'long') tooLong();
+      });
     };
-    const resume = (request) => {
-      if (!flushing || flushing.request !== request) return;
-      const f = flushing; flushing = null;
-      root.inert = f.root; boxEl.inert = f.box;
+    // While Ultra's button waits, the box takes no input; the bar's line stays out of that, so it is still read out.
+    const held = () => [...boxEl.children].flatMap((c) => (c.classList.contains('gw-bar') ? [...c.children].filter((x) => x !== said) : [c]));
+    const release = (f) => {
+      flushing = null;
+      root.inert = f.root;
+      for (const [x, was] of f.held) x.inert = was;
       view.setProps({ editable: f.editable });
       if (f.next) setView(f.next.full, f.next.options);
     };
-    const flush = async (request) => {
+    // reason (the page's, features/writer.js): Ultra's button didn't go after a save.
+    const resume = (request, reason) => {
+      if (!flushing || flushing.request !== request) return;
+      release(flushing);
+      const why = { text: () => t('The text didn’t go into Ultra’s text box. Nothing was submitted.'), submit: () => t('Ultra’s Submit didn’t turn on. Nothing was submitted.'), page: () => t('The attempt page changed. Nothing was submitted.') }[reason];
+      if (why) tell('error', why()); else if (saying === 'saving') tell('');
+    };
+    // action: 'submit' or 'save' (Ultra's Save and Close).
+    const flush = async (request, action) => {
       if (typeof request !== 'string' || flushing || switching || !compact || !loaded || holding || view.composing) {
         host.say?.({ type: 'compact:flushed', request, ok: false }); return;
       }
-      const f = flushing = { request, editable: view.props.editable, root: root.inert, box: boxEl.inert }, doc = view.state.doc;
-      view.setProps({ editable: () => false }); root.inert = boxEl.inert = true;
+      const f = flushing = { request, editable: view.props.editable, root: root.inert, held: held().map((x) => [x, x.inert]) }, doc = view.state.doc;
+      view.setProps({ editable: () => false }); root.inert = true;
+      for (const [x] of f.held) x.inert = true;
+      tell('saving', t('Saving…'));
       const saved = await save();
-      if (flushing !== f) return; // timed out, closed, or replaced
-      const p = saved && doc === view.state.doc && project(doc);
-      host.say?.({ type: 'compact:flushed', request, ok: !!p, ...(p || {}) });
+      if (flushing !== f) return; // closed or replaced
+      const same = doc === view.state.doc, p = saved && same && project(doc);
+      if (!p) {
+        // Nothing goes to Ultra: the box back to the student at once, and why.
+        release(f);
+        if (saved && same) { tooLong(); switches.find((b) => b.getClientRects().length)?.focus({ preventScroll: true }); }
+        else tell('error', !saved ? (action === 'save' ? t('Not saved. Try again in a moment.') : t('The paper could not be saved. Nothing was submitted.')) : t('The attempt page changed. Nothing was submitted.'));
+      }
+      host.say?.({ type: 'compact:flushed', request, ok: !!p, ...(p || { reason: saying === 'long' ? 'long' : 'save' }) });
     };
     const setView = async (full, { save: persist = false, from = null } = {}) => {
       if (switching) return switching.then(() => setView(full, { save: persist, from }));
@@ -1737,6 +1773,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (focus) setFocus(false);
       close();
       compact = next;
+      if (!compact) tell('');
       document.documentElement.dataset.view = compact ? 'compact' : 'full';
       for (const b of switches) b.setAttribute('aria-checked', String(!compact));
       if (compact) {
@@ -1782,7 +1819,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // the caret, Versions, Open from Documents and Documents, labelled again in the page's language as it opens.
     const more = boxEl && document.getElementById('more');
     if (more) {
-      more.before(fullSwitch());
+      more.before(said, fullSwitch());
       const panel = async (name) => { await setView(true, { save: true }); if (!compact) { tabs[name].click(); tabs[name].focus(); } };
       const items = [['Checks', () => panel('checks')], ['Feedback', () => panel('feedback')], ['Cite', () => globalThis.GZ_WRITER_CITE?.open?.({ anchor: more })], ['Versions', () => versions(more)], ['Open from Documents', () => fromDocsSheet()], ['Documents', () => open2('papers.html')]]
         .map(([label, run]) => [host.item?.(t(label), run), label]);
@@ -1813,8 +1850,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   if (frame) {
     const listeners = [];
     frame.on('context', (c) => { for (const fn of listeners) fn(c); });
-    frame.handle('compact:flush', (m) => current ? current.flush(m.request) : frame.say({ type: 'compact:flushed', request: m.request, ok: false }));
-    frame.handle('compact:resume', (m) => current?.resume(m.request));
+    frame.handle('compact:flush', (m) => current ? current.flush(m.request, m.action === 'save' ? 'save' : 'submit') : frame.say({ type: 'compact:flushed', request: m.request, ok: false }));
+    frame.handle('compact:resume', (m) => current?.resume(m.request, typeof m.reason === 'string' ? m.reason : null));
     frame.handle('focus-mode', (m) => current?.focused(m.on === true));
     frame.on('ready', (editor) => {
       if (frame.mode() !== 'paper') return;

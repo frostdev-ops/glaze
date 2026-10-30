@@ -3445,6 +3445,7 @@
   "Ruler": "Lineal",
   "Light page": "Helle Seite",
   "Full writer": "Voller Writer",
+  "Too long for Ultra’s text box. Use Full writer.": "Zu lang für das Textfeld von Ultra. Nutzen Sie den vollen Writer.",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "Das Lineal über der Seite mit den Einzügen und Tabstopps des Absatzes, die Sie ziehen können. Aus beginnt die Seite direkt unter der Symbolleiste.",
   "Versions kept": "Behaltene Versionen",
   "How many earlier versions each paper keeps on this device, the oldest going first. The last version you submitted always stays.": "Wie viele frühere Versionen jede Arbeit auf diesem Gerät behält; die älteste geht zuerst. Die zuletzt abgegebene Version bleibt immer.",
