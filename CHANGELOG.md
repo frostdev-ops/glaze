@@ -10,14 +10,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
-- Blackboard: **Glaze Writer** in discussion, journal, message, assignment and test boxes, with Blackboard's own editor one click away in its ⋯ menu. Discussions and messages get a selection toolbar, word and source targets from the prompt, and Ctrl/⌘+Enter to post. Assignments open in the same light editor and Blackboard's own Submit sends them; **Full writer** turns the box into real pages in MLA 9, APA 7, Chicago 17, Blank or your own format, with format checks, footnotes, versions, .docx import and export, and a submit sheet that attaches the .docx. Spelling, grammar and autocorrect run on your device; citations look up a DOI, ISBN or web address when you click, and sources stay with each assignment or discussion. Tab completion and AI feedback run only when turned on in Settings → AI. Tests get proofing only. Papers, documents and sources are in **Back up…**.
-- **Documents**: every paper and document in one place, from the popup, Ctrl/⌘+K, Glaze's bar, or beside the bar in Blackboard, Canvas and Moodle. Start one (Blank, MLA, APA, Chicago) or import a Word file; search, filter by course, rename, copy, export a .docx. Deleted documents wait 30 days in **Trash**. The page wears your Look.
+- Blackboard: **Glaze Writer** in discussion, journal, message, assignment and test boxes, with Blackboard's own editor one click away in its ⋯ menu. Discussions and messages get a selection toolbar, targets from the prompt and Ctrl/⌘+Enter to post. Assignments open in the same light editor and Blackboard's own Submit sends them; **Full writer** turns the box into real pages in MLA 9, APA 7, Chicago 17, Blank or your own format, with format checks, footnotes, versions, and .docx import, export and submit. Spelling, grammar and autocorrect run on your device; citations look up a DOI, ISBN or web address when you click. Tab completion and AI feedback run only when turned on in Settings → AI. Tests get proofing only. Papers, documents and sources are in **Back up…**.
+- **Documents**: every paper and document in one place, from the popup, Ctrl/⌘+K or Glaze's bar in Blackboard, Canvas and Moodle. Start one (Blank, MLA, APA, Chicago) or import a Word file; search, filter by course, rename, copy, export a .docx. Deleted documents wait 30 days in **Trash**. The page wears your Look.
 - Writer's pages follow a dark Look; **Light page** keeps them white.
 - Mods: `glaze.documents`, with the `documents` and `documents.read` permissions.
 
 ### Changed
 
-- Settings → AI: providers by name (OpenAI, Anthropic, Google Gemini, OpenRouter, xAI, Mistral, Groq, DeepSeek) beside the model on this device; one model for everything or one per feature; your own OpenAI-compatible endpoints in Advanced. An endpoint set up before moves over by itself.
+- Settings → AI: named providers (OpenAI, Anthropic, Gemini, OpenRouter, xAI, Mistral, Groq, DeepSeek) beside the on-device model, one model for all features or one each, and your own endpoints in Advanced; an existing endpoint moves over.
 - Motion starts at Expressive. Updating moves Subtle to Expressive once; Off stays Off.
 - Text pasted or imported from Word keeps a colour only where it reads on the page.
 - Settings → Writer: Clear all names and removes papers and documents, Trash too.
