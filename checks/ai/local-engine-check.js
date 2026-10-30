@@ -766,9 +766,10 @@ function pageLib() {
   const apiChecks = async (o, g) => {
     const out = [], say = (pass, what) => { out.push({ pass, what }); log(`${pass ? 'ok  ' : 'FAIL'} api        ${what}`); };
     const m = await loadModel(g, o, { context: 64, chunk: 8 }), V = m.engine.config.vocab, W = Math.ceil(V / 32);
-    const ref = R.session(await R.load(g));
+    const loaded = await R.load(g), ref = R.session(loaded);
     const prompt = Array.from({ length: 20 }, (_, i) => (i * 37 + 5) % V);
     const logits = ref.forward(prompt);
+    const zero = await m.snapshot();
     const snap = await m.prefill(prompt, { snapshot: true });
     const only = (ids) => { const w = new Uint32Array(W); for (const i of ids) w[i >> 5] |= 1 << (i & 31); return w; };
     // Hot sampling (the tiny random model's greedy choice is nearly always the same id) makes runs differ when state does.
@@ -817,6 +818,24 @@ function pageLib() {
     for (let i = 0; i < 8; i++) f.push(await fresh.decode({ sampler: sampled, random: fd }));
     fresh.release(); base.drop();
     say(a.join() === b.join() && c.join() === d.join() && c.join() === f.join(), `snapshot, decode 8, restore, decode 8: the same tokens as each other and as a fresh model, greedy (${a.join(' ')}) and seeded hot top-k (${c.join(' ')})`);
+    // embeds: prompt positions 5..8 (across the chunk boundary at 8) given as their embedding rows from a GPU buffer, the
+    // ids there a placeholder: the same tokens as the prompt itself; without the rows, different ones.
+    {
+      const E = m.engine.config.nEmbd, rows = new Float32Array(4 * E);
+      for (let j = 0; j < 4; j++) R._ops.row(loaded.weights.embd, prompt[5 + j], rows.subarray(j * E, (j + 1) * E));
+      const eb = m.device.createBuffer({ size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
+      m.device.queue.writeBuffer(eb, 0, rows);
+      const holed = prompt.map((t, i) => (i >= 5 && i < 9 ? 0 : t));
+      await m.restore(zero);
+      await m.prefill(holed, { embeds: [{ at: 5, tokens: 4, buffer: eb }] });
+      const withRows = await run(8, sampled, draw());
+      await m.restore(zero);
+      await m.prefill(holed);
+      const without = await run(8, sampled, draw());
+      eb.destroy();
+      say(withRows.join() === c.join() && without.join() !== c.join(), `embeds at positions 5..8 (across a chunk) give the prompt's own tokens (${withRows.join(' ')}); the placeholder alone gives others (${without.join(' ')})`);
+    }
+    zero.drop();
     // Cancel inside a long prefill: it stops at a chunk boundary with the reason given.
     await m.restore(snap);
     const ctl = new AbortController(), why = new Error('cancelled by the check');

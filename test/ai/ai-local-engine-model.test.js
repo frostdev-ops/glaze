@@ -123,3 +123,23 @@ test('load failures say why: model, webgpu, memory; an abort rejects with its re
   await assert.rejects(a.load(model(), { signal: c.signal }), (e) => e === why);
   assert.equal(a.buffers.filter((b) => !b.destroyed).length, 0);
 });
+
+test('embeds must lie inside the feed and come from a big enough COPY_SRC buffer; a valid one copies over the lookup', async () => {
+  const h = host(), m = await h.load(model(), { context: 32, chunk: 4 });
+  const E = 256, ok = h.device.createBuffer({ size: 2 * E * 4, usage: 2 | 4 }), noSrc = h.device.createBuffer({ size: 2 * E * 4, usage: 4 });
+  await assert.rejects(m.prefill([1, 2, 3], { embeds: [{ at: 2, tokens: 2, buffer: ok }] }), /inside the feed/);
+  await assert.rejects(m.prefill([1, 2, 3], { embeds: [{ at: 0, tokens: 2, buffer: noSrc }] }), /COPY_SRC/);
+  await assert.rejects(m.prefill([1, 2, 3], { embeds: [{ at: 0, tokens: 3, buffer: ok }] }), /COPY_SRC of at least/);
+  await assert.rejects(m.prefill([1, 2, 3], { embeds: [{ at: 0, tokens: 2, buffer: {} }] }), /GPUBuffer/);
+  assert.equal(m.pos, 0);
+  const copies = [];
+  const make = h.device.createCommandEncoder;
+  h.device.createCommandEncoder = () => { const enc = make(); enc.copyBufferToBuffer = (src, from, dst, to, size) => copies.push({ src, from, to, size }); return enc; };
+  // A 6-token feed in chunks of 4: rows 1..2 lie in the first chunk; rows 3..4 split, row 3 to the first chunk's last row
+  // and row 4 to the second chunk's first.
+  await m.prefill([1, 0, 0, 4, 5, 6], { embeds: [{ at: 1, tokens: 2, buffer: ok }] });
+  await m.prefill([1, 2, 3, 0, 0, 6], { embeds: [{ at: 3, tokens: 2, buffer: ok }] });
+  const mine = copies.filter((x) => x.src === ok).map(({ from, to, size }) => ({ from, to, size }));
+  assert.deepEqual(mine, [{ from: 0, to: E * 4, size: 2 * E * 4 }, { from: 0, to: 3 * E * 4, size: E * 4 }, { from: E * 4, to: 0, size: E * 4 }]);
+  m.release();
+});

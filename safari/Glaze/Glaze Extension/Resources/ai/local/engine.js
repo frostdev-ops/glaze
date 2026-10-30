@@ -543,7 +543,10 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // row, by the GPU. → { logits, id, top }.
       // 'keep': the last row's logits stay on the GPU (B.last) for pick(). signal: checked before each chunk; an abort leaves
       // the chunks already fed in the caches.
-      const forward = async (tokens, { logits = 'last', argmax = false, topK: k = 0, onRows, profile = false, signal } = {}) => {
+      // embeds: [{ at, tokens, buffer }]: the rows at positions at .. at + tokens − 1 of this feed come from buffer (a
+      // GPUBuffer on this device with COPY_SRC, tokens × embedding_length f32, as a vision encoder writes them) instead of the
+      // token embedding: one ordinary position each, causal.
+      const forward = async (tokens, { logits = 'last', argmax = false, topK: k = 0, onRows, profile = false, signal, embeds = [] } = {}) => {
         if (life.closed()) fail('session destroyed');
         if (lost) fail(`device lost: ${lost.message}`);
         if (busy) fail('a forward step is running');
@@ -551,6 +554,10 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         if (pos + tokens.length > ctx) fail(`context of ${ctx} positions is full`);
         for (const id of tokens) if (!Number.isInteger(id) || id < 0 || id >= V) fail(`token ${id}`);
         if (!Number.isInteger(k) || k < 0 || k > 64) fail('topK: 0 or an integer from 1 to 64');
+        for (const e of embeds) {
+          if (!Number.isInteger(e?.at) || !Number.isInteger(e.tokens) || e.at < 0 || e.tokens < 1 || e.at + e.tokens > tokens.length) fail('embeds: at and tokens inside the feed');
+          if (!(e.buffer instanceof GPUBuffer) || e.buffer.size < e.tokens * E * 4 || !(e.buffer.usage & S.COPY_SRC)) fail(`embeds: a GPUBuffer with COPY_SRC of at least ${E * 4} bytes a token`);
+        }
         if (logits === 'all') allMany();
         busy = true;
         try {
@@ -571,10 +578,22 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
             fill([body, ...tail], T);
             const enc = device.createCommandEncoder();
             let times = null;
-            if (profile && device.features.has('timestamp-query')) times = await timed(enc, [body, ...tail], T);
+            // Rows from embeds overwrite the lookup's, between it and the first layer.
+            const copies = embeds.flatMap((e) => {
+              const lo = Math.max(e.at, i), hi = Math.min(e.at + e.tokens, i + T);
+              return lo < hi ? [{ buffer: e.buffer, from: (lo - e.at) * E * 4, to: (lo - i) * E * 4, size: (hi - lo) * E * 4 }] : [];
+            });
+            if (profile && device.features.has('timestamp-query') && !copies.length) times = await timed(enc, [body, ...tail], T);
             else {
-              const pass = enc.beginComputePass();
-              encode(pass, body, T);
+              const lookup = copies.length ? body.filter((d) => d.kernel === 'embed') : [];
+              let pass = enc.beginComputePass();
+              if (lookup.length) {
+                encode(pass, lookup, T);
+                pass.end();
+                for (const r of copies) enc.copyBufferToBuffer(r.buffer, r.from, B.x, r.to, r.size);
+                pass = enc.beginComputePass();
+              }
+              encode(pass, lookup.length ? body.filter((d) => d.kernel !== 'embed') : body, T);
               for (const l of tail) encode(pass, l, T);
               pass.end();
             }
@@ -740,7 +759,9 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   // ---- the model a host drives (ai/local/host.js): one sequence on the GPU ------------------------------------------------
   // load(gguf, { context, chunk, signal, onProgress, ...create's options }) → { context, prefill, decode, snapshot, restore,
   // release }. Load errors carry .reason: 'webgpu', 'memory', 'lost' or 'model'; an abort rejects with the signal's reason.
-  //   prefill(ids, { snapshot, signal }): feeds ids (after the token decode last chose, which is part of the sequence);
+  //   prefill(ids, { snapshot, signal, embeds }): feeds ids (after the token decode last chose, which is part of the sequence);
+  //     embeds [{ at, tokens, buffer }]: ids[at .. at + tokens − 1] take their rows from buffer (on model.device, COPY_SRC,
+  //     tokens × embedding_length f32: a picture's embeddings) instead of the token embedding;
   //     → a snapshot of the state after them when snapshot is set, else undefined. The signal is checked before each chunk.
   //   decode({ sampler: { temperature, topK, topP, repetitionPenalty }, mask, signal, random }) → the next token's id,
   //     from the last fed position's logits: penalty (the last 64 tokens), then mask (a Uint32Array of ceil(vocab / 32)
@@ -792,10 +813,14 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     const model = {
       context,
       engine,
-      async prefill(ids, { snapshot: snap = false, signal: sig, onRows } = {}) {
+      // The device embeds buffers must be made on.
+      get device() { return engine.device; },
+      async prefill(ids, { snapshot: snap = false, signal: sig, onRows, embeds } = {}) {
         live(); halt(sig);
         if (!Array.isArray(ids) && !ArrayBuffer.isView(ids)) fail('prefill: token ids');
-        await feed(Array.from(ids), onRows ? { logits: 'all', onRows, signal: sig } : { logits: 'keep', signal: sig });
+        // embeds index ids; the pending token, fed first, moves them one along.
+        const shifted = embeds?.length ? embeds.map((e) => ({ ...e, at: e.at + (pending === null ? 0 : 1) })) : undefined;
+        await feed(Array.from(ids), { ...(onRows ? { logits: 'all', onRows } : { logits: 'keep' }), signal: sig, embeds: shifted });
         halt(sig);
         if (!snap) return undefined;
         try {
