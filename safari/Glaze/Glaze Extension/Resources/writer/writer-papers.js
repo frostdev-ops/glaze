@@ -109,7 +109,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
           return r.value;
         } finally { clearTimeout(timer); }
       };
-      const { submitted: _, merge: __, reown: ___, ...reads } = local; // submit dispatch, backup replay and owners are worker-only
+      const { submitted: _, merge: __, reown: ___, keep: ____, ...reads } = local; // submit dispatch, backup replay, owners and sync's versions are worker-only
       return { ...reads, get: async (k) => { const p = await local.get(k); seen.set(k, p?.revision || 0); return p; },
         save: (k, patch, options = {}) => turn(k, () => send('save', [k, patch, { ...options, base: options.base ?? seen.get(k) }])),
         restore: (k, id) => turn(k, () => send('restore', [k, id])), remove: (k) => turn(k, () => send('remove', [k])),
@@ -359,6 +359,25 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     });
     // The store told again what paper k holds (after a restore committed its records).
     const reown = (k) => serial(k, () => owned(k, null, null));
+    // Another copy of paper k kept as one of its versions, the paper itself unchanged (lib/drive-sync.js: Drive's side of a
+    // conflict). value: a record (its file already in the store), or a spreadsheet's packed { kind: 'sheet', gz, cells }.
+    // → the version's metadata, or null when there is no paper k.
+    const keep = (k, value, reason = 'conflict') => serial(k, async () => {
+      const paper = await get(PAPER + k);
+      if (!paper) return null;
+      const t = now(), sheet = value?.kind === 'sheet';
+      if (sheet && typeof value.gz !== 'string') throw new Error('no such version');
+      const v = sheet ? { id: `${t.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at: t, reason, kind: 'sheet', cells: Number.isSafeInteger(value.cells) ? value.cells : 0, bytes: value.gz.length, gz: value.gz }
+        : snapshot(value, reason, t);
+      const limit = sheet || paper.kind === 'sheet' ? CAP.packed : CAP.bytes;
+      if (v.bytes > limit) throw new RangeError('version size limit');
+      const list = await cap([v, ...(await versionsOf(k))], limit);
+      await claim(k, [v]);
+      await store.set({ [VERSIONS + k]: list });
+      await owned(k, null, list);
+      const { doc, file, thumb, gz, ...meta } = v;
+      return meta;
+    });
 
     // A student's presets (writer/writer-styles.js custom), kept valid.
     const presets = async (scope) => ((scope && (await get(PRESETS + scope))) || []).filter((x) => globalThis.GZ_WRITER_STYLES?.custom ? GZ_WRITER_STYLES.custom(x) : true);
@@ -420,7 +439,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       }
     };
     const api = { get: (k) => get(PAPER + k).then((p) => { seen.set(k, p?.revision || 0); return p || null; }), save, submitted, versions, version, restore, list, remove, presets, savePreset, removePreset, merge,
-      trash: (k) => mark(k, true), untrash: (k, options) => mark(k, false, options), purge, migrate, reown };
+      trash: (k) => mark(k, true), untrash: (k, options) => mark(k, false, options), purge, migrate, reown, keep };
     if (!store) throw new Error('paper storage unavailable');
     return api;
   };

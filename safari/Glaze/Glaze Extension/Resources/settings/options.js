@@ -1204,6 +1204,34 @@ GZ_UI.load().then((s) => {
       } finally { gdBusy = false; }
     });
     chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.google) gdLoad(); });
+
+    // Sync to Google Drive (documents/drive-sync.js and background/drive-store.js, through the worker: 'glaze:driveSync'): shown
+    // while Drive is connected, on once it connects (the worker turns it on) unless turned off here, with one line of how it
+    // stands (storage.local driveSync): syncing, when it last synced, or what stopped it and the fix.
+    const SYNC_SAYS = { auth: 'Connect Google Drive again to keep syncing.', connect: 'Connect Google Drive again to keep syncing.', account: 'Connect Google Drive again to keep syncing.',
+      scope: 'Connect Google Drive again to keep syncing.', permission: 'Connect Google Drive again to keep syncing.', quota: 'Your Google Drive is full. Free up space to keep syncing.',
+      folder: "The Glaze folder is in Google Drive's trash. Restore it to keep syncing.", busy: 'Google Drive is busy. Glaze will try again soon.',
+      network: "Couldn't reach Google Drive. Glaze will try again soon.", offline: "Couldn't reach Google Drive. Glaze will try again soon." };
+    const gsWhen = (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at);
+    const gsRender = async () => {
+      const connected = !$('#gdrive').hidden && !!$('#gdrive-who').textContent;
+      $('#gdrive-sync').hidden = !connected;
+      if (!connected) return;
+      const st = (await chrome.storage.local.get('driveSync')).driveSync || {};
+      $('#gdrive-sync-on').checked = st.on === true;
+      $('#gdrive-sync-said').textContent = st.on !== true ? '' : st.busy && Date.now() - st.busy < 120e3 ? t('Syncing…')
+        : st.problem ? t(SYNC_SAYS[st.problem] || "Couldn't sync. Glaze will try again soon.") : st.last ? t('Last synced {when}.', { when: gsWhen(st.last) }) : '';
+    };
+    new MutationObserver(() => { gsRender(); }).observe($('#gdrive-who'), { childList: true, characterData: true, subtree: true });
+    new MutationObserver(() => { gsRender(); }).observe($('#gdrive'), { attributes: true, attributeFilter: ['hidden'] });
+    gsRender();
+    $('#gdrive-sync-on').addEventListener('change', async (e) => {
+      const on = e.currentTarget.checked;
+      const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:driveSync', op: 'set', on }, (x) => res(chrome.runtime.lastError ? { ok: false, why: 'network' } : x || { ok: false })));
+      if (!r.ok && on && !(await chrome.storage.local.get('driveSync')).driveSync?.on) $('#gdrive-sync-on').checked = false;
+      gsRender();
+    });
+    chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.driveSync) gsRender(); });
   }
 
   // Another surface changed something: read after our queued saves, and never apply a read older than an edit.
