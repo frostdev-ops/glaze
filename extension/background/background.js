@@ -3374,6 +3374,110 @@ chrome.runtime.onConnect.addListener((p) => {
   });
 });
 
+// Sync Documents (documents/drive-sync.js): Settings' switch (Settings → Writer → Papers, only while Drive is connected), and the
+// runs: when it is turned on, when the browser starts or comes back online, when Documents or Writer asks whether Drive is
+// connected (at most every 30 s), and 5 s after the last of a run of saves. Its requests use the token above without ever
+// asking the student to sign in. A document's file is built here: a paper's .docx (writer/writer-docx.js), a spreadsheet's
+// .xlsx (documents/sheets/sheet-xlsx.js), a PDF's or deck's own bytes from the file store; each loaded the first time a push needs it.
+globalThis.addEventListener?.('install', () => importScripts('../documents/drive-sync.js', '../writer/writer-color.js', '../core/zip.js', '../core/doctext.js', '../writer/writer-docx.js', '../writer/writer-objects-docx.js', '../writer/writer-format.js', '../writer/writer-submit.js',
+  '../documents/sheets/sheet-model.js', '../documents/sheets/sheet-numfmt.js', '../documents/sheets/sheet-formula.js', '../documents/sheets/sheet-xlsx.js', '../documents/sheets/sheet-data.js'));
+let driveSync = null;
+const driveSyncDocx = () => { if (!globalThis.GZ_WRITER_DOCX) importScripts('../writer/writer-styles.js', '../vendor/pm.js', '../writer/writer-schema.js', '../writer/writer-color.js', '../core/zip.js', '../core/doctext.js', '../writer/writer-docx.js', '../writer/writer-objects-docx.js', '../writer/writer-format.js', '../writer/writer-submit.js'); };
+const driveSyncSheets = () => { if (!globalThis.GZ_SHEET_XLSX) importScripts('../documents/sheets/sheet-model.js', '../documents/sheets/sheet-numfmt.js', '../documents/sheets/sheet-formula.js', '../core/doctext.js', '../core/zip.js', '../documents/sheets/sheet-xlsx.js', '../documents/sheets/sheet-data.js'); };
+const driveSyncRows = (parts) => new Map(Object.entries(parts || {}).map(([n, p]) => [n, p.rows]));
+const openDriveSync = () => {
+  if (driveSync) return driveSync;
+  driveLib();
+  if (!globalThis.GZ_DRIVE_SYNC) importScripts('../documents/drive-sync.js');
+  const turn = (f) => (brokerTurn ||= GZ_CARDS.queue())(f);
+  const P = () => (openPapers(), GZ_WRITER_PAPERS), PAPER = () => P().KEYS.PAPER;
+  const fileBytes = async (ref) => {
+    const parts = [];
+    let n = 0;
+    try { await openDocFiles().read(ref.hash, (c) => { parts.push(c); n += c.length; }); } catch { return null; }
+    const out = new Uint8Array(n);
+    let at = 0;
+    for (const p of parts) { out.set(p, at); at += p.length; }
+    return out;
+  };
+  const safeTitle = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+  driveSync = GZ_DRIVE_SYNC.create({
+    drive: () => GZ_DRIVE.create({ fetch: (u, init) => fetch(u, init), token: (o) => openGoogle().token(o), account: () => openGoogle().account(),
+      drop: (token) => openGoogle().drop(token), allowed: async () => googleLib().ON, interactive: false }),
+    account: async () => (googleLib().ON ? openGoogle().account() : null),
+    store: { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o), remove: (k) => chrome.storage.local.remove(k),
+      keys: async () => (typeof chrome.storage.local.getKeys === 'function' ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null))) },
+    papers: {
+      get: async (k) => (await chrome.storage.local.get(PAPER() + k))[PAPER() + k] || null,
+      list: () => openPapers().list(),
+      save: (k, patch, o) => turn(() => openPapers().save(k, patch, o)),
+      trash: (k) => turn(() => openPapers().trash(k)),
+      untrash: (k) => turn(() => openPapers().untrash(k)),
+      keep: (k, v) => turn(() => openPapers().keep(k, v)),
+    },
+    // A spreadsheet's parts as its record names them, each written by that revision; else a save landed between the reads.
+    parts: async (k, rec) => {
+      const names = Object.keys(rec.parts || {}), keys = names.map((n) => `${P().KEYS.PART}${k}:${n}`), got = names.length ? await chrome.storage.local.get(keys) : {};
+      return Object.fromEntries(names.map((n, i) => {
+        const part = got[keys[i]];
+        if (!part || part.rev !== rec.parts[n]) throw new GZ_DRIVE_SYNC.Fail('stale');
+        const { rev, ...rest } = part;
+        return [n, rest];
+      }));
+    },
+    files: { has: async (h) => !!(await openDocFiles().stat(h)), put: (bytes, type) => openDocFiles().put(bytes, type) },
+    exportOf: async (k, rec, parts) => {
+      const kind = rec.kind || 'paper', K = driveLib() && GZ_DOC_KINDS.KINDS;
+      if (kind === 'paper') {
+        if (!rec.doc) return null;
+        driveSyncDocx();
+        const f = GZ_WRITER_STYLES.get(rec.format), surname = GZ_WRITER_FORMAT.surname(rec.doc, f), out = GZ_WRITER_DOCX.exportDocx(rec.doc, { format: f, surname, title: rec.title });
+        return { name: GZ_WRITER_SUBMIT_LIB.fileName({ surname, title: rec.title, fallback: 'Paper' }), mime: out.type, bytes: out.bytes };
+      }
+      if (kind === 'sheet') {
+        if (!rec.book) return null;
+        driveSyncSheets();
+        const wb = GZ_SHEET_DATA.join(rec.book, driveSyncRows(parts)), xlsm = GZ_SHEET_XLSX.extension?.(wb) === 'xlsm';
+        return { name: `${safeTitle(rec.title) || 'Spreadsheet'}${xlsm ? '.xlsm' : '.xlsx'}`, mime: xlsm ? 'application/vnd.ms-excel.sheet.macroEnabled.12' : K.sheet.mime, bytes: await GZ_SHEET_XLSX.write(wb) };
+      }
+      if (!P().isRef(rec.file)) return null;
+      const bytes = await fileBytes(rec.file);
+      if (!bytes) return null;
+      const ext = kind === 'slides' ? (rec.ext === '.ppsx' ? '.ppsx' : '.pptx') : '.pdf';
+      return { name: `${safeTitle(rec.title) || (kind === 'pdf' ? 'PDF' : 'Slides')}${ext}`, mime: rec.file.type || K[kind].mime, bytes };
+    },
+    pack: async (rec, parts) => { driveSyncSheets(); return GZ_SHEET_DATA.pack(GZ_SHEET_DATA.join(rec.book, driveSyncRows(parts))); },
+    hash: async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map((b) => b.toString(16).padStart(2, '0')).join(''),
+    copyName: (title) => {
+      try {
+        if (!sessionWords) { if (typeof GZ_I18N === 'undefined') importScripts('../core/i18n.js'); sessionWords = GZ_I18N; }
+        const lang = chrome.i18n.getUILanguage(), file = sessionWords.file(lang);
+        if (file && /^i18n\/(de|es|fr|nl|pt-BR)\.js$/.test(file) && !globalThis.GZ_LANGS?.[file.slice(5, -3)]) importScripts(`../${file}`);
+        return sessionWords.t('{title} (Drive copy)', { title }, lang);
+      } catch { return `${title} (Drive copy)`; }
+    },
+  });
+  return driveSync;
+};
+// Whether Sync is on, read as each trigger fires: nothing of it loads for someone who never turned it on.
+const driveSyncOn = async () => googleLib().ON && (await chrome.storage.local.get('driveSync')).driveSync?.on === true;
+const driveSyncPoke = () => { driveSyncOn().then((on) => on && openDriveSync().poke()).catch((e) => console.warn('Sync Documents:', e)); };
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:driveSync' || m.op !== 'set' || typeof m.on !== 'boolean') return;
+  if (!fromEditor(s)) { reply({ ok: false, why: 'sender' }); return; }
+  if (!googleLib().ON) { reply({ ok: false, why: 'off' }); return; }
+  openDriveSync().set(m.on).then(reply, () => reply({ ok: false, why: 'network' }));
+  return true;
+});
+chrome.runtime.onMessage.addListener((m, s) => { if (m?.type === 'glaze:drive' && m.op === 'status' && googlePage(s)) driveSyncPoke(); });
+chrome.runtime.onStartup.addListener(driveSyncPoke);
+globalThis.addEventListener?.('online', driveSyncPoke);
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area !== 'local') return;
+  const keys = Object.keys(c).filter((k) => k.startsWith('writerPaper:'));
+  if (keys.length) driveSyncOn().then((on) => { if (on) for (const k of keys) openDriveSync().touched(k.slice(12)); }).catch((e) => console.warn('Sync Documents:', e));
+});
+
 // A Download all wait owns a private ticket, sent over its byte port and the frame's MessageChannel, never a URL.
 // A public Allow page's hash is display text, not authority. Only that wait's frame and the tab opened for it may ask.
 // Download all pings its byte port every 15 s; those onMessage events reset Firefox's idle timer while these waits live.

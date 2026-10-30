@@ -16,11 +16,17 @@
 var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   const API = 'https://www.googleapis.com/drive/v3/files';
   const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
+  const CHANGES = 'https://www.googleapis.com/drive/v3/changes';
   const PORT = 'glaze:drive';
   const CHUNK = 384 << 10; // 512 KB as base64, as documents/doc-files.js sends (Safari's message size is the tightest)
   // What Glaze reads of a file (files.get's fields mask), and of one it saved.
   const META = 'id,name,mimeType,size,trashed,capabilities(canEdit,canDownload)';
   const SAVED = 'id,name,mimeType';
+  // What Sync Documents (documents/drive-sync.js) reads of a file: where it is, whether it is in Trash, Glaze's own properties on it,
+  // and its revisions (version: every change; headRevisionId: every new content).
+  const SYNC = 'id,name,mimeType,parents,trashed,explicitlyTrashed,appProperties,headRevisionId,version,size';
+  // An upload larger than this goes resumable: Drive's guide gives multipart "5 MB or less".
+  const SMALL = 5 << 20;
   const DOC = 'application/vnd.google-apps.document';
   // Google's own files, exported as the kind that opens them; the extension a kind's file takes.
   const GOOGLE = { [DOC]: 'paper', 'application/vnd.google-apps.spreadsheet': 'sheet', 'application/vnd.google-apps.presentation': 'slides' };
@@ -74,7 +80,8 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
 
   // env: { fetch, token({ interactive }) (background/google.js token), drop(token) (background/google.js drop: forget one Drive answered 401 to), account() (the
   // connected account, background/google.js account: one client serves one request, which stops as 'connect' if Drive is
-  // connected to another account or none before any of its calls), allowed() (the current sender), boundary() }
+  // connected to another account or none before any of its calls), allowed() (the current sender), boundary(),
+  // interactive (default true: a request the student pressed may ask them to sign in; Sync Documents' never does) }
   const create = (env) => {
     const bound = env.account ? Promise.resolve().then(env.account).catch(() => null) : null;
     const still = async () => {
@@ -95,13 +102,17 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       return 'bad';
     };
     // Every request is something the student pressed: the token may ask them to sign in.
+    // init.signal: the caller's cancel, which stops the request where it stands (raw, open).
     const call = async (url, init = {}) => {
+      const halt = () => { if (init.signal?.aborted) throw new Fail('cancel'); };
       for (let i = 0; ; i++) {
         let t, r;
+        halt();
         await still();
-        try { t = await env.token({ interactive: true }); } catch (e) { throw new Fail(WHY.includes(e?.why) ? e.why : 'auth'); }
+        try { t = await env.token({ interactive: env.interactive !== false }); } catch (e) { throw new Fail(WHY.includes(e?.why) ? e.why : 'auth'); }
         await still(); // a Disconnect while the token came: Calendar's grant may keep it valid
-        try { r = await send(url, { ...init, headers: { authorization: `Bearer ${t}`, ...init.headers } }); } catch { throw new Fail('network'); }
+        halt();
+        try { r = await send(url, { ...init, headers: { authorization: `Bearer ${t}`, ...init.headers } }); } catch { halt(); throw new Fail('network'); }
         if (r.ok) return r;
         if (r.status === 401 && i === 0) {
           r.body?.cancel().catch(() => {});
@@ -111,39 +122,63 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         throw new Fail(await reason(r));
       }
     };
-    const meta = async (id) => {
+    const meta = async (id, signal = null) => {
       if (typeof id !== 'string' || !ID.test(id)) throw new Fail('bad');
-      const m = await (await call(`${API}/${id}?${q({ fields: META, supportsAllDrives: 'true' })}`)).json().catch(() => null);
+      const m = await (await call(`${API}/${id}?${q({ fields: META, supportsAllDrives: 'true' })}`, { signal })).json().catch(() => null);
       if (!valid(m, id)) throw new Fail('bad');
       return m;
     };
-    // A picked file's bytes, told to on: head({ kind, name, mime, size }) once its plan stands, then bytes(piece, total) as
-    // each piece comes (awaited: the caller sets the pace). → the bytes in all.
-    const open = async (id, takes, on = {}) => {
-      const p = plan(await meta(id), takes);
-      await on.head?.({ kind: p.kind, name: p.name, mime: p.mime, size: p.size });
-      const r = await call(p.as ? `${API}/${id}/export?${q({ mimeType: p.as })}` : `${API}/${id}?${q({ alt: 'media', supportsAllDrives: 'true' })}`);
+    // A response's bytes to on.bytes(piece, total) as they come (awaited: the caller sets the pace), at most max of them.
+    // signal: cancelling it cancels the body where it stands, a stalled read included.
+    const pour = async (r, max, on, signal) => {
       const reader = r.body?.getReader();
       if (!reader) throw new Fail('bad');
+      const stop = () => { reader.cancel().catch(() => {}); };
+      signal?.addEventListener('abort', stop, { once: true });
       let total = 0;
       try {
-        if (Number(r.headers.get('content-length')) > p.max) throw new Fail('size');
+        if (Number(r.headers.get('content-length')) > max) throw new Fail('size');
         for (;;) {
+          if (signal?.aborted) throw new Fail('cancel');
           let x;
-          try { x = await reader.read(); } catch { throw new Fail('network'); }
+          try { x = await reader.read(); } catch { throw new Fail(signal?.aborted ? 'cancel' : 'network'); }
+          if (signal?.aborted) throw new Fail('cancel');
           if (x.done) { await still(); break; }
-          if (total + x.value.length > p.max) throw new Fail('size');
+          if (total + x.value.length > max) throw new Fail('size');
           // A network read can contain several port chunks. Recheck after each acknowledgement, so Disconnect
           // cannot release the rest of that read to the page merely because its fetch was already under way.
           for (let i = 0; i < x.value.length; i += CHUNK) {
             await still();
+            if (signal?.aborted) throw new Fail('cancel');
             const b = x.value.subarray(i, i + CHUNK);
             total += b.length;
             await on.bytes?.(b, total);
           }
         }
-      } catch (e) { reader.cancel().catch(() => {}); throw e; }
+      } catch (e) { reader.cancel().catch(() => {}); throw e; } finally { signal?.removeEventListener('abort', stop); }
       return total;
+    };
+    // A picked file's bytes, told to on: head({ kind, name, mime, size }) once its plan stands, then bytes(piece, total) as
+    // each piece comes (awaited: the caller sets the pace); on.signal cancels it. → the bytes in all.
+    const open = async (id, takes, on = {}) => {
+      const p = plan(await meta(id, on.signal), takes);
+      await on.head?.({ kind: p.kind, name: p.name, mime: p.mime, size: p.size });
+      const r = await call(p.as ? `${API}/${id}/export?${q({ mimeType: p.as })}` : `${API}/${id}?${q({ alt: 'media', supportsAllDrives: 'true' })}`, { signal: on.signal });
+      return pour(r, p.max, on, on.signal);
+    };
+    // Submit from Drive's download: any file as it is (an image, a zip, anything Blackboard takes), up to the 50 MB an
+    // upload may be (documents/doc-kinds.js FILE), or a Google Doc, Sheet or deck exported as open() exports it. Other Google
+    // types (forms, folders, shortcuts) and files Drive won't let be downloaded are refused. on: { head({ name, mime, size }),
+    // bytes(piece, total), signal }. → the bytes in all.
+    const raw = async (id, on = {}) => {
+      const m = await meta(id, on.signal), kind = GOOGLE[m.mimeType] || null, max = kinds().FILE;
+      if (!kind && m.mimeType.startsWith('application/vnd.google-apps.')) throw new Fail('type');
+      if (m.capabilities?.canDownload === false) throw new Fail('denied');
+      const as = kind ? kinds().KINDS[kind].mime : null, size = as || m.size === undefined ? null : Number(m.size);
+      if (size !== null && size > max) throw new Fail('size');
+      await on.head?.({ name: kind ? m.name + EXT[kind] : m.name, mime: as || m.mimeType, size });
+      const r = await call(as ? `${API}/${id}/export?${q({ mimeType: as })}` : `${API}/${id}?${q({ alt: 'media', supportsAllDrives: 'true' })}`, { signal: on.signal });
+      return pour(r, max, on, on.signal);
     };
     const multipart = (meta, mime, bytes) => {
       const b = `glaze-${env.boundary ? env.boundary() : crypto.randomUUID()}`, enc = new TextEncoder();
@@ -173,7 +208,82 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       if (typeof j?.id !== 'string' || !ID.test(j.id) || (to && j.id !== to)) throw new Fail('bad');
       return { id: j.id, fresh: !!id && !to };
     };
-    return { meta, open, save };
+    // ---- Sync Documents' calls (documents/drive-sync.js): each → Drive's JSON answer, or bytes; Drive's errors as reasons (WHY).
+    const json = async (r) => { const j = await r.json().catch(() => null); if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Fail('bad'); return j; };
+    const idOf = (id) => { if (typeof id !== 'string' || !ID.test(id)) throw new Fail('bad'); return id; };
+    const JSON_TYPE = 'application/json; charset=UTF-8';
+    // files.get: the fields sync reads.
+    const file = async (id, fields = SYNC) => {
+      const j = await json(await call(`${API}/${idOf(id)}?${q({ fields })}`));
+      if (j.id !== id) throw new Fail('bad');
+      return j;
+    };
+    // files.list in My Drive: q, a page of up to 1000. → { files, nextPageToken }
+    const find = async (query, { fields = SYNC, pageToken = null, pageSize = 1000 } = {}) => {
+      const j = await json(await call(`${API}?${q({ q: query, spaces: 'drive', pageSize: String(pageSize), fields: `nextPageToken,files(${fields})`, ...(pageToken && { pageToken }) })}`));
+      if (!Array.isArray(j.files)) throw new Fail('bad');
+      return j;
+    };
+    // changes.getStartPageToken → the token; changes.list from a token → { changes, nextPageToken | newStartPageToken }.
+    const startToken = async () => {
+      const j = await json(await call(`${CHANGES}/startPageToken`));
+      if (typeof j.startPageToken !== 'string' || !j.startPageToken || j.startPageToken.length > 1000) throw new Fail('bad');
+      return j.startPageToken;
+    };
+    const changes = async (pageToken, { fields = SYNC, pageSize = 100 } = {}) => {
+      if (typeof pageToken !== 'string' || !pageToken || pageToken.length > 1000) throw new Fail('bad');
+      const j = await json(await call(`${CHANGES}?${q({ pageToken, pageSize: String(pageSize), spaces: 'drive', includeRemoved: 'true',
+        fields: `nextPageToken,newStartPageToken,changes(changeType,removed,fileId,time,file(${fields}))` })}`));
+      if (!Array.isArray(j.changes) || (typeof j.nextPageToken !== 'string' && typeof j.newStartPageToken !== 'string')) throw new Fail('bad');
+      return j;
+    };
+    // A file's bytes (alt=media), at most max of them. → Uint8Array
+    const media = async (id, max) => {
+      const r = await call(`${API}/${idOf(id)}?${q({ alt: 'media' })}`);
+      if (Number(r.headers.get('content-length')) > max) { r.body?.cancel().catch(() => {}); throw new Fail('size'); }
+      const reader = r.body?.getReader();
+      if (!reader) throw new Fail('bad');
+      const parts = [];
+      let n = 0;
+      try {
+        for (;;) {
+          let x;
+          try { x = await reader.read(); } catch { throw new Fail('network'); }
+          if (x.done) break;
+          if ((n += x.value.length) > max) throw new Fail('size');
+          parts.push(x.value);
+          await still();
+        }
+      } catch (e) { reader.cancel().catch(() => {}); throw e; }
+      return join(parts, n);
+    };
+    // A file's content and metadata: a new file (no id) or a new revision of id. Up to SMALL in one multipart request, else
+    // a resumable session (its address only ever Drive's own upload address) and one PUT of the bytes.
+    const put = async ({ id = null, meta = {}, mime, bytes, fields = SYNC }) => {
+      if ((id !== null && (typeof id !== 'string' || !ID.test(id))) || typeof mime !== 'string' || !MIME.test(mime) || !(bytes instanceof Uint8Array) || bytes.length > kinds().FILE * 4) throw new Fail('bad');
+      if (bytes.length <= SMALL) {
+        const { type, body } = multipart(meta, mime, bytes);
+        return json(await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'multipart', fields })}` : `${UPLOAD}?${q({ uploadType: 'multipart', fields })}`,
+          { method: id ? 'PATCH' : 'POST', headers: { 'content-type': type }, body }));
+      }
+      const r = await call(id ? `${UPLOAD}/${id}?${q({ uploadType: 'resumable', fields })}` : `${UPLOAD}?${q({ uploadType: 'resumable', fields })}`, {
+        method: id ? 'PATCH' : 'POST', headers: { 'content-type': JSON_TYPE, 'x-upload-content-type': mime, 'x-upload-content-length': String(bytes.length) }, body: JSON.stringify(meta),
+      });
+      r.body?.cancel().catch(() => {});
+      let at;
+      try { at = new URL(r.headers.get('location')); } catch { throw new Fail('bad'); }
+      if (`${at.origin}${at.pathname}` !== (id ? `${UPLOAD}/${id}` : UPLOAD) || !at.searchParams.get('upload_id')) throw new Fail('bad');
+      return json(await call(at.href, { method: 'PUT', headers: { 'content-type': mime }, body: bytes }));
+    };
+    // Metadata only: a name, Glaze's properties, in or out of Drive's trash (never deleted for good).
+    const patch = async (id, meta, fields = SYNC) => json(await call(`${API}/${idOf(id)}?${q({ fields })}`, { method: 'PATCH', headers: { 'content-type': JSON_TYPE }, body: JSON.stringify(meta) }));
+    // A file with no content (a folder).
+    const folder = async (meta, fields = SYNC) => {
+      const j = await json(await call(`${API}?${q({ fields })}`, { method: 'POST', headers: { 'content-type': JSON_TYPE }, body: JSON.stringify(meta) }));
+      if (typeof j.id !== 'string' || !ID.test(j.id)) throw new Fail('bad');
+      return j;
+    };
+    return { meta, open, raw, save, file, find, startToken, changes, media, put, patch, folder };
   };
 
   // ---- the port, worker side: one request a port. page → { op: 'open', id, takes } then { op: 'more' } after each chunk;
@@ -194,17 +304,20 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   };
   const serve = (port, { drive, allowed = async () => true, record = null }) => {
     let gone = false, waiting = null, begun = false;
-    const post = (m) => { if (gone) return; try { port.postMessage(m); } catch { gone = true; } };
+    // The page gone (its cancel, or closed): the download's fetch aborted where it stands.
+    const quit = new AbortController();
+    const post = (m) => { if (gone) return; try { port.postMessage(m); } catch { gone = true; quit.abort(); } };
     const next = () => new Promise((ok, no) => { if (gone) no(new Fail('cancel')); else waiting = { ok, no }; });
     const active = async () => {
       if (gone) throw new Fail('cancel');
       if (!await allowed()) throw new Fail('sender');
       if (gone) throw new Fail('cancel');
     };
-    port.onDisconnect.addListener(() => { gone = true; const w = waiting; waiting = null; w?.no(new Fail('cancel')); });
+    port.onDisconnect.addListener(() => { gone = true; quit.abort(); const w = waiting; waiting = null; w?.no(new Fail('cancel')); });
+    // open: a picked file for Documents or Writer (its kinds, m.takes); raw: Submit from Drive's, any file as it is.
     const open = async (m) => {
       const KS = kinds().KINDS;
-      if (!Array.isArray(m.takes) || !m.takes.length || m.takes.length > 8 || !m.takes.every((k) => typeof k === 'string' && Object.hasOwn(KS, k))) throw new Fail('bad');
+      if (m.op === 'open' && (!Array.isArray(m.takes) || !m.takes.length || m.takes.length > 8 || !m.takes.every((k) => typeof k === 'string' && Object.hasOwn(KS, k)))) throw new Fail('bad');
       let parts = [], held = 0;
       const flush = async () => {
         await active();
@@ -214,7 +327,8 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         if ((await next()).op !== 'more') throw new Fail('bad');
         await active();
       };
-      const size = await drive.open(m.id, m.takes, {
+      const on = {
+        signal: quit.signal,
         head: async (h) => { await active(); post({ type: 'file', ...h }); },
         bytes: async (b) => {
           for (let i = 0; i < b.length;) {
@@ -224,7 +338,8 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
           }
           if (gone) throw new Fail('cancel');
         },
-      });
+      };
+      const size = await (m.op === 'raw' ? drive.raw(m.id, on) : drive.open(m.id, m.takes, on));
       if (held) await flush();
       return { type: 'end', size };
     };
@@ -264,20 +379,24 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       begun = true;
       (async () => {
         await active();
-        if (m?.op === 'open') return open(m);
+        if (m?.op === 'open' || m?.op === 'raw') return open(m);
         if (m?.op === 'save') return save(m);
         throw new Fail('bad');
       })().then(post, (e) => post({ type: 'fail', why: e instanceof Fail ? e.why : 'network' }));
     });
   };
 
-  // ---- the port, page side: open(id, takes, progress) → a File; save({ key, name, mime, bytes, as }, progress) →
-  // { id, fresh }. progress({ done, total }) as bytes go.
+  // ---- the port, page side: open(id, takes, progress, signal) → a File; raw(id, progress, signal) → a File (Submit from
+  // Drive: any file as it is, up to 50 MB); save({ key, name, mime, bytes, as }, progress) → { id, fresh }. progress({ done,
+  // total }) as bytes go; signal: cancelling it lets the port go, which aborts the worker's fetch at once ('cancel').
   const client = (connect = () => chrome.runtime.connect({ name: PORT })) => {
-    const session = (first, step) => new Promise((ok, no) => {
+    const session = (first, step, signal = null) => new Promise((ok, no) => {
       let port, over = false, ping = null;
-      const end = (f, v) => { if (over) return; over = true; clearInterval(ping); try { port.disconnect(); } catch { /* gone */ } f(v); };
-      try { port = connect(); } catch { no(new Fail('network')); return; }
+      const end = (f, v) => { if (over) return; over = true; clearInterval(ping); signal?.removeEventListener('abort', cancel); try { port.disconnect(); } catch { /* gone */ } f(v); };
+      const cancel = () => end(no, new Fail('cancel'));
+      if (signal?.aborted) { no(new Fail('cancel')); return; }
+      signal?.addEventListener('abort', cancel, { once: true });
+      try { port = connect(); } catch { end(no, new Fail('network')); return; }
       port.onDisconnect.addListener(() => end(no, new Fail('network')));
       port.onMessage.addListener((m) => {
         if (over) return;
@@ -288,10 +407,10 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       ping = setInterval(beat, 15000);
       try { port.postMessage(first); } catch { end(no, new Fail('network')); }
     });
-    const open = (id, takes, progress = null) => {
+    const fetchFile = (first, progress, signal) => {
       let head = null, got = 0;
       const parts = [];
-      return session({ op: 'open', id, takes }, (m, send, done) => {
+      return session(first, (m, send, done) => {
         if (m.type === 'file' && !head) { head = m; progress?.({ done: 0, total: m.size || 0 }); }
         else if (m.type === 'chunk' && head) {
           const b = unb64(m.data);
@@ -299,8 +418,10 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
           progress?.({ done: got, total: Math.max(head.size || 0, got) });
           send({ op: 'more' });
         } else if (m.type === 'end' && head) done(new File(parts, String(head.name), { type: typeof head.mime === 'string' ? head.mime : '' }));
-      });
+      }, signal);
     };
+    const open = (id, takes, progress = null, signal = null) => fetchFile({ op: 'open', id, takes }, progress, signal);
+    const raw = (id, progress = null, signal = null) => fetchFile({ op: 'raw', id }, progress, signal);
     const save = ({ key, name, mime, bytes, as }, progress = null) => {
       let at = 0;
       return session({ op: 'save', key, name, mime, size: bytes.length, as }, (m, send, done) => {
@@ -313,7 +434,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         } else if (m.type === 'saved') done({ type: 'saved', id: m.id, fresh: m.fresh === true });
       });
     };
-    return { open, save };
+    return { open, raw, save };
   };
 
   // ---- the pages: the entries show while the worker says Drive is connected, asked as the page loads and again when the
@@ -424,6 +545,6 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     return { home, items, connected: () => connected };
   })();
 
-  return { API, UPLOAD, PORT, CHUNK, META, DOC, WHY, Fail, b64, unb64, plan, create, serve, client, page };
+  return { API, UPLOAD, CHANGES, PORT, CHUNK, META, SYNC, SMALL, DOC, WHY, Fail, b64, unb64, plan, create, serve, client, page };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_DRIVE;

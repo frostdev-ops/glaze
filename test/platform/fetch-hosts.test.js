@@ -53,6 +53,7 @@ const SITES = {
     { at: 'fetch: (url, init) => fetch(url, init),', kind: 'via', to: 'planner/gcal.js', exact: true },
     { at: 'fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'background/google.js', exact: true },
     { at: 'drive: D.create({ fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'documents/drive.js' },
+    { at: 'drive: () => GZ_DRIVE.create({ fetch: (u, init) => fetch(u, init),', kind: 'via', to: 'documents/drive.js' },
     { at: 'fetch(chrome.runtime.getURL(`icons/icon', kind: 'extension' },
     { at: "credentials: 'include', redirect: 'error'", kind: 'asked', flow: 'Gradescope: the Settings switch asks for www.gradescope.com', guard: /reachable\(GZ_GRADESCOPE\.HOST\)/ },
     { at: "redirect: wide ? 'follow' : 'manual', cache: 'no-store', signal: ctl.signal", kind: 'asked', flow: 'Canvas Download all: the page\'s Allow frame (courses/allow.html) for the file server', guard: /if \(!await reachable\(url\)\)/ },
