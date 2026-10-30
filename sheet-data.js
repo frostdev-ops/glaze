@@ -140,6 +140,7 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
       const wb = join(rec.book || bookOf(GZ_SHEET_MODEL_OR().workbook()), parts);
       const sigs = new Map([...parts].map(([n, rows]) => [n, sig(JSON.stringify(rows))]));
       sigs.set('', sig(JSON.stringify(rec.book || null)));
+      sigs.revision = rec.revision || 0;
       return { rec, wb, sigs };
     }
     throw new Error('torn read of a spreadsheet');
@@ -148,12 +149,13 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
   // book when it changed, with the card's text, the search text and the counts; a packed version ({ reason, gz, cells })
   // when one is asked for. Nothing is sent when nothing changed and nothing else is asked. show: a cell's shown text.
   // → { sigs (for the next write; the old ones if the write fails, as it throws), saved (the worker's answer, or null) }.
-  const write = async (papers, key, wb, sigs, { patch = {}, dirty = null, version = null, show = plain, reason } = {}) => {
+  const write = async (papers, key, wb, sigs, { patch = {}, dirty = null, version = null, show = plain, reason, base = sigs?.revision ?? 0 } = {}) => {
     const p = plan(wb, sigs, dirty);
     if (!p.changed && !version && !Object.keys(patch).length) return { sigs, saved: null };
     const m = measure(wb);
     const saved = await papers.save(key, { kind: 'sheet', ...(p.book && { book: p.book }), grid: glance(wb, show), text: text(wb, show), cells: m.cells, sheets: m.sheets, ...patch },
-      { parts: p.parts, drop: p.drop, changed: p.changed, ...(version && { version }), ...(reason && { reason }) });
+      { base, parts: p.parts, drop: p.drop, changed: p.changed, ...(version && { version }), ...(reason && { reason }) });
+    p.sigs.revision = saved.paper.revision;
     return { sigs: p.sigs, saved };
   };
   const GZ_SHEET_MODEL_OR = () => (typeof GZ_SHEET_MODEL !== 'undefined' ? GZ_SHEET_MODEL : require('./lib/sheet-model.js'));

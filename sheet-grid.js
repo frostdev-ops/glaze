@@ -670,7 +670,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
           let version = pend ? await pend : null;
           if (!version && (fresh || Date.now() - lastVersion >= EVERY)) version = { reason: fresh ? 'start' : 'auto', gz: await SD.pack(wb), cells: SD.measure(wb).cells };
           try {
-            const out = await SD.write(papers, key, wb, sigs, { dirty: d, version, patch: { ...(fresh && !patch.title && { title: '', named: false }), ...patch }, show: shown0() });
+            const out = await SD.write(papers, key, wb, sigs, { base: rec?.revision || 0, dirty: d, version, patch: { ...(fresh && !patch.title && { title: '', named: false }), ...patch }, show: shown0() });
             sigs = out.sigs;
             if (out.saved) { rec = out.saved.paper; lastVersion = rec.lastVersion || lastVersion; }
             fresh = false; foreign = false;

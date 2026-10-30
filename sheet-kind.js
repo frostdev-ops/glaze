@@ -136,7 +136,7 @@
     const had = (await get([`writerPaper:${key}`]))[`writerPaper:${key}`];
     const sigs = new Map(Object.keys(had?.parts || {}).map((n) => [n, 'stale']));
     const gz = await SD.pack(wb);
-    return (await SD.write(papers(), key, wb, sigs, { patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: 'start', gz, cells: SD.measure(wb).cells } })).saved.paper;
+    return (await SD.write(papers(), key, wb, sigs, { base: had?.revision || 0, patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: 'start', gz, cells: SD.measure(wb).cells } })).saved.paper;
   };
   // An empty attempt started as a spreadsheet (writer-kinds.js): what its record takes; the grid opens a blank workbook.
   const empty = () => ({ grid: Array.from({ length: 4 }, () => Array(6).fill('')), text: '', cells: 0, sheets: 1 });
