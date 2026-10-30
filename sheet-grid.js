@@ -590,11 +590,20 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       drawNow(false);
     };
     // Moves the active cell (extend: the selection's far corner instead).
-    const move = (dr, dc, extend = false) => {
-      if (extend) { const [er, ec] = end(sel), [r, c] = clampRC(er + dr, ec + dc); setSel(select(sel, r, c, { extend: true })); }
-      else { const [r, c] = clampRC(sel.active[0] + dr, sel.active[1] + dc); setSel(select(null, r, c)); }
+    const shownIndex = (Z, i, by) => {
+      const start = i, step = by < 0 ? -1 : 1;
+      while (i >= 0 && i < Z.n && !Z.size(i)) i += step;
+      if (i >= 0 && i < Z.n) return i;
+      i = start;
+      while (i >= 0 && i < Z.n && !Z.size(i)) i -= step;
+      return Math.max(0, Math.min(i, Z.n - 1));
     };
-    const moveTo = (r, c, extend = false) => { [r, c] = clampRC(r, c); setSel(extend ? select(sel, r, c, { extend: true }) : select(null, r, c)); };
+    const shownRC = (r, c, dr, dc) => [shownIndex(R, r, dr), shownIndex(C, c, dc)];
+    const move = (dr, dc, extend = false) => {
+      if (extend) { const [er, ec] = end(sel), [r, c] = shownRC(...clampRC(er + dr, ec + dc), dr, dc); setSel(select(sel, r, c, { extend: true })); }
+      else { const [r, c] = shownRC(...clampRC(sel.active[0] + dr, sel.active[1] + dc), dr, dc); setSel(select(null, r, c)); }
+    };
+    const moveTo = (r, c, extend = false) => { [r, c] = shownRC(...clampRC(r, c), r - sel.active[0], c - sel.active[1]); setSel(extend ? select(sel, r, c, { extend: true }) : select(null, r, c)); };
 
     // ---- operations: every change goes through the engine; its inverse is the undo step; the cells it changed mark the
     // parts the next save writes
