@@ -5,6 +5,7 @@
 - [Privacy summary](privacy.md): what stays on your device and what goes where ([full policy](../PRIVACY.md))
 - [Agents](agents.md): connect AI apps on your computer to Glaze
 - [AI harness](ai-harness.md): providers, tasks, tools and the worker's message API for Glaze's optional AI
+- [Repository layout](layout.md): where everything lives
 - [Development](development.md): how it works, building, tests, the Chrome Web Store, Safari and App Store builds, Mac updates
 - [Mods API](mods-api.md) and [widgets made of blocks](mods-widgets.md), with [example mods](../examples/mods)
 - [Run your own relay](../server/README.md) for share sessions
