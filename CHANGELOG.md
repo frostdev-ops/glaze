@@ -31,6 +31,7 @@ All notable changes to Glaze are documented here. The format follows
 - Blackboard: Content leaves folders and scrolling to Blackboard; search follows its links; Remember your place off cancels a pending restore.
 - The sidebar covers its card beside a scrollbar, and the rubric opening lines up in right-to-left layouts.
 - Writer: a visible caret on a dark page, no doubled spelling marks in Chrome, and the status bar names the page on screen.
+- Writer: Submit and Save and Close wait out a slow save, never silent.
 - Settings → Writer: Versions kept saves 50 and 100; Saved papers wraps at narrow widths.
 - Your buddy's page no longer errors when Glaze updates while it's open.
 
