@@ -406,3 +406,15 @@ test('import into an existing spreadsheet keeps the workbook it replaces as an i
   assert.ok(prior, 'an import checkpoint holds the replaced workbook');
   same(await SD.unpack((await P.version(KEY, prior.id)).gz), wb);
 });
+
+test('copy reads the card and search metadata from the same revision as its bands', async () => {
+  const s = store(), P = PA.open(s), wb = book();
+  const first = await SD.write(P, KEY, wb, new Map()), old = first.saved.paper;
+  put(wb.sheets[0], 0, 0, { t: 's', v: 'new card' });
+  await SD.write(P, KEY, wb, first.sigs);
+  const { DK } = load({ sheets: true }, { local: s, GZ_SHEET_DATA: SD });
+  await DK.settled();
+  const copied = await DK.get('sheet').copy(old);
+  assert.equal(copied.grid[0][0], 'new card');
+  assert.match(copied.text, /new card/);
+});
