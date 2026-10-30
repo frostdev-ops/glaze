@@ -813,7 +813,6 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const commit = () => {
       if (!editing) return true;
       const x = editing, text = x.surface.value;
-      if (text === x.orig) { stopEdit(); return true; }
       if (x.sheet !== S().id) {
         const i = wb.sheets.findIndex((s) => s.id === x.sheet);
         if (i >= 0) {
@@ -823,6 +822,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
           scroller.scrollLeft = was?.sL || 0; scroller.scrollTop = was?.sT || 0;
         }
       }
+      if (text === x.orig) { stopEdit(); told(); drawNow(false); return true; }
       let res;
       try { res = eng.edit(x.sheet, x.r, x.c, text); } catch (e) { refused(e); return false; }
       if (res.error) { say(t('There’s a problem with this formula.')); x.surface.focus(); return false; }
