@@ -77,6 +77,16 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
       return p;
     };
     const a = await open();
+    check(await a.evaluate(async () => {
+      const raw = await chrome.storage.local.get('lookCatalog');
+      return raw.lookCatalog === undefined && document.querySelectorAll('#looks .look').length === GZ_LOOKS.length;
+    }), 'Settings shows the built-in Looks with no catalogue cache');
+    const freshPopup = await ctx.newPage();
+    freshPopup.on('pageerror', (e) => errors.push(`fresh popup: ${e}`));
+    await freshPopup.goto(`${base}/popup.html`);
+    await freshPopup.locator('#look').click();
+    check(await freshPopup.locator('#looks').evaluate((box) => box.querySelectorAll('.look').length === GZ_LOOKS.length && !box.querySelector('.looks-head')), 'the popup shows the built-in Looks with no catalogue cache');
+    await freshPopup.close();
     await a.evaluate(async ({ kept }) => {
       await chrome.storage.local.set({ lookFavorites: kept, seenCourses: { _101_1: { name: 'Biology 101', slot: '2', org: false } } });
     }, { kept });
@@ -96,6 +106,23 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     const seminarCard = (shown || []).find((x) => x.startsWith('Seminar|')) || '';
     check(seminarCard.includes(ids.seminar) && /rgb\(249, 168, 212\)|#f9a8d4/i.test(seminarCard), 'a kept Look\'s card has its id and its swatch colours', seminarCard);
 
+    await cardFocus();
+    async function cardFocus() {
+      const target = a.locator(`#looks .look[data-look="${ids.seminar}"]`);
+      await target.focus();
+      await a.evaluate(async () => {
+        const { lookFavorites } = await chrome.storage.local.get('lookFavorites');
+        await chrome.storage.local.set({ lookFavorites: lookFavorites.map((f) => f.name === 'Seminar' ? { ...f, name: 'Seminar renamed' } : f) });
+      });
+      await until(async () => (await target.textContent()) === 'Seminar renamed');
+      check(await target.evaluate((b) => b === document.activeElement), 'a catalogue update preserves keyboard focus on the same Look');
+      await a.evaluate(async () => {
+        const { lookFavorites } = await chrome.storage.local.get('lookFavorites');
+        await chrome.storage.local.set({ lookFavorites: lookFavorites.map((f) => f.name === 'Seminar renamed' ? { ...f, name: 'Seminar' } : f) });
+      });
+      await until(async () => (await target.textContent()) === 'Seminar');
+    }
+
     // ---- picking each wears it; the popup's tile names it ----
     const ink = (p) => p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-ink').trim());
     const surface = (p) => p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-surface').trim());
@@ -109,7 +136,8 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     };
     const card = (p, id) => p.locator(`#looks .look[data-look="${id}"]`);
     for (const [name, id, s] of [['Seminar', ids.seminar, seminar], ['Night walk', ids.night, night]]) {
-      await card(a, id).click();
+      await card(a, id).focus();
+      await a.keyboard.press('Enter');
       const worn = await until(async () => (await ink(a)) === s.colors['--gz-ink'] && (await surface(a)) === s.colors['--gz-surface']);
       check(worn, `picking ${name} wears it: the page's own colours are its palette`, `${await ink(a)} ${await surface(a)}`);
       check(await until(async () => (await card(a, id).getAttribute('aria-pressed')) === 'true'), `${name} is pressed`);
@@ -129,6 +157,7 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     await pop.locator('#look').click();
     const sheet = await pop.locator('#sheet #looks').evaluate((box) => [...box.children].map((el) => (el.tagName === 'H4' ? `# ${el.textContent}` : el.textContent)));
     check(sheet.includes('# Gallery') && sheet.includes('Seminar') && sheet.includes('Night walk'), 'the popup\'s sheet has the kept Looks, grouped', sheet.join());
+    check(await pop.locator('#sheet .looks-head').evaluateAll((heads) => heads.every((h) => { const r = h.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })), 'Saved and Gallery headings are visible when the popup sheet opens');
     await pop.locator('#sheet .looks-head').nth(1).scrollIntoViewIfNeeded();
     if (out) await pop.screenshot({ path: path.join(out, 'looks-popup-dark.png') });
     await pop.locator(`#sheet .look[data-look="${ids.seminar}"]`).click();
@@ -189,6 +218,14 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     check(optgroups.join() === 'Built in,Saved,Gallery', 'grouped there too', optgroups.join());
     await select.selectOption(ids.field);
     check(await until(async () => (await a.evaluate(async () => (await chrome.storage.sync.get('courses')).courses?.looks?._101_1)) === ids.field), 'the course wears it, by id');
+    await a.evaluate(async () => {
+      const { courses } = await chrome.storage.sync.get('courses');
+      await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: 'c:00000000000000' } } });
+    });
+    await until(async () => await select.inputValue() === '');
+    check(await select.evaluate((s) => s.selectedOptions[0]?.textContent === 'Your theme'), 'a missing kept Look visibly selects Your theme');
+    await select.selectOption(ids.field);
+    await until(async () => (await a.evaluate(async () => (await chrome.storage.sync.get('courses')).courses?.looks?._101_1)) === ids.field);
     await a.goto(`${base}/options.html#look/palette`);
     await a.locator('#looks button').first().waitFor();
     await more();
@@ -214,6 +251,7 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
       const { courses } = await chrome.storage.sync.get('courses');
       await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: id } } });
     }, { site, id: ids.seminar });
+    await a.evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:look', parts: { x: { pointer: 'quill', cursor: { kind: 'sparkle' } } }, patch: { version: 2 } }));
     await require('./check-env.js').ultraReady(a);
     const lms = await ctx.newPage();
     lms.on('pageerror', (e) => errors.push(`ultra: ${e}`));
@@ -222,6 +260,11 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     check(await until(async () => (await ink(lms)) === seminar.colors['--gz-ink']), 'the course wears its saved Look on its page', await ink(lms));
     await a.evaluate(async () => { const { courses } = await chrome.storage.sync.get('courses'); await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: 'c:00000000000000' } } }); });
     check(await until(async () => (await ink(lms)) === field.colors['--gz-ink']), 'a Look this device doesn\'t keep: the student\'s theme', await ink(lms));
+    check(await until(() => sw.evaluate(async (url) => {
+      const [tab] = await chrome.tabs.query({ url });
+      const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ look: GZ_CTX.courseLook(), parts: GZ_CTX.parts(), pointerOn: GZ_CTX.partsOn(true) }) });
+      return result.result.look === null && result.result.pointerOn && result.result.parts?.pointer === 'quill';
+    }, lms.url())), 'a missing kept Look permits the theme parts and personal pointer');
     await lms.keyboard.press('ControlOrMeta+k');
     await lms.locator('#gz-cmd input').fill('Look: Night');
     const cmd = lms.locator('#gz-cmd-list li').filter({ hasText: 'Look: Night walk' }).first();

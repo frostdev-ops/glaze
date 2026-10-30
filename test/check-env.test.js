@@ -233,7 +233,7 @@ test('installed polls a new profile until each install task has made its last wr
   const vm = require('node:vm');
   const done = { fresh: true, pending: false };
   const states = [{}, { freshDefaults: { fresh: true, pending: true } }, { freshDefaults: done, migrated: ['tabs-auto'] }, { freshDefaults: done, channelKeysMoved: true },
-    { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true }, { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true, lookCatalog: { sig: 'e3b0c442', looks: [] } }];
+    { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true }];
   let polls = 0;
   const page = { evaluate: async (f) => {
     const local = states[Math.min(polls++, states.length - 1)];
@@ -269,4 +269,13 @@ test('the translated layout case lets its seed Look reach History before any pag
   const filed = body.search(/GZ_HISTORY\.entries\(.*\.lookHistory\)\[0\]\?\.at >= at/);
   assert.ok(filed > 0, 'it waits for the worker to file the seed Look');
   assert.ok(filed < body.indexOf("for (const lang of"), 'before the first language is measured');
+});
+
+test('installed accepts a finished empty profile without requiring a catalogue cache', async () => {
+  const { installed } = require('../scripts/check-env.js');
+  const vm = require('node:vm');
+  const local = { freshDefaults: { fresh: true, pending: false }, migrated: ['tabs-auto'], channelKeysMoved: true };
+  const page = { evaluate: (fn, keys) => vm.runInContext(`(${fn})(${JSON.stringify(keys)})`, vm.createContext({ chrome: { storage: { local: { get: async () => local } } } })) };
+  await installed(page, 0);
+  assert.equal('lookCatalog' in local, false, 'a read must not manufacture an empty cache');
 });

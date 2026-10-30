@@ -216,12 +216,29 @@ const BROKER = {
   // a browser wouldn't wake it for the storage change alone. 'parts': a course page wearing a Look of its own (courses.looks)
   // asks for that Look's parts, as storage's lookX gives the theme's: a built-in's own, a kept one's from its code.
   looks: {
-    allow: async (m, s) => (m.op === 'build' && fromGlaze(s)) || (['wear', 'parts'].includes(m.op) && typeof m.id === 'string'
-      && (GZ_CATALOG.ID.test(m.id) || (m.op === 'parts' && GZ_LOOKS.some((L) => L.name === m.id))) && (fromGlaze(s) || !!await lmsPage(s))),
+    allow: async (m, s) => (m.op === 'build' && fromGlaze(s))
+      || (['keep', 'remove'].includes(m.op) && fromEditor(s) && trustedFrame(s, 'settings') && (s.origin === undefined || ownOrigin(s.origin))
+        && (m.op === 'keep' ? !!GZ_CATALOG.kept(m.favorite) && m.favorite.code.length <= 20000 : GZ_CATALOG.ID.test(m.id)))
+      || (['wear', 'parts'].includes(m.op) && typeof m.id === 'string'
+        && (GZ_CATALOG.ID.test(m.id) || (m.op === 'parts' && GZ_LOOKS.some((L) => L.name === m.id))) && (fromGlaze(s) || !!await lmsPage(s))),
     run: async (m, area) => {
       if (m.op === 'build') return catalogue().then(() => ({ ok: true }));
       const L = m.op === 'parts' && GZ_LOOKS.find((l) => l.name === m.id);
       if (L) return { ok: true, parts: GZ_LOOK_PARTS(L) };
+      if (m.op === 'keep' || m.op === 'remove') {
+        const { lookFavorites, rotateLooks } = await area.local.get(['lookFavorites', 'rotateLooks']);
+        const favorites = GZ_HISTORY.favorites(lookFavorites);
+        if (m.op === 'keep') await area.local.set({ lookFavorites: GZ_HISTORY.favor(favorites, GZ_CATALOG.kept(m.favorite)) });
+        else {
+          const f = GZ_CATALOG.keptAll(favorites).find((e) => e.id === m.id);
+          if (!f) return { ok: false, error: 'gone' };
+          const s = GZ_SANITIZE(await area.sync.get('courses'));
+          if (GZ_CATALOG.unmap(s.courses, m.id)) await area.sync.set({ version: 2, courses: s.courses });
+          await area.local.set({ lookFavorites: favorites.filter((e) => e.code !== f.code), rotateLooks: GZ_CATALOG.ids(rotateLooks, favorites).filter((id) => id !== m.id) });
+        }
+        await catalogue();
+        return { ok: true };
+      }
       const e = GZ_CATALOG.keptAll((await area.local.get('lookFavorites')).lookFavorites).find((f) => f.id === m.id);
       const got = e && await GZ_SHARE.decode(e.code).then((g) => (GZ_XPARTS.outside(g.parts).length ? null : g), () => null);
       if (!got) return { ok: false, error: 'gone' };
@@ -1247,6 +1264,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 let catalogTurn = Promise.resolve();
 const catalogue = () => (catalogTurn = catalogTurn.then(async () => {
   const local = chrome.storage.local, { lookFavorites, [GZ_CATALOG.KEY]: was } = await local.get(['lookFavorites', GZ_CATALOG.KEY]);
+  if (!was && !GZ_HISTORY.favorites(lookFavorites).length) return;
   if (was?.sig === GZ_CATALOG.sig(lookFavorites ?? null)) return;
   const cat = await GZ_CATALOG.build(lookFavorites, (code) => GZ_SHARE.decode(code).then((g) => (GZ_XPARTS.outside(g.parts).length ? null : g)), was);
   await local.set({ [GZ_CATALOG.KEY]: cat });

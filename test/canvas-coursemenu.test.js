@@ -9,7 +9,8 @@ const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setIm
 
 // Run the real decoration hook and popover with controlled Canvas responses and timers.
 const page = ({ motion = false } = {}) => {
-  const doc = { cookie: '_csrf_token=page-token' }, requests = [], timers = new Map(), events = [], editors = [];
+  const doc = { cookie: '_csrf_token=page-token' }, requests = [], timers = new Map(), events = [], editors = [], changed = [];
+  let catalog = null;
   let timerId = 0;
   const make = (tag, props = {}, ...kids) => {
     const el = Object.assign(new El(tag, doc), props);
@@ -47,7 +48,7 @@ const page = ({ motion = false } = {}) => {
     setTimeout: (f) => { timers.set(++timerId, f); return timerId; }, clearTimeout: (id) => timers.delete(id),
     addEventListener() {}, matchMedia: () => ({ matches: false }), requestAnimationFrame: () => 0,
     getComputedStyle: (el) => ({ direction: el.closest('[dir]')?.getAttribute('dir') || doc.root.style.direction || 'ltr' }),
-    chrome: { runtime: { id: 'glaze' }, storage: { sync: { set() {} }, onChanged: { addListener() {} } } },
+    GZ_CATALOG: require('../lib/looks.js'), chrome: { runtime: { id: 'glaze' }, storage: { local: { get: async () => ({ lookCatalog: catalog }) }, sync: { set() {} }, onChanged: { addListener: (f) => changed.push(f) } } },
     fetch: (url, init) => new Promise((resolve, reject) => requests.push({ url, init, ok: () => resolve({ ok: true, json: async () => ({}) }), fail: () => reject(Error('unavailable')) })),
     ultra: false, moodle: false, menuOn: () => true, courseList: courses, settings,
     canvasCourseKey: (id) => `canvas:${origin}/${id}`, X: { nickOf: () => '' }, t: (s) => s,
@@ -62,7 +63,7 @@ const page = ({ motion = false } = {}) => {
   const nick = (value) => { const n = doc.getElementById('gz-cm-nick'); n.value = value; doc.fire(n, 'input'); doc.fire(n, 'change'); };
   const flush = async () => { const pending = [...timers.values()]; timers.clear(); for (const f of pending) f(); await settle(); };
   const color = () => cards[0].querySelector('.ic-DashboardCard__header_hero').style.backgroundColor;
-  return { doc, cards, requests, ui, open, nick, flush, color, events, editors, loadCards: () => vm.runInContext(read('features/coursecards.js'), c) };
+  return { doc, cards, requests, ui, open, nick, flush, color, events, editors, catalog: async (next) => { catalog = next; for (const f of changed) f({ lookCatalog: { newValue: next } }, 'local'); await settle(); }, loadCards: () => vm.runInContext(read('features/coursecards.js'), c) };
 };
 
 test('Canvas native and board cards have distinct menu ids', () => {
@@ -211,4 +212,19 @@ test('course-menu arrow direction follows computed CSS direction without a dir a
   const items = p.doc.querySelector('[data-roving]').querySelectorAll('button, input');
   items[1].focus(); press(p, items[1], { key: 'ArrowRight' });
   assert.equal(p.doc.activeElement, items[0]);
+});
+
+
+test('an open course Look selector follows catalogue additions and removals without losing a nickname draft', async () => {
+  const p = page(); await p.open();
+  const C = require('../lib/looks.js'), G = D.GZ_LOOKS[0];
+  const kept = { id: C.idOf('code'), name: 'Study', kind: 'saved', colors: G.colors, look: G.look, bg: G.bg };
+  const nick = p.doc.getElementById('gz-cm-nick');
+  nick.value = 'Draft'; p.doc.fire(nick, 'input');
+  await p.catalog({ looks: [kept] });
+  assert.ok(p.doc.querySelectorAll('.gz-cm-look').some((b) => b.dataset.look === kept.id), 'an added Look appears in the open menu');
+  assert.equal(p.doc.getElementById('gz-cm-nick'), nick);
+  assert.equal(nick.value, 'Draft');
+  await p.catalog({ looks: [] });
+  assert.equal(p.doc.querySelectorAll('.gz-cm-look').some((b) => b.dataset.look === kept.id), false, 'a removed Look leaves the open menu');
 });
