@@ -41,6 +41,18 @@ test('each module names the pinned version and the script that built it', () => 
   for (const f of modules) assert.equal(read(`lib/pdfjs/${f}`).split('\n')[0], `// pdf.js ${version} legacy build (Apache-2.0, lib/pdfjs/LICENSE). Built by scripts/vendor-pdfjs.sh.`);
 });
 
+test('the core-js bundled into each module ships its pinned MIT permission notice', () => {
+  const script = read('scripts/vendor-pdfjs.sh');
+  const license = read('lib/pdfjs/LICENSE_CORE_JS');
+  const version = script.match(/^core_js=(\S+)$/m)[1];
+  for (const f of modules) assert.ok(read(`lib/pdfjs/${f}`).includes(`license: 'https://github.com/zloirock/core-js/blob/v${version}/LICENSE'`), f);
+  assert.match(license, /Copyright \(c\) 2013–2025 Denis Pushkarev/);
+  assert.match(license, /Copyright \(c\) 2025–2026 CoreJS Company/);
+  assert.match(license, /The above copyright notice and this permission notice shall be included/);
+  const hash = require('node:crypto').createHash('sha256').update(license).digest('hex');
+  assert.equal(hash, script.match(/^core_js_license_sha256=(\S+)$/m)[1]);
+});
+
 test('no module makes code from text: no eval, and core-js keeps no Function fallback', () => {
   for (const f of modules) {
     const src = read(`lib/pdfjs/${f}`);
