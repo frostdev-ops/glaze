@@ -34,7 +34,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
   // this site (data, so read against the page's own address: Ultra's <base> is its CDN), its name, and the original's link
   // here. null: a frame that isn't an attachment's preview (it stays Blackboard's).
   const own = (u) => { try { const x = new URL(u, location.href); return x.origin === location.origin ? x : null; } catch { return null; } };
-  const same = (a, b) => !!a && !!b && a.pathname === b.pathname && a.search === b.search;
+  const same = (a, b) => !!a && !!b && a.origin === b.origin && a.pathname === b.pathname && a.search === b.search;
   const fileOf = (bf) => {
     let at = null;
     try { at = new URL(bf.src); } catch { return null; }
