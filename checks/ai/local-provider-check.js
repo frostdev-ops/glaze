@@ -11,6 +11,13 @@
 // checks/ai/local-engine-check.js's nvidia set): the real engine instead of the stub, that file served as the download with
 // its own 64 MB chunk hashes, and Writer's run held only to reaching the engine and finishing (done, or refused by Writer's
 // check: the stock model isn't the fine-tune its prompt is written for) instead of the stub's sentence.
+// Pictures: the card's picture download (a tiny LFM3-VL GGUF and projector, served the same way) from its own click, then
+// writer.image through the worker's broker from a Glaze page: the picture (a PNG made here) decoded by the browser in the
+// engine host's Worker, sized and encoded by a stub encoder written over ai/local/vision.js, fed to the stub engine between
+// <|vision_start|> and <|vision_end|> after the text model was let go, and the answer the task's own, checked.
+// GLAZE_REAL_VL=<LFM3-VL .gguf> and GLAZE_REAL_MMPROJ=<its mmproj .gguf> (with GLAZE_REAL_MODEL): the real files, engine
+// and encoder; GLAZE_PICTURES=<folder of .png/.jpg> reads each with writer.image and writes pictures.json (each output,
+// whether it is the schema's, its time) beside the results.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
@@ -43,16 +50,17 @@ const BYTE = (() => {
 })();
 const TOKENS = [...BYTE, '<|startoftext|>', '<|im_start|>', '<|im_end|>', '<think>', '</think>', ...Array.from({ length: 20 }, (_, i) => `[PAD${i}]`)];
 const TYPES = [...BYTE.map(() => 1), 3, 3, 3, 4, 4, ...Array(20).fill(5)];
-const gguf = () => {
+const gguf = ({ arch = 'lfm3', tokens = TOKENS, types = TYPES } = {}) => {
   const parts = [], u32 = (v) => { const b = Buffer.alloc(4); b.writeUInt32LE(v); parts.push(b); }, i32 = (v) => { const b = Buffer.alloc(4); b.writeInt32LE(v); parts.push(b); };
   const u64 = (v) => { const b = Buffer.alloc(8); b.writeBigUInt64LE(BigInt(v)); parts.push(b); };
   const str = (s) => { const b = Buffer.from(s, 'utf8'); u64(b.length); parts.push(b); };
   const kv = [
-    ['general.architecture', 8, () => str('lfm3')], ['tokenizer.ggml.model', 8, () => str('gpt2')], ['tokenizer.ggml.pre', 8, () => str('lfm2')],
-    ['tokenizer.ggml.tokens', 9, () => { u32(8); u64(TOKENS.length); TOKENS.forEach(str); }],
-    ['tokenizer.ggml.token_type', 9, () => { u32(5); u64(TYPES.length); TYPES.forEach(i32); }],
-    ['tokenizer.ggml.merges', 9, () => { u32(8); u64(0); }],
-    ['tokenizer.ggml.bos_token_id', 4, () => u32(TOKENS.indexOf('<|startoftext|>'))], ['tokenizer.ggml.eos_token_id', 4, () => u32(TOKENS.indexOf('<|im_end|>'))],
+    ['general.architecture', 8, () => str(arch)],
+    ...(tokens.length ? [['tokenizer.ggml.model', 8, () => str('gpt2')], ['tokenizer.ggml.pre', 8, () => str('lfm2')],
+      ['tokenizer.ggml.tokens', 9, () => { u32(8); u64(tokens.length); tokens.forEach(str); }],
+      ['tokenizer.ggml.token_type', 9, () => { u32(5); u64(types.length); types.forEach(i32); }],
+      ['tokenizer.ggml.merges', 9, () => { u32(8); u64(0); }],
+      ['tokenizer.ggml.bos_token_id', 4, () => u32(tokens.indexOf('<|startoftext|>'))], ['tokenizer.ggml.eos_token_id', 4, () => u32(tokens.indexOf('<|im_end|>'))]] : []),
     ['glaze.check.pad', 8, () => str('x'.repeat(2 << 20))], // a model big enough for its download to take a moment
   ];
   parts.push(Buffer.from('GGUF')); u32(3); u64(0); u64(kv.length);
@@ -61,41 +69,75 @@ const gguf = () => {
   return Buffer.concat([body, Buffer.alloc((32 - (body.length % 32)) % 32)]);
 };
 const REAL = process.env.GLAZE_REAL_MODEL ? path.resolve(process.env.GLAZE_REAL_MODEL) : null;
-const DATA = REAL ? null : gguf(), CHUNK = REAL ? 64 << 20 : 256 << 10, COMMIT = 'c'.repeat(40);
-const SIZE = REAL ? fs.statSync(REAL).size : DATA.length;
+const REAL_VL = REAL && process.env.GLAZE_REAL_VL ? [path.resolve(process.env.GLAZE_REAL_VL), path.resolve(process.env.GLAZE_REAL_MMPROJ || '')] : null;
+const PICTURES = process.env.GLAZE_PICTURES ? path.resolve(process.env.GLAZE_PICTURES) : null;
+const PICS = !REAL || !!REAL_VL; // the picture steps: with the stubs, or with the real picture files
+const CHUNK = REAL ? 64 << 20 : 256 << 10, COMMIT = 'c'.repeat(40);
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
-// The served bytes a..b (inclusive): the tiny GGUF, or the real file.
-const slice = (a, b) => {
-  if (!REAL) return DATA.subarray(a, b + 1);
-  const buf = Buffer.alloc(b - a + 1), fd = fs.openSync(REAL, 'r');
-  try { fs.readSync(fd, buf, 0, buf.length, a); } finally { fs.closeSync(fd); }
-  return buf;
-};
-const hashes = () => {
+// A served file: its bytes a..b (inclusive), from memory (the tiny GGUFs) or a real file.
+const served = (from) => {
+  const size = Buffer.isBuffer(from) ? from.length : fs.statSync(from).size;
+  const slice = (a, b) => {
+    if (Buffer.isBuffer(from)) return from.subarray(a, b + 1);
+    const buf = Buffer.alloc(b - a + 1), fd = fs.openSync(from, 'r');
+    try { fs.readSync(fd, buf, 0, buf.length, a); } finally { fs.closeSync(fd); }
+    return buf;
+  };
   const all = crypto.createHash('sha256'), parts = [];
-  for (let i = 0; i * CHUNK < SIZE; i++) { const b = slice(i * CHUNK, Math.min(SIZE, (i + 1) * CHUNK) - 1); parts.push(sha(b)); all.update(b); }
-  return { sha256: parts, total: all.digest('hex') };
+  for (let i = 0; i * CHUNK < size; i++) { const b = slice(i * CHUNK, Math.min(size, (i + 1) * CHUNK) - 1); parts.push(sha(b)); all.update(b); }
+  return { size, slice, sha256: parts, total: all.digest('hex') };
 };
-const MODEL = { id: 'check-tiny', name: 'Check tiny', repo: 'glaze-check/Tiny-GGUF', commit: COMMIT, file: 'tiny.gguf', url: `https://huggingface.co/glaze-check/Tiny-GGUF/resolve/${COMMIT}/tiny.gguf`,
-  size: SIZE, chunk: CHUNK, ...hashes(), license: 'lfm1.0', quant: 'Q4_K_M', tier: 1 };
+// The tiny picture model: the text model's vocabulary with LFM3-VL's two vision tokens; its projector, a clip GGUF.
+const VL_TOKENS = { tokens: [...TOKENS, '<|vision_start|>', '<|vision_end|>'], types: [...TYPES, 3, 3] };
+const FILES = {
+  'tiny.gguf': served(REAL || gguf()),
+  ...(PICS && { 'tiny-vl.gguf': served(REAL_VL ? REAL_VL[0] : gguf(VL_TOKENS)), 'tiny-mmproj.gguf': served(REAL_VL ? REAL_VL[1] : gguf({ arch: 'clip', tokens: [], types: [] })) }),
+};
+const entry = (file, extra) => ({ repo: 'glaze-check/Tiny-GGUF', commit: COMMIT, file, url: `https://huggingface.co/glaze-check/Tiny-GGUF/resolve/${COMMIT}/${file}`,
+  size: FILES[file].size, chunk: CHUNK, sha256: FILES[file].sha256, total: FILES[file].total, license: 'lfm1.0', ...extra });
+const MODEL = { id: 'check-tiny', name: 'Check tiny', ...entry('tiny.gguf', { quant: 'Q4_K_M', tier: 1 }) };
+const VL = PICS && { id: 'check-vl', name: 'Check VL', ...entry('tiny-vl.gguf', { quant: 'Q4_K_M', role: 'pictures', projector: 'check-mmproj', stock: true }) };
+const MMPROJ = PICS && { id: 'check-mmproj', name: 'Check projector', ...entry('tiny-mmproj.gguf', { quant: 'F16', role: 'projector' }) };
+// A 3 × 2 PNG: red, green, blue over white, black, half-transparent grey; the host reads it back with the browser.
+const PNG = (() => {
+  const crc = (buf) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); } return ~c >>> 0; };
+  const chunk = (type, data) => { const len = Buffer.alloc(4), sum = Buffer.alloc(4), td = Buffer.concat([Buffer.from(type), data]); len.writeUInt32BE(data.length); sum.writeUInt32BE(crc(td)); return Buffer.concat([len, td, sum]); };
+  const head = Buffer.alloc(13); head.writeUInt32BE(3, 0); head.writeUInt32BE(2, 4); head.set([8, 6, 0, 0, 0], 8);
+  const rows = [[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255], [255, 255, 255, 255, 0, 0, 0, 255, 128, 128, 128, 128]];
+  const raw = Buffer.concat(rows.map((r) => Buffer.from([0, ...r])));
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', head), chunk('IDAT', require('node:zlib').deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+})();
 const HOSTS = ['huggingface.co', 'us.aws.cdn.hf.co'];
 
 // ---- the stubs written into the copy -----------------------------------------------------------------------------------------
 // The engine (docs/ai-harness.md): reads what the host fed it with Glaze's tokenizer, tells the check over a channel, and
 // answers writer.complete's reply only for the fine-tune's format.
+// A picture prompt (the stock template, the picture between the vision tokens) is answered with writer.image's reading.
+const READING = { description: 'Three coloured squares over white, black and grey.', requirements: [], complete: true, reason: '', relevance: 'relevant' };
 const ENGINE = `var GZ_AI_ENGINE = { load: async (g, opts) => {
   const tok = GZ_AI_TOKENIZER.fromGGUF(g.kv); for (const n of GZ_AI_TOKENIZER.GLAZE_TOKENS) tok.add(n);
-  const say = new BroadcastChannel('glaze-check-engine'); say.postMessage({ type: 'load', opts: Object.keys(opts).sort() });
+  const vision = tok.id('<|vision_start|>') !== undefined;
+  const say = new BroadcastChannel('glaze-check-engine'); say.postMessage({ type: 'load', vision, opts: Object.keys(opts).sort() });
   let seen = [], reply = [], i = 0, pos = 0;
   const snap = (p, s) => ({ pos: p, seen: s.slice(), drop() {} });
-  return { context: 16000,
-    prefill: async (ids, { snapshot } = {}) => { seen.push(...ids); pos += ids.length; const text = tok.decode(seen, { specials: true });
-      say.postMessage({ type: 'prefill', n: ids.length, text });
-      reply = /<\\|gz_task:writer\\.complete\\|>/.test(text) && /<\\|gz_data\\|>/.test(text) && !/<<<DATA-/.test(text) ? [...tok.encode('it arrives uninvited and rearranges the present. Then the river takes it back.')] : [];
+  return { context: 16000, device: { stub: true },
+    prefill: async (ids, { snapshot, embeds = [] } = {}) => {
+      const at = seen.length; seen.push(...ids); pos += ids.length; const text = tok.decode(seen, { specials: true });
+      const around = embeds.map((e) => [tok.decode([seen[at + e.at - 1]], { specials: true }), tok.decode([seen[at + e.at + e.tokens]], { specials: true }), e.tokens]);
+      say.postMessage({ type: 'prefill', n: ids.length, text, vision, embeds: around });
+      reply = /<\\|gz_task:writer\\.complete\\|>/.test(text) && /<\\|gz_data\\|>/.test(text) && !/<<<DATA-/.test(text) ? [...tok.encode('it arrives uninvited and rearranges the present. Then the river takes it back.')]
+        : vision && around.length && around.every(([a, b]) => a === '<|vision_start|>' && b === '<|vision_end|>') ? [...tok.encode(${JSON.stringify(JSON.stringify(READING))})] : [];
       i = 0; return snapshot ? snap(pos, seen) : undefined; },
     decode: async ({ sampler }) => { pos++; return i < reply.length ? reply[i++] : tok.eos; },
     snapshot: async () => snap(pos, seen), restore: async (s) => { pos = s.pos; seen = s.seen.slice(); },
-    release: () => { say.postMessage({ type: 'release' }); } };
+    release: () => { say.postMessage({ type: 'release', vision }); } };
+} };`;
+// The encoder (vision.js's interface): four tokens a picture; it tells the check the pixels the host decoded.
+const VISION = `var GZ_AI_VISION = { load: async (g, opts) => {
+  const say = new BroadcastChannel('glaze-check-engine'); say.postMessage({ type: 'vision', arch: g.kv['general.architecture'], opts: Object.keys(opts).sort(), device: !!opts.device?.stub });
+  return { prepare: ({ width, height }) => ({ width, height, tokens: 4 }),
+    encode: async (img) => { say.postMessage({ type: 'encode', width: img.width, height: img.height, pixels: Array.from(img.data) }); return { tokens: 4, width: img.width, height: img.height, buffer: {}, drop() {} }; },
+    release: () => { say.postMessage({ type: 'vision-release' }); } };
 } };`;
 // The ladder (ladder.js's probe and pick): the runner's GPU is a CPU fallback, which the real one refuses.
 const LADDER = 'var GZ_AI_LADDER = { probe: async () => ({ adapter: {} }), pick: ({ models }) => ({ tier: models[0].tier, id: models[0].id, reason: \'fastest\', quants: [] }) };';
@@ -126,15 +168,16 @@ const records = () => ({
       log.push({ method: req.method, host, path: u.pathname, range: h.range || null, origin: h.origin || null, cookie: !!h.cookie });
       const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'range', 'access-control-expose-headers': '*' };
       if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
-      if (host === 'huggingface.co' && u.pathname === `/glaze-check/Tiny-GGUF/resolve/${COMMIT}/tiny.gguf`) {
-        res.writeHead(302, { location: 'https://us.aws.cdn.hf.co/xet-bridge-us/check/tiny.gguf?Expires=1&Signature=s', 'access-control-allow-origin': h.origin || '*' });
+      const asked = u.pathname.split('/').pop();
+      if (host === 'huggingface.co' && u.pathname === `/glaze-check/Tiny-GGUF/resolve/${COMMIT}/${asked}` && Object.hasOwn(FILES, asked)) {
+        res.writeHead(302, { location: `https://us.aws.cdn.hf.co/xet-bridge-us/check/${asked}?Expires=1&Signature=s`, 'access-control-allow-origin': h.origin || '*' });
         return res.end();
       }
-      const m = host === 'us.aws.cdn.hf.co' && /^bytes=(\d+)-(\d+)$/.exec(h.range || '');
+      const m = host === 'us.aws.cdn.hf.co' && Object.hasOwn(FILES, asked) && /^bytes=(\d+)-(\d+)$/.exec(h.range || '');
       if (m) {
         await pause(250);
-        const a = +m[1], b = Math.min(+m[2], SIZE - 1), body = slice(a, b);
-        res.writeHead(206, { ...cors, 'accept-ranges': 'bytes', 'content-range': `bytes ${a}-${b}/${SIZE}`, 'content-type': 'application/octet-stream', 'content-length': body.length });
+        const f = FILES[asked], a = +m[1], b = Math.min(+m[2], f.size - 1), body = f.slice(a, b);
+        res.writeHead(206, { ...cors, 'accept-ranges': 'bytes', 'content-range': `bytes ${a}-${b}/${f.size}`, 'content-type': 'application/octet-stream', 'content-length': body.length });
         return res.end(body);
       }
       res.writeHead(404); res.end();
@@ -145,8 +188,8 @@ const records = () => ({
     // The copy: its models.json, the stubs, and a 4 s idle (a file written into it replaces its link, never the source's).
     ext = env.staged(root, []);
     const put = (f, text) => { fs.rmSync(path.join(ext, f), { force: true }); fs.writeFileSync(path.join(ext, f), text); };
-    put('ai/local/models.json', `${JSON.stringify({ models: [MODEL] }, null, 2)}\n`);
-    if (!REAL) put('ai/local/engine.js', ENGINE);
+    put('ai/local/models.json', `${JSON.stringify({ models: [MODEL, ...(PICS ? [VL, MMPROJ] : [])] }, null, 2)}\n`);
+    if (!REAL) { put('ai/local/engine.js', ENGINE); put('ai/local/vision.js', VISION); }
     put('ai/local/ladder.js', LADDER);
     const link = fs.readFileSync(path.join(root, 'ai/local/link.js'), 'utf8');
     assert.ok(link.includes('idle: 300000'), 'link.js names its idle time');
@@ -176,7 +219,8 @@ const records = () => ({
     await settings.goto(`${base}/options.html#ai/setup`);
     // The engine's channel, heard in Settings (the same extension origin).
     await settings.evaluate(() => { window.__engine = []; new BroadcastChannel('glaze-check-engine').onmessage = (e) => window.__engine.push(e.data); });
-    const note = () => settings.evaluate(() => document.querySelector('#ai-drawer .note')?.textContent || '');
+    const note = () => settings.evaluate(() => document.querySelector('#ai-drawer .line.own:not(#ai-local-pictures) .note')?.textContent || '');
+    const picNote = () => settings.evaluate(() => document.querySelector('#ai-local-pictures .note')?.textContent || '');
 
     await step('the card: Glaze on-device AI after Chrome\'s, needing a download, its size shown; nothing fetched before the click', async () => {
       const cards = await settings.evaluate(() => [...document.querySelectorAll('#ai-providers .ai-prov b')].map((b) => b.textContent));
@@ -189,13 +233,13 @@ const records = () => ({
       await settings.screenshot({ path: path.join(out, 'card-download.png') });
     });
     await step('Download: the model comes through the 302 and Range requests into OPFS in the engine host, its progress shown, then Ready', async () => {
-      await settings.click('#ai-drawer button.primary');
-      const shown = await until(() => settings.evaluate(() => { const b = document.querySelector('#ai-drawer progress'); return b && b.value > 0 && b.value < 1 && { value: b.value, note: document.querySelector('#ai-drawer .note').textContent }; }), 'its progress');
+      await settings.click('#ai-drawer .line.own:not(#ai-local-pictures) button.primary');
+      const shown = await until(() => settings.evaluate(() => { const b = document.querySelector('#ai-drawer progress'); return b && b.value > 0 && b.value < 1 && { value: b.value, note: document.querySelector('#ai-drawer .line.own .note').textContent }; }), 'its progress');
       assert.match(shown.note, REAL ? /^\d+% · \d+\.\d GB$/ : /^\d+% · 0\.0 GB$/);
       await settings.screenshot({ path: path.join(out, 'card-downloading.png') });
       await until(async () => (await note()).startsWith('Ready'), 'Ready', REAL ? 600000 : 30000);
       assert.deepEqual(await offscreen(), [`${base}/ai/local/host.html`], 'the offscreen document hosts it');
-      const cdn = log.filter((l) => l.host === 'us.aws.cdn.hf.co' && l.method === 'GET');
+      const cdn = log.filter((l) => l.host === 'us.aws.cdn.hf.co' && l.method === 'GET' && l.path.endsWith('/tiny.gguf'));
       assert.equal(cdn.length, MODEL.sha256.length, 'one Range request a chunk');
       assert.ok(log.every((l) => !l.cookie), 'no cookies');
       assert.ok(log.filter((l) => l.host === 'huggingface.co').every((l) => l.origin === base), 'asked from the extension');
@@ -253,10 +297,97 @@ const records = () => ({
       if (!REAL) assert.match(row, /Done/);
       await settings.screenshot({ path: path.join(out, 'activity.png') });
     });
+    // ---- pictures ----
+    // writer.image through the worker's broker, from this Glaze page (a top frame of the extension, as Writer's own pages).
+    let asks = 0;
+    const read = (name, image) => settings.evaluate(({ name, image, id, ms }) => new Promise((resolve) => {
+      const p = chrome.runtime.connect({ name: 'glaze:ai' }), t0 = performance.now();
+      const timer = setTimeout(() => { p.disconnect(); resolve({ type: 'error', error: 'check-timeout', ms }); }, ms);
+      p.onMessage.addListener((m) => { if (m.id === id && (m.type === 'end' || m.type === 'error')) { clearTimeout(timer); p.disconnect(); resolve({ ...m, ms: Math.round(performance.now() - t0) }); } });
+      p.postMessage({ id, op: 'run', feature: 'writing', task: 'writer.image', input: { name, image, context: 'Read the attached picture for this assignment.' } });
+    }), { name, image, id: ++asks, ms: REAL ? 300000 : 30000 });
+    const caps = () => settings.evaluate(() => new Promise((resolve) => {
+      const p = chrome.runtime.connect({ name: 'glaze:ai' });
+      p.onMessage.addListener((m) => { if (m.id === 1) { p.disconnect(); resolve(m); } });
+      p.postMessage({ id: 1, op: 'status', feature: 'writing' });
+    }));
+    if (PICS) {
+      await step('the picture row: Needs a download with its size; nothing fetched before its click; caps.images false', async () => {
+        await settings.evaluate(async () => { const { ai } = await chrome.storage.local.get('ai'); await chrome.storage.local.set({ ai: { ...ai, features: { ...ai.features, writing: true } } }); });
+        await settings.click('#ai-prov-local'); await settings.click('#ai-prov-local');
+        await until(async () => (await note()).startsWith('Ready'), 'Ready');
+        const size = ((VL.size + MMPROJ.size) / 1e9).toFixed(1).replace('.', '\\.');
+        assert.match(await until(async () => { const n = await picNote(); return n.startsWith('Needs a download') && n; }, 'its state'), new RegExp(`^Needs a download · ${size} GB$`));
+        assert.equal(log.filter((l) => /tiny-(vl|mmproj)/.test(l.path)).length, 0, 'no request for it before Download');
+        const st = await caps();
+        assert.deepEqual([st.ready, st.provider, st.caps.images], [true, 'local', false], JSON.stringify(st));
+        await settings.screenshot({ path: path.join(out, 'card-pictures-download.png') });
+      });
+      await step('the picture Download: projector and LFM3-VL through Hugging Face into OPFS, its own progress, Ready; caps.images true', async () => {
+        await settings.click('#ai-local-pictures button.primary');
+        await until(() => settings.evaluate(() => { const b = document.querySelector('#ai-drawer progress'); return b && b.getAttribute('aria-label') === 'Picture reading' && b.value > 0 && b.value < 1; }), 'its progress');
+        assert.ok((await note()).startsWith('Ready'), 'the text model stays ready');
+        await settings.screenshot({ path: path.join(out, 'card-pictures-downloading.png') });
+        await until(async () => (await picNote()).startsWith('Ready'), 'Ready', REAL ? 600000 : 30000);
+        for (const m of [VL, MMPROJ]) {
+          assert.equal(log.filter((l) => l.host === 'us.aws.cdn.hf.co' && l.method === 'GET' && l.path.endsWith(`/${m.file}`)).length, m.sha256.length, `one Range request a chunk of ${m.file}`);
+          const kept = await settings.evaluate(async (id) => { const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models'); const own = await top.getDirectoryHandle(id); const names = []; for await (const [, d] of own.entries()) for await (const k of d.keys()) names.push(k); return names.length; }, m.id);
+          assert.equal(kept, m.sha256.length + 1, `${m.id} whole in OPFS`);
+        }
+        const st = await caps();
+        assert.deepEqual([st.ready, st.caps.images], [true, true], JSON.stringify(st));
+        await settings.screenshot({ path: path.join(out, 'card-pictures-ready.png') });
+      });
+      await step('writer.image runs on Glaze\'s model: the PNG decoded in the host\'s Worker, encoded, fed between the vision tokens; the text model let go first', async () => {
+        await settings.evaluate(() => { window.__engine = []; });
+        const r = await read('squares.png', { mime: 'image/png', data: PNG.toString('base64') });
+        console.log(`     writer.image: ${JSON.stringify(r).slice(0, 400)}`);
+        assert.equal(r.type, 'end', JSON.stringify(r));
+        if (!REAL) {
+          assert.deepEqual(r.output, READING);
+          const heard = await settings.evaluate(() => window.__engine);
+          const vision = heard.find((m) => m.type === 'vision'), enc = heard.find((m) => m.type === 'encode');
+          assert.deepEqual([vision?.arch, vision?.opts, vision?.device], ['clip', ['device', 'kernels', 'signal'], true], JSON.stringify(vision));
+          assert.deepEqual([enc?.width, enc?.height], [3, 2]);
+          assert.deepEqual(enc.pixels.slice(0, 20), [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 255], 'the browser\'s pixels, row by row');
+          assert.ok(enc.pixels.slice(20).every((v, i) => Math.abs(v - 128) <= 1), `alpha kept as decoded: ${enc.pixels.slice(20)}`);
+          const fed = heard.filter((m) => m.type === 'prefill' && m.vision).at(-1);
+          assert.deepEqual(fed?.embeds, [['<|vision_start|>', '<|vision_end|>', 4]]);
+          assert.ok(fed.text.startsWith('<|startoftext|><|im_start|>system\nDescribe only the attached picture.') && !fed.text.includes('<|gz_'), fed.text.slice(0, 200));
+          // One model at a time: a load while another is held follows its release (the host may have idled out before).
+          const order = heard.filter((m) => ['load', 'release'].includes(m.type)).map((m) => `${m.type}${m.vision ? ' vl' : ''}`);
+          let held = 0;
+          for (const e of order) { held = e.startsWith('load') ? held + 1 : Math.max(0, held - 1); assert.ok(held <= 1, `one model at a time: ${order}`); }
+          assert.ok(order.includes('load vl'), `LFM3-VL loaded: ${order}`);
+        }
+        const calls = (await (await sw()).evaluate(() => chrome.storage.local.get('aiCalls'))).aiCalls || [];
+        assert.ok(calls.some((c) => c.task === 'writer.image' && c.provider === 'local' && c.state === 'completed'), JSON.stringify(calls.slice(0, 3)));
+      });
+      if (PICTURES) await step(`the picture set (${PICTURES}): each read by writer.image, its output the schema's`, async () => {
+        const S = require(path.join(root, 'ai/schema.js')), W = require(path.join(root, 'ai/tasks/writer-image.js'));
+        const rows = [];
+        for (const f of fs.readdirSync(PICTURES).filter((x) => /\.(png|jpe?g)$/i.test(x)).sort()) {
+          const r = await read(f, { mime: /\.png$/i.test(f) ? 'image/png' : 'image/jpeg', data: fs.readFileSync(path.join(PICTURES, f)).toString('base64') });
+          const valid = r.type === 'end' && S.validate(r.output, W.SCHEMA).length === 0;
+          rows.push({ picture: f, valid, ms: r.ms, ...(r.type === 'end' ? { output: r.output } : { error: r.error, reason: r.reason }) });
+          console.log(`     ${valid ? 'valid  ' : 'INVALID'} ${f} (${r.ms} ms): ${JSON.stringify(r.output || r).slice(0, 300)}`);
+        }
+        fs.writeFileSync(path.join(out, 'pictures.json'), `${JSON.stringify(rows, null, 2)}\n`);
+        assert.ok(rows.length && rows.every((x) => x.valid), `${rows.filter((x) => x.valid).length}/${rows.length} schema-valid`);
+      });
+      await step('the picture Delete: its files go, the text model stays, caps.images false again', async () => {
+        await settings.locator('#ai-local-pictures').getByRole('button', { name: 'Delete', exact: true }).click();
+        await until(async () => (await picNote()).startsWith('Needs a download'), 'Needs a download');
+        assert.ok((await note()).startsWith('Ready'));
+        const left = await settings.evaluate(async () => { const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models'); const out = []; for await (const [k, h] of top.entries()) if (h.kind === 'directory') out.push(k); return out.sort(); });
+        assert.deepEqual(left, [MODEL.id]);
+        assert.equal((await caps()).caps.images, false);
+      });
+    }
     await step('Delete: the model goes from OPFS and the card needs a download again', async () => {
       await settings.click('#ai-prov-local'); await settings.click('#ai-prov-local');
       await until(async () => (await note()).startsWith('Ready'), 'Ready');
-      await settings.getByRole('button', { name: 'Delete', exact: true }).click();
+      await settings.locator('#ai-drawer .line.own:not(#ai-local-pictures)').getByRole('button', { name: 'Delete', exact: true }).click();
       await until(async () => (await note()).startsWith('Needs a download'), 'Needs a download');
       const left = await settings.evaluate(async (id) => { try { const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models'); await top.getDirectoryHandle(id); return 'kept'; } catch (e) { return e.name; } }, MODEL.id);
       assert.equal(left, 'NotFoundError');
