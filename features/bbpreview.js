@@ -43,7 +43,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     const el = same(own(read(near)?.viewerUrl), at) ? near : [...document.querySelectorAll('#site-wrap [data-bbfile]')].find((x) => same(own(read(x)?.viewerUrl), at)) || null;
     const j = el && read(el), viewer = own(j?.viewerUrl);
     if (!viewer || j.render !== 'inline') return null;
-    const a = el.querySelector('a[href*="/bbcswebdav/"]'), href = own(a?.getAttribute('href') || '')?.href || '';
+    const a = el.querySelector('a[href*="/bbcswebdav/"]'), href = a ? own(a.getAttribute('href'))?.href || '' : '';
     return { el, viewer: viewer.href, name: String(j.linkName || a?.textContent || bf.title || '').replace(/\s+/g, ' ').trim().slice(0, 200), href };
   };
 
