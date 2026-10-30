@@ -623,10 +623,12 @@ test('a feature whose status ask got no status asks again in the same generation
   let lost = 1;
   const f = frame({ pace: 100, answer: (m) => (m.feature === 'completion' && lost-- > 0 ? { type: 'error', error: 'connection-lost' } : { allowed: true, ready: true }) });
   await f.start();
-  assert.equal(f.ai.allowed('writing'), true);
-  assert.equal(f.ai.allowed('completion'), false);
-  assert.equal(await until(() => f.ai.allowed('completion')), true, 'asked again, and on');
   const asks = (feature) => f.sent.filter((m) => m.op === 'status' && m.feature === feature).length;
+  assert.equal(f.ai.allowed('writing'), true);
+  assert.equal(lost, 0, 'the first completion ask was answered with connection-lost');
+  // The re-ask comes after the pace; on a loaded machine it may already have landed, so wait for it, not for a window.
+  assert.equal(await until(() => asks('completion') === 2), true, 'asked again');
+  assert.equal(await until(() => f.ai.allowed('completion')), true, 'and on');
   assert.deepEqual([asks('completion'), asks('writing')], [2, 1]);
   assert.ok(f.sent.some((m) => m.op === 'warm'), 'and warmed once it may run');
 });
