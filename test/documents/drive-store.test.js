@@ -662,3 +662,33 @@ test('a change back to a value Drive sent unchanged still syncs', async () => {
   assert.ok((await a.run()).ok);
   assert.deepEqual((await a.local.get('writerWords')).writerWords, ['Two']);
 });
+
+// ---- round 2: first meetings that join, folders and copies that converge, a push cut short
+
+test('a second device joining keeps its own Looks history beside the folder\'s, newest first', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const look = (c, at) => ({ theme: { colors: accent(c) }, at });
+  await a.local.set({ lookHistory: [look('#aa0000', 300), look('#bb0000', 100)] });
+  assert.ok((await a.on()).ok);
+  await b.local.set({ lookHistory: [look('#cc0000', 200), look('#aa0000', 50)] });
+  assert.ok((await b.on()).ok);
+  const colors = async (d) => (await d.local.get('lookHistory')).lookHistory.map((e) => e.theme.colors['--gz-accent']);
+  assert.deepEqual(await colors(b), ['#aa0000', '#cc0000', '#bb0000'], 'both devices\' Looks, once each, by when worn');
+  assert.ok((await a.run()).ok);
+  assert.deepEqual(await colors(a), ['#aa0000', '#cc0000', '#bb0000']);
+});
+
+test('a second device joining keeps its own Gradescope placings and answers beside the folder\'s', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const acct = { id: 'a'.repeat(24), name: 'Sam' };
+  await a.local.set({ gradescope: GS.clean({ acct, map: { 111: { to: 'canvas:https://school.instructure.com/7', name: 'Bio 101' } }, courses: {}, hide: false, bind: { 'https://school.instructure.com/42': { id: acct.id, show: true } } }) });
+  assert.ok((await a.on()).ok);
+  await b.local.set({ gradescope: GS.clean({ acct, map: { 222: { to: 'canvas:https://school.instructure.com/8', name: 'Chem 110' } }, courses: { 222: { at: 5, bad: 0, rows: [{ id: '3', title: 'Quiz' }] } }, hide: false, bind: {} }) });
+  assert.ok((await b.on()).ok);
+  const here = (await b.local.get('gradescope')).gradescope;
+  assert.deepEqual(Object.keys(here.map).sort(), ['111', '222'], 'both devices\' placings');
+  assert.equal(here.bind['https://school.instructure.com/42']?.show, true, 'and A\'s answer');
+  assert.equal(here.courses['222']?.rows[0].title, 'Quiz', 'what B read for its own placing stays');
+  assert.ok((await a.run()).ok);
+  assert.deepEqual(Object.keys((await a.local.get('gradescope')).gradescope.map).sort(), ['111', '222']);
+});
