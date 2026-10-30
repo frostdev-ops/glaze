@@ -339,3 +339,23 @@ test('text reads a page in order, bounded; thumbnail says why it drew nothing wh
   try { assert.equal(await pdf.text(await scan.getPage(1)), ''); } finally { await scan.loadingTask.destroy(); }
 });
 const LABELS3 = () => F.LABELS.map((label) => ({ label }));
+
+// ---- scripts/pdf-fidelity.js: how it reads the other readers, and what it calls a difference --------------------------
+test('the fidelity script reads pdfinfo and pdftotext, and marks what a reader shows differently from what was asked', () => {
+  const V = require('../scripts/pdf-fidelity.js');
+  assert.deepEqual(V.parseInfo('Pages:           2\nEncrypted:       yes (print:no copy:yes change:yes addNotes:yes algorithm:RC4)\nPage    1 size:  300 x 200 pts\nPage    1 rot:   90\nPage    2 size:  300 x 200 pts\nPage    2 rot:   0\n'),
+    { pages: 2, rotations: [90, 0], encrypted: true, printing: false });
+  assert.deepEqual(V.parseInfo('Pages:           1\nEncrypted:       no\nPage    1 rot:   0\n'), { pages: 1, rotations: [0], encrypted: false, printing: true });
+  assert.deepEqual(V.splitPages('Alpha page one\n\n\f\n\fCharlie\n  page\n\f'), ['Alpha page one', '', 'Charlie page']);
+  const sources = [{ pages: [{ text: 'A', rotate: 90 }, { text: 'B', rotate: 0 }] }, { pages: [{ text: 'M', rotate: 180 }] }];
+  const slots = D.layout(2, [{ op: 'rotate', pages: [0], by: 270 }, { op: 'blank', at: 1 }, { op: 'merge' }, { op: 'rotate', pages: [1], by: 90 }], [1]);
+  assert.deepEqual(V.expectedOf(sources, slots), [{ text: 'A', rotate: 0 }, { text: '', rotate: 90 }, { text: 'B', rotate: 0 }, { text: 'M', rotate: 180 }]);
+  const want = { pages: [{ text: 'A', rotate: 0 }, { text: 'B', rotate: 90 }], fields: { name: 'Ada' } };
+  assert.deepEqual(V.compare(want, { pages: [{ text: 'A', rotate: 0 }, { text: 'B', rotate: 90 }], fields: { name: 'Ada', other: 'x' } }), { pages: 'ok', order: 'ok', rotation: 'ok', fields: 'ok' });
+  assert.deepEqual(V.compare(want, { pages: [{ text: 'B', rotate: 0 }, { text: 'A', rotate: 0 }], fields: null }), { pages: 'ok', order: 'pages 1, 2: "B", "A"', rotation: 'pages 2: 0', fields: 'n/a' });
+  assert.deepEqual(V.compare(want, { pages: [{ text: 'A', rotate: 0 }], fields: { name: 'Grace' } }), { pages: '1, not 2', order: 'pages 2: null', rotation: 'pages 2: null', fields: 'name="Grace"' });
+  assert.deepEqual(V.compare({ ...want, fields: null }, { pages: want.pages, fields: {} }).fields, '', 'no fields asked about');
+  assert.deepEqual(V.compare(want, { error: 'locked' }), { pages: 'locked', order: '', rotation: '', fields: '' });
+  assert.match(V.table([{ file: 'three', output: 'baked', reader: 'PDFKit', pages: 'ok', order: 'ok', rotation: 'ok', fields: '', notes: 'a | b' }]),
+    /^\| three \| baked \| PDFKit \| ok \| ok \| ok \|  \| a \\\| b \|$/m);
+});
