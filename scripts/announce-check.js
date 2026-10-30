@@ -230,8 +230,17 @@ const ok = (v, label) => { checks++; if (!v) { failures.push(label); console.err
       const b = await box('DIALOG');
       ok(b.left >= 0 && b.right <= width + 0.5 && b.bottom <= height + 0.5, `${name}: inside the viewport (${Math.round(b.left)}..${Math.round(b.right)} of ${width})`);
       ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: no sideways scroll`);
+      if (rtl) { // Blackboard's longer name, the widest footer the pop-up gets
+        const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+        const n = find(root, (x) => x.nodeName === 'A' && (x.attributes || []).some((v, i, a) => i % 2 === 0 && v === 'class' && a[i + 1] === 'go'));
+        const { object } = await cdp.send('DOM.resolveNode', { nodeId: n.nodeId });
+        await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, functionDeclaration: 'function() { this.textContent = "Open in Blackboard"; }' });
+      }
+      await page.keyboard.press('Shift+Tab');
+      ok(await focusedName() === 'button:Close', `${name}: Shift+Tab from the title reaches the footer's Close`);
       const [g, c] = [await box('A', 'go'), await box('BUTTON', 'shut')];
-      ok(c && c.bottom <= b.bottom + 0.5, `${name}: the footer's Close is whole inside the pop-up`);
+      const inside = (r) => r && r.left >= b.left - 0.5 && r.right <= b.right + 0.5 && r.bottom <= b.bottom + 0.5;
+      ok(inside(g) && inside(c), `${name}: Open and Close are whole inside the pop-up (${JSON.stringify([g, c].map((r) => r && [Math.round(r.left), Math.round(r.right), Math.round(r.bottom)]))})`);
       ok(g && c && (c.top > g.top || (rtl ? c.right <= g.left : c.left >= g.right)), `${name}: Close after Open in Canvas${rtl ? ', mirrored' : ''}`);
       await shot(`popup-${name}`);
       if (name === 'dark-1440') {

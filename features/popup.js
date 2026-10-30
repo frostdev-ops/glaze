@@ -43,6 +43,7 @@ dialog, .genie-face { position: fixed; inset: 0; box-sizing: border-box; display
   color: var(--gz-ink, #1d2733); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, #fff));
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong, #9aa7b4)); border-radius: var(--gz-radius, 12px); box-shadow: var(--gz-shadow, 0 18px 50px rgb(0 0 0 / 0.3)); }
 dialog.wide { width: min(64em, calc(100vw - 1rem)); }
+dialog { overflow: auto; } /* the body scrolls; the whole pop-up only when its title, body and footer can't all fit */
 dialog:not([open]) { display: none; }
 dialog::backdrop { background: transparent; }
 dialog[data-genie] { background: transparent; border-color: transparent; box-shadow: none; overflow: visible; }
@@ -76,7 +77,7 @@ h2 { margin: 0; font: 600 1.15em/1.3 var(--gz-font-head, var(--gz-font, system-u
 a { color: var(--gz-accent, #0b6bcb); text-underline-offset: 0.15em; }
 .wait { margin: 0; color: var(--gz-ink-muted, #5b6876); }
 .body .files { display: flex; flex-wrap: wrap; gap: 0.35em 0.9em; margin: 1em 0 0; padding: 0.7em 0 0; list-style: none; font-size: 0.9em; border-top: 1px solid var(--gz-line, #d5dbe1); }
-footer { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 0.5em; padding: 0.7em 1.1em 0.9em; border-top: 1px solid var(--gz-line, #d5dbe1); }
+footer { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5em; padding: 0.7em 1.1em 0.9em; border-top: 1px solid var(--gz-line, #d5dbe1); }
 footer:empty { display: none; }
 .go { display: inline-flex; align-items: center; min-height: 2.25em; padding: 0.3em 1em; font-weight: 600; text-decoration: none; color: var(--gz-accent-ink, #fff);
   background: var(--gz-accent, #0b6bcb); border: 1px solid var(--gz-accent, #0b6bcb); border-radius: 999px; }
@@ -285,7 +286,9 @@ h2:focus-visible { outline-offset: 4px; }`;
         .filter((el) => !el.disabled && el.tabIndex >= 0 && !el.closest('[inert]') && el.getClientRects().length)
         .sort((a, b) => (a.tabIndex || Infinity) - (b.tabIndex || Infinity));
       const at = all.indexOf(root.activeElement), next = e.shiftKey ? (at <= 0 ? all.length - 1 : at - 1) : (at + 1) % all.length;
-      e.preventDefault(); (all[next] || title).focus({ preventScroll: true });
+      // Focus without the browser's scroll (it would move the page behind), then just enough to show it in the pop-up.
+      const to = all[next] || title;
+      e.preventDefault(); to.focus({ preventScroll: true }); to.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     });
     // The browser closing it by itself (a repeated Escape it no longer lets the page refuse).
     box.addEventListener('close', () => { if (live && !box.open) close(true); });
