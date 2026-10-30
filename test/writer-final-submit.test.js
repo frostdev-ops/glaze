@@ -381,6 +381,8 @@ test('D4: the sheet shows what Ultra\'s text box holds, with Keep off, and sends
   assert.equal(s.messages.filter((m) => m.type === 'submit:held').length, 2, 'asked again after a failure');
   s.click('#gs-keep');
   s.click('.gs-primary'); await s.flush();
+  // The first hand-in transfers its buffer; an explicit retry builds fresh bytes.
+  s.builds.at(-1).resolve(); await s.flush();
   go = s.messages.filter((m) => m.type === 'submit:go').at(-1);
   assert.equal(go.keep, true);
 });

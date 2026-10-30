@@ -3765,5 +3765,17 @@
   "A PDF can have at most 500 pages.": "Un PDF peut contenir au plus 500 pages.",
   "This PDF is digitally signed: changing its pages would break the signature.": "Ce PDF est signé numériquement : modifier ses pages invaliderait la signature.",
   "The owner of this PDF does not allow changing its pages.": "Le propriétaire de ce PDF n’autorise pas la modification de ses pages.",
-  "Pages cannot be added to a password-protected PDF, or taken from one.": "Impossible d’ajouter des pages à un PDF protégé par mot de passe, ou d’en retirer."
+  "Pages cannot be added to a password-protected PDF, or taken from one.": "Impossible d’ajouter des pages à un PDF protégé par mot de passe, ou d’en retirer.",
+  "Export .xlsm": "Exporter .xlsm",
+  "Attach from Documents": "Joindre depuis Documents",
+  "{name} could not be made.": "Impossible de créer {name}.",
+  "{name} is larger than 50 MB.": "{name} dépasse 50 Mo.",
+  "Attach up to {n} documents.": "Joignez jusqu’à {n} documents.",
+  "Attached: {names}": "Pièces jointes : {names}",
+  "A file is larger than 50 MB. Nothing was submitted.": "Un fichier dépasse 50 Mo. Rien n’a été remis.",
+  "A file could not be read. Nothing was submitted.": "Un fichier n’a pas pu être lu. Rien n’a été remis.",
+  "The document changed or was deleted. Remove it and pick it again. Nothing was submitted.": "Le document a été modifié ou supprimé. Retirez-le et sélectionnez-le à nouveau. Rien n’a été remis.",
+  "File: {name}.": "Fichier : {name}.",
+  "Use Blackboard editor to review or remove these uploads: {names}.": "Utilisez l’éditeur Blackboard pour vérifier ou supprimer ces fichiers téléversés : {names}.",
+  "Not attached": "Non joint"
 };

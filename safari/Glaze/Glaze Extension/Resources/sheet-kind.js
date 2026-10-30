@@ -1,5 +1,5 @@
 // Spreadsheets on the Documents page (papers.html): the sheet kind's page code (lib/doc-kinds.js). Settings → Writer →
-// Spreadsheets (writer.sheets, defaults.js) adds the New band's Spreadsheet tile (create) and takes .xlsx, .csv and .tsv files
+// Spreadsheets (writer.sheets, defaults.js) adds the New band's Spreadsheet tile (create) and takes .xlsx, .xlsm, .csv and .tsv files
 // (importFile); existing spreadsheets always open, copy and export. A card shows the record's 6×4 text (sheet-data.js
 // glance). Opening one mounts the grid (sheet-grid.js) on the calc engine (lib/sheet-*.js). .xlsx files are read and written
 // by GZ_SHEET_XLSX (lib/sheet-xlsx.js), loaded on demand before a file or the grid opens. Storage is sheet-data.js's alone.
@@ -16,6 +16,11 @@
   const ENGINE = ['lib/sheet-model.js', 'lib/sheet-numfmt.js', 'lib/sheet-formula.js', 'lib/sheet-calc.js', ...FNS.map((f) => `lib/sheet-fn-${f}.js`), 'sheet-data.js'];
   const SAYS = { size: 'Choose a spreadsheet smaller than 15 MB.', read: 'That file could not be read.' };
   const xlsx = () => globalThis.GZ_SHEET_XLSX ?? null;
+  // A workbook that keeps a macro project (lib/sheet-xlsx.js extension) is written, named and labelled .xlsm, its record
+  // and index row saying ext '.xlsm' (a card's ⋯ menu reads the row); every other one .xlsx.
+  const XLSM = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+  const extOf = (wb) => (typeof xlsx()?.extension === 'function' && xlsx().extension(wb) === 'xlsm' ? '.xlsm' : '.xlsx');
+  const labelOf = (ext) => (ext === '.xlsm' ? 'Export .xlsm' : 'Export .xlsx');
   // The .xlsx reader and writer and what they stand on, loaded the first time a spreadsheet is listed, opened, imported or
   // written (never with the page). One shared load; a failure rejects the operation and allows a later retry.
   const CODECS = ['lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js'];
@@ -182,7 +187,7 @@
     const got = rec?.key ? await GZ_SHEET_DATA.read(get, rec.key) : null;
     if (!got) return {};
     const { book, parts } = GZ_SHEET_DATA.split(got.wb);
-    return { book, grid: got.rec.grid, charts: got.rec.charts, chartCount: got.rec.chartCount, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
+    return { book, grid: got.rec.grid, charts: got.rec.charts, chartCount: got.rec.chartCount, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, ...(got.rec.ext === '.xlsm' && { ext: '.xlsm' }), parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
   };
 
   // ---- files: .xlsx, .csv and .tsv through GZ_SHEET_XLSX
@@ -209,18 +214,19 @@
     const wb = await workbookOf(file, progress);
     progress?.({ stage: 'save' });
     const key = GZ_WRITER_PAPERS.newKey(), title = stem(file.name);
-    await saveAll(key, wb, { named: !!title, title }, 'start');
+    await saveAll(key, wb, { named: !!title, title, ...(extOf(wb) === '.xlsm' && { ext: '.xlsm' }) }, 'start');
     const notice = noticeOf(wb);
     return notice ? { key, notice } : key;
   };
   const safe = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
-  // A spreadsheet as .xlsx, waiting for the writer. → { name, mime, bytes }.
+  // A spreadsheet as .xlsx (.xlsm with its macros), waiting for the writer. → { name, mime, bytes }.
   const fileOf = async (wb, title) => {
     const name = safe(title) || t('Spreadsheet');
-    const X = await codecs(), bytes = await X.write(wb);
-    return { name: `${name}.xlsx`, mime: DK.KINDS.sheet.mime, bytes };
+    const X = await codecs(), bytes = await X.write(wb), ext = extOf(wb);
+    return { name: `${name}${ext}`, mime: ext === '.xlsm' ? XLSM : DK.KINDS.sheet.mime, bytes };
   };
-  const file = async (key) => {
+  const file = async (key, { progress = null } = {}) => {
+    progress?.({ stage: 'prepare' });
     await need([...ENGINE, 'sheet-grid.js']);
     const got = await GZ_SHEET_DATA.read(get, key);
     return got ? fileOf(got.wb, got.rec.title) : null;
@@ -236,12 +242,12 @@
   const exportFile = async (key) => { const f = await file(key); if (f) download(f); };
 
   // The frame's submit and kind-change checkpoints keep the complete workbook, as the grid's own Versions do.
-  const version = async (key, reason) => {
+  const version = async (key, reason, { attached = null } = {}) => {
     await need(ENGINE);
     const got = await GZ_SHEET_DATA.read(get, key);
     if (got?.rec.kind !== 'sheet') throw new Error('document kind changed');
     const gz = await GZ_SHEET_DATA.pack(got.wb);
-    return papers().save(key, {}, { expectedKind: 'sheet', base: got.rec.revision, version: { reason, gz, cells: GZ_SHEET_DATA.measure(got.wb).cells } });
+    return papers().save(key, {}, { expectedKind: 'sheet', base: got.rec.revision, version: { reason, gz, cells: GZ_SHEET_DATA.measure(got.wb).cells }, ...(attached && { attached }) });
   };
 
   // ---- the grid
@@ -255,7 +261,7 @@
     if (prior) had = prior.rec;
     const sigs = new Map(Object.keys(had?.parts || {}).map((n) => [n, 'stale']));
     const checkpoint = prior?.wb || wb, gz = await SD.pack(checkpoint);
-    const paper = (await SD.write(papers(), key, wb, sigs, { base: had?.revision || 0, patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: prior ? 'import' : 'start', gz, cells: SD.measure(checkpoint).cells } })).saved.paper;
+    const paper = (await SD.write(papers(), key, wb, sigs, { base: had?.revision || 0, patch: { doc: null, words: 0, ext: extOf(wb) === '.xlsm' ? '.xlsm' : null }, reason: 'import', show: shower(wb), version: { reason: prior ? 'import' : 'start', gz, cells: SD.measure(checkpoint).cells } })).saved.paper;
     const notice = noticeOf(wb);
     return notice ? { ...paper, notice } : paper;
   };
@@ -272,7 +278,7 @@
     await need(CHARTS).catch((e) => console.error(e));
     if (!host) document.documentElement.dataset.mode = 'sheet';
     const v = GZ_SHEET_GRID.mount({ key, wb, rec: got?.rec || null, sigs: got?.sigs || new Map(), fresh: !got, t: host?.t || t, locale, papers: papers(), show: shower,
-      local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: () => 'Export .xlsx', host });
+      local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: (book) => labelOf(book ? extOf(book) : null), host });
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
     return v;
   };
@@ -284,7 +290,7 @@
   const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
   const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'undefined' ? need(DEFAULTS) : null)).then(() => chrome.storage.sync.get('writer'))
     .then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.sheets === true, () => false);
-  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, exportLabel: 'Export .xlsx',
+  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, exportLabel: 'Export .xlsx', exportLabelOf: (row) => labelOf(row?.ext),
     ...(yes && { importFile, create }) })));
   globalThis.GZ_SHEET_KIND = Object.freeze({ shower, fileOf });
 })();

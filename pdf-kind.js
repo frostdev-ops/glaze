@@ -50,7 +50,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       }
     },
     // a record → its bytes, or null for none; a FileError when the store can't give them (missing, unavailable, cut).
-    get: async (rec) => {
+    get: async (rec, got = null) => {
       if (typeof rec?.file === 'string') {
         if (!rec.file || rec.file.length > 4 * Math.ceil(LEGACY / 3) || (rec.size != null && (!Number.isSafeInteger(rec.size) || rec.size <= 0 || rec.size > LEGACY))) return null;
         try {
@@ -60,7 +60,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       }
       const F = await files();
       if (!F.ref(rec?.file) || rec.file.size > STORE.max) return null;
-      try { return await F.client().get(rec.file); } catch (e) { throw new FileError(e.why); }
+      try { return await F.client().get(rec.file, got); } catch (e) { throw new FileError(e.why); }
     },
   };
 
@@ -69,8 +69,9 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
   // ---- pdf.js, imported the first time a PDF is read
   let lib = null, viewerLib = null;
-  const pdfjs = () => (lib ||= import(url('lib/pdfjs/pdf.mjs')).then((P) => { P.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.mjs'); return P; }));
-  const viewerjs = () => (viewerLib ||= pdfjs().then(() => import(url('lib/pdfjs/pdf_viewer.mjs'))));
+  // Firefox's linter accepts a dynamic import only of a literal or straight through chrome.runtime.getURL.
+  const pdfjs = () => (lib ||= import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs')).then((P) => { P.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.mjs'); return P; }));
+  const viewerjs = () => (viewerLib ||= pdfjs().then(() => import(chrome.runtime.getURL('lib/pdfjs/pdf_viewer.mjs'))));
   // lib/pdf-doc.js over this pdf.js (papers.html loads it before this file), or null where it isn't loaded: then pdf.js
   // directly, the same checks.
   const GET = { wasmUrl: url('lib/pdfjs/'), isEvalSupported: false, enableXfa: false, verbosity: 0 };
@@ -176,7 +177,11 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     STORE.get(rec).then((bytes) => bytes && read(bytes)).then(async (r) => { if (!r) return; const { task, doc } = r; try { const u = await picture(doc); drawn.set(at, u); img.src = u; } finally { await task.destroy().catch(() => {}); } }).catch(() => {});
     return img;
   };
-  const file = async (key) => { const rec = await papers().get(key), bytes = await STORE.get(rec); return bytes ? { name: nameOf(rec), mime: 'application/pdf', bytes } : null; };
+  // progress (lib/doc-kinds.js progress): the bytes as they come from the file store.
+  const file = async (key, { progress = null } = {}) => {
+    const rec = await papers().get(key), bytes = await STORE.get(rec, progress && ((done, total) => progress({ stage: 'copy', done, total })));
+    return bytes ? { name: nameOf(rec), mime: 'application/pdf', bytes } : null;
+  };
   const exportFile = async (key) => {
     const f = await file(key);
     if (!f) throw new Error('no file');

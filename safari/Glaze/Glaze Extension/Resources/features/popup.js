@@ -35,6 +35,7 @@ var GZ_POPUP = globalThis.GZ_POPUP || (() => {
     ctx.need('lib/lmsq.js', () => globalThis.GZ_LMSQ),
     ctx.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT).then(() => ctx.need('lib/notes.js', () => globalThis.GZ_NOTES)),
   ]).then(() => { L = globalThis.GZ_POPUP_LIB; });
+  ready.catch(() => {});
 
   const CSS = `:host { all: initial; position: fixed; top: 0; left: 0; width: 0; height: 0; z-index: 2147483647; }
 .veil { position: fixed; inset: 0; background: rgb(0 0 0 / 0.35); }

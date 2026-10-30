@@ -3765,5 +3765,17 @@
   "A PDF can have at most 500 pages.": "Um PDF pode ter no máximo 500 páginas.",
   "This PDF is digitally signed: changing its pages would break the signature.": "Este PDF tem assinatura digital: alterar as páginas invalidaria a assinatura.",
   "The owner of this PDF does not allow changing its pages.": "O proprietário deste PDF não permite alterar as páginas.",
-  "Pages cannot be added to a password-protected PDF, or taken from one.": "Não é possível adicionar páginas a um PDF protegido por senha nem retirá-las dele."
+  "Pages cannot be added to a password-protected PDF, or taken from one.": "Não é possível adicionar páginas a um PDF protegido por senha nem retirá-las dele.",
+  "Export .xlsm": "Exportar .xlsm",
+  "Attach from Documents": "Anexar de Documentos",
+  "{name} could not be made.": "Não foi possível criar {name}.",
+  "{name} is larger than 50 MB.": "{name} tem mais de 50 MB.",
+  "Attach up to {n} documents.": "Anexe até {n} documentos.",
+  "Attached: {names}": "Anexos: {names}",
+  "A file is larger than 50 MB. Nothing was submitted.": "Um arquivo tem mais de 50 MB. Nada foi enviado.",
+  "A file could not be read. Nothing was submitted.": "Não foi possível ler um arquivo. Nada foi enviado.",
+  "The document changed or was deleted. Remove it and pick it again. Nothing was submitted.": "O documento foi alterado ou excluído. Remova-o e selecione-o novamente. Nada foi enviado.",
+  "File: {name}.": "Arquivo: {name}.",
+  "Use Blackboard editor to review or remove these uploads: {names}.": "Use o editor do Blackboard para revisar ou remover estes arquivos enviados: {names}.",
+  "Not attached": "Não anexado"
 };

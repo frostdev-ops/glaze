@@ -169,7 +169,7 @@ test('the gate keeps its logs and screenshots when it fails', () => {
 
 test('the gate runs only checks that need no school, local LMS or network', () => {
   const { CHECKS } = require('../scripts/ci-browser-checks.js');
-  assert.deepEqual(CHECKS.map((c) => c.script), ['settings-ia-check.js', 'backup-check.js', 'popup-check.js', 'sites-check.js', 'pointer-check.js', 'register-update-check.js']);
+  assert.deepEqual(CHECKS.map((c) => c.script), ['settings-ia-check.js', 'backup-check.js', 'popup-check.js', 'sites-check.js', 'pointer-check.js', 'register-update-check.js', 'agent-link-check.js']);
   for (const { script } of CHECKS) {
     const code = fs.readFileSync(path.join(__dirname, '../scripts', script), 'utf8');
     assert.doesNotMatch(code, /localhost:(8081|3000)|127\.0\.0\.1:(8081|3000)/, `${script} reaches a local LMS`);

@@ -139,3 +139,70 @@ test('review: a cancellation arriving before a delayed go still revokes that run
   assert.equal(p.uploads.length, 0);
   assert.equal(p.clicks.length, 0);
 });
+
+test('handIn honours here even when an identical file was already listed', async () => {
+  const p = page(), file = { name: 'one.pdf', mime: 'application/pdf', bytes: new Uint8Array([1, 2, 3]) };
+  assert.equal(await p.ctx.GZ_WRITER_SUBMIT.handIn(p.box, file), null);
+  assert.equal(await p.ctx.GZ_WRITER_SUBMIT.handIn(p.box, file, () => false), 'page');
+  assert.equal(p.uploads.length, 1);
+});
+
+test('handIn accepts byte views and returns codes for unreadable or failed dispatches', async () => {
+  const p = page(), file = { name: 'one.pdf', mime: 'application/pdf', bytes: new Uint16Array(new Uint8Array([8, 9, 10, 11, 12, 13]).buffer, 2, 2) };
+  assert.equal(await p.ctx.GZ_WRITER_SUBMIT.handIn(p.box, file), null);
+  assert.deepEqual([...new Uint8Array(await p.uploads[0].arrayBuffer())], [10, 11, 12, 13]);
+  assert.equal(await p.ctx.GZ_WRITER_SUBMIT.handIn(p.box, null), 'file');
+  const bytes = new ArrayBuffer(3); structuredClone(bytes, { transfer: [bytes] });
+  assert.equal(await p.ctx.GZ_WRITER_SUBMIT.handIn(p.box, { ...file, bytes }), 'file');
+  const q = page(); q.input.dispatchEvent = () => { throw new Error('input gone'); };
+  assert.equal(await q.ctx.GZ_WRITER_SUBMIT.handIn(q.box, file), 'review');
+  assert.equal(q.clicks.length, 0);
+});
+
+test('a partial attachment failure names the failed file and every possible retained upload', async () => {
+  const p = page({ listed: false });
+  p.input.addEventListener('change', () => { if (p.uploads.length === 1) p.addRow(p.uploads[0].name); });
+  await p.go({ files: [{ name: 'Notes.pdf', mime: 'application/pdf', bytes: new Uint8Array([4]).buffer }] });
+  await p.tick(31000);
+  assert.equal(p.clicks.length, 0);
+  const failure = p.sent.filter((m) => m.type === 'submit:done').at(-1);
+  assert.equal(failure.error, 'attach');
+  assert.equal(failure.file, 'Notes.pdf');
+  assert.deepEqual([...failure.retained], ['Rivera_Essay2.docx', 'Notes.pdf']);
+});
+
+test('replacing an earlier attachment while the last file uploads never proves the original bytes', async () => {
+  const p = page({ listed: false });
+  p.input.addEventListener('change', () => { if (p.uploads.length === 1) p.addRow(p.uploads[0].name); });
+  await p.go({ files: [{ name: 'Notes.pdf', mime: 'application/pdf', bytes: new Uint8Array([4]).buffer }] });
+  require('../lib/writer-submit.js').listings(require('../lib/writer-submit.js').areaOf(p.box.editor), 'Rivera_Essay2.docx')[0].remove();
+  p.addRow('Rivera_Essay2.docx'); p.addRow('Notes.pdf'); await p.tick();
+  assert.equal(p.clicks.length, 0);
+});
+
+test('compact attachment retries reuse the note once and reject earlier text changes', async () => {
+  const p = page({ enabled: false }); let writes = 0;
+  p.doc.addEventListener('gz-writer:append', (e) => {
+    const m = JSON.parse(e.detail); writes++;
+    p.setText(p.box.editor.textContent + '\n\n' + m.text + '\n');
+    p.doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: true }) }));
+  });
+  p.setText('Original draft\n');
+  const message = { name: null, bytes: null, append: true, note: 'Attached: Notes.pdf', files: [{ name: 'Notes.pdf', mime: 'application/pdf', bytes: new Uint8Array([4]).buffer }] };
+  await p.go(structuredClone(message)); await p.tick(16000);
+  await p.go({ ...structuredClone(message), run: 2 }); await p.tick(16000);
+  assert.equal(writes, 1);
+  p.setText('Changed draft\n\nAttached: Notes.pdf\n'); p.setEnabled(true);
+  await p.go({ ...structuredClone(message), run: 3 });
+  assert.equal(p.clicks.length, 0);
+});
+
+test('the page harness waits for an actual asynchronous digest before asserting native effects', async () => {
+  let release, settled = false;
+  const p = page({ hash: async (...args) => { await new Promise((r) => { release = r; }); return crypto.subtle.digest(...args); } });
+  const going = p.go().then(() => { settled = true; });
+  while (!release) await new Promise(setImmediate);
+  assert.equal(settled, false);
+  release(); await going;
+  assert.equal(p.clicks.length, 1);
+});

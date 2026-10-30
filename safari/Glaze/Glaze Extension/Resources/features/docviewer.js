@@ -7,10 +7,8 @@
 // storage.local per Canvas site, person and file (lib/ink.js) and never sent anywhere. Undo, redo, clear page, export and
 // import as a file, a page saved as a picture. Canvas's own annotations are left alone: Glaze's layer takes the pointer
 // only while one of its tools is picked, and picking one of Canvas's puts Glaze's down.
-// What it can't know it asks the Canvas page around it (content.js, "DocViewer"): the palette, the switches, which file
-// and whose, and Glaze's words in the page's language. Asked at that page's origin only, answers taken only from it; the
-// page tells it again whenever any of that changes. No polling: a MutationObserver, only while annotations are on, puts
-// the layer back on pages the viewer draws again as it scrolls and zooms.
+// The Canvas parent supplies palette, switches, file identity and translations, accepted only from that origin.
+// While annotations are on, MutationObserver and ResizeObserver restore layers on redrawn or resized pages.
 (() => {
   if (window.__gzDocs || window.top === window || !/^canvadocs(-[\w-]+)?\.instructure\.com$/.test(location.hostname) || !/html/.test(document.contentType)) return;
   window.__gzDocs = true;
@@ -87,7 +85,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { if (!got) ask(); }, { once: true });
 
   // ---- annotations ------------------------------------------------------------------------------------------------
-  const stamp = Math.random().toString(36).slice(2); // this frame's own writes, told apart from another tab's
+  const stamp = Math.random().toString(36).slice(2); // this frame's writes
   let key = null;
   let pages = {}; // page number -> strokes
   let done = [], undone = [];
@@ -101,14 +99,20 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   const width = () => (tool === 'hl' ? size * 6 : size * 1.2);
 
   const local = (f) => { try { return f(chrome.storage.local); } catch { return Promise.reject(new Error('reloaded')); } };
+  let saving = Promise.resolve();
   const save = () => {
     const k = key;
     if (!k) return;
-    local((s) => (Object.keys(pages).length ? s.set({ [k]: { v: 1, by: stamp, pages } }) : s.remove(k))).then(() => say(''), () => say(t("Couldn't save on this device")));
+    const value = { v: 1, by: stamp, pages: I.clean(pages) };
+    // Stamp clears before removal; serialize snapshots so Undo cannot overtake the removal.
+    saving = saving.catch(() => {}).then(() => local(async (s) => { await s.set({ [k]: value }); if (!Object.keys(value.pages).length) await s.remove(k); }));
+    saving.then(() => say(''), () => say(t("Couldn't save on this device")));
   };
   try {
     chrome.storage.onChanged.addListener((c, area) => {
-      if (area !== 'local' || !key || !(key in c) || c[key].newValue?.by === stamp) return;
+      if (area !== 'local' || !key || !(key in c)) return;
+      const { oldValue, newValue } = c[key];
+      if (newValue?.by === stamp || (!newValue && oldValue?.by === stamp && !Object.keys(oldValue.pages || {}).length)) return;
       pages = I.clean(c[key].newValue?.pages);
       done = []; undone = [];
       gen++;
@@ -117,9 +121,10 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
     });
   } catch { /* extension reloaded under the frame */ }
 
-  let mo = null, queued = 0;
+  let mo = null, ro = null, queued = 0;
+  const observed = new Set();
   const schedule = () => { if (key && !queued) queued = requestAnimationFrame(() => { queued = 0; mountAll(); }); };
-  let opened = 0; // each file opened, or annotations turned off: what an import still reading belongs to
+  let opened = 0; // imports belong to this open
   const open = (k) => {
     key = k;
     opened++;
@@ -128,6 +133,8 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
     setTool(null);
     if (!k) {
       mo?.disconnect(); mo = null;
+      ro?.disconnect(); ro = null;
+      observed.clear();
       if (queued) { cancelAnimationFrame(queued); queued = 0; }
       hideBar();
       for (const s of document.querySelectorAll('.gz-ink')) s.remove();
@@ -139,6 +146,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
       pages = I.clean(r[k]?.pages);
       mo ||= new MutationObserver((rs) => { if (rs.some((x) => !x.target.closest?.('.gz-ink'))) schedule(); });
       mo.observe(html, { childList: true, subtree: true });
+      ro ||= new ResizeObserver(schedule);
       if (!bar) showBar(false);
       mountAll();
     }, () => {});
@@ -159,6 +167,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   const mount = (page) => {
     const n = page.id.slice(5);
     const w = page.clientWidth, hh = page.clientHeight;
+    if (ro && !observed.has(page)) { ro.observe(page); observed.add(page); }
     if (!/^[1-9]\d{0,4}$/.test(n) || !w || !hh) return;
     const r = turn(page);
     const h = Math.round(I.W * (r % 2 ? w / hh : hh / w));
@@ -181,7 +190,11 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
     svg.dataset.sig = sig;
     svg.dataset.n = n;
   };
-  const mountAll = () => { if (!key || !chrome.runtime?.id) return; for (const page of document.querySelectorAll('.Page[id^="page-"]')) mount(page); };
+  const mountAll = () => {
+    if (!key || !chrome.runtime?.id) return;
+    for (const p of observed) if (!p.isConnected) { ro.unobserve(p); observed.delete(p); }
+    for (const page of document.querySelectorAll('.Page[id^="page-"]')) mount(page);
+  };
 
   const changed = (n) => {
     ver[n] = (ver[n] || 0) + 1;

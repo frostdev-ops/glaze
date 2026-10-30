@@ -43,13 +43,18 @@ const viewer = () => {
   const win = {};
   const sets = [];
   const inputs = [];
+  const mutations = [], resizes = [];
   const parent = { postMessage() {} };
   const store = {};
+  const storageListeners = [];
+  const changes = [];
+  const emitStorage = (change) => { for (const f of storageListeners) f(change, 'local'); };
+  const flushStorage = () => { for (const change of changes.splice(0)) emitStorage(change); };
   const document = {
     documentElement: html, head: null, body, contentType: 'text/html', readyState: 'complete', addEventListener() {},
     createElement: (t) => { const e = new El(t); if (t === 'input') inputs.push(e); return e; },
     createElementNS: (ns, t) => new El(t),
-    querySelectorAll: (sel) => (sel.startsWith('.Page') ? [page] : sel === '.gz-ink' ? page.children.filter((c) => c.attrs.class === 'gz-ink') : []),
+    querySelectorAll: (sel) => (sel.startsWith('.Page') ? [page].filter((p) => p.isConnected) : sel === '.gz-ink' ? page.children.filter((c) => c.attrs.class === 'gz-ink') : []),
     querySelector: () => null,
     getElementById: (id) => (id === 'page-1' ? page : null),
   };
@@ -57,16 +62,29 @@ const viewer = () => {
     document, parent, top: {}, location: { hostname: 'canvadocs.instructure.com', ancestorOrigins: [CANVAS] },
     addEventListener: (t, f) => (win[t] ||= []).push(f),
     requestAnimationFrame: (f) => { f(); return 0; },
-    MutationObserver: class { observe() {} disconnect() {} },
+    MutationObserver: class { constructor(callback) { this.callback = callback; mutations.push(this); } observe() {} disconnect() {} },
+    ResizeObserver: class {
+      constructor(callback) { this.callback = callback; this.targets = new Set(); resizes.push(this); }
+      observe(p) { this.targets.add(p); }
+      unobserve(p) { this.targets.delete(p); }
+      disconnect() { this.targets.clear(); }
+    },
     DOMPoint: class { constructor(x, y) { this.x = x; this.y = y; } matrixTransform() { return { x: this.x, y: this.y }; } },
     GZ_INK: require('../lib/ink.js'),
     GZ_SURFACES: require('../lib/surfaces.js'),
     chrome: { runtime: { id: 'glaze', getURL: (path) => `chrome-extension://test/${path}` }, storage: {
-      onChanged: { addListener() {} },
+      onChanged: { addListener: (f) => storageListeners.push(f) },
       local: {
         get: async (k) => ({ [k]: store[k] }),
-        set: async (o) => { sets.push(JSON.parse(JSON.stringify(o))); Object.assign(store, o); },
-        remove: async (k) => { delete store[k]; },
+        set: async (o) => {
+          const snapshot = JSON.parse(JSON.stringify(o));
+          sets.push(snapshot);
+          for (const [k, newValue] of Object.entries(snapshot)) {
+            changes.push({ [k]: { oldValue: store[k], newValue } });
+            store[k] = newValue;
+          }
+        },
+        remove: async (k) => { if (k in store) changes.push({ [k]: { oldValue: store[k] } }); delete store[k]; },
       },
     } },
   });
@@ -77,8 +95,26 @@ const viewer = () => {
   const bar = () => body.children.find((c) => c.id === 'gz-ink-bar');
   const svg = () => page.children.find((c) => c.attrs.class === 'gz-ink');
   const pointer = (type, id, x, y) => svg().fire(type, { pointerType: 'mouse', button: 0, pointerId: id, clientX: x, clientY: y });
-  return { html, tell, fire, bar, svg, pointer, sets, inputs, chrome: ctx.chrome };
+  return { html, body, page, mutations, resizes, tell, fire, bar, svg, pointer, sets, inputs, store, changes, emitStorage, flushStorage, chrome: ctx.chrome };
 };
+
+test('a zero-size page removed before any resize notification is unobserved, and off/on starts fresh', async () => {
+  const v = viewer();
+  v.page.clientWidth = v.page.clientHeight = 0;
+  await v.tell();
+  const ro = v.resizes[0];
+  assert.equal(ro.targets.has(v.page), true);
+  v.page.remove();
+  v.mutations[0].callback([{ target: v.body, removedNodes: [v.page] }]);
+  assert.equal(ro.targets.has(v.page), false, 'removal does not depend on a resize notification that may never arrive');
+  v.body.append(v.page);
+  v.mutations[0].callback([{ target: v.body, removedNodes: [] }]);
+  assert.equal(ro.targets.has(v.page), true);
+  await v.tell({ ink: false });
+  assert.equal(ro.targets.size, 0);
+  await v.tell();
+  assert.equal(v.resizes[1].targets.has(v.page), true);
+});
 
 test('Esc in the middle of a stroke lets the pointer go and drops the half stroke; the next stroke draws', async () => {
   const v = viewer();
@@ -123,6 +159,62 @@ const file = (pages) => {
   return { f: { size: 100, text: () => text }, done: () => resolve(require('../lib/ink.js').exportFile('21', pages)) };
 };
 const MARK = { 1: [{ t: 'pen', c: '#e11d48', w: 3, p: [1, 1, 9, 9] }] };
+
+const drawn = async () => {
+  const v = viewer();
+  await v.tell();
+  v.bar().find('Annotate').click();
+  v.pointer('pointerdown', 1, 10, 10);
+  v.pointer('pointerup', 1, 20, 20);
+  await settle();
+  v.flushStorage();
+  return v;
+};
+
+test('another tab clearing an already empty file discards redo history', async () => {
+  const v = await drawn();
+  v.bar().find('Undo').click();
+  await settle();
+  v.flushStorage();
+  assert.equal(v.bar().find('Redo').disabled, false);
+  const key = `ink:${CANVAS}/5/21`;
+  v.emitStorage({ [key]: { oldValue: { v: 1, by: 'other', pages: MARK } } });
+  assert.equal(v.bar().find('Redo').disabled, true, 'a foreign clear invalidates redo even without local marks');
+});
+
+test('a delayed own clear notification preserves an undo already applied', async () => {
+  const v = await drawn();
+  v.bar().find('Clear page').click();
+  await settle();
+  assert.equal(Object.keys(v.store).length, 0);
+  v.bar().find('Undo').click();
+  await settle();
+  v.flushStorage();
+  assert.equal(v.svg().firstChild.children.length, 1, 'the restored stroke remains on the page');
+  assert.equal(v.bar().find('Redo').disabled, false, 'the clear is still redoable');
+  const key = `ink:${CANVAS}/5/21`;
+  const foreign = { v: 1, by: 'other', pages: { 1: [{ ...MARK[1][0], c: '#112233' }] } };
+  v.emitStorage({ [key]: { newValue: foreign } });
+  assert.equal(v.bar().find('Redo').disabled, true, 'a subsequent foreign write still resets history');
+  assert.equal(v.svg().firstChild.children[0].attrs.stroke, '#112233');
+});
+
+test('Undo waits for a pending clear removal before saving its restored marks', async () => {
+  const v = await drawn();
+  const remove = v.chrome.storage.local.remove;
+  let finish;
+  v.chrome.storage.local.remove = (k) => new Promise((resolve) => { finish = async () => { await remove(k); resolve(); }; });
+  v.bar().find('Clear page').click();
+  await settle();
+  assert.equal(typeof finish, 'function');
+  v.bar().find('Undo').click();
+  await settle();
+  await finish();
+  await settle();
+  v.flushStorage();
+  assert.equal(v.store[`ink:${CANVAS}/5/21`]?.pages['1']?.length, 1, 'the clear cannot delete the newer undo save');
+  assert.equal(v.svg().firstChild.children.length, 1);
+});
 
 for (const [what, change] of [
   ['another file opens', (v) => v.tell({ file: '22' })],

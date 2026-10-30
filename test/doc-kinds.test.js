@@ -7,7 +7,7 @@ const DK = require('../lib/doc-kinds.js');
 test('paper, sheet, pdf and slides are the kinds, frozen', () => {
   assert.deepEqual(Object.keys(DK.KINDS), ['paper', 'sheet', 'pdf', 'slides']);
   assert.deepEqual(DK.KINDS.paper, { label: 'Document', icon: 'paper', accept: ['.docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', max: 15e6, param: 'paper' });
-  assert.deepEqual(DK.KINDS.sheet, { label: 'Spreadsheet', icon: 'sheet', accept: ['.xlsx', '.csv', '.tsv'], mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', max: 15e6, param: 'sheet' });
+  assert.deepEqual(DK.KINDS.sheet, { label: 'Spreadsheet', icon: 'sheet', accept: ['.xlsx', '.xlsm', '.csv', '.tsv'], mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', max: 15e6, param: 'sheet' });
   assert.deepEqual(DK.KINDS.pdf, { label: 'PDF', icon: 'pdf', accept: ['.pdf'], mime: 'application/pdf', max: 50e6, big: 'Choose a PDF smaller than 50 MB.', param: 'pdf' });
   assert.deepEqual(DK.KINDS.slides, { label: 'Slides', icon: 'slides', accept: ['.pptx', '.ppsx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', max: 50e6, big: 'Choose a PowerPoint file smaller than 50 MB.', param: 'slides' });
   for (const k of Object.values(DK.KINDS)) assert.ok(Object.isFrozen(k) && Object.isFrozen(k.accept));
@@ -28,12 +28,13 @@ test('a file\'s kind is its extension\'s, any case', () => {
   assert.equal(DK.forFile('ESSAY.DOCX'), 'paper');
   assert.equal(DK.forFile('my.essay.Docx'), 'paper');
   assert.equal(DK.forFile('Grades.xlsx'), 'sheet');
+  assert.equal(DK.forFile('Budget.XLSM'), 'sheet');
   assert.equal(DK.forFile('export.CSV'), 'sheet');
   assert.equal(DK.forFile('data.TSV'), 'sheet');
   assert.equal(DK.forFile('Worksheet.PDF'), 'pdf');
   assert.equal(DK.forFile('Week 3.PPTX'), 'slides');
   assert.equal(DK.forFile('show.ppsx'), 'slides');
-  for (const name of ['essay.doc', 'docx', 'essay', '', null, undefined, 'essay.docx.zip', 'essay.pdf.zip', 'deck.ppt', 'deck.pptx.zip', 'deck.odp', 'book.xls', 'book.xlsm', 'book.ods', 'book.xlsx.zip']) assert.equal(DK.forFile(name), null, String(name));
+  for (const name of ['essay.doc', 'docx', 'essay', '', null, undefined, 'essay.docx.zip', 'essay.pdf.zip', 'deck.ppt', 'deck.pptx.zip', 'deck.odp', 'book.xls', 'book.ods', 'book.xlsx.zip']) assert.equal(DK.forFile(name), null, String(name));
 });
 
 test('a kind\'s page code registers onto its facts', () => {
@@ -122,7 +123,7 @@ test('the sheet kind opens files only once it registers importFile', () => {
   assert.equal(K.opens('Grades.xlsx'), 'sheet');
   assert.equal(K.opens('grades.csv'), 'sheet');
   assert.equal(K.opens('grades.tsv'), 'sheet');
-  assert.equal(K.accept(), '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.xlsx,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.equal(K.accept(), '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.xlsx,.xlsm,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   freshSheet();
 });
 
