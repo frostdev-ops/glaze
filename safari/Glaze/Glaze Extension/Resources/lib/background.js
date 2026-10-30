@@ -213,14 +213,19 @@ const BROKER = {
   // its code: palette, look, background, navigation, the bar's and the sidebar's looks, card look and styles, and its parts,
   // through the same write as the editor's (look, above). One gone, or one Glaze won't wear (GZ_XPARTS.outside), isn't.
   // 'build': Settings, having changed the kept Looks, wakes the worker to bring the catalogue up to date (catalogue, below), where
-  // a browser wouldn't wake it for the storage change alone.
+  // a browser wouldn't wake it for the storage change alone. 'parts': a course page wearing a Look of its own (courses.looks)
+  // asks for that Look's parts, as storage's lookX gives the theme's: a built-in's own, a kept one's from its code.
   looks: {
-    allow: async (m, s) => (m.op === 'build' && fromGlaze(s)) || (m.op === 'wear' && typeof m.id === 'string' && GZ_CATALOG.ID.test(m.id) && (fromGlaze(s) || !!await lmsPage(s))),
+    allow: async (m, s) => (m.op === 'build' && fromGlaze(s)) || (['wear', 'parts'].includes(m.op) && typeof m.id === 'string'
+      && (GZ_CATALOG.ID.test(m.id) || (m.op === 'parts' && GZ_LOOKS.some((L) => L.name === m.id))) && (fromGlaze(s) || !!await lmsPage(s))),
     run: async (m, area) => {
       if (m.op === 'build') return catalogue().then(() => ({ ok: true }));
+      const L = m.op === 'parts' && GZ_LOOKS.find((l) => l.name === m.id);
+      if (L) return { ok: true, parts: GZ_LOOK_PARTS(L) };
       const e = GZ_CATALOG.keptAll((await area.local.get('lookFavorites')).lookFavorites).find((f) => f.id === m.id);
       const got = e && await GZ_SHARE.decode(e.code).then((g) => (GZ_XPARTS.outside(g.parts).length ? null : g), () => null);
       if (!got) return { ok: false, error: 'gone' };
+      if (m.op === 'parts') return { ok: true, parts: got.parts };
       const raw = await area.sync.get(null), s = GZ_SANITIZE(raw);
       if (got.cards.length && !(await GZ_CARDS.change({ set: got.cards }, area))?.ok) return { ok: false };
       return BROKER.look.run({ parts: got.parts, patch: { version: 2, ...GZ_LX.wearCode(s, got), card: GZ_CARDS.settings({ ...GZ_CARDS.settings(raw.card), ...got.card }) } }, area);
@@ -747,9 +752,16 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   (async () => {
     if (!globalThis.GZ_MEDIA) importScripts('media.js');
     const area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
-    if (!fromPreview(s) && (!await fromLms(s) || GZ_MEDIA.fileOf((await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local))?.x?.bg?.media?.src) !== m.h)) {
-      return { ok: false, error: 'sender' };
-    }
+    // The file of the Look worn, or of a kept Look a course wears (courses.looks; lib/looks.js), and no other.
+    const worn = async () => GZ_MEDIA.fileOf((await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local))?.x?.bg?.media?.src) === m.h;
+    const course = async () => {
+      const ids = Object.values(GZ_SANITIZE(await area.sync.get('courses')).courses.looks);
+      for (const f of GZ_CATALOG.keptAll((await area.local.get('lookFavorites')).lookFavorites).filter((x) => ids.includes(x.id))) {
+        if (GZ_MEDIA.fileOf((await GZ_SHARE.decode(f.code).catch(() => null))?.parts?.x?.bg?.media?.src) === m.h) return true;
+      }
+      return false;
+    };
+    if (!fromPreview(s) && (!await fromLms(s) || !(await worn() || await course()))) return { ok: false, error: 'sender' };
     return GZ_MEDIA.change({ op: 'file', h: m.h }, area, { queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f) });
   })().then(reply, () => reply({ ok: false, error: 'failed' }));
   return true;

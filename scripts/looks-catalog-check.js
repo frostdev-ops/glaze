@@ -43,7 +43,9 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     const night = wear('Graveyard');
     const sunset = G.GZ_SANITIZE({ colors: G.GZ_PRESET('Ember'), look: { radius: 12 }, bg: { kind: 'gradient', colors: ['#f97316', '#ef4444', '#facc15'] } });
     const field = G.GZ_SANITIZE({ colors: G.GZ_PRESET('Forest'), look: { radius: 4 }, bg: { kind: 'solid' } });
-    const codes = { seminar: await S.encode(seminar, {}), night: await S.encode(night, {}, { x: { pointer: 'ghost' } }), sunset: await S.encode(sunset, {}), field: await S.encode(field, {}) };
+    const codes = { seminar: await S.encode(seminar, {}), night: await S.encode(night, {}, { x: { pointer: 'ghost' } }), sunset: await S.encode(sunset, {}), field: await S.encode(field, {}),
+      // A gallery Look whose background is a shader, with its own pointer.
+      shader: await S.encode(G.GZ_SANITIZE({ colors: G.GZ_PRESET('Midnight'), bg: { kind: 'shader' } }), {}, { x: { bg: { shader: { src: fs.readFileSync(path.join(root, 'assets/shaders/aurora.glsl'), 'utf8') } }, pointer: 'lava' } }) };
     const kept = [C.make(codes.seminar, 'Seminar', '', 'saved'), C.make(codes.night, 'Night walk', 'frostdev-ops', 'gallery')];
     const ids = { seminar: kept[0].id, night: kept[1].id, sunset: C.idOf(codes.sunset), field: C.idOf(codes.field) };
 
@@ -226,6 +228,22 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     check(await until(async () => (await cmd.count()) === 1), 'Ctrl+K lists the kept Looks');
     await cmd.click();
     check(await until(async () => (await ink(a)) === night.colors['--gz-ink']), 'and wears one through the worker, as Settings would', await ink(a));
+
+    // ---- a course wears a gallery Look whole: its shader background and its pointer; another course, the theme's again ----
+    const shaderLook = C.make(codes.shader, 'Shader night', 'mira', 'gallery');
+    await a.evaluate(async ({ f }) => { const { lookFavorites } = await chrome.storage.local.get('lookFavorites'); await chrome.storage.local.set({ lookFavorites: [f, ...lookFavorites] }); }, { f: shaderLook });
+    check(await until(async () => (await catalog()).looks.some((E) => E.id === shaderLook.id && E.kind === 'background')), 'a gallery shader Look is in the catalogue');
+    await a.evaluate(async ({ id }) => { const { courses } = await chrome.storage.sync.get('courses'); await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: id } } }); }, { id: shaderLook.id });
+    const painted = () => lms.evaluate(() => ({ bg: document.documentElement.getAttribute('data-gz-bg'), scene: !!document.getElementById('gz-scene'), pointer: (document.documentElement.style.getPropertyValue('--gz-cursor').match(/cursors\/(\w+)\//) || [])[1] || '' }));
+    await lms.goto(`${site}/ultra/courses/_101_1/outline`);
+    await lms.waitForFunction(() => document.documentElement.hasAttribute('data-gz-bg'));
+    const course = await until(async () => { const p = await painted(); return p.bg === 'shader' && p.scene && p.pointer === 'lava' && p; });
+    check(!!course, 'a course wearing a gallery shader Look shows the shader (not the gradient) and its pointer', JSON.stringify(await painted()));
+    check(await until(async () => (await ink(lms)) === G.GZ_PRESET('Midnight')['--gz-ink']), '  and its palette');
+    await lms.evaluate(() => { history.pushState({}, '', '/ultra/courses/_202_1/outline'); dispatchEvent(new PopStateEvent('popstate')); document.body.append(document.createElement('div')); });
+    const theme = await until(async () => { const p = await painted(); return p.bg === 'scene' && p.scene && p.pointer === 'ghost' && p; });
+    check(!!theme, 'switching to a course without its own Look: the theme\'s background and pointer again', JSON.stringify(await painted()));
+    check(await until(async () => (await ink(lms)) === night.colors['--gz-ink']), '  and the theme\'s palette');
     check(!errors.length, 'no page errors', errors.join(' | '));
   } catch (e) {
     console.error(e);

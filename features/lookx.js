@@ -39,8 +39,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   // with the custom pointer off (extras.pointerOn).
   let pointer = '', pointing = 0; // the own pointer's blob: address and the latest read
   let live = true; // false from pagehide until the page is shown again: no blob: address is made meanwhile
-  const worn = () => (ctx.on() && ctx.partsOn(true) && !quiz() ? GZ_LX.pointerOf(X().pointer,
-    ctx.courseLook?.() ? globalThis.GZ_LOOK_PARTS?.({ name: ctx.courseLook() })?.x?.pointer : ctx.parts()?.pointer, X().pointerOn !== false) : 'off');
+  const worn = () => (ctx.on() && ctx.partsOn() && !quiz() ? GZ_LX.pointerOf(X().pointer, ctx.parts()?.pointer, X().pointerOn !== false) : 'off');
   // Whether this browser takes image-set() in a cursor (for the 2x picture); one that doesn't gets the 1x PNG after the SVG.
   let sets;
   const imageSet = () => (sets ??= !!globalThis.CSS?.supports?.('cursor', 'image-set(url("a.png") 1x, url("b.png") 2x) 0 0, auto'));
@@ -465,7 +464,6 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
 
   const sync = async () => {
     await lib();
-    if (ctx.courseLook?.()) await ctx.need('lib/lookset.js', () => globalThis.GZ_LOOK_PARTS);
     cursor();
     arm();
     stickers();
