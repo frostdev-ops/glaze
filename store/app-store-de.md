@@ -10,7 +10,7 @@ Dunkelmodus, Noten & Notizen
 
 ## Promotional text (170 character maximum)
 
-Mach Blackboard Ultra, Canvas und Moodle in Safari zu deinem Ort: Designs, Glaze Writer, Dokumente, flexible Seitenleiste, Kurs-Tabs, Notizen und Better To Do.
+Designs, Glaze Writer und Dokumente für Blackboard Ultra, Canvas und Moodle in Safari. Seitenleiste, Kurs-Tabs, Notizen und Better To Do.
 
 ## Keywords (100 byte maximum)
 
@@ -21,7 +21,7 @@ canvas,blackboard,moodle,notendurchschnitt,gpa,todo,hausaufgaben,lernen,studium,
 Glaze ist eine Safari-Erweiterung für eigene Farben, Schriften und Hintergründe auf Blackboard Ultra, Canvas und Moodle.
 
 DEIN AUSSEHEN
-Wähle einen Look oder eigene Farben, Schriften, Abstände, Ecken und Oberflächen. Ergänze Verläufe, Bilder oder animierte Hintergründe. Sieh Änderungen im Editor, kombiniere helle und dunkle Paletten und teile den Look als Designcode. Reduzierte Bewegung wird respektiert.
+Wähle einen Look oder eigene Farben, Schriften, Abstände, Ecken und Oberflächen. Ergänze Verläufe, Bilder oder animierte Hintergründe. Prüfe alles im Editor, kombiniere helle und dunkle Paletten und teile einen Designcode. Bewegung folgt deiner Einstellung für reduzierte Bewegung.
 
 DEIN ARBEITSBEREICH
 Ordne auf Blackboard Ultra und Canvas Kurskarten und Widgets auf einem Glaze-Dashboard an. Nutze Better To Do und passende Widgets in einer Seitenleiste, die auf schmalen Bildschirmen zur Schublade wird. Öffne Kurs-Tabs, passe die Navigation an und finde Kurse, Seiten und Einstellungen mit der Befehlspalette.
@@ -36,14 +36,14 @@ Ankündigungen öffnen sich im Pop-up von Glaze, aus Better To Do, mit Strg+K od
 Moodle Boost bekommt dieselben Looks, Kursgesamtwerte, wenn verfügbar, eine Fristenliste aus der Zeitleiste und Tastenkürzel.
 
 GLAZE WRITER UND DOKUMENTE
-Auf Blackboard Ultra ersetzt Glaze Writer den Editor in Diskussionen, Nachrichten, Aufgaben und Tests und prüft Rechtschreibung und Grammatik auf deinem Gerät. Voller Writer gibt Aufgaben echte Seiten in MLA, APA, Chicago oder deinem eigenen Format, mit Zitaten, Fußnoten, Versionen und .docx-Dateien. Dokumente hält alle Arbeiten und Dokumente an einem Ort, mit 30 Tagen Papierkorb. KI ist optional und aus, bis du sie einrichtest; Glaze verfasst keine Entwürfe.
+Auf Blackboard Ultra ersetzt Glaze Writer den Editor in Diskussionen, Journalen, Nachrichten, Aufgaben und Tests. Rechtschreibung und Grammatik werden auf deinem Gerät geprüft; Tests bekommen nur Korrekturhilfen. Voller Writer bietet Seiten in MLA, APA, Chicago oder deinem Format, mit Zitaten, Fußnoten, Versionen und .docx-Dateien. Dokumente bündelt Arbeiten und Dokumente; Gelöschtes bleibt 30 Tage im Papierkorb. KI ist optional und aus, bis du sie einrichtest. Tab-Vervollständigung beendet nur den aktuellen Satz; Feedback bewertet deine Arbeit. Glaze verfasst keine Entwürfe.
 
 DATENSCHUTZ UND KONTROLLE
-Glaze ist kostenlos, ohne Werbung, Analysen oder Glaze-Konto. Safari-Einstellungen, Notizen, Aufgaben, Kursdaten, Arbeiten und Dokumente bleiben auf deinem Gerät. Optionale geteilte Sitzungen beginnen erst, wenn du eine erstellst, ihr beitrittst oder sie fortsetzt, und verschlüsseln Inhalte vor dem Versand über das von dir gewählte Relay. Gewählte Schriften, Medien, externe Player und KI-Anbieter sowie Quellensuchen auf deinen Klick können Netzwerkanfragen stellen; Details stehen in der Datenschutzerklärung. Glaze sammelt und verkauft deine Daten nicht.
+Glaze ist kostenlos, ohne Werbung, Analysen oder Glaze-Konto. Glaze-Einstellungen, Notizen, Aufgaben, Kursdaten, Arbeiten und Dokumente bleiben auf deinem Gerät. Optionale geteilte Sitzungen beginnen erst, wenn du eine erstellst, ihr beitrittst oder sie fortsetzt, und verschlüsseln Inhalte vor dem Versand über das von dir gewählte Relay. Gewählte Schriften, Medien, externe Player und KI-Anbieter sowie Quellensuchen auf deinen Klick können Netzwerkanfragen stellen; Details stehen in der Datenschutzerklärung. Glaze sammelt und verkauft deine Daten nicht.
 
 Glaze ändert keine Noten; Bewertungsraster zeigt es nur an. Writer sendet, was du schreibst, nur über Blackboards eigene Schaltflächen, wenn du sie drückst. Optionale Haken im Canvas-Planer sowie Canvas-Kursfarben und -Spitznamen werden im Schulkonto gespeichert. Öffnen markiert ungelesene Canvas-Ankündigungen als gelesen; Moodle markiert Beiträge bei automatischer Leseerfassung im Forum. Safari unterstützt deklarative Mod-Inhalte und führt kein heruntergeladenes Mod-JavaScript aus.
 
 LOS GEHT'S
 Aktiviere die Erweiterung in Safari und erlaube sie auf der Website deiner Schule. Sie funktioniert auf Schul-Domains und gehosteten Blackboard-Ultra-, Canvas- und Moodle-Websites; die App führt durch die Einrichtung.
 
-Glaze ist unabhängig und weder mit Anthology, Instructure, Moodle oder einer Schule verbunden noch von ihnen unterstützt. Blackboard, Canvas und Moodle sind Marken ihrer jeweiligen Inhaber. Open Source unter der MIT-Lizenz. iPhone und iPad benötigen iOS oder iPadOS 18 oder neuer. Der Mac benötigt macOS 12 und Safari 17.2 oder neuer; die Milchglas-Unschärfe benötigt Safari 18.
+Glaze ist unabhängig von Anthology, Instructure, Moodle und Schulen und wird von ihnen nicht unterstützt. Blackboard, Canvas und Moodle sind Marken ihrer Inhaber. Open Source unter der MIT-Lizenz. iPhone/iPad: mindestens iOS/iPadOS 18. Mac: mindestens macOS 12 und Safari 17.2; Milchglas-Unschärfe ab Safari 18.
