@@ -166,24 +166,26 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
 // page (opaque origin, no extension APIs) under its own CSP, which lets no request, frame or inline script out, and eval in
 // that sandbox only. Its bootstrap, mods/boot.js, is the only other file it exposes. Both on dynamic URLs.
 const SANDBOX_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data: blob:; worker-src blob:; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
-test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages are frameable, with local scripts and Documents\' approved font hosts', () => {
+test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages are frameable, with local scripts and Documents\' approved font hosts and PDF fallback', () => {
   assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'", sandbox: SANDBOX_CSP });
   assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'writer.html', 'sharing/quick.html', 'options.html', 'papers.html', 'preview.html', 'features/allow.html', 'mods/host.html']);
   // Documents is exposed as Settings is (including dynamic URLs if that group uses them). Its Look's fonts use only the
   // catalogued font endpoints; scripts and styles remain local, with no broader network or form authority.
   assert.deepEqual(m.web_accessible_resources.find((w) => w.resources.includes('papers.html')), m.web_accessible_resources.find((w) => w.resources.includes('options.html')));
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; connect-src 'self' https:\/\/fonts\.googleapis\.com https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self' https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; connect-src 'self' https:\/\/fonts\.googleapis\.com https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // Download all's Allow frame: one button, Glaze's files only, no network from the page itself.
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'features/allow.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // The Notes share panel: Glaze's files only, no network from the page itself (the worker talks to the relay).
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'sharing/quick.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   const reader = fs.readFileSync(path.join(__dirname, '..', 'reader.html'), 'utf8');
   assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
-  // Glaze Writer's editor frame: Glaze's files only, no network from the page itself.
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'writer.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
-  // Documents uses Settings' GZ_FONTS loader: selected Google Fonts and jsDelivr files, fetched without credentials.
+  // Glaze Writer's editor frame: Glaze's files only, no network from the page itself. An assignment's PDF or deck shows there
+  // (writer-kinds.js): pdf.js's decoders may compile WebAssembly, and a deck's pictures are blob: URLs of its own parts.
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'writer.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  // Documents uses Settings' GZ_FONTS loader: selected Google Fonts and jsDelivr files, fetched without credentials. Its slides
+  // draw their pictures from blob: URLs of the deck's own parts (slides-kind.js).
   const papers = fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8');
-  assert.match(papers, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; connect-src 'self' https:\/\/fonts.googleapis.com https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  assert.match(papers, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self' https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; connect-src 'self' https:\/\/fonts.googleapis.com https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   assert.doesNotMatch(papers, /<style\b|<script(?![^>]*\bsrc=)/);
 });
 

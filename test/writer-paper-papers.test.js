@@ -173,6 +173,9 @@ test('copyOf drops the assignment fields', async () => {
   copy.doc.content[0].content[0].text = 'Changed.';
   assert.equal(paper.doc.content[0].content[0].text, 'Original.', 'the copy is its own document');
   assert.deepEqual(Object.keys(PA.copyOf({ kind: 'sheet', title: 'x' }, 'Copy of x', 1)).sort(), ['created', 'keep', 'key', 'kind', 'named', 'revision', 'title', 'updated']);
+  // A PDF (pdf-kind.js) is its file: the copy keeps the bytes, their size and page count, and the first page's picture.
+  const pdf = PA.copyOf({ kind: 'pdf', title: 'Form', file: 'JVBERi0xLjQK', size: 9, pages: 3, thumb: 'data:image/png;base64,AA==', school: 'bb.school.test' }, 'Copy of Form', 2);
+  assert.deepEqual(pdf, { key: pdf.key, kind: 'pdf', file: 'JVBERi0xLjQK', size: 9, pages: 3, thumb: 'data:image/png;base64,AA==', keep: false, title: 'Copy of Form', named: true, created: 2, updated: 2, revision: 0 });
 });
 
 test('fromDocument: a standalone document\'s text, format and import choice for an assignment\'s paper, never its name', async () => {
@@ -521,4 +524,21 @@ test('native submit dispatch restores a paper trashed after its sending version 
   assert.equal('trashed' in (await P.list())[0], false);
   assert.deepEqual([paper.updated, paper.revision, paper.doc], [before.updated, before.revision, before.doc]);
   assert.equal((await P.version(k, sending.version.id)).reason, 'submit');
+});
+
+test('filling a PDF in Trash restores it before purge; renaming or unchanged bytes keep it in Trash', async () => {
+  let t = 1000;
+  const P = PA.open(store(), () => t), k = PA.newKey();
+  await P.save(k, { kind: 'pdf', file: 'JVBERi0=', size: 5, pages: 1 });
+  await P.trash(k);
+  await P.save(k, { title: 'Renamed', named: true });
+  assert.ok(PA.trashed(await P.get(k)));
+  await P.save(k, { file: 'JVBERi0=', size: 5 });
+  assert.ok(PA.trashed(await P.get(k)), 'unchanged bytes are not an edit');
+  t++;
+  await P.save(k, { file: 'JVBERi0x', size: 6 });
+  assert.ok(!PA.trashed(await P.get(k)), 'new filled bytes restore the PDF');
+  t += 31 * 86400e3;
+  await P.purge();
+  assert.equal((await P.get(k)).file, 'JVBERi0x');
 });

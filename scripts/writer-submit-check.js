@@ -20,7 +20,7 @@
 // first), the setting kept across a reload and followed live from Settings, a slow save (the worker's writes held 6 s)
 // holding Ultra's Submit with Saving… in the bar until it lands, a paper past compose's input limit saying so in the bar and
 // offering Full writer, a PDF on Ultra's file area left to Ultra and a .docx's card (Open in Writer opens the pages);
-// screenshots compact-*.png at 1280 and 640. Clicks in the frame go through tap() (below); waits are for a condition, and
+// screenshots compact-*.png at 1280 and 640. Clicks in the frame go through tap() (scripts/frame-tap.js); waits are for a condition, and
 // what must not happen is watched for a moment (quiet). GETs only, synthetic.
 // NODE_PATH=<playwright> nice -n 10 node scripts/writer-submit-check.js [evidence directory]
 // SUBMIT_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-submit); IMPORT_SHOTS, the
@@ -62,155 +62,11 @@ const still = async (target) => { await until(() => target.evaluate(STILL), 'at 
 // A page and every frame in it at rest, as a screenshot wants them.
 const stillAll = async (p) => { for (const f of p.frames()) await until(() => f.evaluate(STILL).catch(() => true), 'frames at rest'); await drawn(p); };
 
-// A student's click on something in Writer's frame, made as one: the element settled where it is (nothing animating on it or
-// its ancestors, the same box three polls running), in sight in the page, and the top thing at its centre both in the frame
-// (elementFromPoint there: no part of Writer covers it) and in the page (the frame itself there); then the mouse there, and
-// the click heard by that element. Headless Chromium sometimes gives a press over the frame to the page's <iframe> element
-// instead (most often just after a sheet opens, and under load): the frame hears nothing, so nothing happened, and the press
-// is made again. taps counts the presses made again, for the summary.
-const taps = { made: 0, again: [] };
-const AIM = (el) => {
-  const name = (x) => (x ? `${x.tagName.toLowerCase()}${x.className && typeof x.className === 'string' ? `.${x.className.trim().split(/\s+/).join('.')}` : ''}` : 'nothing');
-  for (let e = el; e; e = e.parentElement) if (e.getAnimations().some((a) => a.playState === 'running' && a.effect?.getComputedTiming?.().iterations !== Infinity)) return { why: `${name(e)} animating` };
-  const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
-  if (!r.width || !r.height) return { why: 'not shown' };
-  if (el.disabled) return { why: 'disabled' };
-  if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) { el.scrollIntoView({ block: 'center', inline: 'nearest' }); return { why: 'outside the frame, scrolled' }; }
-  const top = document.elementFromPoint(x, y);
-  if (!top || (top !== el && !el.contains(top))) { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); return { why: `covered by ${name(top)}` }; }
-  return { x, y, box: [r.left, r.top, r.width, r.height].map(Math.round).join() };
-};
-const PLACE = (f, a) => {
-  const r = f.getBoundingClientRect(), x = r.left + f.clientLeft + a.x, y = r.top + f.clientTop + a.y;
-  if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) {
-    let s = f.parentElement;
-    while (s && !(s.scrollHeight > s.clientHeight && /auto|scroll/.test(getComputedStyle(s).overflowY))) s = s.parentElement;
-    (s || document.scrollingElement).scrollBy(0, y - innerHeight / 2);
-    return { why: 'outside the page\'s window, scrolled' };
-  }
-  const top = document.elementFromPoint(x, y);
-  if (top !== f) return { why: `the page has ${top?.tagName.toLowerCase() || 'nothing'} over the frame there` };
-  return { x, y, box: `${[r.left, r.top, r.width, r.height].map(Math.round).join()}|${a.box}` };
-};
-const HEAR = (el) => {
-  if (!window.__tapOn) {
-    window.__tapOn = true;
-    addEventListener('click', (e) => { const t = window.__tap; if (!t) return; if (t.el === e.target || t.el.contains(e.target)) t.heard++; else t.other.push(`${e.target?.className || e.target?.tagName}@${Math.round(e.clientX)},${Math.round(e.clientY)}`); }, true);
-  }
-  window.__tap = { el, heard: 0, other: [] };
-};
-const MISS = (f) => {
-  if (!window.__tapOn) { window.__tapOn = true; addEventListener('click', (e) => { window.__tapMiss.push(e.target === window.__tapFrame ? 'iframe' : `${e.target?.tagName?.toLowerCase()}.${String(e.target?.className || '').slice(0, 40)}`); }, true); }
-  window.__tapFrame = f; window.__tapMiss = [];
-};
-const tap = async (fr, sel, { count = 1 } = {}) => {
-  const p = fr.page(), frame = await fr.frameElement();
-  for (let attempt = 1; ; attempt++) {
-    let why = 'not in the frame', was = '', same = 0, at = null, aim = null;
-    for (const end = Date.now() + 20000; !at; await pause(80)) {
-      if (Date.now() > end) throw Error(`${sel}: not clickable (${why})`);
-      const h = await fr.$(sel).catch(() => null);
-      const a = h && await h.evaluate(AIM).catch((e) => ({ why: e.message }));
-      if (!a) { why = 'not in the frame'; continue; }
-      if (a.why) { why = a.why; was = ''; continue; }
-      const place = await frame.evaluate(PLACE, a);
-      if (place.why) { why = place.why; was = ''; continue; }
-      // The same box three polls running: a frame Writer resizes in steps (a view switch, then its box) has settled.
-      if (place.box !== was) { why = 'moving'; was = place.box; same = 0; continue; }
-      if (++same < 2) continue;
-      await h.evaluate(HEAR);
-      at = place; aim = a;
-    }
-    await frame.evaluate(MISS);
-    taps.made++;
-    await p.mouse.click(at.x, at.y, { clickCount: count });
-    let heard = null;
-    for (const end = Date.now() + 15000; !heard && Date.now() < end; await pause(40)) {
-      const t = await fr.evaluate(() => window.__tap && { heard: window.__tap.heard, other: window.__tap.other.slice() }).catch(() => null);
-      if (t?.heard) heard = 'heard';
-      else if (t?.other.length) heard = `landed on ${t.other.join(', ')}`;
-      else {
-        const miss = await p.evaluate(() => window.__tapMiss);
-        if (miss.includes('iframe')) heard = 'given to the page\'s <iframe>';
-        else if (miss.length) heard = `landed in the page on ${miss.join(', ')}`;
-      }
-    }
-    if (heard === 'heard') return;
-    if (!heard) throw Error(`${sel}: the click reached nothing`);
-    if (heard !== 'given to the page\'s <iframe>') throw Error(`${sel}: ${heard} (aimed at ${Math.round(aim.x)},${Math.round(aim.y)} in the frame; ${Math.round(at.x)},${Math.round(at.y)} in the page)`);
-    taps.again.push(`${sel}: ${heard} (aimed at ${Math.round(aim.x)},${Math.round(aim.y)} in the frame)`);
-    console.log(`tap retry: ${taps.again.at(-1)}`);
-    if (attempt >= 5) throw Error(`${sel}: ${attempt} clicks, none heard (${taps.again.slice(-attempt).join('; ')})`);
-    // What the browser routes by is stale until the page re-lays the frame out (a repaint inside it doesn't do): its width
-    // a pixel less for two frames, then as it was.
-    await frame.evaluate(async (f) => {
-      const two = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), was = f.style.width;
-      f.style.width = `${f.getBoundingClientRect().width - 1}px`; await two();
-      f.style.width = was; await two();
-    });
-  }
-};
+const { tap, taps } = require('./frame-tap.js');
 
 // The page's world: a real Quill on each writable box (as scripts/writer-paper-check.js), and on an assignment attempt
 // the stand-in for Ultra's React file area and footer.
-const HARNESS = `(() => {
-  const mode = new URLSearchParams(location.search).get('mode') || '';
-  const log = window.__log = []; window.__uploads = []; window.__clicks = []; window.__picker = 0;
-  let q = null;
-  for (const c of document.querySelectorAll('.ql-container:not(.is-read-only)')) {
-    const old = c.querySelector('.ql-editor'), html = old.innerHTML, id = old.id;
-    c.innerHTML = '';
-    q = new Quill(c, {});
-    if (id) q.root.id = id;
-    q.root.setAttribute('role', 'textbox');
-    if (!mode.includes('empty') && /[^\\s]/.test(html.replace(/<[^>]*>/g, ''))) q.setContents(q.clipboard.convert(html), 'silent');
-    window.__native = () => q.root.innerHTML;
-    window.__text = () => q.getText();
-  }
-  for (const i of document.querySelectorAll('input[type=file]')) i.addEventListener('click', () => { window.__picker++; });
-  document.addEventListener('click', (e) => { const b = e.target.closest('.footer button'); if (b) window.__clicks.push(b.getAttribute('analytics-id')); });
-  const panel = document.querySelector('bb-assignment-attempt-authoring-panel');
-  if (!panel) return;
-  const style = document.createElement('style');
-  style.textContent = '.Mui-disabled { pointer-events: none; }';
-  document.head.append(style);
-  const root = panel.firstElementChild, area = document.querySelector('[class*="makeStylessubmission-"]'), preview = area.querySelector('[class*="makeStylespreview-"]');
-  if (mode.includes('gone')) preview.remove();
-  if (mode.includes('noinput')) preview.querySelector('input').remove();
-  const files = [];
-  const footer = { save: document.querySelector('${SAVE}'), submit: document.querySelector('${SUBMIT}') };
-  const state = () => {
-    const on = !mode.includes('stuck') && (q.getText().trim().length > 0 || files.length > 0);
-    for (const b of [footer.save, footer.submit]) { b.disabled = !on; b.classList.toggle('Mui-disabled', !on); b.tabIndex = on ? 0 : -1; }
-  };
-  q.on('text-change', state);
-  state();
-  const take = async (list, via) => {
-    for (const f of list) { window.__uploads.push({ name: f.name, type: f.type, size: f.size, via, bytes: Array.from(new Uint8Array(await f.arrayBuffer())) }); log.push('upload'); }
-    if (mode.includes('never')) return;
-    setTimeout(() => {
-      for (const f of list) {
-        files.push(f);
-        const row = document.createElement('div'), name = document.createElement('span');
-        row.className = 'makeStylesfileRow-0-2-401'; name.className = 'makeStylesfileName-0-2-402'; name.textContent = f.name;
-        row.append(name);
-        (preview.isConnected ? preview : area).after(row);
-      }
-      log.push('row');
-      state();
-    }, 400);
-  };
-  root.addEventListener('change', (e) => { if (e.target.matches('input[type=file]')) take([...e.target.files], 'input'); });
-  root.addEventListener('dragover', (e) => e.preventDefault());
-  root.addEventListener('drop', (e) => { if (e.target.closest('[class*="makeStylesinputContainer-"]')) { e.preventDefault(); take([...e.dataTransfer.files], 'drop'); } });
-  root.addEventListener('click', (e) => {
-    const b = e.target.closest('footer button');
-    if (!b) return;
-    window.__clicks.push(b.getAttribute('data-analytics-id'));
-    log.push('click:' + b.getAttribute('data-analytics-id'));
-    if (b === footer.submit) { const d = document.createElement('div'); d.setAttribute('role', 'dialog'); d.id = 'ultra-confirm'; d.textContent = 'Submit this attempt?'; document.body.append(d); }
-  });
-})();`;
+const HARNESS = require('./ultra-attempt-harness.js');
 
 (async () => {
   let context, held = false, tmp, ext;
@@ -770,12 +626,15 @@ const HARNESS = `(() => {
     check(got.text === 'My file is attached as is.\n' && got.clicks.join() === 'assignment.attempt.authoring.footer.submit' && got.log.indexOf('click:assignment.attempt.authoring.footer.submit') > got.log.indexOf('row'), 'the note in Ultra\'s box, Ultra\'s Submit clicked once after the file was listed');
     check((await versions()).length === countAsis && await paperText(fr) === paperBefore, 'the paper untouched: no version saved, its text as it was');
     await p.close();
-    // A PDF on Ultra's drop zone: straight to the sheet as is.
+    // A PDF on Ultra's drop zone (Settings → Writer → PDFs on, the default): Open in Glaze or Submit as is; as is, the sheet.
     ({ p, el, fr } = await openAttempt('empty'));
     await give(p, '[class*="makeStylesinputContainer-"]', 'Rivera_Essay2.pdf', 'application/pdf', pdf);
+    await until(() => cardOf(fr), 'the PDF\'s card');
+    check((await cardOf(fr)).tiles.join('|') === 'Open in Glaze|Submit as is' && await p.evaluate(() => !__uploads.length), 'a PDF dropped on Ultra\'s area asks Open in Glaze or Submit as is, Ultra none the wiser');
+    await tap(fr, '.gi-choice:not(.gi-default)');
     await sheetOpen(fr);
     asis = await asisOf(fr);
-    check(asis.asis && asis.big === 'PDF' && asis.name === 'Rivera_Essay2.pdf' && await fr.evaluate(() => !document.querySelector('.gi-layer') && getComputedStyle(document.querySelector('.gs-big .gs-doc')).backgroundColor === 'rgb(220, 38, 38)') && await p.evaluate(() => !__uploads.length), 'a PDF dropped on Ultra\'s area: no card, straight to the sheet as is, Ultra none the wiser');
+    check(asis.asis && asis.big === 'PDF' && asis.name === 'Rivera_Essay2.pdf' && await fr.evaluate(() => !document.querySelector('.gi-layer') && getComputedStyle(document.querySelector('.gs-big .gs-doc')).backgroundColor === 'rgb(220, 38, 38)') && await p.evaluate(() => !__uploads.length), 'Submit as is: the PDF large in the sheet, Ultra none the wiser');
     saved.submitPdf = await ishot(p, 'import-submit-pdf-dark.png');
     await tap(fr, '.gs-primary');
     await until(() => p.evaluate(() => __clicks.length > 0), 'PDF submitted', 30000);
@@ -1082,12 +941,16 @@ const HARNESS = `(() => {
     check((await paperText(fr)).includes('Keep this compact draft.'), 'Submit as is leaves the stored paper intact');
     await p.close();
     await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); });
-    // Ultra's file area: a PDF is Ultra's; a .docx asks, over a frame as tall as a paper, and Open in Writer opens the pages.
+    // Ultra's file area: with PDFs off, a PDF is Ultra's; a .docx asks, over a frame as tall as a paper, and Open in Writer
+    // opens the pages.
+    const setPdf = (on) => worker.evaluate(async (on) => { const w = (await chrome.storage.sync.get('writer')).writer || {}; await chrome.storage.sync.set({ writer: { ...w, pdf: on } }); }, on);
+    await setPdf(false);
     ({ p, el, fr } = await openCompact('empty'));
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await give(p, '[class*="makeStylesinputContainer-"]', 'Rivera_Essay2.pdf', 'application/pdf', pdf);
     await until(() => p.evaluate(() => __uploads.length === 1), 'Ultra took the PDF');
-    check(await p.evaluate(() => __uploads[0].via === 'drop') && await fr.evaluate(() => !document.querySelector('.gi-layer, .gs-layer')), 'a PDF on Ultra\'s file area is Ultra\'s, to send with the text');
+    check(await p.evaluate(() => __uploads[0].via === 'drop') && await fr.evaluate(() => !document.querySelector('.gi-layer, .gs-layer')), 'PDFs off: a PDF on Ultra\'s file area is Ultra\'s, to send with the text');
+    await setPdf(true);
     h0 = await frameH(el);
     await give(p, '[class*="makeStylesinputContainer-"]', 'Rivera_Essay2.docx', MIME, essay);
     await until(() => cardOf(fr), 'the card in the compact box');

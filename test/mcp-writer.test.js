@@ -758,7 +758,7 @@ test('an approved change refuses a document trashed, removed, or changed to an u
     await t.summarize(args, ctx);
     if (changed === 'trash') await env.store.trash(ESSAY);
     else if (changed === 'remove') await env.store.remove(ESSAY);
-    else await env.store.save(ESSAY, { kind: 'sheet' });
+    else await env.store.save(ESSAY, { kind: 'sheet' }, { reason: 'import' });
     const before = env.p.pm.state.doc.toJSON(), r = await env.queue(() => t.run(args, ctx));
     assert.equal(r.ok, false, `${name}: ${changed}`);
     assert.match(r.error, /no document by that key/i);
@@ -792,7 +792,7 @@ test('open-page discovery rechecks admission before asking for any document key'
 test('unknown kind values stay unreadable instead of falling back to the legacy paper kind', async () => {
   const env = await make(), document = await keyOf(env, 'Reading notes');
   for (const kind of [42, true, {}, ['paper']]) {
-    await env.store.save(NOTES, { kind });
+    await env.store.save(NOTES, { kind }, { reason: 'import' });
     assert.ok(!(await env.run('documents_list')).items.some((i) => i.key === document), JSON.stringify(kind));
     assert.equal((await env.run('document_read', { document })).ok, false);
   }

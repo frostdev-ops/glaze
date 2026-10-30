@@ -236,15 +236,20 @@ const SYLLABUS_DOCS = 48 + 61;
 // double-spaced", "1 paragraph has other line spacing"): 279 bytes of English plurals in lib/i18n.js, measured against 115bb240.
 // defaults.js's enhance.writerUploads (Open uploads in Writer, 31, cd1afbd3) and content.js's draft finder reading a
 // reply's Ultra message-id, so Writer's and the native editor's drafts find their post (27, b3eb58eb). The Documents home's
-// count ("1 document"): 70 bytes of English plural in lib/i18n.js, measured against ab1da78d.
-const WRITER = 24 + 409 + 134 + 728 + 61 + 279 + 31 + 27 + 70;
+// count ("1 document"): 70 bytes of English plural in lib/i18n.js, measured against ab1da78d. The slides viewer's count
+// ("1 slide", slides-kind.js): 61, measured against 53e27f19.
+const WRITER = 24 + 409 + 134 + 728 + 61 + 279 + 31 + 27 + 70 + 61;
 // Settings → Writer (the brief's ask that every Writer part read one synced `writer` key from defaults.js; a named raise under
 // the owner's 2026-10-19 approval): defaults.js's writer group and its group rule, 1089 bytes on every site, where content.js
 // reads every GZ_DEFAULTS key (features/writer-quote.js reads writer.compose.quote); lib/i18n.js's English plural for its
 // "1 paper", 62. Measured against 66c7f370. Settings → Writer → Light page (writer.lightPage, the off switch for a dark
 // Look's dark pages): 28 bytes, measured against c8e99a04. Settings → Writer → Full writer (writer.full, the compact
-// assignment box's off switch, and its line in the group's comment): 66 bytes, measured against ab37a58d.
-const WRITER_SETTINGS = 1089 + 62 + 28 + 66;
+// assignment box's off switch, and its line in the group's comment): 66 bytes, measured against ab37a58d. Settings → Writer →
+// Spreadsheets (writer.sheets, the sheet kind's off switch on the Documents page, and its words in the group's comment): 36
+// bytes, measured against c773688e. Settings → Writer → PDFs (writer.pdf, the PDF kind's off switch on the Documents page,
+// and its words in the group's comment): 63 bytes, measured against 38a8b816. Settings → Writer → Slides (writer.slides, the
+// slides kind's off switch on the Documents page, and its words in the group's comment): 79 bytes, measured against 6bf3822b.
+const WRITER_SETTINGS = 1089 + 62 + 28 + 66 + 36 + 63 + 79;
 // The command palette over a course tab (a fix, under the owner's 2026-10-19 approval): content.js's Ctrl+K hands the key to
 // the tab on screen and shares its toggle with that tab's frame, 212 bytes on every site; the hand-off itself loads on demand
 // (features/coursetabs.js). Raise only the excess over each site's budget. Measured against ab37a58d.
@@ -373,6 +378,19 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
   for (const [file, call, , clear] of FAST_INTERVALS) assert.match(executable(read(file)), clear, `${file}: the clear that bounds ${call} is gone (a comment doesn't count)`);
 });
 
+// PDF form autosave is an event-driven debounce, never polling: one timer, replaced on input and cleared on save/leave.
+const PDF_TIMEOUTS = [
+  ['pdf-kind.js', 'setTimeout(flush, 1000)', 1, /clearTimeout\(timer\)/],
+];
+test('PDF timeouts under a minute are reviewed and retain their clear', () => {
+  const fast = calls('setTimeout', read('pdf-kind.js')).filter((c) => {
+    const delay = Number(lastArg(c.args));
+    return !Number.isFinite(delay) || delay < 60000;
+  }).map((c) => ({ file: 'pdf-kind.js', ...c }));
+  review(PDF_TIMEOUTS, fast, 'PDF timeouts must be bounded and reviewed.');
+  for (const [file, call, , clear] of PDF_TIMEOUTS) assert.match(executable(read(file)), clear, `${call}: its clear is gone`);
+});
+
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
   ['lib/writer-ultra.js', "querySelectorAll('*')", 1], // Only the recognized Quill body at takeover or after a foreign edit; mounted boxes are skipped on observer passes.
@@ -401,6 +419,7 @@ const STYLE_READS = [
   // WP-T2: only where a Look's colour rule meets Glaze settings: the root's palette, Glaze's item, and that part's ancestors
   // up to the first solid background.
   ['features/rules.js', 'getComputedStyle(el)', 1],
+  ['sheet-grid.js', 'getComputedStyle(gridEl)', 1], // the spreadsheet grid's font, once as it mounts, for fitting a column to its text on a canvas
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.

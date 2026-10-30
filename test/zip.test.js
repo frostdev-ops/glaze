@@ -153,3 +153,83 @@ test('Canvas omits unmet views before deduplication while retaining completed an
   assert.deepEqual([...Z.canvasUnopened(items)], ['1', '4']);
   assert.deepEqual(Z.canvasFiles(items), ['2', '3']);
 });
+
+// zipAsync: the same archive, deflated where that saves bytes (.xlsx parts are XML, which shrinks tenfold).
+const D = require('../lib/doctext.js');
+// xorshift32: bytes deflate cannot shrink.
+const noise = (n) => { let x = 2463534242; return Uint8Array.from({ length: n }, () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return x & 255; }); };
+const deflateCases = () => {
+  const enc = new TextEncoder();
+  return [
+    { name: 'xl/worksheets/sheet1.xml', data: enc.encode('<row><c r="A1"><v>1</v></c></row>'.repeat(2000)), date: new Date(2026, 0, 1) },
+    { name: 'docProps/ñame €.xml', data: enc.encode('ñ €'.repeat(300)), date: new Date(2026, 0, 1) },
+    { name: 'empty', data: new Uint8Array(0), date: new Date(2026, 0, 1) },
+    { name: 'noise.bin', data: noise(4096), date: new Date(2026, 0, 1) },
+  ];
+};
+const methods = (buf) => {
+  const v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const end = buf.length - 22, out = {};
+  let p = v.getUint32(end + 16, true);
+  for (let i = 0; i < v.getUint16(end + 10, true); i++) {
+    const nameLen = v.getUint16(p + 28, true);
+    out[new TextDecoder().decode(buf.subarray(p + 46, p + 46 + nameLen))] = { method: v.getUint16(p + 10, true), csize: v.getUint32(p + 20, true), size: v.getUint32(p + 24, true), local: v.getUint16(v.getUint32(p + 42, true) + 8, true) };
+    p += 46 + nameLen + v.getUint16(p + 30, true) + v.getUint16(p + 32, true);
+  }
+  return out;
+};
+
+test('zipAsync deflates what shrinks and stores what does not; doctext and zlib read it back', async () => {
+  const files = deflateCases();
+  const buf = Buffer.concat(await Z.zipAsync(files, { deflate: true }));
+  const m = methods(buf);
+  assert.equal(m['xl/worksheets/sheet1.xml'].method, 8);
+  assert.ok(m['xl/worksheets/sheet1.xml'].csize * 10 < m['xl/worksheets/sheet1.xml'].size, 'XML shrinks');
+  assert.equal(m['xl/worksheets/sheet1.xml'].local, 8, 'local header names the same method');
+  assert.equal(m['noise.bin'].method, 0, 'stored when deflating would not save bytes');
+  assert.equal(m.empty.method, 0);
+  const z = D.unzip(buf);
+  assert.deepEqual(z.names, files.map((f) => f.name));
+  for (const f of files) assert.deepEqual(new Uint8Array(await z.bytes(f.name)), f.data, f.name);
+  const v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const at = 0, nameLen = v.getUint16(at + 26, true), csize = v.getUint32(at + 18, true);
+  assert.deepEqual(new Uint8Array(zlib.inflateRawSync(buf.subarray(at + 30 + nameLen, at + 30 + nameLen + csize))), files[0].data);
+});
+
+test('zipAsync without deflate is byte for byte the store-only zip', async () => {
+  const files = deflateCases();
+  assert.deepEqual(Buffer.concat(await Z.zipAsync(files)), Buffer.concat(Z.zip(files)));
+  assert.deepEqual(Buffer.concat(await Z.zipAsync(files, { deflate: false })), Buffer.concat(Z.zip(files)));
+});
+
+test('zipAsync falls back to zlib where CompressionStream is missing', async () => {
+  const files = deflateCases();
+  const withStream = Buffer.concat(await Z.zipAsync(files, { deflate: true }));
+  const saved = globalThis.CompressionStream;
+  delete globalThis.CompressionStream;
+  let without;
+  try { without = Buffer.concat(await Z.zipAsync(files, { deflate: true })); } finally { globalThis.CompressionStream = saved; }
+  const z = D.unzip(without);
+  for (const f of files) assert.deepEqual(new Uint8Array(await z.bytes(f.name)), f.data, f.name);
+  assert.deepEqual(Object.values(methods(without)).map((x) => x.method), Object.values(methods(withStream)).map((x) => x.method));
+  assert.deepEqual(without, withStream, 'the node fallback emits identical bytes');
+});
+
+test('zip refuses classic ZIP field overflow before reading or compressing bodies', async () => {
+  const empty = { name: 'a', data: new Uint8Array(0) };
+  const cases = [Array(65536).fill(empty), [{ ...empty, name: 'a'.repeat(65536) }],
+    [{ ...empty, data: { length: 0x100000000 } }],
+    [{ ...empty, data: { length: 0xffffff00 } }, { ...empty, name: 'b', data: { length: 256 } }]];
+  for (const files of cases) {
+    assert.throws(() => Z.zip(files), /zip64|ZIP limit/i);
+    await assert.rejects(Z.zipAsync(files, { deflate: true }), /zip64|ZIP limit/i);
+  }
+});
+
+test('zipAsync uses zlib when node has CompressionStream without deflate-raw', async () => {
+  const files = deflateCases(), saved = globalThis.CompressionStream;
+  const expected = Buffer.concat(await Z.zipAsync(files, { deflate: true }));
+  globalThis.CompressionStream = class { constructor() { throw new TypeError('unsupported format'); } };
+  try { assert.deepEqual(Buffer.concat(await Z.zipAsync(files, { deflate: true })), expected); }
+  finally { globalThis.CompressionStream = saved; }
+});

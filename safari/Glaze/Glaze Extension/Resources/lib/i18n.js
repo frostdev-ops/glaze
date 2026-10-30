@@ -38,6 +38,7 @@ const GZ_I18N = (() => {
     '{n} words': { one: '{n} word', other: '{n} words' },
     '{n} papers': { one: '{n} paper', other: '{n} papers' },
     '{n} documents': { one: '{n} document', other: '{n} documents' },
+    '{n} slides': { one: '{n} slide', other: '{n} slides' },
     '{n} papers and documents': { one: '{n} paper or document', other: '{n} papers and documents' },
     "{n} paragraphs aren't double-spaced": { one: "{n} paragraph isn't double-spaced", other: "{n} paragraphs aren't double-spaced" },
     "{n} paragraphs have other line spacing": { one: "{n} paragraph has other line spacing", other: "{n} paragraphs have other line spacing" },

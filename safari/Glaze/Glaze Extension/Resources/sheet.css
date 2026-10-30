@@ -1,0 +1,116 @@
+/* Spreadsheets on the Documents page (sheet-kind.js, sheet-grid.js): the grid's chrome in the paper chrome's tokens
+   (writer-paper.css: the Look's ground, panels, edges and accent), the grid itself in the Look's surface and ink, the sheet
+   tabs, menus and find bar, and the card's 6×4 text. Motion: none while typing or scrolling. */
+:root[data-mode="sheet"] body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
+.gx { flex-direction: column; height: 100vh; min-width: 0; }
+.gx .gp-top h1 { flex: 0 1 auto; }
+.gx .gp-top .gp-state:empty { display: none; }
+
+/* Toolbar: labels go before the buttons do */
+.gx-tool { gap: 4px; }
+.gx-tool .gp-tbtn { padding: 6px 8px; }
+.gx-tool .gx-tb { padding: 6px 7px; }
+.gx-tool .gp-tbtn[aria-pressed="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi, var(--gz-ink)); }
+.gx-tool .gp-tbtn:disabled { opacity: .4; }
+.gx-tool .gp-caret, .gx-tool .gp-tbtn > .gp-ico:last-child:not(:first-child) { width: 13px; height: 13px; }
+#gx-more .gp-ico { stroke-width: 3.2; }
+@container gp-tool (max-width: 760px) { .gx-lbl { display: none; } }
+
+/* Formula bar and find */
+.gx-bar, .gx-find { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--edge); background: var(--panel); min-width: 0; }
+.gx-bar input, .gx-find input, .gx-fmt-row input { height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); background: var(--gz-surface-fill-2, var(--gz-surface-2));
+  color: var(--gz-ink); font: inherit; font-size: 13px; min-width: 0; }
+.gx-bar input:focus, .gx-find input:focus, .gx-fmt-row input:focus { outline: none; border-color: var(--gz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 22%, transparent); }
+.gx-name { width: 92px; flex: none; font-variant-numeric: tabular-nums; }
+.gx-fx { flex: 1; font-family: var(--gz-mono, ui-monospace, monospace) !important; }
+.gx-find[hidden] { display: none; }
+.gx-find input[type="search"] { flex: 0 1 220px; }
+.gx-find #gx-rep-q { flex: 0 1 180px; }
+.gx-find-n { font-size: 12px; color: var(--gz-ink-muted); white-space: nowrap; }
+.gx-find-n:empty { display: none; }
+
+/* The grid: four panes and the headers under one scroller that takes the pointer and the wheel */
+.gx-wrap { flex: 1; min-height: 0; position: relative; display: flex; }
+.gx-grid { --gx-line: var(--gz-border-line, var(--gz-line)); --gx-head: var(--gz-surface-2); --gx-cell: var(--gz-surface-paint, var(--gz-surface));
+  flex: 1; min-width: 0; position: relative; overflow: hidden; background: var(--gx-cell); color: var(--gz-ink); font: 13px/1 var(--gz-font); outline: none; contain: strict; }
+.gx-grid:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--gz-accent) 45%, transparent); }
+.gx-pane { position: absolute; overflow: hidden; }
+.gx-pane[hidden] { display: none; }
+.gx-in { position: absolute; left: 0; top: 0; will-change: transform; }
+.gx-q { z-index: 1; }
+.gx-tl, .gx-tr { border-bottom: 1px solid var(--gz-line-strong); z-index: 2; }
+.gx-tl, .gx-bl { border-right: 1px solid var(--gz-line-strong); z-index: 2; }
+.gx-r { position: absolute; left: 0; }
+.gx-c { position: absolute; top: 0; height: 100%; box-sizing: border-box; padding: 0 4px; border-right: 1px solid var(--gx-line); border-bottom: 1px solid var(--gx-line);
+  white-space: pre; overflow: hidden; display: flex; align-items: center; line-height: 1.2; }
+.gx-c.gx-n { justify-content: flex-end; font-variant-numeric: tabular-nums; }
+.gx-c:is(.gx-b, .gx-e) { justify-content: center; }
+.gx-c.gx-e { color: var(--gz-err, #dc2626); }
+.gx-c.gx-spill { z-index: 1; background: var(--gx-cell); }
+.gx-head { z-index: 3; background: var(--gx-head); color: var(--gz-ink-muted); font-size: 11px; }
+.gx-ch-c, .gx-rh-c { position: absolute; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--gx-line); border-bottom: 1px solid var(--gx-line); }
+.gx-ch-c { top: 0; height: 24px; }
+.gx-rh-c { left: 0; width: 46px; }
+.gx-ch-c.gx-on, .gx-rh-c.gx-on { background: var(--gz-accent-soft); color: var(--gz-accent-hi, var(--gz-ink)); font-weight: 600; }
+.gx-corner { position: absolute; z-index: 3; background: var(--gx-head); border-right: 1px solid var(--gx-line); border-bottom: 1px solid var(--gx-line); }
+.gx-scroll { position: absolute; inset: 0; z-index: 4; overflow: auto; overscroll-behavior: contain; touch-action: pan-x pan-y; cursor: cell; }
+.gx-space { pointer-events: none; }
+
+/* The overlay: ranges, the active cell, the fill handle, references while a formula is written, the copied range */
+.gx-ov { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 2; }
+.gx-ov > div { position: absolute; box-sizing: border-box; }
+.gx-range { background: color-mix(in srgb, var(--gz-accent) 13%, transparent); border: 1px solid color-mix(in srgb, var(--gz-accent) 60%, transparent); }
+.gx-active { border: 2px solid var(--gz-accent); }
+.gx-handle { width: 8px; height: 8px; background: var(--gz-accent); border: 1px solid var(--gx-cell); }
+.gx-reach { border: 1px dashed var(--gz-ink-muted); }
+.gx-ref { border: 2px solid var(--ref); background: color-mix(in srgb, var(--ref) 10%, transparent); }
+.gx-marquee { border: 2px dashed var(--gz-accent); }
+
+/* Writing in a cell */
+.gx-edit { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; padding: 2px 4px; resize: none; overflow: hidden; border: 2px solid var(--gz-accent); border-radius: 0;
+  background: var(--gx-cell); color: var(--gz-ink); font: inherit; line-height: 1.2; white-space: pre; outline: none; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+.gx-edit[hidden] { display: none; }
+.gx-complete, .gx-sig { position: absolute; z-index: 7; margin: 0; }
+.gx-complete { list-style: none; padding: 4px; min-width: 160px; max-height: 240px; overflow: auto; }
+.gx-complete li { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-family: var(--gz-mono, ui-monospace, monospace); cursor: pointer; }
+.gx-complete li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi, var(--gz-ink)); }
+.gx-sig { padding: 6px 10px; font-size: 12px; font-family: var(--gz-mono, ui-monospace, monospace); white-space: nowrap; }
+.gx-complete[hidden], .gx-sig[hidden] { display: none; }
+.gx-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Sheet tabs and the status bar */
+.gx-tabbar { flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-top: 1px solid var(--edge); background: var(--panel); min-width: 0; }
+.gx-tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+.gx-tab { padding: 5px 12px; border-radius: 7px; font-size: 13px; color: var(--gz-ink-muted); white-space: nowrap; flex: none; }
+.gx-tab:hover { background: var(--gz-line); color: var(--gz-ink); }
+.gx-tab[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi, var(--gz-ink)); font-weight: 600; }
+.gx-tab:focus-visible, .gx-add:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+.gx-tab-in { width: 120px; height: 26px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--gz-accent); background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; font-size: 13px; }
+.gx-status { overflow: hidden; gap: 14px; }
+.gx-said:empty, .gx-circ:empty { display: none; }
+.gx-circ { color: var(--gz-err, #dc2626); }
+.gx-sum { white-space: pre; font-variant-numeric: tabular-nums; }
+
+/* Menus */
+.gx-menu { z-index: 8; }
+.gx-menu > button:disabled { opacity: .45; }
+.gx-fmt-row { display: flex; gap: 6px; padding: 4px 6px; }
+.gx-fmt-row input { flex: 1; width: 140px; font-family: var(--gz-mono, ui-monospace, monospace); }
+
+/* The card and the New band's tile: A1:F4 as text under column letters and row numbers */
+.gx-thumb { display: grid; grid-template-columns: 14px repeat(6, minmax(0, 1fr)); grid-template-rows: 12px repeat(4, minmax(0, 1fr)); width: 208px; height: 132px; box-sizing: border-box;
+  background: #fff; color: #1f2937; font: 9px/1 Arial, sans-serif; border-radius: 2px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+:root:not([data-dark]) .gx-thumb { box-shadow: 0 1px 3px rgba(15,23,42,.16), 0 0 0 1px rgba(15,23,42,.06); }
+.gx-thumb > span { border-right: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; padding: 0 2px; overflow: hidden; white-space: nowrap; text-overflow: clip; display: flex; align-items: center; min-width: 0; }
+.gx-th-h { background: #f3f4f6; color: #6b7280; justify-content: center; font-size: 8px; }
+.gx-th-n { justify-content: flex-end; }
+.gd-pic .gx-thumb { zoom: var(--gd-thumb); align-self: flex-start; }
+.gd-tile-pic .gx-thumb { width: 139px; height: 179.5px; box-shadow: none; border-radius: 0; }
+@media (max-width: 680px) {
+  .gd-pic .gx-thumb { zoom: calc(.8 * var(--gd-thumb)); }
+  .gx-bar { padding: 6px 8px; }
+  .gx-name { width: 64px; }
+  .gx-find { flex-wrap: wrap; }
+}
+/* Five New tiles stay one row inside the panel on a narrow page, as the four do (papers.css). */
+@media (max-width: 640px) { .gd-tiles:has(> .gd-tile:nth-child(5)) .gd-tile-pic :is(.gt-thumb, .gx-thumb) { zoom: .78; } }

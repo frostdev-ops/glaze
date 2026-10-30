@@ -107,6 +107,29 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     return records;
   };
   const paperKey = /^(writerPaper:|writerVersions:)(?:[a-z\d.-]+(?::\d{1,5})?\|_\d+_\d+\|_\d+_\d+\|_\d+_\d+|recovery:[a-z\d-]+|doc:[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12})$|^writerPresets:[a-z\d.-]+(?::\d{1,5})?\|_\d+_\d+$/i;
+  // The kinds of document this build keeps (lib/doc-kinds.js KINDS; test/backup.test.js holds them equal). A spreadsheet's
+  // record goes into its backup file with its bands (writerSheet:<key>:<sheet>:<band>, lib/writer-papers.js PART) as $parts,
+  // so one restore step writes them together; a PDF's or deck's record holds its file (base64, at most 3 MB of it).
+  const KINDS = ['paper', 'sheet', 'pdf', 'slides'], PART = 'writerSheet:', PART_NAME = /^\d{1,9}:\d{1,5}$/;
+  const kindOf = (v) => (obj(v) && typeof v.kind === 'string' ? v.kind : 'paper');
+  const paperVersion = (v) => !obj(v) || v.kind === undefined || KINDS.includes(v.kind);
+  const B64 = /^[A-Za-z0-9+/]*={0,2}$/, FILE_MAX = 4e6, EXT = { pdf: ['.pdf'], slides: ['.pptx', '.ppsx'] };
+  const count = (n) => n == null || (Number.isSafeInteger(n) && n >= 0);
+  const text = (s, max) => s == null || (typeof s === 'string' && s.length <= max);
+  const base64 = (s, max) => typeof s === 'string' && s.length > 0 && s.length <= max && s.length % 4 === 0 && B64.test(s);
+  // A PDF's or deck's fields (pdf-kind.js, slides-kind.js STORE): the file, its size, its first page's picture, what was read.
+  const fileFields = (kind, v) => base64(v.file, FILE_MAX) && (v.size == null || (Number.isSafeInteger(v.size) && v.size > 0 && v.size <= 3e6))
+    && (v.ext == null || EXT[kind].includes(v.ext)) && text(v.text, 2e5) && count(v.pages) && count(v.slides) && count(v.words)
+    && (v.thumb == null || (typeof v.thumb === 'string' && v.thumb.length <= 8e6 && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]*={0,2}$/.test(v.thumb)));
+  // A spreadsheet's record (sheet-data.js): its book, card text and counts, and each band the record names, at the revision
+  // that wrote it.
+  const glance = (g) => g == null || (Array.isArray(g) && g.length === 4 && g.every((row) => Array.isArray(row) && row.length === 6 && row.every((x) => typeof x === 'string' && x.length <= 40)));
+  const sheetFields = (v) => {
+    const names = Object.keys(v.parts ?? {}), bands = v.$parts ?? {};
+    return (v.book == null || obj(v.book)) && glance(v.grid) && text(v.text, 2e4) && count(v.cells) && count(v.sheets)
+      && (v.parts == null || obj(v.parts)) && obj(bands) && names.every((n) => PART_NAME.test(n) && Number.isSafeInteger(v.parts[n]))
+      && Object.keys(bands).length === names.length && names.every((n) => obj(bands[n]) && bands[n].rev === v.parts[n] && Array.isArray(bands[n].rows) && Object.keys(bands[n]).every((k) => k === 'rows' || k === 'rev'));
+  };
   const paperLibraries = async () => {
     if (typeof module !== 'undefined') return { P: require('./writer-papers.js'), S: require('./writer-schema.js'), ST: require('./writer-styles.js'), SR: require('./writer-sources.js') };
     if (!globalThis.GZ_WRITER_SCHEMA || !globalThis.GZ_WRITER_PAPERS || !globalThis.GZ_WRITER_STYLES || !globalThis.GZ_WRITER_SOURCES) {
@@ -128,15 +151,33 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       if (!parsed.type.create(node.attrs, parsed.content).eq(node)) throw fail('bad');
     };
     // A kind this build doesn't know (a later one's) is left out with its versions, so the rest still restores.
-    const later = new Set(Object.entries(raw).filter(([key, value]) => key.startsWith('writerPaper:') && obj(value) && value.kind !== undefined && value.kind !== 'paper').map(([key]) => key.slice(12)));
+    const later = new Set(Object.entries(raw).filter(([key, value]) => key.startsWith('writerPaper:') && obj(value) && !KINDS.includes(kindOf(value))).map(([key]) => key.slice(12)));
     const out = {};
-    for (const [key, value] of Object.entries(raw)) {
+    const size = (v) => new TextEncoder().encode(JSON.stringify(v)).length;
+    for (const [key, original] of Object.entries(raw)) {
+      const value = key.startsWith('writerVersions:') && Array.isArray(original) ? original.filter(paperVersion) : original;
       if (!paperKey.test(key)) throw fail('bad');
       if (later.has(key.replace(/^writer(?:Paper|Versions):/, ''))) continue;
       out[key] = value;
-      if (key.startsWith('writerPaper:')) { if (!obj(value) || value.key !== key.slice(12) || !Number.isFinite(value.updated) || (value.title !== undefined && (typeof value.title !== 'string' || value.title.length > 1000))) throw fail('bad'); doc(value.doc); }
-      else if (key.startsWith('writerVersions:')) { if (!Array.isArray(value) || value.length > 100) throw fail('bad'); for (const v of value) { if (!obj(v) || typeof v.id !== 'string' || !Number.isFinite(v.at)) throw fail('bad'); doc(v.doc); v.bytes = new TextEncoder().encode(JSON.stringify(v.doc)).length; } }
-      else if (!Array.isArray(value) || value.length > P.CAP.presets || value.some((v) => !ST.custom(v))) throw fail('bad');
+      if (key.startsWith('writerPaper:')) {
+        if (!obj(value) || value.key !== key.slice(12) || !Number.isFinite(value.updated) || (value.title !== undefined && (typeof value.title !== 'string' || value.title.length > 1000))) throw fail('bad');
+        const kind = kindOf(value);
+        if (kind !== 'sheet' && value.$parts !== undefined) throw fail('bad');
+        // Another kind's record holds no document; one left there by an older save is checked as a paper's is.
+        if (kind === 'paper' || value.doc != null) doc(value.doc);
+        if (kind !== 'paper' && !(kind === 'sheet' ? sheetFields(value) : fileFields(kind, value))) throw fail('bad');
+      } else if (key.startsWith('writerVersions:')) {
+        if (!Array.isArray(value) || value.length > 100) throw fail('bad');
+        for (const v of value) {
+          if (!obj(v) || typeof v.id !== 'string' || !Number.isFinite(v.at)) throw fail('bad');
+          const kind = kindOf(v);
+          // A spreadsheet's version is its workbook packed (gz); a PDF's or deck's, its file; a paper's, its document.
+          if (kind !== 'paper' && v.doc != null) doc(v.doc);
+          if (kind === 'sheet') { if (!base64(v.gz, 16e6) || !count(v.cells)) throw fail('bad'); v.bytes = v.gz.length; }
+          else if (kind === 'paper') { doc(v.doc); v.bytes = size(v.doc); }
+          else { if (!fileFields(kind, v)) throw fail('bad'); v.bytes = size(v.doc ?? null) + size(Object.fromEntries(['file', 'size', 'pages', 'thumb', 'ext', 'slides', 'text'].filter((f) => v[f] !== undefined).map((f) => [f, v[f]]))); }
+        }
+      } else if (!Array.isArray(value) || value.length > P.CAP.presets || value.some((v) => !ST.custom(v))) throw fail('bad');
     }
     return out;
   };
@@ -288,7 +329,16 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     const pick = (re) => Object.fromEntries(Object.entries(local).filter(([k, v]) => re.test(k) && obj(v)));
     const enc = new TextEncoder();
     const dirs = notes.map((n, i) => ({ account: n.account, dir: `notes/${i + 1}/` }));
-    const papers = Object.entries(local).filter(([key]) => paperKey.test(key)).map(([key, value], i) => ({ key, value, file: `papers/${i + 1}.json` }));
+    // Every kind's record and versions; a spreadsheet's record with the bands it names ($parts), never a stale one.
+    const withBands = (key, value) => {
+      if (!key.startsWith('writerPaper:') || kindOf(value) !== 'sheet') return value;
+      const { partDrops, ...rec } = value, k = key.slice(12);
+      return { ...rec, $parts: Object.fromEntries(Object.keys(obj(rec.parts) ? rec.parts : {}).map((n) => [n, local[`${PART}${k}:${n}`]])) };
+    };
+    // A spreadsheet missing a band it names can't be read back, here or anywhere: it stays out rather than spoil the file.
+    const torn = (key, value) => key.startsWith('writerPaper:') && kindOf(value) === 'sheet' && Object.values(withBands(key, value).$parts).some((p) => !obj(p));
+    const papers = Object.entries(local).filter(([key, value]) => paperKey.test(key) && !torn(key, value))
+      .map(([key, value], i) => ({ key, value: key.startsWith('writerVersions:') && Array.isArray(value) ? value.filter(paperVersion) : withBands(key, value), file: `papers/${i + 1}.json` }));
     const words = Array.isArray(local.writerWords) ? local.writerWords.filter((w) => typeof w === 'string' && w.trim() === w && w && w.length <= WORDS.length).slice(-WORDS.max) : [];
     const sources = pick(sourceKey);
     const m = { format: FORMAT, version: VERSION, made: date.toISOString(), glaze: version, settings, tasks,
@@ -576,7 +626,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     finally { await io.abort?.().catch(() => {}); }
   };
 
-  return { atomic, scratch, FORMAT, VERSION, MANIFEST, KEYS, LIMIT, CATS, STORES, ACCOUNT, parse, read, notesOut, pack, fileName, apply, notesIn, restore };
+  return { atomic, scratch, FORMAT, VERSION, MANIFEST, KEYS, LIMIT, CATS, STORES, ACCOUNT, KINDS, parse, read, notesOut, pack, fileName, apply, notesIn, restore };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_BACKUP;

@@ -70,13 +70,15 @@ test('course choices: each name once, A to Z, and whether any row has none', () 
 
 test('drop routing: Word files within the cap become documents, at most 20; the rest say why', () => {
   const f = (name, size = 1000) => ({ name, size });
-  const r = DH.route([f('a.docx'), f('notes.txt'), f('B.DOCX', 16e6), f('c.docx', 0), f('scan.pdf')], DK.forFile, DK.KINDS);
+  // As papers.js routes: through the kinds registered to take files (the paper's; the PDF's only with writer.pdf on).
+  if (typeof DK.get('paper').importFile !== 'function') DK.register('paper', { importFile: () => null, thumb: () => null });
+  const r = DH.route([f('a.docx'), f('notes.txt'), f('B.DOCX', 16e6), f('c.docx', 0), f('scan.pdf')], DK.opens, DK.KINDS);
   assert.deepEqual(r.take.map((x) => [x.file.name, x.kind]), [['a.docx', 'paper']]);
   assert.deepEqual(r.refused.map((x) => [x.file.name, x.why]), [['notes.txt', 'type'], ['B.DOCX', 'size'], ['c.docx', 'size'], ['scan.pdf', 'type']]);
-  const many = DH.route(Array.from({ length: 23 }, (_, i) => f(`${i}.docx`)), DK.forFile, DK.KINDS);
+  const many = DH.route(Array.from({ length: 23 }, (_, i) => f(`${i}.docx`)), DK.opens, DK.KINDS);
   assert.equal(many.take.length, 20);
   assert.deepEqual(many.refused.map((x) => x.why), ['count', 'count', 'count']);
-  assert.equal(DH.route([f('a.docx', DK.KINDS.paper.max)], DK.forFile, DK.KINDS).take.length, 1, 'the cap itself fits');
+  assert.equal(DH.route([f('a.docx', DK.KINDS.paper.max)], DK.opens, DK.KINDS).take.length, 1, 'the cap itself fits');
   assert.equal(DH.stem('River notes.docx'), 'River notes');
   assert.equal(DH.stem('my.essay.final.DOCX'), 'my.essay.final');
   assert.equal(DH.stem('   .docx'), '');
