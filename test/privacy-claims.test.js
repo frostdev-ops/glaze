@@ -54,12 +54,13 @@ test('optional Google Drive is disclosed in both privacy texts, with its scope, 
     assert.match(text, /`(?:https:\/\/www\.googleapis\.com\/auth\/)?drive\.file`/, file);
     assert.match(text, /frostdev\.io\/glaze\/drive-picker\//, file);
     assert.match(text, /frostdev-ops\.github\.io\/glaze-drive-picker\//, file);
-    assert.match(text, /Google Drive[^.]*unavailable in (?:this|the current) build while Google verification is pending/, file);
+    assert.match(text, /Google Drive[^.]*unavailable in (?:this|the current) build/, file);
     assert.match(limited, /Drive/, file);
     assert.match(limited, /\[Google API Services User Data Policy\]\(https:\/\/developers\.google\.com\/terms\/api-services-user-data-policy\), including\s+the Limited Use requirements/, file);
   }
   const google = policy.slice(policy.indexOf('## Google user data'), policy.indexOf('## Hosting'));
-  assert.match(google, /Google Calendar sync and Google Drive are unavailable/);
+  assert.match(google, /Google Drive is unavailable in this build/);
+  assert.doesNotMatch(google, /Google Calendar sync[^.]*unavailable/);
   assert.match(google, /Google Drive access \(`drive\.file`/);
 });
 

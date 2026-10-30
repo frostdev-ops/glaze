@@ -31,10 +31,14 @@ for (const [name, subject, facts, anchor] of topics) {
 }
 
 const unavailable = /unavailable|not (?:yet )?available|not enabled|disabled|coming soon|future|not shipped|pending (?:verification|approval)|off until Google|when (?:available|supported)|where available/i;
-for (const file of ['README.md', 'docs/privacy.md']) {
-  test(`GZ-04: ${file} does not advertise disabled Google Calendar sync as connectable`, () => {
-    if (G.ON) return;
+for (const file of ['README.md', 'docs/privacy.md', 'PRIVACY.md', 'docs/features.md', 'docs/development.md']) {
+  test(`GZ-04: ${file} describes Google Calendar sync as the build has it`, () => {
     const claims = sentences(read(file)).filter((s) => /Google Calendar sync/i.test(s));
+    if (G.ON) {
+      assert.deepEqual(claims.filter((s) => unavailable.test(s)), [],
+        'Google Calendar sync is on in this build (Chrome, off until you connect); no sentence may call it unavailable or pending');
+      return;
+    }
     const unqualified = claims.filter((s) => !unavailable.test(s));
     assert.deepEqual(unqualified, [],
       'Google Calendar sync is disabled at build time; current feature claims must disclose that or be removed');
@@ -92,11 +96,14 @@ test('BLD-5: the permission text matches the manifest and the packaging scripts'
   assert.ok(manifest.permissions.includes('unlimitedStorage'));
   assert.ok(!/doesn't ask for unlimited/i.test(policy));
   assert.match(policy, /Glaze asks the browser for\s+`unlimitedStorage`/);
-  assert.equal(G.ON, false, 'Google Calendar sync is built off, so released builds omit identity');
-  assert.match(code('package.sh'), /filter\(\(p\) => p !== "identity"\)/);
-  assert.match(code('scripts/package-firefox.sh'), /filter\(\(p\) => p !== 'identity'\)/);
-  assert.match(code('scripts/safari-manifest.sh'), /p != 'identity'/);
-  assert.match(policy, /`identity` \(Chrome only, optional\) — not requested by released builds/);
+  assert.equal(G.ON, true, 'Google Calendar sync is built on, so the Chrome package keeps identity and the OAuth client');
+  assert.deepEqual(manifest.oauth2.scopes, [G.SCOPE]);
+  assert.ok(manifest.optional_permissions.includes('identity'));
+  assert.match(code('package.sh'), /if \[ "\$\(node -p 'require\("\.\/lib\/gcal\.js"\)\.ON'\)" != true \]; then[\s\S]*filter\(\(p\) => p !== "identity"\)/, 'Chrome strips them only from a build with the switch off');
+  assert.match(code('scripts/package-firefox.sh'), /delete m\.oauth2;\nm\.optional_permissions = \(m\.optional_permissions \|\| \[\]\)\.filter\(\(p\) => p !== 'identity'\)/, 'Firefox always leaves them out');
+  assert.match(code('scripts/safari-manifest.sh'), /manifest\.pop\('oauth2', None\)\noptional = \[p for p in manifest\.get\('optional_permissions', \[\]\) if p != 'identity'/, 'Safari always leaves them out');
+  assert.match(policy, /`identity` \(Chrome only, optional\) — asked for only when you press Connect/);
+  assert.ok(!/not requested by released builds/.test(policy));
   assert.match(policy, /Chrome sync \(or Firefox Sync\)/);
   assert.match(policy, /\*\*Music widget\*\* \(Canvas and Blackboard Ultra/);
   assert.ok(/music/.test(code('lib/widgets.js').match(/const TILES = \[[^\]]*\]/)[0]), 'the music tile is a widget on both sites');

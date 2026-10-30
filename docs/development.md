@@ -117,7 +117,15 @@ aren't in the API; edit those in the dashboard. The publisher and item IDs defau
 
 ## Google Calendar sync
 
-Google Calendar sync is unavailable in the current build while Google verification is pending. Keep the build-time switch in `lib/gcal.js` off until verification and an authorized release enable it. While off, the editor hides connection controls, the worker refuses sync operations, and packages omit the OAuth client and optional identity permission. Calendar export (.ics) remains available.
+Google Calendar sync is on in Chrome builds since 4.0.1 (the build-time switch `ON` in `lib/gcal.js`). The Chrome package keeps the manifest's `oauth2` client (`calendar.app.created` scope) and the optional `identity` permission; the Firefox and Safari packages leave both out, because the sync needs Chrome's `identity.getAuthToken`. With the switch off, Settings hides the section, the worker refuses every operation and `package.sh` leaves both out of the Chrome package too. `test/gcal.test.js` runs it against a local mock of Google's API (`scripts/gcal-mock.js`).
+
+The OAuth client belongs to the Chrome Web Store item, so `getAuthToken` works only in a copy with the store's ID. An unpacked checkout has its own ID; for a copy with the store's, save the item's public key (Developer Dashboard → the item → Package → View public key, the base64 between the BEGIN and END lines, on one line) to a file outside the repo and run:
+
+```sh
+scripts/dev-gcal.sh <key file>
+```
+
+Then load `dist/glaze-dev-gcal` unpacked, in a Chrome profile without the store's Glaze. The key never goes in `manifest.json` or the package.
 
 ## Safari
 

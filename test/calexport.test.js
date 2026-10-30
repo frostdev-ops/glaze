@@ -134,7 +134,7 @@ test('review: overdue work planned for later keeps its plan; its past deadline s
 
 // features/calexport.js run() in a page of its own: Canvas's answers can be held, and storage changed meanwhile.
 // failKey: a read that names this key fails, as a failed read does; need(file): what loading a file on demand does.
-const page = ({ failKey = null, need = async () => {} } = {}) => {
+const page = ({ failKey = null, need = async () => {}, next = () => null } = {}) => {
   const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const UID = '3', ORIGIN = 'https://canvas.test', ACCT = 'a'.repeat(24);
   const store = {
@@ -152,7 +152,7 @@ const page = ({ failKey = null, need = async () => {} } = {}) => {
   let hold = false;
   const answer = (url) => {
     const late = url.includes('start_date=2026-04') ? [{ plannable_type: 'assignment', plannable_id: '1', course_id: '7', context_name: 'Biology', plannable: { title: 'Lab 1' }, plannable_date: '2026-10-14T03:59:00Z', html_url: '/courses/7/assignments/1' }] : [];
-    return { ok: true, headers: { get: () => null }, text: async () => JSON.stringify(late) };
+    return { ok: true, headers: { get: (h) => (h === 'link' && next(url) ? `<${next(url)}>; rel="next"` : null) }, text: async () => JSON.stringify(late) };
   };
   // fail[area]: 'error' answers with runtime.lastError and no result, as a failed read does; 'throw' throws.
   const fail = {}, runtime = {};
@@ -206,6 +206,27 @@ const page = ({ failKey = null, need = async () => {} } = {}) => {
   return { store, fail, asked, held, saved, go, activation, downloads, submit, said, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); } };
 };
 const settle = () => new Promise((res) => setImmediate(res));
+
+// Codex, 4.0.1: Canvas's planner read stops at ten pages; one cut short there isn't whole, so Google sync deletes nothing
+// for being missing from it.
+test('review: a planner read cut short at ten pages is not whole; one that ends is', async () => {
+  const capped = page({ next: (url) => `https://canvas.test/api/v1/planner/items?page=${(Number(/[?&]page=(\d+)/.exec(url)?.[1]) || 1) + 1}` });
+  const r = await capped.go();
+  assert.equal(capped.asked.filter((u) => u.includes('/planner/items')).length >= 10, true);
+  assert.equal(r.whole, false);
+  await capped.submit();
+  await settle();
+  assert.ok(capped.said() && !/Blackboard/.test(capped.said()), `no Blackboard note on Canvas: ${capped.said()}`);
+  const ended = page({ next: (url) => (/[?&]page=3\b/.test(url) ? null : `https://canvas.test/api/v1/planner/items?page=${(Number(/[?&]page=(\d+)/.exec(url)?.[1]) || 1) + 1}`) });
+  assert.equal((await ended.go()).whole, true);
+});
+
+test('review: a planner continuation on another origin is not followed and is not a whole read', async () => {
+  const p = page({ next: () => 'https://other.test/api/v1/planner/items?page=2' });
+  assert.equal((await p.go(() => true, { icsPlan: false })).whole, false);
+  assert.equal(p.asked.length, 1);
+  assert.ok(p.asked.every((url) => new URL(url).origin === 'https://canvas.test'));
+});
 
 test('review: an export with nothing changed saves Gradescope work and the overdue item\'s plan, after asking further back', async () => {
   const p = page();
