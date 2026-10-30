@@ -1857,7 +1857,7 @@ chrome.runtime.onMessage.addListener((m, s) => {
     if (!ok) return;
     const target = s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] };
     chrome.scripting.executeScript({ target, world: 'MAIN', injectImmediately: true, func: transitionGuard }).catch(() => {});
-    if (chrome.declarativeContent && s.frameId === 0) chrome.action.setIcon({ tabId: s.tab.id, path: ownIcon() });
+    if (chrome.declarativeContent && s.frameId === 0) return chrome.action.setIcon({ tabId: s.tab.id, path: ownIcon() });
   }).catch(() => {});
 });
 
