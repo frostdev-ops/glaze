@@ -107,8 +107,9 @@
 .gd-tile-pic .gx-thumb { width: 139px; height: 179.5px; box-shadow: none; border-radius: 0; }
 @media (max-width: 680px) {
   .gd-pic .gx-thumb { zoom: calc(.8 * var(--gd-thumb)); }
-  .gd-tile-pic .gx-thumb { zoom: .8; }
   .gx-bar { padding: 6px 8px; }
   .gx-name { width: 64px; }
   .gx-find { flex-wrap: wrap; }
 }
+/* Five New tiles stay one row inside the panel on a narrow page, as the four do (papers.css). */
+@media (max-width: 640px) { .gd-tiles:has(> .gd-tile:nth-child(5)) .gd-tile-pic :is(.gt-thumb, .gx-thumb) { zoom: .78; } }
