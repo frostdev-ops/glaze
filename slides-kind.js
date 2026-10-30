@@ -588,7 +588,7 @@
       if (e.defaultPrevented || presenting || menu || !deck) return;
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); q.focus(); q.select(); }
       // ⌘P / Ctrl+P: the slides, not the viewer around them.
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); e.stopPropagation(); print(false).catch((x) => { console.warn(x); endPrint(); }); }
+      if (view.contains(e.target) && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); e.stopPropagation(); print(false).catch((x) => { console.warn(x); endPrint(); }); }
     }, { capture: true, signal });
     document.addEventListener('keydown', (e) => {
       if (e.defaultPrevented || presenting || menu || !deck) return;
