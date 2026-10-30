@@ -15,6 +15,9 @@ const B = require('../mcp/lib/browsers.js');
 const IDS = require('../mcp/lib/ids.js');
 const L = require('../mcp/lib/launcher.js');
 const I = require('../mcp/lib/install.js');
+// Whether setup would name the node running these tests. It won't on GitHub's hosted runners, where node sits under
+// /opt/hostedtoolcache, a folder anyone can write; nodes.js refuses that, as it should.
+const trusted = (platform) => !require('../mcp/lib/nodes.js').trust(platform).path(process.execPath);
 const D = require('../mcp/lib/doctor.js');
 const CLI = require('../mcp/bin/glaze-mcp.js');
 const { nodeAt } = require('./helpers/mcp-pipe.cjs');
@@ -305,7 +308,7 @@ test('launchers name node by the PATH entry that leads to it, so a Homebrew upgr
   assert.equal(I.stableNode(cellar, 'darwin', { HOME: d }), cellar);
   // The default node is this one, named that way.
   fs.symlinkSync(process.execPath, path.join(mk(d, 'link'), 'node'));
-  assert.equal(I.context({ platform: 'darwin', env: { HOME: d, PATH: path.join(d, 'link') } }).node, path.join(d, 'link', 'node'));
+  assert.equal(I.context({ platform: 'darwin', env: { HOME: d, PATH: path.join(d, 'link') } }).node, trusted('darwin') ? path.join(d, 'link', 'node') : null);
   assert.equal(I.context({ platform: 'darwin', env: { HOME: d, PATH: path.join(d, 'link') }, node: '/given/node' }).node, '/given/node');
 });
 

@@ -29,6 +29,9 @@ const posixOnly = (why) => (POSIX ? false : why);
 const windowsOnly = (why) => (POSIX ? why : false);
 // Loaded per test, so a missing module fails that test alone.
 const N = () => require('../mcp/lib/nodes.js');
+// Whether setup would name the node running these tests. It won't on GitHub's hosted runners, where node sits under
+// /opt/hostedtoolcache, a folder anyone can write; nodes.js refuses that, as it should.
+const trusted = (platform) => !N().trust(platform).path(process.execPath);
 const M = () => require('../mcp/lib/mcpb.js');
 const P = () => require('../mcp/scripts/pack-mcpb.js');
 
@@ -277,7 +280,7 @@ test('a stable PATH alias must be trusted even when it resolves to the running n
   assert.equal(got, node);
   fs.unlinkSync(alias);
   fs.symlinkSync(process.execPath, alias);
-  assert.equal(I.context({ platform: 'darwin', env }).node, process.execPath, 'setup also refuses the unsafe alias');
+  assert.equal(I.context({ platform: 'darwin', env }).node, trusted('darwin') ? process.execPath : null, 'setup also refuses the unsafe alias');
 });
 
 test('choose checks the running node file, ancestors and symlink targets before using it', { skip: posixOnly('POSIX modes and symlinks') }, async (t) => {
@@ -307,7 +310,7 @@ test('the new helper files reach nothing outside the computer and start processe
 test('install refuses to default to Claude\'s runtime when no node is given', () => {
   // context() names this node unless told otherwise; under Electron it names none, so setup can't start Claude's app.
   const ctx = I.context({ platform: 'darwin', env: { HOME: '/h' } });
-  assert.equal(typeof ctx.node, 'string');
+  assert.equal(ctx.node, trusted('darwin') ? process.execPath : null);
   assert.equal(I.context({ platform: 'darwin', env: { HOME: '/h' }, node: null }).node, null, 'null means no node, not the default');
 });
 
@@ -522,7 +525,8 @@ test('the command: --from=mcpb sets up, then runs agent mode; any other --from i
   assert.equal(out.status, 0, out.stderr);
   const { root, hosts } = B.folder(process.platform, { HOME: home, XDG_DATA_HOME: env.XDG_DATA_HOME });
   const l = L.parse(fs.readFileSync(path.join(hosts, B0.id), 'utf8'));
-  assert.equal(fs.realpathSync(l.node), fs.realpathSync(process.execPath));
+  if (trusted(process.platform)) assert.equal(fs.realpathSync(l.node), fs.realpathSync(process.execPath));
+  else assert.equal(l.node, null, 'a node others can change goes in no launcher');
   assert.equal(l.script, path.join(root, VERSION, 'bin', 'glaze-mcp.js'));
   assert.doesNotMatch(out.stderr, /unknown option|GLAZE_MCP_BROWSER/);
   assert.equal(CLI.mode(['--from=mcpb']).mode, 'agent');
