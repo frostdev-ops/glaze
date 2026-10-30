@@ -180,3 +180,10 @@ test('the check owns browser signal handling until its cleanup has finished', as
   await h.run("browse('/profile')");
   assert.deepEqual([launch.handleSIGINT, launch.handleSIGTERM, launch.handleSIGHUP], [false, false, false]);
 });
+
+test('the ten-minute leg runs only for FULL=1', (t) => {
+  for (const [value, expected] of [['0', false], ['false', false], ['', false], ['1', true]]) {
+    const h = harness(t, { process: { env: { FULL: value } } });
+    assert.equal(h.run('FULL'), expected, `FULL=${value}`);
+  }
+});
