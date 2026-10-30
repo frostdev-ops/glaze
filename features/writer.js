@@ -354,6 +354,29 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       return;
     }
   }, true);
+  // Disabled native buttons emit no click. Before the submit module is armed, keep the same pointer intent too;
+  // compact's saved paper can turn Ultra's empty box's Submit on once the frame has loaded and flushed it.
+  let heldDown = null;
+  const disabledAt = (e, includeArmed = false) => {
+    for (const box of boxes.values()) {
+      if (box.mode !== 'paper' || !sameBox(box) || (!includeArmed && box.full && globalThis.GZ_WRITER_SUBMIT?.armed?.(box))) continue;
+      const buttons = box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || [];
+      for (const b of buttons) {
+        if (!/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || U().enabled(b)) continue;
+        const r = b.getBoundingClientRect();
+        if (r.right > r.left && r.bottom > r.top && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return { box, b };
+      }
+    }
+    return null;
+  };
+  document.addEventListener('pointerdown', (e) => { heldDown = e.button === 0 ? disabledAt(e) : null; }, true);
+  document.addEventListener('pointerup', (e) => {
+    const was = heldDown; heldDown = null;
+    if (!was || e.button !== 0 || disabledAt(e, true)?.b !== was.b) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    hold(was.box, was.b, e.type);
+  }, true);
+  document.addEventListener('pointercancel', () => { heldDown = null; }, true);
   // Ultra's button, held until the frame can take it, marked busy meanwhile: while the frame opens or reopens there's no
   // frame to save the paper, and Ultra's box may not hold its last words (a full paper's, none). Compact: the frame's
   // save asked (compact:flush) once it is up and has said its view (a view ends a flush asked before it), asked again of
@@ -361,7 +384,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // pressed again once the submit step has the box; if it never takes it, fail without pressing Ultra's stale box. A box
   // Writer gives back holds nothing: Ultra's editor is there again to press.
   const HOLD_ARM = 5000;
-  const hold = (box, b) => {
+  const hold = (box, b, type = 'click') => {
     if (box.flushing || (box.held && !box.held.request)) return;
     const id = b.getAttribute('data-analytics-id'), action = /submit$/.test(id) ? 'submit' : 'save';
     const busy = (x, on) => { if (on) { x.setAttribute('aria-busy', 'true'); x.style.setProperty('cursor', 'progress'); } else { x.removeAttribute('aria-busy'); x.style.removeProperty('cursor'); } };
@@ -379,7 +402,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       if (p.request && box.port === p.port) { end(); return; } // answered: Ultra's button went, or the bar says why
       if (Date.now() - p.at >= 60000) { fail(); return; }
       if (box.full && x) {
-        if (globalThis.GZ_WRITER_SUBMIT?.armed?.(box)) { end(); GZ_WRITER_SUBMIT.press(box, x); return; }
+        if (globalThis.GZ_WRITER_SUBMIT?.armed?.(box)) { end(); GZ_WRITER_SUBMIT.press(box, x, type); return; }
         if (!box.ready || !box.port) p.up = null;
         else if (Date.now() - (p.up ??= Date.now()) > HOLD_ARM) { fail(); return; }
       } else if (!box.full && x && box.ready && box.port && box.viewedOn === box.port) {

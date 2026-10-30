@@ -309,7 +309,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     else if (m.type === 'submit:review' && armed.has(box)) review(box);
   };
   // armed(box): this step has the box's Ultra buttons (features/writer.js holds a press until it does).
-  const press = (box, b) => { if (live().has(box) && box.full && ownerOf(b) === box) act(box, b, { type: 'click', preventDefault() {}, stopImmediatePropagation() {} }); };
+  const press = (box, b, type = 'click') => { if (live().has(box) && box.full && ownerOf(b) === box) act(box, b, { type, preventDefault() {}, stopImmediatePropagation() {} }); };
   return { hear, press, passing: (button) => button === passing, armed: (box) => live().has(box) };
 })();
 
