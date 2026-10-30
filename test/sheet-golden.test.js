@@ -396,7 +396,6 @@ const TODO = {
   'format.text.40': 'Excel\'s fractions are continued-fraction convergents only (0.7 as ?/? is 2/3); numfmt also takes semiconvergents',
   'format.text.41': 'Excel\'s fractions are continued-fraction convergents only (0.7 as ?/? is 2/3); numfmt also takes semiconvergents',
   'format.text.69': 'under a [$-409] tag Excel writes A/P as AM or PM (live probe: "hh:mm A/P" alone gives P); numfmt writes P',
-  'format.text.88': 'TEXT with an empty format is "" for a number ("-" when negative) in Excel; the engine formats it as General',
   'date1904.text.3': 'a 1904 workbook shows a negative date as a minus and the date of its magnitude; numfmt refuses it',
 };
 

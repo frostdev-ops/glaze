@@ -626,3 +626,8 @@ test('LEN, LEFT, RIGHT and MID count a character outside the BMP once', () => {
     ['MID("a😀b",2,2)', '😀b'], ['MID("a😀b",3,1)', 'b'], ['MID("😀",2,1)', ''], ['LEFT("😀")', '😀'], ['LEN("abc")', 3],
   ]);
 });
+
+// Excel 16.114.1: TEXT(1,"") and TEXT(0,"") are "", TEXT(-1,"") "-", TEXT("a","") "a".
+test('TEXT with an empty format', () => {
+  cases(book(), [['TEXT(1,"")', ''], ['TEXT(0,"")', ''], ['TEXT(-1,"")', '-'], ['TEXT("a","")', 'a'], ['TEXT("12","")', '']]);
+});
