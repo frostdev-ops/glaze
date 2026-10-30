@@ -557,6 +557,17 @@ test('reverse range queries skip disjoint row intervals', () => {
   assert.ok(visited <= 21, `visited ${visited} disjoint intervals`);
 });
 
+test('guarding a change across many arrays visits their membership only linearly', () => {
+  const wb = M.workbook(), sh = wb.sheets[0], count = 1000;
+  for (let i = 0; i < count; i++) sh.rows.set(i * 2, new Map([[0, { t: 'n', v: 1, f: '{1;2}', a: `A${i * 2 + 1}:A${i * 2 + 2}`, cm: '1' }]]));
+  const e = C.engine(wb), iterator = e.members[Symbol.iterator].bind(e.members);
+  let visited = 0;
+  e.members[Symbol.iterator] = function* () { for (const entry of iterator()) { visited++; yield entry; } };
+  e.guard({ op: 'clear', sheet: sh.id, r0: 0, c0: 0, r1: count * 2 - 1, c1: 0 });
+  assert.ok(visited <= count * 2, `${visited} membership visits for ${count} arrays`);
+  assert.throws(() => e.guard({ op: 'clear', sheet: sh.id, r0: 1, c0: 0, r1: count * 2 - 1, c1: 0 }), (x) => x.code === 'array-part');
+});
+
 test('creating an array through apply undoes its generated cells as well as its head', () => {
   const e = book({ D1: 9 }), id = e.wb.sheets[0].id;
   const before = structuredClone(e.wb);
