@@ -1357,6 +1357,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       try { r = await store.restore(key, id); } catch (e) { console.error(e); }
       if (!r) { toast(t('Not saved. Try again in a moment.')); return; }
       paper = r.paper; keep = paper.keep === true; outlineSaved = paper.outline || null;
+      if (await hand(paper)) return;
       await setFormat(ST.get(paper.format), { save: false, restyle: false }); setDoc(paper.doc); toast(t('Version restored'));
     };
     const open2 = (page2) => { try { window.open(chrome.runtime.getURL(page2), '_blank', 'noopener'); } catch { /* no extension context */ } };
@@ -1770,7 +1771,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       projecting = true;
       queueMicrotask(() => {
         projecting = false;
-        if (!compact || !loaded || holding || flushing) return;
+        if (!compact || !loaded || holding || flushing || parked) return;
         const p = project(view.state.doc);
         if (p) { host.say({ type: 'change', ...p }); if (saying) tell(''); } else if (saying !== 'long') tooLong();
       });
@@ -1794,7 +1795,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     // action: 'submit' or 'save' (Ultra's Save and Close).
     const flush = async (request, action) => {
-      if (typeof request !== 'string' || flushing || switching || !compact || !loaded || holding || view.composing) {
+      if (typeof request !== 'string' || flushing || switching || !compact || !loaded || holding || parked || view.composing) {
         host.say?.({ type: 'compact:flushed', request, ok: false }); return;
       }
       const f = flushing = { request, action, editable: view.props.editable, root: root.inert, held: held().map((x) => [x, x.inert]) }, doc = view.state.doc;
@@ -1804,7 +1805,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       let saved;
       try { saved = await save(); } catch { saved = null; }
       if (flushing !== f) return; // closed or replaced
-      const same = doc === view.state.doc, p = saved && same && project(doc);
+      const same = doc === view.state.doc && !parked, p = saved && same && project(doc);
       if (!p) {
         // Nothing goes to Ultra: the box back to the student at once, and why.
         release(f);
