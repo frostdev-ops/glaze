@@ -141,6 +141,10 @@
   html[data-gz-sb-ultra] :is(.gz-sb-edge, .gz-sb-launch) { z-index: 2050; }
   html[data-gz-sb-ultra] .gz-sb-menu { z-index: 2200; }
   html[data-gz-sb-layer] :is(.gz-sb-edge, .gz-sb-launch) { z-index: 1012; }
+  /* An Ultra side panel (Notification Settings, an item's details) is over the page, Glaze's column too. A drawn
+     background makes #main-content a stacking context (extras.css) that holds the panel under anything on <body>. */
+  html[data-gz-sb-ultra]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]):has(.bb-offcanvas-panel.peek) #gz-sidebar.gz-sb-fixed,
+  html[data-gz-sb-ultra]:has(.bb-offcanvas-panel.peek) :is(.gz-sb-edge, .gz-sb-launch) { z-index: -1; }
   .gz-sb-offer { display: grid; gap: 0.4rem; justify-items: start; margin: 0 0 0.6rem; padding: 0.6rem 0.75rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); }
   .gz-sb-offer[hidden] { display: none; }
 

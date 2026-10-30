@@ -77,6 +77,31 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     });
     await page.waitForTimeout(100);
     check(await page.evaluate(() => Math.abs(document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left - document.querySelector('#main-end').getBoundingClientRect().right - 16) < 1), 'a routed page without main-content-inner also reserves room');
+    // Ultra's side panel (a peek: Notification Settings) in #main-content, which a drawn background isolates (extras.css):
+    // the panel, its overlay at 1010 and itself at 1011 as measured live, is over Glaze's column and its launcher.
+    await setup('outline');
+    await page.addStyleTag({ path: path.join(root, 'extras.css') });
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-gz-bg', 'gradient');
+      document.querySelector('aside.outline-actions').remove(); GZ_SIDEBAR_UI.sync(true);
+      document.getElementById('site-wrap').insertAdjacentHTML('beforeend', `<main id="main-content" class="bb-offcanvas-container bb-offcanvas-open over-right" style="position:fixed;inset:0;pointer-events:none">
+        <div class="bb-offcanvas-overlay" style="position:absolute;inset:0;z-index:1010;background:rgb(0 0 0 / .6);pointer-events:auto"></div>
+        <div class="first bb-offcanvas-panel bb-offcanvas-right peek active" style="position:absolute;top:0;bottom:0;right:0;width:420px;z-index:1011;background:#fff;display:flex;flex-direction:column;pointer-events:auto">
+          <h1 id="peek-title" style="margin:24px 30px">Notification Settings</h1><div style="flex:1"></div>
+          <footer style="padding:16px 30px;display:flex;gap:8px;justify-content:flex-end"><button type="button">Cancel</button><button type="button" id="peek-save">Save</button></footer></div></main>`);
+    });
+    await page.waitForSelector('#gz-sidebar');
+    const over = (sel) => page.evaluate((s) => { const e = document.querySelector(s), r = e.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!hit?.closest('.peek'); }, sel);
+    check(await page.evaluate(() => getComputedStyle(document.getElementById('main-content')).isolation === 'isolate'), 'a drawn background isolates #main-content');
+    check(await over('#gz-sidebar') && await over('#peek-save'), 'an open Ultra side panel is over Glaze\'s column, its Save in reach');
+    await shot('peek-over-column');
+    await page.setViewportSize({ width: 700, height: 900 });
+    await page.waitForFunction(() => document.documentElement.dataset.gzSidebar === 'drawer' && !document.getElementById('gz-sb-launch').hidden);
+    check(await over('#gz-sb-launch'), 'an open Ultra side panel is over the sidebar\'s launcher');
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.evaluate(() => document.getElementById('main-content').remove());
+    await page.waitForFunction(() => document.documentElement.dataset.gzSidebar === 'expanded');
+    check(await page.evaluate(() => { const r = document.getElementById('gz-sidebar').getBoundingClientRect(); return !!document.elementFromPoint(r.left + r.width / 2, r.top + 40)?.closest('#gz-sidebar'); }), 'with the side panel closed, the column is on top again');
     await setup('outline');
     await page.evaluate(() => {
       window.loads = 0;
