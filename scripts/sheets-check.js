@@ -404,6 +404,25 @@ const seeded = (key, wb = M.workbook()) => {
     const cardSum = cardCols.reduce((a, b) => a + b, 0), wantSum = wantCols.reduce((a, b) => a + b, 0);
     check(cardCols.every((w, i) => Math.abs(w - (cardSum * wantCols[i]) / wantSum) <= 1.5),
       `the card's columns follow the sheet's widths (card ${cardCols.map((w) => w.toFixed(1)).join(', ')}; grid ${wantCols.join(', ')})`);
+    const edges = await page.evaluate(() => {
+      const kind = GZ_DOC_KINDS.get('sheet'), result = [], times = [], start = performance.now();
+      const maps = [null, [], Array.from({ length: 6 }, (_, i) => [i, 0]), [[0, NaN], [1, Infinity]], [[0, 1e100], [1, 5e99]], [[0, Number.MAX_VALUE], [1, Number.MAX_VALUE / 2]]];
+      const cards = maps.flatMap((pairs) => ['ltr', 'rtl'].map((dir) => {
+        const rec = { grid: [], ...(pairs && { book: { active: 0, sheets: [{ colW: { $map: pairs } }] } }) };
+        const before = performance.now(), el = kind.thumb(rec); times.push(performance.now() - before);
+        el.dir = dir; document.body.append(el); return { el, dir, pairs };
+      }));
+      const elapsed = performance.now() - start;
+      for (const { el, dir, pairs } of cards) {
+        const hs = [...el.children].slice(1, 7).map((e) => e.getBoundingClientRect());
+        result.push({ dir, large: pairs?.[0]?.[1] > 1e90, widths: hs.map((r) => r.width), order: dir === 'rtl' ? hs[0].x > hs[1].x : hs[0].x < hs[1].x });
+        el.remove();
+      }
+      return { result, elapsed, worst: Math.max(...times) };
+    });
+    check(edges.result.filter((r) => !r.large).every((r) => Math.max(...r.widths) - Math.min(...r.widths) < 1 && r.order), 'missing, empty, zero and invalid widths keep even columns in LTR and RTL');
+    check(edges.result.filter((r) => r.large).every((r) => r.order && Math.abs(r.widths[0] / r.widths[1] - 2) < 0.05), `huge widths keep their 2:1 shares in LTR and RTL (${JSON.stringify(edges.result.filter((r) => r.large))})`);
+    check(edges.worst <= 6 && edges.elapsed < 400, `12 sheet thumbnails cost at most 6 ms each and 400 ms together (${edges.worst.toFixed(2)} ms worst, ${edges.elapsed.toFixed(2)} ms total)`);
     // The model's largest workbook still draws only a viewport of pooled cells, and scrolling reuses those elements.
     const bigKey = 'doc:00000000-0000-4000-8000-00000000b16b', big = M.workbook();
     for (let r = 0; r < 1000; r++) big.sheets[0].rows.set(r, new Map(Array.from({ length: 250 }, (_, c) => [c, { t: 'n', v: r * 250 + c }])));

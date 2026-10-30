@@ -358,11 +358,28 @@ test('the card\'s columns take the active sheet\'s widths, in the grid\'s pixels
   wb.sheets.push(second);
   const rec = (w) => ({ kind: 'sheet', book: JSON.parse(JSON.stringify(SD.split(w).book)), grid: SD.glance(w) });
   const cols = (el) => el.style.gridTemplateColumns;
-  const shares = (ws) => `14px ${ws.map((w) => `minmax(0, ${w}fr)`).join(' ')}`;
+  const shares = (ws) => `14px ${ws.map((w) => `minmax(0, ${w / 7 / (Math.max(...ws) / 7)}fr)`).join(' ')}`;
   assert.equal(cols(DK.get('sheet').thumb(rec(wb))), shares([px.col(30), 64, px.col(4), 64, 64, 64]), 'a wide A, a narrow C, the rest the grid\'s default');
   wb.active = 1;
   assert.equal(cols(DK.get('sheet').thumb(rec(wb))), shares([64, px.col(50), 64, 64, 64, 64]), 'the active sheet\'s widths, as the card\'s text is');
   for (const r of [null, { kind: 'sheet', grid: [] }, rec(M.workbook())]) assert.equal(cols(DK.get('sheet').thumb(r)), undefined, 'even columns stay the stylesheet\'s');
+});
+
+test('card width shares stay finite for oversized widths and keep empty or invalid widths even', async () => {
+  const { El } = require('./stand-in-dom.js');
+  const doc = { createElement: (tag) => new El(tag, doc) };
+  const { DK } = load({ sheets: true }, { document: doc, GZ_SHEET_XLSX: {} });
+  await DK.settled();
+  const cols = (colW) => DK.get('sheet').thumb({ book: { active: 0, sheets: [{ colW }] }, grid: [] }).style.gridTemplateColumns;
+  for (const colW of [undefined, {}, { $map: [] }, { $map: [[0, NaN], [1, Infinity], [2, -1]] }, { $map: Array.from({ length: 6 }, (_, i) => [i, 0]) }]) {
+    assert.equal(cols(colW), undefined, 'no usable differences keep the stylesheet\'s even columns');
+  }
+  for (const large of [1e100, Number.MAX_VALUE]) {
+    const shares = [...cols({ $map: [[0, large], [1, large / 2]] }).matchAll(/minmax\(0, ([^)]+)fr\)/g)].map((m) => Number(m[1]));
+    assert.ok(shares.length === 6 && shares.every((w) => Number.isFinite(w) && w >= 0 && w <= 6), 'large widths produce bounded finite CSS shares');
+    assert.ok(shares.reduce((a, b) => a + b, 0) >= 1, 'fractional tracks fill the card');
+    assert.equal(shares[0] / shares[1], 2, 'large widths keep their proportions');
+  }
 });
 
 // An assignment's frame (writer-kinds.js on the integration lane): the grid as the attempt's view, a brought spreadsheet as
