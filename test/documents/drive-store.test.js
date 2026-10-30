@@ -89,6 +89,11 @@ const lookOf = (density) => ({ ...D0.look, density });
 const todo = (...titles) => T.clean({ tasks: titles.map((t, i) => ({ id: `t${t}`, title: t, done: false, at: 1000 + i })), items: {} });
 const recFile = (drive, area, key) => [...drive.files.values()].find((f) => f.meta.appProperties.glaze === 'rec' && f.meta.appProperties.key === sha(`${area}\n${key}`).slice(0, 32));
 const body = (f) => JSON.parse(f.bytes.toString('utf8'));
+// The time a device holds for a record's last change: its stamp while one is pending, else what its record says was agreed.
+const timeOf = async (d, area, key) => {
+  const stamp = ((await d.local.get(ST.STAMPS))[ST.STAMPS] || {})[`${area}:${key}`], rec = (await d.local.get(ST.REC + sha(`${area}\n${key}`).slice(0, 32)))[ST.REC + sha(`${area}\n${key}`).slice(0, 32)];
+  return stamp ?? rec?.at;
+};
 const noDeletes = (drive) => assert.equal(drive.log.filter((x) => x.method === 'DELETE').length, 0, 'nothing deleted for good');
 
 test('a local change syncs when its timestamp equals or precedes the last agreed stamp', async () => {
@@ -203,8 +208,7 @@ test('two devices, interleaved edits in each category: each side\'s change reach
   assert.equal((await a.settings.get('look')).look.density, 'roomy', 'A\'s later change wins');
   assert.equal((await b.settings.get('look')).look.density, 'roomy');
   // A value taken from Drive keeps the time it changed on the device that wrote it.
-  const stamps = (await b.local.get(ST.STAMPS))[ST.STAMPS];
-  assert.equal(stamps['local:' + TODO], body(recFile(drive, 'local', TODO)).at, 'B\'s stamp for A\'s tasks is A\'s time, not when B took them');
+  assert.equal(await timeOf(b, 'local', TODO), body(recFile(drive, 'local', TODO)).at, 'B\'s time for A\'s tasks is A\'s, not when B took them');
   // Settled: nothing more goes up.
   const n = drive.log.filter((x) => x.upload).length;
   await a.run(); await b.run();
@@ -399,8 +403,7 @@ test('Notes: folders, notes and their pictures reach another device; edits inter
   clock.t += 1000; await b.notesOp({ key: ACCT, op: 'save', id: nid(2), base: (await idxOf(b)).notes[nid(2)].rev, sid: 's4', html: '<p>Second, by B</p>' });
   assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
   assert.match(await noteOf(b, nid(1)), /by A/); assert.match(await noteOf(a, nid(2)), /by B/);
-  const stampOf = async (d, k) => (await d.local.get(ST.STAMPS))[ST.STAMPS][`notes:${ACCT}|${k}`];
-  assert.equal(await stampOf(b, nid(1)), body(recFile(drive, 'notes', `${ACCT}|${nid(1)}`)).at, 'B keeps A\'s time for A\'s edit, not when B took it');
+  assert.equal(await timeOf(b, 'notes', `${ACCT}|${nid(1)}`), body(recFile(drive, 'notes', `${ACCT}|${nid(1)}`)).at, 'B keeps A\'s time for A\'s edit, not when B took it');
   // A picture added in a later edit goes up with the note.
   clock.t += 1000;
   const GIF = Buffer.from('474946383961010001000000002c00000000010001000002', 'hex');

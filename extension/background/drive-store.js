@@ -222,6 +222,16 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       });
       turn = p.catch(() => {}); return p;
     };
+    // Stamps the sync has settled, let go (each only if no change stamped it again since): a sweep reads what changed since.
+    const unstamp = (expected) => {
+      const p = turn.then(async () => {
+        const here = await stamps(), gone = Object.keys(expected).filter((id) => here[id] === expected[id]);
+        if (!gone.length) return;
+        for (const id of gone) delete here[id];
+        await S.set({ [STAMPS]: here });
+      });
+      turn = p.catch(() => {}); return p;
+    };
     const valueOf = async (area, key) => { const v = (await env.area(area).get(key))[key], d = defOf(area, key); return d?.view ? d.view(v) : v; };
     const owned = new Map(); // Notes record id → the exact index transition this layer is committing in the broker queue
     const transition = (key, before, after) => {
@@ -435,14 +445,16 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     // What changed here since it was last seen.
     const sweep = async (ctx) => {
       ctx.data = await sub(ctx, 'data', 'Data');
+      const settled = {};
       for (const [id, at] of Object.entries(await stamps())) {
         const cut = id.indexOf(':'), area = id.slice(0, cut), key = id.slice(cut + 1);
-        if (!catOf(area, key)) continue;
+        if (!catOf(area, key)) { settled[id] = at; continue; }
         const h = await hk(area, key), was = await recOf(h);
         // Times can tie, or a remote device's clock can be ahead of this one. Only unchanged content is settled.
-        if (was && (was.seen || 0) >= at && await sumOf(area, key, await valueOf(area, key)) === was.lsum) continue;
+        if (was && (was.seen || 0) >= at && await sumOf(area, key, await valueOf(area, key)) === was.lsum) { settled[id] = at; continue; }
         await each(ctx, h, { area, key });
       }
+      if (Object.keys(settled).length) await unstamp(settled);
       await snapshot(ctx);
     };
     // The daily snapshot: Back up…'s zip in Backups, the newest SNAP.keep kept, older ones moved to Drive's trash.
