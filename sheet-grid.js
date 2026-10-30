@@ -1135,7 +1135,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       // A header: a first row of text over, in some column, a value of another kind.
       if ((one || columns) && g.r1 > g.r0) {
         const cs = []; for (let c = g.c0; c <= g.c1; c++) cs.push(c);
-        const text = cs.every((c) => { const a = cellAt(g.r0, c); return !a || a.t === 's'; });
+        const text = cs.every((c) => { const a = cellAt(g.r0, c); return !a || a.t === 'z' || a.t === 's'; });
         if (text && cs.some((c) => { const a = cellAt(g.r0, c), b = cellAt(g.r0 + 1, c); return a?.t === 's' && b && b.t !== 's' && b.t !== 'z'; })) g.r0++;
       }
       if (g.r1 <= g.r0) return;
