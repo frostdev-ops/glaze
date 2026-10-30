@@ -195,6 +195,35 @@ test('dispose ends every listener outside the grid, so an unmounted grid neither
   assert.equal(f.timers.size, 0, 'no timer left');
 });
 
+test('Versions offers only spreadsheets when an assignment kept paper and other kinds before becoming a sheet', async () => {
+  const f = frame(), other = PA.open(f.store), history = `writerVersions:${KEY}`;
+  f.type('kept'); f.key('Enter');
+  assert.equal(await f.view.save(), true);
+  const sheets = structuredClone(f.data[history]);
+  assert.equal(sheets.length, 1);
+  f.data[history].push(
+    { id: 'paper', at: 1, kind: 'paper', reason: 'import', doc: { ops: [{ insert: 'paper\n' }] } },
+    { id: 'legacy-paper', at: 2, reason: 'import', doc: { ops: [{ insert: 'old paper\n' }] } },
+    { id: 'pdf', at: 3, kind: 'pdf', reason: 'import', file: 'pdf' });
+  f.key('ArrowUp'); f.type('latest'); f.key('Enter');
+  assert.equal(await f.view.save(), true);
+  f.fire(f.el('gx-versions'), 'click');
+  const menu = await until(() => f.doc.querySelector('.gx-menu'));
+  const offered = menu.querySelectorAll('[data-act="restore"]');
+  assert.equal(offered.length, sheets.length, 'paper versions have no spreadsheet payload to restore');
+  f.fire(offered[0], 'click');
+  assert.ok(await until(async () => (await SD.read((ks) => f.store.get(ks), KEY)).wb.sheets[0].rows.get(0)?.get(0)?.v === 'kept'));
+  assert.equal(f.doc.querySelector('.gx-said').textContent, '');
+  await f.view.dispose();
+  // A sheet with only paper history has the ordinary empty Versions menu.
+  const empty = frame();
+  empty.data[history] = (await other.versions(KEY)).filter((v) => (v.kind || 'paper') !== 'sheet');
+  empty.fire(empty.el('gx-versions'), 'click');
+  assert.ok(await until(() => empty.doc.querySelector('[data-act="none"]')));
+  assert.equal(empty.doc.querySelector('[data-act="none"]').textContent, 'No versions yet');
+  await empty.view.dispose();
+});
+
 test('embedded Close waits for the cell being written, and leaving the page commits it too', async () => {
   const f = frame(), read = async () => (await SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY))?.wb.sheets[0].rows.get(0)?.get(0)?.v;
   const leave = () => { const waits = []; f.life['glaze:papers:beforeleave']({ detail: { wait: (p) => waits.push(p) } }); return waits; };
