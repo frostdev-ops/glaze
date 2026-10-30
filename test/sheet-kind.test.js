@@ -689,3 +689,44 @@ test('CSV and TSV imports use the codec byte reader and replace the prior tracki
   assert.equal(got.wb.sheets[0].rows.get(1).get(1).v, 42);
   assert.deepEqual(reads, ['scores.csv', 'notes.tsv']);
 });
+
+// The card's charts: sheet-data.js keeps each chart's kind, cells and colours (lib/sheet-chart-xml.js glance); the card
+// draws a small picture of the kind over the cells of A1:F4 it covers, and counts the rest in its corner.
+test('the card draws a chart over the cells it covers and counts the charts outside A1:F4', async () => {
+  const X = require('../lib/sheet-xlsx.js'), CX = require('../lib/sheet-chart-xml.js'), FX = require('./fixtures/sheets/charts.js');
+  const { El } = require('./stand-in-dom.js');
+  const doc = { createElement: (tag) => new El(tag, doc), createElementNS: (ns, tag) => new El(tag, doc) };
+  const { DK } = load({ sheets: true }, { document: doc, GZ_SHEET_XLSX: {} });
+  await DK.settled();
+  const frame = ([c0, r0, c1, r1], i) => `<xdr:twoCellAnchor><xdr:from><xdr:col>${c0}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r0}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${c1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>`
+    + `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${i + 2}" name="Chart ${i + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId${i + 1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`;
+  const drawing = (places) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${places.map(frame).join('')}</xdr:wsDr>`;
+  // A column chart from B2 to the start of F5 (B2:E4), then two pies far off the card.
+  const wb = await X.read(FX.workbook({ kinds: ['column', 'pie', 'pie'], over: { 'xl/drawings/drawing1.xml': drawing([[1, 1, 5, 4], [8, 10, 12, 20], [8, 22, 12, 30]]) } }));
+  assert.equal(SD.charts(wb), null, 'without the chart reader: null, and the card counts the drawing');
+  globalThis.GZ_SHEET_CHART_XML = CX;
+  let summary;
+  try { summary = SD.charts(wb); } finally { delete globalThis.GZ_SHEET_CHART_XML; }
+  assert.deepEqual(summary.map((x) => [x.kind, x.anchor]), [['column', [1, 1, 3, 4]], ['pie', [10, 8, 19, 11]], ['pie', [22, 8, 29, 11]]]);
+  assert.equal(summary[0].colours.length, 2, 'the two series\' colours');
+  assert.equal(summary[1].colours.length, 4, 'a slice colour per cached point');
+  const rec = { kind: 'sheet', book: JSON.parse(JSON.stringify(SD.split(wb).book)), grid: SD.glance(wb), charts: summary };
+  const box = DK.get('sheet').thumb(rec);
+  const marks = box.children.filter((e) => e.className === 'gx-th-chart');
+  assert.equal(marks.length, 1);
+  assert.deepEqual([marks[0].dataset.kind, marks[0].style.gridRow, marks[0].style.gridColumn], ['column', '3 / 6', '3 / 7'], 'rows 2–4 and columns B–E of the card');
+  const shapes = marks[0].children[0].children;
+  assert.ok(shapes.length >= 4 && shapes.length <= 5 && shapes.every((s) => s.tagName === 'RECT' && /^#[0-9A-F]{6}$/i.test(s.attrs.fill)), 'a few bars in the series\' colours');
+  assert.deepEqual([...new Set(shapes.map((s) => s.attrs.fill))], summary[0].colours);
+  const more = box.children.filter((e) => e.className === 'gx-th-more');
+  assert.equal(more.length, 1);
+  assert.equal(more[0].children.at(-1).textContent, '2', 'the two pies off the card, counted');
+  // A record kept before the summary: its drawing's charts counted in the corner.
+  const old = DK.get('sheet').thumb({ ...rec, charts: undefined }).children.find((e) => e.className === 'gx-th-more');
+  assert.equal(old?.children.at(-1).textContent, '3');
+  // No charts: nothing over the cells.
+  const plain = M.workbook();
+  assert.deepEqual(SD.charts(plain), []);
+  const none = DK.get('sheet').thumb({ kind: 'sheet', book: JSON.parse(JSON.stringify(SD.split(plain).book)), grid: SD.glance(plain), charts: [] });
+  assert.ok(!none.children.some((e) => /gx-th-(chart|more)/.test(e.className)));
+});

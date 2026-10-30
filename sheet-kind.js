@@ -65,6 +65,54 @@
     const largest = Math.max(...ws);
     return ws.some((w) => w !== ws[0]) && largest > 0 ? ws.map((w) => w / largest) : null;
   };
+  // ---- the card's charts: the record's summary (sheet-data.js charts) as a small picture of each kind over the cells it
+  // covers in A1:F4, the rest counted in the corner; a record kept before the summary counts its drawing's charts.
+  const NS = 'http://www.w3.org/2000/svg';
+  const svgEl = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v)); return e; };
+  const HEX = /^#[0-9a-f]{6}$/i;
+  // In a 24×16 box: 4–5 shapes in the chart's colours.
+  const wedge = (cx, cy, rx, ry, a0, a1) => { const p = (a) => `${(cx + rx * Math.sin(a)).toFixed(2)} ${(cy - ry * Math.cos(a)).toFixed(2)}`; return `M${cx} ${cy}L${p(a0)}A${rx} ${ry} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${p(a1)}Z`; };
+  const glyph = (kind, colours) => {
+    const cs = colours.length ? colours : ['#156082', '#E97132', '#196B24', '#0F9ED5'], col = (i) => cs[i % cs.length];
+    const H = [0.5, 0.8, 0.6, 1];
+    if (kind === 'column' || kind === 'column3D') return H.map((v, i) => svgEl('rect', { x: 2 + i * 5.5, y: 15 - v * 13, width: 4, height: v * 13, fill: col(i) }));
+    if (kind === 'bar' || kind === 'bar3D') return H.map((v, i) => svgEl('rect', { x: 1, y: 1 + i * 3.8, width: v * 22, height: 2.8, fill: col(i) }));
+    if (kind === 'line') return [svgEl('path', { d: 'M2 13L8 8L14 10L22 3', fill: 'none', stroke: col(0), 'stroke-width': 1.6, 'stroke-linejoin': 'round' }), ...(cs.length > 1 ? [svgEl('path', { d: 'M2 15L8 12L14 13L22 9', fill: 'none', stroke: col(1), 'stroke-width': 1.6, 'stroke-linejoin': 'round' })] : [])];
+    if (kind === 'area') return [svgEl('path', { d: 'M1 15L1 10L8 6L15 9L23 3L23 15Z', fill: col(0) })];
+    if (kind === 'scatter') return [[4, 12], [9, 7], [15, 10], [20, 4]].map(([x, y], i) => svgEl('circle', { cx: x, cy: y, r: 1.8, fill: col(cs.length > 1 ? i : 0) }));
+    if (kind === 'pie' || kind === 'doughnut' || kind === 'pie3D') {
+      const n = Math.min(5, cs.length), flat = kind === 'pie3D', ry = flat ? 5 : 7, cy = flat ? 7 : 8, out = [];
+      if (flat) out.push(svgEl('ellipse', { cx: 12, cy: cy + 3, rx: 10, ry, fill: col(0), class: 'gx-th-side' }));
+      for (let i = 0; i < n; i++) out.push(n === 1 ? svgEl('ellipse', { cx: 12, cy, rx: flat ? 10 : 7, ry, fill: col(0) }) : svgEl('path', { d: wedge(12, cy, flat ? 10 : 7, ry, (i / n) * 2 * Math.PI, ((i + 1) / n) * 2 * Math.PI), fill: col(i) }));
+      if (kind === 'doughnut') out.push(svgEl('circle', { cx: 12, cy, r: 3, class: 'gx-th-hole' }));
+      return out;
+    }
+    return [svgEl('path', { d: 'M3 15h18M6 15v-5M11 15V3M16 15V8', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 })];
+  };
+  const svgOf = (kind, colours) => { const g = svgEl('svg', { viewBox: '0 0 24 16', preserveAspectRatio: 'xMidYMid meet' }); g.append(...glyph(kind, colours)); return g; };
+  // A record without the summary: its active sheet's drawing, its chart frames counted from the kept XML (no parse).
+  const counted = (book) => {
+    const sh = book?.sheets?.[book.active] || book?.sheets?.[0], path = sh?.keep?.drawing?.path, parts = book?.keep?.parts;
+    const part = path && parts && (parts[path] ?? parts[Object.keys(parts).find((k) => k.toLowerCase() === String(path).toLowerCase())]);
+    let xml = part?.data;
+    if (xml && typeof xml === 'object' && typeof xml.$b64 === 'string') { try { xml = atob(xml.$b64); } catch { xml = ''; } }
+    return typeof xml === 'string' ? (xml.match(/<(?:\w+:)?graphicData\b[^>]*uri="[^"]*chart[^"]*"/g) || []).length : 0;
+  };
+  const chartsOn = (box, rec) => {
+    const list = Array.isArray(rec?.charts) ? rec.charts.filter((x) => x && Array.isArray(x.anchor) && x.anchor.length === 4 && x.anchor.every(Number.isSafeInteger)) : null;
+    let away = list ? 0 : counted(rec?.book);
+    for (const x of list || []) {
+      const [r0, c0, r1, c1] = x.anchor;
+      if (r0 > 3 || c0 > 5 || r1 < 0 || c1 < 0 || r1 < r0 || c1 < c0) { away++; continue; }
+      const kind = typeof x.kind === 'string' ? x.kind : 'chart', colours = Array.isArray(x.colours) ? x.colours.filter((c) => HEX.test(c)).slice(0, 5) : [];
+      const m = h('i', { class: 'gx-th-chart', 'data-kind': kind });
+      m.style.gridRow = `${Math.max(0, r0) + 2} / ${Math.min(3, r1) + 3}`;
+      m.style.gridColumn = `${Math.max(0, c0) + 2} / ${Math.min(5, c1) + 3}`;
+      m.append(svgOf(kind, colours));
+      box.append(m);
+    }
+    if (away) box.append(h('i', { class: 'gx-th-more', 'data-count': String(away) }, svgOf('chart', []), h('b', { text: String(away) })));
+  };
   const thumb = (rec) => {
     if (rec) codecs().catch((e) => console.error(e));
     const g = Array.isArray(rec?.grid) ? rec.grid : [];
@@ -75,6 +123,7 @@
       box.append(h('span', { class: 'gx-th-h', text: String(r + 1) }));
       for (let c = 0; c < 6; c++) { const s = typeof g[r]?.[c] === 'string' ? g[r][c] : ''; box.append(h('span', { class: /^[-+$€£(]?[\d.,]+%?\)?$/.test(s) ? 'gx-th-c gx-th-n' : 'gx-th-c', text: s })); }
     }
+    if (rec) chartsOn(box, rec);
     return box;
   };
   const text = (rec) => (typeof rec?.text === 'string' ? rec.text : '');
@@ -92,7 +141,7 @@
     const got = rec?.key ? await GZ_SHEET_DATA.read(get, rec.key) : null;
     if (!got) return {};
     const { book, parts } = GZ_SHEET_DATA.split(got.wb);
-    return { book, grid: got.rec.grid, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
+    return { book, grid: got.rec.grid, charts: got.rec.charts, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
   };
 
   // ---- files: .xlsx, .csv and .tsv through GZ_SHEET_XLSX
@@ -109,6 +158,7 @@
     p({ stage: 'read', done: raw.byteLength, total: raw.byteLength });
     p({ stage: 'prepare' });
     const X = await codecs(), bytes = new Uint8Array(raw);
+    await need(CHARTS).catch((e) => console.error(e));
     const wb = /\.(csv|tsv)$/i.test(file.name) ? X.readDelimited(bytes, { name: file.name }) : await X.read(bytes).catch(() => null);
     if (!wb?.sheets?.length) throw new RangeError(SAYS.read);
     GZ_SHEET_CALC.engine(wb).recalc();

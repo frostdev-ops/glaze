@@ -712,6 +712,44 @@ const PROBE = ({ lang }) => {
     await archive.close();
     await worker.evaluate(async (keys) => { const gone = new Set(keys); await chrome.storage.local.remove(keys.map((k) => `writerPaper:${k}`)); await chrome.storage.local.set({ writerPapers: (await chrome.storage.local.get('writerPapers')).writerPapers.filter((r) => !gone.has(r.key)) }); }, extras);
 
+    // A spreadsheet's card shows its charts (sheet-kind.js chartsOn): a column chart over B2:E4 drawn in those cells, two
+    // pies off the card counted in its corner, and a workbook without charts showing none.
+    const SHEET_CHARTS = `doc:${crypto.randomUUID()}`, SHEET_PLAIN = `doc:${crypto.randomUUID()}`;
+    await worker.evaluate(async ({ a, b }) => {
+      const grid = [['Month', 'Sales', 'Costs', '', '', ''], ['Jan', '10', '5', '', '', ''], ['Feb', '20', '15', '', '', ''], ['Mar', '30', '10', '', '', '']];
+      const book = { active: 0, sheets: [{ id: 1, name: 'Data' }] }, now = Date.now() + 60e3;
+      const rec = (key, title, charts) => ({ key, kind: 'sheet', named: true, title, book, grid, charts, text: '', cells: 12, sheets: 1, created: now, updated: now, revision: 1 });
+      const ra = rec(a, 'Sales charts', [{ kind: 'column', anchor: [1, 1, 3, 4], colours: ['#156082', '#E97132'] }, { kind: 'pie', anchor: [10, 8, 19, 11], colours: ['#156082', '#E97132', '#196B24', '#0F9ED5'] }, { kind: 'pie3D', anchor: [22, 8, 29, 11], colours: ['#156082'] }]);
+      const rb = rec(b, 'Plain sheet', []);
+      const rows = (await chrome.storage.local.get('writerPapers')).writerPapers;
+      for (const r of [ra, rb]) rows.unshift({ key: r.key, kind: 'sheet', named: true, title: r.title, course: '', url: '', words: 0, format: 'plain', updated: r.updated, submitted: null, grid });
+      await chrome.storage.local.set({ [`writerPaper:${a}`]: ra, [`writerPaper:${b}`]: rb, writerPapers: rows });
+    }, { a: SHEET_CHARTS, b: SHEET_PLAIN });
+    const sheets = await openHome('en', 'sheet charts');
+    await until(() => sheets.evaluate((ks) => ks.every((k) => !!document.querySelector(`.gd-card[data-key="${k}"] .gx-thumb`)), [SHEET_CHARTS, SHEET_PLAIN]), 'the spreadsheet cards');
+    const drawn = await sheets.evaluate((k) => {
+      const box = document.querySelector(`.gd-card[data-key="${k}"] .gx-thumb`), cells = [...box.querySelectorAll(':scope > .gx-th-c')], at = (r, c) => cells[r * 6 + c].getBoundingClientRect();
+      const m = box.querySelector('.gx-th-chart'), mr = m?.getBoundingClientRect(), b2 = at(1, 1), e4 = at(3, 4), more = box.querySelector('.gx-th-more');
+      return { n: box.querySelectorAll('.gx-th-chart').length, kind: m?.dataset.kind, shapes: m ? [...m.querySelectorAll('svg > *')].map((e) => [e.tagName, e.getAttribute('fill')]) : [],
+        inside: !!mr && mr.left >= b2.left - 1 && mr.top >= b2.top - 1 && mr.right <= e4.right + 1 && mr.bottom <= e4.bottom + 1 && mr.width > (e4.right - b2.left) * 0.8,
+        count: more?.textContent, corner: !!more && more.getBoundingClientRect().right <= box.getBoundingClientRect().right && more.getBoundingClientRect().bottom <= box.getBoundingClientRect().bottom };
+    }, SHEET_CHARTS);
+    check(drawn.n === 1 && drawn.kind === 'column' && drawn.inside && drawn.shapes.length >= 4 && drawn.shapes.length <= 5 && drawn.shapes.every(([t, f]) => t === 'rect' && /^#[0-9A-F]{6}$/i.test(f)),
+      `a column chart over B2:E4 is a few bars in its colours over those cells (${JSON.stringify(drawn)})`);
+    check(drawn.count === '2' && drawn.corner, `the two charts off the card are counted in its corner (${drawn.count})`);
+    check(await sheets.evaluate((k) => !document.querySelector(`.gd-card[data-key="${k}"] :is(.gx-th-chart, .gx-th-more)`), SHEET_PLAIN), 'a spreadsheet without charts shows none');
+    await sheets.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"]`).scrollIntoView({ block: 'center' }), SHEET_CHARTS);
+    await shot(sheets, 'sheet-chart-card.png');
+    const sheetMs = await sheets.evaluate(async (k) => {
+      const rec = (await chrome.storage.local.get(`writerPaper:${k}`))[`writerPaper:${k}`], n = 50, t = performance.now();
+      for (let i = 0; i < n; i++) GZ_DOC_KINDS.get('sheet').thumb(rec);
+      return (performance.now() - t) / n;
+    }, SHEET_CHARTS);
+    console.log(`50 spreadsheet cards with charts back to back: ${sheetMs.toFixed(3)} ms each`);
+    check(sheetMs > 0 && sheetMs <= 6, `a spreadsheet card with charts costs ${sheetMs.toFixed(3)} ms (50 timed together)`);
+    await sheets.close();
+    await worker.evaluate(async (keys) => { const gone = new Set(keys); await chrome.storage.local.remove(keys.map((k) => `writerPaper:${k}`)); await chrome.storage.local.set({ writerPapers: (await chrome.storage.local.get('writerPapers')).writerPapers.filter((r) => !gone.has(r.key)) }); }, [SHEET_CHARTS, SHEET_PLAIN]);
+
     // Light Paper Look, both sizes and languages, with measured title and metadata contrast on the actual card.
     const light = G.GZ_SANITIZE({ ...settings, preset: 'Paper', colors: G.GZ_PRESET('Paper') });
     await worker.evaluate(async (s) => chrome.storage.sync.set(s), light);
