@@ -32,7 +32,7 @@ const src = fs.realpathSync(path.join(__dirname, '..'));
 const BIN = path.join(src, 'mcp', 'bin', 'glaze-mcp.js');
 const VERSION = require('../manifest.json').version;
 const OUT = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-conformance-out-')));
-const FULL = !!process.env.FULL;
+const FULL = process.env.FULL === '1';
 const NODE = fs.realpathSync(process.execPath);
 // The client and every package npm installs with it, as `npm view <name>@<version> dist.integrity` prints them. All are
 // installed by exact version, so a newer release of a dependency can't slip in.
@@ -59,10 +59,49 @@ const NS = 'io.modelcontextprotocol/', PV = `${NS}protocolVersion`, CAPS = `${NS
 // The result schema the SDK asks for with a method outside the spec (a Standard Schema that takes anything).
 const ANY = { '~standard': { version: 1, vendor: 'glaze-c17', validate: (value) => ({ value }) } };
 const ERAS = ['legacy', 'old', 'auto', 'pin'];
+const MODERN = '2026-07-28', SUPPORTED = [MODERN, '2025-11-25', '2025-06-18'];
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const halt = new AbortController();
+const sleep = (ms, signal = halt.signal) => new Promise((resolve, reject) => {
+  signal?.throwIfAborted();
+  const done = () => { signal?.removeEventListener('abort', abort); resolve(); };
+  const abort = () => { clearTimeout(timer); reject(signal.reason); };
+  const timer = setTimeout(done, ms);
+  signal?.addEventListener('abort', abort, { once: true });
+});
 let interrupted;
-const until = async (fn, ms = 15000, step = 100) => { for (const end = Date.now() + ms; ; await sleep(step)) { if (interrupted) throw Error(interrupted); const v = await fn(); if (v) return v; if (Date.now() > end) return null; } };
+const bounded = async (name, fn, ms = 15000, signal = halt.signal) => {
+  signal?.throwIfAborted();
+  let timer, abort;
+  try {
+    return await Promise.race([Promise.resolve().then(fn), new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(Error(`${name} timed out after ${ms} ms`), { code: 'CHECK_TIMEOUT' })), ms);
+      abort = () => reject(signal.reason);
+      signal?.addEventListener('abort', abort, { once: true });
+    })]);
+  } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
+};
+// The deadline includes a pending evaluate, not just the time between probes. A missed condition stays an assertion
+// failure, with its named timeout in the evidence; an interruption unwinds to the main finally.
+const until = async (fn, ms = 15000, step = 100, name = 'condition', signal = halt.signal) => {
+  const end = Date.now() + ms;
+  let done = false;
+  try {
+    const value = await bounded(name, async () => {
+      while (!done) {
+        signal?.throwIfAborted();
+        const v = await fn();
+        if (v) return v;
+        if (Date.now() >= end) return null;
+        await sleep(Math.min(step, end - Date.now()), signal);
+      }
+    }, ms, signal);
+    if (value) return value;
+  } catch (e) { if (e.code !== 'CHECK_TIMEOUT') throw e; }
+  finally { done = true; }
+  say(`${name} timed out after ${ms} ms`);
+  return null;
+};
 const R = { node: process.version, sdk: SDK, glaze: VERSION, full: FULL, checks: [], phases: {}, s3: {}, s4: {} };
 const lines = [];
 const say = (...a) => { const s = a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' '); lines.push(`${new Date().toISOString()} ${s}`); console.log(s.length > 600 ? `${s.slice(0, 600)}…` : s); };
@@ -84,10 +123,13 @@ const hosts = () => RV.list(RV.dir({ env: { HOME } })).filter((e) => e.alive);
 // ---- the SDK ----------------------------------------------------------------------------------------------------------
 function install(dir) {
   const ids = [...NPM.parsePins(PINS).keys()];
+  fs.mkdirSync(dir, { recursive: true });
   execFileSync('npm', ['install', '--prefix', dir, '--silent', '--no-save', '--no-package-lock', '--ignore-scripts', '--no-audit', '--no-fund',
-    '--registry', 'https://registry.npmjs.org/', ...ids], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+    '--registry', 'https://registry.npmjs.org/', ...ids], { cwd: dir, env: { ...envFor(HOME), npm_config_cache: path.join(dir, 'cache') },
+    timeout: 180000, killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
   // Nothing installed runs before this passes.
   const verified = NPM.check(JSON.parse(fs.readFileSync(path.join(dir, 'node_modules', '.package-lock.json'), 'utf8')), PINS, ['@modelcontextprotocol/client']);
+  if (!same([...new Set(verified)].sort(), [...ids].sort())) throw Error('incomplete pinned SDK install; nothing may load');
   const need = createRequire(path.join(dir, 'package.json'));
   return { verified, ...need('@modelcontextprotocol/client'), ...need('@modelcontextprotocol/client/stdio') };
 }
@@ -115,13 +157,34 @@ async function client(label, { name = CLIENT.name, mode, versions, changes } = {
   });
   c.onerror = (e) => fs.appendFileSync(log, `[sdk onerror] ${e?.message || e}\n`);
   clients.add(c);
+  const request = c.request.bind(c);
+  c.request = (m, ...opts) => bounded(`${label}: ${m.method}`, () => request(m, ...opts), FULL ? A.TIMEOUT + 30000 : 150000);
   const at = Date.now();
-  await c.connect(transport);
+  await bounded(`${label}: connect`, () => c.connect(transport), 30000);
   return { label, name, c, wire, heard, connectMs: Date.now() - at };
 }
 const sent = (x, method, after = 0) => x.wire.filter((e) => e.dir === 'out' && e.at >= after && e.m.method === method);
 const heardOn = (x, method, after = 0) => x.wire.filter((e) => e.dir === 'in' && e.at >= after && e.m.method === method);
 const answerTo = (x, id) => x.wire.find((e) => e.dir === 'in' && e.m.id === id && !e.m.method);
+const acknowledgedFirst = (x, id) => id !== undefined && x.wire.find((e) => e.dir === 'in' && (e.m.params?._meta?.[SUB] ?? e.m.result?._meta?.[SUB]) === id)?.m.method === 'notifications/subscriptions/acknowledged';
+
+// Assert the raw messages too: an SDK may normalize an absent resultType or retry an unsupported version. The deliberately
+// malformed error probes are the only requests exempted from the ordinary per-request metadata contract.
+function auditWire() {
+  for (const k of ['auto', 'pin']) {
+    const x = E[k];
+    if (!x) continue;
+    const badResults = x.wire.filter((e) => e.dir === 'in' && e.m.result && e.m.result.resultType !== 'complete');
+    const badMeta = x.wire.filter((e) => {
+      if (e.dir !== 'out' || !e.m.method || e.m.id === undefined) return false;
+      const meta = e.m.params?._meta, response = answerTo(x, e.m.id)?.m;
+      if (meta?.[PV] === '1900-01-01' && response?.error?.code === -32022 || meta?.[CAPS] === null && response?.error?.code === -32602) return false;
+      return meta?.[PV] !== MODERN || typeof meta?.[`${NS}clientInfo`]?.name !== 'string' || !meta?.[CAPS] || typeof meta[CAPS] !== 'object';
+    });
+    ok('wire', `${k}: every modern result carries resultType complete`, !badResults.length, badResults);
+    ok('wire', `${k}: every ordinary request carries modern version, identity and capabilities metadata`, !badMeta.length, badMeta);
+  }
+}
 
 // ---- the browser --------------------------------------------------------------------------------------------------------
 // The staged copy: the checkout's files as links (scripts/check-env.js staged), its manifest with nativeMessaging required.
@@ -137,7 +200,7 @@ function setup() {
   const row = BR.table(process.platform, envFor(HOME)).find((b) => b.id === 'chromium');
   fs.mkdirSync(row.data, { recursive: true });
   let out, code = 0;
-  try { out = execFileSync(process.execPath, [BIN, 'setup', '--browser', 'chromium', '--dev', EXT.dir], { env: envFor(HOME), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { out = `${e.stdout}${e.stderr}`; code = e.status; }
+  try { out = execFileSync(process.execPath, [BIN, 'setup', '--browser', 'chromium', '--dev', EXT.dir], { env: envFor(HOME), timeout: 30000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { out = `${e.stdout}${e.stderr}\n${e.message}`; code = e.status; }
   fs.writeFileSync(path.join(OUT, 'setup.txt'), out);
   const mf = path.join(row.dir, `${BR.HOST}.json`), manifest = fs.existsSync(mf) ? JSON.parse(fs.readFileSync(mf, 'utf8')) : null;
   ok('0', 'glaze-mcp setup --browser chromium --dev <staged copy> installs the helper into the profile', code === 0 && !!manifest?.allowed_origins?.includes(IDS.origin(EXT.id)), { code, manifest });
@@ -146,6 +209,7 @@ function setup() {
 async function browse(prof) {
   await require('./wait-for-browser.js')();
   const context = await chromium.launchPersistentContext(prof, { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1000, height: 700 }, env: envFor(HOME),
+    handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false,
     args: [`--disable-extensions-except=${EXT.dir}`, `--load-extension=${EXT.dir}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'] });
   contexts.add(context);
   context.setDefaultTimeout(15000);
@@ -155,10 +219,10 @@ async function browse(prof) {
   await opt.goto(`chrome-extension://${EXT.id}/options.html`);
   return { context, opt };
 }
-const config = (m) => OPT.evaluate((m) => chrome.runtime.sendMessage({ type: 'glaze:mcp-config', ...m }), m);
-const local = (patch) => OPT.evaluate((p) => chrome.storage.local.set(p), patch);
+const config = (m) => bounded(`config ${m.op}`, () => OPT.evaluate((m) => chrome.runtime.sendMessage({ type: 'glaze:mcp-config', ...m }), m));
+const local = (patch) => bounded('seed storage.local', () => OPT.evaluate((p) => chrome.storage.local.set(p), patch));
 // The approval records (lib/mcp/approve.js) in storage.session.
-const asks = () => OPT.evaluate(() => chrome.storage.session.get(null).then((all) => Object.entries(all).filter(([k]) => k.startsWith('mcpAsk:')).map(([, v]) => v)));
+const asks = () => bounded('read approval records', () => OPT.evaluate(() => chrome.storage.session.get(null).then((all) => Object.entries(all).filter(([k]) => k.startsWith('mcpAsk:')).map(([, v]) => v))));
 const askOf = async (name) => (await asks()).filter((a) => a.app?.name === name).sort((a, b) => a.at - b.at).at(-1) || null;
 const APPROVE = () => `chrome-extension://${EXT.id}/lib/mcp/approve.html`;
 const windowPage = () => CTX.pages().find((p) => p.url() === APPROVE());
@@ -169,10 +233,10 @@ const shown = (w) => w.evaluate(() => {
 const showing = async (app) => { const w = windowPage(), s = w && await shown(w); return s?.app === app ? { w, s } : null; };
 // Once the window shows app's ask: the student's click on button. → what the window showed, or null.
 async function decide(app, label, button = 'yes', ms = 30000) {
-  const seen = await until(() => showing(app), ms);
+  const seen = await until(() => showing(app), ms, 100, `approval window for ${app}`);
   if (!seen) return null;
   await seen.w.bringToFront();
-  await until(() => seen.w.evaluate(() => document.hasFocus() && document.getElementById('yes').getAttribute('aria-disabled') === 'false'), 10000);
+  if (!await until(() => seen.w.evaluate(() => document.hasFocus() && document.getElementById('yes').getAttribute('aria-disabled') === 'false'), 10000, 100, `approval focus for ${app}`)) throw Error(`approval focus for ${app} never became ready`);
   await seen.w.screenshot({ path: path.join(OUT, `approve-${label}.png`) }).catch(() => {});
   await seen.w.click(`#${button}`);
   return seen.s;
@@ -216,7 +280,7 @@ async function start() {
   ({ context: CTX, opt: OPT } = await browse(prof));
   await local(STORE);
   const set = await config({ op: 'set', on: true });
-  const up = await until(async () => { const l = await OPT.evaluate(() => chrome.storage.session.get('mcpLink').then((r) => r.mcpLink || null)); return l?.state === 'connected' && l; }, 20000);
+  const up = await until(async () => { const l = await OPT.evaluate(() => chrome.storage.session.get('mcpLink').then((r) => r.mcpLink || null)); return l?.state === 'connected' && l; }, 20000, 100, 'worker native link');
   R.phases.start = { set, link: up, host: hosts()[0]?.rec && { ...hosts()[0].rec, token: '…' } };
   ok('0', 'agent access is on and the worker is connected to the helper setup installed', set?.ok === true && up?.host && hosts().length === 1, R.phases.start);
 }
@@ -227,7 +291,7 @@ async function eras() {
   E.legacy = await client('legacy-2025-11-25', { changes: true });
   E.old = await client('legacy-2025-06-18', { versions: ['2025-06-18'] });
   E.auto = await client('modern-auto', { mode: 'auto', changes: true });
-  E.pin = await client('modern-pin', { mode: { pin: W.MODERN } });
+  E.pin = await client('modern-pin', { mode: { pin: MODERN } });
   for (const k of ERAS) ph[k] = { era: E[k].c.getProtocolEra(), version: E[k].c.getNegotiatedProtocolVersion(), server: E[k].c.getServerVersion(), caps: E[k].c.getServerCapabilities(), instructions: E[k].c.getInstructions?.(), ms: E[k].connectMs };
   const glaze = (s) => s?.name === 'glaze' && s.version === VERSION;
   const init = (k) => sent(E[k], 'initialize')[0]?.m, initAnswer = (k) => answerTo(E[k], init(k)?.id)?.m;
@@ -235,14 +299,20 @@ async function eras() {
     && ph.legacy.caps?.tools?.listChanged === true && init('legacy')?.params?.protocolVersion === '2025-11-25' && initAnswer('legacy')?.result?.protocolVersion === '2025-11-25' && sent(E.legacy, 'notifications/initialized').length === 1, { ...ph.legacy, wire: initAnswer('legacy') });
   ok('1', 'initialize at 2025-06-18 is answered in 2025-06-18', ph.old.era === 'legacy' && ph.old.version === '2025-06-18' && glaze(ph.old.server) && initAnswer('old')?.result?.protocolVersion === '2025-06-18', { ...ph.old, wire: initAnswer('old') });
   const d = ph.discover = E.auto.c.getDiscoverResult?.();
-  ok('1', 'auto negotiation (server/discover on a sibling agent) picks 2026-07-28 and sends no initialize', ph.auto.era === 'modern' && ph.auto.version === W.MODERN && glaze(ph.auto.server) && !sent(E.auto, 'initialize').length, ph.auto);
-  ok('1', 'server/discover: the three versions, tools with listChanged, Glaze in _meta, a private ttlMs', same(d?.supportedVersions, W.SUPPORTED) && d.capabilities?.tools?.listChanged === true
+  ok('1', 'auto negotiation (server/discover on a sibling agent) picks 2026-07-28 and sends no initialize', ph.auto.era === 'modern' && ph.auto.version === MODERN && glaze(ph.auto.server) && !sent(E.auto, 'initialize').length, ph.auto);
+  ok('1', 'server/discover: the three versions, tools with listChanged, Glaze in _meta, a private ttlMs', same(d?.supportedVersions, SUPPORTED) && d.capabilities?.tools?.listChanged === true
     && glaze(d._meta?.[SERVER]) && d.ttlMs > 0 && d.cacheScope === 'private', d);
+  const direct = await caught(() => E.auto.c.request({ method: 'server/discover', params: {} }));
+  const discoverRequest = sent(E.auto, 'server/discover').at(-1)?.m;
+  const discoverResult = discoverRequest && answerTo(E.auto, discoverRequest.id)?.m.result;
+  ok('1', 'server/discover on the live connection returns a complete tools-only result with private caching', !!direct.value && discoverResult?.resultType === 'complete'
+    && same(discoverResult.supportedVersions, SUPPORTED) && same(discoverResult.capabilities, { tools: { listChanged: true } })
+    && glaze(discoverResult._meta?.[SERVER]) && Number.isFinite(discoverResult.ttlMs) && discoverResult.ttlMs >= 0 && discoverResult.cacheScope === 'private', discoverResult ?? direct.error);
   // Pinned, the SDK probes on a sibling too, then holds the server to the pin; its own first request follows.
   await caught(() => E.pin.c.listTools());
   const first = E.pin.wire.find((e) => e.dir === 'out')?.m, back = first && answerTo(E.pin, first.id)?.m;
-  ok('1', 'pinned to 2026-07-28: the probe offers it, and every request names it; results are complete', ph.pin.era === 'modern' && ph.pin.version === W.MODERN && same(E.pin.c.getDiscoverResult?.()?.supportedVersions, W.SUPPORTED)
-    && !sent(E.pin, 'initialize').length && first?.params?._meta?.[PV] === W.MODERN && back?.result?.resultType === 'complete', { ...ph.pin, first: first?.method });
+  ok('1', 'pinned to 2026-07-28: the probe offers it, and every request names it; results are complete', ph.pin.era === 'modern' && ph.pin.version === MODERN && same(E.pin.c.getDiscoverResult?.()?.supportedVersions, SUPPORTED)
+    && !sent(E.pin, 'initialize').length && first?.params?._meta?.[PV] === MODERN && back?.result?.resultType === 'complete', { ...ph.pin, first: first?.method });
 }
 
 // 2: the list, before any mod.
@@ -254,6 +324,7 @@ async function lists() {
   const names = all.auto.map((t) => t.name);
   BASE = names;
   ph.names = names;
+  ph.descriptors = all.auto;
   ok('2', 'tools/list is sorted by name and holds the courses group', names.length > 0 && names.every((n, i) => !i || names[i - 1] < n) && ['accounts_list', 'courses_list', 'todo_list'].every((n) => names.includes(n)), names);
   ok('2', 'the same tool descriptors in every era', ERAS.every((k) => same(all[k], all.auto)), Object.fromEntries(ERAS.map((k) => [k, all[k].length])));
   const again = (await E.auto.c.listTools(undefined, { cacheMode: 'bypass' })).tools;
@@ -290,6 +361,12 @@ async function pairing() {
   ok('3', 'outputSchema: none is declared, so structuredContent has no schema to hold; each is an object, mirrored in its text', !R.phases.lists.outputSchemas.length && outs.every((x) => mirrored(x.value)), R.phases.lists.outputSchemas);
   const apps = ph.apps = await config({ op: 'apps' });
   ok('3', 'Settings holds one app, paired for courses', apps?.apps?.length === 1 && apps.apps[0].name === CLIENT.name && apps.apps[0].exe === NODE && apps.apps[0].grants?.courses === true, apps);
+  const unpaired = await client('unpaired-list', { name: 'C17 unpaired list', mode: 'auto' });
+  const pairedList = (await E.auto.c.listTools(undefined, { cacheMode: 'bypass' })).tools;
+  const unpairedList = (await unpaired.c.listTools()).tools;
+  ok('3', 'pairing leaves the descriptors unchanged, including on a new unpaired connection', same(pairedList, R.phases.lists.descriptors) && same(unpairedList, pairedList));
+  await bounded('unpaired-list: close', () => unpaired.c.close(), 10000);
+  clients.delete(unpaired.c);
 }
 
 // 4 and 5.
@@ -308,16 +385,19 @@ async function errors() {
   const mark = Date.now();
   ph.version = await caught(() => E.pin.c.request({ method: 'tools/list', params: { _meta: { [PV]: '1900-01-01' } } }));
   const v = E.pin.wire.find((e) => e.dir === 'in' && e.at >= mark && e.m.error?.code === -32022)?.m;
-  ok('4', 'an unsupported version is -32022, naming the supported ones and the one asked', same(v?.error?.data?.supported, W.SUPPORTED) && v.error.data.requested === '1900-01-01', { wire: v, sdk: ph.version });
+  ok('4', 'an unsupported version is -32022, naming the supported ones and the one asked', same(v?.error?.data?.supported, SUPPORTED) && v.error.data.requested === '1900-01-01', { wire: v, sdk: ph.version });
   ph.caps = await caught(() => E.pin.c.request({ method: 'tools/list', params: { _meta: { [CAPS]: null } } }));
   ok('4', 'malformed _meta (no client capabilities) is -32602', ph.caps.error?.code === -32602, ph.caps);
   const REFUSED = [['resources/list', {}], ['resources/templates/list', {}], ['resources/read', { uri: 'file:///etc/hosts' }], ['prompts/list', {}], ['prompts/get', { name: 'x' }]];
   ph.refused = {};
   for (const k of ERAS) {
     const got = ph.refused[k] = {};
-    for (const [method, params] of REFUSED) got[method] = await caught(() => E[k].c.request({ method, params }));
-    got['glaze/unknown'] = await caught(() => E[k].c.request({ method: 'glaze/unknown', params: {} }, ANY));
-    ok('5', `${E[k].label}: resources/*, prompts/* and an unknown method are -32601`, Object.values(got).every((x) => x.error?.code === -32601), got);
+    for (const [method, params] of [...REFUSED, ['glaze/unknown', {}]]) {
+      got[method] = await caught(() => E[k].c.request({ method, params }, ...(method === 'glaze/unknown' ? [ANY] : [])));
+      const request = sent(E[k], method).at(-1)?.m;
+      got[method].wire = request && answerTo(E[k], request.id)?.m;
+    }
+    ok('5', `${E[k].label}: resources/*, prompts/* and an unknown method are -32601 on the wire`, Object.values(got).every((x) => x.error?.code === -32601 && x.wire?.error?.code === -32601), got);
   }
   ph.ping = await caught(() => E.legacy.c.ping());
   ok('5', 'legacy ping is answered (2026-07-28 removed it; the SDK refuses to send it there)', same(ph.ping.value, {}), ph.ping);
@@ -330,18 +410,18 @@ async function cancel() {
   for (const [k, o] of [['modern', { mode: 'auto' }], ['legacy', {}]]) {
     const name = `C17 cancel ${k}`, x = await client(`cancel-${k}`, { name, ...o }), ac = new AbortController();
     const p = caught(() => x.c.callTool({ name: 'todo_list', arguments: { account: ACCOUNT } }, { signal: ac.signal }));
-    const waiting = await until(() => showing(name), 20000);
+    const waiting = await until(() => showing(name), 20000, 100, `${k}: cancellation approval`);
     ac.abort('The user stopped it');
     const r = await p;
     const call = sent(x, 'tools/call')[0]?.m, cancelled = sent(x, 'notifications/cancelled')[0]?.m;
-    const state = await until(async () => { const a = await askOf(name); return a && a.state !== 'waiting' && a.state; }, 5000);
-    const closed = await until(() => !windowPage(), 5000);
+    const state = await until(async () => { const a = await askOf(name); return a && a.state !== 'waiting' && a.state; }, 5000, 100, `${k}: cancelled ask`);
+    const closed = await until(() => !windowPage(), 5000, 100, `${k}: approval window closed`);
     await sleep(2000);
     const late = call && answerTo(x, call.id);
     ph[k] = { waiting: !!waiting, sdk: r, cancelled, state, closed: !!closed, late: late?.m ?? null };
     ok('6', `${k}: the abort sends notifications/cancelled for the waiting call`, !!waiting && !!r.error && cancelled?.params?.requestId === call?.id, ph[k]);
     ok('6', `${k}: Glaze ends the ask as cancelled, closes its window, and never answers the call`, state === 'cancelled' && !!closed && !late, ph[k]);
-    await x.c.close();
+    await bounded(`${x.label}: close`, () => x.c.close(), 10000);
     clients.delete(x.c);
   }
   const rows = ph.activity = (await config({ op: 'activity' })).rows?.filter((r) => r.at >= mark);
@@ -354,8 +434,8 @@ async function changes() {
   const sub = E.auto.c.autoOpenedSubscription;
   const listen = sent(E.auto, 'subscriptions/listen')[0]?.m;
   const ack = listen && heardOn(E.auto, 'notifications/subscriptions/acknowledged').find((e) => e.m.params?._meta?.[SUB] === listen.id)?.m;
-  ok('7', 'modern: listChanged opens subscriptions/listen, acknowledged for toolsListChanged under its id', sub?.honoredFilter?.toolsListChanged === true && listen?.params?.notifications?.toolsListChanged === true && ack?.params?.notifications?.toolsListChanged === true, { listen, ack });
-  const quiet = ph.quiet = await caught(() => E.pin.c.listen({ toolsListChanged: false }));
+  ok('7', 'modern: listChanged opens subscriptions/listen, acknowledged for toolsListChanged under its id', acknowledgedFirst(E.auto, listen?.id) && sub?.honoredFilter?.toolsListChanged === true && listen?.params?.notifications?.toolsListChanged === true && ack?.params?.notifications?.toolsListChanged === true, { listen, ack });
+  const quiet = ph.quiet = await caught(() => bounded('quiet subscription acknowledgment', () => E.pin.c.listen({ toolsListChanged: false })));
   ok('7', 'a listen without toolsListChanged is acknowledged without it', !!quiet.value && quiet.value.honoredFilter?.toolsListChanged !== true, quiet.value?.honoredFilter ?? quiet.error);
   const need = W.PAGE + 1 - BASE.length; // one tool past a page
   if (need < 1) return ok('7', 'Glaze lists under a page of its own tools, so mods can make a second', false, BASE.length);
@@ -366,7 +446,7 @@ async function changes() {
   const change = async (label, patch, count) => {
     const mark = Date.now();
     await local(patch);
-    const heard = await until(() => [E.auto, E.legacy].every((x) => x.heard.some((h) => h.at >= mark && h.names?.length === count)), 15000);
+    const heard = await until(() => [E.auto, E.legacy].every((x) => x.heard.some((h) => h.at >= mark && h.names?.length === count)), 15000, 100, `${label}: changed tools received`);
     await sleep(1500);
     const n = Object.fromEntries(ERAS.map((k) => [k, heardOn(E[k], 'notifications/tools/list_changed', mark).map((e) => e.m)]));
     ph[label] = { heard: !!heard, notes: n, sdk: { auto: E.auto.heard.filter((h) => h.at >= mark), legacy: E.legacy.heard.filter((h) => h.at >= mark) } };
@@ -425,17 +505,17 @@ async function timeouts() {
     const name = `C17 wait ${leg}`, x = await client(`s3-${leg}`, { name, ...o });
     const g = ph.legs[leg] = { era: x.c.getProtocolEra(), options: opts, progress: [] };
     const at = Date.now();
-    const p = caught(() => x.c.callTool({ name: 'todo_list', arguments: { account: ACCOUNT } }, {
+    const p = caught(() => bounded(`${leg}: approval call settles`, () => x.c.callTool({ name: 'todo_list', arguments: { account: ACCOUNT } }, {
       ...(opts.progress && { onprogress: (n) => g.progress.push({ ms: Date.now() - at, progress: n.progress, message: n.message }) }),
       ...(opts.resetTimeoutOnProgress && { resetTimeoutOnProgress: true }),
-    })).then((r) => { g.ms = Date.now() - at; g.outcome = r.value ? { isError: r.value.isError === true, text: textOf(r.value) } : { error: r.error }; return r; });
+    }), leg === 'limit' ? A.TIMEOUT + 30000 : 120000)).then((r) => { g.ms = Date.now() - at; g.outcome = r.value ? { isError: r.value.isError === true, text: textOf(r.value) } : { error: r.error }; return r; });
     runs.push({ leg, name, x, at, allowAt, p });
-    await until(() => askOf(name), 10000);
+    await until(() => askOf(name), 10000, 100, `${leg}: approval queued`);
     await sleep(300); // the queue's order is the order asked
   }
   save();
   const reset = runs.find((r) => r.leg === 'reset');
-  await until(() => Date.now() - reset.at >= reset.allowAt, reset.allowAt + 5000, 500);
+  await until(() => Date.now() - reset.at >= reset.allowAt, reset.allowAt + 5000, 500, 'reset: approval elapsed 75 s');
   ph.legs.reset.window = await decide(reset.name, 's3-reset', 'yes', 30000);
   ph.legs.reset.allowedMs = Date.now() - reset.at;
   const open = new Map();
@@ -463,7 +543,7 @@ async function timeouts() {
       && /didn't answer in Glaze in time/.test(L.limit.outcome.text) && ticks(L.limit) && L.limit.progress.length >= A.TIMEOUT / A.TICK - 1 && L.limit.ask?.state === 'timeout' && !L.limit.cancelled
       && same(L.limit.activity.map((x) => x.outcome), ['timeout']) && L.limit.windowOpenAfter === false, { ...L.limit, progress: L.limit.progress.length });
   }
-  for (const r of runs) { await r.x.c.close(); clients.delete(r.x.c); }
+  for (const r of runs) { await bounded(`${r.x.label}: close`, () => r.x.c.close(), 10000); clients.delete(r.x.c); }
 }
 
 // 9: agent access off.
@@ -473,52 +553,94 @@ async function off() {
   const closes = ERAS.map((k) => new Promise((r) => { const was = E[k].c.onclose; E[k].c.onclose = () => { was?.(); r(Date.now()); }; }));
   const pid = hosts()[0]?.rec.pid, at = Date.now();
   ph.set = await config({ op: 'set', on: false });
-  ph.subscription = await Promise.race([sub?.closed, sleep(5000).then(() => 'no end')]);
+  ph.subscription = await until(() => sub?.closed, 5000, 100, 'off: graceful subscription end');
   const end = listen && answerTo(E.auto, listen.id)?.m;
   ok('9', 'off: the subscription is answered complete under its id; the SDK reads a graceful end', ph.subscription === 'graceful' && end?.result?.resultType === 'complete' && end.result._meta?.[SUB] === listen.id, { how: ph.subscription, end });
-  const told = listen && await until(() => heardOn(E.auto, 'notifications/cancelled').find((e) => e.m.params?.requestId === listen.id)?.m, 2000);
+  const told = listen && await until(() => heardOn(E.auto, 'notifications/cancelled').find((e) => e.m.params?.requestId === listen.id)?.m, 2000, 100, 'off: subscription cancellation');
   ok('9', 'then notifications/cancelled names it, as the spec requires of a server ending a subscription', !!told, told);
-  ph.closed = await Promise.race([Promise.all(closes), sleep(8000).then(() => null)]);
+  ph.closed = await until(() => Promise.all(closes), 8000, 100, 'off: all agents closed');
   ok('9', 'every agent is let go', !!ph.closed, ph.closed && ph.closed.map((t) => t - at));
-  ok('9', 'and the host exits', !!await until(() => pid && !RV.alive(pid) && !hosts().length, 5000), { pid });
+  ok('9', 'and the host exits', !!await until(() => pid && !RV.alive(pid) && !hosts().length, 5000, 100, 'off: helper exit'), { pid });
 }
 
-const guard = async (name, fn) => { if (interrupted) return; await fn().catch((e) => { say(`ERROR in ${name}:`, e.stack || String(e)); R.errors = { ...R.errors, [name]: String(e.stack || e) }; }); save(); };
+const guard = async (name, fn) => { if (halt.signal.aborted) return; await bounded(`phase ${name}`, fn, FULL && name === 'timeouts' ? A.TIMEOUT + 150000 : 180000).catch((e) => {
+  say(`ERROR in ${name}:`, e.stack || String(e)); R.errors = { ...R.errors, [name]: String(e.stack || e) };
+  if (e.code === 'CHECK_TIMEOUT') halt.abort(e);
+}); save(); };
 
 const lock = require('./check-env.js').lockPath();
 let held = false, cleaning;
-const cleanup = () => cleaning ||= (async () => {
+// Linux runner processes are identified by PID and start time. Capture children before closing their parents, including
+// Chromium helpers without a profile argument and the SDK's short-lived discovery agents.
+const processInfo = (pid) => {
   try {
-    for (const c of clients) await c.close().catch(() => {});
-    clients.clear();
-    for (const c of contexts) await c.close().catch((e) => { R.errors = { ...R.errors, close: String(e) }; });
-    contexts.clear();
-    if (HOME) {
-      const left = await until(() => !hosts().length, 5000) ? [] : hosts().map((e) => e.rec.pid);
-      for (const pid of left) { try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ } }
-      ok('cleanup', 'no helper outlives the browser', !left.length, left);
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ').at(-1).split(' ');
+    return { pid: +pid, state: stat[0], parent: +stat[1], start: stat[19], argv: fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean) };
+  } catch { return null; }
+};
+const processes = () => process.platform === 'linux' ? fs.readdirSync('/proc').filter((d) => /^\d+$/.test(d)).map(processInfo).filter((p) => p && p.state !== 'Z') : [];
+const sameProcess = (p) => { const now = processInfo(p.pid); return now && now.state !== 'Z' && now.start === p.start; };
+const cleanup = () => cleaning ||= Promise.resolve().then(async () => {
+  const captured = new Map();
+  const ours = () => {
+    const all = processes(), byPid = new Map(all.map((p) => [p.pid, p]));
+    for (let n = -1; n !== captured.size;) {
+      n = captured.size;
+      for (const p of all) {
+        const parent = captured.get(p.parent);
+        if (p.pid !== process.pid && (p.parent === process.pid || parent && parent.start === byPid.get(p.parent)?.start
+          || scratch && p.argv.some((s) => s.includes(scratch)))) captured.set(p.pid, p);
+      }
     }
-    if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
+    return all.filter((p) => captured.get(p.pid)?.start === p.start);
+  };
+  ours();
+  try {
+    // Cleanup must keep going after interruption, a rejected close, or a close that never settles.
+    const close = (name, c) => bounded(name, () => c.close(), 10000, null).catch((e) => { R.errors = { ...R.errors, [name]: String(e) }; });
+    await Promise.all([...clients].map((c, i) => close(`close agent ${i}`, c)));
+    clients.clear();
+    await Promise.all([...contexts].map((c, i) => close(`close browser ${i}`, c)));
+    contexts.clear();
+    await until(() => !ours().length, 3000, 100, 'cleanup: graceful process exit', null);
+    for (const signal of ['SIGTERM', 'SIGKILL']) {
+      const left = ours();
+      if (!left.length) break;
+      for (const p of left) if (sameProcess(p)) { try { process.kill(p.pid, signal); } catch (e) { if (e.code !== 'ESRCH') throw e; } }
+      await until(() => !ours().length, 3000, 100, `cleanup: process exit after ${signal}`, null);
+    }
+    const left = ours();
+    R.cleanup = { scratch, captured: [...captured.keys()], remaining: left };
+    ok('cleanup', 'all owned browsers, helpers and agents have exited', !left.length, left);
+    if (left.length) throw Error('cleanup: owned processes remain');
+    if (scratch) {
+      fs.rmSync(scratch, { recursive: true, force: true });
+      R.cleanup.removed = !fs.existsSync(scratch);
+      ok('cleanup', 'the scratch HOME, SDK and staged profile are removed', R.cleanup.removed);
+    }
   } finally {
     if (held) { fs.rmSync(lock, { recursive: true, force: true }); held = false; }
   }
-})();
-for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { interrupted = signal; R.errors = { ...R.errors, interrupted: signal }; cleanup().finally(() => { save(); process.exit(signal === 'SIGINT' ? 130 : 143); }); });
+});
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(signal, () => {
+  interrupted = signal;
+  R.errors = { ...R.errors, interrupted: signal };
+  halt.abort(Error(signal));
+});
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   try {
-    while (!held) {
-      if (interrupted) throw Error(interrupted);
-      try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await sleep(1000); }
-    }
+    if (!await until(() => {
+      try { fs.mkdirSync(lock); return held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; }
+    }, 120000, 1000, 'acquire browser check lock')) throw Error('acquire browser check lock timed out');
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nmcp-conformance-check\n`);
     scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-c17-')));
     HOME = path.join(scratch, 'home');
     fs.mkdirSync(HOME);
     try { sdk = install(path.join(scratch, 'sdk')); } catch (e) { ok('0', `${SDK} installs and every package matches its pinned integrity`, false, String(e.stderr || e.message || e)); throw e; }
     ok('0', `${SDK} installs and every package matches its pinned integrity`, sdk.verified.length === NPM.parsePins(PINS).size, sdk.verified);
-    try { R.chrome = execFileSync(require('./check-env.js').chromePath() || chromium.executablePath(), ['--version'], { encoding: 'utf8' }).trim(); } catch (e) { R.chrome = String(e); }
+    try { R.chrome = execFileSync(require('./check-env.js').chromePath() || chromium.executablePath(), ['--version'], { timeout: 10000, encoding: 'utf8' }).trim(); } catch (e) { R.chrome = String(e); }
     R.platform = `${os.platform()} ${os.release()}`;
     say('chrome', R.chrome, 'sdk', SDK, FULL ? 'FULL: with the 600 s wait' : '');
     STORE = { todoCache: await C.canvasPlan('5', PLAN), seenCourses: await C.canvasSeen(SEEN) };
@@ -533,6 +655,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { interru
         await guard('changes', changes);
         await guard('timeouts', timeouts);
         await guard('off', off);
+        await guard('wire', auditWire);
       }
     }
   } finally {
@@ -541,6 +664,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { interru
     R.summary = { checks: R.checks.length, failed: failed.length, errors: Object.keys(R.errors || {}) };
     say(failed.length || R.errors ? `FAILED ${failed.length} of ${R.checks.length}${R.errors ? `, errors in ${Object.keys(R.errors).join(', ')}` : ''}` : `all ${R.checks.length} checks pass`, 'evidence in', OUT);
     save();
-    process.exitCode = interrupted ? (interrupted === 'SIGINT' ? 130 : 143) : failed.length || R.errors || !R.checks.length ? 1 : 0;
+    process.exitCode = interrupted ? ({ SIGINT: 130, SIGTERM: 143, SIGHUP: 129 }[interrupted]) : failed.length || R.errors || !R.checks.length ? 1 : 0;
+    if (halt.signal.aborted) process.exit(process.exitCode);
   }
-})().catch((e) => { R.errors = { ...R.errors, main: String(e.stack || e) }; save(); console.error(e); process.exit(interrupted ? (interrupted === 'SIGINT' ? 130 : 143) : 1); });
+})().catch((e) => { R.errors = { ...R.errors, main: String(e.stack || e) }; save(); console.error(e); process.exit(interrupted ? ({ SIGINT: 130, SIGTERM: 143, SIGHUP: 129 }[interrupted]) : 1); });
