@@ -1,5 +1,5 @@
 // Real editor handlers -> sync storage -> sanitization -> reopened controls, in a disposable Chromium profile.
-// NODE_PATH=<playwright> node scripts/settings-wiring-check.js [report.json]
+// NODE_PATH=<playwright> node scripts/settings-wiring-check.js [evidence directory or report.json]
 // WIRING_CASE=cards runs only the preview regression. Network requests outside the extension are blocked.
 // This complements settings-ia-check's real clicks/layout and the feature-specific runtime checks; dispatched
 // input/change events here deliberately reach conditional controls without enabling connected services.
@@ -138,7 +138,8 @@ const check = async (name, run) => {
   } finally {
     try { await context?.close(); }
     finally { if (scratch) fs.rmSync(scratch, { recursive: true, force: true }); if (held) fs.rmSync(lock, { recursive: true, force: true }); }
-    if (process.argv[2]) fs.writeFileSync(process.argv[2], JSON.stringify(results, null, 2));
+    const out = process.argv[2];
+    if (out) fs.writeFileSync(fs.existsSync(out) && fs.statSync(out).isDirectory() ? path.join(out, 'settings-wiring.json') : out, JSON.stringify(results, null, 2));
   }
   console.log(`${results.filter((x) => x.ok).length}/${results.length} settings wiring checks passed`);
   process.exitCode = results.some((x) => !x.ok) ? 1 : 0;

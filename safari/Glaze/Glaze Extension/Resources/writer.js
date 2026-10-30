@@ -139,13 +139,19 @@
     if (root.dataset.mode === 'compose') say({ type: 'change', html: c.html, text: c.text, words: c.words, delta: ed?.view ? GZ_WRITER_SCHEMA.delta(ed.view.state.doc) : null });
     emit('change', c);
   };
+  // One object for this frame. A re-send supplies the full context, so omitted fields (especially a student's id) go.
+  const setContext = (raw) => {
+    const next = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    for (const k of Object.keys(context)) if (!Object.hasOwn(next, k)) delete context[k];
+    Object.assign(context, next);
+  };
   const ON = {
     init: (m) => {
       if (ed || refused) return;
       look(m.look);
       root.dataset.mode = m.mode === 'paper' ? 'paper' : 'compose';
       root.dataset.kind = typeof m.kind === 'string' ? m.kind : '';
-      context = m.context && typeof m.context === 'object' ? m.context : {};
+      setContext(m.context);
       const html = typeof m.html === 'string' ? m.html : '';
       // A box holding what Writer can't keep (an attachment, a table, maths, right-to-left text, a checklist, too much
       // to load) stays Blackboard's: said before the editor exists, so nothing is ever written back.
@@ -160,7 +166,7 @@
       height(); // after the parts' ready: a paper's shows its compact box or its pages (writer-paper.js)
     },
     look: (m) => { look(m.look); emit('look', m.look); },
-    context: (m) => { context = m.context && typeof m.context === 'object' ? m.context : {}; emit('context', context); },
+    context: (m) => { setContext(m.context); emit('context', context); },
     focus: () => ed?.focus(),
     html: (m) => {
       if (!ed || typeof m.html !== 'string') return;

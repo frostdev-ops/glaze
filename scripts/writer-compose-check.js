@@ -5,7 +5,7 @@
 // word target and Quote switches off and on, and Cite's sources kept per discussion (its post and reply share them, live
 // and after a reload) and per course new message. Real Quill 1.3.7 (pinned) in the page, as scripts/writer-check.js runs
 // it. GETs only; no account or outside network from the browser (the DOI lookup's doi.org and Crossref answered here).
-// NODE_PATH=<playwright> nice -n 10 node scripts/writer-compose-check.js [evidence directory], under the heavy-check lock (CLAUDE.md)
+// glaze-remote -e TZ=UTC -o <evidence directory> -- node scripts/writer-compose-check.js /out (CLAUDE.md)
 // WRITER_SHOTS names where the screenshots go (default /tmp/gz-writer-compose-shots).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -301,8 +301,8 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     // ---- Cite's sources: one store a discussion, its post's and its reply's, back after a reload; a new message's its own ----
     const STORE = `writer:sources:${new URL(site).host}|_42_1|_101_1|`, DISCUSSION = `${STORE}_9_1`, MESSAGE = `${STORE}new-message`;
     const ENTRY = 'Okafor, Ana, and Lee Park. “Rememory and the River in Beloved.” Journal of Synthetic Studies, vol. 42, no. 2, June 2019, pp. 113-31, https://doi.org/10.5555/gz.2026.001.';
-    // A typed box is backed up (enhance.drafts) as its tab goes, and that copy's offer would hold the box when the page
-    // comes back: the discussion is reopened in a new tab once those copies are gone.
+    // A same-tab reload offers the typed draft before Writer opens. Close the tab, then remove its draft copies and
+    // reopen in a new tab so this check observes persisted Cite sources independently of draft recovery.
     const dropDrafts = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('draft:'))); });
     const keyIn = (fr) => fr.evaluate(() => GZ_WRITER_SOURCES.keyOf(GZ_WRITER_FRAME.context()));
     // A source by its DOI, else its title: what storage and a frame's Cite hold, and a wait for one of them to hold `value`.
@@ -321,7 +321,7 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     await dropDrafts();
     p = await open('/ultra/courses/_101_1/discussion/_9_1');
     let cp = await box(p, 'post'), cr = await box(p, 'reply');
-    await until(async () => await keyIn(cp.fr) === DISCUSSION && await keyIn(cr.fr) === DISCUSSION, 'the discussion\'s store in both frames');
+    await holds(() => Promise.all([keyIn(cp.fr), keyIn(cr.fr)]), JSON.stringify([DISCUSSION, DISCUSSION]), 'the discussion\'s store in both frames');
     check(JSON.stringify(await stored(DISCUSSION)) === '[]', `the post and the reply keep their sources in one store: ${DISCUSSION}`);
     await cp.fr.click('.ProseMirror');
     await p.keyboard.type('Memory works like a river', { delay: 1 });
@@ -340,7 +340,7 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     await dropDrafts();
     p = await open('/ultra/courses/_101_1/discussion/_9_1');
     cp = await box(p, 'post'); cr = await box(p, 'reply');
-    await until(async () => (await titles(cp.fr)).length && (await titles(cr.fr)).length, 'sources after reopening');
+    await holds(() => Promise.all([titles(cp.fr), titles(cr.fr)]), JSON.stringify([JSON.parse(DOI), JSON.parse(DOI)]), 'sources after reopening');
     const entries = await listed(cp.fr);
     check(JSON.stringify(entries) === JSON.stringify([ENTRY]), `the discussion reopened, the post's ⋯ Sources lists the cited source's entry (${entries.join(' | ')})`);
     check(JSON.stringify(await titles(cr.fr)) === DOI, 'the discussion reopened, the reply has the same source');

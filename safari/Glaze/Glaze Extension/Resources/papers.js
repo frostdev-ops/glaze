@@ -159,7 +159,7 @@
       plugin: (p) => { if (editor) editor.addPlugins([p]); else plugins.push(p); },
       item: (text, fn) => { const b = h('button', { type: 'button', role: 'menuitem', text }); b.addEventListener('click', fn); return b; },
     };
-    await GZ_WRITER_PAPER.need(['lib/writer-sources.js', 'lib/writer-bibliography.js', 'lib/writer-cite.js', 'lib/writer-lookup.js', 'lib/ai/failure.js', 'lib/writer-issues.js', 'lib/writer-proof.js', 'writer-proof.js', 'writer-ai.js', 'writer-cite.js', 'lib/writer-export.js', 'writer-objects.js', 'writer-find.js', 'writer-counts.js', 'writer-print.js', 'writer-ruler.js', 'lib/writer-color.js', 'writer-paste.js']);
+    await GZ_WRITER_PAPER.need(['lib/writer-sources.js', 'lib/writer-bibliography.js', 'lib/writer-cite.js', 'lib/writer-lookup.js', 'lib/ai/failure.js', 'lib/writer-issues.js', 'lib/writer-proof.js', 'lib/ai/tasks/writer-context.js', 'writer-proof.js', 'writer-ai.js', 'writer-cite.js', 'lib/writer-export.js', 'writer-objects.js', 'writer-find.js', 'writer-counts.js', 'writer-print.js', 'writer-ruler.js', 'lib/writer-color.js', 'writer-paste.js']);
     const mountEl = h('div');
     document.body.append(mountEl);
     editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins, onChange: (change) => emit('change', change) });

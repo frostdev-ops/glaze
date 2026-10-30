@@ -8,7 +8,7 @@ const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(setImm
 const until = async (f, ms = 2000) => { const t = Date.now(); while (!f() && Date.now() - t < ms) await new Promise((r) => setTimeout(r, 5)); return f(); };
 const plain = (v) => JSON.parse(JSON.stringify(v));
 // pace: how many times faster than real time the frame's timers run.
-function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, clock, mode = 'compose', format, look, pace = 1, hidden = false, safari = false } = {}) {
+function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, context: initialContext = { kind: 'reply' }, clock, mode = 'compose', format, look, pace = 1, hidden = false, safari = false } = {}) {
   class Element {
     constructor() { this.style = {}; this.attrs = {}; this.children = []; this.hidden = false; this.listeners = {}; }
     get textContent() { return (this.text || '') + this.children.map((c) => (c && typeof c === 'object' ? c.textContent : String(c))).join(' '); }
@@ -21,7 +21,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
     querySelector() { return null; }
   }
   const hooks = {}, sent = [], receives = [], pendingStatus = [], pendingRun = [], said = [], ports = [];
-  let ctx = { kind: 'reply' }, settings = start || { on: true, use: 'main', features: { completion: true, writing: true } }, holdStatus = false;
+  let ctx = initialContext, settings = start || { on: true, use: 'main', features: { completion: true, writing: true } }, holdStatus = false;
   const opened = [];
   const doc = { content: { size: 10 }, textBetween: () => 'draft words' };
   const interaction = { dispatch: 0, focus: 0 };
@@ -30,6 +30,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
     addEventListener(type, f) { hooks[`window:${type}`] = f; }, requestAnimationFrame: (f) => f(), setTimeout: (f, ms, ...a) => setTimeout(f, ms / pace, ...a).unref(), clearTimeout, setInterval, clearInterval,
     GZ_PM: { state: { Plugin: class { constructor(spec) { this.spec = spec; } }, PluginKey: class { getState() { return null; } } }, view: {}, transform: { Mapping: class { appendMapping() {} map(v) { return v; } } } },
     GZ_WRITER_SCHEMA: { text: () => ({ text: 'draft words', posAt: (v) => v }) }, GZ_WRITER_PROOF: {},
+    GZ_AI_WRITER: require('../lib/ai/tasks/writer-context.js'), GZ_WRITER_SOURCES: require('../lib/writer-sources.js'),
     GZ_WRITER_PAPER: format ? { current: () => ({ format: () => format, ...(look && { look }) }) } : undefined,
     GZ_WRITER_FRAME: { t: (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v && k in v ? v[k] : m)), kind: () => 'reply', context: () => ctx, editor: () => ed, mode: () => mode,
       on: (ev, f) => { hooks[ev] = f; }, handle: (type, f) => { hooks[`page:${type}`] = f; }, say: (m) => said.push(m), plugin(p) { hooks.plugin = p.spec; }, slot: () => new Element(), item: () => new Element() },
@@ -233,6 +234,33 @@ test('decide and the proof hook preserve the original candidate index, including
     const result = f.proof.decide({ text: 'They put there coats down.', from: 9, to: 14, suggestions: ['their', 'their', "they're"] });
     f.reply({ id: f.pendingRun.at(-1).id, type: 'end', output: { verdict, choice } });
     assert.deepEqual(plain(await result), expected);
+  }
+});
+
+test('source identity enrichment and duplicate context messages preserve a pending AI ruling', async () => {
+  const own = { prompt: 'Reading Journal' }, f = frame({ context: own }); await f.start();
+  const before = f.sent.filter((m) => m.op === 'status').length;
+  const result = f.proof.decide({ text: 'Their going home.', from: 0, to: 5, suggestions: ["They're"], context: own });
+  const id = f.pendingRun.at(-1).id;
+  const full = { ...own, school: 'bb.school.test', course: { id: '_101_1' }, item: { id: '_12_1' }, user: null };
+  f.context(full);
+  f.context({ ...full, user: { id: '_42_1' } });
+  f.context({ ...full, user: { id: '_42_1' } });
+  await flush();
+  f.reply({ id, type: 'end', output: { verdict: 'apply', choice: "They're" } });
+  assert.deepEqual(plain(await result), { verdict: 'apply', choice: 0 });
+  assert.equal(f.sent.filter((m) => m.op === 'status').length, before, 'metadata re-sends do not restart AI admission');
+});
+
+test('changing a known source scope or prompt still cancels a pending AI ruling', async () => {
+  const own = { prompt: 'Reading Journal', school: 'bb.school.test', course: { id: '_101_1' }, item: { id: '_12_1' }, user: { id: '_42_1' } };
+  for (const next of [{ ...own, user: { id: '_43_1' } }, { ...own, user: null }, { ...own, prompt: 'A different prompt' }]) {
+    const f = frame({ context: own }); await f.start();
+    const result = f.proof.decide({ text: 'Their going home.', from: 0, to: 5, suggestions: ["They're"] });
+    const id = f.pendingRun.at(-1).id;
+    f.context(next); await flush();
+    f.reply({ id, type: 'end', output: { verdict: 'apply', choice: "They're" } });
+    assert.equal(await result, null);
   }
 });
 

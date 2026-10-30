@@ -436,8 +436,9 @@ not those unknown legacy copies or unrelated stickers.
   each assignment's paper (its text, title, course name, due date, format and address), keyed by school, student, course
   and assignment (one Blackboard hasn't yet said whose it is waits under a key of its own), with the versions Settings →
   Writer keeps (40 to start, 10 to 100; 4 MB in all, the last submitted one always kept) and your own format presets; your
-  personal dictionary (up to 5,000 words, shared by every box); and the sources you save for each assignment,
-  discussion (its post and replies share them), journal and course's new messages (up to 300 each), keyed the same way. The documents you start or import on Writer's Documents page are kept
+  personal dictionary (up to 5,000 words, shared by every box); and your saved sources (up to 300 per store), keyed the
+  same way: one store per assignment or journal, one shared by a discussion's post and replies, and one shared by each
+  course's new messages. The documents you start or import on Writer's Documents page are kept
   the same way, each under a random key (`doc:<uuid>`) with its text, title, format and versions; Glaze keeps no copy on
   a server. Delete there moves a paper or document to Trash, which keeps it and its versions on this device; 30 days later
   it is deleted for good the next time the browser starts or Documents opens, unless you restore it first. A paper's edits

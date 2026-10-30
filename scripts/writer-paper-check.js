@@ -171,6 +171,23 @@ const HARNESS = `(() => {
       return;
     }
     check(await fr.evaluate(() => document.documentElement.dataset.mode === 'paper' && document.documentElement.dataset.kind === 'assignment'), 'the assignment attempt mounts in paper mode');
+    // Harper proofs the paper, so the browser's own spellcheck stays off on it and on the header while it is edited (no
+    // second underline, none Add to dictionary can't clear); Settings → Writer → Proofing off gives the browser's back.
+    const spelling = () => fr.evaluate(() => {
+      GZ_WRITER_PAPER.current().editPart('header');
+      const hf = document.querySelector('.gp-hf'), r = { paper: document.querySelector('.gp-flow .ProseMirror').getAttribute('spellcheck'), header: hf ? hf.getAttribute('spellcheck') : 'none' };
+      hf?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return JSON.stringify(r);
+    });
+    const proofing = (on) => worker.evaluate(async (on) => { const w = (await chrome.storage.sync.get('writer')).writer || {}; await chrome.storage.sync.set({ writer: { ...w, proofing: on } }); }, on);
+    await until(async () => (await spelling()) === JSON.stringify({ paper: 'false', header: 'false' }), 'spellcheck off with proofing on');
+    check(true, 'proofing on: spellcheck="false" on the paper and its header');
+    await proofing(false);
+    await until(async () => (await spelling()) === JSON.stringify({ paper: null, header: null }), 'spellcheck back with proofing off');
+    check(true, 'proofing off: the browser\'s spellcheck back on both (no spellcheck attribute)');
+    await proofing(true);
+    await until(async () => (await spelling()) === JSON.stringify({ paper: 'false', header: 'false' }), 'spellcheck off again');
+    check(true, 'proofing on again: spellcheck="false" again');
     check(await fr.evaluate(() => ['.gp-top h1', '.gp-pill', '.gp-box', '[data-run="bold"]', '[data-run="italic"]', '[data-run="underline"]', '[data-run="bulletList"]', '[data-run="orderedList"]', '.gp-submit', '.gp-tabs', '.gp-status'].every((s) => document.querySelector(s))
       && [...document.querySelectorAll('.gp-tbtn')].map((b) => b.textContent.trim()).filter(Boolean).join('|') === 'Cite|Footnote|Page break'
       && [...document.querySelectorAll('.gp-tab')].map((b) => b.firstChild.textContent).join('|') === 'Checks|Sources|Feedback|Outline'), 'paper chrome: toolbar, tabs, status bar');
@@ -316,6 +333,17 @@ const HARNESS = `(() => {
     await settle(fr);
     await until(() => fr.evaluate((n) => document.querySelectorAll('.gp-sheet').length === n + 1, before), 'a page more');
     check(true, 'Page break starts a new page');
+    // The status bar counts the page at the top of the view, as Word and Docs do, not the caret's.
+    const pageSaid = () => fr.evaluate(() => document.querySelector('.gp-status > span').textContent);
+    const caretPage = () => fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view, y = v.coordsAtPos(v.state.selection.head).top; return [...document.querySelectorAll('.gp-zoom .gp-sheet')].findIndex((s) => { const r = s.getBoundingClientRect(); return y >= r.top && y <= r.bottom; }) + 1; });
+    const toPage = (n) => fr.evaluate((n) => { const c = document.querySelector('.gp-canvas'), s = document.querySelectorAll('.gp-zoom .gp-sheet')[n - 1]; c.scrollTop = n === 1 ? 0 : c.scrollTop + s.getBoundingClientRect().top - c.getBoundingClientRect().top + 4; }, n);
+    const pagesNow = before + 1, onPage = await caretPage();
+    await toPage(1);
+    await until(async () => (await pageSaid()) === `Page 1 of ${pagesNow}`, `"Page 1 of ${pagesNow}" with page 1 in view`);
+    check(onPage > 1 && await caretPage() === onPage, `scrolled to page 1 with the caret on page ${onPage}: "Page 1 of ${pagesNow}"`);
+    await toPage(onPage + 1);
+    await until(async () => (await pageSaid()) === `Page ${onPage + 1} of ${pagesNow}`, `"Page ${onPage + 1} of ${pagesNow}" with it at the top`);
+    check(await caretPage() === 0 || await caretPage() === onPage, `scrolled on to page ${onPage + 1}, the caret still on ${onPage}: "Page ${onPage + 1} of ${pagesNow}"`);
     await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.run('undo'));
     await settle(fr);
     const input = await fr.$('input[type="file"]');

@@ -7,6 +7,16 @@ const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
 const env = require('./check-env.js'), lock = require('./check-env.js').lockPath();
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+const waitFor = async (page, predicate) => {
+  for (const end = Date.now() + 5000; !await page.evaluate(predicate);) {
+    if (Date.now() > end) throw new Error(`Timed out waiting for ${predicate}`);
+    await pause(25);
+  }
+};
+const painted = (page) => page.evaluate(async () => {
+  await document.fonts.ready;
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+});
 const layoutState = ({ remember, route, focused = false } = {}) => {
   const face = (el) => el.matches('.seg input, .switch input') ? el.closest('label') : el;
   const visible = (el) => el.checkVisibility({ visibilityProperty: true }) && face(el).checkVisibility({ visibilityProperty: true, opacityProperty: true });
@@ -81,7 +91,8 @@ const check = async (name, test) => {
         const button = frame.locator('#todo button.info').first();
         await button.click(); await frame.locator('.info-pop:popover-open.placed').waitFor();
         await host.keyboard.press('Escape');
-        await pause(80);
+        await frame.waitForFunction(() => !document.querySelector(':popover-open') && document.activeElement.matches('#todo button.info'));
+        await painted(host);
         assert.equal(await host.evaluate(() => closedSettings), 0, 'Escape must leave Settings open');
         assert.equal(await frame.locator(':popover-open').count(), 0, 'Escape closes the description');
         assert.equal(await button.evaluate((b) => document.activeElement === b), true, 'focus returns to the question button');
@@ -118,9 +129,9 @@ const check = async (name, test) => {
       await page.fill('#find', '');
       await page.locator('#editor-all').check();
       await page.selectOption('[data-key="popup.anim"]', 'fade');
-      await page.waitForFunction(() => new Promise((r) => chrome.storage.sync.get('popup', (x) => r(x.popup?.anim === 'fade'))));
+      await waitFor(page, async () => (await chrome.storage.sync.get('popup')).popup?.anim === 'fade');
       await page.locator('[data-reset-section="pages/popups"]').click();
-      await page.waitForFunction(() => new Promise((r) => chrome.storage.sync.get('popup', (x) => r((x.popup?.anim ?? 'genie') === 'genie'))));
+      await waitFor(page, async () => ((await chrome.storage.sync.get('popup')).popup?.anim ?? 'genie') === 'genie');
       assert.equal(await page.locator('[data-key="popup.anim"]').inputValue(), 'genie', 'Reset section puts the animation back');
       await page.locator('#editor-all').uncheck();
     });
@@ -145,7 +156,7 @@ const check = async (name, test) => {
       assert.equal(await inline.isVisible(), true);
       await mode.selectOption('site');
       await inline.uncheck();
-      await page.waitForFunction(async () => {
+      await waitFor(page, async () => {
         const { rubric } = await chrome.storage.sync.get('rubric');
         return rubric?.show === 'site' && rubric?.inline === false;
       });
@@ -153,14 +164,14 @@ const check = async (name, test) => {
       assert.equal(await mode.inputValue(), 'site', 'the selected mode survives a reload');
       assert.equal(await inline.isChecked(), false, 'the inline preference survives a reload');
       await page.locator('[data-reset-section="pages/documents"]').click();
-      await page.waitForFunction(async () => {
+      await waitFor(page, async () => {
         const { rubric } = await chrome.storage.sync.get('rubric');
         return rubric?.show === 'auto' && rubric?.inline === false;
       });
       assert.equal(await mode.inputValue(), 'auto', 'Reset section restores Automatic');
       assert.equal(await inline.isChecked(), false, 'Documents reset preserves the Pop-ups preference');
       await page.locator('[data-reset-section="pages/popups"]').click();
-      await page.waitForFunction(async () => (await chrome.storage.sync.get('rubric')).rubric?.inline === true);
+      await waitFor(page, async () => (await chrome.storage.sync.get('rubric')).rubric?.inline === true);
       assert.equal(await inline.isChecked(), true, 'Pop-ups reset restores inline');
       await page.locator('#editor-all').uncheck();
     });
@@ -217,7 +228,7 @@ const check = async (name, test) => {
       assert.equal(await reset.isVisible(), true);
       await automatic.locator('..').click();
       assert.equal(await note.isVisible(), false, 'Automatic clears the warning immediately');
-      await page.waitForFunction(async () => (await chrome.storage.sync.get('tabs')).tabs?.at === 'auto');
+      await waitFor(page, async () => (await chrome.storage.sync.get('tabs')).tabs?.at === 'auto');
       assert.equal(await reset.isVisible(), false);
       await page.locator('label:has([name="tabs.at"][value="below"])').click();
       await reset.click();
@@ -269,7 +280,7 @@ const check = async (name, test) => {
             await editor.evaluate((direction) => { document.documentElement.dir = direction; }, dir);
             for (const route of ['look/type', 'navigation/bar', 'navigation/tabs', 'navigation/sidebar', 'study/todo', 'pages/documents', 'pages/popups']) {
               await editor.evaluate((hash) => { location.hash = hash; }, route);
-              await pause(100);
+              await editor.waitForFunction((r) => editor.route() === r, route);
               const tag = `${lang} ${embedded ? 'embedded' : 'standalone'} ${dir} ${route}`;
               const overflow = await editor.evaluate(() => {
                 const width = document.documentElement.clientWidth;
@@ -369,6 +380,7 @@ const check = async (name, test) => {
               await host.setViewportSize({ width: 1440, height: 1000 });
               await host.evaluate(layoutState, { remember: route });
               await host.setViewportSize({ width: 320, height: 900 });
+              await painted(host);
               const m = await host.evaluate(layoutState, { route });
               if (m.scroll > 320) problems.push(`${tag}: page is ${m.scroll}px wide`);
               for (const off of m.off) problems.push(`${tag}: ${off}`);
@@ -457,6 +469,7 @@ const check = async (name, test) => {
                 await host.evaluate((r) => editor.show(r), route);
                 for (const width of [1440, 390, 320]) {
                   await host.setViewportSize({ width, height: 1000 });
+                  await painted(host);
                   const m = await host.evaluate(layoutState, width === 1440 ? { remember: route } : { route });
                   const tag = `${lang} ${all ? 'all' : 'default'} ${dir} ${width} ${route}`;
                   if (m.scroll > width) problems.push(`${tag}: page is ${m.scroll}px wide`);
@@ -488,7 +501,7 @@ const check = async (name, test) => {
       await page.locator('#todo button.info').first().click();
       await page.locator('.info-pop:popover-open.placed').waitFor();
       await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
-      await pause(100);
+      await page.waitForFunction(() => !document.querySelector(':popover-open'));
       assert.equal(await page.locator(':popover-open').count(), 0, 'a description dismisses when its button scrolls out of view');
     });
   } finally {

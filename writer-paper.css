@@ -75,6 +75,13 @@
 .gp-full:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; border-radius: 6px; }
 /* A narrow box (the frame is as wide as Ultra's): the slider alone, its name still its label. */
 @media (max-width: 479.98px) { .gp-full-name { display: none; } }
+/* The compact bar's line before it (writer-paper.js tell): one line, cut short with an ellipsis; why Ultra's button didn't
+   go in the error colour, and the switch it names ringed while the paper is too long for Ultra's box. */
+.gp-said { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-said:empty { display: none; }
+.gp-said:is([data-kind="long"], [data-kind="error"]) { color: var(--gz-err); }
+.gp-full[data-offer] { color: var(--gz-ink); }
+.gp-full[data-offer] .gp-full-track { box-shadow: 0 0 0 2px var(--gz-accent); }
 .gp { flex-direction: column; height: 100vh; background: var(--ground); color: var(--gz-ink); font: 14px/1.5 var(--gz-font); }
 /* In Ultra the paper is a card: the Look's corners and edge (drawn over the bars, which fill to them). Focus fills the window,
    square, as does papers.html. */

@@ -28,8 +28,17 @@ test('routes: a discussion\'s course and content ids, a journal\'s, a message co
   assert.deepEqual(C.route('/ultra/courses/_101_1/discussion/_9_1'), { course: '_101_1', content: '_9_1' });
   assert.deepEqual(C.route('/ultra/courses/_101_1/journal/_12_1'), { course: '_101_1', journal: '_12_1' });
   assert.deepEqual(C.route('/ultra/courses/_101_1/outline/discussion/_9_1/'), { course: '_101_1', content: '_9_1' });
+  assert.deepEqual(C.route('/ultra/courses/_101_1/outline/journal/_12_1/'), { course: '_101_1', journal: '_12_1' });
   assert.deepEqual(C.route('/ultra/messages/create', '?courseId=_101_1'), { course: '_101_1' });
   for (const [p, s] of [['/ultra/messages/create', ''], ['/ultra/messages/create', '?courseId=101'], ['/ultra/courses/_101_1/outline', ''], ['/ultra/courses/_101_1/discussion/9', ''], ['/ultra/courses/_101_1/discussion/_9_1/rubric-view', '']]) assert.equal(C.route(p, s), null, p + s);
+});
+
+test('compose routes agree with rubric discussion routes and never treat new-message as a content id', () => {
+  const R = require('../lib/rubric.js');
+  const path = '/ultra/courses/_101_1/discussion/_9_1/';
+  assert.equal(C.route(path).content, R.route('ultra', path).contentId);
+  for (const kind of ['discussion', 'journal']) assert.equal(C.route(`/ultra/courses/_101_1/${kind}/new-message`), null);
+  for (const suffix of ['attempt', 'attempt/create', 'attempt/_31_1']) assert.equal(C.route(`/ultra/courses/_101_1/assessment/_8_1/${suffix}`), null);
 });
 
 test('the forum behind a route: by the gradebook column its content id has, else by a title only one discussion has', () => {

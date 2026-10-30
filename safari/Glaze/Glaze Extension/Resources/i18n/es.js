@@ -3446,6 +3446,7 @@
   "Ruler": "Regla",
   "Light page": "Página clara",
   "Full writer": "Writer completo",
+  "Too long for Ultra’s text box. Use Full writer.": "Demasiado largo para el cuadro de texto de Ultra. Usa Writer completo.",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "La regla sobre la página, con las sangrías y tabulaciones del párrafo, que puedes arrastrar. Desactivada, la página empieza justo bajo la barra de herramientas.",
   "Versions kept": "Versiones guardadas",
   "How many earlier versions each paper keeps on this device, the oldest going first. The last version you submitted always stays.": "Cuántas versiones anteriores guarda cada trabajo en este dispositivo; la más antigua se va primero. La última versión entregada siempre se queda.",

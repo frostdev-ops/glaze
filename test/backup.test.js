@@ -751,3 +751,22 @@ test('Back up carries assignment source host keys, ports and local document keys
     for (const k of keys) assert.deepEqual(b.store[k], local[k]);
   } finally { a.stop(); b.stop(); }
 });
+
+test('Back up restores discussion, journal and new-message sources under each student and course', async () => {
+  const C = require('../lib/writer-context-discussion.js');
+  const keys = [];
+  for (const uid of ['_42_1', '_43_1']) for (const cid of ['_101_1', '_102_1']) {
+    for (const [kind, path] of [['reply', `/ultra/courses/${cid}/outline/discussion/_9_1`], ['journal', `/ultra/courses/${cid}/outline/journal/_12_1`], ['message', '/ultra/messages/create']]) {
+      keys.push(SR.keyOf(C.contextOf({ kind, school: 'bb.school.test:8443', user: { id: uid }, course: { id: cid }, item: C.itemOf(kind, C.route(path, `?courseId=${cid}`)) })));
+    }
+  }
+  assert.equal(new Set(keys).size, 12);
+  const local = Object.fromEntries(keys.map((k, n) => [k, { sources: [source(`Compose source ${n}`, `compose-${n}`)], at: NOW }]));
+  const a = device(local), b = device();
+  try {
+    const { plan, out } = await restore(b, await backUp(a), ['sources']);
+    assert.deepEqual(plan.cats.sources, local);
+    assert.deepEqual(out.failed, []);
+    for (const key of keys) assert.deepEqual(b.store[key], local[key]);
+  } finally { a.stop(); b.stop(); }
+});
