@@ -633,6 +633,39 @@ test('Safari: a 20 s keep-alive while on, an empty batch when idle, cleared when
   }
 });
 
+test('Safari: every beat also posts on the native port, even with a batch in flight; the handler\'s echo is ignored', async () => {
+  const w = world({ browser: 'safari' });
+  await w.link.ensure();
+  const { i, s } = w.batches[0].msg;
+  w.port().host({ name: 'agent.frames', userInfo: { i, s, frames: [HELLO] } });
+  w.batches[0].resolve({ ok: true });
+  await settle();
+  assert.deepEqual(w.port().sent, [], 'frames go as batches, never on the port');
+  await w.advance(20e3);
+  assert.deepEqual(w.port().sent, [{ type: 'keep-alive' }]);
+  await w.advance(20e3);
+  assert.equal(w.batches.length, 2, 'the beat\'s batch is still in flight');
+  assert.deepEqual(w.port().sent, [{ type: 'keep-alive' }, { type: 'keep-alive' }], 'the port post does not wait for it');
+  w.port().host({ echo: { type: 'keep-alive' } });
+  await settle();
+  assert.equal(w.link.status().state, 'connected');
+  w.batches[1].resolve({ ok: true });
+  await settle();
+
+  w.storage.local.data.mcp = { on: false };
+  await w.link.ensure();
+  const posts = w.ports.flatMap((p) => p.sent).length;
+  await w.advance(120e3);
+  assert.equal(w.ports.flatMap((p) => p.sent).length, posts, 'none once off');
+
+  for (const browser of ['chrome', 'firefox']) {
+    const other = await connected({ browser });
+    const before = other.port().sent.length;
+    await other.advance(120e3);
+    assert.equal(other.port().sent.length, before, browser);
+  }
+});
+
 test('R1: Safari rejects dispatches from an earlier session on the replacement port', async () => {
   const w = world({ browser: 'safari' });
   await w.link.ensure();
