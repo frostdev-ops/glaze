@@ -1633,9 +1633,14 @@ Promise.resolve().then(pointerToLook).catch(() => {});
 // A pick waits here until the worker gets to it; a change to that course's courseLooks first (a 4.0 pick, newer) drops it.
 const builtinPicks = new Map();
 const moveCourseLooks = () => (brokerTurn ||= GZ_CARDS.queue())(async () => {
+  const pending = [...builtinPicks];
   const s = GZ_SANITIZE(await chrome.storage.sync.get(['courses', 'courseLooks']));
-  const picks = [...builtinPicks];
-  builtinPicks.clear();
+  // A pick that arrives during this read needs the next snapshot; a cancelled or replaced one must not use this one.
+  const picks = [];
+  for (const [cid, pick] of pending) if (builtinPicks.get(cid) === pick) {
+    builtinPicks.delete(cid);
+    picks.push([cid, pick.name]);
+  }
   const moved = GZ_CATALOG.move(s), cleared = GZ_CATALOG.clear(s, picks);
   if (moved || cleared) await chrome.storage.sync.set({ ...(moved && { version: 2, courses: s.courses }), courseLooks: s.courseLooks });
 });
@@ -1645,7 +1650,7 @@ chrome.storage.onChanged.addListener((c, area) => {
   if (area !== 'sync') return;
   if (c.courseLooks) for (const cid of builtinPicks.keys()) if (c.courseLooks.oldValue?.[cid] !== c.courseLooks.newValue?.[cid]) builtinPicks.delete(cid);
   if (!c.courses) return;
-  for (const [cid, name] of GZ_CATALOG.picked(c.courses.oldValue, c.courses.newValue)) builtinPicks.set(cid, name);
+  for (const [cid, name] of GZ_CATALOG.picked(c.courses.oldValue, c.courses.newValue)) builtinPicks.set(cid, { name });
   moveCourseLooks().catch(() => {});
 });
 // Once, on the update from 3.3.4: that one list goes under its site, and Ultra's one ten-minute gate for its course list
