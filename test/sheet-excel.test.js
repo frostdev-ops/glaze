@@ -92,3 +92,34 @@ test('Excel harness: locale-sensitive parsing checks en-US before making a workb
   assert.match(s, /get international data type decimal separator/);
   assert.ok(s.indexOf('country_setting') < s.indexOf('make new workbook'));
 });
+
+const helper = ({ writeError = false } = {}) => {
+  const killed = [], removed = [];
+  let opened = false, probes = 0;
+  const context = { module: { exports: {} }, process: {
+    platform: 'darwin', env: {}, kill: (...args) => killed.push(args),
+  }, require: (id) => {
+    if (id === 'node:fs') return { existsSync: () => true, mkdtempSync: () => '/scratch/osa',
+      writeFileSync: () => { if (writeError) throw Error('write refused'); }, rmSync: (dir) => removed.push(dir) };
+    if (id === 'node:child_process') return { execFileSync: (cmd) => {
+      if (cmd === 'open') { opened = true; return ''; }
+      if (cmd === 'pgrep') { if (!opened || ++probes === 1) throw Error('not ready'); return '123\n'; }
+      const err = Error('events refused'); err.stderr = '-1743'; throw err;
+    } };
+    return require(id);
+  } };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'scripts/sheet-excel.js'), 'utf8'), context);
+  return { ...context.module.exports, killed, removed };
+};
+
+test('Excel helper: a delayed launch PID is captured before refused-event cleanup', () => {
+  const h = helper();
+  assert.throws(() => h.start(), /Automation/);
+  assert.deepEqual(h.killed, [[123, 'SIGTERM']]);
+});
+
+test('Excel helper: a script write failure removes the temporary directory', () => {
+  const h = helper({ writeError: true });
+  assert.throws(() => h.osa('never sent'), /write refused/);
+  assert.deepEqual(h.removed, ['/scratch/osa']);
+});
