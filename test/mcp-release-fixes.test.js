@@ -193,6 +193,18 @@ test('doctor skips unsafe fallbacks consistently with the launcher and warns', {
   assert.equal(failed.code, 1, failed.out);
 });
 
+test('shell-like path text stays literal when generating and parsing a guarded launcher', { skip: !POSIX }, (t) => {
+  const home = scratch(t), exe = node(path.join(home, '&& exec "$n" 100% ! &'));
+  const launcher = path.join(home, 'launch'), script = path.join(home, 'glaze.js');
+  const o = { node: exe, also: [], script, browser: 'chrome' };
+  const text = L.sh(o);
+  assert.deepEqual(L.parse(text), o);
+  fs.writeFileSync(launcher, text, { mode: 0o755 });
+  const out = spawnSync(launcher);
+  assert.equal(out.status, 37, String(out.stderr));
+  assert.deepEqual(out.stdout.toString().split('\n'), [script, 'host', '--browser=chrome', '']);
+});
+
 test('batch candidate guards exclude directories without expanding the selected exit code early', () => {
   const o = { node: 'C:\\Jo 100% !x! & (home)\\node.exe', also: ['C:\\other ^ bin\\node.exe'], script: "C:\\Jo's 100% !x! & (home)\\glaze.js", browser: 'chrome' };
   const text = L.bat(o);
