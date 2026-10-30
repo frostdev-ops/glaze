@@ -17,7 +17,7 @@ const BLANK = { ...C, chrome: 'PLACEHOLDER-chrome.apps.googleusercontent.com', w
 const REAL = { ...C, chrome: '111-chrome.apps.googleusercontent.com', web: '222-web.apps.googleusercontent.com', ios: '333-ios.apps.googleusercontent.com', apiKey: 'AIzaTestKey', appId: '123456789012' };
 
 // A worker: flow, config, what Google answers (google(details) → the redirect URL; userinfo), which picker pages load.
-const harness = ({ flow = 'chrome', config = REAL, granted = true, firefox = false, client = REAL.chrome, keep = false, up = [true, true], email = 'student@school.edu' } = {}) => {
+const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, firefox = false, client = REAL.chrome, keep = false, up = [true, true], email = 'student@school.edu' } = {}) => {
   const local = {}, sync = {};
   const log = { fetch: [], launch: [], auth: [], removed: [], cleared: 0, permRemoved: [], native: [] };
   let clock = 1_000_000;
@@ -65,7 +65,7 @@ const harness = ({ flow = 'chrome', config = REAL, granted = true, firefox = fal
     throw new Error(`unexpected request: ${url}`);
   };
   const g = G.create({
-    config, flow, firefox,
+    on, config, flow, firefox,
     identity: () => (granted ? identity : undefined),
     permissions: { contains: async ({ permissions }) => granted && permissions.join() === 'identity', remove: async (p) => { log.permRemoved.push(p); return true; } },
     manifest: () => ({ oauth2: { client_id: client } }),
@@ -365,10 +365,10 @@ test('the worker answers glaze:google from Settings only (pick from Glaze\'s own
 // ---- packaging: what each package's manifest carries for Google ----
 const repo = require('../manifest.json');
 test('packages: placeholders leave Drive out, so a build asks for no identity and carries no oauth2', () => {
-  const chrome = oauth(repo, { target: 'chrome', calendar: false, config: BLANK });
+  const chrome = oauth(repo, { target: 'chrome', calendar: false, drive: true, config: BLANK });
   assert.equal(chrome.oauth2, undefined);
   assert.ok(!(chrome.optional_permissions || []).includes('identity'));
-  const firefox = oauth(repo, { target: 'firefox', calendar: false, config: BLANK });
+  const firefox = oauth(repo, { target: 'firefox', calendar: false, drive: true, config: BLANK });
   assert.equal(firefox.oauth2, undefined);
   assert.ok(!(firefox.optional_permissions || []).includes('identity'));
   const { oauth2, optional_permissions: optional, ...rest } = repo;
@@ -376,27 +376,69 @@ test('packages: placeholders leave Drive out, so a build asks for no identity an
 });
 
 test('packages: real ids give Chrome the Drive client and its three scopes, without Calendar\'s while Calendar is off', () => {
-  const chrome = oauth(repo, { target: 'chrome', calendar: false, config: REAL });
+  const chrome = oauth(repo, { target: 'chrome', calendar: false, drive: true, config: REAL });
   assert.deepEqual(chrome.oauth2, { client_id: REAL.chrome, scopes: C.scopes });
   assert.deepEqual(chrome.optional_permissions, repo.optional_permissions, 'identity stays optional');
   assert.ok(!chrome.permissions.includes('identity'));
-  const both = oauth(repo, { target: 'chrome', calendar: true, config: REAL });
+  const both = oauth(repo, { target: 'chrome', calendar: true, drive: true, config: REAL });
   assert.deepEqual(both.oauth2.scopes, ['https://www.googleapis.com/auth/calendar.app.created', ...C.scopes]);
-  const cal = oauth(repo, { target: 'chrome', calendar: true, config: BLANK });
+  const cal = oauth(repo, { target: 'chrome', calendar: true, drive: true, config: BLANK });
   assert.deepEqual(cal.oauth2, repo.oauth2, 'Calendar alone: the manifest as it is');
-  const web = oauth(repo, { target: 'chrome', calendar: false, config: { ...REAL, chrome: BLANK.chrome } });
+  const web = oauth(repo, { target: 'chrome', calendar: false, drive: true, config: { ...REAL, chrome: BLANK.chrome } });
   assert.equal(web.oauth2, undefined, 'only the Web client: Edge and Brave sign in, Chrome waits');
   assert.ok(web.optional_permissions.includes('identity'));
-  const firefox = oauth(repo, { target: 'firefox', calendar: false, config: REAL });
+  const firefox = oauth(repo, { target: 'firefox', calendar: false, drive: true, config: REAL });
   assert.equal(firefox.oauth2, undefined);
   assert.ok(firefox.optional_permissions.includes('identity'), 'Firefox signs in with the Web client');
 });
 
-test('packages: the shipped config gives Chrome Calendar\'s client with Drive\'s three scopes, and Firefox identity', () => {
-  const chrome = oauth(repo, { target: 'chrome', calendar: false, config: C });
+test('packages: switched on, the shipped config gives Chrome Calendar\'s client with Drive\'s three scopes, and Firefox identity', () => {
+  const chrome = oauth(repo, { target: 'chrome', calendar: false, drive: true, config: C });
   assert.deepEqual(chrome.oauth2, { client_id: repo.oauth2.client_id, scopes: C.scopes });
   assert.deepEqual(chrome.optional_permissions, repo.optional_permissions);
-  const firefox = oauth(repo, { target: 'firefox', calendar: false, config: C });
+  const firefox = oauth(repo, { target: 'firefox', calendar: false, drive: true, config: C });
   assert.equal(firefox.oauth2, undefined);
   assert.deepEqual(firefox.optional_permissions, repo.optional_permissions);
+});
+
+// ---- the build-time switch (lib/google.js ON): off on this branch, as Calendar's is, until the release that ships Drive ----
+test('Drive is switched off: the worker refuses, Settings has no row, and the packages carry neither oauth2 nor identity', async () => {
+  assert.equal(G.ON, false);
+  const h = harness({ on: undefined });
+  assert.deepEqual(await h.g.status(), { ok: false, why: 'off' });
+  assert.deepEqual(await h.g.connect(), { ok: false, why: 'off' });
+  assert.deepEqual(await h.g.pick(), { ok: false, why: 'off' });
+  await assert.rejects(h.g.token(), (e) => e.why === 'off');
+  assert.deepEqual([h.log.auth, h.log.launch, h.log.fetch, h.local], [[], [], [], {}]);
+  for (const target of ['chrome', 'firefox']) {
+    const m = oauth(repo, { target, calendar: false, drive: G.ON, config: C });
+    assert.equal(m.oauth2, undefined, target);
+    assert.ok(!(m.optional_permissions || []).includes('identity'), target);
+  }
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
+  const at = src.indexOf("m?.type !== 'glaze:google'");
+  assert.match(src.slice(at, src.indexOf('return true;', at)), /if \(!GZ_GOOGLE\.ON\) \{ reply\(\{ ok: false, why: 'off' \}\); return; \}/, 'the worker refuses every operation');
+});
+
+test('scripts/dev-drive.sh: a dev copy with Drive on, Glaze\'s client and scopes, identity and the store key; the package and repo stay off', () => {
+  const { execFileSync } = require('node:child_process');
+  const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-drive-pkg-'));
+  try {
+    const keyFile = path.join(dir, 'key.txt');
+    fs.writeFileSync(keyFile, require('node:crypto').randomBytes(294).toString('base64'));
+    const out = execFileSync(path.join(__dirname, '../scripts/dev-drive.sh'), [keyFile, path.join(dir, 'dev')], { env: { ...process.env, DIST: path.join(dir, 'dist') }, encoding: 'utf8', stdio: 'pipe' });
+    assert.match(out, /extension ID [a-p]{32}/);
+    const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
+    const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
+    assert.ok(!packed.oauth2 && !(packed.optional_permissions || []).includes('identity'), 'the store package: off');
+    assert.match(execFileSync('unzip', ['-p', zip, 'lib/google.js']).toString(), /\n {2}const ON = false;\n/);
+    const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
+    assert.deepEqual(dev.oauth2, { client_id: C.chrome, scopes: C.scopes });
+    assert.deepEqual(dev.optional_permissions, repo.optional_permissions);
+    assert.equal(dev.key, fs.readFileSync(keyFile, 'utf8'));
+    assert.match(fs.readFileSync(path.join(dir, 'dev/lib/google.js'), 'utf8'), /\n {2}const ON = true;\n/);
+    assert.equal(G.ON, false, "the repo's switch is untouched");
+    assert.ok(!('key' in repo));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

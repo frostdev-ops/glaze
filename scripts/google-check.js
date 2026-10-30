@@ -25,6 +25,11 @@ const ext = env.staged(process.env.EXT || path.join(__dirname, '..'), []);
   m.optional_permissions = m.optional_permissions.filter((p) => p !== 'identity');
   m.oauth2 = { client_id: CHROME_CLIENT, scopes: require('../lib/google-config.js').scopes };
   fs.writeFileSync(file, JSON.stringify(m, null, 2));
+  // Drive's build-time switch on in this copy only, as scripts/dev-drive.sh does (the staged file is a link: replaced, not edited).
+  const g = path.join(ext, 'lib/google.js'), src = fs.readFileSync(g, 'utf8');
+  if (!src.includes('\n  const ON = false;\n')) throw new Error('lib/google.js: no ON switch');
+  fs.rmSync(g);
+  fs.writeFileSync(g, src.replace('\n  const ON = false;\n', '\n  const ON = true;\n'));
 }
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const REDIRECT = `https://${id}.chromiumapp.org/`;
@@ -80,6 +85,7 @@ const answer = ({ method, url, headers, body }, via) => {
   }
   // Chromium's own account check (its browser sign-in), now that accounts.google.com resolves here: the browser's, not Glaze's.
   if (u.origin === 'https://accounts.google.com' && u.pathname === '/ListAccounts' && u.searchParams.get('source') === 'ChromiumBrowser') return null;
+  if (u.href === 'https://school.instructure.com/embed') return { status: 200, headers: { 'content-type': 'text/html' }, body: '<html><body></body></html>' };
   log.other.push(`${via} ${u.href}`);
   return null;
 };
@@ -239,6 +245,38 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
     await page.locator('#gdrive-disconnect').click();
     await until(async () => await page.locator('#gdrive-connect').isVisible(), 'disconnected, chrome flow');
     ok(log.revoke.at(-1)[1] === 'token=ya29.check-chrome-token', 'Disconnect revokes Chrome\'s token');
+
+    // Settings framed in a school's page with no permissions API (Firefox gives such a frame none): Connect asks nothing
+    // there and opens Settings' own tab at Writer → Papers.
+    const lms = await ctx.newPage();
+    lms.on('pageerror', (e) => errors.push(`lms: ${e}`));
+    await lms.addInitScript(() => {
+      if (location.protocol !== 'chrome-extension:') return;
+      Object.defineProperty(chrome, 'permissions', { value: undefined, configurable: true });
+      const send = chrome.runtime.sendMessage.bind(chrome.runtime);
+      globalThis.__gzSent = [];
+      chrome.runtime.sendMessage = (m, ...a) => { __gzSent.push(m); return send(m, ...a); };
+    });
+    await lms.goto('https://school.instructure.com/embed');
+    const tabId = await sw.evaluate(() => chrome.tabs.query({ url: 'https://school.instructure.com/embed' }).then((t) => t[0].id));
+    const ticket = await sw.evaluate(async (tabId) => {
+      const [r] = await chrome.scripting.executeScript({ target: { tabId }, func: () => chrome.runtime.sendMessage({ type: 'glaze:settings-ticket' }) });
+      return r.result.ticket;
+    }, tabId);
+    await lms.evaluate((url) => { const f = document.createElement('iframe'); f.src = url; f.style.cssText = 'width:1200px;height:850px'; document.body.append(f); }, `chrome-extension://${id}/options.html?t=${ticket}#writer/papers`);
+    const frame = await until(async () => lms.frames().find((f) => f.url().includes('/options.html')), 'embedded Settings');
+    await until(() => frame.evaluate(() => document.documentElement.hasAttribute('data-embed-ok')), 'claimed frame');
+    ok(await frame.evaluate(() => typeof chrome.permissions?.request !== 'function'), 'the frame has no permissions API, as Firefox gives it');
+    await until(() => frame.locator('#gdrive').isVisible(), 'the row, framed');
+    const tabs = ctx.pages().length, asked = log.auth.length;
+    await frame.locator('#gdrive-connect').click();
+    const own = await until(async () => ctx.pages().find((p) => p !== page && p.url().startsWith(`chrome-extension://${id}/options.html`) && p.url().endsWith('#writer/papers')), 'Settings\' own tab');
+    ok(ctx.pages().length > tabs && own, 'framed Connect opens Settings in its own tab, at Writer → Papers');
+    const sent = await frame.evaluate(() => __gzSent.map((m) => [m.type, m.op || m.hash])).catch(() => null);
+    ok(!sent || !sent.some(([type, op]) => type === 'glaze:google' && op === 'connect'), 'and asks the worker for no sign-in from the frame');
+    ok(log.auth.length === asked, 'nothing reached Google');
+    await own.close();
+    await lms.close();
 
     // Who may ask: a page Glaze doesn't trust for this (the pop-up) is refused.
     const popup = await ctx.newPage();

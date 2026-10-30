@@ -397,6 +397,25 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
   assert.equal(mock.calendars.size, 1, 'kept, as chosen');
 });
 
+withMock('worker: Calendar\'s disconnect while Drive still holds the shared grant drops only Calendar\'s state: no revoke, Chrome\'s cache and identity stay', async (mock) => {
+  const w = worker(mock);
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  const cal = w.store.local.gcal.cal;
+  w.store.local.google = { email: 'student@school.edu', flow: 'chrome', at: NOW }; // Drive connected (lib/google.js)
+  assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, EDITOR), { ok: true, revoked: false, had: false, shared: true });
+  assert.ok(!mock.calendars.has(cal), 'the calendar still goes, as chosen');
+  assert.deepEqual([mock.revoked, w.identity.cleared, w.identity.removed], [[], 0, []]);
+  assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
+  assert.deepEqual(w.store.local.google, { email: 'student@school.edu', flow: 'chrome', at: NOW }, 'Drive\'s record stays');
+});
+
+test('Settings gives identity back after Calendar\'s Disconnect only when Drive doesn\'t share it', () => {
+  const src = read('options.js');
+  const bye = src.slice(src.indexOf("$('#gcal-bye').addEventListener('close'"), src.indexOf("chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.gcal)"));
+  assert.match(bye, /if \(!r\.shared\) await chrome\.permissions\.remove\(\{ permissions: \['identity'\] \}\)/);
+  assert.doesNotMatch(bye.replace(/if \(!r\.shared\) await chrome\.permissions\.remove/, ''), /permissions\.remove/);
+});
+
 // ---- the build-time switch (lib/gcal.js ON): off in the repo and the store package until Google verifies the app ----
 test('switch off (the repo as it is): no settings section, no sync, no page script, even with a connection left from a dev build', async () => {
   assert.equal(G.ON, false, 'lib/gcal.js ON stays false until Google verifies the app');
@@ -439,7 +458,8 @@ test('the store package leaves Google sync out while the switch is off; scripts/
     const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
     const { oauth2 } = repo;
     // Calendar's scope stays out while its switch is off; what Drive needs (scripts/oauth-manifest.js) goes in.
-    assert.deepEqual(packed, require('../scripts/oauth-manifest.js').oauth(repo, { target: 'chrome', calendar: false, config: require('../lib/google-config.js') }), 'the store manifest: the repo\'s, with only what Drive needs from Google');
+    const { oauth2: _o, optional_permissions: optional, ...rest } = repo, store = optional.filter((p) => p !== 'identity');
+    assert.deepEqual(packed, store.length ? { ...rest, optional_permissions: store } : rest, 'the store manifest: the same, without oauth2 and identity while Calendar and Drive are both switched off');
     assert.ok(!(packed.oauth2?.scopes || []).includes(G.SCOPE), 'no Calendar scope while the switch is off');
     assert.match(execFileSync('unzip', ['-p', zip, 'lib/gcal.js']).toString(), /\n {2}const ON = false;\n/);
     const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
