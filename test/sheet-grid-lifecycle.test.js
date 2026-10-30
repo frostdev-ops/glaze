@@ -20,6 +20,7 @@ const frame = (options = {}) => {
     el.insertBefore = (child, at) => { if (at) at.before(child); else el.append(child); };
     el.setSelectionRange = (start, end) => { el.selectionStart = start; el.selectionEnd = end; };
     el.select = () => el.setSelectionRange(0, el.value.length);
+    el.matches = (selector) => require('./stand-in-dom.js').matches(el, selector);
     el.classList = { toggle() {} };
     el.scrollLeft = el.scrollTop = 0;
     el.box = { left: 0, top: 0, width: 640, height: 400 };
@@ -77,4 +78,14 @@ test('Escape then Tab or Shift+Tab releases the grid to native keyboard focus na
   assert.ok(!f.key('Tab').defaultPrevented, 'Tab can reach the sheet tabs');
   f.key('Escape');
   assert.ok(!f.key('Tab', { shiftKey: true }).defaultPrevented, 'Shift+Tab can reach the formula bar and toolbar');
+});
+
+test('the format menu lets keyboard users Tab from presets to its custom input', () => {
+  const f = frame();
+  const format = f.el('gx-format'); format.focus(); f.fire(format, 'click');
+  const menu = f.doc.querySelector('.gx-menu'), preset = menu.querySelector('button');
+  preset.focus();
+  f.fire(preset, 'keydown', { key: 'Tab' });
+  assert.equal(f.doc.activeElement?.id, 'gx-fmt-code');
+  assert.ok(menu.isConnected);
 });
