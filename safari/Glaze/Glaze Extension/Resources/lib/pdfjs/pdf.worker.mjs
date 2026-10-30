@@ -68451,6 +68451,12 @@ class PDFEditor {
         reservePageSlot(newPageIndex);
         promises.push(document.getPage(i).then(page => {
           this.oldPages[newPageIndex] = new PageData(page, documentData);
+          // scripts/vendor-pdfjs.sh: the entry's rotations[i] turns source page i further clockwise.
+          const extraRotate = pageInfo.rotations?.[i] ?? 0;
+          if (!Number.isInteger(extraRotate) || extraRotate % 90 !== 0) {
+            throw new Error("extractPages: invalid rotation.");
+          }
+          this.oldPages[newPageIndex].extraRotate = (extraRotate % 360 + 360) % 360;
         }));
       }
     }
@@ -69543,7 +69549,8 @@ class PDFEditor {
       documentData,
       annotations,
       pointingNamedDestinations,
-      copyLevel
+      copyLevel,
+      extraRotate
     } = this.oldPages[pageIndex];
     this.currentDocument = documentData;
     const {
@@ -69572,7 +69579,7 @@ class PDFEditor {
     }
     const lastRef = this.newRefCount;
     await this.#collectDependencies(pageDict, false, xref);
-    pageDict.set("Rotate", rotate);
+    pageDict.set("Rotate", (rotate + extraRotate) % 360);
     pageDict.set("MediaBox", mediaBox);
     for (const boxName of ["CropBox", "BleedBox", "TrimBox", "ArtBox"]) {
       const box = page.getBoundingBox(boxName);
