@@ -108,6 +108,9 @@ const fixture = () => {
     await page.click(`.gd-card[data-key="${key}"] .gd-title`);
     await until(() => page.evaluate(() => document.querySelectorAll('.pdfViewer .page').length === 3 && !!document.querySelector('.pdfViewer .page[data-page-number="1"] canvas')), 'three pages');
     check(page.url().endsWith(`papers.html?pdf=${encodeURIComponent(key)}`), 'the viewer is the card\'s address');
+    // pdf.js's words come from Glaze's catalogue (lib/pdf-l10n.js), set as its elements are added.
+    const landmark = await until(() => page.evaluate(() => document.querySelector('.pdfViewer .page[data-page-number="2"]')?.getAttribute('aria-label')), 'page landmarks');
+    check(landmark === 'Page 2', `each page is a landmark named in Glaze's words (${landmark})`);
     check(workers.some((u) => u.endsWith('/lib/pdfjs/pdf.worker.mjs')), `pdf.js runs in its module worker (${workers.join(', ')})`);
     const chrome1 = await page.evaluate(() => ({ title: document.querySelector('.gp-top h1 input, .gp-top h1')?.value ?? document.querySelector('.gp-top h1')?.textContent, back: document.querySelector('.gp-top a')?.getAttribute('href'), mode: document.documentElement.dataset.mode }));
     check(chrome1.title === 'Field trip form' && chrome1.back === 'papers.html' && chrome1.mode === 'pdf', `the top bar: Documents, the title (${JSON.stringify(chrome1)})`);
