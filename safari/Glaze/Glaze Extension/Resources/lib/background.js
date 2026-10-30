@@ -3157,10 +3157,17 @@ const gcalOps = {
     return { ok: !!g?.cal };
   },
   // drop: also delete the Glaze calendar; if that fails, nothing changes. Then the grant is revoked, Chrome forgets its
-  // tokens and Glaze its state. → revoked: whether Google confirmed (false with no token to revoke: had).
+  // tokens and Glaze its state. → revoked: whether Google confirmed (false with no token to revoke: had). While Google Drive
+  // is connected (lib/google.js) it holds the same grant, and a revocation would end its access too: only Calendar's state
+  // goes, and shared tells Settings to keep the identity permission.
   disconnect: async (m) => {
     const g = await gcalState();
     if (m.drop === true && g?.cal) await GZ_GCAL.remove(gcalEnv, g.cal);
+    if (typeof (await chrome.storage.local.get('google')).google?.email === 'string') {
+      await chrome.storage.local.remove(['gcal', 'gcalSync']);
+      serial(ensure);
+      return { ok: true, revoked: false, had: false, shared: true };
+    }
     const token = await gcalEnv.token().catch(() => null);
     const revoked = !!token && await GZ_GCAL.revoke(gcalEnv, token);
     await Promise.resolve().then(() => chrome.identity.clearAllCachedAuthTokens()).catch(() => {});
@@ -3254,9 +3261,10 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // pages. Loaded the first time one asks; nothing runs for someone who never connects. The token stays here.
 globalThis.addEventListener?.('install', () => importScripts('oauth.js', 'google-config.js', 'google.js'));
 let google = null;
+const googleLib = () => { if (!globalThis.GZ_GOOGLE) importScripts('oauth.js', 'google-config.js', 'google.js'); return GZ_GOOGLE; };
 const openGoogle = () => {
   if (!google) {
-    if (!globalThis.GZ_GOOGLE) importScripts('oauth.js', 'google-config.js', 'google.js');
+    googleLib();
     const protocol = new URL(chrome.runtime.getURL('')).protocol;
     google = GZ_GOOGLE.create({
       config: GZ_GOOGLE_CONFIG, flow: GZ_GOOGLE.flowOf({ protocol, brands: navigator.userAgentData?.brands }), firefox: protocol === 'moz-extension:',
@@ -3273,6 +3281,8 @@ const googlePage = (s) => s.id === chrome.runtime.id && typeof s.url === 'string
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:google' || !['status', 'connect', 'disconnect', 'pick'].includes(m.op)) return;
   if (!(m.op === 'pick' ? googlePage(s) : fromEditor(s))) { reply({ ok: false, why: 'sender' }); return; }
+  googleLib();
+  if (!GZ_GOOGLE.ON) { reply({ ok: false, why: 'off' }); return; } // the build-time switch (lib/google.js)
   Promise.resolve().then(() => openGoogle()[m.op]()).then(reply, () => reply({ ok: false, why: 'network' }));
   return true;
 });

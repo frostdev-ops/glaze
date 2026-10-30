@@ -1148,8 +1148,8 @@ GZ_UI.load().then((s) => {
       if ($('#gcal-bye').returnValue !== 'ok') return $('#gcal-disconnect').focus();
       const r = await gcalOp({ op: 'disconnect', drop: $('#gcal-drop').checked });
       if (!r.ok) return hint(t("Couldn't delete the Glaze calendar, so nothing changed. Try again, or disconnect without deleting it."), true);
-      // Nothing stays behind: the permission goes too, until the next Connect asks again.
-      await chrome.permissions.remove({ permissions: ['identity'] }).catch(() => {});
+      // Nothing stays behind: the permission goes too, until the next Connect asks again, unless Google Drive still uses it.
+      if (!r.shared) await chrome.permissions.remove({ permissions: ['identity'] }).catch(() => {});
       gcalRender(null);
       $('#gcal-connect').focus();
       hint(r.had && !r.revoked ? t("Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.") : t('Disconnected.'), r.had && !r.revoked);
@@ -1174,6 +1174,8 @@ GZ_UI.load().then((s) => {
     // Google's own screen, from the worker.
     $('#gdrive-connect').addEventListener('click', async (e) => {
       if (!e.isTrusted || gdBusy) return;
+      // Settings framed in a school's page may have no permissions API (Firefox): its own tab asks, at this section.
+      if (typeof chrome.permissions?.request !== 'function') return GZ_SITE.elsewhere ? GZ_SITE.elsewhere(e.currentTarget) : hint(t("Glaze needs the browser's sign-in permission to connect."), true);
       gdBusy = true;
       try {
         const asked = chrome.permissions.request({ permissions: ['identity'] });
