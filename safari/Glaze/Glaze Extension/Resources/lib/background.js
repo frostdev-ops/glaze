@@ -1637,6 +1637,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // courses and the due list Glaze read there (the student's own notes and tasks stay); Reset everything empties the lists and
 // the Not nows. Pages open on a site removed keep Glaze until they reload, refused by every check above meanwhile.
 const forget = async (origin) => {
+  mcpFiles(); await GZ_MCP_ASSIGN.clear({ local: chrome.storage.local }, origin);
   const u = new URL(origin);
   const got = await chrome.storage.local.get([...LMS, 'seenCourses', 'courseSlots', 'todoCache']);
   const patch = {};
@@ -1659,6 +1660,7 @@ const forget = async (origin) => {
   return true;
 };
 const forgetAll = async () => {
+  mcpFiles(); await GZ_MCP_ASSIGN.clear({ local: chrome.storage.local });
   const all = await chrome.storage.local.get(null), origins = new Set();
   for (const kind of LMS) for (const value of Array.isArray(all[kind]) ? all[kind] : []) {
     try { origins.add(new URL(value).origin); } catch { /* old invalid entry */ }
@@ -2364,7 +2366,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const MCP_BROWSER = SAFARI ? 'safari' : new URL(chrome.runtime.getURL('')).protocol === 'moz-extension:' ? 'firefox' : 'chrome';
 const agentFiles = () => importScripts('agent-frames.js', 'agent-link.js');
 const grantFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'mcp/grants.js');
-const mcpFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'ai/failure.js', 'ai/loop.js', 'modapi.js', 'modwidget.js', 'modbroker.js', 'modtools.js', 'mcp/grants.js', 'mcp/registry.js', 'mcp/tools-study.js', 'mcp/tools-grades.js', 'doc-home.js', 'writer-sources.js', 'writer-tools.js', 'mcp/writer.js', 'mcp/wire.js', 'mcp/approve.js', 'mcp/calls.js', 'mcp/modroute.js');
+const mcpFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'ai/failure.js', 'ai/loop.js', 'modapi.js', 'modwidget.js', 'modbroker.js', 'modtools.js', 'mcp/grants.js', 'mcp/registry.js', 'mcp/tools-study.js', 'mcp/tools-grades.js', 'doc-home.js', 'writer-sources.js', 'writer-tools.js', 'mcp/writer.js', 'mcp/tabs.js', 'mcp/tools-assign.js', 'mcp/wire.js', 'mcp/approve.js', 'mcp/calls.js', 'mcp/modroute.js');
 globalThis.addEventListener?.('install', () => { agentFiles(); mcpFiles(); });
 // The local setting is a UI mirror, writable by content scripts. Only an options message may persist consent in this
 // extension-origin database. A forged local on cannot reconnect a previously paired app after the owner switched off.
@@ -2393,7 +2395,9 @@ const MCP_KEEP = MCP_BROWSER === 'safari';
 
 // Group D's stubs: each step replaces its own here, and nothing else in this worker.
 // C11: an account's caches for a group read afresh through an open LMS tab → { ok, source: 'tab' }, or null with none open.
-const mcpRefresh = async (account, group, { signal, tool } = {}) => null;
+let mcpTabsMade = null;
+const mcpTabs = () => (mcpTabsMade ||= GZ_MCP_TABS.create({ tabs: chrome.tabs, scripting: chrome.scripting, quiet: modQuiet }));
+const mcpRefresh = (account, group, o) => mcpTabs().refresh(account, group, o);
 // C13: Writer's document tools that need an open Writer page (writer-mcp.js) reach it over port glaze:mcp-writer, admitted
 // with the AI port's sender rules while agent access is on (lib/mcp/writer.js pages) → the page's answer, or null with none.
 let mcpWriterHub = null;
@@ -2429,7 +2433,7 @@ let mcpMade = null, mcpLink = null;
 const mcpKept = new Map(); // Safari: c → { peer, snap }, as the last worker kept them, until its connection opens again
 const mcpCore = () => (mcpMade ||= (() => {
   if (typeof GZ_MCP_CALLS === 'undefined') mcpFiles();
-  if (!GZ_AI_TOOLS.get('accounts_list')) { GZ_MCP_STUDY.register(GZ_AI_TOOLS); GZ_MCP_GRADES.register(GZ_AI_TOOLS); }
+  if (!GZ_AI_TOOLS.get('accounts_list')) { const deps = { sync: chrome.storage.sync, tabs: mcpTabs() }; GZ_MCP_STUDY.register(GZ_AI_TOOLS, deps); GZ_MCP_GRADES.register(GZ_AI_TOOLS); GZ_MCP_ASSIGN.register(GZ_AI_TOOLS, deps); }
   if (!GZ_AI_TOOLS.get('documents_list')) GZ_MCP_WRITER.register(GZ_AI_TOOLS, { papers: (f) => (brokerTurn ||= GZ_CARDS.queue())(() => f(openPapers())), bridge: mcpWriter });
   mcpWriterPages().wake();
   const approve = GZ_MCP_APPROVE.create({ windows: chrome.windows, tabs: chrome.tabs, storage: { session: chrome.storage.session }, runtime: chrome.runtime,
@@ -2562,6 +2566,7 @@ const mcpConfig = async (m) => {
     if (typeof m.on !== 'boolean') return { ok: false, error: 'args' };
     await mcpConsent(m.on);
     await local.set({ mcp: { on: m.on } });
+    if (!m.on) { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); }
     return { ok: true, link: (await mcpEnsure()) ?? MCP_OFF };
   }
   if (m.op === 'activity') { const rows = (await local.get('mcpCalls')).mcpCalls; return { ok: true, rows: Array.isArray(rows) ? rows : [] }; }
@@ -2570,7 +2575,9 @@ const mcpConfig = async (m) => {
   const grants = mcpGrants();
   if (m.op === 'apps') return { ok: true, apps: await grants.list() };
   if (m.op === 'grant') return { ok: !!await grants.grant(m.app, m.group, m.on) };
-  return { ok: await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget()) };
+  const ok = await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget());
+  if (ok && m.op === 'forget') { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); }
+  return { ok };
 };
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:mcp-config') return;

@@ -21,7 +21,7 @@ const CALL = (id, name, args = {}) => ({ jsonrpc: '2.0', id, method: 'tools/call
 const EDITOR = { id: 'glaze', url: 'chrome-extension://x/options.html#agents', frameId: 0, origin: 'chrome-extension://x' };
 const ACCOUNT = `${C.CANVAS}/5`;
 const MOD = 'abcdefghijklmnop';
-const OWN = ['accounts_list', 'citation_insert', 'course_grades', 'courses_list', 'document_assignment', 'document_issues', 'document_read', 'document_sources', 'documents_list', 'fix_apply', 'grades_list', 'schedule_list', 'todo_list'];
+const OWN = ['accounts_list', 'assignment_read', 'assignments_list', 'citation_insert', 'course_grades', 'courses_list', 'document_assignment', 'document_issues', 'document_read', 'document_sources', 'documents_list', 'fix_apply', 'grades_list', 'schedule_list', 'todo_list', 'todo_mark_done'];
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, what, ms = 4000) => {
