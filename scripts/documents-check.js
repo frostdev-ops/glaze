@@ -1543,7 +1543,8 @@ const PROBE = ({ lang }) => {
       check(queued.length === 20 && queued.every((s) => s === 'Reading…'), `twenty dropped files each show a stage immediately (${JSON.stringify(queued)})`);
       await im.evaluate(() => __batchRead());
       await until(() => im.evaluate(() => !document.querySelector('.gd-pending')), 'batch imported', 60000);
-      check(await im.evaluate(() => [...document.querySelectorAll('.gd-card .gd-title')].filter((el) => /^Batch \d+$/.test(el.textContent)).length === 20), 'all twenty queued imports become their own documents');
+      const batch = await im.evaluate(() => ({ titles: [...document.querySelectorAll('.gd-card .gd-title')].map((el) => el.textContent).filter((title) => title.startsWith('Batch')), search: document.getElementById('gd-q').value }));
+      check(batch.titles.filter((title) => /^Batch \d+$/.test(title)).length === 20, `all twenty queued imports become their own documents (${JSON.stringify(batch)})`);
       await shot(im, 'import-done-1280-en.png');
       await im.close();
     }
