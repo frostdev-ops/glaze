@@ -64,7 +64,7 @@ const check = async (name, test) => {
 };
 
 (async () => {
-  const lock = env.lockPath();
+  const lock = require('./check-env.js').lockPath();
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-mcp-refresh-'));
   const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'gz-mcp-refresh'));
   fs.mkdirSync(out, { recursive: true });
@@ -74,14 +74,14 @@ const check = async (name, test) => {
       try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nmcp-refresh-check\n`);
-    const ext = env.staged(root, [`${ULTRA}/*`], scratch);
+    const ext = require('./check-env.js').staged(root, [`${ULTRA}/*`], scratch);
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
     const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
     fs.rmSync(path.join(ext, 'lib/background.js'));
     fs.writeFileSync(path.join(ext, 'lib/background.js'), wired(worker0) + SHIM);
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
+      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
     env.noFirstRun(context);
