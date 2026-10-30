@@ -101,15 +101,15 @@ test('the note, then the paper\'s text, as one plain insert Quill keeps', () => 
 
 test('the steps: Ultra\'s Submit is reachable only after every step before it, in turn; any failure ends the run', () => {
   let s = S.start({ text: true });
-  assert.deepEqual(s.plan, ['save', 'docx', 'attach', 'text', 'submit']);
-  assert.deepEqual(S.start({}).plan, ['save', 'docx', 'attach', 'submit'], 'no note or text: nothing written into Ultra\'s box');
+  assert.deepEqual(s.plan, ['save', 'build', 'attach', 'text', 'submit']);
+  assert.deepEqual(S.start({}).plan, ['save', 'build', 'attach', 'submit'], 'no note or text: nothing written into Ultra\'s box');
   assert.equal(S.may(s, 'submit'), false);
-  for (const step of ['save', 'docx', 'attach', 'text']) { assert.equal(S.step(s), step); s = S.advance(s, { step }); }
+  for (const step of ['save', 'build', 'attach', 'text']) { assert.equal(S.step(s), step); s = S.advance(s, { step }); }
   assert.equal(S.may(s, 'submit'), true);
   s = S.advance(s, { step: 'submit' });
   assert.equal(s.done, true);
   assert.equal(S.may(s, 'submit'), false, 'once: a finished run never offers Submit again');
-  for (const failAt of ['save', 'docx', 'attach', 'text']) {
+  for (const failAt of ['save', 'build', 'attach', 'text']) {
     let r = S.start({ text: true });
     while (S.step(r) !== failAt) r = S.advance(r, { step: S.step(r) });
     r = S.advance(r, { error: 'x' });

@@ -45,7 +45,7 @@ test('a brought file: a .docx asks, anything else is submitted as is under its o
   assert.equal(L.pagesOf('<Properties></Properties>'), 0);
   assert.deepEqual(L.start({ asis: true }).plan, ['attach', 'submit'], 'as is: nothing of the paper is saved or built');
   assert.deepEqual(L.start({ asis: true, text: true }).plan, ['attach', 'text', 'submit']);
-  assert.deepEqual(L.start({ text: true }).plan, ['save', 'docx', 'attach', 'text', 'submit'], 'the paper\'s own submit is unchanged');
+  assert.deepEqual(L.start({ text: true }).plan, ['save', 'build', 'attach', 'text', 'submit'], 'the paper\'s own submit is unchanged');
 });
 
 // Ultra's own file area, through the page's capture listener: whether Ultra hears it is whether the event went on.

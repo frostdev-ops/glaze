@@ -24,7 +24,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   const nf = (n) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(n);
   const SAYS = {
     save: 'The paper could not be saved. Nothing was submitted.',
-    docx: 'The .docx could not be made. Nothing was submitted.',
+    build: 'The .docx could not be made. Nothing was submitted.',
     upload: 'Ultra’s file upload isn’t on this page. Nothing was submitted.',
     attach: 'Ultra didn’t list the file as attached. Nothing was submitted. Use Blackboard editor to review or remove the upload.',
     text: 'The text didn’t go into Ultra’s text box. Nothing was submitted.',
@@ -245,8 +245,8 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         if (mine.cancelled || sheet !== mine || !same()) throw 'page';
         s = L().advance(s, { step: 'save' });
         let out;
-        try { out = built && built.doc === snapshot.doc && built.format === snapshot.format && built.key === snapshot.key ? built.out : await build(); } catch (e) { console.error(e); throw 'docx'; }
-        s = L().advance(s, { step: 'docx' });
+        try { out = built && built.doc === snapshot.doc && built.format === snapshot.format && built.key === snapshot.key ? built.out : await build(); } catch (e) { console.error(e); throw 'build'; }
+        s = L().advance(s, { step: 'build' });
         if (mine.cancelled || !same() || !L().may(s, 'attach') || sheet !== mine) throw 'page';
         const r = await send(run, { key: snapshot.key, name, bytes: out.bytes.slice().buffer, note: note.value, text, ...ultra, version: sending.version?.id ?? null });
         if (mine.cancelled || sheet !== mine) return;
