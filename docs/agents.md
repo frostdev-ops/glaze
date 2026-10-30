@@ -112,6 +112,7 @@ Settings → AI → Agents shows the helper's state, with **Copy** for a command
 | Ready | Connected. |
 | Starting… | Wait; the first time in Chrome, up to a minute. |
 | Allow Glaze to start the helper | Press **Allow**. |
+| Restart Glaze to start the helper | Press **Restart**. |
 | The helper is missing | Open the app bundle or run `npx glaze-mcp setup`. |
 | `npx glaze-mcp setup --extension-id <id>` | The helper doesn't let this copy of Glaze in, as with one loaded unpacked. Run the command shown. |
 | Update the helper: `npx glaze-mcp@latest setup` | |
