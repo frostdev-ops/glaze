@@ -39,8 +39,8 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     let at = null;
     try { at = new URL(bf.src); } catch { return null; }
     const read = (x) => { try { return JSON.parse(x.getAttribute('data-bbfile')); } catch { return null; } };
-    let el = [...document.querySelectorAll('#site-wrap [data-bbfile]')].find((x) => same(own(read(x)?.viewerUrl), at)) || null;
-    if (!el && same(own(read(bf.closest('[data-bbfile]'))?.viewerUrl), at)) el = bf.closest('[data-bbfile]');
+    const near = bf.closest('[data-bbfile]');
+    const el = same(own(read(near)?.viewerUrl), at) ? near : [...document.querySelectorAll('#site-wrap [data-bbfile]')].find((x) => same(own(read(x)?.viewerUrl), at)) || null;
     const j = el && read(el), viewer = own(j?.viewerUrl);
     if (!viewer || j.render !== 'inline') return null;
     const a = el.querySelector('a[href*="/bbcswebdav/"]'), href = own(a?.getAttribute('href') || '')?.href || '';
