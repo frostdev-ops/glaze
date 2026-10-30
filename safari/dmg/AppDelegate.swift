@@ -12,9 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
     private var deadline: Timer?
     private var updaterObservations: [NSKeyValueObservation] = []
     private var updateStatus = ""
+    private var agents: GlazeAgentHost?
 
     func application(_ application: NSApplication, open urls: [URL]) {
         // URL parameters never select a feed, file, action or installation target.
+        if urls.contains(where: { $0.absoluteString == GlazeAgentBridge.start }) { startAgents() }
         guard urls.contains(where: { $0.absoluteString == "io.frostdev.glaze-update://check" }) else { return }
         NSLog("Glaze update: private URL received, launched=%d", launched)
         pendingCheck = true
@@ -33,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
             item.target = self
             appMenu.insertItem(item, at: min(1, appMenu.items.count))
         }
-        driver.unexpectedExtraction = { [weak self] in self?.finishHidden("unexpected interactive extraction") }
+        driver.unexpectedExtraction = { [weak self] in self?.finishHidden("unexpected interactive extraction", force: true) }
         if notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true {
             showGuide()
         } else {
@@ -46,6 +48,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
               NSApp.activationPolicy().rawValue, NSApp.isActive, NSApp.windows.count)
         if pendingCheck { checkFromExtension() }
         else if userSession { startUpdater(background: false) }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) { agents?.stop() }
+
+    /// Safari's agent host (GlazeAgentHost.swift), started by the extension's private URL. While it runs, a hidden launch
+    /// stays up; it ends once no Safari worker has sent anything for 10 minutes.
+    private func startAgents() {
+        guard agents == nil else { return }
+        guard let host = GlazeAgentHost.safari(), host.start() else { return NSLog("Glaze agents: unavailable") }
+        NSLog("Glaze agents: started")
+        host.onIdle = { [weak self] in
+            guard let self else { return }
+            self.agents?.stop()
+            self.agents = nil
+            if self.updater?.sessionInProgress != true { self.finishHidden("agents idle") }
+        }
+        agents = host
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -163,12 +182,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
         menuItem.action != #selector(checkForUpdatesByUser) || updater?.canCheckForUpdates == true
     }
 
-    private func finishHidden(_ reason: String) {
+    /// force: even while agents keep the app up.
+    private func finishHidden(_ reason: String, force: Bool = false) {
         NSLog("Glaze update: %@, user=%d", reason, userSession)
-        guard !userSession else { return }
+        guard !userSession, force || agents == nil else { return }
         DispatchQueue.main.async { [weak self] in
             // A normal launch can open the guide before this queued termination runs.
-            guard let self, !self.userSession else { return }
+            guard let self, !self.userSession, force || self.agents == nil else { return }
             NSApp.terminate(nil)
         }
     }
