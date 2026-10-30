@@ -4,7 +4,8 @@
 // Regenerate on a Mac with Excel after changing the cases, as the one heavy job running:
 //   nice -n 10 node scripts/sheet-excel-golden.js [family …]
 // Checked here: the cases themselves, the reader the harness reads workbooks with (test/helpers/xlsx-cache.cjs), the
-// workbooks and golden.json against the cases, and the engine against golden.json (todo until it is wired).
+// workbooks and golden.json against the cases, and the engine against golden.json: a case the engine can't answer yet
+// is a todo, with its reason in TODO below or, for a function not built, its name.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
@@ -352,20 +353,74 @@ test('engine comparison: 1e-12 relative, types strict', () => {
   }
 });
 
-// The engine's entry, (family, case) → the case's { t, v }: the family's inputs and formulas into a workbook, then the
-// case's cell. Not wired yet: the engine (GZ_SHEET_CALC.engine(wb).evaluate(text, sheetId, r, c), branch sheets/model)
-// is still under review.
-const run = null;
-const REASON = 'the engine (GZ_SHEET_CALC.engine(wb).evaluate on sheets/model) is not wired into run() yet';
+const M = require('../lib/sheet-model.js');
+const C = require('../lib/sheet-calc.js');
+const F = require('../lib/sheet-formula.js');
+const LIB = path.join(__dirname, '../lib');
+for (const f of fs.readdirSync(LIB).filter((name) => /^sheet-fn-.*\.js$/.test(name)).sort()) require(path.join(LIB, f));
+
+// A family's workbook as Glaze opens the one Excel saved: the inputs, then each case's formula at its cell, an array
+// formula where the file has one (a legacy array's range, or a dynamic-array formula over its own cell), calculated
+// once. → Map case id → the { t, v } its cell holds.
+const run = async (family, list) => {
+  const saved = await X.read(fs.readFileSync(path.join(DIR, `${family}.xlsx`)));
+  const wb = M.workbook({ date1904: !!families[family].date1904 });
+  wb.sheets[0].name = families[family].sheets[0];
+  for (const name of families[family].sheets.slice(1)) M.apply(wb, { op: 'addSheet', at: wb.sheets.length, name });
+  const place = (sheet, cell) => [M.getSheet(wb, sheet), ...M.cellPosition(cell)];
+  const put = (sheet, at, cell) => { const [sh, r, c] = place(sheet, at); M.apply(wb, { op: 'set', sheet: sh.id, r, c, cell }); };
+  for (const [at, v] of Object.entries(Object.assign({}, ...list.map((c) => c.inputs)))) {
+    const k = at.lastIndexOf('!');
+    if (v !== null) put(at.slice(0, k), at.slice(k + 1), v.f ? { t: 'n', v: 0, f: v.f.slice(1) } : input(v));
+  }
+  for (const c of list) {
+    const cell = saved.sheets.find((s) => s.name === c.sheet).cells.get(c.cell);
+    if (c.unsupported != null || cell.master) continue;
+    put(c.sheet, c.cell, { t: 'n', v: 0, f: c.formula.slice(1), ...(cell.kind === 'array' && { a: cell.ref }) });
+  }
+  C.engine(wb).recalc();
+  return new Map(list.map((c) => {
+    const [sh, r, k] = place(c.sheet, c.cell), x = M.cell(sh, r, k);
+    return [c.id, x && x.t !== 'z' ? { t: x.t, v: x.v } : { t: 'n', v: 0 }];
+  }));
+};
+// Excel caches an error named after Excel 2016 (#CALC!) as #VALUE! and shows its name, which is its answer.
+const excel = (g) => (g.t === 'e' && g.text !== g.v ? { t: 'e', v: g.text } : { t: g.t, v: g.v });
+
+// Cases the engine answers otherwise, and why. A function not built is a todo by itself.
+const TODO = {
+  'math.mod.8': 'MOD is #NUM! once |number/divisor| reaches 1.1259E+12 (Excel 16.114.1); the engine computes it',
+  'math.power.2': 'Excel gives a negative base to the power 1/odd its real root, -2 for POWER(-8,1/3); the engine #NUM!',
+  'text.len.9': 'Excel 16.114.1 counts a character outside the BMP once in LEN, LEFT, RIGHT and MID; the engine counts UTF-16 units',
+  'text.mid.5': 'Excel 16.114.1 counts a character outside the BMP once in LEN, LEFT, RIGHT and MID; the engine counts UTF-16 units',
+  'financial.rate.1': 'the engine\'s RATE stops 4e-12 short of the root that Excel reaches to 1e-13',
+  'financial.rate.4': 'the engine\'s RATE stops 4e-12 short of the root that Excel reaches to 1e-13',
+  'financial.rate.2': 'the root is 0, where Excel stops at -1.96e-10 and the engine at 1.1e-12: no relative test holds',
+  'financial.xirr.1': 'Excel\'s XIRR stops 6e-9 short of the root (its residual -1.7e-6) that the engine finds',
+  'financial.xirr.2': 'Excel\'s XIRR stops 6e-9 short of the root (its residual -1.7e-6) that the engine finds',
+  'format.text.24': 'Excel drops the minus sign of a negative number that shows as zero',
+  'format.text.40': 'Excel\'s fractions are continued-fraction convergents only (0.7 as ?/? is 2/3); numfmt also takes semiconvergents',
+  'format.text.41': 'Excel\'s fractions are continued-fraction convergents only (0.7 as ?/? is 2/3); numfmt also takes semiconvergents',
+  'format.text.69': 'under a [$-409] tag Excel writes A/P as AM or PM (live probe: "hh:mm A/P" alone gives P); numfmt writes P',
+  'format.text.88': 'TEXT with an empty format is "" for a number ("-" when negative) in Excel; the engine formats it as General',
+  'date1904.text.3': 'a 1904 workbook shows a negative date as a minus and the date of its magnitude; numfmt refuses it',
+};
+
+test('every todo names a case', () => {
+  assert.deepEqual(Object.keys(TODO).filter((id) => !golden[id]), []);
+});
 
 for (const [family, list] of byFamily) {
   test(`engine against Excel: ${family}`, async (t) => {
+    const got = await run(family, list);
     for (const c of list) {
       if (c.unsupported != null) continue;
-      await t.test(c.id, { todo: REASON }, () => {
-        if (!run) return;
-        const got = run(family, c);
-        assert.ok(same(golden[c.id], got), `${c.formula}: Excel ${JSON.stringify(golden[c.id])}, engine ${JSON.stringify(got)}`);
+      const want = excel(golden[c.id]), ok = same(want, got.get(c.id));
+      const missing = [...new Set(F.tokenize(c.formula).filter((k) => k.k === 'fn' && !C.fn(k.name)).map((k) => k.name))];
+      const todo = ok ? undefined : TODO[c.id] ?? (missing.length ? `not built: ${missing.join(', ')}` : undefined);
+      await t.test(c.id, { todo }, () => {
+        assert.ok(!(ok && TODO[c.id]), `${c.id} agrees with Excel now: drop its todo`);
+        assert.ok(ok, `${c.formula}: Excel ${JSON.stringify(want)}, engine ${JSON.stringify(got.get(c.id))}`);
       });
     }
   });
