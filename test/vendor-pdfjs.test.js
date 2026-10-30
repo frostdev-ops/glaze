@@ -61,6 +61,13 @@ test('no module makes code from text: no eval, and core-js keeps no Function fal
   }
 });
 
+test('the viewer keeps Fluent overlays without the HTML sinks Firefox Add-ons flags', () => {
+  const src = read('lib/pdfjs/pdf_viewer.mjs');
+  const sinks = /\.(?:inner|outer)HTML\s*=(?!=)|\binsertAdjacentHTML\s*\(|\bdocument\.write(?:ln)?\s*\(/;
+  const found = src.split('\n').flatMap((line, i) => sinks.test(line) ? [i + 1] : []);
+  assert.deepEqual(found, []);
+});
+
 // The worker's Brotli decoder ships no packed data (scripts/vendor-pdfjs-brotli.js): it reads Brotli's dictionary from
 // google/brotli's dictionary.bin beside it, and its tables are numbers. It still undoes real Brotli: Node's own
 // compressor, at its best setting, leans on that dictionary and its transforms.
