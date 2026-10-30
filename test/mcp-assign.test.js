@@ -253,3 +253,11 @@ test('a read begun during a rubric purge cannot recreate the cleared index', asy
   await reading;
   assert.deepEqual(s, {});
 });
+
+test('rubric numbers come back as the site means them, not with float noise (live Ultra, 2026-10-30: 0.7000000000000001)', () => {
+  const r = require('../lib/mcp/tools-assign.js').clean({ title: 'T', points: 5.000000000000001,
+    rubric: { title: 'R', total: 5, levels: [{ id: 'a', label: 'Proficient' }], criteria: [{ id: 'c', label: 'Create the first table', points: 0.14 * 5, weight: 14.000000000000002,
+      cells: [{ level: 'a', detail: '', value: 0.1 + 0.2 }] }] } });
+  assert.equal(r.points, 5);
+  assert.deepEqual([r.rubric.criteria[0].points, r.rubric.criteria[0].weight, r.rubric.criteria[0].cells[0].value], [0.7, 14, 0.3]);
+});
