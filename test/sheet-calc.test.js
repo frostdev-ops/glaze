@@ -600,3 +600,12 @@ test('a function lifted over an array gives values: a one-cell reference\'s, an 
     ['IFERROR(TESTREF({1,2},2),"e")', 'e'], ['SUM(IFERROR(TESTREF({1,2},2),0))', 0],
   ]);
 });
+
+// Excel 16.114.1, bisected: MOD is #NUM! once the quotient reaches 1.1259E+12 in size, whatever the two numbers are.
+test('MOD refuses a quotient of 1.1259E+12 or more', () => {
+  cases(book(), [
+    ['MOD(1E+15,7)', '#NUM!'], ['MOD(1125899999999,1)', 0], ['MOD(1125900000000,1)', '#NUM!'], ['MOD(-1125900000000,1)', '#NUM!'],
+    ['MOD(1125900000000,-1)', '#NUM!'], ['MOD(2251799999998,2)', 0], ['MOD(2251800000000,2)', '#NUM!'], ['MOD(2^30,2^-10)', 0], ['MOD(2^30,2^-11)', '#NUM!'],
+    ['MOD(1,2^-40)', 0], ['MOD(1,2^-41)', '#NUM!'], ['MOD(2^40+0.5,1)', 0.5],
+  ]);
+});
