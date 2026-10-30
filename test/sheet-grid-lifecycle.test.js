@@ -8,6 +8,8 @@ require('../lib/sheet-fn-math.js');
 const source = fs.readFileSync(require.resolve('../sheet-grid.js'), 'utf8');
 const KEY = 'doc:00000000-0000-4000-8000-000000000001';
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
+// A save in flight (a version packed through CompressionStream first) lands when it lands: wait for what it stores.
+const until = async (fn, ms = 5000) => { const end = Date.now() + ms; for (;;) { const v = await fn(); if (v || Date.now() > end) return v; await new Promise((ok) => setTimeout(ok, 5)); } };
 const frame = (options = {}) => {
   const doc = { activeElement: null, hidden: false, listeners: [] }, life = {}, lives = [], changes = new Set(), timers = new Map(), data = {};
   let tick = 0;
@@ -65,8 +67,7 @@ test('beforeunload protects uncommitted cell text with the browser prompt and sa
   const leaving = f.unload();
   assert.equal(leaving.prevented, true);
   assert.equal(leaving.returnValue, '', 'only the browser supplies prompt text');
-  await settle();
-  const got = await SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY);
+  const got = await until(() => SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY));
   assert.equal(got.wb.sheets[0].rows.get(0).get(0).v, 'draft');
   assert.equal(f.unload().prevented, false);
 });
@@ -205,8 +206,7 @@ test('embedded Close waits for the cell being written, and leaving the page comm
   assert.equal(await read(), 'draft');
   f.el('gx-grid').focus(); f.type('gone');
   f.life.pagehide({ persisted: false });
-  await settle();
-  assert.equal(await read(), 'gone', 'pagehide (an iframe removed) keeps the open cell');
+  assert.equal(await until(async () => (await read()) === 'gone' && 'gone'), 'gone', 'pagehide (an iframe removed) keeps the open cell');
 });
 
 test('unsaved work over another tab\'s write saves over it whole, keeping theirs as a version, instead of retrying forever', async () => {
