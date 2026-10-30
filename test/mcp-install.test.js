@@ -889,12 +889,14 @@ test('ids come only from explicit grants, never another manifest carrying our na
 });
 
 test('doctor reports a valid Chromium id that was never granted', async (t) => {
-  const home = scratch(t), ctx = mac(home, { node: process.execPath });
+  const home = scratch(t), ctx = mac(home, { node: nodeAt(t) });
   const dir = mk(AS(home), 'Google', 'Chrome', 'NativeMessagingHosts');
   await I.setup({ ...ctx, ids: [A] });
+  assert.equal((await D.run(ctx)).ok, true);
   const file = path.join(dir, `${HOST}.json`);
   fs.writeFileSync(file, JSON.stringify({ ...json(file), allowed_origins: [ORIGIN, `chrome-extension://${A}/`, `chrome-extension://${Z}/`] }));
-  assert.equal((await D.run(ctx)).ok, false);
+  const bad = await D.run(ctx);
+  assert.ok(bad.rows.some((r) => r.level === 'fail' && /lets in extension ids that setup was never given/.test(r.detail)), D.text(bad));
 });
 
 test('a shared Windows key can move between our browsers as they are installed', async (t) => {
@@ -938,9 +940,11 @@ test('batch launchers reject quote and line injection, preserve carets and perce
 });
 
 test('doctor rejects unsafe folders before running a node path and rejects extra Firefox ids', { skip: posixOnly('POSIX file modes') }, async (t) => {
-  const home = scratch(t), calls = [], ctx = mac(home, { node: process.execPath, run: async (...args) => { calls.push(args); return { stdout: 'v18.20.8' }; } });
+  const home = scratch(t), calls = [], ctx = mac(home, { node: nodeAt(t), run: async (...args) => { calls.push(args); return { stdout: 'v18.20.8' }; } });
   mk(AS(home), 'Firefox');
   await I.setup(ctx);
+  assert.equal((await D.run(ctx)).ok, true);
+  calls.length = 0;
   const root = path.join(AS(home), 'glaze-mcp');
   fs.chmodSync(root, 0o777);
   assert.equal((await D.run(ctx)).ok, false);
@@ -948,7 +952,8 @@ test('doctor rejects unsafe folders before running a node path and rejects extra
   fs.chmodSync(root, 0o700);
   const file = path.join(AS(home), 'Mozilla', 'NativeMessagingHosts', `${HOST}.json`);
   fs.writeFileSync(file, JSON.stringify({ ...json(file), allowed_extensions: [IDS.FIREFOX, 'unasked@example.org'] }));
-  assert.equal((await D.run(ctx)).ok, false);
+  const bad = await D.run(ctx);
+  assert.ok(bad.rows.some((r) => r.level === 'fail' && /must let in only/.test(r.detail)), D.text(bad));
 });
 
 test('doctor never executes a node from an unsafe file or any unsafe path ancestor', { skip: posixOnly('POSIX file modes') }, async (t) => {
