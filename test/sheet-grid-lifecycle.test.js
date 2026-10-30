@@ -262,3 +262,17 @@ test('a write that leaves the cells alone (a submit checkpoint) keeps undo; anot
   assert.equal(f.el('gx-formula').value, 'theirs');
   assert.equal(f.el('gx-undo').disabled, true, 'their workbook comes without this one\'s undo');
 });
+
+test('while an input method composes, Enter, Tab, Escape and the arrows stay with it', () => {
+  const f = frame();
+  f.type('かな');
+  for (const key of ['Enter', 'Tab', 'Escape', 'ArrowDown']) {
+    const e = f.key(key, { isComposing: true, keyCode: 229 });
+    assert.ok(!e.defaultPrevented, `${key} reaches the input method`);
+    assert.equal(f.el('gx-edit').hidden, false, `${key} leaves the cell open`);
+  }
+  assert.equal(f.el('gx-name').value, 'A1');
+  f.key('Enter');
+  assert.equal(f.wb.sheets[0].rows.get(0).get(0).v, 'かな', 'Enter after it commits');
+  assert.equal(f.el('gx-name').value, 'A2');
+});

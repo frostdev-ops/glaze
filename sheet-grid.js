@@ -893,6 +893,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     };
     const editKeys = (e) => {
       if (!editing) return;
+      // An input method's keys (Enter takes a candidate, Escape drops one) are its own while it composes.
+      if (e.isComposing || e.keyCode === 229) { e.stopPropagation(); return; }
       const s = editing.surface;
       if (!complete.hidden && ['ArrowDown', 'ArrowUp', 'Tab'].includes(e.key) && !e.altKey) {
         const items = [...complete.children];
