@@ -266,3 +266,27 @@ test('LINEST accepts 250,000 observations', () => {
   assert.ok(Math.abs(fit[0][0] - 3) < 1e-12);
   assert.ok(Math.abs(fit[0][1] - 2) < 1e-7);
 });
+
+test('distribution endpoints and gamma range limits agree with Excel', () => {
+  const e = book();
+  cases(e, [['CHISQ.DIST(0,1,FALSE)', '#NUM!'], ['CHISQ.DIST(0,2,FALSE)', 0.5], ['CHISQ.DIST(0,3,FALSE)', 0],
+    ['GAMMA(1.1E-308)', '#NUM!'], ['GAMMALN(1E-308)', '#NUM!']]);
+  close(e, [['GAMMALN(1E-307)', 706.893623549172]]);
+});
+
+test('incomplete distributions converge before returning and preserve small tails', () => {
+  const e = book();
+  close(e, [['GAMMA.DIST(1E10,1E10,1,TRUE)', 0.5000013298076014], ['CHISQ.DIST(1E10,1E10,TRUE)', 0.5000018806319452],
+    ['POISSON.DIST(10000000000,10000000000,TRUE)', 0.5000026596152026], ['BETA.DIST(0.5,1E10,1E10,TRUE)', 0.5]]);
+  const S = require('../lib/sheet-fn-stats2.js');
+  for (const [a, x, q] of [[1e-10, 1, 2.1938393441796778e-11], [1e-8, 0.5, 5.597735977099587e-9]]) {
+    const got = S.incgamma(a, x)[1];
+    assert.ok(Math.abs(got - q) <= Math.abs(q) * 1e-12, `${a}, ${x}: Q=${got}; 60-digit reference ${q}`);
+  }
+  assert.throws(() => S.incgamma(1e30, 1e30), (error) => error === C.lib.ERR.NUM, 'iteration exhaustion must be explicit');
+});
+
+test('inverse brackets retain finite roots in both extreme tails', () => {
+  close(book(), [['T.INV.2T(1E-100,1)', 6.366197723675814e99], ['F.INV.RT(1E-100,1,1)', 4.052847345693495e199],
+    ['GAMMA.INV(1E-100,0.5,1)', 7.853981633974483e-201], ['BETA.INV(1E-100,0.5,2)', 4.444444444444384e-201]]);
+});
