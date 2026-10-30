@@ -290,7 +290,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
     asked: 0, hold: null,
     getAuthToken: async ({ interactive, scopes }) => {
       assert.equal(interactive, false, 'the worker never prompts');
-      assert.deepEqual(scopes, [G.SCOPE], 'Calendar asks for its own scope only, never the manifest\'s list (Drive\'s are there too)');
+      assert.deepEqual(scopes && [...scopes], [G.SCOPE], 'Calendar asks for its own scope only, never the manifest\'s list (Drive\'s are there too)'); // the worker's array is of the vm's realm
       identity.asked++;
       await identity.hold;
       return { token: 'tok-1', grantedScopes: [G.SCOPE] };
