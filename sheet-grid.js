@@ -160,8 +160,21 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     return rows;
   };
   const writeDelimited = (rows, delimiter) => rows.map((row) => row.map((v) => (/["\r\n]/.test(v) || v.includes(delimiter) ? `"${v.replace(/"/g, '""')}"` : v)).join(delimiter)).join('\r\n');
-  // A CSV's delimiter: the one of , ; and tab its first line has most of.
-  const sniff = (text) => { const line = String(text).replace(/^﻿/, '').split(/\r?\n/, 1)[0]; return [',', ';', '\t'].map((d) => [d, line.split(d).length]).sort((a, b) => b[1] - a[1])[0][0]; };
+  // A CSV's delimiter: count separators in the first record, outside quoted fields (which may span lines).
+  const sniff = (text) => {
+    const counts = new Map([[',', 0], [';', 0], ['\t', 0]]);
+    text = String(text).replace(/^﻿/, '');
+    let quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') { if (quoted && text[i + 1] === '"') i++; else quoted = !quoted; }
+      else if (!quoted) {
+        if (ch === '\r' || ch === '\n') break;
+        if (counts.has(ch)) counts.set(ch, counts.get(ch) + 1);
+      }
+    }
+    return [...counts].sort((a, b) => b[1] - a[1])[0][0];
+  };
   const sig = (s) => { s = String(s).replace(/\r\n?/g, '\n').replace(/\n$/, ''); let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(16).padStart(8, '0'); };
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   // What a copy puts on the clipboard: the shown text as TSV (a field quoted only for a tab, a line break or a leading quote,
