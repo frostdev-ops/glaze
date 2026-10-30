@@ -171,6 +171,20 @@ test('MCP loads only while it is on: the link at worker start, the rest with the
   await connected(on);
 });
 
+// A student who never turned agent access on: removing a site, or Reset everything, clears the kept assignment reads with
+// lib/mcp/tools-assign.js alone, and leaves storage as it was.
+test('a site removal or Reset everything with agent access never on loads only the assignment cache\'s file and adds nothing', async () => {
+  const env = boot({ store: store0({ on: false, local: { canvas: [C.CANVAS] } }) });
+  await env.w.settle();
+  const before = Object.keys(env.store.local).sort();
+  await inWorker(env.w, `forget(${JSON.stringify(C.CANVAS)})`);
+  await inWorker(env.w, 'forgetAll()');
+  assert.equal(inWorker(env.w, 'typeof GZ_MCP_ASSIGN'), 'object');
+  for (const g of ['GZ_MCP_CALLS', 'GZ_MCP_WIRE', 'GZ_MCP_REGISTRY', 'GZ_MCP_APPROVE', 'GZ_AI_TOOLS', 'GZ_MODBROKER']) assert.equal(inWorker(env.w, `typeof ${g}`), 'undefined', g);
+  assert.deepEqual(Object.keys(env.store.local).filter((k) => k.startsWith('mcp')), []);
+  assert.ok(Object.keys(env.store.local).every((k) => before.includes(k)), 'nothing new kept');
+});
+
 test('frames in give replies out: initialize, ping and an unknown method, each on its own connection', async () => {
   const env = boot();
   const host = nodeHost(env.w);
