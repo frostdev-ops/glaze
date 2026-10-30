@@ -307,6 +307,7 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
       const G = start();
       G.write(`${PING(7)}\n`);
       await frame((x) => x.f.t === 'line' && x.f.d === PING(7), 'the last agent\'s line');
+      await frame((x) => x.f.t === 'open', 'the last agent\'s open');
       // An agent slow to read still gets the line the worker sent just before its bye (agent access off).
       const late = R.connect(rec.path);
       late.on('error', () => {});
@@ -320,7 +321,7 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
       late.on('data', (c) => { got += c; });
       const gone = new Promise((r) => late.on('close', () => r(true)));
       late.resume();
-      assert.equal(await Promise.race([gone, new Promise((r) => setTimeout(r, 15000, false))]), true, 'the late reader is let go');
+      assert.equal(await Promise.race([gone, new Promise((r) => setTimeout(r, 15000, false))]), true, `the late reader is let go (${got.length} characters read)`);
       assert.equal(got.length, last.length + 1);
       assert.equal(got, `${last}\n`);
       assert.equal(await G.exit, 1);
