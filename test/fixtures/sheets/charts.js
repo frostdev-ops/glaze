@@ -1,6 +1,7 @@
 // A workbook with charts as Excel writes them (its element order, namespaces, caches and two-cell anchors), built with
 // lib/zip.js for test/sheet-chart*.test.js and scripts/sheets-check.js: sheet Data's months, sales, costs and an x/y
-// pair; a clustered column, a line, a pie and a scatter chart, and a radar chart Glaze draws as a frame.
+// pair; a clustered column, a line, a pie and a scatter chart, and a radar chart Glaze draws as a frame; a 3-D pie (its
+// second slice exploded, percent labels) and a 3-D clustered column chart (walls, value labels) for workbooks that ask.
 const Z = require('../../../lib/zip.js');
 const enc = new TextEncoder();
 const RT = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -19,8 +20,19 @@ const ser = (i, col, cat, vals, extra = '') => `<c:ser><c:idx val="${i}"/><c:ord
   + `<c:cat><c:strRef><c:f>Data!$A$2:$A$5</c:f>${strCache(cat)}</c:strRef></c:cat><c:val><c:numRef><c:f>Data!$${col}$2:$${col}$5</c:f>${numCache(vals)}</c:numRef></c:val></c:ser>`;
 const axes = (cat = 'catAx') => `<c:${cat}><c:axId val="10"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="20"/><c:crosses val="autoZero"/>${cat === 'catAx' ? '<c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/>' : '<c:crossBetween val="midCat"/>'}</c:${cat}>`
   + '<c:valAx><c:axId val="20"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="10"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>';
-const space = (title, plot, legend = 'b') => `${HEAD}<c:chartSpace ${C_NS}><c:date1904 val="0"/><c:lang val="en-US"/><c:roundedCorners val="0"/><c:chart>${title ? rich(title) : ''}<c:autoTitleDeleted val="${title ? 0 : 1}"/>`
+// pre: what Excel writes between autoTitleDeleted and the plot area (a 3-D chart's view3D, floor and walls).
+const space = (title, plot, legend = 'b', pre = '') => `${HEAD}<c:chartSpace ${C_NS}><c:date1904 val="0"/><c:lang val="en-US"/><c:roundedCorners val="0"/><c:chart>${title ? rich(title) : ''}<c:autoTitleDeleted val="${title ? 0 : 1}"/>${pre}`
   + `<c:plotArea><c:layout/>${plot}</c:plotArea>${legend ? `<c:legend><c:legendPos val="${legend}"/><c:overlay val="0"/></c:legend>` : ''}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
+
+// Excel's 3-D parts: c:view3D, then the floor and walls (thickness 0; no spPr is the default fill, noFill none).
+const view3D = (x, y, rAng) => `<c:view3D><c:rotX val="${x}"/><c:rotY val="${y}"/><c:depthPercent val="100"/><c:rAngAx val="${rAng}"/></c:view3D>`;
+const noFill = '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/><a:sp3d/></c:spPr>';
+const walls = (floor, side, back) => `<c:floor><c:thickness val="0"/>${floor}</c:floor><c:sideWall><c:thickness val="0"/>${side}</c:sideWall><c:backWall><c:thickness val="0"/>${back}</c:backWall>`;
+const flags = (o) => ['showLegendKey', 'showVal', 'showCatName', 'showSerName', 'showPercent', 'showBubbleSize'].map((k) => `<c:${k} val="${o[k] ? 1 : 0}"/>`).join('');
+const slice3D = (i, k, ex = '') => `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/>${ex}<c:spPr><a:solidFill><a:schemeClr val="accent${k}"/></a:solidFill><a:ln w="25400"><a:solidFill><a:schemeClr val="lt1"/></a:solidFill></a:ln><a:effectLst/><a:sp3d contourW="25400"><a:contourClr><a:schemeClr val="lt1"/></a:contourClr></a:sp3d></c:spPr></c:dPt>`;
+const PIE3D_LABELS = `<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr>${flags({ showPercent: 1 })}<c:showLeaderLines val="1"/></c:dLbls>`;
+const COL3D_LABELS = `<c:dLbls><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr>${flags({ showVal: 1 })}</c:dLbls>`;
+const fill3D = (k) => `<c:spPr><a:solidFill><a:schemeClr val="accent${k}"/></a:solidFill><a:ln><a:noFill/></a:ln><a:effectLst/><a:sp3d/></c:spPr><c:invertIfNegative val="0"/>`;
 
 const CHARTS = {
   column: space('Sales by month', `<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>${ser(0, 'B', MONTHS, SALES, fill(1))}${ser(1, 'C', MONTHS, COSTS, fill(2))}<c:gapWidth val="219"/><c:overlap val="-27"/><c:axId val="10"/><c:axId val="20"/></c:barChart>${axes()}`),
@@ -29,9 +41,15 @@ const CHARTS = {
   scatter: space('Spread', `<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:strRef><c:f>Data!$E$1</c:f>${strCache(['y'])}</c:strRef></c:tx><c:spPr><a:ln w="25400" cap="rnd"><a:noFill/><a:round/></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:schemeClr val="accent1"/></a:solidFill></c:spPr></c:marker>`
     + `<c:xVal><c:numRef><c:f>Data!$D$2:$D$5</c:f>${numCache(XS)}</c:numRef></c:xVal><c:yVal><c:numRef><c:f>Data!$E$2:$E$5</c:f>${numCache(YS)}</c:numRef></c:yVal><c:smooth val="0"/></c:ser><c:axId val="10"/><c:axId val="20"/></c:scatterChart>${axes('valAx').replace('<c:axPos val="b"/>', '<c:axPos val="b"/>')}`, null),
   radar: space('Radar view', `<c:radarChart><c:radarStyle val="marker"/><c:varyColors val="0"/>${ser(0, 'B', MONTHS, SALES)}<c:axId val="10"/><c:axId val="20"/></c:radarChart>${axes()}`),
+  pie3d: space('Share in 3-D', `<c:pie3DChart><c:varyColors val="1"/>${ser(0, 'B', MONTHS, SALES, [1, 2, 3, 4].map((k, i) => slice3D(i, k, i === 1 ? '<c:explosion val="18"/>' : '')).join('') + PIE3D_LABELS)}`
+    + `<c:dLbls>${flags({})}<c:showLeaderLines val="1"/></c:dLbls></c:pie3DChart>`, 'r', view3D(30, 0, 0) + walls('', noFill, noFill)),
+  col3d: space('Sales in 3-D', `<c:bar3DChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>${ser(0, 'B', MONTHS, SALES, fill3D(1) + COL3D_LABELS)}${ser(1, 'C', MONTHS, COSTS, fill3D(2))}`
+    + `<c:dLbls>${flags({})}</c:dLbls><c:gapWidth val="150"/><c:shape val="box"/><c:axId val="10"/><c:axId val="20"/><c:axId val="0"/></c:bar3DChart>${axes()}`, 'b', view3D(15, 20, 1) + walls(noFill, '', '')),
 };
 // Where each sits: [from col, from row, to col, to row] (0-based cells).
 const PLACES = { column: [6, 1, 12, 15], line: [13, 1, 19, 15], pie: [6, 16, 12, 30], scatter: [13, 16, 19, 30], radar: [6, 31, 12, 45] };
+// The 3-D charts, in a workbook of their own (kinds: ['pie3d', 'col3d']).
+const PLACES_3D = { pie3d: [6, 1, 13, 18], col3d: [6, 19, 13, 36] };
 const anchor = ([c0, r0, c1, r1], i, name) => `<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>${c0}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r0}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${c1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>`
   + `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${i + 2}" name="${name}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId${i + 1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`;
 
@@ -53,7 +71,7 @@ const workbook = ({ kinds = ['column', 'line', 'pie', 'scatter', 'radar'], over 
     'xl/sharedStrings.xml': `${HEAD}<sst ${NS} count="${strings.length}" uniqueCount="${strings.length}">${strings.map((x) => `<si><t>${x}</t></si>`).join('')}</sst>`,
     'xl/worksheets/sheet1.xml': `${HEAD}<worksheet ${NS}><sheetData>${rows.join('')}</sheetData><drawing r:id="rId1"/></worksheet>`,
     'xl/worksheets/_rels/sheet1.xml.rels': rels([['rId1', 'drawing', '../drawings/drawing1.xml']]),
-    'xl/drawings/drawing1.xml': `${HEAD}<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${RT}">${kinds.map((k, i) => anchor(PLACES[k], i, `Chart ${i + 1}`)).join('')}</xdr:wsDr>`,
+    'xl/drawings/drawing1.xml': `${HEAD}<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${RT}">${kinds.map((k, i) => anchor(PLACES[k] ?? PLACES_3D[k], i, `Chart ${i + 1}`)).join('')}</xdr:wsDr>`,
     'xl/drawings/_rels/drawing1.xml.rels': rels(kinds.map((k, i) => [`rId${i + 1}`, 'chart', `../charts/chart${i + 1}.xml`])),
     ...Object.fromEntries(kinds.map((k, i) => [`xl/charts/chart${i + 1}.xml`, CHARTS[k]])),
     ...over,
@@ -85,4 +103,4 @@ const layerOn = (wb, sh = wb.sheets[0]) => {
   return CH.layer({ panes: { br: { el: { hidden: false }, inner: el(), fr: false, fc: false } }, wb: () => wb, sheet: () => sh, geo: () => geo, t: (s) => s });
 };
 
-module.exports = { fakeDom, layerOn, workbook, CHARTS, PLACES, MONTHS, SALES, COSTS, XS, YS, pack, rels, space, ser, axes, fill, rich, strCache, numCache, C_NS };
+module.exports = { fakeDom, layerOn, workbook, CHARTS, PLACES, PLACES_3D, MONTHS, SALES, COSTS, XS, YS, pack, rels, space, ser, axes, fill, rich, strCache, numCache, C_NS };
