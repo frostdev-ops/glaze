@@ -38,7 +38,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
   const define = (name, def) => {
     if (REGISTRY.has(name)) throw Error(`${name} is defined twice`);
     REGISTRY.set(name, { name, min: def.min ?? 0, max: def.max ?? CAP.args, p: def.p ?? ['v'], rep: def.rep ?? 1, errors: def.errors === true,
-      volatile: def.volatile === true || VOLATILE.has(name), fn: def.fn });
+      volatile: def.volatile === true || VOLATILE.has(name), prepare: def.prepare, fn: def.fn });
   };
   const fn = (name) => REGISTRY.get(name) ?? null;
   const kindAt = (def, i) => (i < def.p.length ? def.p[i] : def.p[def.p.length - def.rep + ((i - def.p.length) % def.rep)]);
@@ -381,6 +381,8 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       args[i] = kind === 'r' ? v : ctx.value(v);
       if (kind === 'v' && Array.isArray(args[i])) lifted = true;
     }
+    // A function may settle arguments whose array treatment depends on another argument (the table lookups' index).
+    if (def.prepare) def.prepare(args);
     if (!lifted) return invoke(def, args, ctx);
     const slots = args.map((v, i) => (kindAt(def, i) === 'v' ? v : null));
     return map(slots, (...xs) => element(invoke(def, xs.map((x, i) => (kindAt(def, i) === 'v' ? x : args[i])), ctx), ctx));
@@ -436,14 +438,26 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
     let info = analyses.get(ast);
     if (info) return info;
     info = { refs: [], names: [], fns: new Set(), opaque: false };
-    const walk = (n) => {
+    const walk = (n, locals = new Set()) => {
       if (n.k === 'ref') info.refs.push(n);
-      else if (n.k === 'name') info.names.push(n);
+      else if (n.k === 'name') { if (n.sheet || !locals.has(n.name.toLowerCase())) info.names.push(n); }
       else if (n.k === 'table' || n.k === 'ext') info.opaque = true;
       else if (n.k === 'fn') info.fns.add(n.name);
-      for (const x of n.args || n.items || []) walk(x);
-      if (n.a) walk(n.a);
-      if (n.b) walk(n.b);
+      // Binding positions are declarations. Each value sees the earlier locals; the final calculation sees them all.
+      // Defined names are analyzed separately by depend(), without these locals, as evalName() evaluates them.
+      if (n.k === 'fn' && n.name === 'LET' && n.args.length >= 3 && n.args.length % 2 === 1) {
+        const scope = new Set(locals);
+        for (let i = 0; i + 1 < n.args.length; i += 2) {
+          walk(n.args[i + 1], scope);
+          const name = n.args[i];
+          if (name.k === 'name' && !name.sheet) scope.add(name.name.toLowerCase());
+        }
+        walk(n.args.at(-1), scope);
+        return;
+      }
+      for (const x of n.args || n.items || []) walk(x, locals);
+      if (n.a) walk(n.a, locals);
+      if (n.b) walk(n.b, locals);
     };
     walk(ast);
     analyses.set(ast, info);
