@@ -186,3 +186,67 @@ test('the viewer runs no PDF scripts: its import of the form-script sandbox is c
   } finally { console.error = error; delete globalThis.window; }
   assert.deepEqual(said.map(([where, e]) => [where, e?.message]), [['setDocument:', 'PDF scripts are off in Glaze.']]);
 });
+
+// ---- extractPages, in node ----------------------------------------------------------------------------------------------
+// A tiny PDF: a page per entry, its label printed on it, with its own /Rotate or one its page tree gives every page.
+const pdfOf = (pages, { treeRotate } = {}) => {
+  const objects = ['<< /Type /Catalog /Pages 2 0 R >>', null, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+  const kids = [];
+  for (const { label = '', rotate } of pages) {
+    const text = label ? `BT /F1 24 Tf 20 20 Td (${label}) Tj ET` : '';
+    objects.push(`<< /Length ${text.length} >>\nstream\n${text}\nendstream`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 3 0 R >> >> /Contents ${objects.length} 0 R${rotate === undefined ? '' : ` /Rotate ${rotate}`} >>`);
+    kids.push(`${objects.length} 0 R`);
+  }
+  objects[1] = `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${kids.length}${treeRotate === undefined ? '' : ` /Rotate ${treeRotate}`} >>`;
+  let out = '%PDF-1.7\n';
+  const offsets = objects.map((body, i) => { const at = out.length; out += `${i + 1} 0 obj\n${body}\nendobj\n`; return at; });
+  const xref = out.length;
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((at) => `${String(at).padStart(10, '0')} 00000 n \n`).join('')}`;
+  return new TextEncoder().encode(`${out}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+};
+const A = pdfOf([{ label: 'A1' }, { label: 'A2', rotate: 90 }, { label: 'A3' }]);
+const B = pdfOf([{ label: 'B1' }], { treeRotate: 180 });
+const BLANK = pdfOf([{}]);
+// pdf.js reads its own bytes back: each page as its text ('' for a blank one) and its rotation (its /Rotate, or its tree's).
+const opened = async (bytes) => (await load()).pdfjs.getDocument({ data: bytes.slice(), verbosity: 0 }).promise;
+const pagesOf = async (bytes) => {
+  const doc = await opened(bytes);
+  try {
+    const out = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      out.push(`${(await page.getTextContent()).items.map((item) => item.str).join('')} ${page.rotate}`);
+    }
+    return out;
+  } finally { await doc.loadingTask.destroy(); }
+};
+// extractPages on A, as the pages panel will call it; a document entry of bytes merges that file in.
+const fromA = async (pageInfos) => {
+  const doc = await opened(A);
+  try { return await doc.extractPages(pageInfos); } finally { await doc.loadingTask.destroy(); }
+};
+
+test('extractPages rearranges pages in node: reorder, delete, duplicate, merge, and a blank page merged in', async () => {
+  assert.deepEqual(await pagesOf(A), ['A1 0', 'A2 90', 'A3 0']);
+  assert.deepEqual(await pagesOf(B), ['B1 180'], 'the page tree turns its page');
+  assert.deepEqual(await pagesOf(await fromA([{ document: null, includePages: [0, 1, 2], pageIndices: [2, 0, 1] }])), ['A2 90', 'A3 0', 'A1 0'], 'reorder');
+  assert.deepEqual(await pagesOf(await fromA([{ document: null, excludePages: [1] }])), ['A1 0', 'A3 0'], 'delete');
+  assert.deepEqual(await pagesOf(await fromA([{ document: null, includePages: [0] }, { document: null, includePages: [0] }, { document: null, includePages: [1] }])),
+    ['A1 0', 'A1 0', 'A2 90'], 'duplicate');
+  assert.deepEqual(await pagesOf(await fromA([{ document: null }, { document: B.slice() }])), ['A1 0', 'A2 90', 'A3 0', 'B1 180'], 'merge keeps an inherited turn');
+  // A blank page is the page of a one-page empty PDF, merged in (pdf.js's own blank is an image page, which needs a canvas).
+  assert.deepEqual(await pagesOf(await fromA([{ document: null, includePages: [0] }, { document: BLANK.slice() }, { document: null, includePages: [1, 2] }])),
+    ['A1 0', ' 0', 'A2 90', 'A3 0'], 'blank page');
+});
+
+// The one patch to pdf.js's code (scripts/vendor-pdfjs.sh): an entry's rotations[i] turns its source page i further.
+test("extractPages turns pages by each entry's rotations: /Rotate is the page's own turn plus the extra, mod 360", async () => {
+  assert.deepEqual(await pagesOf(await fromA([{ document: null, rotations: [90, 270, -90] }, { document: B.slice(), rotations: { 0: 90 } }])),
+    ['A1 90', 'A2 0', 'A3 270', 'B1 270']);
+  assert.deepEqual(await pagesOf(await fromA([{ document: null, includePages: [2, 0], pageIndices: [0, 1], rotations: { 2: 180 } }])), ['A1 0', 'A3 180'],
+    'keyed by source page, wherever the page lands');
+  assert.deepEqual(await pagesOf(await fromA([{ document: null, includePages: [1] }, { document: null, includePages: [1], rotations: { 1: 450 } }])), ['A2 90', 'A2 180'],
+    'each copy of a page turns on its own');
+  for (const bad of [45, 1.5, '90']) assert.equal(await fromA([{ document: null, rotations: [bad] }]), null, `${JSON.stringify(bad)} is refused, as pdf.js refuses a bad entry`);
+});
