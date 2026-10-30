@@ -74,7 +74,8 @@ const seeded = (key) => {
     const openHome = async () => { await page.goto(HOME); await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'home'); };
     const said = () => page.evaluate(() => document.getElementById('gd-said').textContent);
     // The grid's view of a cell: its shown text, by row and column (0-based), where it is drawn.
-    const cell = (r, c) => page.evaluate(([r, c]) => document.querySelector(`#gx-grid .gx-c[data-r="${r}"][data-c="${c}"]`)?.textContent ?? null, [r, c]);
+    // (after the frame a change or a move draws in)
+    const cell = (r, c) => page.evaluate(async ([r, c]) => { await new Promise(requestAnimationFrame); return document.querySelector(`#gx-grid .gx-c[data-r="${r}"][data-c="${c}"]`)?.textContent ?? null; }, [r, c]);
     const nameBox = () => page.evaluate(() => document.getElementById('gx-name').value);
     const formula = () => page.evaluate(() => document.getElementById('gx-formula').value);
     const grid = () => page.waitForSelector('#gx-grid .gx-c[data-r="0"][data-c="0"]');
@@ -105,7 +106,7 @@ const seeded = (key) => {
     // ---- on: the tile, the chooser, a .csv import
     await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(true));
     await openHome();
-    const on = await page.evaluate(() => { const t = document.querySelector('.gd-tile[data-kind="sheet"]'); return { tile: !!t, name: t?.textContent, cells: t?.querySelectorAll('.gx-th-c').length, accept: document.getElementById('gd-file').accept, label: document.getElementById('gd-import').textContent, tiles: document.querySelectorAll('.gd-tile').length }; });
+    const on = await page.evaluate(() => { const t = document.querySelector('.gd-tile[data-kind="sheet"]'); return { tile: !!t, name: t?.querySelector('.gd-tile-name')?.textContent, cells: t?.querySelectorAll('.gx-th-c').length, accept: document.getElementById('gd-file').accept, label: document.getElementById('gd-import').textContent, tiles: document.querySelectorAll('.gd-tile').length }; });
     check(on.tile && on.name === 'Spreadsheet' && on.cells === 24 && on.tiles === 5 && /\.xlsx/.test(on.accept) && /\.csv/.test(on.accept) && on.label === 'Import…', `on: the Spreadsheet tile, a 6×4 grid, and the chooser takes spreadsheets (${JSON.stringify(on)})`);
     await shot('home-1280.png');
     await page.setViewportSize({ width: 640, height: 900 });
