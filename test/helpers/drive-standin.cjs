@@ -160,6 +160,13 @@ const standin = ({ tokens = null, owner = 'student@school.edu' } = {}) => {
       if (!f || !f.app) return json(404, ERRORS[404]);
       let meta;
       try { meta = JSON.parse(body.toString('utf8')); } catch { return bad(); }
+      // A move: addParents and removeParents (comma-separated ids), as files.update takes them.
+      const add = u.searchParams.get('addParents'), remove = u.searchParams.get('removeParents');
+      if (add || remove) {
+        const next = [...f.meta.parents.filter((p) => !(remove || '').split(',').includes(p)), ...(add ? add.split(',') : [])];
+        if ((add && add.split(',').some((p) => !files.has(p))) || !next.length) return bad('Invalid parents');
+        f.meta.parents = [...new Set(next)];
+      }
       update(f, meta);
       return json(200, mask(view(f), fields(u)));
     }

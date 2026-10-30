@@ -168,10 +168,11 @@ test('turning Sync on uploads every document: its file and a JSON copy in a Glaz
   assert.equal(sidecarOf(drive, 'recovery:abc'), undefined, 'a stand-in for a lost key stays on this device');
   const st = await state(a);
   assert.ok(st.on && st.folder === folder.meta.id && typeof st.token === 'string' && st.account === 'student@school.edu' && !st.problem && st.last, JSON.stringify(st));
-  // A run with nothing changed asks Drive only for its folder and its changes: Glaze's own uploads are no news.
+  // A run with nothing changed asks Drive only for its folder, whether another device made one too, and its changes:
+  // Glaze's own uploads are no news.
   const n = drive.log.length;
   assert.ok((await a.sync.run()).ok);
-  assert.deepEqual(drive.log.slice(n).map((x) => `${x.method} ${x.path}`), [`GET /drive/v3/files/${folder.meta.id}`, 'GET /drive/v3/changes']);
+  assert.deepEqual(drive.log.slice(n).map((x) => `${x.method} ${x.path}`), [`GET /drive/v3/files/${folder.meta.id}`, 'GET /drive/v3/files', 'GET /drive/v3/changes']);
   noDeletes(drive);
 });
 

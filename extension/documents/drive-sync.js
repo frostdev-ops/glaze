@@ -62,6 +62,37 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
   const body = (key, rec, parts) => ({ key, kind: kindOf(rec), record: strip(rec), ...(kindOf(rec) === 'sheet' && { parts: parts || {} }) });
   const safe = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
   const whyOf = (e) => (e instanceof Fail || typeof e?.why === 'string' ? e.why : 'stale');
+  const byId = (a, b) => (a.id < b.id ? -1 : 1);
+
+  // The one folder of a kind every device keeps: Glaze in My Drive (tag 'root') and its Data and Backups (background/
+  // drive-store.js). Devices that each made one at once converge on the lowest id: what another holds moves into it, and
+  // the emptied one, tagged 'merged', is put away in Glaze/Data (hide), never into Drive's trash (which would take any file
+  // of the student's in it along). mine: the one this device holds, counted before Drive's search shows it, and followed
+  // when merged (what was put there since moves too). D: a run's Drive (create's D). → the folder's id
+  const converge = async (D, { parent = null, tag, name, mine = null, hide = null }) => {
+    const ok = (f) => !!f && f.mimeType === FOLDER && !f.trashed && f.appProperties?.glaze === tag && (!parent || (f.parents || []).includes(parent));
+    const live = (await D((c) => c.find(`${parent ? `'${parent}' in parents and ` : ''}mimeType='${FOLDER}' and appProperties has { key='glaze' and value='${tag}' } and trashed=false`, { pageSize: 100 }))).files.filter(ok);
+    let held = null;
+    if (mine && !live.some((f) => f.id === mine)) {
+      held = await D((c) => c.file(mine)).catch((e) => { if (e.why === 'missing') return null; throw e; });
+      if (ok(held)) { live.push(held); held = null; }
+    }
+    live.sort(byId);
+    const win = live[0] || await D((c) => c.folder({ name, mimeType: FOLDER, ...(parent && { parents: [parent] }), appProperties: { glaze: tag } }));
+    for (const f of [...live.slice(1), ...(held && !held.trashed && held.appProperties?.glaze === 'merged' ? [held] : [])]) {
+      // Each child moved, until none is left that Glaze can see (drive.file: the student's own stay where they are).
+      for (let n = 0; n < 100; n++) {
+        const r = await D((c) => c.find(`'${f.id}' in parents and trashed=false`, { pageSize: 100 }));
+        const kids = r.files.filter((x) => (x.parents || []).includes(f.id));
+        if (!kids.length) break;
+        for (const x of kids) await D((c) => c.patch(x.id, {}, undefined, { add: win.id, remove: [f.id] }));
+      }
+      if (f.appProperties?.glaze === 'merged') continue;
+      const into = hide ? await hide(win.id) : win.id;
+      await D((c) => c.patch(f.id, { appProperties: { glaze: 'merged' } }, undefined, { add: into, remove: f.parents || [] }));
+    }
+    return win.id;
+  };
 
   // env: { drive(active) (a documents/drive.js client, interactive: false, with active checked by its allowed hook), account() (the connected
   // account's email, background/google.js account), store (storage.local: get, set, remove, keys), papers (writer/writer-papers.js in
@@ -246,7 +277,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // { removed }: deleted for good, or out of reach); E: its kind's file's, when a change named it.
     const sync = async (key, h, { R, E, folder }) => {
       if (!(await state()).on) throw new Fail('off');
-      let d = await docOf(h);
+      let d = await docOf(h), gone = null;
       key ||= d?.key || null;
       if (key && !syncable(key)) return;
       let l = key ? await local(key) : null;
@@ -254,14 +285,21 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // Another device's copy of the same document. One made while this device made its own (first syncs that overlapped):
       // every device keeps the lowest id, met as a first meeting; any other is not this one's.
       if (d && R?.id && R.id !== d.json && !R.removed) {
-        if (R.id < d.json && !R.trashed) { await dropDoc(h, d); d = null; } else R = undefined;
+        if (R.id < d.json && !R.trashed) { gone = d; await dropDoc(h, d); d = null; await putAway(gone.json, folder); } else R = undefined;
       }
       if (d && E && E.id !== d.file) E = undefined;
       if (R === undefined) R = d?.json ? await meta(d.json) : d ? null : !lt && l ? await lookup(h, folder) : null;
+      // This device's copy moved out of the Glaze folder (put away by the device whose copy it was, as above, or moved by
+      // the student): no longer the document's; the folder's copy is, met as a first meeting, or this device's goes up anew.
+      if (d && R && !R.removed && R.id === d.json && Array.isArray(R.parents) && !R.parents.includes(folder)) {
+        await dropDoc(h, d); d = null;
+        R = !lt && l ? await lookup(h, folder) : null;
+      }
 
       if (!d) {
         if (!R || R.removed || R.trashed || lt) { if (l && !lt && !R) await push(key, h, l, null, folder); return; }
         const got = await fetchCopy(R, h, key);
+        if (gone?.file && gone.file !== got.file) await putAway(gone.file, folder);
         const source = { json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
         if (!l) { const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
         if ((await sumOf(key, l)) !== got.sum) {
@@ -352,6 +390,15 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       }
       if (ldirty || force) await push(key, h, l, d, folder);
     };
+    // A copy that lost to another of the same document, put away in Glaze/Data: out of the folder the student browses and
+    // every search, so no device links to it anew, and never in Drive's trash, so a device still linked to it loses nothing
+    // (it writes there until the folder's copy changes, then meets that one).
+    const putAway = async (id, folder) => {
+      const f = id ? await meta(id) : null;
+      if (!f || f.removed || !(f.parents || []).includes(folder)) return;
+      const data = await converge(D, { parent: folder, tag: 'data', name: 'Data' });
+      await D((c) => c.patch(id, {}, undefined, { add: data, remove: [folder] }));
+    };
     // The JSON copy Drive holds for h, if another device made one first (oldest id first).
     const lookup = async (h, folder) => {
       const r = await D((c) => c.find(`'${folder}' in parents and appProperties has { key='key' and value='${h}' } and appProperties has { key='glaze' and value='doc' } and trashed=false`, { pageSize: 10 }));
@@ -370,19 +417,22 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
     // ---- the folder: the one Glaze made (found by its tag, so a second device finds the first's), or a new one.
     const folderOf = async (st) => {
-      if (st.folder) {
-        const f = await meta(st.folder);
-        if (!f.removed && f.trashed) throw new Fail('folder');
-        if (!f.removed) return st.folder;
-        // Gone for good: everything goes up again into a new one; nothing here goes to Trash for it.
-        await forget();
-        await setState({ folder: null, token: null });
+      let mine = st.folder || null;
+      if (mine) {
+        const f = await meta(mine);
+        // In Drive's trash (the student's doing; one merged into another is followed instead): Sync stops and says so.
+        if (!f.removed && f.trashed && f.appProperties?.glaze !== 'merged') throw new Fail('folder');
+        if (f.removed) {
+          // Gone for good: everything goes up again into a new one; nothing here goes to Trash for it.
+          await forget();
+          await setState({ folder: null, token: null });
+          mine = null;
+        }
       }
-      const r = await D((c) => c.find(`mimeType='${FOLDER}' and name='${NAME}' and appProperties has { key='glaze' and value='root' } and trashed=false`, { pageSize: 10 }));
-      const f = r.files.filter((x) => x.mimeType === FOLDER && !x.trashed).sort((a, b) => (a.id < b.id ? -1 : 1))[0]
-        || await D((c) => c.folder({ name: NAME, mimeType: FOLDER, appProperties: { glaze: 'root' } }));
-      await setState({ folder: f.id });
-      return f.id;
+      // Another device's made at the same time: the one with the lowest id, its own put away in that one's Data.
+      const id = await converge(D, { tag: 'root', name: NAME, mine, hide: (w) => converge(D, { parent: w, tag: 'data', name: 'Data' }) });
+      if (id !== mine) await setState({ folder: id });
+      return id;
     };
 
     // Everything, both sides: the first run, and again whenever the page token is lost.
@@ -431,9 +481,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           }
           const h = f.appProperties?.key, role = f.appProperties?.glaze;
           if (!HASH.test(h || '') || !['doc', 'file'].includes(role)) continue;
-          if (role === 'doc' && (f.parents || []).includes(folder) && f.mimeType === JSON_TYPE) {
-            const x = at(h);
-            if (!x.R || x.R.id === f.id || (!f.trashed && !x.R.removed && f.id < x.R.id)) x.R = f; // two copies in one page: the lower id
+          if (role === 'doc' && f.mimeType === JSON_TYPE) {
+            const x = at(h), out = (g) => Array.isArray(g?.parents) && !g.parents.includes(folder);
+            // Two copies in one page: the lower id in the folder; one of this device's own moved out of it, when nothing else came.
+            if (!out(f)) { if (!x.R || x.R.id === f.id || out(x.R) || (!f.trashed && !x.R.removed && f.id < x.R.id)) x.R = f; }
+            else if (!x.R && (await S.get(FILE + f.id))[FILE + f.id] === h) x.R = f;
           }
           else if (role === 'file') at(h).E = f;
         }
@@ -541,6 +593,6 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     return { set, run, touched, nudge, poke, status };
   };
 
-  return { STATE, DOC, FILE, DIRTY, WAIT, KINDS, Fail, canon, strip, body, create };
+  return { STATE, DOC, FILE, DIRTY, WAIT, KINDS, Fail, canon, strip, body, converge, create };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_DRIVE_SYNC;

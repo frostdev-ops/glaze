@@ -71,6 +71,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     notes: () => (typeof GZ_NOTES !== 'undefined' ? GZ_NOTES : require('../planner/notes.js')),
     gradescope: () => (typeof GZ_GRADESCOPE !== 'undefined' ? GZ_GRADESCOPE : require('../planner/gradescope.js')),
     backup: () => (typeof GZ_BACKUP !== 'undefined' ? GZ_BACKUP : require('./backup.js')),
+    sync: () => (typeof GZ_DRIVE_SYNC !== 'undefined' ? GZ_DRIVE_SYNC : require('../documents/drive-sync.js')),
   };
   const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   // A value from Drive as its store keeps it (each store's own cleaner), or undefined when it isn't one.
@@ -288,16 +289,14 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       await restamp(mine);
     };
 
-    // The folders inside Glaze: Data and Backups, found by their tag, else made.
+    // The folders inside Glaze: Data and Backups, found by their tag, else made; two made at once by two devices converge on
+    // one (documents/drive-sync.js converge), the other's records or snapshots moving into it and the emptied one put away
+    // in Data.
     const sub = async (ctx, tag, name) => {
       const st = (await S.get(STATE))[STATE] || {};
-      if (st[tag]) {
-        try { const f = await ctx.D((c) => c.file(st[tag])); if (!f.trashed && (f.parents || []).includes(ctx.folder)) return st[tag]; } catch (e) { if (e.why !== 'missing') throw e; }
-      }
-      const r = await ctx.D((c) => c.find(`'${ctx.folder}' in parents and mimeType='${FOLDER}' and appProperties has { key='glaze' and value='${tag}' } and trashed=false`, { pageSize: 10 }));
-      const f = r.files.sort((a, b) => (a.id < b.id ? -1 : 1))[0] || await ctx.D((c) => c.folder({ name, mimeType: FOLDER, parents: [ctx.folder], appProperties: { glaze: tag } }));
-      await ctx.state({ [tag]: f.id });
-      return f.id;
+      const id = await L.sync().converge(ctx.D, { parent: ctx.folder, tag, name, mine: st[tag] || null, hide: tag === 'data' ? null : () => sub(ctx, 'data', 'Data') });
+      if (id !== st[tag]) await ctx.state({ [tag]: id });
+      return id;
     };
 
     const fetchRec = async (ctx, R, h) => {
