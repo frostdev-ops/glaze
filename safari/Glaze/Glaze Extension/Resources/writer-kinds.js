@@ -5,7 +5,8 @@
 // the paper, then makes the attempt's record that kind with the file's bytes (the kind's into, whose 'import' save keeps
 // the paper as a version first). The viewer's Submit… and Ultra's own open the submit sheet (writer-submit.js) on its
 // surface, whose file() is the PDF as saved or the deck as brought. A Word file brought over a viewer makes the record a
-// paper again (Open in Writer).
+// paper again (Open in Writer). An empty attempt offers Document or Spreadsheet while the spreadsheet kind is here
+// (FRAME.sheet, sheets/grid's) and writer.sheets is on; until then nothing offers it.
 // Classic script after writer-import.js.
 var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
   const frame = globalThis.GZ_WRITER_FRAME;
@@ -20,6 +21,8 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
   const prefs = () => globalThis.GZ_WRITER_SETTINGS?.now() || {};
   // The kinds a brought file may open as here: in this frame, and switched on.
   const opens = (w = prefs(), frameKinds = FRAME) => L().switched(w).filter((id) => Object.hasOwn(frameKinds, id));
+  // What an empty attempt offers: Document and Spreadsheet once the spreadsheet kind is here and writer.sheets is on.
+  const offers = (w = prefs(), frameKinds = FRAME, kinds = globalThis.GZ_DOC_KINDS?.KINDS) => (Object.hasOwn(frameKinds, 'sheet') && !!kinds?.sheet && L().switched(w).includes('sheet') ? ['paper', 'sheet'] : []);
   const sheets = new Map();
   const sheet = (href) => {
     if (!sheets.has(href)) sheets.set(href, new Promise((ok) => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.onload = ok; l.onerror = ok; document.head.append(l); }));
@@ -113,5 +116,45 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     await paper.importFile(f, { full: true });
   };
 
-  return { FRAME, opens, mount, open, shown: () => shown?.id || null };
+  // ---- an empty attempt: Document or Spreadsheet (offers above). Spreadsheet makes the record the sheet kind, empty.
+  // any: ⋯ → New spreadsheet, over a paper with words in it too (kept as the version).
+  const start = async (paper, id, { any = false } = {}) => {
+    if (busy || !offers().includes(id) || id === 'paper' || (!any && !paper.blank())) return;
+    busy = true;
+    try {
+      const k = await kind(id);
+      if (typeof k?.view !== 'function') throw new Error('no viewer');
+      if (!await paper.save()) throw new Error('paper could not be saved');
+      paper.hold();
+      const r = await store().save(paper.key(), { kind: id, doc: null, words: 0, ...(k.empty?.() || {}) }, { reason: 'import' });
+      if (!await paper.hand(r.paper)) throw new Error('no viewer');
+    } catch (e) { console.error(e); paper.release(); paper.notify('Not saved. Try again in a moment.'); } finally { busy = false; }
+  };
+  const choice = (paper) => {
+    if (offers().length < 2 || !paper.blank() || paper.kind?.() !== 'paper' || document.querySelector('.gk-choose')) return null;
+    const row = document.createElement('div');
+    row.className = 'gk-choose';
+    row.setAttribute('role', 'group');
+    for (const [id, label] of [['paper', 'Document'], ['sheet', 'Spreadsheet']]) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'gk-pick'; b.dataset.kind = id; b.textContent = t(label);
+      b.addEventListener('click', () => { row.remove(); if (id !== 'paper') start(paper, id); });
+      row.append(b);
+    }
+    document.getElementById('gw')?.prepend(row);
+    return row;
+  };
+  frame.on('ready', () => {
+    if (frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
+    // ⋯ → New spreadsheet, and the choice, once the paper has loaded and only where both are offered.
+    (async () => {
+      for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100));
+      const paper = P()?.current();
+      if (!paper || paper.kind?.() !== 'paper' || offers().length < 2) return;
+      frame.item(t('New spreadsheet'), () => start(paper, 'sheet', { any: true }));
+      choice(paper);
+    })().catch((e) => console.error(e));
+  });
+
+  return { FRAME, opens, offers, mount, open, start, shown: () => shown?.id || null };
 })();

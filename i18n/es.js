@@ -3431,6 +3431,8 @@
   "Import…": "Importar…",
   "Open in Writer": "Abrir en Writer",
   "Open in Glaze": "Abrir en Glaze",
+  "Spreadsheet": "Hoja de cálculo",
+  "New spreadsheet": "Nueva hoja de cálculo",
   "The file could not be made. Nothing was submitted.": "No se pudo crear el archivo. No se entregó nada.",
   "Submit as is": "Entregar tal cual",
   "Saves current paper": "Guarda el trabajo actual",
