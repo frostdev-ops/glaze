@@ -231,6 +231,8 @@ test('CORREL, PEARSON, COVARIANCE, SLOPE, INTERCEPT, RSQ, FORECAST: pairs of num
     ['SLOPE(A2:A6,B2:B5)', '#N/A'], ['INTERCEPT(A2:A6,B2:B5)', '#N/A'], ['RSQ(A2:A6,B2:B5)', '#N/A'], ['FORECAST(1,A2:A6,B2:B5)', '#N/A'],
     ['CORREL(Z1:Z5,Y1:Y5)', '#DIV/0!'], ['CORREL(A2:A6,{1;1;1;1;1})', '#DIV/0!'], ['COVARIANCE.P(Z1:Z5,Y1:Y5)', '#DIV/0!'],
     ['COVARIANCE.S(A2,B2)', '#DIV/0!'], ['RSQ(A2,B2)', '#DIV/0!'], ['CORREL(A2:A6,{1;2;3;4;#N/A})', '#N/A'],
+    // Points on one line correlate exactly: one root of the product, not a root of each (0.9999999999999999).
+    ['CORREL({1,2},{10,20})', 1], ['PEARSON({1,2,3},{3,2,1})', -1], ['RSQ({10,20},{1,2})', 1], ['RSQ({3,2,1},{1,2,3})', 1],
   ]);
   // pearson-function
   prints(book([['Data'], ['Independent values', 'Dependent values'], [9, 10], [7, 6], [5, 1], [3, 5], [1, 3]]), [['PEARSON(A3:A7,B3:B7)', '0.699379'], ['CORREL(A3:A7,B3:B7)', '0.699379']]);
