@@ -104,7 +104,7 @@ test('Calendar\'s Disconnect discloses that, while Google Drive shares the grant
   const calendar = network.slice(network.indexOf('- **Google Calendar sync**'), network.indexOf('- **Google Drive** (off until you connect)'));
   assert.match(calendar.slice(calendar.indexOf('**Disconnect**')), /Google Drive[^.]*same access[^.]*doesn't revoke/);
   const identity = policy.slice(policy.indexOf('- `identity` (Chrome only, optional)'), policy.indexOf('- `unlimitedStorage`'));
-  assert.match(identity, /removed on Disconnect[^.;]*unless Google Drive/);
+  assert.match(identity, /removed on\s+Disconnect[^.;]*unless Google Drive/);
   assert.match(read('../docs/privacy.md'), /\*\*Disconnect\*\* deletes them and revokes access[^.]*unless Google Drive/);
 });
 
@@ -120,7 +120,7 @@ test('what Glaze stores says Sync to Google Drive copies records it otherwise ke
   const store = read('background/drive-store.js');
   assert.match(store, /cat: 'gradescope'[^\n]*view: \(v\) => \(obj\(v\) \? \{ acct: v\.acct/, 'the code: Gradescope\'s account goes with its placings');
   const stores = policy.slice(policy.indexOf('## What Glaze stores'), policy.indexOf('- **Glaze navigation**'));
-  assert.match(stores, /Sync to Google Drive[^.]*your own Google Drive[^.]*on this device only/);
+  assert.match(stores, /Sync to Google Drive[^.]*your own\s+Google Drive[^.]*on this device only/);
   const data = policy.slice(policy.indexOf('in Glaze/Data, one JSON file per setting'), policy.indexOf('in Glaze/Backups'));
   assert.match(data, /Gradescope's account/);
 });
