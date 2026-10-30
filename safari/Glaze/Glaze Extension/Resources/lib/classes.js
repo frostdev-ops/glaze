@@ -699,7 +699,7 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
     const out = [];
     for (const z of new Set(s.courses.flatMap((c) => c.periods.map((p) => p.tz || base)))) {
       for (let n = L.dayOf(from, z) - 1; n <= L.dayOf(to, z) + 1 && out.length < 5000; n++) for (const x of onDay(s, n, (p) => (p.tz || base) === z)) {
-        const at = L.typed(keyOf(n), hhmm(x.start), z), until = L.typed(keyOf(n), hhmm(Math.min(x.end, 1439)), z);
+        const at = L.typed(keyOf(n), hhmm(x.start), z), until = x.end >= 1440 ? L.midnight(n + 1, z) : L.typed(keyOf(n), hhmm(x.end), z);
         if (at !== null && until > at && at >= from && at < to) out.push({ ...x, day: keyOf(n), at, until });
       }
     }

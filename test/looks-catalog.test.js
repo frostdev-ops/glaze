@@ -142,6 +142,23 @@ test('a kept Look made now carries its id and where it came from, and favorites 
   assert.equal(C.kept({ code: 1, name: 'n' }), null);
 });
 
+test('kept identity follows the code even when an old entry carries another valid id', async () => {
+  const { favorites } = await fixtures();
+  const first = favorites[0], second = favorites[2];
+  assert.equal(C.kept({ ...first, id: second.id }).id, C.idOf(first.code));
+  assert.equal(C.keptAll([first, { ...first, id: second.id, name: 'Alias' }]).length, 1, 'same code, two names and stored ids: one Look');
+  assert.equal(C.keptAll([first, { ...second, id: first.id }]).length, 2, 'different codes never discard one another because of stored ids');
+});
+
+test('an ambiguous code hash is refused rather than wearing or removing another Look', () => {
+  // Force the rare hash collision at the identity boundary; both original favorites must survive outside the catalogue.
+  const context = vm.createContext({ GZ_LOOKS: G.GZ_LOOKS, GZ_LOOK_ON: G.GZ_LOOK_ON });
+  vm.runInContext(read('lib/looks.js').replace('`c:${hash(code)}`', "'c:00000000000000'"), context);
+  const favorites = [{ code: 'first', name: 'One' }, { code: 'second', name: 'Two' }];
+  assert.equal(context.GZ_CATALOG.keptAll(favorites).length, 0, 'neither ambiguous id may be picked');
+  assert.equal(favorites.length, 2, 'originals stay available for recovery');
+});
+
 // ---- the worker: the catalogue it keeps, wearing a kept Look by id, rotation by id ------------------------------------------
 const fs = require('node:fs');
 const path = require('node:path');
@@ -173,7 +190,7 @@ const worker = (local = {}, syncStore = {}) => {
     if (!kept) res('ignored');
   });
   const until = async (fn) => { for (let i = 0; i < 400 && !fn(); i++) await new Promise((r) => setTimeout(r, 5)); return fn(); };
-  return { send, local, sync: syncStore, until, set: context.chrome.storage.local.set, install: () => { for (const f of installed) f({ reason: 'update' }); }, popup: { id: 'glaze', url: 'chrome-extension://x/popup.html' } };
+  return { send, local, sync: syncStore, until, chrome: context.chrome, set: context.chrome.storage.local.set, install: () => { for (const f of installed) f({ reason: 'update' }); }, popup: { id: 'glaze', url: 'chrome-extension://x/popup.html' } };
 };
 
 test('the worker keeps the catalogue: built on update, again when a Look is saved, renamed or removed', async () => {
@@ -237,4 +254,88 @@ test('lib/looks.js loads on demand as the worker injects it: it ends on a value,
   assert.ok(first, 'no last value: the worker would answer "did not finish"');
   assert.equal(vm.runInContext(read('lib/looks.js'), context), first);
   assert.equal(vm.runInContext('GZ_CATALOG', context).list().length, G.GZ_LOOKS.length);
+});
+
+test('a course page asks the worker for its Look\'s parts by id: a kept Look\'s from its code, a built-in\'s own', async () => {
+  const { favorites } = await fixtures();
+  const shader = fs.readFileSync(path.join(__dirname, '..', 'assets/shaders/aurora.glsl'), 'utf8');
+  const gallery = C.make(await S.encode(G.GZ_SANITIZE({ colors: G.GZ_PRESET('Midnight'), bg: { kind: 'shader' } }), {}, { x: { bg: { shader: { src: shader } }, pointer: 'lava' } }), 'Shader night', 'mira', 'gallery');
+  const w = worker({ lookFavorites: [gallery, ...favorites] });
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: gallery.id }, { id: 'glaze', tab: {}, url: 'https://evil.example/' }), { ok: false, error: 'sender' });
+  // The page in this harness isn't a registered LMS page either: Glaze's own pages ask the same way.
+  const got = await w.send({ type: 'glaze:looks', op: 'parts', id: gallery.id }, w.popup);
+  assert.equal(got.ok, true);
+  assert.deepEqual(got.parts, (await S.decode(gallery.code)).parts);
+  assert.equal(got.parts.x.pointer, 'lava');
+  assert.ok(got.parts.x.bg.shader.src.length > 100, 'the shader comes with it');
+  assert.deepEqual((await w.send({ type: 'glaze:looks', op: 'parts', id: 'Graveyard' }, w.popup)).parts, require('../lib/lookset.js')(look('Graveyard')));
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: 'c:00000000000000' }, w.popup), { ok: false, error: 'gone' });
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: 'Nope' }, w.popup), { ok: false, error: 'sender' });
+});
+
+test('two Settings tabs keep and remove Looks through one worker turn without losing another tab’s changes', async () => {
+  const { favorites } = await fixtures();
+  const w = worker({}, G.GZ_SANITIZE({ courses: { looks: { _1_1: favorites[0].id, _2_1: favorites[2].id } } }));
+  const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/options.html' };
+  const [a, b] = await Promise.all(favorites.slice(0, 2).map((favorite) => w.send({ type: 'glaze:looks', op: 'keep', favorite }, editor)));
+  assert.deepEqual([a, b], [{ ok: true }, { ok: true }]);
+  assert.equal(w.local.lookFavorites.length, 2, 'both tabs survive');
+  const renamed = { ...favorites[0], name: 'Finals' };
+  await w.send({ type: 'glaze:looks', op: 'keep', favorite: renamed }, editor);
+  assert.equal(w.local.lookFavorites.filter((f) => f.code === renamed.code).length, 1, 'Use then Save, or two names: one code');
+  w.local.rotateLooks = [favorites[0].code, favorites[1].code, 'Library'];
+  const [removed, added] = await Promise.all([
+    w.send({ type: 'glaze:looks', op: 'remove', id: favorites[0].id }, editor),
+    w.send({ type: 'glaze:looks', op: 'keep', favorite: favorites[2] }, editor),
+  ]);
+  assert.deepEqual([removed, added], [{ ok: true }, { ok: true }]);
+  assert.deepEqual(w.local.lookFavorites.map((f) => f.code).sort(), [favorites[1].code, favorites[2].code].sort());
+  assert.deepEqual(w.local.rotateLooks, [C.idOf(favorites[1].code), 'Library']);
+  assert.deepEqual(w.sync.courses.looks, { _2_1: favorites[2].id });
+  assert.equal(w.local.lookCatalog.sig, C.sig(w.local.lookFavorites), 'reply waits for the final catalogue');
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'remove', id: favorites[2].id }, w.popup), { ok: false, error: 'sender' });
+});
+
+// Remove unmaps the courses that wore the Look (sync) before it forgets the Look (local): a sync write refused (quota, rate)
+// leaves both as they were and says so, rather than a course still wearing a Look that is gone everywhere else.
+test('remove fails closed when the courses that wore the Look cannot be written', async () => {
+  const { favorites } = await fixtures();
+  const w = worker({ lookFavorites: favorites.slice(0, 2), rotateLooks: [favorites[0].id] }, G.GZ_SANITIZE({ courses: { looks: { _1_1: favorites[0].id } } }));
+  const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/options.html' };
+  w.chrome.storage.sync.set = () => Promise.reject(new Error('QUOTA_BYTES_PER_ITEM quota exceeded'));
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'remove', id: favorites[0].id }, editor), { ok: false, error: 'write' });
+  assert.equal(w.local.lookFavorites.length, 2, 'the Look is still kept');
+  assert.deepEqual(w.local.rotateLooks, [favorites[0].id]);
+  assert.deepEqual(w.sync.courses.looks, { _1_1: favorites[0].id });
+});
+
+test('catalogue rebuilds settle on the latest of consecutive favorites writes', async () => {
+  const { favorites } = await fixtures();
+  const w = worker();
+  await Promise.all([w.set({ lookFavorites: favorites }), w.set({ lookFavorites: favorites.slice(1, 3) })]);
+  assert.ok(await w.until(() => w.local.lookCatalog?.sig === C.sig(w.local.lookFavorites)));
+  assert.deepEqual(w.local.lookCatalog.looks.map((e) => e.id), favorites.slice(1, 3).map((f) => C.idOf(f.code)));
+});
+
+test('a device with no favorites needs no empty catalogue write', async () => {
+  const w = worker();
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'build' }, w.popup), { ok: true });
+  assert.equal(w.local.lookCatalog, undefined, 'fresh install readiness must not be followed by an unnecessary local write');
+});
+
+test('parts reads accept approved LMS documents, reject mod origins, and refuse Looks Glaze will not wear', async () => {
+  const { favorites } = await fixtures();
+  const blocked = C.make(await code(wear('Graveyard'), { x: { nav: { hidden: ['logout'] } } }), 'Hidden logout', '', 'saved');
+  const w = worker({ lookFavorites: [blocked, ...favorites] });
+  const url = 'https://school.blackboard.com/ultra/courses/_101_1/outline';
+  const sender = { id: 'glaze', frameId: 0, tab: { id: 1, url }, url, origin: 'https://school.blackboard.com' };
+  const request = { type: 'glaze:looks', op: 'parts', id: 'Graveyard' };
+  for (const frameId of [0, 7]) assert.equal((await w.send(request, { ...sender, frameId })).ok, true);
+  for (const untrusted of [{ ...sender, url: 'https://unapproved.example/ultra/courses/_101_1/outline' },
+    { ...sender, frameId: 8, url: 'chrome-extension://x/mods/frame.html', origin: 'null' },
+    { ...w.popup, origin: 'null' }, { ...sender, id: 'another-extension' }]) {
+    assert.deepEqual(await w.send(request, untrusted), { ok: false, error: 'sender' });
+  }
+  assert.deepEqual(await w.send({ ...request, id: blocked.id }, sender), { ok: false, error: 'gone' });
+  assert.deepEqual(w.sync, {}, 'parts reads grant no settings writes or frame passes');
 });

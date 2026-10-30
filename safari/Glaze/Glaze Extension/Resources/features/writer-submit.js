@@ -44,26 +44,64 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
 
   // ---- Ultra's footer buttons, caught before Ultra
   const ownerOf = (b) => { for (const box of live().keys()) { if (!box.full) continue; const f = L().footer(box.editor); if (b && (f.submit === b || f.save === b)) return box; } return null; };
+  // Ultra's Submit opens the sheet, and its Save and Close saves the paper first, as soon as there is a frame up to ask
+  // (it reopens: features/writer.js box.ready), Ultra's button marked busy until then. The save takes as long as it takes,
+  // the paper's title bar saying Saving… (the frame gives up with a word after a while, writer-submit.js); a frame that
+  // reopened before answering is asked again; once saved, Ultra's own Save and Close, found again (Ultra may have drawn
+  // its footer anew), goes on once. A box no longer Writer's lets go: Ultra's editor is there to press again.
+  const busy = (b, on) => { if (!b) return; if (on) { b.setAttribute('aria-busy', 'true'); b.style.setProperty('cursor', 'progress'); } else { b.removeAttribute('aria-busy'); b.style.removeProperty('cursor'); } };
   const act = (box, b, e) => {
     e.preventDefault();
     e.stopImmediatePropagation();
-    if (L().actionOf(b) === 'submit') { if (!running) { box.frame?.focus(); say(box, { type: 'submit:open' }); } return; }
-    // Save and Close: one matching save acknowledgement, never a late reply or an earlier timer. After Writer's Submit
-    // (Ultra's confirmation cancelled) it goes on the same way.
-    if (running || box.saved) return;
+    if (box.saved && Date.now() - box.saved.at >= SAVE_LOST) box.saved(false);
+    if (running || box.opening || box.saved) return;
+    let marked = b;
+    const mark = () => {
+      const x = L().footer(box.editor)[L().actionOf(b)];
+      if (marked !== x) { busy(marked, false); marked = x; }
+      busy(marked, true);
+    };
+    if (L().actionOf(b) === 'submit') {
+      const opening = box.opening = {};
+      const at = Date.now();
+      const open = () => {
+        if (box.opening !== opening) return;
+        if (!live().has(box) || Date.now() - at >= SAVE_LOST) { box.opening = null; busy(marked, false); return; }
+        mark();
+        if (!box.ready || !box.port) { setTimeout(open, 100); return; }
+        box.opening = null; busy(marked, false);
+        box.frame?.focus(); say(box, { type: 'submit:open' });
+      };
+      busy(b, true);
+      open();
+      return;
+    }
+    // Save and Close: one matching save acknowledgement, never a late reply. After Writer's Submit (Ultra's confirmation
+    // cancelled) it goes on the same way. One that waited past what the frame waits for its save has been lost (its frame
+    // went quiet): a press asks anew.
     const go = e.type === 'click', request = crypto.randomUUID();
+    let asked = null;
     box.saveRequest = request;
     const saved = (ok) => {
       if (box.saved !== saved) return;
-      clearTimeout(timer);
       box.saved = null; box.saveRequest = null;
-      const b = L().footer(box.editor).save;
-      if (go && ok && live().has(box) && b?.isConnected && L().enabled(b)) pass(b);
+      busy(marked, false);
+      const x = L().footer(box.editor).save;
+      if (go && ok && Date.now() - saved.at < SAVE_LOST && live().has(box) && x?.isConnected && L().enabled(x)) pass(x);
     };
+    saved.at = Date.now();
     box.saved = saved;
-    const timer = setTimeout(() => saved(false), 4000);
-    say(box, { type: 'submit:save', request });
+    const ask = () => {
+      if (box.saved !== saved) return;
+      if (!live().has(box) || Date.now() - saved.at >= SAVE_LOST) { saved(false); return; }
+      mark();
+      if (box.ready && box.port && box.port !== asked) { asked = box.port; saved.at = Date.now(); say(box, { type: 'submit:save', request }); }
+      if (box.saved === saved) setTimeout(ask, 100);
+    };
+    busy(b, true);
+    ask();
   };
+  const SAVE_LOST = 50000; // the frame waits 15 s at most for its paper, then 30 s for the save
   const pass = (b) => { passing = b; try { b.click(); } finally { passing = null; } };
   document.addEventListener('click', (e) => {
     if (!armed.size) return;
@@ -271,7 +309,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     else if (m.type === 'submit:held' && armed.has(box)) say(box, { type: 'submit:held', text: heldOf(box).slice(0, 1e6) });
     else if (m.type === 'submit:review' && armed.has(box)) review(box);
   };
-  return { hear, passing: (button) => button === passing };
+  // armed(box): this step has the box's Ultra buttons (features/writer.js holds a press until it does).
+  const press = (box, b, type = 'click') => { if (live().has(box) && box.full && ownerOf(b) === box) act(box, b, { type, preventDefault() {}, stopImmediatePropagation() {} }); };
+  return { hear, press, passing: (button) => button === passing, armed: (box) => live().has(box) };
 })();
 
 GZ_WRITER_SUBMIT;

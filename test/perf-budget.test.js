@@ -178,6 +178,10 @@ const UI_SWAP = 159;
 // which reached the page as errors (owner's go-ahead for the Mac session's requests, 2026-10-23): 118 bytes on Ultra.
 // Measured against bf11791.
 const ULTRA_VT_ABORT = { ultra: 118, canvas: 0, moodle: 0 };
+// Chrome rejects a skipped or timed-out crossfade's ready in the page's own world too, where a school's error tracker would
+// collect it (owner-approved raises, 2026-10-19): Ultra's page-link crossfade asks for and tells the page world's guard
+// (content-ultra.js), and content.js asks for that guard from every frame: 367 bytes on Ultra, 23 elsewhere. Against b2d3ed7.
+const VT_GUARD = { ultra: 367, canvas: 23, moodle: 23 };
 // The Frostdev Look (a named raise, as the owner approved for first scripts on 2026-10-19): its row in GZ_LOOKS (palette, fonts,
 // shape and the topography scene, 90% surfaces) and the two names it adds to GZ_SPEC (the scene, the pointer set) in defaults.js, which
 // every site reads for per-course Looks: 408 bytes on every site. Its scene, parts and pointers load only when worn.
@@ -248,8 +252,10 @@ const CTAB_PALETTE = { ultra: 209, canvas: 168, moodle: 59 };
 // The Looks catalogue (the owner's request, 2026-10-29: saved and gallery Looks show with the rest; a named raise under the
 // 2026-10-19 approval): defaults.js keeps a course's saved or gallery Look by id and wears it from the catalogue (401 bytes),
 // and content.js reads the catalogue only when a course wears one, and wears the theme for one this device doesn't keep
-// (822), on every site. The catalogue itself (lib/looks.js) loads on demand. Measured against 777d9b35.
-const LOOK_CATALOG = 401 + 822;
+// (822), on every site. The catalogue itself (lib/looks.js) loads on demand. Measured against 777d9b35. A course wears its own
+// Look whole, parts included (features/lookparts.js reads them): content.js asks for them when the course's Look changes (117),
+// measured against e359f896.
+const LOOK_CATALOG = 401 + 822 + 117;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -258,7 +264,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content-ultra.js')), c
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG;
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG;
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }

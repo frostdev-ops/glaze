@@ -67,10 +67,11 @@ const ultraReady = async (page, timeout = 10000) => {
 // A new profile's install (lib/background.js onInstalled) writes storage.local after Glaze's pages can load, so a check that
 // seeds or compares storage first waits for each install task's last write: the starter widgets (freshDefaults settles
 // with widgetLayout and starterTouched), the tabs-auto migration and the channel-key move. Polled from Node, as ultraReady.
-const INSTALL_KEYS = ['freshDefaults', 'migrated', 'channelKeysMoved', 'lookCatalog'];
+// With no favorites, catalogue() writes nothing; every reader treats the missing cache as no kept Looks.
+const INSTALL_KEYS = ['freshDefaults', 'migrated', 'channelKeysMoved'];
 const installDone = async (keys) => {
   const l = await chrome.storage.local.get(keys);
-  return l.freshDefaults?.pending === false && Array.isArray(l.migrated) && l.migrated.includes('tabs-auto') && l.channelKeysMoved === true && typeof l.lookCatalog?.sig === 'string';
+  return l.freshDefaults?.pending === false && Array.isArray(l.migrated) && l.migrated.includes('tabs-auto') && l.channelKeysMoved === true;
 };
 // The limit only bounds a failure: on a loaded runner the install has taken more than 10 s.
 const installed = async (page, timeout = 30000) => {

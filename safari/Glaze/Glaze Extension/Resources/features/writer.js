@@ -245,21 +245,21 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (m.type === 'compact:flushed') {
       const f = box.flushing;
       if (!f || m.request !== f.request) return;
+      if (Date.now() - f.at >= 60000) { endFlush(box, 'save'); return; }
       // Saved: Ultra's own button goes on with the text (Ultra may have drawn its footer again meanwhile), or the compact
       // bar says why not. A paper too long for Ultra's box: the frame has said so and focused Full writer itself (focusing
       // the frame from here would put its focus back on its body).
-      let why = null;
+      let why = null, on = false;
       try {
         if (m.ok === true) {
-          const b = f.button.isConnected ? f.button : [...box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || []].find((x) => x.getAttribute('data-analytics-id') === f.id);
+          const b = flushButton(box, f);
           if (box.full || !sameBox(box) || !b) why = 'page';
           else if (typeof m.html !== 'string' || !Array.isArray(m.delta) || !sync(box, m.html, m.delta)) why = 'text';
-          else if (!U().enabled(b)) why = f.action === 'submit' ? 'submit' : 'page';
-          else { passing = b; try { b.click(); } finally { passing = null; } }
+          else on = true;
         }
-      } finally { endFlush(box, why); }
+      } finally { if (on) turnOn(box, f, Date.now()); else endFlush(box, why); }
     }
-    else if (m.type === 'view' || m.type === 'room') { if (box.mode === 'paper') view(box, m); }
+    else if (m.type === 'view' || m.type === 'room') { if (box.mode === 'paper') { if (m.type === 'view') box.viewedOn = box.port; view(box, m); } }
     else if (box.mode === 'paper' && box.full) { if (m.type === 'focus-mode') focusMode(box, m.on === true); else if (m.type === 'native') { drop(box); declined.add(box.editor); } }
     else if (m.type === 'height' && Number.isFinite(m.px)) { box.px = Math.max(40, Math.min(20000, Math.round(m.px))); if (!paged(box) && !box.focused) box.frame.style.height = `${box.px}px`; }
     else if (m.type === 'change' && typeof m.html === 'string' && typeof m.text === 'string') {
@@ -322,6 +322,19 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // saves and holds editing until the native click is dispatched (its bar says Saving…). A lost save gives editing back
   // after a minute with a visible failure; its late acknowledgement can never dispatch Ultra's button.
   let passing = null;
+  // The flush's button, or the one Ultra drew in its place.
+  const flushButton = (box, f) => (f.button.isConnected ? f.button : [...box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || []].find((x) => x.getAttribute('data-analytics-id') === f.id));
+  // Saved and in Ultra's box: Ultra turns its button on once it has drawn that text, so the flush (Saving…, the button
+  // busy) lasts until it does, SUBMIT_ON at most, then Ultra's own button goes once.
+  const SUBMIT_ON = 15000;
+  const turnOn = (box, f, since) => {
+    if (box.flushing !== f) return;
+    const b = flushButton(box, f);
+    if (box.full || !sameBox(box) || !b) { endFlush(box, 'page'); return; }
+    if (U().enabled(b)) { try { passing = b; b.click(); } finally { passing = null; endFlush(box); } return; }
+    if (Date.now() - since >= SUBMIT_ON) { endFlush(box, f.action === 'submit' ? 'submit' : 'page'); return; }
+    setTimeout(() => turnOn(box, f, since), 100);
+  };
   const endFlush = (box, reason = null) => {
     const f = box.flushing;
     if (!f) return;
@@ -344,18 +357,81 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       globalThis.GZ_DRAFT_UI?.sent?.(box.editor);
       box.sending = true;
     }
-    // An attempt's Submit and Save and Close send its box: a compact paper's last edit goes in first.
+    // An attempt's Submit and Save and Close send its box: a compact paper's last edit goes in first; a full paper's
+    // press waits for its submit step (features/writer-submit.js) while the frame isn't up to have one.
     for (const box of boxes.values()) {
-      if (box.mode !== 'paper' || box.full || !/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || !box.editor.closest('bb-assignment-attempt-authoring-panel')?.contains(b) || !sameBox(box)) continue;
+      if (box.mode !== 'paper' || !/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || !box.editor.closest('bb-assignment-attempt-authoring-panel')?.contains(b) || !sameBox(box)) continue;
+      if (box.full && globalThis.GZ_WRITER_SUBMIT?.armed?.(box)) continue;
       e.preventDefault(); e.stopImmediatePropagation();
-      if (!box.ready || !box.port || box.flushing) return;
-      const request = crypto.randomUUID(), id = b.getAttribute('data-analytics-id'), action = /submit$/.test(id) ? 'submit' : 'save';
-      box.flushing = { request, button: b, id, action, timer: setTimeout(() => {
-        if (box.flushing?.request === request) endFlush(box, 'save');
-      }, 60000) };
-      box.port.postMessage({ type: 'compact:flush', request, action });
+      hold(box, b);
+      return;
     }
   }, true);
+  // Disabled native buttons emit no click. Before the submit module is armed, keep the same pointer intent too;
+  // compact's saved paper can turn Ultra's empty box's Submit on once the frame has loaded and flushed it.
+  let heldDown = null;
+  const disabledAt = (e, includeArmed = false) => {
+    for (const box of boxes.values()) {
+      if (box.mode !== 'paper' || !sameBox(box) || (!includeArmed && box.full && globalThis.GZ_WRITER_SUBMIT?.armed?.(box))) continue;
+      const buttons = box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || [];
+      for (const b of buttons) {
+        if (!/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || U().enabled(b)) continue;
+        const r = b.getBoundingClientRect();
+        if (r.right > r.left && r.bottom > r.top && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return { box, b };
+      }
+    }
+    return null;
+  };
+  document.addEventListener('pointerdown', (e) => { heldDown = e.button === 0 ? disabledAt(e) : null; }, true);
+  document.addEventListener('pointerup', (e) => {
+    const was = heldDown; heldDown = null;
+    if (!was || e.button !== 0 || disabledAt(e, true)?.b !== was.b) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    hold(was.box, was.b, e.type);
+  }, true);
+  document.addEventListener('pointercancel', () => { heldDown = null; }, true);
+  // Ultra's button, held until the frame can take it, marked busy meanwhile: while the frame opens or reopens there's no
+  // frame to save the paper, and Ultra's box may not hold its last words (a full paper's, none). Compact: the frame's
+  // save asked (compact:flush) once it is up and has said its view (a view ends a flush asked before it), asked again of
+  // a frame that reopened before answering; a press while one is asked waits on that one (the bar says Saving…). Full:
+  // pressed again once the submit step has the box; if it never takes it, fail without pressing Ultra's stale box. A box
+  // Writer gives back holds nothing: Ultra's editor is there again to press.
+  const HOLD_ARM = 5000;
+  const hold = (box, b, type = 'click') => {
+    if (box.flushing && Date.now() - box.flushing.at >= 60000) endFlush(box, 'save');
+    if (box.flushing || (box.held && !box.held.request)) return;
+    const id = b.getAttribute('data-analytics-id'), action = /submit$/.test(id) ? 'submit' : 'save';
+    const busy = (x, on) => { if (!x) return; if (on) { x.setAttribute('aria-busy', 'true'); x.style.setProperty('cursor', 'progress'); } else { x.removeAttribute('aria-busy'); x.style.removeProperty('cursor'); } };
+    if (box.held) busy(box.held.button, false);
+    const p = box.held = { button: b, request: null, port: null, up: null, at: Date.now() };
+    const button = () => [...box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || []].find((x) => x.getAttribute('data-analytics-id') === id);
+    const end = () => { if (box.held === p) box.held = null; if (p.button) busy(p.button, false); };
+    const fail = () => { end(); box.port?.postMessage({ type: 'submit:unavailable', action }); };
+    const step = () => {
+      if (box.held !== p) return;
+      if (boxes.get(box.editor) !== box || !sameBox(box)) { end(); return; }
+      const x = button();
+      if (x !== p.button) { if (p.button) busy(p.button, false); p.button = x; if (x) busy(x, true); }
+      if (p.request && box.flushing?.request === p.request) { setTimeout(step, 100); return; } // the frame saves it
+      if (p.request && box.port === p.port) { end(); return; } // answered: Ultra's button went, or the bar says why
+      if (Date.now() - p.at >= 60000) { fail(); return; }
+      if (box.full && x) {
+        if (p.port !== box.port) { p.port = box.port; p.up = null; }
+        if (globalThis.GZ_WRITER_SUBMIT?.armed?.(box)) { end(); GZ_WRITER_SUBMIT.press(box, x, type); return; }
+        if (!box.ready || !box.port) p.up = null;
+        else if (Date.now() - (p.up ??= Date.now()) > HOLD_ARM) { fail(); return; }
+      } else if (!box.full && x && box.ready && box.port && box.viewedOn === box.port) {
+        p.request = crypto.randomUUID(); p.port = box.port;
+        box.flushing = { request: p.request, button: x, id, action, at: Date.now(), timer: setTimeout(() => {
+          if (box.flushing?.request === p.request) endFlush(box, 'save');
+        }, 60000) };
+        box.port.postMessage({ type: 'compact:flush', request: p.request, action });
+      }
+      setTimeout(step, 100);
+    };
+    busy(b, true);
+    step();
+  };
   // Ultra collapses an empty new Post when its editor loses focus, and the frame taking the typing is such a loss. While
   // the frame stands in, the hidden editor's blur never reaches Ultra (live Ultra, 2026-10-28).
   for (const type of ['blur', 'focusout']) addEventListener(type, (e) => {

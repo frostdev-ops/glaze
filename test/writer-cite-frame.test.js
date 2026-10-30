@@ -135,3 +135,33 @@ test('changing students clears the old sources and ignores their late read and s
   assert.equal(f.cite.sources().length, 0, 'losing the student also clears the sources');
   f.life.pagehide();
 });
+
+// A discussion's page re-sends a box's context as it reads more (the student, the prompt, the thread, a new post): the
+// Sources popover the student has open stays open while the store it lists is the same, and closes when it isn't.
+test('a context re-send keeps the open Sources popover unless its store changes', async () => {
+  const nodes = [];
+  const node = () => {
+    const n = { hidden: false, style: {}, dataset: {}, className: '', textContent: '', value: '', offsetWidth: 0, offsetHeight: 0, offsetTop: 0, isConnected: true,
+      classList: { toggle() {}, add() {}, remove() {} }, append() {}, prepend() {}, replaceChildren() {}, addEventListener() {}, removeEventListener() {}, focus() {},
+      setAttribute(k) { if (k === 'hidden') this.hidden = true; }, removeAttribute(k) { if (k === 'hidden') this.hidden = false; }, getAttribute: () => null,
+      querySelector: () => null, querySelectorAll: () => [], getBoundingClientRect: () => ({ left: 0, top: 0, bottom: 0, width: 0, height: 0 }), getClientRects: () => [], contains: () => false, closest: () => null };
+    nodes.push(n);
+    return n;
+  };
+  const events = {};
+  const view = { state: PM.state.EditorState.create({ doc: W.parse(W.compose, '<p>Body</p>') }), dispatch(tr) { this.state = this.state.apply(tr); } };
+  const scope = vm.createContext({ console, setTimeout: () => 0, clearTimeout() {}, innerWidth: 800, scrollY: 0, ResizeObserver: class { observe() {} }, addEventListener() {},
+    document: { createElement: node, createElementNS: node, createTextNode: node, body: node(), getElementById: () => null, addEventListener() {}, activeElement: null },
+    GZ_PM: PM, GZ_WRITER_CITE: { ...C }, GZ_WRITER_LOOKUP: {}, GZ_WRITER_SOURCES: { ...S, load: async () => [source('Alpha')], save: async () => {} },
+    GZ_WRITER_FRAME: { on: (name, fn) => { events[name] = fn; }, slot: () => null, editor: () => ({ view, focus() {} }), mode: () => 'compose', t: (s) => s } });
+  vm.runInContext(fs.readFileSync(process.env.WRITER_CITE_SOURCE || require.resolve('../writer-cite.js'), 'utf8'), scope);
+  const cite = scope.GZ_WRITER_CITE, pop = nodes.find((n) => n.className === 'pop gz-cite');
+  const asked = { ...context('_9_1'), kind: 'post' };
+  await events.context(asked);
+  cite.open();
+  assert.equal(pop.hidden, false);
+  await events.context({ ...asked, thread: [{ id: '_5_1', text: 'A new post' }], prompt: 'Discuss the river.' });
+  assert.equal(pop.hidden, false, 'the same store: the popover stays open');
+  await events.context({ ...asked, item: '_10_1' });
+  assert.equal(pop.hidden, true, 'another store: the popover closes');
+});

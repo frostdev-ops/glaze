@@ -216,6 +216,15 @@ const HARNESS = `(() => {
     for (const fid of ['mla9', 'apa7', 'chicago17']) {
       await load(fr, FX.papers[fid](), fid);
       pages[fid] = await pagesOf(fr);
+      // Each line's start as the pages read it from the DOM is where ProseMirror's posAtCoords puts it (notes, tabs and
+      // headings included), and a layout from scratch has the drawn one's breaks.
+      const starts = await fr.evaluate(() => {
+        const v = GZ_WRITER_PAPER.current().editor.view, P = GZ_WRITER_PAGINATE, one = P.whole(v), old = P.whole(v, { legacy: true });
+        const at = (l) => l.blocks.map((b) => (b.lines || []).map((x) => x.at).join(','));
+        const sig = (breaks) => breaks.map((b) => `${b.b}:${b.l}:${Math.round(b.gap * 100)}`).join('|');
+        return { lines: one.blocks.reduce((n, b) => n + (b.lines?.length || 0), 0), differ: at(one).findIndex((x, i) => x !== at(old)[i]), same: sig(one.breaks) === sig(GZ_WRITER_PAPER.current().layout().breaks) };
+      });
+      check(starts.differ === -1 && starts.same, `${fid}: its ${starts.lines} lines start where ProseMirror's posAtCoords puts them, and laid out again from scratch it breaks as drawn${starts.differ === -1 ? '' : ` (block ${starts.differ} differs)`}`);
       const api = await fr.evaluate(async () => { const o = await GZ_WRITER_PAPER.current().docx(); return Array.from(o.bytes); });
       fs.writeFileSync(path.join(out, `paper-${fid}.docx`), Buffer.from(api));
       if (process.env.PAPER_PROBE && fid === 'apa7') console.log('PROBE', JSON.stringify(await fr.evaluate(() => {
@@ -242,6 +251,32 @@ const HARNESS = `(() => {
     check(pages.chicago17.count === 6 && pages.chicago17.headers[0] === '' && pages.chicago17.headers[1] === '2', 'Chicago: no number on the title page, then 2…');
     check(pages.chicago17.notes.reduce((a, b) => a + b, 0) === 5 && pages.chicago17.notes[0] === 0, 'Chicago: five footnotes at the foot of their pages');
 
+    // ---- line starts with mixed inline content, including visual order differing from document order
+    const mixedStarts = await fr.evaluate(() => {
+      const S = GZ_WRITER_SCHEMA.paper, text = (s, marks = []) => S.text(s, marks), para = (content, attrs = {}) => S.node('paragraph', attrs, content);
+      const repeat = (s) => s.repeat(18), bold = S.marks.bold.create();
+      const cases = [
+        ['rtl', para([text(repeat('שלום עולם בדיקה של שורות שונות '))], { dir: 'rtl' })],
+        ['bidi', para([text(repeat('English שלום עולם more words العربية '))])],
+        ['direction marks', para([text(repeat('Plain words ')), text(repeat('שלום עולם '), [S.marks.direction.create({ dir: 'rtl' })]), text(repeat(' after words '))])],
+        ['wide and soft hyphen', para([text(repeat('漢字🙂a\u00adb\u00adc wides '), [bold])])],
+        ['hard breaks and notes', para([text(repeat('Words before ')), S.node('hard_break'), S.node('footnote_ref', { content: 'A note.' }), text(repeat(' words after '))])],
+        ['inline image', para([text(repeat('Words before ')), S.node('image', { src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', width: 84, alt: 'Pixel' }), text(repeat(' words after '))])],
+        ['mixed heights', para([text(repeat('normal ')), text(repeat('large '), [S.marks.text_style.create({ size: 26 })]), text(repeat(' small '))])],
+        ['tab stops', para([text('left\tcentre\tright'), S.node('hard_break'), text(repeat('words '))], { tabs: [[1, 'l'], [3, 'c'], [6, 'r']] })],
+      ];
+      const v = GZ_WRITER_PAPER.current().editor.view;
+      v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, cases.map(([, n]) => n)));
+      return cases.map(([name]) => name);
+    });
+    await settle(fr);
+    const mixed = await fr.evaluate(() => {
+      const v = GZ_WRITER_PAPER.current().editor.view, P = GZ_WRITER_PAGINATE, one = P.whole(v), old = P.whole(v, { legacy: true });
+      return one.blocks.map((b, i) => ({ at: b.lines.map((x) => x.at), legacy: old.blocks[i].lines.map((x) => x.at) }));
+    });
+    console.log('mixed line starts', JSON.stringify(mixed.map((x, i) => ({ name: mixedStarts[i], ...x }))));
+    for (let i = 0; i < mixedStarts.length; i++) check(JSON.stringify(mixed[i].at) === JSON.stringify(mixed[i].legacy), `${mixedStarts[i]}: line starts match posAtCoords (${JSON.stringify(mixed[i])})`);
+
     // ---- incremental: a keystroke measures the block it's in, not the paper
     await load(fr, FX.papers.mla9(), 'mla9');
     const cost = await fr.evaluate(async () => {
@@ -257,15 +292,15 @@ const HARNESS = `(() => {
 
     // ---- format checks on the page
     await load(fr, FX.seeded.mla9().find(([r]) => r === 'heading-order')[1], 'mla9');
-    await pause(400);
-    check(await fr.evaluate(() => !!document.querySelector('.gp-issue[data-rule="heading-order"] .gp-sbtn')), 'a heading-order issue spanning paragraphs keeps its Checks card and Fix');
+    const orderCard = await until(() => fr.evaluate(() => !!document.querySelector('.gp-issue[data-rule="heading-order"] .gp-sbtn')), 'heading-order Checks card with Fix', 30000).catch(() => false);
+    check(orderCard, 'a heading-order issue spanning paragraphs keeps its Checks card and Fix');
     await fr.click('.gp-issue[data-rule="heading-order"] .gp-sbtn');
     await until(() => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.child(0).textContent === 'Alex Rivera'), 'heading order fixed');
     check(true, 'Fix restores heading order through the shared issues integration');
     for (const fid of ['mla9', 'apa7', 'chicago17']) {
       await load(fr, FX.papers[fid](), fid);
       check(await fr.evaluate(() => GZ_WRITER_CITE.style() === ({ mla: 'mla9', apa: 'apa7', chicago: 'chicago17' })[GZ_WRITER_PAPER.current().format().cite]), `${fid}: citations follow the paper's format`);
-      await pause(400);
+      await pause(400); // past runChecksSoon's 250 ms debounce; a clean paper must stay clean
       const issues = await fr.evaluate(() => GZ_WRITER_ISSUES.list().map(({ source, message, rule }) => ({ source, message, rule })));
       const clean = await fr.evaluate(() => document.querySelectorAll('.gp-issue[data-rule]').length);
       check(clean === 0 && !issues.some((i) => ['format', 'cite'].includes(i.source)), `${fid}: a clean paper has no format or citation issues in Checks (${clean} cards; ${JSON.stringify(issues)})`);
@@ -288,7 +323,7 @@ const HARNESS = `(() => {
     await fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view; let at = 0; v.state.doc.descendants((n, pos) => { if (!at && n.isText && n.text.includes('(Morrison 35)')) at = pos + n.text.indexOf('(Morrison 35)'); }); v.dispatch(v.state.tr.insertText('(Morrison, 42)', at, at + '(Morrison 35)'.length)); });
     await until(() => fr.evaluate(() => [...document.querySelectorAll('.gp-issue')].some((c) => c.textContent.includes('(Morrison 42)'))), 'citation card');
     check(true, 'MLA citation "(Morrison, 42)" gets a card with the fix "(Morrison 42)"');
-    await pause(700);
+    await pause(700); // a second card for the same citation would land in this window
     const duplicates = await fr.evaluate(() => [...document.querySelectorAll('.gp-issue')].filter((c) => c.textContent.includes('(Morrison 42)')).length);
     check(duplicates === 1, `paper format and cite checks share one MLA citation card (${duplicates})`);
     // In the attempt panel, then in Focus (the frame fills the window): the mockup's 1440px view.
@@ -473,7 +508,7 @@ const HARNESS = `(() => {
     check(await d.evaluate(() => GZ_WRITER_PAPER.current().format().id === 'mla9' && document.querySelector('.gp-sheet .gp-hdr').textContent === '1'), '?format=mla9 opens a new MLA document');
     check(await d.evaluate(() => document.querySelector('.gp-top a').textContent === 'Documents'), 'the back link reads Documents');
     check(await d.evaluate(() => { const i = document.querySelector('.gp-top h1 input'); return i && i.getAttribute('aria-label') === 'Title' && i.placeholder === 'Untitled document' && !i.readOnly && document.querySelector('.gp-state').textContent === ''; }), 'its title is a field, Untitled document, and nothing says Saved');
-    await pause(1500);
+    await pause(1500); // past the 800 ms autosave: an untouched document must not save
     await d.close();
     check((await rows()).papers.length === 0 && (await rows()).index.length === 0, 'an untouched new document leaves nothing behind');
 
@@ -506,7 +541,8 @@ const HARNESS = `(() => {
     await d.click('.gp-top h1 input', { clickCount: 3 });
     await d.keyboard.type('My own title');
     await until(() => d.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'title saved');
-    await pause(300);
+    let titleSeen;
+    await until(async () => (titleSeen = (await stored(k2))?.title) === 'My own title', 'typed title in storage', 30000).catch((e) => { throw Error(`${e.message} (last: ${JSON.stringify(titleSeen)})`); });
     rec = await stored(k2);
     check(rec.title === 'My own title' && rec.named === true && await d.evaluate(() => document.querySelector('.gp-top h1 input').value === 'My own title'), 'a title typed in the editor is saved and stays');
     await d.fill('.gp-top h1 input', 'Title still being typed');

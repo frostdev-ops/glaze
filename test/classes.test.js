@@ -621,6 +621,20 @@ test('class-start reminders: lead minutes before, in the student\'s zone, in lib
   assert.ok(R.clean({ seen: { [`class:11.0@${bio.at}`]: now } }, now).seen[`class:11.0@${bio.at}`]);
 });
 
+// A period may run to midnight (end 1440): one that starts at 23:59 is still a class, reminded and exported, until midnight.
+test('a class in the day\'s last minute runs to midnight: reminded, exported, and found across midnight', () => {
+  const T = require('../lib/todo.js');
+  const NY = 'America/New_York';
+  const late = { courses: [{ id: '11', name: 'Late lab', periods: [{ days: [4], start: 1439, end: 1440, loc: '', from: '', to: '', skip: [] }] }] };
+  const thu = T.typed('2026-10-15', '23:59', NY), fri = T.midnight(C.dayNum('2026-10-16'), NY);
+  assert.deepEqual(C.between(late, thu - 6e4, thu + 6e4, NY).map((x) => [x.at, x.until]), [[thu, fri]]);
+  const ev = C.events(late, { now: thu - 5 * 6e4, tz: NY, lead: 10 }).filter((e) => e.end === thu);
+  assert.equal(ev.length, 1);
+  assert.equal(ev[0].at, thu - 10 * 6e4);
+  const iso = (ms) => new Date(ms).toISOString();
+  assert.deepEqual(C.icsEvents(late, { site: 'x', from: '2026-10-15', to: '2026-10-15', tz: NY }).map((e) => [iso(e.start), iso(e.end)]), [[iso(thu), iso(fri)]]);
+});
+
 // Codex W14 review: an export holds exact instants (UTC), as every other timed event in W13's file, worked out in the
 // zone the schedule was saved in: floating times would move with the calendar app's zone.
 test('the export hook: one event per meeting, at its instant in the schedule\'s own zone, written by lib/ics.js', async () => {

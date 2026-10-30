@@ -213,14 +213,36 @@ const BROKER = {
   // its code: palette, look, background, navigation, the bar's and the sidebar's looks, card look and styles, and its parts,
   // through the same write as the editor's (look, above). One gone, or one Glaze won't wear (GZ_XPARTS.outside), isn't.
   // 'build': Settings, having changed the kept Looks, wakes the worker to bring the catalogue up to date (catalogue, below), where
-  // a browser wouldn't wake it for the storage change alone.
+  // a browser wouldn't wake it for the storage change alone. 'parts': a course page wearing a Look of its own (courses.looks)
+  // asks for that Look's parts, as storage's lookX gives the theme's: a built-in's own, a kept one's from its code.
   looks: {
-    allow: async (m, s) => (m.op === 'build' && fromGlaze(s)) || (m.op === 'wear' && typeof m.id === 'string' && GZ_CATALOG.ID.test(m.id) && (fromGlaze(s) || !!await lmsPage(s))),
+    allow: async (m, s) => (m.op === 'build' && fromGlaze(s))
+      || (['keep', 'remove'].includes(m.op) && fromEditor(s) && trustedFrame(s, 'settings') && (s.origin === undefined || ownOrigin(s.origin))
+        && (m.op === 'keep' ? !!GZ_CATALOG.kept(m.favorite) && m.favorite.code.length <= 20000 : GZ_CATALOG.ID.test(m.id)))
+      || (['wear', 'parts'].includes(m.op) && typeof m.id === 'string'
+        && (GZ_CATALOG.ID.test(m.id) || (m.op === 'parts' && GZ_LOOKS.some((L) => L.name === m.id))) && (fromGlaze(s) || !!await lmsPage(s))),
     run: async (m, area) => {
       if (m.op === 'build') return catalogue().then(() => ({ ok: true }));
+      const L = m.op === 'parts' && GZ_LOOKS.find((l) => l.name === m.id);
+      if (L) return { ok: true, parts: GZ_LOOK_PARTS(L) };
+      if (m.op === 'keep' || m.op === 'remove') {
+        const { lookFavorites, rotateLooks } = await area.local.get(['lookFavorites', 'rotateLooks']);
+        const favorites = GZ_HISTORY.favorites(lookFavorites);
+        if (m.op === 'keep') await area.local.set({ lookFavorites: GZ_HISTORY.favor(favorites, GZ_CATALOG.kept(m.favorite)) });
+        else {
+          const f = GZ_CATALOG.keptAll(favorites).find((e) => e.id === m.id);
+          if (!f) return { ok: false, error: 'gone' };
+          const s = GZ_SANITIZE(await area.sync.get('courses'));
+          if (GZ_CATALOG.unmap(s.courses, m.id) && !await area.sync.set({ version: 2, courses: s.courses })) return { ok: false, error: 'write' };
+          await area.local.set({ lookFavorites: favorites.filter((e) => e.code !== f.code), rotateLooks: GZ_CATALOG.ids(rotateLooks, favorites).filter((id) => id !== m.id) });
+        }
+        await catalogue();
+        return { ok: true };
+      }
       const e = GZ_CATALOG.keptAll((await area.local.get('lookFavorites')).lookFavorites).find((f) => f.id === m.id);
       const got = e && await GZ_SHARE.decode(e.code).then((g) => (GZ_XPARTS.outside(g.parts).length ? null : g), () => null);
       if (!got) return { ok: false, error: 'gone' };
+      if (m.op === 'parts') return { ok: true, parts: got.parts };
       const raw = await area.sync.get(null), s = GZ_SANITIZE(raw);
       if (got.cards.length && !(await GZ_CARDS.change({ set: got.cards }, area))?.ok) return { ok: false };
       return BROKER.look.run({ parts: got.parts, patch: { version: 2, ...GZ_LX.wearCode(s, got), card: GZ_CARDS.settings({ ...GZ_CARDS.settings(raw.card), ...got.card }) } }, area);
@@ -739,6 +761,44 @@ BROKER.media = {
     return GZ_MEDIA.change(m, store, { decode: GZ_SHARE.decode });
   },
 };
+// Background reads also belong to live same-site course frames. This grants no editor writes or mod authority.
+const backgroundPage = async (s) => {
+  if (!Number.isInteger(s.frameId) || s.frameId < 0) return null;
+  const site = await fromLms({ ...s, url: addressOf(s), frameId: 0 });
+  return site && (s.frameId === 0 || s.tab?.url?.startsWith(`${site}/`)) ? site : null;
+};
+// Resolve only this document's Look, never the files assigned to other courses or tabs. Sender URLs can predate SPA
+// navigation (or still be about:blank); Moodle keeps its course and installation path in two small DOM fields. Pin the
+// current-page read to the sending document where supported, and fail closed if it has gone. No page-supplied id grants a file.
+const backgroundParts = async (s, area) => {
+  const courses = GZ_SANITIZE(await area.sync.get('courses')).courses.looks;
+  const theme = async () => GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local);
+  if (!Object.keys(courses).length) return theme();
+  let u = new URL(addressOf(s)), key;
+  const [current] = await chrome.scripting.executeScript({ target: { tabId: s.tab.id,
+    ...(s.documentId ? { documentIds: [s.documentId] } : { frameIds: [s.frameId] }) }, func: () => ({
+    href: location.href,
+    moodle: document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1],
+    styles: document.querySelector('link[href*="/theme/styles"]')?.href,
+  }) });
+  const at = new URL(current.result.href);
+  if (at.origin !== u.origin || !await fromLms({ ...s, frameId: 0, url: at.href })) throw Error('sender');
+  u = at;
+  if (await approved('moodle', u) && current.result.moodle && current.result.styles) {
+    const base = new URL(current.result.styles.split('/theme/')[0]);
+    if (base.origin === u.origin) key = `moodle:${base.href.replace(/\/$/, '')}/${current.result.moodle}`;
+  }
+  const ultra = /^\/ultra\/courses\/(_\d+_\d+)\//.exec(u.pathname)?.[1];
+  const canvas = /^\/courses\/(\d+)(?:\/|$)/.exec(u.pathname)?.[1];
+  key ||= ultra || (canvas && `canvas:${u.origin}/${canvas}`);
+  const id = courses[key];
+  const builtin = GZ_LOOKS.find((l) => l.name === id);
+  if (builtin) return GZ_LOOK_PARTS(builtin);
+  const kept = id && GZ_CATALOG.keptAll((await area.local.get('lookFavorites')).lookFavorites).find((f) => f.id === id);
+  const got = kept && await GZ_SHARE.decode(kept.code).catch(() => null);
+  if (got && !GZ_XPARTS.outside(got.parts).length) return got.parts;
+  return theme();
+};
 // A kept file for a page's background (lib/scene-media.js): as it was kept (checked and named when it was put), for the file
 // the worn Look names only; the editor and its preview frame may have any. Read outside the broker's queue: only a file an
 // older Glaze kept in storage.local, moving over, takes a turn.
@@ -747,9 +807,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   (async () => {
     if (!globalThis.GZ_MEDIA) importScripts('media.js');
     const area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
-    if (!fromPreview(s) && (!await fromLms(s) || GZ_MEDIA.fileOf((await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local))?.x?.bg?.media?.src) !== m.h)) {
-      return { ok: false, error: 'sender' };
-    }
+    if (!fromPreview(s) && (!await backgroundPage(s) || GZ_MEDIA.fileOf((await backgroundParts(s, area))?.x?.bg?.media?.src) !== m.h)) return { ok: false, error: 'sender' };
     return GZ_MEDIA.change({ op: 'file', h: m.h }, area, { queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f) });
   })().then(reply, () => reply({ ok: false, error: 'failed' }));
   return true;
@@ -783,11 +841,11 @@ const mediaDownloads = new Map(); // shared only while loading; never a cache of
 const mediaFetch = async (s, op, type) => {
   if (!globalThis.GZ_MEDIA) importScripts('media.js');
   const free = fromPreview(s);
-  const site = free ? null : await fromLms(s);
+  const site = free ? null : await backgroundPage(s);
   if (!free && !site) return { ok: false, error: 'sender' };
   const area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
   const allow = async (src) => {
-    const worn = free ? null : (await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local))?.x?.bg?.media;
+    const worn = free ? null : (await backgroundParts(s, area))?.x?.bg?.media;
     if (free || (worn?.src === src && worn.type === type)) return true;
     if (!globalThis.GZ_MODBROKER) importScripts('modapi.js', 'modwidget.js', 'modbroker.js');
     const answer = await GZ_MODBROKER.page({ op: 'parts' }, { site, local: area.local,
@@ -1235,6 +1293,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 let catalogTurn = Promise.resolve();
 const catalogue = () => (catalogTurn = catalogTurn.then(async () => {
   const local = chrome.storage.local, { lookFavorites, [GZ_CATALOG.KEY]: was } = await local.get(['lookFavorites', GZ_CATALOG.KEY]);
+  if (!was && !GZ_HISTORY.favorites(lookFavorites).length) return;
   if (was?.sig === GZ_CATALOG.sig(lookFavorites ?? null)) return;
   const cat = await GZ_CATALOG.build(lookFavorites, (code) => GZ_SHARE.decode(code).then((g) => (GZ_XPARTS.outside(g.parts).length ? null : g)), was);
   await local.set({ [GZ_CATALOG.KEY]: cat });
@@ -1866,9 +1925,30 @@ const lightUp = async () => {
   await new Promise((done) => dc.onPageChanged.addRules(LIT.map((c) => ({ conditions: [new dc.PageStateMatcher(c)], actions: [new dc.SetIcon({ imageData })] })), done));
 };
 const ownIcon = () => Object.fromEntries(Object.entries(chrome.runtime.getManifest().action.default_icon).map(([k, v]) => [k, `/${v}`]));
+// Glaze's crossfades (lib/motion.js swap, content-ultra.js's page links) start in its content scripts' world, but Chrome
+// rejects a skipped or timed-out one's ready in the page's own world as well, where only the page's code can handle it and
+// a school's error tracker would collect it. This, in each frame Glaze runs in, answers their glaze:transition event: it
+// cancels a presence probe (the guard is here) and, on the separate handoff, marks the transition started's ready handled.
+const transitionGuard = () => {
+  if (!('activeViewTransition' in document) || globalThis.__gzTransitionGuard) return;
+  addEventListener('glaze:transition', (e) => {
+    try {
+      // A hidden document skips before assigning activeViewTransition: there would be nothing to hand over.
+      // A presence probe must leave any transition the school already owns alone.
+      if (e.cancelable) { if (!document.hidden) e.preventDefault(); }
+      else (e.viewTransition || document.activeViewTransition)?.ready.then(undefined, () => {});
+    } catch { /* page code can replace these properties; never throw into its error tracker */ }
+  }, true);
+  globalThis.__gzTransitionGuard = true; // repeated messages, worker restarts and bfcache keep one listener per document
+};
 chrome.runtime.onMessage.addListener((m, s) => {
-  if (m?.type !== 'glaze:here' || !chrome.declarativeContent || s.frameId !== 0 || !s.tab) return;
-  lmsPage(s).then((ok) => ok && chrome.action.setIcon({ tabId: s.tab.id, path: ownIcon() })).catch(() => {});
+  if (m?.type !== 'glaze:here' || !s.tab) return;
+  lmsPage(s).then((ok) => {
+    if (!ok) return;
+    const target = s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] };
+    chrome.scripting.executeScript({ target, world: 'MAIN', injectImmediately: true, func: transitionGuard }).catch(() => {});
+    if (chrome.declarativeContent && s.frameId === 0) return chrome.action.setIcon({ tabId: s.tab.id, path: ownIcon() });
+  }).catch(() => {});
 });
 
 // Glaze's reader (reader.html, W23) reads a PDF or picture only with a one-use pass that an import's content script got

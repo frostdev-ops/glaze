@@ -47,8 +47,8 @@
   }
   if (site !== 'ultra') globalThis.GZ_SITE_ULTRA?.sheets?.forEach((l) => l.remove());
   if (!site) return;
-  // Glaze's toolbar icon for this tab (lib/background.js).
-  if (window.top === window && !isPreview) try { chrome.runtime.sendMessage({ type: 'glaze:here' }).catch(() => {}); } catch { /* reloaded */ }
+  // Glaze's toolbar icon for this tab, and the guard for its crossfades in this frame (lib/background.js).
+  if (!isPreview) try { chrome.runtime.sendMessage({ type: 'glaze:here' }).catch(() => {}); } catch { /* reloaded */ }
   const ultra = site === 'ultra';
   const moodle = site === 'moodle';
 
@@ -266,7 +266,7 @@
   const moveParts = () => {
     const p = GZ_CTX.parts(), x = settings.extras;
     if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor && x.pointerOn && x.pointerAnim || p?.type) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
-    if (globalThis.GZ_LOOKX || x.pointerOn && (x.pointer === 'look' ? p?.pointer || lookHere() : partsOn(true))) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
+    if (globalThis.GZ_LOOKX || x.pointerOn && (x.pointer === 'look' ? p?.pointer || lookHere() : partsOn())) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {});
   };
   document.addEventListener('glaze:parts', moveParts);
   // Ultra's review circle is role=checkbox; aria-checked turning "true" is the item being completed. The dots are
@@ -1309,7 +1309,8 @@
   if (!ultra) addEventListener('pagereveal', (e) => { if (e.viewTransition) setAttr('data-gz-vt-in', true); });
 
   const applySettings = () => {
-    looked = lookHere();
+    // A course's own Look brings its own parts (features/lookparts.js read), as the theme brings its.
+    if (looked !== (looked = lookHere())) Promise.resolve(looked).then((id) => partsIn(id));
     const s = (worn = looked ? GZ_COURSE_LOOK(settings, ultra ? courseId() : canvasCourseKey(), looks) : settings);
     setVar('--gz-surface-course', surfaceCourse());
     const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
@@ -1564,7 +1565,7 @@
   document.addEventListener('glaze:parts', () => { if (links.length) X.syncNav(); });
 
   // This frame's helpers for lazy features; site helpers resolve when called.
-  const partsOn = (pointer = false) => on(settings) && (!isPreview || html.dataset.previewPage !== 'quiz') && (pointer || !lookHere());
+  const partsOn = () => on(settings) && (!isPreview || html.dataset.previewPage !== 'quiz');
   globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, moment, gradeMoment, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
     account: () => (site === 'canvas' ? X.ctx.profile().then((p) => String(p.id)) : X.ctx.me()),
     // The palette, the keys, the course menu, the previews and Download all (W0c).
@@ -1573,7 +1574,7 @@
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    // Course Looks replace global parts; pointers resolve the course Look separately.
+    // A course's own Look's parts replace the theme's (features/lookparts.js).
     partsOn, courseLook: lookHere,
     parts: () => (partsOn() && (globalThis.GZ_MODS ? GZ_MODS.parts(globalThis.GZ_XPARTS_PAGE?.now() || null) : globalThis.GZ_XPARTS_PAGE?.now())) || null,
     background: (el) => { stopScene(); if (modBg && modBg !== el) { globalThis.GZ_SCENE_HOST?.clear(modBg); modBg.remove(); } modBg = el || null; syncScene(); },

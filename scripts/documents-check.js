@@ -177,8 +177,8 @@ const PROBE = ({ lang }) => {
     check(await home.evaluate(() => [...document.querySelectorAll('.gt-thumb')].filter((t) => !t.closest('.gd-tile')).every((t) => t.parentElement.matches('.gd-card > .gd-pic') && t.getAttribute('aria-hidden') === 'true')), 'each thumbnail sits in its own card, hidden from assistive tech');
     const rendersBefore = renders.length;
     await home.evaluate(() => scrollTo(0, 0));
-    await pause(300);
-    check((await home.evaluate(() => __gd.renders.length)) > rendersBefore, 'evicted thumbnails are redrawn when revisited');
+    await until(async () => { const n = await home.evaluate(() => __gd.renders.length); if (n <= rendersBefore) throw Error(`${n} renders, ${rendersBefore} before the scroll`); return true; }, 'evicted thumbnails redrawn at the top', 30000);
+    check(true, 'evicted thumbnails are redrawn when revisited');
     const cached = await home.evaluate(() => __gd.renders.length);
     await worker.evaluate(async () => { const r = await chrome.storage.local.get('writerPapers'); await chrome.storage.local.set(r); });
     await pause(150);
@@ -264,7 +264,8 @@ const PROBE = ({ lang }) => {
     check(await home.evaluate(() => document.getElementById('gd-q').value === ''), 'Esc in the search field clears it');
 
     // Once every body is cached, changing or clearing a query must still render even with no reads left to await.
-    await home.fill('#gd-q', 'never-present'); await pause(300);
+    await home.fill('#gd-q', 'never-present');
+    await until(async () => { const [n, s] = [(await shown()).length, await said(home)]; if (n || s !== '0 documents') throw Error(`${n} cards, "${s}"`); return true; }, 'no match for never-present', 30000);
     await home.fill('#gd-q', 'HÉLIOTROPE');
     await until(async () => (await shown()).join() === FIELD, 'warm-cache query');
     check(true, 'a query change after the body cache is warm paints the new result');
@@ -438,7 +439,7 @@ const PROBE = ({ lang }) => {
     const courseNow = await home.evaluate(() => [...document.querySelectorAll('#gd-course option')].map((o) => o.textContent));
     check(courseNow.join('|') === 'All courses|ENGL 2110|No course', `a course whose only paper is in Trash leaves the Course choices (${courseNow.join('|')})`);
     await home.fill('#gd-q', 'Field notes from Tuesday');
-    await pause(300);
+    await until(async () => { const s = await said(home); if (s !== '0 documents') throw Error(`"${s}"`); return true; }, 'the live search drawn with no match', 30000);
     check(!(await shown()).includes(FIELD) && await said(home) === '0 documents', 'search leaves out what is in Trash');
     await home.fill('#gd-q', '');
     await until(async () => (await shown()).length > 100, 'cleared search');
@@ -461,7 +462,8 @@ const PROBE = ({ lang }) => {
     const binMenu = await home.evaluate(() => [...document.querySelectorAll('.gd-menu [role="menuitem"], .gd-menu [role="separator"]')].map((b) => b.textContent || '—'));
     check(binMenu.join('|') === 'Restore|Delete forever', `Shift+F10 in Trash offers Restore and Delete forever only (${binMenu.join('|')})`);
     await home.keyboard.press('Escape');
-    await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Delete'); await home.keyboard.press('F2'); await pause(200);
+    await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Delete'); await home.keyboard.press('F2');
+    await pause(200); // a window for a rename or toast that must not come
     check((await binned()).includes(FIELD) && !(await home.evaluate(() => document.querySelector('.gd-rename, .gd-toast'))) && !!(await local(`writerPaper:${FIELD}`)), 'in Trash the Delete key and F2 do nothing');
     await home.click(`${card(FIELD)} .gd-more`); await home.click('.gd-menu [data-act="restore"]');
     await until(async () => !(await binned()).includes(FIELD) && !('trashed' in (await local(`writerPaper:${FIELD}`))), 'restored');
@@ -811,7 +813,7 @@ const PROBE = ({ lang }) => {
         // Reduced motion (this browser's, followed by default): the painter's motion is off and the background holds still.
         const frames = () => pg.evaluate(() => document.getElementById('gd-backdrop').contentWindow.__gdRAF);
         const beforeFrames = await frames();
-        const a = await margin(pg); await pause(700); const b = await margin(pg);
+        const a = await margin(pg); await pause(700); const b = await margin(pg); // a window for a frame that must not be drawn
         check(await frames() === beforeFrames, `${name}: reduced motion schedules no continuing animation frames`);
         check(w.motion === 'off' && w.innerMotion === 'off' && a.equals(b), `${name}: under reduced motion the background is a still frame (motion ${w.motion}/${w.innerMotion})`);
       } else check(!w.backdrop && w.cardBlur === 'none', `${name}: a solid Look draws no background frame and no blur (${w.cardBlur})`);
@@ -820,8 +822,9 @@ const PROBE = ({ lang }) => {
         if (w.scene) {
           await pg.emulateMedia({ reducedMotion: 'no-preference' });
           await until(() => pg.evaluate(() => document.getElementById('gd-backdrop').contentDocument.documentElement.getAttribute('data-gz-motion') === 'expressive' && document.documentElement.dataset.motion === 'expressive'), 'scene motion on');
-          const a = await margin(pg); await pause(900); const b = await margin(pg);
-          check(!a.equals(b), 'scene: with motion on the background moves');
+          const a = await margin(pg);
+          await until(async () => !a.equals(await margin(pg)), 'scene: the background drawn moving with motion on', 30000);
+          check(true, 'scene: with motion on the background moves');
           await pg.emulateMedia({ reducedMotion: 'reduce' });
         }
       }
@@ -982,7 +985,7 @@ const PROBE = ({ lang }) => {
     // Without the documents grant the mod doesn't run here.
     await worker.evaluate(async ({ id, rec }) => chrome.storage.local.set({ [`mod:${id}`]: { ...rec, grants: { documents: false, 'documents.read': true } }, [`modData:${id}`]: {} }), { id: MOD, rec: modRec });
     const off = await openHome('en', 'mod off');
-    await pause(1500);
+    await pause(1500); // a window for the mod's item, which must not come
     check(await off.evaluate(() => !document.querySelector('.gd-extra button')) && !(await modData())?.ready, 'mod: without the documents grant it does not run on the Documents page');
     await off.close();
     await worker.evaluate(async (id) => chrome.storage.local.remove(['mods', `mod:${id}`, `modData:${id}`, `modPrivate:${id}`]), MOD);
@@ -1176,7 +1179,6 @@ const PROBE = ({ lang }) => {
       check(glides.length >= 3 && glides.every((x) => x.last.translate === '0px 0px'), `motion: a new order glides the cards on screen to their places (${glides.length} cards)`);
       await mo.selectOption('#gd-sort', 'updated');
       await mo.evaluate(() => scrollTo(0, 0));
-      await pause(600);
 
       // Delete: the card fades where it was while the rest close up; the toast comes in; Undo takes it out and brings the card back in.
       await settled(mo);
@@ -1199,8 +1201,8 @@ const PROBE = ({ lang }) => {
 
       // Files over the page: the drop target fades in and out; a refused file's words pop; a dropped .docx's card comes in.
       await drop(mo, [{ name: 'notes.txt', type: 'text/plain', bytes: [104, 105] }], 'over');
-      await pause(400);
-      const over = await mo.evaluate(() => { const s = getComputedStyle(document.getElementById('list'), '::after'); return { o: s.opacity, v: s.visibility, d: s.transitionDuration }; });
+      let over = null;
+      await until(async () => { over = await mo.evaluate(() => { const s = getComputedStyle(document.getElementById('list'), '::after'); return { o: s.opacity, v: s.visibility, d: s.transitionDuration }; }); return over.o === '1' && over.v === 'visible'; }, 'motion: the drop target shown', 30000).catch(() => {});
       t = await clock(mo);
       await drop(mo, [{ name: 'notes.txt', type: 'text/plain', bytes: [104, 105] }]);
       await until(() => mo.evaluate(() => document.getElementById('gd-said').textContent !== ''), 'motion: refusal');

@@ -233,7 +233,7 @@ test('installed polls a new profile until each install task has made its last wr
   const vm = require('node:vm');
   const done = { fresh: true, pending: false };
   const states = [{}, { freshDefaults: { fresh: true, pending: true } }, { freshDefaults: done, migrated: ['tabs-auto'] }, { freshDefaults: done, channelKeysMoved: true },
-    { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true }, { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true, lookCatalog: { sig: 'e3b0c442', looks: [] } }];
+    { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true }];
   let polls = 0;
   const page = { evaluate: async (f) => {
     const local = states[Math.min(polls++, states.length - 1)];
@@ -269,4 +269,21 @@ test('the translated layout case lets its seed Look reach History before any pag
   const filed = body.search(/GZ_HISTORY\.entries\(.*\.lookHistory\)\[0\]\?\.at >= at/);
   assert.ok(filed > 0, 'it waits for the worker to file the seed Look');
   assert.ok(filed < body.indexOf("for (const lang of"), 'before the first language is measured');
+});
+
+test('installed accepts a finished empty profile without requiring a catalogue cache', async () => {
+  const { installed } = require('../scripts/check-env.js');
+  const vm = require('node:vm');
+  const local = { freshDefaults: { fresh: true, pending: false }, migrated: ['tabs-auto'], channelKeysMoved: true };
+  const page = { evaluate: (fn, keys) => vm.runInContext(`(${fn})(${JSON.stringify(keys)})`, vm.createContext({ chrome: { storage: { local: { get: async () => local } } } })) };
+  await installed(page, 0);
+  assert.equal('lookCatalog' in local, false, 'a read must not manufacture an empty cache');
+});
+
+test('the pointer check waits for whole attempts at the pointer animation, polled from Node, and says what it missed', () => {
+  const source = fs.readFileSync(path.join(scripts, 'pointer-check.js'), 'utf8');
+  assert.doesNotMatch(source, /until\((trail|glow), \d+\)/, 'one 5 s attempt inside a 4 s limit is a single try on a loaded runner');
+  const uses = source.match(/await animates\(/g) || [];
+  assert.equal(uses.length, 6, 'every "it plays" step: three in the preview, three on the Ultra page');
+  assert.match(source, /const animates = async \(frame, at, bound = \d{5}\)/);
 });

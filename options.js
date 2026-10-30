@@ -1005,7 +1005,7 @@ GZ_UI.load().then((s) => {
       look.dataset.settingControl = 'courses.looks';
       look.setAttribute('aria-label', look.title);
       look.append(new Option(t('Your theme'), ''), ...lookOptions());
-      look.value = cc.looks[id] || '';
+      look.value = catalog.some((E) => E.id === cc.looks[id]) ? cc.looks[id] : '';
       look.addEventListener('change', () => {
         if (look.value) cc.looks[id] = look.value; else delete cc.looks[id];
         refresh();
@@ -1291,7 +1291,7 @@ GZ_UI.load().then((s) => {
       if (set.length) cardsOp({ set });
       $('#share-code').value = '';
       // A Look from the gallery is one of the student's own from now on (lib/looks.js), in the picker with the rest.
-      if (from?.gallery) local.set({ lookFavorites: GZ_HISTORY.favor(favorites, GZ_CATALOG.make(chosen.code, from.name, from.author, 'gallery')) });
+      if (from?.gallery) keepFavorite(GZ_CATALOG.make(chosen.code, from.name, from.author, 'gallery'));
       endOffer(true); // its background file, if it brought one, is kept now
       fill();
       save([...GZ_HISTORY.KEYS, 'card', 'nav', 'navbar', ...sidebarLook ? ['sidebar'] : []]);
@@ -1354,11 +1354,8 @@ GZ_UI.load().then((s) => {
   };
   // A kept Look removed goes from every list (the worker's catalogue follows), from rotation, and from the courses that wore
   // it, which wear the student's theme again.
-  const removeKept = (f) => {
-    const { id } = GZ_CATALOG.kept(f);
-    local.set({ lookFavorites: favorites.filter((x) => x !== f), rotateLooks: GZ_CATALOG.ids(rotateLooks, favorites).filter((x) => x !== id) });
-    if (GZ_CATALOG.unmap(s.courses, id)) { renderCourses(); refresh(); save(['courses']); }
-  };
+  const removeKept = (f) => chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'remove', id: GZ_CATALOG.kept(f).id })
+    .then((r) => { if (!r?.ok) hint(t('Not saved. Try again in a moment.'), true); }, () => hint(t('Not saved. Try again in a moment.'), true));
   // A kept Look picked (lib/looks.js): its code goes through the offer and "Use this theme" as it did when it came, at once.
   const wearKept = async (E) => {
     const f = GZ_CATALOG.keptAll(favorites).find((x) => x.id === E.id);
@@ -1417,14 +1414,14 @@ GZ_UI.load().then((s) => {
   $('#history-back').addEventListener('click', () => { const e = GZ_HISTORY.previous(history, s); if (e) wearEntry(e); });
   // Through the background, which also drops a recording still waiting to be written.
   $('#history-clear').addEventListener('click', () => chrome.runtime.sendMessage('clear-history', () => void chrome.runtime.lastError));
+  // The worker merges keeps and removals against storage, so two Settings tabs cannot replace each other's lists.
+  const keepFavorite = (favorite) => chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'keep', favorite })
+    .then((r) => { const ok = r?.ok === true; hint(t(ok ? 'Saved to your favorites.' : 'Not saved. Try again in a moment.'), !ok); }, () => hint(t('Not saved. Try again in a moment.'), true));
   // Kept with the student's Looks (lib/looks.js): in the picker at once, pressed while it is the one on offer.
   $('#share-fav').addEventListener('click', () => {
     const f = GZ_CATALOG.make(offer.code, from?.name || offer.preset || t('Custom theme'), from?.author || '', from?.gallery ? 'gallery' : from?.from || 'saved');
     letGo(true); // a favorite names its background file: it stays
-    local.set({ lookFavorites: GZ_HISTORY.favor(favorites, f) }, () => {
-      const err = chrome.runtime.lastError;
-      hint(err ? t('Not saved: {error}', { error: err.message }) : t('Saved to your favorites.'), !!err);
-    });
+    keepFavorite(f);
   });
   // A Look picked on the gallery (lib/gallery.js, then the background): previewed here; the student decides.
   // The editor the worker opens takes it (openOptionsPage: a tab of its own). Settings framed in a school's page, open or
@@ -1448,6 +1445,7 @@ GZ_UI.load().then((s) => {
   // What reads the catalogue, drawn again; not the page, which may be showing a Look on offer.
   const takeCatalog = (raw) => { catalog = GZ_CATALOG.list(raw); drawLooks(); renderHistory(); renderCourses(); renderRotate(); preview(); };
   local.get(GZ_CATALOG.KEY, (r) => takeCatalog(r?.[GZ_CATALOG.KEY]));
+  chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'build' }, () => void chrome.runtime.lastError);
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes[GZ_CATALOG.KEY]) takeCatalog(changes[GZ_CATALOG.KEY].newValue);

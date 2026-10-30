@@ -66,7 +66,7 @@ const STUB = `(() => {
   window.chrome = { runtime: { sendMessage: async (m) => m.type === 'glaze:writerPapers' ? { ok: true, value: await GZ_WRITER_PAPERS.open(local)[m.op](...m.args) } : { ok: true }, connect },
     // Writer's synced settings (lib/writer-settings.js): Full writer on for a frame opened at #full, where a step needs an
     // assignment's pages rather than its compact box; the defaults otherwise.
-    storage: { local, sync: { get: async () => ({ writer: location.hash === '#full' ? { full: true } : {} }), set: async () => {} }, onChanged: { addListener: (f) => ai.changed.push(f) } } };
+    storage: { local, sync: { get: async () => ({ writer: location.hash === '#full' ? { full: true } : {} }), set: async () => {} }, onChanged: { addListener: (f) => ai.changed.push(f), removeListener: (f) => { const i = ai.changed.indexOf(f); if (i >= 0) ai.changed.splice(i, 1); } } } };
 })();`;
 const CONTEXT = {
   kind: 'reply', course: { id: '_101_1', name: 'ENGL 2110' },
@@ -201,7 +201,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
       assert.equal(await ghost(p), 'ives uninvited and rearranges the present.');
       await p.keyboard.type('i');
       assert.equal(await ghost(p), 'ves uninvited and rearranges the present.');
-      await pause(1200);
+      await pause(1200); // past writer-ai.js's longest pause before asking (1000 ms)
       assert.equal(await runs(p), before, 'no new run while it shows');
       await p.keyboard.type('x');
       assert.equal(await ghost(p), null, 'a different character');
@@ -215,7 +215,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
       const id = await p.evaluate(() => __ai.runs.at(-1).id);
       await p.keyboard.press('ArrowLeft');
       await until(() => p.evaluate((id) => __ai.cancels.includes(id), id), 'cancel sent');
-      await pause(1700);
+      await pause(1700); // past the cancelled run's held 1500 ms answer
       assert.equal(await ghost(p), null, 'its answer never shows');
       await next(p, 'writer.complete', GHOST);
       for (const [why, act] of [
@@ -283,7 +283,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
         const ed = GZ_WRITER_FRAME.editor(), st = ed.view.state;
         ed.view.dispatch(st.tr.setSelection(GZ_PM.state.TextSelection.create(st.doc, 2, 5)));
       });
-      await pause(1200);
+      await pause(1200); // past the run's held 1000 ms answer
       assert.equal(await ghost(p), null);
     });
     await check('ghost motion stops with reduced motion and motion off, and consuming text does not animate', async () => {
@@ -348,7 +348,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
       assert.deepEqual(await p.evaluate(() => __ai.runs.at(-1).input.past), [said], 'the frame sends what it showed');
       assert.match((await p.evaluate(() => __ai.seen.at(-1))).messages[1].content.map((p) => p.text).join('\n\n'), /\[suggestions already shown[^\n]*\n<<<DATA-[0-9a-f]+\nWhen Sethe returns/, 'the model is told');
       assert.equal((await p.evaluate(() => __ai.ends.at(-1))).error, 'check', 'the same suggestion is refused');
-      await pause(300);
+      await pause(300); // the refused answer has ended; it must not paint
       assert.equal(await ghost(p), null);
       await next(p, 'writer.complete', { text: 'it arrives late and leaves early.' });
       await p.keyboard.type('x'); await p.keyboard.press('Backspace');
@@ -406,7 +406,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
       await reset(p);
       const before = await runs(p);
       await p.keyboard.type(' it');
-      await pause(1300);
+      await pause(1300); // past writer-ai.js's longest pause before asking (1000 ms)
       assert.equal(await runs(p), before);
       assert.equal(await ghost(p), null);
       assert.ok(await p.$('.gz-ai-chip'));
@@ -459,7 +459,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
       const q = await frame({ kind: 'test' });
       await end(q);
       await q.keyboard.type(' it');
-      await pause(1300);
+      await pause(1300); // past writer-ai.js's longest pause before asking (1000 ms)
       assert.deepEqual(await q.evaluate(() => [__ai.connects, !!document.querySelector('.gz-ai-chip'), !!document.querySelector('.gz-ghost'), typeof GZ_WRITER_PROOF.decide]), [0, false, false, 'object']);
       await q.close();
     });
@@ -663,7 +663,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
           await q.keyboard.type(' to');
         };
         await write('<p>Baldwin writes “the price<br>Three things I learned are how</p>');
-        await pause(1200);
+        await pause(1200); // past writer-ai.js's longest pause before asking (1000 ms)
         assert.equal(await runs(q), 0, 'a hard break is still inside the open quotation');
         assert.equal(await ghost(q), null);
         await write('<p>Baldwin writes “the price</p><p>Three things I learned are how</p>');
