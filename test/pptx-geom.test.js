@@ -264,7 +264,7 @@ test('the preset transcription can be regenerated from DrawingML XML', () => {
   assert.ifError(child.error);
   assert.equal(child.status, 0, child.stderr);
   const source = fs.readFileSync(path.join(__dirname, '../lib/pptx-geom.js'), 'utf8');
-  assert.equal(child.stdout.trimEnd(), `  const PRESETS = {\n${source.match(/    rect: \{[\s\S]*?\n    \},/)[0]}\n  };`);
+  assert.equal(child.stdout.trimEnd(), `  const PRESETS = {\n${source.match(/^    rect: \{[\s\S]*?\n    \},/m)[0]}\n  };`);
 });
 
 test('an unknown preset draws as rect and says which name it did not know', () => {
