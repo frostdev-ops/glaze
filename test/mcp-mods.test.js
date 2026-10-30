@@ -297,12 +297,14 @@ const chain = async ({ page = {}, local = {}, timers = never } = {}) => {
   const sender = from(7);
   const env = { site: SCHOOL, local: l, sync: area({}), fetch: async () => { throw new Error('no network'); }, reach: async () => true, queue: (f) => (turn = turn.then(f, f)),
     keys: async () => Object.keys(l.data), record: async (id) => (await l.get(`mod:${id}`))[`mod:${id}`], blocklist: async () => null, account: async () => '5' };
-  const toWorker = (m) => (m.type === 'glaze:mod' ? B.handle(m, { ...env, tool: (call, out) => route.settle(sender, m.mod, call, out) }) : B.page(m, env));
+  const toWorker = (m) => (m.type === 'glaze:mod' ? B.handle(m, { ...env, tool: (call, out, uid) => route.settle(sender, m.mod, call, out, uid) }) : B.page(m, env));
   const s = school({ ...page, toWorker });
-  route = R.create({ tabs: { query: async () => [TAB(7, { active: true, url: `${SCHOOL}${page.path || '/courses/1'}` })], sendMessage: (id, m, o) => (id === 7 && o?.frameId === 0 ? s.deliver(m) : Promise.reject(new Error('no such frame'))) },
+  env.account = () => s.ctx.GZ_CTX.account();
+  const asked = [];
+  route = R.create({ tabs: { query: async () => [TAB(7, { active: true, url: `${SCHOOL}${page.path || '/courses/1'}` })], sendMessage: (id, m, o) => { asked.push(plain(m)); return id === 7 && o?.frameId === 0 ? s.deliver(m) : Promise.reject(new Error('no such frame')); } },
     browser: 'chrome', timers });
   await s.start();
-  return { ...s, route, local: l, worker: () => s.host.workers[0] };
+  return { ...s, route, asked, local: l, worker: () => s.host.workers[0] };
 };
 
 test('an agent app\'s call reaches the mod\'s Worker in the school\'s tab, and its answer comes back through the broker\'s checks', async () => {
@@ -323,6 +325,21 @@ test('a handler that throws, answers with what JSON can\'t carry, or isn\'t ther
   assert.deepEqual(await c.route.code(MOD, 'boom', {}, CTX), fail("The mod's tool failed: boom"));
   assert.deepEqual(await c.route.code(MOD, 'odd', {}, CTX), fail("The mod's tool failed: The answer is not JSON."));
   assert.deepEqual(await c.route.code(MOD, 'unhandled', {}, CTX), fail("The mod's tool failed: No handler for unhandled."));
+});
+
+test('a pending answer is refused if the tab is now signed in as another account or signed out', async () => {
+  for (const uid of ['6', null]) {
+    const c = await chain();
+    const pending = c.route.code(MOD, 'slow', {}, CTX);
+    await settle();
+    const call = c.asked.find((m) => m.op === 'call').call;
+    c.ctx.GZ_CTX.account = async () => uid;
+    const result = await c.ctx.chrome.runtime.sendMessage({ type: 'glaze:mod', mod: MOD, via: 'worker', call: 'tools.result', args: [call, { secret: 'other account' }] });
+    assert.deepEqual(result, fail('call'), String(uid));
+    // As forward() does when the broker refuses a Worker's answer, stop waiting on the page too.
+    c.chrome.changed({ enabled: { newValue: false } }, 'sync');
+    assert.deepEqual(await pending, fail(TEXT.stopped));
+  }
 });
 
 test('the page hands a call only to a running mod\'s Worker with that tool, on that school\'s page signed in as that account, from the worker', async () => {
@@ -436,6 +453,7 @@ const wiredWorker = async () => {
   const w = worker({ store, background: wired(), globals: { indexedDB: fakeIDB().indexedDB } });
   const sender = from(7);
   const s = school({ toWorker: (m) => w.send(m, sender) });
+  w.context.chrome.scripting.executeScript = async () => [{ result: await s.ctx.GZ_CTX.account() }];
   const sent = [];
   w.context.chrome.tabs.query = async () => [TAB(7, { active: true })];
   w.context.chrome.tabs.sendMessage = (id, m, o) => { sent.push([id, plain(m), plain(o)]); return id === 7 && o?.frameId === 0 ? s.deliver(m) : Promise.reject(new Error('no such frame')); };

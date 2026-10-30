@@ -534,6 +534,18 @@ test('the page is told every on mod\'s Look parts, cleaned, in order, code or no
 // ---- code tools for agent apps (lib/mcp/modroute.js) ----------------------------------------------------------------------
 const agents = (over = {}) => rec({ manifest: { ...rec().manifest, permissions: [...rec().manifest.permissions, { id: 'agents', why: 'w' }] }, grants: { ...rec().grants, agents: true }, ...over });
 
+test('tools.result hands the tab account read by the worker to the pending call check and observes revocation while reading it', async () => {
+  const taken = [];
+  const e = { ...env({ record: agents() }), tool: (...args) => { taken.push(args); return true; } };
+  assert.deepEqual(await call(e, 'tools.result', ['call-1', 1]), { ok: true, value: true });
+  assert.deepEqual(taken, [['call-1', { value: 1 }, '5']]);
+  const ac = new AbortController();
+  e.signal = ac.signal;
+  e.account = async () => { ac.abort(); return '5'; };
+  assert.deepEqual(await call(e, 'tools.result', ['call-2', 2]), { ok: false, error: 'cancelled' });
+  assert.equal(taken.length, 1);
+});
+
 test('tools.result: a code tool\'s answer from the mod\'s Worker, with agents declared and granted, to the agent call waiting for it', async () => {
   const took = [];
   const e = { ...env({ record: agents() }), tool: (id, out) => { took.push([id, out]); return id === 'call-1'; } };
