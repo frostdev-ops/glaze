@@ -3401,6 +3401,7 @@ const openDriveSync = () => {
   if (!globalThis.GZ_DRIVE_SYNC) importScripts('../documents/drive-sync.js');
   if (!globalThis.GZ_DRIVE_STORE) importScripts('drive-store.js');
   brokerIn('backup'); // A restarted worker needs every record's validator before its first download, not after it.
+  openPapers(); // and the paper store's library, which documents/drive-sync.js reads before any paper is asked for
   const turn = (f) => (brokerTurn ||= GZ_CARDS.queue())(f);
   // Everything else Glaze keeps (background/drive-store.js): its writes in the broker's queue, as every other store's are.
   const keysOf = async (a) => (typeof chrome.storage[a].getKeys === 'function' ? chrome.storage[a].getKeys() : Object.keys(await chrome.storage[a].get(null)));
