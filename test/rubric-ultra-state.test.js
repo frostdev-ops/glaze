@@ -58,7 +58,8 @@ const page = (data, width = 706, kind = 'overview') => {
   const answer = (u) => {
     if (/\/gradebook\/grades$/.test(u.pathname)) return { results: data.grade ? [data.grade] : [] };
     if (/\/gradebook\/columns\/_300_1$/.test(u.pathname)) return data.column;
-    if (/\/gradebook\/attempts\/_400_1$/.test(u.pathname)) return data.attempt;
+    const attemptId = /\/gradebook\/attempts\/(_\d+_\d+)$/.exec(u.pathname)?.[1];
+    if (attemptId) return data.attempts?.[attemptId] ?? (data.attempt?.id === attemptId ? data.attempt : null);
     return null;
   };
   const fetch = async (url) => {
@@ -275,6 +276,35 @@ test('a saved draft at its numbered attempt address: the rubric link opens the p
   assert.ok(e.prevented && e.stopped);
   assert.equal(p.popups.length, 1);
   assert.deepEqual(marks(p.popups[0].body.shadowForTest), [], 'no selections on a draft');
+});
+
+test('a numbered attempt never borrows the latest attempt\'s selections or feedback', async () => {
+  for (const status of ['IN_PROGRESS', 'COMPLETED']) {
+    const d = real(), latest = structuredClone(d.attempt);
+    latest.id = '_401_1'; latest.rubricEvaluation.attemptId = latest.id;
+    d.grade.lastAttemptId = latest.id; d.grade.lastAttempt.id = latest.id;
+    d.attempt.status = status;
+    d.attempts = { [d.attempt.id]: d.attempt, [latest.id]: latest };
+    const p = await show(d, 1400, 'draft');
+    assert.ok(press(p).prevented, status);
+    const shadow = p.popups[0].body.shadowForTest;
+    assert.deepEqual(marks(shadow), [], `${status}: the latest grade row cannot release another attempt's evaluation`);
+    assert.doesNotMatch(shadow.textContent, /Synthetic note\./);
+    assert.ok(p.asked.some((x) => x.endsWith('/attempts/_400_1')), 'read the attempt in the address');
+    assert.ok(!p.asked.some((x) => x.endsWith('/attempts/_401_1')), 'do not read a different attempt');
+  }
+});
+
+test('a numbered latest attempt retains its released selections, but a foreign column or user stays native', async () => {
+  const p = await show(real(), 1400, 'draft');
+  assert.ok(press(p).prevented);
+  assert.equal(marks(p.popups[0].body.shadowForTest).length, 2);
+  for (const field of ['columnId', 'userId']) {
+    const d = real(); d.attempt[field] = '_999_1';
+    const p = await show(d, 1400, 'draft');
+    assert.ok(!press(p).prevented, field);
+    assert.equal(p.popups.length, 0, field);
+  }
 });
 
 test('until Glaze has the rubric, the discussion and attempt links still open Ultra\'s own', async () => {
