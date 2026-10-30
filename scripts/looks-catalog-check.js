@@ -244,6 +244,33 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     const theme = await until(async () => { const p = await painted(); return p.bg === 'scene' && p.scene && p.pointer === 'ghost' && p; });
     check(!!theme, 'switching to a course without its own Look: the theme\'s background and pointer again', JSON.stringify(await painted()));
     check(await until(async () => (await ink(lms)) === night.colors['--gz-ink']), '  and the theme\'s palette');
+
+    // ---- a kept video, including a live course frame; repeated switches release the old player and GL context ----
+    const put = await a.evaluate((b64) => chrome.runtime.sendMessage({ type: 'glaze:media', op: 'put', kind: 'video', b64 }), fs.readFileSync(path.join(root, 'test/fixtures/media/clip.webm')).toString('base64'));
+    check(put.ok, 'the worker keeps the video fixture');
+    const videoCode = await S.encode(G.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'video', src: `file:${put.h}` } }, pointer: 'lava' } });
+    const videoLook = C.make(videoCode, 'Course video', '', 'saved');
+    await a.evaluate(async (f) => { const { lookFavorites } = await chrome.storage.local.get('lookFavorites'); await chrome.storage.local.set({ lookFavorites: [f, ...lookFavorites] }); }, videoLook);
+    check(await until(async () => (await catalog()).looks.some((e) => e.id === videoLook.id)), 'the video Look reaches the catalogue');
+    await a.evaluate(async (id) => { const { courses } = await chrome.storage.sync.get('courses'); await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: id } } }); }, videoLook.id);
+    const go = (id) => lms.evaluate((id) => { history.pushState({}, '', `${location.origin}/ultra/courses/${id}/outline`); dispatchEvent(new PopStateEvent('popstate')); document.body.append(document.createElement('div')); }, id);
+    const playing = (p) => p.evaluate(() => { const v = document.querySelector('#gz-scene video'); return !!v && v.readyState >= 2 && v.muted && v.loop && v.currentSrc.startsWith('blob:'); });
+    for (let i = 0; i < 3; i++) {
+      await lms.evaluate(() => { window.__oldScene = document.getElementById('gz-scene'); window.__oldGL = window.__oldScene?.tagName === 'CANVAS' ? window.__oldScene.getContext('webgl2') : null; });
+      await go('_101_1');
+      check(await until(() => playing(lms)), `course video plays from its kept file, switch ${i + 1}`);
+      check(await lms.evaluate(() => !window.__oldScene?.isConnected && (!window.__oldGL || window.__oldGL.isContextLost())), `the outgoing scene releases its GL context, switch ${i + 1}`);
+      await lms.evaluate(() => { window.__oldVideo = document.querySelector('#gz-scene video'); });
+      await go('_202_1');
+      check(await until(async () => (await painted()).bg === 'scene' && (await painted()).pointer === 'ghost'), `the theme returns after video, switch ${i + 1}`);
+      check(await until(() => lms.evaluate(() => !!window.__oldVideo && !window.__oldVideo.isConnected && window.__oldVideo.paused && !window.__oldVideo.getAttribute('src') && document.querySelectorAll('#gz-scene').length === 1)), `the outgoing video is stopped and detached, switch ${i + 1}`);
+    }
+    // The parent wears the theme, the child the video's Look: its file permission must belong to the child's document.
+    await lms.evaluate((src) => { const f = document.createElement('iframe'); f.name = 'gz-ctab:_101_1'; f.id = 'course-video-frame'; f.src = src; document.body.append(f); }, `${site}/ultra/courses/_101_1/outline`);
+    const framed = await until(async () => lms.frames().find((f) => f.name() === 'gz-ctab:_101_1'));
+    check(!!framed && await until(() => playing(framed)), 'a live course frame plays its own video while the parent wears the theme');
+    check((await painted()).bg === 'scene' && (await painted()).pointer === 'ghost', 'the frame leaves the parent theme unchanged');
+    await lms.evaluate(() => { document.getElementById('course-video-frame').remove(); delete window.__oldScene; delete window.__oldGL; delete window.__oldVideo; });
     check(!errors.length, 'no page errors', errors.join(' | '));
   } catch (e) {
     console.error(e);
