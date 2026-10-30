@@ -332,6 +332,39 @@ test('a write that leaves the cells alone (a submit checkpoint) keeps undo; anot
   assert.equal(f.el('gx-undo').disabled, true, 'their workbook comes without this one\'s undo');
 });
 
+test('a delayed storage read cannot replace a newer workbook or strand the next save on an old revision', async () => {
+  const f = frame(), other = PA.open(f.store), deliver = (paper) => {
+    for (const l of f.changes) l({ [`writerPaper:${KEY}`]: { newValue: paper } }, 'local');
+  };
+  const book = (value) => { const wb = M.workbook(); wb.sheets[0].rows.set(0, new Map([[0, { t: 's', v: value }]])); return wb; };
+  f.type('one'); f.key('Enter'); f.key('ArrowUp');
+  assert.equal(await f.view.save(), true);
+  let got = await SD.read((ks) => f.store.get(ks), KEY);
+  const first = await SD.write(other, KEY, book('two'), got.sigs, { base: got.rec.revision });
+  let release, entered, hold = true;
+  const waiting = new Promise((ok) => { entered = ok; }), gate = new Promise((ok) => { release = ok; });
+  const get = f.store.get;
+  f.store.get = async (ks) => {
+    const values = await get(ks);
+    if (hold && ks.some((k) => k.startsWith(SD.PART))) { hold = false; entered(); await gate; }
+    return values;
+  };
+  deliver(first.saved.paper);
+  await waiting;
+  got = await SD.read((ks) => f.store.get(ks), KEY);
+  const second = await SD.write(other, KEY, book('three'), got.sigs, { base: got.rec.revision });
+  deliver(second.saved.paper);
+  assert.ok(await until(() => f.el('gx-formula').value === 'three'), 'the newest workbook arrives first');
+  release();
+  await settle();
+  assert.equal(f.el('gx-formula').value, 'three', 'the late older read cannot roll the grid back');
+  assert.equal(f.el('gx-undo').disabled, true, 'another tab\'s workbook has no local undo');
+  f.type('four'); f.key('Enter');
+  assert.equal(await f.view.save(), true, 'the next save uses the newest revision');
+  assert.equal((await SD.read((ks) => f.store.get(ks), KEY)).wb.sheets[0].rows.get(0).get(0).v, 'four');
+  await f.view.dispose();
+});
+
 test('while an input method composes, Enter, Tab, Escape and the arrows stay with it', () => {
   const f = frame();
   f.type('かな');
