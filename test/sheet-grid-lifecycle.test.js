@@ -291,3 +291,16 @@ test('Ctrl+minus and Ctrl+plus over cells are the browser\'s zoom; over whole ro
   assert.ok(f.key('-', { ctrlKey: true }).defaultPrevented);
   assert.equal(f.wb.sheets[0].rows.get(0)?.get(0)?.v, 'keep', 'and deleted');
 });
+
+test('pasting a picture, a file or an empty clipboard leaves the cell as it was', () => {
+  const f = frame();
+  f.type('kept'); f.key('Enter'); f.key('ArrowUp');
+  for (const html of ['', '<img src="shot.png">', '<meta charset="utf-8"><img src="blob:x">']) {
+    const e = f.fire(f.el('gx-grid'), 'paste', { clipboardData: { getData: (type) => (type === 'text/html' ? html : '') } });
+    assert.ok(e.defaultPrevented);
+    assert.equal(f.wb.sheets[0].rows.get(0)?.get(0)?.v, 'kept', JSON.stringify(html));
+  }
+  assert.equal(f.el('gx-undo').disabled, false);
+  f.key('z', { ctrlKey: true });
+  assert.equal(f.wb.sheets[0].rows.get(0)?.get(0), undefined, 'no empty paste took an undo step');
+});

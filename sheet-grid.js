@@ -1406,6 +1406,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       } else {
         let table = null;
         try { table = html ? parseHTML(html) : null; } catch { table = null; }
+        // A picture or a file alone brings no cells.
+        if (!table && !text) return;
         if (!table) { try { table = parseDelimited(text.replace(/\r?\n$/, ''), '\t').map((row) => row.map((v) => ({ text: v }))); } catch { table = [[{ text }]]; } }
         table.forEach((row, i) => row.forEach((x, j) => { cells.push([r0 + i, c0 + j, cellOf(x, r0 + i, c0 + j)]); cols = Math.max(cols, j + 1); }));
         rows = table.length;
