@@ -2,7 +2,8 @@
 // The check plays Hugging Face: huggingface.co's resolve URL answers 302 to us.aws.cdn.hf.co, which answers 206 Range
 // replies with `Access-Control-Allow-Origin: *`, as probe 4 measured live. A 4.5 MiB "model" in 1 MiB chunks downloads,
 // is cancelled after two chunks, resumes with only the rest (one chunk corrupted once on the way, refetched), verifies,
-// is read in slices (also from a dedicated Worker), and is removed. A redirect to another host is refused. The shipped
+// is read in slices (also from a dedicated Worker), and is removed. A redirect to another host is refused. A remove from a
+// second page ends the first page's download as removed. The shipped
 // models.json loads as the default catalog. Everything else the browser asks for is aborted.
 //   NODE_PATH=<playwright> node scripts/local-store-check.js [evidence folder]
 const { chromium } = require('playwright');
@@ -35,6 +36,7 @@ const ok = (value, label, detail) => { results.push({ label, pass: !!value, ...(
   let server, tls;
   const log = []; // every request the check's server answered
   const corrupt = { 3: 1 }; // chunk 3's first reply has a flipped byte
+  let hold = null, letGo = () => {}; // while set, the CDN keeps chunk 2's reply
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   try {
     while (!held) { try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); } }
@@ -44,7 +46,7 @@ const ok = (value, label, detail) => { results.push({ label, pass: !!value, ...(
     tls = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-local-store-tls-'));
     execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=huggingface.co',
       '-keyout', path.join(tls, 'k.pem'), '-out', path.join(tls, 'c.pem')], { stdio: 'ignore' });
-    server = https.createServer({ key: fs.readFileSync(path.join(tls, 'k.pem')), cert: fs.readFileSync(path.join(tls, 'c.pem')) }, (req, res) => {
+    server = https.createServer({ key: fs.readFileSync(path.join(tls, 'k.pem')), cert: fs.readFileSync(path.join(tls, 'c.pem')) }, async (req, res) => {
       const host = (req.headers.host || '').replace(/:\d+$/, ''), u = new URL(req.url, `https://${host}`), h = req.headers;
       log.push({ method: req.method, host, path: u.pathname, range: h.range || null, origin: h.origin || null, cookie: !!h.cookie });
       const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'range', 'access-control-expose-headers': '*' };
@@ -60,6 +62,7 @@ const ok = (value, label, detail) => { results.push({ label, pass: !!value, ...(
         const a = +m[1], b = Math.min(+m[2], SIZE - 1);
         const body = Buffer.from(DATA.subarray(a, b + 1));
         const n = Math.floor(a / CHUNK);
+        if (hold && n === 2) await hold;
         if (corrupt[n] > 0) { corrupt[n]--; body[17] ^= 0xff; }
         res.writeHead(206, { ...cors, 'accept-ranges': 'bytes', 'content-range': `bytes ${a}-${b}/${SIZE}`, 'content-type': 'application/octet-stream', 'content-length': body.length });
         return res.end(body);
@@ -168,6 +171,30 @@ const ok = (value, label, detail) => { results.push({ label, pass: !!value, ...(
     ok(freed.status.state === 'missing' && !freed.left.includes('tiny'), 'remove deletes the model', freed);
     ok(freed.before - freed.after >= SIZE * 0.9, 'and the storage estimate drops by its size', freed);
 
+    // Two pages of the extension share the OPFS: one downloads, the other removes. The download ends as removed (the
+    // remove's broadcast), the remove waits for its lock and then frees the space.
+    hold = new Promise((r) => { letGo = r; });
+    const other = await context.newPage();
+    await other.goto(`chrome-extension://${id}/popup.html`);
+    await other.addScriptTag({ url: `chrome-extension://${id}/lib/ai/local/store.js` });
+    await other.evaluate((models) => { window.S = GZ_AI_STORE.create({ models }); }, MODELS);
+    const at = log.length;
+    await page.evaluate(() => { window.pending = S.download('tiny').then((r) => ({ r }), (e) => ({ reason: e.reason, name: e.name })); });
+    for (const end = Date.now() + 30000; !log.slice(at).some((l) => l.host === 'us.aws.cdn.hf.co' && l.range === `bytes=${2 * CHUNK}-${3 * CHUNK - 1}`); await pause(50)) {
+      if (Date.now() > end) throw new Error('the first page never asked for chunk 2');
+    }
+    const removing = await other.evaluate(async () => { await S.remove('tiny'); return S.status('tiny'); });
+    const ended = await page.evaluate(() => window.pending);
+    letGo(); hold = null;
+    const after = await page.evaluate(async () => {
+      const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models');
+      const left = []; for await (const k of dir.keys()) left.push(k);
+      return { status: await S.status('tiny'), left };
+    });
+    ok(ended.reason === 'removed', 'a remove from another page ends its download as removed', ended);
+    ok(removing.state === 'missing' && after.status.state === 'missing' && !after.left.includes('tiny'), 'and frees the model for both pages', { removing, after });
+    await other.close();
+
     // The shipped catalog, loaded the default way.
     const shipped = await page.evaluate(async () => (await GZ_AI_STORE.list()).map(({ id, size, state }) => ({ id, size, state })));
     ok(shipped.length === 4 && shipped.every((m) => m.state === 'missing' && m.size > 1e9), 'the shipped models.json lists four LFM3 entries, none downloaded', shipped);
@@ -181,6 +208,7 @@ const ok = (value, label, detail) => { results.push({ label, pass: !!value, ...(
     process.exitCode = 1;
   } finally {
     await context?.close().catch(() => {});
+    letGo();
     server?.close();
     if (profile) fs.rmSync(profile, { recursive: true, force: true });
     if (tls) fs.rmSync(tls, { recursive: true, force: true });

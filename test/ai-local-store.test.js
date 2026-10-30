@@ -28,7 +28,7 @@ const fakeFs = ({ quota = Infinity } = {}) => {
     const f = { kind: 'file', name, data: new Uint8Array(0) };
     f.getFile = async () => {
       const snap = f.data;
-      return { size: snap.length, arrayBuffer: async () => snap.slice().buffer, slice: (a = 0, b = snap.length) => ({ arrayBuffer: async () => snap.slice(a, b).buffer }) };
+      return { size: snap.length, text: async () => Buffer.from(snap).toString(), arrayBuffer: async () => snap.slice().buffer, slice: (a = 0, b = snap.length) => ({ arrayBuffer: async () => snap.slice(a, b).buffer }) };
     };
     f.createWritable = async ({ keepExistingData = false } = {}) => {
       let swap = keepExistingData ? f.data.slice() : new Uint8Array(0), at = 0, open = true;
@@ -104,12 +104,52 @@ const fakeHf = (data = DATA, { cdn = 'https://us.aws.cdn.hf.co/xet-bridge-us/abc
   return hf;
 };
 
+// Web Locks as one origin's contexts share them (FIFO per name; a signal ends a wait), and a BroadcastChannel between
+// stores (each message delivered later, never to its sender).
+const fakeLocks = () => {
+  const tails = new Map();
+  return {
+    held: new Set(),
+    request(name, opts, cb) {
+      if (typeof opts === 'function') { cb = opts; opts = {}; }
+      const prev = tails.get(name) || Promise.resolve();
+      let release;
+      const mine = new Promise((r) => { release = r; });
+      tails.set(name, prev.then(() => mine));
+      return new Promise((resolve, reject) => {
+        const { signal } = opts;
+        const quit = () => reject(signal.reason);
+        if (signal?.aborted) { quit(); prev.then(release); return; }
+        signal?.addEventListener('abort', quit, { once: true });
+        prev.then(async () => {
+          if (signal?.aborted) { release(); return; }
+          signal?.removeEventListener('abort', quit);
+          this.held.add(name);
+          try { resolve(await cb({ name })); } catch (e) { reject(e); } finally { this.held.delete(name); release(); }
+        });
+      });
+    },
+  };
+};
+const fakeBus = () => {
+  const members = new Set();
+  return () => {
+    const ch = { onmessage: null, postMessage: (data) => { for (const o of members) if (o !== ch) setTimeout(() => o.onmessage?.({ data })); }, close: () => members.delete(ch) };
+    members.add(ch);
+    return ch;
+  };
+};
 const make = (opts = {}) => {
   const fs = opts.fs || fakeFs(opts);
   const fetch = opts.fetch || fakeHf(DATA, opts);
-  const store = S.create({ models: opts.models || [entry()], fetch, root: async () => fs.root, estimate: fs.estimate });
-  return { store, fs, fetch };
+  const locks = opts.locks || fakeLocks(), channel = 'channel' in opts ? opts.channel : fakeBus();
+  const store = S.create({ models: opts.models || [entry()], fetch, root: async () => fs.root, estimate: fs.estimate, locks, channel });
+  return { store, fs, fetch, locks, channel };
 };
+// A second store over the same OPFS root, locks and channel: another context of the same extension.
+const twin = (m, opts = {}) => S.create({ models: opts.models || [entry()], fetch: opts.fetch || m.fetch, root: async () => m.fs.root, estimate: m.fs.estimate,
+  locks: m.locks, channel: 'channel' in opts ? opts.channel : m.channel });
+const settle = () => new Promise((r) => setTimeout(r, 5));
 const chunksFetched = (fetch) => fetch.log.map((l) => Math.floor(l.range[0] / CHUNK));
 
 test('a fresh download fetches each chunk once by Range, verifies it and ends ready', async () => {
@@ -154,7 +194,7 @@ test('a cancelled download keeps its verified chunks, and resuming fetches only 
   await assert.rejects(store.download('tiny-q4', { signal: ctl.signal }), (e) => e.reason === 'aborted');
   assert.deepEqual(await store.status('tiny-q4'), { state: 'partial', bytes: 2 * CHUNK });
   const before = fetch.log.length;
-  const again = S.create({ models: [entry()], fetch, root: async () => fs.root, estimate: fs.estimate }); // a new worker
+  const again = S.create({ models: [entry()], fetch, root: async () => fs.root, estimate: fs.estimate, locks: fakeLocks() }); // a new worker
   assert.deepEqual(await again.status('tiny-q4'), { state: 'partial', bytes: 2 * CHUNK });
   const seen = [];
   assert.equal((await again.download('tiny-q4', { onProgress: (p) => seen.push(p) })).state, 'ready');
@@ -193,7 +233,7 @@ test('too little space is reason quota, with the bytes needed and available', as
   await assert.rejects(store.download('tiny-q4'), (e) => e.reason === 'quota' && e.needed === SIZE && e.available === 2000);
   // Space the estimate promised but the write then refused is quota too.
   const fs = fakeFs({ quota: 2000 });
-  const liar = S.create({ models: [entry()], fetch: fakeHf(), root: async () => fs.root, estimate: async () => ({ quota: 1e12, usage: 0 }) });
+  const liar = S.create({ models: [entry()], fetch: fakeHf(), root: async () => fs.root, estimate: async () => ({ quota: 1e12, usage: 0 }), locks: fakeLocks() });
   await assert.rejects(liar.download('tiny-q4'), (e) => e.reason === 'quota' && e.needed > 0 && typeof e.available === 'number');
   assert.deepEqual(await liar.status('tiny-q4'), { state: 'partial', bytes: CHUNK });
 });
@@ -264,7 +304,7 @@ test('remove frees the space, also during a download, and list reports each mode
   const older = make();
   await older.store.download('tiny-q4');
   await (await older.fs.root.getDirectoryHandle('glaze-models')).getDirectoryHandle('empty', { create: true });
-  const newer = S.create({ models: [entry(DATA, { id: 'next' })], fetch: fakeHf(), root: async () => older.fs.root, estimate: older.fs.estimate });
+  const newer = twin(older, { models: [entry(DATA, { id: 'next' })] });
   assert.deepEqual((await newer.list()).map(({ id, state, bytes }) => ({ id, state, bytes })), [{ id: 'next', state: 'missing', bytes: undefined }, { id: 'tiny-q4', state: 'stale', bytes: SIZE }]);
   await newer.remove('tiny-q4');
   assert.equal(older.fs.disk.used, 0);
@@ -278,7 +318,7 @@ test('remove frees the space, also during a download, and list reports each mode
   while (fetch.log.length < 2) await new Promise((r) => setImmediate(r));
   const gone = m.store.remove('tiny-q4');
   release();
-  await assert.rejects(running, (e) => e.reason === 'aborted');
+  await assert.rejects(running, (e) => e.reason === 'removed');
   await gone;
   assert.equal(m.fs.disk.used, 0);
   assert.deepEqual(await m.store.status('tiny-q4'), { state: 'missing' });
@@ -312,7 +352,7 @@ test('a copy kept for another commit of the same id is replaced, never mixed in'
   const DATA2 = bytes(SIZE, 99);
   const next = entry(DATA2, { commit: 'b'.repeat(40), url: `https://huggingface.co/test/Tiny-GGUF/resolve/${'b'.repeat(40)}/tiny.gguf` });
   const fetch = fakeHf(DATA2);
-  const s2 = S.create({ models: [next], fetch, root: async () => fs.root, estimate: fs.estimate });
+  const s2 = S.create({ models: [next], fetch, root: async () => fs.root, estimate: fs.estimate, locks: fakeLocks() });
   assert.deepEqual(await s2.status('tiny-q4'), { state: 'missing' });
   assert.equal((await s2.download('tiny-q4')).state, 'ready');
   assert.deepEqual(chunksFetched(fetch), [0, 1, 2, 3, 4]);
@@ -339,4 +379,87 @@ test('the shipped manifest is well formed and pinned', () => {
     for (const h of [...m.sha256, m.total]) assert.match(h, /^[0-9a-f]{64}$/);
     assert.equal(S.valid(m), true, m.id);
   }
+});
+
+test('a download asked for just before a remove is cancelled, not restarted once the catalog loads', async () => {
+  const { store, fetch } = make();
+  const p = store.download('tiny-q4');
+  await store.remove('tiny-q4');
+  await assert.rejects(p, (e) => e.reason === 'removed');
+  await settle();
+  assert.deepEqual(await store.status('tiny-q4'), { state: 'missing' });
+  assert.equal(fetch.log.length, 0);
+});
+
+test('a caller whose progress replay cancels it is cancelled, and stops counting as waiting', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const fetch = fakeHf();
+  const slow = async (u, i) => { if (fetch.log.length === 1) await gate; return fetch(u, i); };
+  const m = make({ fetch: slow });
+  const a = new AbortController(), b = new AbortController();
+  const first = m.store.download('tiny-q4', { signal: a.signal });
+  while (fetch.log.length < 1) await settle();
+  const second = m.store.download('tiny-q4', { signal: b.signal, onProgress: () => b.abort() });
+  await assert.rejects(second, (e) => e.reason === 'aborted');
+  a.abort(); // the last one waiting: the download stops
+  await assert.rejects(first, (e) => e.reason === 'aborted');
+  release();
+  await settle();
+  assert.ok(fetch.log.length <= 2, `the download went on: ${fetch.log.length} requests`);
+  assert.notEqual((await m.store.status('tiny-q4')).state, 'ready');
+});
+
+test('a remove in another context cancels a running download with reason removed and frees its space', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const fetch = fakeHf();
+  const slow = async (u, i) => { if (fetch.log.length === 2) await gate; return fetch(u, i); };
+  const a = make({ fetch: slow });
+  const b = twin(a);
+  const running = a.store.download('tiny-q4');
+  while (fetch.log.length < 2) await settle();
+  const gone = b.remove('tiny-q4');
+  await settle();
+  release();
+  await assert.rejects(running, (e) => e.reason === 'removed');
+  await gone;
+  assert.equal(a.fs.disk.used, 0);
+  assert.deepEqual(await a.store.status('tiny-q4'), { state: 'missing' });
+  assert.deepEqual(await b.status('tiny-q4'), { state: 'missing' });
+});
+
+test('a download queued in another context before a remove does not run after it', async () => {
+  let loaded;
+  const catalog = new Promise((r) => { loaded = r; });
+  const a = make({ models: () => catalog, channel: null }); // no message reaches it: the lock and OPFS alone decide
+  const b = twin(a);
+  const p = a.store.download('tiny-q4');
+  await b.remove('tiny-q4');
+  loaded([entry()]);
+  await assert.rejects(p, (e) => e.reason === 'removed');
+  assert.equal(a.fetch.log.length, 0);
+  assert.deepEqual(await b.status('tiny-q4'), { state: 'missing' });
+  // A download asked for after the remove runs.
+  assert.equal((await a.store.download('tiny-q4')).state, 'ready');
+});
+
+test('verify in another context waits for a running download instead of deleting its chunks', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const fetch = fakeHf();
+  const slow = async (u, i) => { if (fetch.log.length === 2) await gate; return fetch(u, i); };
+  const a = make({ fetch: slow });
+  const b = twin(a);
+  const running = a.store.download('tiny-q4');
+  while (fetch.log.length < 2) await settle();
+  let checked = null;
+  const check = b.verify('tiny-q4').then((v) => { checked = v; });
+  await settle();
+  assert.equal(checked, null, 'verify waits');
+  release();
+  assert.equal((await running).state, 'ready');
+  await check;
+  assert.deepEqual(checked, { state: 'ready' });
+  assert.deepEqual(chunksFetched(fetch), [0, 1, 2, 3, 4]);
 });
