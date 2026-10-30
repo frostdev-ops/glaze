@@ -66,6 +66,24 @@ test('the storage seam: bytes in, the same bytes out, nothing past the record ca
   assert.equal(S.get({}), null, 'a record without a file');
 });
 
+test('stored PDFs are bounded before decoding, including dishonest size fields', () => {
+  const { ctx } = load({ pdf: true });
+  const S = ctx.GZ_PDF_KIND.STORE;
+  let decoded = 0;
+  ctx.atob = () => { decoded++; return ''; };
+  assert.equal(S.get({ file: 'A'.repeat(4 * Math.ceil(S.max / 3) + 4), size: 1 }), null);
+  assert.equal(decoded, 0, 'reject the encoded allocation before decoding');
+  assert.equal(S.get({ file: 'AAAA', size: S.max + 1 }), null);
+  assert.equal(decoded, 0, 'reject an oversized declared file before decoding');
+});
+
+test('malformed stored PDFs return no bytes instead of aborting the viewer', () => {
+  const { ctx } = load({ pdf: true });
+  const S = ctx.GZ_PDF_KIND.STORE;
+  assert.equal(S.get({ file: 'not base64!' }), null);
+  assert.equal(S.get({ file: 'YQ==', size: 2 }), null, 'declared and decoded sizes agree');
+});
+
 test('pure XFA is refused; a hybrid form (XFA with AcroForm fields) opens', async () => {
   const { ctx } = load({ pdf: true });
   const { pureXfa } = ctx.GZ_PDF_KIND;
