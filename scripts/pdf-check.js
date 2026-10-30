@@ -185,6 +185,21 @@ const photo = () => {
     await page.click('#gq-zoom');
     await page.click('[data-zoom="page-fit"]');
     const fit = await until(() => page.evaluate(() => { const p = document.querySelector('.pdfViewer .page[data-page-number="1"]').getBoundingClientRect(), s = document.querySelector('.gq-scroll').getBoundingClientRect(); return p.height <= s.height + 1 ? { p: p.height, s: s.height } : null; }), 'whole page');
+    // Whole page: page 1 all in sight from the top, filling the room; with the find bar open, the smaller room.
+    const inSight = () => page.evaluate(() => {
+      const s = document.querySelector('.gq-scroll'), b = s.getBoundingClientRect(), p = document.querySelector('.pdfViewer .page[data-page-number="1"]').getBoundingClientRect(), top = b.top + s.clientTop;
+      return { above: Math.round(p.top - top), below: Math.round(top + s.clientHeight - p.bottom), h: Math.round(p.height), room: s.clientHeight, label: document.getElementById('gq-zoom').textContent };
+    });
+    const whole = (g) => g.label === 'Whole page' && g.above >= 0 && g.below >= 0 && g.h >= g.room - 48;
+    await page.evaluate(() => document.querySelector('.gq-scroll').scrollTo(0, 0));
+    await page.click('#gq-zoom');
+    await page.click('[data-zoom="page-fit"]');
+    const sight = await inSight();
+    await page.click('#gq-find-b');
+    const sightFind = await until(async () => { const g = await inSight(); return g.room < sight.room && g.h < sight.h ? g : null; }, 'whole page under the find bar');
+    await page.click('#gq-find-b');
+    await until(async () => (await inSight()).room === sight.room, 'find bar closed');
+    check(whole(sight) && whole(sightFind), `whole page: page 1 in sight from the top, filling the room (${JSON.stringify(sight)}), and with find open (${JSON.stringify(sightFind)})`);
     await page.click('#gq-zoom');
     await page.click('[data-zoom="page-width"]');
     const wide = await until(() => page.evaluate(() => { const p = document.querySelector('.pdfViewer .page[data-page-number="1"]').getBoundingClientRect(), s = document.querySelector('.gq-scroll').getBoundingClientRect(); return p.width > s.width * 0.85 && p.width <= s.width ? { p: p.width, s: s.width } : null; }), 'page width');
