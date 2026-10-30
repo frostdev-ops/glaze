@@ -4,8 +4,10 @@
 // on lib/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, and Present (a dialog, full screen
 // where the browser allows, Rimeward's keys, hidden slides skipped). Its chrome wears the Look; the slide stays as authored.
 // Export gives back the bytes imported. A viewer, never an editor: the record only changes by the page's rename.
-// Storage (STORE): the deck's bytes as base64 in the paper record, within the record's 4 MB. The worker-owned blob store
-// (glaze-docs, built with sheets) replaces STORE.put and STORE.get with a reference; nothing else reads or writes the bytes.
+// Storage (STORE): the deck's bytes in the worker's file store (lib/doc-files.js, over its port), the record pointing at
+// them (file: { hash, size, type }), up to the kind's max; a record from before the store holds them as base64, read as
+// before and moved over as it is opened, and where the store is unavailable a deck up to the old 3 MB is kept that way still.
+// Nothing else reads or writes the bytes.
 (() => {
   const DK = globalThis.GZ_DOC_KINDS;
   const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return globalThis.navigator?.language || 'en'; } })();
@@ -16,7 +18,7 @@
   const LIBS = ['lib/doctext.js', 'lib/pptx.js', 'lib/pptx-geom.js', 'lib/slides-render.js'];
   const need = (files) => GZ_WRITER_PAPER.need(files);
   // What the page says when it refuses a deck (papers.js translates them).
-  const SAYS = { size: 'Choose a PowerPoint file smaller than 3 MB.', read: 'That file could not be read as a PowerPoint presentation.' };
+  const SAYS = { size: DK.KINDS.slides.big, read: 'That file could not be read as a PowerPoint presentation.', ...DK.SAYS };
   const MIME = { '.pptx': DK.KINDS.slides.mime, '.ppsx': 'application/vnd.openxmlformats-officedocument.presentationml.slideshow' };
 
   // ---- storage: the one place the deck's bytes go in and come out
@@ -26,15 +28,29 @@
     return btoa(s);
   };
   const unb64 = (s) => { const bin = atob(s), out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
+  const files = () => need(['lib/doc-files.js']).then(() => GZ_DOC_FILES);
+  // A refusal of the store's, as the page says it.
+  class FileError extends RangeError { constructor(why) { super(DK.SAYS[why] || SAYS.read); this.why = why; } }
+  const LEGACY = 3e6; // base64 of 3 MB is the record's 4 MB
   const STORE = {
-    max: 3e6, // base64 of 3 MB is the record's 4 MB
-    put: (bytes, ext) => {
+    max: GZ_DOC_KINDS.KINDS.slides.max,
+    put: async (bytes, ext) => {
       if (!(bytes?.length <= STORE.max)) throw new RangeError(SAYS.size);
-      return { file: b64(bytes), size: bytes.length, ext: String(ext || '').toLowerCase() === '.ppsx' ? '.ppsx' : '.pptx' };
+      const x = String(ext || '').toLowerCase() === '.ppsx' ? '.ppsx' : '.pptx', F = await files();
+      try { return { file: await F.client().put(bytes, MIME[x]), size: bytes.length, ext: x }; } catch (e) {
+        if (e.why === 'unavailable' && bytes.length <= LEGACY) return { file: b64(bytes), size: bytes.length, ext: x };
+        throw new FileError(e.why);
+      }
     },
-    get: (rec) => {
-      if (typeof rec?.file !== 'string' || !rec.file.length || rec.file.length > 4 * Math.ceil(STORE.max / 3)) return null;
-      try { const bytes = unb64(rec.file); return bytes.length <= STORE.max ? bytes : null; } catch { return null; }
+    // a record → its bytes, or null for none; a FileError when the store can't give them (missing, unavailable, cut).
+    get: async (rec) => {
+      if (typeof rec?.file === 'string') {
+        if (!rec.file.length || rec.file.length > 4 * Math.ceil(LEGACY / 3)) return null;
+        try { const bytes = unb64(rec.file); return bytes.length <= LEGACY ? bytes : null; } catch { return null; }
+      }
+      const F = await files();
+      if (!F.ref(rec?.file) || rec.file.size > STORE.max) return null;
+      try { return await F.client().get(rec.file); } catch (e) { throw new FileError(e.why); }
     },
   };
   let store = null;
@@ -147,7 +163,7 @@
     }
     (async () => {
       await need(LIBS);
-      const bytes = STORE.get(rec), deck = bytes && await GZ_PPTX.read(bytes).catch(() => null), s = deck?.slides[0];
+      const bytes = await STORE.get(rec), deck = bytes && await GZ_PPTX.read(bytes).catch(() => null), s = deck?.slides[0];
       if (!s) return;
       // Cards can be discarded and redrawn while the page lives; their images own no blob URLs.
       const media = await blobs(bytes, deck, mediaOf(s), true);
@@ -169,13 +185,13 @@
     if (!deck?.slides.length) throw new RangeError(SAYS.read);
     const thumbUrl = await picture(deck, bytes).catch(() => null), words = textOf(deck), title = stem(file.name);
     const key = GZ_WRITER_PAPERS.newKey();
-    await papers().save(key, { kind: 'slides', ...STORE.put(bytes, /\.ppsx$/i.test(file.name) ? '.ppsx' : '.pptx'), slides: deck.slides.length, text: words,
+    await papers().save(key, { kind: 'slides', ...await STORE.put(bytes, /\.ppsx$/i.test(file.name) ? '.ppsx' : '.pptx'), slides: deck.slides.length, text: words,
       words: measure({ text: words }).words, ...(thumbUrl && { thumb: thumbUrl }), named: !!title, title }, { reason: 'import' });
     return key;
   };
   // A deck as its file: the bytes imported, named by its title. → { name, mime, bytes } or null.
   const file = async (key) => {
-    const rec = await papers().get(key), bytes = STORE.get(rec);
+    const rec = await papers().get(key), bytes = await STORE.get(rec);
     if (!bytes) return null;
     const ext = rec.ext === '.ppsx' ? '.ppsx' : '.pptx', name = String(rec.title || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || t('Slides');
     return { name: `${name}${ext}`, mime: MIME[ext], bytes };
@@ -240,7 +256,11 @@
     const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'slides';
     await need(LIBS);
-    const rec = await papers().get(key).catch(() => null), bytes = STORE.get(rec);
+    const rec = await papers().get(key).catch(() => null);
+    // A record from before the store moves into it as it is opened (the worker reads its base64 again).
+    if (typeof rec?.file === 'string') papers().migrate?.(key).catch(() => {});
+    let failed = null;
+    const bytes = await STORE.get(rec).catch((e) => { failed = e; return null; });
     const deck = bytes ? await GZ_PPTX.read(bytes).catch((e) => { console.warn(e); return null; }) : null;
     const Rr = R(), labels = LABELS(), title = host?.title?.() || rec?.title || t('Untitled document'), n = deck ? deck.slides.length : 0;
     const media = deck ? await blobs(bytes, deck, new Set(deck.media.map((m) => m.path))) : new Map();
@@ -280,8 +300,19 @@
       h('div', { class: 'gs-work' }, railEl, h('div', { class: 'gs-main' }, canvasEl, notesEl)));
     (host?.mount || document.body).append(view);
     if (!deck) {
-      canvasEl.append(h('p', { class: 'gs-said', role: 'status', text: t(SAYS.read) }));
+      const said = h('p', { class: 'gs-said', role: 'status', text: t(failed instanceof FileError ? failed.message : SAYS.read) });
+      canvasEl.append(said);
       for (const b of [prevB, nextB, outB, zoomB, inB, q, findPrev, findNext, notesB, presentB]) b.disabled = true;
+      // A file the store no longer has: Delete (to Trash, as Documents' own) or Import… it again, where this is a document of its own.
+      if (failed?.why === 'missing' && !host && GZ_WRITER_PAPERS.local(key)) {
+        const pick = h('input', { type: 'file', accept: DK.KINDS.slides.accept.join(','), hidden: true, onchange: () => {
+          const f = pick.files[0];
+          pick.value = '';
+          if (f) into(key, f).then(() => location.reload(), (e) => { console.error(e); said.firstChild.textContent = t(e instanceof RangeError ? e.message : SAYS.read); });
+        } });
+        said.append(' ', btn({ class: 'gs-btn gs-label', 'data-act': 'delete', onclick: () => { papers().trash(key).then(() => location[window.top === window ? 'assign' : 'replace']('papers.html'), (e) => console.error(e)); } }, t('Delete')),
+          ' ', btn({ class: 'gs-btn gs-label', 'data-act': 'reimport', onclick: () => pick.click() }, t('Import…')), pick);
+      }
     }
 
     // ---- the slide: drawn at the zoom, its find marks, its notes
@@ -519,7 +550,7 @@
     const deck = await GZ_PPTX.read(bytes).catch(() => null);
     if (!deck?.slides.length) throw new RangeError(SAYS.read);
     const thumbUrl = await picture(deck, bytes).catch(() => null), words2 = textOf(deck);
-    return (await papers().save(key, { kind: 'slides', doc: null, ...STORE.put(bytes, /\.ppsx$/i.test(f.name) ? '.ppsx' : '.pptx'), slides: deck.slides.length, text: words2,
+    return (await papers().save(key, { kind: 'slides', doc: null, ...await STORE.put(bytes, /\.ppsx$/i.test(f.name) ? '.ppsx' : '.pptx'), slides: deck.slides.length, text: words2,
       words: measure({ text: words2 }).words, ...(thumbUrl && { thumb: thumbUrl }) }, { reason: 'import' })).paper;
   };
 

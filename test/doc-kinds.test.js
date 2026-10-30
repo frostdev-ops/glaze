@@ -8,8 +8,8 @@ test('paper, sheet, pdf and slides are the kinds, frozen', () => {
   assert.deepEqual(Object.keys(DK.KINDS), ['paper', 'sheet', 'pdf', 'slides']);
   assert.deepEqual(DK.KINDS.paper, { label: 'Document', icon: 'paper', accept: ['.docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', max: 15e6, param: 'paper' });
   assert.deepEqual(DK.KINDS.sheet, { label: 'Spreadsheet', icon: 'sheet', accept: ['.xlsx', '.csv', '.tsv'], mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', max: 15e6, param: 'sheet' });
-  assert.deepEqual(DK.KINDS.pdf, { label: 'PDF', icon: 'pdf', accept: ['.pdf'], mime: 'application/pdf', max: 50e6, param: 'pdf' });
-  assert.deepEqual(DK.KINDS.slides, { label: 'Slides', icon: 'slides', accept: ['.pptx', '.ppsx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', max: 50e6, param: 'slides' });
+  assert.deepEqual(DK.KINDS.pdf, { label: 'PDF', icon: 'pdf', accept: ['.pdf'], mime: 'application/pdf', max: 50e6, big: 'Choose a PDF smaller than 50 MB.', param: 'pdf' });
+  assert.deepEqual(DK.KINDS.slides, { label: 'Slides', icon: 'slides', accept: ['.pptx', '.ppsx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', max: 50e6, big: 'Choose a PowerPoint file smaller than 50 MB.', param: 'slides' });
   for (const k of Object.values(DK.KINDS)) assert.ok(Object.isFrozen(k) && Object.isFrozen(k.accept));
   assert.ok(Object.isFrozen(DK.KINDS));
   assert.throws(() => { 'use strict'; DK.KINDS.paper.max = 1; });
