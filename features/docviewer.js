@@ -9,8 +9,8 @@
 // only while one of its tools is picked, and picking one of Canvas's puts Glaze's down.
 // What it can't know it asks the Canvas page around it (content.js, "DocViewer"): the palette, the switches, which file
 // and whose, and Glaze's words in the page's language. Asked at that page's origin only, answers taken only from it; the
-// page tells it again whenever any of that changes. No polling: a MutationObserver, only while annotations are on, puts
-// the layer back on pages the viewer draws again as it scrolls and zooms.
+// page tells it again whenever any of that changes. No polling: a MutationObserver and a ResizeObserver, only while
+// annotations are on, put the layer back on pages the viewer draws again or resizes.
 (() => {
   if (window.__gzDocs || window.top === window || !/^canvadocs(-[\w-]+)?\.instructure\.com$/.test(location.hostname) || !/html/.test(document.contentType)) return;
   window.__gzDocs = true;
@@ -117,7 +117,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
     });
   } catch { /* extension reloaded under the frame */ }
 
-  let mo = null, queued = 0;
+  let mo = null, ro = null, queued = 0;
   const schedule = () => { if (key && !queued) queued = requestAnimationFrame(() => { queued = 0; mountAll(); }); };
   let opened = 0; // each file opened, or annotations turned off: what an import still reading belongs to
   const open = (k) => {
@@ -128,6 +128,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
     setTool(null);
     if (!k) {
       mo?.disconnect(); mo = null;
+      ro?.disconnect(); ro = null;
       if (queued) { cancelAnimationFrame(queued); queued = 0; }
       hideBar();
       for (const s of document.querySelectorAll('.gz-ink')) s.remove();
@@ -139,6 +140,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
       pages = I.clean(r[k]?.pages);
       mo ||= new MutationObserver((rs) => { if (rs.some((x) => !x.target.closest?.('.gz-ink'))) schedule(); });
       mo.observe(html, { childList: true, subtree: true });
+      ro ||= new ResizeObserver((es) => { for (const e of es) if (!e.target.isConnected) ro.unobserve(e.target); schedule(); });
       if (!bar) showBar(false);
       mountAll();
     }, () => {});
@@ -159,6 +161,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   const mount = (page) => {
     const n = page.id.slice(5);
     const w = page.clientWidth, hh = page.clientHeight;
+    ro?.observe(page);
     if (!/^[1-9]\d{0,4}$/.test(n) || !w || !hh) return;
     const r = turn(page);
     const h = Math.round(I.W * (r % 2 ? w / hh : hh / w));

@@ -58,6 +58,7 @@ const viewer = () => {
     addEventListener: (t, f) => (win[t] ||= []).push(f),
     requestAnimationFrame: (f) => { f(); return 0; },
     MutationObserver: class { observe() {} disconnect() {} },
+    ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
     DOMPoint: class { constructor(x, y) { this.x = x; this.y = y; } matrixTransform() { return { x: this.x, y: this.y }; } },
     GZ_INK: require('../lib/ink.js'),
     GZ_SURFACES: require('../lib/surfaces.js'),
