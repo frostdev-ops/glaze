@@ -381,3 +381,16 @@ test('duplicate ZIP part names are refused by the slide and media readers', asyn
   await assert.rejects(P.read(bytes), /duplicate zip entry/);
   await assert.rejects(P.media(bytes, 'ppt/media/image1.png'), /duplicate zip entry/);
 });
+
+test('the part byte limit also bounds relationship XML and multibyte slide XML', async () => {
+  const pres = fixture('ppt/presentation.xml');
+  const part = Buffer.byteLength(pres) + 100;
+  const rels = fixture('ppt/_rels/presentation.xml.rels').replace('<Relationships ', `<Relationships pad="${'x'.repeat(part)}" `);
+  const d = await P.read(pack({ 'ppt/_rels/presentation.xml.rels': rels }), { limits: { part } });
+  assert.equal(d.slides.every((s) => s.missing), true);
+  const slide = `<p:sld xmlns:p="p" note="${'é'.repeat(part / 2)}"><p:cSld><p:spTree/></p:cSld></p:sld>`;
+  assert.ok(slide.length < part);
+  assert.ok(Buffer.byteLength(slide) > part);
+  const multi = await P.read(pack({ 'ppt/slides/slide1.xml': slide }), { limits: { part } });
+  assert.equal(multi.slides[0].broken, true);
+});
