@@ -94,6 +94,17 @@ test('a browser that opens the popup at its own size (Safari, live 2026-10-30: t
   g.a.ask('pair', PAIR);
   await settle();
   assert.deepEqual(g.data.mcpAskWindow, { id: 7, tab: 700 });
+  // A popup closed while it was opening is never resized.
+  const h = env(), resized = [];
+  let finish;
+  h.deps.windows.create = (o) => new Promise((res) => { finish = () => { h.made.push({ ...o, id: 8 }); res({ id: 8, width: 1800, height: 1130, tabs: [{ id: 800, windowId: 8 }] }); }; });
+  h.deps.windows.update = async (id, o) => { resized.push(id); };
+  h.a.ask('pair', PAIR);
+  await settle();
+  h.a.closed(8);
+  finish();
+  await settle();
+  assert.deepEqual(resized, []);
 });
 
 test('the record keeps what Glaze shows and nothing else: no arguments, no extra view fields, no staged text', async () => {
