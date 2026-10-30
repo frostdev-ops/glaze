@@ -41,10 +41,12 @@ const shots = process.env.SUBMIT_SHOTS || path.join(os.homedir(), 'Projects/glaz
 const checks = [], requests = [], errors = [];
 let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-const until = async (fn, label, ms = 15000) => {
+// state: what the timeout says was there instead (an object, read at the deadline).
+const until = async (fn, label, ms = 15000, state = null) => {
   const start = Date.now(); let last;
   while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(80); }
-  throw Error(`${label} timed out${last ? `: ${last.message}` : ''}`);
+  const was = state ? await Promise.resolve().then(state).then((x) => JSON.stringify(x), (e) => `unreadable: ${e.message}`) : '';
+  throw Error(`${label} timed out after ${ms} ms${last ? `: ${last.message}` : ''}${was ? `; at the deadline ${was}` : ''}`);
 };
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 const squash = (s) => String(s || '').replace(/\s+/g, ' ').trim();
@@ -696,6 +698,19 @@ const HARNESS = `(() => {
       return { p, el, fr };
     };
     const frameH = (el) => el.evaluate((f) => f.getBoundingClientRect().height);
+    // Typing into the compact box: once the frame's document has the focus and the box's editor is its active element
+    // (polled from Node: on a loaded runner the focus can follow the tap by a moment); the text then waited for in Ultra's
+    // box as long as a loaded runner takes, a miss saying what Ultra's box, the paper and the bar's line held.
+    const SYNC_MS = 60000;
+    const focusOf = (fr) => fr.evaluate(() => ({ focused: document.hasFocus(), active: document.activeElement?.matches?.('#gw .ProseMirror') || `${document.activeElement?.tagName?.toLowerCase()}.${String(document.activeElement?.className || '').slice(0, 40)}` }));
+    const boxFocused = (fr) => until(async () => { const f = await focusOf(fr); return f.focused && f.active === true; }, 'the compact box focused', 15000, () => focusOf(fr));
+    const boxState = (p, fr) => async () => ({
+      ultra: await p.evaluate(() => __text()).then((x) => x.slice(0, 200), (e) => `unreadable: ${e.message}`),
+      paper: await fr.evaluate(() => GZ_WRITER_PAPER.current()?.editor.view.state.doc.textContent.slice(0, 200)).catch((e) => `unreadable: ${e.message}`),
+      bar: await fr.evaluate(() => document.querySelector('.gw-bar .gp-said')?.textContent ?? null).catch(() => null),
+      ...await focusOf(fr).catch(() => ({})),
+    });
+    const inUltra = (p, fr, ok, label) => until(async () => ok(await p.evaluate(() => __text())), label, SYNC_MS, boxState(p, fr));
     await setFull(false);
     await blankPaper();
     await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); });
@@ -707,8 +722,9 @@ const HARNESS = `(() => {
     let h0 = await frameH(el);
     check(Math.abs(h0 - (v.gw + 6)) <= 2 && h0 < 400, `the frame is as tall as the box (${h0}px)`);
     await tap(fr, '#gw .ProseMirror');
+    await boxFocused(fr);
     await p.keyboard.type('Memory in Beloved is a debt the town keeps.', { delay: 2 });
-    await until(async () => (await p.evaluate(() => __text())) === 'Memory in Beloved is a debt the town keeps.\n', 'the text in Ultra\'s box');
+    await inUltra(p, fr, (x) => x === 'Memory in Beloved is a debt the town keeps.\n', 'the text in Ultra\'s box');
     check(true, 'what is typed goes into Ultra\'s text box, as it is');
     check(await p.evaluate(() => !document.querySelector(`${'[data-analytics-id="assignment.attempt.authoring.footer.submit"]'}`).disabled), 'Ultra\'s Submit turns on with the text');
     const paperKey = await fr.evaluate(() => GZ_WRITER_PAPER.current().key());
@@ -834,8 +850,9 @@ const HARNESS = `(() => {
     ({ p, el, fr } = await openCompact('empty'));
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await tap(fr, '#gw .ProseMirror');
+    await boxFocused(fr);
     await p.keyboard.type('Submitted as text.', { delay: 2 });
-    await until(async () => (await p.evaluate(() => __text())) === 'Submitted as text.\n', 'in Ultra\'s box');
+    await inUltra(p, fr, (x) => x === 'Submitted as text.\n', 'in Ultra\'s box');
     await p.click(SUBMIT);
     await until(() => p.evaluate(() => !!document.getElementById('ultra-confirm')), 'Ultra\'s confirmation');
     got = await p.evaluate(() => ({ uploads: __uploads.length, clicks: __clicks, text: __text(), confirm: !!document.getElementById('ultra-confirm') }));
@@ -853,12 +870,14 @@ const HARNESS = `(() => {
     ({ p, el, fr } = await openCompact('empty'));
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await tap(fr, '#gw .ProseMirror');
+    await boxFocused(fr);
     await p.keyboard.type('Sent after a slow save.', { delay: 2 });
     await until(() => fr.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'saved before the slow part');
     await fr.evaluate(() => { window.__said = []; const s = document.querySelector('.gw-bar .gp-said'); if (s) new MutationObserver(() => window.__said.push(s.textContent)).observe(s, { childList: true, characterData: true, subtree: true }); });
     check(await slowStore(6000), 'the worker\'s storage writes held 6 s');
+    await boxFocused(fr);
     await p.keyboard.type(' Last words.', { delay: 2 });
-    await until(async () => (await p.evaluate(() => __text())).includes('Last words.'), 'the last words in Ultra\'s box');
+    await inUltra(p, fr, (x) => x.includes('Last words.'), 'the last words in Ultra\'s box');
     const pressed = Date.now();
     await p.click(SUBMIT);
     const heldAtOnce = await p.evaluate(() => !__clicks.length);
@@ -881,8 +900,9 @@ const HARNESS = `(() => {
     ({ p, el, fr } = await openCompact('empty'));
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await tap(fr, '#gw .ProseMirror');
+    await boxFocused(fr);
     await p.keyboard.type('Short start.', { delay: 2 });
-    await until(async () => (await p.evaluate(() => __text())) === 'Short start.\n', 'the short start in Ultra\'s box');
+    await inUltra(p, fr, (x) => x === 'Short start.\n', 'the short start in Ultra\'s box');
     const over = await fr.evaluate(() => {
       const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA.paper, bold = S.marks.bold.create();
       const paras = Array.from({ length: 260 }, (_, i) => S.node('paragraph', null, Array.from({ length: 200 }, (_, j) => (j % 2 ? S.text(' ') : S.text(String((j / 2 + 1) % 10), [bold])))));
@@ -906,8 +926,8 @@ const HARNESS = `(() => {
     await blankPaper();
     // Submit as is from compact: the sheet owns the native text and its one final click.
     ({ p, el, fr } = await openCompact('empty'));
-    await tap(fr, '#gw .ProseMirror'); await p.keyboard.type('Keep this compact draft.');
-    await until(async () => (await p.evaluate(() => __text())).includes('Keep this compact draft.'), 'compact draft synced');
+    await tap(fr, '#gw .ProseMirror'); await boxFocused(fr); await p.keyboard.type('Keep this compact draft.');
+    await inUltra(p, fr, (x) => x.includes('Keep this compact draft.'), 'compact draft synced');
     await give(p, '[class*="makeStylesinputContainer-"]', 'Compact_original.docx', MIME, essay);
     await until(() => cardOf(fr), 'compact as-is card');
     await tap(fr, '.gi-choice:not(.gi-default)'); await sheetOpen(fr);
