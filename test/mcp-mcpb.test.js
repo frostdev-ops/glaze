@@ -526,7 +526,8 @@ test('the command: --from=mcpb sets up, then runs agent mode; any other --from i
   const { root, hosts } = B.folder(process.platform, { HOME: home, XDG_DATA_HOME: env.XDG_DATA_HOME });
   const l = L.parse(fs.readFileSync(path.join(hosts, B0.id), 'utf8'));
   if (trusted(process.platform)) assert.equal(fs.realpathSync(l.node), fs.realpathSync(process.execPath));
-  else assert.equal(l.node, null, 'a node others can change goes in no launcher');
+  // Setup then names another node it finds and trusts, or none.
+  else assert.ok(l.node === null || (!N().trust(process.platform).path(l.node) && fs.realpathSync(l.node) !== fs.realpathSync(process.execPath)), `a node others can change goes in no launcher: ${l.node}`);
   assert.equal(l.script, path.join(root, VERSION, 'bin', 'glaze-mcp.js'));
   assert.doesNotMatch(out.stderr, /unknown option|GLAZE_MCP_BROWSER/);
   assert.equal(CLI.mode(['--from=mcpb']).mode, 'agent');
