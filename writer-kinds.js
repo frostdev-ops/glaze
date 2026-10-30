@@ -44,6 +44,8 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
   const mount = async (id, key, paper) => {
     const k = await kind(id).catch((e) => { console.error(e); return null; });
     if (typeof k?.view !== 'function' || !key) return null;
+    const rec = await store().get(key).catch(() => null);
+    if (GZ_DOC_KINDS.kindOf(rec) !== id) return null;
     const root = document.documentElement, el = document.createElement('div'), was = root.dataset.view;
     el.className = 'gk';
     document.body.append(el);
@@ -52,7 +54,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     root.dataset.doc = id;
     root.dataset.view = 'full';
     let v = null;
-    const rec = await store().get(key).catch(() => null), ext = rec?.ext && GZ_DOC_KINDS.KINDS[id]?.accept.includes(rec.ext) ? rec.ext : GZ_DOC_KINDS.KINDS[id]?.accept[0] || '';
+    const ext = rec?.ext && GZ_DOC_KINDS.KINDS[id]?.accept.includes(rec.ext) ? rec.ext : GZ_DOC_KINDS.KINDS[id]?.accept[0] || '';
     const submitB = document.createElement('button');
     submitB.type = 'button'; submitB.className = 'gp-submit'; submitB.textContent = t('Submit…');
     submitB.disabled = typeof P().submit !== 'function';
@@ -75,8 +77,11 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     submitB.addEventListener('click', () => P().submit?.(surface));
     try {
       v = await k.view(key, { mount: el, t, title: () => paper.context()?.assignment?.title || '', tools: [submitB] });
+      if (!await owns()) throw new Error('document kind changed');
     } catch (e) {
-      console.error(e); el.remove(); delete root.dataset.doc;
+      console.error(e);
+      try { await v?.dispose?.(); } catch (e) { console.error(e); }
+      el.remove(); delete root.dataset.doc;
       if (was !== 'full') { if (was) root.dataset.view = was; else delete root.dataset.view; frame.say({ type: 'view', full: false }); }
       return null;
     }
