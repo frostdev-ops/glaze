@@ -100,6 +100,62 @@ test('reader: a formula moved as Excel fills it', () => {
   for (const [f, dr, dc, want] of cases) assert.equal(X.shift(f, dr, dc), want, `${f} by ${dr},${dc}`);
 });
 
+test('reader: inline phonetics and empty strings', async () => {
+  const wb = await X.read(book({ One: '<row r="1">'
+    + '<c r="A1" t="inlineStr"><is><r><t>日</t></r><r><t>本</t></r><rPh sb="0" eb="2"><t>ニホン</t></rPh></is></c>'
+    + '<c r="B1" t="inlineStr"><is><t/></is></c></row>' }));
+  const c = wb.sheets[0].cells;
+  assert.deepEqual(c.get('A1'), { t: 's', v: '日本' });
+  assert.deepEqual(c.get('B1'), { t: 's', v: '' });
+});
+
+test('reader: missing typed caches are blank, ISO dates and false retain their types', async () => {
+  const wb = await X.read(book({ One: '<row r="1">'
+    + '<c r="C1" s="1" t="s"/><c r="D1" s="1" t="b"/><c r="E1" s="1" t="e"/><c r="F1" s="1" t="d"/>'
+    + '<c r="G1" t="str"><f>"x"</f></c><c r="H1" t="b"><f>TRUE()</f></c>'
+    + '<c r="I1" t="d"><v>2026-10-30T00:00:00Z</v></c><c r="J1" t="b"><v>0</v></c></row>' }));
+  const c = wb.sheets[0].cells;
+  for (const at of ['C1', 'D1', 'E1', 'F1']) assert.equal(c.get(at), undefined, at);
+  assert.deepEqual(c.get('G1'), { t: null, v: null, f: '"x"' });
+  assert.deepEqual(c.get('H1'), { t: null, v: null, f: 'TRUE()' });
+  assert.deepEqual(c.get('I1'), { t: 'd', v: '2026-10-30T00:00:00Z' });
+  assert.deepEqual(c.get('J1'), { t: 'b', v: false });
+});
+
+test('reader: empty shared strings count toward limits', async () => {
+  await assert.rejects(X.read(book({ One: '' }, { 'xl/sharedStrings.xml': '<sst><si/><si/><si/></sst>' }),
+    { limits: { strings: 2 } }), /too many shared strings/);
+});
+
+test('reader: styled blanks count toward limits', async () => {
+  await assert.rejects(X.read(book({ One: '<row r="1"><c r="A1" s="1"/><c r="B1" s="1"/><c r="C1" s="1"/></row>' }),
+    { limits: { cells: 2 } }), /too many cells/);
+});
+
+test('reader: array expansion is bounded even without cached followers', async () => {
+  await assert.rejects(X.read(book({ One: '<row r="1"><c r="A1"><f t="array" ref="A1:D4">1</f><v>1</v></c></row>' }),
+    { limits: { cells: 5 } }), /too many array cells/);
+});
+
+test('reader: invalid array ranges are rejected', async () => {
+  await assert.rejects(X.read(book({ One: '<row r="1"><c r="A1"><f t="array" ref="bad">1</f><v>1</v></c></row>' })), /bad array range/);
+});
+
+test('reader: expanded shared formulas respect the formula limit', async () => {
+  await assert.rejects(X.read(book({ One: '<row r="1"><c r="A1"><f t="shared" si="0" ref="A1:A100">B1</f><v>1</v></c></row>'
+    + '<row r="100"><c r="A100"><f t="shared" si="0"/><v>1</v></c></row>' }), { limits: { formula: 2 } }), /formula too long/);
+});
+
+test('reader: dimensions do not hide cells and archive budgets pass through', async () => {
+  const bytes = book({ One: '<row r="99"><c r="Z99"><v>7</v></c></row>' }, {
+    'xl/worksheets/sheet1.xml': `<worksheet ${NS}><dimension ref="A1"/><sheetData><row r="99"><c r="Z99"><v>7</v></c></row></sheetData></worksheet>`,
+  });
+  assert.deepEqual((await X.read(bytes)).sheets[0].cells.get('Z99'), { t: 'n', v: 7 });
+  for (const limits of [{ input: 10 }, { entries: 1 }, { entry: 10 }, { total: 10 }]) {
+    await assert.rejects(X.read(bytes, { limits }), RangeError);
+  }
+});
+
 // ---- the cases ----------------------------------------------------------------------------------------------------
 // Every reference a case's formula spells out: { sheets: [names], c0, r0, c1, r1 } (rows or columns null for whole
 // columns or rows). A reference without a sheet comes back with sheets null.
