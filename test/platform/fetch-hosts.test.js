@@ -153,7 +153,7 @@ const KINDS = ['required', 'extension', 'asked', 'page', 'via', 'open'];
 const extensionSide = () => {
   const out = new Set(['background/background.js', 'settings/options.js', 'settings/popup.js', 'planner/reader.js', 'core/ui.js']);
   for (const m of read('background/background.js').matchAll(/importScripts\(([^)]*)\)/g)) for (const [, f] of m[1].matchAll(/'([^']+)'/g)) out.add(path.posix.normalize(`background/${f}`));
-  for (const page of ['options.html', 'popup.html', 'preview.html', 'reader.html', 'settings/welcome.html', 'sharing/quick.html', 'courses/allow.html']) {
+  for (const page of ['options.html', 'popup.html', 'preview.html', 'reader.html', 'settings/welcome.html', 'sharing/quick.html', 'courses/allow.html', 'ai/local/host.html']) {
     if (!fs.existsSync(path.join(root, page))) continue;
     for (const [, src] of read(page).matchAll(/<script[^>]+src="([^"]+)"/g)) out.add(path.posix.normalize(path.posix.join(path.posix.dirname(page), src)));
   }

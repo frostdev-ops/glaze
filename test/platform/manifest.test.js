@@ -58,8 +58,9 @@ test('host access: each LMS\'s own hosts, Glaze\'s gallery and share relay; any 
 });
 
 // Agent access's on switch asks for native messaging (the glaze-mcp helper); Google Calendar sync asks for identity.
-test('Chrome adds only activeTab and declarativeContent to its permissions; native messaging and identity are asked for when used', () => {
-  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage', 'activeTab', 'declarativeContent']); // notes are never cleared for space (owner, 2026-10-15)
+// offscreen: Glaze's own model's engine host (ai/local/host.html); no permission warning.
+test('Chrome adds only activeTab, declarativeContent and offscreen to its permissions; native messaging and identity are asked for when used', () => {
+  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage', 'activeTab', 'declarativeContent', 'offscreen']); // notes are never cleared for space (owner, 2026-10-15)
   assert.deepEqual(m.optional_permissions, ['identity', 'nativeMessaging']);
 });
 
@@ -67,6 +68,7 @@ test('Safari requires native messaging already, so its manifest drops the option
   const s = safari(m);
   assert.deepEqual(s.permissions.filter((p) => p === 'nativeMessaging'), ['nativeMessaging']);
   assert.equal(s.optional_permissions, undefined);
+  assert.ok(!s.permissions.includes('offscreen'), 'no offscreen documents in Safari');
   assert.deepEqual(safari({ ...m, optional_permissions: [...m.optional_permissions, 'bookmarks'] }).optional_permissions, ['bookmarks']);
 });
 

@@ -55,7 +55,8 @@ for (const entry of m.web_accessible_resources || []) delete entry.use_dynamic_u
 // Firefox has no declarativeContent (Chrome's lit button) and no addHostAccessRequest; AMO's linter flags both, the second
 // even behind popup.js's check, so the Firefox popup goes without that line. The button starts on the toolbar for new
 // installs (default_area, Firefox's own key). The hosts stay Chrome's: built-in ones required, a school's own asked for.
-m.permissions = m.permissions.filter((p) => p !== 'declarativeContent');
+// Nor offscreen documents: Glaze's own model's engine host runs in a Worker of the event page there (ai/local/link.js).
+m.permissions = m.permissions.filter((p) => p !== 'declarativeContent' && p !== 'offscreen');
 m.action = { ...m.action, default_area: 'navbar' };
 if (fs.existsSync(popup)) {
   const hostAccess = /^(\s*)const hostAccess = typeof chrome\.permissions\.addHostAccessRequest === 'function' \? .*$/m;

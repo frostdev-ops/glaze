@@ -155,12 +155,41 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   // tools/build/package-firefox.sh: the files named in the worker's importScripts calls, as it reads them.
   const bg = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const named = new Set([...bg.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.normalize(`background/${f}`))));
-  // The local engine's files before its provider step names them (4.0.1): the worker doesn't load them yet.
-  const unwired = ['local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/store.js'];
-  const shipped = fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !unwired.includes(f)).map((f) => `ai/${f}`);
+  // Glaze's own model: the worker loads its provider, the store (status), the formatter and the link to the engine host;
+  // the host (ai/local/host.js, a Worker of Chrome's offscreen document or of Firefox's event page) loads the engine's
+  // files itself, and the worker never does.
+  const host = ['local/host.js', 'local/offscreen.js', 'local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/engine.js', 'local/grammar.js', 'local/ladder.js'];
+  for (const f of ['ai/local/store.js', 'ai/local/format.js', 'ai/local/link.js', 'ai/providers/local.js']) assert.ok(named.has(f), f);
+  const shipped = fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !host.includes(f)).map((f) => `ai/${f}`);
   assert.ok(shipped.length >= 14);
   for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
+  for (const f of host) assert.ok(!named.has(`ai/${f}`), `${f} stays out of the worker`);
   assert.ok(!named.has('ai/providers/mock.js'), 'the mock is for tests and the eval');
+  // The host's own imports, beside it: the store, the GGUF reader and the tokenizer, then the engine's files.
+  const hs = fs.readFileSync(path.join(__dirname, '../../extension/ai/local/host.js'), 'utf8');
+  const imported = [...hs.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => f));
+  const optional = [...hs.matchAll(/for \(const f of \[([^\]]*)\]\) \{ try \{ importScripts\(f\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => f));
+  assert.deepEqual(imported, ['store.js', 'gguf.js', 'tokenizer.js']);
+  assert.deepEqual(optional, ['quant.js', 'reference.js', 'engine.js', 'grammar.js', 'ladder.js']);
+  for (const f of imported) assert.ok(fs.existsSync(path.join(__dirname, '../../extension/ai/local', f)), f);
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/host.html'), 'utf8'), /<script src="offscreen\.js"><\/script>/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/offscreen.js'), 'utf8'), /new Worker\('host\.js'\)/);
+});
+
+test('Glaze\'s own model\'s host page connects as glaze:local, and the worker takes that port from that page of this extension only', async () => {
+  const w = make();
+  const page = (extra = {}) => ({ id: 'glaze', url: `${EXT}/ai/local/host.html`, origin: EXT, ...extra });
+  const accepted = [];
+  require('node:vm').runInContext('ai()', w.context);
+  w.context.GZ_AI_LOCAL._env({ store: { list: async () => [] }, gpu: () => ({}), link: { kind: 'offscreen', accept: (p) => accepted.push(p) } });
+  for (const sender of [page({ url: `${EXT}/options.html` }), page({ id: 'another-extension' }), page({ tab: { id: 3 } }), page({ url: 'https://evil.example.com/ai/local/host.html' })]) {
+    const { port } = w.connect('glaze:local', sender);
+    assert.equal(port.hungUp, true, JSON.stringify(sender));
+  }
+  assert.equal(accepted.length, 0);
+  const { port } = w.connect('glaze:local', page());
+  assert.equal(port.hungUp, false);
+  assert.equal(accepted.length, 1);
 });
 
 test('AI rejects opaque frames, foreign top pages and assessment ancestors', async () => {

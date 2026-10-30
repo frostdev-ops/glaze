@@ -87,12 +87,14 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   const using = async (s, feature, all) => {
     const sel = A().resolve(s, feature);
     if (!sel || !E().ID.test(sel.use)) return null;
-    const conn = sel.use === 'device' ? await onDevice(all) : usable(sel.use, all[sel.use]);
+    const conn = await connection(sel.use, all);
     if (conn?.p.id === 'openai' && !sel.model) return null;
     const tune = A().tuning(s, feature);
     const cfg = conn && conn.p.config({ ...conn.cfg, ...(conn.p.id === 'openai' && { model: sel.model }), ...(tune.context && { context: tune.context }) });
     return cfg ? { ...conn, cfg, sel, tune } : null;
   };
+  // A connection by its id: On this device resolved (onDevice), Glaze's own model ('local') kept or not, any other as kept.
+  const connection = async (id, all) => (id === 'device' ? onDevice(all) : id === 'local' ? usable('local', all.local || { provider: 'local' }) : usable(id, all[id]));
   // A row's provider: an endpoint's connection id ('openrouter', one the student added), or the provider of a model on this
   // computer.
   const shown = (use) => (use.p.id === 'openai' ? use.id : use.p.id);
@@ -116,7 +118,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   // On this device is Settings' one choice, whichever model it resolves to.
   const named = async (env, feature) => {
     try {
-      const { s, all } = await view(env), sel = A().resolve(s, feature), use = sel && sel.use !== 'device' && usable(sel.use, all[sel.use]);
+      const { s, all } = await view(env), sel = A().resolve(s, feature), use = sel && sel.use !== 'device' && await connection(sel.use, all);
       return sel?.use === 'device' ? 'device' : use ? shown(use) : '';
     } catch { return ''; }
   };
@@ -197,8 +199,10 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     let closed = false;
     const close = () => { if (closed) return; closed = true; for (const c of mine.values()) c.abort(new DOMException('Closed', 'AbortError')); mine.clear(); confirms.clear(); };
     const post = (m) => { if (closed) return; try { port.postMessage(m); } catch { close(); } };
-    // Prompt API work can be silent past Chrome's 30-second worker idle cutoff. An open port alone does not keep it
-    // alive (Chrome 114+); messages do. Keep only an admitted device run alive, within its existing task deadline.
+    // A model on this computer can be silent past Chrome's 30-second worker idle cutoff (the Prompt API's, and Glaze's own
+    // engine reading a long prompt). An open port alone does not keep it alive (Chrome 114+); messages do. Keep only an
+    // admitted run on a model that downloads to this computer (a provider with prepare: device, local) alive, within its
+    // existing task deadline.
     const keepAlive = (id, signal) => {
       let timer;
       const stop = () => { clearTimeout(timer); signal.removeEventListener('abort', stop); };
@@ -312,7 +316,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         try { accepted = await F().wait(() => admit(m), signal.signal); } finally { admission.done(); signal.done(); }
         const { task, use } = accepted;
         admitted.set(control, use);
-        if (use.p.id === 'device') stopKeepAlive = keepAlive(m.id, control.signal);
+        if (typeof use.p.prepare === 'function') stopKeepAlive = keepAlive(m.id, control.signal);
         row.provider = shown(use);
         if (use.p.id === 'openai') row.model = use.cfg.model;
         const list = await catalog(env, use, control.signal, now());
@@ -433,12 +437,19 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     const p = typeof m.provider === 'string' && A().PROVIDERS.includes(m.provider) ? P().get(m.provider) : null;
     const cfg = p && typeof p.prepare === 'function' && p.config({});
     if (!cfg) return Promise.resolve({ ok: false, error: 'setup' });
-    const done = (st) => ({ ok: true, state: ['ready', 'download', 'downloading', 'unavailable'].includes(st?.state) ? st.state : 'unavailable', ...(typeof st?.reason === 'string' && { reason: st.reason }) });
+    // Glaze's own model also says its size, tier and the tiers there are (Settings' card), and how far a download is.
+    const n = (v) => Number.isSafeInteger(v) && v > 0;
+    const done = (st) => ({ ok: true, state: ['ready', 'download', 'downloading', 'unavailable'].includes(st?.state) ? st.state : 'unavailable', ...(typeof st?.reason === 'string' && { reason: st.reason }),
+      ...(n(st?.size) && { size: st.size }), ...(n(st?.tier) && { tier: st.tier }), ...(Number.isFinite(st?.progress) && { progress: Math.min(1, Math.max(0, st.progress)) }),
+      ...(Array.isArray(st?.tiers) && { tiers: st.tiers.filter((x) => n(x?.tier) && n(x?.size)).map((x) => ({ tier: x.tier, size: x.size })) }) });
     const failed = () => ({ ok: true, state: 'unavailable', reason: 'failed' });
-    if (m.op === 'test') return p.status(cfg, {}).then(done, failed);
+    // The kept connection's settings (Glaze's own model's tier), as a run would take them.
+    const kept = async () => { const rec = env.vault ? (await stored(env).catch(() => ({})))[p.id] : null; const c = isObj(rec) && rec.provider === p.id && p.config((({ provider: _, ...r }) => r)(rec)); return c || cfg; };
+    if (m.op === 'test') return kept().then((c) => p.status(c, {})).then(done, failed);
+    if (m.op === 'delete') return typeof p.remove === 'function' ? kept().then((c) => p.remove(c)).then(done, failed).finally(() => revoke(p.id, env)) : Promise.resolve({ ok: false, error: 'setup' });
     // A model just downloaded may take more than the catalog kept from before said.
-    return p.prepare(cfg, { onProgress: (loaded) => { try { env.say?.({ type: 'glaze:ai-config', event: 'progress', provider: p.id, loaded }); } catch { /* no page listening */ } } })
-      .then(done, failed).finally(() => { if (env.vault) listed.delete(env.vault); });
+    return kept().then((c) => p.prepare(c, { onProgress: (loaded) => { try { env.say?.({ type: 'glaze:ai-config', event: 'progress', provider: p.id, loaded }); } catch { /* no page listening */ } } })
+      .then(done, failed)).finally(() => { if (env.vault) listed.delete(env.vault); });
   };
   let turn = Promise.resolve();
   const queued = (f) => { const next = turn.then(f, f); turn = next.catch(() => {}); return next; };
@@ -456,7 +467,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     return typeof m === 'boolean' ? m : env.vault.set(CONNECTIONS, m.connections);
   };
   const NAME = /^[^\p{Cc}\p{Bidi_Control}]{1,40}$/u;
-  const config = (m, env) => ((m?.op === 'prepare' || m?.op === 'test') && m.id === undefined ? local(m, env) : queued(async () => {
+  const config = (m, env) => (['prepare', 'test', 'delete'].includes(m?.op) && m.id === undefined ? local(m, env) : queued(async () => {
     // What a write keeps: until the store is in its shape, an older connection as it is, its model too.
     const done = await upgrade(env).catch(() => false), kept = await stored(env), all = A().migrate(undefined, kept).connections, base = done ? all : kept;
     if (m?.op === 'get') {
@@ -490,7 +501,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       return { ok: true, ...(p.origin && { origin: p.origin(cfg) }) };
     }
     if (m.op === 'remove') { const { [m.id]: _, ...rest } = base; const ok = await env.vault.set(CONNECTIONS, rest); if (ok) revoke(m.id, env); return { ok }; }
-    const use = m.id === 'device' ? await onDevice(all) : usable(m.id, all[m.id]);
+    const use = await connection(m.id, all);
     if (!use) return { ok: false, error: 'setup' };
     if (m.op === 'test') {
       if (!await reaches(env, use)) return { ok: true, state: 'unavailable', reason: 'permission' };
