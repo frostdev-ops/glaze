@@ -266,7 +266,8 @@ const area = (data = {}) => ({
   async set(p) { await new Promise(setImmediate); Object.assign(data, structuredClone(p)); return true; },
   async remove(k) { await new Promise(setImmediate); for (const x of [].concat(k)) delete data[x]; return true; },
 });
-const TOOL = (name) => ({ name, title: `The ${name} tool`, description: `Answers with ${name}.`, code: true });
+const TOOL = (name) => ({ name, title: `The ${name} tool`, description: `Answers with ${name}.`, code: true,
+  input: { type: 'object', properties: { text: { type: 'string' } }, additionalProperties: false } });
 // The mod's Worker: its handlers, and what it heard.
 const HOOKS = `
 var heardCalls = [];
