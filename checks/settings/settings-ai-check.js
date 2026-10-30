@@ -104,10 +104,11 @@ async function pass(scheme) {
       { id: 'b', task: 'writer.complete', feature: 'completion', provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017', state: 'completed', startedAt: now - 180000, ms: 900, usage: { input: 2700, output: 260 }, count: 38 },
     ];
 
+    // Every selected case uses its browser's scheme, including an isolated Glaze card check.
+    await open();
+    await page.evaluate(async () => chrome.storage.sync.set({ auto: { ...GZ_SANITIZE().auto, on: true, mode: 'device' } }));
+
     await check('migration', async () => {
-      await open();
-      // The Look follows the system's light or dark (Paper and Frost), so each state is shot in both.
-      await page.evaluate(async () => chrome.storage.sync.set({ auto: { ...GZ_SANITIZE().auto, on: true, mode: 'device' } }));
       await page.evaluate(async (calls) => chrome.storage.local.set({ ai: { on: true, use: 'endpoint', features: { syllabus: true, completion: true, writing: true } }, aiCalls: calls }), CALLS);
       await older({ endpoint: { provider: 'openai', base: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-v4.1-flash-1017', key: KEY, generation: 'g-1' } });
       await open();
