@@ -87,11 +87,14 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const viewport = page.getViewport({ scale: 408 / Math.max(1, one.width) });
     const canvas = Object.assign(document.createElement('canvas'), { width: Math.ceil(viewport.width), height: Math.min(Math.ceil(viewport.height), 1200) });
     // The page is the viewer's too (one proxy per page): the viewer cleans it up.
-    await page.render({ canvas, viewport, background: '#fff', annotationMode: P.AnnotationMode.ENABLE_STORAGE }).promise;
-    let out = '';
-    for (const q of [0.78, 0.6, 0.45]) if ((out = canvas.toDataURL('image/jpeg', q)).length <= 64e3) break;
-    canvas.width = canvas.height = 0;
-    return out;
+    try {
+      await page.render({ canvas, viewport, background: '#fff', annotationMode: P.AnnotationMode.ENABLE_STORAGE }).promise;
+      for (const q of [0.78, 0.6, 0.45, 0.3, 0.15, 0.05]) {
+        const out = canvas.toDataURL('image/jpeg', q);
+        if (out.length <= 64e3) return out;
+      }
+      return null;
+    } finally { canvas.width = canvas.height = 0; }
   };
 
   let store = null;
