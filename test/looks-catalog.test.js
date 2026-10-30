@@ -255,3 +255,35 @@ test('lib/looks.js loads on demand as the worker injects it: it ends on a value,
   assert.equal(vm.runInContext(read('lib/looks.js'), context), first);
   assert.equal(vm.runInContext('GZ_CATALOG', context).list().length, G.GZ_LOOKS.length);
 });
+
+
+test('two Settings tabs keep and remove Looks through one worker turn without losing another tab’s changes', async () => {
+  const { favorites } = await fixtures();
+  const w = worker({}, G.GZ_SANITIZE({ courses: { looks: { _1_1: favorites[0].id, _2_1: favorites[2].id } } }));
+  const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/options.html' };
+  const [a, b] = await Promise.all(favorites.slice(0, 2).map((favorite) => w.send({ type: 'glaze:looks', op: 'keep', favorite }, editor)));
+  assert.deepEqual([a, b], [{ ok: true }, { ok: true }]);
+  assert.equal(w.local.lookFavorites.length, 2, 'both tabs survive');
+  const renamed = { ...favorites[0], name: 'Finals' };
+  await w.send({ type: 'glaze:looks', op: 'keep', favorite: renamed }, editor);
+  assert.equal(w.local.lookFavorites.filter((f) => f.code === renamed.code).length, 1, 'Use then Save, or two names: one code');
+  w.local.rotateLooks = [favorites[0].code, favorites[1].code, 'Library'];
+  const [removed, added] = await Promise.all([
+    w.send({ type: 'glaze:looks', op: 'remove', id: favorites[0].id }, editor),
+    w.send({ type: 'glaze:looks', op: 'keep', favorite: favorites[2] }, editor),
+  ]);
+  assert.deepEqual([removed, added], [{ ok: true }, { ok: true }]);
+  assert.deepEqual(w.local.lookFavorites.map((f) => f.code).sort(), [favorites[1].code, favorites[2].code].sort());
+  assert.deepEqual(w.local.rotateLooks, [C.idOf(favorites[1].code), 'Library']);
+  assert.deepEqual(w.sync.courses.looks, { _2_1: favorites[2].id });
+  assert.equal(w.local.lookCatalog.sig, C.sig(w.local.lookFavorites), 'reply waits for the final catalogue');
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'remove', id: favorites[2].id }, w.popup), { ok: false, error: 'sender' });
+});
+
+test('catalogue rebuilds settle on the latest of consecutive favorites writes', async () => {
+  const { favorites } = await fixtures();
+  const w = worker();
+  await Promise.all([w.set({ lookFavorites: favorites }), w.set({ lookFavorites: favorites.slice(1, 3) })]);
+  assert.ok(await w.until(() => w.local.lookCatalog?.sig === C.sig(w.local.lookFavorites)));
+  assert.deepEqual(w.local.lookCatalog.looks.map((e) => e.id), favorites.slice(1, 3).map((f) => C.idOf(f.code)));
+});
