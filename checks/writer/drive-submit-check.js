@@ -5,8 +5,9 @@
 // googleapis hosts resolve to (test/fixtures/drive/v3.js's shapes); every other host is refused.
 //   Connected: From Google Drive on the sheet. Two Drive files (a PDF by alt=media, a Google Doc exported as .docx) listed
 //   beside the paper, read through the worker, Submit never pressed for the student; the student's Submit sends the paper
-//   and both, their bytes as Drive gave them. A file over 50 MB and a file Drive no longer has: each named, neither listed,
-//   nothing sent. Cancel while a file streams: the sheet closes and the worker's request to Drive is dropped.
+//   and both, their bytes as Drive gave them. Any type as it is (a PNG) and a .docx over 15 MB, under Blackboard's 50 MB,
+//   sent with their bytes. A file over 50 MB and a file Drive no longer has: each named, neither listed, nothing sent.
+//   Cancel while Drive's answer stalls mid-file: the sheet closes and the worker drops the request at once.
 //   node checks/writer/drive-submit-check.js [evidence directory]   (glaze-remote -o <dir> -- node checks/writer/drive-submit-check.js /out)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
@@ -31,7 +32,7 @@ const until = async (fn, label, ms = 20000) => { const end = Date.now() + ms; fo
 const quiet = async (fn, label, ms = 800) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) throw new Error(`${label}: it happened`); await pause(80); } };
 const sha = (b) => crypto.createHash('sha256').update(Buffer.from(b)).digest('hex');
 
-// Drive as the stand-in holds it: id → { meta, bytes, slow (sent 64 KB at a time) }.
+// Drive as the stand-in holds it: id → { meta, bytes, stall (its first 64 KB, then nothing) }.
 const drive = new Map();
 const log = { drive: [], dropped: [], other: [] };
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET, HEAD, POST, PATCH' };
@@ -55,15 +56,12 @@ const answer = (req, res, body) => {
     return send(reply(200, Object.fromEntries(keep.filter((k) => f.meta[k] !== undefined).map((k) => [k, f.meta[k]]))));
   }
   const type = m[2] ? u.searchParams.get('mimeType') : f.meta.mimeType;
-  if (!f.slow) return send({ status: 200, headers: { ...CORS, 'content-type': type, 'content-length': String(f.bytes.length) }, body: f.bytes });
-  // A slow file: 64 KB every 150 ms; a request the worker drops before the end is recorded.
+  if (!f.stall) return send({ status: 200, headers: { ...CORS, 'content-type': type, 'content-length': String(f.bytes.length) }, body: f.bytes });
+  // A stalled answer: the first 64 KB, then nothing until the other side goes; that request's close is recorded.
   res.writeHead(200, { ...CORS, 'content-type': type, 'content-length': String(f.bytes.length) });
-  let at = 0, done = false;
-  const timer = setInterval(() => {
-    if (at >= f.bytes.length) { clearInterval(timer); done = true; res.end(); return; }
-    res.write(f.bytes.subarray(at, at += 64 << 10));
-  }, 150);
-  res.on('close', () => { clearInterval(timer); if (!done) log.dropped.push({ id: m[1], at }); });
+  const at = 64 << 10;
+  res.write(f.bytes.subarray(0, at));
+  res.on('close', () => log.dropped.push({ id: m[1], at, when: Date.now() }));
 };
 
 (async () => {
@@ -134,7 +132,8 @@ const answer = (req, res, body) => {
     // The Picker's answer, as background/google.js pick hands it back.
     const picks = (files) => sw.evaluate((f) => { openGoogle().pick = async () => ({ ok: true, files: f }); }, files);
 
-    // Drive's files: a PDF (its own bytes), a Google Doc (its export: a real .docx), one over 50 MB, one that streams slowly.
+    // Drive's files: a PDF (its own bytes), a Google Doc (its export: a real .docx), a PNG, a 20 MB .docx, one over 50 MB, one
+    // whose answer stalls.
     const pdf = fs.readFileSync(path.join(__dirname, '../../test/fixtures/import/syllabus.pdf'));
     const watch = (p, tag) => {
       p.on('pageerror', (e) => errors.push(`${tag}: ${e.message}`));
@@ -157,6 +156,9 @@ const answer = (req, res, body) => {
     const err = (fr) => fr.evaluate(() => document.querySelector('.gs-err').textContent);
     const uploads = (p) => p.evaluate(() => __uploads.map(({ name, type, size, bytes }) => ({ name, type, size, bytes })));
     const clicks = (p) => p.evaluate(() => __clicks.length);
+    // Ultra's uploads hashed in the page: a 20 MB file's bytes stay there.
+    const hashed = (p) => p.evaluate(() => Promise.all(__uploads.map(async ({ name, type, size, bytes }) => ({ name, type, size,
+      sha: [...new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes)))].map((b) => b.toString(16).padStart(2, '0')).join('') }))));
 
     // ---- two Drive files beside the paper
     let { p, fr } = await openAttempt();
@@ -190,6 +192,22 @@ const answer = (req, res, body) => {
     ok(await p.evaluate((names) => __text().includes(`Attached: ${names.join(', ')}`), listed.map((x) => x.name)), 'the note names them');
     await p.close();
 
+    // ---- any type as it is, and a .docx over 15 MB (Open from Drive's cap for a Word file) under Blackboard's 50 MB
+    ({ p, fr } = await openAttempt());
+    const png = fs.readFileSync(path.join(__dirname, '../../test/fixtures/import/syllabus.png')), long = crypto.randomBytes(20e6);
+    drive.set('1PnG_x', { meta: { ...FILES.pdf, id: '1PnG_x', name: 'Timetable.png', mimeType: 'image/png', size: String(png.length) }, bytes: png });
+    drive.set('1LoNg_d', { meta: { ...FILES.docx, id: '1LoNg_d', name: 'Long draft.docx', size: String(long.length) }, bytes: long });
+    await picks([{ id: '1PnG_x', name: 'Timetable.png', mimeType: 'image/png' }, { id: '1LoNg_d', name: 'Long draft.docx', mimeType: MIME.docx }]);
+    await tap(fr, '.gs-drive');
+    const anyType = await until(async () => { const r = await rows(fr); return r.length === 2 && r.every((x) => / KB$/.test(x.size)) && await fr.evaluate(() => !document.querySelector('.gs-primary').disabled) && r; }, 'the PNG and the 20 MB .docx listed', 60000);
+    ok(await err(fr) === '' && /\.png$/.test(anyType[0].name) && /\.docx$/.test(anyType[1].name), `any type and a 20 MB .docx listed, nothing refused (${anyType.map((x) => `${x.name} ${x.size}`).join('; ')})`);
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => !!document.getElementById('ultra-confirm')), 'submitted with the PNG and the 20 MB file', 60000 * 4);
+    const big = await hashed(p);
+    ok(big.length === 3 && big[1].type === 'image/png' && big[1].sha === sha(png) && big[2].type === MIME.docx && big[2].size === 20e6 && big[2].sha === sha(long) && await clicks(p) === 1,
+      `the paper, the PNG and the 20 MB .docx reach Ultra's upload with their types and very bytes, Submit once (${big.map((u) => `${u.name} ${u.type} ${u.size}`).join('; ')})`);
+    await p.close();
+
     // ---- over 50 MB, and gone from Drive
     ({ p, fr } = await openAttempt());
     drive.set('1BiG_pdf', { meta: { ...FILES.pdf, id: '1BiG_pdf', name: 'Scan.pdf', size: String(60e6) }, bytes: Buffer.alloc(1) });
@@ -204,17 +222,19 @@ const answer = (req, res, body) => {
     ok(true, 'nothing sent and Submit not pressed');
     await p.screenshot({ path: path.join(out, 'drive-submit-2-refused.png') });
 
-    // ---- Cancel while a file streams
-    drive.set('1SlOw_pdf', { meta: { ...FILES.pdf, id: '1SlOw_pdf', name: 'Slow.pdf', size: String(6e6) }, bytes: crypto.randomBytes(6e6), slow: true });
+    // ---- Cancel while Drive's answer stalls mid-file
+    drive.set('1SlOw_pdf', { meta: { ...FILES.pdf, id: '1SlOw_pdf', name: 'Slow.pdf', size: String(6e6) }, bytes: crypto.randomBytes(6e6), stall: true });
     await picks([{ id: '1SlOw_pdf', name: 'Slow.pdf', mimeType: MIME.pdf }]);
     await tap(fr, '.gs-drive');
-    await until(async () => (await rows(fr))[0]?.size === 'Reading…' && log.drive.some((x) => x.path === '/drive/v3/files/1SlOw_pdf' && x.query.alt === 'media'), 'streaming, Reading… in its row');
+    await until(async () => (await rows(fr))[0]?.size === 'Reading…' && log.drive.some((x) => x.path === '/drive/v3/files/1SlOw_pdf' && x.query.alt === 'media'), 'stalled, Reading… in its row');
     ok(await fr.evaluate(() => document.querySelector('.gs-primary').disabled), 'Submit waits while it reads');
     await p.screenshot({ path: path.join(out, 'drive-submit-3-reading.png') });
+    ok(!log.dropped.some((x) => x.id === '1SlOw_pdf'), 'the stalled request is still open before Cancel');
+    const cancelled = Date.now();
     await tap(fr, '.gs-foot .gs-btn:not(.gs-primary)');
     ok(await fr.evaluate(() => !document.querySelector('.gs-layer')), 'Cancel closes the sheet');
-    const dropped = await until(async () => log.dropped.find((x) => x.id === '1SlOw_pdf'), 'the worker dropped Drive\'s stream', 10000);
-    ok(dropped.at < 6e6, `the worker's request to Drive ended mid-file (${dropped.at} of 6000000 bytes)`);
+    const dropped = await until(async () => log.dropped.find((x) => x.id === '1SlOw_pdf'), 'the worker dropped the stalled request', 10000);
+    ok(dropped.when - cancelled < 5000, `the worker's stalled request to Drive ended ${dropped.when - cancelled} ms after Cancel, no more bytes needed`);
     await quiet(async () => await clicks(p) > 0 || (await uploads(p)).length > 0, 'Ultra heard after Cancel');
     ok(true, 'nothing sent after Cancel');
     await p.close();

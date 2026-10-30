@@ -326,62 +326,40 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       if (doc && sheet === mine) mine.addDoc(doc);
     });
     // From Google Drive (shown while Drive is connected): the files picked in Google's Picker (the worker opens it), each
-    // read through the worker's Drive port as Open from Drive reads it (documents/drive.js: a Google file exported as .docx, .xlsx
-    // or .pptx), one at a time in the attachments' queue, its row saying Reading… until it's staged. Remove, Cancel or the
-    // sheet closing ends its read (the port closed, the worker stops). A file that can't come names itself and leaves the list.
+    // read as it is through the worker's Drive port (documents/drive.js raw: any type up to 50 MB, a Google Doc, Sheet or
+    // deck exported as Open from Drive exports it), one at a time in the attachments' queue, its row saying Reading… until
+    // it's staged. Remove, Cancel or the sheet closing aborts its read, a stalled one included. A file that can't come names
+    // itself and leaves the list.
     const SIGN_IN = ['off', 'connect', 'setup', 'account', 'auth', 'permission', 'scope', 'browser', 'unsupported', 'state'];
     const driveWhy = (why) => (why === 'cancel' ? '' : why === 'missing' || why === 'denied' ? t("Glaze can't reach this file in Google Drive.")
       : why === 'busy' ? t('Google Drive is busy. Try again in a moment.') : why === 'type' || why === 'bad' ? t('That file could not be read.')
       : SIGN_IN.includes(why) ? t('Connect Google Drive again in Settings.') : t("Couldn't reach Google Drive. Try again in a moment."));
     const tell = (why) => { if (why) err.textContent = err.textContent ? `${err.textContent} ${why}` : why; };
-    // A port the sheet can close: client() ends its request when told the port went (Chrome doesn't tell the side that closed it).
-    const drivePort = () => {
-      let port = null, stopped = false;
-      const ends = [];
-      const connect = () => {
-        if (stopped) throw new Error('stopped');
-        port = chrome.runtime.connect({ name: GZ_DRIVE.PORT });
-        return { postMessage: (m) => port.postMessage(m), disconnect: () => port.disconnect(), onMessage: port.onMessage,
-          onDisconnect: { addListener: (f) => { ends.push(f); port.onDisconnect.addListener(f); } } };
-      };
-      const stop = () => {
-        if (stopped) return;
-        stopped = true;
-        try { port?.disconnect(); } catch { /* gone */ }
-        for (const f of ends) try { f(); } catch (e) { console.error(e); }
-      };
-      return { connect, stop };
-    };
-    const fromDrive = (f, takes) => {
-      let plan;
-      try { plan = GZ_DRIVE.plan({ name: f.name, mimeType: f.mimeType }, takes); } catch { tell(`${f.name}: ${t('That file could not be read.')}`); return; }
-      const name = plan.name, a = { title: name.replace(/\.[^.]+$/, '') };
+    const fromDrive = (f) => {
+      const name = String(f.name), a = { title: name.replace(/\.[^.]+$/, '') };
       a.ui = row(name, L().tag(name), L().tag(name).toLowerCase());
       a.ui.x.addEventListener('click', () => drop(a, true));
       list.push(a);
       making++; ready();
-      const large = () => (plan.max >= L().MAX_FILE ? t('{name} is larger than 50 MB.', { name }) : `${name}: ${t('That file is too large.')}`);
       jobs = jobs.then(async () => {
         if (!alive(a)) return;
-        const port = drivePort();
-        let over = false;
-        a.stop = port.stop;
-        const report = GZ_DOC_KINDS.progress((p) => { if (p.end || p.failed || !alive(a)) return; const w = GZ_DOC_KINDS.said(p, plan.kind); if (w) a.ui.sizeEl.textContent = t(...w); }, ['read']);
+        const quit = new AbortController();
+        a.stop = () => quit.abort();
+        const report = GZ_DOC_KINDS.progress((p) => { if (p.end || p.failed || !alive(a)) return; const w = GZ_DOC_KINDS.said(p, 'paper'); if (w) a.ui.sizeEl.textContent = t(...w); }, ['read']);
         let file;
         try {
-          file = await GZ_DRIVE.client(port.connect).open(f.id, takes, (p) => {
-            if (Math.max(p.total, p.done) > L().MAX_FILE) { over = true; port.stop(); return; }
-            report({ stage: 'read', ...p });
-          });
-        } catch (e) { throw { why: over ? 'size' : e?.why || 'network' }; } finally { report.end(); a.stop = null; }
+          file = await GZ_DRIVE.client().raw(f.id, (p) => report({ stage: 'read', ...p }), quit.signal);
+        } catch (e) { throw { why: e?.why || 'network' }; } finally { report.end(); a.stop = null; }
         if (!alive(a)) return;
         const bytes = new Uint8Array(await file.arrayBuffer());
         if (!alive(a)) return;
+        // Drive adds the export extension to Google titles, which can themselves contain dots.
+        a.title = file.name.replace(/\.[^.]+$/, '');
         await stage(a, { name: file.name, mime: file.type, bytes });
       }).catch((e) => {
         if (!alive(a)) return;
         drop(a, false);
-        tell(e?.why === 'size' || e?.error === 'large' ? large() : `${name}: ${e?.why ? driveWhy(e.why) || t('That file could not be read.') : t('That file could not be read.')}`);
+        tell(e?.why === 'size' || e?.error === 'large' ? t('{name} is larger than 50 MB.', { name }) : `${name}: ${(e?.why && driveWhy(e.why)) || t('That file could not be read.')}`);
       }).finally(() => { making--; if (sheet === mine) ready(); });
     };
     driveB?.addEventListener('click', async () => {
@@ -395,10 +373,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         if (!r.files.length) return; // the Picker closed
         await P().need(['documents/doc-kinds.js']);
         if (sheet !== mine || mine.busy || mine.cancelled) return;
-        const takes = Object.keys(GZ_DOC_KINDS.KINDS);
         for (const f of r.files) {
           if (list.length >= L().MAX_ATTACH) { tell(t('Attach up to {n} documents.', { n: L().MAX_ATTACH })); break; }
-          fromDrive(f, takes);
+          fromDrive(f);
         }
       } catch {
         if (sheet === mine && !mine.cancelled) tell(t('That file could not be read.'));

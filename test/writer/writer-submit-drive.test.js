@@ -1,12 +1,16 @@
-// The submit sheet's From Google Drive (writer/frame/writer-submit.js): the frame asks the worker for the Picker and reads each file over
-// the worker's Drive port (documents/drive.js client and serve, the real protocol over paired stand-in ports), a stand-in Drive
-// behind it. Shown only while connected; the files staged beside the paper; limits, failures and Cancel.
+// The submit sheet's From Google Drive (writer/frame/writer-submit.js): the frame asks the worker for the Picker and reads
+// each file over the worker's Drive port with documents/drive.js's own client, serve and create (raw: any type up to 50 MB,
+// cancelled through its signal), the real protocol over paired stand-in ports, and a stand-in fetch answering for Drive v3
+// (test/fixtures/drive/v3.js's shapes). Shown only while connected; the files staged beside the paper; limits, failures,
+// a stalled read cancelled.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const D = require('../../extension/documents/drive.js'), K = require('../../extension/documents/doc-kinds.js');
+const { ERRORS } = require('../fixtures/drive/v3.js');
 const sheet = require('../helpers/writer-submit-sheet.cjs');
 
-const MIME = { docx: K.KINDS.paper.mime, pdf: 'application/pdf', gdoc: 'application/vnd.google-apps.document', png: 'image/png' };
+const MIME = { docx: K.KINDS.paper.mime, pdf: 'application/pdf', gdoc: 'application/vnd.google-apps.document', gform: 'application/vnd.google-apps.form',
+  png: 'image/png', zip: 'application/zip' };
 
 // Two ports joined: a message posted on one reaches the other's listeners a turn later; disconnect tells the other side only.
 const pair = () => {
@@ -21,36 +25,35 @@ const pair = () => {
   return [port(a, b), port(b, a)];
 };
 
-// Drive as the stand-in holds it: id → { meta, bytes, hold (a promise the bytes wait on) }. Its open is documents/drive.js's in
-// shape: the plan, head, then the bytes in pieces, each awaited.
+// Drive as the stand-in holds it: id → { meta, bytes, hold (a promise the second piece waits on), stall (no piece after the
+// first, ever) }. asked: each request, `${id} meta|media|export <type>`; ended: each body cancelled before its end.
 const standIn = () => {
   const files = new Map(), asked = [], ended = [];
-  const drive = {
-    async open(id, takes, on) {
-      asked.push(id);
-      const f = files.get(id);
-      if (!f) throw new D.Fail('missing');
-      const p = D.plan(f.meta, takes);
-      await on.head({ kind: p.kind, name: p.name, mime: p.mime, size: p.size });
-      try {
-        for (let i = 0; i < f.bytes.length; i += 100e3) {
-          if (i && f.hold) await f.hold;
-          await on.bytes(f.bytes.subarray(i, i + 100e3), i);
-        }
-      } catch (e) { ended.push({ id, why: e.why }); throw e; }
-      return f.bytes.length;
-    },
+  const fetch = async (url) => {
+    const u = new URL(url), m = /\/files\/([\w-]+)(\/export)?$/.exec(u.pathname), id = m[1], f = files.get(id);
+    const what = m[2] ? `export ${u.searchParams.get('mimeType')}` : u.searchParams.get('alt') === 'media' ? 'media' : 'meta';
+    asked.push(`${id} ${what}`);
+    if (!f) return new Response(JSON.stringify(ERRORS[404]), { status: 404 });
+    if (what === 'meta') return Response.json({ trashed: false, capabilities: { canEdit: true, canDownload: true }, ...f.meta });
+    let at = 0;
+    const body = new ReadableStream({
+      async pull(c) {
+        if (at >= f.bytes.length) { c.close(); return; }
+        if (at && f.hold) await f.hold;
+        if (at && f.stall) await new Promise(() => {});
+        c.enqueue(f.bytes.slice(at, at += 100e3));
+      },
+      cancel() { ended.push(id); },
+    }, { highWaterMark: 0 });
+    return new Response(body, { headers: { 'content-length': String(f.bytes.length) } });
   };
-  return { files, asked, ended, drive };
+  return { files, asked, ended, drive: D.create({ fetch, token: async () => 'ya29.unit' }) };
 };
 
 const setup = ({ connected = true, picked = [], pick = null } = {}) => {
   const s = sheet(), d = standIn(), store = new Map(), ports = [];
   let n = 0;
   s.picks = [];
-  s.ctx.GZ_DRIVE = { ...D, page: { connected: () => connected } };
-  s.ctx.GZ_DOC_KINDS = K;
-  s.ctx.GZ_DOC_FILES = { client: () => ({ put: async (b) => { store.set(++n, b); return n; }, get: async (r) => store.get(r) }) };
   s.ctx.chrome = { runtime: {
     sendMessage: async (m) => { s.picks.push(m); return pick || { ok: true, files: picked }; },
     connect: ({ name }) => {
@@ -61,6 +64,11 @@ const setup = ({ connected = true, picked = [], pick = null } = {}) => {
       return page;
     },
   } };
+  // The page's client connects as the frame's chrome does (drive.js runs in this realm, the sheet in its own).
+  s.ctx.GZ_DRIVE = { ...D, client: () => D.client(() => s.ctx.chrome.runtime.connect({ name: D.PORT })), page: { connected: () => connected } };
+  s.ctx.GZ_DOC_KINDS = K;
+  s.ctx.AbortController = AbortController; // a frame has it; the helper's context doesn't
+  s.ctx.GZ_DOC_FILES = { client: () => ({ put: async (b) => { store.set(++n, b); return n; }, get: async (r) => store.get(r) }) };
   return Object.assign(s, { d, store, ports });
 };
 const rows = (s) => s.doc.querySelectorAll('.gs-att').map((r) => ({ name: r.querySelector('.gs-name').textContent, size: r.querySelector('small').textContent }));
@@ -132,13 +140,13 @@ test('two Drive files, one a Google Doc exported as .docx, are staged beside the
   await s.open(); s.builds[0].resolve(); await s.flush();
   s.click('.gs-drive');
   await s.flush();
-  assert.deepEqual(rows(s).map((r) => r.name), ['Field trip.pdf', 'Lab notes.docx'], 'listed at once, the Google Doc named as its export');
+  assert.deepEqual(rows(s).map((r) => r.name), ['Field trip.pdf', 'Lab notes'], 'listed at once, by the names picked');
   assert.ok(submitOff(s), 'Submit waits while files are read');
   await settle(s, 20);
   assert.ok(submitOff(s), 'still reading');
   release(); await settle(s, 20);
   assert.equal(JSON.stringify(s.picks), JSON.stringify([{ type: 'glaze:google', op: 'pick' }]), 'the Picker is the worker\'s');
-  assert.deepEqual(s.d.asked, ['1Pdf', '1GDoc'], 'one at a time, in order');
+  assert.deepEqual(s.d.asked, ['1Pdf meta', '1Pdf media', '1GDoc meta', `1GDoc export ${MIME.docx}`], 'one at a time, in order, the Google Doc exported as .docx');
   const r = rows(s);
   assert.equal(r.length, 2);
   assert.ok(r.every((x) => / KB$/.test(x.size)), JSON.stringify(r));
@@ -153,14 +161,52 @@ test('two Drive files, one a Google Doc exported as .docx, are staged beside the
   assert.equal(JSON.stringify(go.files.map((f) => [f.name, f.mime, f.size])), JSON.stringify([[r[0].name, MIME.pdf, 450e3], [r[1].name, MIME.docx, 30e3]]));
 });
 
-test('a file over 50 MB is refused with the sheet\'s words, and Drive\'s own cap names the file', async () => {
-  const s = setup({ picked: [file('1Big', 'Scan.pdf', MIME.pdf), file('1Doc', 'Long.docx', MIME.docx)] });
+for (const [mime, title, expected] of [
+  [MIME.gdoc, 'Lab notes v1.2', 'LabNotesV12.docx'],
+  ['application/vnd.google-apps.spreadsheet', 'Budget.FY26', 'BudgetFY26.xlsx'],
+  ['application/vnd.google-apps.presentation', '.Final slides', 'FinalSlides.pptx'],
+]) test(`a Google export preserves the full dotted title: ${title}`, async () => {
+  const picked = file('1Dotted', title, mime), s = setup({ picked: [picked] });
+  s.d.files.set(picked.id, { meta: picked, bytes: bytes(1000) });
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-drive'); await settle(s, 20);
+  assert.equal(err(s), '');
+  assert.deepEqual(rows(s).map((r) => r.name), [expected], 'strip only the export extension, not part of the Google title');
+  s.click('.gs-primary'); await settle(s);
+  const go = s.messages.find((m) => m.type === 'submit:go');
+  assert.equal(go.files[0].name, expected, 'the reviewed name is submitted');
+  assert.equal(go.note, `Attached: ${expected}`);
+});
+
+test('any type comes as it is, and a file over 15 MB under Blackboard\'s 50 MB is taken', async () => {
+  const s = setup({ picked: [file('1Png', 'Photo.png', MIME.png), file('1Zip', 'Data.zip', MIME.zip), file('1Long', 'Long.docx', MIME.docx)] });
+  s.d.files.set('1Png', { meta: file('1Png', 'Photo.png', MIME.png, 2000), bytes: bytes(2000, 3) });
+  s.d.files.set('1Zip', { meta: file('1Zip', 'Data.zip', MIME.zip, 3000), bytes: bytes(3000, 4) });
+  s.d.files.set('1Long', { meta: file('1Long', 'Long.docx', MIME.docx, 20e6), bytes: bytes(20e6, 5) });
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-drive');
+  for (let i = 0; i < 100 && s.store.size < 3 && !err(s); i++) await settle(s, 20);
+  const r = rows(s);
+  assert.equal(err(s), '');
+  assert.equal(r.length, 3);
+  assert.match(r[0].name, /\.png$/); assert.match(r[1].name, /\.zip$/); assert.match(r[2].name, /Long\.docx$/);
+  assert.ok(r.every((x) => / KB$/.test(x.size)), JSON.stringify(r));
+  assert.deepEqual([...s.store.values()].map((b) => [b.length, b[0]]), [[2000, 3], [3000, 4], [20e6, 5]], 'the bytes as Drive gave them');
+  s.click('.gs-primary'); await settle(s);
+  for (const b of s.builds.slice(1)) b.resolve(); await settle(s);
+  const go = s.messages.find((m) => m.type === 'submit:go');
+  assert.equal(JSON.stringify(go.files.map((f) => [f.mime, f.size])), JSON.stringify([[MIME.png, 2000], [MIME.zip, 3000], [MIME.docx, 20e6]]));
+});
+
+test('a file over 50 MB is refused by its size before its bytes; a Google type with no export says it can\'t be read', async () => {
+  const s = setup({ picked: [file('1Big', 'Scan.pdf', MIME.pdf), file('1Form', 'Quiz', MIME.gform)] });
   s.d.files.set('1Big', { meta: file('1Big', 'Scan.pdf', MIME.pdf, 60e6), bytes: bytes(1) });
-  s.d.files.set('1Doc', { meta: file('1Doc', 'Long.docx', MIME.docx, 20e6), bytes: bytes(1) });
+  s.d.files.set('1Form', { meta: file('1Form', 'Quiz', MIME.gform), bytes: bytes(1) });
   await s.open(); s.builds[0].resolve(); await s.flush();
   s.click('.gs-drive'); await settle(s, 20);
   assert.equal(rows(s).length, 0);
-  assert.equal(err(s), 'Scan.pdf is larger than 50 MB. Long.docx: That file is too large.');
+  assert.equal(err(s), 'Scan.pdf is larger than 50 MB. Quiz: That file could not be read.');
+  assert.deepEqual(s.d.asked, ['1Big meta', '1Form meta'], 'no bytes asked for');
   assert.equal(submitOff(s), false);
 });
 
@@ -174,29 +220,29 @@ test('a file gone from Drive names itself and leaves the list; the others still 
   assert.equal(s.messages.some((m) => m.type === 'submit:go'), false);
 });
 
-test('Cancel mid-download closes the sheet and ends the worker\'s read; Remove ends just that one', async () => {
-  let release;
+test('Cancel mid-stall closes the sheet and aborts the read where it stands; Remove aborts just that one', async () => {
   const s = setup({ picked: [file('1Slow', 'Slow.pdf', MIME.pdf)] });
-  s.d.files.set('1Slow', { meta: file('1Slow', 'Slow.pdf', MIME.pdf, 900e3), bytes: bytes(900e3), hold: new Promise((r) => { release = r; }) });
+  s.d.files.set('1Slow', { meta: file('1Slow', 'Slow.pdf', MIME.pdf, 900e3), bytes: bytes(900e3), stall: true });
   await s.open(); s.builds[0].resolve(); await s.flush();
   s.click('.gs-drive'); await settle(s, 20);
   assert.equal(rows(s)[0].size, 'Reading…', 'progress in its row');
   assert.ok(submitOff(s));
+  assert.deepEqual(s.d.ended, [], 'stalled, not ended');
   s.doc.fire(s.doc.querySelector('.gs-foot .gs-btn'), 'click');
   assert.equal(s.doc.querySelector('.gs-layer'), null, 'Cancel closes the sheet at once');
-  release(); await settle(s, 20);
-  assert.deepEqual(s.d.ended, [{ id: '1Slow', why: 'cancel' }], 'the worker stopped reading');
+  await settle(s, 20);
+  assert.deepEqual(s.d.ended, ['1Slow'], 'the stalled body was cancelled, no more bytes needed');
   assert.equal(s.store.size, 0, 'nothing staged');
 
-  let again;
-  const r = setup({ picked: [file('1Slow', 'Slow.pdf', MIME.pdf)] });
-  r.d.files.set('1Slow', { meta: file('1Slow', 'Slow.pdf', MIME.pdf, 900e3), bytes: bytes(900e3), hold: new Promise((x) => { again = x; }) });
+  const r = setup({ picked: [file('1Slow', 'Slow.pdf', MIME.pdf), file('1Pdf', 'Notes.pdf', MIME.pdf)] });
+  r.d.files.set('1Slow', { meta: file('1Slow', 'Slow.pdf', MIME.pdf, 900e3), bytes: bytes(900e3), stall: true });
+  r.d.files.set('1Pdf', { meta: file('1Pdf', 'Notes.pdf', MIME.pdf, 1000), bytes: bytes(1000) });
   await r.open(); r.builds[0].resolve(); await r.flush();
   r.click('.gs-drive'); await settle(r, 20);
-  r.click('.gs-att-x');
-  again(); await settle(r, 20);
-  assert.deepEqual(r.d.ended, [{ id: '1Slow', why: 'cancel' }]);
-  assert.equal(rows(r).length, 0); assert.equal(err(r), ''); assert.equal(submitOff(r), false);
+  r.click('.gs-att-x'); await settle(r, 20);
+  assert.deepEqual(r.d.ended, ['1Slow']);
+  assert.deepEqual(rows(r).map((x) => x.name.slice(-4)), ['.pdf'], 'the next file still comes');
+  assert.equal(err(r), ''); assert.equal(submitOff(r), false);
   assert.ok(r.doc.querySelector('.gs-layer'), 'the sheet stays');
 });
 
@@ -211,18 +257,13 @@ test('at most ten attachments: the rest are left with the sheet\'s words', async
   assert.equal(s.doc.querySelector('.gs-drive').disabled, true, 'full: the button is off');
 });
 
-test('a type Glaze can\'t take, a closed Picker and a sign-in to redo each say so (or nothing) without a request', async () => {
-  const s = setup({ picked: [file('1Png', 'Photo.png', MIME.png)] });
-  await s.open(); s.builds[0].resolve(); await s.flush();
-  s.click('.gs-drive'); await settle(s);
-  assert.equal(err(s), 'Photo.png: That file could not be read.');
-  assert.deepEqual(s.d.asked, []);
+test('a closed Picker says nothing and a sign-in to redo says so, without a request', async () => {
   const closed = setup({ picked: [] });
   await closed.open(); closed.builds[0].resolve(); await closed.flush();
   closed.click('.gs-drive'); await settle(closed);
-  assert.equal(err(closed), ''); assert.equal(rows(closed).length, 0);
+  assert.equal(err(closed), ''); assert.equal(rows(closed).length, 0); assert.deepEqual(closed.d.asked, []);
   const setupFail = setup({ pick: { ok: false, why: 'auth' } });
   await setupFail.open(); setupFail.builds[0].resolve(); await setupFail.flush();
   setupFail.click('.gs-drive'); await settle(setupFail);
-  assert.equal(err(setupFail), 'Connect Google Drive again in Settings.');
+  assert.equal(err(setupFail), 'Connect Google Drive again in Settings.'); assert.deepEqual(setupFail.d.asked, []);
 });
