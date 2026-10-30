@@ -178,6 +178,13 @@ const until = async (holds, ms = 5000) => { for (const end = Date.now() + ms; !(
     await bar.locator('button[aria-label="Clear page"]').click();
     await until(async () => !(KEY in await local()));
     ok(!(KEY in await local()), 'clear page empties the file: key removed');
+    // Undo takes the clear back, though the clear removed the file's key; Redo clears again.
+    await bar.locator('button[aria-label="Undo"]').click({ timeout: 3000 }).catch(() => {});
+    await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
+    ok((await local())[KEY]?.pages?.['1']?.length === 1 && await f.locator('#page-1 > svg.gz-ink path').count() === 1, 'Undo brings a cleared page back, in storage and on the page');
+    await bar.locator('button[aria-label="Redo"]').click({ timeout: 3000 }).catch(() => {});
+    await until(async () => !(KEY in await local()));
+    ok(!(KEY in await local()) && await f.locator('#page-1 > svg.gz-ink path').count() === 0, 'Redo clears it again');
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), bar.locator('button[aria-label="Import annotations"]').click()]);
     await chooser.setFiles(file);
     await until(async () => (await local())[KEY]?.pages?.['1']?.length === 1);
@@ -213,6 +220,12 @@ const until = async (holds, ms = 5000) => { for (const end = Date.now() + ms; !(
     await f.waitForFunction(() => /^matrix\(0,1,-1,0,/.test(document.querySelector('#page-1 > svg.gz-ink g')?.getAttribute('transform')), null, { polling: 50, timeout: 5000 }).catch(() => {});
     ok(/^matrix\(0,1,-1,0,/.test(await f.locator('#page-1 > svg.gz-ink g').getAttribute('transform')), 'rotate: the layer turns a quarter');
     await page.screenshot({ path: path.join(out, 'ink-rotated.png') });
+    // Another tab clears the file: this one drops its marks, and its history with them.
+    const undoB = bar.locator('button[aria-label="Undo"]');
+    const hadUndo = await undoB.isEnabled();
+    await opts.evaluate((k) => chrome.storage.local.remove(k), KEY);
+    await until(async () => await f.locator('#page-1 > svg.gz-ink path').count() === 0 && await undoB.isDisabled());
+    ok(hadUndo && await f.locator('#page-1 > svg.gz-ink path').count() === 0 && await undoB.isDisabled() && !(KEY in await local()), "another tab's clear empties this one, history too");
 
     // German.
     lang = 'de';
