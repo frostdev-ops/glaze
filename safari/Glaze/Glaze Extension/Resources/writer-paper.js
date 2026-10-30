@@ -1723,6 +1723,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       for (const b of switches) b.toggleAttribute('data-offer', kind === 'long');
     };
     const tooLong = () => tell('long', t('Too long for Ultra’s text box. Use Full writer.'));
+    // The switch, offered when Ultra's Submit couldn't send the paper: focused, which brings the frame the focus too.
+    const offer = () => switches.find((b) => b.getClientRects().length)?.focus({ preventScroll: true });
     // The compact box's text for Ultra's: once per turn of edits, as compose's change (writer.js) is.
     const projectSoon = () => {
       if (!compact || !loaded || holding || flushing || projecting || !host.say) return;
@@ -1765,7 +1767,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (!p) {
         // Nothing goes to Ultra: the box back to the student at once, and why.
         release(f);
-        if (saved && same) { tooLong(); switches.find((b) => b.getClientRects().length)?.focus({ preventScroll: true }); }
+        if (saved && same) { tooLong(); offer(); }
         else tell('error', !saved ? (action === 'save' ? t('Not saved. Try again in a moment.') : t('The paper could not be saved. Nothing was submitted.')) : t('The attempt page changed. Nothing was submitted.'));
       }
       host.say?.({ type: 'compact:flushed', request, ok: !!p, ...(p || { reason: saying === 'long' ? 'long' : 'save' }) });
