@@ -122,6 +122,10 @@ const fixture = () => {
     const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
     const colours = await page.evaluate(() => ({ dark: document.documentElement.hasAttribute('data-dark'), page: getComputedStyle(document.querySelector('.pdfViewer .page')).backgroundColor, bar: getComputedStyle(document.querySelector('.gp-top')).backgroundColor, ground: getComputedStyle(document.querySelector('.gq-scroll')).backgroundColor }));
     check(colours.dark && lum(colours.page) > 0.98 && lum(colours.ground) < 0.35, `dark Look: white page, dark chrome (${JSON.stringify(colours)})`);
+    // pdf.js's stylesheet leaves the page's own colour scheme as the Look's where only stylesheets set it (an assignment's
+    // frame, writer.html: writer.css), so the browser's scrollbars and controls stay dark under a dark Look.
+    const scheme = await page.evaluate(() => { const r = document.documentElement, was = r.style.colorScheme; r.style.colorScheme = ''; const s = getComputedStyle(r).colorScheme; r.style.colorScheme = was; return s; });
+    check(scheme === 'dark', `the dark Look's colour scheme holds over pdf.js's stylesheet (${scheme})`);
 
     // ---- zoom: ± and the fits
     const width = () => page.evaluate(() => document.querySelector('.pdfViewer .page[data-page-number="1"]').getBoundingClientRect().width);
