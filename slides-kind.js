@@ -306,8 +306,9 @@
       list.append(h('li', { role: 'presentation' }, b));
       return b;
     });
+    const state = h('span', { class: 'gp-state', role: 'status', text: deck ? t('{n} slides', { n }) : '' });
     const view = h('div', { class: 'gp gp-standalone gs-view' },
-      h('header', { class: 'gp-top' }, host ? null : h('a', { href: 'papers.html', text: t('Documents') }), h('h1', { text: title }), h('span', { class: 'grow' }), h('span', { class: 'gp-state', text: deck ? t('{n} slides', { n }) : '' })),
+      h('header', { class: 'gp-top' }, host ? null : h('a', { href: 'papers.html', text: t('Documents') }), h('h1', { text: title }), h('span', { class: 'grow' }), state),
       h('div', { class: 'gs-tool' }, h('div', { class: 'gs-group' }, prevB, atEl, nextB), h('div', { class: 'gs-group' }, outB, zoomB, inB),
         h('div', { class: 'gs-find', role: 'search' }, q, findN, findPrev, findNext), h('span', { class: 'grow' }), notesB, presentB, ...(host?.tools || []), moreB),
       h('div', { class: 'gs-work' }, railEl, h('div', { class: 'gs-main' }, canvasEl, notesEl)));
@@ -545,7 +546,7 @@
     draw();
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
     // What an assignment's submit sheet sends (writer-submit.js): the deck as it was brought.
-    return { pages: () => null, say: () => {}, ready: () => !!deck, save: async () => true,
+    return { pages: () => null, say: (text) => { if (state.textContent !== text) state.textContent = text || ''; }, ready: () => !!deck, save: async () => true,
       dispose: () => {
         life.abort(); sizing.disconnect(); near.disconnect(); closeMenu(); presenting?.close();
         for (const u of media.values()) { URL.revokeObjectURL(u); made.delete(u); }
