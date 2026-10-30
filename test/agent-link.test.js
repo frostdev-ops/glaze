@@ -403,6 +403,29 @@ test('stop says bye, then disconnects the port itself (permissions.remove leaves
   assert.equal(backing.ports.length, 1);
 });
 
+// Agent access off: each connection's last lines (a subscription's end, then its notifications/cancelled) go before bye, and
+// Chrome and Firefox, which drop what a port still queues when it is disconnected, let the helper end the port after bye.
+test('stop lets every connection say its last lines before bye, and the helper end the port, or disconnects it after 1 s', async () => {
+  for (const exits of [true, false]) {
+    const w = await connected();
+    const p = w.port();
+    p.host({ t: 'open', c: 1, peer: { verified: false } });
+    w.link.attach({ close: (c) => { w.link.send(c, 'end'); w.link.send(c, 'cancelled'); } });
+    w.log.length = 0;
+    assert.equal((await w.link.stop()).state, 'off');
+    assert.deepEqual(p.sent.slice(-3).map((f) => f.d ?? f.t), ['end', 'cancelled', 'bye']);
+    assert.deepEqual(w.log, [['post', 'line'], ['post', 'line'], ['post', 'bye']], 'not disconnected yet');
+    const again = w.link.ensure();
+    await settle();
+    assert.equal(w.ports.length, 1, 'a new port waits for the old one to go');
+    if (exits) p.die('Native host has exited.'); else await w.advance(1000);
+    await again;
+    assert.deepEqual(w.log.slice(3, 4), exits ? [] : [['disconnect']]);
+    assert.equal(w.ports.length, 2);
+    assert.equal(w.jobs.size > 0, true, 'the new port waits for its hello');
+  }
+});
+
 test('triggers: ensure follows the setting and the grant either way, one pass at a time', async () => {
   const w = world();
   const [a, b] = await Promise.all([w.link.ensure(), w.link.ensure()]);
