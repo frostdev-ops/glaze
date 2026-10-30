@@ -17,6 +17,50 @@ test('routed documents and assignments are kept exactly, query and all', () => {
   assert.equal(L.target({ ...kept, cid: '_72_1' }), '/ultra/courses/_72_1/outline', 'never another course\'s page');
 });
 
+test('remembering an assignment rubric panel keeps its assignment, including when cleaning an older saved tab', () => {
+  const query = '?columnId=_83_1&courseId=_71_1&view=content&return_to=%2Fultra%2Fstream';
+  for (const parent of [`${C}/assessment/_82_1/overview`, `${C}/assessment/_82_1/attempt`, `${C}/assessment/_82_1/attempt/create`,
+    `${C}/assessment/_82_1/attempt/_84_1`, `${C}/outline/assessment/_82_1/attempt/create`]) {
+    for (const tail of ['/rubric-view', '/rubric-view/']) {
+      const panel = parent + tail, expected = parent + query;
+      assert.equal(L.safe(panel, query), panel + query, 'an explicit rubric destination stays valid');
+      assert.deepEqual(L.placeOf(panel, query), { path: expected, exact: false }, 'capture remembers the assignment beneath its panel');
+      assert.equal(L.target({ cid: '_71_1', path: panel + query }), expected, 'restore closes only the transient panel');
+      const kept = L.clean([{ cid: '_71_1', path: panel + query, top: 610 }], 'ultra')[0];
+      assert.equal(kept.path, expected, 'an older stored panel is repaired before a frame opens');
+      assert.equal(kept.top, 0, 'the panel scroll does not belong to the assignment');
+    }
+  }
+});
+
+test('a rubric captured on first render cannot reopen after a URL-only panel close', () => {
+  const parent = `${C}/assessment/_82_1/attempt/create`, panel = `${parent}/rubric-view`;
+  const location = { pathname: panel, search: '?courseId=_71_1' }, tab = { cid: '_71_1', path: parent, top: 0 };
+  // Closing Ultra's panel can keep the assignment's existing main/content nodes.
+  const nodes = [{}, {}, {}];
+  const api = vm.runInNewContext(part('  const sameView = ', '  const readyView = ')
+    + part('  let liveView = ', '  // A panel over the bar') + part('  const notePlace = ', '  const onScroll = ')
+    + '\n({observeView,notePlace});', {
+    view: () => nodes, readyView: () => true, location, safePath: (p, q) => L.safe(p, q), showing: '', tabs: [tab], L, save() {},
+  });
+  api.observeView(); api.notePlace('_71_1');
+  location.pathname = parent;
+  api.observeView(); api.notePlace('_71_1');
+  assert.equal(tab.path, parent + location.search, 'the saved location never includes the rubric panel');
+  assert.equal(L.target(tab), parent + location.search, 'reloading the surrounding page restores the assignment alone');
+});
+
+test('remembered ordinary destinations and their queries retain their exact spelling', () => {
+  const query = '?columnId=_83_1&view=content&return_to=%2Fultra%2Fstream&view=all';
+  for (const [cid, pathname] of [['_71_1', documentPath], ['_71_1', overview], ['_71_1', `${C}/document/rubric-view`],
+    ['_71_1', `${C}/discussion/_82_1/rubric-view`], ['12', '/courses/12/pages/rubric-view']]) {
+    const expected = pathname + query;
+    assert.deepEqual(L.placeOf(pathname, query), { path: expected, exact: true });
+    assert.equal(L.target({ cid, path: expected }), expected);
+    assert.equal(L.clean([{ cid, path: expected, top: 610 }])[0].top, 610);
+  }
+});
+
 test('an assignment overview without a main counts its routed body as the content', () => {
   const routedMain = vm.runInNewContext(part('  const routedMain = ', '  // A URL or header change') + '\nroutedMain;', {});
   const body = { id: 'body' }, main = { id: 'main' };

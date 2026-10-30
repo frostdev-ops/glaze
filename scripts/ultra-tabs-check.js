@@ -145,7 +145,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       const previous = phase; phase = `native-open:${cid}`;
       try {
         if (await target.locator('.routed-page a').count()) await target.click('.routed-page a');
-        await target.click('[data-analytics-id="course.header.home"]');
+        // A course scrolled has its bar folded, its Home link out of view (as above).
+        await target.locator('[data-analytics-id="course.header.home"]').first().evaluate((e) => e.click());
         target = page;
         await target.waitForSelector(`a[href="/ultra/courses/${cid}/outline"]`);
         await target.click(`a[href="/ultra/courses/${cid}/outline"]`);
@@ -261,25 +262,14 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       };
       await target.evaluate(() => { const sc = document.querySelector('.course-content-container > .panel-wrap'); if (sc) sc.scrollTop = 0; });
       await target.click('.b8b-folder');
-      await opts.evaluate(async () => {
-        const until = performance.now() + 4000;
-        while (performance.now() < until) {
-          if ((await chrome.storage.local.get('coursePlace')).coursePlace?._101_1?.open?.includes('_8130_1')) return true;
-          await new Promise((r) => setTimeout(r, 25));
-        }
-        throw new Error('the native folder expansion was not saved');
-      });
+      ok(await target.locator('.b8b-folder').getAttribute('aria-expanded') === 'true', 'the native folder still expands when selected');
+      // A pre-update folder record must not trigger reconstruction when the routed outline returns.
+      await opts.evaluate(() => chrome.storage.local.set({ coursePlace: { _101_1: { open: ['_8130_1'], top: 640, at: Date.now() } } }));
       await native('a.b8b-document');
       const doc = '/ultra/courses/_101_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
       phase = 'B8b:NATIVE:history'; await target.evaluate(() => history.back()); await target.waitForFunction(() => location.pathname.endsWith('/outline')); await settled('_101_1');
       ok(await target.evaluate(() => location.pathname.endsWith('/outline')), 'Back from a routed document restores the native outline');
-      try { await target.waitForSelector('.b8b-folder[aria-expanded="true"]', { timeout: 5000 }); }
-      catch (error) {
-        const receipt = { native: await target.evaluate(() => ({ page: location.href, folder: document.querySelector('.b8b-folder')?.outerHTML, pagePlace: sessionStorage.getItem('gz-place:_101_1') })),
-          settings: await isolated(() => ({ enabled: GZ_CTX.on(), place: GZ_CTX.settings().enhance.place, loaded: typeof GZ_PLACE, acted: GZ_CTX.acted(), asked: GZ_CTX.placeAsked() })), local: await opts.evaluate(() => chrome.storage.local.get('coursePlace')) };
-        fs.writeFileSync(path.join(out, 'B8b-folder-failure.json'), JSON.stringify(receipt, null, 2)); throw error;
-      }
-      ok(true, 'the existing Your place path restores the open folder after the routed document');
+      ok(await target.locator('.b8b-folder').getAttribute('aria-expanded') === 'false', 'Back leaves the native outline collapsed instead of replaying saved folders');
       await target.evaluate(() => history.forward()); await target.waitForFunction(() => location.pathname.includes('/document/')); await settled('_101_1');
       ok(await target.evaluate(() => location.pathname + location.search) === doc && (await strip())?.at === 'routed', 'Forward restores the routed document with its strip and query');
       for (const at of ['above', 'between', 'below']) {
@@ -359,7 +349,9 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await target.waitForFunction(() => location.pathname.endsWith('/grades') && !document.querySelector('.spinner'));
     await target.evaluate(() => { document.querySelector('.course-content-container > .panel-wrap').scrollTop = 600; });
     await pictured('_101_1', '/ultra/courses/_101_1/grades');
-    await target.click('[data-analytics-id="course.header.home"]');
+    // Scrolled, the bar is folded and its header row out of view: a pointer click would scroll the course back to its top
+    // to show the Home link, and that place would be kept.
+    await target.locator('[data-analytics-id="course.header.home"]').evaluate((e) => e.click());
     await target.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'page');
     ok(true, 'outside a course, the strip shows above the page');
     await target.click('a[href="/ultra/courses/_102_1/outline"]');
@@ -383,9 +375,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       const drawnNow = await standIn(), sketch = Object.values(await session()).find((v) => v?.cid === '_101_1' && v.boxes);
       fs.writeFileSync(path.join(out, 'stand-in-sketch.json'), JSON.stringify(sketch, null, 1));
       ok(sketch && drawnNow?.parts === CTABS.drawn(sketch).length && drawnNow.pictures === 0, `the stand-in is drawn from the course's sketch, with no picture in it (${JSON.stringify(drawnNow)})`);
-      // The Gradebook's rows (text bars right of Ultra's menu, under the course's header) and its header's blocks.
+      // The Gradebook's rows (text bars right of Ultra's menu, under the course's header) and its header's blocks: one, the
+      // tools' pill, as the bar is folded at the place kept.
       const rows = sketch?.boxes.filter(([x, y, , , k]) => k === 't' && x > 230 && y > 170).length, header = sketch?.boxes.filter(([x, y, w, , k]) => 'bc'.includes(k) && x >= 220 && y < 170 && w > 500).length;
-      ok(rows >= 8 && header >= 2, `the sketch is of the course's page: its rows and its header (${rows} rows, ${header} header blocks)`);
+      ok(rows >= 8 && header >= 1, `the sketch is of the course's page: its rows and its header (${rows} rows, ${header} header blocks)`);
       await page.screenshot({ path: path.join(out, 'switch-copy-frost-1280.png') });
     } finally { holdCourse = ''; releaseCourse?.(); }
     await showing('_101_1');

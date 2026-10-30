@@ -296,6 +296,17 @@ test('migration happens once, in the queue, against the layout stored then, befo
   assert.deepEqual(ur.rec.offer, { todo: 'pending' }); assert.deepEqual(ur.rec.dest, {});
 });
 
+test('a new install writes storage.local only what scripts/check-env.js installed() waits for', async () => {
+  const { installed } = require('../scripts/check-env.js');
+  const w = worker(), had = Object.keys(w.store.local);
+  const done = () => installed({ evaluate: (f) => vm.runInContext(`(${f})()`, vm.createContext({ chrome: { storage: { local: { get: async () => structuredClone(w.store.local) } } } })) }, 0);
+  await assert.rejects(done(), /install/);
+  w.installed[0]({ reason: 'install' }); await settle();
+  await done();
+  assert.deepEqual(Object.keys(w.store.local).filter((k) => !had.includes(k)).sort(), ['channelKeysMoved', 'freshDefaults', 'migrated', 'starterTouched', 'widgetLayout'],
+    'a new install write needs its task\'s last write in installed(), or checks that compare storage see it land late');
+});
+
 test('a new install marks its layout fresh, an update does not, and the mark gives To Do in the dock', async () => {
   const fresh = worker();
   fresh.installed[0]({ reason: 'install' }); await settle();

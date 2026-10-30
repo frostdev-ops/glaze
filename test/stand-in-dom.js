@@ -80,4 +80,16 @@ class El {
   // A shadow root as a child list; tests reach a closed one through shadowForTest, as a page script cannot.
   attachShadow({ mode }) { const r = new El('#shadow-root', this.doc); r.host = this; this.shadowForTest = r; if (mode === 'open') this.shadowRoot = r; return r; }
 }
-module.exports = { El, matches };
+// DOMParser for page code run against the stand-in: the parsed body (text/html), or an SVG string's outer <svg> with its
+// attributes, holds the markup as innerHTML would.
+const parser = (doc) => class DOMParser {
+  parseFromString(markup, type) {
+    const s = String(markup);
+    if (type !== 'image/svg+xml') { const body = new El('body', doc); body.innerHTML = s; return { body, documentElement: body }; }
+    const m = s.match(/^<svg\b([^>]*)>([\s\S]*)<\/svg>$/), root = new El('svg', doc);
+    for (const [, k, v] of (m?.[1] || '').matchAll(/([\w:-]+)="([^"]*)"/g)) if (k !== 'xmlns') root.setAttribute(k, v);
+    root.innerHTML = m ? m[2] : s;
+    return { documentElement: root };
+  }
+};
+module.exports = { El, matches, parser };

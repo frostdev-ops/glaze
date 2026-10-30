@@ -126,7 +126,7 @@ test('Moodle: the news forum\'s discussion list and the Latest announcements blo
 test('routes: features/announce.js loads on the pages with a site\'s own announcement list, and nowhere else', async () => {
   const where = async (site, pathname, search = '') => {
     const loaded = [];
-    const ctx = vm.createContext({ GZ_CTX: { site, need: async (f) => { loaded.push(f); ctx.GZ_ANNOUNCE = ctx.GZ_ANNOUNCE_READ = { sync() {} }; } }, location: { pathname, search }, Set, Promise });
+    const ctx = vm.createContext({ GZ_CTX: { site, need: async (f) => { loaded.push(f); ctx.GZ_ANNOUNCE = ctx.GZ_ANNOUNCE_READ = ctx.GZ_STICKY_FOLD = { sync() {} }; } }, location: { pathname, search }, Set, Promise });
     ctx.globalThis = ctx;
     vm.runInContext(read('features/routes.js'), ctx);
     ctx.GZ_ROUTES.sync(); await settle();

@@ -1,0 +1,393 @@
+/* Glaze Writer's paper mode (writer-paper.js): the attempt's title bar, toolbar, pages, side panel and status bar as
+   glaze-plans/writer/mockups (C) draws them, in the Look's tokens. The page itself is paper: white, black text (dark on a
+   dark Look, below), the format's own font and spacing (lib/writer-styles.js css(), in an adopted sheet). Motion as writer.css: transform and
+   opacity only, none while typing. */
+@font-face { font-family: "Times New Roman"; src: local("Times New Roman"), local("TimesNewRomanPSMT"); }
+@font-face { font-family: "Times New Roman"; src: url("lib/fonts/tinos-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Times New Roman"; src: url("lib/fonts/tinos-700-normal.woff2") format("woff2"); font-weight: 700; font-style: normal; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Times New Roman"; src: url("lib/fonts/tinos-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Times New Roman"; src: url("lib/fonts/tinos-700-italic.woff2") format("woff2"); font-weight: 700; font-style: italic; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Arial"; src: local("Arial"), local("ArialMT"); }
+@font-face { font-family: "Arial"; src: url("lib/fonts/arimo-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Arial"; src: url("lib/fonts/arimo-700-normal.woff2") format("woff2"); font-weight: 700; font-style: normal; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Arial"; src: url("lib/fonts/arimo-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Arial"; src: url("lib/fonts/arimo-700-italic.woff2") format("woff2"); font-weight: 700; font-style: italic; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Calibri"; src: local("Calibri"); }
+@font-face { font-family: "Calibri"; src: url("lib/fonts/carlito-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Calibri"; src: url("lib/fonts/carlito-700-normal.woff2") format("woff2"); font-weight: 700; font-style: normal; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Calibri"; src: url("lib/fonts/carlito-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Calibri"; src: url("lib/fonts/carlito-700-italic.woff2") format("woff2"); font-weight: 700; font-style: italic; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Courier New"; src: local("Courier New"), local("CourierNewPSMT"); }
+@font-face { font-family: "Courier New"; src: url("lib/fonts/cousine-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Courier New"; src: url("lib/fonts/cousine-700-normal.woff2") format("woff2"); font-weight: 700; font-style: normal; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Courier New"; src: url("lib/fonts/cousine-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Courier New"; src: url("lib/fonts/cousine-700-italic.woff2") format("woff2"); font-weight: 700; font-style: italic; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+:root { --fmt: #60a5fa; }
+/* The page's colours. On a dark Look the pages on screen are dark (Settings → Writer → Light page keeps them white): only
+   in .gp-zoom, so print's copy and the submit sheet's previews stay white with the paper's own colours. A run's colour
+   (--c) is lifted until it reads on the dark page (black becomes the page's ink, white stays white) and a highlight (--h)
+   is mixed into the page, so a band stays a band and dark highlighters stay dark; the marks themselves keep their values.
+   Colours only: nothing here changes a size, so pagination is the same in either. */
+:root { --sheet: #fff; --sheet-ink: #111; --sheet-line: #111; --sheet-guide: #c8cdd4; --sheet-link: #0563c1; --sheet-hit: #fde68a; --sheet-hit-cur: #fbbf24; }
+@media screen {
+  :root[data-dark]:not([data-light-page]) .gp-size { --sheet: #1e1e1e; --sheet-ink: #e6e6e6; --sheet-line: #555; --sheet-guide: #4a4a4a; --sheet-link: #8ab4f8;
+    --sheet-hit: color-mix(in srgb, #fbbf24 32%, transparent); --sheet-hit-cur: color-mix(in srgb, #fbbf24 52%, transparent); color-scheme: dark; }
+  :root[data-dark]:not([data-light-page]) .gp-zoom .gp-sheet { box-shadow: 0 0 0 1px rgba(255,255,255,.07), 0 6px 24px rgba(0,0,0,.5); }
+  :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: color-mix(in srgb, var(--c) 10%, #fff) !important; }
+  @supports (color: oklch(from red l c h)) {
+    :root[data-dark]:not([data-light-page]) .gp-zoom :is([data-gz-color], [style*="--c:"]) { color: oklch(from var(--c) max(l, 0.72, calc(0.93 - l * 0.4)) c h) !important; }
+  }
+  :root[data-dark]:not([data-light-page]) .gp-zoom [data-gz-highlight] { background-color: color-mix(in oklab, var(--h) 35%, var(--sheet)) !important; }
+  :root[data-dark]:not([data-light-page]) .gp-zoom [data-gz-highlight="black"] { background-color: #424242 !important; }
+  :root[data-dark]:not([data-light-page]) .gp-zoom .ProseMirror-gapcursor::after { border-top-color: var(--sheet-ink); }
+}
+/* Focus covers the page: the mockup's ground and opaque panels, whatever is behind. */
+:root:has(.gp-tbtn[aria-pressed="true"]) { --ground: var(--gz-surface-2); --panel: var(--gz-surface-paint, var(--gz-surface)); --top-faint: var(--gz-ink-faint); }
+.gp, .gp-hidden { display: none; }
+/* An assignment's paper is its pages (data-view full) or writer.html's compose box (compact; writer-paper.js). */
+:root[data-mode="paper"]:not([data-view="compact"]) body { padding: 0; overflow: hidden; background: transparent; }
+:root[data-mode="paper"]:not([data-view="compact"]) #gw, :root[data-mode="paper"]:not([data-view="compact"]) #tb { display: none !important; }
+:root[data-mode="paper"]:not([data-view="compact"]) .gp, .gp.gp-standalone { display: flex; }
+/* In the compact box: compose's text (writer.css) and the paper's own blocks as compose draws its own; none of the paper's
+   fonts, sizes or line spacing (Ultra's box gets none of them; the pages show them). */
+:root[data-view="compact"] #gw .ProseMirror :is(h1, h2, h5, h6) { margin: 4px 0 10px; line-height: 1.35; font-weight: 600; font-size: 1.2em; }
+:root[data-view="compact"] #gw .ProseMirror [style*="line-height"] { line-height: inherit !important; }
+:root[data-view="compact"] #gw .ProseMirror span[style*="font-"] { font-family: inherit !important; font-size: inherit !important; }
+:root[data-view="compact"] #gw .ProseMirror blockquote { margin: 0 0 10px; padding: 0 0 0 12px; border-left: 3px solid var(--gz-accent); color: var(--gz-ink-muted); }
+:root[data-view="compact"] #gw .ProseMirror blockquote p { margin-bottom: 4px; }
+:root[data-view="compact"] #gw .ProseMirror hr { border: 0; border-top: 1px dashed var(--gz-line-strong); margin: 12px 0; }
+:root[data-view="compact"] #gw .ProseMirror { counter-reset: gz-note; }
+:root[data-view="compact"] #gw .ProseMirror sup.gz-footnote { counter-increment: gz-note; cursor: pointer; color: var(--gz-ink-muted); }
+:root[data-view="compact"] #gw .ProseMirror sup.gz-footnote::after { content: counter(gz-note); }
+:root[data-view="compact"] #gw .ProseMirror table { border-collapse: collapse; margin: 0 0 10px; }
+:root[data-view="compact"] #gw .ProseMirror :is(td, th) { border: 1px solid var(--gz-line-strong); padding: 2px 6px; vertical-align: top; }
+:root[data-view="compact"] #gw .ProseMirror :is(td, th) p { margin: 0; }
+:root[data-view="compact"] #gw .ProseMirror img { max-width: 100%; height: auto; }
+/* Full writer: a slider in the compact bar's right end and the title bar's; the accent when on. Its knob slides
+   (transform only). */
+.gp-full { display: inline-flex; align-items: center; gap: 8px; padding: 4px 2px; font-size: 13px; color: var(--gz-ink-muted); white-space: nowrap; flex: none; }
+.gp-full:hover, .gp-full[aria-checked="true"] { color: var(--gz-ink); }
+.gp-full-track { position: relative; width: 30px; height: 18px; border-radius: 9px; background: var(--gz-line-strong); flex: none; }
+.gp-full-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--gz-ink); transition: transform var(--t) ease-out; }
+.gp-full[aria-checked="true"] .gp-full-track { background: var(--gz-accent); }
+.gp-full[aria-checked="true"] .gp-full-track::after { transform: translateX(12px); background: var(--gz-accent-ink); }
+.gp-full:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; border-radius: 6px; }
+/* A narrow box (the frame is as wide as Ultra's): the slider alone, its name still its label. */
+@media (max-width: 479.98px) { .gp-full-name { display: none; } }
+/* The compact bar's line before it (writer-paper.js tell): one line, cut short with an ellipsis; why Ultra's button didn't
+   go in the error colour, and the switch it names ringed while the paper is too long for Ultra's box. */
+.gp-said { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-said:empty { display: none; }
+.gp-said:is([data-kind="long"], [data-kind="error"]) { color: var(--gz-err); }
+.gp-full[data-offer] { color: var(--gz-ink); }
+.gp-full[data-offer] .gp-full-track { box-shadow: 0 0 0 2px var(--gz-accent); }
+.gp { flex-direction: column; height: 100vh; background: var(--ground); color: var(--gz-ink); font: 14px/1.5 var(--gz-font); }
+/* In Ultra the paper is a card: the Look's corners and edge (drawn over the bars, which fill to them). Focus fills the window,
+   square, as does papers.html. */
+.gp:not(.gp-standalone) { position: relative; overflow: hidden; border-radius: var(--gz-radius, 12px); }
+.gp:not(.gp-standalone)::after { content: ""; position: absolute; inset: 0; z-index: 3; border: 1px solid var(--edge); border-radius: inherit; pointer-events: none; }
+:root:has(.gp-tbtn[aria-pressed="true"]) .gp { border-radius: 0; }
+:root:has(.gp-tbtn[aria-pressed="true"]) .gp::after { display: none; }
+
+/* Title bar */
+.gp-top { height: 60px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-bottom: 1px solid var(--edge); min-width: 0; }
+.gp-top h1 { font-size: 17px; margin: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 100%; inline-size: fit-content; }
+.gp-top .gp-due, .gp-top .gp-state { color: var(--top-faint); font-size: 13px; white-space: nowrap; }
+/* The title, the due date and the paper's state are pills, as the page's section headings are (theme.css). */
+.gp-top h1, .gp-top .gp-due, .gp-top .gp-state { min-height: 36px; padding: 6px 14px; line-height: 22px; border-radius: 999px; background: var(--pill); border: 1px solid var(--edge); }
+.gp-top .gp-due:empty, .gp-top .gp-state:empty { display: none; }
+.gp-top a { color: var(--gz-ink-muted); text-decoration: none; font-size: 13px; }
+/* A standalone document's title field: the pill's own type, nothing of a text box's. */
+.gp-top h1 .gp-title-in { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; max-width: 100%; text-overflow: ellipsis; }
+.grow { flex: 1; }
+
+/* Toolbar */
+.gp-tool { height: 50px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 16px; border-bottom: 1px solid var(--edge); background: var(--panel); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.gp-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 12px; border-radius: 999px; background: var(--gz-accent-soft); color: var(--gz-accent-hi); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.gp-box { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border: 1px solid var(--gz-line-strong); border-radius: 8px; font-size: 13px; color: var(--gz-ink); white-space: nowrap; }
+.gp-tb { display: flex; align-items: center; gap: 2px; }
+.gp-tb button { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; color: var(--gz-ink); font-weight: 700; font-size: 14px; flex: none; }
+.gp-tb button:hover, .gp-tbtn:hover, .gp-pill:hover, .gp-box:hover { background: var(--gz-line); }
+.gp-pill:hover { background: color-mix(in srgb, var(--gz-accent-soft) 80%, var(--gz-accent)); }
+.gp-tb button[aria-pressed="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi); }
+.gp-sepv { width: 1px; height: 18px; background: var(--gz-line-strong); margin: 0 4px; flex: none; }
+.gp-tbtn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; font-size: 13px; color: var(--gz-ink); white-space: nowrap; flex: none; }
+.gp-submit { padding: 7px 16px; border-radius: 999px; background: var(--gz-accent); color: var(--gz-accent-ink); font-weight: 700; font-size: 13px; white-space: nowrap; flex: none; }
+.gp button:disabled { cursor: default; opacity: .45; }
+.gp-submit:disabled { opacity: .55; }
+.gp button:focus-visible, .gp [tabindex]:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+.gp-ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.gp-caret { width: 14px; height: 14px; }
+
+/* Work area: pages and the side panel */
+.gp-work { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 28vw, 380px); grid-template-rows: minmax(0, 1fr); }
+.gp-col { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* The desk behind the pages: the Look's second surface, solid on every Look (its colour without any alpha, so no wallpaper
+   shows behind a page); the glass stays on the bars and the side panel. */
+.gp-canvas { flex: 1; min-height: 0; overflow: auto; position: relative; overscroll-behavior: contain; --desk: var(--gz-surface-paint-2, var(--gz-surface-2)); background: var(--gz-surface-2); background: rgb(from var(--desk) r g b); }
+.gp-canvas.gp-drop { box-shadow: inset 0 0 0 2px var(--gz-accent); }
+.gp-size { position: relative; margin: 28px auto 60px; }
+.gp-zoom { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.gp-sheet { position: absolute; left: 0; background: var(--sheet); color: var(--sheet-ink); box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+:root:not([data-dark]) .gp-sheet { box-shadow: 0 6px 24px rgba(15,23,42,.18), 0 1px 3px rgba(15,23,42,.12); }
+.gp-hdr { position: absolute; text-align: right; color: var(--sheet-ink); white-space: pre; pointer-events: none; }
+.gp-ftr { position: absolute; color: var(--sheet-ink); white-space: pre; pointer-events: none; }
+.gp-hdr .gp-part, .gp-ftr .gp-part { white-space: pre; }
+.gp-notes { position: absolute; color: var(--sheet-ink); pointer-events: none; }
+.gp-notes .gp-sep { position: relative; }
+.gp-notes .gp-rule { position: absolute; top: 50%; left: 0; width: 2in; height: 0; border-top: 0.75px solid var(--sheet-line); }
+.gp-notes p { margin: 0; }
+.gp-notes sup, .gp-flow sup.gz-footnote { font-size: .66em; line-height: 0; vertical-align: baseline; position: relative; top: -0.42em; }
+.gp-measure { visibility: hidden; top: 0; left: -10000px !important; }
+.gp-flow { position: absolute; }
+/* The caret writer-paper.js draws, the text's height (the browser's is hidden but while an input method composes); it
+   blinks as the system's and holds still while it moves. */
+.gp-flow[data-composing] .ProseMirror { caret-color: var(--sheet-ink); }
+.gp-cursor { position: absolute; left: 0; top: 0; z-index: 1; width: 2px; margin-left: -1px; background: var(--sheet-ink); pointer-events: none; animation: gp-blink 1.06s step-end infinite; }
+@keyframes gp-blink { 50% { opacity: 0; } }
+
+/* The paper's text (the format adds font, size, spacing and indents) */
+/* Spaces at a line's end hang into the margin, as Word lays them out (ProseMirror's break-spaces would count them). */
+.gp-flow .ProseMirror { min-height: 0; padding: 0; white-space: pre-wrap; tab-size: 0.5in; color: var(--sheet-ink); caret-color: transparent; font-kerning: none; font-variant-ligatures: none; outline: none; }
+.gp-flow .ProseMirror ::selection { background: rgba(37, 99, 235, .22); }
+.gp-flow .ProseMirror sup, .gp-flow .ProseMirror sub { line-height: 0; }
+.gp-flow .ProseMirror sup.gz-footnote { counter-increment: gz-note; cursor: pointer; }
+.gp-flow .ProseMirror sup.gz-footnote::after { content: counter(gz-note); }
+.gp-flow .ProseMirror { counter-reset: gz-note; }
+.gp-flow .ProseMirror hr.gz-page-break { border: 0; height: 0; margin: 0; overflow: visible; position: relative; }
+.gp-flow .ProseMirror hr.gz-page-break.ProseMirror-selectednode { outline: 2px solid rgba(37, 99, 235, .6); outline-offset: 2px; }
+.gp-flow .ProseMirror blockquote { border: 0; color: inherit; }
+.gp-flow .ProseMirror li { list-style: none; position: relative; }
+.gp-flow .ProseMirror li::before { position: absolute; margin-left: -0.25in; }
+.gp-flow .ProseMirror ul > li::before { content: "\2022"; }
+.gp-flow .ProseMirror ol { counter-reset: gp-l0 gp-l1 gp-l2; }
+.gp-flow .ProseMirror ol > li { counter-increment: gp-l0; }
+.gp-flow .ProseMirror ol > li::before { content: counter(gp-l0) "."; }
+.gp-flow .ProseMirror ol > li.ql-indent-1 { counter-increment: gp-l1; } .gp-flow .ProseMirror ol > li.ql-indent-1::before { content: counter(gp-l1, lower-alpha) "."; }
+.gp-flow .ProseMirror ol > li.ql-indent-2 { counter-increment: gp-l2; } .gp-flow .ProseMirror ol > li.ql-indent-2::before { content: counter(gp-l2, lower-roman) "."; }
+.gp-flow .ProseMirror table { border-collapse: collapse; width: 100%; }
+.gp-flow .ProseMirror td, .gp-flow .ProseMirror th { border: 1px solid var(--sheet-line); vertical-align: top; padding: 0 4px; }
+.gp-flow .ProseMirror td p, .gp-flow .ProseMirror th p { text-indent: 0; }
+.gp-flow .ProseMirror img { max-width: 100%; }
+/* A tab sized to a Word tab stop (lib/writer-paginate.js sizeTabs), with its leader */
+.gp-flow .ProseMirror .gp-tabstop { display: inline-block; vertical-align: baseline; text-indent: 0; }
+.gp-flow .ProseMirror .gp-tabstop-dot, .gp-part .gp-tabstop-dot { background: radial-gradient(circle, currentColor 0.7px, transparent 1px) 0 calc(100% - 0.28em) / 0.25em 0.25em repeat-x; }
+.gp-flow .ProseMirror .gp-tabstop-hyphen, .gp-flow .ProseMirror .gp-tabstop-middleDot, .gp-part .gp-tabstop-hyphen, .gp-part .gp-tabstop-middleDot { background: linear-gradient(currentColor, currentColor) 0 calc(100% - 0.45em) / 100% 1px no-repeat; }
+.gp-flow .ProseMirror .gp-tabstop-underscore, .gp-flow .ProseMirror .gp-tabstop-heavy, .gp-part .gp-tabstop-underscore, .gp-part .gp-tabstop-heavy { box-shadow: inset 0 -1px currentColor; }
+.gp-gap { display: block; pointer-events: none; }
+.gp-gap-line { display: inline-block; width: 100%; vertical-align: top; line-height: 0; font-size: 0; text-indent: 0; }
+/* Format issues, where no proofing draws them */
+.gp-flow .gp-u-format { text-decoration: underline dashed #2563eb; text-underline-offset: 4px; text-decoration-thickness: 1.5px; }
+/* Format findings underline only while their card is picked or hovered (the gp-u-format above), not from the shared store */
+.gp-flow .gz-iss[data-issue^="format:"] { text-decoration: none; }
+.gp-flow .gp-cur { outline: 2px solid color-mix(in srgb, #2563eb 35%, transparent); outline-offset: 1px; border-radius: 2px; background: rgba(37,99,235,.08); }
+
+/* Status bar */
+.gp-status { height: 34px; flex: none; display: flex; align-items: center; gap: 18px; padding: 0 16px; color: var(--gz-ink-muted); font-size: 12px; background: var(--panel); border-top: 1px solid var(--edge); white-space: nowrap; }
+.gp-status button { font-size: 12px; color: var(--gz-ink-muted); }
+.gp-status button:hover { color: var(--gz-ink); }
+
+/* Side panel */
+.gp-side { background: var(--panel); border-left: 1px solid var(--edge); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.gp-tabs { display: flex; gap: 2px; padding: 10px 12px 0; border-bottom: 1px solid var(--edge); flex: none; }
+.gp-tab { padding: 8px 10px 10px; font-size: 13px; color: var(--gz-ink-muted); border-bottom: 2px solid transparent; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.gp-tab[aria-selected="true"] { color: var(--gz-ink); border-bottom-color: var(--gz-accent); font-weight: 600; }
+/* The Look's rounded focus ring, inside the tab, clear of its underline. */
+.gp .gp-tab { position: relative; }
+.gp .gp-tab:focus-visible { outline: none; }
+.gp .gp-tab:focus-visible::after { content: ""; position: absolute; inset: 3px 0 6px; border-radius: 8px; box-shadow: 0 0 0 2px var(--gz-accent); pointer-events: none; }
+.gp-badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--gz-line-strong); color: var(--gz-ink); font-size: 11px; display: inline-grid; place-items: center; font-weight: 600; }
+.gp-badge:empty { display: none; }
+.gp-tab[aria-selected="true"] .gp-badge { background: var(--gz-accent); color: var(--gz-accent-ink); }
+.gp-pane { flex: 1; min-height: 0; overflow: auto; }
+/* The Outline (mockups E): the title and the list of sources in ink, headings by level with a guide line, each with its
+   page; the caret's section marked with the accent; an empty paper says so. */
+.gp-outline { padding: 14px; display: grid; gap: 1px; align-content: start; }
+.gp-ol-options { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 14px 0; font-size: 12px; }
+.gp-ol-options label { display: flex; align-items: center; gap: 8px; margin-inline-end: auto; }
+.gp-ol-options input { accent-color: var(--gz-accent); }
+.gp-ol-busy { color: var(--gz-ink-muted); }
+.gp-ol-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 32px; padding: 0 8px; border-radius: 7px; font-size: 13px; text-align: start; color: var(--gz-ink-muted); }
+.gp-ol-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-ol-row.gp-ol-structure { padding-block: 8px; }
+.gp-ol-row .gp-ol-copy { display: grid; gap: 3px; min-width: 0; }
+.gp-ol-label { font-weight: 600; }
+.gp-ol-row .gp-ol-preview { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; font-size: 12px; line-height: 1.4; color: var(--gz-ink-muted); }
+.gp-ol-structure small { align-self: start; padding-top: 1px; }
+.gp-ol-row small { font-size: 11px; color: var(--gz-ink-faint); }
+.gp-ol-row:hover { background: var(--gz-line); color: var(--gz-ink); }
+.gp-ol-row:is([data-kind="title"], [data-kind="list"]) { color: var(--gz-ink); font-weight: 600; }
+.gp-ol-sub { padding-inline-start: calc(8px + var(--ol-level, 1) * 16px); }
+.gp-ol-sub::before { content: ""; position: absolute; inset-inline-start: calc(13px + (var(--ol-level, 1) - 1) * 16px); top: 0; bottom: 0; width: 1px; background: var(--gz-line-strong); }
+.gp-ol-row.cur { background: var(--gz-accent-soft); color: var(--gz-accent-hi); }
+.gp-ol-row.cur::after { content: ""; position: absolute; inset-inline-start: 0; top: 7px; bottom: 7px; width: 2px; border-radius: 2px; background: var(--gz-accent); }
+.gp-ol-sep { height: 1px; margin: 6px 4px; background: var(--gz-line); }
+.gp-empty { display: grid; justify-items: center; gap: 10px; padding: 64px 16px; font-size: 13px; text-align: center; color: var(--gz-ink-faint); }
+.gp-empty-ico { width: 28px; height: 28px; opacity: .7; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.gp-issues { padding: 12px; display: grid; gap: 10px; }
+.gp-issues:empty { display: none; }
+.gp-issue { border: 1px solid var(--gz-line); border-radius: 10px; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; background: var(--card); text-align: start; cursor: pointer; }
+.gp-issue.gp-on { border-color: color-mix(in srgb, var(--fmt) 60%, transparent); }
+.gp-issue .gp-count { margin-inline-start: 8px; padding: 0 6px; border-radius: 9px; background: var(--gz-line-strong); font-size: 11px; font-weight: 600; }
+.gp-issue .gp-lbl { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--gz-ink-muted); }
+.gp-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+.gp-issue .gp-fix { display: block; width: auto; min-width: 0; max-width: 100%; font-size: 14px; overflow-wrap: anywhere; }
+.gp-issue .gp-fix s { color: var(--gz-ink-faint); }
+.gp-issue .gp-fix b { color: var(--gz-ink); font-weight: 600; }
+.gp-issue .gp-row { display: flex; gap: 8px; }
+.gp-sbtn { padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; background: var(--gz-accent); color: var(--gz-accent-ink); }
+.gp-sbtn.gp-ghost { background: transparent; color: var(--gz-ink-muted); border: 1px solid var(--gz-line-strong); font-weight: 500; }
+.gp-list { margin: 4px 12px 12px; border-top: 1px solid var(--gz-line); padding-top: 12px; display: grid; gap: 7px; font-size: 13px; }
+.gp-list div { display: flex; justify-content: space-between; color: var(--gz-ink-muted); }
+.gp-list .gp-ok { color: var(--gz-ok); } .gp-list .gp-no { color: var(--fmt); }
+.gp-list h4 { margin: 0 0 2px; font-size: 12px; color: var(--gz-ink-faint); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+
+/* Menus and popovers (writer.css .pop's look and motion) */
+.gp-menu { position: fixed; z-index: 5; min-width: 180px; max-width: calc(100vw - 8px); max-height: calc(100vh - 16px); overflow: auto; padding: 6px; transform-origin: top left; }
+.gp-menu > button, .gp-menu .gp-mi { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 16px; padding: 7px 10px; border-radius: 7px; font-size: 13px; text-align: start; color: var(--gz-ink); }
+.gp-menu > button:hover, .gp-menu > button:focus { background: var(--gz-accent-soft); outline: none; }
+.gp-menu > button[aria-checked="true"]::after { content: "\2713"; color: var(--gz-accent-hi); }
+.gp-menu .gp-hr { height: 1px; margin: 5px 4px; background: var(--gz-line); }
+.gp-menu small { color: var(--gz-ink-faint); font-size: 12px; }
+.gp-form { display: grid; gap: 8px; padding: 6px 4px; min-width: 240px; }
+.gp-form label { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: var(--gz-ink-muted); }
+.gp-form input, .gp-form select, .gp-note textarea { font: inherit; font-size: 13px; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 7px; padding: 4px 8px; min-width: 0; }
+.gp-form input:focus, .gp-form select:focus, .gp-note textarea:focus { border-color: var(--gz-accent); outline: none; }
+.gp-note { position: fixed; z-index: 5; width: min(360px, calc(100vw - 16px)); display: grid; gap: 8px; }
+.gp-note textarea { width: 100%; min-height: 72px; resize: vertical; }
+.gp-toast { position: fixed; left: 50%; bottom: 46px; z-index: 6; transform: translateX(-50%); max-width: min(520px, calc(100vw - 24px)); padding: 9px 14px; font-size: 13px; display: flex; align-items: center; gap: 14px; }
+.gp-toast-do { margin: -3px -6px -3px 0; padding: 3px 8px; border-radius: 6px; color: var(--gz-accent-hi); font-weight: 700; }
+:root:not([data-dark]) .gp-toast-do { color: var(--gz-accent); }
+.gp-toast[data-open] { transform: translateX(-50%); }
+.gp-toast-ask { flex-wrap: wrap; max-width: min(620px, calc(100vw - 24px)); }
+.gp-toast-choices { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gp-toast-choices b { font-weight: 600; margin-inline-end: 4px; }
+.gp-toast-choice { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--gz-line-strong); font-size: 12px; font-weight: 600; }
+.gp-toast-choice.gp-default { background: var(--gz-accent); color: var(--gz-accent-ink); border-color: transparent; }
+.gp-versions { min-width: 280px; }
+.gp-versions .gp-mi { color: var(--gz-ink-muted); }
+.gp-versions .gp-mi button { color: var(--gz-accent-hi); font-weight: 600; font-size: 12px; }
+/* Open from Documents: the import card's sheet (writer-import.css) over its dim, a row per document */
+.gp-fromdocs-layer { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; overflow: auto; font: 14px/1.5 var(--gz-font); color: var(--gz-ink); }
+.gp-fromdocs-dim { position: fixed; inset: 0; background: rgba(2,6,12,.66); backdrop-filter: blur(2px); opacity: 0; transition: opacity var(--gz-t, var(--t)) var(--gz-ease, ease-out); }
+.gp-fromdocs { position: relative; width: min(520px, 100%); max-height: calc(100vh - 32px); padding: 18px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; background: var(--panel); backdrop-filter: blur(24px);
+  border: 1px solid var(--edge); border-radius: 16px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px) scale(.97); transition: opacity var(--gz-t, var(--t)) var(--gz-ease, ease-out), transform var(--gz-t, var(--t)) var(--gz-ease, ease-out); }
+:root[data-gz-no-enter] .gp-fromdocs-layer[data-open] *, :root[data-gz-no-trans] .gp-fromdocs-layer * { transition: none; }
+.gp-fromdocs-layer[data-open] .gp-fromdocs-dim, .gp-fromdocs-layer[data-open] .gp-fromdocs { opacity: 1; transform: none; }
+.gp-fromdocs-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.gp-fromdocs-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.gp-fromdocs-x { margin-left: auto; width: 30px; height: 30px; flex: none; border-radius: 8px; display: grid; place-items: center; color: var(--gz-ink-muted); }
+.gp-fromdocs-x:hover { background: color-mix(in srgb, var(--gz-ink-faint) 16%, transparent); }
+.gp-fromdocs-list { display: grid; align-content: start; gap: 6px; min-height: 0; overflow: auto; padding: 4px; margin: -4px; }
+.gp-fromdocs-row { display: grid; gap: 2px; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--edge); background: var(--card); text-align: start; }
+.gp-fromdocs-row:hover { border-color: var(--gz-accent); }
+.gp-fromdocs-row b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-fromdocs-row small { font-size: 12px; color: var(--gz-ink-faint); }
+.gp-fromdocs-layer button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+
+/* papers.html */
+.gp-page { padding: 0; overflow: auto; background: var(--gz-surface-2); color: var(--gz-ink); font: 14px/1.5 var(--gz-font); }
+:root[data-mode="paper"] .gp-page { overflow: hidden; }
+.gp-row { display: flex; gap: 8px; }
+@media (max-width: 1200px) { .gp-tabs { padding: 10px 8px 0; } .gp-tab { padding: 8px 6px 10px; } }
+/* Keep the page wide enough to write on; checks retain their own scroller below it. */
+@media screen and (max-width: 800px) {
+  .gp-work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(140px, 35%); }
+  .gp-side { border-left: 0; border-top: 1px solid var(--edge); }
+  .gp-tabs { overflow-x: auto; }
+  .gp-status { gap: 12px; padding-inline: 12px; overflow-x: auto; overflow-y: hidden; }
+  .gp-status > * { flex-shrink: 0; }
+}
+@media screen and (max-width: 600px) {
+  .gp-top { padding-inline: 16px; gap: 10px; }
+  .gp-top .gp-due { display: none; }
+}
+
+
+.gp-print { display: none; }
+@media print {
+  @page { size: letter; margin: 0; }
+  html, body { height: auto !important; overflow: visible !important; background: white !important; }
+  body > * { display: none !important; }
+  body > .gp-print { display: block !important; }
+  .gp-print .gp-sheet { position: relative; top: auto !important; break-after: page; box-shadow: none !important; overflow: hidden; }
+  .gp-print .gp-sheet:last-child { break-after: auto; }
+  .gp-print .gp-flow .ProseMirror { background: transparent; }
+  .gp-print .gp-cur { outline: none; background: transparent; }
+}
+
+.gp-flow .ProseMirror .gp-gap-row { display: table-row; }
+.gp-flow .ProseMirror .gp-gap-row > td { border: 0; padding: 0; }
+
+/* Font, size, colour and highlight, more formatting, the Paragraph dialog and ⋯ (stream F). The labelled buttons drop
+   their labels when the toolbar is narrow; their names stay as aria-labels. */
+.gp-tool { container-type: inline-size; container-name: gp-tool; }
+@container gp-tool (max-width: 1560px) { .gp-tbtn .gp-lbl { display: none; } .gp-tbtn:has(.gp-lbl) { padding-inline: 7px; } }
+@container gp-tool (max-width: 1240px) { .gp-font { width: 112px; } }
+.gp-font { width: 136px; justify-content: space-between; padding-inline: 10px 8px; flex: none; }
+.gp-font .gp-font-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-sizebox { padding: 0 2px 0 0; gap: 0; flex: none; }
+.gp-size-in { width: 34px; height: 28px; border: 0; background: transparent; color: var(--gz-ink); font: inherit; font-size: 13px; text-align: center; outline: none; padding: 0; }
+.gp-size-in:focus { box-shadow: inset 0 -2px 0 var(--gz-accent); }
+.gp-size-b { width: 18px; height: 28px; display: grid; place-items: center; color: var(--gz-ink-muted); border-radius: 6px; }
+.gp-tb button.gp-wide { width: auto; padding: 0 3px 0 5px; display: inline-flex; gap: 1px; }
+.gp-tb button.gp-wide .gp-caret { width: 12px; height: 12px; color: var(--gz-ink-muted); }
+.gp-aa { font-weight: 600; font-size: 13px; letter-spacing: -.02em; }
+.gp-swatch { display: grid; justify-items: center; gap: 1px; line-height: 1; }
+.gp-swatch .gp-a { font-weight: 700; font-size: 14px; }
+.gp-swatch .gp-ico { width: 14px; height: 14px; }
+.gp-bar { display: block; width: 16px; height: 3px; border-radius: 1px; }
+.gp-tb button.gp-pilcrow { font-size: 16px; font-weight: 600; }
+.gp-tb button[aria-expanded="true"], .gp-box[aria-expanded="true"], .gp-tbtn[aria-expanded="true"] { background: var(--gz-line); }
+.gp-palette { padding: 8px; min-width: 0; }
+.gp-palette > .gp-sw-auto { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 6px; border-radius: 7px; font-size: 13px; color: var(--gz-ink); margin-bottom: 6px; }
+.gp-palette > .gp-sw-auto:hover, .gp-palette > .gp-sw-auto:focus { background: var(--gz-accent-soft); outline: none; }
+.gp-sw-ink, .gp-sw-none { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--gz-line-strong); }
+.gp-sw-ink { background: #000; }
+.gp-sw-none { background: linear-gradient(to top right, transparent calc(50% - 1px), var(--gz-err) 50%, transparent calc(50% + 1px)); }
+.gp-sw-grid { display: grid; grid-template-columns: repeat(10, 18px); gap: 4px; }
+.gp-sw-grid.gp-sw-hl { grid-template-columns: repeat(5, 22px); gap: 6px; }
+.gp-sw-hl .gp-sw { width: 22px; height: 22px; }
+.gp-sw { width: 18px; height: 18px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.gp-sw:hover, .gp-sw:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+.gp-sw[aria-checked="true"] { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+.gp-palette .gp-hr { margin: 8px 0; }
+/* The Paragraph and Page setup sheets */
+.gp-sheet-form { width: min(380px, calc(100vw - 16px)); gap: 10px; padding: 12px; }
+.gp-sheet-form h5 { margin: 4px 0 -2px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--gz-ink-faint); }
+.gp-frow { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--gz-ink-muted); }
+.gp-fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+.gp-fgrid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--gz-ink-muted); }
+.gp-form .gp-num { width: 74px; text-align: end; }
+.gp-form select { max-width: 132px; }
+.gp-form input:disabled, .gp-form select:disabled { opacity: .45; }
+.gp-form [aria-invalid="true"] { border-color: var(--gz-err); }
+.gp-seg { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid var(--gz-line-strong); border-radius: 8px; }
+.gp-seg button { display: inline-flex; align-items: center; gap: 6px; min-width: 30px; height: 26px; padding: 0 7px; justify-content: center; border-radius: 6px; font-size: 12px; color: var(--gz-ink-muted); }
+.gp-seg button[aria-checked="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi); }
+:root:not([data-dark]) .gp-seg button[aria-checked="true"] { color: var(--gz-accent); }
+.gp-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+.gp-check { display: flex !important; justify-content: flex-start !important; gap: 8px !important; font-size: 13px; color: var(--gz-ink); cursor: pointer; }
+.gp-check input { accent-color: var(--gz-accent); margin: 0; }
+.gp-actions { align-items: center; margin-top: 2px; }
+.gp-actions .gp-sbtn:disabled { opacity: .45; }
+/* The header and footer, edited on the page */
+.gp-hf { position: absolute; z-index: 2; color: var(--sheet-ink); white-space: pre-wrap; outline: 1.5px dashed var(--gz-accent); outline-offset: 4px; border-radius: 1px; caret-color: var(--sheet-ink); min-height: 1em; }
+.gp-hf:focus { outline-style: dashed; }
+.gp-hf .gp-field { background: color-mix(in srgb, var(--gz-accent) 18%, transparent); border-radius: 2px; }
+.gp-sheet.gp-editing-header .gp-hdr, .gp-sheet.gp-editing-footer .gp-ftr { visibility: hidden; }
+.gp.gp-hf-on .gp-flow { opacity: .45; }
+.gp-hfbar { position: fixed; z-index: 6; display: flex; align-items: center; gap: 4px; padding: 5px; }
+.gp-hfbar .gp-tbtn { padding: 5px 8px; }
+.gp-hfbar .gp-ibtn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--gz-ink); }
+.gp-hfbar .gp-tbtn:hover, .gp-hfbar .gp-ibtn:hover { background: var(--gz-line); }
+.gp-hfbar .gp-check { padding: 0 6px; white-space: nowrap; }
+.gp-menu small { margin-inline-start: 18px; }
+@media print { .gp-hf, .gp-hfbar { display: none !important; } }
+.gp-more .gp-ico { stroke-width: 3.2; }
+.gp-fgrid label { white-space: nowrap; }
+/* thumbnails (lib/writer-thumb.js): page 1 drawn small, its format's page CSS in the thumbnail's own sheet */
+.gt-thumb { position: relative; overflow: hidden; flex: none; pointer-events: none; user-select: none; }
+.gt-thumb .gt-page.gp-sheet { top: 0; left: 0; box-shadow: none; }
+.gt-thumb .gp-flow { overflow: hidden; }

@@ -337,14 +337,15 @@ test('preview on Moodle asks nothing (its answer would mark the posts read): wha
 test('routes: a matching page loads its feature and syncs it each pass; leaving calls off() once', async () => {
   const loaded = [], calls = [];
   const location = { pathname: '/ultra/courses/_1_1/outline' };
-  const ctx = vm.createContext({ GZ_CTX: { site: 'ultra', need: async (f, ready) => { loaded.push(f); ctx.GZ_RUBRIC ||= { sync: () => calls.push('sync'), off: () => calls.push('off') }; assert.ok(ready()); } }, location, Set, Promise });
+  const ctx = vm.createContext({ GZ_CTX: { site: 'ultra', need: async (f, ready) => { loaded.push(f); ctx.GZ_RUBRIC ||= { sync: () => calls.push('sync'), off: () => calls.push('off') }; ctx.GZ_STICKY_FOLD ||= { sync() {} }; assert.ok(ready()); } }, location, Set, Promise });
   ctx.globalThis = ctx;
   vm.runInContext(read('features/routes.js'), ctx);
   const R = ctx.GZ_ROUTES;
   R.add((l, site) => site === 'ultra' && /\/assessment\//.test(l.pathname), 'features/rubric.js', 'GZ_RUBRIC');
   R.add(() => { throw new Error('broken'); }, 'features/x.js', 'GZ_X');
   R.sync(); await settle();
-  assert.deepEqual(loaded, [], 'not this page');
+  // A course page: only the course bar's fold, which every one of them loads.
+  assert.deepEqual(loaded, ['features/sticky-fold.js'], 'not this page');
   location.pathname = '/ultra/courses/_1_1/outline/assessment/_5_1/overview';
   R.sync(); await settle(); R.sync(); await settle();
   assert.deepEqual(calls, ['sync', 'sync']);
@@ -502,6 +503,21 @@ test('safe pictures use the LMS queue and release their bytes when replaced or c
   release({ status: 200, blob: new Blob(['late'], { type: 'image/png' }) }); await settle();
   assert.equal(q.asked[0].init.signal.aborted, true);
   assert.equal(img.src, undefined, 'a late response creates no image address');
+});
+
+test('closing keeps decoded pictures available to the visual sheet and releases them when the effect ends', async () => {
+  const p = page({ hold: true, motion: 'expressive', answer: () => ({ status: 200, blob: new Blob(['picture'], { type: 'image/png' }) }) });
+  let closed = 0;
+  const h = p.P.open({ title: 'T', source: p.link(), body: p.P.safe('<img src="/picture">'), onClose: () => closed++ });
+  await settle();
+  const src = h.dialog.querySelector('img').src;
+  h.close();
+  assert.equal(await (await fetch(src)).text(), 'picture', 'closing copies can still decode their image');
+  h.close(true);
+  await h.closed;
+  await assert.rejects(fetch(src));
+  assert.equal(closed, 1);
+  assert.equal(p.host('gz-popup'), null);
 });
 
 test('a focused preview follows its link on scroll and resize and disappears when the link leaves', async () => {

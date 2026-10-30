@@ -5,10 +5,18 @@ const browsers = () => {
   catch (e) { if (e.status === 1) return ''; throw e; }
 };
 
-module.exports = async () => {
+module.exports = async (signal) => {
+  signal?.throwIfAborted();
+  // Windows has no pgrep, and browser checks run there only in CI, one job to a runner.
+  if (typeof process === 'object' && process.platform === 'win32') return;
   for (let i = 0; browsers(); i++) {
     if (i >= 120) throw Error('gave up waiting for another browser');
     if (i % 6 === 0) console.error('[browser-check] another browser is running; waiting');
-    await new Promise((r) => setTimeout(r, 5000));
+    await new Promise((resolve, reject) => {
+      const done = () => { signal?.removeEventListener('abort', abort); resolve(); };
+      const abort = () => { clearTimeout(timer); reject(signal.reason); };
+      const timer = setTimeout(done, 5000);
+      signal?.addEventListener('abort', abort, { once: true });
+    });
   }
 };

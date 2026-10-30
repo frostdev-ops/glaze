@@ -21,21 +21,29 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
     notes: 'Notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights', hideFolders: 'Hide modules' };
   // Ultra's: its own, and the planning switches, which work on both sites.
-  const ULTRA_EXTRAS = { ...EXTRAS, hideFolders: 'Hide folders', pet: 'Pet habitat', dashboard: 'Glaze Dashboard', tabs: 'Course tabs', ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
+  const ULTRA_EXTRAS = { ...EXTRAS, hideFolders: 'Hide folders', pet: 'Pet habitat', dashboard: 'Glaze Dashboard', tabs: 'Course tabs', fold: 'Compact bars on scroll', titleScroll: 'Scrolling assignment titles', ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
+    globalThis.GZ_PLACE?.stop();
     let u;
     try { u = new URL(url, location.origin); } catch { return; }
-    if (u.protocol === 'https:' || u.protocol === 'http:') globalThis.GZ_CTABS?.bar?.open(u.href) || location.assign(u.href); // this site's pages through the course tabs when they run
+    if (u.protocol === 'https:' || u.protocol === 'http:') globalThis.GZ_CTABS?.bar?.open(u.href, { native: true }) || location.assign(u.href); // this site's pages through the course tabs when they run
   };
   // Ultra's Institution page is Glaze's Dashboard while its switch is on (features/dashboard.js).
   const dash = () => (ctx.settings().enhance.dashboard ? [['/ultra/institution-page', 'Dashboard']] : []);
   const pages = () => (moodle ? [] : ultra ? [...dash(), ...TOOLS] : CANVAS_TOOLS).map(([path, label]) => ({ label: t(label), hint: ultra ? 'Blackboard' : 'Canvas', group: 'Go to', run: go(path) }));
+  // The student's saved and gallery Looks (lib/looks.js: the worker's storage.local lookCatalog), as they change; each is put on
+  // by the worker from its code, as Settings' "Use this theme" puts it on.
+  let kept = [];
+  const keep = () => Promise.resolve().then(() => need('lib/looks.js', () => globalThis.GZ_CATALOG)).then(() => chrome.storage.local.get(GZ_CATALOG.KEY)).then((r) => { kept = GZ_CATALOG.looks(r?.[GZ_CATALOG.KEY]); }, () => {});
+  let keeping = keep();
+  try { chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.lookCatalog) keeping = keep(); }); } catch { /* extension reloaded under the tab */ }
+  const wear = (id) => () => { try { chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'wear', id }).catch(() => {}); } catch { /* extension reloaded under the tab */ } };
   // A built-in Look comes with its own extras (parts) in place of the one before's, in the same write (lib/lookparts.js).
   const store = (patch, look) => () => { try { if (look) chrome.runtime.sendMessage({ type: 'glaze:look', parts: null, look: look.name, patch: { version: 2, ...patch } }).catch(() => {}); else chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
     const title = new Map(all.map((c) => [c.id, c.title]));
-    return all.filter((c) => c.links?.[0]?.href).map((c) => ({ label: c.title, hint: title.get(c.parentId) || '', group: 'In this course', run: go(c.links[0].href.replace(/^https?:\/\/[^/]+/, '')) }));
+    return all.flatMap((c) => { const url = globalThis.GZ_ULTRA?.contentLink(c, cid, location.origin); return url ? [{ label: c.title, hint: title.get(c.parentId) || '', group: 'In this course', run: go(url) }] : []; });
   });
   // The due items, "in 2 days · Thu 11:59 PM · ENG1001", each opening its item: on Canvas at its own address, on Ultra
   // at the address the content API gives it (as "In this course" does), or its course when it has none.
@@ -43,13 +51,14 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     const now = new Date();
     const lang = GZ_I18N.locale(locale());
     return due.filter((d) => d.due >= now).map((d) => ({ label: d.title, hint: [GZ_PAGE.describe(new Date(d.due), true, now, lang).rel, new Date(d.due).toLocaleString(lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' }), nickOf(d.cid) || d.course || ctx.courseList()[d.cid]?.name].filter(Boolean).join(' · '), group: 'Due this week',
-      run: d.url ? go(d.url) : () => (d.content ? courseItems(d.cid).p : Promise.resolve([])).then((all) => go(all.find((c) => c.id === d.content)?.links?.[0]?.href.replace(/^https?:\/\/[^/]+/, '') || `/ultra/courses/${d.cid}/outline`)()) }));
+      run: d.url ? go(d.url) : () => (d.content ? courseItems(d.cid).p : Promise.resolve([])).then((all) => go(globalThis.GZ_ULTRA?.contentLink(all.find((c) => c.id === d.content), d.cid, location.origin) || `/ultra/courses/${d.cid}/outline`)()) }));
   };
   // Glaze's own switches, the same on both sites but for the extras.
   const glazeCmds = () => {
     const s = ctx.settings();
     return [
       ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L), L) })),
+      ...kept.map((E) => ({ label: t('Look: {name}', { name: E.name }), hint: GZ_CATALOG.on(s, E) ? t('Current') : 'Glaze', group: 'Glaze', run: wear(E.id) })),
       ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }, false) })),
       ...[['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']].map(([m, n]) => ({ label: t('Auto light and dark: {mode}', { mode: t(n) }), hint: (s.auto.on ? s.auto.mode : 'off') === m ? t('Current') : 'Glaze', group: 'Glaze', run: store({ auto: { ...s.auto, on: m !== 'off', ...(m !== 'off' && { mode: m }) } }) })),
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
@@ -83,9 +92,16 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...(cid && ctx.settings().enhance.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: () => need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.open(), () => {}) }] : []),
     ];
   };
-  // Canvas and Ultra alike: the notes app (features/notes.js: the library, a new note, and this course's notes), Glaze's
-  // own commands, and every extra with its switch (features/widgets.js), whether or not the widgets are on.
+  // Glaze Writer's Documents (papers.html), on every site while Writer is on, for the student's own click or Enter on its row:
+  // as a page of the site, as the bar's item opens it (features/settingspage.js), else in a tab the worker opens.
+  const papersTab = () => { try { Promise.resolve(chrome.runtime.sendMessage('papers')).catch(() => {}); } catch { /* extension reloaded under the tab */ } };
+  const documents = () => (ctx.settings().enhance.writer === false ? [] : [{ label: t('Documents'), hint: 'Glaze', group: 'Glaze', run: (e) => {
+    if (e?.isTrusted) need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE.open('', 'papers')).then((opened) => { if (!opened) papersTab(); }, papersTab);
+  } }]);
+  // Canvas and Ultra alike: Documents, the notes app (features/notes.js: the library, a new note, and this course's notes),
+  // Glaze's own commands, and every extra with its switch (features/widgets.js), whether or not the widgets are on.
   const apps = (cid) => [
+    ...documents(),
     ...(ctx.settings().enhance.pet ? [{ label: t('Pet habitat'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => need('features/pet.js', () => globalThis.GZ_PET_UI)).then(() => GZ_PET_UI.open(), () => {}) }] : []),
     ...(ctx.settings().enhance.notes ? [
       { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: (e) => notes({ event: e }) },
@@ -103,7 +119,12 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches (glazeCmds), the pointer picture's
     // once lookx knows there is one.
     await need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => globalThis.GZ_LOOKX?.ready(), () => {});
-    if (moodle) { const [m, due] = await Promise.all([moodleIn(), dueWeek()]); return [...await m.commands(go), ...dueCmds(due), ...glazeCmds()]; }
+    await keeping;
+    if (moodle) {
+      // A failed Moodle loader or course list leaves Glaze's own commands available, as well as the cached due items.
+      const [rows, due] = await Promise.all([moodleIn().then((m) => m.commands(go)).catch(() => []), dueWeek()]);
+      return [...rows, ...dueCmds(due), ...documents(), ...glazeCmds()];
+    }
     if (!ultra) return canvasCommands();
     const cid = courseId();
     // A tab's name without its count badge ("Announcements 12").
@@ -216,6 +237,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   // Canvas and Ultra share content search; Moodle has no adapter.
   const searchHere = () => !moodle && ctx.settings().enhance.search;
   const openCmd = () => {
+    globalThis.GZ_PLACE?.stop();
     const box = document.createElement('div');
     box.id = 'gz-cmd';
     const panel = document.createElement('div');

@@ -53,9 +53,17 @@ test('host access: each LMS\'s own hosts, Glaze\'s gallery and share relay; any 
   for (const c of m.content_scripts) for (const p of c.matches) assert.ok(held(p), p);
 });
 
-test('Chrome adds only activeTab and declarativeContent to its permissions, without native messaging', () => {
+// Agent access's on switch asks for native messaging (the glaze-mcp helper); Google Calendar sync asks for identity.
+test('Chrome adds only activeTab and declarativeContent to its permissions; native messaging and identity are asked for when used', () => {
   assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage', 'activeTab', 'declarativeContent']); // notes are never cleared for space (owner, 2026-10-15)
-  assert.ok(!m.permissions.includes('nativeMessaging'));
+  assert.deepEqual(m.optional_permissions, ['identity', 'nativeMessaging']);
+});
+
+test('Safari requires native messaging already, so its manifest drops the optional duplicate and keeps any other optional permission', () => {
+  const s = safari(m);
+  assert.deepEqual(s.permissions.filter((p) => p === 'nativeMessaging'), ['nativeMessaging']);
+  assert.equal(s.optional_permissions, undefined);
+  assert.deepEqual(safari({ ...m, optional_permissions: [...m.optional_permissions, 'bookmarks'] }).optional_permissions, ['bookmarks']);
 });
 
 // content.js, content-ultra.js, options.js and lib/background.js all ask defaults.js GZ_BUILT_IN.
@@ -147,7 +155,8 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
     // A clean Chrome manifest also gains the permission on its first conversion.
     fs.writeFileSync(file, JSON.stringify(m));
     rewrite();
-    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).permissions, ['storage', 'scripting', 'unlimitedStorage', 'nativeMessaging']);
+    const clean = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual([clean.permissions, clean.optional_permissions], [['storage', 'scripting', 'unlimitedStorage', 'nativeMessaging'], undefined]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -157,15 +166,25 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
 // page (opaque origin, no extension APIs) under its own CSP, which lets no request, frame or inline script out, and eval in
 // that sandbox only. Its bootstrap, mods/boot.js, is the only other file it exposes. Both on dynamic URLs.
 const SANDBOX_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data: blob:; worker-src blob:; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
-test('Glaze\'s pages may compile WebAssembly for the OCR engine, nothing more; Settings (as a page beside the navigation) and its live preview, the reader, the Notes share panel, Download all\'s Allow frame and the mods host are the pages a site may frame, and load only Glaze\'s files', () => {
+test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages are frameable, with local scripts and Documents\' approved font hosts', () => {
   assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'", sandbox: SANDBOX_CSP });
-  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'sharing/quick.html', 'options.html', 'preview.html', 'features/allow.html', 'mods/host.html']);
+  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'writer.html', 'sharing/quick.html', 'options.html', 'papers.html', 'preview.html', 'features/allow.html', 'mods/host.html']);
+  // Documents is exposed as Settings is (including dynamic URLs if that group uses them). Its Look's fonts use only the
+  // catalogued font endpoints; scripts and styles remain local, with no broader network or form authority.
+  assert.deepEqual(m.web_accessible_resources.find((w) => w.resources.includes('papers.html')), m.web_accessible_resources.find((w) => w.resources.includes('options.html')));
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; connect-src 'self' https:\/\/fonts\.googleapis\.com https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // Download all's Allow frame: one button, Glaze's files only, no network from the page itself.
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'features/allow.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // The Notes share panel: Glaze's files only, no network from the page itself (the worker talks to the relay).
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'sharing/quick.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   const reader = fs.readFileSync(path.join(__dirname, '..', 'reader.html'), 'utf8');
   assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  // Glaze Writer's editor frame: Glaze's files only, no network from the page itself.
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'writer.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  // Documents uses Settings' GZ_FONTS loader: selected Google Fonts and jsDelivr files, fetched without credentials.
+  const papers = fs.readFileSync(path.join(__dirname, '..', 'papers.html'), 'utf8');
+  assert.match(papers, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self' https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; connect-src 'self' https:\/\/fonts.googleapis.com https:\/\/fonts.gstatic.com https:\/\/cdn.jsdelivr.net; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  assert.doesNotMatch(papers, /<style\b|<script(?![^>]*\bsrc=)/);
 });
 
 test('the mods host is the one sandbox page: no same-origin, no inline script, no requests, and only it and its bootstrap are exposed', () => {

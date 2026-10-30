@@ -92,3 +92,28 @@ test('Look overrides expose every supported background kind in the SDK', () => {
   for (const field of ['type', 'src', 'fit', 'dim', 'loop']) assert.match(media, new RegExp(`\\b${field}\\??:`), field);
   for (const value of [...XP.MEDIA.types, ...XP.MEDIA.fits]) assert.ok(media.includes(`'${value}'`), value);
 });
+
+test('mod.json tools: the type file has each source\'s fields and each kind of tool\'s keys, and the docs name them', () => {
+  const T = require('../lib/modtools.js');
+  assert.deepEqual(sorted(literals('GlazeTodoField')), sorted(Object.keys(T.FIELDS.todo)));
+  assert.deepEqual(Object.keys(T.FIELDS.schedule), Object.keys(T.FIELDS.todo));
+  assert.deepEqual(sorted(literals('GlazeCourseField')), sorted(Object.keys(T.FIELDS.courses)));
+  assert.deepEqual(sorted(literals('GlazeGradeField')), sorted(Object.keys(T.FIELDS.grades)));
+  // A tool interface's keys, with those of the one it extends.
+  const toolKeys = (name) => {
+    const m = dts.match(new RegExp(`^interface ${name}(?: extends (\\w+))? \\{\\n([\\s\\S]*?)^\\}`, 'm'));
+    assert.ok(m, `interface ${name}`);
+    return [...(m[1] ? toolKeys(m[1]) : []), ...[...m[2].matchAll(/^ {2}(\w+)\??:/gm)].map((x) => x[1])];
+  };
+  const DATA = ['GlazeTodoTool', 'GlazeCourseTool', 'GlazeGradeTool'];
+  for (const name of DATA) assert.deepEqual(sorted(toolKeys(name)), sorted(T.KEYS.data), name);
+  assert.deepEqual(sorted(toolKeys('GlazeCodeTool')), sorted(T.KEYS.code));
+  assert.deepEqual(sorted(new Set([...dts.match(/^type GlazeTool =([^;]*);/m)[1].matchAll(/Glaze\w+/g)].map((m) => m[0]))), sorted([...DATA, 'GlazeCodeTool']));
+  const froms = DATA.flatMap((name) => [...dts.match(new RegExp(`^interface ${name}[^{]*\\{[\\s\\S]*?^ {2}from: ([^;]*);`, 'm'))[1].matchAll(/'(\w+)'/g)].map((m) => m[1]));
+  assert.deepEqual(sorted(froms), sorted(T.SOURCES));
+  // The docs: the field, the permission, each source and every key a tool takes.
+  assert.ok(docs.includes('| `tools` |'), 'tools in the mod.json table');
+  assert.ok(docs.includes('| `agents` |'), 'agents in the permissions table');
+  assert.ok(docs.includes('### `tools`'));
+  for (const k of new Set([...T.SOURCES, ...T.KEYS.data, ...T.KEYS.code])) assert.ok(docs.includes(`\`${k}\``), k);
+});

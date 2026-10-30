@@ -97,7 +97,7 @@ const ok = (v, label) => { checks++; if (!v) { failures.push(label); console.err
     const page = await ctx.newPage(), errors = [];
     // The synthetic site page doesn't opt in to Canvas's page transition (content.js @view-transition): Chrome reports the
     // aborted transition there for a plain link too, so that one isn't the pop-up's.
-    page.on('pageerror', (e) => { if (!(/\/discussion_topics\/8$/.test(page.url()) && /ViewTransition opt-in disabled/.test(String(e)))) errors.push(String(e)); });
+    page.on('pageerror', (e) => { if (!(/\/discussion_topics\/8$/.test(page.url()) && (/ViewTransition opt-in disabled/.test(String(e)) || String(e) === 'AbortError: Transition was skipped'))) errors.push(`${page.url()}: ${String(e)}`); });
     // Settings change with the page away, as a student would set them: no crossfade of a page being left.
     const store = async (s) => { await page.goto('about:blank'); await opts.evaluate(async ([s, l]) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.clear(); await chrome.storage.local.set(l); }, [s, { widgetLayout: LAYOUT, freshDefaults: { fresh: false } }]); };
     const link = (id = '7') => page.locator(`#gz-todo a[data-ann="announcement:${id}"]`);
@@ -159,8 +159,8 @@ const ok = (v, label) => { checks++; if (!v) { failures.push(label); console.err
     for (const animation of genie) {
       const resolved = await cdp.send('Animation.resolveAnimation', { animationId: animation.id });
       const data = await cdp.send('Runtime.callFunctionOn', { objectId: resolved.remoteObject.objectId,
-        functionDeclaration: 'function() { return { tag: this.effect.target.tagName, frame: this.effect.getKeyframes()[0] }; }', returnByValue: true });
-      if (data.result.value?.tag === 'DIALOG') firstFrame = data.result.value.frame;
+        functionDeclaration: 'function() { return { tag: this.effect.target.tagName, cls: this.effect.target.className, frame: this.effect.getKeyframes()[0] }; }', returnByValue: true });
+      if (data.result.value?.cls === 'genie-sheet' || data.result.value?.tag === 'DIALOG' && data.result.value.frame.clipPath) firstFrame = data.result.value.frame;
     }
     const firstClip = firstFrame?.clipPath?.match(/polygon\(([-\d.]+)% [^,]+, ([-\d.]+)%/);
     const dialogWidth = (await box('DIALOG'))?.width;

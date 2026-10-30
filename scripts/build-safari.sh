@@ -71,6 +71,7 @@ python3 scripts/safari-build-ids.py app "$app"
 # Check package integration and URL registration before final re-signing and packaging.
 test -d "$app/Contents/Frameworks/Sparkle.framework" || { echo "build-safari: Sparkle framework is missing" >&2; exit 1; }
 /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$app/Contents/Info.plist" | grep -qx 'io.frostdev.glaze-update'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:1:CFBundleURLSchemes:0' "$app/Contents/Info.plist" | grep -qx 'io.frostdev.glaze-agent'
 /usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$app/Contents/Info.plist" | grep -qxF "$SAFARI_UPDATE_PUBLIC_KEY" || { echo "build-safari: the app doesn't carry the Sparkle public key" >&2; exit 1; }
 
 extension="$app/Contents/PlugIns/Glaze Extension.appex"
@@ -85,7 +86,15 @@ for bundle in "$sparkle/XPCServices/Downloader.xpc" "$sparkle/XPCServices/Instal
     plist="$bundle/Contents/Info.plist"
     [ -f "$plist" ] || plist="$bundle/Resources/Info.plist"
     id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")
-    codesign --force --sign "$identity" --timestamp --options runtime --identifier "$id" --preserve-metadata=entitlements,flags \
+    # The extension and app get the entitlements Xcode signed them with, their app group back to Glaze's own.
+    case "$bundle" in
+      "$extension" | "$app")
+        codesign -d --entitlements - --xml "$bundle" > "$stage/built.entitlements" 2>/dev/null
+        python3 scripts/safari-build-ids.py entitlements "$stage/built.entitlements" "$stage/release.entitlements"
+        set -- --entitlements "$stage/release.entitlements" --preserve-metadata=flags ;;
+      *) set -- --preserve-metadata=entitlements,flags ;;
+    esac
+    codesign --force --sign "$identity" --timestamp --options runtime --identifier "$id" "$@" \
       --requirements "=designated => anchor apple generic and identifier \"$id\" and (certificate leaf[field.1.2.840.113635.100.6.1.9] /* exists */ or certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = \"$team\")" \
       "$bundle"
   else
@@ -102,10 +111,10 @@ find "$app" -type f | while IFS= read -r file; do
   fi
 done
 
-# Keep a debug entitlement from slipping into a release.
+# Keep a debug entitlement out of a release, and Glaze's app group in.
 for bundle in "$extension" "$app"; do
   codesign -d --entitlements - --xml "$bundle" > "$stage/entitlements.plist" 2>/dev/null
-  python3 - "$stage/entitlements.plist" "$bundle" <<'PY'
+  python3 - "$stage/entitlements.plist" "$bundle" "$team" <<'PY'
 import plistlib, sys
 with open(sys.argv[1], 'rb') as f:
     entitlements = plistlib.load(f)
@@ -113,6 +122,8 @@ if entitlements.get('com.apple.security.get-task-allow'):
     sys.exit('build-safari: debug entitlement found in release')
 if sys.argv[2].endswith('.appex') and not entitlements.get('com.apple.security.app-sandbox'):
     sys.exit('build-safari: the Safari extension must be sandboxed')
+if entitlements.get('com.apple.security.application-groups') != [sys.argv[3] + '.io.frostdev.Glaze']:
+    sys.exit("build-safari: the app and its extension must share Glaze's app group")
 PY
 done
 

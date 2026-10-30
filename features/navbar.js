@@ -732,8 +732,18 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       X.need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE?.open(what === 'customize' ? 'navigation/bar' : '')).then((opened) => { if (!opened) tab(); }, tab);
       return;
     }
-    if (what === 'search') { X.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); return; }
+    // Over a course tab's frame, the palette is that frame's (features/coursetabs.js).
+    if (what === 'search') { if (!globalThis.GZ_CTABS?.palette?.(true)) X.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); return; }
     if (what === 'notes') { X.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ event: e }), () => {}); return; }
+    // Writer's Documents (papers.html), for the student's own click: as a page of the site like Settings, else (the editor's
+    // preview, a page Glaze can't open it in) a tab of its own, which the worker opens.
+    if (what === 'documents') {
+      if (!e?.isTrusted) return;
+      const tab = () => send('papers');
+      if (isPreview) { tab(); return; }
+      X.need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE?.open('', 'papers')).then((opened) => { if (!opened) tab(); }, tab);
+      return;
+    }
     // To Do lives on the site's home (the Glaze Dashboard on Ultra, the Canvas dashboard): go there.
     if (what === 'todo') goNative(site.home());
   };
@@ -783,8 +793,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       return;
     }
     const target = path.find((n) => n.dataset && (n.dataset.id !== undefined || n.dataset.act));
-    // Somewhere else picked in the bar leaves Glaze's settings page, as leaving any page.
-    if (target && e.type === 'click' && target.dataset.id !== 'glaze:settings' && !['customize', 'panel-close', 'panel-retry', 'tab-pin', 'tab-close', 'widgets'].includes(target.dataset.act)) globalThis.GZ_SETTINGS_PAGE?.close();
+    // Somewhere else picked in the bar leaves Glaze's page (Settings, Documents), as leaving any page; the other of the two
+    // takes its place.
+    if (target && e.type === 'click' && !['glaze:settings', 'glaze:documents'].includes(target.dataset.id) && !['customize', 'panel-close', 'panel-retry', 'tab-pin', 'tab-close', 'widgets'].includes(target.dataset.act)) globalThis.GZ_SETTINGS_PAGE?.close();
     if (e.type === 'auxclick' && target?.dataset.act !== 'tab') return;
     if (!target) {
       if (path.includes(el.toggle)) { e.preventDefault(); pinTo(!(lay.open || peek)); }
@@ -918,8 +929,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     rows = lay.tabs && api ? api.rows() : [];
     // A course tab shown over the page is in Courses, whatever the page under it is.
     const framed = !!globalThis.GZ_CTABS?.showing?.() && globalThis.GZ_CTABS.showing() !== 'page'; // (not Canvas's page frame: the page in it says)
-    // Glaze's settings open as the page: nothing else is where you are.
-    const glazePage = !!globalThis.GZ_SETTINGS_PAGE?.isOpen();
+    // Glaze's settings or Documents open as the page: nothing else is where you are.
+    const glazePage = globalThis.GZ_SETTINGS_PAGE?.showing?.() || '';
     const native = site.read().map((n) => (glazePage ? { ...n, active: false } : framed ? { ...n, active: n.id === 'course' } : n));
     const look = X.parts()?.nav ? L.clean(X.parts().nav) : null;
     // What the site has no shared name for (link:<id>, see the adapter contract) the model takes as links of the student's own,
@@ -927,12 +938,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const sited = native.filter((n) => /^link:[a-z0-9]{12}$/.test(n.id));
     model = M.build({ native: sited.length ? native.filter((n) => !sited.includes(n)) : native, look, legacy, mods: [...mods.values()].flatMap((m) => [...m.values()]),
       prefs: sited.length ? { ...prefs, links: [...prefs.links.filter((l) => !sited.some((n) => n.id === 'link:' + l.id)), ...sited.map((n) => ({ id: n.id.slice(5), n: n.label, u: n.href, i: n.icon || 'link' }))] } : prefs,
-      names: { notes: t('Notes'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') }, origin: location.origin });
+      names: { notes: t('Notes'), documents: t('Documents'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') }, origin: location.origin });
     for (const n of sited) {
       const i = model.items.find((x) => x.id === n.id);
       if (i) Object.assign(i, { active: !!n.active, ...(n.panel && { panel: true }), ...(typeof n.checked === 'boolean' && { switch: true, checked: n.checked, disabled: !!n.disabled }) });
     }
-    if (glazePage) for (const i of model.items) if (i.id === 'glaze:settings') i.active = true;
+    if (glazePage) for (const i of model.items) if (i.id === (glazePage === 'papers' ? 'glaze:documents' : 'glaze:settings')) i.active = true;
     // Glaze's widgets load with the first one turned on; mods' navigation widgets go in the dock, once each.
     const wants = model.widgets.map((w) => w.id);
     if (wants.length && !wx) {
@@ -1035,7 +1046,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
 // items last read on this site (storage.local navbarSeen:<origin>, this device only) stand in, else Ultra's usual ones,
 // and open as plain links.
 function GZ_NAVBAR_ULTRA(X) {
-  const ROOT = '[data-gz-nav-root], nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]';
+  const ROOT = '[data-gz-nav-root], nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]';
   const SEEN = `navbarSeen:${location.origin}`;
   const USUAL = [['institution-page', 'Institution page'], ['stream', 'Activity'], ['course', 'Courses'], ['organization', 'Organizations'], ['calendar', 'Calendar'], ['messages', 'Messages'], ['grades', 'Grades'], ['tools', 'Tools'], ['profile', 'Profile']];
   let mo = null, swap = null, watched = null, notify = null, seen = null, saved = '';

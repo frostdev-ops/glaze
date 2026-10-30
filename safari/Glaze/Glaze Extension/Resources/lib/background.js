@@ -1,4 +1,4 @@
-importScripts('download.js', 'color.js', 'fonts.js', 'surfaces.js', '../defaults.js', 'lookset.js', 'history.js', 'cards.js', 'nav.js', 'nav-items.js', 'navlayout.js', 'motionx.js', 'parts.js', 'nav-store.js', 'todo.js', 'petbrain.js', 'pet.js', 'petsprites.js', 'remind.js', 'widgets.js', 'sidebar.js', 'lookparts.js', 'share.js', 'lookx.js', 'gradescope.js', 'doctext.js', 'folders.js', 'notes.js', 'calexport.js', 'gcal.js', 'gcal-auth.js', 'site.js', 'coursetabs.js');
+importScripts('download.js', 'color.js', 'fonts.js', 'surfaces.js', '../defaults.js', 'lookset.js', 'history.js', 'cards.js', 'nav.js', 'nav-items.js', 'navlayout.js', 'motionx.js', 'parts.js', 'nav-store.js', 'todo.js', 'petbrain.js', 'pet.js', 'petsprites.js', 'remind.js', 'widgets.js', 'sidebar.js', 'lookparts.js', 'share.js', 'lookx.js', 'looks.js', 'gradescope.js', 'doctext.js', 'folders.js', 'notes.js', 'calexport.js', 'gcal.js', 'gcal-auth.js', 'site.js', 'coursetabs.js');
 
 // Cache packaged broker scripts at install; parse them on first use rather than every worker wake.
 const BROKER_FILES = {
@@ -115,16 +115,20 @@ const gradescopeFor = async (gid, s) => {
   const to = GZ_GRADESCOPE.clean(gradescope).map[gid]?.to;
   return (site && to?.startsWith(`canvas:${site}/`)) || (ultra && to?.startsWith(`ultra:${ultra}/`)) ? to : null;
 };
-// Frames the worker trusts, by what for. Course tabs and the Settings page of an LMS tab are frames, so a plain "top frame"
+// Frames the worker trusts, by what for. Course tabs and Glaze's pages in an LMS tab are frames, so a plain "top frame"
 // check refuses them:
 // - 'settings': Settings in a tab of its own (the top frame), or the Settings frame of an LMS tab that claimed its one-use
 //   ticket (glaze:settings-claim). Only the writes that hold no keys or grants ask: Sharing, Mods and Backup are gated in that
 //   frame, and the worker keeps them to the editor's own tab.
+// - 'papers': Documents (papers.html) in a tab of its own, or the Documents frame of an LMS tab whose document claimed its
+//   one-use pass (glaze:papers). A document opened there loads in that frame as its next document, with a pass of its own.
 // - 'download': a course page's top frame, or a course tab's frame of a page on its own site (lib/download.js).
 // A claimed frame is remembered by its tab, frame and document in session storage as well (this worker sleeps while Settings
 // stays open), until the tab closes. Without a document id (some browsers), the frame in that tab is what is known.
-const settingsFrames = new Map(); // tab id -> { frameId, documentId? }
-const settingsFrameKey = (tab) => `settingsFrame:${tab}`;
+const FRAMED = { settings: new Map(), papers: new Map() }; // what for -> tab id -> { frameId, documentId? }
+const FRAMED_PAGE = { settings: 'options.html', papers: 'papers.html' };
+const frameKey = (what, tab) => `${what}Frame:${tab}`;
+const settingsFrameKey = (tab) => frameKey('settings', tab);
 const closedSettingsTabs = new Set(); // only needed while the initial session read is outstanding
 let settingsRestoreDone = !chrome.storage?.session;
 const settingsFramesLoaded = settingsRestoreDone ? Promise.resolve() : new Promise((resolve) => {
@@ -132,34 +136,38 @@ const settingsFramesLoaded = settingsRestoreDone ? Promise.resolve() : new Promi
   const timer = setTimeout(finish, 1500); // an unavailable session store cannot stall Settings indefinitely
   Promise.resolve().then(() => chrome.storage.session?.get(null)).then((all) => {
     if (settingsRestoreDone) return;
-    for (const [k, f] of Object.entries(all || {})) if (/^settingsFrame:\d+$/.test(k) && !closedSettingsTabs.has(+k.slice(14))
-      && !settingsFrames.has(+k.slice(14)) && Number.isInteger(f?.frameId) && f.frameId > 0
-      && (f.documentId === undefined || typeof f.documentId === 'string')) settingsFrames.set(+k.slice(14), f);
+    for (const [k, f] of Object.entries(all || {})) {
+      const [, what, tab] = /^(settings|papers)Frame:(\d+)$/.exec(k) || [];
+      if (what && !closedSettingsTabs.has(+tab) && !FRAMED[what].has(+tab) && Number.isInteger(f?.frameId) && f.frameId > 0
+        && (f.documentId === undefined || typeof f.documentId === 'string')) FRAMED[what].set(+tab, f);
+    }
     finish();
   }, finish);
 });
-const claimSettingsFrame = async (s) => {
+const claimFrame = async (s, what = 'settings') => {
   if (!Number.isInteger(s.frameId) || s.frameId <= 0 || !Number.isInteger(s.tab?.id)
     || (s.origin !== undefined && !ownOrigin(s.origin))) throw Error('sender');
+  const frames = FRAMED[what], key = frameKey(what, s.tab.id);
   const f = { frameId: s.frameId, ...(s.documentId && { documentId: s.documentId }), pending: true };
-  settingsFrames.set(s.tab.id, f);
+  frames.set(s.tab.id, f);
   try {
     const { pending, ...saved } = f;
-    await chrome.storage.session?.set({ [settingsFrameKey(s.tab.id)]: saved });
-    if (settingsFrames.get(s.tab.id) !== f) {
-      if (!settingsFrames.has(s.tab.id)) await chrome.storage.session?.remove(settingsFrameKey(s.tab.id));
+    await chrome.storage.session?.set({ [key]: saved });
+    if (frames.get(s.tab.id) !== f) {
+      if (!frames.has(s.tab.id)) await chrome.storage.session?.remove(key);
       throw Error('closed');
     }
     delete f.pending;
-  } catch (e) { if (settingsFrames.get(s.tab.id) === f) settingsFrames.delete(s.tab.id); throw e; }
+  } catch (e) { if (frames.get(s.tab.id) === f) frames.delete(s.tab.id); throw e; }
 };
 const trustedFrame = (s, purpose) => {
   if (purpose === 'download') return GZ_DOWNLOAD.sender(s, chrome.runtime.id);
-  if (purpose !== 'settings') return false;
+  if (!Object.hasOwn(FRAMED, purpose)) return false;
   if (s.frameId === 0) return true;
-  if (!Number.isInteger(s.frameId) || !Number.isInteger(s.tab?.id) || !fromEditor(s)) return false;
+  if (!Number.isInteger(s.frameId) || !Number.isInteger(s.tab?.id) || s.id !== chrome.runtime.id || typeof s.url !== 'string'
+    || s.url.split(/[?#]/)[0] !== chrome.runtime.getURL(FRAMED_PAGE[purpose])) return false;
   if (s.origin !== undefined && !ownOrigin(s.origin)) return false; // when the browser says, it must be ours
-  const f = settingsFrames.get(s.tab.id);
+  const f = FRAMED[purpose].get(s.tab.id);
   return !!f && !f.pending && f.frameId === s.frameId && f.documentId === s.documentId;
 };
 const BROKER = {
@@ -199,6 +207,45 @@ const BROKER = {
         return r.ok ? { ok: true } : r;
       }
       return { ok: await GZ_XPARTS.write(area, parts, patch) };
+    },
+  },
+  // A kept Look (lib/looks.js) put on by its id from the popup or the command palette, as the editor's "Use this theme" puts on
+  // its code: palette, look, background, navigation, the bar's and the sidebar's looks, card look and styles, and its parts,
+  // through the same write as the editor's (look, above). One gone, or one Glaze won't wear (GZ_XPARTS.outside), isn't.
+  // 'build': Settings, having changed the kept Looks, wakes the worker to bring the catalogue up to date (catalogue, below), where
+  // a browser wouldn't wake it for the storage change alone. 'parts': a course page wearing a Look of its own (courses.looks)
+  // asks for that Look's parts, as storage's lookX gives the theme's: a built-in's own, a kept one's from its code.
+  looks: {
+    allow: async (m, s) => (m.op === 'build' && fromGlaze(s))
+      || (['keep', 'remove'].includes(m.op) && fromEditor(s) && trustedFrame(s, 'settings') && (s.origin === undefined || ownOrigin(s.origin))
+        && (m.op === 'keep' ? !!GZ_CATALOG.kept(m.favorite) && m.favorite.code.length <= 20000 : GZ_CATALOG.ID.test(m.id)))
+      || (['wear', 'parts'].includes(m.op) && typeof m.id === 'string'
+        && (GZ_CATALOG.ID.test(m.id) || (m.op === 'parts' && GZ_LOOKS.some((L) => L.name === m.id))) && (fromGlaze(s) || !!await lmsPage(s))),
+    run: async (m, area) => {
+      if (m.op === 'build') return catalogue().then(() => ({ ok: true }));
+      const L = m.op === 'parts' && GZ_LOOKS.find((l) => l.name === m.id);
+      if (L) return { ok: true, parts: GZ_LOOK_PARTS(L) };
+      if (m.op === 'keep' || m.op === 'remove') {
+        const { lookFavorites, rotateLooks } = await area.local.get(['lookFavorites', 'rotateLooks']);
+        const favorites = GZ_HISTORY.favorites(lookFavorites);
+        if (m.op === 'keep') await area.local.set({ lookFavorites: GZ_HISTORY.favor(favorites, GZ_CATALOG.kept(m.favorite)) });
+        else {
+          const f = GZ_CATALOG.keptAll(favorites).find((e) => e.id === m.id);
+          if (!f) return { ok: false, error: 'gone' };
+          const s = GZ_SANITIZE(await area.sync.get('courses'));
+          if (GZ_CATALOG.unmap(s.courses, m.id) && !await area.sync.set({ version: 2, courses: s.courses })) return { ok: false, error: 'write' };
+          await area.local.set({ lookFavorites: favorites.filter((e) => e.code !== f.code), rotateLooks: GZ_CATALOG.ids(rotateLooks, favorites).filter((id) => id !== m.id) });
+        }
+        await catalogue();
+        return { ok: true };
+      }
+      const e = GZ_CATALOG.keptAll((await area.local.get('lookFavorites')).lookFavorites).find((f) => f.id === m.id);
+      const got = e && await GZ_SHARE.decode(e.code).then((g) => (GZ_XPARTS.outside(g.parts).length ? null : g), () => null);
+      if (!got) return { ok: false, error: 'gone' };
+      if (m.op === 'parts') return { ok: true, parts: got.parts };
+      const raw = await area.sync.get(null), s = GZ_SANITIZE(raw);
+      if (got.cards.length && !(await GZ_CARDS.change({ set: got.cards }, area))?.ok) return { ok: false };
+      return BROKER.look.run({ parts: got.parts, patch: { version: 2, ...GZ_LX.wearCode(s, got), card: GZ_CARDS.settings({ ...GZ_CARDS.settings(raw.card), ...got.card }) } }, area);
     },
   },
   courseName: {
@@ -382,7 +429,9 @@ const BROKER = {
     run: async (m, { sync, local }) => {
       const s = GZ_SANITIZE(await sync.get(null));
       const { rotateState, rotateLooks, lookFavorites } = await local.get(['rotateState', 'rotateLooks', 'lookFavorites']);
-      const list = GZ_LX.rotation(rotateLooks, GZ_LOOKS.map((L) => L.name), GZ_HISTORY.favorites(lookFavorites).map((f) => f.code));
+      // Ticked by id (lib/looks.js); a tick from before ids, by its code, is its kept Look's.
+      const kept = GZ_CATALOG.keptAll(lookFavorites);
+      const list = GZ_LX.rotation(GZ_CATALOG.ids(rotateLooks, lookFavorites), GZ_LOOKS.map((L) => L.name), kept.map((f) => f.id));
       const r = GZ_LX.turn(rotateState, Date.now(), s.extras, list, m.now === true);
       if (r.wear >= 0) {
         const L = GZ_LOOKS.find((l) => l.name === list[r.wear]);
@@ -390,7 +439,7 @@ const BROKER = {
         // A favorite that no longer decodes is passed over: its turn goes by unworn.
         // Favorites are saved only from the outside-code offer. Recheck old entries that predate its safety limits;
         // the student's own worn Look and history are separate and keep their full editing freedom.
-        const got = L ? null : await GZ_SHARE.decode(list[r.wear]).then((g) => GZ_XPARTS.outside(g.parts).length ? null : g).catch(() => null);
+        const got = L ? null : await GZ_SHARE.decode(kept.find((f) => f.id === list[r.wear])?.code).then((g) => GZ_XPARTS.outside(g.parts).length ? null : g).catch(() => null);
         const patch = L ? GZ_LOOK_APPLY(s, L) : got && GZ_LX.wearCode(s, got);
         // Decoding takes a moment, and the editor and popup write outside this queue: if rotation was turned off or
         // changed, or the student changed the theme meanwhile, this turn is dropped rather than worn over their choice.
@@ -691,9 +740,9 @@ BROKER.backup = (() => {
 })();
 // Mods (lib/modbundle.js): only the editor's own top frame installs, lists or changes them, and every bundle is read
 // and checked again here, whatever the editor showed. Nothing here runs a mod's code.
-BROKER_FILES.mods = ['zip.js', 'modapi.js', 'modwidget.js', 'modbundle.js', 'blocklist.js']; // a bundle's widget blocks are checked with modwidget.js
+BROKER_FILES.mods = ['zip.js', 'modapi.js', 'modwidget.js', 'ai/schema.js', 'modtools.js', 'modbundle.js', 'blocklist.js']; // a bundle's widget blocks are checked with modwidget.js, its tools with modtools.js
 BROKER_FILES.modwidget = ['gradecalc.js']; // a widget's GPA
-globalThis.addEventListener?.('install', () => importScripts('zip.js', 'modapi.js', 'modwidget.js', 'modbundle.js'));
+globalThis.addEventListener?.('install', () => importScripts('zip.js', 'modapi.js', 'modwidget.js', 'ai/schema.js', 'modtools.js', 'modbundle.js'));
 BROKER.mods = {
   allow: (m, s) => fromEditor(s) && s.frameId === 0 && ownOrigin(s.origin) && GZ_MODBUNDLE.OPS.includes(m.op),
   run: (m, area) => GZ_MODBUNDLE.change(m, area),
@@ -712,6 +761,44 @@ BROKER.media = {
     return GZ_MEDIA.change(m, store, { decode: GZ_SHARE.decode });
   },
 };
+// Background reads also belong to live same-site course frames. This grants no editor writes or mod authority.
+const backgroundPage = async (s) => {
+  if (!Number.isInteger(s.frameId) || s.frameId < 0) return null;
+  const site = await fromLms({ ...s, url: addressOf(s), frameId: 0 });
+  return site && (s.frameId === 0 || s.tab?.url?.startsWith(`${site}/`)) ? site : null;
+};
+// Resolve only this document's Look, never the files assigned to other courses or tabs. Sender URLs can predate SPA
+// navigation (or still be about:blank); Moodle keeps its course and installation path in two small DOM fields. Pin the
+// current-page read to the sending document where supported, and fail closed if it has gone. No page-supplied id grants a file.
+const backgroundParts = async (s, area) => {
+  const courses = GZ_SANITIZE(await area.sync.get('courses')).courses.looks;
+  const theme = async () => GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local);
+  if (!Object.keys(courses).length) return theme();
+  let u = new URL(addressOf(s)), key;
+  const [current] = await chrome.scripting.executeScript({ target: { tabId: s.tab.id,
+    ...(s.documentId ? { documentIds: [s.documentId] } : { frameIds: [s.frameId] }) }, func: () => ({
+    href: location.href,
+    moodle: document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1],
+    styles: document.querySelector('link[href*="/theme/styles"]')?.href,
+  }) });
+  const at = new URL(current.result.href);
+  if (at.origin !== u.origin || !await fromLms({ ...s, frameId: 0, url: at.href })) throw Error('sender');
+  u = at;
+  if (await approved('moodle', u) && current.result.moodle && current.result.styles) {
+    const base = new URL(current.result.styles.split('/theme/')[0]);
+    if (base.origin === u.origin) key = `moodle:${base.href.replace(/\/$/, '')}/${current.result.moodle}`;
+  }
+  const ultra = /^\/ultra\/courses\/(_\d+_\d+)\//.exec(u.pathname)?.[1];
+  const canvas = /^\/courses\/(\d+)(?:\/|$)/.exec(u.pathname)?.[1];
+  key ||= ultra || (canvas && `canvas:${u.origin}/${canvas}`);
+  const id = courses[key];
+  const builtin = GZ_LOOKS.find((l) => l.name === id);
+  if (builtin) return GZ_LOOK_PARTS(builtin);
+  const kept = id && GZ_CATALOG.keptAll((await area.local.get('lookFavorites')).lookFavorites).find((f) => f.id === id);
+  const got = kept && await GZ_SHARE.decode(kept.code).catch(() => null);
+  if (got && !GZ_XPARTS.outside(got.parts).length) return got.parts;
+  return theme();
+};
 // A kept file for a page's background (lib/scene-media.js): as it was kept (checked and named when it was put), for the file
 // the worn Look names only; the editor and its preview frame may have any. Read outside the broker's queue: only a file an
 // older Glaze kept in storage.local, moving over, takes a turn.
@@ -720,9 +807,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   (async () => {
     if (!globalThis.GZ_MEDIA) importScripts('media.js');
     const area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
-    if (!fromPreview(s) && (!await fromLms(s) || GZ_MEDIA.fileOf((await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local))?.x?.bg?.media?.src) !== m.h)) {
-      return { ok: false, error: 'sender' };
-    }
+    if (!fromPreview(s) && (!await backgroundPage(s) || GZ_MEDIA.fileOf((await backgroundParts(s, area))?.x?.bg?.media?.src) !== m.h)) return { ok: false, error: 'sender' };
     return GZ_MEDIA.change({ op: 'file', h: m.h }, area, { queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f) });
   })().then(reply, () => reply({ ok: false, error: 'failed' }));
   return true;
@@ -756,11 +841,11 @@ const mediaDownloads = new Map(); // shared only while loading; never a cache of
 const mediaFetch = async (s, op, type) => {
   if (!globalThis.GZ_MEDIA) importScripts('media.js');
   const free = fromPreview(s);
-  const site = free ? null : await fromLms(s);
+  const site = free ? null : await backgroundPage(s);
   if (!free && !site) return { ok: false, error: 'sender' };
   const area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
   const allow = async (src) => {
-    const worn = free ? null : (await GZ_XPARTS.fromStored((await area.sync.get('lookX')).lookX, area.local))?.x?.bg?.media;
+    const worn = free ? null : (await backgroundParts(s, area))?.x?.bg?.media;
     if (free || (worn?.src === src && worn.type === type)) return true;
     if (!globalThis.GZ_MODBROKER) importScripts('modapi.js', 'modwidget.js', 'modbroker.js');
     const answer = await GZ_MODBROKER.page({ op: 'parts' }, { site, local: area.local,
@@ -960,7 +1045,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     const t = typeof m.ticket === 'string' && settingsTickets.get(m.ticket);
     if (!t || !fromEditor(s) || s.frameId === 0 || s.tab?.id !== t.tab) return { ok: false };
     settingsTickets.delete(m.ticket);
-    await claimSettingsFrame(s); // this frame, as this document, may now save what trustedFrame(…, 'settings') lets Settings save
+    await claimFrame(s); // this frame, as this document, may now save what trustedFrame(…, 'settings') lets Settings save
     return { ok: true };
   })().then(reply, () => reply({ ok: false }));
   return true;
@@ -1041,8 +1126,8 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 chrome.tabs?.onRemoved?.addListener((id) => {
-  chrome.storage.session?.remove([`landed:${id}`, settingsFrameKey(id)]).catch(() => {});
-  settingsFrames.delete(id);
+  chrome.storage.session?.remove([`landed:${id}`, ...Object.keys(FRAMED).map((what) => frameKey(what, id))]).catch(() => {});
+  for (const frames of Object.values(FRAMED)) frames.delete(id);
   if (!settingsRestoreDone) closedSettingsTabs.add(id);
   for (const [k, t] of quickTickets) if (t.tab === id) quickTickets.delete(k); // a closed tab's Notes share panel tickets
   for (const p of quickPanels) if (p.tab === id) p.revoke();
@@ -1075,6 +1160,8 @@ const openEditor = () => {
   try { Promise.resolve(chrome.runtime.openOptionsPage()).catch(tab); } catch { tab(); }
 };
 chrome.runtime.onMessage.addListener((m, s) => { if (m === 'options') Promise.resolve(fromGlaze(s) || lmsPage(s)).then((ok) => { if (ok) openEditor(); }, () => {}); });
+// Writer's Documents (papers.html), from the palette or Glaze's bar: the same senders.
+chrome.runtime.onMessage.addListener((m, s) => { if (m === 'papers') Promise.resolve(fromGlaze(s) || lmsPage(s)).then((ok) => { if (ok) return chrome.tabs.create({ url: chrome.runtime.getURL('papers.html') }); }).catch(() => {}); });
 
 // The manifest's content script entries, each file by its path in the package: Firefox's getManifest gives each one as its
 // full address. entryWith: the entry that runs `file`.
@@ -1198,7 +1285,19 @@ chrome.runtime.onMessage.addListener((m, { url }) => {
 // they nor the worn Look name can go.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && (changes.lookHistory || changes.lookFavorites) && !before) sweepMedia();
+  if (area === 'local' && changes.lookFavorites) catalogue();
 });
+// The Looks catalogue (lib/looks.js): the kept Looks' codes decoded here, once, into storage.local lookCatalog for every page
+// to read. Again whenever they change, and on install and start-up for a change made while the worker was away; one Glaze
+// won't wear (GZ_XPARTS.outside) is left out, as rotation passes it over. One build at a time, each from what is stored then.
+let catalogTurn = Promise.resolve();
+const catalogue = () => (catalogTurn = catalogTurn.then(async () => {
+  const local = chrome.storage.local, { lookFavorites, [GZ_CATALOG.KEY]: was } = await local.get(['lookFavorites', GZ_CATALOG.KEY]);
+  if (!was && !GZ_HISTORY.favorites(lookFavorites).length) return;
+  if (was?.sig === GZ_CATALOG.sig(lookFavorites ?? null)) return;
+  const cat = await GZ_CATALOG.build(lookFavorites, (code) => GZ_SHARE.decode(code).then((g) => (GZ_XPARTS.outside(g.parts).length ? null : g)), was);
+  await local.set({ [GZ_CATALOG.KEY]: cat });
+}).catch(console.warn));
 
 // Canvas on a school's own domain (canvas.school.edu) can't be matched by address, nor can Moodle off MoodleCloud. Once the student
 // approved such a site (approved, above), Glaze goes onto its host for good, so its pages are themed from the first paint as
@@ -1441,8 +1540,20 @@ const tabsAuto = async (update) => {
   if (!tabsAutoMigrated) await chrome.storage.sync.set({ tabsAutoMigrated: true, ...(update && tabs?.at === 'above' ? { tabs: { ...tabs, at: 'auto' } } : {}) });
   await chrome.storage.local.set({ migrated: [...(Array.isArray(migrated) ? migrated : []), 'tabs-auto'] });
 };
+// Expressive is the new default. The editor saved whole groups, so migrate the old Subtle value once, while preserving
+// Off (including 1.0's three disabled switches). The synced marker protects later choices on this device and other ones.
+const motionExpressive = async () => {
+  const { motion, motionExpressiveMigrated } = await chrome.storage.sync.get(['motion', 'motionExpressiveMigrated']);
+  if (motionExpressiveMigrated === true) return;
+  const kept = motion && typeof motion === 'object' && !Array.isArray(motion) ? motion : null;
+  const off = kept && (kept.level === 'off' || kept.level == null && ['enter', 'hover', 'transitions'].every((k) => kept[k] === false));
+  const level = off ? 'off' : GZ_DEFAULTS.motion.level;
+  // With no stored group, the schema supplies Expressive; leave late synced Off preferences free to arrive.
+  await chrome.storage.sync.set({ motionExpressiveMigrated: true, ...(kept && kept.level !== level ? { motion: { ...kept, level } } : {}) });
+};
 chrome.runtime.onInstalled.addListener((d) => {
   if (['install', 'update'].includes(d?.reason)) tabsAuto(d.reason === 'update').catch(() => {});
+  if (['install', 'update'].includes(d?.reason)) motionExpressive().catch(() => {});
   // Mark fresh installs too: a later update must not mistake their untouched starter layout for a pre-change device.
   const seeded = ['install', 'update'].includes(d?.reason)
     ? (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(d.reason === 'install')).catch(() => {}) : Promise.resolve();
@@ -1452,8 +1563,9 @@ chrome.runtime.onInstalled.addListener((d) => {
   if (d?.reason === 'update') { serial(perSite); pointerToLook(); }
   if (['install', 'update'].includes(d?.reason)) lightUp().catch(console.warn);
   if (d?.reason === 'install') firstRun();
+  catalogue();
 });
-chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(false, true)).catch(() => {}); serial(ensure); moveChannelKeys().catch(() => {}); sweepMedia(); pointerToLook(); });
+chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(false, true)).catch(() => {}); serial(ensure); moveChannelKeys().catch(() => {}); sweepMedia(); pointerToLook(); catalogue(); });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && Object.keys(changes).some((k) => k.startsWith('starterOff:')))
     (brokerTurn ||= GZ_CARDS.queue())(() => resumeDefaults(true)).catch(() => {});
@@ -1615,6 +1727,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // courses and the due list Glaze read there (the student's own notes and tasks stay); Reset everything empties the lists and
 // the Not nows. Pages open on a site removed keep Glaze until they reload, refused by every check above meanwhile.
 const forget = async (origin) => {
+  await mcpClearReads(origin);
   const u = new URL(origin);
   const got = await chrome.storage.local.get([...LMS, 'seenCourses', 'courseSlots', 'todoCache']);
   const patch = {};
@@ -1637,6 +1750,7 @@ const forget = async (origin) => {
   return true;
 };
 const forgetAll = async () => {
+  await mcpClearReads();
   const all = await chrome.storage.local.get(null), origins = new Set();
   for (const kind of LMS) for (const value of Array.isArray(all[kind]) ? all[kind] : []) {
     try { origins.add(new URL(value).origin); } catch { /* old invalid entry */ }
@@ -1700,8 +1814,8 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   approved(m.kind, u).then(reply, () => reply(false));
   return true;
 });
-const ADDERS = ['popup.html', 'features/welcome.html', 'options.html'];
-const fromAdder = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ADDERS.some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p))
+const ADDERS = ['popup.html', 'features/welcome.html', 'options.html', 'writer.html'];
+const fromAdder = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ADDERS.some((p) => p !== 'writer.html' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p))
   && extensionOrigin(s) && (!s.tab || s.frameId === 0);
 // Glaze into tabs already open on a site it now has (their top frames).
 const intoTabs = (kind, site, tabs) => {
@@ -1774,6 +1888,15 @@ chrome.permissions?.onRemoved?.addListener((p) => { for (const o of p?.origins |
 // Glaze's first screen, once.
 const firstRun = () => { if (!staticDetector()) Promise.resolve().then(() => chrome.tabs.create({ url: chrome.runtime.getURL('features/welcome.html') })).catch(() => {}); };
 
+// Citation lookups belong to Writer's pages (writer.html, and papers.html's editor); cache the scripts at install and load
+// them on the first request.
+globalThis.addEventListener?.('install', () => importScripts('writer-sources.js', 'writer-lookup.js'));
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:writer-lookup') return;
+  if (!globalThis.GZ_WRITER_LOOKUP) importScripts('writer-sources.js', 'writer-lookup.js');
+  return GZ_WRITER_LOOKUP.listener(() => ({ fetch: (u, i) => fetch(u, i), reach: reachable, id: chrome.runtime.id, pages: ['writer.html', 'papers.html'].map((f) => chrome.runtime.getURL(f)) }))(m, s, reply);
+});
+
 // ---- The toolbar button ---------------------------------------------------------------------------------------------
 // A new extension sits in Chrome's extensions menu. On a page that looks like an LMS its button lights there (a dot on its
 // icon), with no host access: declarativeContent matches displayed elements only, so each LMS by its body, never its head.
@@ -1804,39 +1927,89 @@ const lightUp = async () => {
   await new Promise((done) => dc.onPageChanged.addRules(LIT.map((c) => ({ conditions: [new dc.PageStateMatcher(c)], actions: [new dc.SetIcon({ imageData })] })), done));
 };
 const ownIcon = () => Object.fromEntries(Object.entries(chrome.runtime.getManifest().action.default_icon).map(([k, v]) => [k, `/${v}`]));
+// Glaze's crossfades (lib/motion.js swap, content-ultra.js's page links) start in its content scripts' world, but Chrome
+// rejects a skipped or timed-out one's ready in the page's own world as well, where only the page's code can handle it and
+// a school's error tracker would collect it. This, in each frame Glaze runs in, answers their glaze:transition event: it
+// cancels a presence probe (the guard is here) and, on the separate handoff, marks the transition started's ready handled.
+const transitionGuard = () => {
+  if (!('activeViewTransition' in document) || globalThis.__gzTransitionGuard) return;
+  addEventListener('glaze:transition', (e) => {
+    try {
+      // A hidden document skips before assigning activeViewTransition: there would be nothing to hand over.
+      // A presence probe must leave any transition the school already owns alone.
+      if (e.cancelable) { if (!document.hidden) e.preventDefault(); }
+      else (e.viewTransition || document.activeViewTransition)?.ready.then(undefined, () => {});
+    } catch { /* page code can replace these properties; never throw into its error tracker */ }
+  }, true);
+  globalThis.__gzTransitionGuard = true; // repeated messages, worker restarts and bfcache keep one listener per document
+};
 chrome.runtime.onMessage.addListener((m, s) => {
-  if (m?.type !== 'glaze:here' || !chrome.declarativeContent || s.frameId !== 0 || !s.tab) return;
-  lmsPage(s).then((ok) => ok && chrome.action.setIcon({ tabId: s.tab.id, path: ownIcon() })).catch(() => {});
+  if (m?.type !== 'glaze:here' || !s.tab) return;
+  lmsPage(s).then((ok) => {
+    if (!ok) return;
+    const target = s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] };
+    chrome.scripting.executeScript({ target, world: 'MAIN', injectImmediately: true, func: transitionGuard }).catch(() => {});
+    if (chrome.declarativeContent && s.frameId === 0) return chrome.action.setIcon({ tabId: s.tab.id, path: ownIcon() });
+  }).catch(() => {});
 });
 
 // Glaze's reader (reader.html, W23) reads a PDF or picture only with a one-use pass that an import's content script got
 // here first, for the reader frame it then opens in its own tab ('job'); the reader redeems it ('claim'). A site that
 // frames the reader itself can't get one, since web pages can't message this worker, so it can't set the reader to
 // work. A pass is a random id, lasts a minute and works once, and only for a reader in the tab that asked for it.
-const readerPasses = new Map(); // pass → { tab, at }
+// Glaze Writer's editor frame (writer.html) opens the same way ('glaze:writer'), and only from an Ultra page Glaze runs
+// on; its job also puts lib/writer-main.js in that page's own world, where Ultra's Quill can be reached (scripting
+// world MAIN: Chrome 95, Firefox 128, Safari 15.4), into the document that asked. The writer's claim also tells the AI
+// broker which tab and document the frame works for (aiFrameHost, where the AI harness defines it).
+// Documents as a page of an LMS tab (features/settingspage.js, 'glaze:papers'): a pass for each document its frame loads,
+// asked by the top frame of a page Glaze runs on; the frame's claim makes it, as that document, the tab's Documents frame
+// (trustedFrame 'papers'), the one that may write papers the way the Documents tab does.
+const PASS_PAGES = { 'glaze:reader': '/reader.html', 'glaze:writer': '/writer.html', 'glaze:papers': '/papers.html' };
+const readerPasses = new Map(); // pass → { type, tab, at, from: the job's sender { tab, frameId, documentId } }
 chrome.runtime.onMessage.addListener((m, s, reply) => {
-  if (m?.type !== 'glaze:reader') return;
+  if (!Object.hasOwn(PASS_PAGES, m?.type ?? '')) return;
+  const page = PASS_PAGES[m.type];
   const now = Date.now();
   for (const [k, v] of readerPasses) if (now - v.at > 60000) readerPasses.delete(k);
   const pass = typeof m.pass === 'string' && /^[\w-]{32,64}$/.test(m.pass) ? m.pass : '';
+  // A Documents pass is spent on the attempt, including a refused sender or address.
+  const papersClaim = m.type === 'glaze:papers' && m.op === 'claim';
+  const papersPass = papersClaim ? readerPasses.get(pass) : null;
+  if (papersPass?.type === m.type) readerPasses.delete(pass);
   let from = null;
   try { from = new URL(addressOf(s)); } catch { /* no address */ }
-  let ok = false;
-  if (pass && s.id === chrome.runtime.id && s.tab && from) {
-    if (m.op === 'job' && /^https?:$/.test(from.protocol) && readerPasses.size < 50) {
-      readerPasses.set(pass, { tab: s.tab.id, at: now });
-      ok = true;
-    } else if (m.op === 'claim' && from.protocol === new URL(chrome.runtime.getURL('')).protocol && from.pathname === '/reader.html') {
-      ok = readerPasses.get(pass)?.tab === s.tab.id;
-      readerPasses.delete(pass);
-    }
+  if (!pass || s.id !== chrome.runtime.id || !s.tab || !from) { reply({ ok: false }); return; }
+  if (m.op === 'job' && /^https?:$/.test(from.protocol) && readerPasses.size < 50) {
+    const writer = m.type === 'glaze:writer';
+    (writer ? fromUltra(s).then((o) => o && chrome.scripting.executeScript({ target: s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] }, files: ['lib/writer-main.js'], world: 'MAIN', injectImmediately: true }).then(() => true))
+      : m.type === 'glaze:papers' ? (s.frameId === 0 ? lmsPage(s) : Promise.resolve(null)).then(Boolean) : Promise.resolve(true))
+      .then((ok) => { if (ok) readerPasses.set(pass, { type: m.type, tab: s.tab.id, at: now, from: { tab: s.tab, frameId: s.frameId, documentId: s.documentId } }); reply({ ok: !!ok }); }, () => reply({ ok: false }));
+    return true;
   }
-  reply({ ok });
+  let ok = false, p = null;
+  if (m.op === 'claim' && ownOrigin(`${from.protocol}//${from.host}`) && from.pathname === page) {
+    p = papersClaim ? papersPass : readerPasses.get(pass);
+    ok = p?.tab === s.tab.id && p.type === m.type;
+    if (p?.type === m.type) readerPasses.delete(pass);
+  }
+  if (ok && m.type === 'glaze:papers') {
+    // Only a frame, as Glaze's own page (its own tab needs no pass); the pass is spent either way. Like the writer's claim,
+    // it seats the frame with the AI broker, judged by the page that asked for the pass.
+    if (s.frameId > 0 && (s.origin === undefined || ownOrigin(s.origin))) {
+      claimFrame(s, 'papers').then(() => (typeof aiFrameHost === 'function' ? aiFrameHost(s, p.from) : null)).then(() => reply({ ok: true }), () => reply({ ok: false }));
+    } else reply({ ok: false });
+    return true;
+  }
+  if (!ok || m.type !== 'glaze:writer' || typeof aiFrameHost !== 'function') { reply({ ok }); return; }
+  // The editor opens either way; without the host, the frame's AI stays refused.
+  const done = () => reply({ ok: true });
+  Promise.resolve().then(() => aiFrameHost(s, p.from)).then(done, done);
+  return true;
 });
 
 // Code mods (lib/modbroker.js): a mod's API calls ('glaze:mod') and the page's own asks ('glaze:modpage'),
 // only from Glaze's content script in the top frame of an LMS page Glaze runs on and is on for, never a quiz or a tool's
-// page. Parts also go to same-site Ultra course frames. The broker checks everything else.
+// page, or from the Documents page. Parts also go to same-site Ultra course frames. The broker checks everything else.
 globalThis.addEventListener?.('install', () => importScripts('modapi.js', 'modwidget.js', 'modbroker.js'));
 const modQuiet = (p) => GZ_LX.quiet(p) || /\/(quizzes|external_tools|assessment|attempt|lti)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(p);
 const fromLms = async (s, parts = false) => {
@@ -1847,6 +2020,10 @@ const fromLms = async (s, parts = false) => {
   if ((await chrome.storage.sync.get('enabled')).enabled === false) return null;
   return (await fromCanvas(s)) || (await fromUltra(s)) || (await approved('moodle', u) ? u.origin : null);
 };
+// Documents mods remain in its own tab, with Glaze on and no LMS data. A framed pass grants paper writes and AI only;
+// it does not expand S3c's standalone mod authority into a school's page.
+const fromDocuments = async (s) => s.id === chrome.runtime.id && !!s.tab && s.frameId === 0 && typeof s.url === 'string'
+  && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('papers.html') && (await chrome.storage.sync.get('enabled')).enabled !== false;
 // Whose plans and grades a mod or widget on that page reads (lib/modbroker.js account): the account signed in on the
 // document that asked, as Glaze's own content script there reads it (GZ_CTX.account, as the sidebar's record check does), never what
 // a message says. That document by its documentId, else the frame, which must still hold the document the call names
@@ -1880,7 +2057,7 @@ chrome.storage.onChanged.addListener((c, area) => {
 const modRead = async (k) => {
   if (modKept.has(k)) return modKept.get(k);
   const gen = modGen, value = (await chrome.storage.local.get(k))[k];
-  const kept = k === 'modsBlocklist' ? value?.list : GZ_MODBROKER.usable(value, k.slice(4), true) ? { id: value.id, enabled: true, dev: value.dev, blocked: value.blocked, hash: value.hash, key: value.key, grants: value.grants, manifest: { permissions: value.manifest.permissions, parts: value.manifest.parts, ui: value.manifest.ui, settings: value.manifest.settings, replaces: value.manifest.replaces }, paths: Object.keys(value.files || {}) } : null;
+  const kept = k === 'modsBlocklist' ? value?.list : GZ_MODBROKER.usable(value, k.slice(4), true) ? { id: value.id, enabled: true, dev: value.dev, blocked: value.blocked, hash: value.hash, key: value.key, grants: value.grants, manifest: { name: value.manifest.name, permissions: value.manifest.permissions, parts: value.manifest.parts, ui: value.manifest.ui, settings: value.manifest.settings, replaces: value.manifest.replaces, tools: value.manifest.tools }, paths: Object.keys(value.files || {}) } : null;
   if (gen !== modGen) return modRead(k); // a change heard while reading: retry before using the grant
   modKept.set(k, kept);
   return kept;
@@ -1898,10 +2075,10 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
       // The editor's preview shows installed mods' parts and their background files as a page would (same checks, no code).
       const preview = m.type === 'glaze:modpage' && ['parts', 'media'].includes(m.op) && fromPreview(s);
       let who;
-      const env = { site: preview ? 'editor' : await fromLms(s, m.type === 'glaze:modpage' && m.op === 'parts'), signal: control?.signal, local, sync: brokerArea('sync'), fetch: (u, i) => fetch(u, control ? { ...i, signal: control.signal } : i), reach: reachable, queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
+      const env = { site: preview ? 'editor' : await fromDocuments(s) ? 'documents' : await fromLms(s, m.type === 'glaze:modpage' && m.op === 'parts'), signal: control?.signal, local, sync: brokerArea('sync'), fetch: (u, i) => fetch(u, control ? { ...i, signal: control.signal } : i), reach: reachable, queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
         keys: async () => (chrome.storage.local.getKeys ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null))),
-        account: () => (who ||= env.site && !preview ? modAccount(s, env.site, m.doc) : Promise.resolve(null)),
-        record: (id) => modRead(`mod:${id}`), blocklist: () => modRead('modsBlocklist') };
+        account: () => (who ||= env.site && !preview && env.site !== 'documents' ? modAccount(s, env.site, m.doc) : Promise.resolve(null)),
+        record: (id) => modRead(`mod:${id}`), blocklist: () => modRead('modsBlocklist'), tool: (call, out, uid) => !!mcpRoute && mcpRoute.settle(s, m.mod, call, out, uid) };
       return await (m.type === 'glaze:mod' ? GZ_MODBROKER.handle(m, env) : GZ_MODBROKER.page(m, env));
     } finally {
       clearTimeout(timer);
@@ -1917,7 +2094,103 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const SAFARI = new URL(chrome.runtime.getURL('')).protocol === 'safari-web-extension:';
 // Features that move (lib/motion.js): the worker puts it in ahead of any of them, so each finds it already there.
 const MOVERS = ['features/coursetabs.js', 'features/widgets.js', 'features/todo.js', 'features/reminders.js', 'features/coursemenu.js', 'features/folders.js', 'features/sidebar.js'];
-const LOADABLE = new Set(['lib/motion.js', 'lib/scene-host.js', 'lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-moodle.js', 'features/navbar.js', 'features/navbar-widgets.js', 'features/settingspage.js', 'lib/stream.js', 'features/stream.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'lib/sidebar.js', 'features/sidebar.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'lib/lookset.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/docreview.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'lib/syllabus-ai.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/lmsq.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js', 'features/routes.js', 'lib/popup.js', 'features/popup.js', 'lib/announce.js', 'features/announce.js', 'features/announce-read.js', 'lib/rubric.js', 'features/rubric.js']);
+// Paper writes share one worker queue across framed editors and Papers tabs.
+globalThis.addEventListener?.('install', () => importScripts('writer-styles.js', 'writer-papers.js', 'pm.js', 'writer-schema.js'));
+let paperStore = null;
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:writerPapers') return;
+  const page = s.url?.split(/[?#]/)[0];
+  const papers = page === chrome.runtime.getURL('papers.html');
+  // The Documents frame of a school's page writes once its document claimed its pass (trustedFrame 'papers'), which a
+  // woken worker reads back first.
+  const framed = papers && s.frameId !== 0;
+  if (s.id !== chrome.runtime.id || (s.origin !== undefined && !ownOrigin(s.origin))
+    || !(page === chrome.runtime.getURL('writer.html') || (papers && (framed || !!s.tab))
+      // Settings → Writer's Clear papers, from Settings' own tab only (never a frame a school's page holds).
+      || (m.op === 'remove' && page === chrome.runtime.getURL('options.html') && s.frameId === 0 && !!s.tab))
+    || !['save', 'restore', 'remove', 'savePreset', 'removePreset', 'trash', 'untrash', 'purge'].includes(m.op) || !Array.isArray(m.args)) { reply({ ok: false, error: 'sender' }); return; }
+  (framed ? settingsFramesLoaded.then(() => trustedFrame(s, 'papers')) : Promise.resolve(true)).then((ok) => (ok ? queuePapers(m, () => !framed || trustedFrame(s, 'papers')) : { ok: false, error: 'sender' }))
+    .then(reply, (e) => reply({ ok: false, error: e.message }));
+  return true;
+});
+// The same broker turn owns submit claims and removals. Even a timed-out run holds its permit until release/review;
+// purging it must not discard the version a dispatch is about to mark submitted. Paper keys omit the origin's scheme.
+const openPapers = () => {
+  if (!paperStore) {
+    importScripts('writer-styles.js', 'writer-papers.js');
+    paperStore = GZ_WRITER_PAPERS.open(chrome.storage.local, () => Date.now(), { busy: async (k) => {
+      if (!GZ_WRITER_PAPERS.valid(k) || !k.includes('|')) return false;
+      const permits = await chrome.storage.local.get(['https', 'http'].map((scheme) => `writerSubmit:${scheme}://${k}`));
+      return Object.values(permits).some((p) => !!p?.run);
+    } });
+  }
+  return paperStore;
+};
+// What the Documents page's Trash has held past 30 days goes as the browser starts, as it does when the page opens.
+chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => openPapers().purge()).catch(() => {}); });
+const queuePapers = (m, allowed = () => true) => {
+  const task = (brokerTurn ||= GZ_CARDS.queue())(async () => {
+    if (!allowed()) return { ok: false, error: 'sender' };
+    openPapers();
+    return { ok: true, value: await paperStore[m.op](...m.args) };
+  });
+  return task;
+};
+// Writer submit permits live in the worker so two tabs and an MV3 restart share the same fence: one per assignment, since
+// Ultra can number an attempt at /attempt/create (/attempt/_N_1) while a run is under way. A run (claim) belongs to one
+// page. A run that attached nothing releases it; one that may have uploaded keeps it until the student opens Blackboard's
+// editor from the sheet (review): its own page at once, another once the run is past its bound (SUBMIT_RUN, beyond the
+// page's 80 seconds), so never one under way. A dispatch (commit) is kept: the attempt it numbered stays fenced, and so
+// does every document then on the assignment; a page opened later is a new attempt. It marks the paper's version the
+// .docx was built from as submitted here, so the page or frame Ultra's navigation tears down can't lose it.
+const SUBMIT_RUN = 90e3;
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:writerSubmit') return;
+  // The pages on the assignment as a commit arrives, before it waits its turn: one opened after the submit went out is
+  // the next attempt's. (A worker just woken reads them back from the session first.)
+  const present = m.op === 'commit' && aiKeptRead ? new Set(aiAttempts.keys()) : null;
+  const task = (brokerTurn ||= GZ_CARDS.queue())(async () => {
+    const no = { ok: false };
+    if (s.id !== chrome.runtime.id || !s.tab || s.frameId !== 0 || !['claim', 'commit', 'release', 'review'].includes(m.op) ||
+      !/^[\w-]{32,64}$/.test(m.token || '') || !/^_\d+_\d+$/.test(m.user || '')) return no;
+    let u;
+    try { u = new URL(addressOf(s)); } catch { return no; }
+    const at = /^\/ultra\/courses\/(_\d+_\d+)\/assessment\/(_\d+_\d+)\/attempt\/(create|_\d+_\d+)\/?$/.exec(u.pathname);
+    const settings = await chrome.storage.sync.get(['enabled', 'enhance']);
+    // A commit or release only settles the page's own claim, which was checked to be an assignment's.
+    if (!at || !await fromUltra(s) || settings.enabled === false || settings.enhance?.writer === false ||
+      (['claim', 'review'].includes(m.op) && await aiAttempt(s.tab.id, s.documentId, u.href) !== 'assignment')) return no;
+    const [, course, content, attempt] = at;
+    const key = `writerSubmit:${u.origin}|${m.user}|${course}|${content}`;
+    const kept = (await chrome.storage.local.get(key))[key];
+    const run = kept?.run || null, sent = Array.isArray(kept?.sent) ? kept.sent : [];
+    const owner = `${s.tab.id}|${s.documentId || ''}`, now = Date.now(), mine = run?.token === m.token && run.owner === owner;
+    const keep = (r) => (r.run || r.sent.length ? chrome.storage.local.set({ [key]: r }) : chrome.storage.local.remove(key));
+    if (m.op === 'claim') {
+      if ((run && !mine) || sent.some((x) => x.owners.includes(owner) || x.attempts.includes(attempt))) return no;
+      await keep({ run: { token: m.token, owner, attempt, until: now + SUBMIT_RUN }, sent });
+    } else if (m.op === 'review') {
+      if (!run || (run.owner !== owner && now < run.until)) return no;
+      await keep({ run: null, sent });
+    } else if (!mine) return no;
+    else if (m.op === 'release') await keep({ run: null, sent });
+    else {
+      await aiKept();
+      const here = `${u.origin}/ultra/courses/${course}/assessment/${content}/attempt/`;
+      const owners = [owner, ...[...aiAttempts].filter(([k, v]) => k !== owner && (!present || present.has(k)) && v.page?.startsWith(here)).map(([k]) => k)].slice(0, 32);
+      await keep({ run: null, sent: [{ owners, attempts: [...new Set([run.attempt, attempt])].filter((x) => x !== 'create') }, ...sent].slice(0, 20) });
+      if (typeof m.version === 'string' && /^[a-z0-9]{1,12}-[a-z0-9]{1,8}$/.test(m.version)) {
+        try {
+          await openPapers().submitted(GZ_WRITER_PAPERS.keyOf({ school: u.host, user: m.user, course, content }), m.version);
+        } catch (e) { console.error(e); }
+      }
+    }
+    return { ok: true };
+  });
+  task.then(reply, () => reply({ ok: false }));
+  return true;
+});
+const LOADABLE = new Set(['lib/motion.js', 'lib/scene-host.js', 'lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-moodle.js', 'features/navbar.js', 'features/navbar-widgets.js', 'features/settingspage.js', 'lib/stream.js', 'features/stream.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'features/discussion-nav.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'lib/sidebar.js', 'features/sidebar.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'lib/lookset.js', 'lib/looks.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/docreview.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'lib/syllabus-ai.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/lmsq.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js', 'features/routes.js', 'lib/popup.js', 'features/popup.js', 'lib/announce.js', 'features/announce.js', 'features/announce-read.js', 'lib/rubric.js', 'features/rubric.js', 'features/editor-menu.js', 'features/sticky-fold.js', 'lib/writer-ultra.js', 'features/writer.js', 'lib/writer-target.js', 'lib/writer-context-discussion.js', 'features/writer-quote.js', 'lib/writer-context-assignment.js', 'lib/writer-submit.js', 'features/writer-submit.js']);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m?.type !== 'glaze:load') return;
   const files = Array.isArray(m.files) ? m.files : [];
@@ -1962,13 +2235,15 @@ const loadInto = (m, sender, files, reply) => {
 
 // AI (lib/ai/broker.js, docs/ai-harness.md): off by default, and nothing of it loads until a feature opens a 'glaze:ai' port.
 // Who may: Glaze's own pages, or Glaze in a frame of a site it runs on (lmsPage), never a quiz's, a test's or a tool's page
-// (modQuiet). The connections live in the worker's own store; only Settings' top frame reads and writes them
-// ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
+// (modQuiet). Glaze's writer frame (writer.html) is Glaze's own page inside an LMS tab: it is judged by the frame it sits
+// in and the tab's page, read live, and on an Ultra assignment attempt it may ask for the writer's features only once the
+// tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
+// Settings' top frame reads and writes them ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
 // worker's importScripts calls name (scripts/package-firefox.sh). A task (lib/ai/tasks/<id>.js) goes in this list too.
-const aiFiles = () => importScripts('ai/schema.js', 'ai/request.js', 'ai/stream.js', 'ai/failure.js', 'ai/endpoint.js', 'ai/text.js', 'ai/models.js', 'ai/providers.js', 'ai/providers/openai.js', 'ai/providers/device.js', 'ai/providers/apple.js', 'ai/tools.js', 'ai/loop.js', 'ai/task.js', 'ai/tasks/syllabus-read.js', 'ai/settings.js', 'ai/broker.js');
+const aiFiles = () => importScripts('writer-sources.js', 'writer-cite.js', 'ai/schema.js', 'ai/request.js', 'ai/stream.js', 'ai/failure.js', 'ai/endpoint.js', 'ai/text.js', 'ai/visual-cache.js', 'ai/models.js', 'ai/providers.js', 'ai/providers/openai.js', 'ai/providers/device.js', 'ai/providers/apple.js', 'ai/tools.js', 'ai/loop.js', 'ai/task.js', 'ai/tasks/syllabus-read.js', 'ai/tasks/writer-context.js', 'ai/tasks/writer-complete.js', 'ai/tasks/writer-review.js', 'ai/tasks/writer-image.js', 'ai/tasks/writer-feedback.js', 'ai/tasks/writer-outline.js', 'ai/tasks/writer-requirements.js', 'ai/tasks/writer-cite.js', 'ai/tasks/writer-decide.js', 'ai/settings.js', 'ai/broker.js');
 globalThis.addEventListener?.('install', aiFiles);
 const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ_AI_BROKER; };
-let aiVault = null, aiRevision = 0;
+let aiVault = null, aiLocal = null, aiRevision = 0;
 chrome.storage.onChanged.addListener((changes, area) => {
   if ((area === 'local' && changes.ai) || (area === 'sync' && changes.enabled)) aiRevision++;
 });
@@ -1977,12 +2252,160 @@ const aiEnv = () => ({
   settings: async () => (await chrome.storage.local.get(GZ_AI_SETTINGS.KEY))[GZ_AI_SETTINGS.KEY],
   enabled: async () => (await chrome.storage.sync.get('enabled')).enabled !== false,
   revision: () => aiRevision,
-  vault: (aiVault ||= GZ_AI_BROKER.vault()), local: brokerArea('local'), reach: reachable, fetch: (u, i) => fetch(u, i), task: (id) => GZ_AI_TASKS.get(id),
+  vault: (aiVault ||= GZ_AI_BROKER.vault()), local: (aiLocal ||= brokerArea('local')), reach: reachable, fetch: (u, i) => fetch(u, i), task: (id) => GZ_AI_TASKS.get(id),
   say: (m) => chrome.runtime.sendMessage?.(m)?.catch?.(() => {}), // the device model's download progress, to Settings
 });
-const aiSender = async (s) => {
+// Ultra's assignment and test attempts share one route (features/sidebar.js reads it too). What the attempt is, Glaze's
+// content script in that document says ('glaze:attempt-kind' { kind: 'assignment' | 'test' | 'unknown' }), with
+// LMS and live ancestry checks but on this route; kept for that document's own page, including a course-tab frame. Unknown is a test, and
+// takes back an earlier 'assignment' once the page shows it can't be one.
+// The writer frame is judged by the frame it sits in: the writer's claim of its pass (glaze:writer, and Documents' frame's,
+// glaze:papers) names it with aiFrameHost(writer frame's sender, the sender that asked for the pass); a writer frame no claim
+// named may not ask. Both
+// are kept in storage.session too, so a stopped worker remembers them.
+const AI_ATTEMPT = /^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)\/?$/;
+const AI_WRITER = ['completion', 'writing'];
+const AI_FRAMES = ['/writer.html', '/papers.html']; // Writer's frame, and Documents as a page of an LMS tab (glaze:papers)
+const aiAttempts = new Map(); // `${tab id}|${document id}` → { page, kind, frameId, documentId }
+const aiRevisions = new Map(); // tab navigation epochs also prevent stale session hydration and late reports
+const aiReports = new Map(); // per-document report order, independent of navigation and session hydration
+const aiHosts = new Map(); // `${tab id}|${writer frame id}` → { frameId, documentId?, writerDocumentId? } of its host and claimed writer
+const aiPage = (url) => { try { const u = new URL(url); return u.origin + u.pathname + u.search; } catch { return ''; } };
+const aiAttemptKey = (tabId, documentId) => Number.isInteger(tabId) && typeof documentId === 'string' && documentId ? `${tabId}|${documentId}` : '';
+const aiKeep = () => chrome.storage.session?.set({ aiAttempts: Object.fromEntries(aiAttempts), aiHosts: Object.fromEntries(aiHosts) }).catch(() => {});
+let aiKeptRead = null;
+const aiKept = () => (aiKeptRead ||= Promise.resolve(chrome.storage.session?.get(['aiAttempts', 'aiHosts'])).then((r) => {
+  for (const [key, v] of Object.entries(r?.aiAttempts || {})) if (key === aiAttemptKey(Number(key.split('|')[0]), v?.documentId)
+    && !aiRevisions.has(Number(key.split('|')[0])) && !aiAttempts.has(key) && typeof v?.page === 'string' && Number.isInteger(v.frameId) && v.frameId >= 0
+    && ['assignment', 'test', 'unknown'].includes(v.kind)) aiAttempts.set(key, v);
+  for (const [k, v] of Object.entries(r?.aiHosts || {})) if (!aiRevisions.has(Number(k.split('|')[0])) && !aiHosts.has(k) && Number.isInteger(v?.frameId)) aiHosts.set(k, v);
+  if (aiRevisions.size) aiKeep();
+}, () => {}));
+const aiAttempt = async (tabId, documentId, page) => {
+  await aiKept();
+  const key = aiAttemptKey(tabId, documentId), kept = aiAttempts.get(key);
+  if (kept && kept.page !== aiPage(page)) { aiAttempts.delete(key); aiReports.delete(key); aiKeep(); return null; }
+  return kept?.kind || null;
+};
+// Child navigations have no tabs.onUpdated event. A new document in a frame retires the earlier document's evidence;
+// every use still scripts the pinned document and compares its live page, so a frame id or SPA history cannot inherit it.
+const aiRetire = (tabId, frameId, documentId) => {
+  for (const [key, v] of aiAttempts) if (key.startsWith(`${tabId}|`) && v.frameId === frameId && v.documentId !== documentId) {
+    aiAttempts.delete(key); aiReports.delete(key);
+  }
+};
+const aiFrameHost = async (frame, host) => {
+  if (!Number.isInteger(frame?.tab?.id) || !(frame.frameId > 0) || host?.tab?.id !== frame.tab.id || !Number.isInteger(host.frameId) || host.frameId === frame.frameId) return;
+  await aiKept();
+  if (host.documentId) aiRetire(host.tab.id, host.frameId, host.documentId);
+  aiHosts.delete(`${frame.tab.id}|${frame.frameId}`);
+  aiHosts.set(`${frame.tab.id}|${frame.frameId}`, { frameId: host.frameId, ...(typeof host.documentId === 'string' && { documentId: host.documentId }),
+    ...(typeof frame.documentId === 'string' && { writerDocumentId: frame.documentId }) });
+  while (aiHosts.size > 64) aiHosts.delete(aiHosts.keys().next().value);
+  aiKeep();
+};
+const aiForget = (id, url) => {
+  aiRevisions.set(id, (aiRevisions.get(id) || 0) + 1);
+  const pages = [...aiAttempts].filter(([key, v]) => key.startsWith(`${id}|`) && (url === undefined || (v.frameId === 0 && v.page !== aiPage(url)))).map(([key]) => key);
+  const hosts = url === undefined ? [...aiHosts.keys()].filter((k) => k.startsWith(`${id}|`)) : [];
+  for (const key of pages) { aiAttempts.delete(key); aiReports.delete(key); }
+  for (const k of hosts) aiHosts.delete(k);
+  if (pages.length || hosts.length) aiKeep();
+};
+// pushState also reports 'loading'. Seats and attempt evidence belong to documents, not a tab's load status: every AI
+// request re-reads the pinned host document, its live URL and ancestry. A real reload fails that document check, even at
+// the same URL. URL changes still fence in-flight reports and retire the top page's earlier attempt evidence.
+chrome.tabs?.onUpdated?.addListener((id, change) => { if (change.url !== undefined) aiForget(id, change.url); });
+chrome.tabs?.onRemoved?.addListener((id) => aiForget(id));
+chrome.tabs?.onReplaced?.addListener((added, removed) => aiForget(removed));
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:attempt-kind') return;
+  (async () => {
+    const key = aiAttemptKey(s.tab?.id, s.documentId);
+    if (s.id !== chrome.runtime.id || !key || !Number.isInteger(s.frameId) || s.frameId < 0 || !['assignment', 'test', 'unknown'].includes(m.kind) || fromGlaze(s)) return false;
+    // A course-tab sender can retain its initial about:blank URL. Its claimed current page is only a candidate:
+    // the pinned document's live URL, origin and complete ancestor chain must all confirm it below.
+    const u = new URL(m.page === undefined ? addressOf(s) : m.page);
+    if (u.protocol !== 'https:' || !AI_ATTEMPT.test(decodeURIComponent(u.pathname))) return false;
+    // A newer report takes precedence even when an older report's asynchronous checks finish last.
+    const revision = aiRevisions.get(s.tab.id), report = {};
+    aiReports.set(key, report);
+    // Close the earlier grant before validation yields, including before session hydration can restore it. A test or
+    // unknown report must fence both Writer features while the worker checks it. Hydrate the seats before persisting.
+    const at = { page: aiPage(u.href), frameId: s.frameId, documentId: s.documentId };
+    aiAttempts.set(key, { ...at, kind: 'unknown' });
+    await aiKept();
+    if (aiRevisions.get(s.tab.id) !== revision || aiReports.get(key) !== report) return false;
+    aiKeep();
+    if ((await chrome.storage.sync.get('enabled')).enabled === false || !await lmsPage(s)) return false;
+    const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target: { tabId: s.tab.id, documentIds: [s.documentId] }, func: aiFramePage })]);
+    const live = frames?.[0];
+    if (live?.documentId !== s.documentId || live?.frameId !== s.frameId || aiPage(live?.result?.href) !== aiPage(u.href)
+      || live?.result?.origin !== u.origin || (s.origin !== undefined && s.origin !== u.origin) || !await aiLmsFrame(tab, live, s.frameId)
+      || aiRevisions.get(s.tab.id) !== revision || aiReports.get(key) !== report) return false;
+    aiRetire(s.tab.id, s.frameId, s.documentId);
+    aiAttempts.set(key, { ...at, kind: m.kind });
+    aiKeep();
+    return true;
+  })().then((ok) => reply({ ok }), () => reply({ ok: false }));
+  return true;
+});
+// A frame's address and every address above it, read in its own document (aiSender's content-script check too).
+const aiFramePage = () => {
+  try {
+    const ancestors = [];
+    for (let frame = window; frame !== frame.top;) { frame = frame.parent; ancestors.push(frame.location.href); }
+    return { href: location.href, origin: globalThis.origin || location.origin, ancestors };
+  } catch { return null; }
+};
+// The LMS document's own page may be an attempt. Every ancestor must be a same-origin LMS page outside a quiet route.
+const aiLmsFrame = async (tab, live, frameId) => {
+  const page = live?.result;
+  if (typeof page?.href !== 'string' || typeof page.origin !== 'string' || !Array.isArray(page.ancestors) || (frameId === 0) !== !page.ancestors.length) return false;
+  const own = new URL(page.href), top = new URL(tab.url);
+  if (own.origin !== page.origin || top.origin !== page.origin || aiPage(page.ancestors.at(-1) || page.href) !== aiPage(tab.url)) return false;
+  for (const address of page.ancestors) {
+    const parent = new URL(address);
+    if (parent.origin !== page.origin || modQuiet(decodeURIComponent(parent.pathname))
+      || !await lmsPage({ id: chrome.runtime.id, tab, frameId: 0, url: parent.href, origin: parent.origin })) return false;
+  }
+  return !!await lmsPage({ id: chrome.runtime.id, tab, frameId, url: page.href, origin: page.origin });
+};
+// A writer frame, by the frame it sits in, read now with the tab: true, false, or 'attempt' (an Ultra attempt that isn't
+// known to be an assignment, asked for the writer's features). The frame it sits in, every frame above it and the tab's
+// page: one LMS site Glaze runs on, never a quiet route, but the tab's own attempt page, where only the writer's features
+// may ask, once that host document is said to be an assignment. A cancel only stops.
+const aiWriter = async (s, { op, feature } = {}) => {
+  const papers = s.url?.split(/[?#]/)[0] === chrome.runtime.getURL('papers.html');
+  if (papers) {
+    await settingsFramesLoaded;
+    if (!trustedFrame(s, 'papers')) return false; // a replacement claim revokes the earlier seat before its storage write
+  }
+  await aiKept();
+  const host = aiHosts.get(`${s.tab.id}|${s.frameId}`);
+  if (!host || (host.writerDocumentId && host.writerDocumentId !== s.documentId)) return false;
+  const current = () => aiHosts.get(`${s.tab.id}|${s.frameId}`) === host && (!papers || trustedFrame(s, 'papers'));
+  const target = host.documentId ? { tabId: s.tab.id, documentIds: [host.documentId] } : { tabId: s.tab.id, frameIds: [host.frameId] };
+  const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target, func: aiFramePage })]);
+  const live = frames?.[0], page = live?.result;
+  if (host.documentId && live?.documentId !== host.documentId) return false;
+  let path;
+  try { if (!await aiLmsFrame(tab, live, host.frameId)) return false; path = decodeURIComponent(new URL(page.href).pathname); } catch { return false; }
+  if (!modQuiet(path)) return current();
+  if (!AI_ATTEMPT.test(path)) return false;
+  if (op === 'cancel') return current();
+  if (!AI_WRITER.includes(feature)) return false;
+  const assignment = host.documentId && await aiAttempt(tab.id, host.documentId, page.href) === 'assignment';
+  return current() && (assignment || 'attempt');
+};
+const aiSender = async (s, what = {}) => {
   if (s.id !== chrome.runtime.id) return false;
-  if (fromGlaze(s)) return s.frameId === 0 || (s.frameId === undefined && !s.tab);
+  if (fromGlaze(s)) {
+    if (s.frameId === 0 || (s.frameId === undefined && !s.tab)) return true;
+    let path;
+    try { path = new URL(s.url).pathname; } catch { return false; }
+    return Number.isInteger(s.frameId) && s.frameId > 0 && Number.isInteger(s.tab?.id) && AI_FRAMES.includes(path) && aiWriter(s, what);
+  }
   if (!Number.isInteger(s.frameId) || s.frameId < 0 || !Number.isInteger(s.tab?.id)) return false;
   const safe = async (sender, top) => {
     let u, parent;
@@ -1995,14 +2418,7 @@ const aiSender = async (s) => {
   // A Port's sender URL is a snapshot. Re-read the isolated document and its tab so SPA navigation or an assessment
   // ancestor cannot retain an earlier course page's authority. documentId pins the frame where the browser supplies it.
   const target = s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] };
-  const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target,
-    func: () => {
-      try {
-        const ancestors = [];
-        for (let frame = window; frame !== frame.top;) { frame = frame.parent; ancestors.push(frame.location.href); }
-        return { href: location.href, origin: globalThis.origin || location.origin, ancestors };
-      } catch { return null; }
-    } })]);
+  const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target, func: aiFramePage })]);
   const page = frames?.[0]?.result;
   if (typeof page?.href !== 'string' || typeof page.origin !== 'string' || !Array.isArray(page.ancestors)) return false;
   for (const address of page.ancestors) {
@@ -2012,9 +2428,36 @@ const aiSender = async (s) => {
   }
   return safe({ ...s, url: page.href, origin: page.origin, tab }, tab.url);
 };
+// Read cache authority from the claimed host's isolated Glaze world. Neither the Writer payload nor a page-selected
+// cache key may name another account. A navigation during the account read invalidates this snapshot.
+const aiVisualScope = async (s) => {
+  if (await aiWriter(s, { op: 'run', feature: 'writing' }) !== true) return null;
+  const host = aiHosts.get(`${s.tab.id}|${s.frameId}`);
+  if (!host) return null;
+  const target = host.documentId ? { tabId: s.tab.id, documentIds: [host.documentId] } : { tabId: s.tab.id, frameIds: [host.frameId] };
+  const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target, func: async () => {
+    const href = location.href;
+    const control = new AbortController(), timer = setTimeout(() => control.abort(), 5000);
+    try {
+      // The content document's ordinary account helper is memoized. A cookie/account switch in another tab must not
+      // reuse that identity for persistent readings, so obtain fresh authenticated authority for this operation.
+      const response = await fetch(`${location.origin}/learn/api/v1/users/me`, { credentials: 'same-origin', cache: 'no-store', redirect: 'error', headers: { accept: 'application/json' }, signal: control.signal });
+      const user = response.ok ? (await response.json())?.id : '';
+      const url = new URL(location.href), at = /^\/ultra\/courses\/(_\d+_\d+)\/assessment\/(_\d+_\d+)\/attempt\//.exec(url.pathname);
+      if (href !== location.href || !at || typeof user !== 'string' || !/^_\d+_\d+$/.test(user)) return null;
+      const ancestors = [];
+      for (let frame = window; frame !== frame.top;) { frame = frame.parent; ancestors.push(frame.location.href); }
+      return { href, origin: url.origin, ancestors, school: url.host.toLowerCase(), account: user, assignment: `${at[1]}/${at[2]}` };
+    } catch { return null; } finally { clearTimeout(timer); }
+  } })]);
+  const live = frames?.[0], page = live?.result, current = aiHosts.get(`${s.tab.id}|${s.frameId}`);
+  if (!page || !host.documentId || live?.documentId !== host.documentId || current !== host || !await aiLmsFrame(tab, live, host.frameId)
+    || await aiAttempt(s.tab.id, host.documentId, page.href) !== 'assignment') return null;
+  return { school: page.school, account: page.account, assignment: page.assignment };
+};
 chrome.runtime.onConnect.addListener((p) => {
   if (p.name !== 'glaze:ai') return;
-  ai().connect(p, { ...aiEnv(), who: String(p.sender?.tab?.id ?? 'none'), allowed: () => aiSender(p.sender || {}) });
+  ai().connect(p, { ...aiEnv(), who: String(p.sender?.tab?.id ?? 'none'), allowed: (what) => aiSender(p.sender || {}, what), visualScope: () => aiVisualScope(p.sender || {}) });
 });
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:ai-config') return;
@@ -2022,6 +2465,248 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   ai().config(m, aiEnv()).then(reply, () => reply({ ok: false, error: 'failed' }));
   return true;
 });
+
+// ---- Agent apps (MCP) -----------------------------------------------------------------------------------------------
+// Agent apps on this computer reach Glaze's tools through the glaze-mcp helper: lib/agent-link.js carries their
+// connections as frames, lib/mcp/wire.js speaks MCP on each, and every tools/call goes through lib/mcp/calls.js (the
+// switches, the app's pairing and groups in the approval window, lib/mcp/approve.js, then the tool). Off by default
+// (storage.local mcp, lib/mcp/grants.js): nothing of it loads until it is on. While it is on the link loads at worker start,
+// as ensure() must run then (a worker granted nativeMessaging connects once it restarts), and the rest with it; after a
+// switch-on, with the first frame. Glaze or agent access off ends every connection, and with them every ask waiting for
+// one, and the link; the apps and their grants stay. Every file by name in literal importScripts calls (scripts/package-firefox.sh).
+const MCP_BROWSER = SAFARI ? 'safari' : new URL(chrome.runtime.getURL('')).protocol === 'moz-extension:' ? 'firefox' : 'chrome';
+const agentFiles = () => importScripts('agent-frames.js', 'agent-link.js');
+const grantFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'mcp/grants.js');
+const mcpFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'ai/failure.js', 'ai/loop.js', 'modapi.js', 'modwidget.js', 'modbroker.js', 'modtools.js', 'mcp/grants.js', 'mcp/registry.js', 'mcp/tools-study.js', 'mcp/tools-grades.js', 'doc-home.js', 'writer-sources.js', 'writer-tools.js', 'mcp/writer.js', 'mcp/tabs.js', 'mcp/tools-assign.js', 'mcp/wire.js', 'mcp/approve.js', 'mcp/calls.js', 'mcp/modroute.js');
+globalThis.addEventListener?.('install', () => { agentFiles(); mcpFiles(); });
+// The local setting is a UI mirror, writable by content scripts. Only an options message may persist consent in this
+// extension-origin database. A forged local on cannot reconnect a previously paired app after the owner switched off.
+let mcpConsentDB = null;
+const mcpConsent = async (on) => {
+  mcpConsentDB ||= new Promise((resolve, reject) => {
+    const r = indexedDB.open('glaze-mcp-settings', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('settings');
+    r.onsuccess = () => { r.result.onversionchange = () => { r.result.close(); mcpConsentDB = null; }; resolve(r.result); };
+    r.onerror = () => reject(r.error);
+  }).catch((e) => { mcpConsentDB = null; throw e; });
+  const tx = (await mcpConsentDB).transaction('settings', on === undefined ? 'readonly' : 'readwrite');
+  let value = false;
+  const store = tx.objectStore('settings');
+  if (on === undefined) { const r = store.get('on'); r.onsuccess = () => { value = r.result === true; }; }
+  else { store.put(on === true, 'on'); value = on === true; }
+  return new Promise((resolve, reject) => { tx.oncomplete = () => resolve(value); tx.onerror = tx.onabort = () => reject(tx.error); });
+};
+const mcpOn = async () => (await chrome.storage.local.get('mcp')).mcp?.on === true && await mcpConsent().catch(() => false);
+let mcpGrantStore = null;
+const mcpGrants = () => (mcpGrantStore ||= GZ_MCP_GRANTS.open());
+// Only Safari's helper, the Glaze app, outlives this worker and announces its connections to the next one, so only there
+// is each connection's engine state kept (storage.session mcpConn:<c>) and restored. Chrome and Firefox end the helper with
+// the worker's port, and the next helper numbers its connections from 1 again.
+const MCP_KEEP = MCP_BROWSER === 'safari';
+// The assignment reads agent apps had Glaze keep (lib/mcp/tools-assign.js clear), cleared with that file alone at off, at
+// Forget all apps, and for a site removal (scope: its origin) or Reset everything, whether or not agent access was ever on.
+const mcpClearReads = (scope) => {
+  if (typeof GZ_MCP_ASSIGN === 'undefined') importScripts('mcp/tools-assign.js');
+  return GZ_MCP_ASSIGN.clear({ local: chrome.storage.local }, scope);
+};
+
+// An account's caches for a group read afresh through an open LMS tab → { ok, source: 'tab' }, or null with none open.
+let mcpTabsMade = null;
+const mcpTabs = () => (mcpTabsMade ||= GZ_MCP_TABS.create({ tabs: chrome.tabs, scripting: chrome.scripting, quiet: modQuiet }));
+const mcpRefresh = (account, group, o) => mcpTabs().refresh(account, group, o);
+// Writer's document tools that need an open Writer page (writer-mcp.js) reach it over port glaze:mcp-writer, admitted
+// from Glaze's own pages only, with the AI port's sender rules, while agent access is on (lib/mcp/writer.js pages) → the
+// page's answer, or null with none.
+let mcpWriterHub = null;
+const mcpWriterPages = () => { if (typeof GZ_MCP_WRITER === 'undefined') importScripts('mcp/writer.js'); return (mcpWriterHub ||= GZ_MCP_WRITER.pages({ runtime: chrome.runtime })); };
+const mcpWriter = (key, op, args, o) => mcpWriterPages().call(key, op, args, o);
+chrome.runtime.onConnect.addListener((p) => {
+  if (p.name === 'glaze:mcp-writer') mcpWriterPages().connect(p, async () => fromGlaze(p.sender || {}) && await mcpOn() && await glazeOn() && await aiSender(p.sender || {}, { op: 'run', feature: 'writing' }) === true);
+});
+// A mod's code tool (the registry state's code), answered by its Worker through an open LMS tab.
+let mcpRoute = null;
+const mcpCode = (mod, name, args, ctx) => (mcpRoute ||= GZ_MCP_MODROUTE.create({ tabs: chrome.tabs, browser: MCP_BROWSER, quiet: modQuiet })).code(mod, name, args, ctx);
+
+const mcpKeys = async () => (chrome.storage.local.getKeys ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null)));
+const mcpCtx = (account) => ({ account, local: chrome.storage.local, keys: mcpKeys, now: Date.now });
+// A mod's declarative tool reads what Glaze's own tool for its source reads, for the account calls.js resolved: { at, items,
+// missing? }. A schedule's items are the planner's, which lib/modtools.js keeps to the dated ones.
+const MCP_SOURCES = { todo: 'todo_list', schedule: 'todo_list', courses: 'courses_list', grades: 'grades_list' };
+const mcpData = async (source, account) => {
+  const r = Object.hasOwn(MCP_SOURCES, source) ? await GZ_AI_TOOLS.get(MCP_SOURCES[source])?.run({}, mcpCtx(account)) : null;
+  return Array.isArray(r?.items) ? { at: r.at ?? null, items: r.items, ...(typeof r.missing === 'string' && { missing: r.missing }) } : { at: null, items: [] };
+};
+// The registry's state (lib/mcp/registry.js), read afresh for each call; mcpState is the last one read, for the list, which
+// the engine reads at once.
+const mcpRead = async () => {
+  const got = await chrome.storage.local.get(['mods', 'modDev', 'modRuntime']);
+  const ids = Array.isArray(got.mods) ? [...new Set(got.mods)].filter((id) => typeof id === 'string' && /^[a-z2-7]{16}$/.test(id)) : [];
+  return { tools: GZ_AI_TOOLS, mods: (await Promise.all(ids.map((id) => modRead(`mod:${id}`)))).filter(Boolean), dev: got.modDev === true,
+    blocklist: await modRead('modsBlocklist'), browser: MCP_BROWSER, runtime: got.modRuntime, data: mcpData, code: mcpCode, now: Date.now };
+};
+let mcpState = {};
+const mcpList = () => GZ_MCP_REGISTRY.list(mcpState);
+let mcpMade = null, mcpLink = null;
+const mcpKept = new Map(); // Safari: c → { peer, snap }, as the last worker kept them, until its connection opens again
+const mcpCore = () => (mcpMade ||= (() => {
+  if (typeof GZ_MCP_CALLS === 'undefined') mcpFiles();
+  if (!GZ_AI_TOOLS.get('accounts_list')) { const deps = { sync: chrome.storage.sync, tabs: mcpTabs() }; GZ_MCP_STUDY.register(GZ_AI_TOOLS, deps); GZ_MCP_GRADES.register(GZ_AI_TOOLS); GZ_MCP_ASSIGN.register(GZ_AI_TOOLS, deps); }
+  if (!GZ_AI_TOOLS.get('documents_list')) GZ_MCP_WRITER.register(GZ_AI_TOOLS, { papers: (f) => (brokerTurn ||= GZ_CARDS.queue())(() => f(openPapers())), bridge: mcpWriter });
+  mcpWriterPages().wake();
+  const approve = GZ_MCP_APPROVE.create({ windows: chrome.windows, tabs: chrome.tabs, storage: { session: chrome.storage.session }, runtime: chrome.runtime,
+    now: Date.now, timers: globalThis, url: chrome.runtime.getURL('lib/mcp/approve.html') });
+  chrome.windows?.onRemoved?.addListener((id) => approve.closed(id));
+  const grants = mcpGrants();
+  const calls = GZ_MCP_CALLS.create({
+    registry: GZ_MCP_REGISTRY, state: mcpRead, grants, approve, refresh: mcpRefresh, enabled: glazeOn,
+    settings: async () => ({ on: await mcpOn() }),
+    accounts: async () => (await GZ_AI_TOOLS.get('accounts_list').run({}, mcpCtx(null))).items,
+    local: chrome.storage.local, keys: mcpKeys, now: Date.now,
+    record: (row) => GZ_MCP_GRANTS.record(chrome.storage.local, row), turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
+  });
+  const wire = GZ_MCP_WIRE.create({ serverInfo: { name: 'glaze', title: 'Glaze', version: chrome.runtime.getManifest().version }, call: calls.call,
+    list: mcpList, listHash: () => GZ_MCP_REGISTRY.hash(mcpList()) });
+  const kept = MCP_KEEP && Promise.resolve(chrome.storage.session?.get(null)).then((all) => {
+    const keys = Object.keys(all || {}).filter((k) => /^mcpConn:\d+$/.test(k));
+    for (const k of keys) mcpKept.set(Number(k.slice(8)), all[k]);
+    if (keys.length) return chrome.storage.session.remove(keys);
+  });
+  const ready = Promise.allSettled([mcpRead().then((s) => { mcpState = s; }), approve.sweep(), kept]);
+  return { approve, grants, wire, ready };
+})());
+
+// The connections, by the helper's number c: { peer, conn (once the core is ready), queue (its lines until then), saved
+// (the snapshot last kept), fresh (restored legacy: an initialize as its first line means the app started over) }.
+const mcpConns = new Map();
+const mcpWire = (c, k) => mcpCore().wire.conn(c, k.peer, (line) => { mcpLink?.send(c, line); }, (why) => { mcpLink?.close(c, why); mcpForget(c, k); });
+const mcpSave = (c, k) => {
+  if (!MCP_KEEP || !k.conn || mcpConns.get(c) !== k) return;
+  const snap = k.conn.snapshot(), text = JSON.stringify(snap);
+  if (snap.era === null || text === k.saved) return;
+  k.saved = text;
+  chrome.storage.session.set({ [`mcpConn:${c}`]: { peer: k.peer, snap } }).catch(() => {});
+};
+const mcpForget = (c, k) => {
+  if (mcpConns.get(c) !== k) return;
+  mcpConns.delete(c);
+  if (k.saved) chrome.storage.session.remove(`mcpConn:${c}`).catch(() => {});
+};
+const samePeer = (a, b) => ['name', 'exe', 'ppid', 'verified'].every((x) => a?.[x] === b?.[x]);
+const mcpFeed = (c, k, text) => {
+  if (k.fresh) {
+    let m = null;
+    try { m = text.length <= 65536 ? JSON.parse(text) : null; } catch { /* the engine answers it */ }
+    if (m?.method !== 'ping') { k.fresh = false; if (m?.method === 'initialize') k.conn = mcpWire(c, k); }
+  }
+  k.conn.line(text);
+  mcpSave(c, k);
+};
+const mcpOpen = (c, peer) => {
+  const k = { peer, conn: null, queue: [], saved: '', fresh: false };
+  mcpConns.set(c, k);
+  Promise.resolve().then(() => mcpCore().ready).then(() => {
+    if (mcpConns.get(c) !== k) return;
+    k.conn = mcpWire(c, k);
+    const was = mcpKept.get(c);
+    mcpKept.delete(c);
+    if (was && samePeer(was.peer, peer) && k.conn.restore(was.snap)) {
+      k.fresh = was.snap.era === 'legacy';
+      k.conn.changed(); // the list may have moved while no worker listened
+    }
+    mcpSave(c, k);
+    for (const text of k.queue.splice(0)) mcpFeed(c, k, text);
+  }).catch(() => { mcpLink?.close(c, 'failed'); mcpClose(c, 'failed'); });
+};
+const mcpLine = (c, text) => {
+  const k = mcpConns.get(c);
+  if (k && !k.conn) k.queue.push(text);
+  else if (k) mcpFeed(c, k, text);
+};
+const mcpClose = (c, why) => {
+  const k = mcpConns.get(c);
+  if (!k) return;
+  mcpForget(c, k);
+  k.conn?.close(why);
+};
+// The link brought to the setting and Glaze's own switch, on every trigger (on: the setting, when just read). → its status,
+// or null while it never loaded.
+const mcpEnsure = async () => {
+  if (!await mcpOn() || !await glazeOn()) {
+    mcpKept.clear();
+    if (mcpListTimer) { clearTimeout(mcpListTimer); mcpListTimer = 0; }
+    for (const c of [...mcpConns.keys()]) mcpClose(c, 'stopped');
+    return mcpLink ? mcpLink.stop() : null;
+  }
+  if (!mcpLink) {
+    if (typeof GZ_AGENT_LINK === 'undefined') agentFiles();
+    mcpLink = (() => {
+      const local = { get: async (keys) => ({ ...await chrome.storage.local.get(keys), mcp: { on: await mcpOn() && await glazeOn() } }), set: (v) => chrome.storage.local.set(v) };
+      const link = GZ_AGENT_LINK.make({ runtime: chrome.runtime, permissions: chrome.permissions, storage: { local, session: chrome.storage.session }, browser: MCP_BROWSER });
+      link.attach({ open: mcpOpen, line: mcpLine, close: mcpClose });
+      return link;
+    })();
+  }
+  return mcpLink.ensure();
+};
+const mcpTrigger = () => { mcpEnsure().catch(() => {}); };
+chrome.runtime.onStartup.addListener(mcpTrigger);
+chrome.runtime.onInstalled.addListener(mcpTrigger);
+chrome.permissions?.onAdded?.addListener(mcpTrigger);
+chrome.permissions?.onRemoved?.addListener(mcpTrigger);
+// What the list is made of: once it has settled for 500 ms, the state is read again and each connection hears whether the
+// list moved (lib/mcp/wire.js changed).
+let mcpListTimer = 0;
+chrome.storage.onChanged.addListener((c, area) => {
+  if ((area === 'local' && c.mcp) || (area === 'sync' && c.enabled)) mcpTrigger();
+  if (!mcpMade || !((area === 'local' && Object.keys(c).some((k) => ['mcp', 'mods', 'modDev', 'modsBlocklist', 'modRuntime'].includes(k) || k.startsWith('mod:'))) || (area === 'sync' && c.enabled))) return;
+  clearTimeout(mcpListTimer);
+  mcpListTimer = setTimeout(async () => {
+    if (!await mcpOn() || !await glazeOn()) return;
+    mcpRead().then((s) => {
+    mcpState = s;
+    for (const [n, k] of mcpConns) if (k.conn) { k.conn.changed(); mcpSave(n, k); }
+    }, () => {});
+  }, 500);
+});
+// The approval window's Allow and Don't allow (lib/mcp/approve.js decide checks it is that window's tab).
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:mcp-ask') return;
+  reply(mcpMade ? mcpMade.approve.decide(m, s) : { ok: false });
+});
+// Settings' Agents section, from the editor's own top frame: the switch and the link's state, the apps and their groups, and
+// the activity list. Turning on in Chrome first asks for nativeMessaging on the page, in the click.
+const MCP_OFF = { state: 'off', at: null };
+const mcpConfig = async (m) => {
+  const local = chrome.storage.local;
+  if (m.op === 'state') return { ok: true, on: await mcpOn(), link: mcpLink?.status() ?? MCP_OFF };
+  if (m.op === 'set') {
+    if (typeof m.on !== 'boolean') return { ok: false, error: 'args' };
+    await mcpConsent(m.on);
+    await local.set({ mcp: { on: m.on } });
+    if (!m.on) await mcpClearReads();
+    return { ok: true, link: (await mcpEnsure()) ?? MCP_OFF };
+  }
+  if (m.op === 'activity') { const rows = (await local.get('mcpCalls')).mcpCalls; return { ok: true, rows: Array.isArray(rows) ? rows : [] }; }
+  if (!['apps', 'grant', 'revoke', 'forget'].includes(m.op)) return { ok: false, error: 'op' };
+  if (typeof GZ_MCP_GRANTS === 'undefined') grantFiles();
+  const grants = mcpGrants();
+  if (m.op === 'apps') return { ok: true, apps: await grants.list() };
+  if (m.op === 'grant') return { ok: !!await grants.grant(m.app, m.group, m.on) };
+  const ok = await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget());
+  if (ok && m.op === 'forget') { await mcpClearReads(); await local.remove('mcpCalls'); }
+  return { ok };
+};
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:mcp-config') return;
+  if (!fromEditor(s) || s.frameId !== 0 || !extensionOrigin(s)) { reply({ ok: false, error: 'sender' }); return; }
+  mcpConfig(m).then(reply, () => reply({ ok: false, error: 'failed' }));
+  return true;
+});
+// At worker start: everything while it is on (the approval sweep and the kept connections run then), and the link.
+Promise.resolve().then(async () => {
+  if (await mcpOn() && await glazeOn()) mcpCore();
+  return mcpEnsure();
+}).catch(() => {});
 
 // The mod blocklist (lib/blocklist.js): a signed list of mods to stop, asked for at most daily and only while a code mod is
 // installed on Chrome and the setting is on. Nothing is scheduled: a page loading the mods runtime (glaze:load above) and the editor

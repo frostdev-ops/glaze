@@ -19,6 +19,18 @@ const dates = {
 const SYLLABUS = 'BIO 101\nMidterm exam — Oct 12, 2026 (25%).\nFinal project due December 5, 2026.';
 const answer = (items) => ({ json: { items } });
 
+test('a trusted bounded subrequest caps an advanced output override in both fit and inference', async () => {
+  const task = T.define({ ...dates, id: 'example.bounded', orchestrate: async (inp, { text, ask, fits }) => {
+    const request = dates.build(inp, { text });
+    assert.equal(fits(request), false, 'the ordinary 4096-token override cannot fit this small model');
+    assert.equal(fits(request, { maxTokensCap: 512 }), true);
+    return ask(request, { maxTokensCap: 512 });
+  } });
+  const cfg = { caps: { context: 1800 }, replies: [answer([])], seen: [] };
+  await T.run(task, { text: 'A short supplied task.' }, { provider: 'mock', cfg, over: { maxTokens: 4096 } });
+  assert.equal(cfg.seen[0].maxTokens, 512);
+});
+
 test('a task runs: input cleaned, request fenced with instructions only in system, answer checked and grounded', async () => {
   const task = T.define(dates);
   const cfg = { replies: [answer([{ title: 'Midterm', date: '2026-10-12', quote: 'Midterm exam - Oct 12, 2026' }, { title: 'Quiz 9', date: '2026-11-01', quote: 'Quiz 9 on Nov 1' }])], seen: [] };
@@ -110,13 +122,120 @@ test('a task that streams lets the deltas through; one that doesn\'t, doesn\'t',
   assert.deepEqual(words, ['{"items"', ':[]}']);
 });
 
-test('the settings model is off by default, local, and lets a feature ask only when AI is on, a provider chosen and it is allowed', () => {
-  assert.deepEqual(A.clean(undefined), { on: false, use: null, features: { syllabus: false } });
-  assert.deepEqual(A.clean({ on: 'yes', use: 'Bad Name', features: { syllabus: 1, other: true } }), { on: false, use: null, features: { syllabus: false } });
-  const s = A.clean({ on: true, use: 'my-ollama', features: { syllabus: true } });
-  assert.equal(s.use, 'my-ollama');
+test('the settings model is off by default, local, and lets a feature ask only when AI is on, a model chosen and it is allowed', () => {
+  assert.deepEqual(A.clean(undefined), { on: false, outline: true, sources: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false } });
+  assert.deepEqual(A.clean({ on: 'yes', use: 'Bad Name', features: { syllabus: 1, other: true } }).model, { use: null, model: '' });
+  const s = A.clean({ on: true, model: { use: 'my-ollama', model: 'llama3.2' }, features: { syllabus: true } });
+  assert.equal(s.model.use, 'my-ollama');
   assert.equal(A.allowed(s, 'syllabus'), true);
   assert.equal(A.allowed({ ...s, on: false }, 'syllabus'), false);
-  assert.equal(A.allowed({ ...s, use: null }, 'syllabus'), false);
+  assert.equal(A.allowed({ ...s, model: { use: 'my-ollama', model: '' } }, 'syllabus'), false);
   assert.equal(A.allowed(s, 'grades'), false);
+});
+
+test('what the student set goes on every request over the task\'s own, and a longer timeout lengthens the run', async (t) => {
+  // The loop subtracts elapsed wall time from the provider budget. Pin Date for the exact override assertion;
+  // native timers still verify that the 120ms response survives the task's original 50ms deadline.
+  t.mock.timers.enable({ apis: ['Date'], now: 1000 });
+  const task = T.define({ ...dates, limits: { ms: 50 } });
+  const over = { effort: 'low', temperature: 0.4, maxTokens: 900, timeoutMs: 2000 };
+  const cfg = { replies: [{ ...answer([]), wait: 120 }], seen: [] };
+  await T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg, over });
+  const [req] = cfg.seen;
+  assert.deepEqual({ effort: req.effort, temperature: req.temperature, maxTokens: req.maxTokens, timeoutMs: req.timeoutMs }, over);
+  const kept = { replies: [answer([])], seen: [] };
+  await T.run(T.define({ ...dates, build: (input, { text }) => text.request({ system: 'x', data: [{ label: 'd', text: input.text }], maxTokens: 400, temperature: 0, effort: 'none' }) }), { text: SYLLABUS }, { provider: 'mock', cfg: kept, over: { maxTokens: 64 } });
+  assert.deepEqual([kept.seen[0].effort, kept.seen[0].temperature, kept.seen[0].maxTokens], ['none', 0, 64], 'the task\'s own where the student set nothing');
+  assert.equal(T.prepare(T.define(dates), { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [] }, over: { temperature: 1 } }).temperature, 1, 'a warm-up readies the session the run will use');
+});
+
+test('an effort the student sets above its task\'s own gets room to think beside the answer\'s own output, unless the student set the output', async () => {
+  // writer.complete's way: no reasoning, 64 tokens for the rest of a sentence. Reasoning counts against max_tokens, so a
+  // student's Low would spend all 64 thinking (OpenRouter, 2026-10-27: 23 thinking events, then no text).
+  const quick = T.define({ ...dates, build: (input, { text }) => text.request({ system: 'x', data: [{ label: 'd', text: input.text }], maxTokens: 64, effort: 'none' }) });
+  const sent = async (task, over) => { const cfg = { replies: [answer([])], seen: [] }; await T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg, over }); return [cfg.seen[0].effort, cfg.seen[0].maxTokens]; };
+  assert.deepEqual(await sent(quick, { effort: 'low' }), ['low', 64 + 2048]);
+  assert.deepEqual(await sent(quick, { effort: 'high' }), ['high', 64 + 8192]);
+  assert.deepEqual(await sent(quick, { effort: 'low', maxTokens: 100 }), ['low', 100], 'the output the student set');
+  assert.deepEqual(await sent(quick, { effort: 'none' }), ['none', 64]);
+  assert.deepEqual(await sent(quick, {}), ['none', 64]);
+  // A task that already thinks keeps its room, and gets more only for a higher effort.
+  const deep = T.define({ ...dates, build: (input, { text }) => text.request({ system: 'x', data: [{ label: 'd', text: input.text }], maxTokens: 5000, effort: 'medium' }) });
+  assert.deepEqual(await sent(deep, { effort: 'high' }), ['high', 5000 + 8192 - 4096]);
+  assert.deepEqual(await sent(deep, { effort: 'low' }), ['low', 5000]);
+  // Never past what a request may ask (lib/ai/request.js LIMIT.maxTokens).
+  const big = T.define({ ...dates, build: (input, { text }) => text.request({ system: 'x', data: [{ label: 'd', text: input.text }], maxTokens: 30000, effort: 'none' }) });
+  assert.deepEqual(await sent(big, { effort: 'high' }), ['high', 32768]);
+  assert.equal(T.prepare(quick, { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [] }, over: { effort: 'low' } }).maxTokens, 64 + 2048, 'a warm-up asks as the run will');
+});
+
+// example.finish: plain text, streamed, the rest of the sentence at the caret.
+const finish = {
+  id: 'example.finish', version: 1, output: 'text', stream: true, rate: { perMinute: 60, supersede: true }, limits: { maxTokens: 40 },
+  input: (raw) => (typeof raw?.before === 'string' && raw.before.length <= 2000 ? { before: raw.before } : null),
+  build: (input, { text }) => text.request({ system: 'Finish the sentence. Answer with the words only.', context: [{ label: 'prompt', text: 'Rivers' }], data: [{ label: 'before', text: input.before }] }),
+  check: (text, input, { truncated }) => { const cut = text.split(/(?<=[.!?])\s/)[0]; return cut.trim() && !cut.startsWith(input.before) ? (truncated ? cut.trimEnd() : cut) : null; },
+};
+
+test('a text task: no schema, its words streamed as they come, check given the text; a provider without JSON may run it', async () => {
+  const task = T.define(finish);
+  assert.equal(task.output, 'text');
+  assert.deepEqual(task.rate, { perMinute: 60, supersede: true });
+  assert.ok(Object.isFrozen(task.rate));
+  const words = [], seen = [];
+  const out = await T.run(task, { before: 'The river' }, { provider: 'mock', cfg: { replies: [{ deltas: [' runs to', ' the sea.', ' Then more.'] }], seen, caps: { json: false } },
+    emit: (e) => e.type === 'text_delta' && words.push([e.delta, e.offset]) });
+  assert.deepEqual(words, [[' runs to', 0], [' the sea.', 8], [' Then more.', 17]], 'every delta, live, with its offset');
+  assert.equal(out.output, ' runs to the sea.', 'the task\'s check cut it at the sentence end');
+  assert.equal(out.meta.finish, 'stop');
+  assert.equal('truncated' in out.meta, false);
+  assert.equal(seen[0].schema, undefined, 'no schema asked for');
+  assert.equal(seen[0].maxTokens, 40);
+  await assert.rejects(T.run(task, { before: 'The river' }, { provider: 'mock', cfg: { replies: [{ text: 'The river' }] } }), { code: 'check' }, 'check still refuses');
+});
+
+test('a text task cut off at maxTokens gives the words so far, marked truncated; a JSON task cut off is still a refusal', async () => {
+  const out = await T.run(T.define(finish), { before: 'The river' }, { provider: 'mock', cfg: { replies: [{ text: ' runs to the ', finish: 'length' }] } });
+  assert.equal(out.output, ' runs to the');
+  assert.equal(out.meta.truncated, true);
+  assert.equal(out.meta.finish, 'length');
+  await assert.rejects(T.run(T.define(dates), { text: SYLLABUS }, { provider: 'mock', cfg: { replies: [{ ...answer([]), finish: 'length' }] } }), { code: 'refusal' });
+});
+
+test('a definition\'s rate and text output are checked', () => {
+  for (const rate of [{}, { perMinute: 0 }, { perMinute: 121 }, { perMinute: 1.5 }, { supersede: 'yes' }, { other: true }, 'fast']) {
+    assert.throws(() => T.define({ ...finish, rate }), /: rate$/, JSON.stringify(rate));
+  }
+  assert.throws(() => T.define({ ...finish, output: 'words' }), /: output$/);
+  assert.equal(T.define({ ...finish, rate: { supersede: true } }).rate.perMinute, undefined);
+  assert.equal(T.define(dates).rate, undefined, 'a task without one keeps the broker\'s limits');
+});
+
+test('orchestrated requests share accounting and cannot exceed the registered call cap', async () => {
+  const built = () => X.request({ system: 'Read the dates.', data: [{ label: 'source', text: SYLLABUS }], maxTokens: 100 });
+  const task = T.define({ ...dates, limits: { calls: 2 }, orchestrate: async (input, { ask }) => {
+    await ask(built()); await ask(built()); return ask(built());
+  } });
+  const cfg = { replies: () => answer([]), seen: [] };
+  await assert.rejects(T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg }), { code: 'limit' });
+  assert.equal(cfg.seen.length, 2);
+  assert.throws(() => T.define({ ...dates, limits: { calls: 65 } }), /limits/);
+});
+
+test('orchestration cannot overlap provider calls or retain call authority after the run ends', async () => {
+  const built = X.request({ system: 'Read the dates.', data: [{ label: 'source', text: SYLLABUS }], maxTokens: 100 });
+  let later;
+  const task = T.define({ ...dates, orchestrate: async (input, { ask, fits }) => {
+    later = ask;
+    assert.equal(fits(built), true);
+    const first = ask(built);
+    await assert.rejects(ask(built), { code: 'limit' });
+    return first;
+  } });
+  const cfg = { replies: () => answer([]), seen: [] };
+  const out = await T.run(task, { text: SYLLABUS }, { provider: 'mock', cfg });
+  assert.equal(out.meta.parts, 1);
+  assert.ok(out.meta.usage.input > 0);
+  await assert.rejects(later(built), { code: 'limit' });
+  assert.equal(cfg.seen.length, 1);
 });

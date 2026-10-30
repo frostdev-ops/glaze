@@ -25,6 +25,7 @@ const built = (dir, stores = ['chrome', 'firefox'], applePlatforms = []) => ({
     firefoxSource: write(dir, 'glaze-v1.0.0-source.zip', 'source zip'),
     MAC_OS: write(dir, 'glaze-1.0.0-appstore.pkg', 'pkg'),
     IOS: write(dir, 'glaze-1.0.0-ios.ipa', 'ipa'),
+    mcpb: write(dir, 'glaze-mcp-1.0.0.mcpb', 'bundle'),
   },
 });
 
@@ -67,6 +68,21 @@ test('verify requires every artifact of every selected store, Apple platforms in
     assert.throws(() => verify(manifest, dir), /Artifact IOS is required/);
     manifest = built(dir, ['chrome', 'apple'], ['MAC_OS']);
     assert.doesNotThrow(() => verify(manifest, dir));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('verify requires Claude Desktop\'s bundle whenever both store ZIPs are built, and checks its bytes', async () => {
+  const { verify } = await store(), dir = scratch();
+  try {
+    let manifest = built(dir);
+    delete manifest.files.mcpb;
+    assert.throws(() => verify(manifest, dir), /Artifact mcpb is required/);
+    manifest = built(dir, ['chrome', 'apple'], ['MAC_OS']);
+    delete manifest.files.mcpb;
+    assert.doesNotThrow(() => verify(manifest, dir), 'store-only work that cannot make a public release builds no bundle');
+    manifest = built(dir);
+    fs.appendFileSync(path.join(dir, 'glaze-mcp-1.0.0.mcpb'), 'x');
+    assert.throws(() => verify(manifest, dir), /Checksum changed for glaze-mcp-1\.0\.0\.mcpb; refusing upload\./);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -146,6 +162,18 @@ test('asset action: a published release is never changed, whether the asset is m
   for (const existing of [undefined, { name: 'a.dmg' }]) {
     assert.throws(() => assetAction({ draft: false }, 'a.dmg', existing, false), /Published release asset a\.dmg is missing or different; refusing to change a published candidate\./);
   }
+});
+
+test('the GitHub release carries both store ZIPs and Claude Desktop\'s bundle, uploaded, verified and fetched like the rest', async () => {
+  const { storeAssets } = await pub();
+  const item = (name) => ({ path: name, sha256: sha(name) });
+  const files = { chrome: item('a.zip'), firefox: item('b.zip'), firefoxSource: item('s.zip'), MAC_OS: item('p.pkg'), mcpb: item('c.mcpb') };
+  assert.deepEqual(storeAssets({ files }), [files.chrome, files.firefox, files.mcpb], 'the reviewer source and App Store packages stay off GitHub');
+  delete files.mcpb;
+  assert.throws(() => storeAssets({ files }), /Artifact mcpb is required/);
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/public-release.mjs'), 'utf8');
+  assert.match(source, /const assets = \[\.\.\.Object\.values\(state\.files\), \.\.\.storeAssets\(manifest\)\];/);
+  assert.equal(source.match(/for \(const item of assets\)/g).length, 3, 'each is uploaded, checked by digest, then fetched from its public URL');
 });
 
 test('publishing uploads with --clobber only when the draft action says replace', () => {
@@ -316,4 +344,50 @@ test('verifyPublic refuses a DMG that was swapped after signing, even with a ref
     rehash(dir, manifest, 'dmg');
     assert.throws(() => verifyPublic(manifest, dir, dir, env), /does not authenticate this DMG/, 'same length, different bytes');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- public-release preparePublic: SHA256SUMS covers every GitHub asset ----
+
+test('preparePublic writes SHA256SUMS for every GitHub asset: the Mac files, the feed, both store ZIPs and the bundle', { skip: !hasPython && 'needs python3' }, async () => {
+  const { preparePublic } = await pub(), base = scratch();
+  try {
+    const root = path.join(base, 'root'), out = path.join(base, 'out'), bin = path.join(base, 'bin');
+    write(root, 'scripts/safari-appcast.sh', 'exit 1\n');
+    gitIn(base, 'init', '-q', root); gitIn(root, 'add', '.'); gitIn(root, 'commit', '-qm', 'source');
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+    const key = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64');
+    const old = { version: '9.9.8', url: 'https://example.invalid/old.dmg', length: 1, signature: 'AAAA' };
+    // The live feed, wherever curl is told to write it.
+    write(bin, 'feed.xml', feed([old]));
+    fs.writeFileSync(path.join(bin, 'curl'), '#!/bin/sh\nwhile [ "$1" != -o ]; do shift; done\ncp "$(dirname "$0")/feed.xml" "$2"\n', { mode: 0o755 });
+    const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, SAFARI_UPDATE_PUBLIC_KEY: key, SPARKLE_BIN: '/sparkle/bin', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+    const MAC = ['.dmg', '.zip', '.dmg.sha256', '.sha256'];
+    // Stand-ins for the clone, build-safari.sh and safari-appcast.sh, the stages that build and sign on a release Mac.
+    const run = async (command, args, cwd, stepEnv) => {
+      if (command === 'git') return void gitIn(cwd, ...args);
+      if (args[0] === 'scripts/build-safari.sh') { for (const suffix of MAC) write(cwd, `release/${VERSION}/github/${NAME}${suffix}`, `${suffix} bytes`); return; }
+      if (args[0] === 'scripts/safari-appcast.sh') {
+        const dmg = fs.readFileSync(args[1]);
+        const entry = { version: VERSION, url: `https://github.com/frostdev-ops/glaze/releases/download/v${VERSION}/${NAME}.dmg`, length: dmg.length, signature: crypto.sign(null, dmg, privateKey).toString('base64') };
+        fs.writeFileSync(stepEnv.SAFARI_APPCAST_OUT, feed([entry, old]));
+        return;
+      }
+      throw new Error(`unexpected step ${command} ${args.join(' ')}`);
+    };
+    const files = {
+      chrome: write(out, `glaze-v${VERSION}.zip`, 'chrome zip'), firefox: write(out, `glaze-v${VERSION}-firefox.zip`, 'firefox zip'),
+      firefoxSource: write(out, `glaze-v${VERSION}-source.zip`, 'source zip'), mcpb: write(out, `glaze-mcp-${VERSION}.mcpb`, 'bundle'),
+    };
+    const manifest = { version: VERSION, sourceCommit: gitIn(root, 'rev-parse', 'HEAD'), files };
+    let saves = 0;
+    await preparePublic({ manifest, save: () => { saves++; }, out, root, env, run });
+    assert.equal(manifest.public.ready, true);
+    assert.equal(saves, 1);
+    const rows = fs.readFileSync(path.join(out, 'public/SHA256SUMS'), 'utf8').trimEnd().split('\n').map((row) => row.split('  '));
+    assert.deepEqual(rows.map(([, name]) => name), [...MAC.map((suffix) => NAME + suffix), 'appcast.xml', `glaze-v${VERSION}.zip`, `glaze-v${VERSION}-firefox.zip`, `glaze-mcp-${VERSION}.mcpb`]);
+    for (const [hash, name] of rows) {
+      const file = [path.join(out, 'public', name), path.join(out, name)].find((f) => fs.existsSync(f));
+      assert.equal(hash, sha(fs.readFileSync(file)), name);
+    }
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });

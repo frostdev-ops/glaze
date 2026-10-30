@@ -13,7 +13,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // features/place.js on a Canvas course's Modules page (or an item opened from it), with the page's storage, messages, scroll
 // and timers faked. env.sent: the messages it sent; env.writes: what it wrote to storage.local itself.
 const canvasPage = ({ search = '', stored = {} } = {}) => {
-  const env = { sent: [], writes: [], timers: [], scroll: [], session: {} };
+  const env = { sent: [], writes: [], timers: [], scroll: [], session: {}, settings: { enhance: { place: true } } };
   const list = { id: 'context_modules_sortable_container', getBoundingClientRect: () => ({ top: -300 }), parentElement: null };
   const scroller = { scrollTop: 0 };
   const local = {
@@ -25,7 +25,7 @@ const canvasPage = ({ search = '', stored = {} } = {}) => {
     GZ_PAGE: require('../lib/page.js'),
     GZ_CTX: {
       site: 'canvas', local: (fn) => fn(local), courseId: () => undefined, toggleOf: () => null, ROWS: '.row', placeAsked: () => 0,
-      canvasCourseKey: () => 'canvas:https://school.instructure.com/25', settings: () => ({ enhance: { place: true } }), solo: true, on: () => true,
+      canvasCourseKey: () => 'canvas:https://school.instructure.com/25', settings: () => env.settings, solo: true, on: () => true,
       acted: () => 0, holding: () => false, tapped: () => null,
     },
     location: { pathname: '/courses/25/modules', search, origin: 'https://school.instructure.com' },
@@ -33,9 +33,11 @@ const canvasPage = ({ search = '', stored = {} } = {}) => {
     document: { scrollingElement: scroller, body: {}, getElementById: (id) => (id === list.id ? list : null), querySelectorAll: () => [], documentElement: { toggleAttribute() {} },
       addEventListener: (type, f) => { if (type === 'scroll') env.scroll.push(f); } },
     getComputedStyle: () => ({ overflowY: 'visible' }),
+    clearTimeout: (id) => { if (env.timers[id - 1]) env.timers[id - 1].cancelled = true; },
     setTimeout: (f, ms) => { env.timers.push({ f, ms }); return env.timers.length; },
     chrome: { runtime: { sendMessage: (m, cb) => { env.sent.push(JSON.parse(JSON.stringify(m))); cb?.({ ok: true }); } }, storage: { local } },
   });
+  env.local = local;
   env.scroller = scroller;
   env.stored = stored;
   env.sendFails = () => { context.chrome.runtime.sendMessage = () => { throw new Error('Extension context invalidated.'); }; };
@@ -76,6 +78,21 @@ test('a page whose extension was reloaded under it keeps its own tab copy and fa
   assert.doesNotThrow(() => env.timers[0].f());
   assert.equal(JSON.parse(env.session['gz-place:canvas:https://school.instructure.com/25']).top, 300);
   assert.deepEqual(env.writes, []);
+});
+
+test('disabling place cancels restoration and ignores its outstanding storage reply', async () => {
+  const env = canvasPage({ stored: { coursePlace: { 'canvas:https://school.instructure.com/25': { top: 900 } } } });
+  const get = env.local.get; let answer;
+  env.local.get = (k, cb) => { answer = () => get(k, cb); };
+  env.ui.sync();
+  env.settings.enhance.place = false; env.ui.stop(true);
+  answer();
+  assert.equal(env.scroller.scrollTop, 0);
+  assert.equal(env.timers.length, 0, 'a late read cannot restart a cancelled restore');
+  env.settings.enhance.place = true; env.local.get = get; env.ui.sync();
+  assert.ok(env.timers.some((t) => t.ms === 200), 'enabling again starts a fresh place lifecycle');
+  env.ui.stop(true);
+  assert.ok(env.timers.every((t) => t.cancelled));
 });
 
 // ---- who the worker takes them from ------------------------------------------------------------------------------------

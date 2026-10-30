@@ -11,6 +11,7 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const BB = 'https://bb.school.edu', CANVAS = 'https://canvas.school.edu', WWW = 'https://www.school.edu';
+const env = require('./check-env.js');
 const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${BB}/*`, `${CANVAS}/*`, `${WWW}/*`]);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sites-'));
@@ -52,7 +53,7 @@ const stub = (required) => {
       ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
-    require('./check-env.js').noFirstRun(ctx);
+    const welcomed = env.noFirstRun(ctx);
     await ctx.addInitScript(stub, require('../manifest.json').host_permissions);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
@@ -66,13 +67,18 @@ const stub = (required) => {
     });
     const sw = ctx.serviceWorkers().find((w) => w.url().startsWith(`chrome-extension://${id}/`)) || await ctx.waitForEvent('serviceworker', { predicate: (w) => w.url().startsWith(`chrome-extension://${id}/`) });
     const local = () => sw.evaluate(() => chrome.storage.local.get(['canvas', 'moodle', 'ultra']));
+    // The install's work first: its storage writes, and its first screen, which opens as the active tab whenever it comes.
+    await env.installed(sw);
+    let welcomeTimer;
+    try {
+      await Promise.race([welcomed, new Promise((_, no) => { welcomeTimer = setTimeout(() => no(new Error('the install never closed its first screen')), 45000); })]);
+    } finally { clearTimeout(welcomeTimer); }
 
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
     page.on('console', (m) => { if (m.type() === 'error' && !(m.text().startsWith('Failed to load resource') && !m.location().url.startsWith('chrome-extension:'))) errors.push(m.text()); });
     await page.goto(`${OPTIONS}#backup/sites`);
     await page.waitForSelector('#site-add', { state: 'visible', timeout: 15000 });
-    await pause(800);
     const state = () => page.evaluate(() => ({
       note: !document.querySelector('#site-note').hidden, error: document.querySelector('#site-error').textContent,
       picks: [...document.querySelectorAll('#site-picks button')].map((b) => b.textContent), status: document.querySelector('#site-status').textContent,
@@ -81,6 +87,7 @@ const stub = (required) => {
       rows: [...document.querySelectorAll('#site-list li')].map((li) => [li.querySelector('.name > span').textContent, li.querySelector('.name small').textContent]),
     }));
     const gz = (fn, arg) => page.evaluate(fn, arg);
+    const asking = () => gz(() => !!__gz.answer); // a request parked by the stub: the browser is asking
     const shot = (name) => page.locator('#sites').screenshot({ path: path.join(out, `${name}.png`) });
     const type = async (text) => { await page.fill('#site-address', ''); await page.type('#site-address', text, { delay: 15 }); };
 
@@ -90,7 +97,7 @@ const stub = (required) => {
 
     await type('not a site');
     await page.keyboard.press('Enter');
-    await pause(200);
+    await until(async () => (await state()).note);
     s = await state();
     check(s.note && s.error === 'Not a web address' && (await gz(() => __gz.asked.length)) === 0, 'what isn\'t an address is refused, with nothing asked');
     await shot('settings-2-invalid');
@@ -99,21 +106,22 @@ const stub = (required) => {
 
     await type('https://canvas.school.edu/courses/12?x=1');
     await page.click('#site-allow');
-    await pause(200);
+    await until(asking);
     s = await state();
     check(s.readOnly && s.busy === 'true', 'while the browser asks, the field holds and the button waits');
     check(JSON.stringify(await gz(() => __gz.asked.at(-1))) === `["${CANVAS}/*"]`, 'it asks for exactly that host');
     check(JSON.stringify(await gz(() => __gz.sent.at(-1))) === JSON.stringify({ type: 'glaze:allow', op: 'ask', origin: CANVAS }), 'after telling the worker');
     await shot('settings-3-asking');
     await gz(() => __gz.answer(false));
-    await pause(300);
+    await until(async () => { const now = await state(); return !now.readOnly && !now.busy; });
     s = await state();
     check(!s.readOnly && !s.busy && !s.note && !s.status && s.value === 'https://canvas.school.edu/courses/12?x=1', 'refused, it is as it was, with nothing said');
 
     await page.click('#site-allow');
-    await pause(200);
+    await until(asking);
     await gz(() => __gz.answer(true));
     check(await until(async () => (await state()).rows.some(([h]) => h === 'canvas.school.edu'), 15000), 'granted and checked, the site is listed');
+    await until(async () => !(await state()).busy); // the list follows storage; the field and status follow the add's end
     s = await state();
     check(JSON.stringify(s.rows) === '[["canvas.school.edu","Canvas"]]' && s.status === 'Allowed canvas.school.edu' && s.value === '' && s.focus === 'site-address', `with its LMS named, and the field ready for another (${JSON.stringify(s)})`);
     check((await local()).canvas?.includes(`${CANVAS}/*`), 'the worker checked it again and approved it');
@@ -124,7 +132,7 @@ const stub = (required) => {
 
     await type('www.school.edu');
     await page.click('#site-allow');
-    await pause(200);
+    await until(asking);
     await gz(() => __gz.answer(true));
     check(await until(async () => (await state()).note, 15000), 'a school\'s main website is turned down');
     s = await state();
@@ -133,17 +141,18 @@ const stub = (required) => {
     check(s.focus === 'bb.school.edu', 'the pick has focus');
     await shot('settings-5-no-course-site');
     await page.click('#site-picks button');
-    await pause(200);
+    await until(asking);
     check(JSON.stringify(await gz(() => __gz.asked.at(-1))) === `["${BB}/*"]`, 'picking it asks for that site');
     await gz(() => __gz.answer(true));
     check(await until(async () => (await state()).rows.some(([h]) => h === 'bb.school.edu'), 15000), 'and it is listed');
+    await until(async () => !(await state()).busy);
     s = await state();
     check(JSON.stringify(s.rows) === '[["bb.school.edu","Blackboard Ultra"],["canvas.school.edu","Canvas"]]' && !s.note, `as Blackboard Ultra (${JSON.stringify(s.rows)})`);
     await shot('settings-6-picked');
 
     await type('bb.nowhere.edu');
     await page.keyboard.press('Enter');
-    await pause(200);
+    await until(asking);
     await gz(() => __gz.answer(true));
     check(await until(async () => (await state()).note, 15000), 'a site that doesn\'t answer is turned down');
     s = await state();
@@ -158,12 +167,12 @@ const stub = (required) => {
     check(await until(async () => !(await state()).rows.some(([h]) => h === 'canvas.school.edu')), 'Remove takes the site off the list');
     check(await until(async () => JSON.stringify(await gz(() => __gz.removed.at(-1))) === `["${CANVAS}/*"]`), 'and hands its grant back');
     check(!(await local()).canvas?.includes(`${CANVAS}/*`), 'the worker forgot it');
-    check((await state()).status === 'Removed canvas.school.edu. Glaze no longer runs there.', 'and says so');
+    check(await until(async () => (await state()).status === 'Removed canvas.school.edu. Glaze no longer runs there.'), 'Remove reports completion for canvas.school.edu');
     await shot('settings-8-removed');
     await gz((p) => { __gz.required = [...__gz.required, p]; }, `${BB}/*`);
     await removeRow('bb.school.edu');
     check(await until(async () => (await state()).rows.length === 0), 'a site on a required host is removed from the list');
-    await pause(400);
+    check(await until(async () => (await state()).status === 'Removed bb.school.edu. Glaze no longer runs there.'), 'Remove reports completion for bb.school.edu');
     const kept = await gz(() => __gz.removed);
     check(kept.length === before + 1 && JSON.stringify(kept.at(-1)) === `["${CANVAS}/*"]` && await gz((p) => __gz.held.has(p), `${BB}/*`), `and its grant stays (${JSON.stringify(kept)})`);
 
@@ -173,7 +182,7 @@ const stub = (required) => {
     await school.goto(`${WWW}/settings`);
     const frame = await until(async () => school.frames().find((f) => f.url().startsWith(OPTIONS)));
     await frame.waitForSelector('#site-add', { state: 'attached', timeout: 15000 });
-    await pause(800);
+    await frame.waitForFunction(() => document.documentElement.hasAttribute('data-embedded') && !!document.querySelector('[data-editor-panel="backup"] .embed-gate'), null, { timeout: 15000 }).catch(() => {});
     const framed = await frame.evaluate(() => ({ embedded: document.documentElement.hasAttribute('data-embedded'), form: document.querySelector('#site-add').getClientRects().length,
       gated: document.querySelector('[data-editor-panel="backup"]').hasAttribute('data-gated'), gate: !!document.querySelector('[data-editor-panel="backup"] .embed-gate') }));
     check(framed.embedded && framed.gated && framed.gate && framed.form === 0, `embedded Settings keeps Sites in its own tab (${JSON.stringify(framed)})`);

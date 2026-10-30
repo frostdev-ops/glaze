@@ -63,6 +63,7 @@ over-long value is an error, and nothing is trimmed.
 | `hooks` | A `.js` file of the mod, run in a Worker. |
 | `replaces` | What the mod can take over, below. |
 | `settings` | At most 32, below. |
+| `tools` | At most 8, for the agent apps the student connects, below. |
 
 ### `packs`
 
@@ -88,16 +89,19 @@ chooses what to allow, and can take any of it back later. A call without its gra
 | `nav.read` | `glaze.nav.model()` and the `nav.change`, `nav.navigate`, `nav.expand`, `nav.collapse` and `nav.sheet` events. Glaze's bar shows course names and unread counts, so this is personal data. |
 | `nav.items` | `glaze.nav.add()`, `glaze.nav.update()` and `glaze.nav.remove()`: up to 8 items of the mod's own in Glaze's bar, and the `nav.action` event. |
 | `nav.layout` | `glaze.nav.layout()`, a layout returned from `glaze.nav.items()`, and a `nav` in `glaze.look.override()`: a layout proposed over the student's while the mod runs. Its links go only to pages of the school's site. |
+| `agents` | Agent apps the student connects in **Settings → AI → Agents** can call the mod's `tools`, below. |
 | `network:<host>` | `glaze.fetch()` to `https://<host>/`. The host is a lowercase DNS name with at least two labels: no port, wildcard, address or local name, and subdomains don't count. At most 8. |
+| `documents` | On the [Documents page](#the-documents-page): `glaze.documents.list()`, `open()`, `create()`, `add()`, `remove()` and `style()`, and the `documents.action` and `documents.change` events. The list holds the titles, courses and word counts of the student's documents, so this is personal data. |
+| `documents.read` | `glaze.documents.read()` and `glaze.documents.export()`: a document's text, and the file it saves as. Needs `documents` too. |
 
 `why` is one line of at most 280 characters.
 
-- **Personal data stays in the Worker.** A mod that declares `courses`, `todo`, `grades` or `nav.read` has no page of its own: no
+- **Personal data stays in the Worker.** A mod that declares `courses`, `todo`, `grades`, `nav.read`, `documents` or `documents.read` has no page of its own: no
   HTML file anywhere in its bundle, and every UI is a component tree. A mod that has held such data stays Worker-only
   through updates.
 - **Glaze adds its own warnings** to the prompt: personal data together with a network host ("could send your grades to
-  ..."), a page of its own (it can contact other sites, which learn the student's address and when they use it), unsigned
-  (Dev), not reviewed, and Chrome only.
+  ..."), a page of its own (it can contact other sites, which learn the student's address and when they use it), code tools
+  with a network host (they can send what an app asks for there), unsigned (Dev), not reviewed, and Chrome only.
 - **Code is a permission of its own.** A mod with `hooks` or a slot `file` is listed as "Runs its author's code". An update
   that adds code to a mod that had none (a widget made of blocks) asks again, even with the same permissions, and a
   followed channel waits for the student's review.
@@ -135,13 +139,55 @@ and `label` (one line, at most 60).
 | `text` | `max` (1 to 500, default 500), `default` | a line of text, `''` by default |
 | `color` | `default` | `#rrggbb` (lowercase), `#000000` by default |
 
+### `tools`
+
+Tools that agent apps the student connects in **Settings → AI → Agents** can call. They need the `agents` permission, and each
+appears on its own line in the install prompt; an update that adds a tool, or changes where one's answers come from, asks
+again. Apps see a tool's title as "<mod name> (mod): <title>" and its description after "Written by the mod's author, not
+Glaze." Each tool has:
+
+- `name`: `[a-z][a-z0-9_]`, at most 24 characters, unique in the mod.
+- `title`: one line, at most 60 characters.
+- `description`: one line, at most 500 characters, for the app's model.
+
+**Declarative tools** are answered by Glaze from what it has read, with none of the mod's code, on every browser and with
+no school page open:
+
+```json
+{ "name": "due_soon", "title": "Due soon", "description": "Open to-dos due in the next week, soonest first.", "from": "todo",
+  "select": ["title", "course", "due", "url"], "where": [{ "field": "done", "eq": false }, { "field": "due", "days": 7 }],
+  "sort": { "field": "due", "order": "asc" }, "limit": 20, "input": { "course": true } }
+```
+
+| Key | |
+|---|---|
+| `from` | Required. `todo` (every to-do), `schedule` (to-dos with a due date), `courses` or `grades`: the fields of `glaze.todo()`, `glaze.courses()` or `glaze.grades()`. Needs that permission (`todo` for both plans). |
+| `select` | The fields each answer has, in that order; all of them when left out. |
+| `where` | At most 8 tests, all of which an item passes: `{ field, eq }`, that value exactly (`null` for no date, grade or colour), or `{ field, days }` on `due` or `at`, within that many days from now (-366 to 366, not 0; negative looks back). |
+| `sort` | `{ field, order }`, `asc` or `desc`. Empty values go last; ties keep the source's order. |
+| `limit` | 1 to 200 items; 200 when left out. |
+| `input` | What the app may pass: `"course": true`, one course's items by its id; `"days": true`, 1 to 60 days from now (ahead for due dates, back for when Glaze read a grade; not for `courses`). |
+
+**Code tools**, `{ name, title, description, code: true, input }`, are answered by the mod's Worker, so they need `hooks`,
+and run in Chrome while a school page is open. `input` is the arguments' JSON Schema: an object at the root, in the subset
+`lib/ai/schema.js` checks, with no `reason` property; none when left out. The student approves each call in Glaze, which
+then hands it to the mod on an open page of that school, signed in as the account the app asked about. The Worker answers
+with `glaze.tools.handle`:
+
+```js
+glaze.tools.handle('open_count', async () => ({ open: (await glaze.todo()).filter((i) => !i.done && !i.submitted).length }));
+```
+
+The answer is accepted only while that tab is still signed in as the requested account. Cancelling before dispatch stops
+the call; once dispatched, it runs to its answer or the 15 s timeout. Each broker write takes its own serialized turn.
+
 ### Look parts
 
 `parts` holds the same data as a theme code's parts, cleaned by `lib/lookparts.js`, which has every field and limit.
 An installed mod's `parts` apply while it is on (and not blocklisted; a development copy only while development mode is on),
 on every browser: a mod with only `parts` and no code is a whole mod, and a code mod's parts apply in Firefox and Safari
-too, where its code can't run. They go where a Look's parts go, including live course tabs, never on quiz or tool pages, nor on a course that wears
-a Look of its own. The student's Look is the base; each mod's parts lay over it in the student's mod order: the first
+too, where its code can't run. They go where a Look's parts go, including live course tabs, never on quiz or tool pages. The
+student's Look is the base, or on a course that wears a Look of its own, that Look; each mod's parts lay over it in the student's mod order: the first
 mod to set a key (`bg`, `anim`, `fx`, `cursor`, `pointer`, `type`, `nav`) wins it whole, and `rules` add up, the Look's first, to 64 in
 all. A mod's background is drawn whatever kind of background the student chose. `glaze.look.override()` layers from
 running code go on top of all of these. Turning the mod off, removing it or reordering applies at once:
@@ -227,7 +273,7 @@ Two places, by what the mod asks for:
   popups and browser storage are blocked. A frame UI that navigates away is stopped; Glaze still warns that a page of
   its own can contact other sites. `glaze.storage` is the mod's storage.
 - **When it runs.** In the top frame of Canvas, Blackboard Ultra and Moodle pages Glaze is on, never on a quiz or a
-  tool's page. It stops when the page goes, the mod is turned off or revoked, or Glaze is turned off.
+  tool's page; and, for a mod granted `documents`, its Worker on the Documents page in a tab of its own. It stops when the page goes, the mod is turned off or revoked, or Glaze is turned off.
 - **When it is stopped.** A Worker that doesn't answer the heartbeat (every 2 s) for 5 s, a frame that holds the page for
   2 s or more, more than 240 messages from the mod in a second, a frame that navigates away, and an error that is
   thrown and not caught in a Worker (including one thrown inside a handler or a `decorate` or `items` function; a
@@ -274,6 +320,15 @@ Where a row says Worker, a frame UI can't use it (personal data goes to Workers 
 | `glaze.effects.play(kind, options?)` | A particle effect: `kind` is `burst`, `confetti`, `rain`, `ring`, `sprite` or `contour` (up to 4 nested rings stepping out to `size`, traced round `spread` degrees and lifted by -`gravity` × 4 px, then its `shapes` round the rim). Options: `count` 1 to 60, `shapes` (up to 4 of `dot` `star` `snow` `heart` `leaf` `spark`), `c` (up to 6 colours), `spread` 0 to 360, `gravity` -2 to 2, `life` 200 to 2500 ms, `size` 2 to 48, `x` and `y` 0 to 1 (fractions of the window; 0.5 and 0.33 by default). One a mod every 200 ms; none with motion off or the page hidden. | |
 | `glaze.look.override(parts)` | Look parts laid over the student's Look while the mod runs, never saved; `null` removes them. The first mod in the student's order to give a part wins it; `rules` add up. Media `src` and `type` must exactly match `parts.bg.media` in the installed manifest; code can change its fit, dim and loop controls. A `nav` is a nav layout from code, as `glaze.nav.layout()`'s, and needs `nav.layout`. Use `glaze.fetch` for network requests. | `nav.layout` for a `nav` |
 | `glaze.broadcast(data)` | To this mod's other Worker and frames on the page, as a `broadcast` event; not back to the sender. At most 64 KiB. | |
+| `glaze.tools.handle(name, fn)` | Answers an agent app's calls to the code tool `name` in mod.json: `fn(args)` returns JSON, or a promise of it, within 15 s; what it throws is the call's error. A name mod.json doesn't declare as a code tool throws. Worker. | `agents` |
+| `glaze.documents.list()` | `[{ key, kind, title, format, words, updated, course }]`: every document the page lists (none in its Trash), newest first, its title as shown, `updated` in ms since 1970, `course` `''` for none. Never its text. Documents page, Worker. | `documents` |
+| `glaze.documents.open(key)` | Opens a document in this tab, restoring it first if it is in Trash. Only within a second of the student's click on one of the mod's own items; one click allows one call, and any other rejects with `permission`. | `documents` |
+| `glaze.documents.create({ format })` | Starts a new document in this tab: `format` `plain` (Blank, the default), `mla9`, `apa7` or `chicago17`. As `open`, after a click. | `documents` |
+| `glaze.documents.read(key)` | `{ key, title, text }`: a listed document's text, a line a paragraph. | `documents.read` |
+| `glaze.documents.export(key)` | `{ name, mime, bytes }`: a listed document as the file its kind saves (`Lastname_Title.docx`), `bytes` a `Uint8Array`. | `documents.read` |
+| `glaze.documents.add(slot, { id, label })` | One of the mod's own items: `slot` `documents.toolbar` (a button in the toolbar) or `documents.card` (an entry in every card's ⋯ menu, after Glaze's own). `id` as slot ids, `label` one line of at most 40. At most 4 a slot; the same `id` replaces. They show with the mod's name and go when it stops; a click sends `documents.action`. | `documents` |
+| `glaze.documents.remove(slot, id)` | Removes one of its own items. | `documents` |
+| `glaze.documents.style(hooks)` | The page's hooks while the mod runs, never saved; `null` withdraws them: `radius` (0 to 32 px), `glass` (the blur, 0 to 40 px), `thumb` (the thumbnails' scale, 0.6 to 1.6), `column` (the grid's narrowest column, 160 to 400 px). The first mod in the student's order to set one wins it. | `documents` |
 
 **Nav layout** (`glaze.nav.items`, `glaze.nav.layout`, `glaze.look.override`, `parts.nav`): `{ place: 'left' | 'top' | 'bottom' | 'dock', groups: [{ label, items: [id] }]
 (up to 6), hidden: [id], links: [{ id, n, u, i }] (up to 8), icons: { id: icon } }`. Ids are the navigation's own names
@@ -300,7 +355,7 @@ letters (for example, `Glаze settings` with Cyrillic `а`). This comparison doe
 | Event | When | Data |
 |---|---|---|
 | `stop` | Glaze is about to stop the mod. | |
-| `page` | At start and when the address changes. | `{ site: 'ultra' \| 'canvas' \| 'moodle', kind: 'course' \| 'courses' \| 'dashboard' \| 'grades' \| 'calendar' \| 'other', courseId }` |
+| `page` | At start and when the address changes. | `{ site: 'ultra' \| 'canvas' \| 'moodle' \| 'documents', kind: 'course' \| 'courses' \| 'dashboard' \| 'grades' \| 'calendar' \| 'documents' \| 'other', courseId }` |
 | `visible` | The page is shown or hidden. | boolean |
 | `theme` | Glaze's colours or motion changed: ask `glaze.theme()`. | |
 | `settings` | The student changed the mod's settings: ask `glaze.settings()`. | `{}` |
@@ -318,8 +373,11 @@ letters (for example, `Glаze settings` with Cyrillic `а`). This comparison doe
 | `nav.expand` `nav.collapse` | The rail opened or closed (`nav.read`). | `{}` |
 | `nav.sheet` | A phone's More sheet opened or closed (`nav.read`). | `{ open }` |
 | `nav.action` | The student clicked one of the mod's own `action` items. | `{ id }` |
+| `documents.action` | The student clicked one of the mod's own items on the Documents page (`documents`). | `{ slot, id, doc? }`: `doc`, the card's summary as `list()` gives it, for a `documents.card` item |
+| `documents.change` | The documents changed (`documents`): ask `glaze.documents.list()`. | `{}` |
 | `canvas.size` | Worker. A slot's canvas has this size in device pixels. | `{ slot, w, h, dpr }` |
 | `canvas.pause` | Worker. Nothing of the mod's canvases shows (page hidden, motion off, canvas not on the page); animation frames wait. | `{ paused }` |
+| `tool.call` | Worker. An agent app called one of the mod's code tools; `tools.handle` answers this. | `{ id, name, args }` |
 
 ## UI slots and components
 
@@ -356,6 +414,43 @@ Glaze resizes it as the slot changes. Its picture goes to the page after each an
 (any call or assignment on the canvas's context counts; a context taken from `OffscreenCanvas.prototype` directly isn't
 seen, so call `glaze.ui.commit` after drawing with one), or on `glaze.ui.commit`, at most 60 a second. Frames stop while `canvas.pause` says so. Nothing animates with motion off.
 
+## The Documents page
+
+Glaze Writer's Documents page, in a tab of its own (the popup's Documents, or Settings → Writer's Documents link), runs
+the Worker of each mod granted `documents`, as a school page runs mods, and nothing of the others. Documents opened as a
+page of a school's site (Ctrl+K, the navigation's Documents) and a document opened from the list run no mods. There a mod
+has `glaze.storage`, `glaze.theme()`, `glaze.settings()`, `glaze.broadcast()`
+and `glaze.documents`; any other call rejects with `call`, as `glaze.documents` does on a school page. Its `page` event says
+`{ site: 'documents', kind: 'documents', courseId: null }`. A key is a random opaque handle, `document:<uuid>`, scoped to
+this mod on this page, without the school host or user id in the internal storage key. It comes from `glaze.documents.list()` or
+`documents.action`; do not persist it across page loads or mod restarts. The document must still be listed;
+any other key rejects with `args`.
+
+```js
+glaze.documents.add('documents.card', { id: 'count', label: 'Count sentences' });
+glaze.on('documents.action', async ({ id, doc }) => {
+  if (id !== 'count') return;
+  const { text } = await glaze.documents.read(doc.key); // documents.read
+  await glaze.storage.set(doc.key, text.split(/[.!?]+\s/).length);
+});
+```
+
+The page wears the student's Look, background and glass included. These hooks restyle it, through
+`glaze.documents.style()` (a Look has no CSS of its own):
+
+| Property | Default | |
+|---|---|---|
+| `--gd-radius` | the Look's corners | The panels', cards' and menus' corners (`radius`). |
+| `--gd-glass` | the Look's blur | The blur behind the panels, cards and menus over a background (`glass`). |
+| `--gd-thumb` | `1` | The thumbnails' scale (`thumb`). |
+| `--gd-column` | `224px` | The grid's narrowest column (`column`). |
+| `--gd-lift` | Glaze's hover lift (`--gz-lift`: up 2px, 4px and 1% larger on Expressive, none with motion or hover effects off) | A hovered card's and New tile's lift, a `transform`. |
+| `--gd-panel` | the Look's surface, opaque enough to read | The panels' and cards' fill. |
+
+The page's parts keep these class names: `gd-top` (the heading and New), `gd-new`, `gd-tile`, `gd-bar` (the toolbar),
+`gd-search`, `gd-extra` (the toolbar's added items), `gd-docs`, `gd-card`, `gd-pic`, `gd-title`, `gd-meta`, `gd-more`,
+`gd-menu` and `gd-added` (an added menu item).
+
 ## Limits
 
 | | |
@@ -373,6 +468,8 @@ seen, so call `glaze.ui.commit` after drawing with one), or on `glaze.ui.commit`
 | `glaze.palette.commands` | 16 |
 | `glaze.nav.add` | 8 items a mod; label 40, badge 4 characters |
 | `glaze.broadcast` | 64 KiB |
+| `glaze.documents.add` | 4 items a slot; label 40 characters |
+| `tools` | 8 a mod; a declarative tool's answer at most 200 items; a code tool answers within 15 s, at most 1 MiB as JSON |
 | Hangs | a Worker silent for 5 s, or a frame holding the page for 2 s, is stopped |
 
 ## Examples
@@ -384,6 +481,7 @@ Each mod folder in [`examples/mods`](../examples/mods) loads with **Load mod fol
 | `examples/mods/countdown-tile` | A tile drawn from a component tree: counts down to the next open due item (`todo`), with a setting. |
 | `examples/mods/rail-widget` | A rail widget with a page of its own: HTML, CSS and a script that follows Glaze's theme and keeps a count in `glaze.storage`. |
 | `examples/mods/card-decorator` | A badge on each course card (`courses`). |
+| `examples/mods/workload-tool` | A code tool for agent apps: how many open to-dos are due on each of the next days (`agents`, `todo`). |
 
 [`examples/looks/shader-background`](../examples/looks/shader-background) is a Look-parts example: paste its GLSL into
 **Look → Background → Custom shader**. It becomes part of the worn Look; **Copy theme code** shares it.

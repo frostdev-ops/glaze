@@ -178,6 +178,10 @@ const UI_SWAP = 159;
 // which reached the page as errors (owner's go-ahead for the Mac session's requests, 2026-10-23): 118 bytes on Ultra.
 // Measured against bf11791.
 const ULTRA_VT_ABORT = { ultra: 118, canvas: 0, moodle: 0 };
+// Chrome rejects a skipped or timed-out crossfade's ready in the page's own world too, where a school's error tracker would
+// collect it (owner-approved raises, 2026-10-19): Ultra's page-link crossfade asks for and tells the page world's guard
+// (content-ultra.js), and content.js asks for that guard from every frame: 367 bytes on Ultra, 23 elsewhere. Against b2d3ed7.
+const VT_GUARD = { ultra: 367, canvas: 23, moodle: 23 };
 // The Frostdev Look (a named raise, as the owner approved for first scripts on 2026-10-19): its row in GZ_LOOKS (palette, fonts,
 // shape and the topography scene, 90% surfaces) and the two names it adds to GZ_SPEC (the scene, the pointer set) in defaults.js, which
 // every site reads for per-course Looks: 408 bytes on every site. Its scene, parts and pointers load only when worn.
@@ -223,6 +227,35 @@ const RUBRIC_SETTINGS = 81;
 // content API's string body and only real anchors, 48 bytes; lib/i18n.js's English plural for Settings → AI's token count
 // ("1 token"), 61 bytes. Both on every site, measured against a7467254.
 const SYLLABUS_DOCS = 48 + 61;
+// Glaze Writer (a named raise under the owner's 2026-10-19 approval): defaults.js's enhance.writer (24 bytes) and content.js's
+// hook that loads features/writer.js on the draft backup's cue, an Ultra editor on the page or written in (409), on every
+// site. The adapter, the frame, its page-world helper and the editor load on demand. Measured against a1399a5d.
+// Submit-sheet English plurals add 134 bytes to lib/i18n.js, measured against ed70e640. The rest of the writer's counts
+// ("1 word", "Reply to 1 classmate", "AI found 1 issue.") add 728, measured against 97a4efc9. Settings → AI's "1 model"
+// adds 61, measured against 04ac67ec. The Checks pane's one card per rule counts its paragraphs ("1 paragraph isn't
+// double-spaced", "1 paragraph has other line spacing"): 279 bytes of English plurals in lib/i18n.js, measured against 115bb240.
+// defaults.js's enhance.writerUploads (Open uploads in Writer, 31, cd1afbd3) and content.js's draft finder reading a
+// reply's Ultra message-id, so Writer's and the native editor's drafts find their post (27, b3eb58eb). The Documents home's
+// count ("1 document"): 70 bytes of English plural in lib/i18n.js, measured against ab1da78d.
+const WRITER = 24 + 409 + 134 + 728 + 61 + 279 + 31 + 27 + 70;
+// Settings → Writer (the brief's ask that every Writer part read one synced `writer` key from defaults.js; a named raise under
+// the owner's 2026-10-19 approval): defaults.js's writer group and its group rule, 1089 bytes on every site, where content.js
+// reads every GZ_DEFAULTS key (features/writer-quote.js reads writer.compose.quote); lib/i18n.js's English plural for its
+// "1 paper", 62. Measured against 66c7f370. Settings → Writer → Light page (writer.lightPage, the off switch for a dark
+// Look's dark pages): 28 bytes, measured against c8e99a04. Settings → Writer → Full writer (writer.full, the compact
+// assignment box's off switch, and its line in the group's comment): 66 bytes, measured against ab37a58d.
+const WRITER_SETTINGS = 1089 + 62 + 28 + 66;
+// The command palette over a course tab (a fix, under the owner's 2026-10-19 approval): content.js's Ctrl+K hands the key to
+// the tab on screen and shares its toggle with that tab's frame, 212 bytes on every site; the hand-off itself loads on demand
+// (features/coursetabs.js). Raise only the excess over each site's budget. Measured against ab37a58d.
+const CTAB_PALETTE = { ultra: 209, canvas: 168, moodle: 59 };
+// The Looks catalogue (the owner's request, 2026-10-29: saved and gallery Looks show with the rest; a named raise under the
+// 2026-10-19 approval): defaults.js keeps a course's saved or gallery Look by id and wears it from the catalogue (401 bytes),
+// and content.js reads the catalogue only when a course wears one, and wears the theme for one this device doesn't keep
+// (822), on every site. The catalogue itself (lib/looks.js) loads on demand. Measured against 777d9b35. A course wears its own
+// Look whole, parts included (features/lookparts.js reads them): content.js asks for them when the course's Look changes (117),
+// measured against e359f896.
+const LOOK_CATALOG = 401 + 822 + 117;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -231,7 +264,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content-ultra.js')), c
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS;
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG;
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -259,10 +292,10 @@ test('the detector that Safari runs on every other https page stays under 2 KB',
 
 // ---- runtime work, read from the source -------------------------------------------------------------------------
 // Every first-party script Glaze ships, at any depth (features/, lib/, i18n/ and the root), whether it is in the
-// first content script, loaded on demand or in the extension's pages. Not the vendored three.js or OCR engine, nor the tools,
+// first content script, loaded on demand or in the extension's pages. Not the vendored three.js, ProseMirror, OCR engine or Harper, nor the tools,
 // tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
-const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server']);
-const VENDORED = new Set(['lib/three.js', 'lib/tesseract/tesseract-core-simd-lstm.js', 'lib/lottie/lottie_light_canvas.js']); // pdf.js is .mjs, not scanned
+const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server', 'mcp']);
+const VENDORED = new Set(['lib/three.js', 'lib/pm.js', 'lib/tesseract/tesseract-core-simd-lstm.js', 'lib/lottie/lottie_light_canvas.js', 'lib/harper/index.js', 'lib/harper/BinaryModule-S5UABkWQ.js', 'lib/harper/slimBinary.js']); // pdf.js is .mjs, not scanned
 // Only what git tracks: releases are packaged from a fresh checkout, so an untracked folder (another project's build) isn't Glaze.
 const shipped = (top) => execFileSync('git', ['ls-files', '-z', '--', '*.js'], { cwd: top, encoding: 'utf8' }).split('\0').filter((f) => {
   const parts = f.split('/');
@@ -321,6 +354,9 @@ const review = (list, seen, what) => {
 const FAST_INTERVALS = [
   // Download all: a 15 s keep-alive to the service worker only while a zip streams; cleared when its port closes.
   ['features/download.js', "setInterval(() => { if (!closed) post({ type: 'ping' }); }, 15000)", 1, /\bclearInterval\s*\(\s*ping\s*\)/],
+  // Agent access in Safari: a 20 s keep-alive to the Glaze app only while the link is live (connecting, connected or
+  // retrying); cleared when it goes off or waits for a trigger. Never on Chrome or Firefox.
+  ['lib/agent-link.js', 'setInterval(beat, 20000)', 1, /\bclearInterval\s*\(\s*keep\s*\)/],
 ];
 
 test('no setInterval fires faster than once a minute unless it is reviewed, and its clear is still there', () => {
@@ -334,7 +370,10 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
+  ['lib/writer-ultra.js', "querySelectorAll('*')", 1], // Only the recognized Quill body at takeover or after a foreign edit; mounted boxes are skipped on observer passes.
   ['features/rubric.js', 'getComputedStyle(a.box)', 1], // One recognized rubric section's padding and font per layout pass; no descendant sweep.
+  ['features/writer.js', 'getComputedStyle(html)', 1], // The root's Look tokens, when a Writer box opens or <html>'s Look attributes change.
+  ['lib/writer-paginate.js', 'getComputedStyle(view.dom)', 1], // One editor root per batched layout pass: its fractional width gives the exact zoom without a descendant sweep.
   ['lib/editor.js', 'getComputedStyle(doc.documentElement)', 1], // One root direction read per category keypress, never on scroll or an LMS page.
   ['lib/scene-host.js', 'getComputedStyle(c)', 1], // only direct siblings of the course/routed shell, when deciding whether it covers visible content
   ['features/coursemenu.js', 'getComputedStyle(g)', 1], // WP-N2: only the focused roving group, once per horizontal arrow key
@@ -347,9 +386,10 @@ const STYLE_READS = [
   ['features/sidebar.js', 'getComputedStyle(html())', 1], // the root's navigation offsets in a batched sidebar layout pass
   ['features/sidebar.js', 'getComputedStyle(x)', 1], // only the drawer's focusable controls, on Tab or a focus escape
   ['features/sidebar.js', 'getComputedStyle(node)', 1], // one exact overview or Rubric and at most 30 ancestors at projection start; Rubric overflow checks stop at 400 descendants
-  // Three bounded sites in a batched layout pass: known course tool panels, known header ancestors (hidden routes),
-  // and the native discussion host's ancestors up to its nearest scroller. No descendant or whole-page style sweep.
-  ['features/sidebar.js', 'getComputedStyle(p)', 3],
+  // Four bounded sites: known course tool panels, known header ancestors (hidden routes), the native discussion host's
+  // ancestors up to its nearest scroller, and active Ultra peeks/backdrops plus the three sidebar controls' ancestors
+  // only while a peek is visible (batched once per frame). No descendant or whole-page style sweep.
+  ['features/sidebar.js', 'getComputedStyle(p)', 4],
   ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
   ['features/sidebar.js', 'getComputedStyle(panel.grid)', 1], // one verified assessment overview grid, to identify Ultra's current native sidebar shell
   ['features/widgets.js', 'getComputedStyle(html)', 1], // the root's two room variables for Glaze's bar, when floating tiles are placed
@@ -364,6 +404,7 @@ const STYLE_READS = [
   ['content.js', 'getComputedStyle(p)', 1], // a highlight's fill above an element
   ['content-ultra.js', 'getComputedStyle(p)', 1], // a course slot's probe
   ['features/docs.js', 'getComputedStyle(p)', 1], // the scroller above the document in focus mode
+  ['features/writer.js', 'getComputedStyle(e)', 1], // the scroller above an assignment's Writer frame, once per Full writer switch
   ['features/petworld.js', 'getComputedStyle(n)', 1], // at most 30 ancestors when a pet/toy acquires a content anchor; never in the scroll handler
   ['features/petworld.js', 'getComputedStyle(e)', 1], // only matching panel roots with layout boxes, while the pet is wandering
   ['features/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list

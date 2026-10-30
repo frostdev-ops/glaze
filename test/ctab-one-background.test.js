@@ -219,7 +219,9 @@ test('scene host: the page\'s scene hears its frames\' pointer moves, offset by 
 });
 
 
-const sign = (r) => vm.runInContext('{ const s = worn, colors = palette; ' + source.slice(source.indexOf('    // What the background is made of:'), source.indexOf("    if (s.motion.level === 'expressive')")) + '; bgSig; }', r.ctx);
+const signatureStart = source.indexOf('    // What the background is made of:');
+const signatureEnd = source.indexOf('\n', source.indexOf('    bgSig = ', signatureStart));
+const sign = (r) => vm.runInContext('{ const s = worn, colors = palette; ' + source.slice(signatureStart, signatureEnd) + '; bgSig; }', r.ctx);
 
 test('sharing: a page advertises only an available background, revoking it for mods, failures and disable', async () => {
   const r = rig({ tabFrame: '' }), key = sign(r);

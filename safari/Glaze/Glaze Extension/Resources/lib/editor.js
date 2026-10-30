@@ -136,8 +136,21 @@ var GZ_EDITOR = (() => {
       sync();
     };
     all?.addEventListener('change', () => setAll(all.checked));
+    // A framed Settings section belongs to its host's one history entry, including jump links and breadcrumbs.
+    const navigate = (next, opts) => {
+      if (location.hash !== `#${next}`) {
+        if (doc.documentElement?.hasAttribute('data-embedded')) history.replaceState(null, '', `#${next}`);
+        else location.hash = next;
+      }
+      show(next, opts);
+    };
+    doc.addEventListener?.('click', (e) => {
+      const a = e.target.closest?.('a[data-editor-jump], a[data-editor-alias]');
+      if (!doc.documentElement?.hasAttribute('data-embedded') || !a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault(); navigate(a.getAttribute('href').slice(1), { scroll: true, remember: true });
+    });
     for (const el of tabs) {
-      const activate = (tab) => { const next = first(tab); if (location.hash !== `#${next}`) location.hash = next; show(next, { focus: true, remember: true }); };
+      const activate = (tab) => navigate(first(tab), { focus: true, remember: true });
       el.addEventListener('click', () => activate(el.dataset.editorTab));
       el.addEventListener('keydown', (e) => {
         const at = tabs.indexOf(el), next = (at + 1) % tabs.length, back = (at + tabs.length - 1) % tabs.length;

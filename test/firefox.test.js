@@ -25,9 +25,10 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     for (const f of m.background.scripts) assert.ok(files.has(f), `${f} is a background script but isn't packaged`);
     for (const f of ['lib/relay.js', 'lib/sessions.js', 'defaults.js', 'lib/sidebar.js', 'lib/gcal-auth.js']) assert.ok(m.background.scripts.includes(f), f);
     for (const f of ['features/sidebar.js', 'features/sidebar.css', 'features/docreview.js', 'features/docreview.css']) assert.ok(files.has(f), f);
-    assert.deepEqual(m.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'] });
+    // Nothing without consent; agent access sends the student's course data to an app on this computer, outside the browser.
+    assert.deepEqual(m.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'], optional: ['websiteContent'] });
     assert.equal(m.oauth2, undefined);
-    assert.ok(!(m.optional_permissions || []).includes('identity'));
+    assert.deepEqual(m.optional_permissions, ['nativeMessaging'], 'no identity; agent access asks for native messaging');
     assert.ok(m.web_accessible_resources.every((e) => !('use_dynamic_url' in e)));
     // Code mods need Chrome: no sandbox page, CSP or files, so content.js never starts them.
     assert.equal(m.sandbox, undefined);
@@ -35,6 +36,11 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     assert.ok(m.web_accessible_resources.every((e) => e.resources.length && e.resources.every((r) => !r.startsWith('mods/'))));
     assert.ok(![...files].some((f) => f.startsWith('mods/') || f === 'features/mods.js'), 'no mods host, bootstrap or sandbox page side');
     assert.ok(files.has('lib/modbroker.js') && m.background.scripts.includes('lib/modbroker.js'), 'the worker imports the broker, so it ships');
+    // Agent access: the link and every MCP file are background scripts, the frames before the link, which reads them as it loads.
+    for (const f of ['lib/agent-frames.js', 'lib/agent-link.js', 'lib/modtools.js', 'lib/ai/failure.js', 'lib/ai/loop.js', 'lib/mcp/grants.js', 'lib/mcp/registry.js',
+      'lib/mcp/tools-study.js', 'lib/mcp/tools-grades.js', 'lib/mcp/wire.js', 'lib/mcp/approve.js', 'lib/mcp/calls.js']) assert.ok(m.background.scripts.includes(f), f);
+    assert.ok(m.background.scripts.indexOf('lib/agent-frames.js') < m.background.scripts.indexOf('lib/agent-link.js'));
+    for (const f of ['lib/mcp/approve.html', 'lib/mcp/approve-page.js', 'lib/mcp/approve.css']) assert.ok(files.has(f), f);
     // Declarative widgets are not code: their page side, its renderer and the checks they run through ship, and nothing of theirs
     // reaches for the sandbox.
     for (const f of ['features/modwidgets.js', 'features/modui.js', 'lib/modwidget.js']) assert.ok(files.has(f), f);

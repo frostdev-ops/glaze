@@ -7,5 +7,7 @@ and choose one of these folders. Review its permissions and install. After editi
 - **rail-widget** adds a Breathing space widget to the navigation rail and remembers your count on this device. It asks
   for no data permissions.
 - **card-decorator** adds course initials to your course cards. Allow Courses so it can read their names.
+- **workload-tool** gives the agent apps you connect in **Settings → Agents** a tool that counts what is due on each of
+  the next days. Allow Agents and To Do.
 
 For a shader background you wear as a Look, use the [Look-parts example](../looks/shader-background).

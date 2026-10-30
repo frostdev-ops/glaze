@@ -12,6 +12,9 @@ const T = require('../lib/todo.js');
 const D = require('../defaults.js');
 const SHARE = require('../lib/sharing.js');
 const SHARE_KEY = SHARE.exportKeys(SHARE.create('collection'));
+const SR = require('../lib/writer-sources.js');
+const SOURCES = SR.key({ school: 'https://bb.school.test', user: '_900_1', course: '_101_1', item: '_7_1' });
+const source = (title, id) => SR.normalize({ id, type: 'book', title, author: [{ family: 'Doe', given: 'Jane' }], issued: { 'date-parts': [[2020]] } });
 
 const SITE = 'https://school.instructure.com';
 const ACCOUNT = `notesIdx:${SITE}/5`;
@@ -55,9 +58,12 @@ const seeded = async () => {
     lookFavorites: [{ code: 'mark-code', name: 'MARK-FAVORITE', at: NOW }],
     [`todo:${SITE}/5`]: T.clean({ tasks: [{ id: 'k1', title: 'MARK-TASK', at: NOW }] }),
     [ACCOUNT]: N.clean({}),
+    writerWords: ['Glazeword', 'MARK-WORD'],
+    [SOURCES]: { sources: [source('MARK-SOURCE', 's-mark-1')], at: NOW },
   });
   await a.send('notesFile', { key: ACCOUNT, file: { id: id(9), note: id(1), kind: 'image', name: 'pic.png', data: N.b64(PNG) } });
   assert.equal((await a.notes({ op: 'save', id: id(1), base: 0, sid: 'a', title: 'MARK-NOTE', html: `<p>MARK-NOTE-BODY</p><p><img data-gz-file="${id(9)}" alt=""></p>` })).ok, true);
+  await require('../lib/writer-papers.js').open(a.local, () => NOW).save('bb.school.test|_900_1|_101_1|_7_1', { title: 'MARK-PAPER', format: 'mla9', doc: require('../lib/writer-schema.js').parse(require('../lib/writer-schema.js').paper, '<p>MARK-PAPER-BODY</p>').toJSON() });
   a.keys.push(SHARE_KEY);
   return a;
 };
@@ -101,6 +107,202 @@ const restore = async (dev, file, ticked, account) => {
 };
 const reasonOf = (p) => p.then(() => 'read', (e) => e.why);
 
+test('Papers, their JSON documents, versions and presets survive a backup restore', async () => {
+  const PA = require('../lib/writer-papers.js'), key = 'bb.school.test|_900_1|_101_1|_7_1';
+  const doc = { type: 'doc', content: [{ type: 'paragraph', attrs: { first: 0 }, content: [{ type: 'text', text: 'Paper before backup.' }] }] };
+  const a = device(), P = PA.open(a.local);
+  await P.save(key, { doc, format: 'mla9', title: 'Kept paper' });
+  await P.savePreset('bb.school.test|_900_1', { id: 'custom:one', label: 'One', base: 'mla9' });
+  const b = device(), file = await backUp(a), result = await restore(b, file, ['papers']);
+  assert.ok(result.plan.cats.papers, 'the backup must include papers');
+  assert.deepEqual(result.out.failed, []);
+  const Q = PA.open(b.local);
+  assert.equal((await Q.get(key)).title, 'Kept paper');
+  assert.equal((await Q.get(key)).doc.content[0].attrs.first, 0);
+  assert.ok((await Q.versions(key)).length);
+  assert.equal((await Q.list())[0].title, 'Kept paper');
+  assert.equal((await Q.presets('bb.school.test|_900_1'))[0].label, 'One');
+  a.stop(); b.stop();
+});
+
+test('a paper with page setup and a paste preference survives a backup restore', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js'), ST = require('../lib/writer-styles.js');
+  const key = 'bb.school.test|_900_1|_101_1|_7_1', a = device(), b = device();
+  try {
+    const node = SC.parse(SC.paper, '<p>Imported paper.</p>');
+    const doc = node.type.create({ setup: ST.pageSetup(ST.FORMATS.mla9, { page: ST.PAGES.a4 }), paste: 'match' }, node.content).toJSON();
+    await PA.open(a.local).save(key, { doc, format: 'mla9', keep: true });
+    const result = await restore(b, await backUp(a), ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    assert.deepEqual((await PA.open(b.local).get(key)).doc, JSON.parse(JSON.stringify(doc)));
+  } finally { a.stop(); b.stop(); }
+});
+
+test('a doc: paper backs up and restores', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const key = PA.newKey(), a = device(), b = device();
+  try {
+    let clock = NOW;
+    const P = PA.open(a.local, () => ++clock);
+    await P.save(key, { doc: SC.parse(SC.paper, '<p>MARK-LOCAL-DOC</p>').toJSON(), title: 'My notes', named: true, format: 'mla9' });
+    await P.save(key, { doc: SC.parse(SC.paper, '<p>MARK-LOCAL-DOC, more.</p>').toJSON() }, { reason: 'import' });
+    const file = await backUp(a), plan = await B.read(file);
+    assert.deepEqual(Object.keys(plan.cats.papers).sort(), [`writerPaper:${key}`, `writerVersions:${key}`]);
+    const result = await restore(b, file, ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    const Q = PA.open(b.local), p = await Q.get(key);
+    assert.deepEqual([p.title, p.named, p.kind], ['My notes', true, 'paper']);
+    assert.equal(SC.text(SC.paper.nodeFromJSON(p.doc)).text, 'MARK-LOCAL-DOC, more.');
+    assert.deepEqual((await Q.list()).map((r) => [r.key, r.kind]), [[key, 'paper']]);
+    assert.ok((await Q.versions(key)).some((v) => v.reason === 'import'));
+  } finally { a.stop(); b.stop(); }
+});
+
+test('a document in Trash backs up and restores still in Trash, with when it was trashed and its versions', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const key = PA.newKey(), kept = PA.newKey(), a = device(), b = device();
+  try {
+    let clock = NOW;
+    const P = PA.open(a.local, () => ++clock);
+    await P.save(key, { doc: SC.parse(SC.paper, '<p>MARK-TRASHED-DOC</p>').toJSON(), title: 'Old notes', named: true, format: 'plain' });
+    await P.save(kept, { doc: SC.parse(SC.paper, '<p>MARK-KEPT-DOC</p>').toJSON(), title: 'Notes', named: true, format: 'plain' });
+    const { trashed } = await P.trash(key);
+    const file = await backUp(a), result = await restore(b, file, ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    const Q = PA.open(b.local), p = await Q.get(key), rows = await Q.list();
+    assert.equal(p.trashed, trashed, 'the record keeps its flag');
+    assert.equal(rows.find((r) => r.key === key).trashed, trashed, 'and its row, so it restores into Trash');
+    assert.equal(PA.trashed(rows.find((r) => r.key === kept)), false, 'what was not trashed is not');
+    assert.ok((await Q.versions(key)).length, 'its versions came with it');
+  } finally { a.stop(); b.stop(); }
+});
+
+test('a record of an unknown kind is skipped on restore', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const paper = 'bb.school.test|_900_1|_101_1|_7_1', sheet = PA.newKey(), later = PA.newKey(), a = device(), b = device();
+  try {
+    const P = PA.open(a.local, () => NOW);
+    await P.save(paper, { doc: SC.parse(SC.paper, '<p>MARK-PAPER</p>').toJSON(), title: 'Kept paper' });
+    // A later build's kinds: their documents are no paper's.
+    a.store[`writerPaper:${sheet}`] = { key: sheet, kind: 'sheet', title: 'Budget', updated: NOW, doc: { cells: [['a', 1]] } };
+    a.store[`writerVersions:${sheet}`] = [{ id: 'v1', at: NOW, reason: 'start', doc: { cells: [] } }];
+    a.store[`writerPaper:${later}`] = { key: later, kind: 'slides', updated: NOW, doc: { slides: [] } };
+    const file = await backUp(a), plan = await B.read(file);
+    assert.deepEqual(Object.keys(plan.cats.papers).sort(), [`writerPaper:${paper}`, `writerVersions:${paper}`]);
+    const result = await restore(b, file, ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    assert.equal((await PA.open(b.local).get(paper)).title, 'Kept paper');
+    assert.deepEqual([b.store[`writerPaper:${sheet}`], b.store[`writerVersions:${sheet}`], b.store[`writerPaper:${later}`]], [undefined, undefined, undefined]);
+    assert.deepEqual(await B.apply({ papers: { [`writerPaper:${sheet}`]: a.store[`writerPaper:${sheet}`] } }, { local: b.local }), { ok: true }, 'the worker omits it too');
+    assert.equal(b.store[`writerPaper:${sheet}`], undefined);
+  } finally { a.stop(); b.stop(); }
+});
+
+// A whole mixed set onto a device with documents of its own: an assignment's paper, a document edited on both, one in
+// Trash and a later build's kind. What restores is the backup's, what the device alone holds stays, the index lists every
+// record it should and no other, and the 30 days of the restored Trash run from when it was trashed.
+test('a mixed set restores onto a device that has documents of its own', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js'), DAY = 864e5;
+  const p = (text) => SC.parse(SC.paper, `<p>${text}</p>`).toJSON(), text = (r) => SC.text(SC.paper.nodeFromJSON(r.doc)).text;
+  const paper = 'bb.school.test|_900_1|_101_1|_7_1', both = PA.newKey(), binned = PA.newKey(), sheet = PA.newKey(), mine = PA.newKey(), slides = PA.newKey();
+  const a = device(), b = device();
+  try {
+    let at = NOW - 20 * DAY;
+    const A = PA.open(a.local, () => at), Bs = PA.open(b.local, () => at);
+    await Bs.save(both, { doc: p('MARK-BOTH-OLD'), title: 'Notes', named: true, format: 'plain' });
+    await Bs.save(mine, { doc: p('MARK-MINE'), title: 'Mine', named: true, format: 'plain' });
+    at += DAY;
+    await A.save(paper, { doc: p('MARK-PAPER'), title: 'Essay 2', courseName: 'ENGL 2110' });
+    await A.save(both, { doc: p('MARK-BOTH-NEW'), title: 'Notes', named: true, format: 'plain' });
+    await A.save(binned, { doc: p('MARK-BINNED'), title: 'Old draft', named: true, format: 'plain' });
+    const { trashed } = await A.trash(binned);
+    // Later builds' kinds, on each device: theirs, never this build's to restore or to touch.
+    a.store[`writerPaper:${sheet}`] = { key: sheet, kind: 'sheet', title: 'Budget', updated: at, doc: { cells: [] } };
+    b.store[`writerPaper:${slides}`] = { key: slides, kind: 'slides', title: 'Talk', updated: at, doc: { slides: [] } };
+    b.store.writerPapers = [{ key: slides, kind: 'slides', title: 'Talk', updated: at }, ...b.store.writerPapers];
+    const result = await restore(b, await backUp(a), ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    const rows = await Bs.list(), keys = rows.map((r) => r.key).sort();
+    assert.deepEqual(keys, [paper, both, binned, mine, slides].sort(), 'every record listed once, the later kind\'s own row kept');
+    for (const k of keys) assert.ok(b.store[`writerPaper:${k}`], `${k}: its record`);
+    assert.equal(b.store[`writerPaper:${sheet}`], undefined, 'the backup\'s later kind left out');
+    assert.deepEqual(b.store[`writerPaper:${slides}`].doc, { slides: [] }, 'the device\'s later kind untouched');
+    assert.equal(text(await Bs.get(paper)), 'MARK-PAPER');
+    assert.equal(text(await Bs.get(both)), 'MARK-BOTH-NEW', 'the newer edit wins');
+    assert.ok((await Bs.versions(both)).some((v) => v.reason === 'restore'), 'the device\'s older text kept as a version');
+    assert.equal(text(await Bs.get(mine)), 'MARK-MINE');
+    assert.equal((await Bs.get(binned)).trashed, trashed);
+    assert.deepEqual(rows.filter((r) => PA.trashed(r)).map((r) => r.key), [binned], 'in Trash: only what was');
+    at = trashed + 31 * DAY;
+    assert.deepEqual(await Bs.purge(), [binned], '30 days from when it was trashed, not from the restore');
+    assert.deepEqual((await Bs.list()).map((r) => r.key).sort(), [paper, both, mine, slides].sort());
+  } finally { a.stop(); b.stop(); }
+});
+
+test('backups accept the maximum selectable version count', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const key = 'bb.school.test|_900_1|_101_1|_7_1', a = device(), b = device();
+  try {
+    let clock = NOW;
+    const P = PA.open(a.local, () => ++clock, { versions: () => 100 });
+    for (let i = 0; i < 100; i++) await P.save(key, { doc: SC.parse(SC.paper, `<p>Version ${i}.</p>`).toJSON() }, { reason: 'submit' });
+    const file = await backUp(a), plan = await B.read(file);
+    assert.equal(plan.cats.papers[`writerVersions:${key}`].length, 100);
+    const result = await restore(b, file, ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    assert.ok((await PA.open(b.local).versions(key)).length);
+  } finally { a.stop(); b.stop(); }
+});
+
+test('backups retain papers with several individually bounded pictures', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+  const key = 'bb.school.test|_900_1|_101_1|_7_1', a = device(), b = device();
+  try {
+    const image = () => SC.paper.node('image', { src: `data:image/png;base64,${Buffer.alloc(900000).toString('base64')}`, width: 24 });
+    const doc = SC.paper.node('doc', null, [SC.paper.node('paragraph', null, [image(), image()])]).toJSON();
+    await PA.open(a.local).save(key, { doc });
+    const result = await restore(b, await backUp(a), ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    assert.deepEqual((await PA.open(b.local).get(key)).doc, JSON.parse(JSON.stringify(doc)));
+  } finally { a.stop(); b.stop(); }
+});
+
+test('the writer\'s dictionary and saved sources join what is here, and a damaged one refuses the file', async () => {
+  const a = await seeded(), file = await backUp(a);
+  const b = device({ writerWords: ['Local', 'glazeword'], [SOURCES]: { sources: [source('Local source', 's-local-1')], at: NOW + 5 } });
+  try {
+    const { plan, out } = await restore(b, file, ['writerWords', 'sources']);
+    assert.deepEqual(plan.cats.writerWords, ['Glazeword', 'MARK-WORD']);
+    assert.deepEqual(out.failed, []);
+    // A word this device has in another case stays as it is; the backup's others go ahead of this device's own.
+    assert.deepEqual(b.store.writerWords, ['MARK-WORD', 'Local', 'glazeword']);
+    assert.deepEqual(b.store[SOURCES].sources.map((x) => x.title), ['Local source', 'MARK-SOURCE']);
+    assert.equal(b.store[SOURCES].at, NOW + 5);
+    const before = structuredClone(b.store);
+    await restore(b, file, ['writerWords', 'sources']);
+    assert.deepEqual(b.store, before, 'restoring again changes nothing');
+    // The same work saved on both devices is kept once, with this device's id.
+    const c = device({ [SOURCES]: { sources: [source('MARK-SOURCE', 's-other-1')], at: NOW } });
+    await restore(c, file, ['sources']);
+    assert.deepEqual(c.store[SOURCES].sources.map((x) => x.id), ['s-other-1']);
+    c.stop();
+  } finally { a.stop(); b.stop(); }
+  for (const [what, local] of [
+    ['', { writerWords: ['ok'] }],
+    ['a word that is no string', { writerWords: ['ok', 5] }],
+    ['a word too long for the dictionary', { writerWords: ['x'.repeat(61)] }],
+    ['a source key no box has', { 'writer:sources:nope': { sources: [], at: NOW } }],
+    ['a source that is no source', { [SOURCES]: { sources: [{ id: 's-bad-1', type: 'book' }], at: NOW } }],
+    ['a source list without its time', { [SOURCES]: { sources: [source('T', 's-bad-2')] } }],
+  ]) {
+    const entries = B.pack({ settings: SETTINGS, tasks: { tasks: {}, pets: {} }, local: {}, version: '9.9.9' });
+    const manifest = JSON.parse(new TextDecoder().decode(entries[0].data));
+    if (local.writerWords) manifest.writerWords = local.writerWords; else manifest.sources = local;
+    entries[0].data = new TextEncoder().encode(JSON.stringify(manifest));
+    assert.equal(await reasonOf(B.read(await zipFile(entries))), what ? 'bad' : 'read', what);
+  }
+});
+
 test('a backup of every category comes back whole on a new device', async () => {
   const a = await seeded(), b = device();
   try {
@@ -130,7 +332,7 @@ test('a backup of every category comes back whole on a new device', async () => 
     assert.deepEqual(N.unb64(pic.data), PNG);
     // Only these categories: nothing Glaze read from the school.
     const raw = JSON.parse(await (await unzipped(file)).text(B.MANIFEST));
-    assert.deepEqual(Object.keys(raw).sort(), ['classes', 'dashNotes', 'format', 'glaze', 'gpa', 'made', 'notes', 'settings', 'tasks', 'version', 'widgets']);
+    assert.deepEqual(Object.keys(raw).sort(), ['classes', 'dashNotes', 'format', 'glaze', 'gpa', 'made', 'notes', 'papers', 'settings', 'sources', 'tasks', 'version', 'widgets', 'writerWords']);
   } finally { a.stop(); b.stop(); }
 });
 const unzipped = async (file) => require('../lib/doctext.js').unzip(file.bytes);
@@ -188,6 +390,9 @@ test('an unticked category is left as it is', async () => {
       if (off === 'dashNotes') assert.equal(b.store[`notes:${SITE}/5`].text, 'mine');
       if (off === 'classes') assert.deepEqual(b.store[`classes:${SITE}/5`], mine[`classes:${SITE}/5`]);
       if (off === 'gpa') assert.equal(b.store[`gpaTerms:${SITE}:5`], undefined);
+      if (off === 'papers') assert.equal(b.store['writerPaper:bb.school.test|_900_1|_101_1|_7_1'], undefined);
+      if (off === 'writerWords') assert.equal(b.store.writerWords, undefined);
+      if (off === 'sources') assert.equal(b.store[SOURCES], undefined);
       if (off === 'widgets') assert.equal(b.store.widgetLayout, undefined);
       if (off === 'settings') { assert.deepEqual(b.settings, []); assert.deepEqual(b.store.lookFavorites, []); }
       // Tasks without the settings still come back, through the worker's own record write, with nothing of the settings.
@@ -531,3 +736,37 @@ for (const [name, extra] of [['Look parts', { parts: { x: { invalid: true } } }]
     assert.equal(await reasonOf(B.read(file)), 'bad');
   });
 }
+
+
+test('Back up carries assignment source host keys, ports and local document keys', async () => {
+  const paper = { school: 'bb.school.test:8443', user: '_900_1', course: '_101_1', content: '_7_1' };
+  const keys = [SR.keyOf({ paper }), SR.keyOf({ paper: { ...paper, school: 'bb.school.test' } }),
+    SR.key({ school: 'local', user: 'local', course: 'papers', item: `doc:${id(1)}` }), SOURCES];
+  const local = Object.fromEntries(keys.map((k, n) => [k, { sources: [source(`Source ${n}`, `source-${n}`)], at: NOW }]));
+  const a = device(local), b = device();
+  try {
+    const { plan, out } = await restore(b, await backUp(a), ['sources']);
+    assert.deepEqual(Object.keys(plan.cats.sources).sort(), keys.sort());
+    assert.deepEqual(out.failed, []);
+    for (const k of keys) assert.deepEqual(b.store[k], local[k]);
+  } finally { a.stop(); b.stop(); }
+});
+
+test('Back up restores discussion, journal and new-message sources under each student and course', async () => {
+  const C = require('../lib/writer-context-discussion.js');
+  const keys = [];
+  for (const uid of ['_42_1', '_43_1']) for (const cid of ['_101_1', '_102_1']) {
+    for (const [kind, path] of [['reply', `/ultra/courses/${cid}/outline/discussion/_9_1`], ['journal', `/ultra/courses/${cid}/outline/journal/_12_1`], ['message', '/ultra/messages/create']]) {
+      keys.push(SR.keyOf(C.contextOf({ kind, school: 'bb.school.test:8443', user: { id: uid }, course: { id: cid }, item: C.itemOf(kind, C.route(path, `?courseId=${cid}`)) })));
+    }
+  }
+  assert.equal(new Set(keys).size, 12);
+  const local = Object.fromEntries(keys.map((k, n) => [k, { sources: [source(`Compose source ${n}`, `compose-${n}`)], at: NOW }]));
+  const a = device(local), b = device();
+  try {
+    const { plan, out } = await restore(b, await backUp(a), ['sources']);
+    assert.deepEqual(plan.cats.sources, local);
+    assert.deepEqual(out.failed, []);
+    for (const key of keys) assert.deepEqual(b.store[key], local[key]);
+  } finally { a.stop(); b.stop(); }
+});

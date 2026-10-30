@@ -129,6 +129,8 @@ html[data-gz-motion="expressive"] :is(.element-card, .content-list-item > .itemC
 html[data-gz-enhance-reading] #site-wrap :is(.bb-editor-container.is-read-only .ql-editor, .bbml-content) { max-width: 72ch; }
 /* …in the middle of its card, which is often wider than the measure. */
 html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { margin-inline: auto; }
+/* …except a test's prompts and answers, which keep to the start of their card and rows, in line with each other. */
+html[data-gz-enhance-reading] #site-wrap .assessment-question .bb-editor-container.is-read-only .ql-editor { margin-inline: 0; }
 html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { font-size: 1.04em; }
 
 /* Shorter descriptions: three lines until the item is hovered or focused. Not on touch screens, which
@@ -566,9 +568,11 @@ html[data-gz-ctabs~="above"] div.bb-course-navigation:not(:has(#gz-ctabs)) { pad
 html[data-gz-ctabs~="below"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h) !important; }
 html[data-gz-ctabs~="between"] div.bb-course-navigation:not(:has(#gz-ctabs)) div:has(> .js-course-navigation) { margin-top: calc(var(--gz-ctabs-h) + var(--gz-float-gap, 12px)) !important; }
 html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
-/* Full routed pages have one header, not the course bar's two rows. Reserve before the lazy feature arrives. */
-html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h); }
-html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h); }
+/* Full routed pages have one header, not the course bar's two rows. Reserve before the lazy feature arrives. A page with a
+   breadcrumb row gets the strip at that row, never in a header under it (an assignment attempt's title had 52px of room
+   for a strip that was above it). */
+html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container:not(:has(content-page-header > header)) [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h); }
+html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .routed-page.bb-offcanvas-container:not(:has(content-page-header > header)) [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h); }
 html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: transparent; }
 #gz-ctabs[data-at="routed"] { position: sticky; top: 0; z-index: 2; }
 /* Native panel headers pull into their scroller's padding; after a tab row that would cover the subtitle. */

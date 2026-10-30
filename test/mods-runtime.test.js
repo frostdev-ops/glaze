@@ -252,7 +252,7 @@ const page = ({ path = '/courses/1', list } = {}) => {
   let clock = 1000;
   const timers = new Set();
   const sent = [], frames = [], appended = [];
-  const chrome = { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, sendMessage: async (m) => { sent.push(m); return m.type === 'glaze:mod' ? { ok: true, value: `answer to ${m.call}` } : m.op === 'list' ? { mods: list() } : { ok: true }; } },
+  const chrome = { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, onMessage: { addListener: (f) => { chrome.heard = f; } }, sendMessage: async (m) => { sent.push(m); return m.type === 'glaze:mod' ? { ok: true, value: `answer to ${m.call}` } : m.op === 'list' ? { mods: list() } : { ok: true }; } },
     storage: { onChanged: { addListener: (f) => { chrome.changed = f; } } } };
   const el = (tag) => {
     const e = { tag, isConnected: false, listeners: {}, style: {}, setAttribute() {}, replaceChildren() {}, append(c) { c.isConnected = true; }, remove() { this.isConnected = false; },

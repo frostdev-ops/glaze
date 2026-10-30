@@ -8,6 +8,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
   };
   const create = ({ key, save, t }) => {
     const P = GZ_PET, F = GZ_PET_PHYSICS, B = GZ_PET_BRAIN;
+    const storageEvent = chrome.storage?.onChanged;
     const make = (tag, cls) => Object.assign(document.createElement(tag), { className: cls });
     const world = make('div', 'gz-game-world');
     const actor = make('div', 'gz-game-actor'), avatar = make('div', 'gz-game-avatar'), cheer = make('span', 'gz-game-reaction');
@@ -703,7 +704,8 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       for (const off of offs) off(); offs = [];
       for (const off of frameOffs) off(); frameOffs = [];
       for (const p of props) p.el.remove(); for (const p of floating.values()) p.el.remove(); floating.clear(); actor.remove(); home.remove(); world.remove();
-      chrome.storage.onChanged.removeListener(changed); reduced?.removeEventListener('change', wake); motion?.disconnect(); sizes?.disconnect();
+      try { storageEvent?.removeListener(changed); } catch { /* extension reloaded */ }
+      reduced?.removeEventListener('change', wake); motion?.disconnect(); sizes?.disconnect();
       if (current?.key === key) current = null;
     };
     on(actor, 'pointerdown', (e) => begin(e)); on(document, 'pointermove', move, { passive: false });
@@ -761,7 +763,8 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     on(window, 'pagehide', destroy, { once: true });
     const motion = typeof MutationObserver === 'function' ? new MutationObserver(wake) : null;
     motion?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-gz-motion'] });
-    chrome.storage.onChanged.addListener(changed); reduced?.addEventListener('change', wake);
+    try { storageEvent?.addListener(changed); } catch { /* extension reloaded */ }
+    reduced?.addEventListener('change', wake);
     try { chrome.storage.local.get('widgetTimer', (r) => { if (alive) { updateFocus(r?.widgetTimer, true); if (data) wake(); } }); } catch { /* reloaded */ }
     return { key, attach, detach, play, destroy, refresh: () => { if (globalThis.GZ_CTABS?.revoked?.()) { destroy(); return; } const changed = syncSurface(), nextPath = viewDoc.location.pathname; geometryDirty = true; if (changed || path !== nextPath || (!timer && allowed() && !still())) { path = nextPath; wake(); } } };
   };

@@ -15,8 +15,9 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const ultra = ctx.site === 'ultra';
   const { t, locale, capi, profile, canvasCourses, local } = ctx;
   const EDITOR = ctx.draftEditor; // Ultra's Quill editors, or Canvas's Inbox compose body
+  const writer = (ed) => !!ed?.closest?.('[data-gz-writer]'); // Glaze Writer's (features/writer.js) until it's given back
   let account = null; // who you are: { user }, and on Canvas your courses, which its Inbox key names
-  let accountLoading = false;
+  let accountLoading = false, accountJob = null;
   let accountRetry = 0;
   let inboxWrites = new WeakMap();
   const inboxPending = new Map();
@@ -172,9 +173,10 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   // from what was read as it was written.
   const accountWaiting = new Map(); // editor (or a snapshot of one gone) -> ctx.draftAt
   const loadAccount = () => {
-    if (account || accountLoading || Date.now() < accountRetry) return;
+    if (account || Date.now() < accountRetry) return Promise.resolve();
+    if (accountLoading) return accountJob;
     accountLoading = true;
-    (ultra ? ctx.account().then((user) => ({ user: String(user) })) : Promise.all([profile(), canvasCourses()]).then(([user, courses]) => ({ user: String(user.id), courses }))).then((found) => {
+    accountJob = (ultra ? ctx.account().then((user) => ({ user: String(user) })) : Promise.all([profile(), canvasCourses()]).then(([user, courses]) => ({ user: String(user.id), courses }))).then((found) => {
       if (!(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(found.user)) throw new Error('no account');
       account = found;
       const eds = [...accountWaiting];
@@ -182,15 +184,17 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
       for (const [, at] of eds) take(at);
       watch(); // the offers that were waiting for it
     }).catch(() => { accountRetry = Date.now() + 60000; }).finally(() => { accountLoading = false; });
+    return accountJob;
   };
   // An editor gone (compose closed, the page changed) before its copy could be made: the copy is made from what was read
   // as it was written, under the same rules.
-  const keep = (s) => {
+  const keep = (s, replace = false) => {
     if (!ctx.settings().enhance.drafts || !ctx.on()) return;
     if (!account) { accountWaiting.set(ultra ? s : s.ed, s); loadAccount(); return; }
     if (ultra) {
       const key = keyOf(s);
-      if (!key || !GZ_DRAFTS.worth(s.text) || (typed.get(key)?.at || 0) > s.at) return;
+      if (!key || (typed.get(key)?.at || 0) > s.at) return;
+      if (!GZ_DRAFTS.worth(s.text)) { if (replace && typed.get(key)?.ed === s.ed) { typed.delete(key); store(key, s.ed); } return; }
       typed.set(key, { ed: s.ed, html: s.html, text: s.text, at: s.at, id: ownId(key), gone: 0 });
       store(key, s.ed);
       return;
@@ -210,6 +214,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const write = (e) => {
     if (!ultra && e.type !== 'input') return;
     const ed = ctx.settings().enhance.drafts && ctx.on() && e.target instanceof Element && e.target.closest(EDITOR);
+    if (writer(ed)) return;
     if (!ed) {
       // Controlled inputs can change value without a DOM mutation, so destination edits also run the pass.
       if (!ultra && ctx.settings().enhance.drafts && ctx.on() && e.target.closest?.('#compose-message-modal')) watchInboxDrafts();
@@ -349,7 +354,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const offerDraft = (ed) => {
     const key = draftKey(ed);
     if (!key) return;
-    const here = () => ctx.settings().enhance.drafts && ctx.on() && ed.isConnected && draftKey(ed) === key;
+    const here = () => ctx.settings().enhance.drafts && ctx.on() && ed.isConnected && !writer(ed) && draftKey(ed) === key;
     read(key, async () => {
       const d = held.get(key)?.[0];
       if (!d || !here()) return;
@@ -391,13 +396,13 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     }
     // A bar steps aside while its editor has text (Ultra's own saved draft, or you're writing), and goes with it.
     for (const [bar, ed] of bars) {
-      if (!bar.isConnected || !ed.isConnected || draftKey(ed) !== barKeys.get(bar)) { bar.remove(); bars.delete(bar); } else bar.hidden = !!ed.textContent.trim();
+      if (!bar.isConnected || !ed.isConnected || writer(ed) || draftKey(ed) !== barKeys.get(bar)) { bar.remove(); bars.delete(bar); } else bar.hidden = !!ed.textContent.trim();
     }
     // An editor offers its copy once, after it has sat empty for a moment: Ultra may still be filling it. Its key needs who you are.
     if (!account) { if (document.querySelector(EDITOR)) loadAccount(); return; }
     for (const ed of document.querySelectorAll(EDITOR)) {
       const key = draftKey(ed);
-      if (!key || offered.get(ed) === key) continue;
+      if (!key || offered.get(ed) === key || writer(ed)) continue;
       read(key, () => {
         offered.set(ed, key);
         if (!ed.textContent.trim()) setTimeout(() => offerDraft(ed), 800);
@@ -433,7 +438,22 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     const key = ed && draftKey(ed);
     if (key) { inboxWrites.set(ed, key); captureInboxDraft(ed); saveDraft(ed); inboxSending.add(key); }
   }, true);
-  return { write, watch, drop, take };
+  // Writer journals its own text under the frozen destination, including after Ultra removes or reuses the node.
+  // Existing recovery stays in the native editor, where its Restore and Dismiss controls remain available.
+  const ready = async (ed) => {
+    if (!ctx.settings().enhance.drafts) return true;
+    await loadAccount();
+    const key = account && draftKey(ed);
+    if (!key) return false;
+    let timer;
+    try {
+      return await new Promise((yes) => {
+        timer = setTimeout(() => yes(false), 1500);
+        read(key, () => yes(!(held.get(key) || []).length));
+      });
+    } finally { clearTimeout(timer); }
+  };
+  return { write, watch, drop, take, keep, ready, sent: send };
 })();
 
 GZ_DRAFT_UI;

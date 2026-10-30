@@ -11,7 +11,7 @@ var GZ_ROUTES = globalThis.GZ_ROUTES || (() => {
   const table = [];
   const live = new Set();
   const add = (test, file, name) => { table.push({ test, file, name }); };
-  add((url, site) => site === 'ultra' ? /^\/ultra\/courses\/_\d+_\d+\/(?:assessment\/_\d+_\d+\/(?:overview|attempt(?:\/create)?)|discussion\/_\d+_\d+)\/?$/.test(url.pathname)
+  add((url, site) => site === 'ultra' ? /^\/ultra\/courses\/_\d+_\d+\/(?:assessment\/_\d+_\d+\/(?:overview|attempt(?:\/(?:create|_\d+_\d+))?)|discussion\/_\d+_\d+)\/?$/.test(url.pathname)
     : site === 'canvas' && /^\/courses\/\d+\/assignments\/\d+\/?$/.test(url.pathname), 'features/rubric.js', 'GZ_RUBRIC_UI');
   // The site's own announcement lists, opening in Glaze's pop-up: Ultra's Activity Stream and a course's Announcements;
   // Canvas's Dashboard, a course's home and Announcements; Moodle's course page and its forums (the news forum's list).
@@ -19,6 +19,14 @@ var GZ_ROUTES = globalThis.GZ_ROUTES || (() => {
   add((l, site) => LISTS[site]?.test(l.pathname) || (site === 'canvas' && /^\/courses\/\d+\/discussion_topics\/?$/.test(l.pathname) && /[?&]only_announcements=(?:1|true)\b/.test(l.search || '')),
     'features/announce.js', 'GZ_ANNOUNCE');
   add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/announcements\/?$/.test(l.pathname), 'features/announce-read.js', 'GZ_ANNOUNCE_READ');
+  add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/engagement\/?$/.test(l.pathname)
+    && (globalThis.GZ_DISCUSSION_NAV?.pending() || sessionStorage.getItem('gz-discussion-jump')), 'features/discussion-nav.js', 'GZ_DISCUSSION_NAV');
+  // An editor's toolbar menu brought into view where Ultra opens it under its scroller's edge: a test or assignment
+  // attempt, a journal, a discussion.
+  add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/(?:outline\/)?(?:assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)|journal\/_\d+_\d+|discussion\/_\d+_\d+)\/?$/.test(l.pathname),
+    'features/editor-menu.js', 'GZ_EDITOR_MENU');
+  // A course's top bar and a test attempt's progress band, folded into pills once the page scrolls under them.
+  add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\//.test(l.pathname), 'features/sticky-fold.js', 'GZ_STICKY_FOLD');
   const sync = () => {
     for (const e of table) {
       let yes = false;

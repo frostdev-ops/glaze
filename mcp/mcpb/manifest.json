@@ -1,0 +1,49 @@
+{
+  "manifest_version": "0.3",
+  "name": "glaze-mcp",
+  "display_name": "Glaze",
+  "version": "4.0.0",
+  "description": "Lets Claude use Glaze in your browser: your courses, to-dos, grades, assignments and Writer documents.",
+  "author": {
+    "name": "FrostDev",
+    "url": "https://frostdev.io"
+  },
+  "homepage": "https://frostdev.io/glaze",
+  "license": "MIT",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/bin/glaze-mcp.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/bin/glaze-mcp.js", "--from=mcpb"],
+      "env": {
+        "GLAZE_MCP_BROWSER": "${user_config.browser}",
+        "GLAZE_MCP_INSTALL_HOSTS": "${user_config.install_hosts}"
+      }
+    }
+  },
+  "tools_generated": true,
+  "user_config": {
+    "browser": {
+      "type": "string",
+      "title": "Browser",
+      "description": "Chrome, Edge, Brave, Vivaldi, Arc, Chromium or Firefox. Empty: the one Glaze last opened in.",
+      "required": false,
+      "default": ""
+    },
+    "install_hosts": {
+      "type": "boolean",
+      "title": "Set up browsers",
+      "description": "Lets your browsers start the Glaze helper.",
+      "required": false,
+      "default": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

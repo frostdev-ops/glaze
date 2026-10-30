@@ -19,7 +19,7 @@ extension reload. Run `node --test` before sending a change.
 
 ## Conventions
 
-- No build step, no dependencies, no bundler. Vanilla JS, plain CSS, files loaded directly. The exceptions are `lib/three.js`, a checked-in, tree-shaken, readable three.js (`scripts/vendor-three.sh` rebuilds it), and lottie-web's official readable light canvas player in `lib/lottie/` (`scripts/vendor-lottie.sh` fetches it by a pinned hash); only an upgrade needs either.
+- No build step, no dependencies, no bundler. Vanilla JS, plain CSS, files loaded directly. The exceptions are `lib/three.js`, a checked-in, tree-shaken, readable three.js (`scripts/vendor-three.sh` rebuilds it), lottie-web's official readable light canvas player in `lib/lottie/` (`scripts/vendor-lottie.sh` fetches it by a pinned hash), pdf.js in `lib/pdfjs/` and Tesseract in `lib/tesseract/` (`scripts/vendor-pdfjs.sh`, `scripts/vendor-tesseract.sh`), ProseMirror as one readable bundle in `lib/pm.js` and `lib/pm.css` (`scripts/vendor-prosemirror.sh`), harper.js in `lib/harper/` (`scripts/vendor-harper.sh`), and Writer's paper fonts in `lib/fonts/` (`scripts/vendor-paper-fonts.sh`); only an upgrade needs any of them.
 - Keep diffs small and focused. One change per PR.
 - Defaults live in exactly one place: `defaults.js`. Don't duplicate a colour or a toggle elsewhere.
 - Every setting reaches the page as a `--gz-*` variable or an `html[data-gz-*]` attribute. CSS matches on those; it never waits on JavaScript.

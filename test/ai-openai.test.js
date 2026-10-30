@@ -100,6 +100,64 @@ test('max_tokens and temperature step down when a refusal names them', async () 
   assert.equal(prose.calls[1].body.response_format.type, 'json_object');
 });
 
+test('a reasoning effort goes as OpenRouter\'s reasoning object there and as reasoning_effort elsewhere; none asked, none sent', async () => {
+  const or = server(done('ok'), done('ok'));
+  await P.run('openai', ask({ effort: 'none' }), cfg({ base: 'https://openrouter.ai/api/v1', model: `e-${n}` }), { fetch: or.fetch });
+  assert.deepEqual(or.calls[0].body.reasoning, { effort: 'none' });
+  assert.equal('reasoning_effort' in or.calls[0].body, false);
+  await P.run('openai', ask(), cfg({ base: 'https://openrouter.ai/api/v1', model: `f-${n}` }), { fetch: or.fetch });
+  assert.equal('reasoning' in or.calls[1].body || 'reasoning_effort' in or.calls[1].body, false);
+  const flat = server(done('ok'));
+  await P.run('openai', ask({ effort: 'low' }), cfg(), { fetch: flat.fetch });
+  assert.equal(flat.calls[0].body.reasoning_effort, 'low');
+  assert.equal('reasoning' in flat.calls[0].body, false);
+});
+
+test('an effort a model refuses steps up a level at a time (none, minimal, low), then goes; remembered, and never lowering a request\'s own', async () => {
+  const base = 'https://openrouter.ai/api/v1', model = `must-reason-${n}`;
+  const mandatory = () => json({ error: { code: 400, message: 'Reasoning is mandatory for this endpoint and cannot be disabled.' } }, 400);
+  const level = () => json({ error: { code: 400, message: 'Reasoning effort "minimal" is not supported by this model.' } }, 400);
+  const s = server(mandatory, level, done('ok'), done('ok'), done('ok'));
+  assert.equal((await P.run('openai', ask({ effort: 'none' }), cfg({ base, model }), { fetch: s.fetch })).text, 'ok');
+  assert.deepEqual(s.calls.map((c) => c.body.reasoning.effort), ['none', 'minimal', 'low']);
+  await P.run('openai', ask({ effort: 'none' }), cfg({ base, model }), { fetch: s.fetch });
+  assert.equal(s.calls[3].body.reasoning.effort, 'low', 'remembered for that model');
+  await P.run('openai', ask({ effort: 'high' }), cfg({ base, model }), { fetch: s.fetch });
+  assert.equal(s.calls[4].body.reasoning.effort, 'high', 'a remembered level only raises');
+  // Every level refused: the parameter goes.
+  const all = server(mandatory, level, json({ error: { message: 'reasoning is not available here' } }, 400), done('ok'), done('ok'));
+  await P.run('openai', ask({ effort: 'none' }), cfg({ base: 'https://all.example.com/v1' }), { fetch: all.fetch });
+  assert.deepEqual(all.calls.map((c) => c.body.reasoning_effort), ['none', 'minimal', 'low', undefined]);
+  await P.run('openai', ask({ effort: 'none' }), cfg({ base: 'https://all.example.com/v1' }), { fetch: all.fetch });
+  assert.equal('reasoning_effort' in all.calls[4].body, false, 'remembered');
+});
+
+test('all parameter fallbacks and one rate-limit retry still leave an attempt for the answer', async () => {
+  const effort = () => json({ error: { message: 'reasoning effort is not available here' } }, 400);
+  const s = server(rejection('response_format'), rejection('response_format'), rejection('max_tokens'), rejection('temperature'),
+    effort, effort, effort, json({ error: { message: 'rate limited' } }, 429), done('{"answer":"ok"}'));
+  const out = await P.run('openai', ask({ schema: SCHEMA, maxTokens: 64, temperature: 0, effort: 'none' }), cfg(), { fetch: s.fetch });
+  assert.deepEqual(out.json, { answer: 'ok' });
+  assert.equal(s.calls.length, 9);
+  const last = s.calls.at(-1).body;
+  assert.equal(last.response_format, undefined);
+  assert.equal(last.max_completion_tokens, 64);
+  assert.equal(last.temperature, undefined);
+  assert.equal(last.reasoning_effort, undefined);
+});
+
+test('a server that does not know the effort parameter gets none at once; a 400 that names something else is not stepped', async () => {
+  const typed = server(rejection('reasoning_effort', "Unsupported parameter: 'reasoning_effort' is not supported with this model."), done('ok'));
+  assert.equal((await P.run('openai', ask({ effort: 'none' }), cfg(), { fetch: typed.fetch })).text, 'ok');
+  assert.deepEqual(typed.calls.map((c) => c.body.reasoning_effort), ['none', undefined]);
+  const prose = server(json({ error: { message: 'Unrecognized request argument supplied: reasoning_effort' } }, 400), done('ok'));
+  await P.run('openai', ask({ effort: 'none' }), cfg({ base: 'https://prose.example.com/v1' }), { fetch: prose.fetch });
+  assert.deepEqual(prose.calls.map((c) => c.body.reasoning_effort), ['none', undefined]);
+  const other = server(json({ error: { message: 'messages: too long' } }, 400));
+  await assert.rejects(P.run('openai', ask({ effort: 'none' }), cfg(), { fetch: other.fetch }), (e) => e.code === 'request-rejected');
+  assert.equal(other.calls.length, 1);
+});
+
 test('a 429 is retried once after a pause; network loss, a 5xx and a cut stream never replay inference', async () => {
   const rate = server(json({ error: { message: 'slow down' } }, 429), done('ok'));
   const t = Date.now();
@@ -271,4 +329,64 @@ test('a schema tool-call round cannot emit a Unicode-escaped credential in its t
     fetch: server(sse(events)).fetch, onDelta: (d) => deltas.push(d),
   }), { code: 'invalid-response' });
   assert.equal(deltas.length, 0);
+});
+
+test('a connection kept without a model cleans, and a request without one is refused before anything is sent', async () => {
+  assert.deepEqual(O.config({ base: 'https://api.groq.com/openai/v1', key: KEY }), { base: 'https://api.groq.com/openai/v1', key: KEY });
+  const s = server(done('{}'));
+  await assert.rejects(P.run('openai', ask(), { base: 'https://api.groq.com/openai/v1', key: KEY }, { fetch: s.fetch }), { code: 'setup' });
+  assert.equal(s.calls.length, 0);
+});
+
+test('Anthropic\'s compatible endpoint gets its browser header and a schema in words, since it ignores response_format', async () => {
+  const s = server(done('{"answer":"ok"}'));
+  const out = await P.run('openai', ask({ schema: SCHEMA }), cfg({ base: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5' }), { fetch: s.fetch });
+  assert.deepEqual(out.json, { answer: 'ok' });
+  const [call] = s.calls;
+  assert.equal(call.url, 'https://api.anthropic.com/v1/chat/completions');
+  assert.equal(call.init.headers['anthropic-dangerous-direct-browser-access'], 'true');
+  assert.equal(call.init.headers.authorization, `Bearer ${KEY}`);
+  assert.equal(call.body.response_format, undefined);
+  assert.match(call.body.messages[0].content, /JSON Schema/);
+  // Nowhere else: Gemini's server refuses a request carrying headers it doesn't know.
+  const g = server(done('fine'));
+  await P.run('openai', ask(), cfg({ base: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-flash' }), { fetch: g.fetch });
+  assert.deepEqual(Object.keys(g.calls[0].init.headers).sort(), ['accept', 'authorization', 'content-type']);
+});
+
+test('status of a connection with no model yet: ready once its catalog answers; OpenRouter\'s key asked of its own record first', async () => {
+  const list = (ids) => json({ object: 'list', data: ids.map((id) => ({ id })) });
+  assert.deepEqual(await O.status(O.config({ base: 'https://api.groq.com/openai/v1', key: KEY }), { fetch: server(list(['llama'])).fetch }), { state: 'ready', source: 'live' });
+  const or = server(json({ data: { label: 'sk-or-v1-abc...' } }), list(['a/b']));
+  assert.deepEqual(await O.status(O.config({ base: 'https://openrouter.ai/api/v1', key: KEY }), { fetch: or.fetch }), { state: 'ready', source: 'live' });
+  assert.equal(or.calls[0].url, 'https://openrouter.ai/api/v1/key');
+  assert.equal(or.calls[0].init.headers.authorization, `Bearer ${KEY}`);
+  assert.equal(or.calls[0].init.redirect, 'error');
+  const bad = server(json({ error: { message: 'User not found.', code: 401 } }, 401));
+  const refused = await O.status(O.config({ base: 'https://openrouter.ai/api/v1', key: 'sk-or-v1-wrong' }), { fetch: bad.fetch });
+  assert.deepEqual({ ...refused, reference: typeof refused.reference }, { state: 'unavailable', reason: 'request-rejected', status: 401, reference: 'string' });
+  assert.equal(bad.calls.length, 1, 'no catalog once the key is refused');
+});
+
+
+test('OpenRouter Anthropic routes emit an explicit stable-block cache marker; other endpoints omit it', async () => {
+  const X = require('../lib/ai/text.js');
+  const C = require('../lib/ai/tasks/writer-complete.js');
+  const req = C.task.build(C.task.input({ before: 'Earlier the river carried the town history.\nOur group now studies ' }), { text: X, caps: { context: 128000 } });
+  for (const config of [cfg({ base: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4.5' }), cfg({ base: 'https://api.anthropic.com/v1' }), cfg()]) {
+    const s = server(done('the river.'));
+    await P.run('openai', req, config, { fetch: s.fetch });
+    const content = s.calls[0].body.messages[1].content;
+    if (config.base.includes('openrouter.ai')) {
+      assert.equal(content.length, 2);
+      assert.deepEqual(content[0].cache_control, { type: 'ephemeral' });
+      assert.match(content[0].text, /Earlier the river/);
+      assert.doesNotMatch(content[0].text, /the sentence the student is typing/);
+      assert.equal(content[1].cache_control, undefined);
+      assert.match(content[1].text, /Our group now studies/);
+    } else {
+      assert.equal(typeof content, 'string');
+      assert.ok(!s.calls[0].init.body.includes('cache_control'));
+    }
+  }
 });

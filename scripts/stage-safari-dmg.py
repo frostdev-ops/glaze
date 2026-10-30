@@ -69,6 +69,28 @@ frameworks = [o[k] for k in app['buildPhases'] if o[k]['isa'] == 'PBXFrameworksB
 require(len(frameworks) == 1 and frameworks[0]['files'] == [], 'Mac framework phase')
 frameworks[0]['files'].append(link)
 o[p['rootObject']]['packageReferences'] = [pkg]
+# Agent access, the DMG build's only: the Mac extension and app compile GlazeAgentBridge.swift, the app GlazeAgentHost.swift.
+require(not any(v.get('isa') == 'PBXFileReference' and v.get('path') in ('GlazeAgentBridge.swift', 'GlazeAgentHost.swift') for v in o.values()),
+        'agent sources already in the project')
+handler = [k for k, v in o.items() if v.get('isa') == 'PBXFileReference' and v.get('path') == 'SafariWebExtensionHandler.swift']
+extension_groups = [v for v in o.values() if v.get('isa') == 'PBXGroup' and v.get('path') == 'Glaze Extension' and set(handler) & set(v.get('children', []))]
+require(len(handler) == 1 and len(extension_groups) == 1, 'extension source group')
+extension_sources = [o[k] for k in extension['buildPhases'] if o[k]['isa'] == 'PBXSourcesBuildPhase']
+require(len(extension_sources) == 1, 'Mac extension source phase')
+bridge, host, bridge_extension, bridge_app, host_app = ['F17A0000000000000000000' + n for n in '45678']
+require(all(k not in o for k in (bridge, host, bridge_extension, bridge_app, host_app)), 'injected IDs are in use')
+for ref, name in ((bridge, 'GlazeAgentBridge.swift'), (host, 'GlazeAgentHost.swift')):
+    o[ref] = {'isa': 'PBXFileReference', 'lastKnownFileType': 'sourcecode.swift', 'path': name, 'sourceTree': '<group>'}
+extension_groups[0]['children'].append(bridge)
+groups[0]['children'].append(host)
+for build, ref in ((bridge_extension, bridge), (bridge_app, bridge), (host_app, host)):
+    o[build] = {'isa': 'PBXBuildFile', 'fileRef': ref}
+extension_sources[0]['files'].append(bridge_extension)
+sources[0]['files'] += [bridge_app, host_app]
+app_ids = {o[k]['buildSettings'].get('PRODUCT_BUNDLE_IDENTIFIER') for k in o[app['buildConfigurationList']]['buildConfigurations']}
+require(len(app_ids) == 1, 'Mac app bundle id')
+# The app and its extension meet in this group's container (lib/agent-link.js, Safari contract).
+app_group = os.environ.get('SAFARI_TEAM_ID', '22AAZFMTV8') + '.' + app_ids.pop()
 for t in (app, extension):
     for key in o[t['buildConfigurationList']]['buildConfigurations']:
         settings = o[key]['buildSettings']
@@ -84,9 +106,18 @@ entitlements = project / 'Glaze/Release.entitlements'
 with entitlements.open('rb') as f:
     e = plistlib.load(f)
 require(e.pop('com.apple.security.app-sandbox', None) is True, 'release sandbox entitlement')
-with entitlements.open('wb') as f:
-    plistlib.dump(e, f)
+extension_entitlements = project / 'Glaze Extension/Release.entitlements'
+with extension_entitlements.open('rb') as f:
+    x = plistlib.load(f)
+require(x.get('com.apple.security.app-sandbox') is True, 'extension sandbox entitlement')
+for path, values in ((entitlements, e), (extension_entitlements, x)):
+    require('com.apple.security.application-groups' not in values, 'app group already set')
+    values['com.apple.security.application-groups'] = [app_group]
+    with path.open('wb') as f:
+        plistlib.dump(values, f)
 shutil.copyfile(root / 'safari/dmg/AppDelegate.swift', project / 'Glaze/AppDelegate.swift')
+shutil.copyfile(root / 'safari/dmg/GlazeAgentHost.swift', project / 'Glaze/GlazeAgentHost.swift')
+require((project / 'Glaze Extension/GlazeAgentBridge.swift').is_file(), 'agent bridge source')
 # Keep the application/menu scene, but instantiate the guide window only on a user launch.
 storyboard = project / 'Glaze/Base.lproj/Main.storyboard'
 tree = ET.parse(storyboard)
@@ -104,7 +135,10 @@ i.update(SUFeedURL='https://frostdev.io/projects/glaze/appcast.xml',
          SUEnableAutomaticChecks=True, SUAutomaticallyUpdate=True, SUEnableSystemProfiling=False,
          SUSendProfileInfo=False, LSUIElement=True,
          CFBundleURLTypes=[{'CFBundleURLName': 'io.frostdev.glaze-update',
-                            'CFBundleURLSchemes': ['io.frostdev.glaze-update']}])
+                            'CFBundleURLSchemes': ['io.frostdev.glaze-update']},
+                           # GlazeAgentBridge.start: the extension opens the app hidden for agents.
+                           {'CFBundleURLName': 'io.frostdev.glaze-agent',
+                            'CFBundleURLSchemes': ['io.frostdev.glaze-agent']}])
 with info.open('wb') as f:
     plistlib.dump(i, f)
 # Exact version plus immutable revision, reviewed together on every Sparkle bump.

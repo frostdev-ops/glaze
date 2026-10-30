@@ -40,6 +40,51 @@ test('the call record keeps the last 40 calls, metadata only', async () => {
   await F.record({ get: async () => { throw new Error('down'); } }, 'aiCalls', { id: 'x' }); // never throws
 });
 
+test('safe local diagnostics survive failures and Activity without exposing native text', async () => {
+  const e = F.modelFailure(Object.assign(new Error('PRIVATE PAPER'), { category: 'request-rejected', reason: 'context', context: 8192, tokens: 9000, native: 'PRIVATE PAPER' }));
+  assert.equal(e.reason, 'context'); assert.equal(e.context, 8192); assert.equal(e.tokens, 9000);
+  assert.match(F.explain(e), /context window/);
+  const data = {}, area = { get: async () => data, set: async (v) => Object.assign(data, v) };
+  await F.record(area, 'calls', { id: 'safe', ...e, prompt: 'PRIVATE PAPER' });
+  assert.equal(data.calls[0].reason, 'context'); assert.equal(data.calls[0].tokens, 9000);
+  assert.doesNotMatch(JSON.stringify(data), /PRIVATE PAPER/);
+  assert.deepEqual(F.diagnostic({ reason: 'PRIVATE PAPER', context: Infinity, tokens: -1 }), {});
+});
+
+test('response context diagnostics retain only fixed phases and measured counts', async () => {
+  const data = {}, area = { get: async () => data, set: async (v) => Object.assign(data, v) };
+  const detail = { reason: 'response-context', phase: 'response', tokens: 4000, context: 9216 };
+  assert.deepEqual(F.diagnostic({ ...detail, prompt: 'PRIVATE PAPER' }), detail);
+  assert.deepEqual(F.diagnostic({ phase: 'PRIVATE PAPER' }), {});
+  assert.match(F.explain(detail), /input fit.*producing the answer/);
+  await F.record(area, 'calls', { id: 'response', ...detail, prompt: 'PRIVATE PAPER' });
+  assert.equal(data.calls[0].phase, 'response');
+  assert.doesNotMatch(JSON.stringify(data), /PRIVATE PAPER/);
+});
+
+test('output cutoff diagnostics retain byte counts and never the partial answer', () => {
+  const detail = { reason: 'response-limit', phase: 'response', actual: 1030, limit: 1024, tokens: 3563, context: 9216 };
+  const failure = F.modelFailure(Object.assign(new Error('PRIVATE PARTIAL ANSWER'), { category: 'request-rejected', ...detail }));
+  assert.deepEqual(F.diagnostic(failure), detail);
+  assert.match(F.explain(failure), /output limit/);
+  assert.doesNotMatch(JSON.stringify(failure), /PRIVATE PARTIAL ANSWER/);
+});
+
+test('feedback limit diagnostics retain bounded counts without presenting task caps as native context overflow', async () => {
+  const data = {}, area = { get: async () => data, set: async (v) => Object.assign(data, v) };
+  for (const reason of ['feedback-criteria', 'feedback-attachments', 'feedback-material', 'feedback-calls']) {
+    const diagnostic = F.diagnostic({ reason, actual: 65, limit: 64, prompt: 'PRIVATE PAPER' });
+    assert.deepEqual(diagnostic, { reason, actual: 65, limit: 64 });
+    assert.ok(F.explain(diagnostic)); assert.doesNotMatch(F.explain(diagnostic), /context window/);
+    await F.record(area, 'calls', { id: reason, ...diagnostic, prompt: 'PRIVATE PAPER' });
+  }
+  assert.equal(data.calls.length, 4); assert.equal(data.calls[0].actual, 65); assert.equal(data.calls[0].limit, 64);
+  assert.doesNotMatch(JSON.stringify(data), /PRIVATE PAPER/);
+  assert.deepEqual(F.diagnostic({ reason: 'PRIVATE PAPER', actual: '65', limit: Infinity }), {});
+  for (const value of [-1, 1.5, 10000001]) assert.deepEqual(F.diagnostic({ actual: value, limit: value }), {});
+  assert.match(F.explain({ reason: 'feedback-context' }), /estimated context budget/);
+});
+
 test('bounded refuses a body past its limit; anySignal aborts with the first reason', async () => {
   assert.equal(await F.bounded(new Response('hello')), 'hello');
   await assert.rejects(F.bounded(new Response('x'.repeat(100)), 10), /exceeds/);
@@ -80,4 +125,23 @@ test('waiting races cancellation, skips already-cancelled work and handles late 
   await new Promise(setImmediate);
   assert.equal(started, 1);
   assert.equal(await F.wait(() => 42), 42);
+});
+
+
+test('concurrent diagnostic writes preserve rows, ordered tally renames and the 40-row cap', async () => {
+  const data = {};
+  const area = { get: async (k) => ({ [k]: structuredClone(data[k]) }), set: async (v) => { await new Promise(setImmediate); Object.assign(data, structuredClone(v)); } };
+  await Promise.all(Array.from({ length: 45 }, (_, i) => F.record(area, 'aiCalls', { id: `r${i}`, count: 1 })));
+  assert.equal(data.aiCalls.length, 40, 'concurrent calls must not overwrite each other');
+  assert.equal(data.aiCalls[0].id, 'r5');
+  await Promise.all([
+    F.record(area, 'aiCalls', { id: 'failure-1', count: 2 }, 'r44'),
+    F.record(area, 'aiCalls', { id: 'failure-2', count: 3 }, 'failure-1'),
+    F.record(area, 'aiCalls', { id: 'failure-2', count: 4 }),
+    F.record(area, 'aiCalls', { id: 'other', count: 1 }),
+  ]);
+  assert.equal(data.aiCalls.length, 40);
+  assert.equal(data.aiCalls.filter((r) => /r44|failure-/.test(r.id)).length, 1);
+  assert.deepEqual(data.aiCalls.find((r) => r.id === 'failure-2'), { id: 'failure-2', count: 4 });
+  assert.ok(data.aiCalls.some((r) => r.id === 'other'));
 });

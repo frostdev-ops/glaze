@@ -192,7 +192,7 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
       }
       // With Glaze's bar drawn, the replacement stands in for the bar; without it, for Ultra's own nav.
       const barLive = await inPage(page, () => !!globalThis.GZ_NAVBAR_UI?.live());
-      const native = () => page.evaluate(() => getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation"]')).display);
+      const native = () => page.evaluate(() => getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation-"]')).display);
       const glazeBar = () => page.evaluate(() => [...(document.getElementById('gz-navbar')?.shadowRoot?.querySelectorAll('.rail, .topbar, .tabs') || [])].some((e) => getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden'));
       if (barLive) ok(await glazeBar(), 'Glaze\'s bar shows while the replacement is off');
       else ok(await native() !== 'none', 'the nav is Ultra\'s while the replacement is off');

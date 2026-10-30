@@ -49,7 +49,7 @@ test('only the top frame and live tab frames read parts, never the editor\'s pre
 test('content.js hands parts to the pages through GZ_CTX.parts(), asks only when storage changes lookX, and feeds the preview', () => {
   // Running code mods lay their parts over the Look's (features/mods.js parts), under the same gate.
   // Course Looks suppress global parts; their pointer is resolved separately.
-  assert.match(content, /const partsOn = \(pointer = false\) => on\(settings\) && \(!isPreview \|\| html\.dataset\.previewPage !== 'quiz'\) && \(pointer \|\| !lookHere\(\)\);/);
+  assert.match(content, /const partsOn = \(\) => on\(settings\) && \(!isPreview \|\| html\.dataset\.previewPage !== 'quiz'\);/);
   assert.match(content, /partsOn, courseLook: lookHere,\n    parts: \(\) => \(partsOn\(\) && \(globalThis\.GZ_MODS \? GZ_MODS\.parts\(globalThis\.GZ_XPARTS_PAGE\?\.now\(\) \|\| null\) : globalThis\.GZ_XPARTS_PAGE\?\.now\(\)\)\) \|\| null,/);
   assert.match(content, /if \(changes\.lookX && area === 'sync'\) lookX = changes\.lookX\.newValue;/);
   assert.match(content, /globalThis\.GZ_XPARTS_PAGE\?\.preview\(e\.data\.gzPreviewParts\);/);
@@ -82,6 +82,33 @@ const page = ({ sync = {}, local = {}, path: pathname = '/ultra/courses/_1_1/out
   return { context, events, needed, listeners, data: { sync, local }, now: () => vm.runInContext('GZ_XPARTS_PAGE.now()', context), run: (code) => vm.runInContext(code, context) };
 };
 const GLOW = { x: { cursor: { kind: 'glow', size: 14 } } };
+
+test('course parts discard delayed replies, restore the theme, and stay independent in two tabs', async () => {
+  const a = page({ sync: { lookX: await X.pack(GLOW) } }), b = page();
+  const pending = new Map();
+  let course = 'Graveyard';
+  a.context.GZ_CTX.courseLook = () => course;
+  a.context.chrome.runtime.sendMessage = ({ id }) => new Promise((resolve) => pending.set(id, resolve));
+  b.context.GZ_CTX.courseLook = () => 'Terminal';
+  b.context.chrome.runtime.sendMessage = async () => ({ ok: true, parts: { x: { pointer: 'terminal' } } });
+  const first = a.run('GZ_XPARTS_PAGE.read()');
+  course = 'Frostdev';
+  const second = a.run('GZ_XPARTS_PAGE.read()');
+  pending.get('Frostdev')({ ok: true, parts: { x: { pointer: 'lava' } } });
+  await second;
+  assert.equal(a.now().pointer, 'lava');
+  pending.get('Graveyard')({ ok: true, parts: { x: { pointer: 'ghost' } } });
+  await first;
+  assert.equal(a.now().pointer, 'lava', 'late course reply cannot replace the current parts');
+  await b.run('GZ_XPARTS_PAGE.read()');
+  assert.equal(b.now().pointer, 'terminal');
+  course = null;
+  assert.equal(a.now(), null, 'old course parts are unavailable immediately');
+  await a.run('GZ_XPARTS_PAGE.read()');
+  assert.deepEqual(JSON.parse(JSON.stringify(a.now())), GLOW.x);
+  assert.equal(b.now().pointer, 'terminal', 'another tab keeps its own course');
+  assert.deepEqual(a.listeners, {}, 'course reads add no listeners or polling');
+});
 
 test('the page module reads the parts, fires glaze:parts when they change and not otherwise, and keeps them frozen', async () => {
   const p = page({ sync: { lookX: await X.pack(GLOW) } });
@@ -243,10 +270,10 @@ test('the Ultra preview suppresses parts on its mock quiz and restores them on r
   context.isPreview = false;
   assert.ok(context.ctx.parts(), 'a live page cannot suppress parts with a preview attribute');
   assert.equal(context.ctx.partsOn(), true);
+  // A course Look's parts are features/lookparts.js's to give (its now() is that Look's on that course): no gate here.
   context.lookHere = () => 'Clear';
-  assert.equal(context.ctx.partsOn(), false, 'a course Look suppresses the global Look parts');
-  assert.equal(context.ctx.partsOn(true), true, 'the personal pointer remains eligible on a course Look');
-  assert.equal(context.ctx.parts(), null);
+  assert.equal(context.ctx.partsOn(), true, 'a course Look wears its own parts');
+  assert.ok(context.ctx.parts());
 });
 
 test('changing the mock page announces parts so rules, scenes and nav follow the preview context', () => {

@@ -45,8 +45,20 @@ const world = ({ record = { earned: { 'work:assignment:1': 20 } }, seed = 1 } = 
   const pointer = (x, y) => { for (const l of docEvents.filter((e) => e.type === 'pointermove')) l.f({ type: 'pointermove', isTrusted: true, clientX: x, clientY: y, pointerId: 1, target: { closest: () => null, ownerDocument: doc }, preventDefault() {} }); };
   // The stage laid out at a new size, as a tile resized under it: its observers are told, as the browser does.
   const resize = (width, height) => { stage.box = { ...stage.box, width, height }; for (const o of observers) if (o.els.has(stage)) o.f([{ target: stage }]); };
-  return { W, stage, actor, run, pointer, scroll, resize, timers, saved, reads: () => reads, resetReads: () => { reads = 0; }, now: () => clock, doc };
+  return { W, stage, actor, run, pointer, scroll, resize, timers, saved, reads: () => reads, resetReads: () => { reads = 0; }, now: () => clock, doc,
+    chrome: c.chrome, hide: () => { for (const l of winEvents.filter((e) => e.type === 'pagehide')) l.f(); } };
 };
+
+test('the pet world tears down after chrome.storage disappears or its event is invalidated', () => {
+  for (const throwing of [false, true]) {
+    const w = world();
+    if (throwing) w.chrome.storage.onChanged.removeListener = () => { throw Error('Extension context invalidated.'); };
+    delete w.chrome.storage;
+    assert.doesNotThrow(w.hide);
+    assert.equal(w.timers.size, 0);
+    assert.equal(w.doc.root.querySelectorAll('.gz-game-world').length, 0);
+  }
+});
 
 test('the pet world runs at frame rate while the pointer is about and the pet is not at rest', () => {
   const w = world();

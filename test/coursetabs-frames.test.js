@@ -17,7 +17,7 @@ const loadingFrame = () => {
   const c = vm.createContext({ PAGE: 'page', requestAnimationFrame() {}, nudge() {}, keepPage() {}, spare: new Map(), next: new Map(), popping: false, L, ctx: { site: 'ultra' }, frames, showing: '_2_1', location: { origin }, performance: { now: () => now },
     MutationObserver: class { observe() {} disconnect() {} }, loading: () => false, shown: (el) => !!el, waiting: '', wait() {},
     unpicture() {}, later() {}, clearSlow() {}, hoist() {}, slowFrame: () => notices.push('slow'), t: (s) => s,
-    setTimeout: (fn, ms) => timers.push({ fn, ms }),
+    setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout() {},
   });
   const watch = vm.runInContext(part('  const watch = ', '  const open = ') + '\nwatch;', c);
   return { f, frames, navigations, notices, watch: () => watch('_2_1', f),
@@ -49,6 +49,16 @@ test('slow rendered course documents and edited frames are never automatically r
     assert.equal(p.f.ready, false);
     assert.deepEqual(p.navigations, [], 'preserve native loading state and any edits');
   }
+});
+
+test('an Ultra frame native load cannot settle on the document it is leaving', () => {
+  const p = loadingFrame();
+  const old = p.built();
+  p.document(old); p.f.stale = old;
+  p.watch(); p.step(301);
+  assert.equal(p.f.ready, false, 'the old outline may remain rendered while the new native load waits');
+  p.document(p.built()); p.step(50); p.step(301);
+  assert.equal(p.f.ready, true, 'only the destination document settles the new load');
 });
 
 test('selecting a timed-out course again retries only an untouched frame', () => {
@@ -488,6 +498,8 @@ test('native edits protect a live frame before window load and after a new docum
   });
   assert.equal(typeof handlers.input, 'function', 'protection is installed by the content module without waiting for window load');
   handlers.input({ isTrusted: false });
+  handlers.input({ isTrusted: true, target: { closest: (selector) => selector === '#gz-cmd' ? {} : null } });
+  assert.deepEqual(sent, ['loaded'], 'palette search input cannot mark the native course page edited');
   handlers.input({ isTrusted: true });
   handlers.change({ isTrusted: true });
   handlers.submit({ isTrusted: true });

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:font w:name="Times New Roman">
+<w:panose1 w:val="02020603050405020304"/>
+<w:charset w:val="00"/>
+<w:family w:val="roman"/>
+<w:pitch w:val="variable"/>
+</w:font>
+<w:font w:name="Arial">
+<w:panose1 w:val="020B0604020202020204"/>
+<w:charset w:val="00"/>
+<w:family w:val="swiss"/>
+<w:pitch w:val="variable"/>
+</w:font>
+<w:font w:name="Calibri">
+<w:panose1 w:val="020F0502020204030204"/>
+<w:charset w:val="00"/>
+<w:family w:val="swiss"/>
+<w:pitch w:val="variable"/>
+</w:font>
+<w:font w:name="Courier New">
+<w:panose1 w:val="02070309020205020404"/>
+<w:charset w:val="00"/>
+<w:family w:val="modern"/>
+<w:pitch w:val="fixed"/>
+</w:font>
+</w:fonts>

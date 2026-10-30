@@ -1,0 +1,35 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unit 3 test</title>
+<!-- _note: shape from the owner's Ultra, 2026-10-27, synthetic values. A test attempt (…/assessment/{id}/attempt/{attempt}) as
+glaze-plans/writer/probe/skeleton-test-additional-content.html records it: the attempt canvas's Additional content box (an
+autosaving bb-rich-text-editor; no essay question was seen) and the footer's Save and Close and Submit by analytics-id, each
+drawn twice, disabled while empty. Question subtrees and wrappers trimmed. -->
+<style>
+body { margin:0; font:14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gz-surface-2, #060d18); color:var(--gz-ink, #e8f2fa); }
+.bb-editor-root { border:1px solid var(--gz-line-strong, #24405f); border-radius:12px; background:var(--gz-surface, #0d1b2e); }
+.bb-editor-toolbar { display:flex; gap:4px; padding:6px; border-bottom:1px solid var(--gz-line, #16283f); } .bb-editor-toolbar button { width:28px; height:28px; }
+.ql-container:not(.is-read-only) .ql-editor { min-height:200px; padding:12px 16px; outline:none; } .ql-editor p { margin:0 0 8px; } .ql-clipboard, .sr-only { position:absolute; left:-9999px; }
+.status-bar { padding:4px 16px; color:var(--gz-ink-faint, #5c7189); font-size:12px; }
+footer, .footer { display:flex; justify-content:flex-end; gap:10px; padding:12px 24px; border-top:1px solid var(--gz-line, #16283f); }
+footer button, .footer button { font:inherit; font-weight:600; padding:8px 18px; border-radius:999px; border:1px solid var(--gz-line-strong, #24405f); background:none; color:inherit; } button:disabled { opacity:.45; }
+.attempt-authoring-container { width:860px; margin:32px auto; }
+</style></head>
+<body><div id="site-wrap"><div id="main-content-inner"><section class="routed-page route-view-container"><div class="routed-page-body">
+<bb-attempt-canvas attempt="assessmentAttempt.attempt" canvas-type="assessmentAttempt.AssessmentCanvasMode.AttemptAuthoring"><div class="attempt-authoring-container" bb-load-bundle="components/directives/assessment/attempt-canvas">
+  <div class="assessment-question js-question-type-multipleanswer"><p>Which places return in the novel?</p></div>
+  <div class="freeform-response"><span id="additional-content-editor" class="additional-content-label">Additional content</span>
+    <ng-form name="freeform-response-form" novalidate><bb-freeform-response-editor auto-save-context-area="assessments" editor-aria-labelled-by="additional-content-editor" video-studio-embed-location="BB_TESTS"><div class="freeform-response-editor-template"><div class="freeform-response-editor freeform-response-editor-row js-bbml-editor" id="BBML_Editor_ID__1_">
+      <form class="freeform-response-form" name="editorForm" novalidate auto-save-context-area="assessments" auto-save-context-id="freeform" bb-autosave="" save-func="bbmlEditor.save()" use-save-numbers="true">
+        <bb-rich-text-editor class="bb-text-editor-controls-wrapper rich-text-editor" name="responseEditor" editor-aria-labelled-by="additional-content-editor" ng-model="bbmlEditor.rawText" on-change="bbmlEditor.onChange" video-studio-embed-location="BB_TESTS">
+          <div class="bb-editor-root bb-editor-heading-h4" role="presentation"><div class="bb-editor-toolbar no-select" role="toolbar" aria-label="Editor toolbar" aria-controls="bb-editor-textbox"><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.bold.button" aria-label="Bold">B</button></div><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.italic.button" aria-label="Italic">I</button></div><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.underline.button" aria-label="Underline">U</button></div><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.link.button" aria-label="Insert/edit link">I</button></div><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.insertLocalFile.button" aria-label="Insert/edit local files">I</button></div><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.insertImage.button" aria-label="Insert image">I</button></div></div>
+            <div class="editor-content-container keyboard-tooltip-container"><div class="bb-editor-container ql-container is-active" role="presentation">
+              <div class="ql-editor ql-blank bb-editor" id="bb-editor-textbox" data-gramm="false" contenteditable="true" data-placeholder="Drag and drop files here or click to add text." aria-labelledby="additional-content-editor BB_Editor_ID__1_-editorLabel" role="textbox" aria-multiline="true" aria-required="false"><p><br></p></div>
+            </div></div>
+          </div>
+        </bb-rich-text-editor>
+      </form>
+    </div></div></bb-freeform-response-editor></ng-form>
+  </div>
+</div></bb-attempt-canvas>
+<div class="footer"><button class="button button--secondary js-save-draft-button assessment-save-draft-button" tabindex="-1" analytics-id="course.content.assessment.footer.buttons.saveAndClose" ng-click="assessmentAttempt.save($event)">Save and Close</button><button class="button js-send-draft-button assessment-send-draft-button" tabindex="-1" analytics-id="course.content.assessment.footer.buttons.submit" ng-click="assessmentAttempt.submit($event)">Submit</button></div>
+<div class="footer" hidden><button class="button button--secondary js-save-draft-button" tabindex="-1" analytics-id="course.content.assessment.footer.buttons.saveAndClose">Save and Close</button><button class="button js-send-draft-button" tabindex="-1" analytics-id="course.content.assessment.footer.buttons.submit">Submit</button></div>
+</div></section></div></div></body></html>

@@ -27,6 +27,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (name, ok, detail = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `  ${detail}`}`); if (!ok) fails++; };
 const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Date.now() < end) { const v = await fn(); if (v) return v; await sleep(80); } return null; };
+// The pointer's animation plays where moving the pointer draws #gz-fx (it removes itself once faded). One attempt: wait for
+// the last one to go, move the pointer over a dozen frames, then look for a new one. Each part is its own call from Node, so
+// the bound covers several whole attempts on a loaded runner. → true, or what it never saw.
+const animates = async (frame, at, bound = 20000) => {
+  const end = Date.now() + bound;
+  let missed = 'the frame';
+  for (; Date.now() < end; await sleep(80)) {
+    const f = frame();
+    if (!f) { missed = 'the frame'; continue; }
+    if (!await f.evaluate(() => !document.getElementById('gz-fx')).catch(() => false)) { missed = 'the last #gz-fx going'; continue; }
+    await f.evaluate(async ([x, y]) => {
+      for (let i = 0; i < 12; i++) { dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientX: x + i * 12, clientY: y, bubbles: true })); await new Promise(requestAnimationFrame); }
+    }, at).catch(() => {});
+    for (const stop = Math.min(end, Date.now() + 2000); Date.now() < stop; await sleep(80)) if (await f.evaluate(() => !!document.getElementById('gz-fx')).catch(() => false)) return true;
+    missed = '#gz-fx after the pointer moved';
+  }
+  return `waited ${bound / 1000} s for ${missed}`;
+};
 
 (async () => {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-pointer-')));
@@ -187,14 +205,15 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
       for (let i = 0; i < 12; i++) { dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientX: 200 + i * 15, clientY: 200, bubbles: true })); await new Promise(requestAnimationFrame); }
       return !!document.getElementById('gz-fx');
     });
-    check('the Look\'s pointer animation plays in the preview', await until(trail, 4000));
+    let anim = await animates(preview, [200, 200]);
+    check('the Look\'s pointer animation plays in the preview', anim === true, anim);
     await page.click('[data-key="extras.pointerAnim"]');
     check('Pointer animation off: saved, and the preview draws nothing around the pointer', await until(async () => (await sync()).pointerAnim === false) && !(await sleep(300), await trail()));
     check('  this Look\'s animation is named beside the switch', await page.evaluate(() => /^This Look's: \S/.test(document.getElementById('pointer-anim-look').textContent)));
     await page.click('[data-pointer="pumpkin"]');
     await until(async () => (await sync()).pointer === 'pumpkin');
     await page.click('[data-key="extras.pointerAnim"]');
-    check('Pointer animation on again: it plays around Pumpkin', await until(async () => (await sync()).pointerAnim === true) && !!await wears('pumpkin') && !!await until(trail, 4000));
+    check('Pointer animation on again: it plays around Pumpkin', await until(async () => (await sync()).pointerAnim === true) && !!await wears('pumpkin') && (anim = await animates(preview, [200, 200])) === true, anim);
     await shot('pointer-setting-dark');
     await page.setViewportSize({ width: 390, height: 900 });
     await shot('pointer-setting-phone');
@@ -207,7 +226,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     await shot('pointer-setting-dark-off');
     check('the switch off: the system\'s pointer and nothing drawn around it in the preview', await wears('system') && !(await sleep(300), await trail()), await worn());
     await page.click('[data-key="extras.pointerOn"]');
-    check('  on again: Pumpkin and its animation are back', await until(async () => (await sync()).pointerOn === true) && !!await wears('pumpkin') && !!await until(trail, 4000), await worn());
+    check('  on again: Pumpkin and its animation are back', await until(async () => (await sync()).pointerOn === true) && !!await wears('pumpkin') && (anim = await animates(preview, [200, 200])) === true, `${anim} ${await worn()}`);
 
     // ---- This Look's pointer: the Look's parts ---------------------------------------------------------------------------------
     const lookCursor = () => page.evaluate(async () => (await GZ_XPARTS.read(GZ_XPARTS.areas()))?.x?.cursor?.kind ?? null);
@@ -264,15 +283,16 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
       for (let i = 0; i < 12; i++) { dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientX: 300 + i * 10, clientY: 300, bubbles: true })); await new Promise(requestAnimationFrame); }
       return !!document.getElementById('gz-fx');
     });
-    check('the Look\'s pointer animation plays around the student\'s pointer', await until(glow, 4000));
+    let glowing = await animates(() => lms.mainFrame(), [300, 300]);
+    check('the Look\'s pointer animation plays around the student\'s pointer', glowing === true, glowing);
     await extras({ pointerAnim: false });
     check('  Pointer animation off: nothing drawn around it', !(await sleep(600), await glow()));
     await extras({ pointerAnim: true });
-    check('  on again: it plays', await until(glow, 4000));
+    check('  on again: it plays', (glowing = await animates(() => lms.mainFrame(), [300, 300])) === true, glowing);
     await extras({ pointerOn: false });
     check('the custom pointer off: nothing drawn around the pointer either', await shows('system') && !(await sleep(600), await glow()));
     await extras({ pointerOn: true });
-    check('  on again: it plays', await until(glow, 4000));
+    check('  on again: it plays', (glowing = await animates(() => lms.mainFrame(), [300, 300])) === true, glowing);
     // The command palette (Ctrl+K): a Pointer: entry per choice; their own picture only once there is one.
     await lms.keyboard.press('Control+k');
     await lms.waitForSelector('#gz-cmd input');

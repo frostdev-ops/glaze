@@ -1,0 +1,142 @@
+/* Glaze Writer's objects (writer-objects.js), as glaze-plans/writer/mockups/objects draws them, in the Look's tokens: the
+   paper toolbar's Insert and list style buttons, the picture, table and link popovers, the table grid and the special
+   characters palette (writer.css .pop: they scale from 0.98 and fade in, and go at once). On the page, which is paper:
+   pictures with their captions, handles and outline, tables without borders, list markers for every level and style,
+   links as the .docx writes them, and the horizontal line. Nothing animates while typing. */
+
+/* ---- the paper toolbar (writer-paper.css .gp-tbtn and .gp-tb buttons) */
+.gzo-tbtn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; font-size: 13px; color: var(--gz-ink); white-space: nowrap; flex: none; }
+.gzo-tbtn .ico { width: 16px; height: 16px; }
+.gzo-tbtn .ico:last-child { width: 14px; height: 14px; }
+.gp-tb .gzo-caretbtn { width: 16px; margin-left: -2px; }
+.gzo-caretbtn { height: 30px; border-radius: 7px; display: grid; place-items: center; color: var(--gz-ink); flex: none; }
+.gzo-caretbtn .ico { width: 14px; height: 14px; }
+.gzo-tbtn:hover, .gzo-caretbtn:hover, .gzo-tbtn[aria-expanded="true"], .gzo-caretbtn[aria-expanded="true"] { background: var(--gz-line); }
+.gzo-tbtn:focus-visible, .gzo-caretbtn:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+
+/* ---- popovers */
+.gzo-pop { z-index: 6; padding: 6px; font-family: var(--gz-font); color: var(--gz-ink); }
+.gzo-row { display: flex; align-items: center; gap: 2px; }
+.gzo-row .grow { flex: 1; }
+.gzo-sepv { width: 1px; height: 18px; background: var(--gz-line-strong); margin: 0 4px; flex: none; }
+.gzo-ibtn { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; color: var(--gz-ink); flex: none; }
+.gzo-ibtn:hover { background: var(--gz-line); }
+.gzo-ibtn[aria-pressed="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi); }
+:root:not([data-dark]) .gzo-ibtn[aria-pressed="true"] { color: var(--gz-accent); }
+.gzo-ibtn:focus-visible, .gzo-sbtn:focus-visible, .gzo-cat:focus-visible, .gzo-char:focus-visible, .gzo-grid:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+.gzo-field { height: 30px; min-width: 0; width: 100%; padding: 0 8px; border: 1px solid var(--gz-line-strong); border-radius: 7px; background: var(--card); color: var(--gz-ink); font: inherit; font-size: 13px; outline: none; }
+.gzo-field:focus { border-color: var(--gz-accent); }
+.gzo-field[aria-invalid="true"] { border-color: var(--gz-err); }
+.gzo-field::placeholder { color: var(--gz-ink-faint); }
+.gzo-sbtn { padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; background: var(--gz-accent); color: var(--gz-accent-ink); white-space: nowrap; }
+
+.gzo-imgpop { width: min(420px, calc(100vw - 8px)); padding: 8px; display: grid; gap: 8px; }
+.gzo-unit { position: relative; display: block; flex: none; }
+.gzo-unit .gzo-field { width: 86px; padding-right: 26px; font-variant-numeric: tabular-nums; }
+.gzo-unit + .gzo-unit .gzo-field { width: 70px; }
+.gzo-unit span { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--gz-ink-faint); pointer-events: none; }
+.gzo-tablepop { padding: 4px; }
+.gzo-linkpop { display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 12px; max-width: min(420px, calc(100vw - 8px)); }
+.gzo-url { color: var(--gz-accent-hi); text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 260px; margin-right: 6px; }
+:root:not([data-dark]) .gzo-url { color: var(--gz-accent); }
+.gzo-url:hover { text-decoration: underline; }
+.gzo-linkedit { width: min(340px, calc(100vw - 8px)); padding: 10px; display: grid; gap: 8px; }
+
+/* ---- menus (writer-paper.css .gp-menu) */
+.gzo-menu { min-width: 236px; z-index: 7; }
+.gzo-menu [role^="menuitem"] .ico { width: 16px; height: 16px; flex: none; color: var(--gz-ink-muted); }
+.gzo-menu [role^="menuitem"] { gap: 10px; justify-content: flex-start; }
+.gzo-menu [role^="menuitem"] small { margin-left: auto; }
+.gzo-mlabel { white-space: nowrap; }
+.gzo-mhead { display: flex; align-items: center; gap: 10px; padding: 7px 10px 2px; font-size: 13px; color: var(--gz-ink); }
+.gzo-mhead .ico { width: 16px; height: 16px; color: var(--gz-ink-muted); }
+.gzo-grid { display: grid; grid-template-columns: repeat(10, 18px); gap: 3px; padding: 6px 10px 4px; width: max-content; border-radius: 8px; }
+.gzo-grid i { width: 18px; height: 18px; border: 1px solid var(--gz-line-strong); border-radius: 3px; display: block; cursor: pointer; }
+.gzo-grid i.on { background: var(--gz-accent-soft); border-color: var(--gz-accent); }
+.gzo-gridlbl { text-align: center; color: var(--gz-ink-muted); font-size: 12px; padding-bottom: 4px; font-variant-numeric: tabular-nums; }
+.gzo-listmenu { min-width: 200px; }
+.gzo-mrow { display: flex; gap: 2px; padding: 0 2px; }
+.gzo-mrow [role^="menuitem"] { width: auto; flex: 1; justify-content: center; font-family: "Times New Roman", serif; font-size: 17px; }
+
+.gzo-chars { width: min(392px, calc(100vw - 8px)); padding: 10px; display: grid; gap: 8px; }
+.gzo-search { position: relative; display: block; }
+.gzo-search .ico { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--gz-ink-faint); pointer-events: none; }
+.gzo-search .gzo-field { padding-left: 28px; }
+.gzo-cats { display: flex; gap: 4px; flex-wrap: wrap; }
+.gzo-cat { padding: 3px 9px; border-radius: 999px; border: 1px solid var(--gz-line-strong); font-size: 12px; color: var(--gz-ink-muted); }
+.gzo-cat[aria-pressed="true"] { background: var(--gz-accent-soft); border-color: transparent; color: var(--gz-accent-hi); font-weight: 600; }
+:root:not([data-dark]) .gzo-cat[aria-pressed="true"] { color: var(--gz-accent); }
+.gzo-cgrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; max-height: 216px; overflow: auto; }
+.gzo-char { height: 34px; border-radius: 7px; display: grid; place-items: center; font: 400 17px/1 "Times New Roman", serif; color: var(--gz-ink); }
+.gzo-char:hover, .gzo-char:focus { background: var(--gz-accent-soft); }
+.gzo-cname { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--edge); padding-top: 7px; color: var(--gz-ink-muted); font-size: 12px; min-height: 26px; }
+.gzo-cname kbd { font: 11px ui-monospace, Menlo, monospace; color: var(--gz-ink-faint); }
+
+/* ---- pictures on the page */
+.gp-flow .ProseMirror .gzo-img { display: inline-block; position: relative; line-height: 0; text-indent: 0; max-width: 100%; vertical-align: baseline; }
+.gp-flow .ProseMirror .gzo-img[data-display="block"] { display: block; width: 100%; text-align: center; }
+.gp-flow .ProseMirror .gzo-img[data-display="block"][data-align="left"] { text-align: left; }
+.gp-flow .ProseMirror .gzo-img[data-display="block"][data-align="right"] { text-align: right; }
+.gp-flow .ProseMirror .gzo-img[data-caption]::after { content: attr(data-caption); display: block; padding-top: 0; font-size: max(8pt, calc(1em - 2pt)); line-height: 1.15; white-space: normal; }
+.gp-flow .ProseMirror .gzo-box { display: inline-block; position: relative; max-width: 100%; vertical-align: bottom; }
+.gp-flow .ProseMirror .gzo-box img { display: block; max-width: 100%; height: auto; }
+.gp-flow .ProseMirror .gzo-img.ProseMirror-selectednode { outline: none; }
+.gp-flow .ProseMirror .gzo-img.ProseMirror-selectednode .gzo-box { outline: 2px solid #2563eb; outline-offset: 0; }
+.gzo-h { display: none; position: absolute; width: 10px; height: 10px; background: #fff; border: 2px solid #2563eb; border-radius: 2px; z-index: 1; touch-action: none; }
+.gzo-img.ProseMirror-selectednode .gzo-h { display: block; }
+.gzo-h[data-c="nw"] { left: -6px; top: -6px; cursor: nwse-resize; } .gzo-h[data-c="ne"] { right: -6px; top: -6px; cursor: nesw-resize; }
+.gzo-h[data-c="sw"] { left: -6px; bottom: -6px; cursor: nesw-resize; } .gzo-h[data-c="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.gzo-size { display: none; position: absolute; left: 100%; bottom: -6px; margin-left: 10px; background: #111; color: #fff; font: 600 11px/1 var(--gz-font); padding: 4px 6px; border-radius: 5px; white-space: nowrap; }
+.gzo-sizing .gzo-size { display: block; }
+
+/* ---- tables on the page: borders off show a faint guide while editing, never in print */
+.gp-flow .ProseMirror th { font-weight: inherit; text-align: inherit; }
+.gp-flow .ProseMirror table[data-borders="none"] td, .gp-flow .ProseMirror table[data-borders="none"] th { border: 1px dashed var(--sheet-guide, #c8cdd4); }
+.gp-print table[data-borders="none"] td, .gp-print table[data-borders="none"] th { border-color: transparent; }
+@media print { table[data-borders="none"] td, table[data-borders="none"] th { border-color: transparent !important; } }
+.gp-flow .ProseMirror td[data-valign="middle"], .gp-flow .ProseMirror th[data-valign="middle"] { vertical-align: middle; }
+.gp-flow .ProseMirror td[data-valign="bottom"], .gp-flow .ProseMirror th[data-valign="bottom"] { vertical-align: bottom; }
+
+/* ---- links as the paper format writes them (the .docx's Hyperlink style) */
+.gp .gp-flow .ProseMirror a { color: var(--sheet-link, #0563c1); text-decoration: underline; }
+
+/* ---- the horizontal line: one line of the page, a rule through its middle */
+.gp-flow .ProseMirror hr.gz-rule { border: 0; margin: 0; height: 1lh; background: linear-gradient(var(--sheet-line, #111), var(--sheet-line, #111)) center / 100% 1px no-repeat; }
+.gp-flow .ProseMirror hr.gz-rule.ProseMirror-selectednode { outline: 2px solid rgba(37, 99, 235, .6); outline-offset: 2px; }
+
+/* ---- paper lists: every level counts on its own, in its list's style (lib/writer-schema.js --gzs<level> and
+   --gzb<level>), a restarted item sets its level (counter-set inline), and a continued list keeps counting */
+.gp .gp-flow .ProseMirror ol { counter-reset: gzl0 0 gzl1 0 gzl2 0 gzl3 0 gzl4 0 gzl5 0 gzl6 0 gzl7 0 gzl8 0; }
+.gp .gp-flow .ProseMirror ol[data-continue] { counter-reset: none; }
+.gp .gp-flow .ProseMirror ol > li { counter-reset: none; }
+.gp .gp-flow .ProseMirror ol > li:not([class*="ql-indent-"]) { counter-increment: gzl0; counter-set: gzl1 0 gzl2 0 gzl3 0 gzl4 0 gzl5 0 gzl6 0 gzl7 0 gzl8 0; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-1 { counter-increment: gzl1; counter-set: gzl2 0 gzl3 0 gzl4 0 gzl5 0 gzl6 0 gzl7 0 gzl8 0; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-2 { counter-increment: gzl2; counter-set: gzl3 0 gzl4 0 gzl5 0 gzl6 0 gzl7 0 gzl8 0; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-3 { counter-increment: gzl3; counter-set: gzl4 0 gzl5 0 gzl6 0 gzl7 0 gzl8 0; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-4 { counter-increment: gzl4; counter-set: gzl5 0 gzl6 0 gzl7 0 gzl8 0; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-5 { counter-increment: gzl5; counter-set: gzl6 0 gzl7 0 gzl8 0; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-6 { counter-increment: gzl6; counter-set: gzl7 0 gzl8 0; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-7 { counter-increment: gzl7; counter-set: gzl8 0; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-8 { counter-increment: gzl8; counter-set: none; }
+.gp .gp-flow .ProseMirror ol > li:not([class*="ql-indent-"])::before { content: counter(gzl0, var(--gzs0, decimal)) "."; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-1::before { content: counter(gzl1, var(--gzs1, lower-alpha)) "."; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-2::before { content: counter(gzl2, var(--gzs2, lower-roman)) "."; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-3::before { content: counter(gzl3, var(--gzs3, decimal)) "."; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-4::before { content: counter(gzl4, var(--gzs4, lower-alpha)) "."; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-5::before { content: counter(gzl5, var(--gzs5, lower-roman)) "."; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-6::before { content: counter(gzl6, var(--gzs6, decimal)) "."; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-7::before { content: counter(gzl7, var(--gzs7, lower-alpha)) "."; }
+.gp .gp-flow .ProseMirror ol > li.ql-indent-8::before { content: counter(gzl8, var(--gzs8, lower-roman)) "."; }
+.gp .gp-flow .ProseMirror ul > li:not([class*="ql-indent-"])::before { content: var(--gzb0, "\2022"); }
+.gp .gp-flow .ProseMirror ul > li.ql-indent-1::before { content: var(--gzb1, "\25e6"); }
+.gp .gp-flow .ProseMirror ul > li.ql-indent-2::before { content: var(--gzb2, "\25aa"); }
+.gp .gp-flow .ProseMirror ul > li.ql-indent-3::before { content: var(--gzb3, "\2022"); }
+.gp .gp-flow .ProseMirror ul > li.ql-indent-4::before { content: var(--gzb4, "\25e6"); }
+.gp .gp-flow .ProseMirror ul > li.ql-indent-5::before { content: var(--gzb5, "\25aa"); }
+.gp .gp-flow .ProseMirror ul > li.ql-indent-6::before { content: var(--gzb6, "\2022"); }
+.gp .gp-flow .ProseMirror ul > li.ql-indent-7::before { content: var(--gzb7, "\25e6"); }
+.gp .gp-flow .ProseMirror ul > li.ql-indent-8::before { content: var(--gzb8, "\25aa"); }
+.gzo-mrow > button { display: flex; align-items: center; padding: 7px 6px; border-radius: 7px; color: var(--gz-ink); }
+.gzo-mrow > button:hover, .gzo-mrow > button:focus { background: var(--gz-accent-soft); outline: none; }
+.gzo-mrow > button[aria-checked="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi); font-weight: 700; }
+:root:not([data-dark]) .gzo-mrow > button[aria-checked="true"] { color: var(--gz-accent); }

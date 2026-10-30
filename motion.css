@@ -132,7 +132,7 @@ html[data-gz-swap]::view-transition-old(root), html[data-gz-swap]::view-transiti
 .gz-w[data-tile^="course:"]:nth-child(4 of [data-tile^="course:"]) { animation-delay: 0s, calc(var(--gz-stagger) * 3); }
 .gz-w[data-tile^="course:"]:nth-child(5 of [data-tile^="course:"]) { animation-delay: 0s, calc(var(--gz-stagger) * 4); }
 .gz-w[data-tile^="course:"]:nth-child(n+6 of [data-tile^="course:"]) { animation-delay: 0s, calc(var(--gz-stagger) * 5); }
-html[data-gz-nav-expanded] :is(nav#base_tools, nav[class*="makeStylesnavigation"]) a, body.primary-nav-expanded #header .ic-app-header__menu-list-link { animation: var(--gz-rail-open); }
+html[data-gz-nav-expanded] :is(nav#base_tools, nav[class*="makeStylesnavigation-"]) a, body.primary-nav-expanded #header .ic-app-header__menu-list-link { animation: var(--gz-rail-open); }
 .element-card:nth-child(2), .content-list-item:nth-child(2) { animation-delay: calc(var(--gz-stagger) * 1); }
 .element-card:nth-child(3), .content-list-item:nth-child(3) { animation-delay: calc(var(--gz-stagger) * 2); }
 .element-card:nth-child(4), .content-list-item:nth-child(4) { animation-delay: calc(var(--gz-stagger) * 3); }

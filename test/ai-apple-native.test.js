@@ -23,6 +23,12 @@ extension Native {
         do { _ = try GenerationSchema(root: Schema().node(schema, name: "Answer", depth: 0), dependencies: []); return true }
         catch { return false }
     }
+    // The root's key order as the model is given it (GenerationSchema's description is its JSON Schema, with x-order).
+    static func order(_ schema: [String: Any]) -> [String] {
+        guard let g = try? GenerationSchema(root: Schema().node(schema, name: "Answer", depth: 0), dependencies: []),
+              let json = (try? JSONSerialization.jsonObject(with: Data(g.debugDescription.utf8))) as? [String: Any] else { return [] }
+        return json["x-order"] as? [String] ?? []
+    }
 }
 if #available(macOS 27.0, *) {
     var out: [String: Any] = [:]
@@ -31,10 +37,24 @@ if #available(macOS 27.0, *) {
     out["guardrail"] = Native.failure(LanguageModelError.guardrailViolation(.init(debugDescription: "PRIVATE")))
     out["rate"] = Native.failure(LanguageModelError.rateLimited(.init(resetDate: nil, debugDescription: "PRIVATE")))
     out["cancelled"] = Native.failure(CancellationError())
+    out["busyCount"] = Native.failure(NSError(domain: "FoundationModels.LanguageModelError", code: -1, userInfo: [NSLocalizedDescriptionKey: "PRIVATE PAPER", NSMultipleUnderlyingErrorsKey: [NSError(domain: "ModelManagerServices.ModelManagerError", code: 1013)]]))
+    out["busyAnswer"] = Native.failure(NSError(domain: "com.apple.SensitiveContentAnalysisML", code: 15, userInfo: [NSLocalizedDescriptionKey: "PRIVATE PAPER"]))
+    out["notBusy"] = Native.failure(NSError(domain: "ModelManagerServices.ModelManagerError", code: 1001))
     out["cloud"] = await Native.status(["model": "private-cloud"])
     out["earlyCancel"] = Native.cancel(["id": "cancel-before-registration"])
     out["earlyRun"] = await Native.run(["id": "cancel-before-registration"])
     out["emptyCancel"] = Native.cancel(["id": ""])
+    out["release"] = Native.release()
+    out["warm"] = Native.warmCount()
+    out["warmModel"] = Native.warm(["model": "private-cloud", "instructions": "Finish it."])
+    out["warmEmpty"] = Native.warm(["model": "on-device", "instructions": ""])
+    out["warmNone"] = Native.warm(["model": "on-device"])
+    out["order"] = Native.order(["type": "object", "x-order": ["status", "quotes", "complete"], "properties": ["complete": ["type": "boolean"], "quotes": ["type": "string"], "status": ["type": "string"]], "required": ["status", "quotes", "complete"]])
+    out["unordered"] = Native.order(["type": "object", "properties": ["b": ["type": "string"], "a": ["type": "string"]], "required": ["a", "b"]])
+    // A tokenizer count, not inference; tokenCount(for:) throws for a picture (macOS 27.0.1), so this needs the words-and-pictures count.
+    let picture = try Native.conversation([["role": "user", "content": [["type": "text", "text": "Read it."], ["type": "image", "mime": "image/png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="]]]])
+    let words = SystemLanguageModel.default.isAvailable ? ((try? await SystemLanguageModel.default.tokenCount(for: Prompt("Read it."))) ?? -1) : -1
+    out["picture"] = words < 0 ? -1 : ((try? await Native.count(SystemLanguageModel.default, picture, schema: nil)) ?? -2)
     out["nullSchema"] = Native.checkSchema(["type": "object", "properties": ["answer": ["anyOf": [["type": "string"], ["type": "null"]]]], "required": ["answer"]])
     print(String(data: try JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]), encoding: .utf8)!)
 }
@@ -53,6 +73,10 @@ test('native errors carry only fixed categories and reasons', { skip: !supported
   assert.deepEqual(result.rate, { ok: false, error: 'request-rejected', reason: 'rate', status: 429 });
   assert.deepEqual(result.cancelled, { ok: false, error: 'cancelled' });
 });
+test('the background budget reads as busy, from its domains and codes alone', { skip: !supported }, () => {
+  for (const k of ['busyCount', 'busyAnswer']) assert.deepEqual(result[k], { ok: false, error: 'provider-unavailable', reason: 'busy' });
+  assert.deepEqual(result.notBusy, { ok: false, error: 'provider-unavailable', reason: 'unknown' });
+});
 test('the native side refuses any model but the one on this device', { skip: !supported }, () => {
   assert.deepEqual(result.cloud, { ok: false, error: 'request-rejected', reason: 'model' });
 });
@@ -60,8 +84,24 @@ test('native cancellation arriving before registration prevents the run', { skip
   assert.deepEqual(result.earlyRun, { ok: false, error: 'cancelled' });
   assert.equal(result.emptyCancel.error, 'request-rejected');
 });
+test('native schema conversion keeps the order the worker sent (x-order), else sorts', { skip: !supported }, () => {
+  assert.deepEqual(result.order, ['status', 'quotes', 'complete']);
+  assert.deepEqual(result.unordered, ['a', 'b']);
+});
+test('a request with a picture is budgeted: its words counted, the picture at its estimated allowance', { skip: !supported }, (t) => {
+  if (result.picture === -1) return t.skip('Apple Intelligence counts no tokens here now');
+  assert.ok(Number.isSafeInteger(result.picture) && result.picture > 1024 && result.picture < 1100, String(result.picture));
+});
 test('native schema conversion accepts null branches in an object', { skip: !supported }, () => {
   assert.equal(result.nullSchema, true);
+});
+test('ai.release drops the warm sessions; none are made until a run', { skip: !supported }, () => {
+  assert.deepEqual(result.release, { ok: true });
+  assert.equal(result.warm, 0);
+});
+test('ai.warm takes only the model on this device and its instructions', { skip: !supported }, () => {
+  assert.deepEqual(result.warmModel, { ok: false, error: 'request-rejected', reason: 'model' });
+  for (const k of ['warmEmpty', 'warmNone']) assert.deepEqual(result[k], { ok: false, error: 'request-rejected', reason: 'instructions' });
 });
 test('native tasks pass complete sendability checking', { skip: !supported }, () => {
   assert.doesNotMatch(diagnostics, /warning:|error:/);
@@ -69,4 +109,82 @@ test('native tasks pass complete sendability checking', { skip: !supported }, ()
 test('the native handler never logs native message bodies, including malformed AI messages', () => {
   const source = fs.readFileSync(path.join(root, 'safari/Glaze/Glaze Extension/SafariWebExtensionHandler.swift'), 'utf8');
   assert.doesNotMatch(source, /String\(describing: message\)/);
+});
+
+
+// Run the shipped cache methods against an inert session. No model, app bundle or inference is involved.
+test('native release cannot be undone by a spare session prewarming concurrently', { skip: process.platform !== 'darwin' }, () => {
+  const source = fs.readFileSync(nativeFile, 'utf8');
+  const cache = source.slice(source.indexOf('    private static let lock = NSLock()'), source.indexOf('    static func cancel('));
+  const dir = fs.mkdtempSync(path.join(root, '.native-cache-'));
+  try {
+    const file = path.join(dir, 'Cache.swift');
+    fs.writeFileSync(file, `import Foundation
+struct SystemLanguageModel {}
+struct Transcript { struct Entry {}; init(entries: [Entry]) {} }
+final class LanguageModelSession: @unchecked Sendable {
+    static let entered = DispatchSemaphore(value: 0), proceed = DispatchSemaphore(value: 0)
+    init(model: SystemLanguageModel, transcript: Transcript) {}
+    func prewarm() { Self.entered.signal(); Self.proceed.wait() }
+}
+private enum Native {
+${cache}
+    static func take() { _ = warmSession("instructions", [], model: SystemLanguageModel()) }
+}
+let finished = DispatchSemaphore(value: 0)
+DispatchQueue.global().async { Native.take(); finished.signal() }
+LanguageModelSession.entered.wait()
+_ = Native.release()
+LanguageModelSession.proceed.signal()
+finished.wait()
+print(Native.warmCount())
+`);
+    const run = spawnSync('xcrun', ['swift', ...flags, file], { encoding: 'utf8', timeout: 30000 });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout.trim(), '0', 'release must invalidate a spare started before it');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+
+test('native spares stay bounded and never reuse a prompted transcript, including concurrent takes', { skip: process.platform !== 'darwin' }, () => {
+  const source = fs.readFileSync(nativeFile, 'utf8');
+  const cache = source.slice(source.indexOf('    private static let lock = NSLock()'), source.indexOf('    static func cancel('));
+  const dir = fs.mkdtempSync(path.join(root, '.native-cache-'));
+  try {
+    const file = path.join(dir, 'Cache.swift');
+    fs.writeFileSync(file, `import Foundation
+struct SystemLanguageModel {}
+struct Transcript { typealias Entry = String; let entries: [Entry] }
+final class LanguageModelSession: @unchecked Sendable {
+    let id = UUID(); var entries: [String]
+    init(model: SystemLanguageModel, transcript: Transcript) { entries = transcript.entries }
+    func prewarm() {}
+}
+final class Results: @unchecked Sendable {
+    let lock = NSLock(); var ids = Set<UUID>(); var clean = true
+    func use(_ s: LanguageModelSession, _ key: String) {
+        lock.withLock { clean = clean && s.entries == [key] && ids.insert(s.id).inserted }
+        s.entries.append("PRIVATE ANSWER")
+    }
+}
+private enum Native {
+${cache}
+    static func check() -> Bool {
+        let results = Results()
+        DispatchQueue.concurrentPerform(iterations: 64) { i in
+            let key = "instructions-" + String(i % 8)
+            results.use(warmSession(key, [key], model: SystemLanguageModel()), key)
+        }
+        let bounded = warmCount() <= maxWarm
+        _ = release()
+        return results.clean && results.ids.count == 64 && bounded && warmCount() == 0
+    }
+}
+print(Native.check())
+`);
+    const run = spawnSync('xcrun', ['swift', ...flags, file], { encoding: 'utf8', timeout: 30000 });
+    assert.equal(run.status, 0, run.stderr);
+    assert.doesNotMatch(run.stderr, /warning:|error:/);
+    assert.equal(run.stdout.trim(), 'true');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

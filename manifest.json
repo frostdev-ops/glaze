@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_name__",
   "short_name": "Glaze",
-  "version": "3.4.6",
+  "version": "4.0.0",
   "description": "__MSG_description__",
   "default_locale": "en",
   "permissions": [
@@ -13,7 +13,8 @@
     "declarativeContent"
   ],
   "optional_permissions": [
-    "identity"
+    "identity",
+    "nativeMessaging"
   ],
   "oauth2": {
     "client_id": "1071735898350-o14e1vjmrvkmrfl8bb8e8qbcpue5i5qq.apps.googleusercontent.com",
@@ -195,6 +196,7 @@
         "lib/scene-media.js",
         "lib/lottie/lottie_light_canvas.js",
         "reader.html",
+        "writer.html",
         "fonts/*.woff2"
       ],
       "matches": [
@@ -205,6 +207,7 @@
       "resources": [
         "sharing/quick.html",
         "options.html",
+        "papers.html",
         "preview.html",
         "features/allow.html"
       ],

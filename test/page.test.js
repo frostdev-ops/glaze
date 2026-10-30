@@ -13,6 +13,11 @@ test('due dates in the formats Ultra writes', () => {
   assert.equal(P.due('Due date: 10/11/2026, 2:59 PM', now), 'overdue');
 });
 
+test('the due field wins over earlier dates in the same text', () => {
+  assert.equal(P.due('Posted 10/1/26. Due date: 10/11/26, 11:59 PM', now), 'today');
+  assert.equal(P.due('Posted 10/11/26, 11:59 PM. Due date: 10/13/26, 9:00 AM', now), 'soon');
+});
+
 test('12 AM and 12 PM', () => {
   assert.equal(P.due('Due date: 10/12/26, 12:00 AM', now), 'soon');   // midnight starting Monday
   assert.equal(P.due('Due date: 10/11/26, 12:00 PM', now), 'overdue'); // noon today, already past
@@ -21,6 +26,47 @@ test('12 AM and 12 PM', () => {
 test('the soon window is three days past today', () => {
   assert.equal(P.due('Due date: 10/14/26, 11:59 PM', now), 'soon');
   assert.equal(P.due('Due date: 10/15/26, 12:01 AM', now), null);
+});
+
+test('today and the soon window end at midnight across a clock change', (t) => {
+  const tz = process.env.TZ;
+  t.after(() => { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; });
+  process.env.TZ = 'America/New_York'; // 8 March 2026 has 23 hours, 1 November 25
+  assert.equal(P.due('Due date: 3/9/26, 12:30 AM', new Date(2026, 2, 8, 10)), 'soon');
+  assert.equal(P.due('Due date: 11/1/26, 11:59 PM', new Date(2026, 10, 1, 10)), 'today');
+  assert.equal(P.due('Due date: 11/1/26, 11:59 PM', new Date(2026, 9, 29, 10)), 'soon');
+});
+
+test('due chips follow calendar days in every pinned zone', (t) => {
+  const tz = process.env.TZ;
+  t.after(() => { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; });
+  for (const zone of ['UTC', 'America/New_York', 'Europe/Berlin', 'Asia/Kolkata', 'America/St_Johns', 'Australia/Lord_Howe']) {
+    process.env.TZ = zone;
+    for (const [y, m, d] of [[2026, 2, 8], [2026, 10, 1], [2026, 3, 5], [2026, 9, 4], [2026, 11, 30]]) {
+      const start = new Date(y, m, d, 10);
+      for (const [offset, h, mi, want] of [[0, 9, 59, 'overdue'], [0, 23, 59, 'today'], [1, 0, 0, 'soon'], [3, 23, 59, 'soon'], [4, 0, 0, null]]) {
+        const at = new Date(y, m, d + offset, h, mi), tag = `${zone}: ${start} -> ${at}`;
+        const text = `Due date: ${at.getMonth() + 1}/${at.getDate()}/${at.getFullYear()}, ${h % 12 || 12}:${String(mi).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+        assert.equal(P.due(at, start), want, tag);
+        assert.equal(P.due(text, start), want, tag);
+        const de = `${at.getDate()}.${at.getMonth() + 1}.${at.getFullYear()}, ${h}:${String(mi).padStart(2, '0')}`;
+        assert.equal(P.due(de, start, 'de'), want, tag);
+      }
+      assert.equal(P.due('Due date: 12/31/26', start), null, zone);
+      assert.equal(P.due('31.12.2026', start, 'de'), null, zone);
+      const midnight = new Date(y, m, d);
+      assert.equal(P.due(new Date(y, m, d, 23, 59), midnight), 'today', zone);
+      assert.equal(P.due(midnight, midnight), 'today', zone);
+    }
+  }
+});
+
+test('due chips reject impossible US dates and times', () => {
+  for (const text of ['2/30/26, 11:59 PM', '10/11/26, 13:00 PM', '10/11/26, 11:60 PM', '10/11/26, 0:00 AM']) {
+    assert.equal(P.due(`Due date: ${text}`, now), null, text);
+    assert.equal(P.read(text, 'en-US', now), null, text);
+    assert.equal(P.when(text, now), null, text);
+  }
 });
 
 test('anything else is left alone', () => {

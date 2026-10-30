@@ -370,7 +370,7 @@ test('only Glaze\'s content script in the top frame of an LMS page it runs on, w
     { ...frame, url: 'about:blank', origin: 'https://other.school.edu' }, { ...frame, url: 'https://bb.school.edu/ultra/courses/_1_1/assessment/_2_1' }]) {
     assert.equal(await ctx.fromLms(sender, true), null, `parts refuse ${sender.url}`);
   }
-  assert.match(src, /site: preview \? 'editor' : await fromLms\(s, m\.type === 'glaze:modpage' && m\.op === 'parts'\)/);
+  assert.match(src, /site: preview \? 'editor' : await fromDocuments\(s\) \? 'documents' : await fromLms\(s, m\.type === 'glaze:modpage' && m\.op === 'parts'\)/);
   // Only the editor's own pages stand in for a page, and only to read parts and a mod's background file.
   assert.match(src, /const preview = m\.type === 'glaze:modpage' && \['parts', 'media'\]\.includes\(m\.op\) && fromPreview\(s\);/);
   store.sync.enabled = false;
@@ -439,7 +439,7 @@ for (const revoke of [{ [`mod:${ID}`]: { newValue: { enabled: false } } }, { mod
   const changes = [];
   const ctx = vm.createContext({
     GZ_MODBROKER: B, AbortController, DOMException, Map, Set, setTimeout, clearTimeout,
-    fromLms: async () => SITE, reachable: async () => true, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
+    fromLms: async () => SITE, fromDocuments: async () => false, reachable: async () => true, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
     fetch: async (url, init) => { signal = init.signal; return new Promise((r) => { finish = r; }); },
     chrome: { runtime: { onMessage: { addListener(f) { message = f; } } }, storage: { local: e.local, onChanged: { addListener(f) { changes.push(f); } } } },
   });
@@ -491,7 +491,7 @@ test('the worker cancels an in-flight declarative widget read on revocation', as
   const ctx = vm.createContext({
     GZ_MODBROKER: { ...B, page: async (m, env) => { signal = env.signal; return new Promise((r) => { finish = r; }); } },
     AbortController, DOMException, Map, Set, setTimeout, clearTimeout, brokerIn() {},
-    fromLms: async () => SITE, reachable: async () => true, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
+    fromLms: async () => SITE, fromDocuments: async () => false, reachable: async () => true, brokerArea: (name) => e[name], brokerTurn: null, GZ_CARDS: { queue: () => e.queue },
     chrome: { runtime: { onMessage: { addListener(f) { message = f; } } }, storage: { local: e.local, onChanged: { addListener(f) { changes.push(f); } } } },
   });
   vm.runInContext(code, ctx);
@@ -529,4 +529,59 @@ test('the page is told every on mod\'s Look parts, cleaned, in order, code or no
   assert.equal((await parts()).length, 1);
   assert.deepEqual(await B.page({ op: 'parts' }, { ...e, site: null }), { ok: false, error: 'sender' }, 'quiz, tool and non-LMS pages are refused by the sender check');
   assert.deepEqual(await B.page({ op: 'parts' }, env({ local: { mods: 'x' } })), { ok: true, parts: [] });
+});
+
+// ---- code tools for agent apps (lib/mcp/modroute.js) ----------------------------------------------------------------------
+const agents = (over = {}) => rec({ manifest: { ...rec().manifest, permissions: [...rec().manifest.permissions, { id: 'agents', why: 'w' }] }, grants: { ...rec().grants, agents: true }, ...over });
+
+test('tools.result hands the tab account read by the worker to the pending call check and observes revocation while reading it', async () => {
+  const taken = [];
+  const e = { ...env({ record: agents() }), tool: (...args) => { taken.push(args); return true; } };
+  assert.deepEqual(await call(e, 'tools.result', ['call-1', 1]), { ok: true, value: true });
+  assert.deepEqual(taken, [['call-1', { value: 1 }, '5']]);
+  const ac = new AbortController();
+  e.signal = ac.signal;
+  e.account = async () => { ac.abort(); return '5'; };
+  assert.deepEqual(await call(e, 'tools.result', ['call-2', 2]), { ok: false, error: 'cancelled' });
+  assert.equal(taken.length, 1);
+});
+
+test('tools.result: a code tool\'s answer from the mod\'s Worker, with agents declared and granted, to the agent call waiting for it', async () => {
+  const took = [];
+  const e = { ...env({ record: agents() }), tool: (id, out) => { took.push([id, out]); return id === 'call-1'; } };
+  for (const args of [['call-1', { n: 1 }], ['call-1', null, 'boom'], ['call-1', null, 'x'.repeat(600)], ['call-1', 2, null], ['call-1', 'é'.repeat(300), undefined]]) {
+    assert.deepEqual(await call(e, 'tools.result', args), { ok: true, value: true }, JSON.stringify(args));
+  }
+  assert.deepEqual(took, [['call-1', { value: { n: 1 } }], ['call-1', { error: 'boom' }], ['call-1', { error: 'x'.repeat(500) }], ['call-1', { value: 2 }], ['call-1', { value: 'é'.repeat(300) }]]);
+  // None waiting for it, or no agent calls here at all.
+  assert.deepEqual(await call(e, 'tools.result', ['call-2', 1]), { ok: false, error: 'call' });
+  assert.deepEqual(await call({ ...e, tool: undefined }, 'tools.result', ['call-1', 1]), { ok: false, error: 'call' });
+  const reached = took.length;
+  // A frame UI never answers one; nor a mod without agents declared and granted.
+  for (const via of ['frame:tile:x', undefined]) assert.deepEqual(await call(e, 'tools.result', ['call-1', 1], { via }), { ok: false, error: 'permission' }, String(via));
+  assert.deepEqual(await call({ ...env(), tool: () => true }, 'tools.result', ['call-1', 1]), { ok: false, error: 'permission' }, 'not declared');
+  assert.deepEqual(await call({ ...env({ record: agents({ grants: { ...rec().grants, agents: false } }) }), tool: () => true }, 'tools.result', ['call-1', 1]), { ok: false, error: 'permission' }, 'not granted');
+  // Its arguments: the call's id, the value, and an error's text or nothing.
+  for (const args of [[], ['call-1'], [1, 1], ['', 1], ['x'.repeat(65), 1], ['call 1', 1], ['call-1', 1, 5], ['call-1', 1, ''], ['call-1', 1, null, 4]]) {
+    assert.deepEqual(await call(e, 'tools.result', args), { ok: false, error: 'args' }, JSON.stringify(args));
+  }
+  // An answer is held to a call's own argument limit, which is below an answer's.
+  assert.ok(B.LIMIT.args < B.LIMIT.value);
+  assert.deepEqual(await call(e, 'tools.result', ['call-1', 'x'.repeat(B.LIMIT.args)]), { ok: false, error: 'size' });
+  // Never on the Documents page, which has no school account.
+  assert.deepEqual(await call({ ...e, site: 'documents', record: async () => agents({ grants: { ...agents().grants, documents: true }, manifest: { ...agents().manifest, permissions: [...agents().manifest.permissions, { id: 'documents', why: 'w' }] } }) }, 'tools.result', ['call-1', 1]), { ok: false, error: 'call' });
+  assert.equal(took.length, reached, 'what is refused never reaches the hand-off');
+});
+
+test('the page is told each mod\'s code tools by name, declared, for its Worker\'s glaze.tools.handle', async () => {
+  const tools = [{ name: 'ask', title: 'Ask', description: 'd', code: true }, { name: 'due', title: 'Due', description: 'd', from: 'todo' }, { name: 'tell', title: 'Tell', description: 'd', code: true }];
+  const e = env({ record: agents({ manifest: { ...agents().manifest, hooks: 'hooks.js', tools } }) });
+  assert.deepEqual((await B.page({ op: 'list' }, e)).mods.map((m) => m.tools), [['ask', 'tell']]);
+  // Granted agents or not: the worker sends a call only for a tool the student lets apps use.
+  e.local.data[`mod:${ID}`] = agents({ grants: rec().grants, manifest: { ...agents().manifest, hooks: 'hooks.js', tools } });
+  assert.deepEqual((await B.page({ op: 'list' }, e)).mods.map((m) => m.tools), [['ask', 'tell']]);
+  for (const none of [undefined, [], [tools[1]], 'x']) {
+    e.local.data[`mod:${ID}`] = agents({ manifest: { ...agents().manifest, hooks: 'hooks.js', tools: none } });
+    assert.equal(Object.hasOwn((await B.page({ op: 'list' }, e)).mods[0], 'tools'), false, JSON.stringify(none));
+  }
 });

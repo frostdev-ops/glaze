@@ -7,6 +7,16 @@ const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
 const env = require('./check-env.js'), lock = require('./check-env.js').lockPath();
 const chromeLaunch = require('./check-env.js').chromeLaunch();
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+const waitFor = async (page, predicate) => {
+  for (const end = Date.now() + 5000; !await page.evaluate(predicate);) {
+    if (Date.now() > end) throw new Error(`Timed out waiting for ${predicate}`);
+    await pause(25);
+  }
+};
+const painted = (page) => page.evaluate(async () => {
+  await document.fonts.ready;
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+});
 const layoutState = ({ remember, route, focused = false } = {}) => {
   const face = (el) => el.matches('.seg input, .switch input') ? el.closest('label') : el;
   const visible = (el) => el.checkVisibility({ visibilityProperty: true }) && face(el).checkVisibility({ visibilityProperty: true, opacityProperty: true });
@@ -14,7 +24,11 @@ const layoutState = ({ remember, route, focused = false } = {}) => {
     .filter((el) => !el.closest('.editor-nav') && visible(el));
   if (remember) (window.layoutWant ??= new Map()).set(remember, controls);
   const active = document.activeElement;
-  const wanted = focused ? (active && active !== document.body ? [active] : []) : [...new Set([...controls, ...window.layoutWant?.get(route) || []])];
+  // Preview-ready messages can redraw the Look builders between widths. Follow the same control's data-f key; a
+  // missing or newly hidden replacement still fails, but an old detached node is not a hidden live control.
+  const remembered = (window.layoutWant?.get(route) || []).map((el) => !el.isConnected && el.dataset.f
+    ? document.querySelector(`[data-f="${CSS.escape(el.dataset.f)}"]`) || el : el);
+  const wanted = focused ? (active && active !== document.body ? [active] : []) : [...new Set([...controls, ...remembered])];
   const off = [];
   for (const el of wanted) {
     const name = el.dataset.key || el.id || el.name || el.textContent.trim().slice(0, 30) || el.tagName;
@@ -81,7 +95,8 @@ const check = async (name, test) => {
         const button = frame.locator('#todo button.info').first();
         await button.click(); await frame.locator('.info-pop:popover-open.placed').waitFor();
         await host.keyboard.press('Escape');
-        await pause(80);
+        await frame.waitForFunction(() => !document.querySelector(':popover-open') && document.activeElement.matches('#todo button.info'));
+        await painted(host);
         assert.equal(await host.evaluate(() => closedSettings), 0, 'Escape must leave Settings open');
         assert.equal(await frame.locator(':popover-open').count(), 0, 'Escape closes the description');
         assert.equal(await button.evaluate((b) => document.activeElement === b), true, 'focus returns to the question button');
@@ -118,9 +133,9 @@ const check = async (name, test) => {
       await page.fill('#find', '');
       await page.locator('#editor-all').check();
       await page.selectOption('[data-key="popup.anim"]', 'fade');
-      await page.waitForFunction(() => new Promise((r) => chrome.storage.sync.get('popup', (x) => r(x.popup?.anim === 'fade'))));
+      await waitFor(page, async () => (await chrome.storage.sync.get('popup')).popup?.anim === 'fade');
       await page.locator('[data-reset-section="pages/popups"]').click();
-      await page.waitForFunction(() => new Promise((r) => chrome.storage.sync.get('popup', (x) => r((x.popup?.anim ?? 'genie') === 'genie'))));
+      await waitFor(page, async () => ((await chrome.storage.sync.get('popup')).popup?.anim ?? 'genie') === 'genie');
       assert.equal(await page.locator('[data-key="popup.anim"]').inputValue(), 'genie', 'Reset section puts the animation back');
       await page.locator('#editor-all').uncheck();
     });
@@ -145,7 +160,7 @@ const check = async (name, test) => {
       assert.equal(await inline.isVisible(), true);
       await mode.selectOption('site');
       await inline.uncheck();
-      await page.waitForFunction(async () => {
+      await waitFor(page, async () => {
         const { rubric } = await chrome.storage.sync.get('rubric');
         return rubric?.show === 'site' && rubric?.inline === false;
       });
@@ -153,14 +168,14 @@ const check = async (name, test) => {
       assert.equal(await mode.inputValue(), 'site', 'the selected mode survives a reload');
       assert.equal(await inline.isChecked(), false, 'the inline preference survives a reload');
       await page.locator('[data-reset-section="pages/documents"]').click();
-      await page.waitForFunction(async () => {
+      await waitFor(page, async () => {
         const { rubric } = await chrome.storage.sync.get('rubric');
         return rubric?.show === 'auto' && rubric?.inline === false;
       });
       assert.equal(await mode.inputValue(), 'auto', 'Reset section restores Automatic');
       assert.equal(await inline.isChecked(), false, 'Documents reset preserves the Pop-ups preference');
       await page.locator('[data-reset-section="pages/popups"]').click();
-      await page.waitForFunction(async () => (await chrome.storage.sync.get('rubric')).rubric?.inline === true);
+      await waitFor(page, async () => (await chrome.storage.sync.get('rubric')).rubric?.inline === true);
       assert.equal(await inline.isChecked(), true, 'Pop-ups reset restores inline');
       await page.locator('#editor-all').uncheck();
     });
@@ -217,7 +232,7 @@ const check = async (name, test) => {
       assert.equal(await reset.isVisible(), true);
       await automatic.locator('..').click();
       assert.equal(await note.isVisible(), false, 'Automatic clears the warning immediately');
-      await page.waitForFunction(async () => (await chrome.storage.sync.get('tabs')).tabs?.at === 'auto');
+      await waitFor(page, async () => (await chrome.storage.sync.get('tabs')).tabs?.at === 'auto');
       assert.equal(await reset.isVisible(), false);
       await page.locator('label:has([name="tabs.at"][value="below"])').click();
       await reset.click();
@@ -269,7 +284,7 @@ const check = async (name, test) => {
             await editor.evaluate((direction) => { document.documentElement.dir = direction; }, dir);
             for (const route of ['look/type', 'navigation/bar', 'navigation/tabs', 'navigation/sidebar', 'study/todo', 'pages/documents', 'pages/popups']) {
               await editor.evaluate((hash) => { location.hash = hash; }, route);
-              await pause(100);
+              await editor.waitForFunction((r) => editor.route() === r, route);
               const tag = `${lang} ${embedded ? 'embedded' : 'standalone'} ${dir} ${route}`;
               const overflow = await editor.evaluate(() => {
                 const width = document.documentElement.clientWidth;
@@ -359,7 +374,8 @@ const check = async (name, test) => {
             }, variant);
             assert.equal(await host.locator('[data-key="navbar.on"]').isChecked(), true, 'narrow layout includes the default navigation controls after earlier checks');
             const routes = await host.evaluate(() => [...document.querySelectorAll('[data-editor-section]')].map((s) => s.dataset.editorSection));
-            assert.equal(routes.length, 39, 'every settings route is swept');
+            const expectedRoutes = [...fs.readFileSync(path.join(root, 'options.html'), 'utf8').matchAll(/data-editor-section="([^"]+)"/g)].map((m) => m[1]);
+            assert.deepEqual(routes, expectedRoutes, 'every settings route is swept');
             const panels = new Set();
             for (const route of routes) {
               await host.evaluate((hash) => { location.hash = hash; }, route);
@@ -368,6 +384,7 @@ const check = async (name, test) => {
               await host.setViewportSize({ width: 1440, height: 1000 });
               await host.evaluate(layoutState, { remember: route });
               await host.setViewportSize({ width: 320, height: 900 });
+              await painted(host);
               const m = await host.evaluate(layoutState, { route });
               if (m.scroll > 320) problems.push(`${tag}: page is ${m.scroll}px wide`);
               for (const off of m.off) problems.push(`${tag}: ${off}`);
@@ -407,8 +424,49 @@ const check = async (name, test) => {
       }
       assert.deepEqual([...new Set(problems)], [], 'settings fit a 320px viewport');
     });
+    await check('translated-heading-wrap', async () => {
+      const host = await context.newPage();
+      try {
+        await host.setViewportSize({ width: 320, height: 1000 });
+        await host.addInitScript(() => { chrome.i18n.getUILanguage = () => 'de'; });
+        await host.goto(`${base}/options.html#navigation/items`);
+        await host.waitForFunction(() => document.querySelector('#looks button'));
+        await host.evaluate(() => {
+          // A wide user-selected face also reproduces Linux's longer system-font metrics on macOS.
+          document.documentElement.style.fontSize = '20px';
+          document.querySelector('#heading-navigation-items').style.fontFamily = 'monospace';
+          document.querySelector('#heading-navigation-items').style.fontSize = '25px';
+        });
+        assert.equal(await host.locator('#heading-navigation-items').textContent(), 'Navigationseinträge');
+        for (const direction of ['ltr', 'rtl']) {
+          await host.evaluate((dir) => { document.documentElement.dir = dir; }, direction);
+          assert.ok(await host.evaluate(() => {
+            const h = document.querySelector('#heading-navigation-items'), b = h.getBoundingClientRect();
+            const r = document.createRange(); r.selectNodeContents(h);
+            return document.documentElement.scrollWidth <= 320 && b.left >= 0 && b.right <= 320
+              && [...r.getClientRects()].every((line) => line.left >= b.left - 1 && line.right <= b.right + 1);
+          }), `${direction}: translated heading wraps within the viewport without clipping`);
+        }
+      } finally { await host.close(); }
+    });
     await check('translated-large-layout', async () => {
       const problems = [];
+      // The worker files a Look into History once it has rested 4 s (lib/background.js), and Settings then redraws History,
+      // replacing the rows the pages measure. Wear the seed Look once and let its entry land before any page measures: each
+      // page's own seed then changes nothing in sync, so nothing more is filed.
+      const prep = await context.newPage();
+      try {
+        await prep.goto(`${base}/options.html#look/palette`);
+        await prep.waitForFunction(() => document.querySelector('#looks button'));
+        const since = await prep.evaluate(async () => {
+          const s = GZ_SANITIZE(), at = Date.now();
+          await chrome.storage.sync.remove(GZ_HISTORY.KEYS);
+          await chrome.storage.sync.set({ ...s, colors: GZ_PRESET('Paper'), preset: 'Paper', look: { ...s.look, scale: 1.25 } });
+          return at;
+        });
+        const filed = () => prep.evaluate(async (at) => GZ_HISTORY.entries((await chrome.storage.local.get('lookHistory')).lookHistory)[0]?.at >= at, since);
+        for (const end = Date.now() + 30000; !await filed(); await pause(100)) if (Date.now() > end) throw new Error('the seed Look never reached History');
+      } finally { await prep.close(); }
       for (const lang of ['en', 'de', 'fr', 'es', 'nl', 'pt-BR']) {
         const host = await context.newPage();
         try {
@@ -431,6 +489,7 @@ const check = async (name, test) => {
                 await host.evaluate((r) => editor.show(r), route);
                 for (const width of [1440, 390, 320]) {
                   await host.setViewportSize({ width, height: 1000 });
+                  await painted(host);
                   const m = await host.evaluate(layoutState, width === 1440 ? { remember: route } : { route });
                   const tag = `${lang} ${all ? 'all' : 'default'} ${dir} ${width} ${route}`;
                   if (m.scroll > width) problems.push(`${tag}: page is ${m.scroll}px wide`);
@@ -462,7 +521,7 @@ const check = async (name, test) => {
       await page.locator('#todo button.info').first().click();
       await page.locator('.info-pop:popover-open.placed').waitFor();
       await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
-      await pause(100);
+      await page.waitForFunction(() => !document.querySelector(':popover-open'));
       assert.equal(await page.locator(':popover-open').count(), 0, 'a description dismisses when its button scrolls out of view');
     });
   } finally {

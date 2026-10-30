@@ -325,7 +325,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     let c = contents.get(cid);
     if (!c || Date.now() - c.at > 300000) {
       c = { at: Date.now(), items: c?.items };
-      c.p = reader().then((r) => r.list(`/learn/api/public/v1/courses/${cid}/contents`, 'id,parentId,title,availability.available,links,contentHandler.isBbPage', true))
+      c.p = reader().then((r) => r.list(`/learn/api/public/v1/courses/${cid}/contents`, 'id,parentId,title,availability.available,links,contentHandler.id,contentHandler.isBbPage', true))
         .then((j) => { c.items = covered(j.items.filter((i) => i.availability?.available !== 'No'), j.complete); renderNew(); return c.items; }, () => c.items || []);
       contents.set(cid, c);
     }
@@ -447,6 +447,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       const link = e.target instanceof Element && e.target.closest(PAGE_LINKS);
       // Native fragment actions and Sign Out must keep their trusted click for later listeners (course tabs included).
       if (!link || link.matches('[aria-current="page"], .active') || /^#|^$|(?:^|\/)logout(?:[/?#]|$)|[?&](?:action|event)=logout(?:[&#]|$)/i.test((link.getAttribute('href') || '').trim())) return;
+      // The page-world guard handles ready too (lib/background.js).
+      if ('activeViewTransition' in document && dispatchEvent(new Event('glaze:transition', { cancelable: true }))) return;
       // Ultra gets the click inside the transition, once the old page has been captured.
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -460,8 +462,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
         // on the element rather than switched on <html>, so it can't restart when the mark goes.
         for (const el of document.querySelectorAll('.route-view-container, .panel-wrap')) el.setAttribute('data-gz-held', '');
       });
-      // A resize can abort it: handled.
+      // A resize can abort it: handled, here and in the page's world.
       for (const p of [vt.ready, vt.finished]) p.catch(() => {});
+      if ('activeViewTransition' in document) dispatchEvent(new (globalThis.PageRevealEvent || Event)('glaze:transition', { viewTransition: vt }));
     }, true);
   }
 
@@ -609,7 +612,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 
   html.removeAttribute?.('data-gz-nav-expanded');
   const navRoots = new Set(), renamed = new Map();
-  const navSelector = 'nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]';
+  const navSelector = 'nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]';
   let navDirty = false, navQueued = false;
   const syncDashboard = () => {
     if (!chrome.runtime?.id) return;

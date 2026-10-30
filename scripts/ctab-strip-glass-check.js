@@ -27,7 +27,7 @@ const measure = (p) => p.evaluate(() => {
   const box = (e) => { const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; };
   const v = getComputedStyle(document.querySelector('div.bb-course-navigation'), '::before');
   return { header: box(header), tools: box(tools), strip: box(strip), inset: [s.left, s.right], border: h.borderBottomWidth,
-    paints: [h.backgroundColor, t.backgroundColor], shadows: [h.boxShadow, t.boxShadow], veil: [v.content, v.opacity],
+    paints: [h.backgroundColor, t.backgroundColor], shadows: [h.boxShadow, t.boxShadow], veil: [v.content, v.opacity, v.display],
     filters: [h.backdropFilter, t.backdropFilter, s.backdropFilter], glass: getComputedStyle(document.documentElement).getPropertyValue('--gz-glass').trim() };
 });
 (async () => {
@@ -98,7 +98,12 @@ const measure = (p) => p.evaluate(() => {
     await setup(look);
     check((await measure(page)).veil[1] === '0', 'scroll timeline leaves the background visible at the top');
     await page.locator('.course-content-container > .panel-wrap').evaluate((e) => { e.scrollTop = 200; }); await pause(200);
-    check((await measure(page)).veil[1] === '1', 'scroll timeline veils content after 48px');
+    // Scrolled, the bar folds to its tools with no veil (features/sticky-fold.js); shown whole under keyboard focus, the veil
+    // is behind it again.
+    check((await measure(page)).veil[2] === 'none', 'scrolled, the folded bar has no veil');
+    await page.locator('bb-course-navigation a').first().focus(); await pause(200);
+    check((await measure(page)).veil[1] === '1', 'whole under keyboard focus, scroll timeline veils content after 48px');
+    await page.evaluate(() => document.activeElement?.blur());
     await shot(page, 'scrolled');
     for (const at of ['above', 'between', 'below']) {
       await setup(look, at);

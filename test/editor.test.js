@@ -5,12 +5,13 @@ const root = path.resolve(__dirname, '..'), D = require(path.join(root, 'default
 for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(path.join(root, `lib/${file}.js`));
 const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
 const cards = require(path.join(root, 'lib/cards.js'));
-const TABS = ['look', 'navigation', 'courses', 'study', 'pages', 'sharing', 'mods', 'ai', 'backup', 'about'];
+const TABS = ['look', 'navigation', 'courses', 'study', 'pages', 'writer', 'sharing', 'mods', 'ai', 'backup', 'about'];
 const GROUP = { stream: 'pages/dashboard', docreview: 'pages/documents', auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'navigation/bar', navbar: 'navigation/bar', sidebar: 'navigation/sidebar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'pages/declutter', card: 'courses/cards', courses: 'courses/list', mods: 'backup/privacy', announce: 'pages/popups', popup: 'pages/popups', rubric: 'pages/popups' };
 const ENHANCE = {
-  'pages/content': ['urgency', 'clamp', 'scores', 'reading', 'previews', 'progress', 'newcontent', 'drafts', 'download', 'place'],
+  'pages/content': ['urgency', 'clamp', 'scores', 'reading', 'fold', 'previews', 'progress', 'newcontent', 'drafts', 'download', 'place'],
+  'writer/setup': ['writer', 'writerUploads'],
   'pages/shortcuts': ['palette', 'search', 'keys'],
-  'pages/documents': ['docPages', 'toggles', 'docTheme', 'docInk', 'quizLight'],
+  'pages/documents': ['docPages', 'toggles', 'docTheme', 'docInk', 'quizLight', 'titleScroll'],
   'courses/list': ['coursemenu'],
   'study/grades': ['inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],
   'study/todo': ['todo', 'cardTasks', 'gradescope'],
@@ -30,6 +31,10 @@ const OVERRIDE = {
   'extras.pointer': 'look/pointer', 'extras.pointerOn': 'look/pointer', 'extras.pointerAnim': 'look/pointer',
   ...Object.fromEntries(['radius', 'glass', 'depth', ...Object.keys(D.GZ_SPEC.look).filter((k) => /^(surface|shadow)/.test(k))].map((k) => [`look.${k}`, 'look/surfaces'])),
   ...Object.fromEntries(Object.entries(ENHANCE).flatMap(([section, keys]) => keys.map((key) => [`enhance.${key}`, section]))),
+  // Settings → Writer: its sections by what each changes.
+  ...Object.fromEntries([['papers', ['format', 'zoom', 'ruler', 'lightPage', 'full', 'versions']], ['typing', ['autocorrect.typos', 'autocorrect.capitalI', 'autocorrect.doubles', 'autocorrect.smart', 'pasteAsk']],
+    ['proofing', ['proofing', 'dialect']], ['discussions', ['compose.markdown', 'compose.target', 'compose.quote']], ['submitting', ['submit.rememberText']]]
+    .flatMap(([section, keys]) => keys.map((key) => [`writer.${key}`, `writer/${section}`]))),
   ...Object.fromEntries(['icsDue', 'icsTasks', 'icsPlan', 'icsGs', 'icsClasses', 'icsRange'].map((key) => [`todo.${key}`, 'study/schedule'])),
 };
 // These are real existing picker/group carriers, not invented inputs for internal bookkeeping or storage IDs.
@@ -51,6 +56,7 @@ const ACTIONS = {
   'courses/cards': ['card-set', 'card-set-clear'], 'courses/list': ['course-list', 'org-list'], 'study/pet': ['pet-library'],
   'sharing/sessions': ['ss-status', 'ss-resume', 'ss-pause', 'ss-refresh', 'ss-sessions', 'ss-name', 'ss-title', 'ss-kind', 'ss-sources', 'ss-expire', 'ss-create', 'ss-invite', 'ss-join'],
   'sharing/calendar': ['gcal', 'gcal-connect', 'gcal-code', 'gcal-link', 'gcal-reconnect', 'gcal-share', 'gcal-disconnect', 'gcal-pair', 'gcal-id', 'gcal-copy'],
+  'writer/papers': ['writer-paper-list', 'writer-clear-all'], 'writer/proofing': ['writer-words', 'writer-words-clear'],
   'backup/privacy': ['export', 'import-btn', 'import', 'reset-all'], 'about/glaze': ['report-link', 'news', 'news-close'],
 };
 // Each section's everyday controls stay in view; the rest sit in its "More options" (details.more). Keys and action IDs listed
@@ -68,7 +74,7 @@ const MORE = {
     ...Object.keys(D.GZ_SPEC.sidebar).filter((k) => !['canvas', 'ultra'].includes(k)).map((k) => `sidebar.${k}`),
     ...['width', 'gap', 'radius', 'height', 'icons', 'create'].map((k) => `card.${k}`),
     ...['group', 'rel', 'urgent', 'teacher', 'progress', 'sync', 'cardN', 'cardStatus', 'cardCross', 'gsDaily'].map((k) => `todo.${k}`),
-    ...['gradeHover', 'gpaPlus', 'gpaWeighted', 'gpaAfter', 'urgency', 'clamp', 'scores', 'reading', 'place'].map((k) => `enhance.${k}`),
+    ...['gradeHover', 'gpaPlus', 'gpaWeighted', 'gpaAfter', 'urgency', 'clamp', 'scores', 'reading', 'fold', 'place'].map((k) => `enhance.${k}`),
     ...['work', 'rest', 'sound', 'quotes', 'quoteMode', 'quoteEvery', 'inhale', 'hold', 'exhale', 'cycles'].map((k) => `widgets.${k}`),
     ...Object.keys(D.GZ_SPEC.docreview).map((k) => `docreview.${k}`), ...Object.keys(D.GZ_SPEC.stream).map((k) => `stream.${k}`),
   ],
@@ -104,8 +110,11 @@ const byId = (id) => nodes.filter((n) => n.attrs.id === id);
 const owner = (node) => [node, ...node.parents.toReversed()].find((n) => n.attrs['data-editor-section'])?.attrs['data-editor-section'] || (node.parents.some((n) => n.tag === 'header') ? 'header' : undefined);
 const preview = (node) => [node, ...node.parents].some((n) => n.attrs.id === 'preview' || (n.attrs.class || '').split(/\s+/).includes('preview'));
 const schema = { ...D.GZ_SPEC, card: cards.SPEC };
+// A group's settings (defaults.js GZ_GROUP) each have their own control; writer.submit.text is the submit sheet's own.
+const FRAME_ONLY = ['writer.submit.text'];
 const expected = [
-  ...Object.entries(schema).flatMap(([group, keys]) => Object.keys(keys).map((key) => `${group}.${key}`)),
+  ...Object.entries(schema).flatMap(([group, keys]) => Object.entries(keys).flatMap(([key, [, rule]]) => (rule && typeof rule === 'object' && !Array.isArray(rule)
+    ? Object.keys(rule).map((k) => `${group}.${key}.${k}`) : [`${group}.${key}`]))).filter((key) => !FRAME_ONLY.includes(key)),
   ...Object.keys(D.GZ_DEFAULTS.courses).map((key) => `courses.${key}`), ...D.GZ_COLORS.map(([key]) => `colors.${key}`),
   'enabled', 'footer', 'preset', 'presets',
 ];
@@ -186,10 +195,10 @@ test('E1 section and global preference resets preserve pictures, preset librarie
 
 test('resets give back the defaults this device started with: a fresh install keeps Notes and the pet habitat on', () => {
   const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
-  const helper = source.slice(source.indexOf('  let freshHere = false;'), source.indexOf('  // Two clicks, so a stray one'));
+  const helper = source.slice(source.indexOf('  let freshHere = false'), source.indexOf('  // Two clicks, so a stray one'));
   for (const fresh of [true, false]) {
     const defaults = vm.runInNewContext(`${helper}\ndefaultsHere()`, { GZ_SANITIZE: D.GZ_SANITIZE, GZ_CARDS: { settings: () => ({}) }, showResets() {},
-      chrome: { storage: { local: { get: (k, cb) => cb({ freshDefaults: { fresh } }) } } } });
+      chrome: { storage: { local: { get: (k, cb) => cb({ freshDefaults: { fresh } }) }, onChanged: { addListener() {} } } } });
     assert.deepEqual([defaults.enhance.notes, defaults.enhance.pet], [fresh, fresh], fresh ? 'a fresh install' : 'an update');
   }
   for (const site of ["GZ_EDITOR.reset(s, [path], defaultsHere())", "GZ_EDITOR.reset(s, paths, defaultsHere())", "const defaults = defaultsHere();"]) assert.ok(source.includes(site), site);
@@ -197,6 +206,29 @@ test('resets give back the defaults this device started with: a fresh install ke
   const shows = source.slice(source.indexOf('  showResets = () => {'), source.indexOf('  // Look parts builders'));
   assert.match(shows, /const defaults = defaultsHere\(\);[\s\S]*GZ_EDITOR\.differs\(s, paths, defaults\)[\s\S]*GZ_EDITOR\.differs\(s, \[b\.dataset\.resetSetting\], defaults\)/);
   assert.match(source, /freshHere = r\?\.freshDefaults\?\.fresh === true; showResets\(\);/);
+});
+
+test('resets follow this device\'s defaults when the install marks it after Settings opened, or a restore unmarks it', () => {
+  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const helper = source.slice(source.indexOf('  let freshHere = false'), source.indexOf('  // Two clicks, so a stray one'));
+  // The read answers before the install's write, or (another process) only after its change event.
+  for (const late of [false, true]) {
+    let answer, shown = 0;
+    const changed = [];
+    const ctx = vm.createContext({ GZ_SANITIZE: D.GZ_SANITIZE, GZ_CARDS: { settings: () => ({}) }, showResets() { shown++; },
+      chrome: { storage: { local: { get: (k, cb) => { answer = cb; } }, onChanged: { addListener: (f) => changed.push(f) } } } });
+    vm.runInContext(helper, ctx);
+    const notes = () => vm.runInContext('defaultsHere().enhance.notes', ctx);
+    if (!late) answer({});
+    for (const f of changed) f({ freshDefaults: { newValue: { fresh: true, pending: true } } }, 'local');
+    if (late) answer({});
+    assert.equal(notes(), true, late ? 'a read older than the change does not undo it' : 'the install marks this device fresh');
+    assert.ok(shown > 0, 'Reset buttons are shown again against the new defaults');
+    for (const f of changed) f({ freshDefaults: { oldValue: { fresh: true, pending: false }, newValue: { fresh: false, pending: false } } }, 'local');
+    assert.equal(notes(), false, 'a restored backup is not a fresh install');
+    for (const f of changed) f({ freshDefaults: { newValue: { fresh: true } } }, 'sync');
+    assert.equal(notes(), false, 'only this device\'s own mark counts');
+  }
 });
 
 test('E1 Ultra preview carries the chosen course color and nickname without saving a pending Look', () => {
@@ -209,7 +241,7 @@ test('E1 Ultra preview carries the chosen course color and nickname without savi
     frame: { contentDocument: { querySelector: () => section }, contentWindow: { postMessage: (m) => messages.push(m) } },
     $: (selector) => ({ value: selector === '#preview-size' ? 'desktop' : 'current' }), location: { origin: 'chrome-extension://fixture' },
     previewSite: 'ultra', previewPage: 'outline', previewCourse: '', renderNav() {}, renderContrast() {}, sizePreview() {}, paintBackdrop() {}, previewItems: () => ({}),
-    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED, GZ_LOOK_PARTS: require('../lib/lookset.js'),
+    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED, GZ_LOOK_PARTS: require('../lib/lookset.js'), catalog: require('../lib/looks.js').list(),
   });
   vm.runInContext(`(${preview})()`, context);
   assert.equal(section.className, 'course course-color-2'); assert.equal(name.textContent, 'My course');
@@ -376,7 +408,7 @@ test('IA: power-user sections are marked, and All settings is a local switch in 
   const all = byId('editor-all');
   assert.equal(all.length, 1); assert.equal(all[0].attrs.type, 'checkbox'); assert.ok(Object.hasOwn(all[0].attrs, 'data-local'));
   assert.ok(all[0].parents.some((n) => n.tag === 'header'));
-  assert.deepEqual(nodes.filter((n) => Object.hasOwn(n.attrs, 'data-no-preview')).map((n) => n.attrs['data-editor-panel']), ['sharing', 'mods', 'ai', 'backup', 'about']);
+  assert.deepEqual(nodes.filter((n) => Object.hasOwn(n.attrs, 'data-no-preview')).map((n) => n.attrs['data-editor-panel']), ['writer', 'sharing', 'mods', 'ai', 'backup', 'about']);
 });
 
 test('IA: one navigation section swaps its body on Glaze navigation, with one logo picker after both', () => {

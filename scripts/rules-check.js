@@ -64,7 +64,7 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     const look = () => ultra.evaluate(() => {
       const card = document.querySelector('article.course-element-card'), s = getComputedStyle(card);
       return { title: card.querySelector('.course-title').textContent.trim(), radius: s.borderRadius, border: `${s.borderTopWidth} ${s.borderTopStyle}`, shadow: s.boxShadow, font: s.fontFamily,
-        footer: getComputedStyle(document.querySelector('[class*="makeStylesfooter"]')).display, nav: getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation"]')).backgroundColor,
+        footer: getComputedStyle(document.querySelector('[class*="makeStylesfooter"]')).display, nav: getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation-"]')).backgroundColor,
         sheet: !!document.getElementById('gz-rules-css')?.sheet };
     });
     await until(ultra, () => !!document.getElementById('gz-rules-css')?.sheet, null, 'rules.css loads');

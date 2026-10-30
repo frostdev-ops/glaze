@@ -52,7 +52,9 @@ const failures = [], results = []; let browser, held = false;
         const ctx = sceneCanvas.getContext('2d'); ctx.fillStyle = '#184080'; ctx.fillRect(0,0,16,16);
         const scene = { draw() {} }, modBg = null;
         const LAYERS = ':is(.panel-wrap,.bb-offcanvas-panel):not(.peek,:is(.peek,.peek-panel__content-wrapper,.ms-Panel-main) *)';
-        const place = new Function('sceneCanvas','modBg','scene','ultra','LAYERS', placement + ';return placeScene;')(sceneCanvas, modBg, scene, ultra, LAYERS);
+        // The page itself, not a course tab's frame (scripts/ctab-background-check.js has those).
+        const tabFrame = '';
+        const place = new Function('sceneCanvas','modBg','scene','ultra','LAYERS','tabFrame', placement + ';return placeScene;')(sceneCanvas, modBg, scene, ultra, LAYERS, tabFrame);
         place(); window.placeBackground = place;
       }, { placement, ultra: !['canvas', 'moodle'].includes(family) });
       if (family === 'retained-course') await page.evaluate(() => { document.documentElement.setAttribute('data-gz-ctab-framed', ''); window.placeBackground(); });
@@ -83,7 +85,10 @@ const failures = [], results = []; let browser, held = false;
           const ctx = c.getContext('2d'); ctx.drawImage(im, 0, 0); return [...ctx.getImageData(2, 4, 1, 1).data].slice(0, 3);
         }, png.toString('base64'));
         const label = `${width} ${dir} retained-course fallback`;
-        const pass = pixel.every((v, i) => Math.abs(v - [24, 64, 128][i]) <= 2);
+        // A drawn background's fallback is the gradient under at least 75% of --gz-surface-2 (extras.css): [18,40,68], not
+        // the bare surface [16,32,48] it would be without one.
+        const fallback = [24, 64, 128].map((v, i) => Math.round(v * 0.25 + [16, 32, 48][i] * 0.75));
+        const pass = pixel.every((v, i) => Math.abs(v - fallback[i]) <= 2);
         results.push({ label, pass, pixels: [pixel] }); if (!pass) failures.push(`${label}: ${JSON.stringify(pixel)}`);
       }
     }

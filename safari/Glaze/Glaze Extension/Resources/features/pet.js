@@ -4,6 +4,13 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   if (!ctx) return null; // a frame-only injection can outlive its document
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const button = (text, run) => { const b = make('button', { type: 'button', textContent: text }); b.addEventListener('click', run); return b; };
+  // Extension reloads can remove chrome.storage before pagehide or dialog cleanup runs. Keep the event we subscribed
+  // to, and tolerate its old context being invalidated while still releasing the DOM listeners and clocks.
+  const watchStorage = (changed) => {
+    let event;
+    try { event = chrome.storage?.onChanged; event?.addListener(changed); } catch { /* reloaded */ }
+    return () => { try { event?.removeListener(changed); } catch { /* reloaded */ } };
+  };
   const NAMES = { books: 'Books', plant: 'Mushroom', moon: 'Moon', stars: 'Stars', plain: 'Classic buddy', bandana: 'Mint bandana', happy: 'Happy buddy' };
   const ACTIVITIES = { walk: 'Exploring', perch: 'Perching', hide: 'Hide and seek', rest: 'Resting', greet: 'Saying hello', investigate: 'Investigating', follow: 'Following your pointer', play: 'Playing', study: 'Studying beside you', groom: 'Grooming', stretch: 'Stretching', home: 'Returning home' };
   const TIMES = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', night: 'Night' };
@@ -14,7 +21,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   let mounts = 0; // each mount's ids (its panels, its care line) stay its own when a tile and the dialog show at once
   // inDialog: the habitat dialog's own copy, which has every control at its size and so no way to open itself.
   const mount = (body, api, { inDialog = false } = {}) => {
-    let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0, player = null, pets = [], form = '', readout = '';
+    let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0, player = null, pets = [], form = '', readout = '', storageOff;
     // The one panel open under the actions (Wellbeing, Decorate, Progress; Settings in the dialog), or none. It survives repaints.
     let panel = '', panelChosen = false, wandered = false;
     const uid = `gz-game-${++mounts}`;
@@ -187,7 +194,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       if (next !== panel) { panel = next; form = ''; paint(); }
     }) : null;
     size?.observe(body);
-    const stop = () => { alive = false; size?.disconnect(); mounted.delete(handle); player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };
+    const stop = () => { alive = false; size?.disconnect(); mounted.delete(handle); player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); storageOff?.(); storageOff = null; };
     stage.addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('application/x-glaze-pet-item')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
     stage.addEventListener('drop', (e) => {
       const id = e.dataTransfer?.getData('application/x-glaze-pet-item');
@@ -239,7 +246,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       if (!/^(?:\d+|_\d+_\d+)$/.test(String(p?.id))) throw new Error('unknown account');
       if (tile) tile.hidden = false;
       key = GZ_PET.storeKey(location.origin, p.id); tz = GZ_TODO.zone(p.time_zone);
-      chrome.storage.onChanged.addListener(changed);
+      storageOff = watchStorage(changed);
       update(); library();
     }).catch(() => { if (alive) status.textContent = t('Your buddy is available when your account is known.'); });
     // After a back/forward-cache restore the world was torn down with the page: paint hands it to a new one.
@@ -264,8 +271,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
           const data = GZ_PET.view(ch[key].newValue);
           if (data) GZ_PET_WORLD.mount(null, { key, tz, data, save, t });
         };
-        chrome.storage.onChanged.addListener(changed);
-        resumeOff = () => chrome.storage.onChanged.removeListener(changed);
+        resumeOff = watchStorage(changed);
       }
       const r = await save({ op: 'read' });
       if (turn !== resumeTurn) return;
@@ -286,8 +292,8 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     box.setAttribute('aria-labelledby', 'gz-game-title');
     const tile = mount(body, undefined, { inDialog: true }), current = box;
     const off = (ch, area) => { if (area === 'sync' && (ch.enabled?.newValue === false || (ch.enhance && !ch.enhance.newValue?.pet))) current.close(); };
-    chrome.storage.onChanged.addListener(off);
-    box.addEventListener('close', () => { chrome.storage.onChanged.removeListener(off); tile.stop(); current.remove(); if (box === current) { box = null; (opener?.isConnected ? opener : openerControls?.querySelector('[data-control="more"]'))?.focus({ preventScroll: true }); } });
+    const storageOff = watchStorage(off);
+    box.addEventListener('close', () => { storageOff(); tile.stop(); current.remove(); if (box === current) { box = null; (opener?.isConnected ? opener : openerControls?.querySelector('[data-control="more"]'))?.focus({ preventScroll: true }); } });
     box.addEventListener('click', (e) => { if (e.target === current) current.close(); });
     // Not modal (the pet can be dragged onto the page), so the browser does not close it on Escape. Something inside that used the
     // key already (the pet's own Escape, which sends it home) has prevented it.

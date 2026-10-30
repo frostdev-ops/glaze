@@ -139,15 +139,15 @@ const firefox = async (label, body) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/session`);
     await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
     let n = 0;
-    const wait = new Map();
-    ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && wait.has(d.id)) { wait.get(d.id)(d); wait.delete(d.id); } };
+    const wait = new Map(), events = [];
+    ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && wait.has(d.id)) { wait.get(d.id)(d); wait.delete(d.id); } else if (d.type === 'event') events.push(d); };
     const send = (method, params = {}) => new Promise((res, rej) => {
       const id = ++n;
       wait.set(id, (d) => (d.type === 'error' ? rej(new Error(`${method}: ${d.error} ${d.message}`)) : res(d.result)));
       ws.send(JSON.stringify({ id, method, params }));
     });
     await send('session.new', { capabilities: { alwaysMatch: { acceptInsecureCerts: true } } });
-    const b = browser(send, () => log);
+    const b = browser(send, () => log, events);
     await body(b);
     ws.close();
   } finally {
@@ -159,7 +159,7 @@ const firefox = async (label, body) => {
   }
 };
 
-const browser = (send, log) => {
+const browser = (send, log, events = []) => {
   let seen = 0;
   const chrome = async () => (await send('browsingContext.getTree', { 'moz:scope': 'chrome' })).contexts.find((c) => c.url === 'chrome://browser/content/browser.xhtml').context;
   const value = async (expression, context, sandbox) => {
@@ -170,7 +170,7 @@ const browser = (send, log) => {
   const tree = async () => (await send('browsingContext.getTree', {})).contexts;
   const flat = (cs) => cs.flatMap((c) => [c, ...flat(c.children || [])]);
   const b = {
-    send, value, tree, log,
+    send, value, tree, log, events,
     find: async (prefix) => (await tree()).find((c) => c.url.startsWith(prefix))?.context,
     // A frame in the tab `top` whose address starts with `prefix`.
     frame: async (top, prefix) => flat((await tree()).filter((c) => c.context === top).flatMap((c) => c.children || [])).find((c) => c.url.startsWith(prefix))?.context,
@@ -477,6 +477,61 @@ const run = async () => {
     await b.close(modsTab);
     await b.close(course);
     await noErrors(b, 'embedded Settings');
+
+    // Documents beside the bar (features/settingspage.js): Firefox gives its frame no tabs or downloads API, so its Export
+    // saves through the frame's own link and its Import through the frame's own file input. The .docx lands in the downloads
+    // folder, the click opens the file dialog, and a Word file chosen there is saved through the frame's claimed pass.
+    const KEY = `doc:${crypto.randomUUID()}`, word = path.join(tmp, 'Imported notes.docx');
+    fs.writeFileSync(word, Buffer.concat(require('../lib/zip.js').zip([{ name: 'word/document.xml', data: Buffer.from('<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Brought in from Word.</w:t></w:r></w:p></w:body></w:document>') }])));
+    const papersTab = await b.open(`${EXT}papers.html`);
+    ok(await b.value(`browser.storage.sync.get('navbar').then((r) => browser.storage.sync.set({ navbar: { ...r.navbar, on: true }, navbarItems: { glaze: ['settings', 'documents'] } }))
+      .then(() => browser.runtime.sendMessage({ type: 'glaze:writerPapers', op: 'save', args: [${JSON.stringify(KEY)}, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Notes from the archive.' }] }] }, format: 'plain', title: 'Field notes', named: true }] }))
+      .then((r) => r?.ok === true)`, papersTab), 'a document saved from the Documents tab');
+    // Same-document support does not imply cross-document support (Firefox 140+). Load a stale handoff and navigate for real.
+    const support = await b.value(`({ reveal: 'onpagereveal' in window, swap: 'onpageswap' in window, same: typeof document.startViewTransition === 'function' })`, papersTab);
+    console.log(`Documents view-transition support: ${JSON.stringify(support)}`);
+    await b.value(`(sessionStorage.setItem('gz-documents-route', JSON.stringify({ at: '?paper=old', kind: 'genie' })), 1)`, papersTab);
+    await until(() => b.value(`!!document.querySelector('.gd-card[data-key="${KEY}"] .gd-title')`, papersTab), 'the Documents card');
+    await b.clickOn(papersTab, `document.querySelector('.gd-card[data-key="${KEY}"] .gd-title')`);
+    await until(() => b.value(`!!globalThis.GZ_WRITER_PAPER?.current()?.key()`, papersTab), 'document editor without cross-document transitions');
+    // Harper proofs the document, so Firefox's own spellcheck stays off on the editor; Settings → Writer → Proofing off gives
+    // it back.
+    const spell = `(() => { const e = document.querySelector('.gp-flow .ProseMirror'); return e && JSON.stringify([e.getAttribute('spellcheck'), e.spellcheck]); })()`;
+    const proofing = (on) => b.value(`browser.storage.sync.get('writer').then((r) => browser.storage.sync.set({ writer: { ...r.writer, proofing: ${on} } })).then(() => 1)`, papersTab);
+    await until(async () => (await b.value(spell, papersTab)) === '["false",false]', 'spellcheck off with proofing on');
+    await proofing(false);
+    await until(async () => (await b.value(spell, papersTab)) === '[null,true]', 'spellcheck back with proofing off');
+    await proofing(true);
+    await until(async () => (await b.value(spell, papersTab)) === '["false",false]', 'spellcheck off again');
+    ok(true, 'Documents editor: spellcheck="false" while proofing is on, Firefox\'s own spellcheck back with it off');
+    ok(await b.value(`!sessionStorage.getItem('gz-documents-route') && !document.documentElement.hasAttribute('data-gd-route') && !document.getAnimations().some((a) => a.effect?.pseudoElement?.startsWith('::view-transition'))`, papersTab), 'Documents: unsupported cross-document motion is instant and consumes a stale handoff');
+    await b.close(papersTab);
+    const docsCourse = await b.open(`${INST}/courses/25`);
+    const navDocs = `document.getElementById('gz-navbar')?.shadowRoot?.querySelector('[data-id="glaze:documents"]')`;
+    await until(() => b.value(`!!${navDocs}?.getClientRects().length`, docsCourse), 'Documents in the bar');
+    await b.clickOn(docsCourse, navDocs);
+    const docsFrame = await until(() => b.frame(docsCourse, `${EXT}papers.html`), 'embedded Documents');
+    await until(() => b.value(`!document.documentElement.style.getPropertyValue('opacity') && !document.getElementById('list').hidden && !!document.querySelector('.gd-card[data-key="${KEY}"] .gd-more')`, docsFrame), 'Documents to claim its frame');
+    ok(await b.value(`document.getElementById('gz-navbar').shadowRoot.querySelector('[data-id="glaze:documents"]').getAttribute('aria-current')`, docsCourse) === 'page', 'embedded Documents: beside the bar, marked where you are');
+    const inDocs = [docsFrame, '#gz-settings-page'];
+    for (const f of fs.readdirSync(downloads)) fs.rmSync(path.join(downloads, f), { force: true });
+    await b.clickOn(docsCourse, `document.querySelector('.gd-card[data-key="${KEY}"] .gd-more')`, inDocs);
+    await b.clickOn(docsCourse, `document.querySelector('.gd-menu [data-act="export"]')`, inDocs);
+    const exported = await until(async () => fs.readdirSync(downloads).find((f) => f.endsWith('.docx')), 'the exported .docx');
+    ok(fs.statSync(path.join(downloads, exported)).size > 1000, `embedded Documents: Export .docx saves from the frame (${exported})`);
+    await b.send('session.subscribe', { events: ['input.fileDialogOpened'] });
+    b.events.length = 0;
+    await b.clickOn(docsCourse, `document.getElementById('gd-import')`, inDocs);
+    const dialog = await until(async () => b.events.find((e) => e.method === 'input.fileDialogOpened'), 'the file dialog');
+    ok(dialog.params.context === docsFrame, 'embedded Documents: Import .docx… opens the file dialog from the frame');
+    await b.send('input.setFiles', { context: docsFrame, element: dialog.params.element, files: [word] });
+    await until(() => b.value(`browser.storage.local.get('writerPapers').then((r) => (r.writerPapers || []).some((x) => x.title === 'Imported notes'))`, docsFrame), 'the import saved');
+    ok(true, 'embedded Documents: the chosen Word file is saved as a document through the frame\'s pass');
+    await b.keys(docsCourse, ['\uE00C']); // Escape, in the frame (focus followed the click)
+    await until(() => b.value(`!document.getElementById('gz-settings-page')`, docsCourse), 'embedded Documents to close');
+    ok(true, 'embedded Documents: Escape leaves');
+    await b.close(docsCourse);
+    await noErrors(b, 'embedded Documents');
 
     // A web-accessible Allow page opened directly cannot request a host planted in its hash.
     const planted = await b.open(`${EXT}features/allow.html#planted.example.net`);

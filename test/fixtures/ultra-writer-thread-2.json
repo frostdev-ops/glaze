@@ -1,0 +1,77 @@
+{
+  "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. Shape from the owner's Ultra, 2026-10-27 (glaze-plans/writer/probe/notes.md): page two of two of the same list (paging.nextPage followed).",
+  "results": [
+    {
+      "id": "_203_1",
+      "threadId": "_203_1",
+      "parentId": null,
+      "forumId": "_1101_1",
+      "userId": "_42_1",
+      "givenName": "Sam",
+      "familyName": "Rivera",
+      "postedName": "Sam Rivera",
+      "postAsAnonymous": false,
+      "subject": "",
+      "body": {
+        "rawText": "<p>Sethe's word \"rememory\" makes memory a place you can walk into, which is why the clearing feels haunted.</p><p>(Morrison 42)</p>",
+        "displayText": "<p>Sethe's word \"rememory\" makes memory a place you can walk into, which is why the clearing feels haunted.</p><p>(Morrison 42)</p>",
+        "webLocation": null,
+        "fileLocation": null
+      },
+      "bodyLength": 131,
+      "lifecycle": "PUBLISHED",
+      "createdDate": "2026-10-22T18:10:00.000Z",
+      "modifiedDate": "2026-10-22T18:10:00.000Z",
+      "postDate": "2026-10-22T18:10:00.000Z",
+      "editDate": null,
+      "groupId": null,
+      "allowGrading": false,
+      "postFirst": false,
+      "isThreadLocked": false,
+      "aiState": null,
+      "deanonymize": false,
+      "linkrefid": null,
+      "lastUpdateUserId": "_42_1",
+      "hitCount": 3,
+      "isFromCartridge": false,
+      "messageStatus": {
+        "totalCount": 1,
+        "hasAttachment": false,
+        "isRead": true,
+        "readCount": 0,
+        "numberOfChildren": 0,
+        "numberOfChildrenNodraft": 0,
+        "numberOfReadChildren": 0,
+        "totalViews": 3,
+        "parentPosition": 0,
+        "ancestorDistance": 0,
+        "ancestor": null,
+        "averageRating": 0,
+        "isImportant": false,
+        "isSubscribed": false
+      },
+      "permissions": {
+        "reply": true,
+        "delete": true,
+        "edit": true,
+        "create": true,
+        "enableGradeOnThread": false,
+        "deleteTree": false,
+        "revealAuthor": false,
+        "threadChangeLifecycleOrLock": false
+      }
+    }
+  ],
+  "paging": {
+    "limit": 2,
+    "offset": 2,
+    "count": 3,
+    "previousPage": "/learn/api/v1/courses/_101_1/discussionboards/default/forums/_1101_1/messages?limit=2&offset=0",
+    "nextPage": ""
+  },
+  "permissions": {
+    "create": true,
+    "edit": false,
+    "delete": false
+  }
+}

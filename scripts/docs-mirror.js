@@ -16,6 +16,7 @@ const PAGES = {
   'docs/install.md': ['Install', 'install', 'Install Glaze in Chrome, Edge or Brave, Firefox, Safari on a Mac, or on iPhone and iPad.'],
   'docs/features.md': ['Features', 'features', 'Everything Glaze does on Blackboard Ultra, Canvas and Moodle, site by site.'],
   'docs/privacy.md': ['Privacy-summary', 'privacy', 'What Glaze keeps on your device, and the few requests it makes and where they go.'],
+  'docs/agents.md': ['Agents', 'agents', 'Connect AI apps on your computer to Glaze.'],
   'docs/development.md': ['Development', 'development', 'How Glaze is put together, and how to build, test, package and publish it.'],
   'docs/mods-api.md': ['Mods-API', 'mods-api', 'Make a Glaze mod: the manifest, permissions, slots and the glaze object your code talks to.'],
   'docs/mods-widgets.md': ['Widgets-made-of-blocks', 'mods-widgets', 'Widgets with no code: the blocks format Glaze draws itself on every browser.'],

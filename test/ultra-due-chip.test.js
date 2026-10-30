@@ -11,7 +11,9 @@ const { El } = require('./stand-in-dom.js');
 const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
-const ORIGIN = 'https://bb.test', NOW = Date.parse('2026-10-01T12:00:00Z');
+// Ultra writes dates in the viewer's zone, so the page's text and the gradebook's date are built in the test's own:
+// the same moment, three days off, in any TZ.
+const ORIGIN = 'https://bb.test', NOW = new Date(2026, 9, 1, 8).getTime();
 
 const page = (row, { locale = 'en', labelText = 'Assessment due date:', dateText = '10/4/26, 11:59 PM', view = 'assessment' } = {}) => {
   const doc = { activeElement: null, fire() {} };
@@ -69,7 +71,7 @@ const page = (row, { locale = 'en', labelText = 'Assessment due date:', dateText
   const chipped = () => [label, date].filter((e) => e.hasAttribute('data-gz-countdown') || e.hasAttribute('data-gz-due')).map((e) => e.tagName.toLowerCase());
   return { tag, chipped, label, date };
 };
-const column = { id: '_300_1', contentId: '_7_1', dueDate: '2026-10-05T03:59:00Z' };
+const column = { id: '_300_1', contentId: '_7_1', dueDate: new Date(2026, 9, 4, 23, 59).toISOString() };
 
 test('a graded assessment\'s due-date row draws its chip once, on the date', async () => {
   const p = page({ columnId: '_300_1', status: 'GRADED', displayGrade: { score: 5 }, pointsPossible: 5, submissionStatus: { status: 'GRADED' }, column });

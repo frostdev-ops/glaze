@@ -111,8 +111,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       native() {
         // A details layer covers the outline; it does not replace its column or the live widgets in it.
         const f = /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname) ? 'outline' : ADAPTERS.ultra.family();
-        const attempt = f === 'assessment' && nativeAttempt();
-        if (attempt) return { el: attempt, page: attempt, kind: 'attempt' };
+        const attempt = f === 'assessment' && nativeAttempt(), older = f === 'assessment' && !attempt && nativeTestAttempt();
+        if (attempt || older) return { el: attempt || older, page: attempt || older, kind: attempt ? 'attempt' : 'test' };
         const el = f === 'courses' ? document.querySelector('div.todo-panel') : f === 'outline' ? document.querySelector('aside.outline-actions')
           : f === 'assessment' ? nativeAssessment()
           : f === 'discussion' ? ADAPTERS.ultra.discussion() : null;
@@ -195,6 +195,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
   let mo = null, frame = 0, noteTimer = 0, retryTimer = 0, passFrame = 0, offer = null, asleep = false;
   let topRO = null, topHeaders = [];
+  let peekMO = null, peekFrame = 0;
   let openHere = null; // expanded or collapsed on this page, when the settings start each page one way
   const isOpen = () => (['expanded', 'collapsed'].includes(cfg().open) ? openHere ?? cfg().open === 'expanded' : rec.open);
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
@@ -535,6 +536,26 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       || !el.isConnected || el.closest('[hidden], [aria-hidden="true"]') || !readOnlyPanel(el)) return null;
     return el;
   };
+  // Ultra's older (Angular) test attempt: the questions and its read-only Details & Information side by side in the panel
+  // that scrolls them, Save and Submit in a footer below that panel. Its details column, as the attempt's, is the host.
+  const nativeTestAttempt = () => {
+    if (!ultra || cfg().absorb === false || html().hasAttribute('data-gz-focus')
+      || !/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)\/?$/.test(location.pathname)) return null;
+    const panels = [...document.querySelectorAll('div.assessment-attempt-panel')];
+    if (panels.length !== 1) return null;
+    const panel = panels[0], shell = panel.parentElement;
+    const kids = (e, tag, name) => [...(e?.children || [])].filter((x) => x.tagName === tag && has(x, name));
+    const sections = kids(panel, 'SECTION', 'panel-content'), rows = kids(sections[0], 'DIV', 'panel-content-flex');
+    if (!has(panel, 'panel-wrap') || !has(shell, 'test-attempt') || sections.length !== 1 || rows.length !== 1) return null;
+    const columns = [...rows[0].children].filter((e) => e !== backdrop), el = columns[1];
+    const footers = [...shell.children].filter((x) => x.tagName === 'BB-ASSESSMENT-ATTEMPT-FOOTER').flatMap((f) => kids(f, 'FOOTER', 'submit-footer'));
+    const native = [...(el?.children || [])].filter((e) => !part(e)), title = native[0]?.querySelector('h2');
+    if (columns.length !== 2 || columns[0].tagName !== 'DIV' || !has(columns[0], 'panel-content-full') || !columns[0].querySelector('bb-attempt-canvas')
+      || el.tagName !== 'DIV' || !has(el, 'panel-content-info') || !has(el, 'assessment-summary') || !has(native[0], 'row') || !has(native[0], 'collapse') || !title?.textContent.trim()
+      || footers.length !== 1 || !footers[0].querySelector('.js-send-draft-button')
+      || !el.isConnected || el.closest('[hidden], [aria-hidden="true"]') || !readOnlyPanel(el)) return null;
+    return el;
+  };
   const absorbable = () => {
     if (!ultra || cfg().absorb === false) { absorbBlocked = new WeakMap(); return []; }
     const review = rubricView();
@@ -632,9 +653,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         }`;
         document.body.append(absorbSheet);
         pv(slot, 'height', `${e.getBoundingClientRect().height}px`);
-        const hr = host.el.getBoundingClientRect(), x = sr.left - hr.left, y = sr.top - hr.top, right = x + sr.width, bottom = y + e.getBoundingClientRect().height;
-        // The owned background accepts events everywhere except the exact native Rubric aperture.
-        absorbSheet.textContent += `@media screen { #gz-sidebar.gz-sb-fixed::before { content:""; position:absolute; inset:0; z-index:-1;
+        // The owned background accepts events everywhere except the exact native Rubric aperture: fixed, as the Rubric is,
+        // over the card inside its border. An absolute one filled only the padding box, short of a classic scrollbar's gutter.
+        const hr = host.el.getBoundingClientRect(), hc = css(host.el), b = (k) => parseFloat(hc[`border${k}Width`]) || 0;
+        const box = { left: hr.left + b('Left'), top: hr.top + b('Top'), width: hr.width - b('Left') - b('Right'), height: hr.height - b('Top') - b('Bottom') };
+        const x = sr.left - box.left, y = sr.top - box.top, right = x + sr.width, bottom = y + e.getBoundingClientRect().height;
+        absorbSheet.textContent += `@media screen { #gz-sidebar.gz-sb-fixed::before { content:""; position:fixed; left:${box.left}px; top:${box.top}px; width:${box.width}px; height:${box.height}px; z-index:-1;
           border-radius:inherit; background:var(--gz-sb-fill,var(--gz-surface)); pointer-events:auto;
           clip-path:polygon(evenodd,0 0,100% 0,100% 100%,0 100%,0 0,${x}px ${y}px,${right}px ${y}px,${right}px ${bottom}px,${x}px ${bottom}px,${x}px ${y}px,0 0);
         } }`;
@@ -693,6 +717,63 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let hadStyle = null;
   const setVar = (k, v) => { if (hadStyle === null) hadStyle = html().hasAttribute('style'); const s = html().style; if (s.getPropertyValue(k) !== v) s.setProperty(k, v); };
   const setAttr = (el, k, v) => { if (v === false || v == null) { if (el.hasAttribute(k)) el.removeAttribute(k); } else if (el.getAttribute(k) !== v) el.setAttribute(k, v); };
+  // A retained or nonoverlapping peek must not bury exposed controls under the page. Ultra's visible panel and its
+  // own backdrop decide separately for the fixed column and each edge button. No native node is restyled or moved.
+  const peek = () => {
+    if (!ultra || !active || !host || asleep) return;
+    const rect = (e) => {
+      if (!e?.isConnected || e.closest('[hidden], [inert], [aria-hidden="true"]')) return null;
+      for (let p = e; p?.tagName; p = p.parentElement) {
+        const s = getComputedStyle(p);
+        if (s.display === 'none' || ['hidden', 'collapse'].includes(s.visibility) || s.opacity === '0') return null;
+      }
+      const r = e.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight
+        ? { left: Math.max(0, r.left), right: Math.min(innerWidth, r.right), top: Math.max(0, r.top), bottom: Math.min(innerHeight, r.bottom) } : null;
+    };
+    const covers = [];
+    for (const panel of document.querySelectorAll('#main-content .bb-offcanvas-panel.peek.active')) {
+      const container = panel.closest('.bb-offcanvas-container');
+      const r = container?.classList.contains('bb-offcanvas-open') && rect(panel);
+      if (!r) continue;
+      covers.push(r);
+      for (const overlay of container.querySelectorAll(':scope > .bb-offcanvas-overlay')) {
+        const b = rect(overlay); if (b) covers.push(b);
+      }
+    }
+    const fixed = host.own && A.own && ['expanded', 'collapsed'].includes(html().getAttribute('data-gz-sidebar'));
+    const tokens = [];
+    for (const [name, e] of [['column', fixed && host.el], ['edge', edge], ['launch', launch]]) {
+      const r = covers.length && e && rect(e);
+      if (r && covers.some((b) => b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top)) tokens.push(name);
+    }
+    setAttr(html(), 'data-gz-sb-peek', tokens.join(' ') || false);
+  };
+  const queuePeek = () => {
+    if (!ultra || !active || asleep || peekFrame) return;
+    peekFrame = requestAnimationFrame(() => { peekFrame = 0; peek(); });
+  };
+  const peekEnd = (e) => { if (e.target?.closest?.('.bb-offcanvas-panel.peek, .bb-offcanvas-overlay')) queuePeek(); };
+  const watchPeek = () => {
+    if (!ultra || typeof MutationObserver !== 'function') return;
+    const main = document.getElementById('main-content');
+    peekMO?.disconnect();
+    if (!main) {
+      cancelAnimationFrame(peekFrame); peekFrame = 0;
+      document.removeEventListener('transitionend', peekEnd, true);
+      document.removeEventListener('animationend', peekEnd, true);
+      setAttr(html(), 'data-gz-sb-peek', false);
+      return;
+    }
+    peekMO ||= new MutationObserver(queuePeek);
+    const attributes = { attributes: true, attributeFilter: ['class', 'style', 'hidden', 'inert', 'aria-hidden'] };
+    peekMO.observe(main, { childList: true, subtree: true, ...attributes });
+    // Also see replacement or hiding of this one container; unrelated page subtrees need no observer.
+    if (main.parentElement) peekMO.observe(main.parentElement, { childList: true, ...attributes });
+    document.addEventListener('transitionend', peekEnd, true);
+    document.addEventListener('animationend', peekEnd, true);
+    peek();
+  };
   // A drawer starts closed. Canvas's column holds a quiz's timer and question list, so a quiz's content gives up room down
   // to S.MAIN_KEEP before they go into one. On the grades page, while what-if scores show the note that they aren't
   // official (with Revert), the table keeps the room any page does (sidebar.min) instead of its own: narrower, it would
@@ -710,7 +791,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const nativeScrollRoot = () => {
     if (!ultra || host?.own) return null;
     return family === 'discussion' ? host?.el.closest('#full-discussions[bb-intersection-observer-root]')
-      : family === 'assessment' ? host.kind === 'attempt' ? host.el.parentElement : host?.el.closest('.assessment-overview-grid') : null;
+      : family === 'assessment' ? ['attempt', 'test'].includes(host.kind) ? host.el.parentElement : host?.el.closest('.assessment-overview-grid') : null;
   };
   let nativeScroller = null;
   const watchNativeScroll = (root) => {
@@ -790,7 +871,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       const scrollRect = nativeScroller === document ? null : nativeScroller?.getBoundingClientRect();
       setVar('--gz-sb-native-offset', `${Math.max(0, top - (scrollRect?.top || 0))}px`);
       setVar('--gz-sb-native-top', `${Math.max(top, host.el.getBoundingClientRect().top)}px`);
-      setVar('--gz-sb-native-end', `${scrollRect ? Math.max(0, innerHeight - scrollRect.bottom) : 0}px`);
+      // An attempt's Save and Submit stay over the bottom of the body that scrolls it (theme.css): the column ends above them.
+      const foot = host.kind === 'attempt' ? nativeScroller?.querySelector?.(':scope > [class*="makeStylesfooterWrapper-"]') : null;
+      const bottom = Math.min(scrollRect ? scrollRect.bottom : innerHeight, foot ? foot.getBoundingClientRect().top : Infinity);
+      setVar('--gz-sb-native-end', `${Math.max(0, innerHeight - bottom)}px`);
     }
     foot();
     pageHead.hidden = pageEmpty;
@@ -822,6 +906,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       absorbBlocked.set(review.el, absorbKey());
       queueMicrotask(() => { if (on && active && !asleep) layout(); });
     }
+    watchPeek();
   };
   const paint = () => {
     if (!active || !host || asleep) return;
@@ -900,12 +985,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setVar('--gz-sb-foot', `${r ? Math.max(0, Math.round(ultra ? innerHeight - r.top : r.height)) : 0}px`);
   };
   // A bar the site fixes along the window's bottom holds its actions at its end, where the edge buttons are: Ultra's Save
-  // and Submit (content.js tags them) and its help button, Canvas's Previous and Next; the site's CSS stands them on Glaze's
-  // bar. The button showing stands above the highest one under it (--gz-sb-bar). A layer the window's height is no bar.
+  // and Submit (content.js tags them; an older test's footer Ultra places absolutely, an assignment attempt's in its flex
+  // column, both untagged) and its help button,
+  // Canvas's Previous and Next; the site's CSS stands them on Glaze's bar. The button showing stands above the highest one
+  // under it (--gz-sb-bar). A layer the window's height is no bar.
   const bars = () => {
     const b = [launch, edge].find((x) => !x.hidden)?.getBoundingClientRect();
     let up = 0;
-    if (b?.width) for (const e of document.querySelectorAll('[data-gz-fixed-bottom], .pagehelp-directive, #module_sequence_footer')) {
+    if (b?.width) for (const e of document.querySelectorAll('[data-gz-fixed-bottom], .pagehelp-directive, #module_sequence_footer, footer.submit-footer.panel-footer-fixed, bb-assignment-attempt-authoring-panel [class*="makeStylesfooterWrapper-"]')) {
       const r = e.getBoundingClientRect();
       if (r.height && r.height < innerHeight / 2 && r.left < b.right && r.right > b.left && !host.el.contains(e)) up = Math.max(up, Math.round(innerHeight - r.top));
     }
@@ -934,6 +1021,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       asleep = true;
       mo?.disconnect();
       topRO?.disconnect(); topHeaders = [];
+      peekMO?.disconnect(); cancelAnimationFrame(peekFrame); peekFrame = 0;
       watchNativeScroll(null);
       for (const f of [frame, passFrame]) cancelAnimationFrame(f);
       clearTimeout(noteTimer);
@@ -1150,6 +1238,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     backdrop?.remove();
     cancelAnimationFrame(frame);
     cancelAnimationFrame(passFrame);
+    peekMO?.disconnect(); cancelAnimationFrame(peekFrame); peekFrame = 0;
+    document.removeEventListener('transitionend', peekEnd, true);
+    document.removeEventListener('animationend', peekEnd, true);
     clearTimeout(noteTimer);
     clearTimeout(retryTimer);
     nativeView = null; route = '';
@@ -1166,7 +1257,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // <html> as before the sidebar: its attributes and variables gone.
   const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool', 'data-gz-sb-layer',
-    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle', 'data-gz-sb-native-root', 'data-gz-sb-assessment'];
+    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle', 'data-gz-sb-native-root', 'data-gz-sb-assessment', 'data-gz-sb-peek'];
   const bare = () => {
     const h = html();
     if (!h) return;

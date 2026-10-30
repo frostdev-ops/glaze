@@ -1,6 +1,6 @@
 # Privacy summary
 
-_Last updated: 2026-10-22_
+_Last updated: 2026-10-29_
 
 A plain-language summary. The full policy is [PRIVACY.md](../PRIVACY.md).
 
@@ -8,6 +8,7 @@ Optional [encrypted sharing](../PRIVACY.md#optional-encrypted-share-sessions) en
 
 User-installed [mods](../PRIVACY.md#user-installed-mods) can read course data only with declared and granted permissions. Removing a mod also removes the data it stored, unless you untick **Remove its stored data too**. On Chrome, code with access to personal data runs in a Worker; a mod granted both data and network access can send that data to its approved hosts. Firefox and Safari use declarative parts only.
 The `nav.read` permission is personal-data access too: it reads the bar's items, course names, unread counts and navigation events, without link addresses, and disables the mod's frame UI. `nav.items` lets a mod manage up to eight items of its own with school-origin links or click actions; `nav.layout` proposes a layout while it runs. Use my own keeps that mod's layouts off locally. An enabled replacement can use `glaze.nav.go` to open an existing bar item only within a second of a click in its navigation controls.
+`documents` lets a mod's Worker on the Documents page, in its own tab, read your documents' titles, courses and word counts and add items of its own there; `documents.read` adds their text and exported files. Both are personal data, Worker only, and only once you grant them. A mod sees random handles of its own for your documents, never their storage keys.
 
 On Chrome, the optional [signed mod blocklist](../PRIVACY.md#signed-mod-blocklist) makes a credential-free request at most daily when Glaze and the setting are on and a code mod is installed. Failed checks retry after an hour. Declarative-only mods, Firefox and Safari do not make this request.
 
@@ -17,6 +18,39 @@ storage key listing cannot reset unknown legacy media until it is discovered; cu
 while stickers and other local data stay.
 
 Backups (**Back up…**, and older settings files and notes ZIPs) include share keys and creator delete tokens for all sessions, even paused ones. Keep these backups private: the keys grant access to shared content. Single-note exports do not contain session keys. See [sharing and backups](../PRIVACY.md#optional-encrypted-share-sessions).
+
+[Glaze Writer](../PRIVACY.md#what-glaze-stores) (Blackboard Ultra) keeps your papers and the documents on its Documents
+page, their versions and your format presets, your personal dictionary and the sources you save in `chrome.storage.local`
+on this device, with no server; **Back up…** includes them. Documents' Trash keeps a deleted paper or document for 30
+days, then deletes it. The Documents page loads a web font your Look uses from Google Fonts or jsDelivr, as Settings does. Discussion,
+message and test boxes keep their drafts through Back up what you type when it is on, as Blackboard's own editor does. Spelling and
+grammar are checked on your device. Writer reads the prompt, thread and rubric from your own Blackboard site, read-only,
+and sends nothing to Blackboard itself: your words reach it only when you press Blackboard's own Post, Reply, Send or
+Submit (an assignment's compact box puts its text in Blackboard's text box; with Full writer the submit sheet attaches
+your paper's .docx through Blackboard's upload and clicks its Submit). A citation
+lookup goes out only when you click Look up: a DOI to `doi.org` (or Crossref and DataCite), an ISBN to
+`openlibrary.org`, a web address to that page's own host once you allow it. AI runs only for what you turn on in
+Settings → AI, to the model you chose for it: Tab completion sends the text around the caret, the course, prompt
+or assignment, and in a discussion your classmates' posts with their names; Feedback sends your draft with the
+assignment's instructions and rubric. Nothing goes to AI from a test.
+
+[Agent access](../PRIVACY.md#agent-access) (Settings → AI → Agents) is off by default. Apps on this computer connect
+through a local helper: `glaze-mcp`, or the downloaded Glaze Mac app on Safari. Glaze asks you to allow each app
+identity and data group: Courses, to-dos and schedule; Grades; Assignments and rubrics; Writer documents; each mod's
+tools. App names are self-reported, and program identities can be too. Every built-in change and every call to a
+mod's code tool waits for your OK in Glaze's window. Built-in agent tools never submit work. A mod's code tool can send
+the app's arguments and data the mod may read to its approved hosts. Agent access sends no data to FrostDev; the app may
+send what it gets to its own AI service, under that app's own policy.
+
+Glaze keeps app identities, grants and declines, the switch and profile id locally without a timed expiry, the last 200
+calls' metadata (never their content), and the 100 assignment reads used last. Session-only approval records can include
+document text in action summaries; records no longer waiting become eligible for cleanup an hour after creation, on
+later requests or agent-worker startup, and may remain until session end. Turn off cancels waiting requests and clears
+assignment reads, keeping apps and grants; a change already started can finish. Revoke forgets one app; Forget all apps
+clears the activity list and assignment reads and forgets all apps, grants and declines. Removing a site clears its
+assignment reads; Reset everything clears all assignment reads, keeping the switch, apps, grants and activity. None of
+these erases copies an app kept. On Firefox, turning agent access on also asks to share website content, which turning
+it off gives back.
 
 Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
 you set in a course's menu. These follow Chrome sync (or Firefox Sync) when it's on; Safari keeps them on this device only.
@@ -78,8 +112,8 @@ Course tabs show an automatic short name by default, with common term/section wr
 Reminders, what you've snoozed or muted and your streak stay on your device as well, and so do your marks on documents; reminders show only inside Canvas and Blackboard pages, and Glaze has no notifications permission.
 With Gradescope in To Do on, Glaze reads your own Gradescope course pages (read-only, signed in as you) and keeps the assignments on your device; nothing from Gradescope goes anywhere else.
 It has no analytics. Glaze's writes anywhere are opt-in: with Better To Do's "Tick off in Canvas too" on, ticking an item
-marks it done or not done in your own Canvas planner, as Canvas's List View does. Changing a course's nickname or
-color in its Canvas card menu saves that choice to your own Canvas site too, Sign out in Glaze's Canvas bar signs you out of Canvas as Canvas's own button does, and Moodle's Edit mode switch in Glaze's bar flips Moodle's own control. Apart from those clicks and the optional
+marks it done or not done in your own Canvas planner, as Canvas's List View does, and so does an agent app's mark done
+once you allow it. Changing a course's nickname or color in its Canvas card menu saves that choice to your own Canvas site too, Sign out in Glaze's Canvas bar signs you out of Canvas as Canvas's own button does, and Moodle's Edit mode switch in Glaze's bar flips Moodle's own control. Apart from those clicks and the optional
 sharing and mods described above, the extension's other requests are read-only and go to your own Blackboard, Canvas or Moodle site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards; on Canvas a course's assignment groups when you use its what-if calculator;

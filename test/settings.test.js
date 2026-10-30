@@ -20,7 +20,7 @@ test('1.0 data migrates: palette kept, motion level derived, preset recovered', 
   assert.equal(s.motion.level, 'off');
   assert.equal(s.preset, 'Midnight');
   assert.equal(s.footer, false);
-  assert.equal(G.GZ_SANITIZE({ motion: { enter: true, hover: false, transitions: false } }).motion.level, 'subtle');
+  assert.equal(G.GZ_SANITIZE({ motion: { enter: true, hover: false, transitions: false } }).motion.level, 'expressive');
 });
 
 test('edited 1.0 palette has no preset', () => {
@@ -47,7 +47,7 @@ test('hostile import is cleaned, not trusted', () => {
   assert.deepEqual(s.look, G.GZ_DEFAULTS.look);
   assert.equal(s.bg.kind, 'image');
   assert.equal(s.bg.image, '');
-  assert.equal(s.motion.level, 'subtle');
+  assert.equal(s.motion.level, 'expressive');
   assert.deepEqual(s.courses.colors, { '3': '#ffffff' });
   assert.deepEqual(s.presets.map((p) => p.name), ['Mine']);
   assert.equal(s.presets[0].colors['--gz-ink'], '#ffffff');
@@ -98,9 +98,9 @@ test('declutter tabs keep only known slugs, once each', () => {
   assert.deepEqual(b.declutter.tabs, [], 'defaults are not shared between results');
 });
 
-test('score bars, countdowns, folder previews, course progress, card grades, draft backup, download all, remembering your place, the course menu, the document buttons, the document viewer\'s palette, search in your courses, Better To Do, the Ultra Dashboard, the widgets (with none added), the sidebar, hiding folders and course tabs are on by default; the rest are off', () => {
+test('score bars, countdowns, folder previews, course progress, card grades, draft backup, Glaze Writer and its uploads, download all, remembering your place, the course menu, the document buttons, the document viewer\'s palette, search in your courses, Better To Do, the Ultra Dashboard, the widgets (with none added), the sidebar, hiding folders and course tabs are on by default; the rest are off', () => {
   const on = Object.entries(G.GZ_DEFAULTS.enhance).filter(([, v]) => v === true).map(([k]) => k);
-  assert.deepEqual(on.sort(), ['calc', 'coursemenu', 'dashboard', 'docTheme', 'download', 'drafts', 'hideFolders', 'inline', 'newcontent', 'newgrades', 'overall', 'palette', 'place', 'previews', 'progress', 'scores', 'search', 'sidebar', 'tabs', 'todo', 'toggles', 'widgets']);
+  assert.deepEqual(on.sort(), ['calc', 'coursemenu', 'dashboard', 'docTheme', 'download', 'drafts', 'fold', 'hideFolders', 'inline', 'newcontent', 'newgrades', 'overall', 'palette', 'place', 'previews', 'progress', 'scores', 'search', 'sidebar', 'tabs', 'titleScroll', 'todo', 'toggles', 'widgets', 'writer', 'writerUploads']);
   assert.equal(G.GZ_DEFAULTS.enhance.docPages, 'plain');
   assert.equal(G.GZ_SANITIZE({ enhance: { scores: false } }).enhance.scores, false, 'an explicit off is kept');
 });

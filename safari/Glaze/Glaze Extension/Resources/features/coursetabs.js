@@ -579,6 +579,19 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     box.append(back); host.append(box); retryNote = box;
   };
   const toTop = (op, m = {}) => { try { window.top.postMessage({ gzCtab: op, ...m }, location.origin); } catch { /* gone */ } };
+  // The command palette asked for on this page (content.js's Ctrl+K, open: Glaze's bar's Search) while a tab's frame is
+  // on screen: the frame's own, for the course or page shown, with the keyboard in it ('palette'). A frame whose Glaze
+  // hasn't yet said it is drawn on screen ('drawn', the answer to 'visible') keeps the ask (f.cmd: 'key' or 'open') until
+  // it does; a press meanwhile takes it back, and switching tabs drops it (show).
+  const palette = (open = false) => {
+    const f = on && !framed && !preview && showing && frames.get(showing);
+    if (!f) return false;
+    let live = false; try { live = f.ready && f.live === f.el.contentDocument; } catch { /* gone */ }
+    if (live) cmdTo(f, open);
+    else f.cmd = !open && f.cmd ? '' : open ? 'open' : 'key';
+    return true;
+  };
+  const cmdTo = (f, open) => { f.el.focus({ preventScroll: true }); f.el.contentWindow?.postMessage({ gzCtab: 'palette', open }, location.origin); };
   // The sidebar (features/sidebar.js) works in the document on screen only: this page, or the tab's frame over it. A
   // frame learns which it is from the page around it ('visible'), and counts as hidden until then. Its record's changes
   // go through that page ('sidebar'), which sends them only for the frame on screen, signed in as the page is, and
@@ -682,7 +695,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     dropNext(cid);
     const f = frames.get(cid);
     if (!f) return;
-    if (ctx.site === 'canvas') f.unwatch?.();
+    f.unwatch?.();
     if (drawerFrom === f) drawerOff();
     if (showing === cid) nudge();
     f.el.remove();
@@ -1164,17 +1177,17 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // A frame is shown once rendered course content has settled. A stalled initial about:blank can be retried once;
   // slow native pages keep loading, with their form state intact, rather than becoming falsely ready.
   const watch = (cid, f) => {
-    if (ctx.site === 'canvas') f.unwatch?.();
+    f.unwatch?.();
     const turn = f.watch = {};
     let t0 = performance.now();
     let changed = t0, mo = null, doc = null, timer = 0;
     const scrolled = () => { changed = performance.now(); };
     const clean = () => {
       mo?.disconnect();
-      if (ctx.site === 'canvas') { clearTimeout(timer); doc?.removeEventListener('scroll', scrolled, true); }
+      clearTimeout(timer); doc?.removeEventListener?.('scroll', scrolled, true);
       mo = null; doc = null;
     };
-    if (ctx.site === 'canvas') f.unwatch = clean;
+    f.unwatch = clean;
     f.slow = false;
     const step = () => {
       if (frames.get(cid) !== f || f.watch !== turn) return clean();
@@ -1188,7 +1201,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         mo.observe(d.body, { subtree: true, childList: true });
         d.addEventListener('scroll', scrolled, { capture: true, passive: true });
       }
-      const built = doc && (ctx.site !== 'canvas' || doc === d && doc !== f.stale) && (cid === PAGE ? !/^\/courses\/\d+/.test(doc.location.pathname) : L.owns(doc.location.pathname, cid)) && (ctx.site === 'canvas' ? canvasContent(doc) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
+      const built = doc && doc === d && doc !== f.stale && (cid === PAGE ? !/^\/courses\/\d+/.test(doc.location.pathname) : L.owns(doc.location.pathname, cid)) && (ctx.site === 'canvas' ? canvasContent(doc) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
         && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]');
       if (built && now - changed > 300) {
         clean();
@@ -1330,6 +1343,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (k === cid) g.at = Date.now();
       g.el.style.visibility = k === cid && g.ready ? '' : 'hidden';
       g.el.inert = k !== cid;
+      g.cmd = '';
       g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid && g.ready }, location.origin);
     }
     if (host) { host.toggleAttribute('data-on', !!cid); lay(); }
@@ -1342,7 +1356,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     ctx.scene();
     for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI', 'GZ_DOCREVIEW']) globalThis[n]?.cover?.();
     globalThis.GZ_PET_WORLD?.refresh();
-    try { if (cid) sessionStorage.setItem('gz-ctabs-shown', cid); else sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
+    try {
+      if (cid) { sessionStorage.setItem('gz-ctabs-shown', cid); if (ctx.site === 'ultra') sessionStorage.setItem('gz-ctabs-from', shownFrom); }
+      else { sessionStorage.removeItem('gz-ctabs-shown'); sessionStorage.removeItem('gz-ctabs-from'); }
+    } catch { /* blocked */ }
     keepPage();
     // Keyboard focus goes with it: into the frame (over one not drawn yet, to its tab), or back to this page's strip.
     if (f && strip?.parentElement === host) { if (!strip.contains(document.activeElement)) (list.querySelector(`[data-course-id="${cid}"]`) || f.el).focus({ preventScroll: true }); }
@@ -1442,11 +1459,20 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (ctx.site === 'canvas' && from === showing) w.postMessage({ gzCtab: 'loading', cid: waiting }, location.origin);
       globalThis.GZ_PET_WORLD?.refresh();
     }
+    else if (op === 'drawn' && from === showing && src.ready) {
+      try { src.live = src.el.contentDocument; } catch { /* gone */ }
+      if (src.cmd) { cmdTo(src, src.cmd === 'open'); src.cmd = ''; }
+    }
     else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); nudge(src, true); later(700); keepPage(); if (ctx.site === 'canvas' || from === PAGE) globalThis.GZ_NAVBAR_UI?.sync(); }
     // A link to a page of its own (go), or pressed (warm): turned to by this page (turnTo), the one it leaves kept.
     else if ((op === 'go' || op === 'warm') && ctx.site === 'canvas' && typeof url === 'string' && url.length < 1300) {
       const u = canvasURL(url), c = u && (u.match(/^\/courses\/(\d+)/)?.[1] || PAGE);
       if (c === from && pageable(split(u)[0])) { if (op === 'warm') turnTo(from, u, true); else if (from === showing) { if (from === PAGE) openPage(u); else openAt(from, u); } }
+    }
+    else if (op === 'open' && ctx.site !== 'canvas' && from === showing && typeof url === 'string' && url.length < 1300) {
+      let u; try { u = new URL(url, location.origin); } catch { return; }
+      const cid = L.courseOf(u.pathname, u.search);
+      if (u.origin === location.origin && cid) openAt(cid, u.pathname + u.search + u.hash);
     }
     else if (op === 'open' && ctx.site === 'canvas' && from === showing && typeof url === 'string' && url.length < 1300) {
       const u = canvasURL(url), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
@@ -1491,16 +1517,18 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   if (framed && !preview) {
     // Track before load: slow native resources must not leave usable editors unprotected.
     // shortcut: native work without edit/submit events is unknown; use an LMS save-state API when available.
-    for (const event of ['input', 'change', 'submit']) document.addEventListener(event, (e) => { if (on && e.isTrusted) toTop('edited'); }, true);
+    for (const event of ['input', 'change', 'submit']) document.addEventListener(event, (e) => { if (on && e.isTrusted && !e.target?.closest?.('#gz-cmd')) toTop('edited'); }, true);
     addEventListener('message', (e) => {
       if (e.origin !== location.origin || e.source !== window.top) return;
       if (e.data?.gzCtab === 'visible' && typeof e.data.on === 'boolean') {
         told = e.data.on;
         html.toggleAttribute('data-gz-ctab-framed', !e.data.on); ctx.scene();
         for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI', 'GZ_DOCREVIEW']) globalThis[n]?.cover?.();
-        // A hidden page may have left its course while its navigation request was ignored.
-        if (e.data.on) { awayFrom = ''; pass(); }
+        // A hidden page may have left its course while its navigation request was ignored. Its palette goes with it.
+        if (e.data.on) { awayFrom = ''; pass(); toTop('drawn'); } else globalThis.GZ_CMD?.close();
       }
+      // As Ctrl+K here would, or as Glaze's bar's Search does on its own page (open).
+      else if (e.data?.gzCtab === 'palette' && ctx.on()) { if (e.data.open === true) ctx.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); else ctx.askCmd(); }
       else if (e.data?.gzCtab === 'sidebar:ack' && Number.isSafeInteger(e.data.n)) acked(e.data);
       else if (e.data?.gzCtab === 'timer:ack' && Number.isSafeInteger(e.data.n)) acked(e.data, 'timer');
       else if (e.data?.gzCtab === 'note' && typeof e.data.text === 'string' && e.data.text.length <= 500) say(e.data.text);
@@ -1532,7 +1560,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   let restored = false;
   const scrollBack = (top) => {
-    if (/\/outline\/?$/.test(location.pathname) && ctx.settings().enhance.place) return;
+    if (ctx.site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/.test(location.pathname)) return;
     const t0 = Date.now();
     let steady = 0;
     html.setAttribute('data-gz-placing', '');
@@ -1776,7 +1804,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     readPrefs().then(() => { drawn = ''; pass(); });
     if (preview) { tabs = L.order(DEMO.map((x) => ({ ...x }))); loaded = true; return; }
     // A reload while a tab's frame was on screen: that tab again.
-    const was = (() => { try { return framed ? '' : sessionStorage.getItem('gz-ctabs-shown'); } catch { return ''; } })();
+    // Restore only over the address that frame covered. A new native destination (such as New Message) owns its page.
+    const was = (() => { try { return framed || (ctx.site === 'ultra' && sessionStorage.getItem('gz-ctabs-from') !== location.pathname + location.search) ? '' : sessionStorage.getItem('gz-ctabs-shown'); } catch { return ''; } })();
     const wasPage = (() => { try { return was === PAGE && ctx.site === 'canvas' ? L.outside(...split(sessionStorage.getItem('gz-ctabs-page') || '')) : null; } catch { return null; } })();
     ctx.me().then((uid) => {
       if (!on) return;
@@ -1890,7 +1919,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       host = null;
       html.removeAttribute('data-gz-ctab-framed');
       ctx.scene();
-      try { sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
+      try { sessionStorage.removeItem('gz-ctabs-shown'); sessionStorage.removeItem('gz-ctabs-from'); } catch { /* blocked */ }
       // Switched off (Glaze or the tabs): nothing of the courses is kept in memory any more.
       snaps.clear();
       send({ op: 'drop' });
@@ -1996,9 +2025,22 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     },
     // An address of this site: in a course's frame when a frame is on screen and it is a course page (on Canvas any
     // course's, through its own frame; on Ultra the shown course's), else on this page, as a click on it here would go.
-    open: (href) => {
+    open: (href, options) => {
       let u; try { u = new URL(String(href), location.origin); } catch { return false; }
       if (!on || u.origin !== location.origin) return false;
+      // Palette selections are explicit destinations. A native load avoids tearing down a large outline through
+      // a history-only route that can report success while the old content is still on screen.
+      if (ctx.site === 'ultra' && options?.native) {
+        const cid = L.courseOf(u.pathname, u.search);
+        if (cid) {
+          const url = u.pathname + u.search + u.hash;
+          if (framed) { if (url.length >= 1300) return false; toTop('open', { url }); return true; }
+          // Use the frame owner's normal load lifecycle and unsaved-work guard for the visible course too.
+          if (showing === cid) { openAt(cid, url); return true; }
+          if (showing || cid !== ctx.courseId()) { openAt(cid, url); return true; }
+          return false; // the caller performs native navigation in this document, with its normal unload guards
+        }
+      }
       const page = L.safe(u.pathname, u.search) || (ctx.site === 'canvas' ? L.outside(u.pathname, u.search) : null), url = page && page + (ctx.site === 'canvas' ? u.hash : ''), cid = url && (ctx.site === 'canvas' ? u.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] : showing);
       if (framed) {
         const mine = cid ? cid === framed : framed === PAGE;
@@ -2026,7 +2068,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       return true;
     },
   };
-  return { sync, held, petSurface, bar, visible, sidebar: askSidebar, timer: askTimer, drawer, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
+  return { sync, held, petSurface, bar, visible, palette, sidebar: askSidebar, timer: askTimer, drawer, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
 })();
 
 GZ_CTABS;

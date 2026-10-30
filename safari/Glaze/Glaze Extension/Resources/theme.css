@@ -272,6 +272,33 @@ div.bb-course-navigation::before, .routed-page.bb-offcanvas-container [class*="h
   }
 }
 @keyframes gz-bar-veil { to { opacity: 1; } }
+/* Scrolled, the course bar folds to its tools: a small pill at the end, no backing, the page under it reachable beside it
+   (features/sticky-fold.js marks it and keeps its height, also as a flex item of Ultra's scroller, so nothing moves).
+   Glaze's course strip stays as it is, on its own glass, so a course can be switched to and back from at any place. The
+   header row stays for assistive tech; keyboard focus inside the bar shows it whole. */
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) {
+  box-sizing: border-box; block-size: var(--gz-whole, auto) !important; min-block-size: var(--gz-whole, auto) !important; padding-block-start: 0 !important;
+  pointer-events: none;
+}
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) #gz-ctabs { pointer-events: auto; }
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible))::before { display: none; }
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) course-page-header {
+  position: absolute !important; inline-size: 1px !important; block-size: 1px !important; padding: 0 !important; overflow: hidden !important; clip-path: inset(50%); white-space: nowrap;
+}
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] {
+  inline-size: fit-content !important; max-inline-size: calc(100% - var(--gz-float-start, 12px) - var(--gz-float-end, 12px)); block-size: auto !important; min-block-size: 0 !important;
+  margin-block-start: var(--gz-float-gap, 12px) !important; margin-inline-start: auto !important; padding: 0.125rem 0.25rem !important; border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: 999px !important; pointer-events: auto;
+}
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] .bb-ui-navigation-list-horizontal a {
+  block-size: 1.875rem !important; min-block-size: 0 !important; padding-block: 0 !important; padding-inline: 0.625rem !important; font-size: 0.75rem !important;
+}
+/* Ultra sets the tool's name in a Typography span with a size of its own. */
+div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] .bb-ui-navigation-list-horizontal a :is(.MuiListItemText-root, .MuiTypography-root) {
+  margin-block: 0 !important; font-size: inherit !important; line-height: 1.2 !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-gz-motion="off"]) div.bb-course-navigation[data-gz-stuck]:not(:has(:focus-visible)) bb-course-navigation > [class*="makeStylestoolbar"] { animation: gz-fold 160ms ease-out; }
+}
 /* A routed page (a document, a discussion, an assignment): its breadcrumb row, or its header's title row where it has no
    breadcrumbs, is a panel of its own under the strip, inset as the course header is. A discussion's title panel keeps a
    gap from it. */
@@ -469,6 +496,32 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"] { padding: 1
 bb-assignment-attempt-authoring-panel .MuiAccordion-root :is(.MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root, .bb-editor-container, .ql-editor, .ql-container, .editor-content-container, .bb-editor-root) { background: transparent !important; }
 bb-assignment-attempt-authoring-panel .MuiAccordionSummary-root { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-right: 0 !important; }
+/* The Submission heading is a pill its text's width, as the other section headings, even in a column that stretches. */
+bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2 { inline-size: fit-content; align-self: flex-start; }
+/* Glaze Writer's frame (features/writer.js) paints the Look's ground, surfaces, corners and edge itself; behind a paper over
+   a background the page adds the blur of the glass cards beside it. Nothing that clips or outlines the frame element: Chrome
+   runs the frame in its own process, and with a rounded clip or an outline on it a click right after Focus ended went to
+   the page instead (scripts/writer-paper-check.js, "Fix applies the citation fix"). */
+html[data-gz-bg]:not([data-gz-bg="solid"]) #site-wrap iframe.gz-writer[data-gz-writer-frame="assignment"] { backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.2); }
+/* It scrolls as one page, as a document does: the title goes up with the instructions instead of staying over them (Ultra
+   scrolls only the content under it). Ultra's body, already a scroller, takes the scroll; Save and Submit stay at its
+   bottom, on glass over what passes under them. Off with the enhance.titleScroll setting. */
+html[data-gz-enhance-titleScroll] bb-assignment-attempt-authoring-panel [class*="makeStylesbaseBody-"] { overflow-y: auto !important; }
+html[data-gz-enhance-titleScroll] bb-assignment-attempt-authoring-panel [class*="makeStylesbaseBody-"] > [class*="makeStylescontentRoot-"] { flex: none !important; overflow: visible !important; }
+html[data-gz-enhance-titleScroll] bb-assignment-attempt-authoring-panel [class*="makeStylesbaseBody-"] > [class*="makeStylesfooterWrapper-"] {
+  position: sticky; inset-block-end: 0; z-index: 3; margin-block-start: auto;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
+}
+/* A document's Contents, closed: Ultra's open button is a bare icon at the column's edge, drawn for a white page. It is a
+   pill on the Look's surface, as Glaze's icon buttons are. */
+#site-wrap button[class*="makeStylesexpandTocButton-"] {
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4); color: var(--gz-accent) !important; box-shadow: var(--gz-rest-shadow) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
+}
+#site-wrap button[class*="makeStylesexpandTocButton-"]:hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent) 18%, var(--gz-surface-paint, var(--gz-surface))) !important; }
+html[data-gz-bg="solid"] #site-wrap button[class*="makeStylesexpandTocButton-"] { backdrop-filter: none; }
 /* Previous / Next above an item: Ultra sits them on a hard-coded #262626 bar the sweep leaves alone
    (it only recolors light fills). */
 #site-wrap div:has(> .js-content-navigator-previous, > .js-content-navigator-next) { background: transparent !important; gap: 0.5rem; }
@@ -487,7 +540,8 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
   .base-header, .course-groups-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"],
   .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
-  document-panel-react [class*="makeStylespanelHeaderContainerRoot-"]) {
+  document-panel-react [class*="makeStylespanelHeaderContainerRoot-"],
+  .routed-page bb-panel-header > .panel-header.persistent-white-header) {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent) !important;
   backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
@@ -495,7 +549,9 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
   box-shadow: var(--gz-rest-shadow) !important;
 }
 #site-wrap :is(.discussion-container .panel-header.panel-header-directive.has-controls,
-  .bb-offcanvas-panel.full .panel-header.simple-header) :is(.panel-title, .editable-title-container) { background: transparent !important; }
+  .bb-offcanvas-panel.full .panel-header.simple-header, .routed-page bb-panel-header > .panel-header.persistent-white-header) :is(.panel-title, .editable-title-container, .panel-titles-container, .panel-title-texteditor) { background: transparent !important; }
+/* The legacy item pages' band (a test attempt, a journal, a file) sits in the content column, a gap under the strip. */
+#site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header { margin: var(--gz-float-gap, 12px) 0 0 !important; padding: 1rem 1.5rem !important; min-height: 0 !important; }
 /* A full panel over the page (an announcement opened from a course): its header is a floating glass panel like the course
    header, inset from the window's top and end; the header's own box keeps Ultra's place (it pulls into the panel's
    padding), so the glass is drawn inside it. The panel's own edge draws no line. */
@@ -649,7 +705,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
    a Grades card's title band, the calendar's bars. Ground there showed as a dark patch on the surface (light on Paper).
    A header card of its own keeps its paint. */
 #site-wrap :is(.base-header, .course-groups-header, [class*="makeStylespanelHeaderContainerRoot-"], .calendar-wrapper, .tabular-list, table, course-student-grades,
-  .element-card, .base-grades-course-tile, article, .MuiCard-root, .MuiPaper-root:not(.MuiDrawer-paper))
+  .element-card, .base-grades-course-tile, article, .MuiCard-root, .MuiPaper-root:not(.MuiDrawer-paper), .assessment-question, .assessment-progress-header, .assessment-attempt-panel > .black-panel-header)
   :is(div:is([class*="-header"], [class*="header-"]), .guidance-wrapper):not(.base-header, .base-header-tools, .course-groups-header, .panel-header, [class*="makeStylespanelHeaderContainerRoot-"]) { background: transparent !important; }
 
 /* Attendance peek panel. */
@@ -711,6 +767,11 @@ svg:has(> path[class*="makeStylesindeterminateSvg-"]) { filter: drop-shadow(0 0 
 .MuiSkeleton-root { background-color: color-mix(in srgb, var(--gz-ink) 8%, transparent) !important; }
 .MuiSkeleton-wave::after { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gz-accent) 14%, transparent), transparent) !important; }
 #site-wrap .PrivateSwitchBase-root > span, #site-wrap .MuiRadio-root > span, #site-wrap .MuiCheckbox-root > span { background: transparent !important; }
+/* Ultra's own radio is a ring whose ::before is the dot, white on every radio: an unchecked one hid it in the ring's white
+   fill, cleared above. The dot shows only once checked, dark on an accent fill. */
+#site-wrap .MuiRadio-root > span[class*="makeStylesroot-"][aria-hidden="true"]::before { background: transparent !important; }
+#site-wrap .MuiRadio-root:has(> input:checked) > span[class*="makeStylesroot-"][aria-hidden="true"] { background: var(--gz-accent) !important; border-color: var(--gz-accent) !important; }
+#site-wrap .MuiRadio-root:has(> input:checked) > span[class*="makeStylesroot-"][aria-hidden="true"]::before { background: var(--gz-accent-ink) !important; }
 #site-wrap .MuiRadio-root, #site-wrap .MuiCheckbox-root, #site-wrap .MuiRadio-root svg, #site-wrap .MuiCheckbox-root svg { color: var(--gz-ink-muted) !important; }
 #site-wrap .MuiRadio-root.Mui-checked, #site-wrap .MuiCheckbox-root.Mui-checked, #site-wrap .Mui-checked svg { color: var(--gz-accent) !important; }
 #site-wrap label.MuiFormControlLabel-root, #site-wrap label.MuiFormControlLabel-root .MuiFormControlLabel-label, #site-wrap label.MuiFormControlLabel-root .MuiFormControlLabel-label * { color: var(--gz-ink) !important; }
@@ -927,7 +988,9 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
 /* Item pages' wells and lists (an assignment's due date, attempts and details; a test's results, which have no well; a
    profile's lists; a group set with nothing in it): panels on Glaze's surface with the Look's corners. Ultra painted the
    wells in the page's own colour, square, so they read as empty outlines. */
-#site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state) {
+#site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state,
+  .assessment-attempt-panel :is(.assessment-question, .assessment-progress-header), .rubric-details-panel > .panel-section-header,
+  .course-announcement-layer .no-result-message, .is-empty-page > .is-empty-wrapper) {
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
 }
@@ -935,13 +998,15 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
    a GPU layer each. Same fill. */
 html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header, content-page-header > header,
   .routed-page.bb-offcanvas-container [class*="headerRoot"] > [class*="panelHeaderContainerRoot"],
-  #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls, #site-wrap .course-groups-header,
+  #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls, #site-wrap .course-groups-header, #site-wrap .routed-page bb-panel-header > .panel-header.persistent-white-header,
   bb-assignment-attempt-authoring-panel [class*="makeStylespanelHeaderContainerRoot-"], .assessment-overview-modern-panel [class*="makeStylespanelHeaderContainerRoot-"],
   #site-wrap document-panel-react [class*="makeStylespanelHeaderContainerRoot-"], #site-wrap .bb-offcanvas-panel.full .panel-header.simple-header::before,
   .bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .bbml-editor-parent > .bbml-editor,
-  bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]), #site-wrap .outline-action-block,
+  bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"], [class*="makeStylesbaseBody-"] > [class*="makeStylesfooterWrapper-"]), #site-wrap .outline-action-block,
   #site-wrap .layer-details :is(.discussion-settings, .discussion-participants),
-  #site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state)) { backdrop-filter: none; }
+  #site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .assessment-results-section > .section-content, .base-profile section ul, .group-empty-state,
+  .assessment-attempt-panel :is(.assessment-question, .assessment-progress-header), .rubric-details-panel > .panel-section-header,
+  .course-announcement-layer .no-result-message, .is-empty-page > .is-empty-wrapper)) { backdrop-filter: none; }
 #site-wrap :is(.assessment-details-section > ul.section-content, .assessment-results-section > .section-content) { padding: 0.75rem 1rem !important; }
 #site-wrap .base-profile section ul { overflow: hidden; } /* its rows paint their own fill: kept inside the corners */
 /* Item type at a glance: the type icon carries its name as aria-label. */
@@ -1004,7 +1069,9 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 #site-wrap .discussion-board .reply-control { padding-inline: 0.5rem; }
 #site-wrap .discussion-board .discussion-sorting-wrapper { margin-block: 1rem; }
 #site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
-  .activity-stream .activity-group-title, .base-profile .profile-content h2),
+  .activity-stream .activity-group-title, .base-profile .profile-content h2,
+  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2, .assessment-summary div.row > .settings-label),
+  bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2),
 #site-wrap .discussion-board :is(.discussion-full-panel-detail-header,
   discussion-refresh-button button, discussion-follow-button button, bb-discussion-sorting-options button, discussion-reply-button button) {
   background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
@@ -1014,8 +1081,12 @@ html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wr
 }
 /* Section-heading pills retain the native heading text and scale with the active Look. */
 #site-wrap :is(.assessment-overview-grid > .overview-section > h2.section-label, .assessment-overview-grid > .assessment-results-section > .assessment-results-header > h2.section-label,
-  .activity-stream .activity-group-title, .base-profile .profile-content h2),
+  .activity-stream .activity-group-title, .base-profile .profile-content h2,
+  .assessment-attempt-panel :is(.attempt-header > h2, .question-header > .question-label, .additional-content-label, .assessment-summary > .row.collapse h2, .assessment-summary div.row > .settings-label),
+  bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2),
 #site-wrap .discussion-board .discussion-full-panel-detail-header { display: inline-flex; align-items: center; max-width: 100%; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
+/* A test's Grading and Description labels head their own rows: the pill on its own line above the value. */
+#site-wrap .assessment-attempt-panel .assessment-summary div.row > .settings-label { display: flex; inline-size: fit-content; margin-block: 0.75rem 0.5rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button { min-width: 2.25rem; min-height: 2.25rem; padding: 0.35rem 0.85rem; }
 #site-wrap .discussion-board :is(discussion-refresh-button, discussion-follow-button, bb-discussion-sorting-options, discussion-reply-button) button:is(:hover, :focus-visible, [aria-pressed="true"]) {
   background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border-color: var(--gz-accent) !important;
@@ -1038,20 +1109,20 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 
 /* ---- rich text editor (submissions, replies, messages): toolbar, text and word count as one
    card, with the accent ring while you type ---- */
-#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-root {
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-root {
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius) !important;
   transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease);
 }
-#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-root:focus-within { border-color: var(--gz-accent) !important; box-shadow: 0 0 0 3px var(--gz-accent-soft) !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-toolbar {
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-root:focus-within { border-color: var(--gz-accent) !important; box-shadow: 0 0 0 3px var(--gz-accent-soft) !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-toolbar:not(.bb-editor-toolbar-submenu) {
   border: 0 !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 55%), var(--gz-surface-paint-2, var(--gz-surface-2))) !important;
 }
-#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-toolbar :is(button, .ql-picker) { border-color: transparent !important; border-radius: var(--gz-radius-sm) !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) :is(.editor-content-container, .bb-editor-container) { border: 0 !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) .ql-editor.ql-blank::before { color: var(--gz-ink-muted) !important; font-style: normal !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) .status-bar { padding: 0.3rem 0.9rem 0.45rem !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; text-align: right; font-size: 12px; color: var(--gz-ink-muted) !important; }
-#site-wrap .bb-editor-wrapper:not(.read-only) .status-bar * { font-style: normal !important; color: inherit !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .bb-editor-toolbar :is(button, .ql-picker) { border-color: transparent !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) :is(.editor-content-container, .bb-editor-container) { border: 0 !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .ql-editor.ql-blank::before { color: var(--gz-ink-muted) !important; font-style: normal !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .status-bar { padding: 0.3rem 0.9rem 0.45rem !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; text-align: right; font-size: 12px; color: var(--gz-ink-muted) !important; }
+#site-wrap :is(.bb-editor-wrapper:not(.read-only), .freeform-response bb-rich-text-editor) .status-bar * { font-style: normal !important; color: inherit !important; }
 
 /* ---- assessment pages (an assignment or test attempt, its submission view): Ultra lays out an
    "authoring" column and a "details" column. ---- */
@@ -1074,6 +1145,101 @@ html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml
 #site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"] svg { color: var(--gz-accent) !important; }
 /* The Exit button in the item header: Ultra paints it #404040. */
 #site-wrap header[class*="makeStylesheader-"] .MuiButtonBase-root[class*="makeStylescontained-"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border-radius: var(--gz-radius-sm) !important; }
+/* ---- the legacy test attempt (Ultra's Angular .assessment-attempt-panel). Ultra draws it as white boxes on a white page;
+   with the white taken away it was loose pieces on the background. Each part owns one surface: the title band and the
+   section pills (above), a card per question and the sticky progress bar (the wells, above), a painted row per answer,
+   one editor card, and the footer's dock. ---- */
+#site-wrap .assessment-attempt-panel .assessment-question { margin-block: 0 1rem; padding: 1rem 1.25rem !important; }
+#site-wrap .assessment-attempt-panel .question-header { margin-block-end: 0.75rem; }
+#site-wrap .assessment-attempt-panel .additional-content-label { margin-block-end: 0.75rem; }
+/* Inside a card nothing paints its own square: the prompt's, the instructions' and each answer's Quill layers are see-through. */
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor),
+#site-wrap .assessment-attempt-panel .assessment-question :is(.bb-editor-wrapper.read-only, .MuiFormControlLabel-label, .question-container > bb-rich-text-editor) :is(.bb-editor-root, .editor-content-container, .bb-editor-container, .ql-container, .ql-editor) { background: transparent !important; border: 0 !important; }
+/* An answer: the whole row is the control, its letter and its text, one rounded fill with one edge. The edge marks where
+   the pointer is, the chosen answer and the keyboard's place; the box's own edge is ink, not a faint line. */
+#site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root {
+  box-sizing: border-box; margin-inline: 0 !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-ink) 5%, var(--gz-surface-paint, var(--gz-surface))) !important;
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important;
+  transition: background var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease);
+}
+#site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root:hover { border-color: var(--gz-accent) !important; }
+#site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root:has(input:checked) {
+  border-color: var(--gz-accent) !important; background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent) 16%, var(--gz-surface-paint, var(--gz-surface))) !important;
+}
+#site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#site-wrap .assessment-attempt-panel .assessment-question label.MuiFormControlLabel-root:has(input:disabled) { opacity: 0.6; cursor: not-allowed; }
+#site-wrap .assessment-attempt-panel .assessment-question :is(.MuiRadio-root, .MuiCheckbox-root) > span[aria-hidden="true"] { border-color: var(--gz-ink-muted) !important; }
+#site-wrap .assessment-attempt-panel .assessment-question .MuiDivider-root { border-color: var(--gz-border-line, var(--gz-line)) !important; }
+/* The progress bar stays at the top of the scroller as a whole band (Ultra parks it 30px above the edge, which cut off
+   its top and left the rest see-through over the questions). */
+#site-wrap .assessment-attempt-panel .assessment-progress-header { top: 0 !important; z-index: 3; margin-block-end: 1rem; padding: 0.75rem 1rem !important; }
+/* Once the questions scroll under it, it folds into a pill at the column's end: a short bar and the count
+   (features/sticky-fold.js marks it and gives the folded height back below it, so nothing moves). */
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] {
+  display: flex !important; align-items: center; gap: 0.75rem; inline-size: fit-content; max-inline-size: 100%; margin-inline-start: auto;
+  margin-block-end: calc(1rem + var(--gz-fold, 0px)); padding: 0.375rem 0.875rem !important; border-radius: 999px !important;
+}
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > * { margin: 0 !important; padding: 0 !important; border: 0 !important; }
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-first-row { flex: none; inline-size: 4.5rem; }
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-first-row p:empty,
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-third-row { display: none; }
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-second-row,
+#site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] > .assessment-progress-header-second-row * { font-size: 0.75rem; line-height: 1.4; white-space: nowrap; }
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-gz-motion="off"]) #site-wrap .assessment-attempt-panel .assessment-progress-header[data-gz-stuck] { animation: gz-fold 160ms ease-out; }
+}
+@keyframes gz-fold { from { opacity: 0; transform: translateY(-4px); } } /* no scale: the fold is measured off its box */
+/* Below Ultra's 64em the panel opens with its own bar (Exit, the item's type, its details): a band like the title's, in
+   Ultra's place (the content below is placed a bar's height down). */
+#site-wrap .assessment-attempt-panel > .black-panel-header {
+  position: relative; margin-inline: var(--gz-float-start, 12px) var(--gz-float-end, 12px) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; box-shadow: var(--gz-rest-shadow) !important;
+}
+/* The details' grading box: Ultra's black tile, as a rounded tile of the surface. */
+#site-wrap .assessment-summary .no-submission-card {
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) !important; overflow: hidden;
+}
+#site-wrap .assessment-summary .no-submission-card * { background: transparent !important; }
+/* The Additional content editor: the card (the rules above) paints once; its layers are see-through inside it. */
+#site-wrap .freeform-response bb-rich-text-editor .bb-editor-root { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
+#site-wrap .freeform-response bb-rich-text-editor :is(.editor-content-container, .bb-editor-container, .ql-container, .ql-editor, .status-bar) { background: transparent !important; }
+#site-wrap .freeform-response bb-rich-text-editor .ql-editor { min-height: 6rem; }
+/* The editor's menus are menus: rounded, edged, over the page. */
+#site-wrap .bb-editor-toolbar.bb-editor-toolbar-submenu {
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important; box-shadow: var(--gz-shadow) !important; padding: 0.25rem !important;
+}
+/* Colour swatches are the colour their name says. Ultra fills Purple with its brand colour (the palette above makes that the
+   accent) and Black and Grey with text colours (made ink, then repainted by the sweep); these are Ultra's own fallbacks. */
+#site-wrap .bb-editor-toolbar-submenu .picker-color { box-shadow: 0 0 0 1px var(--gz-border-strong, var(--gz-line-strong)); }
+#site-wrap .bb-editor-toolbar-submenu .picker-color.color-black { background-color: #000 !important; }
+#site-wrap .bb-editor-toolbar-submenu .picker-color.color-grey { background-color: #666 !important; }
+#site-wrap .bb-editor-toolbar-submenu .picker-color.color-purple { background-color: #a234b5 !important; }
+/* The footer under the scroller is a floating dock, inset as the bars above it are; its box keeps Ultra's place. */
+#site-wrap .assessment-attempt footer.submit-footer.panel-footer-fixed { isolation: isolate; background: transparent !important; border: 0 !important; box-shadow: none !important; }
+#site-wrap .assessment-attempt footer.submit-footer.panel-footer-fixed::before {
+  content: ""; position: absolute; z-index: -1; inset: 6px var(--gz-float-end, 12px) var(--gz-float-gap, 12px) var(--gz-float-start, 12px); pointer-events: none;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
+  backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+}
+html[data-gz-bg="solid"] #site-wrap .assessment-attempt footer.submit-footer.panel-footer-fixed::before { backdrop-filter: none; }
+/* A rubric's title row: the well (above) is its one surface; Ultra's title and icon paint nothing over it. */
+#site-wrap .rubric-details-panel > .panel-section-header { margin-block-end: 0.75rem; }
+#site-wrap .rubric-details-panel > .panel-section-header > * { background: transparent !important; }
+/* The Grades tab above a course's grade table: a pill like the section headings, not a bare word on the background. */
+#site-wrap bb-ui-student-tabs .MuiTabs-root {
+  width: fit-content; max-width: 100%; margin-block-end: 0.75rem; padding-inline: 0.5rem; box-sizing: border-box;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: 999px !important;
+}
+#site-wrap bb-ui-student-tabs .MuiTab-root { min-height: 0; border-radius: 999px !important; }
+#site-wrap bb-ui-student-tabs .MuiTab-root.Mui-selected { background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; }
+#site-wrap bb-ui-student-tabs .MuiTabs-indicator { display: none; }
+/* A file's inline preview is a panel while Blackboard renders it, not a hole onto the background. */
+#site-wrap iframe[src*="/bbcswebdav/"] { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border-radius: var(--gz-radius-sm); }
+
 
 /* ---- empty states: centred, quieter ---- */
 #site-wrap :is(.js-empty-state, [class*="empty-state"]) { padding: 1.5rem 1rem !important; text-align: center; color: var(--gz-ink-muted) !important; border-color: color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, transparent) !important; }
@@ -1208,38 +1374,38 @@ html:not([data-gz-card-icons]) #site-wrap .gz-bm { display: none; }
 #site-wrap .gz-bm a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #site-wrap .gz-bm svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* Base navigation: no changes to the course tab bar or other navigation regions. */
-html[data-gz-nav] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools) { isolation: isolate; background: var(--gz-nav-c) !important; }
+html[data-gz-nav] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools) { isolation: isolate; background: var(--gz-nav-c) !important; }
 html[data-gz-nav] nav#base_tools { position: relative; }
-html[data-gz-nav="gradient"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools) { background: linear-gradient(var(--gz-nav-a), var(--gz-nav-c), var(--gz-nav-d)) !important; }
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before,
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { z-index: -2; background: var(--gz-nav-img) center / cover no-repeat; }
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::after { z-index: -1; background: var(--gz-nav-c); opacity: var(--gz-nav-o); }
-html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { color: var(--gz-nav-ink) !important; background: transparent !important; }
-html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) :is(span, svg) { color: inherit !important; }
-html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link):is(:hover, :focus-visible) { text-decoration: underline; outline: 2px solid var(--gz-nav-ink); outline-offset: -2px; }
-html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link).Mui-selected::before { background: var(--gz-nav-ink) !important; }
-html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill :is(img, [analytics-id="baseLayout.logo.link"]) { display: none; }
-html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { min-height: 40px; padding-block: 6px !important; font-size: 12px; }
-html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { min-height: 58px; padding-block: 14px !important; font-size: 17px; }
-html[data-gz-nav-labels="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { font-size: 11px; }
-html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { justify-content: center; min-height: 44px; }
-html[data-gz-nav-f="vivid"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: saturate(1.6) contrast(1.08); }
-html[data-gz-nav-f="mono"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: grayscale(1); }
-html[data-gz-nav-f="noir"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: grayscale(1) contrast(1.45) brightness(0.85); }
-html[data-gz-nav-f="warm"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: sepia(0.35) saturate(1.35) hue-rotate(-10deg); }
-html[data-gz-nav-f="cool"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: saturate(0.8) hue-rotate(12deg) brightness(1.05); }
-html[data-gz-nav-f="faded"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: contrast(0.78) saturate(0.7) brightness(1.12); }
-html[data-gz-nav-f="dreamy"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: blur(1.5px) saturate(1.25) brightness(1.08); }
+html[data-gz-nav="gradient"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools) { background: linear-gradient(var(--gz-nav-a), var(--gz-nav-c), var(--gz-nav-d)) !important; }
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before,
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { z-index: -2; background: var(--gz-nav-img) center / cover no-repeat; }
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::after { z-index: -1; background: var(--gz-nav-c); opacity: var(--gz-nav-o); }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { color: var(--gz-nav-ink) !important; background: transparent !important; }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) :is(span, svg) { color: inherit !important; }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link):is(:hover, :focus-visible) { text-decoration: underline; outline: 2px solid var(--gz-nav-ink); outline-offset: -2px; }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link).Mui-selected::before { background: var(--gz-nav-ink) !important; }
+html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill :is(img, [analytics-id="baseLayout.logo.link"]) { display: none; }
+html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { min-height: 40px; padding-block: 6px !important; font-size: 12px; }
+html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { min-height: 58px; padding-block: 14px !important; font-size: 17px; }
+html[data-gz-nav-labels="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { font-size: 11px; }
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { justify-content: center; min-height: 44px; }
+html[data-gz-nav-f="vivid"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: saturate(1.6) contrast(1.08); }
+html[data-gz-nav-f="mono"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: grayscale(1); }
+html[data-gz-nav-f="noir"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: grayscale(1) contrast(1.45) brightness(0.85); }
+html[data-gz-nav-f="warm"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: sepia(0.35) saturate(1.35) hue-rotate(-10deg); }
+html[data-gz-nav-f="cool"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: saturate(0.8) hue-rotate(12deg) brightness(1.05); }
+html[data-gz-nav-f="faded"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: contrast(0.78) saturate(0.7) brightness(1.12); }
+html[data-gz-nav-f="dreamy"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]), nav#base_tools)::before { filter: blur(1.5px) saturate(1.25) brightness(1.08); }
 
 
-html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(nav, ul) { background: transparent !important; }
-html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) svg { width: 20px; height: 20px; }
-html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) svg { width: 30px; height: 30px; }
+html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :is(nav, ul) { background: transparent !important; }
+html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) svg { width: 20px; height: 20px; }
+html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation-"]) svg { width: 30px; height: 30px; }
 @media (min-width: 900px) {
-  html[data-gz-nav-size="small"] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]), html[data-gz-nav-size="small"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { width: 204px; flex-basis: 204px; }
-  html[data-gz-nav-size="large"] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]), html[data-gz-nav-size="large"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { width: 280px; flex-basis: 280px; }
-  html[data-gz-nav-collapsed] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]), html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { width: 88px !important; flex-basis: 88px !important; }
+  html[data-gz-nav-size="small"] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]), html[data-gz-nav-size="small"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) { width: 204px; flex-basis: 204px; }
+  html[data-gz-nav-size="large"] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]), html[data-gz-nav-size="large"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) { width: 280px; flex-basis: 280px; }
+  html[data-gz-nav-collapsed] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]), html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) { width: 88px !important; flex-basis: 88px !important; }
 }
 html[data-gz-card-hover="none"] #site-wrap article:is(.course-element-card, .gz-course-card):hover { transform: none; }
 @media (hover: hover) {
@@ -1300,55 +1466,55 @@ html[data-gz-card-condensed] #site-wrap .gz-pet { top: 2px; right: calc(50% - 32
 
 #site-wrap article.course-element-card:not(.multi-column-view *) > .gz-pet { display: none; }
 
-html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill { background: transparent !important; }
+html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill { background: transparent !important; }
 
 /* Ultra base rails only: the first-paint values also cover the newer MUI drawer. */
 :root { --gz-nav-width: 200px; --gz-nav-icon: 24px; --gz-nav-text: 14px; --gz-nav-height: 44px; --gz-nav-gap: 2px; --gz-nav-padding: 8px; }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) { display: flex; flex-direction: column; padding: var(--gz-nav-padding) !important; box-sizing: border-box; }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) ul { display: flex; flex-direction: column; gap: var(--gz-nav-gap); padding: 0; margin: 0; list-style: none; }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { display: flex; align-items: center; box-sizing: border-box; gap: 12px; min-height: var(--gz-nav-height) !important; padding: 6px 10px !important; font-size: var(--gz-nav-text) !important; color: var(--gz-ink-muted); border-radius: var(--gz-radius-sm); text-decoration: none; }
-html[data-gz-nav-brand] nav[class*="makeStylesnavigation"] a:is(:hover, :focus-visible) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) { display: flex; flex-direction: column; padding: var(--gz-nav-padding) !important; box-sizing: border-box; }
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) ul { display: flex; flex-direction: column; gap: var(--gz-nav-gap); padding: 0; margin: 0; list-style: none; }
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { display: flex; align-items: center; box-sizing: border-box; gap: 12px; min-height: var(--gz-nav-height) !important; padding: 6px 10px !important; font-size: var(--gz-nav-text) !important; color: var(--gz-ink-muted); border-radius: var(--gz-radius-sm); text-decoration: none; }
+html[data-gz-nav-brand] nav[class*="makeStylesnavigation-"] a:is(:hover, :focus-visible) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 /* Compact labels use the space beside the icon; full text stays in the DOM and tooltip. */
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a:is(.base-navigation-button-content, .MuiListItemButton-root, .gz-nav-link) {
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a:is(.base-navigation-button-content, .MuiListItemButton-root, .gz-nav-link) {
   width: 100%; min-width: 0 !important; max-width: 100%; height: var(--gz-nav-height) !important; margin: 0 !important;
   line-height: 1.3; flex-wrap: nowrap; background: var(--gz-nav-item-bg, transparent) !important;
   border-radius: var(--gz-nav-item-radius, var(--gz-radius-sm)) !important; box-shadow: none !important;
   font-size: var(--gz-nav-text) !important;
 }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) :is(.MuiListItemText-root, a > span:not(:has(svg))) { flex: 1 1 0; min-width: 0 !important; margin: 0 !important; }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) :is(.MuiListItemText-root, .MuiTypography-root, a > span:not(:has(svg))) {
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(.MuiListItemText-root, a > span:not(:has(svg))) { flex: 1 1 0; min-width: 0 !important; margin: 0 !important; }
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(.MuiListItemText-root, .MuiTypography-root, a > span:not(:has(svg))) {
   display: block; max-width: 100% !important; font: inherit !important; white-space: nowrap !important; word-break: normal !important; overflow-wrap: normal !important; hyphens: none !important; overflow: hidden; text-overflow: ellipsis;
 }
-html[data-gz-nav-brand][data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a { height: auto !important; max-height: max(var(--gz-nav-height), calc(var(--gz-nav-text) * 2.6 + 12px)); }
-html[data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) :is(.MuiTypography-root, a > span:not(:has(svg, .MuiTypography-root))) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal !important; }
-html[data-gz-nav-brand][data-gz-nav-overflow="shrink"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a { font-size: var(--gz-nav-fit, 10px) !important; }
+html[data-gz-nav-brand][data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a { height: auto !important; max-height: max(var(--gz-nav-height), calc(var(--gz-nav-text) * 2.6 + 12px)); }
+html[data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(.MuiTypography-root, a > span:not(:has(svg, .MuiTypography-root))) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal !important; }
+html[data-gz-nav-brand][data-gz-nav-overflow="shrink"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a { font-size: var(--gz-nav-fit, 10px) !important; }
 html[data-gz-nav-style="pill"] { --gz-nav-item-radius: 999px; }
 html[data-gz-nav-style="flat"] { --gz-nav-item-radius: 0; }
 html[data-gz-nav-background] { --gz-nav-item-bg: var(--gz-surface); }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a:is(.Mui-selected, .active, [aria-current]:not([aria-current="false"])) { box-shadow: var(--gz-nav-active-shadow, inset 3px 0 var(--gz-accent)) !important; background: var(--gz-nav-active-bg, var(--gz-nav-item-bg, transparent)) !important; }
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a:is(.Mui-selected, .active, [aria-current]:not([aria-current="false"])) { box-shadow: var(--gz-nav-active-shadow, inset 3px 0 var(--gz-accent)) !important; background: var(--gz-nav-active-bg, var(--gz-nav-item-bg, transparent)) !important; }
 html[data-gz-nav-indicator="outline"] { --gz-nav-active-shadow: inset 0 0 0 1px var(--gz-accent); }
 html[data-gz-nav-indicator="background"] { --gz-nav-active-shadow: none; --gz-nav-active-bg: var(--gz-accent-soft); }
 html[data-gz-nav-indicator="none"] { --gz-nav-active-shadow: none; }
-html[data-gz-nav-brand][data-gz-nav-indicator] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a::before { display: none !important; }
-html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) svg { width: var(--gz-nav-icon) !important; height: var(--gz-nav-icon) !important; flex: none; }
+html[data-gz-nav-brand][data-gz-nav-indicator] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a::before { display: none !important; }
+html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) svg { width: var(--gz-nav-icon) !important; height: var(--gz-nav-icon) !important; flex: none; }
 /* Glaze settings, last in the nav (content-ultra.js): Glaze's drop for its icon, at the nav's icon size. */
 .gz-nav-glaze-icon { display: inline-block; flex: none; width: var(--gz-nav-icon, 24px); height: var(--gz-nav-icon, 24px); background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22128%22 height=%22128%22 viewBox=%2214 17 100 100%22%3E%3Cdefs%3E%3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%230d1b2e%22/%3E%3Cstop offset=%221%22 stop-color=%22%23060d18%22/%3E%3C/linearGradient%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 36 36 Z%22 fill=%22%23060d18%22 opacity=%220.28%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.55%22/%3E%3C/svg%3E") center / contain no-repeat; }
 @media (min-width: 900px) {
-  html[data-gz-nav-brand] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]) { box-sizing: border-box; width: var(--gz-nav-width) !important; flex-basis: var(--gz-nav-width) !important; max-width: 100vw; }
+  html[data-gz-nav-brand] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]) { box-sizing: border-box; width: var(--gz-nav-width) !important; flex-basis: var(--gz-nav-width) !important; max-width: 100vw; }
   html:not([data-gz-nav-detailed])[data-gz-nav-size="small"] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools) { width: 204px !important; flex-basis: 204px !important; }
   html:not([data-gz-nav-detailed])[data-gz-nav-size="large"] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools) { width: 280px !important; flex-basis: 280px !important; }
-  html[data-gz-nav-collapsed] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]) { width: 80px !important; flex-basis: 80px !important; }
+  html[data-gz-nav-collapsed] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]) { width: 80px !important; flex-basis: 80px !important; }
   html[data-gz-nav-collapsed] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools) { width: 88px !important; flex-basis: 88px !important; }
 }
-html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) :is(.MuiListItemText-root, .MuiTypography-root, a > span:not(:has(svg)), .gz-nav-label) { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a { justify-content: center; gap: 0 !important; }
-html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img) { display: grid; position: relative; min-height: calc(var(--gz-nav-logo-size, 48px) + 16px); }
-html[data-gz-nav-brand]:not([data-gz-nav-brand="school"]) .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill img { opacity: 0; }
-html:is([data-gz-nav-brand="glaze"], [data-gz-nav-brand="custom"]) .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img)::after { content: ""; position: absolute; inset: 8px; background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%230d1b2e%22%3EGlaze%3C/text%3E%3C/svg%3E") center / contain no-repeat; }
-html[data-gz-dark-theme][data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%23eaf6ff%22%3EGlaze%3C/text%3E%3C/svg%3E"); }
-html[data-gz-nav-brand="custom"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: var(--gz-nav-logo, url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%230d1b2e%22%3EGlaze%3C/text%3E%3C/svg%3E")); }
-html[data-gz-nav-collapsed]:not([data-gz-nav-expanded])[data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22128%22 height=%22128%22 viewBox=%220 0 128 128%22%3E%3Cdefs%3E%3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%230d1b2e%22/%3E%3Cstop offset=%221%22 stop-color=%22%23060d18%22/%3E%3C/linearGradient%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22128%22 height=%22128%22 rx=%2228%22 fill=%22url(%23bg)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 36 36 Z%22 fill=%22%23060d18%22 opacity=%220.28%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.55%22/%3E%3C/svg%3E"); }
-html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img) { display: none; }
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) :is(.MuiListItemText-root, .MuiTypography-root, a > span:not(:has(svg)), .gz-nav-label) { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]) a { justify-content: center; gap: 0 !important; }
+html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img) { display: grid; position: relative; min-height: calc(var(--gz-nav-logo-size, 48px) + 16px); }
+html[data-gz-nav-brand]:not([data-gz-nav-brand="school"]) .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill img { opacity: 0; }
+html:is([data-gz-nav-brand="glaze"], [data-gz-nav-brand="custom"]) .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img)::after { content: ""; position: absolute; inset: 8px; background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%230d1b2e%22%3EGlaze%3C/text%3E%3C/svg%3E") center / contain no-repeat; }
+html[data-gz-dark-theme][data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%23eaf6ff%22%3EGlaze%3C/text%3E%3C/svg%3E"); }
+html[data-gz-nav-brand="custom"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: var(--gz-nav-logo, url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%230d1b2e%22%3EGlaze%3C/text%3E%3C/svg%3E")); }
+html[data-gz-nav-collapsed]:not([data-gz-nav-expanded])[data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22128%22 height=%22128%22 viewBox=%220 0 128 128%22%3E%3Cdefs%3E%3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%230d1b2e%22/%3E%3Cstop offset=%221%22 stop-color=%22%23060d18%22/%3E%3C/linearGradient%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22128%22 height=%22128%22 rx=%2228%22 fill=%22url(%23bg)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 36 36 Z%22 fill=%22%23060d18%22 opacity=%220.28%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.55%22/%3E%3C/svg%3E"); }
+html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img) { display: none; }
 .gz-nav-dashboard :is(svg:not(.gz-nav-dashboard-icon), .MuiListItemIcon-root) { display: none !important; }
 .gz-nav-dashboard > svg.gz-nav-dashboard-icon { fill: currentColor !important; stroke: none !important; }
 .gz-nav-widgets { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
@@ -1364,20 +1530,20 @@ html[data-gz-nav-collapsed]:not([data-gz-nav-expanded]) .gz-nav-widget .gz-nav-d
 
 html[data-gz-nav-brand] [data-gz-nav-id][hidden] { display: none !important; }
 /* Default MUI rail colors must outrank Ultra's generic page-link color without reaching course tabs. */
-html:not([data-gz-nav]) :is(#site-wrap, .MuiDrawer-paper) nav[class*="makeStylesnavigation"] a.MuiListItemButton-root { color: var(--gz-ink-muted) !important; }
-html:not([data-gz-nav]) :is(#site-wrap, .MuiDrawer-paper) nav[class*="makeStylesnavigation"] a.MuiListItemButton-root:is(:hover, :focus-visible) { color: var(--gz-ink) !important; }
-html:not([data-gz-nav]) :is(#site-wrap, .MuiDrawer-paper) nav[class*="makeStylesnavigation"] a.MuiListItemButton-root:is(.Mui-selected, [aria-current], .active) { color: var(--gz-accent) !important; }
+html:not([data-gz-nav]) :is(#site-wrap, .MuiDrawer-paper) nav[class*="makeStylesnavigation-"] a.MuiListItemButton-root { color: var(--gz-ink-muted) !important; }
+html:not([data-gz-nav]) :is(#site-wrap, .MuiDrawer-paper) nav[class*="makeStylesnavigation-"] a.MuiListItemButton-root:is(:hover, :focus-visible) { color: var(--gz-ink) !important; }
+html:not([data-gz-nav]) :is(#site-wrap, .MuiDrawer-paper) nav[class*="makeStylesnavigation-"] a.MuiListItemButton-root:is(.Mui-selected, [aria-current], .active) { color: var(--gz-accent) !important; }
 .gz-nav-link > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html[data-gz-nav-collapsed]:not([data-gz-nav-expanded]) .gz-nav-widget .gz-nav-pet-level { display: inline; font-size: 10px; }
 
-html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill img { width: 100%; max-width: 100%; height: var(--gz-nav-logo-size, 48px); object-fit: contain; object-position: var(--gz-nav-logo-position, center); }
-html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img)::after { background-position: var(--gz-nav-logo-position, center); }
+html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill img { width: 100%; max-width: 100%; height: var(--gz-nav-logo-size, 48px); object-fit: contain; object-position: var(--gz-nav-logo-position, center); }
+html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header.themed-logo-background-primary-fill a:has(img)::after { background-position: var(--gz-nav-logo-position, center); }
 html[data-gz-nav-logo-align="start"] { --gz-nav-logo-position: left; }
 html[data-gz-nav-logo-align="end"] { --gz-nav-logo-position: right; }
-html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(footer, [class*="makeStylesfooter"]) a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; overflow-wrap: normal; hyphens: none; font-size: var(--gz-nav-text); }
-html[data-gz-nav-footer-hidden] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(footer, [class*="makeStylesfooter"]) { display: none !important; }
+html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :is(footer, [class*="makeStylesfooter"]) a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; overflow-wrap: normal; hyphens: none; font-size: var(--gz-nav-text); }
+html[data-gz-nav-footer-hidden] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :is(footer, [class*="makeStylesfooter"]) { display: none !important; }
 
-html[data-gz-nav-overflow="wrap"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(footer, [class*="makeStylesfooter"]) a { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.3; max-height: 2.6em; }
+html[data-gz-nav-overflow="wrap"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :is(footer, [class*="makeStylesfooter"]) a { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.3; max-height: 2.6em; }
 
 .gz-nav-expand { position: absolute; z-index: 1; inset-block-end: 4px; inset-inline: 0; display: grid; place-items: center; width: 30px; height: 30px; margin: 0 auto; padding: 0; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); cursor: pointer; }
 .gz-nav-expand svg { display: block; }
@@ -1388,22 +1554,22 @@ html[data-gz-nav-expanded] .gz-nav-expand { transform: rotate(180deg); }
 html[data-gz-nav-expanded] body > .gz-tip[data-gz-nav-tip] { visibility: hidden !important; }
 @media (min-width: 900px) {
   /* Over the page, as Ultra's own paper is (fixed): an in-flow full-height drawer pushes the page a screen down where Ultra stacks the side menu above it. */
-  html[data-gz-nav-collapsed][data-gz-nav-expanded] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 1300; width: var(--gz-nav-width) !important; box-shadow: var(--gz-shadow); }
+  html[data-gz-nav-collapsed][data-gz-nav-expanded] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) { position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 1300; width: var(--gz-nav-width) !important; box-shadow: var(--gz-shadow); }
   html:not([data-gz-nav-detailed])[data-gz-nav-size="small"][data-gz-nav-expanded] .MuiDrawer-paper:has(#base_tools) { width: 204px !important; }
   html:not([data-gz-nav-detailed])[data-gz-nav-size="large"][data-gz-nav-expanded] .MuiDrawer-paper:has(#base_tools) { width: 280px !important; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  html:not([data-gz-motion="off"])[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { transition: width 150ms ease; }
+  html:not([data-gz-motion="off"])[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) { transition: width 150ms ease; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { transition: none !important; }
+  html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) { transition: none !important; }
 }
-html[data-gz-motion="off"][data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { transition: none !important; }
+html[data-gz-motion="off"][data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) { transition: none !important; }
 
-html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header { position: relative; padding-block-end: 38px !important; }
+html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) header { position: relative; padding-block-end: 38px !important; }
 
-html[data-gz-nav-overflow="shrink"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(footer, [class*="makeStylesfooter"]) a { font-size: var(--gz-nav-fit, 10px); }
+html[data-gz-nav-overflow="shrink"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) :is(footer, [class*="makeStylesfooter"]) a { font-size: var(--gz-nav-fit, 10px); }
 
 /* ---- Glaze's own navigation (features/navbar.js) in place of Ultra's drawer. The drawer stays in the page, out of sight
    (the bar opens its items through its links and reads its badges). The page keeps the bar's room, from the saved settings
@@ -1426,11 +1592,11 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
   html[data-gz-navbar~="top"] { --gz-navbar-top: 80px; }
   html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top: 56px; }
-  html[data-gz-navbar] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]):not(#gz-navbar) {
+  html[data-gz-navbar] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation-"]):not(#gz-navbar) {
     width: 0 !important; min-width: 0 !important; max-width: none !important; flex-basis: 0 !important;
     overflow: hidden !important; background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; pointer-events: none;
   }
-  html[data-gz-navbar] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) > * { visibility: hidden !important; }
+  html[data-gz-navbar] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation-"]) > * { visibility: hidden !important; }
   html[data-gz-navbar] #main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }
   html[data-gz-navbar] #main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }
   /* A course, and a page Ultra routes in its place (an assignment's details and attempts, a document opened on its own). */
@@ -1462,6 +1628,11 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
 @media screen {
   html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) [class*="headerRoot"]:has(bb-close, .bb-close) #gz-ctabs { margin-inline-start: 48px !important; width: calc(100% - 48px) !important; }
   html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap > .bb-close-offset > .bb-close { inset-inline-start: 6px !important; }
+  /* The button sits over the header's start there: its title begins past it. */
+  html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) > .bb-offcanvas-panel-wrap .panel-wrap > .panel-header.simple-header:not(.bb-offcanvas-panel .bb-offcanvas-panel *) { padding-inline-start: 56px !important; }
+  /* A legacy test attempt places its content a black bar's height from the panel's top; with the strip first in the panel
+     that put the title band under the bar. In flow, it follows the bar wherever the strip leaves it. */
+  .assessment-attempt-panel > #gz-ctabs ~ section.panel-content { position: relative !important; top: 0 !important; }
   /* Span the native scroller's 30px padding; keep the close button's room inside the glass. */
   .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) .panel-wrap > #gz-ctabs { margin-inline: -30px !important; width: calc(100% + 60px) !important; }
   html[data-gz-navbar] .bb-offcanvas-panel.full:not(.bb-offcanvas-panel *) #gz-ctabs { padding-inline-start: calc(48px + var(--gz-float-start, 12px)); }

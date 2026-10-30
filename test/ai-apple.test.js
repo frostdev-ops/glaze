@@ -34,7 +34,7 @@ test('only on Safari: elsewhere the file adds no provider', () => {
 test('config takes only the model on this device; caps say JSON and pictures, no tools, no streaming', () => {
   assert.deepEqual(A.config({ model: 'on-device', base: 'x', key: 'k' }), { model: 'on-device' });
   for (const bad of [null, {}, { model: 'gpt' }, { model: 1 }, { model: 'private-cloud' }]) assert.equal(A.config(bad), null);
-  assert.deepEqual(P.caps(A, A.config({ model: 'on-device' })), { text: true, images: true, json: true, tools: false, stream: false, context: 8192 });
+  assert.deepEqual(P.caps(A, A.config({ model: 'on-device' })), { text: true, images: true, json: true, tools: false, stream: false, local: true, context: 8192 });
   assert.equal(A.origin, undefined, 'nothing goes over the network from the worker: no host to hold');
 });
 
@@ -57,6 +57,20 @@ test('status: the native answer in the harness\'s words; no handler or a strange
   }
 });
 
+test('native context and guardrail reasons survive the full provider sanitizer, but arbitrary diagnostics do not', async () => {
+  native = async () => ({ ok: false, error: 'provider-unavailable', reason: 'busy' });
+  await assert.rejects(P.run(A, { messages: [{ role: 'user', content: 'Synthetic test.' }] }, { model: 'on-device' }), (e) => e.category === 'provider-unavailable' && e.reason === 'busy');
+  native = async () => ({ ok: false, error: 'request-rejected', reason: 'context', context: 8192, tokens: 9100, message: 'PRIVATE PAPER' });
+  await assert.rejects(P.run(A, { messages: [{ role: 'user', content: 'Synthetic test.' }] }, { model: 'on-device' }), (e) => {
+    assert.deepEqual({ reason: e.reason, context: e.context, tokens: e.tokens }, { reason: 'context', context: 8192, tokens: 9100 });
+    assert.doesNotMatch(JSON.stringify(e), /PRIVATE PAPER/); return e.code === 'request-rejected';
+  });
+  native = async () => ({ ok: false, error: 'refusal', reason: 'guardrail' });
+  await assert.rejects(P.run(A, { messages: [{ role: 'user', content: 'Synthetic test.' }] }, { model: 'on-device' }), (e) => e.code === 'refusal' && e.reason === 'guardrail');
+  native = async () => ({ ok: false, error: 'provider-unavailable', reason: 'PRIVATE PAPER' });
+  await assert.rejects(P.run(A, { messages: [{ role: 'user', content: 'Synthetic test.' }] }, { model: 'on-device' }), (e) => e.reason === undefined && !JSON.stringify(e).includes('PRIVATE PAPER'));
+});
+
 test('a run is one message with the cleaned request and the schema; the JSON answer is read and checked', async () => {
   native = async () => ok('{"answer":"42"}');
   const deltas = [];
@@ -67,8 +81,32 @@ test('a run is one message with the cleaned request and the schema; the JSON ans
   const { app, m } = sent[0];
   assert.equal(app, 'io.frostdev.Glaze');
   assert.match(m.id, /^[\w-]{8,64}$/);
-  assert.deepEqual({ ...m, id: 'x' }, { type: 'ai.run', id: 'x', model: 'on-device', schema: SCHEMA, temperature: 0, maxTokens: 300,
+  assert.deepEqual({ ...m, id: 'x' }, { type: 'ai.run', id: 'x', model: 'on-device', schema: { ...SCHEMA, 'x-order': ['answer'] }, temperature: 0, maxTokens: 300,
     messages: [{ role: 'system', content: [{ type: 'text', text: 'Answer.' }] }, { role: 'user', content: [{ type: 'text', text: 'Q' }] }] });
+});
+
+test('the native schema keeps each object\'s key order (x-order), past the request cleaner; the schema that checks the answer is untouched', async () => {
+  const item = { type: 'object', properties: { text: { type: 'string' }, at: { type: 'integer' } }, required: ['text', 'at'], additionalProperties: false };
+  const schema = { type: 'object', properties: { status: { enum: ['met', 'missing'] }, quotes: { type: 'array', items: item },
+    level: { anyOf: [{ type: 'object', properties: { name: { type: 'string' }, points: { type: 'number' } }, required: ['name', 'points'], additionalProperties: false }, { type: 'null' }] },
+    properties: { type: 'string' }, complete: { type: 'boolean' } }, required: ['status', 'quotes', 'level', 'properties', 'complete'], additionalProperties: false };
+  const before = structuredClone(schema);
+  native = async () => ok('{"status":"met","quotes":[{"text":"a","at":0}],"level":null,"properties":"p","complete":true}');
+  assert.deepEqual((await P.run('apple', ask({ schema }), { model: 'on-device' })).json, { status: 'met', quotes: [{ text: 'a', at: 0 }], level: null, properties: 'p', complete: true });
+  const s = sent[0].m.schema;
+  assert.deepEqual(s['x-order'], ['status', 'quotes', 'level', 'properties', 'complete']);
+  assert.deepEqual(s.properties.quotes.items['x-order'], ['text', 'at']);
+  assert.deepEqual(s.properties.level.anyOf[0]['x-order'], ['name', 'points']);
+  assert.deepEqual(Object.keys(s.properties), ['status', 'quotes', 'level', 'properties', 'complete'], 'a property named properties stays a property');
+  assert.equal(s.properties.properties['x-order'], undefined);
+  assert.deepEqual(schema, before);
+});
+
+test('a reasoning effort stays in the worker: the native message has none', async () => {
+  native = async () => ok('Four');
+  assert.equal((await P.run('apple', ask({ effort: 'none', maxTokens: 64 }), { model: 'on-device' })).text, 'Four');
+  assert.equal('effort' in sent[0].m, false);
+  assert.equal(sent[0].m.maxTokens, 64);
 });
 
 test('an answer the native side cut at maxTokens is a refusal, never read, even when its JSON closes', async () => {
@@ -155,7 +193,7 @@ test('the broker keeps an apple connection, tests it and runs a task on it, with
   on.forEach((f) => f({ id: 1, op: 'status', feature: 'syllabus' }));
   on.forEach((f) => f({ id: 2, op: 'run', feature: 'syllabus', task: 'example.echo', input: { text: 'hello' } }));
   for (let i = 0; i < 40; i++) await new Promise(setImmediate);
-  assert.deepEqual(posted.find((m) => m.id === 1), { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'apple', caps: { text: true, images: true, json: true, tools: false, stream: false, context: 8192 } });
+  assert.deepEqual(posted.find((m) => m.id === 1), { id: 1, type: 'status', on: true, allowed: true, ready: true, provider: 'apple', caps: { text: true, images: true, json: true, tools: false, stream: false, local: true, context: 8192 } });
   const end = posted.find((m) => m.id === 2 && m.type === 'end');
   assert.deepEqual(end.output, { text: 'hello' });
   assert.equal(end.meta.provider, 'apple');
@@ -226,3 +264,162 @@ test('Apple status stops waiting when its caller cancels', async () => {
   assert.notEqual(out, 'hung');
   assert.equal(out.state, 'unavailable');
 });
+
+test('a text task on Apple sends no schema and gives the words back, cut ones marked truncated', async () => {
+  const finish = T.define({ id: 'example.finish', version: 1, output: 'text', input: (raw) => raw, check: (text) => text,
+    build: (input, { text }) => text.request({ system: 'Finish it.', data: [{ label: 'before', text: input.text }], maxTokens: 20 }) });
+  native = async () => ok(' runs to the', { finish: 'length' });
+  const out = await T.run(finish, { text: 'The river' }, { provider: 'apple', cfg: { model: 'on-device' } });
+  assert.equal(out.output, ' runs to the');
+  assert.equal(out.meta.truncated, true);
+  assert.equal('schema' in sent[0].m, false);
+  assert.equal(sent[0].m.maxTokens, 20);
+});
+
+test('a changed connection asks the native side to drop its warm sessions', async () => {
+  const vault = new Map();
+  const env = { vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async () => true } };
+  native = async () => ({ ok: true });
+  assert.deepEqual(await B.config({ op: 'set', id: 'mac', cfg: { provider: 'apple', model: 'on-device' } }, env), { ok: true });
+  await new Promise(setImmediate);
+  assert.deepEqual(sent.map((s) => s.m), [{ type: 'ai.release' }]);
+  assert.deepEqual(await B.config({ op: 'remove', id: 'mac' }, env), { ok: true });
+  await new Promise(setImmediate);
+  assert.equal(sent.length, 2);
+});
+
+// "On this device" (connection id 'device') is one choice: Apple Intelligence where Safari offers it and this Mac can run
+// it, else the browser's own model. A stand-in for that model (lib/ai/providers/device.js isn't loaded here).
+let browserModel = { state: 'unavailable', reason: 'browser' };
+P.add({ id: 'device', config: () => ({}), caps: () => ({ text: true, json: true, stream: true, local: true }), status: async () => browserModel,
+  run: async () => ({ text: 'from the browser', model: 'gemini-nano', finish: 'stop' }) });
+const here = (stored = {}) => ({ enabled: async () => true, settings: async () => ({ on: true, use: 'device', features: { syllabus: true } }),
+  vault: { get: async () => structuredClone(stored), set: async () => true } });
+
+test('On this device runs on Apple Intelligence when this Mac has it, with no connection of its own to choose', async () => {
+  browserModel = { state: 'unavailable', reason: 'browser' };
+  native = async () => ({ ok: true, state: 'ready' });
+  const st = await B.status({ feature: 'syllabus' }, here());
+  assert.equal(st.provider, 'apple');
+  assert.equal(st.ready, true);
+  assert.equal(st.caps.local, true);
+  native = async () => ({ ok: true, state: 'downloading', reason: 'not-ready' });
+  const dl = await B.status({ feature: 'syllabus' }, here({ device: { provider: 'device' } }));
+  assert.deepEqual([dl.provider, dl.ready, dl.why], ['apple', false, 'downloading'], 'still Apple while its model downloads');
+  assert.deepEqual(await B.config({ op: 'test', id: 'device' }, here()), { ok: true, state: 'downloading', reason: 'not-ready', provider: 'apple' });
+});
+
+test('On this device says Apple Intelligence is off when neither model can run, and uses the browser\'s model when only it can', async () => {
+  native = async () => ({ ok: true, state: 'unavailable', reason: 'off' });
+  browserModel = { state: 'unavailable', reason: 'browser' };
+  const off = await B.status({ feature: 'syllabus' }, here());
+  assert.deepEqual([off.provider, off.ready, off.why, off.reason], ['apple', false, 'unavailable', 'off'], 'the reason the student can fix');
+  browserModel = { state: 'ready' };
+  for (const reason of ['off', 'os', 'device']) {
+    native = async () => ({ ok: true, state: 'unavailable', reason });
+    const st = await B.status({ feature: 'syllabus' }, here());
+    assert.deepEqual([st.provider, st.ready], ['device', true], reason);
+  }
+  native = async () => ({ ok: true, state: 'ready' });
+  assert.equal((await B.status({ feature: 'syllabus' }, here())).provider, 'apple', 'Apple first whenever it can run');
+});
+
+test('a run on On this device that Apple Intelligence answers comes back, not as changed', async () => {
+  // Live on Safari, 2026-10-27: every gray-text run on the merged choice ended 'changed' (aiCalls), its answers dropped.
+  browserModel = { state: 'unavailable', reason: 'browser' };
+  native = async (m) => (m.type === 'ai.status' ? { ok: true, state: 'ready', context: 8192 } : ok('{"text":"hello"}'));
+  const vault = new Map();
+  const env = { who: '4', allowed: Promise.resolve(true), enabled: async () => true,
+    settings: async () => ({ on: true, use: 'device', features: { syllabus: true } }),
+    vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
+    reach: async () => true, fetch: async () => { throw new Error('nothing is fetched'); },
+    task: async () => T.define({ id: 'example.echo2', version: 1, input: (raw) => raw, build: (input, { text }) => text.request({ system: 'Repeat.', data: [{ label: 'text', text: input.text }] }),
+      output: S.obj({ text: S.str('The text.') }, ['text']), check: (o) => o }) };
+  const posted = [], on = [];
+  B.connect({ postMessage: (m) => posted.push(m), disconnect() {}, onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener() {} } }, env);
+  on.forEach((f) => f({ id: 1, op: 'run', feature: 'syllabus', task: 'example.echo2', input: { text: 'hello' } }));
+  for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+  const end = posted.find((m) => m.id === 1 && m.type === 'end');
+  assert.ok(end, JSON.stringify(posted.find((m) => m.id === 1 && m.type === 'error')));
+  assert.equal(end.meta.provider, 'apple');
+});
+
+test('changing either kept connection immediately cancels an Apple run on On this device', async () => {
+  for (const id of ['apple', 'device']) for (const op of ['set', 'remove']) {
+    B._reset(); sent.length = 0;
+    const stored = { device: { provider: 'device', generation: 'dev-1' }, apple: { provider: 'apple', model: 'on-device', generation: 'mac-1' } };
+    const vault = new Map([['connections', op === 'set' ? {} : stored]]);
+    native = async (m) => m.type === 'ai.run' ? new Promise(() => {}) : { ok: true, state: 'ready' };
+    const task = T.define({ id: 'example.kept', version: 1, output: 'text', input: (raw) => raw, check: (o) => o,
+      build: (_input, { text }) => text.request({ system: 'Answer.', data: [{ label: 'text', text: 'hello' }] }) });
+    const env = { who: 'kept', allowed: true, enabled: async () => true, task: async () => task,
+      settings: async () => ({ on: true, use: 'device', features: { syllabus: true } }),
+      vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; } } };
+    let receive;
+    const posted = [], link = B.connect({ postMessage: (m) => posted.push(m), disconnect() {}, onMessage: { addListener: (f) => { receive = f; } }, onDisconnect: { addListener() {} } }, env);
+    try {
+      receive({ id: 1, op: 'run', feature: 'syllabus', task: task.id, input: {} });
+      for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+      const run = sent.find((s) => s.m.type === 'ai.run');
+      assert.ok(run, 'the native run is in flight');
+      const cfg = id === 'apple' ? { provider: 'apple', model: 'on-device' } : { provider: 'device' };
+      assert.equal((await B.config({ op, id, ...(op === 'set' && { cfg }) }, env)).ok, true);
+      for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+      assert.ok(sent.some((s) => s.m.type === 'ai.cancel' && s.m.id === run.m.id), `${op} ${id}: cancel before the native answer`);
+      assert.ok(posted.some((m) => m.type === 'error' && m.error === 'changed'), `${op} ${id}: the run ends as changed`);
+    } finally {
+      link.close();
+      for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+    }
+  }
+});
+
+test('On this device is the browser\'s model outside Safari, and Apple is never asked', () => {
+  const out = execFileSync(process.execPath, ['-e', `
+    globalThis.chrome = { runtime: { getURL: () => 'chrome-extension://abc/' } };
+    const P = require('./lib/ai/providers.js'); require('./lib/ai/providers/apple.js');
+    P.add({ id: 'device', config: () => ({}), caps: () => ({ text: true, local: true }), status: async () => ({ state: 'ready' }), run: async () => ({ text: '', finish: 'stop' }) });
+    const B = require('./lib/ai/broker.js');
+    const env = { enabled: async () => true, settings: async () => ({ on: true, use: 'device', features: { syllabus: true } }), vault: { get: async () => ({}) } };
+    B.status({ feature: 'syllabus' }, env).then((st) => process.stdout.write(JSON.stringify([st.provider, st.ready])));`], { cwd: path.join(__dirname, '..') }).toString();
+  assert.deepEqual(JSON.parse(out), ['device', true]);
+});
+
+test('a warm-up asks the native side to prewarm a session with the request\'s instructions, and nothing else', async () => {
+  native = async () => ({ ok: true });
+  assert.equal(await P.warm(A, { messages: [{ role: 'system', content: 'Finish it.' }, { role: 'user', content: 'go' }] }, { model: 'on-device' }), true);
+  assert.deepEqual(sent.map((x) => x.m), [{ type: 'ai.warm', model: 'on-device', instructions: 'Finish it.' }]);
+  native = async () => ({ ok: false, error: 'provider-unavailable' });
+  assert.equal(await P.warm(A, { messages: [{ role: 'system', content: 'Finish it.' }, { role: 'user', content: 'go' }] }, { model: 'on-device' }), false);
+});
+
+test('a warm-up through the broker readies Apple Intelligence for the task\'s instructions, gated like a run', async () => {
+  browserModel = { state: 'unavailable', reason: 'browser' };
+  native = async (m) => (m.type === 'ai.status' ? { ok: true, state: 'ready', context: 8192 } : { ok: true });
+  const warmTask = T.define({ id: 'example.warm', version: 1, warm: true, input: (raw) => raw, output: 'text', check: (o) => o,
+    build: (input, { text }) => text.request({ system: 'Finish it.', data: [{ label: 'text', text: input.text }] }) });
+  const coldTask = T.define({ ...warmTask, id: 'example.cold', warm: false });
+  const vault = new Map();
+  const env = (features) => ({ who: '5', allowed: Promise.resolve(true), enabled: async () => true,
+    settings: async () => ({ on: true, use: 'device', features }),
+    vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },
+    reach: async () => true, fetch: async () => { throw new Error('nothing is fetched'); },
+    task: async (id) => ({ 'example.warm': warmTask, 'example.cold': coldTask }[id] || null) });
+  const open = (e) => { const posted = [], on = []; B.connect({ postMessage: (m) => posted.push(m), disconnect() {}, onMessage: { addListener: (f) => on.push(f) }, onDisconnect: { addListener() {} } }, e); return { posted, send: (m) => on.forEach((f) => f(m)) }; };
+  let c = open(env({ syllabus: true }));
+  c.send({ id: 1, op: 'warm', feature: 'syllabus', task: 'example.warm', input: { text: 'hello' } });
+  for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+  assert.deepEqual(c.posted.find((m) => m.id === 1), { id: 1, type: 'warmed', ok: true });
+  const w = sent.find((x) => x.m.type === 'ai.warm');
+  assert.ok(w && w.m.instructions.startsWith('Finish it.\n\n'), 'the run\'s own instructions, its data fence rule included');
+  assert.equal(sent.some((x) => x.m.type === 'ai.run'), false, 'nothing asked of the model');
+  sent.length = 0;
+  c.send({ id: 2, op: 'warm', feature: 'syllabus', task: 'example.cold', input: { text: 'hello' } });
+  c = open(env({ syllabus: false }));
+  c.send({ id: 3, op: 'warm', feature: 'syllabus', task: 'example.warm', input: { text: 'hello' } });
+  for (let i = 0; i < 40; i++) await new Promise(setImmediate);
+  assert.deepEqual(c.posted.find((m) => m.id === 3), { id: 3, type: 'warmed', ok: false }, 'the feature off');
+  assert.equal(sent.some((x) => x.m.type === 'ai.warm'), false, 'a task that doesn\'t warm, or a feature that is off: nothing');
+  assert.throws(() => T.define({ ...warmTask, id: 'example.bad', warm: 'yes' }), /warm/);
+});
+

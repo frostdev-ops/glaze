@@ -24,6 +24,14 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   const rootOf = (cid) => /^\d+$/.test(cid) ? `/courses/${cid}` : `/ultra/courses/${cid}`;
   const homeOf = (cid) => rootOf(cid) + (/^\d+$/.test(cid) ? '' : '/outline');
   const owns = (path, cid) => typeof path === 'string' && validId(cid) && (path === rootOf(cid) || path.startsWith(`${rootOf(cid)}/`));
+  // Redirects carry the course in their query rather than their path. Reject conflicting identifiers.
+  const courseOf = (path, search = '') => {
+    const direct = typeof path === 'string' && path.match(/^\/ultra\/courses\/(_\d+_\d+)(?:\/|$)/);
+    if (direct) return safe(path, search) && direct[1];
+    if (path !== '/ultra/redirect') return null;
+    const q = new URLSearchParams(search), ids = ['courseId', 'course_id'].flatMap((k) => q.getAll(k));
+    return ids.length && validId(ids[0], 'ultra') && ids.every((id) => id === ids[0]) ? ids[0] : null;
+  };
   // Common term/section wrappers, without a school's particular subject list. A doubtful result keeps the full name.
   const shortName = (name) => {
     const full = String(name || '').trim();
@@ -42,7 +50,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   // ---- where a tab may go back to ----------------------------------------------------------------------------
   // Any page of its own course, exactly as it was (path and query), like a browser tab: an item, an assignment, a
   // discussion, a test's page, a tool. Only the address's shape is checked: the course's own path, plain path characters,
-  // a bounded length. Going back opens what was open; it never presses anything there.
+  // a bounded length. A remembered assignment returns beneath its transient rubric panel.
   const TOOLS = ['outline', 'calendar', 'announcements', 'engagement', 'grades', 'messages', 'groups/enrollments', 'achievements'];
   const PAGE = /^(?:\/ultra\/courses\/_\d+_\d+\/[\w\-./]*|\/courses\/\d+(?:\/(?:[\w\-./]|%[0-9a-fA-F]{2})*)?)$/;
   // The path (and its query) if a tab may go back there, else null.
@@ -73,12 +81,15 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
     const tool = TOOLS.find((x) => x === m[2] || x === `${m[2]}/${m[3]}`) || (m[2] === 'groups' ? 'groups/enrollments' : 'outline');
     return `/ultra/courses/${m[1]}/${tool}`;
   };
+  // Ultra puts an assignment's rubric in the address. Keep that destination valid for an explicit click, but never
+  // save or restore its panel: closing it can leave the assignment's main nodes unchanged, so its last capture lingers.
+  const remembered = (page) => page && page.replace(/^(\/ultra\/courses\/_\d+_\d+\/(?:outline\/)?assessment\/_\d+_\d+\/(?:overview|attempt(?:\/(?:create|_\d+_\d+))?))\/rubric-view\/?(?=\?|$)/, '$1');
   // What a course page is to its tab: { path, exact } (exact: the page itself, so its scroll means something there).
-  const placeOf = (path, search) => { const p = safe(path, search); return { path: p || back(path), exact: !!p }; };
+  const placeOf = (path, search) => { const p = safe(path, search), kept = remembered(p); return { path: kept || back(path), exact: !!p && kept === p }; };
   // Where a click on tab `t` goes: its remembered place when that's still safe and in its own course, else its outline.
   const target = (t, remember = true) => {
     const s = String(remember && t.path || ''), i = s.indexOf('?'), p = i < 0 ? s : s.slice(0, i);
-    return (owns(p, t.cid) && safe(p, i < 0 ? '' : s.slice(i + 1))) || homeOf(t.cid);
+    return (owns(p, t.cid) && remembered(safe(p, i < 0 ? '' : s.slice(i + 1)))) || homeOf(t.cid);
   };
 
   // ---- the tab list -------------------------------------------------------------------------------------------
@@ -290,7 +301,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
     return [...items].reverse().sort((a, b) => b[2] - a[2]).filter(([, n]) => (sum += n) > all).map(([k]) => k);
   };
 
-  return { validId, rootOf, homeOf, owns, SPEC, shortName, TOOLS, safe, outside, back, placeOf, target, clean, open, close, pin, move, order, MAX, KEY, storeKey, BOXES, sketch, clip, drawn, SNAP_ONE, SNAP_ALL, fit };
+  return { courseOf, validId, rootOf, homeOf, owns, SPEC, shortName, TOOLS, safe, outside, back, placeOf, target, clean, open, close, pin, move, order, MAX, KEY, storeKey, BOXES, sketch, clip, drawn, SNAP_ONE, SNAP_ALL, fit };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_CTABS_LIB; else GZ_CTABS_LIB;

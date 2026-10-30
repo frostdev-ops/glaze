@@ -19,10 +19,10 @@
   // heartbeats, and the mod's code, run once at global scope. Sent as source, so it uses nothing from around it.
   // Events Glaze sends that the client answers itself, before the mod's own handlers hear them: 'cards' and 'nav.items'
   // (the mod's transform runs and its result goes back as a call), 'palette.run' (the command's function), and in a
-  // Worker 'canvas.size' and 'canvas.pause'.
+  // Worker 'canvas.size', 'canvas.pause' and 'tool.call' (the code tool's handler, its answer a 'tools.result' call).
   function glazeClient(port) {
-    const waiting = new Map(), on = new Map(), inner = new Map();
-    let n = 0, ran = false;
+    const waiting = new Map(), on = new Map(), inner = new Map(), handlers = new Map(); // handlers: glaze.tools.handle's, by tool
+    let n = 0, ran = false, declared = [];
     const post = (m, transfer) => port.postMessage(m, transfer || []);
     const call = (name, ...args) => new Promise((res, rej) => { if (waiting.size >= 64) return rej(new Error('busy')); const id = ++n; waiting.set(id, [res, rej]); post({ id, call: name, args }); });
     const later = (err) => setTimeout(() => { throw err; });
@@ -33,6 +33,7 @@
       if (Number.isSafeInteger(d.ping)) return post({ pong: d.ping });
       if (Array.isArray(d.run) && !ran) {
         ran = true;
+        if (Array.isArray(d.tools)) declared = d.tools.filter((t) => typeof t === 'string');
         try { for (const src of d.run) (0, eval)(String(src)); post({ ran: true }); } catch (err) { post({ error: String(err?.message || err) }); }
         return;
       }
@@ -114,7 +115,27 @@
         for (const [slot, k] of canvases) { k.dirty = true; ship(slot); }
       }]);
       inner.set('canvas.size', [(d) => { if (typeof d?.slot === 'string' && Number.isInteger(d.w) && Number.isInteger(d.h)) { sizes.set(d.slot, d); fit(d.slot); ship(d.slot); } }]);
+      // An agent app's call to a code tool ({ id, name, args }): its handler's answer as JSON, or its error, goes back by id.
+      // An answer Glaze refuses on its way out is sent again as that error.
+      inner.set('tool.call', [(d) => {
+        if (typeof d?.id !== 'string') return;
+        const f = handlers.get(d.name), said = (err) => String(err?.message || err || 'failed');
+        const result = (...a) => call('tools.result', d.id, ...a);
+        new Promise((res) => { if (!f) throw new Error(`No handler for ${d.name}.`); res(f(d.args)); })
+          .then((v) => { try { return JSON.parse(JSON.stringify(v === undefined ? null : v)); } catch { throw new Error('The answer is not JSON.'); } })
+          .then((v) => result(v).catch((err) => result(null, `Glaze refused the answer: ${said(err)}`)), (err) => result(null, said(err)))
+          .catch(() => {});
+      }]);
     }
+    // glaze.tools.handle(name, fn): fn answers the code tool `name` of mod.json (code: true), in the Worker only.
+    const tools = Object.freeze({
+      handle: (name, fn) => {
+        if (typeof document !== 'undefined') throw new Error('glaze.tools is for Workers');
+        if (typeof fn !== 'function') throw new TypeError('tools.handle needs a function');
+        if (!declared.includes(name)) throw new Error(`${name} is not a code tool in mod.json`);
+        handlers.set(name, fn);
+      },
+    });
     const ui = Object.freeze({
       render: (slot, tree) => call('ui.render', slot, tree === undefined ? null : tree),
       canvas: (slot) => {
@@ -159,6 +180,12 @@
       look: Object.freeze({ override: (parts) => call('look.override', parts === undefined ? null : parts) }),
       // To this mod's own Worker and frames on this page ('broadcast' events), never another mod's.
       broadcast: (data) => call('broadcast', data === undefined ? null : data),
+      // Agent apps' calls to the mod's code tools, answered in its Worker.
+      tools,
+      // The Documents page's: documents (list, open, create, add, remove, style) and documents.read (read, export).
+      documents: Object.freeze({ list: () => call('documents.list'), open: (key) => call('documents.open', key), create: (o) => call('documents.create', o ?? {}),
+        read: (key) => call('documents.read', key), export: (key) => call('documents.export', key), add: (slot, item) => call('documents.add', slot, item),
+        remove: (slot, id) => call('documents.remove', slot, id), style: (vars) => call('documents.style', vars === undefined ? null : vars) }),
     });
     Object.defineProperty(globalThis, 'glaze', { value: glaze, enumerable: false });
     return glaze;
@@ -276,7 +303,7 @@
       m.worker = new Worker(workerUrl);
       m.worker.onmessage = fromMod(mod.id, 'worker');
       m.worker.onerror = () => stop(mod.id, 'error');
-      m.worker.postMessage({ run: [mod.worker] });
+      m.worker.postMessage({ run: [mod.worker], ...(Array.isArray(mod.tools) && mod.tools.length && { tools: mod.tools.filter((t) => typeof t === 'string') }) });
     }
     for (const f of Array.isArray(mod.frames) ? mod.frames : []) if (isObj(f) && typeof f.slot === 'string' && typeof f.file === 'string') frame(mod, m, f);
   };

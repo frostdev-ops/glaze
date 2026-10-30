@@ -10,22 +10,16 @@ const GZ_PAGE = (() => {
   const us = (locale) => !locale || /^en(-us)?$/i.test(locale);
   const due = (x, now = new Date(), locale) => {
     let at = x instanceof Date ? x : null;
-    if (!at && us(locale)) {
-      const m = DUE.exec(x);
-      if (!m) return null;
-      let [, mo, d, y, h, mi, ap] = m;
-      y = +y < 100 ? 2000 + +y : +y;
-      h = (+h % 12) + (ap.toUpperCase() === 'PM' ? 12 : 0);
-      at = new Date(y, mo - 1, +d, h, +mi);
-    } else if (!at) {
-      const r = read(x, locale, now);
+    if (!at) {
+      const text = us(locale) ? DUE.exec(x)?.[0] : x;
+      const r = text && read(text, locale, now);
       at = r?.timed ? r.at : null;
     }
     if (!at || Number.isNaN(at.getTime())) return null;
     if (at < now) return 'overdue';
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    if (at < new Date(today.getTime() + DAY)) return 'today';
-    if (at < new Date(today.getTime() + 4 * DAY)) return 'soon';
+    const midnight = (n) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + n);
+    if (at < midnight(1)) return 'today';
+    if (at < midnight(4)) return 'soon';
     return null;
   };
 
@@ -126,8 +120,9 @@ const GZ_PAGE = (() => {
       let [, mo, d, y, h, mi, ap] = m;
       y = +y < 100 ? 2000 + +y : +y;
       const timed = h !== undefined;
+      if (timed && (+h < 1 || +h > 12 || +mi > 59)) return null;
       const at = timed ? new Date(y, mo - 1, +d, (+h % 12) + (ap.toUpperCase() === 'PM' ? 12 : 0), +mi) : new Date(y, mo - 1, +d);
-      if (at.getMonth() !== mo - 1) return null; // 2/30 and friends roll over; not a real date
+      if (at.getMonth() !== mo - 1 || at.getDate() !== +d) return null;
       return { at, timed };
     }
     let f;

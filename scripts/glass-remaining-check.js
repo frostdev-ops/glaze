@@ -173,6 +173,15 @@ const OFFCANVAS = `<div class="bb-offcanvas-panel bb-offcanvas-right full active
         });
         check(m.edge[0] === '0px' && m.edge[1] === 'none', `${look} offcanvas: no line at the panel's left edge`, m.edge);
         check(m.headerPaint[2] === '""' && m.headerPaint[3] !== '0px', `${look} offcanvas: the header is an inset glass panel`, m.headerPaint);
+        const clearance = await page.evaluate(() => {
+          const panel = document.querySelector('.bb-offcanvas-panel.full'), close = panel.querySelector('.bb-close').getBoundingClientRect();
+          const rtl = getComputedStyle(panel).direction === 'rtl';
+          return [...panel.querySelectorAll('.panel-title, .panel-sub-title')].map((e) => {
+            const r = e.getBoundingClientRect();
+            return rtl ? close.left - r.right : r.left - close.right;
+          });
+        });
+        check(clearance.length === 2 && clearance.every((gap) => gap >= 8), `${look} offcanvas: Close leaves both the course label and title readable`, clearance);
         const aligned = await page.evaluate(() => {
           const h = document.querySelector('.bb-offcanvas-panel.full .panel-header'), s = document.querySelector('#gz-ctabs');
           const paint = (e) => { const r = e.getBoundingClientRect(), c = getComputedStyle(e, '::before'); return [r.left + parseFloat(c.left), r.right - parseFloat(c.right)]; };

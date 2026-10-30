@@ -76,8 +76,14 @@ export function assetAction(release, name, existing, same) {
   if (!release.draft) throw new Error(`Published release asset ${name} is missing or different; refusing to change a published candidate.`);
   return existing ? 'replace' : 'upload';
 }
+// A public release needs both store ZIPs; a build that makes them also packs Claude Desktop's bundle.
+export const publicStores = stores => stores.includes('chrome') && stores.includes('firefox');
+// The saved store-release packages that are GitHub release assets too.
+export function storeAssets(manifest) {
+  return ['chrome', 'firefox', 'mcpb'].map(key => { if (!manifest.files[key]) throw new Error(`Artifact ${key} is required`); return manifest.files[key]; });
+}
 export function publicPreflight(opt, env, root, manifest) {
-  if (!opt.stores.includes('chrome') || !opt.stores.includes('firefox')) throw new Error('A full release needs both Chrome and Firefox packages. Use build/submit for store-only work.');
+  if (!publicStores(opt.stores)) throw new Error('A full release needs both Chrome and Firefox packages. Use build/submit for store-only work.');
   if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) throw new Error('Public releases require a stable major.minor.patch version.');
   for (const bin of ['gh', 'git', 'curl', 'ssh', 'rsync', 'xcodebuild', 'xcrun', 'lipo', 'python3']) command('/usr/bin/which', [bin], root, env);
   if (process.platform !== 'darwin') throw new Error('The universal DMG release must run on a Mac.');
@@ -170,7 +176,7 @@ export async function preparePublic({ manifest, save, out, root, env, run }) {
     preservesFeed(entries(base, root, env), entries(appcast, root, env));
     files.appcast = { path: path.relative(out, appcast), sha256: sha(appcast) };
     const sums = path.join(dir, 'SHA256SUMS');
-    fs.writeFileSync(sums, [...Object.values(files), manifest.files.chrome, manifest.files.firefox].map(item => `${item.sha256}  ${path.basename(item.path)}\n`).join(''));
+    fs.writeFileSync(sums, [...Object.values(files), ...storeAssets(manifest)].map(item => `${item.sha256}  ${path.basename(item.path)}\n`).join(''));
     files.sums = { path: path.relative(out, sums), sha256: sha(sums) };
     manifest.public = { sourceCommit: manifest.sourceCommit, files, ready: true };
     verifyPublic(manifest, out, root, env); save();
@@ -233,7 +239,7 @@ export async function publishPublic(context) {
     gh(['release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', '--title', `Glaze ${manifest.version}`, '--notes-file', notes], root, env);
     release = releaseInfo(tag, root, env);
   }
-  const assets = [...Object.values(state.files), manifest.files.chrome, manifest.files.firefox];
+  const assets = [...Object.values(state.files), ...storeAssets(manifest)];
   for (const item of assets) {
     const file = path.join(out, item.path);
     const existing = release.assets.find(asset => asset.name === path.basename(file));

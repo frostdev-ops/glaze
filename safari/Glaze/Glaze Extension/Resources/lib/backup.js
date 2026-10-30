@@ -19,7 +19,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
   // Refused by size before being read: a settings file, and a backup (two Notes accounts at their cap, and the rest).
   const LIMIT = { json: 16 << 20, zip: 512 << 20, entries: 40000, records: 1000 };
   // In the order the restore list shows them: two columns, row by row.
-  const CATS = ['settings', 'notes', 'tasks', 'dashNotes', 'classes', 'gpa', 'widgets', 'shareKeys'];
+  const CATS = ['settings', 'notes', 'tasks', 'dashNotes', 'classes', 'gpa', 'widgets', 'shareKeys', 'papers', 'writerWords', 'sources'];
   // The stores' own keys (lib/widgets.js NOTES_KEY, lib/classes.js STORE_KEY, lib/gpa.js KEY, lib/notes.js KEY; test/backup.test.js
   // keeps them equal): the editor doesn't load those libraries.
   const STORES = {
@@ -106,6 +106,57 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     }
     return records;
   };
+  const paperKey = /^(writerPaper:|writerVersions:)(?:[a-z\d.-]+(?::\d{1,5})?\|_\d+_\d+\|_\d+_\d+\|_\d+_\d+|recovery:[a-z\d-]+|doc:[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12})$|^writerPresets:[a-z\d.-]+(?::\d{1,5})?\|_\d+_\d+$/i;
+  const paperLibraries = async () => {
+    if (typeof module !== 'undefined') return { P: require('./writer-papers.js'), S: require('./writer-schema.js'), ST: require('./writer-styles.js'), SR: require('./writer-sources.js') };
+    if (!globalThis.GZ_WRITER_SCHEMA || !globalThis.GZ_WRITER_PAPERS || !globalThis.GZ_WRITER_STYLES || !globalThis.GZ_WRITER_SOURCES) {
+      const files = ['lib/pm.js', 'lib/writer-schema.js', 'lib/writer-styles.js', 'lib/writer-papers.js', 'lib/writer-sources.js'];
+      if (typeof importScripts === 'function') importScripts(...files.map((f) => chrome.runtime.getURL(f)));
+      else for (const file of files) await new Promise((ok, no) => { const script = document.createElement('script'); script.src = chrome.runtime.getURL(file); script.onload = ok; script.onerror = no; document.head.append(script); });
+    }
+    return { P: GZ_WRITER_PAPERS, S: GZ_WRITER_SCHEMA, ST: GZ_WRITER_STYLES, SR: GZ_WRITER_SOURCES };
+  };
+  const paperRecords = async (raw) => {
+    if (!obj(raw) || Object.keys(raw).length > 6000) throw fail('bad');
+    const { P, S, ST } = await paperLibraries();
+    const doc = (json) => {
+      const node = S.paper.nodeFromJSON(json); node.check();
+      const { setup, paste } = node.attrs;
+      if (setup != null && JSON.stringify(ST.setup(setup)) !== JSON.stringify(setup) || ![null, 'keep', 'match'].includes(paste)) throw fail('bad');
+      const parsed = S.parse(S.paper, S.serialize(S.paper, node), { document: true });
+      // HTML carries block/run attributes; page setup and the paste choice live only on the document.
+      if (!parsed.type.create(node.attrs, parsed.content).eq(node)) throw fail('bad');
+    };
+    // A kind this build doesn't know (a later one's) is left out with its versions, so the rest still restores.
+    const later = new Set(Object.entries(raw).filter(([key, value]) => key.startsWith('writerPaper:') && obj(value) && value.kind !== undefined && value.kind !== 'paper').map(([key]) => key.slice(12)));
+    const out = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (!paperKey.test(key)) throw fail('bad');
+      if (later.has(key.replace(/^writer(?:Paper|Versions):/, ''))) continue;
+      out[key] = value;
+      if (key.startsWith('writerPaper:')) { if (!obj(value) || value.key !== key.slice(12) || !Number.isFinite(value.updated) || (value.title !== undefined && (typeof value.title !== 'string' || value.title.length > 1000))) throw fail('bad'); doc(value.doc); }
+      else if (key.startsWith('writerVersions:')) { if (!Array.isArray(value) || value.length > 100) throw fail('bad'); for (const v of value) { if (!obj(v) || typeof v.id !== 'string' || !Number.isFinite(v.at)) throw fail('bad'); doc(v.doc); v.bytes = new TextEncoder().encode(JSON.stringify(v.doc)).length; } }
+      else if (!Array.isArray(value) || value.length > P.CAP.presets || value.some((v) => !ST.custom(v))) throw fail('bad');
+    }
+    return out;
+  };
+  // The writer's personal dictionary (writer-proof.js 'writerWords': words, the newest last) and each box's saved sources
+  // (lib/writer-sources.js `writer:sources:<school>|<user>|<course>|<item>` → { sources, at }).
+  const WORDS = { max: 5000, length: 60 };
+  const sourceKey = /^writer:sources:(?:[\w.!~*'()%-]{1,2700}\|){3}[\w.!~*'()%-]{1,2700}$/;
+  const wordsOf = (raw) => {
+    if (!Array.isArray(raw) || raw.length > WORDS.max || raw.some((w) => typeof w !== 'string' || !w.trim() || w !== w.trim() || w.length > WORDS.length)) throw fail('bad');
+    return raw;
+  };
+  const sourcesOf = async (raw) => {
+    if (!obj(raw) || Object.keys(raw).length > 6000) throw fail('bad');
+    const { SR } = await paperLibraries();
+    for (const [key, value] of Object.entries(raw)) {
+      if (!sourceKey.test(key) || !obj(value) || !Number.isFinite(value.at) || !Array.isArray(value.sources) || value.sources.length > SR.MAX.sources
+        || value.sources.some((x) => SR.normalize(x)?.id !== x?.id)) throw fail('bad');
+    }
+    return raw;
+  };
   const tasksOf = (raw) => {
     if (!obj(raw) || (raw.tasks !== undefined && !obj(raw.tasks)) || (raw.pets !== undefined && !obj(raw.pets))) throw fail('bad');
     if (raw.pets !== undefined && !lib('GZ_PET').backup(raw.pets)) throw fail('bad');
@@ -184,6 +235,15 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       if (m.settings !== undefined) cats.settings = settingsOf(m.settings);
       if (m.tasks !== undefined) { const r = tasksOf(m.tasks); if (filled(r.tasks) || filled(r.pets)) cats.tasks = r; }
       for (const c of ['dashNotes', 'classes', 'gpa']) if (m[c] !== undefined) { const r = whole(c, records(m[c], STORES[c])); if (Object.keys(r).length) cats[c] = r; }
+      if (m.papers !== undefined) {
+        if (!Array.isArray(m.papers) || m.papers.length > 6000) throw fail('bad');
+        const raw = {};
+        for (const row of m.papers) { if (!obj(row) || !paperKey.test(row.key) || !/^papers\/\d+\.json$/.test(row.file) || Object.hasOwn(raw, row.key)) throw fail('bad'); raw[row.key] = parse(await zip.text(row.file)); }
+        const r = await paperRecords(raw);
+        if (Object.keys(r).length) cats.papers = r;
+      }
+      if (m.writerWords !== undefined) { const r = wordsOf(m.writerWords); if (r.length) cats.writerWords = r; }
+      if (m.sources !== undefined) { const r = await sourcesOf(m.sources); if (Object.keys(r).length) cats.sources = r; }
       if (m.widgets !== undefined) { if (!obj(m.widgets)) throw fail('bad'); cats.widgets = m.widgets; }
       if (m.notes !== undefined) {
         if (!Array.isArray(m.notes) || m.notes.length > 100) throw fail('bad');
@@ -228,12 +288,17 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     const pick = (re) => Object.fromEntries(Object.entries(local).filter(([k, v]) => re.test(k) && obj(v)));
     const enc = new TextEncoder();
     const dirs = notes.map((n, i) => ({ account: n.account, dir: `notes/${i + 1}/` }));
+    const papers = Object.entries(local).filter(([key]) => paperKey.test(key)).map(([key, value], i) => ({ key, value, file: `papers/${i + 1}.json` }));
+    const words = Array.isArray(local.writerWords) ? local.writerWords.filter((w) => typeof w === 'string' && w.trim() === w && w && w.length <= WORDS.length).slice(-WORDS.max) : [];
+    const sources = pick(sourceKey);
     const m = { format: FORMAT, version: VERSION, made: date.toISOString(), glaze: version, settings, tasks,
       dashNotes: pick(STORES.dashNotes), classes: pick(STORES.classes), gpa: pick(STORES.gpa),
-      ...(obj(local.widgetLayout) && { widgets: local.widgetLayout }), notes: dirs };
+      ...(obj(local.widgetLayout) && { widgets: local.widgetLayout }), notes: dirs, ...(papers.length && { papers: papers.map(({ key, file }) => ({ key, file })) }),
+      ...(words.length && { writerWords: words }), ...(Object.keys(sources).length && { sources }) };
     const entries = [
       { name: MANIFEST, data: enc.encode(JSON.stringify(m, null, 1)), date },
       ...(keys.length ? [{ name: KEYS, data: enc.encode(JSON.stringify(keys, null, 2)), date }] : []),
+      ...papers.map(({ file, value }) => ({ name: file, data: enc.encode(JSON.stringify(value)), date })),
       ...notes.flatMap((n, i) => n.entries.map((e) => ({ ...e, name: dirs[i].dir + e.name }))),
     ];
     if (notes.length > 100 || entries.length > LIMIT.entries || entries.reduce((n, e) => n + e.data.length + 76 + enc.encode(e.name).length * 2, 22) > LIMIT.zip
@@ -246,12 +311,12 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
   // ---- restoring -------------------------------------------------------------------------------------------------
   // The worker's part of a restore (lib/background.js 'glaze:backup'), in one turn of its write queue and one write: r {
   // dashNotes, classes, gpa, widgets, favorites, tasks (when the settings, which bring their own, aren't restored), notes
-  // (accounts a Notes import then fills) }, each optional. Everything is checked first; a part that can't be taken whole
+  // (accounts a Notes import then fills), papers, writerWords, sources }, each optional. Everything is checked first; a part that can't be taken whole
   // writes nothing. → { ok } or { ok: false, error }.
   const apply = async (r, { local }) => {
     const W = lib('GZ_WIDGETS'), C = lib('GZ_CLASSES'), G = lib('GZ_GPA');
     const H = lib('GZ_HISTORY'), N = lib('GZ_NOTES');
-    let parts;
+    let parts, papers;
     try {
       parts = {
         dashNotes: r?.dashNotes === undefined ? {} : records(r.dashNotes, STORES.dashNotes),
@@ -259,16 +324,21 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
         gpa: r?.gpa === undefined ? {} : whole('gpa', records(r.gpa, STORES.gpa)),
         tasks: r?.tasks === undefined ? null : tasksOf(r.tasks),
       };
-      if (!obj(r) || Object.keys(r).some((k) => !['dashNotes', 'classes', 'gpa', 'widgets', 'favorites', 'tasks', 'notes'].includes(k))
+      if (!obj(r) || Object.keys(r).some((k) => !['dashNotes', 'classes', 'gpa', 'widgets', 'favorites', 'tasks', 'notes', 'papers', 'writerWords', 'sources'].includes(k))
         || (r.widgets !== undefined && !obj(r.widgets)) || (r.favorites !== undefined && !Array.isArray(r.favorites))
         || (r.notes !== undefined && (!Array.isArray(r.notes) || r.notes.length > 100 || r.notes.some((k) => typeof k !== 'string' || !ACCOUNT.test(k))))) throw fail('bad');
+    } catch { return { ok: false, error: 'bad' }; }
+    try {
+      if (r.papers !== undefined) papers = await paperRecords(r.papers);
+      if (r.writerWords !== undefined) wordsOf(r.writerWords);
+      if (r.sources !== undefined) await sourcesOf(r.sources);
     } catch { return { ok: false, error: 'bad' }; }
     const tasks = parts.tasks ? Object.fromEntries(Object.entries(parts.tasks.tasks).map(([k, v]) => [k, lib('GZ_TODO').clean(v)])) : {};
     const pets = parts.tasks?.pets === undefined ? {} : lib('GZ_PET').backup(parts.tasks.pets);
     if (!pets) return { ok: false, error: 'bad' };
     const petKeys = [...new Set([...Object.keys(pets), ...Object.keys(tasks).map((k) => `pet:${k.slice(5)}`)])];
     const keys = [...Object.keys(parts.dashNotes), ...Object.keys(parts.classes), ...Object.keys(parts.gpa), ...Object.keys(tasks), ...petKeys, ...(r.notes || []),
-      ...(r.favorites ? ['lookFavorites'] : [])];
+      ...(r.favorites ? ['lookFavorites'] : []), ...(r.writerWords ? ['writerWords'] : []), ...Object.keys(r.sources || {})];
     const here = keys.length ? await local.get(keys) : {};
     const patch = {};
     // Dashboard notes: the newer typing stays (lib/widgets.js saveNote).
@@ -328,6 +398,24 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     }
     // A Notes account the backup has and this device doesn't: an empty one, for the Notes import to fill.
     for (const k of r.notes || []) if (!Object.hasOwn(here, k)) patch[k] = N.clean();
+    // The dictionary: the backup's words this device lacks, ahead of its own, so a full list drops the backup's first.
+    if (r.writerWords) {
+      const mine = Array.isArray(here.writerWords) ? here.writerWords.filter((w) => typeof w === 'string') : [], low = new Set(mine.map((w) => w.toLowerCase()));
+      const theirs = r.writerWords.filter((w) => !low.has(w.toLowerCase()) && low.add(w.toLowerCase()));
+      if (theirs.length) patch.writerWords = [...theirs, ...mine].slice(-WORDS.max);
+    }
+    // Saved sources: each box's list joined with the backup's, one entry per work (lib/writer-sources.js dedupe).
+    if (r.sources) {
+      const { SR } = await paperLibraries();
+      for (const [k, v] of Object.entries(r.sources)) {
+        const mine = Array.isArray(here[k]?.sources) ? here[k].sources : [], sources = SR.dedupe([...mine, ...v.sources]);
+        if (JSON.stringify(sources) !== JSON.stringify(SR.dedupe(mine))) patch[k] = { sources, at: Math.max(Number.isFinite(here[k]?.at) ? here[k].at : 0, v.at) };
+      }
+    }
+    if (r.papers !== undefined) {
+      const { P } = await paperLibraries();
+      await P.open({ ...local, set: async (v) => { if (await local.set(v) === false) throw fail('write'); } }).merge(papers);
+    }
     return !Object.keys(patch).length || await local.set(patch) ? { ok: true } : { ok: false, error: 'write' };
   };
   // One Notes account from the zip into account `key`, through the worker's Notes import (lib/sessions.js): its files, then
@@ -455,12 +543,16 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     const notes = on('notes') ? c.notes.map((n) => ({ ...n, account: n.account || account })).filter((n) => ACCOUNT.test(n.account)) : [];
     if (on('notes') && notes.length !== c.notes.length) return { ...out, failed: CATS.filter(on) };
     const favorites = on('settings') && Array.isArray(c.settings.favorites) && c.settings.favorites.length ? c.settings.favorites : null;
-    const own = { ...Object.fromEntries(['dashNotes', 'classes', 'gpa', 'widgets'].filter(on).map((k) => [k, c[k]])),
+    const own = { ...Object.fromEntries(['dashNotes', 'classes', 'gpa', 'widgets', 'writerWords', 'sources'].filter(on).map((k) => [k, c[k]])),
       ...(favorites && { favorites }), ...(on('tasks') && !on('settings') && { tasks: c.tasks }), ...(notes.length && plan.kind === 'backup' && { notes: notes.map((n) => n.account) }) };
     try {
       await io.begin();
       if (Object.keys(own).length && !(await Promise.resolve().then(() => io.own(own)).catch(() => null))?.ok) return { ...out, failed: CATS.filter(on) };
       out.changed = Object.keys(own).length > 0;
+      if (on('papers')) for (const [key, value] of Object.entries(c.papers)) {
+        if (!(await io.own({ papers: { [key]: value } }))?.ok) return { ...out, failed: CATS.filter(on) };
+        out.changed = true;
+      }
       if (on('settings')) {
         const { favorites: _, ...settings } = c.settings;
         const r = await Promise.resolve().then(() => io.settings(on('tasks') ? { ...settings, ...c.tasks } : settings)).catch(() => ({ ok: false }));

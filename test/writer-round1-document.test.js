@@ -1,0 +1,71 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const S = require('../lib/writer-schema.js');
+const E = require('../lib/writer-editor.js');
+const ST = require('../lib/writer-styles.js');
+const X = require('../lib/writer-docx.js');
+
+test('whole-paper replacement restores every document attribute and undoes independently', () => {
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-paper.js'), 'utf8');
+  const from = source.indexOf('    const setDoc = '), to = source.indexOf('    const setFormat = ', from);
+  const view = { state: E.state({ mode: 'paper', html: '<p>before</p>' }), dispatch(tr) { this.state = this.state.apply(tr); } };
+  view.state = view.state.apply(view.state.tr.setDocAttribute('paste', 'match'));
+  const setDoc = vm.runInNewContext(`${source.slice(from, to)} setDoc`, { S, PM: GZ_PM, view, formatIssues: [], picked: null });
+  const replacement = S.paper.node('doc', { paste: 'keep' }, [S.paper.node('paragraph', null, S.paper.text('after'))]);
+  setDoc(replacement.toJSON());
+  assert.equal(view.state.doc.attrs.paste, 'keep');
+  E.commands(S.paper).undo()(view.state, (tr) => view.dispatch(tr));
+  assert.equal(view.state.doc.attrs.paste, 'match');
+  assert.equal(view.state.doc.textContent, 'before');
+  E.commands(S.paper).redo()(view.state, (tr) => view.dispatch(tr));
+  assert.equal(view.state.doc.attrs.paste, 'keep');
+  setDoc(S.paper.node('doc', null, [S.paper.node('paragraph')]).toJSON());
+  assert.equal(view.state.doc.attrs.paste, null, 'an imported paper must not inherit the previous paper preference');
+});
+
+test('a heading can explicitly align left through commands, HTML and Word', async () => {
+  let st = E.state({ mode: 'paper', html: '<h1>Heading</h1>' });
+  E.commands(S.paper).align('left')(st, (tr) => { st = st.apply(tr); });
+  assert.equal(st.doc.firstChild.attrs.align, 'left');
+  assert.equal(S.parse(S.paper, S.serialize(S.paper, st.doc)).firstChild.attrs.align, 'left');
+  const out = X.exportDocx(st.doc, { format: 'apa7' });
+  assert.match(out.parts['word/document.xml'], /<w:jc w:val="left"/);
+  const back = await X.importDocx(out.bytes, { format: 'apa7' });
+  assert.equal(back.doc.content[0].attrs.align, 'left');
+});
+
+test('the Paragraph dialog retains left when a format centres a heading', () => {
+  const patch = ST.paraAttrs(ST.FORMATS.apa7, { heading: 1 }, { align: 'left' });
+  assert.equal(patch.align, 'left');
+  let st = E.state({ mode: 'paper', html: '<h1>Heading</h1>' });
+  E.commands(S.paper).paragraph(patch)(st, (tr) => { st = st.apply(tr); });
+  assert.equal(st.doc.firstChild.attrs.align, 'left');
+});
+
+test('submit previews and picture widths use the paper page setup', () => {
+  const setup = ST.pageSetup(ST.FORMATS.mla9, { page: [11.69, 8.27], margins: [0.5, 0.5, 0.5, 0.5] });
+  const look = ST.look(ST.FORMATS.mla9, setup), api = { format: () => ST.FORMATS.mla9, look: () => look };
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-submit.js'), 'utf8');
+  const from = source.indexOf('  const previews = '), to = source.indexOf('  // The big file', from);
+  let measured;
+  const stop = new Error('measured');
+  const ctx = { document: { querySelectorAll: () => [{}], querySelector: () => ({}) }, P: () => ({ current: () => api }),
+    GZ_WRITER_STYLES: { geometry: (f) => { measured = f; throw stop; } } };
+  assert.throws(() => vm.runInNewContext(`${source.slice(from, to)} previews()`, ctx), (e) => e === stop);
+  assert.equal(measured, look, 'the preview clips and scales to the page the student sees');
+  const objects = fs.readFileSync(require('node:path').join(__dirname, '../writer-objects.js'), 'utf8');
+  const a = objects.indexOf('  const content = '), b = objects.indexOf('\n', a);
+  assert.equal(vm.runInNewContext(`${objects.slice(a, b)} content()`, { PAPER: () => api, GZ_WRITER_STYLES: ST }), ST.geometry(look).content);
+});
+
+test('paper images are held as data and remote images refuse takeover', () => {
+  const html = '<p>Before <img src="https://remote.example/track.png" alt="Diagram"> after</p>';
+  assert.deepEqual(S.loses(S.paper, html), ['media']);
+  const d = S.parse(S.paper, html);
+  let images = 0;
+  d.descendants((n) => { if (n.type.name === 'image') images++; });
+  assert.equal(images, 0, 'an image that cannot render or export never enters the paper');
+  assert.match(d.textContent, /Diagram/, 'keep the alternative text');
+});

@@ -48,9 +48,10 @@ It never moves a published tag or replaces a published asset with different byte
      Given no zip, the script packages a fresh checkout of the committed `HEAD` and refuses a dirty working tree.
    - Firefox Add-ons: upload `release/<v>/firefox/glaze-v<v>-firefox.zip` at addons.mozilla.org. When it asks for source
      code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js is the readable legacy build with a compatibility
-     shim and core-js's old-IE fallback cut, three.js is a custom build, and lottie-web's player is the official light canvas build with one comment line on top. Reviewers rebuild them with `scripts/vendor-pdfjs.sh`, `scripts/vendor-three.sh` and `scripts/vendor-lottie.sh`.
-     `vendor-three.sh` installs exact versions with install scripts off, checks every installed package against a pinned
-     SHA-512 integrity before running anything, and compares the result with the recorded hash of `lib/three.js`.
+     shim and core-js's old-IE fallback cut, three.js is a custom build, lottie-web's player is the official light canvas build with one comment line on top, ProseMirror (`lib/pm.js`) is an unminified esbuild bundle of its published packages, and harper.js (`lib/harper/`) is the published modules and slim wasm with two unused paths cut. Reviewers rebuild them with `scripts/vendor-pdfjs.sh`, `scripts/vendor-three.sh`, `scripts/vendor-lottie.sh`, `scripts/vendor-prosemirror.sh` and `scripts/vendor-harper.sh`.
+     `vendor-three.sh` and `vendor-prosemirror.sh` install exact versions with install scripts off, check every installed
+     package against a pinned SHA-512 integrity before running anything, and compare the result with the recorded hash of
+     `lib/three.js` or `lib/pm.js` and `lib/pm.css`; `vendor-harper.sh` checks the npm tarball and its wasm against pinned SHA-256s.
    - App Store: `sh scripts/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh scripts/appstore-ios.sh`.
 
 ### CI

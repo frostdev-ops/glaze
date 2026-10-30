@@ -27,6 +27,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     todo: 'M4 6.5l2 2 3.5-4M12 7h8M4 13.5l2 2 3.5-4M12 14h8M12 20h8M5 20h2',
     search: 'M16.5 10.5a6 6 0 1 1-12 0 6 6 0 0 1 12 0zM15 15l5.5 5.5',
     settings: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M18 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM12 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM20 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0z',
+    documents: 'M8 3h7l4 4v11H8zM15 3v4h4M5 7v14h11M11 11h5M11 14.5h3',
     more: 'M6.6 12a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0zM13.6 12a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0zM20.6 12a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0z',
     chevron: 'm9 6 6 6-6 6',
     pin: 'M9 4h6l-1 6 4 3H6l4-3zM12 13v7',
@@ -65,7 +66,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     ['calendar', /calendar|schedule|events?/], ['video', /conferenc|zoom|meet|video|lecture/], ['star', /outcome|competenc|badges?|rubric/], ['gear', /settings|admin|more|reports?/]];
   const courseIcon = (key, name = '') => COURSE_ICONS.find(([, re]) => re.test(String(key).toLowerCase()) || re.test(String(name).toLowerCase()))?.[0] || 'doc';
   // Glaze's own items, opt-in (owner decision 2026-10-19): the page asks Glaze to open them (features/navbar.js).
-  const GLAZE = ['notes', 'todo', 'search', 'settings'];
+  const GLAZE = ['notes', 'documents', 'todo', 'search', 'settings'];
   // The default bar (the design canvas's): the places first, then the rest, separated. The account and signing out sit at
   // the foot, not in a group; Glaze's settings item in Ultra's own nav (content-ultra.js) is the opt-in settings here.
   const DEFAULT = [
@@ -88,7 +89,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
   //   items: { id: { label, icon, hidden } }  a name, an icon, shown or hidden; a key left out follows the Look or the default
   //   groups: [{ label, items: [id] }]          the student's own grouping and order (up to 8 groups)
   //   tabs: [id]                                mobile's tabs before More (up to 4)
-  //   glaze: ['notes' | 'todo' | 'search' | 'settings']   Glaze's own items, opt-in
+  //   glaze: ['notes' | 'documents' | 'todo' | 'search' | 'settings']   Glaze's own items, opt-in
   //   links: [{ id, n, u, i, tab }]             their own links (lib/nav-items.js link)
   //   widgets: [{ id, at }]                     the widgets shown, in order, at the rail's 'top' or 'bottom'; left out until
   //                                             they choose, when a worn Look's or the older rail's (navItems.widgets) show
@@ -135,7 +136,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
   //   prefs: clean()'s navbarItems; look: a worn Look's x.nav (GZ_NAV_LAYOUT.clean); legacy: navItems (lib/nav-items.js)
   //   mods: [{ owner, id, label, icon, href, badge, group, slot, by }] items mods added (features/navbar.js checks them); group: a
 //     group's id, label or place; by: the mod's name
-  //   names: { notes, todo, search, settings }: Glaze's own items' names, in the page's language
+  //   names: { notes, documents, todo, search, settings }: Glaze's own items' names, in the page's language
   //   origin: the school's site the page is on ('' in the editor, where every Look link counts as leaving it)
   // -> { groups: [{ id, label, items }], slots: { top, bottom }, account, signout, tabs, sheet, items, widgets }
   // widgets: [{ id, at }] the student's (prefs.widgets), else a worn Look's (its w: items, at the top), else the older rail's.
@@ -157,7 +158,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
       const from = looks.has(l.id) && L.away(l, origin);
       add({ id: `link:${l.id}`, label: l.n, icon: PICKS.includes(l.i) ? l.i : 'link', href: l.u, tab: l.tab === true, active: false, badge: '', ...(from && { from }) });
     }
-    for (const g of p.glaze) add({ id: `glaze:${g}`, label: names[g] || { notes: 'Notes', todo: 'To Do', search: 'Search', settings: 'Glaze settings' }[g], icon: g === 'settings' ? 'glaze' : g, action: g, active: false, badge: '' });
+    for (const g of p.glaze) add({ id: `glaze:${g}`, label: names[g] || { notes: 'Notes', documents: 'Documents', todo: 'To Do', search: 'Search', settings: 'Glaze settings' }[g], icon: g === 'settings' ? 'glaze' : g, action: g, active: false, badge: '' });
     // A mod's item named as Glaze's settings or signing out (in any of Glaze's languages, or as this page or the student
     // names them) is left out: features/navbar.js refuses one, and this is the model every bar is drawn from.
     const own = [names.settings, ...native.filter((n) => n?.id === 'logout').map((n) => n.label), p.items['glaze:settings']?.label, p.items.logout?.label];

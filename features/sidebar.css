@@ -124,6 +124,15 @@
   html[data-gz-sb-assessment="attempt"][data-gz-sidebar="collapsed"] bb-assignment-attempt-authoring-panel [class*="makeStylescontainer-"]:has(> [data-gz-sidebar-host]) { grid-template-columns: minmax(0, 1fr) 3rem !important; }
   html[data-gz-sb-assessment="attempt"]:is([data-gz-sidebar="drawer"], [data-gz-sidebar="none"]) bb-assignment-attempt-authoring-panel [class*="makeStylescontainer-"]:has(> [data-gz-sidebar-host]) { grid-template-columns: minmax(0, 1fr) !important; }
   html[data-gz-sb-assessment="attempt"][data-gz-sidebar="drawer"] bb-assignment-attempt-authoring-panel [data-gz-sidebar-host] { grid-column: 1 !important; z-index: 2100; }
+  /* An older test attempt (Angular): its questions and Details & Information share a row in the panel that scrolls them.
+     The details column holds the dock beside the questions; Save and Submit stay in Ultra's footer below the panel. */
+  html[data-gz-sb-assessment="test"][data-gz-sidebar] .assessment-attempt-panel .panel-content-flex:has(> [data-gz-sidebar-host]) {
+    display: grid !important; grid-template-columns: minmax(0, 1fr) var(--gz-sidebar-w) !important; column-gap: 16px; align-items: start;
+  }
+  html[data-gz-sb-assessment="test"][data-gz-sidebar] .assessment-attempt-panel .panel-content-flex > .panel-content-full { grid-column: 1; grid-row: 1; width: auto !important; min-width: 0 !important; max-width: none !important; }
+  html[data-gz-sb-assessment="test"][data-gz-sidebar="collapsed"] .assessment-attempt-panel .panel-content-flex:has(> [data-gz-sidebar-host]) { grid-template-columns: minmax(0, 1fr) 3rem !important; }
+  html[data-gz-sb-assessment="test"]:is([data-gz-sidebar="drawer"], [data-gz-sidebar="none"]) .assessment-attempt-panel .panel-content-flex:has(> [data-gz-sidebar-host]) { grid-template-columns: minmax(0, 1fr) !important; }
+  html[data-gz-sb-assessment="test"][data-gz-sidebar="drawer"] .assessment-attempt-panel .panel-content-flex > [data-gz-sidebar-host] { grid-column: 1 !important; z-index: 2100; }
   /* The older overview's projection is a Glaze-owned, screen-only sheet. */
   .gz-sb-slot { display: block; pointer-events: none; }
   html:not([data-gz-sidebar="expanded"]) .gz-sb-slot, .gz-sb-slot:not([style*="height"]) { display: none; }
@@ -132,6 +141,11 @@
   html[data-gz-sb-ultra] :is(.gz-sb-edge, .gz-sb-launch) { z-index: 2050; }
   html[data-gz-sb-ultra] .gz-sb-menu { z-index: 2200; }
   html[data-gz-sb-layer] :is(.gz-sb-edge, .gz-sb-launch) { z-index: 1012; }
+  /* An Ultra side panel (Notification Settings, an item's details) is over the page, Glaze's column too. A drawn
+     background makes #main-content a stacking context (extras.css) that holds the panel under anything on <body>. */
+  html[data-gz-sb-ultra][data-gz-sb-peek~="column"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #gz-sidebar.gz-sb-fixed,
+  html[data-gz-sb-ultra][data-gz-sb-peek~="edge"] .gz-sb-edge,
+  html[data-gz-sb-ultra][data-gz-sb-peek~="launch"] .gz-sb-launch { z-index: -1; }
   .gz-sb-offer { display: grid; gap: 0.4rem; justify-items: start; margin: 0 0 0.6rem; padding: 0.6rem 0.75rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); }
   .gz-sb-offer[hidden] { display: none; }
 
@@ -317,7 +331,8 @@
   html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar] #full-discussions[bb-intersection-observer-root] .course-main-container > :not([data-gz-sidebar-host], .gz-sb-backdrop) { grid-column: 1 !important; grid-row: 1; }
   html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"],
   html[data-gz-sb-native-root][data-gz-sb-family="assessment"][data-gz-sidebar] #learningModulePanelContainerId .assessment-overview-grid > [data-gz-sidebar-host="native"],
-  html[data-gz-sb-native-root][data-gz-sb-assessment="attempt"][data-gz-sidebar] #site-wrap bb-assignment-attempt-authoring-panel [data-gz-sidebar-host="native"] {
+  html[data-gz-sb-native-root][data-gz-sb-assessment="attempt"][data-gz-sidebar] #site-wrap bb-assignment-attempt-authoring-panel [data-gz-sidebar-host="native"],
+  html[data-gz-sb-native-root][data-gz-sb-assessment="test"][data-gz-sidebar] #site-wrap .assessment-attempt-panel .panel-content-flex > [data-gz-sidebar-host="native"] {
     position: sticky !important; grid-column: 2; grid-row: 1; align-self: start; justify-self: end;
     top: calc(var(--gz-sb-native-offset, 0px) + var(--gz-sb-inset)) !important; bottom: auto !important; inset-inline: auto !important;
     height: calc(100dvh - var(--gz-sb-native-top, var(--gz-sb-top, 0px)) - max(var(--gz-sb-end), var(--gz-sb-native-end, 0px)) - var(--gz-sb-inset)) !important;
@@ -326,7 +341,8 @@
   html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar="collapsed"] #full-discussions[bb-intersection-observer-root] .course-main-container { grid-template-columns: minmax(0, 1fr) 3rem !important; }
   html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar="collapsed"] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"],
   html[data-gz-sb-native-root][data-gz-sb-family="assessment"][data-gz-sidebar="collapsed"] #learningModulePanelContainerId .assessment-overview-grid > [data-gz-sidebar-host="native"],
-  html[data-gz-sb-native-root][data-gz-sb-assessment="attempt"][data-gz-sidebar="collapsed"] #site-wrap bb-assignment-attempt-authoring-panel [data-gz-sidebar-host="native"] { height: auto !important; }
+  html[data-gz-sb-native-root][data-gz-sb-assessment="attempt"][data-gz-sidebar="collapsed"] #site-wrap bb-assignment-attempt-authoring-panel [data-gz-sidebar-host="native"],
+  html[data-gz-sb-native-root][data-gz-sb-assessment="test"][data-gz-sidebar="collapsed"] #site-wrap .assessment-attempt-panel .panel-content-flex > [data-gz-sidebar-host="native"] { height: auto !important; }
   html[data-gz-sb-native-root][data-gz-sb-family="discussion"]:is([data-gz-sidebar="drawer"], [data-gz-sidebar="none"]) #full-discussions[bb-intersection-observer-root] .course-main-container { grid-template-columns: minmax(0, 1fr) !important; }
   html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar="drawer"] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"] { grid-column: 1; z-index: 2100; }
 

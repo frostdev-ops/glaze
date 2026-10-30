@@ -22,8 +22,8 @@ const walk = (p) => {
   if (!fs.existsSync(f)) return [];
   return fs.statSync(f).isDirectory() ? fs.readdirSync(f).flatMap((x) => walk(path.posix.join(p, x))) : [p];
 };
-// Vendored engines (pdf.js, Tesseract, three.js, Lottie) load only their own files, from the extension.
-const VENDORED = /^lib\/(pdfjs|tesseract|lottie)\/|^lib\/three\.min\.js$/;
+// Vendored engines (pdf.js, Tesseract, three.js, Lottie, Harper) load only their own files, from the extension.
+const VENDORED = /^lib\/(pdfjs|tesseract|lottie)\/|^lib\/harper\/(?!shared\.js$)|^lib\/three\.min\.js$/;
 const FILES = roots.flatMap(walk).filter((f) => /\.m?js$/.test(f));
 // Each line without its comment: a comment line, or what follows ` // ` (an address's `://` has no space before it).
 const lines = (js) => js.split('\n').map((l) => (/^\s*(\/\/|\/?\*)/.test(l) ? '' : l.replace(/\s\/\/\s.*$/, '')));
@@ -39,6 +39,10 @@ const covered = (origin) => manifest.host_permissions.some((p) => {
 // file → [{ at: text on the call's line, kind, … }]. `n`: how many calls on lines with that text (1 when absent).
 const SITES = {
   'lib/background.js': [
+    // Runs inside the claimed LMS document via executeScript; its origin is fixed by that document. The worker's
+    // Writer admission gate and the browser's held school grant are required before injecting the account read.
+    { at: 'fetch(`${location.origin}/learn/api/v1/users/me`', kind: 'asked', flow: 'the verified Blackboard assignment host, under its existing school grant, for the visual cache account binding', guard: /if \(await aiWriter\(s, \{ op: 'run', feature: 'writing' \}\) !== true\) return null/ },
+    { at: 'return GZ_WRITER_LOOKUP.listener', kind: 'via', to: 'lib/writer-lookup.js' },
     { at: "{ fetch: (u, i) => fetch(u, i), allow", kind: 'via', to: 'lib/media.js' },
     { at: 'GZ_MEDIA.fromGallery(h, m.type, { fetch:', kind: 'via', to: 'lib/media.js' },
     { at: 'GZ_MODBUNDLE.offer(g, { fetch:', kind: 'via', to: 'lib/modbundle.js' },
@@ -62,8 +66,16 @@ const SITES = {
   // AI: the connection's endpoint, whose host Settings asks for from a click. The broker refuses while the browser doesn't
   // hold it, and the provider and the catalog reach it only through the broker's fetch pinned to that host and generation.
   'lib/ai/broker.js': [{ at: 'env.fetch(url, init)', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'lib/ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
-  'lib/ai/providers/openai.js': [{ at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'lib/ai/broker.js', guard: /fetch: pinned\(env, use\)/ }],
+  'lib/ai/providers/openai.js': [
+    { at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'lib/ai/broker.js', guard: /fetch: pinned\(env, use\)/ },
+    { at: 'res = await fetch(`${cfg.base}/key`', kind: 'asked', flow: 'Settings\' check of an OpenRouter key (Connect, Test), through the broker\'s pinned fetch once the host is held', in: 'lib/ai/broker.js', guard: /if \(!await reaches\(env, use\)\) return \{ ok: true, state: 'unavailable', reason: 'permission' \};[\s\S]*use\.p\.status\(use\.cfg, \{ fetch: pinned\(env, use\)/ },
+  ],
   'lib/ai/models.js': [{ at: 'fetch(shared ? OPENROUTER', kind: 'asked', flow: 'the connection\'s catalog, through the broker\'s pinned fetch (OpenRouter\'s public catalog is on the connection\'s own host)', in: 'lib/ai/broker.js', guard: /use\.p\.catalog\(use\.cfg, \{ fetch: pinned\(env, use\)/ }],
+  // Glaze Writer's citation lookups, on the student's click: a web page only once its https host is held (the Cite popover
+  // asks for exactly it in the click); doi.org (and the agency it redirects to, api.crossref.org) and openlibrary.org answer
+  // every origin with CORS, so a DOI or an ISBN asks for no host.
+  'lib/writer-lookup.js': [{ at: 'res = await bounded(env.fetch(url, {', kind: 'asked', flow: 'a web page\'s host, asked for from the Cite popover\'s click (writer-cite.js); doi.org, api.crossref.org, data.crosscite.org and openlibrary.org answer every origin',
+    guard: /if \(!r\.open && !await env\.reach\(r\.url\)\) return \{ ok: false, error: 'host' \}/ }],
   'lib/blocklist.js': [{ at: 'env.fetch(ENDPOINT', kind: 'required', host: 'https://frostdev.io', literal: "'https://frostdev.io/glaze/mods/api/blocklist'" }],
   'lib/modchannel.js': [{ at: 'const client = (st, fetch) =>', kind: 'via', to: 'lib/background.js' }],
   'lib/sessions.js': [
@@ -97,7 +109,11 @@ const SITES = {
   'features/popup.js': [{ at: 'GZ_LMSQ.fetch(src,', kind: 'page' }],
   // Rubric definitions and the current student's evaluation, read-only through the page's own LMS queue.
   'features/rubric.js': [{ at: 'const res = await GZ_LMSQ.fetch(url,', kind: 'page' }, { at: 'f: (...args) => GZ_LMSQ.fetch(...args, 0, live)', kind: 'page' }],
+  // An assignment's context, and the files it attaches (/bbcswebdav/ on the page's site), read when Feedback asks.
+  'lib/writer-context-assignment.js': [{ at: 'f: (...a) => GZ_LMSQ.fetch(...a, 0, live)', kind: 'page' }, { at: "await fetch(url, { credentials: 'same-origin' })", kind: 'page' }],
   'features/calexport.js': [{ at: 'await fetch(url,', kind: 'page' }],
+  // Glaze Writer's discussion context: the prompt, thread and replies, read-only behind visible work in the site's queue.
+  'lib/writer-context-discussion.js': [{ at: 'GZ_LMSQ.fetch(u, o, 1, live)', kind: 'page' }],
   'features/cardtasks.js': [{ at: 'await fetch(url,', kind: 'page' }],
   'features/classes.js': [{ at: 'await fetch(u.href,', kind: 'page' }],
   'features/coursemenu.js': [{ at: 'fetch(`${location.origin}/api/v1/users/self/', kind: 'page' }],
@@ -115,6 +131,8 @@ const SITES = {
   // A file an Ultra document links (/bbcswebdav/ on the page's site), read on the student's click for the syllabus import.
   'features/syllabus.js': [{ at: 'await fetch(f.url,', kind: 'page' }],
   'features/todo.js': [{ at: 'await fetch(url,', kind: 'page' }, { at: 'fetch(`${location.origin}/api/v1/planner/overrides', kind: 'page' }],
+  // Agent apps' reads in the account's own LMS tab (lib/mcp/tabs.js injects it there): the page's own site only.
+  'lib/mcp/tab.js': [{ at: 'await fetch(go.origin + path,', kind: 'page' }],
 };
 const KINDS = ['required', 'extension', 'asked', 'page', 'via', 'open'];
 
@@ -194,4 +212,26 @@ test('review: the font loader classification names every catalog file host', () 
   const named = new Set(entry.hosts || [entry.host]);
   const files = require('../lib/fonts.js').LIST.flatMap((f) => Object.values(f.files || {}));
   for (const url of files) assert.ok(named.has(new URL(url).origin), `${url}: the font host is named`);
+});
+
+// The AI providers Settings → AI names (lib/ai/settings.js PRESETS), each one's host: never one the manifest holds, so the
+// browser is asked for it, from Connect's click (lib/editor-ai.js), before the broker reaches it.
+const AI_HOSTS = { openai: 'api.openai.com', anthropic: 'api.anthropic.com', gemini: 'generativelanguage.googleapis.com', openrouter: 'openrouter.ai',
+  xai: 'api.x.ai', mistral: 'api.mistral.ai', groq: 'api.groq.com', deepseek: 'api.deepseek.com' };
+const PRIVACY_AI = Object.entries({ openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google Gemini', openrouter: 'OpenRouter', xai: 'xAI', mistral: 'Mistral', groq: 'Groq', deepseek: 'DeepSeek' })
+  .map(([id, name]) => `- \`https://${AI_HOSTS[id]}\` for ${name}`);
+test('each AI provider is an https host asked for from Connect\'s click, none the manifest holds', () => {
+  const { PRESETS } = require('../lib/ai/settings.js');
+  assert.deepEqual(Object.fromEntries(Object.entries(PRESETS).map(([id, p]) => [id, new URL(p.base).hostname])), AI_HOSTS, 'a new provider is listed here');
+  for (const [id, host] of Object.entries(AI_HOSTS)) {
+    assert.equal(new URL(PRESETS[id].base).protocol, 'https:', id);
+    assert.ok(!covered(`https://${host}`), `${host} is asked for, not held`);
+    assert.ok(manifest.optional_host_permissions.includes('https://*/*'), `${host} can be asked for`);
+  }
+  const edit = read('lib/editor-ai.js');
+  const connect = edit.slice(edit.indexOf('const connect = (e, id, input, from) => {'), edit.indexOf('const check = async'));
+  // The host first, from the click, before anything is awaited; the key after.
+  assert.match(connect, /if \(!e\?\.isTrusted \|\| busy\) return;[\s\S]*const asked = Promise\.resolve\(GZ_SITE\.reach\(S\.PRESETS\[id\]\.base, from\)\)/);
+  assert.ok(connect.indexOf('GZ_SITE.reach') < connect.indexOf('await'), 'asked before anything is awaited');
+  assert.ok(PRIVACY_AI.every((line) => read('PRIVACY.md').includes(line)), 'PRIVACY.md names each host');
 });

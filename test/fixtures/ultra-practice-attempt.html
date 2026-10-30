@@ -1,0 +1,71 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Essay 2</title>
+<!-- _note: shape from the owner's Ultra, 2026-10-27, synthetic values. An assignment attempt (…/assessment/{id}/attempt/create) as
+glaze-plans/writer/probe/skeleton-assignment-attempt.html records it: the React authoring panel, the read-only instructions
+Quill, the submission Quill and its wrappers (no local-files button), the separate file area, and the footer's Save and Close
+and Submit by data-analytics-id, disabled while empty. Mui/makeStyles class suffixes are snapshot values; wrappers trimmed.
+Non-empty enablement, upload completion/listing/removal and confirmation/receipt behavior are unprobed stand-ins.
+The practice copy (scripts/writer-practice.js) of test/fixtures/ultra-writer-attempt.html: a fresh attempt (its box empty),
+and the page laid out as Ultra's panel is, scrolling itself, with its footer kept in view, so Glaze's own chrome fits around it. -->
+<style>
+body { margin:0; font:14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gz-surface-2, #060d18); color:var(--gz-ink, #e8f2fa); }
+.bb-editor-root { border:1px solid var(--gz-line-strong, #24405f); border-radius:12px; background:var(--gz-surface, #0d1b2e); }
+.bb-editor-toolbar { display:flex; gap:4px; padding:6px; border-bottom:1px solid var(--gz-line, #16283f); } .bb-editor-toolbar button { width:28px; height:28px; }
+.ql-container:not(.is-read-only) .ql-editor { min-height:200px; padding:12px 16px; outline:none; } .ql-editor p { margin:0 0 8px; } .ql-clipboard, .sr-only { position:absolute; left:-9999px; }
+.status-bar { padding:4px 16px; color:var(--gz-ink-faint, #5c7189); font-size:12px; }
+footer, .footer { display:flex; justify-content:flex-end; gap:10px; padding:12px 24px; border-top:1px solid var(--gz-line, #16283f); }
+footer button, .footer button { font:inherit; font-weight:600; padding:8px 18px; border-radius:999px; border:1px solid var(--gz-line-strong, #24405f); background:none; color:inherit; } button:disabled { opacity:.45; }
+[class*="makeStylescontainer-"] { display:grid; grid-template-columns:minmax(0, 3fr) minmax(200px, 1fr); gap:24px; padding:24px; }
+/* Ultra routes the attempt in as a panel of its own under <body>, over the whole window (as test/fixtures/ultra-course.html
+   draws one), scrolling itself; Glaze's bar and sidebar keep their room in it. */
+.routed-page.bb-offcanvas-container { position:fixed; inset:0; z-index:20; box-sizing:border-box; overflow-y:auto; display:flex; flex-direction:column; }
+.routed-page-body { flex:1 0 auto; display:flex; flex-direction:column; } bb-assignment-attempt-authoring-panel { flex:1 0 auto; display:flex; flex-direction:column; }
+bb-assignment-attempt-authoring-panel > div { flex:1 0 auto; display:flex; flex-direction:column; } [class*="makeStylescontentRoot-"] { flex:1 0 auto; }
+[class*="makeStylesfooterWrapper-"] { position:sticky; bottom:0; z-index:1; background:var(--gz-surface-2, #060d18); }
+[class*="makeStylesinput-"] { position:absolute; width:1px; height:1px; opacity:0; } /* React's input stays hidden; its buttons open it */
+[class*="makeStylesinputContainer-"] { display:grid; justify-items:center; gap:8px; margin-top:12px; padding:18px; border:1px dashed var(--gz-line-strong, #24405f); border-radius:12px; }
+[class*="makeStylesinputContainer-"] p { margin:0; color:var(--gz-ink-muted, #8fa8c0); } [class*="makeStylesbuttonContainer-"] { display:flex; gap:8px; }
+[class*="makeStylesbuttonContainer-"] button { font:inherit; padding:6px 14px; border-radius:999px; border:1px solid var(--gz-line-strong, #24405f); background:none; color:inherit; cursor:pointer; }
+.ql-container { position:relative; }
+@media (max-width: 900px) { [class*="makeStylescontainer-"] { grid-template-columns:minmax(0, 1fr); } } .bb-editor-wrapper.read-only .ql-editor { padding:0; }
+</style></head>
+<body><div id="site-wrap"><div id="main-content-inner"></div></div>
+<section class="routed-page route-view-container bb-offcanvas-container" data-testid="assessment-attempt" tabindex="-1"><div class="routed-page-body js-skip-link-target">
+<bb-assignment-attempt-authoring-panel class="react-container" ng-if="assessmentAttempt.contentData.courseContent.isAssignment()" content-id="assessmentAttempt.contentData.courseContent.id" attempt-id="assessmentAttempt.attempt.id"><div><div class="makeStylespanelRoot-0-2-221 makeStylespanelRootWithFooter-0-2-222"><div class="makeStylesbaseBody-0-2-224">
+  <div class="makeStylescontentRoot-0-2-229"><div class="makeStylesbody-0-2-285"><div class="makeStylescontainer-0-2-199">
+    <div class="makeStylesauthoring-0-2-201 makeStylessidePanelContentMarginFix-0-2-214">
+      <div class="MuiPaper-root MuiAccordion-root Mui-expanded" data-analytics-id="assignment.attempt.authoring.instructions">
+        <h3 class="MuiAccordion-heading"><button type="button" aria-expanded="true" data-analytics-id="assignment.attempt.authoring.instructions.summary" id="assignment-attempt-authoring-instructions-summary" aria-controls="assignment-attempt-authoring-instructions-details"><span class="MuiAccordionSummary-content"><h2>Instructions</h2></span></button></h3>
+        <div id="assignment-attempt-authoring-instructions-details" role="region" class="MuiAccordion-region"><div class="MuiAccordionDetails-root" data-analytics-id="assignment.attempt.authoring.instructions.details"><div class="makeStylesinstructionsWrapper-0-2-200">
+          <div class="bb-editor-wrapper read-only"><div class="bb-editor-root bb-editor-heading-h3" role="presentation"><div class="editor-content-container keyboard-tooltip-container no-toolbar no-scroll"><div role="presentation" class="bb-editor-container ql-container ql-disabled is-read-only">
+            <div class="ql-editor bb-editor" data-gramm="false" contenteditable="false" id="bb-editorassignment-attempt-authoring-instructions"><p><strong>Essay 2</strong></p><p>Write 1,200 words on memory in Beloved, in MLA format, citing at least three sources.</p></div>
+            <div class="ql-clipboard" contenteditable="true" tabindex="-1" aria-hidden="true"></div>
+          </div></div></div></div>
+        </div></div></div>
+      </div>
+      <div class="makeStylessubmission-0-2-203">
+        <h2>Submission</h2>
+        <div class="bb-editor-wrapper">
+          <div id="BB_Editor_ID__1_-editorLabel" class="sr-only" aria-hidden="true">Your answer</div>
+          <div class="bb-editor-root bb-editor-heading-h3" role="presentation">
+            <div><div class="bb-editor-toolbar no-select" role="toolbar" aria-label="Editor toolbar" aria-controls="bb-editorassignment-attempt-authoring-submission"><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.bold.button" aria-label="Bold">B</button></div><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.italic.button" aria-label="Italic">I</button></div><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.underline.button" aria-label="Underline">U</button></div><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.link.button" aria-label="Insert/edit link">I</button></div><div role="presentation" class="bb-editor-toolbar-button-container"><button type="button" tabindex="-1" data-analytics-id="editor.toolbar.insertImage.button" aria-label="Insert image">I</button></div></div></div>
+            <div class="editor-content-container keyboard-tooltip-container">
+              <div role="presentation" class="bb-editor-container ql-container is-active">
+                <div class="ql-editor bb-editor" data-gramm="false" contenteditable="true" data-placeholder="Click to add text" id="bb-editorassignment-attempt-authoring-submission" aria-labelledby="null BB_Editor_ID__1_-editorLabel" role="textbox" aria-multiline="true" aria-required="false"><p><br></p></div>
+                <div class="ql-clipboard" contenteditable="true" tabindex="-1" aria-hidden="true"></div>
+              </div>
+              <div class="status-bar"><span class="word-count">Word count: 0</span></div>
+            </div>
+          </div>
+        </div>
+        <div tabindex="-1" class="makeStylespreview-0-2-288"><div class="makeStylesinputContainer-0-2-289"><input id="_1_" type="file" class="makeStylesinput-0-2-292" tabindex="-1" aria-hidden="true" multiple><p>Drag files here</p><div class="makeStylesbuttonContainer-0-2-298"><button type="button">Upload files</button><button type="button">Cloud storage</button></div></div></div>
+        <div class="makeStyleshideOffScreen-0-2-299" aria-live="polite" role="status"></div>
+      </div>
+    </div>
+    <div class="makeStylesdetails-0-2-202"><div class="makeStylessidePanelContentMarginFix-0-2-214"><h2>Details &amp; Information</h2><a data-analytics-id="assignment.attempt.authoring.rubric.view.link" href="/ultra/courses/_101_1/assessment/_7_1/attempt/create/rubric-view">View rubric</a></div></div>
+  </div></div></div>
+  <div class="makeStylesfooterWrapper-0-2-233"><footer class="makeStylesfooterRoot-0-2-305" role="contentinfo"><div class="makeStyleswrapper-0-2-306"><div class="makeStylesstatus-0-2-308"></div><div class="makeStylesfooterButtons-0-2-307">
+    <button type="button" class="Mui-disabled" disabled aria-disabled="true" tabindex="-1" data-analytics-id="course.content.assessment.footer.buttons.saveAndClose">Save and Close</button><button type="button" class="Mui-disabled" disabled aria-disabled="true" tabindex="-1" data-analytics-id="assignment.attempt.authoring.footer.submit">Submit</button>
+  </div></div></footer></div>
+</div></div></div></bb-assignment-attempt-authoring-panel>
+</div></section>
+</body></html>
