@@ -347,6 +347,14 @@ test('typed input: numbers, percent, currency, dates, times, booleans, errors, f
   assert.deepEqual(p('3/4'), { t: 'n', v: 45720, fmt: 'd-mmm' }, 'this year');
   assert.deepEqual(p('4-Mar-2025'), { t: 'n', v: 45720, fmt: 'd-mmm-yy' });
   assert.deepEqual(p('March 4, 2025'), { t: 'n', v: 45720, fmt: 'd-mmm-yy' });
+  // A month and a year: four digits, or two that can't be a day (32-99), as Excel reads 3/2025, Mar-99 and 1/32.
+  assert.deepEqual(p('3/2025'), { t: 'n', v: M.toSerial(2025, 3, 1), fmt: 'mmm-yy' });
+  assert.deepEqual(p('12-2025'), { t: 'n', v: M.toSerial(2025, 12, 1), fmt: 'mmm-yy' });
+  assert.deepEqual(p('12/99'), { t: 'n', v: M.toSerial(1999, 12, 1), fmt: 'mmm-yy' });
+  assert.deepEqual(p('1/32'), { t: 'n', v: M.toSerial(1932, 1, 1), fmt: 'mmm-yy' });
+  assert.deepEqual(p('Mar-99'), { t: 'n', v: M.toSerial(1999, 3, 1), fmt: 'mmm-yy' });
+  assert.deepEqual(p('Mar 32'), { t: 'n', v: M.toSerial(1932, 3, 1), fmt: 'mmm-yy' });
+  assert.deepEqual(p('1/2/3'), { t: 'n', v: M.toSerial(2003, 1, 2), fmt: 'm/d/yyyy' }, 'a one-digit year is 200x');
   assert.deepEqual(p('13:30'), { t: 'n', v: 0.5625, fmt: 'h:mm' });
   assert.deepEqual(p('1:30 PM'), { t: 'n', v: 0.5625, fmt: 'h:mm AM/PM' });
   assert.deepEqual(p('12:00:30 am'), { t: 'n', v: 30 / 86400, fmt: 'h:mm:ss AM/PM' });
@@ -361,7 +369,7 @@ test('typed input: numbers, percent, currency, dates, times, booleans, errors, f
   assert.deepEqual(p('='), { t: 's', v: '=' });
   assert.deepEqual(p("'42"), { t: 's', v: '42' });
   assert.deepEqual(p("'"), { t: 's', v: '' });
-  for (const s of ['hello', '2/30/2025', '13/1/2025', '25:61', '1,2', '1,2345', '$', '%', '1e', '12%%', 'TRUE!', ' ']) assert.equal(p(s).t, 's', s);
+  for (const s of ['hello', '2/30/2025', '13/1/2025', '25:61', '1,2', '1,2345', '$', '%', '1e', '12%%', 'TRUE!', ' ', '13/2025', '0/2025', '1/2/345', '32/1']) assert.equal(p(s).t, 's', s);
   assert.deepEqual(M.parseNumber('$1,200'), { v: 1200, fmt: '"$"#,##0' });
   assert.equal(M.parseNumber('abc'), null);
 });
