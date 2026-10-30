@@ -36,3 +36,41 @@ test('Sites reads Remove status after the grant has gone back and the status has
 test('Sites fails when Remove never reports completion, even if the list and grant are correct', async () => {
   await assert.rejects(removeSites({ missingBB: true }), /Removed|status|completion/);
 });
+
+const layoutProbe = () => {
+  const source = read('settings-ia-check.js');
+  const helper = source.slice(source.indexOf('const layoutState ='), source.indexOf('let context,'));
+  const body = {}, document = { body, documentElement: { scrollWidth: 320 } };
+  let controls = [];
+  document.querySelectorAll = () => controls;
+  document.querySelector = (selector) => controls.find((el) => selector === `[data-f="${el.dataset.f}"]`) || null;
+  const measure = vm.runInNewContext(`${helper}\nlayoutState`, {
+    document, window: {}, innerWidth: 320, CSS: { escape: (s) => s }, getComputedStyle: () => ({ overflowX: 'visible' }),
+  });
+  const control = ({ visible = true, left = 0 } = {}) => ({
+    dataset: { f: 'rule:add' }, textContent: 'Add tweak', isConnected: true, parentElement: body,
+    matches: () => false, closest: () => null,
+    checkVisibility() { return this.isConnected && visible; },
+    getBoundingClientRect: () => ({ left, right: left + 100, width: 100, height: 30 }),
+  });
+  const old = control(); controls = [old];
+  measure({ remember: 'look/palette' });
+  return {
+    measure: () => measure({ route: 'look/palette' }),
+    replace: (opts) => { old.isConnected = false; controls = opts === null ? [] : [control(opts)]; },
+  };
+};
+
+test('translated layout measures the current rule controls after the preview redraws them', () => {
+  const p = layoutProbe();
+  p.replace({});
+  assert.deepEqual(Array.from(p.measure().off), [], 'a replaced Add tweak button is still present and fits');
+});
+
+test('translated layout still catches removed, hidden or clipped replacement controls', () => {
+  for (const [replacement, why] of [[null, /hidden/], [{ visible: false }, /hidden/], [{ left: -20 }, /outside the viewport/]]) {
+    const p = layoutProbe();
+    p.replace(replacement);
+    assert.match(p.measure().off.join('; '), why);
+  }
+});
