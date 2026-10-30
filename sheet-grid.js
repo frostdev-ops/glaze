@@ -39,6 +39,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // The index whose span holds pixel px (the last of a run of hidden ones before it never is).
     at(px) {
       if (px <= 0) return this.firstShown(0);
+      const total = this.total();
+      // Keep the binary search inside the last positive span, even if the end of the axis is hidden.
+      px = Math.min(px, total - Number.EPSILON * Math.max(1, total));
       let pos = 0, left = px;
       for (let step = 1 << Math.floor(Math.log2(this.n || 1)); step; step >>= 1) {
         const next = pos + step;
