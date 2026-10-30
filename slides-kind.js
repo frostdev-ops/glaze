@@ -236,6 +236,7 @@
   // assignment's title and the frame's tools (Submit…) before ⋯, no way back to Documents; → its surface.
   const edit = async (key, host = null) => {
     const root = document.documentElement;
+    const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'slides';
     await need(LIBS);
     const rec = await papers().get(key).catch(() => null), bytes = STORE.get(rec);
@@ -329,7 +330,8 @@
       }
     };
     const show = (i) => { if (!deck) return; const to = Math.max(0, Math.min(n - 1, i)); if (to === cur && showing) return; cur = to; draw(); };
-    new ResizeObserver(() => { if (zoom === 'fit') rescale(); }).observe(canvasEl);
+    const sizing = new ResizeObserver(() => { if (zoom === 'fit') rescale(); });
+    sizing.observe(canvasEl);
 
     // ---- the rail: each thumbnail drawn as it nears the view
     const drawn = new Set();
@@ -472,7 +474,7 @@
       menu.querySelector('[role="menuitem"]').focus();
     };
     moreB.addEventListener('click', () => { if (menu) closeMenu(true); else openMenu(); });
-    document.addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target) && !moreB.contains(e.target)) closeMenu(); }, true);
+    document.addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target) && !moreB.contains(e.target)) closeMenu(); }, { capture: true, signal });
 
     // ---- keys: the slides by arrows, Page Up and Down, Home and End; Ctrl+F finds
     document.addEventListener('keydown', (e) => {
@@ -483,12 +485,16 @@
       if (to === undefined) return;
       e.preventDefault();
       show(to);
-    });
+    }, { signal });
 
     draw();
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
     // What an assignment's submit sheet sends (writer-submit.js): the deck as it was brought.
     return { pages: () => null, say: () => {}, ready: () => !!deck, save: async () => true,
+      dispose: () => {
+        life.abort(); sizing.disconnect(); near.disconnect(); closeMenu(); presenting?.close();
+        for (const u of media.values()) { URL.revokeObjectURL(u); made.delete(u); }
+      },
       file: async () => { const f = await file(key); if (!f) throw new Error('no file'); return { bytes: f.bytes, mime: f.mime, ext: rec?.ext === '.ppsx' ? '.ppsx' : '.pptx' }; } };
   };
   // A deck brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it held

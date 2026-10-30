@@ -1401,7 +1401,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         if (!here()) return;
         const doc = S.paper.nodeFromJSON(r.doc), own = ownFormatting(doc);
         if (key) {
-          if (!await save()) throw new Error('paper could not be saved before import');
+          if (!o.fromKind && !await save()) throw new Error('paper could not be saved before import');
           if (!here()) return;
           replacing = new Promise((r) => { release = r; });
           const json = doc.toJSON();
