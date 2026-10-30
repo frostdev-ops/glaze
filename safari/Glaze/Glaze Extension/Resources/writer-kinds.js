@@ -89,6 +89,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
 
   // ---- Open in Glaze: a brought file of a kind that opens here becomes the attempt's record, and shows. api: the paper
   // or the viewer that shows now.
+  let arriving = null;
   const said = (k, e) => (e instanceof RangeError && Object.values(k?.says || {}).includes(e.message) ? e.message : k?.says?.read || 'That file could not be read.');
   const open = async (api, f) => {
     if (busy || !f) return;
@@ -105,7 +106,21 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       if (shown) { if (!await (shown.id === 'sheet' ? shown.surface.version('import') : shown.surface.save())) throw new Error('not saved'); }
       else if (!await paper.save()) throw new Error('paper could not be saved');
       paper.hold();
-      const rec = await k.into(key, f);
+      // The file arriving, stage by stage (lib/doc-kinds.js progress): in the paper's status bar, or the viewer's line,
+      // until its viewer shows (finally, below).
+      const steps = id === 'sheet' ? ['read', 'prepare', 'save'] : ['read', 'prepare', 'copy', 'save'];
+      let stage = null;
+      const progress = GZ_DOC_KINDS.progress((p) => {
+        const w = GZ_DOC_KINDS.said(p, id);
+        if (!w || p.end || p.failed) return;
+        if (shown) {
+          if (stage !== p.stage) { stage = p.stage; shown.viewer?.say?.(t(...GZ_DOC_KINDS.said(p, id, { spoken: true }))); }
+        }
+        else paper.arriving?.({ name: f.name, text: t(...w), spoken: t(...GZ_DOC_KINDS.said(p, id, { spoken: true })), fraction: p.fraction });
+      }, steps);
+      arriving = paper;
+      const rec = await k.into(key, f, { progress });
+      progress.end();
       if (shown) { await unmount(); const s = await mount(id, key, paper); if (!s) throw new Error('no viewer'); paper.take(s); }
       else if (!await paper.hand(rec)) throw new Error('no viewer');
       if (rec?.notice) shown?.surface.notify(rec.notice);
@@ -113,7 +128,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       console.error(e);
       paper.release();
       (shown?.surface || paper).notify?.(said(k, e));
-    } finally { busy = false; }
+    } finally { busy = false; arriving?.arriving?.(null); arriving = null; }
   };
   // A Word file over a viewer: the record a paper again (its kind's fields cleared), then the file opens as a paper does.
   const back = async (f) => {
