@@ -785,11 +785,13 @@ test('Back up restores discussion, journal and new-message sources under each st
 });
 
 
-test('backup export omits slide decks and their versions until the blob store owns them', () => {
-  const deck = `doc:${id(91)}`, paper = `doc:${id(92)}`;
+test('backup export omits file kinds and their versions until the blob store owns them', () => {
+  const deck = `doc:${id(91)}`, paper = `doc:${id(92)}`, pdf = `doc:${id(93)}`;
   const entries = B.pack({ settings: SETTINGS, tasks: {}, local: {
     [`writerPaper:${deck}`]: { key: deck, kind: 'slides', file: 'UEsDBA==', updated: NOW },
     [`writerVersions:${deck}`]: [],
+    [`writerPaper:${pdf}`]: { key: pdf, kind: 'pdf', file: 'JVBERi0=', updated: NOW },
+    [`writerVersions:${pdf}`]: [],
     [`writerPaper:${paper}`]: { key: paper, kind: 'paper', doc: {}, updated: NOW },
   } });
   const manifest = JSON.parse(new TextDecoder().decode(entries.find((e) => e.name === 'glaze-backup.json').data));
