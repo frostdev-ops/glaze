@@ -729,13 +729,13 @@ test('csv: an unclosed quote and the cell cap degrade, listed in the problems', 
 test('csv: written as Excel saves CSV UTF-8: shown text, quotes where needed, CRLF, a BOM; TSV with tabs', async () => {
   const wb = await X.read(synthetic());
   const one = M.getSheet(wb, 'One');
-  const csv = X.writeDelimited(wb, { sheet: one.id });
+  const csv = X.writeDelimited(wb, { sheet: one.id, recalc: false });
   const lines = csv.split('\r\n');
   assert.equal(csv[0], '\ufeff');
   assert.equal(lines[0], '\ufeffplain & simple,Bold blue sub,日本,"a\rb_x0041_",,in,Bc,', 'a carriage return is quoted too');
   assert.equal(lines[1], '1.5,TRUE,#N/A,44863.5,-4E+300,x1.5,TRUE,#DIV/0!', 'shown as their formats show them: the ISO date has no date format');
   assert.equal(lines.at(-1), '', 'a line end after the last row');
-  const tsv = X.writeDelimited(wb, { sheet: 'One', delimiter: '\t', bom: false });
+  const tsv = X.writeDelimited(wb, { sheet: 'One', delimiter: '\t', bom: false, recalc: false });
   assert.equal(tsv.split('\r\n')[1].split('\t').length, 8);
   const q = M.workbook();
   q.sheets[0].rows.set(0, new Map([[0, { t: 's', v: 'a,b' }], [1, { t: 's', v: 'say "x"' }], [2, { t: 's', v: 'two\nlines' }], [3, { t: 'n', v: 0.1 + 0.2 }], [4, { t: 'n', v: 1 / 3 }]]));
@@ -744,4 +744,126 @@ test('csv: written as Excel saves CSV UTF-8: shown text, quotes where needed, CR
   const back = X.readDelimited(X.writeDelimited(q));
   assert.deepEqual(sheetOf(back).A1, { t: 's', v: 'a,b' });
   assert.deepEqual(sheetOf(back).C1, { t: 's', v: 'two\nlines' });
+});
+
+test('review reader: ambiguous ZIP parts are refused, including case aliases', async () => {
+  const base = D.unzip(synthetic()), files = [];
+  for (const name of base.names) files.push({ name, data: await base.bytes(name) });
+  for (const name of ['xl/workbook.xml', 'XL/WORKBOOK.XML']) {
+    await assert.rejects(X.read(Buffer.concat(Z.zip([...files, { name, data: enc.encode(BOOK()) }]))), /duplicate|ambiguous/i);
+  }
+});
+
+test('review reader: missing content types and package-escaping relationships are reported', async () => {
+  const wb = await X.read(synthetic({ '[Content_Types].xml': '',
+    'xl/worksheets/_rels/sheet1.xml.rels': rels([['bad', 'comments', '../../../xl/comments1.xml']]) }));
+  assert.ok(wb.keep.problems.some((p) => p.code === 'content-types'));
+  assert.ok(wb.keep.problems.some((p) => p.code === 'relationship'));
+  assert.deepEqual(wb.sheets[0].keep.rels, []);
+});
+
+test('review reader: an empty array formula cannot discard later cells', async () => {
+  const wb = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': `<worksheet ${NS}><sheetData><row r="1"><c r="A1"><f t="array" ref="A1:A2"/><v>1</v></c><c r="B1"><v>2</v></c></row></sheetData></worksheet>` }));
+  assert.equal(at(wb, 'One', 'B1')?.v, 2);
+  assert.ok(wb.keep.problems.some((p) => p.code === 'formula'));
+});
+
+test('review reader: imported strings obey the model text cap', async () => {
+  const long = 'x'.repeat(M.CAP.text + 1);
+  const wb = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': `<worksheet ${NS}><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${long}</t></is></c><c r="B1" t="str"><v>${long}</v></c></row></sheetData></worksheet>` }));
+  for (const a of ['A1', 'B1']) assert.equal(at(wb, 'One', a).v.length, M.CAP.text);
+  assert.ok(wb.keep.problems.some((p) => p.code === 'text'));
+});
+
+test('review writer: unchanged cellXfs retain flags, inheritance and unmodelled fields', async () => {
+  const xf = '<xf numFmtId="164" fontId="1" fillId="2" borderId="1" xfId="1" applyFont="0" applyFill="0" applyNumberFormat="0" applyBorder="0" applyProtection="0" applyAlignment="0" pivotButton="1"><alignment relativeIndent="2"/><protection locked="0"/></xf>';
+  const styles = STYLES.replace(/<cellXfs[\s\S]*?<\/cellXfs>/, `<cellXfs count="1">${xf}</cellXfs>`);
+  const wb = await X.read(synthetic({ 'xl/styles.xml': styles }));
+  const p = await parts(await X.write(wb, { recalc: false }));
+  assert.ok(p['xl/styles.xml'].includes(`<cellXfs count="1">${xf}</cellXfs>`));
+  wb.styles[0] = { bold: true };
+  const q = await parts(await X.write(wb, { recalc: false }));
+  assert.ok(!q['xl/styles.xml'].includes(xf), 'an edited style must be regenerated');
+});
+
+test('review writer: prefixed and empty roots produce well-formed namespaced XML', async () => {
+  const wb = await X.read(synthetic({
+    'xl/workbook.xml': `<s:workbook xmlns:s="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${RT}"><s:sheets><s:sheet name="One" sheetId="1" r:id="rId1"/></s:sheets></s:workbook>`,
+    'xl/worksheets/sheet1.xml': '<s:worksheet xmlns:s="http://schemas.openxmlformats.org/spreadsheetml/2006/main"/>',
+    'xl/styles.xml': '<s:styleSheet xmlns:s="http://schemas.openxmlformats.org/spreadsheetml/2006/main"/>',
+  }));
+  const p = await parts(await X.write(wb, { recalc: false }));
+  for (const [file, root] of [['xl/workbook.xml', 'workbook'], ['xl/worksheets/sheet1.xml', 'worksheet'], ['xl/styles.xml', 'styleSheet']]) {
+    assert.match(p[file], new RegExp(`<s:${root}[^>]* xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"[^>]*>`));
+    assert.ok(p[file].endsWith(`</s:${root}>`));
+    assert.doesNotMatch(p[file], new RegExp(`<s:${root}[^>]*\\/>`));
+  }
+});
+
+test('review writer: large number-format tables do not overflow the call stack', async () => {
+  const wb = M.workbook();
+  wb.keep.styles = { numFmts: Array.from({ length: 140000 }, (_, i) => ({ id: 164 + i, code: '0' })) };
+  wb.styles = [{ fmt: '0.0001' }];
+  const p = await parts(await X.write(wb, { recalc: false }));
+  assert.match(p['xl/styles.xml'], /numFmtId="140164" formatCode="0.0001"/);
+});
+
+test('review writer: refs in single quotes, whole columns and rows, and kept table formulas move', async () => {
+  const xml = SHEET1.replace('</worksheet>', "<ignoredErrors><ignoredError sqref='$A:$C $2:$5' numberStoredAsText='1'/></ignoredErrors><dataValidations count='1'><dataValidation sqref='C2:C5'><formula1>Two!A1</formula1></dataValidation></dataValidations><tableParts count=\"1\"><tablePart r:id=\"t\"/></tableParts></worksheet>");
+  const wb = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': xml,
+    'xl/worksheets/_rels/sheet1.xml.rels': rels([['t', 'table', '../tables/table1.xml']]),
+    'xl/tables/table1.xml': `<table ${NS} ref="A1:C5"><tableColumns count="1"><tableColumn id="1" name="V"><calculatedColumnFormula>A2+Two!A1</calculatedColumnFormula></tableColumn></tableColumns></table>` }));
+  const sh = wb.sheets[0];
+  X.track(wb, { op: 'insert', sheet: sh.id, axis: 'row', at: 1, n: 1 });
+  X.track(wb, { op: 'insert', sheet: sh.id, axis: 'col', at: 1, n: 1 });
+  const p = await parts(await X.write(wb, { recalc: false }));
+  assert.match(p['xl/worksheets/sheet1.xml'], /sqref=["']\$?A:\$?D \$?3:\$?6["']/);
+  assert.match(p['xl/worksheets/sheet1.xml'], /sqref=["']D3:D6["']/);
+  assert.match(p['xl/tables/table1.xml'], /<calculatedColumnFormula>A3\+Two!A1<\/calculatedColumnFormula>/);
+});
+
+test('review writer: kept range insertion at its first cell moves the start too', async () => {
+  const wb = await X.read(synthetic());
+  X.track(wb, { op: 'insert', sheet: wb.sheets[0].id, axis: 'row', at: 1, n: 2 });
+  const p = await parts(await X.write(wb, { recalc: false }));
+  assert.match(p['xl/worksheets/sheet1.xml'], /sqref="A4:A11 C4"/);
+});
+
+test('review writer: shifted chart formulas invalidate stale point caches', async () => {
+  const chart = '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:numRef><c:f>One!$A$2:$A$3</c:f><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>7</c:v></c:pt></c:numCache></c:numRef></c:chartSpace>';
+  const wb = await X.read(synthetic({ 'xl/charts/chart1.xml': chart }));
+  X.track(wb, { op: 'delete', sheet: wb.sheets[0].id, axis: 'row', at: 1, n: 1 });
+  const p = await parts(await X.write(wb, { recalc: false }));
+  assert.match(p['xl/charts/chart1.xml'], /One!\$A\$2/);
+  assert.doesNotMatch(p['xl/charts/chart1.xml'], /numCache/);
+});
+
+test('review copied sheet: the original keeps its part and revision id even after the copy moves before it', async () => {
+  const wb = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': SHEET1.replace('<worksheet ', '<worksheet xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision" xr:uid="original" ') }));
+  const one = wb.sheets[0], copy = { ...one, id: 77, name: 'Copy', keep: { ...one.keep } };
+  wb.sheets.unshift(copy);
+  const p = await parts(await X.write(wb, { recalc: false }));
+  const again = await X.read(await X.write(wb, { recalc: false }));
+  assert.equal(M.getSheet(again, 'One').keep.path, one.keep.path);
+  assert.match(p[one.keep.path], /xr:uid="original"/);
+  assert.doesNotMatch(p[M.getSheet(again, 'Copy').keep.path], /xr:uid=/);
+  assert.match(p[one.keep.path], /<drawing /);
+});
+
+test('review csv: formula caches refresh and sparse rectangles are bounded', () => {
+  const wb = X.readDelimited('2,=A1*2');
+  assert.equal(X.writeDelimited(wb, { bom: false }), '2,4\r\n');
+  const sparse = M.workbook(), sh = sparse.sheets[0];
+  sh.rows.set(M.MAX_ROWS - 1, new Map([[M.MAX_COLS - 1, { t: 'n', v: 1 }]]));
+  sh.rows.get = () => { throw Error('export walked a giant rectangle'); };
+  assert.throws(() => X.writeDelimited(sparse), (e) => e.code === 'cap-cells');
+});
+
+test('review dependencies: a failed early lookup can retry after the engine loads', () => {
+  const vm = require('node:vm');
+  const ctx = { GZ_SHEET_MODEL: M, module: { exports: {} }, require: () => { throw Error('late dependency'); } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../lib/sheet-xlsx.js'), 'utf8'), ctx);
+  assert.throws(() => ctx.module.exports.tinted('#000000', 0), /late dependency/);
+  Object.assign(ctx, { GZ_SHEET_FORMULA: require('../lib/sheet-formula.js'), GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'), GZ_DOCTEXT: D });
+  assert.equal(ctx.module.exports.tinted('#000000', 0), '#000000');
 });
