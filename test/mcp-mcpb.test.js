@@ -151,19 +151,19 @@ test('pack-mcpb validates and packs with @anthropic-ai/mcpb 2.1.2 into dist/, wh
   assert.equal(steps[0][1][3], path.join('/s', 'manifest.json'));
   assert.deepEqual(steps[1][1].slice(3), ['/s', out]);
   assert.equal(steps[2][1][3], out);
-  assert.ok(fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8').split('\n').includes('dist/'));
+  assert.ok(fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8').split(/\r?\n/).includes('dist/'));
   const pkg = json(path.join(PKG, 'package.json'));
   assert.deepEqual(pkg.files, ['bin', 'lib', 'LICENSE'], 'the npm package leaves the bundle\'s files out');
 });
 
 // ---- the node a launcher names -----------------------------------------------------------------------------------------
-test('Claude\'s own runtime is told apart: Electron, ELECTRON_RUN_AS_NODE, or a node inside Claude\'s app', () => {
+test('Claude\'s own runtime is told apart: Electron, or a node inside Claude\'s app; ELECTRON_RUN_AS_NODE alone is not it', () => {
   const { claude } = N();
   const plain = { execPath: '/opt/homebrew/bin/node', versions: { node: '22.11.0' }, env: {} };
   assert.equal(claude(plain), false);
   assert.equal(claude({ ...plain, versions: { node: '22.11.0', electron: '38.1.0' } }), true);
-  assert.equal(claude({ ...plain, env: { ELECTRON_RUN_AS_NODE: '1' } }), true);
-  assert.equal(claude({ ...plain, env: { ELECTRON_RUN_AS_NODE: '' } }), false);
+  // Electron runs as node only under ELECTRON_RUN_AS_NODE, which no browser sets; a plain node ignores it, so its launcher works.
+  assert.equal(claude({ ...plain, env: { ELECTRON_RUN_AS_NODE: '1' } }), false);
   assert.equal(claude({ ...plain, execPath: '/Applications/Claude.app/Contents/MacOS/Claude' }), true);
   assert.equal(claude({ ...plain, execPath: '/Applications/Claude.app/Contents/Frameworks/Claude Helper.app/Contents/MacOS/Claude Helper' }), true);
   assert.equal(claude({ ...plain, execPath: 'C:\\Users\\Jo\\AppData\\Local\\AnthropicClaude\\app-0.14.10\\claude.exe' }), true);
@@ -172,7 +172,7 @@ test('Claude\'s own runtime is told apart: Electron, ELECTRON_RUN_AS_NODE, or a 
   assert.equal(claude({ execPath: process.execPath, versions: process.versions, env: {} }), false, 'this test runs on a plain node');
 });
 
-test('where a system node is looked for: PATH, then where installers put one, newest nvm first', (t) => {
+test('where a system node is looked for on macOS: PATH, then where installers put one, newest nvm first', { skip: posixOnly('a POSIX scratch home for nvm; Linux and Windows below run everywhere') }, (t) => {
   const { places } = N();
   const home = scratch(t);
   for (const v of ['v9.11.2', 'v18.20.4', 'v22.11.0', 'v20.18.0', 'not-a-version']) mk(home, '.nvm', 'versions', 'node', v, 'bin');
@@ -186,7 +186,10 @@ test('where a system node is looked for: PATH, then where installers put one, ne
   assert.deepEqual(places('darwin', { HOME: home, PATH: '/usr/local/bin' }).filter((p) => p === '/usr/local/bin/node').length, 1);
   // NVM_DIR moves nvm.
   assert.ok(places('darwin', { HOME: '/nowhere', NVM_DIR: path.join(home, '.nvm') }).includes(`${home}/.nvm/versions/node/v22.11.0/bin/node`));
+});
 
+test('where a system node is looked for on Linux and Windows', () => {
+  const { places } = N();
   const linux = places('linux', { HOME: '/home/jo', PATH: '/usr/bin:/bin' });
   assert.deepEqual(linux.slice(0, 2), ['/usr/bin/node', '/bin/node']);
   for (const p of ['/usr/local/bin/node', '/home/jo/.volta/bin/node', '/home/jo/.local/bin/node']) assert.ok(linux.includes(p), p);
@@ -211,7 +214,6 @@ test('find takes the first candidate that is a safe executable file saying v18 o
   const shared = mk(d, 'shared');
   const loose = fakeNode(shared, 'v22.0.0');
   fs.chmodSync(shared, 0o777);
-  t.after(() => fs.chmodSync(shared, 0o700));
   const folder = path.join(mk(d, 'folder', 'node'));
   const claudeApp = fakeNode(path.join(d, 'Claude.app', 'Contents', 'Resources'), 'v22.0.0');
   const good = fakeNode(path.join(d, 'good'), 'v20.18.0');
@@ -242,6 +244,14 @@ test('choose keeps a plain node by its stable PATH name, and under Claude finds 
   assert.equal(await choose({ ...electron, list: [node] }), node);
   assert.equal(await choose({ ...electron, list: [] }), null);
   assert.equal(await choose({ ...electron, list: ['/Applications/Claude.app/Contents/MacOS/Claude'] }), null, 'Claude\'s app is never a candidate');
+});
+
+test('the new helper files reach nothing outside the computer and start processes only through the runner they are given', () => {
+  const code = (f) => fs.readFileSync(path.join(PKG, f), 'utf8').replace(/^\s*\/\/.*$/gm, '');
+  for (const f of ['lib/nodes.js', 'lib/mcpb.js']) {
+    assert.doesNotMatch(code(f), /require\(['"](node:)?(net|http|https|http2|dgram|tls|dns|child_process)['"]\)|\bfetch\(/, f);
+    assert.doesNotMatch(code(f), /(?<![.\w$])(spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\(/, f);
+  }
 });
 
 test('install refuses to default to Claude\'s runtime when no node is given', () => {

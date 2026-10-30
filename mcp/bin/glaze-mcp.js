@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // glaze-mcp: lets AI apps on this computer reach Glaze in the browser.
-//   glaze-mcp [agent]   what an agent app runs (lib/agent.js)
+//   glaze-mcp [agent]   what an agent app runs (lib/agent.js); with --from=mcpb, Claude Desktop's bundle, it first sets
+//                       the browsers up (lib/mcpb.js)
 //   glaze-mcp host      what the browser starts over native messaging (lib/host.js); also chosen from the browser's own
 //                       argv alone, so a manifest may name this file directly. Never from a terminal.
 //   glaze-mcp setup | uninstall | doctor | --version
@@ -79,7 +80,12 @@ const main = async (args, io = {}) => {
         }
         const mod = part(m.mode, stderr);
         if (!mod) return 2;
-        const code = await mod.main({ args: m.args, browser: m.browser || null, caller: m.caller || null, io: { stdin, stdout, stderr, platform, env: io.env } });
+        let { args: rest } = m, env = io.env;
+        if (m.mode === 'agent' && rest.includes('--from=mcpb')) {
+          rest = rest.filter((a) => a !== '--from=mcpb');
+          ({ env } = await require('../lib/mcpb.js').start({ platform, env: io.env, stderr, run: io.run }));
+        }
+        const code = await mod.main({ args: rest, browser: m.browser || null, caller: m.caller || null, io: { stdin, stdout, stderr, platform, env } });
         return typeof code === 'number' ? code : undefined;
       }
       case 'setup': {
