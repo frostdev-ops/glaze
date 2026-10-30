@@ -1,5 +1,5 @@
-// An assignment's attached PDF or deck opened in Glaze (lib/writer-context-assignment.js): only a .pdf, .pptx or .ppsx
-// attachment whose kind's Settings → Writer switch is on is offered; its bytes come by the same bounded GET Feedback's
+// An assignment's attached PDF, deck or spreadsheet opened in Glaze (lib/writer-context-assignment.js): only a .pdf, .pptx,
+// .ppsx, .xlsx, .csv or .tsv attachment whose kind's Settings → Writer switch is on is offered; its bytes come by the same bounded GET Feedback's
 // reader uses, with the session, and go to the paper's frame as import:file { open: true } (writer-import.js then opens
 // it in Glaze: the paper kept as a version first); a file past the bound, a failed read or a file not the box's says so.
 const test = require('node:test');
@@ -12,14 +12,17 @@ const FILES = [
   { url: 'https://bb.school.test/bbcswebdav/pid-1-dt-asiobject-rid-12_1/xid-12_1', name: 'Week 3.pptx', image: false, id: 'attachment-2' },
   { url: 'https://bb.school.test/bbcswebdav/pid-1-dt-asiobject-rid-13_1/xid-13_1', name: 'Essay 2 prompt.docx', image: false, id: 'attachment-3' },
   { url: 'https://bb.school.test/bbcswebdav/pid-1-dt-asiobject-rid-14_1/xid-14_1', name: 'explore3.png', image: true, id: 'attachment-4' },
+  { url: 'https://bb.school.test/bbcswebdav/pid-1-dt-asiobject-rid-15_1/xid-15_1', name: 'Lab data.csv', image: false, id: 'attachment-5' },
 ];
 
-test('openable: a PDF or deck attachment only while its kind\'s switch is on; never a Word file or a picture', () => {
+test('openable: a PDF, deck or spreadsheet attachment only while its kind\'s switch is on; never a Word file or a picture', () => {
   const names = (w) => C.openable(FILES, w, L).map((f) => f.name);
   assert.deepEqual(names({}), [], 'switches off: nothing added');
   assert.deepEqual(names({ pdf: true }), ['Field trip form.pdf']);
   assert.deepEqual(names({ slides: true }), ['Week 3.pptx']);
-  assert.deepEqual(names({ pdf: true, slides: true, sheets: true }), ['Field trip form.pdf', 'Week 3.pptx']);
+  assert.deepEqual(names({ sheets: true }), ['Lab data.csv']);
+  assert.deepEqual(names({ pdf: true, slides: true, sheets: true }), ['Field trip form.pdf', 'Week 3.pptx', 'Lab data.csv']);
+  for (const name of ['Budget.xlsx', 'Scores.tsv']) assert.deepEqual(C.openable([{ ...FILES[4], name }], { sheets: true }, L).map((f) => f.name), [name]);
   assert.deepEqual(C.openable(null, { pdf: true }, L), []);
   assert.deepEqual(C.openable([{ ...FILES[0], image: true }], { pdf: true }, L), [], 'a file read as a picture is not opened as a PDF');
 });
@@ -111,4 +114,29 @@ test('every matching link keeps a stable opener, and changed hrefs lose theirs',
   C.decorate(p.X, p.box, L, doc);
   assert.equal(p.box.openers.size, 0);
   assert.equal(links[1].button, null);
+});
+
+test('a spreadsheet attachment reaches the opener through the real attachment-link parser; Feedback never fetches it', async () => {
+  const item = require('./fixtures/ultra-writer-attach-content.json');
+  const html = item.contentDetail['resource/x-bb-asmt-test-link'].test.assessment.instructions.rawText
+    .replaceAll('Essay 2 prompt.docx', 'Lab data.xlsx').replaceAll('wordprocessingml.document', 'spreadsheetml.sheet');
+  const files = C.attached([html], 'https://bb.school.example.edu');
+  assert.deepEqual(C.openable(files, { sheets: true }, L).map((f) => f.name), ['Lab data.xlsx']);
+  assert.equal(files.incomplete, undefined, 'a spreadsheet is a file the box knows');
+  const got = [];
+  const read = await C.read(files, { get: async (url) => { got.push(url); return new Uint8Array([0x89, 0x50, 0x4e, 0x47]); }, text: async () => '', D: require('../lib/doctext.js'), images: false });
+  assert.ok(!got.some((u) => files.find((f) => f.name === 'Lab data.xlsx').url === u), 'the spreadsheet is never fetched for Feedback');
+  assert.equal(read.incomplete, true, 'Feedback hears a file went unread');
+});
+
+test('open: an attached spreadsheet goes to the frame as import:file { open } while Spreadsheets is on', async () => {
+  const csv = new TextEncoder().encode('Time,Temp\n1,20.5\n');
+  const p = page({ [FILES[4].url]: csv });
+  assert.equal(await C.open(p.X, p.box, 'attachment-5', L), false, 'Spreadsheets off: refused');
+  assert.equal(p.fetched.length, 0);
+  p.X.settings = () => ({ writer: { sheets: true } });
+  assert.equal(await C.open(p.X, p.box, 'attachment-5', L), true);
+  const { m } = p.port.sent[0];
+  assert.deepEqual({ type: m.type, name: m.name, mime: m.mime, open: m.open }, { type: 'import:file', name: 'Lab data.csv', mime: 'text/csv', open: true });
+  assert.deepEqual([...new Uint8Array(m.bytes)], [...csv]);
 });
