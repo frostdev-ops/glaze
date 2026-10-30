@@ -185,3 +185,27 @@ test('a daily snapshot holds Notes and hidden course folders as Back up… does,
   assert.ok(!r.zip.names.some((n) => /share-keys/.test(n)), 'no share keys');
   assert.deepEqual(JSON.parse(await r.zip.text('glaze-backup.json')).settings.folders, { 'hiddenFolders:https://school.instructure.com/42/7': hidden }, 'the hidden course folders');
 });
+
+test('a restarted worker builds the daily snapshot without a document export having loaded the zip library first', async () => {
+  const { context, records, local } = worker();
+  // The worker's own importScripts, relative to background/: what a restarted worker has is only what something loaded.
+  const path = require('node:path');
+  const loaded = [];
+  context.importScripts = (...files) => { for (const f of files) { loaded.push(f); vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../../extension/background', f), 'utf8'), context); } };
+  const B = require('../../extension/background/backup.js');
+  Object.assign(context, {
+    GZ_BACKUP: B, GZ_TODO: require('../../extension/planner/todo.js'), GZ_PET: require('../../extension/pet/pet.js'), GZ_SANITIZE: require('../../extension/content/defaults.js').GZ_SANITIZE,
+    GZ_HISTORY: require('../../extension/looks/history.js'), GZ_DOC_KINDS: require('../../extension/documents/doc-kinds.js'), GZ_FOLDERS: require('../../extension/courses/folders.js'), Blob, URL,
+  });
+  assert.equal(context.GZ_ZIP, undefined, 'no export ran in this worker');
+  context.chrome.runtime.getManifest = () => ({ version: '4.0.1' });
+  context.openDocFiles = () => ({ read: async () => { throw new Error('no files'); } });
+  const get = local.get;
+  local.get = async (k) => (k === null ? Object.fromEntries(await Promise.all((await local.getKeys()).map(async (x) => [x, (await get(x))[x]]))) : get(k));
+  await local.set({ writerWords: ['Glaze'] });
+  const made = await records.snapshot();
+  assert.ok(made?.bytes?.length > 0, 'a snapshot was made');
+  const r = await B.read(Object.assign(new Blob([made.bytes]), { name: made.name }));
+  assert.deepEqual(JSON.parse(await r.zip.text('glaze-backup.json')).writerWords, ['Glaze']);
+  assert.ok(loaded.includes('../core/zip.js'));
+});
