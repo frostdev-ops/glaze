@@ -4,7 +4,8 @@
 // every other request aborted and DNS resolving nowhere; Glaze's own page features are off, so every planner and gradebook
 // request is the agent read's. Checks: the planner read afresh in the Canvas and the Ultra tab and kept through the page's
 // publish path, Insights read afresh while it is on, an assignment read in the tab (its text, files and rubric, through the
-// libraries the page loads on demand, and no submission), no tab for another account, a quiz page or no tab at all.
+// libraries the page loads on demand, and no submission), Canvas's planner mark with the page's CSRF token, no tab for
+// another account, a quiz page or no tab at all.
 //   NODE_PATH=<playwright> nice -n 10 node scripts/mcp-refresh-check.js [evidence folder]   (EXT selects the checkout)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
@@ -85,13 +86,19 @@ const check = async (name, test) => {
     });
     env.noFirstRun(context);
     context.setDefaultTimeout(15000);
-    const asked = [];
+    const asked = [], marks = [];
     let uid = '5';
+    const CSRF = 'check+token/=';
+    await context.addCookies([{ name: '_csrf_token', value: encodeURIComponent(CSRF), domain: 'school.instructure.com', path: '/', secure: true }]);
     await context.route('**/*', (r) => {
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
-      if (![CANVAS, ULTRA].includes(u.origin) || req.method() !== 'GET') { asked.push(`refused ${req.method()} ${u.href}`); return r.abort(); }
       const json = (b, status = 200) => r.fulfill({ status, contentType: 'application/json', body: JSON.stringify(b) });
+      if (u.origin === CANVAS && req.method() === 'POST' && u.pathname === '/api/v1/planner/overrides') {
+        marks.push({ headers: req.headers(), body: req.postDataJSON() });
+        return json({ id: 901, plannable_id: req.postDataJSON().plannable_id, marked_complete: req.postDataJSON().marked_complete, dismissed: false });
+      }
+      if (![CANVAS, ULTRA].includes(u.origin) || req.method() !== 'GET') { asked.push(`refused ${req.method()} ${u.href}`); return r.abort(); }
       asked.push(`${u.origin === CANVAS ? 'canvas' : 'ultra'} ${u.pathname}`);
       if (u.origin === ULTRA) return u.pathname.startsWith('/learn/api/') ? json(ultraApi(u)) : r.fulfill({ contentType: 'text/html', body: ULTRA_PAGE });
       if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return json({ id: uid, time_zone: 'UTC' });
@@ -163,6 +170,15 @@ const check = async (name, test) => {
       const mine = asked.slice(n).filter((x) => x.startsWith('canvas /api/'));
       assert.deepEqual(mine, ['canvas /api/v1/courses/25/assignments/171']);
       return { title: r.title, files: r.files, criteria: r.rubric.criteria.length, loaded: asked.slice(n).filter((x) => !x.startsWith('canvas /api/')) };
+    });
+    await check('Canvas: the planner mark goes through the tab with the page\'s CSRF token', async () => {
+      const r = await worker.evaluate(([a]) => tabRun(a, 'mark', { type: 'assignment', id: '1', aid: '', ov: '' }), [A]);
+      assert.deepEqual(r, { ok: true, ov: { id: '901', done: true, dismissed: false } });
+      assert.equal(marks.length, 1);
+      assert.deepEqual(marks[0].body, { plannable_id: '1', plannable_type: 'assignment', user_id: '5', marked_complete: true });
+      assert.equal(marks[0].headers['x-csrf-token'], CSRF);
+      assert.equal(marks[0].headers['x-requested-with'], 'XMLHttpRequest');
+      return { answer: r, body: marks[0].body };
     });
     await check('another account\'s tab, or a quiz page, is no tab', async () => {
       uid = '6';

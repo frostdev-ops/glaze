@@ -78,13 +78,15 @@ test('accounts_list: every account with a planner or Insights record kept, newes
   assert.match(none.missing, /^Open /);
 });
 
+// The broker's items with Glaze's own mark beside each (lib/mcp/tools-study.js marked): none here.
+const unmarked = (items) => items.map((i) => ({ ...i, marked: null }));
 test('todo_list: the account\'s planner items as a mod gets them, with the span Glaze read; another account\'s is never shown', async () => {
   const store = await school();
-  const mine = await B.CALLS.todo.run([], C.broker(store, A));
+  const mine = unmarked(await B.CALLS.todo.run([], C.broker(store, A)));
   assert.equal(mine.length, 5);
   const plan = store.todoCache;
   assert.deepEqual(await run('todo_list', store, A), { account: A, at: plan.at, covers: { from: Date.parse(plan.start), to: Date.parse(plan.end), complete: true }, items: mine });
-  assert.deepEqual(Object.keys(mine[0]), ['id', 'type', 'courseId', 'course', 'title', 'due', 'url', 'done', 'submitted', 'graded', 'late', 'missing']);
+  assert.deepEqual(Object.keys(mine[0]), ['id', 'type', 'courseId', 'course', 'title', 'due', 'url', 'done', 'submitted', 'graded', 'late', 'missing', 'marked']);
   assert.ok(!JSON.stringify(mine).includes('note text'), 'planner notes\' text stays out, as for mods');
   // One course; what is due in the next days (from now, as a mod tool's days).
   assert.deepEqual((await run('todo_list', store, A, { course: '25' })).items.map((i) => i.id), ['1', '5']);
@@ -101,7 +103,7 @@ test('todo_list: the account\'s planner items as a mod gets them, with the span 
   // Ultra's planner, once it is the one kept, with a calendar Glaze couldn't read whole.
   store.todoCache = await C.ultraPlan(NOW - 120e3, false);
   const u = await run('todo_list', store, UL);
-  assert.deepEqual(u.items, await B.CALLS.todo.run([], C.broker(store, UL)));
+  assert.deepEqual(u.items, unmarked(await B.CALLS.todo.run([], C.broker(store, UL))));
   assert.deepEqual(u.items.map((i) => i.title), ['Publisher Homework 4', 'Lab Report 3', 'Essay 3']);
   assert.equal(u.covers.complete, false);
   assert.deepEqual((await run('todo_list', store, A)).items, [], 'A\'s is gone with it');
@@ -113,7 +115,7 @@ test('schedule_list: dates or date-times, at most 60 days, the same items as the
   const local = (y, m, d) => new Date(y, m - 1, d).getTime();
   // A date alone is the student's own day, its start to its end.
   const days = await run('schedule_list', store, A, { from: '2026-10-15', to: '2026-10-19' });
-  assert.deepEqual(days.items, await B.CALLS.schedule.run([local(2026, 10, 15), local(2026, 10, 20) - 1], env));
+  assert.deepEqual(days.items, unmarked(await B.CALLS.schedule.run([local(2026, 10, 15), local(2026, 10, 20) - 1], env)));
   assert.equal(days.at, store.todoCache.at);
   assert.deepEqual(days.covers, { from: Date.parse(store.todoCache.start), to: Date.parse(store.todoCache.end), complete: true });
   // With a zone, that moment; without one, the student's own clock.
@@ -121,7 +123,7 @@ test('schedule_list: dates or date-times, at most 60 days, the same items as the
     ['2026-10-15T00:00:00Z', '2026-10-20T04:00:00Z', [Date.UTC(2026, 9, 15), Date.UTC(2026, 9, 20, 4)]],
     ['2026-10-15T12:00+02:00', '2026-10-21T23:59:59.5-04:00', [Date.UTC(2026, 9, 15, 10), Date.UTC(2026, 9, 22, 3, 59, 59, 500)]],
     ['2026-10-13T10:00', '2026-10-16T09:30:15', [new Date(2026, 9, 13, 10).getTime(), new Date(2026, 9, 16, 9, 30, 15).getTime()]]]) {
-    assert.deepEqual((await run('schedule_list', store, A, { from, to })).items, await B.CALLS.schedule.run(want, env), `${from} ${to}`);
+    assert.deepEqual((await run('schedule_list', store, A, { from, to })).items, unmarked(await B.CALLS.schedule.run(want, env)), `${from} ${to}`);
   }
   assert.deepEqual((await run('schedule_list', store, A, { from: '2026-10-16T00:00:00Z', to: '2026-10-21T00:00:00Z' })).items.map((i) => i.id), ['1', '2']);
   assert.equal((await run('schedule_list', store, A, { from: '2026-10-01T00:00:00Z', to: '2026-11-30T00:00:00Z' })).items.length, 5, 'sixty days exactly');

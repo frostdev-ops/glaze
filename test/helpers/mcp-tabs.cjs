@@ -105,7 +105,7 @@ const WIRING = [
   ['const mcpRefresh = async (account, group, { signal, tool } = {}) => null;',
     'let mcpTabsMade = null;\nconst mcpTabs = () => (mcpTabsMade ||= GZ_MCP_TABS.create({ tabs: chrome.tabs, scripting: chrome.scripting, quiet: modQuiet }));\nconst mcpRefresh = (account, group, o) => mcpTabs().refresh(account, group, o);'],
   ["if (!GZ_AI_TOOLS.get('accounts_list')) { GZ_MCP_STUDY.register(GZ_AI_TOOLS); GZ_MCP_GRADES.register(GZ_AI_TOOLS); }",
-    "if (!GZ_AI_TOOLS.get('accounts_list')) { GZ_MCP_STUDY.register(GZ_AI_TOOLS); GZ_MCP_GRADES.register(GZ_AI_TOOLS); GZ_MCP_ASSIGN.register(GZ_AI_TOOLS, { tabs: mcpTabs() }); }"],
+    "if (!GZ_AI_TOOLS.get('accounts_list')) { const deps = { sync: chrome.storage.sync, tabs: mcpTabs() }; GZ_MCP_STUDY.register(GZ_AI_TOOLS, deps); GZ_MCP_GRADES.register(GZ_AI_TOOLS); GZ_MCP_ASSIGN.register(GZ_AI_TOOLS, deps); }"],
 ];
 const wired = (src = read('lib/background.js')) => WIRING.reduce((s, [stub, line]) => {
   if (s.includes(line)) return s;

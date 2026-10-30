@@ -5,7 +5,8 @@
 // record for this account: one the student cleared, or never made, is theirs to make by opening Insights. assignment reads
 // one assignment's title, due date, points, instructions, the names of the files they attach and its rubric's definition:
 // Ultra's as Writer reads it (lib/writer-context-assignment.js build), Canvas's from its assignment through lib/rubric.js;
-// never a submission or an attempt, so never the student's scores or feedback. Past args.ms (at
+// never a submission or an attempt, so never the student's scores or feedback. mark is Canvas's planner mark for an item,
+// with the page's CSRF token (lib/mcp/tools-study.js todo_mark_done, once the student allowed it). Past args.ms (at
 // most LIMIT.ms) nothing more is asked of the site and nothing is kept; a read that didn't finish whole keeps nothing.
 // Content side, in Glaze's own world (GZ_CTX); a second injection keeps the first. run(op, args) → { ok: true, … } or
 // { ok: false, error }.
@@ -180,7 +181,23 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
       instructions: text(html), description: '', files: files(html), rubric: m ? W.rubricOf(m) : null, incomplete: html.length > LIMIT.text };
   };
 
-  const OPS = { todo, insights, assignment };
+  // ---- Canvas's planner mark, as features/todo.js write sends it: the page's CSRF token, an assignment behind a quiz or a
+  // discussion marked as the assignment, PUT to an override Canvas keeps already. → the override Canvas kept ----
+  const csrf = () => { const m = document.cookie.match(/(?:^|;\s*)_csrf_token=([^;]*)/); return m ? decodeURIComponent(m[1]) : ''; };
+  const mark = async (go, a) => {
+    const x = X();
+    if (x.site !== 'canvas' || !ID.test(a.id || '') || !/^[a-z_]{1,40}$/.test(a.type || '') || (a.aid && !ID.test(a.aid)) || (a.ov && !ID.test(a.ov))) return no('args');
+    const uid = String(await x.account());
+    if (!ID.test(uid)) return no('profile');
+    const body = { plannable_id: a.aid || a.id, plannable_type: a.aid ? 'assignment' : a.type, user_id: uid, marked_complete: true };
+    const { j } = await req(`/api/v1/planner/overrides${a.ov ? `/${a.ov}` : ''}`, go, {
+      method: a.ov ? 'PUT' : 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': csrf(), 'x-requested-with': 'XMLHttpRequest' },
+      body: JSON.stringify(a.ov ? { id: a.ov, ...body } : body),
+    });
+    return ID.test(String(j?.id)) ? { ok: true, ov: { id: String(j.id), done: !!j.marked_complete, dismissed: !!j.dismissed } } : no('no override');
+  };
+
+  const OPS = { todo, insights, assignment, mark };
   const run = async (op, args) => {
     const x = X(), a = args && typeof args === 'object' ? args : {};
     if (!x?.on() || !Object.hasOwn(OPS, op)) return no('here');
