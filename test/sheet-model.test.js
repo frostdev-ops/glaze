@@ -374,3 +374,42 @@ test('styles are shared: an equal style is the same index', () => {
   assert.equal(M.internStyle(wb, { fmt: 10 }), 2);
   assert.equal(wb.styles.length, 3);
 });
+
+// Excel's legacy array restrictions: support.microsoft.com/en-us/excel/rules-for-changing-array-formulas.
+test('structural edits refuse to split an array before changing formulas or dimensions', () => {
+  for (const axis of ['row', 'col']) for (const op of ['insert', 'delete']) {
+    const wb = shaped(), sh = wb.sheets[0];
+    M.apply(wb, { op: 'set', sheet: sh.id, r: 1, c: 1, cell: { t: 'n', v: 1, f: '{1,2;3,4}', a: 'B2:C3' } });
+    const before = structuredClone(wb);
+    assert.throws(() => M.apply(wb, { op, sheet: sh.id, axis, at: 2, n: 1 }), (e) => e.code === 'array-part');
+    assert.deepEqual(wb, before);
+  }
+});
+
+test('insert undo preserves dimensions and hidden flags pushed off the last row or column', () => {
+  for (const axis of ['row', 'col']) {
+    const wb = shaped(), sh = wb.sheets[0];
+    const max = axis === 'row' ? M.MAX_ROWS : M.MAX_COLS;
+    sh[axis === 'row' ? 'rowH' : 'colW'].set(max - 1, 27);
+    sh.hidden[axis === 'row' ? 'rows' : 'cols'].add(max - 1);
+    const before = structuredClone(wb);
+    const { inverse } = M.apply(wb, { op: 'insert', sheet: sh.id, axis, at: 0, n: 1 });
+    M.apply(wb, inverse);
+    assert.deepEqual(wb, before);
+  }
+});
+
+test('adding a populated sheet cannot bypass the workbook cell cap', () => {
+  const wb = M.workbook(), sh = M.sheet('Imported', 2);
+  sh.rows.set(0, new Map(Array.from({ length: M.CAP.cells + 1 }, (_, i) => [i, { t: 'n', v: i }])));
+  const before = structuredClone(wb);
+  assert.throws(() => M.apply(wb, { op: 'addSheet', sheet: sh }), (e) => e.code === 'cap-cells');
+  assert.deepEqual(wb, before);
+});
+
+// Microsoft: Keeping leading zeros and large numbers, digits beyond the fifteenth are zeroed on entry.
+test('typed numbers discard significant digits past the fifteenth', () => {
+  assert.equal(M.parseInput('1234567890123456').v, 1234567890123450);
+  assert.equal(M.parseInput('0.1234567890123456').v, 0.123456789012345);
+  assert.equal(M.parseInput('-1234567890123456').v, -1234567890123450);
+});
