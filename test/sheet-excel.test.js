@@ -27,7 +27,7 @@ const execute = async (name, options = {}) => {
       if (id === 'node:fs') return disk;
       if (id === './sheet-excel.js') return excel;
       if (id.includes('fixtures/sheets/cases')) return { cases: list, families };
-      if (id.includes('xlsx-cache')) return { read: async () => ({ sheets: families.math.sheets.map((sheet) => ({
+      if (id.includes('xlsx-cache')) return { ...require('./helpers/xlsx-cache.cjs'), read: async () => ({ sheets: families.math.sheets.map((sheet) => ({
         name: sheet, cells: new Map(list.filter((c) => c.sheet === sheet).map((c) => [c.cell, { f: c.formula.slice(1), t: 'n', v: 2 }])),
       })) }) };
       return require(id);
