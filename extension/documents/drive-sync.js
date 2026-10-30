@@ -447,7 +447,9 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         await S.set({ [STATE]: { on: false, off: true, problem: 'account' } });
         return { ok: false, why: 'account' };
       }
-      if (!o.full && st.wait && now() < st.wait) return { ok: false, why: 'later' };
+      // The wait holds off saves' runs; a start, Documents or Writer opening, or coming back online tries at once after a
+      // run that only failed to reach Drive.
+      if (!o.full && st.wait && now() < st.wait && !(o.poke && st.problem === 'network')) return { ok: false, why: 'later' };
       if (!st.account) st = await setState({ account: who });
       runAccount = who;
       client = env.drive(active);
@@ -510,7 +512,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const poke = async () => {
       if (now() - poked < WAIT.pull || !(await state()).on) return null;
       poked = now();
-      return run();
+      return run({ poke: true });
     };
     // busy: a run under way (one a stopped worker left counts for two minutes at most).
     const status = async () => { const s = await state(); return { on: !!s.on, last: s.last || null, problem: s.problem || null, busy: !!s.busy && now() - s.busy < 120e3 }; };
