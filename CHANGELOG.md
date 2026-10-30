@@ -14,6 +14,7 @@ All notable changes to Glaze are documented here. The format follows
 - **Documents**: every paper and document in one place, from the popup, Ctrl/⌘+K or Glaze's bar in Blackboard, Canvas and Moodle. Start one (Blank, MLA, APA, Chicago) or import a Word file; search, filter by course, rename, copy, export a .docx. Deleted documents wait 30 days in **Trash**. The page wears your Look.
 - Writer's pages follow a dark Look; **Light page** keeps them white.
 - Mods: `glaze.documents`, with the `documents` and `documents.read` permissions.
+- Agents (off by default): AI apps on your computer can read your courses, to-dos, grades and drafts once you allow them, and ask before any change.
 
 ### Changed
 
