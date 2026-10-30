@@ -121,8 +121,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
 
   // ---- the engine --------------------------------------------------------------------------------------------------------
   const defaultSource = (base) => async (name) => {
+    // An extension page has chrome.runtime; the engine host's dedicated Worker has no chrome.* but the extension's origin.
     const url = base ? new URL(`${name}.wgsl`, base).href
-      : typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL(`ai/local/kernels/${name}.wgsl`) : fail('no kernel source');
+      : typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL(`ai/local/kernels/${name}.wgsl`)
+        : typeof location !== 'undefined' && /^(chrome|moz|safari-web)-extension:$/.test(new URL(location.origin).protocol) ? new URL(`/ai/local/kernels/${name}.wgsl`, location.origin).href
+          : fail('no kernel source');
     const r = await fetch(url);
     if (!r.ok) fail(`kernel ${name}: ${r.status}`);
     return r.text();
@@ -154,7 +157,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     try { c = REF().config(gguf); } catch (e) { fail(e.message, 'model'); }
     if (typeof navigator === 'undefined' || !navigator.gpu) fail('no WebGPU', 'webgpu');
     let adapter = opts.adapter;
-    if (!adapter) try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); } catch { adapter = null; }
+    // Chrome on Linux with NVIDIA's Vulkan driver answers null until its GPU process is up: a few more tries.
+    for (let i = 0; !adapter && i < 4; i++) {
+      if (i) { await new Promise((r) => setTimeout(r, 500 * i)); halt(); }
+      try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); } catch { adapter = null; }
+    }
     halt();
     if (!adapter) fail('no WebGPU adapter', 'webgpu');
     const precision = opts.precision || 'auto';

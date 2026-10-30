@@ -81,7 +81,7 @@ function host() {
   };
   const adapter = { limits, features, requestDevice: async () => device };
   const context = vm.createContext({
-    require, navigator: { gpu: {} }, GZ_AI_REFERENCE: require('../../extension/ai/local/reference.js'),
+    require, navigator: { gpu: {} }, setTimeout, clearTimeout, URL, GZ_AI_REFERENCE: require('../../extension/ai/local/reference.js'),
     GPUBuffer: Buffer, GPUBufferUsage: { STORAGE: 1, COPY_SRC: 2, COPY_DST: 4, MAP_READ: 8, UNIFORM: 16 }, GPUMapMode: { READ: 1 },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/engine.js'), 'utf8'), context);

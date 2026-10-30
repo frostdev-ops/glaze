@@ -143,3 +143,16 @@ test('embeds must lie inside the feed and come from a big enough COPY_SRC buffer
   assert.deepEqual(mine, [{ from: 0, to: E * 4, size: 2 * E * 4 }, { from: 0, to: 3 * E * 4, size: E * 4 }, { from: E * 4, to: 0, size: E * 4 }]);
   m.release();
 });
+
+test('in the engine host\'s Worker (no chrome.*), the kernels come from the extension\'s own /ai/local/kernels/', async () => {
+  const h = host(), fs = require('node:fs'), path = require('node:path'), asked = [];
+  h.context.location = { origin: 'chrome-extension://abc', href: 'chrome-extension://abc/ai/local/host.js' };
+  h.context.fetch = async (url) => {
+    asked.push(String(url));
+    const name = /\/ai\/local\/kernels\/(\w+)\.wgsl$/.exec(String(url))?.[1];
+    return name ? { ok: true, text: async () => fs.readFileSync(path.join(__dirname, `../../extension/ai/local/kernels/${name}.wgsl`), 'utf8') } : { ok: false, status: 404 };
+  };
+  const m = await h.load(model(), { context: 32, chunk: 4, kernels: undefined });
+  assert.ok(asked.length > 0 && asked.every((u) => u.startsWith('chrome-extension://abc/ai/local/kernels/')), asked.join(' '));
+  m.release();
+});

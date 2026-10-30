@@ -7,6 +7,10 @@
 // as probe 4 measured), slowly, so the download's progress shows. The host idles out after 4 s in the copy (5 minutes as
 // shipped), so its offscreen document is seen to close, and a later run starts it again. Every step is reported.
 //   glaze-remote -o <evidence> -- node checks/ai/local-provider-check.js /out
+// GLAZE_REAL_MODEL=<a real LFM3 .gguf> (on a machine with a GPU; GLAZE_GPU_FLAGS: Chromium's flags for it, e.g.
+// checks/ai/local-engine-check.js's nvidia set): the real engine instead of the stub, that file served as the download with
+// its own 64 MB chunk hashes, and Writer's run held only to reaching the engine and finishing (done, or refused by Writer's
+// check: the stock model isn't the fine-tune its prompt is written for) instead of the stub's sentence.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
@@ -56,11 +60,24 @@ const gguf = () => {
   const body = Buffer.concat(parts);
   return Buffer.concat([body, Buffer.alloc((32 - (body.length % 32)) % 32)]);
 };
-const DATA = gguf(), CHUNK = 256 << 10, COMMIT = 'c'.repeat(40);
+const REAL = process.env.GLAZE_REAL_MODEL ? path.resolve(process.env.GLAZE_REAL_MODEL) : null;
+const DATA = REAL ? null : gguf(), CHUNK = REAL ? 64 << 20 : 256 << 10, COMMIT = 'c'.repeat(40);
+const SIZE = REAL ? fs.statSync(REAL).size : DATA.length;
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
+// The served bytes a..b (inclusive): the tiny GGUF, or the real file.
+const slice = (a, b) => {
+  if (!REAL) return DATA.subarray(a, b + 1);
+  const buf = Buffer.alloc(b - a + 1), fd = fs.openSync(REAL, 'r');
+  try { fs.readSync(fd, buf, 0, buf.length, a); } finally { fs.closeSync(fd); }
+  return buf;
+};
+const hashes = () => {
+  const all = crypto.createHash('sha256'), parts = [];
+  for (let i = 0; i * CHUNK < SIZE; i++) { const b = slice(i * CHUNK, Math.min(SIZE, (i + 1) * CHUNK) - 1); parts.push(sha(b)); all.update(b); }
+  return { sha256: parts, total: all.digest('hex') };
+};
 const MODEL = { id: 'check-tiny', name: 'Check tiny', repo: 'glaze-check/Tiny-GGUF', commit: COMMIT, file: 'tiny.gguf', url: `https://huggingface.co/glaze-check/Tiny-GGUF/resolve/${COMMIT}/tiny.gguf`,
-  size: DATA.length, chunk: CHUNK, sha256: Array.from({ length: Math.ceil(DATA.length / CHUNK) }, (_, i) => sha(DATA.subarray(i * CHUNK, (i + 1) * CHUNK))), total: sha(DATA),
-  license: 'lfm1.0', quant: 'Q4_K_M', tier: 1 };
+  size: SIZE, chunk: CHUNK, ...hashes(), license: 'lfm1.0', quant: 'Q4_K_M', tier: 1 };
 const HOSTS = ['huggingface.co', 'us.aws.cdn.hf.co'];
 
 // ---- the stubs written into the copy -----------------------------------------------------------------------------------------
@@ -116,8 +133,8 @@ const records = () => ({
       const m = host === 'us.aws.cdn.hf.co' && /^bytes=(\d+)-(\d+)$/.exec(h.range || '');
       if (m) {
         await pause(250);
-        const a = +m[1], b = Math.min(+m[2], DATA.length - 1), body = DATA.subarray(a, b + 1);
-        res.writeHead(206, { ...cors, 'accept-ranges': 'bytes', 'content-range': `bytes ${a}-${b}/${DATA.length}`, 'content-type': 'application/octet-stream', 'content-length': body.length });
+        const a = +m[1], b = Math.min(+m[2], SIZE - 1), body = slice(a, b);
+        res.writeHead(206, { ...cors, 'accept-ranges': 'bytes', 'content-range': `bytes ${a}-${b}/${SIZE}`, 'content-type': 'application/octet-stream', 'content-length': body.length });
         return res.end(body);
       }
       res.writeHead(404); res.end();
@@ -129,7 +146,7 @@ const records = () => ({
     ext = env.staged(root, []);
     const put = (f, text) => { fs.rmSync(path.join(ext, f), { force: true }); fs.writeFileSync(path.join(ext, f), text); };
     put('ai/local/models.json', `${JSON.stringify({ models: [MODEL] }, null, 2)}\n`);
-    put('ai/local/engine.js', ENGINE);
+    if (!REAL) put('ai/local/engine.js', ENGINE);
     put('ai/local/ladder.js', LADDER);
     const link = fs.readFileSync(path.join(root, 'ai/local/link.js'), 'utf8');
     assert.ok(link.includes('idle: 300000'), 'link.js names its idle time');
@@ -138,7 +155,7 @@ const records = () => ({
     profile = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-local-provider-profile-'));
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(profile, { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US',
-      args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking',
+      args: [...(process.env.GLAZE_GPU_FLAGS || '').split(' ').filter(Boolean), `--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking',
         `--host-resolver-rules=${HOSTS.map((x) => `MAP ${x} 127.0.0.1:${port}`).join(',')}, MAP * ~NOTFOUND`, '--ignore-certificate-errors'] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
     const unexpected = [];
@@ -165,7 +182,7 @@ const records = () => ({
       const cards = await settings.evaluate(() => [...document.querySelectorAll('#ai-providers .ai-prov b')].map((b) => b.textContent));
       assert.equal(cards[cards.indexOf('Glaze on-device AI') - 1], 'Chrome on-device AI', JSON.stringify(cards));
       await settings.click('#ai-prov-local');
-      assert.match(await until(async () => { const n = await note(); return n.startsWith('Needs a download') && n; }, 'its state'), /^Needs a download · 0\.0 GB$/);
+      assert.match(await until(async () => { const n = await note(); return n.startsWith('Needs a download') && n; }, 'its state'), REAL ? /^Needs a download · \d+\.\d GB$/ : /^Needs a download · 0\.0 GB$/);
       await pause(800);
       assert.deepEqual(log, [], 'no request before Download');
       assert.deepEqual(await offscreen(), [], 'no engine host for a status');
@@ -174,9 +191,9 @@ const records = () => ({
     await step('Download: the model comes through the 302 and Range requests into OPFS in the engine host, its progress shown, then Ready', async () => {
       await settings.click('#ai-drawer button.primary');
       const shown = await until(() => settings.evaluate(() => { const b = document.querySelector('#ai-drawer progress'); return b && b.value > 0 && b.value < 1 && { value: b.value, note: document.querySelector('#ai-drawer .note').textContent }; }), 'its progress');
-      assert.match(shown.note, /^\d+% · 0\.0 GB$/);
+      assert.match(shown.note, REAL ? /^\d+% · \d+\.\d GB$/ : /^\d+% · 0\.0 GB$/);
       await settings.screenshot({ path: path.join(out, 'card-downloading.png') });
-      await until(async () => (await note()).startsWith('Ready'), 'Ready', 30000);
+      await until(async () => (await note()).startsWith('Ready'), 'Ready', REAL ? 600000 : 30000);
       assert.deepEqual(await offscreen(), [`${base}/ai/local/host.html`], 'the offscreen document hosts it');
       const cdn = log.filter((l) => l.host === 'us.aws.cdn.hf.co' && l.method === 'GET');
       assert.equal(cdn.length, MODEL.sha256.length, 'one Range request a chunk');
@@ -204,6 +221,18 @@ const records = () => ({
         v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, at))); v.focus();
       }, LAST);
       await pg.keyboard.type(' it');
+      if (REAL) {
+        // The stock model isn't the fine-tune the prompt is written for, so Writer's check may refuse its words: the run
+        // must reach the real engine and finish (done, or check), never fail or find the engine unavailable.
+        const calls = async () => (await (await sw()).evaluate(() => chrome.storage.local.get('aiCalls'))).aiCalls || [];
+        const call = await until(async () => (await calls()).find((c) => c.provider === 'local' && c.task === 'writer.complete' && c.state && c.state !== 'running'), 'the local run finished', 180000);
+        console.log(`     the real engine's run: ${JSON.stringify(call)}`);
+        assert.ok(['done', 'check'].includes(call.state), `state ${call.state}`);
+        const ghost = await pg.evaluate(() => document.querySelector('.gz-ghost')?.firstChild?.textContent || null);
+        console.log(`     gray text: ${JSON.stringify(ghost)}`);
+        await pg.screenshot({ path: path.join(out, 'writer-ghost.png') });
+        return;
+      }
       const ghost = await until(() => pg.evaluate(() => document.querySelector('.gz-ghost')?.firstChild?.textContent ?? null), 'the gray text', 30000);
       assert.equal(ghost, GHOST);
       await pg.screenshot({ path: path.join(out, 'writer-ghost.png') });
@@ -221,7 +250,7 @@ const records = () => ({
       await settings.bringToFront();
       const row = await until(() => settings.evaluate(() => [...document.querySelectorAll('#ai-calls li')].map((li) => li.textContent).find((t) => t.includes('Glaze on-device AI'))), 'the row');
       assert.match(row, /^Tab completion · Glaze on-device AI/);
-      assert.match(row, /Done/);
+      if (!REAL) assert.match(row, /Done/);
       await settings.screenshot({ path: path.join(out, 'activity.png') });
     });
     await step('Delete: the model goes from OPFS and the card needs a download again', async () => {
