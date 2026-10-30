@@ -18,7 +18,7 @@
 //   summarize <ref dir> <out dir>             (Node only) per row the reference's top 32 (id, logit), for a machine
 //                                             without the full dumps; `model` then compares top-1 and those logits
 // Options: --out <dir> (results.json, the log), --flags nvidia | swiftshader | none (Chromium's GPU flags; default none,
-// small: swiftshader), --precision auto | f32 | f16, --subgroups auto | off, --chunk n (session chunk, 128).
+// small: swiftshader), --precision auto | f32 | f16, --subgroups auto | off, --chunk n (session chunk, 512).
 // Error bounds (u = 2⁻²⁴; each output's bound from the reference's own values, so a pass means |GPU − reference| ≤ the
 // worst case of f32 rounding in the kernel's order, not a tuned tolerance; the reference sums in double):
 //   matmul    (K + 16)·u·Σ|w·x| + u·|y|   (a K-term sum in any order: γ_K·Σ|terms|, Higham 3.1; +16 for the products and
@@ -58,8 +58,8 @@ const has = (name) => { const i = args.indexOf(name); if (i >= 0) args.splice(i,
 const mode = args.shift();
 const opt = {
   out: flag('--out', null), flags: flag('--flags', mode === 'small' ? 'swiftshader' : 'none'), precision: flag('--precision', 'auto'),
-  subgroups: flag('--subgroups', 'auto'), chunk: +flag('--chunk', 128), only: flag('--only', null), steps: +flag('--steps', 64),
-  prompt: +flag('--prompt', 512), decode: +flag('--decode', 128), tokens: flag('--tokens', null), summary: has('--summary'), profile: has('--profile'), api: has('--api'), system: +flag('--system', 1500),
+  subgroups: flag('--subgroups', 'auto'), chunk: +flag('--chunk', 512), only: flag('--only', null), steps: +flag('--steps', 64),
+  prompt: +flag('--prompt', 512), decode: +flag('--decode', 128), tokens: flag('--tokens', null), summary: has('--summary'), profile: has('--profile'), api: has('--api'), system: +flag('--system', 1500), gemm: flag('--gemm', 'auto'),
 };
 
 // ---- Node: summaries of full dumps --------------------------------------------------------------------------------------
@@ -195,7 +195,7 @@ function pageLib() {
   };
   const engine = async (g, o) => {
     const a = await adapter();
-    const e = await EN.create(g, { adapter: a, precision: o.precision, profile: !!o.profile, subgroups: o.subgroups === 'off' ? false : 'auto', kernels: new URL('/ai/local/kernels/', location.href).href });
+    const e = await EN.create(g, { adapter: a, precision: o.precision, profile: !!o.profile, gemm: o.gemm, subgroups: o.subgroups === 'off' ? false : 'auto', kernels: new URL('/ai/local/kernels/', location.href).href });
     log(`engine: ${a.info.vendor} ${a.info.architecture}${a.info.isFallbackAdapter ? ' (fallback)' : ''}, ${e.f16 ? 'f16' : 'f32'}, subgroups ${e.subgroups ? `on (${e._k.tpr} lanes a row)` : `off${e.subgroupsOff ? ` (${e.subgroupsOff})` : ''}`}, ${e.layout.buffers.length} weight buffers`);
     return { e, adapter: describe(a) };
   };
@@ -296,25 +296,29 @@ function pageLib() {
       return { M, sw };
     };
     const sumAbs = (X, T, n) => Float64Array.from({ length: T }, (_, t) => { let s = 0; for (let i = 0; i < n; i++) s += Math.abs(X[t * n + i]); return s; });
+    // gemm: false (GEMV a token at a time), 'small' (64 × 64 tiles) or 'big' (128 × 128).
     const gpuMm = async (name, X, T, gemm) => {
-      const t = k.tensor(name), xb = up(X), yb = k.buffer(T * t.rows * 4);
+      const t = k.tensor(name), xb = up(X), yb = k.buffer(T * t.rows * 4), tile = gemm === 'big' ? 128 : 64;
       for (const r of t.runs) {
-        if (gemm) await k.dispatch('matmul', { [t.type]: true }, { 0: r.bind, 1: xb, 2: yb }, k.PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, ldy: t.rows, yOff: r.row }), [Math.ceil(r.rows / 64), Math.ceil(T / 64)]);
+        if (gemm) await k.dispatch('matmul', { [t.type]: true, BIG: gemm === 'big' }, { 0: r.bind, 1: xb, 2: yb }, k.PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, ldy: t.rows, yOff: r.row }), [Math.ceil(r.rows / tile), Math.ceil(T / tile)]);
         else for (let i = 0; i < T; i++) await k.dispatch('matvec', { [t.type]: true }, { 0: r.bind, 1: xb, 2: yb }, k.PARAMS.matvec({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, xOff: i * t.cols, yOff: i * t.rows + r.row }), k.grid(Math.ceil(r.rows / (256 / k.tpr))));
       }
       const y = await rd(yb, T * t.rows);
       xb.destroy(); yb.destroy();
       return y;
     };
+    // A GEMM case runs both tiles (the big one where the device has the workgroup storage for it).
+    const bigOk = e.device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * (f16 ? 8 : 16);
     const mmCheck = async (name, X, T, gemm) => {
       const W = await mat(name), ref = R._ops.matmul(W, X, T), { M, sw } = absDot(W, X, T), sx = sumAbs(X, T, W.cols);
-      const got = await gpuMm(name, X, T, gemm);
       const half = gemm && f16;
       const bound = Float64Array.from(ref, (y, i) => {
         const t = Math.floor(i / W.rows), r = i % W.rows;
         return (W.cols + 16) * u * M[i] + u * Math.abs(y) + (half ? 2 ** -10 * M[i] + h25 * (sw[r] + sx[t]) : 0);
       });
-      record(gemm ? 'gemm' : 'gemv', `${name} ${W.type} ${W.rows}×${W.cols} T=${T}`, got, ref, bound);
+      for (const how of gemm ? ['small', ...(bigOk ? ['big'] : [])] : [false]) {
+        record(how ? 'gemm' : 'gemv', `${name} ${W.type} ${W.rows}×${W.cols} T=${T}${how === 'big' ? ' big' : ''}`, await gpuMm(name, X, T, how), ref, bound);
+      }
       return ref;
     };
     const G0 = b(firstConv, 'ffn_gate'), U0 = b(firstConv, 'ffn_up'), D0 = b(firstConv, 'ffn_down');
@@ -325,6 +329,9 @@ function pageLib() {
     for (const n of [b(firstConv, 'shortconv.in_proj'), b(firstFull, 'attn_v'), b(firstFull, 'attn_gate'), b(firstFull, 'attn_k')]) { await mmCheck(n, X0, 1, false); await mmCheck(n, X0, T, true); }
     await mmCheck(b(firstConv, 'shortconv.in_proj'), X70, 70, true);
     await mmCheck(b(firstConv, 'ffn_gate'), X70, 70, true);
+    // Past one 128-token tile: 200 tokens on a 512-row matrix.
+    const X200 = R._ops.rmsnorm(emb(Array.from({ length: 200 }, (_, i) => (i * 911 + 7) % V)), 200, E, n0, c.eps);
+    await mmCheck(b(firstFull, 'attn_k'), X200, 200, true);
     const hN = R._ops.rmsnorm(X0, T, E, await vec('output_norm.weight'), c.eps);
     const lm = await mmCheck('token_embd.weight', hN.subarray((T - 1) * E), 1, false);
     await mmCheck('token_embd.weight', hN, Math.min(T, 4), true);
@@ -675,7 +682,7 @@ function pageLib() {
         const s2 = await e.session({ ctx: o.prompt + 16, chunk: o.chunk });
         const preSteps = [];
         for (let i = 0; i < 3; i++) preSteps.push((await s2.forward(prompt.slice(i * o.chunk, (i + 1) * o.chunk), { logits: 'none', profile: true })).profile);
-        await s2.forward(prompt.slice(3 * o.chunk, o.prompt), { logits: 'none' });
+        if (o.prompt > 3 * o.chunk) await s2.forward(prompt.slice(3 * o.chunk, o.prompt), { logits: 'none' });
         const decSteps = [];
         for (let i = 0; i < 5; i++) decSteps.push((await s2.forward([prompt[i]], { logits: 'last', argmax: true, profile: true })).profile);
         s2.destroy();
@@ -755,7 +762,7 @@ function pageLib() {
 
   // The model interface (EN.load) on a GPU: a mask forcing a token, a masked pick against the reference's logits, snapshot
   // and restore giving the same tokens, a cancel inside a long prefill, release.
-  const loadModel = async (g, o, extra) => EN.load(g, { adapter: await adapter(), precision: o.precision, subgroups: o.subgroups === 'off' ? false : 'auto', kernels: new URL('/ai/local/kernels/', location.href).href, ...extra });
+  const loadModel = async (g, o, extra) => EN.load(g, { adapter: await adapter(), precision: o.precision, gemm: o.gemm, subgroups: o.subgroups === 'off' ? false : 'auto', kernels: new URL('/ai/local/kernels/', location.href).href, ...extra });
   const apiChecks = async (o, g) => {
     const out = [], say = (pass, what) => { out.push({ pass, what }); log(`${pass ? 'ok  ' : 'FAIL'} api        ${what}`); };
     const m = await loadModel(g, o, { context: 64, chunk: 8 }), V = m.engine.config.vocab, W = Math.ceil(V / 32);

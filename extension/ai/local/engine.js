@@ -168,6 +168,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     if (f16 && !device.features.has('shader-f16')) bail(Object.assign(new Error('engine: the device has no shader-f16'), { reason: 'webgpu' }));
     // The GEMM's tiles: 2 × 576 vec4 of H.
     if (device.limits.maxComputeWorkgroupStorageSize < 2 * 576 * (f16 ? 8 : 16)) bail(Object.assign(new Error('engine: the device allows too little workgroup storage'), { reason: 'webgpu' }));
+    // The big GEMM tile (2 × 1024 vec4 of H) where the device allows it: opts.gemm 'auto' (for matrices of 1024 rows or
+    // more), 'big' or 'small'.
+    // A prompt step of more than 64 tokens takes the big tiles (for matrices of 1024 rows or more under 'auto').
+    const bigTile = device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * (f16 ? 8 : 16) && opts.gemm !== 'small';
+    const bigRows = opts.gemm === 'big' ? 1 : 1024;
     let lost = null;
     device.lost.then((info) => { lost = info; });
     try {
@@ -384,7 +389,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
 
       // Every dispatch of a forward step owns a uniform slot; a step rewrites them all, then runs its list.
       const slots = [];
-      const P = { one: [], many: [], lastOne: [], lastMany: [], allMany: [], argmax: [], topk: [] };
+      const P = { one: [], many: [], manyBig: [], lastOne: [], lastMany: [], allMany: [], argmax: [], topk: [] };
       let params = null;
       const op = async (list, kernel, defines, entries, words, dims) => {
         const p = await pipe(kernel, defines), slot = slots.length;
@@ -395,18 +400,21 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const blk = (i, n) => `blk.${i}.${n}.weight`;
 
       // y = W · x for each run of W's rows. GEMV (one token) or GEMM (T tokens, T filled per step).
-      const mm = async (list, name, xOff, X, Y, yOff, { one, ldy }) => {
+      const mm = async (list, name, xOff, X, Y, yOff, { one, ldy, big: bigList = false }) => {
         const t = W(name);
         for (const r of t.runs) {
           if (one) await op(list, 'matvec', { [t.type]: true }, { 0: r.bind, 1: X, 2: Y }, () => PARAMS.matvec({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, xOff: xOff(), yOff: yOff + r.row }), () => grid(Math.ceil(r.rows / (256 / tpr))));
-          else await op(list, 'matmul', { [t.type]: true }, { 0: r.bind, 1: X, 2: Y }, (T) => PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, xOff: xOff(), ldy, yOff: yOff + r.row }), (T) => [Math.ceil(r.rows / 64), Math.ceil(T / 64)]);
+          else {
+            const big = bigList && bigTile && r.rows >= bigRows, tile = big ? 128 : 64;
+            await op(list, 'matmul', { [t.type]: true, BIG: big }, { 0: r.bind, 1: X, 2: Y }, (T) => PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, xOff: xOff(), ldy, yOff: yOff + r.row }), (T) => [Math.ceil(r.rows / tile), Math.ceil(T / tile)]);
+          }
         }
       };
       const vec = (name) => W(name).runs[0].bind;
 
-      const build = async (list, one) => {
+      const build = async (list, one, big = false) => {
         const zero = () => 0;
-        const at = (n) => ({ one, ldy: n });
+        const at = (n) => ({ one, ldy: n, big });
         const embd = W('token_embd.weight');
         for (const r of embd.runs) await op(list, 'embed', { [embd.type]: true }, { 0: r.bind, 1: B.ids, 2: B.x }, (T) => PARAMS.embed({ n: T, E, rowBytes: embd.rowBytes, row0: r.row, rows: r.rows }), (T) => grid(Math.ceil((T * E) / 32 / 64)));
         await op(list, 'norm', {}, { 1: B.x, 2: B.n, 3: vec(blk(0, 'attn_norm')) }, () => PARAMS.norm({ n: E, eps: c.eps }), (T) => [T]);
@@ -452,6 +460,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const out = gguf.tensor('output.weight') ? 'output.weight' : 'token_embd.weight';
       await build(P.one, true);
       await build(P.many, false);
+      if (bigTile && chunk > 64) await build(P.manyBig, false, true);
       let lastT = 1;
       await mm(P.lastOne, out, () => 0, B.n, B.last, 0, { one: true });
       await mm(P.lastMany, out, () => (lastT - 1) * E, B.n, B.last, 0, { one: true });
@@ -479,7 +488,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       await picks(P.argmaxMask, P.topkMask, true);
       await op(P.penalty, 'penalty', {}, { 0: B.last, 1: B.pen }, () => PARAMS.penalty({ count: penCount, r: penR }), () => [1]);
       // Every row's logits: its buffer (chunk × vocab) is made on first use.
-      await mm(P.allMany, out, () => 0, B.n, null, 0, { one: false, ldy: V });
+      await mm(P.allMany, out, () => 0, B.n, null, 0, { one: false, ldy: V, big: bigTile && chunk > 64 });
       params = life.own(buffer(slots.length * SLOT, S.UNIFORM | S.COPY_DST));
       const host = new Uint32Array((slots.length * SLOT) / 4);
       const bindAll = (list) => { for (const d of list) d.group = group(d.p, { ...d.entries, [paramBinding[d.kernel]]: { buffer: params, offset: d.slot * SLOT, size: 32 } }, d.kernel); };
@@ -534,7 +543,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
             const part = tokens.slice(i, i + chunk), T = part.length, lastChunk = i + chunk >= tokens.length;
             device.queue.writeBuffer(B.ids, 0, Uint32Array.from(part));
             lastT = T; topK = k || 1;
-            const body = T === 1 ? P.one : P.many;
+            const body = T === 1 ? P.one : T > 64 && P.manyBig.length ? P.manyBig : P.many;
             const tail = [];
             if (lastChunk && (logits !== 'none' || argmax || k)) tail.push(T === 1 ? P.lastOne : P.lastMany);
             if (lastChunk && argmax) tail.push(P.argmax);
@@ -703,7 +712,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   //     words, id i allowed when bit i & 31 of word i >> 5 is set), then temperature 0 or topK 1: the highest; else the
   //     topK (at most 64; 0: 64) highest, top-p, temperature, a draw. The id is fed by the next decode or prefill.
   //   snapshot() → snap (snap.drop() frees it); restore(snap): the sequence as it was. release(): all GPU memory goes.
-  const load = async (gguf, { context = 4096, chunk = 128, signal, onProgress, ...opts } = {}) => {
+  const load = async (gguf, { context = 4096, chunk = 512, signal, onProgress, ...opts } = {}) => {
     const engine = await create(gguf, { ...opts, onProgress, signal });
     let s;
     try {
