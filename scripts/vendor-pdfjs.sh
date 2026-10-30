@@ -15,7 +15,11 @@
 # the old escape and unescape functions are written out as the same encoding and decoding.
 # The viewer's import of pdf.js's form-script sandbox (pdf.sandbox.mjs, not shipped) is cut, so a PDF's own JavaScript
 # never runs: the scripting manager fails to start a sandbox, logs it, and the document opens without its scripts.
-# Each cut matches its upstream text exactly once or the script stops. Every download is checked against the
+# One patch to pdf.js's code, in the worker: extractPages() takes `rotations` on each page entry, keyed like its
+# includePages by source page index, that turns that page a further multiple of 90 degrees clockwise: the copy's /Rotate
+# is (its own /Rotate + rotations[i]) % 360. pdf.js's own copy always keeps the page's /Rotate. A rotation that is not a
+# multiple of 90 fails the call, as pdf.js's other bad entries do.
+# Each cut and the patch match its upstream text exactly once or the script stops. Every download is checked against the
 # SHA-256 pinned here before anything in lib/pdfjs changes. Run it to upgrade pdf.js (new version, new hash); the output
 # is checked in, so the extension itself still has no build step.
 # Usage: scripts/vendor-pdfjs.sh
@@ -107,6 +111,31 @@ for (const file of process.argv.slice(2)) {
   if (/\beval\s*\(|(^|[^\w$.])Function\s*\(\s*['"`]/.test(src)) throw new Error(`${file}: code made from text is left`);
   fs.writeFileSync(file, src);
 }
+EOF
+# The rotation patch (see the top).
+node - lib/pdfjs/pdf.worker.mjs <<'EOF'
+const fs = require('node:fs');
+const file = process.argv[2];
+let src = fs.readFileSync(file, 'utf8');
+const patch = (find, replacement) => {
+  const hits = src.split(find).length - 1;
+  if (hits !== 1) throw new Error(`${file}: pdf.js's extractPages changed (${hits} matches of ${JSON.stringify(find)}); update the rotation patch`);
+  src = src.replace(find, () => replacement);
+};
+if (src.split('new PageData(').length !== 2) throw new Error(`${file}: pdf.js makes a page copy somewhere new; give it a rotation in the patch`);
+// Where extractPages takes source page i of an entry for copying.
+patch('          this.oldPages[newPageIndex] = new PageData(page, documentData);\n',
+  '          this.oldPages[newPageIndex] = new PageData(page, documentData);\n' +
+  '          // scripts/vendor-pdfjs.sh: the entry\'s rotations[i] turns source page i further clockwise.\n' +
+  '          const extraRotate = pageInfo.rotations?.[i] ?? 0;\n' +
+  '          if (!Number.isInteger(extraRotate) || extraRotate % 90 !== 0) {\n' +
+  '            throw new Error("extractPages: invalid rotation.");\n' +
+  '          }\n' +
+  '          this.oldPages[newPageIndex].extraRotate = (extraRotate % 360 + 360) % 360;\n');
+// Where #makePageCopy writes the copy's /Rotate.
+patch('      copyLevel\n    } = this.oldPages[pageIndex];\n', '      copyLevel,\n      extraRotate\n    } = this.oldPages[pageIndex];\n');
+patch('    pageDict.set("Rotate", rotate);\n', '    pageDict.set("Rotate", (rotate + extraRotate) % 360);\n');
+fs.writeFileSync(file, src);
 EOF
 cp "$tmp/brotli-dictionary.bin" "$tmp/LICENSE_BROTLI" "$tmp/LICENSE_MPL" lib/pdfjs/
 node scripts/vendor-pdfjs-brotli.js lib/pdfjs/pdf.worker.mjs lib/pdfjs/brotli-dictionary.bin
