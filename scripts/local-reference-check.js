@@ -146,7 +146,7 @@ if (mode === 'tsv') {
     console.log(`${p.id}: top-1 ${same}/${n}, max |Δ| ${dmax.toExponential(3)} (mean ${(dsum / (n * V)).toExponential(2)}); greedy ${firstDiff}/${ga.length} agree, decode max |Δ| ${ddmax.toExponential(3)} over ${compared} steps${misses.length ? `; misses ${JSON.stringify(misses.slice(0, 5))}` : ''}${atDiff ? `; first different token ${JSON.stringify(atDiff)}` : ''}`);
   }
   Object.assign(results, { top1: agree, of: total, allTop1, allGen, prefillMaxAbs: maxPrefill, decodeMaxAbs: maxDecode });
-  console.log(`all: top-1 ${agree}/${total} (${((100 * agree) / total).toFixed(2)}%), greedy identical on ${results.prompts.filter((r) => r.genSame).length}/${PROMPTS.length}, max |Δ| prefill ${maxPrefill.toExponential(3)}, decode ${maxDecode.toExponential(3)}`);
+  console.log(`all: top-1 ${agree}/${total} (${total ? ((100 * agree) / total).toFixed(2) : 'n/a'}%), greedy identical on ${results.prompts.filter((r) => r.genSame).length}/${PROMPTS.length}, max |Δ| prefill ${maxPrefill.toExponential(3)}, decode ${maxDecode.toExponential(3)}`);
   if (out) fs.writeFileSync(out, JSON.stringify(results, null, 1));
   if (strict && !(allTop1 && allGen)) process.exitCode = 1;
 } else {
