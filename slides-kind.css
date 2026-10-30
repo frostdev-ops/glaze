@@ -67,8 +67,8 @@ dialog.gs-present::backdrop { background: #000; }
 
 @media (max-width: 720px) {
   .gs-rail { display: none; }
-  .gs-tool { gap: 6px; padding: 0 8px; }
-  .gs-tool > .gs-group:nth-child(2) { display: none; }
-  .gs-find { min-width: 160px; }
+  .gs-tool { height: auto; display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 6px; padding: 8px; }
+  .gs-tool > .grow { display: none; }
+  .gs-find { grid-row: 2; grid-column: 1 / -1; min-width: 0; }
   .gs-canvas { padding: 12px; }
 }
