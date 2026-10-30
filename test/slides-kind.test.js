@@ -20,11 +20,11 @@ test('papers.html loads the kind registry first and slides-kind.js after papers.
 });
 
 // slides-kind.js in a context of its own: the registry, a storage.sync answering writer.slides, and need() as a no-op.
-const load = (writer) => {
+const load = (writer, overrides = {}) => {
   delete require.cache[require.resolve('../lib/doc-kinds.js')];
   delete globalThis.GZ_DOC_KINDS;
   const DK = require('../lib/doc-kinds.js');
-  const ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_WRITER_PAPER: { need: async () => {} }, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob,
+  const ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_WRITER_PAPER: { need: async () => {} }, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,
     chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}` } } });
   ctx.globalThis = ctx;
   vm.runInContext(read('slides-kind.js'), ctx);
@@ -92,4 +92,14 @@ test('files over the record cap are refused in the student\'s words before anyth
   const big = { name: 'Huge.pptx', size: 3e6 + 1, arrayBuffer: () => { throw new Error('read'); } };
   await assert.rejects(k.importFile(big), (e) => e instanceof RangeError && e.message === k.says.size);
   assert.deepEqual({ ...k.says }, { size: 'Choose a PowerPoint file smaller than 3 MB.', read: 'That file could not be read as a PowerPoint presentation.' });
+});
+
+
+test('stored decks are bounded before base64 decoding', () => {
+  let decoded = 0;
+  const { ctx } = load({ slides: true }, { atob: (s) => { decoded++; return atob(s); } });
+  const S = ctx.GZ_SLIDES_KIND.STORE;
+  assert.equal(S.get({ file: 'A'.repeat(4e6 + 4), size: 3e6 + 3 }), null);
+  assert.equal(decoded, 0, 'oversized stored input never reaches atob');
+  assert.equal(S.get({ file: '' }), null);
 });
