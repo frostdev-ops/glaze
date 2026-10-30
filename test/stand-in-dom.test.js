@@ -1,11 +1,10 @@
 // The stand-in DOM's elements as a failed assertion prints them.
 const test = require('node:test'), assert = require('node:assert/strict');
-const { inspect } = require('node:util');
 const { El } = require('./stand-in-dom.js');
 
 // node:assert prints a failed value at depth 1000: an element that reaches the document from every node prints the page
 // again at each one (a grid test's failed assert.equal(menu, null) took the runner past 6 GB).
-test('a failed assertion on a nested element prints that element and its children alone', () => {
+test('a failed assertion on a nested element stays small without printing page links', () => {
   const doc = { listeners: [] };
   doc.root = new El('html', doc);
   const body = new El('body', doc), list = new El('ul', doc);
@@ -16,11 +15,17 @@ test('a failed assertion on a nested element prints that element and its childre
   const host = list.children[1], shadow = host.attachShadow({ mode: 'open' });
   shadow.append(new El('b', doc));
   const nested = shadow.children[0];
-  // A short print first, so a page reached again from every node fails here in milliseconds.
-  assert.ok(inspect(nested, { depth: 6, getters: true }).length < 20000, 'the way back up stays out of the print');
-  const printed = (el) => { try { assert.equal(el, null); } catch (e) { return e.message.length; } };
-  assert.ok(printed(nested) < 20000, `${printed(nested)} characters for a shadow root's child`);
-  assert.ok(printed(list) < 20000, `${printed(list)} characters for a list in the page`);
+  // Fail on booleans before asking node:assert to inspect anything: even a partial regression must stay safe to report.
+  for (const el of [doc.root, ...doc.root.all(), shadow, nested]) {
+    for (const key of ['doc', 'parentNode']) assert.equal(Object.prototype.propertyIsEnumerable.call(el, key), false, `${el.tagName}.${key} stays out of assertion output`);
+  }
+  assert.equal(Object.prototype.propertyIsEnumerable.call(shadow, 'host'), false, 'the shadow host stays out of assertion output');
+  // Plenty of room for Node's formatting; no exact snapshot of its version-dependent assertion message.
+  for (const el of [nested, list, shadow]) assert.throws(() => assert.equal(el, null), (e) => {
+    assert.ok(e instanceof assert.AssertionError);
+    assert.ok(e.message.length < 20000, `${e.message.length} characters for ${el.tagName}`);
+    return true;
+  });
   assert.equal(nested.parentNode, shadow, 'the back links still work');
   assert.equal(shadow.host, host);
   assert.equal(nested.doc, doc);
