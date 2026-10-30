@@ -210,7 +210,7 @@ test('GEOMEAN, HARMEAN, TRIMMEAN, AVEDEV, DEVSQ', () => {
   const e = book(column('Data', [4, 5, 8, 7, 11, 4, 3]));
   prints(e, [['GEOMEAN(A2:A8)', '5.476987'], ['HARMEAN(A2:A8)', '5.028376']]);
   cases(e, [
-    ['DEVSQ(A2:A8)', 48], ['GEOMEAN(A2:A8,0)', '#NUM!'], ['HARMEAN(A2:A8,-1)', '#NUM!'], ['GEOMEAN(Z1:Z3)', '#NUM!'], ['HARMEAN(Z1:Z3)', '#NUM!'],
+    ['DEVSQ(A2:A8)', 48], ['GEOMEAN(A2:A8,0)', '#NUM!'], ['HARMEAN(A2:A8,-1)', '#NUM!'], ['GEOMEAN(Z1:Z3)', '#NUM!'], ['HARMEAN(Z1:Z3)', '#N/A'],
     ['DEVSQ(Z1:Z3)', '#NUM!'], ['GEOMEAN(4,"9")', 6], ['HARMEAN(TRUE,1)', 1],
   ]);
   // avedev-function
@@ -280,7 +280,7 @@ test('PERMUT and COMBIN truncate their arguments', () => {
   // permut-function, combin-function
   const e = book([['Data', 'Description'], [100, 'Number of objects'], [3, 'Number of objects in each permutation']]);
   cases(e, [
-    ['PERMUT(A2,A3)', 970200], ['PERMUT(3,2)', 6], ['PERMUT(3.9,2.9)', 6], ['PERMUT("x",2)', '#VALUE!'], ['PERMUT(0,0)', '#NUM!'], ['PERMUT(3,-1)', '#NUM!'],
+    ['PERMUT(A2,A3)', 970200], ['PERMUT(3,2)', 6], ['PERMUT(3.9,2.9)', 6], ['PERMUT("x",2)', '#VALUE!'], ['PERMUT(0,0)', 1], ['PERMUT(3,-1)', '#NUM!'],
     ['PERMUT(2,3)', '#NUM!'], ['PERMUT(5,0)', 1], ['PERMUT(1e9,1e9)', '#NUM!'],
     ['COMBIN(8,2)', 28], ['COMBIN(8.9,2.7)', 28], ['COMBIN("x",2)', '#VALUE!'], ['COMBIN(-1,0)', '#NUM!'], ['COMBIN(3,-1)', '#NUM!'], ['COMBIN(2,3)', '#NUM!'],
     ['COMBIN(0,0)', 1], ['COMBIN(49,6)', 13983816], ['COMBIN(1e9,5e8)', '#NUM!'],
@@ -306,5 +306,25 @@ test('errors read in a range are the result; an argument left out reads as 0', (
     ['LARGE(A1:A3,1)', '#N/A'], ['PERCENTILE(A1:A3,0.5)', '#N/A'], ['QUARTILE.EXC(A1:A3,1)', '#N/A'], ['TRIMMEAN(A1:A3,0)', '#N/A'], ['RANK(1,A1:A3)', '#N/A'],
     ['CORREL(A1:A3,B1:B3)', '#N/A'], ['SLOPE(B1:B3,A1:A3)', '#N/A'], ['MAXIFS(A1:A3,B1:B3,">4")', '#N/A'], ['MAXIFS(A1:A3,B1:B3,"<5")', 1],
     ['NORM.S.DIST(#DIV/0!,TRUE)', '#DIV/0!'], ['MEDIAN(1,,5)', 1], ['AVERAGEA(4,)', 2], ['STDEV.P(1,)', 0.5],
+  ]);
+});
+
+// Excel 16.114.1, hidden native workbook, 2026-10-30. Unlike references, array constants do not count logicals;
+// only AVERAGEA counts their text. The reference fixture below has the same three kinds of value.
+test('Excel array constants and references have distinct A coercion rules', () => {
+  const e = book([['x'], [true], [4]]);
+  close(e, [['AVERAGEA({1,"x",TRUE,4})', 5 / 3], ['AVERAGEA(A1:A3)', 5 / 3], ['VARA(A1:A3)', 13 / 3]]);
+  cases(e, [
+    ['AVERAGEA({TRUE,FALSE})', '#DIV/0!'], ['AVERAGEA({"x","y"})', 0],
+    ['MAXA({-1,"x",TRUE,-4})', -1], ['MINA({1,"2",TRUE,4})', 1], ['MINA(A1:A3)', 0],
+    ['VARA({1,"x",TRUE,4})', 4.5], ['VARPA({1,"x",TRUE,4})', 2.25],
+    ['STDEVA({TRUE,FALSE})', '#DIV/0!'], ['STDEVPA({1,"x",TRUE,4})', 1.5],
+  ]);
+});
+
+test('Excel checks negative combinatorial arguments before truncating', () => {
+  cases(book(), [
+    ['PERMUT(0.9,0)', 1], ['PERMUT(-0.5,0)', '#NUM!'], ['PERMUT(3,-0.5)', '#NUM!'],
+    ['COMBIN(-0.5,0)', '#NUM!'], ['COMBIN(3,-0.5)', '#NUM!'], ['COMBIN(0.5,0.9)', 1],
   ]);
 });
