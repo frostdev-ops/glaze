@@ -3176,6 +3176,8 @@ const gcalOps = {
     const token = await gcalEnv.token().catch(() => null);
     const revoked = !!token && await GZ_GCAL.revoke(gcalEnv, token);
     await Promise.resolve().then(() => chrome.identity.clearAllCachedAuthTokens()).catch(() => {});
+    // Release inside grantTurn, before another Connect can acquire identity. A delayed Settings reply owns no grant.
+    await Promise.resolve().then(() => chrome.permissions.remove({ permissions: ['identity'] })).catch(() => {});
     await chrome.storage.local.remove(['gcal', 'gcalSync']);
     serial(ensure);
     return { ok: true, revoked, had: !!token };
