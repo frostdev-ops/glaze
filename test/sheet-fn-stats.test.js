@@ -374,3 +374,10 @@ test('normal density rejects an overflowing squared standardized value', () => {
   ]);
   close(book(), [['NORM.DIST(0,0,1e-300,FALSE)', 3.989422804014327e299]]);
 });
+
+test('TRIMMEAN floors exclusion counts without a 15-digit rounding snap', () => {
+  cases(book(), [
+    ['TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.599999999999999)', 42],
+    ['TRIMMEAN({1,2,4,8,16,32,64,128,256,1000},0.3999999999999999)', 63.75],
+  ]);
+});
