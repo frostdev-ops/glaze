@@ -180,3 +180,15 @@ test('CELL uses the resulting text type and returns numeric zero for blank conte
     ['SHEETS(TRUE)', '#N/A'], ['SHEETS("Sheet1")', '#N/A'], ['SHEETS({1,2})', '#N/A'],
   ]);
 });
+
+test('formula inspection work does not scan all array members per cell', () => {
+  const e = book({ A1: { f: '1', a: 'A1:A10000' } });
+  const original = e.members.values;
+  let visited = 0;
+  e.members.values = function* () { for (const value of original.call(this)) { visited++; yield value; } };
+  for (let i = 0; i < 100; i++) {
+    assert.equal(calc(e, 'ISFORMULA(A10000)'), true);
+    assert.equal(calc(e, 'FORMULATEXT(A10000)'), '{=1}');
+  }
+  assert.ok(visited <= 10000, `${visited} array-member visits for 200 lookups`);
+});
