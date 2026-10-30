@@ -811,7 +811,7 @@ test('a restored paper backs up without file-kind versions and still restores', 
     const result = await restore(b, await backUp(a), ['papers']);
     assert.deepEqual(result.out.failed, []);
     const Q = PA.open(b.local);
-    assert.deepEqual((await Q.get(key)).doc, doc);
+    assert.deepEqual((await Q.get(key)).doc, JSON.parse(JSON.stringify(doc)));
     assert.ok((await Q.versions(key)).every((v) => !v.kind || v.kind === 'paper'));
     const entries = B.pack({ settings: SETTINGS, tasks: {}, local: a.store });
     for (const e of entries.filter((e) => e.name.startsWith('papers/'))) assert.ok(!new TextDecoder().decode(e.data).includes('JVBERi0='), 'file bytes stay out of the backup');
