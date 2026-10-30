@@ -1,5 +1,5 @@
 // Spreadsheets on the Documents page (papers.html, sheet-kind.js, sheet-grid.js) in the real unpacked extension. With
-// Settings → Writer → Spreadsheets off (writer.sheets, the default) the New band has no Spreadsheet tile, a .csv is refused
+// Settings → Writer → Spreadsheets stored off (writer.sheets false) the New band has no Spreadsheet tile, a .csv is refused
 // with the Word string, and a spreadsheet already stored still opens. On: the tile opens a blank workbook; values and
 // formulas typed into it compute; the fill handle continues a series and shifts a formula; copy and paste (Glaze's own copy
 // keeping formulas, Excel's HTML with its number formats); rows inserted and deleted move formulas; a renamed sheet's
