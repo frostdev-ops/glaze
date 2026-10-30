@@ -506,7 +506,7 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
 });
 
 withMock('worker: Calendar\'s disconnect while Drive still holds the shared grant drops only Calendar\'s state: no revoke, Chrome\'s cache and identity stay', async (mock) => {
-  const w = worker(mock);
+  const w = worker(mock, { drive: true }); // Drive in this build, connected through Chrome's own client as Calendar is
   await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
   const cal = w.store.local.gcal.cal;
   w.store.local.google = { email: 'student@school.edu', flow: 'chrome', at: NOW }; // Drive connected (background/google.js)
