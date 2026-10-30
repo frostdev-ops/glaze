@@ -99,6 +99,8 @@ const photo = () => {
     await worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings(false));
     const HOME = `chrome-extension://${id}/papers.html`;
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
+    // A record's file bytes: from the worker's file store (lib/doc-files.js), or a record's base64 from before it.
+    const bytesOf = async (rec) => Buffer.from(await worker.evaluate(async (f) => { if (typeof f === 'string') return f; let s = ''; await openDocFiles().read(f.hash, (c) => { s += GZ_DOC_FILES.b64(c); }); return s; }, rec.file), 'base64');
     page = await context.newPage();
     page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
     page.on('console', (m) => { const x = m.text(); logs.push(`${m.type()}: ${x}`); if (m.type() === 'error' && !/Failed to load resource|pdf-check quota refusal/.test(x)) errors.push(`console: ${x}`); if (/fake worker/i.test(x)) errors.push(`fake worker: ${x}`); });
@@ -132,7 +134,7 @@ const photo = () => {
     await page.setInputFiles('#gd-file', file);
     const key = await until(() => page.evaluate(() => document.querySelector('.gd-card')?.dataset.key), 'the PDF card');
     const rec = await local(`writerPaper:${key}`);
-    check(rec?.kind === 'pdf' && rec.title === 'Field trip form' && rec.pages === 3 && Buffer.from(rec.file, 'base64').subarray(0, 5).toString() === '%PDF-', `the record: kind pdf, its title, 3 pages, the bytes (${JSON.stringify({ kind: rec?.kind, title: rec?.title, pages: rec?.pages, size: rec?.size })})`);
+    check(rec?.kind === 'pdf' && rec.title === 'Field trip form' && rec.pages === 3 && (await bytesOf(rec)).subarray(0, 5).toString() === '%PDF-', `the record: kind pdf, its title, 3 pages, the bytes (${JSON.stringify({ kind: rec?.kind, title: rec?.title, pages: rec?.pages, size: rec?.size })})`);
     check(/^data:image\/(png|jpeg);base64,/.test(rec.thumb || '') && rec.thumb.length < 64e3, `the record keeps its first page as a picture (${(rec.thumb || '').length} chars)`);
     const cardInfo = await until(() => page.evaluate((k) => { const c = document.querySelector(`.gd-card[data-key="${k}"]`), img = c?.querySelector('.gd-pic img'); return img?.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, meta: c.querySelector('.gd-meta').textContent, title: c.querySelector('.gd-title').textContent, href: c.querySelector('.gd-title').getAttribute('href') } : null; }, key), 'the card thumbnail');
     check(cardInfo.title === 'Field trip form' && /^PDF/.test(cardInfo.meta) && cardInfo.href === `papers.html?pdf=${encodeURIComponent(key)}`, `the card: title, PDF meta, link (${JSON.stringify(cardInfo)})`);
@@ -216,7 +218,7 @@ const photo = () => {
     check(await input.evaluate((el) => document.activeElement === el), 'the form autosaves without leaving its field');
     await input.press('Tab');
     const saved = await local(`writerPaper:${key}`);
-    check(saved.revision > rec.revision && Buffer.from(saved.file, 'base64').length > Buffer.from(rec.file, 'base64').length, `the filled file is saved (${rec.size} → ${saved.size} bytes)`);
+    check(saved.revision > rec.revision && (await bytesOf(saved)).length > (await bytesOf(rec)).length, `the filled file is saved (${rec.size} → ${saved.size} bytes)`);
     // Saving (and drawing page 1 again for the card) leaves the page on screen as it was: drawn, the field filled.
     const drawnPage = () => page.evaluate(() => { const p = document.querySelector('.pdfViewer .page[data-page-number="1"]'), c = p?.querySelector('canvas'); return !!c && c.width > 0 && getComputedStyle(c).display !== 'none' && p.querySelector('.annotationLayer input')?.value === 'Ada Lovelace' && !!p.querySelector('.textLayer span'); });
     check(await until(drawnPage, 'page 1 drawn after saving', 5000), 'page 1 stays drawn with its field after saving');
@@ -290,7 +292,7 @@ const photo = () => {
       await page.click('.gp-top a[href="papers.html"]');
       await until(() => page.evaluate(() => !location.search || document.querySelector('.gp-state')?.textContent === 'Not saved. Try again in a moment.'), 'quota refusal or navigation');
       check(page.url().includes('?pdf=') && await page.evaluate(() => document.querySelector('.annotationLayer input')?.value === 'Grace Hopper'), 'quota refusal keeps the unsaved form open');
-      check((await local(`writerPaper:${key}`)).file === good.file, 'quota refusal keeps the last good bytes');
+      check(JSON.stringify((await local(`writerPaper:${key}`)).file) === JSON.stringify(good.file), 'quota refusal keeps the last good bytes');
     } finally {
       await worker.evaluate(() => { chrome.storage.local.set = globalThis.pdfCheckSet; delete globalThis.pdfCheckSet; });
     }
@@ -420,7 +422,7 @@ const photo = () => {
         const P = await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs'));
         P.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdfjs/pdf.worker.mjs');
         const rec = (await chrome.storage.local.get(`writerPaper:${key}`))[`writerPaper:${key}`];
-        const data = Uint8Array.from(atob(rec.file), (c) => c.charCodeAt(0));
+        const data = typeof rec.file === 'string' ? Uint8Array.from(atob(rec.file), (c) => c.charCodeAt(0)) : await GZ_WRITER_PAPER.need(['lib/doc-files.js']).then(() => GZ_DOC_FILES.client().get(rec.file));
         const task = P.getDocument({ data, isEvalSupported: false, verbosity: 0 });
         try {
           const doc = await task.promise;

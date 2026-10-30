@@ -67,6 +67,8 @@ const fixture = () => {
     await first.catch(() => {});
     await worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings(false));
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
+    // A record's file bytes: from the worker's file store (lib/doc-files.js), or a record's base64 from before it.
+    const bytesOf = async (rec) => Buffer.from(await worker.evaluate(async (f) => { if (typeof f === 'string') return f; let s = ''; await openDocFiles().read(f.hash, (c) => { s += GZ_DOC_FILES.b64(c); }); return s; }, rec.file), 'base64');
     const shot = async (name) => { await pause(250); const f = path.join(out, name); await page.screenshot({ path: f }); shots.push(f); };
     const openHome = async () => { await page.goto(HOME); await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'home'); };
     const said = () => page.evaluate(() => document.getElementById('gd-said').textContent);
@@ -92,7 +94,7 @@ const fixture = () => {
     await page.setInputFiles('#gd-file', file);
     const key = await until(() => page.evaluate(() => document.querySelector('.gd-card')?.dataset.key), 'the deck card');
     const rec = await until(() => local(`writerPaper:${key}`), 'the record');
-    check(rec.kind === 'slides' && rec.title === 'Cell Biology week 3' && rec.slides === 10 && rec.ext === '.pptx' && rec.size === deckBytes.length && Buffer.from(rec.file, 'base64').equals(deckBytes),
+    check(rec.kind === 'slides' && rec.title === 'Cell Biology week 3' && rec.slides === 10 && rec.ext === '.pptx' && rec.size === deckBytes.length && (await bytesOf(rec)).equals(deckBytes),
       `the record: kind slides, its title, 10 slides, the bytes as given (${JSON.stringify({ kind: rec.kind, title: rec.title, slides: rec.slides, size: rec.size, ext: rec.ext })})`);
     check(/Membrane transport/.test(rec.text) && /Start with the quiz/.test(rec.text), 'the record keeps the slides\' and notes\' text for search');
     check(/^data:image\/jpeg;base64,/.test(rec.thumb || '') && rec.thumb.length < 96e3, `the record keeps slide 1 as a picture (${(rec.thumb || '').length} chars)`);
