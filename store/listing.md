@@ -121,6 +121,10 @@ When the user opens Glaze's toolbar popup, Glaze reads that tab's address and ch
 
 Puts a dot on Glaze's toolbar icon on pages that look like Canvas, Blackboard Ultra or Moodle, with page-URL and CSS rules that Chrome evaluates itself, so the user can see where Glaze can be turned on. Glaze is not told which pages match.
 
+### offscreen
+
+Used only when the student chooses Glaze's own AI model in Settings → AI and clicks Download. A hidden extension page runs that model on this computer with WebGPU, in a worker of its own, and keeps it loaded between requests; it closes after five minutes unused. It downloads the model's files from Hugging Face on that click and reads nothing from any page. The text Glaze's AI features give it stays on this computer and is never sent anywhere.
+
 ### scripting
 
 Registers Glaze's packaged content scripts on the sites the user allowed, so later visits are themed from the start, and runs the popup's LMS check in the current tab. With All sites granted, it also registers a packaged check that reads only a page's head. All code is packaged; nothing is fetched and run. It does not inject Glaze's theme into unrelated sites.

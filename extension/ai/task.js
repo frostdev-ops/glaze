@@ -96,7 +96,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     let rounds = 0, finish = 'stop', pending, orchestrated, calls = 0, inFlight = false, active = true, releaseImages;
     const checkFailure = () => Object.assign(Q.error('check'), ['writer.outline', 'writer.feedback'].includes(task.id) ? { reason: task.id.slice(7) } : {});
     const requestOf = (built, output = task.output, maxTokensCap) => {
-      const request = mine({ ...built, ...(output !== 'text' && { schema: output }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }) }, over);
+      const request = mine({ ...built, ...(output !== 'text' && { schema: output }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }), task: own(task) }, over);
       if (Number.isSafeInteger(maxTokensCap) && maxTokensCap > 0 && maxTokensCap <= Q.LIMIT.maxTokens) request.maxTokens = Math.min(request.maxTokens || maxTokensCap, maxTokensCap);
       return request;
     };
@@ -143,7 +143,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
         if (inputs.length > 1) emit({ type: 'note', part: i + 1, parts: inputs.length });
         const built = task.build(part, { caps: can, text: X(), fence: X().fence() });
         if (!Q.isObj(built)) throw Q.error('input', 'build');
-        const request = mine({ ...built, ...(!text && { schema: task.output }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }) }, over);
+        const request = mine({ ...built, ...(!text && { schema: task.output }), ...(task.limits.maxTokens && built.maxTokens === undefined && { maxTokens: task.limits.maxTokens }), task: own(task) }, over);
         const call = (r, o) => P().run(p, r, c, { ...o, fetch });
         const res = await L().run({ request, tools: kit, call, policy, rounds: task.limits.steps, limits, headless, stream: task.stream, signal: both.signal, emit, ctx, confirms });
         steps.push(...res.steps);
@@ -171,14 +171,16 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     return { output, ...(steps.length && { steps }), meta };
   };
 
+  // The task a request is for, as ai/request.js keeps it: Glaze's own model reads its token by it (ai/local/format.js).
+  const own = (task) => ({ id: task.id, version: task.version });
   // The student's settings a request takes: only those Glaze knows, as ai/request.js cleans them.
-  const own = (over) => Object.fromEntries(['effort', 'temperature', 'maxTokens', 'timeoutMs'].filter((k) => R().isObj(over) && over[k] !== undefined).map((k) => [k, over[k]]));
+  const theirs = (over) => Object.fromEntries(['effort', 'temperature', 'maxTokens', 'timeoutMs'].filter((k) => R().isObj(over) && over[k] !== undefined).map((k) => [k, over[k]]));
   // Reasoning counts against a request's output (OpenRouter's docs: an effort takes about a tenth to four fifths of
   // max_tokens; one too small thinks it all away and answers nothing). An effort the student set above the task's own gets
   // the room that effort thinks in beside the answer's own, unless the student set the output too.
   const ROOM = { none: 0, minimal: 1024, low: 2048, medium: 4096, high: 8192 };
   const mine = (request, over) => {
-    const out = { ...request, ...own(over) }, more = (ROOM[out.effort] ?? 0) - (ROOM[request.effort || 'none'] ?? 0);
+    const out = { ...request, ...theirs(over) }, more = (ROOM[out.effort] ?? 0) - (ROOM[request.effort || 'none'] ?? 0);
     if (more > 0 && over?.maxTokens === undefined && Number.isSafeInteger(request.maxTokens)) out.maxTokens = Math.min(R().LIMIT.maxTokens, request.maxTokens + more);
     return out;
   };
@@ -191,7 +193,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     const input = task.input(raw);
     if (input === null || input === undefined) return null;
     const built = task.build(input, { caps: P().caps(p, c), text: X(), fence: X().fence() });
-    return R().isObj(built) ? mine({ ...built, ...(task.output !== 'text' && { schema: task.output }) }, over) : null;
+    return R().isObj(built) ? mine({ ...built, ...(task.output !== 'text' && { schema: task.output }), task: own(task) }, over) : null;
   };
 
   return { LIMIT, ID, define, add, get, run, prepare, list: () => [...all.keys()] };
