@@ -148,10 +148,12 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     const row = document.createElement('div');
     row.className = 'gk-choose';
     row.setAttribute('role', 'group');
+    const dismiss = () => { row.remove(); (paper.compact?.() ? frame.editor?.() : paper.editor)?.focus(); };
+    row.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); dismiss(); } });
     for (const [id, label] of [['paper', 'Document'], ['sheet', 'Spreadsheet']]) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'gk-pick'; b.dataset.kind = id; b.textContent = t(label);
-      b.addEventListener('click', () => { row.remove(); if (id !== 'paper') start(paper, id); });
+      b.addEventListener('click', () => { if (id === 'paper') dismiss(); else { row.remove(); start(paper, id); } });
       row.append(b);
     }
     document.getElementById('gw')?.prepend(row);
