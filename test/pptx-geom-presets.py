@@ -7,8 +7,8 @@ https://ecma-international.org/wp-content/uploads/ECMA-376-1_5th_edition_decembe
 XML SHA-256: 2f7c868d857c1e3c4b5a6068759fe0e07d77ad58377a6618d1b02ba3507b6939
 
 python3 test/pptx-geom-presets.py presetShapeDefinitions.xml > presets.js
-Compare that block with lib/pptx-geom.js before replacing it. Optional remaining
-arguments select presets; '-' reads XML from stdin. Adjust handles and
+Compare that block with lib/pptx-geom.js before replacing it: every preset, in name order.
+Optional remaining arguments select presets; '-' reads XML from stdin. Adjust handles and
 extrusionOk are intentionally omitted. Formula whitespace is normalized.
 upArrow is the one handwritten exception: the addendum's downArrow flipped
 vertically, with the path reversed to retain its winding.
@@ -17,11 +17,6 @@ vertically, with the path reversed to retain its winding.
 import sys
 import xml.etree.ElementTree as ET
 
-PRESETS = """rect roundRect ellipse triangle rtTriangle diamond parallelogram trapezoid pentagon
-hexagon octagon star5 rightArrow leftArrow upArrow downArrow leftRightArrow chevron homePlate
-flowChartProcess flowChartDecision flowChartTerminator wedgeRectCallout wedgeRoundRectCallout
-wedgeEllipseCallout cloudCallout line bentConnector3 curvedConnector3 snip1Rect plaque can cube
-heart donut noSmoking bracketPair bracePair""".split()
 NS = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
 UP_ARROW = """    // The addendum has no upArrow: this is its downArrow turned upside down.
     upArrow: {
@@ -111,7 +106,7 @@ def main():
         sys.exit(__doc__)
     root = ET.parse(sys.stdin if sys.argv[1] == "-" else sys.argv[1]).getroot()
     definitions = {shape.tag: shape for shape in root}
-    names = sys.argv[2:] or PRESETS
+    names = sys.argv[2:] or sorted({*definitions, "upArrow"})
     blocks = [UP_ARROW if name == "upArrow" else transcribe(definitions[name]) for name in names]
     print("  const PRESETS = {\n" + "\n".join(blocks) + "\n  };")
 

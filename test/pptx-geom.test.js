@@ -237,10 +237,11 @@ test('large and negative swings keep their sweep and cover at most one turn', ()
 });
 
 test('every preset arc ends on its own ellipse and turns at most a quarter, so its SVG flags are unambiguous', () => {
-  for (const prst of PRESETS) for (const [w, h] of SIZES) for (const avLst of [undefined, ADJUSTED[prst]]) {
+  for (const prst of G.presets) for (const [w, h] of SIZES) for (const avLst of [undefined, ADJUSTED[prst]]) {
     for (const p of G.path({ prst, avLst, w, h }).paths) for (const a of arcs(p.d)) {
       assert.ok(a.lambda <= 1 + 1e-3, `${prst} ${w}×${h}: an arc endpoint is off its ellipse (λ ${a.lambda})`);
-      assert.ok(Math.abs(a.turn) <= 90 + 1e-3, `${prst} ${w}×${h}: an arc turns ${a.turn}°`);
+      // Whole-EMU ends on a ribbon's 57,151-EMU curl move the turn read back from them by a thousandth of a degree.
+      assert.ok(Math.abs(a.turn) <= 90 + 1e-2, `${prst} ${w}×${h}: an arc turns ${a.turn}°`);
     }
   }
 });
@@ -272,8 +273,15 @@ test('read back by SVG rules, the ellipse, roundRect, donut and can arcs have th
 
 // ---- presets -------------------------------------------------------------------------------------------------------
 
-test('the presets are the ones Slides draws', () => {
-  assert.deepEqual([...G.presets].sort(), [...PRESETS].sort());
+test('every preset of the addendum draws, upArrow among them; the snapshot ones too', () => {
+  assert.equal(G.presets.length, 187);
+  assert.deepEqual([...G.presets], [...G.presets].sort());
+  for (const prst of [...PRESETS, 'arc', 'blockArc', 'cloud', 'leftBrace', 'rightBracket', 'flowChartDocument', 'straightConnector1', 'star32', 'actionButtonHome']) assert.ok(G.presets.includes(prst), prst);
+  for (const prst of G.presets) {
+    const out = G.path({ prst, w: 2286000, h: 1371600 });
+    assert.ok(out.paths.length && out.paths.every((p) => typeof p.d === 'string') && out.paths.some((p) => p.d), prst);
+    for (const p of out.paths) for (const [, ...n] of segments(p.d)) assert.ok(n.every((v) => Math.abs(v) <= 10 * 2286000), `${prst} stays near its box`);
+  }
   assert.ok(Object.isFrozen(G.presets));
 });
 
@@ -292,9 +300,9 @@ test('the preset transcription can be regenerated from DrawingML XML', () => {
 });
 
 test('an unknown preset draws as rect and says which name it did not know', () => {
-  const out = G.path({ prst: 'wave', w: 1000, h: 500 });
+  const out = G.path({ prst: 'squiggle', w: 1000, h: 500 });
   assert.equal(out.prst, 'rect');
-  assert.equal(out.unknown, 'wave');
+  assert.equal(out.unknown, 'squiggle');
   assert.deepEqual(out.paths, [{ d: 'M 0 0 L 1000 0 L 1000 500 L 0 500 Z', fill: 'norm', stroke: true }]);
   assert.deepEqual(out.rect, { l: 0, t: 0, r: 1000, b: 500 });
   assert.equal(G.path({ prst: 'rect', w: 1000, h: 500 }).unknown, undefined);
@@ -332,7 +340,7 @@ test('preset adjust lists match objects, including negative callout positions an
 });
 
 test('zero and tiny shapes retain finite whole-EMU output and one-EMU lines', () => {
-  for (const [w, h] of [[0, 0], [0, 10000000], [1, 10000000], [10000000, 1], [1, 1]]) for (const prst of PRESETS) {
+  for (const [w, h] of [[0, 0], [0, 10000000], [1, 10000000], [10000000, 1], [1, 1]]) for (const prst of G.presets) {
     const out = G.path({ prst, w, h });
     for (const p of out.paths) {
       assert.doesNotMatch(p.d, /NaN|Infinity/, `${prst} ${w}×${h}`);
@@ -355,7 +363,7 @@ test('the multi-part presets keep each part\'s fill and stroke', () => {
 });
 
 test('a preset scales with its shape: twice the size draws every point twice as far', () => {
-  for (const prst of PRESETS) for (const [w, h] of SIZES) for (const avLst of [undefined, ADJUSTED[prst]]) {
+  for (const prst of G.presets) for (const [w, h] of SIZES) for (const avLst of [undefined, ADJUSTED[prst]]) {
     const small = G.path({ prst, avLst, w, h }), big = G.path({ prst, avLst, w: 2 * w, h: 2 * h });
     small.paths.forEach((p, i) => {
       const a = segments(p.d), b = segments(big.paths[i].d);
