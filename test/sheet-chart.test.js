@@ -296,6 +296,26 @@ test('layout: a markers-only line chart honours its noFill line', async () => {
   assert.equal(sc.marks.lines.length, 0);
 });
 
+test('large charts: resolution stops at a point budget and keeps a titled frame', () => {
+  const c = CX.chart(FX.CHARTS.column);
+  let reads = 0;
+  const data = CX.resolve(c, () => { reads++; return Array.from({ length: 10001 }, () => ({ t: 'n', v: 1 })); });
+  assert.equal(data.kind, 'frame');
+  assert.equal(data.type, 'Chart');
+  assert.equal(data.title, 'Sales by month');
+  assert.equal(reads, 1, 'do not resolve further series or category references after the budget');
+});
+
+test('large charts: layout does not create a mark for every point in an oversized chart', () => {
+  const data = CX.resolve(CX.chart(FX.CHARTS.column), () => null);
+  data.groups[0].series[0].vals = new Array(10001).fill(1);
+  const sc = CH.scene(data, 480, 288);
+  assert.equal(sc.marks.kind, 'Chart');
+  assert.equal(sc.marks.title, 'Sales by month');
+  assert.equal(sc.marks.bars.length, 0);
+  assert.ok(sc.prims.length < 10);
+});
+
 test('round trip: a workbook read, drawn and written untouched keeps its drawing and chart parts byte for byte', async () => {
   const bytes = FX.workbook();
   const before = await parts(bytes);

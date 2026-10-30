@@ -27,6 +27,14 @@ const book = () => {
 };
 const show = (x) => (x?.t === 'n' ? String(x.v) : String(x?.v ?? ''));
 
+test('plan: a huge sparse selection is refused before scanning its rectangle', () => {
+  const { wb, sh } = book();
+  let reads = 0;
+  sh.rows.get = () => { reads++; throw new Error('oversized chart selection read a cell'); };
+  assert.equal(CX.plan(wb, sh, { r0: 0, c0: 0, r1: 1048575, c1: 16383 }, 'column', show), null);
+  assert.equal(reads, 0);
+});
+
 test('plan: series down the columns, names from the header, categories from the text column', () => {
   const { wb, sh } = book();
   const p = CX.plan(wb, sh, { r0: 0, c0: 0, r1: 4, c1: 2 }, 'column', show);
