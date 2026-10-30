@@ -32,7 +32,17 @@ const failed = [];
 let checks = 0;
 const ok = (value, label) => { if (value) { checks++; console.log(`ok   ${label}`); } else { failed.push(label); console.log(`FAIL ${label}`); } };
 // `label` names the state waited for; a function gives it with what the last look saw.
-const until = async (fn, label, ms = 15000) => { const end = Date.now() + ms; for (;;) { const v = await fn().catch(() => null); if (v) return v; if (Date.now() > end) throw new Error(`timed out: ${typeof label === 'function' ? label() : label}`); await pause(150); } };
+const until = async (fn, label, ms = 15000) => {
+  let timer;
+  const expired = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out: ${typeof label === 'function' ? label() : label}`)), ms); });
+  try {
+    for (;;) {
+      const v = await Promise.race([Promise.resolve().then(fn).catch(() => null), expired]);
+      if (v) return v;
+      await Promise.race([pause(150), expired]);
+    }
+  } finally { clearTimeout(timer); }
+};
 // A loaded machine's bound, for a wait a quiet one ends in well under a second.
 const SLOW = 60000;
 const fixture = (f) => fs.readFileSync(path.join(root, 'test/fixtures', f), 'utf8');
@@ -146,8 +156,10 @@ const firefox = async (label, body) => {
     ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && wait.has(d.id)) { wait.get(d.id)(d); wait.delete(d.id); } else if (d.type === 'event') events.push(d); };
     const send = (method, params = {}) => new Promise((res, rej) => {
       const id = ++n;
-      wait.set(id, (d) => (d.type === 'error' ? rej(new Error(`${method}: ${d.error} ${d.message}`)) : res(d.result)));
-      ws.send(JSON.stringify({ id, method, params }));
+      const timer = setTimeout(() => { wait.delete(id); rej(new Error(`timed out: ${method}`)); }, SLOW);
+      wait.set(id, (d) => { clearTimeout(timer); d.type === 'error' ? rej(new Error(`${method}: ${d.error} ${d.message}`)) : res(d.result); });
+      try { ws.send(JSON.stringify({ id, method, params })); }
+      catch (e) { clearTimeout(timer); wait.delete(id); rej(e); }
     });
     await send('session.new', { capabilities: { alwaysMatch: { acceptInsecureCerts: true } } });
     const b = browser(send, () => log, events);
@@ -258,12 +270,16 @@ const allowFrame = (b, tab) => {
   const states = ['no download running', 'no frame in the module\'s header', `no ${EXT}features/allow.html in the frame`, 'its button not shown (no ticket from the worker)'];
   let at = 0, says = '';
   return until(async () => {
-    const [busy, label, added] = await b.value(`(() => { const d = document.getElementById('gz-dl-73'); return [!!d?.hasAttribute('data-busy'), d?.textContent ?? '', !!document.querySelector('.gz-dl-allow')]; })()`, tab);
+    const [busy, label, added] = await b.value(`(() => { const d = document.getElementById('gz-dl-73'); return [!!d?.hasAttribute('data-busy'), d?.textContent ?? '', !!document.querySelector('#context_module_73 .ig-header > .gz-dl-allow')]; })()`, tab);
     says = label;
-    const frame = added && await b.frame(tab, `${EXT}features/allow.html`);
-    const shown = !!frame && await b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && !document.getElementById('allow').hidden`, frame);
-    at = [busy, added, !!frame, shown].indexOf(false);
-    return at < 0 && frame;
+    at = 0; if (!busy) return false;
+    at = 1; if (!added) return false;
+    at = 2;
+    const frame = await b.frame(tab, `${EXT}features/allow.html`);
+    if (!frame) return false;
+    at = 3;
+    const shown = await b.value(`(() => { const a = document.getElementById('allow'); return a?.textContent === 'Allow ${FILES}' && !a.hidden; })()`, frame);
+    return shown && frame;
   }, () => `the Allow frame: ${states[at]}, Download all ${says ? `says "${says}"` : 'idle'}`, SLOW);
 };
 // What follows a click on an Allow page's button (in `c`); the error says whether the button took the click (allow.js marks
