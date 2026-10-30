@@ -422,6 +422,20 @@ test('Replace says why a cell in an array stays, and passes over a match in the 
   assert.equal(f.el('gx-undo').disabled, true, 'no undo step for a replace that changed nothing');
 });
 
+test('Replace all keeps the array refusal instead of claiming cells were replaced', async () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  sh.rows.set(0, new Map([[0, { t: 'n', v: 2, f: '1+1', a: 'A1:A2' }]]));
+  sh.rows.set(1, new Map([[0, { t: 'n', v: 2 }]]));
+  const f = frame({ wb });
+  f.key('h', { ctrlKey: true });
+  f.el('gx-find-q').value = '1+1'; f.fire(f.el('gx-find-q'), 'input');
+  f.el('gx-rep-q').value = '2+2'; f.fire(f.el('gx-rep-all'), 'click');
+  assert.equal(f.doc.querySelector('.gx-said').textContent, 'You can’t change part of an array.');
+  assert.equal(sh.rows.get(0).get(0).f, '1+1');
+  assert.equal(f.el('gx-undo').disabled, true, 'a refused replacement has no undo step');
+  await f.view.dispose();
+});
+
 test('sorting from a cell or a whole column keeps rows whole and the header row a numeric column shows', () => {
   const rows = [['Name', 'Score'], ['Zoe', 90], ['Adam', 70], ['Mia', 80]];
   const names = (wb) => [0, 1, 2, 3].map((r) => `${wb.sheets[0].rows.get(r).get(0).v}${r ? wb.sheets[0].rows.get(r).get(1).v : ''}`).join();
