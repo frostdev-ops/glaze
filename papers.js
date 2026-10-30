@@ -343,7 +343,7 @@
       for (let i = incoming.length; i--;) {
         const j = incoming[i];
         if (!j.key || !listed.has(j.key)) continue;
-        if (j.refocus || j.ui.el.contains(document.activeElement)) focusNext = j.key;
+        if (j.ui.el.contains(document.activeElement)) focusNext = j.key;
         incoming.splice(i, 1);
       }
       const els = [...(bin ? [] : incoming.map((j) => j.ui.el)), ...shown.map(cardFor)];
@@ -714,9 +714,10 @@
     // Retry keeps the focus with the import: on the document once it is listed, on Retry again if it fails again.
     const retry = async (j) => {
       say('');
-      j.refocus = j.ui.el.contains(document.activeElement);
-      const r = await importJob(j);
-      if (r.failed && j.refocus && j.ui.el.isConnected) j.ui.again.focus();
+      const focused = j.ui.el.contains(document.activeElement), pending = importJob(j);
+      if (focused) j.ui.el.focus({ preventScroll: true });
+      const r = await pending;
+      if (r.failed && j.ui.el.contains(document.activeElement) && j.ui.el.isConnected) j.ui.again.focus();
       if (r.failed || r.notice) say(t(r.failed || r.notice));
     };
     const job = (f, id) => {
@@ -727,7 +728,7 @@
       const again = btn({ class: 'gd-btn gd-quiet', 'data-act': 'retry', onclick: () => { retry(j).catch((e) => console.error(e)); } }, t('Retry'));
       const acts = h('div', { class: 'gd-acts', hidden: true }, again, btn({ class: 'gd-btn gd-quiet', 'data-act': 'remove', onclick: () => removeJob(j) }, t('Remove')));
       const more = btn({ class: 'gd-more', disabled: true, 'aria-label': t('More'), title: t('More'), tabindex: '-1' }, icon('dots'));
-      const el = h('li', { class: 'gd-pending', 'data-kind': id, 'data-import': String(j.id) },
+      const el = h('li', { class: 'gd-pending', tabindex: '-1', 'data-kind': id, 'data-import': String(j.id) },
         h('div', { class: 'gd-pic' }, h('div', { class: 'gd-blank' })),
         h('div', { class: 'gd-info' }, icon(DK.KINDS[id]?.icon || 'paper', 'gd-kind'), h('div', { class: 'gd-text' }, h('span', { class: 'gd-title', text: f.name }), meta, bar, acts), more));
       j.ui = { el, bar, fill, meta, acts, again };
