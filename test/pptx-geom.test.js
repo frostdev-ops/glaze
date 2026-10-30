@@ -7,6 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const G = require('../lib/pptx-geom.js');
 
 const SNAPSHOTS = path.join(__dirname, 'fixtures', 'pptx-geom');
@@ -349,6 +350,18 @@ test('custGeom: what a file leaves out or gets wrong draws something sensible an
 });
 
 // ---- snapshots -----------------------------------------------------------------------------------------------------
+
+test('CI refuses snapshot regeneration before writing any fixture', () => {
+  const child = spawnSync(process.execPath, ['--test-name-pattern', '^every preset matches its snapshot', '-e', `
+    require('node:fs').writeFileSync = () => { throw Error('snapshot write attempted'); };
+    require(${JSON.stringify(__filename)});
+  `], { env: { ...process.env, CI: 'true', GZ_GEOM_SNAPSHOTS: 'write' }, encoding: 'utf8' });
+  assert.ifError(child.error);
+  const output = child.stdout + child.stderr;
+  assert.notEqual(child.status, 0, output);
+  assert.match(output, /Snapshot regeneration is disabled in CI/);
+  assert.doesNotMatch(output, /snapshot write attempted/);
+});
 
 const casesFor = (prst) => [
   ...SIZES.map(([w, h]) => ({ w, h })),
