@@ -60,12 +60,12 @@ Canvas ist eine Marke von Instructure, Inc. Blackboard ist eine Marke von Anthol
 
 NEU IN 4.0.0
 
-• Blackboard Ultra: Glaze Writer bringt einen Editor für Diskussionen, Nachrichten und Aufgaben. Blackboards eigener Editor bleibt im ⋯-Menü erreichbar.
-• Arbeiten nutzen MLA 9, APA 7, Chicago 17 oder dein eigenes Format, mit echten Seiten, Formatprüfung, Zitaten, Fußnoten, Versionen sowie .docx-Import und -Export.
-• Die Gliederung folgt deinen Überschriften oder der Struktur eines Textes ohne Überschriften. Quellen lassen sich aus einem vorhandenen Literaturverzeichnis übernehmen.
-• Rechtschreibung, Grammatik und Autokorrektur laufen auf deinem Gerät. Tests erhalten nur Korrekturhilfen, ohne KI oder Textvervollständigung.
-• Optionale KI vervollständigt den aktuellen Satz und kommentiert deinen Text. Feedback bewertet anhand von Bewertungsraster und Anweisungen, erklärt geschätzte Noten oder warum keine Punktzahl möglich ist und kann vorhandene Abschnitte benennen. Glaze verfasst keine Entwürfe.
-• Prüfe deine Arbeit, bevor ihre .docx über Blackboards eigenen Upload abgegeben wird. „Sichern…“ und „Wiederherstellen…“ enthalten Arbeiten, Versionen, dein Wörterbuch und gespeicherte Quellen.
-• Einstellungen › KI verbindet benannte Anbieter mit ihrem Schlüssel oder ein Modell auf diesem Gerät. Ein Modell gilt für alles oder je eines pro Funktion. „Einfach“ und „Erweitert“ bieten eigene Endpunkte und Modelloptionen. KI bleibt aus, bis du sie einschaltest.
-• Blackboard-Kurs-Tabs behalten ihre Seiten, die Suche folgt den nativen Kurslinks und das Abschalten der Positionsspeicherung bricht eine ausstehende Wiederherstellung ab.
+• Blackboard Ultra: Glaze Writer ersetzt den Editor in Diskussionen, Journalen, Nachrichten, Aufgaben und Tests; Blackboards eigener Editor bleibt im ⋯-Menü. Diskussionen und Nachrichten bekommen eine Symbolleiste für markierten Text, die Wort- und Quellenvorgaben der Aufgabenstellung und Strg/⌘+Eingabe zum Posten.
+• Aufgaben öffnen sich im selben schlanken Editor, und Blackboards eigene Abgabe-Schaltfläche schickt sie ab. Voller Writer macht aus dem Textfeld echte Seiten in MLA 9, APA 7, Chicago 17, Leer oder deinem eigenen Format, mit Formatprüfung, Fußnoten, Versionen, .docx-Import und -Export und einem Abgabefenster, das die .docx anhängt.
+• Dokumente: alle Arbeiten und Dokumente an einem Ort. Öffne die Seite über das Glaze-Symbol in der Symbolleiste oder mit Strg/⌘+K oder der Glaze-Navigation direkt in Blackboard, Canvas und Moodle. Beginne mit Leer, MLA, APA oder Chicago oder importiere eine Word-Datei; suche, filtere nach Kurs, benenne um, kopiere und exportiere als .docx. Gelöschte Dokumente bleiben 30 Tage im Papierkorb.
+• Dokumente trägt dein Design. Die Seiten von Writer folgen einem dunklen Design; Helle Seite lässt sie weiß.
+• Rechtschreibung, Grammatik und Autokorrektur laufen auf deinem Gerät. „Zitieren“ sucht eine DOI, ISBN oder Webadresse nur, wenn du klickst, und Quellen bleiben bei der jeweiligen Aufgabe, dem Journal, der Diskussion oder den neuen Nachrichten eines Kurses. Tests erhalten nur Korrekturhilfen, ohne KI oder Textvervollständigung.
+• Einstellungen › KI verbindet benannte Anbieter mit ihrem Schlüssel oder ein Modell auf diesem Gerät, mit einem Modell für alles oder einem pro Funktion. KI bleibt aus, bis du sie einrichtest. Die Tab-Vervollständigung beendet nur den aktuellen Satz, und Feedback bewertet anhand von Bewertungsraster und Anweisungen und erklärt geschätzte Noten oder warum keine Punktzahl möglich ist. Glaze verfasst keine Entwürfe.
+• „Sichern…“ und „Wiederherstellen…“ enthalten Arbeiten, Dokumente, Versionen, dein Wörterbuch und gespeicherte Quellen.
+• Blackboard: Das Bewertungsraster erscheint auf der Abgabeseite eines gespeicherten Entwurfs, Fälligkeitshinweise stimmen auch nach einer Zeitumstellung, die Suche folgt Blackboards eigenen Links, und das Ausschalten von „Deine Stelle merken“ bricht eine ausstehende Wiederherstellung ab.
 • Aussehen › Bewegung beginnt bei Lebhaft. Das Update stellt Dezent einmalig auf Lebhaft um; Aus bleibt Aus.

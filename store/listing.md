@@ -68,14 +68,14 @@ Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Antholog
 
 NEW IN 4.0.0
 
-• Blackboard Ultra: Glaze Writer brings an editor to discussions, messages and assignments, with Blackboard's own editor in its ⋯ menu.
-• Papers use MLA 9, APA 7, Chicago 17 or your own format, with real pages, format checks, citations, footnotes, versions and .docx import and export.
-• The outline follows your headings or the structure of an essay without headings. Sources can be imported from an existing bibliography.
-• Spelling, grammar and autocorrect run on your device. Tests get proofing only, with no AI or completion.
-• Optional AI finishes the current sentence and comments on your writing. Feedback assesses the rubric and instructions, explains estimated grades or why no score is available, and can label existing sections. Glaze never drafts.
-• Review your paper before submitting its .docx through Blackboard's own upload. Back up… and Restore… include papers, versions, your dictionary and saved sources.
-• Settings › AI connects named providers with their keys or a model on this device, with one model for everything or one per feature. Simple and Advanced views keep custom endpoints and model controls in reach. AI stays off until you turn it on.
-• Blackboard course tabs keep their pages, search follows native course links, and turning Remember your place off cancels pending restoration.
+• Blackboard Ultra: Glaze Writer takes the place of the editor in discussions, journals, messages, assignments and tests, with Blackboard's own editor in its ⋯ menu. Discussions and messages get a selection toolbar, the prompt's word and source targets, and Ctrl/⌘+Enter to post.
+• Assignments open in the same light editor, and Blackboard's own Submit sends them. Full writer turns the box into real pages in MLA 9, APA 7, Chicago 17, Blank or your own format, with format checks, footnotes, versions, .docx import and export, and a submit sheet that attaches the .docx.
+• Documents: every paper and document in one place. Open it from Glaze's toolbar icon, or with Ctrl/⌘+K or Glaze navigation inside Blackboard, Canvas and Moodle. Start one in Blank, MLA, APA or Chicago, or import a Word file; search, filter by course, rename, copy and export a .docx. Deleted documents wait 30 days in Trash.
+• Documents wears your Look. Writer's pages follow a dark Look, and Light page keeps them white.
+• Spelling, grammar and autocorrect run on your device. Cite looks up a DOI, ISBN or web address only when you click, and sources stay with each assignment, journal, discussion or course's new messages. Tests get proofing only, with no AI or completion.
+• Settings › AI connects named providers with their keys, or a model on this device, with one model for everything or one per feature. AI stays off until you set it up. Tab completion only finishes the current sentence, and Feedback assesses the rubric and instructions and explains estimated grades or why no score is available. Glaze never drafts.
+• Back up… and Restore… include papers, documents, versions, your dictionary and saved sources.
+• Blackboard: the rubric shows on a saved draft's attempt page, due chips stay right across a clock change, search follows Blackboard's own links, and turning Remember your place off cancels a pending restore.
 • Look › Motion starts at Expressive. Updating moves Subtle to Expressive once; Off stays Off.
 
 ## Single-purpose statement

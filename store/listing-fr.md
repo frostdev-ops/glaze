@@ -60,12 +60,12 @@ Canvas est une marque d’Instructure, Inc. Blackboard est une marque d’Anthol
 
 NOUVEAUTÉS DE LA VERSION 4.0.0
 
-• Blackboard Ultra : Glaze Writer ajoute un éditeur aux discussions, messages et devoirs. L’éditeur Blackboard reste accessible dans le menu ⋯.
-• Les travaux suivent MLA 9, APA 7, Chicago 17 ou votre propre format, avec de vraies pages, vérification du format, citations, notes de bas de page, versions et import et export .docx.
-• Le plan suit vos titres ou la structure d’un texte sans titres. Les sources peuvent être importées depuis une bibliographie existante.
-• Orthographe, grammaire et correction automatique fonctionnent sur votre appareil. Les tests n’ont que la correction, sans IA ni complétion.
-• L’IA facultative termine la phrase en cours et commente votre texte. Les commentaires évaluent la grille et les consignes, expliquent les notes estimées ou l’absence de score et peuvent nommer les sections existantes. Glaze ne rédige jamais à votre place.
-• Relisez votre travail avant l’envoi de son .docx par le téléversement de Blackboard. « Sauvegarder… » et « Restaurer… » incluent travaux, versions, dictionnaire et sources enregistrées.
-• Réglages › IA connecte des fournisseurs par leur nom avec leur clé ou un modèle sur cet appareil, avec un modèle pour tout ou par fonction. Les vues « Simple » et « Avancé » donnent accès aux points de connexion personnalisés et aux réglages du modèle. L’IA reste désactivée tant que vous ne l’activez pas.
-• Les onglets de cours Blackboard conservent leurs pages, la recherche suit les liens natifs des cours et désactiver la mémorisation de votre position annule toute restauration en attente.
+• Blackboard Ultra : Glaze Writer remplace l’éditeur dans les discussions, journaux, messages, devoirs et tests ; l’éditeur Blackboard reste dans son menu ⋯. Discussions et messages gagnent une barre d’outils sur le texte sélectionné, les objectifs de mots et de sources de la consigne, et Ctrl/⌘+Entrée pour publier.
+• Les devoirs s’ouvrent dans le même éditeur léger, et le bouton de remise de Blackboard les envoie. Writer complet transforme la zone en vraies pages en MLA 9, APA 7, Chicago 17, Vierge ou votre propre format, avec vérification du format, notes de bas de page, versions, import et export .docx et une fenêtre de remise qui joint le .docx.
+• Documents : tous vos travaux et documents au même endroit. Ouvrez la page depuis l’icône Glaze de la barre d’outils, ou avec Ctrl/⌘+K ou la navigation Glaze dans Blackboard, Canvas et Moodle. Commencez en Vierge, MLA, APA ou Chicago, ou importez un fichier Word ; recherchez, filtrez par cours, renommez, copiez et exportez en .docx. Les documents supprimés attendent 30 jours dans la Corbeille.
+• Documents adopte votre style. Les pages de Writer suivent un style sombre, et Page claire les garde blanches.
+• Orthographe, grammaire et correction automatique fonctionnent sur votre appareil. Citer recherche un DOI, un ISBN ou une adresse web seulement quand vous cliquez, et les sources restent avec chaque devoir, journal ou discussion, ou avec les nouveaux messages d’un cours. Les tests n’ont que la correction, sans IA ni complétion.
+• Réglages › IA connecte des fournisseurs par leur nom avec leur clé ou un modèle sur cet appareil, avec un modèle pour tout ou un par fonction. L’IA reste désactivée tant que vous ne la configurez pas. La complétion avec Tab termine seulement la phrase en cours, et les commentaires évaluent la grille et les consignes et expliquent les notes estimées ou l’absence de score. Glaze ne rédige jamais à votre place.
+• « Sauvegarder… » et « Restaurer… » incluent travaux, documents, versions, dictionnaire et sources enregistrées.
+• Blackboard : la grille s’affiche sur la page de tentative d’un brouillon enregistré, les indicateurs d’échéance restent justes au changement d’heure, la recherche suit les liens de Blackboard et désactiver Retrouver où vous en étiez annule une restauration en attente.
 • Apparence › Animations commence à Expressives. La mise à jour passe une fois Subtiles à Expressives ; Aucune reste Aucune.

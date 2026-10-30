@@ -60,12 +60,12 @@ Canvas is een handelsmerk van Instructure, Inc. Blackboard is een handelsmerk va
 
 NIEUW IN 4.0.0
 
-• Blackboard Ultra: Glaze Writer voegt een editor toe voor discussies, berichten en opdrachten. De eigen editor van Blackboard blijft bereikbaar via het ⋯-menu.
-• Papers gebruiken MLA 9, APA 7, Chicago 17 of je eigen opmaak, met echte pagina’s, opmaakcontroles, bronverwijzingen, voetnoten, versies en .docx-import en -export.
-• Het overzicht volgt je koppen of de structuur van een essay zonder koppen. Je kunt bronnen uit een bestaande literatuurlijst importeren.
-• Spelling, grammatica en autocorrectie werken op je apparaat. Toetsen krijgen alleen tekstcontrole, zonder AI of aanvulling.
-• Optionele AI maakt de huidige zin af en geeft commentaar op je tekst. Feedback beoordeelt het beoordelingsschema en de instructies, verklaart geschatte cijfers of waarom er geen score is en kan bestaande onderdelen een titel geven. Glaze schrijft nooit een tekst voor je.
-• Bekijk je paper voordat de .docx via Blackboards eigen upload wordt ingeleverd. “Back-up maken…” en “Herstellen…” bevatten papers, versies, je woordenboek en opgeslagen bronnen.
-• Instellingen › AI verbindt genoemde aanbieders met hun sleutel of een model op dit apparaat, met één model voor alles of per functie. “Eenvoudig” en “Geavanceerd” bieden eigen eindpunten en modelinstellingen. AI blijft uit tot je het inschakelt.
-• Blackboard-cursustabbladen behouden hun pagina’s, zoeken volgt de eigen cursuslinks en het uitschakelen van de optie om je plek te onthouden annuleert een gepland herstel.
+• Blackboard Ultra: Glaze Writer neemt de editor over in discussies, dagboeken, berichten, opdrachten en toetsen; de eigen editor van Blackboard blijft in het ⋯-menu. Discussies en berichten krijgen een werkbalk bij geselecteerde tekst, de woord- en brondoelen uit de opdracht en Ctrl/⌘+Enter om te plaatsen.
+• Opdrachten openen in dezelfde lichte editor, en de eigen inleverknop van Blackboard verstuurt ze. Volledige Writer maakt van het tekstvak echte pagina’s in MLA 9, APA 7, Chicago 17, Leeg of je eigen opmaak, met opmaakcontroles, voetnoten, versies, .docx-import en -export en een inleverscherm dat de .docx bijvoegt.
+• Documenten: al je werkstukken en documenten op één plek. Open de pagina via het Glaze-pictogram in de werkbalk, of met Ctrl/⌘+K of de Glaze-navigatie binnen Blackboard, Canvas en Moodle. Begin met Leeg, MLA, APA of Chicago of importeer een Word-bestand; zoek, filter op cursus, wijzig de naam, maak een kopie en exporteer als .docx. Verwijderde documenten wachten 30 dagen in de Prullenbak.
+• Documenten krijgt je stijl. De pagina’s van Writer volgen een donkere stijl, en Lichte pagina houdt ze wit.
+• Spelling, grammatica en autocorrectie werken op je apparaat. Citeren zoekt een DOI, ISBN of webadres alleen op als je klikt, en bronnen blijven bij elke opdracht, elk dagboek, elke discussie of de nieuwe berichten van een cursus. Toetsen krijgen alleen tekstcontrole, zonder AI of aanvulling.
+• Instellingen › AI verbindt genoemde aanbieders met hun sleutel of een model op dit apparaat, met één model voor alles of één per functie. AI blijft uit tot je het instelt. Aanvullen met Tab maakt alleen de huidige zin af, en Feedback toetst aan het beoordelingsschema en de instructies en verklaart geschatte cijfers of waarom er geen score is. Glaze schrijft nooit een tekst voor je.
+• “Back-up maken…” en “Herstellen…” bevatten werkstukken, documenten, versies, je woordenboek en opgeslagen bronnen.
+• Blackboard: het beoordelingsschema verschijnt op de pagina van een opgeslagen concept, deadlinelabels kloppen ook na een tijdwisseling, zoeken volgt de eigen links van Blackboard en het uitzetten van Onthoud waar je was annuleert een gepland herstel.
 • Uiterlijk › Beweging begint bij Expressief. De update zet Subtiel eenmalig op Expressief; Uit blijft Uit.

@@ -60,12 +60,12 @@ Canvas é uma marca da Instructure, Inc. Blackboard é uma marca da Anthology In
 
 NOVO NA 4.0.0
 
-• Blackboard Ultra: o Glaze Writer traz um editor para discussões, mensagens e trabalhos. O editor do Blackboard continua disponível no menu ⋯.
-• Os trabalhos usam MLA 9, APA 7, Chicago 17 ou seu próprio formato, com páginas reais, verificação do formato, citações, notas de rodapé, versões e importação e exportação .docx.
-• A estrutura segue seus títulos ou a organização de um texto sem títulos. As fontes podem ser importadas de uma bibliografia existente.
-• Ortografia, gramática e correção automática funcionam no seu dispositivo. As provas têm apenas revisão, sem IA nem preenchimento de texto.
-• A IA opcional completa a frase atual e comenta seu texto. Os comentários avaliam a rubrica e as instruções, explicam as notas estimadas ou por que não há pontuação e podem dar nome às seções existentes. O Glaze nunca redige por você.
-• Revise seu trabalho antes de enviar o .docx pelo próprio upload do Blackboard. “Fazer backup…” e “Restaurar…” incluem trabalhos, versões, seu dicionário e fontes salvas.
-• Configurações › IA conecta provedores pelo nome com suas chaves ou um modelo neste dispositivo, com um modelo para tudo ou um por recurso. As visualizações “Simples” e “Avançado” oferecem endpoints próprios e controles do modelo. A IA fica desligada até você ativá-la.
-• As abas de cursos do Blackboard mantêm suas páginas, a busca segue os links nativos dos cursos e desativar a opção de lembrar sua posição cancela qualquer restauração pendente.
+• Blackboard Ultra: o Glaze Writer substitui o editor em discussões, diários, mensagens, trabalhos e provas; o editor do Blackboard continua no menu ⋯. Discussões e mensagens ganham uma barra de ferramentas para o texto selecionado, as metas de palavras e fontes do enunciado e Ctrl/⌘+Enter para publicar.
+• Os trabalhos abrem no mesmo editor leve, e o próprio botão de entrega do Blackboard os envia. O Writer completo transforma a caixa em páginas reais em MLA 9, APA 7, Chicago 17, Em branco ou seu próprio formato, com verificação do formato, notas de rodapé, versões, importação e exportação .docx e uma janela de entrega que anexa o .docx.
+• Documentos: todos os seus trabalhos e documentos em um só lugar. Abra a página pelo ícone do Glaze na barra de ferramentas, ou com Ctrl/⌘+K ou a navegação do Glaze dentro do Blackboard, do Canvas e do Moodle. Comece em Em branco, MLA, APA ou Chicago, ou importe um arquivo do Word; pesquise, filtre por curso, renomeie, faça uma cópia e exporte em .docx. Documentos excluídos ficam 30 dias na Lixeira.
+• Documentos usa o seu estilo. As páginas do Writer seguem um estilo escuro, e Página clara as mantém brancas.
+• Ortografia, gramática e correção automática funcionam no seu dispositivo. Citar busca um DOI, um ISBN ou um endereço da web só quando você clica, e as fontes ficam com cada trabalho, diário ou discussão, ou com as mensagens novas de cada curso. As provas têm apenas revisão, sem IA nem preenchimento de texto.
+• Configurações › IA conecta provedores pelo nome com suas chaves ou um modelo neste dispositivo, com um modelo para tudo ou um por recurso. A IA fica desligada até você configurá-la. Completar com Tab só termina a frase atual, e os comentários avaliam a rubrica e as instruções e explicam as notas estimadas ou por que não há pontuação. O Glaze nunca redige por você.
+• “Fazer backup…” e “Restaurar…” incluem trabalhos, documentos, versões, seu dicionário e fontes salvas.
+• Blackboard: a rubrica aparece na página da tentativa de um rascunho salvo, os avisos de prazo ficam certos na mudança de horário, a busca segue os links do próprio Blackboard e desligar Lembrar onde você parou cancela uma restauração pendente.
 • Aparência › Movimento começa em Expressivo. A atualização muda Sutil para Expressivo uma vez; Desligado continua desligado.
