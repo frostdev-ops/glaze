@@ -241,7 +241,7 @@ const load = (writer, overrides = {}) => {
   delete globalThis.GZ_DOC_KINDS;
   const DK = require('../lib/doc-kinds.js');
   const ctx = vm.createContext({ GZ_DOC_KINDS: DK, GZ_WRITER_PAPER: { need: async () => {} }, console, URL, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, RangeError, Error, Promise, Object, Array, String, Number, Math, JSON, Map, Set, btoa, atob, ...overrides,
-    chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}` } } });
+    chrome: { storage: { sync: { get: async () => (writer === undefined ? {} : { writer }) }, local: overrides.local || { get: async () => ({}) } }, runtime: { getURL: (f) => `chrome-extension://x/${f}` } } });
   ctx.globalThis = ctx;
   vm.runInContext(read('sheet-kind.js'), ctx);
   return { DK, ctx };
@@ -295,4 +295,34 @@ test('the card is the record\'s 6×4 text; its text and measure come from the re
   assert.equal(k.text(rec), 'Name\tScore');
   assert.deepEqual({ ...k.measure(rec) }, { cells: 9, sheets: 2 }, 'from the page\'s realm');
   assert.equal(k.text({}), '');
+});
+
+// An assignment's frame (writer-kinds.js on the integration lane): the grid as the attempt's view, a brought spreadsheet as
+// the attempt's record (into: the paper kept as a version, parts the record had dropped), a blank start (empty).
+test('the assignment frame\'s hooks: view, into over a paper, empty', async () => {
+  const s = store(), P = PA.open(s, () => 1000, { versions: async () => 40 }), K = 'bb.school.test|_900_1|_101_1|_7_1';
+  await P.save(K, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'my draft' }] }] }, title: 'Lab 3' });
+  const G = require('../sheet-grid.js');
+  for (const f of ['date', 'math', 'info']) require(`../lib/sheet-fn-${f}.js`);
+  const { DK } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: G, GZ_SHEET_CALC: require('../lib/sheet-calc.js'),
+    GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob });
+  await DK.settled();
+  const k = DK.get('sheet');
+  assert.equal(typeof k.view, 'function');
+  const file = (name, text) => ({ name, size: Buffer.byteLength(text), arrayBuffer: async () => { const b = Buffer.from(text); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length); } });
+  // The vm's chrome.storage.local reads the same stand-in store the worker writes.
+  const rec = await k.into(K, file('scores.csv', 'Name,Score\nAda,91\nGrace,=B2-3\n'));
+  assert.deepEqual([rec.kind, rec.doc, rec.words, rec.cells, rec.title], ['sheet', null, 0, 6, 'Lab 3']);
+  const versions = await P.versions(K);
+  assert.ok(versions.some((v) => v.reason === 'import' && v.words === 2), 'the paper it held is kept as a version');
+  const got = await SD.read((ks) => s.get(ks), K);
+  assert.equal(got.wb.sheets[0].rows.get(2).get(1).v, 88, 'its formulas calculated');
+  // A second spreadsheet over it leaves none of the first's parts.
+  const big = 'x\n'.repeat(1500);
+  await k.into(K, file('long.csv', big));
+  await k.into(K, file('short.csv', 'only\n'));
+  assert.deepEqual(Object.keys(s.data).filter((x) => x.startsWith(`writerSheet:${K}:`)), [`writerSheet:${K}:1:0`]);
+  await assert.rejects(k.into(K, file('book.xlsx', 'PK')), (e) => e instanceof RangeError || e.name === 'RangeError', 'an .xlsx without the reader is refused');
+  const e = k.empty();
+  assert.ok(SD.isGlance(JSON.parse(JSON.stringify(e.grid))) && e.cells === 0 && e.sheets === 1 && !('book' in e));
 });
