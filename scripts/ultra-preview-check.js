@@ -181,7 +181,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
 
     // ---- Save to Documents above the old 3 MB cap: the merged file store keeps it
     // Each thing the viewer's line says as it saves, kept.
-    await fr.evaluate(() => { const R = globalThis.__saying = [], st = document.querySelector('.gp-state'); new MutationObserver(() => { if (R.at(-1) !== st.textContent) R.push(st.textContent); }).observe(st, { childList: true, characterData: true, subtree: true }); });
+    await fr.evaluate(() => { const R = globalThis.__saying = [], st = document.querySelector('.gp-state'); new MutationObserver((records) => { for (const r of records) for (const n of r.addedNodes) R.push(n.textContent); }).observe(st, { childList: true, characterData: true, subtree: true }); });
     await fr.click('[data-act="save"]');
     await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'Saved to Documents'), 'large PDF saved', 20000, () => fr.evaluate(() => document.querySelector('.gp-state')?.textContent));
     const saying = await fr.evaluate(() => globalThis.__saying), pcts = saying.map((x) => /^Saving… (\d+)%$/.exec(x)?.[1]).filter(Boolean).map(Number);
