@@ -1,5 +1,5 @@
-// Slides on the Documents page (slides-kind.js, papers.html): loaded after papers.js and packaged, registered only with
-// Settings → Writer → Slides on (writer.slides), its one storage seam (the deck's bytes as a base64 `file` field in the paper
+// Slides on the Documents page (slides-kind.js, papers.html): loaded after papers.js and packaged, available for viewing with
+// Settings → Writer → Slides off; importing needs writer.slides on, its one storage seam (the deck's bytes as a base64 `file` field in the paper
 // record until the worker's blob store takes them), what it keeps for search and a copy, and the files it refuses. The
 // viewer itself is scripts/slides-check.js.
 const test = require('node:test');
@@ -31,11 +31,12 @@ const load = (writer) => {
   return { DK, ctx };
 };
 
-test('off (the default), no slides kind is registered: Documents opens Word files only', async () => {
+test('off (the default), slides still view and export while Documents imports Word files only', async () => {
   for (const writer of [undefined, { slides: false }, { slides: 'yes' }, { full: true }, { pdf: true }]) {
     const { DK } = load(writer);
     await DK.settled();
-    assert.equal(DK.get('slides').edit, undefined, JSON.stringify(writer));
+    for (const f of ['edit', 'thumb', 'file', 'exportFile', 'copy', 'text']) assert.equal(typeof DK.get('slides')[f], 'function', `${f}: ${JSON.stringify(writer)}`);
+    assert.equal(DK.get('slides').importFile, undefined);
     assert.equal(DK.opens('Week 3.pptx'), null);
     assert.ok(!/pptx/.test(DK.accept()));
   }

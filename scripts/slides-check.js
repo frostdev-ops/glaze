@@ -73,7 +73,7 @@ const fixture = () => {
     await until(said, 'off: refusal');
     check(await said() === 'That file could not be read as a Word document.', 'off: a .pptx is refused with the Word string');
     check(((await local('writerPapers')) || []).length === 0, 'off: nothing stored');
-    // A link to a deck the build has no switch for goes home.
+    // A link to a missing deck goes home, with either switch value.
     await page.goto(`${HOME}?slides=${encodeURIComponent('doc:00000000-0000-4000-8000-000000000000')}`);
     await until(() => page.evaluate(() => !document.getElementById('list').hidden && location.search === ''), 'off: a slides link goes home');
     check(true, 'off: a ?slides= address goes home');
@@ -254,6 +254,15 @@ const fixture = () => {
     await page.goBack();
     await until(() => page.evaluate(() => !document.getElementById('list').hidden && location.search === ''), 'Back to Documents');
     check(true, 'Back returns to Documents');
+
+    // Turning import off preserves the existing deck's card and viewer.
+    await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(false));
+    await openHome();
+    await until(() => page.locator(`.gd-card[data-key="${key}"]`).count(), 'off: existing deck card');
+    check(await page.locator('#gd-file').getAttribute('accept').then((s) => !/pptx/.test(s)), 'off: import remains Word only');
+    await page.click(`.gd-card[data-key="${key}"] .gd-title`);
+    await until(() => page.locator('#gs-canvas .gs-slide').count(), 'off: existing deck opens');
+    check((await at()).n === '1 / 10', 'off: existing slides still open for viewing');
 
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);
