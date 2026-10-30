@@ -125,6 +125,9 @@ Settings → AI → Agents shows the helper's state, with **Copy** for a command
 
 `npx glaze-mcp doctor` checks the helper's folders, each browser's setup, the Node.js each one starts, and whether a
 browser has agent access on now. An app with no browser to reach says "waiting for Glaze" in its log.
+In Safari, Glaze's background sleeps a few minutes after you last use Glaze there, and an app's request then times
+out: open Glaze's popup or a Blackboard or Canvas tab in Safari, then ask again. If the app then shows Glaze as
+disconnected, reconnect it there (in Claude Code, `/mcp`).
 
 ## Browsers
 

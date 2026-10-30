@@ -1,7 +1,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../scripts/writer-submit-check.js'), 'utf8');
-const code = source.slice(source.indexOf('const taps = '), source.indexOf('// The page\'s world:'));
+const source = fs.readFileSync(require.resolve('../scripts/frame-tap.js'), 'utf8');
+const code = source.slice(source.indexOf('const taps = '), source.indexOf('module.exports'));
 
 // Exercise tap's routing decisions without Chromium: a pre-click hit test passes, then the browser reports where the
 // click actually went. Only its known iframe-routing failure may change the frame width and try again.

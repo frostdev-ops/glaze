@@ -8,7 +8,7 @@ test('full → compact refuses to project when the paper or its view version can
   for (const fail of [1, 2]) {
     let calls = 0, projected = false;
     const view = { props: { editable: () => true }, hasFocus: () => true, setProps(o) { Object.assign(this.props, o); }, focus() {} };
-    const ctx = vm.createContext({ boxEl: {}, compact: false, key: 'paper', loaded: true, switching: null, flushing: null, holding: false, dirty: true,
+    const ctx = vm.createContext({ boxEl: {}, parked: null, compact: false, key: 'paper', loaded: true, switching: null, flushing: null, holding: false, dirty: true,
       view, mine: [], root: { inert: false }, document: { activeElement: null }, caretY: () => 20, SET: { patch() { throw Error('preference changed before the save'); }, now: () => ({ full: true }) },
       save: async () => { calls++; return calls === fail ? null : {}; }, projectSoon: () => { projected = true; } });
     vm.runInContext(code + '\nglobalThis.run = () => setView(false, { save: true });', ctx);
@@ -26,7 +26,7 @@ const flushCtx = ({ save, project }) => {
   const messages = [], doc = {}, view = { props: { editable: () => true }, state: { doc }, setProps(o) { Object.assign(this.props, o); } };
   const el = (cls = '') => ({ inert: false, textContent: '', title: '', dataset: {}, children: [], classList: { contains: (c) => cls.split(' ').includes(c) }, toggleAttribute(n, on) { this[n] = on; }, focus() { this.focused = (this.focused || 0) + 1; }, getClientRects: () => [1] });
   const bar = el('gw-bar'), body = el(), full = el('gp-full');
-  const ctx = vm.createContext({ view, compact: true, loaded: true, holding: false, switching: null, flushing: null, projecting: false,
+  const ctx = vm.createContext({ view, parked: null, compact: true, loaded: true, holding: false, switching: null, flushing: null, projecting: false,
     root: { inert: false }, boxEl: { children: [body, bar] }, host: { say: (m) => messages.push(m) }, save, project, setView() {}, queueMicrotask,
     h: () => el(), t: (k) => k, switches: [full] });
   vm.runInContext(`${source.slice(source.indexOf('    const said = boxEl ?'), start)}\nglobalThis.begin = flush; globalThis.end = resume; globalThis.line = () => said; globalThis.soon = projectSoon;`, ctx);
@@ -34,6 +34,31 @@ const flushCtx = ({ save, project }) => {
   return { ctx, messages, view, body, bar, full, line: ctx.line() };
 };
 const PROJECTED = { html: '<p>Last edit.</p>', text: 'Last edit.', delta: [{ insert: 'Last edit.\n' }] };
+
+test('a kind handoff stops a queued compact projection and a pending flush', async () => {
+  const a = flushCtx({ save: async () => ({}), project: () => PROJECTED });
+  a.ctx.soon();
+  a.ctx.parked = { holding: true };
+  await new Promise(setImmediate);
+  assert.equal(a.messages.length, 0, 'a queued microtask cannot project the outgoing paper');
+  let done;
+  const b = flushCtx({ save: () => new Promise((r) => { done = r; }), project: () => PROJECTED });
+  const pending = b.ctx.begin('late', 'submit');
+  b.ctx.parked = { holding: true };
+  done({}); await pending;
+  assert.ok(!b.messages.some((m) => m.ok === true), 'a flush cannot submit the outgoing paper after a handoff');
+});
+
+test('restoring a file version mounts its viewer before touching the paper document', async () => {
+  let mounted = false;
+  const begin = source.indexOf('    const restore = async (id) => {'), end = source.indexOf('    const open2 = ', begin);
+  const ctx = vm.createContext({ save: async () => true, key: 'paper', store: { restore: async () => ({ paper: { kind: 'pdf', doc: null } }) },
+    paper: null, keep: false, outlineSaved: null, hand: async (p) => { mounted = p.kind === 'pdf'; return mounted; },
+    setFormat: async () => {}, ST: { get: () => ({}) }, setDoc: () => assert.fail('file version parsed as paper'), toast() {}, t: (s) => s });
+  vm.runInContext(source.slice(begin, end) + '\nglobalThis.restoreVersion = restore;', ctx);
+  await ctx.restoreVersion('pdf');
+  assert.equal(mounted, true);
+});
 
 test('compact flush: the save first, however long; the box held and the bar saying Saving… until the page answers', async () => {
   for (const early of [false, true]) {
@@ -98,7 +123,7 @@ test('compact flush: why Ultra\'s button didn\'t go stays in the bar — not sav
 
 test('a view preference already stored by another frame does not leave an unmatched own-change marker', async () => {
   let patches = 0;
-  const ctx = vm.createContext({ boxEl: {}, compact: true, key: 'paper', loaded: true, switching: null, flushing: null,
+  const ctx = vm.createContext({ boxEl: {}, parked: null, compact: true, key: 'paper', loaded: true, switching: null, flushing: null,
     view: { hasFocus: () => false }, document: { activeElement: null }, caretY: () => null, mine: [],
     SET: { now: () => ({ full: true }), patch: () => { patches++; return Promise.resolve(); } } });
   const prefix = source.slice(start, source.indexOf('      if (focus) setFocus(false);', start));

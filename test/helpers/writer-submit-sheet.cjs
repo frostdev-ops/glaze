@@ -13,7 +13,7 @@ module.exports = () => {
   const builds = [], saved = [];
   const api = { context: () => ({ assignment: { title: 'Essay 2' } }), paper: () => ({}), key: () => 'school|student|course|paper',
     pages: () => 1, format: () => format, editor: { view: { state: { get doc() { return value; } } }, text: () => value.label },
-    docx: () => { const snapshot = value; return new Promise((resolve) => builds.push({ snapshot, resolve: () => resolve({ bytes: new Uint8Array([snapshot.label === 'first' ? 1 : 2]) }) })); },
+    file: () => { const snapshot = value; return new Promise((resolve) => builds.push({ snapshot, resolve: () => resolve({ bytes: new Uint8Array([snapshot.label === 'first' ? 1 : 2]) }) })); },
     version: async () => { saved.push(value); return true; }, save: async () => true };
   current = api;
   const frame = { t: (k, v) => I.t(k, v, 'en'), mode: () => 'paper', kind: () => 'assignment', say: (m) => messages.push(m), handle: (k, f) => { handles[k] = f; }, on: (k, f) => { hooks[k] = f; } };

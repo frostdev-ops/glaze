@@ -1,15 +1,19 @@
 // Glaze Writer's import card (glaze-plans/writer/mockups/settings-ai/import.html), in an assignment's paper frame. A file
 // the student brings (dropped on the paper, ⋯ → Import…, or Ultra's own file area, which the page hands over before Ultra
 // hears it: features/writer-submit.js) is routed by lib/writer-submit.js: a .docx asks Open in Writer (the default, Enter)
-// or Submit as is; any other file goes straight to the submit sheet as is. Open in Writer replaces the paper, what it held
-// kept as a version first (writer-paper.js importFile, whose toast has Undo). The close button, Escape and the dim change
-// nothing.
-// page → frame: import:file { name, mime, bytes }.
+// or Submit as is, and a .pdf, .pptx or .ppsx Open in Glaze or Submit as is while its kind opens here (writer-kinds.js:
+// Settings → Writer → PDFs, Slides); any other file goes straight to the submit sheet as is. Open in Writer replaces the
+// paper, what it held kept as a version first (writer-paper.js importFile, whose toast has Undo); Open in Glaze shows the
+// file in its kind's viewer in the paper's place, the paper kept as a version first. The close button, Escape and the dim
+// change nothing.
+// page → frame: import:file { name, mime, bytes, open } (open: an attachment's Open in Glaze, no card), import:failed
+// { name, why } (why 'size': past what the kind opens, said in the kind's words: lib/doc-kinds.js big).
 // Classic script after writer-submit.js.
 var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
   const frame = globalThis.GZ_WRITER_FRAME;
   if (!frame) return null;
-  const P = () => globalThis.GZ_WRITER_PAPER, L = () => globalThis.GZ_WRITER_SUBMIT_LIB, SHEET = () => globalThis.GZ_WRITER_SUBMIT_SHEET;
+  const P = () => globalThis.GZ_WRITER_PAPER, L = () => globalThis.GZ_WRITER_SUBMIT_LIB, SHEET = () => globalThis.GZ_WRITER_SUBMIT_SHEET, K = () => globalThis.GZ_WRITER_KINDS;
+  const route = (name) => L().route(name, { kinds: K()?.opens() || [] });
   const t = (k, v) => frame.t(k, v);
   const nf = (n) => new Intl.NumberFormat(document.documentElement.lang || undefined).format(n);
   const SVG = 'http://www.w3.org/2000/svg';
@@ -37,7 +41,7 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
   // "4 pages · 38 KB": a Word file's pages as Word saved them, when it says; its size always.
   const about = async (file) => {
     const size = t('{n} KB', { n: nf(L().kb(file.size)) });
-    if (L().route(file.name) !== 'choose') return size;
+    if (L().kindOf(file.name) !== 'paper') return size;
     try {
       await P().need(['lib/doctext.js']);
       const xml = await GZ_DOCTEXT.unzip(new Uint8Array(await file.arrayBuffer())).bytes('docProps/app.xml');
@@ -58,10 +62,10 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
   };
   const choose = (api, file) => {
     close();
-    const replace = !api.blank();
+    const replace = !api.blank(), word = L().kindOf(file.name) === 'paper';
     const meta = h('small', { text: t('{n} KB', { n: nf(L().kb(file.size)) }) });
     const x = h('button', { type: 'button', class: 'gi-x', 'aria-label': t('Close'), title: t('Close') }, icon(X));
-    const open = h('button', { type: 'button', class: 'gi-choice gi-default' }, art(ART.open(replace)), h('span', { text: t('Open in Writer') }),
+    const open = h('button', { type: 'button', class: 'gi-choice gi-default' }, art(ART.open(replace)), h('span', { text: t(word ? 'Open in Writer' : 'Open in Glaze') }),
       replace ? h('span', { class: 'gi-kept' }, icon(HISTORY), t('Saves current paper')) : null);
     const asis = h('button', { type: 'button', class: 'gi-choice' }, art(ART.asis()), h('span', { text: t('Submit as is') }));
     const layer = h('div', { class: 'gi-layer' },
@@ -82,7 +86,7 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
     x.addEventListener('click', close);
     layer.querySelector('.gi-dim').addEventListener('click', close);
     // From the compact box, Open in Writer opens the pages too (Full writer on): the file is a paper now.
-    open.addEventListener('click', () => { if (card !== mine) return; mine.back = null; close(); api.importFile(file, { full: true }); });
+    open.addEventListener('click', () => { if (card !== mine) return; mine.back = null; close(); if (word) api.importFile(file, { full: true }); else K()?.open(api, file); });
     asis.addEventListener('click', () => { if (card !== mine) return; mine.back = null; close(); SHEET()?.open(api, file); });
     layer.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
@@ -101,20 +105,31 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
     const error = L().fileError(file);
     if (error) { api.notify?.(error); return; }
     SHEET()?.close();
-    if (L().route(file.name) === 'choose') choose(api, file);
+    if (route(file.name) === 'choose') choose(api, file);
     else { close(); SHEET()?.open(api, file); }
   };
 
   // The page takes Ultra's file area from the frame's ready, a moment before the paper mounts: a file waits for the paper.
   const paper = async () => { for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100)); return P()?.current() || null; };
   frame.handle('import:file', async (m) => {
-    if (frame.mode() !== 'paper' || frame.kind() !== 'assignment' || !(m.bytes instanceof ArrayBuffer) || !m.bytes.byteLength || m.bytes.byteLength > 50e6) return;
+    if (frame.mode() !== 'paper' || frame.kind() !== 'assignment' || !(m.bytes instanceof ArrayBuffer) || !m.bytes.byteLength) return;
     const request = ++requests;
     const api = P()?.current() || await paper();
     if (!api || request !== requests) return;
     await P().need(['lib/writer-submit.js']);
-    if (request !== requests || P()?.current() !== api || L().fileError({ name: m.name, size: m.bytes.byteLength, type: m.mime ?? '' })) return;
-    bring(api, new File([m.bytes], m.name, { type: typeof m.mime === 'string' ? m.mime : '' }));
+    if (m.bytes.byteLength > L().MAX_FILE || request !== requests || P()?.current() !== api || L().fileError({ name: m.name, size: m.bytes.byteLength, type: m.mime ?? '' })) return;
+    const file = new File([m.bytes], m.name, { type: typeof m.mime === 'string' ? m.mime : '' });
+    // An attachment's Open in Glaze (lib/writer-context-assignment.js open): straight to its kind, no card, while it is on.
+    if (m.open === true) { if (K()?.opens().includes(L().kindOf(m.name)) && !api.importing?.() && !SHEET()?.busy()) { close(); K().open(api, file); } return; }
+    bring(api, file);
+  });
+  frame.handle('import:failed', async (m) => {
+    let says = 'That file could not be read.';
+    if (m?.why === 'size') {
+      await P().need(['lib/writer-submit.js', 'lib/doc-kinds.js']).catch(() => {});
+      says = globalThis.GZ_DOC_KINDS?.KINDS[L()?.kindOf(m.name)]?.big || 'That file is too large.';
+    }
+    P()?.current()?.notify?.(says);
   });
   return { bring, about, close, opened: () => !!card };
 })();

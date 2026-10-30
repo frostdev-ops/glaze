@@ -236,15 +236,20 @@ const SYLLABUS_DOCS = 48 + 61;
 // double-spaced", "1 paragraph has other line spacing"): 279 bytes of English plurals in lib/i18n.js, measured against 115bb240.
 // defaults.js's enhance.writerUploads (Open uploads in Writer, 31, cd1afbd3) and content.js's draft finder reading a
 // reply's Ultra message-id, so Writer's and the native editor's drafts find their post (27, b3eb58eb). The Documents home's
-// count ("1 document"): 70 bytes of English plural in lib/i18n.js, measured against ab1da78d.
-const WRITER = 24 + 409 + 134 + 728 + 61 + 279 + 31 + 27 + 70;
+// count ("1 document"): 70 bytes of English plural in lib/i18n.js, measured against ab1da78d. The slides viewer's count
+// ("1 slide", slides-kind.js): 61, measured against 53e27f19.
+const WRITER = 24 + 409 + 134 + 728 + 61 + 279 + 31 + 27 + 70 + 61;
 // Settings → Writer (the brief's ask that every Writer part read one synced `writer` key from defaults.js; a named raise under
 // the owner's 2026-10-19 approval): defaults.js's writer group and its group rule, 1089 bytes on every site, where content.js
 // reads every GZ_DEFAULTS key (features/writer-quote.js reads writer.compose.quote); lib/i18n.js's English plural for its
 // "1 paper", 62. Measured against 66c7f370. Settings → Writer → Light page (writer.lightPage, the off switch for a dark
 // Look's dark pages): 28 bytes, measured against c8e99a04. Settings → Writer → Full writer (writer.full, the compact
-// assignment box's off switch, and its line in the group's comment): 66 bytes, measured against ab37a58d.
-const WRITER_SETTINGS = 1089 + 62 + 28 + 66;
+// assignment box's off switch, and its line in the group's comment): 66 bytes, measured against ab37a58d. Settings → Writer →
+// Spreadsheets (writer.sheets, the sheet kind's off switch on the Documents page, and its words in the group's comment): 36
+// bytes, measured against c773688e. Settings → Writer → PDFs (writer.pdf, the PDF kind's off switch on the Documents page,
+// and its words in the group's comment): 63 bytes, measured against 38a8b816. Settings → Writer → Slides (writer.slides, the
+// slides kind's off switch on the Documents page, and its words in the group's comment): 79 bytes, measured against 6bf3822b.
+const WRITER_SETTINGS = 1089 + 62 + 28 + 66 + 36 + 63 + 79;
 // The command palette over a course tab (a fix, under the owner's 2026-10-19 approval): content.js's Ctrl+K hands the key to
 // the tab on screen and shares its toggle with that tab's frame, 212 bytes on every site; the hand-off itself loads on demand
 // (features/coursetabs.js). Raise only the excess over each site's budget. Measured against ab37a58d.
@@ -261,6 +266,10 @@ const LOOK_CATALOG = 401 + 822 + 117;
 // one resolver every course painter reads (1342), and content.js reads it (9), on every site. Moving old ids over is the
 // worker's (lib/looks.js move). Measured against d840dd70.
 const COURSE_LOOKS_SYNC = 1342 + 9;
+// Blackboard's previews in Glaze's PDF viewer (the owner's 4.0.0 ask, 2026-10-30; a named raise under the 2026-10-19
+// approval): content.js keeps Glaze's frame out of PREVIEWS (12), and defaults.js adds enhance.bbPreviews (28), on every
+// site. The viewer's loader lives in the already-lazy features/docs.js. Measured against 90d6220d.
+const BB_PREVIEWS = 12 + 28;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -269,7 +278,7 @@ const FIRST_SCRIPT = { ultra: entry((c) => c.js.includes('content-ultra.js')), c
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC;
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS + CONTRAST_ROLES[site] + ULTRA_OFF[site] + EN_US_YEARS + LOOK_OFFER + LMS_CONSENT[site] + ULTRA_SIGNOUT[site] + LMS_REQUESTS[site] + DOC_PAGES + NAV_KEYS + NAV_FRAME_HIDE[site] + EN_PLURALS + SCENE_RECOVERY + CTAB_ONE_BG + FROSTDEV_LOOK, budget = Math.round(baseline * 1.02) + UI_SWAP + ULTRA_VT_ABORT[site] + VT_GUARD[site] + TOOLBAR_ICON + LOCAL_DEV + STREAM_FIX[site] + NAV_GATE[site] + LOAD_RECOVERY + TABS_AUTO[site] + POINTER_SWITCH + POPUP_CORE + RUBRIC_SETTINGS + SYLLABUS_DOCS + WRITER + WRITER_SETTINGS + CTAB_PALETTE[site] + LOOK_CATALOG + COURSE_LOOKS_SYNC + BB_PREVIEWS;
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -373,11 +382,27 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
   for (const [file, call, , clear] of FAST_INTERVALS) assert.match(executable(read(file)), clear, `${file}: the clear that bounds ${call} is gone (a comment doesn't count)`);
 });
 
+// PDF form autosave is an event-driven debounce, never polling: one timer, replaced on input and cleared on save/leave.
+const PDF_TIMEOUTS = [
+  ['pdf-kind.js', 'setTimeout(flush, 1000)', 1, /clearTimeout\(timer\)/],
+  // A Blackboard preview's first page: 20 s for it to draw before the page keeps Blackboard's frame; once per viewer.
+  ['pdf-kind.js', 'setTimeout(r, 20000, false)', 1, /clearTimeout\(drawTimer\)/],
+];
+test('PDF timeouts under a minute are reviewed and retain their clear', () => {
+  const fast = calls('setTimeout', read('pdf-kind.js')).filter((c) => {
+    const delay = Number(lastArg(c.args));
+    return !Number.isFinite(delay) || delay < 60000;
+  }).map((c) => ({ file: 'pdf-kind.js', ...c }));
+  review(PDF_TIMEOUTS, fast, 'PDF timeouts must be bounded and reviewed.');
+  for (const [file, call, , clear] of PDF_TIMEOUTS) assert.match(executable(read(file)), clear, `${call}: its clear is gone`);
+});
+
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
   ['lib/writer-ultra.js', "querySelectorAll('*')", 1], // Only the recognized Quill body at takeover or after a foreign edit; mounted boxes are skipped on observer passes.
   ['features/rubric.js', 'getComputedStyle(a.box)', 1], // One recognized rubric section's padding and font per layout pass; no descendant sweep.
   ['features/writer.js', 'getComputedStyle(html)', 1], // The root's Look tokens, when a Writer box opens or <html>'s Look attributes change.
+  ['features/bbpreview.js', 'getComputedStyle(html)', 1], // The root's Look tokens, once as Glaze's viewer opens for a Blackboard preview.
   ['lib/writer-paginate.js', 'getComputedStyle(view.dom)', 1], // One editor root per batched layout pass: its fractional width gives the exact zoom without a descendant sweep.
   ['lib/editor.js', 'getComputedStyle(doc.documentElement)', 1], // One root direction read per category keypress, never on scroll or an LMS page.
   ['lib/scene-host.js', 'getComputedStyle(c)', 1], // only direct siblings of the course/routed shell, when deciding whether it covers visible content
@@ -398,9 +423,12 @@ const STYLE_READS = [
   ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
   ['features/sidebar.js', 'getComputedStyle(panel.grid)', 1], // one verified assessment overview grid, to identify Ultra's current native sidebar shell
   ['features/widgets.js', 'getComputedStyle(html)', 1], // the root's two room variables for Glaze's bar, when floating tiles are placed
+  ['pdf-kind.js', 'getComputedStyle(pagesEl)', 1], // the PDF viewer's pages box, its top padding: once when Whole page is chosen or its room resizes
+  ['pdf-kind.js', 'getComputedStyle(pv.div)', 1], // the current page's margin and borders, with the read above
   // WP-T2: only where a Look's colour rule meets Glaze settings: the root's palette, Glaze's item, and that part's ancestors
   // up to the first solid background.
   ['features/rules.js', 'getComputedStyle(el)', 1],
+  ['sheet-grid.js', 'getComputedStyle(gridEl)', 1], // the spreadsheet grid's font, once as it mounts, for fitting a column to its text on a canvas
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.

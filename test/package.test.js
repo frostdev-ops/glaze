@@ -13,6 +13,19 @@ const packaged = () => {
 };
 const inPackage = (file, roots) => roots.some((r) => file === r || file.startsWith(`${r}/`));
 
+test('the permission and zip lists ship the same files, with only exclusions after -x', () => {
+  const script = read('package.sh').replace(/\\\n/g, ' ');
+  const permissions = script.match(/^chmod -R a\+rX (.+)$/m)[1].trim().split(/\s+/);
+  const zip = script.match(/^zip -q -r -X "\$OUT" (.+)$/m)[1].trim().split(/\s+/);
+  const exclude = zip.indexOf('-x');
+  assert.ok(exclude > 0);
+  assert.deepEqual(zip.slice(exclude + 1), ["'*.DS_Store'"], 'runtime files after -x would be excluded');
+  assert.deepEqual(zip.slice(0, exclude).sort(), permissions.sort());
+  for (const file of ['writer-mcp.js', 'writer-kinds.js', 'pdf-kind.js', 'pdf-kind.css', 'slides-kind.js', 'slides-kind.css']) {
+    assert.ok(permissions.includes(file), `${file} needs readable permissions and a place in the zip`);
+  }
+});
+
 test('every file the loader may inject is in the package', () => {
   const list = read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1];
   const files = JSON.parse(list.replace(/'/g, '"'));

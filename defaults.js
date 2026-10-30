@@ -93,7 +93,7 @@ const GZ_SPEC = {
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], hideFolders: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [true, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
-    notes: [false, 'bool'], widgets: [true, 'bool'], pet: [false, 'bool'], dashboard: [true, 'bool'], writer: [true, 'bool'], writerUploads: [true, 'bool'],
+    notes: [false, 'bool'], widgets: [true, 'bool'], pet: [false, 'bool'], dashboard: [true, 'bool'], writer: [true, 'bool'], writerUploads: [true, 'bool'], bbPreviews: [true, 'bool'],
     // sidebar: the page's sidebar, widgets docked under it (lib/sidebar.js).
     sidebar: [true, 'bool'],
     // place: remember Canvas Modules position. Ultra retains live course pages. coursemenu: each course card's button for its color,
@@ -123,10 +123,11 @@ const GZ_SPEC = {
   announce: { open: ['popup', ['popup', 'site']], ...Object.fromEntries(['glaze', 'ultra', 'canvas', 'moodle'].flatMap((k) => [[k, ['default', ['default', 'popup', 'site']]], [k + 'Preview', [true, 'bool']]])), preview: [true, 'bool'], delay: [600, [200, 2000]], lines: [3, [1, 8]] },
   popup: { anim: ['genie', ['genie', 'fade', 'none']] },
   rubric: { show: ['auto', ['auto', 'popup', 'site']], inline: [true, 'bool'] },
-  // Glaze Writer's (lib/writer-settings.js). zoom: 'fit' or a percent; full: assignments paged, not compact; submit.text:
-  // the submit sheet's paste switch as left.
+  // Glaze Writer's (lib/writer-settings.js). zoom: 'fit' or a percent; full: assignments paged, not compact; sheets, pdf,
+  // slides: Documents takes spreadsheets, PDFs, slide decks (sheet-kind.js, pdf-kind.js, slides-kind.js); submit.text: the
+  // submit sheet's paste switch as left.
   writer: {
-    format: ['mla9', ['mla9', 'apa7', 'chicago17', 'plain']], zoom: ['fit', ['fit', 75, 100, 125, 150]], ruler: [true, 'bool'], lightPage: [false, 'bool'], full: [false, 'bool'], pasteAsk: [true, 'bool'],
+    format: ['mla9', ['mla9', 'apa7', 'chicago17', 'plain']], zoom: ['fit', ['fit', 75, 100, 125, 150]], ruler: [true, 'bool'], lightPage: [false, 'bool'], full: [false, 'bool'], sheets: [true, 'bool'], pdf: [true, 'bool'], slides: [true, 'bool'], pasteAsk: [true, 'bool'],
     versions: [40, [10, 25, 40, 50, 100]], proofing: [true, 'bool'], dialect: ['en-US', ['en-US', 'en-GB', 'en-CA', 'en-AU']],
     autocorrect: GZ_GROUP({ typos: [true, 'bool'], capitalI: [true, 'bool'], doubles: [true, 'bool'], smart: [true, 'bool'] }),
     compose: GZ_GROUP({ markdown: [true, 'bool'], target: [true, 'bool'], quote: [true, 'bool'] }),

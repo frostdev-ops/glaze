@@ -184,9 +184,9 @@ test('a record of an unknown kind is skipped on restore', async () => {
     const P = PA.open(a.local, () => NOW);
     await P.save(paper, { doc: SC.parse(SC.paper, '<p>MARK-PAPER</p>').toJSON(), title: 'Kept paper' });
     // A later build's kinds: their documents are no paper's.
-    a.store[`writerPaper:${sheet}`] = { key: sheet, kind: 'sheet', title: 'Budget', updated: NOW, doc: { cells: [['a', 1]] } };
+    a.store[`writerPaper:${sheet}`] = { key: sheet, kind: 'board', title: 'Budget', updated: NOW, doc: { cells: [['a', 1]] } };
     a.store[`writerVersions:${sheet}`] = [{ id: 'v1', at: NOW, reason: 'start', doc: { cells: [] } }];
-    a.store[`writerPaper:${later}`] = { key: later, kind: 'slides', updated: NOW, doc: { slides: [] } };
+    a.store[`writerPaper:${later}`] = { key: later, kind: 'poster', updated: NOW, doc: { slides: [] } };
     const file = await backUp(a), plan = await B.read(file);
     assert.deepEqual(Object.keys(plan.cats.papers).sort(), [`writerPaper:${paper}`, `writerVersions:${paper}`]);
     const result = await restore(b, file, ['papers']);
@@ -217,9 +217,9 @@ test('a mixed set restores onto a device that has documents of its own', async (
     await A.save(binned, { doc: p('MARK-BINNED'), title: 'Old draft', named: true, format: 'plain' });
     const { trashed } = await A.trash(binned);
     // Later builds' kinds, on each device: theirs, never this build's to restore or to touch.
-    a.store[`writerPaper:${sheet}`] = { key: sheet, kind: 'sheet', title: 'Budget', updated: at, doc: { cells: [] } };
-    b.store[`writerPaper:${slides}`] = { key: slides, kind: 'slides', title: 'Talk', updated: at, doc: { slides: [] } };
-    b.store.writerPapers = [{ key: slides, kind: 'slides', title: 'Talk', updated: at }, ...b.store.writerPapers];
+    a.store[`writerPaper:${sheet}`] = { key: sheet, kind: 'board', title: 'Budget', updated: at, doc: { cells: [] } };
+    b.store[`writerPaper:${slides}`] = { key: slides, kind: 'poster', title: 'Talk', updated: at, doc: { slides: [] } };
+    b.store.writerPapers = [{ key: slides, kind: 'poster', title: 'Talk', updated: at }, ...b.store.writerPapers];
     const result = await restore(b, await backUp(a), ['papers']);
     assert.deepEqual(result.out.failed, []);
     const rows = await Bs.list(), keys = rows.map((r) => r.key).sort();
@@ -782,4 +782,190 @@ test('Back up restores discussion, journal and new-message sources under each st
     assert.deepEqual(out.failed, []);
     for (const key of keys) assert.deepEqual(b.store[key], local[key]);
   } finally { a.stop(); b.stop(); }
+});
+
+
+// Spreadsheets, PDFs and slide decks back up with papers: a spreadsheet's record with its bands, a PDF's or deck's with its
+// file, each one's versions by kind.
+const kinds = async (dev, clock = { t: NOW }) => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js'), zlib = require('node:zlib');
+  const P = PA.open(dev.local, () => ++clock.t);
+  const sheet = `doc:${id(81)}`, pdf = `doc:${id(82)}`, deck = `doc:${id(83)}`;
+  const gz = zlib.gzipSync(Buffer.from(JSON.stringify({ sheets: [{ id: 1, rows: [[0, [[0, 'n', 42]]]] }] }))).toString('base64');
+  const grid = [['42', '', '', '', '', ''], ['', '', '', '', '', ''], ['', '', '', '', '', ''], ['', '', '', '', '', '']];
+  await P.save(sheet, { kind: 'sheet', doc: null, book: { sheets: [{ id: 1, name: 'Lab' }], active: 0 }, grid, text: 'MARK-SHEET 42', cells: 2, sheets: 1, title: 'MARK-SHEET', named: true },
+    { parts: { '1:0': { rows: [[0, [[0, 'n', 42]]]] }, '1:3': { rows: [[3000, [[1, 's', 'MARK-BAND']]]] } }, changed: true, version: { reason: 'auto', gz, cells: 2 } });
+  // The PDF was an assignment's paper first: its import kept that paper as a version.
+  await P.save(pdf, { doc: SC.parse(SC.paper, '<p>MARK-PAPER-BEFORE</p>').toJSON() });
+  await P.save(pdf, { kind: 'pdf', doc: null, words: 0, file: 'JVBERi0xLjQK', size: 9, pages: 1, thumb: 'data:image/png;base64,iVBORw0KGgo=', title: 'MARK-PDF', named: true }, { reason: 'import' });
+  await P.save(deck, { kind: 'slides', doc: null, file: 'UEsDBBQAAAAI', size: 9, ext: '.pptx', slides: 2, text: 'MARK-DECK', words: 1, title: 'MARK-DECK', named: true }, { reason: 'import' });
+  // A deck brought again over it: the first one kept as a version.
+  await P.save(deck, { kind: 'slides', doc: null, file: 'UEsDBBQAAAAJ', size: 9, ext: '.ppsx', slides: 3, text: 'MARK-DECK-2', words: 1 }, { reason: 'import' });
+  return { P, sheet, pdf, deck };
+};
+
+test('Back up keeps spreadsheets with their bands, PDFs and decks with their files, and each one\'s versions', async () => {
+  const a = device(), b = device();
+  try {
+    const { sheet, pdf, deck } = await kinds(a);
+    const file = await backUp(a);
+    const { plan, out } = await restore(b, file, ['papers']);
+    assert.deepEqual(out.failed, []);
+    for (const k of [sheet, pdf, deck]) {
+      const { partDrops, ...rec } = a.store[`writerPaper:${k}`];
+      assert.deepEqual(b.store[`writerPaper:${k}`], rec, `${k}'s record (a spreadsheet's cleanup names stay behind)`);
+      assert.equal(JSON.stringify(b.store[`writerVersions:${k}`]), JSON.stringify(a.store[`writerVersions:${k}`]), `${k}'s versions`);
+    }
+    for (const band of ['1:0', '1:3']) assert.deepEqual(b.store[`writerSheet:${sheet}:${band}`], a.store[`writerSheet:${sheet}:${band}`], `band ${band}`);
+    assert.equal(b.store[`writerSheet:${sheet}:1:3`].rows[0][1][0][2], 'MARK-BAND');
+    assert.deepEqual(b.store.writerPapers.map((r) => [r.key, r.kind]).sort(), a.store.writerPapers.map((r) => [r.key, r.kind]).sort(), 'the Documents index lists them');
+    assert.equal(b.store.writerPapers.find((r) => r.key === sheet).grid[0][0], '42', 'the card\'s glance');
+    assert.ok(a.store[`writerVersions:${pdf}`].some((v) => v.kind === 'paper' && JSON.stringify(v.doc).includes('MARK-PAPER-BEFORE')), 'the paper the PDF replaced is a version');
+    assert.ok(!Object.keys(plan.cats.papers).some((k) => k.startsWith('writerSheet:')), 'bands travel inside their spreadsheet\'s record');
+    // A deck's earlier file, kept as a version, comes back as the deck.
+    const first = b.store[`writerVersions:${deck}`].find((v) => v.kind === 'slides' && v.file === 'UEsDBBQAAAAI');
+    assert.ok(first, 'the first deck is a version');
+    const back = await require('../lib/writer-papers.js').open(b.local).restore(deck, first.id);
+    assert.deepEqual([back.paper.kind, back.paper.file, back.paper.ext, back.paper.slides], ['slides', 'UEsDBBQAAAAI', '.pptx', 2]);
+    // A stale band (a cleanup the worker hadn't finished) stays out.
+    a.store[`writerSheet:${sheet}:1:9`] = { rows: [], rev: 1 };
+    const again = await B.read(await backUp(a));
+    assert.deepEqual(Object.keys(again.cats.papers[`writerPaper:${sheet}`].$parts).sort(), ['1:0', '1:3']);
+  } finally { a.stop(); b.stop(); }
+});
+
+test('a spreadsheet already on this device stays as it is; its history joins the backup\'s', async () => {
+  const a = device(), b = device();
+  try {
+    const { sheet } = await kinds(a);
+    const file = await backUp(a);
+    const PA = require('../lib/writer-papers.js');
+    const here = PA.open(b.local, () => NOW + 1e6);
+    await here.save(sheet, { kind: 'sheet', doc: null, text: 'MINE', cells: 1, sheets: 1 }, { parts: { '1:0': { rows: [[0, [[0, 's', 'MINE']]]] } }, changed: true });
+    const before = structuredClone(b.store[`writerPaper:${sheet}`]);
+    const { out } = await restore(b, file, ['papers']);
+    assert.deepEqual(out.failed, []);
+    assert.deepEqual(b.store[`writerPaper:${sheet}`], before, 'the record here is untouched');
+    assert.equal(b.store[`writerSheet:${sheet}:1:0`].rows[0][1][0][2], 'MINE', 'its band is untouched');
+    assert.equal(b.store[`writerSheet:${sheet}:1:3`], undefined, 'no band of the backup\'s joins it');
+    assert.deepEqual(b.store[`writerVersions:${sheet}`].map((v) => v.id), a.store[`writerVersions:${sheet}`].map((v) => v.id), 'the backup\'s versions join');
+  } finally { a.stop(); b.stop(); }
+});
+
+test('a newer PDF in a backup replaces the paper here, which is kept as a version', async () => {
+  const a = device(), b = device();
+  try {
+    const { pdf } = await kinds(a, { t: NOW + 5e6 });
+    const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
+    await PA.open(b.local, () => NOW).save(pdf, { doc: SC.parse(SC.paper, '<p>MARK-HERE</p>').toJSON() });
+    const { out } = await restore(b, await backUp(a), ['papers']);
+    assert.deepEqual(out.failed, []);
+    const rec = b.store[`writerPaper:${pdf}`];
+    assert.equal(rec.kind, 'pdf');
+    assert.equal(rec.file, 'JVBERi0xLjQK');
+    assert.ok(b.store[`writerVersions:${pdf}`].some((v) => (v.kind || 'paper') === 'paper' && JSON.stringify(v.doc).includes('MARK-HERE')), 'what it replaced is a version');
+  } finally { a.stop(); b.stop(); }
+});
+
+test('a kind this build does not know stays out, and a damaged spreadsheet or file refuses the backup', async () => {
+  const later = `doc:${id(84)}`, paper = `doc:${id(85)}`;
+  const SC = require('../lib/writer-schema.js'), doc = SC.parse(SC.paper, '<p>MARK-KEPT</p>').toJSON();
+  const local = { [`writerPaper:${later}`]: { key: later, kind: 'board', updated: NOW, doc: null }, [`writerVersions:${later}`]: [{ id: 'v1', at: NOW, kind: 'board' }],
+    [`writerPaper:${paper}`]: { key: paper, doc, updated: NOW, revision: 1 } };
+  const plan = await B.read(await zipFile(B.pack({ settings: SETTINGS, tasks: {}, local })));
+  assert.deepEqual(Object.keys(plan.cats.papers), [`writerPaper:${paper}`]);
+  const a = device();
+  try {
+    const { sheet, pdf } = await kinds(a);
+    const tamper = async (key, fn) => {
+      const entries = B.pack({ settings: SETTINGS, tasks: {}, local: structuredClone(a.store) });
+      const m = JSON.parse(new TextDecoder().decode(entries.find((e) => e.name === B.MANIFEST).data));
+      const row = m.papers.find((r) => r.key === key), e = entries.find((x) => x.name === row.file);
+      e.data = new TextEncoder().encode(JSON.stringify(fn(JSON.parse(new TextDecoder().decode(e.data)))));
+      return reasonOf(B.read(await zipFile(entries)));
+    };
+    assert.equal(await tamper(`writerPaper:${sheet}`, (r) => r), 'read');
+    assert.equal(await tamper(`writerPaper:${sheet}`, (r) => ({ ...r, $parts: { ...r.$parts, '1:3': { ...r.$parts['1:3'], rev: 99 } } })), 'bad', 'a band from another write');
+    assert.equal(await tamper(`writerPaper:${sheet}`, (r) => { const { '1:3': _, ...rest } = r.$parts; return { ...r, $parts: rest }; }), 'bad', 'a band missing');
+    assert.equal(await tamper(`writerPaper:${pdf}`, (r) => ({ ...r, file: 'not base64!' })), 'bad', 'a file that is no base64');
+    assert.equal(await tamper(`writerPaper:${pdf}`, (r) => ({ ...r, thumb: 'javascript:alert(1)' })), 'bad', 'a picture that is no picture');
+    assert.equal(await tamper(`writerPaper:${pdf}`, (r) => ({ ...r, $parts: {} })), 'bad', 'bands on a file kind');
+  } finally { a.stop(); }
+});
+
+test('the kinds a backup keeps are the Documents home\'s', () => {
+  assert.deepEqual([...B.KINDS].sort(), Object.keys(require('../lib/doc-kinds.js').KINDS).sort());
+});
+
+for (const [label, damage] of [
+  ['a row that cannot be joined', (a, k) => { a.store[`writerSheet:${k.sheet}:1:0`].rows = [null]; }],
+  ['a band whose sheet is absent', (a, k) => { a.store[`writerPaper:${k.sheet}`].book.sheets = []; }],
+  ['duplicate cell columns', (a, k) => { a.store[`writerSheet:${k.sheet}:1:0`].rows = [[0, [[0, 'n', 1], [0, 'n', 2]]]]; }],
+  ['a row outside its band', (a, k) => { a.store[`writerSheet:${k.sheet}:1:0`].rows = [[3000, [[0, 'n', 1]]]]; }],
+  ['a PDF size that disagrees with its bytes', (a, k) => { a.store[`writerPaper:${k.pdf}`].size++; }],
+  ['a version size that disagrees with its bytes', (a, k) => { a.store[`writerVersions:${k.deck}`].find((v) => v.kind === 'slides').size++; }],
+  ['a thumbnail with invalid base64', (a, k) => { a.store[`writerPaper:${k.pdf}`].thumb = 'data:image/png;base64,A'; }],
+]) test(`a backup refuses ${label}`, async () => {
+  const a = device();
+  try {
+    const k = await kinds(a);
+    damage(a, k);
+    assert.equal(await reasonOf(B.read(await backUp(a))), 'bad');
+  } finally { a.stop(); }
+});
+
+for (const kind of ['pdf', 'deck']) test(`replaying an older ${kind} backup does not duplicate its restore version`, async () => {
+  const a = device(), b = device();
+  try {
+    const keys = await kinds(a), k = keys[kind];
+    const P = require('../lib/writer-papers.js').open(b.local, () => NOW + 1e6);
+    const incoming = a.store[`writerPaper:${k}`];
+    await P.save(k, { ...incoming, file: 'TkVX', size: 3 }, { reason: 'import' });
+    const file = await backUp(a);
+    assert.deepEqual((await restore(b, file, ['papers'])).out.failed, []);
+    const first = structuredClone(b.store[`writerVersions:${k}`]);
+    assert.deepEqual((await restore(b, file, ['papers'])).out.failed, []);
+    assert.deepEqual(b.store[`writerVersions:${k}`], first, 'replay must not consume another version slot');
+    assert.equal(b.store[`writerPaper:${k}`].file, 'TkVX', 'the newer device file stays');
+  } finally { a.stop(); b.stop(); }
+});
+
+test('Back up refuses a spreadsheet member larger than its ZIP reader accepts', () => {
+  const key = `doc:${id(86)}`, name = `writerPaper:${key}`;
+  // Each cell fits the model's 32,767-character bound; a workbook can grow across many small band writes.
+  const rows = Array.from({ length: 100 }, (_, r) => [r, Array.from({ length: 22 }, (_, c) => [c, 's', 'x'.repeat(32000)])]);
+  const local = { [name]: { key, kind: 'sheet', updated: NOW, book: { sheets: [{ id: 1, name: 'Large' }] }, parts: { '1:0': 1 } },
+    [`writerSheet:${key}:1:0`]: { rev: 1, rows } };
+  assert.throws(() => B.pack({ settings: SETTINGS, local }), (e) => e.why === 'big');
+});
+
+test('Back up refuses a missing spreadsheet band instead of silently leaving the document out', async () => {
+  const a = device();
+  try {
+    const { sheet } = await kinds(a);
+    delete a.store[`writerSheet:${sheet}:1:3`];
+    assert.throws(() => B.pack({ settings: SETTINGS, local: a.store }), (e) => e.why === 'bad');
+  } finally { a.stop(); }
+});
+
+for (const kind of ['pdf', 'deck']) test(`an older ${kind} already versioned in the backup is not snapshotted again`, async () => {
+  const a = device(), b = device();
+  try {
+    const keys = await kinds(a), k = keys[kind];
+    await keys.P.save(k, {}, { reason: 'sending' });
+    const P = require('../lib/writer-papers.js').open(b.local, () => NOW + 1e6);
+    await P.save(k, { ...a.store[`writerPaper:${k}`], file: 'TkVX', size: 3 }, { reason: 'import' });
+    assert.deepEqual((await restore(b, await backUp(a), ['papers'])).out.failed, []);
+    assert.deepEqual(b.store[`writerVersions:${k}`].map((v) => v.id).sort(), a.store[`writerVersions:${k}`].map((v) => v.id).sort(), 'the existing backup version already retains the older file');
+  } finally { a.stop(); b.stop(); }
+});
+
+test('Back up refuses a spreadsheet that cannot fit through the restore write fence', () => {
+  assert.equal(B.LIMIT.command, 32 << 20);
+  assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/background.js'), 'utf8'), /JSON\.stringify\(m\.restore\)\.length > \(32 << 20\)/, 'the worker fence is the same bound');
+  const key = `doc:${id(87)}`, rows = Array.from({ length: 100 }, (_, r) => [r, Array.from({ length: 11 }, (_, c) => [c, 's', 'x'.repeat(32000)])]);
+  const local = { [`writerPaper:${key}`]: { key, kind: 'sheet', updated: NOW, book: { sheets: [{ id: 1, name: 'Large' }] }, parts: { '1:0': 1 } },
+    [`writerSheet:${key}:1:0`]: { rev: 1, rows } };
+  const entries = () => B.pack({ settings: SETTINGS, local });
+  assert.throws(entries, (e) => e.why === 'big');
 });

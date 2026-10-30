@@ -1,0 +1,433 @@
+// An assignment's PDF and slide deck in Glaze Writer (writer-kinds.js), in the real unpacked extension on the synthetic
+// Ultra attempt writer-submit-check.js uses (test/fixtures/ultra-writer-attempt.html, Quill 1.3.7, its Ultra stand-in:
+// scripts/ultra-attempt-harness.js), from the compact box (Full writer off, the default). With Settings → Writer → PDFs and
+// Slides on: a .pdf dropped on Ultra's file area reaches the frame before Ultra hears it; the card asks Open in Glaze or
+// Submit as is; Open in Glaze keeps the paper as a version, makes the attempt's record a PDF and shows pdf.js's viewer in
+// the paper's place, as tall as a paper; a field filled is saved; Submit… sends the saved PDF (its bytes, application/pdf,
+// Lastname_Title.pdf) through Ultra's upload once and clicks Ultra's Submit once; a reload opens the viewer again, the field
+// still filled. The same for a .pptx: the deck in the slides viewer, and Submit sends the very bytes brought. With
+// Spreadsheets off nothing offers a spreadsheet; on, an empty attempt offers Document or Spreadsheet (and ⋯ New
+// spreadsheet): Spreadsheet keeps the paper as a version and shows the grid, values typed are saved, and Submit sends the
+// sheet's file once (.xlsx where lib/sheet-xlsx.js is in the build, else .csv); a .csv on Ultra's file area opens in the
+// grid by Open in Glaze, as does an .xlsx (lib/sheet-xlsx.js, loaded with the grid), which edited is submitted as .xlsx.
+// An attached PDF (the assignment's content item, test/fixtures/ultra-writer-attach-content.json, with a PDF entry in its
+// .docx entry's shape; on the page a link to the file in the instructions, a stand-in: how Ultra draws an attachment on
+// the attempt page wasn't probed) gets Open in Glaze beside its link, PDFs on, and that alone: the file comes by the page's
+// GET and opens in the viewer with no card, the paper a version first. An attached .csv the same, Spreadsheets on: the grid.
+// Each step turns on only the switches it names (they ship on: defaults.js). Switches off: a PDF on Ultra's file area is
+// Ultra's, as before, and no attachment gets Open in Glaze (writer-submit-check.js covers the rest of today's flows).
+// GETs only, synthetic. NODE_PATH=<playwright> node scripts/writer-kinds-check.js [evidence directory]
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const HARNESS = require('./ultra-attempt-harness.js');
+const { tap } = require('./frame-tap.js');
+const PDF = require('./pdf-fixtures.js');
+const Z = require('../lib/zip.js');
+const XL = require('../lib/sheet-xlsx.js'), SM = require('../lib/sheet-model.js');
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const site = 'https://bb.school.test';
+const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
+const FORM = '/bbcswebdav/pid-4968850-dt-asiobject-rid-14533106_1/xid-14533106_1', LAB = '/bbcswebdav/pid-4968850-dt-asiobject-rid-14533107_1/xid-14533107_1';
+// The content item with the attachments its fixture has, and a PDF and a .csv besides.
+const link = (site, at, name, mimeType) => `<p><a href="${site}${at}" data-bbtype="attachment" data-bbfile="${JSON.stringify({ alternativeText: name, displayName: name, fileName: name, isDecorative: false, mimeType, render: 'link', linkName: name }).replace(/"/g, '&quot;')}">${name}</a></p>`;
+const item = (site) => {
+  const j = JSON.parse(fixture('ultra-writer-attach-content.json').replaceAll('https://bb.school.example.edu', site));
+  const more = link(site, FORM, 'Field trip form.pdf', 'application/pdf') + link(site, LAB, 'Lab data.csv', 'text/csv');
+  const ins = j.contentDetail['resource/x-bb-asmt-test-link'].test.assessment.instructions;
+  ins.rawText += more; ins.displayText += more;
+  return j;
+};
+const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const out = process.argv[2] || path.join(os.tmpdir(), 'gz-kinds-check');
+const checks = [], errors = [];
+let passed = false;
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (fn, label, ms = 20000, state = null) => {
+  const start = Date.now(); let last;
+  while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(80); }
+  const was = state ? await Promise.resolve().then(state).then((x) => JSON.stringify(x), (e) => `unreadable: ${e.message}`) : '';
+  throw Error(`${label} timed out after ${ms} ms${last ? `: ${last.message}` : ''}${was ? `; at the deadline ${was}` : ''}`);
+};
+// features/writer.js: 15 s for the initial frame plus FRAME_RETRIES (2) reopens = 45 s, with 5 s margin for this wait.
+const FRAME_SHOWN_MS = 50000;
+const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
+const quiet = async (fn, label, ms = 800) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) throw Error(`${label}: it happened`); await pause(80); } return true; };
+const sha = (b) => crypto.createHash('sha256').update(Buffer.from(b)).digest('hex');
+// The fixture deck as its package (scripts/slides-check.js's): every part under test/fixtures/pptx/deck, stored.
+const deck = () => {
+  const dir = path.join(root, 'test/fixtures/pptx/deck');
+  const walk = (d, base = '') => fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
+    .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), `${base}${e.name}/`) : [[`${base}${e.name}`, fs.readFileSync(path.join(d, e.name))]]));
+  return Buffer.concat(Z.zip(walk(dir).sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, data]) => ({ name, data: new Uint8Array(data), date: new Date(2026, 9, 29, 12) }))));
+};
+// A PDF's text field value as pdf.js writes it: a literal string, or UTF-16 in hex.
+const holds = (bytes, value) => {
+  const s = Buffer.from(bytes).toString('latin1');
+  const hex = Buffer.from(`﻿${value}`, 'utf16le').swap16().toString('hex');
+  return s.includes(`(${value})`) || s.toLowerCase().includes(hex);
+};
+
+(async () => {
+  let context, held = false, tmp;
+  const lock = require('./check-env.js').lockPath();
+  try {
+    for (let i = 0; ; i++) {
+      try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-kinds-check\n`); break; }
+      catch (e) { if (e.code !== 'EEXIST' || i >= 240) throw e; if (i % 12 === 0) console.error('[writer-kinds-check] waiting for heavy lock'); await pause(5000); }
+    }
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-kinds-'));
+    fs.mkdirSync(out, { recursive: true });
+    const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
+    if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
+    const ext = require('./check-env.js').staged(root, [`${site}/*`]);
+    await require('./wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    env.noFirstRun(context); context.setDefaultTimeout(20000);
+    const grades = JSON.parse(fixture('ultra-writer-gradebook.json')), members = JSON.parse(fixture('ultra-memberships.json'));
+    const attachment = { bytes: null, gets: 0, labGets: 0 };
+    await context.route('**/*', async (r) => {
+      const req = r.request(), u = new URL(req.url());
+      if (u.protocol === 'chrome-extension:') return r.continue();
+      if (req.method() !== 'GET' || u.origin !== site) return r.abort();
+      if (u.pathname === '/gz-check/quill.js') return r.fulfill({ contentType: 'text/javascript', body: quill });
+      if (u.pathname === '/gz-check/harness.js') return r.fulfill({ contentType: 'text/javascript', body: HARNESS });
+      if (req.isNavigationRequest() && u.pathname === ATTEMPT) return r.fulfill({ contentType: 'text/html', body: fixture('ultra-writer-attempt.html').replace('<head>', '<head><base href="/ultra/">').replace('</body>', '<script src="/gz-check/quill.js"></script><script src="/gz-check/harness.js"></script></body>')
+        .replace('id="bb-editorassignment-attempt-authoring-instructions">', `id="bb-editorassignment-attempt-authoring-instructions"><p><a href="${FORM}" data-bbtype="attachment">Field trip form.pdf</a></p><p><a href="${LAB}" data-bbtype="attachment">Lab data.csv</a></p>`) });
+      if (u.pathname === FORM) { attachment.gets++;  return r.fulfill({ status: 200, contentType: 'application/pdf', body: Buffer.from(attachment.bytes) }); }
+      if (u.pathname === LAB) { attachment.labGets++; return r.fulfill({ status: 200, contentType: 'text/csv', body: 'Trial,Mass\n1,4.2\n2,4.5\n' }); }
+      if (req.isNavigationRequest()) return r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Blank</title>' });
+      let data = { results: [] };
+      if (u.pathname.endsWith('/users/me')) data = { id: '_900_1', userName: 'synthetic', givenName: 'Alex', familyName: 'Rivera' };
+      else if (/\/users\/_900_1\/memberships$/.test(u.pathname)) data = members;
+      else if (u.pathname.includes('/gradebook/grades')) data = grades;
+      else if (u.pathname === '/learn/api/v1/courses/_101_1/contents/_7_1') data = item(site);
+      return r.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
+    });
+    const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
+    const G = require(path.join(root, 'defaults.js'));
+    const settings = (w) => G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, writerUploads: true, drafts: true }, writer: { full: false, sheets: false, pdf: false, slides: false, ...w } });
+    const reset = (w) => worker.evaluate(async ({ s, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: [site] }); }, { s: settings(w), site });
+    await reset({ pdf: true, slides: true });
+    const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
+    const local = () => worker.evaluate(async () => chrome.storage.local.get(null));
+    // A record's file bytes: from the worker's file store (lib/doc-files.js), or a record's base64 from before it.
+    const bytesOf = async (rec) => Buffer.from(await worker.evaluate(async (f) => { if (typeof f === 'string') return f; let s = ''; await openDocFiles().read(f.hash, (c) => { s += GZ_DOC_FILES.b64(c); }); return s; }, rec.file), 'base64');
+    const record = async () => { const all = await local(), k = Object.keys(all).find((x) => x.startsWith('writerPaper:')); return k ? all[k] : null; };
+    const versions = async () => { const all = await local(), k = Object.keys(all).find((x) => x.startsWith('writerVersions:')); return all[k] || []; };
+    let opens = 0;
+    const open = async () => {
+      const n = ++opens, p = await context.newPage();
+      p.on('pageerror', (e) => errors.push(`page: ${e.message}`));
+      p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`page console: ${m.text()}`); });
+      const t0 = Date.now();
+      await p.goto(`${site}${ATTEMPT}?mode=empty`);
+      const tGoto = Date.now() - t0;
+      let sawFrame = false;
+      // Read only page state at the deadline. Recovery removes the frame and Writer markers, leaving Ultra's editor visible.
+      const state = async () => {
+        let timer;
+        try {
+          return await Promise.race([new Promise((r) => { timer = setTimeout(r, 5000, 'unreadable: page busy'); }), p.evaluate(() => {
+            const frames = [...document.querySelectorAll('iframe.gz-writer')].map((f) => ({ kind: f.dataset.gzWriterFrame, opacity: f.style.opacity, connected: f.isConnected }));
+            const editor = document.getElementById('bb-editorassignment-attempt-authoring-submission');
+            const nativeEditor = editor ? { visible: editor.getClientRects().length > 0, writerMounted: !!editor.closest('[data-gz-writer], [data-gz-writer-id]') } : null;
+            return { frames, nativeEditor };
+          }).then((s) => ({ ...s, frameSeen: sawFrame, status: !s.frames.some((f) => f.kind === 'assignment') && s.nativeEditor?.visible === true && !s.nativeEditor.writerMounted
+            ? (sawFrame ? 'Writer frame removed; native editor visible' : 'no Writer frame observed; native editor visible') : 'Writer frame not shown',
+            extensionFrames: p.frames().filter((f) => f.url().startsWith('chrome-extension:')).length }))]);
+        } finally { clearTimeout(timer); }
+      };
+      const el = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); if (x) sawFrame = true; return x && await x.evaluate((f) => !f.style.opacity) && x; }, `open ${n}: Writer frame shown`, FRAME_SHOWN_MS, state);
+      const tShown = Date.now() - t0;
+      const fr = await until(() => el.contentFrame(), `open ${n}: Writer frame document`);
+      await until(() => fr.evaluate(() => !!globalThis.GZ_WRITER_PAPER?.current()?.key()), `open ${n}: paper loaded`, 30000);
+      console.log(`open ${n}: navigation completed at ${tGoto} ms, Writer frame shown at ${tShown} ms, paper loaded at ${Date.now() - t0} ms (all since navigation started)`);
+      return { p, el, fr };
+    };
+    const give = (p, name, type, bytes) => p.evaluate(({ name, type, bytes }) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([new Uint8Array(bytes)], name, { type }));
+      const at = document.querySelector('[class*="makeStylesinputContainer-"]');
+      for (const t of ['dragenter', 'dragover', 'drop']) at.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: dt }));
+    }, { name, type, bytes: Array.from(bytes) });
+    const cardOf = (fr) => fr.evaluate(() => { const c = document.querySelector('.gi-layer[data-open] .gi-card'); return c && { name: c.querySelector('.gi-file b').textContent, tiles: [...c.querySelectorAll('.gi-choice > span:first-of-type')].map((x) => x.textContent) }; });
+    const sheetOf = (fr) => fr.evaluate(() => { const L = document.querySelector('.gs-layer[data-open]'), q = (x) => L?.querySelector(x); return L && { name: q('.gs-name').textContent, big: q('.gs-big .gs-doc')?.textContent || '', toggle: !!q('.gs-toggle:not([for="gs-keep"])'), size: q('.gs-file small').textContent, title: q('h2').textContent }; });
+    const shot = async (p, name) => { await pause(300); const f = path.join(out, name); await p.screenshot({ path: f }); return f; };
+    const pdfBytes = PDF.acroform(), deckBytes = deck();
+    attachment.bytes = pdfBytes;
+
+    // ---- Spreadsheets off: no choice offered
+    let { p, el, fr } = await open();
+    await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
+    await quiet(() => fr.evaluate(() => !!document.querySelector('.gk-choose')), 'Document/Spreadsheet offered with Spreadsheets off', 2000);
+    check(await fr.evaluate(() => GZ_WRITER_KINDS.offers().length === 0 && !document.querySelector('.gk-choose') && ![...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => /spreadsheet/i.test(b.textContent))), 'Spreadsheets off: no Document/Spreadsheet choice, no New spreadsheet');
+    await fr.locator('#gw .ProseMirror').fill('Text beside the PDF.');
+    await until(() => p.evaluate(() => __text().trim() === 'Text beside the PDF.'), 'compact text in Ultra');
+
+    // ---- a PDF: Ultra's file area → the card → Open in Glaze → the viewer in the paper's place
+    const h0 = await el.evaluate((f) => f.getBoundingClientRect().height);
+    await give(p, 'Field trip form.pdf', 'application/pdf', pdfBytes);
+    await until(() => cardOf(fr), 'the card');
+    const card = await cardOf(fr);
+    check(card.tiles.join('|') === 'Open in Glaze|Submit as is' && card.name === 'Field trip form.pdf' && await p.evaluate(() => __uploads.length === 0), `a .pdf on Ultra's file area asks Open in Glaze or Submit as is, Ultra hearing nothing (${JSON.stringify(card)})`);
+    await tap(fr, '.gi-default');
+    await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelectorAll('.gk .pdfViewer .page').length === 3 && !!document.querySelector('.gk .pdfViewer .page[data-page-number="1"] canvas')), 'the PDF viewer', 40000,
+      () => fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, pages: document.querySelectorAll('.pdfViewer .page').length, said: document.querySelector('.gq-said')?.textContent })));
+    const h1 = await until(async () => { const h = await el.evaluate((f) => f.getBoundingClientRect().height); return h > 600 && h; }, 'a paper\'s height');
+    let rec = await record(), vs = await versions();
+    check(rec.kind === 'pdf' && sha((await bytesOf(rec))) === sha(pdfBytes) && rec.pages === 3 && rec.doc == null, `the attempt's record is the PDF, its bytes as brought (${JSON.stringify({ kind: rec.kind, pages: rec.pages, size: rec.size })})`);
+    check(vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper'), `the paper kept as a version first (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
+    check(await fr.evaluate(() => { const shown = (x) => !!x && x.getClientRects().length > 0; return !shown(document.querySelector('#gw')) && !shown(document.querySelector('.gp:not(.gp-standalone)')) && shown(document.querySelector('.gk .gp-submit')) && !document.querySelector('.gk .gp-top a[href]'); }),
+      `the viewer in the paper's place, its own Submit…, no way to Documents (frame ${h0}px → ${h1}px)`);
+    await tap(fr, '#gq-zoom'); await tap(fr, '[data-zoom="page-fit"]');
+    const fitInFrame = () => fr.evaluate(() => {
+      const s = document.querySelector('.gq-scroll'), b = s.getBoundingClientRect(), pg = document.querySelector('.pdfViewer .page').getBoundingClientRect();
+      return { top: pg.top - b.top, bottom: b.top + s.clientHeight - pg.bottom, left: pg.left - b.left, right: b.left + s.clientWidth - pg.right, w: pg.width, h: pg.height, roomW: s.clientWidth, room: s.clientHeight, label: document.getElementById('gq-zoom').textContent };
+    });
+    const frameFits = (g) => g.label === 'Whole page' && Math.min(g.top, g.bottom, g.left, g.right) >= -1 && (g.h >= g.room - 48 || g.w >= g.roomW - 56);
+    const frameFit = await until(async () => { const g = await fitInFrame(); return frameFits(g) && g; }, 'whole page in the assignment frame');
+    await tap(fr, '#gq-find-b');
+    const frameFind = await until(async () => { const g = await fitInFrame(); return g.room < frameFit.room && frameFits(g) && g; }, 'whole page under the frame find bar');
+    await tap(fr, '#gq-find-b');
+    await until(async () => { const g = await fitInFrame(); return g.room === frameFit.room && frameFits(g); }, 'whole page after frame find closes');
+    check(frameFits(frameFit) && frameFits(frameFind), `Whole page fits writer.html with find closed and open (frame ${h1}px; ${JSON.stringify({ frameFit, frameFind })})`);
+    await shot(p, 'kinds-pdf-1440.png');
+    // Fill the form's text field: saved.
+    const input = fr.locator('.gk .page[data-page-number="1"] .annotationLayer input').first();
+    await input.fill('Rivera Field');
+    await input.press('Tab');
+    await until(async () => holds((await bytesOf((await record()))), 'Rivera Field'), 'the filled PDF saved', 20000);
+    rec = await record();
+    check(rec.kind === 'pdf' && rec.file && holds((await bytesOf(rec)), 'Rivera Field'), `a filled field is saved into the record's PDF (${rec.size} bytes)`);
+    // PDF → Word → Undo exercises the real importer, file-version restore and viewer disposal in the assignment frame.
+    const word = await fr.evaluate(async () => {
+      await GZ_WRITER_PAPER.need(['lib/writer-color.js', 'lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js']);
+      const doc = GZ_WRITER_SCHEMA.paper.nodeFromJSON({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Replacement Word draft.' }] }] });
+      return Array.from((await GZ_WRITER_DOCX.exportDocx(doc, { format: GZ_WRITER_STYLES.get('plain') })).bytes);
+    });
+    await give(p, 'replacement.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', word);
+    await until(() => cardOf(fr), 'Word card over PDF');
+    await tap(fr, '.gi-default');
+    await until(async () => (await record())?.kind === 'paper' && await fr.evaluate(() => !document.documentElement.dataset.doc && GZ_WRITER_PAPER.current()?.editor?.text().includes('Replacement Word draft.')), 'Word replaces PDF');
+    check(!(await record()).file && await fr.evaluate(() => !!document.querySelector('.gp-toast-do')), 'Word import replaces the PDF only after parsing and offers Undo');
+    await tap(fr, '.gp-toast-do');
+    await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelector('.gk .annotationLayer input')?.value === 'Rivera Field'), 'Undo restores filled PDF', 40000);
+    check((await record()).kind === 'pdf' && holds((await bytesOf((await record()))), 'Rivera Field'), 'Undo restores the PDF kind, its viewer and its filled bytes');
+    // Submit…: the sheet with the PDF large, no paste switch; Submit attaches the saved PDF once and clicks Ultra's Submit once.
+    await tap(fr, '.gk .gp-submit');
+    await until(() => sheetOf(fr), 'the sheet');
+    const sh = await sheetOf(fr);
+    check(sh.name === 'Rivera_Essay2.pdf' && sh.big === 'PDF' && !sh.toggle, `the sheet names the PDF Lastname_Title.pdf, no paste switch (${JSON.stringify(sh)})`);
+    await until(() => fr.evaluate(() => document.querySelector('#gs-held')?.value === 'Text beside the PDF.'), 'held compact text shown');
+    check(await fr.evaluate(() => document.querySelector('#gs-keep').getAttribute('aria-checked') === 'false'), 'the old compact text is shown in the sheet with Keep off by default');
+    await shot(p, 'kinds-pdf-sheet-1440.png');
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => __clicks.filter((c) => /footer\.submit/.test(c)).length === 1), 'Ultra\'s Submit clicked', 40000, () => p.evaluate(() => ({ uploads: __uploads.map((u) => u.name), clicks: __clicks, log: __log, err: null })));
+    await quiet(() => p.evaluate(() => __clicks.filter((c) => /footer\.submit/.test(c)).length > 1 || __uploads.length > 1), 'a second upload or Submit');
+    const up = await p.evaluate(() => __uploads.map((u) => ({ name: u.name, type: u.type, bytes: u.bytes })));
+    rec = await record(); vs = await versions();
+    check(up.length === 1 && up[0].name === 'Rivera_Essay2.pdf' && up[0].type === 'application/pdf' && sha(up[0].bytes) === sha((await bytesOf(rec))) && holds(up[0].bytes, 'Rivera Field'),
+      `the saved PDF attached once: its name, application/pdf, the record's very bytes, the field filled (${up.map((u) => `${u.name} ${u.type} ${u.bytes.length}`).join('; ')})`);
+    check(await until(async () => (await versions()).some((v) => v.reason === 'submit'), 'the Submitted version'), 'Ultra\'s Submit clicked once; the version is marked Submitted');
+    check(await p.evaluate(() => !__text().trim()), 'PDF submission with Keep off clears the old compact text from Ultra');
+    await p.close();
+
+    // ---- the attempt again: the PDF viewer at once, the field still filled
+    ({ p, el, fr } = await open());
+    await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && !!document.querySelector('.gk .annotationLayer input')), 'the viewer again', 40000);
+    const again = await until(() => fr.evaluate(() => document.querySelector('.gk .annotationLayer input')?.value), 'the field');
+    check(again === 'Rivera Field' && await fr.evaluate(() => !document.querySelector('.gw .ProseMirror')?.getClientRects().length), `a reload opens the PDF viewer, the field still filled (${again})`);
+    await p.close();
+
+    // ---- a deck: Open in Glaze → the slides viewer; Submit sends the very bytes brought
+    await reset({ pdf: true, slides: true });
+    ({ p, el, fr } = await open());
+    await give(p, 'Cell Biology week 3.pptx', PPTX, deckBytes);
+    await until(() => cardOf(fr), 'the deck\'s card');
+    check((await cardOf(fr)).tiles.join('|') === 'Open in Glaze|Submit as is', 'a .pptx asks Open in Glaze or Submit as is');
+    await tap(fr, '.gi-default');
+    await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'slides' && document.querySelectorAll('.gk .gs-rail-b').length === 10 && !!document.querySelector('.gk #gs-canvas [role="group"]')), 'the slides viewer', 40000);
+    rec = await record(); vs = await versions();
+    check(rec.kind === 'slides' && rec.slides === 10 && sha((await bytesOf(rec))) === sha(deckBytes) && vs.some((v) => v.reason === 'import'), `the record is the deck, its bytes as brought, the paper a version first (${JSON.stringify({ kind: rec.kind, slides: rec.slides })})`);
+    // Ctrl+F (⌘F) over the viewer is the viewer's own find, never the hidden paper's (writer-find.js).
+    await fr.evaluate(() => document.querySelector('.gk .gs-rail-b')?.focus());
+    await p.keyboard.press('ControlOrMeta+f');
+    const found = await fr.evaluate(() => ({ paper: document.querySelector('.ge-find')?.hidden !== false, own: document.activeElement?.id }));
+    check(found.paper && found.own === 'gs-find-q', `Ctrl+F over the slides finds in the deck, the paper's find closed (${JSON.stringify(found)})`);
+    await shot(p, 'kinds-slides-1440.png');
+    await fr.focus('.gk #gs-canvas');
+    await p.keyboard.press('Control+f');
+    await until(() => fr.evaluate(() => document.activeElement?.id === 'gs-find-q'), 'the deck\'s find on Ctrl+F');
+    check(await fr.evaluate(() => [...document.querySelectorAll('.ge-find')].every((b) => b.hidden)), 'Ctrl+F in the deck opens its own find, not the parked paper\'s');
+    await tap(fr, '.gk .gp-submit');
+    await until(() => sheetOf(fr), 'the deck\'s sheet');
+    check((await sheetOf(fr)).name === 'Rivera_Essay2.pptx', `the sheet names the deck Lastname_Title.pptx (${(await sheetOf(fr)).name})`);
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => __clicks.filter((c) => /footer\.submit/.test(c)).length === 1), 'Ultra\'s Submit clicked for the deck', 40000);
+    await quiet(() => p.evaluate(() => __uploads.length > 1), 'a second upload');
+    const dup = await p.evaluate(() => __uploads.map((u) => ({ name: u.name, type: u.type, bytes: u.bytes })));
+    check(dup.length === 1 && dup[0].name === 'Rivera_Essay2.pptx' && dup[0].type === PPTX && sha(dup[0].bytes) === sha(deckBytes), `the deck attached once, byte for byte, as a presentation (${dup.map((u) => `${u.name} ${u.type}`).join('; ')})`);
+    await p.close();
+
+    // ---- a spreadsheet: Spreadsheets on, an empty attempt offers Document or Spreadsheet; Spreadsheet shows the grid
+    await reset({ sheets: true });
+    ({ p, el, fr } = await open());
+    await until(() => fr.evaluate(() => [...document.querySelectorAll('.gk-choose .gk-pick')].map((b) => b.textContent).join('|') === 'Document|Spreadsheet'), 'the choice', 30000);
+    check(await fr.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => b.textContent === 'New spreadsheet')), 'Spreadsheets on: an empty attempt offers Document or Spreadsheet, and ⋯ has New spreadsheet');
+    await worker.evaluate(async () => { const { writer } = await chrome.storage.sync.get('writer'); await chrome.storage.sync.set({ writer: { ...writer, sheets: false } }); });
+    await until(() => fr.evaluate(() => GZ_WRITER_SETTINGS.now().sheets === false), 'Spreadsheets off received', 60000);
+    check(await fr.evaluate(() => !document.querySelector('.gk-choose') && ![...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => b.textContent === 'New spreadsheet')), 'turning Spreadsheets off removes the live chooser and New spreadsheet');
+    await worker.evaluate(async () => { const { writer } = await chrome.storage.sync.get('writer'); await chrome.storage.sync.set({ writer: { ...writer, sheets: true } }); });
+    await until(() => fr.evaluate(() => !!document.querySelector('.gk-choose')), 'the choice returns with Spreadsheets on', 60000);
+    const dismissed = [];
+    for (const key of ['Escape', 'Enter']) {
+      await fr.locator('.gk-pick[data-kind="paper"]').focus();
+      await p.keyboard.press(key);
+      dismissed.push(await fr.evaluate(() => !document.querySelector('.gk-choose') && !!document.activeElement?.closest('.ProseMirror') && document.activeElement.getClientRects().length > 0));
+      await worker.evaluate(async () => { const { writer } = await chrome.storage.sync.get('writer'); await chrome.storage.sync.set({ writer: { ...writer, sheets: false } }); });
+      await until(() => fr.evaluate(() => GZ_WRITER_SETTINGS.now().sheets === false), 'Spreadsheets off received', 60000);
+      await worker.evaluate(async () => { const { writer } = await chrome.storage.sync.get('writer'); await chrome.storage.sync.set({ writer: { ...writer, sheets: true } }); });
+      await until(() => fr.evaluate(() => !!document.querySelector('.gk-choose')), 'the choice restored for the next input', 60000);
+    }
+    check(dismissed.every(Boolean), `Escape and Document by keyboard dismiss the choice and focus the editor (${dismissed.join(', ')})`);
+    await tap(fr, '.gk-pick[data-kind="sheet"]');
+    const A1 = '.gk #gx-grid .gx-c[data-r="0"][data-c="0"]';
+    await until(() => fr.evaluate((a1) => document.documentElement.dataset.doc === 'sheet' && !!document.querySelector(a1), A1), 'the grid', 40000,
+      () => fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, said: [...document.querySelectorAll('[role="status"], [role="alert"]')].map((x) => x.textContent).filter(Boolean).join(' | ') })));
+    rec = await record(); vs = await versions();
+    check(rec.kind === 'sheet' && rec.doc == null && vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper') && (await el.evaluate((f) => f.getBoundingClientRect().height)) > 600,
+      `Spreadsheet: the record a spreadsheet, the paper a version first, the grid as tall as a paper (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
+    // To A1 by the name box, as sheets-check.js goes to a cell: the grid's cells sit under its scroll layer.
+    await tap(fr, '.gk #gx-name');
+    await fr.fill('.gk #gx-name', 'A1');
+    await p.keyboard.press('Enter');
+    await until(() => fr.evaluate(() => document.querySelector('.gk #gx-name')?.value === 'A1' && document.activeElement?.id === 'gx-grid'), 'A1 active in the grid');
+    for (const v of ['Trial', '42', '58']) { await p.keyboard.type(v); await p.keyboard.press('Enter'); }
+    const cellOf = (r, c) => fr.evaluate(([r, c]) => document.querySelector(`.gk #gx-grid .gx-c[data-r="${r}"][data-c="${c}"]`)?.textContent ?? null, [r, c]);
+    await until(async () => (await cellOf(2, 0)) === '58', 'the values in the grid');
+    await until(async () => /58/.test((await record())?.text || ''), 'the values saved', 20000, async () => ({ text: (await record())?.text, state: await fr.evaluate(() => document.querySelector('.gk .gp-state')?.textContent) }));
+    check([await cellOf(0, 0), await cellOf(1, 0), await cellOf(2, 0)].join() === 'Trial,42,58', 'values typed into the grid are saved');
+    await shot(p, 'kinds-sheet-1440.png');
+    const sx = await fr.evaluate(() => (globalThis.GZ_SHEET_XLSX ? '.xlsx' : '.csv'));
+    await tap(fr, '.gk .gp-submit');
+    await until(() => sheetOf(fr), 'the spreadsheet\'s sheet');
+    check((await sheetOf(fr)).name === `Rivera_Essay2${sx}`, `the sheet names the spreadsheet Lastname_Title${sx} (${(await sheetOf(fr)).name})`);
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => __clicks.filter((c) => /footer\.submit/.test(c)).length === 1), 'Ultra\'s Submit clicked for the spreadsheet', 40000);
+    await quiet(() => p.evaluate(() => __uploads.length > 1), 'a second upload');
+    const sup = await p.evaluate(() => __uploads.map((u) => ({ name: u.name, type: u.type, bytes: u.bytes })));
+    const body = Buffer.from(sup[0]?.bytes || []);
+    const typed = sx === '.xlsx' ? await XL.read(new Uint8Array(body)).then((wb) => [0, 1, 2].map((r) => wb.sheets[0].rows.get(r)?.get(0)?.v).join(), () => 'unreadable') : body.toString('utf8');
+    check(sx === '.xlsx' && sup.length === 1 && sup[0].name === `Rivera_Essay2${sx}` && sup[0].type === XLSX && typed === 'Trial,42,58',
+      `the spreadsheet's file attached once, Ultra's Submit once (${sup.map((u) => `${u.name} ${u.type} ${u.bytes.length}`).join('; ')})`);
+    vs = await versions();
+    const submittedBook = vs.find((v) => v.kind === 'sheet' && v.reason === 'submit' && v.gz);
+    const packedText = submittedBook ? require('node:zlib').gunzipSync(Buffer.from(submittedBook.gz, 'base64')).toString('utf8') : '';
+    check(/Trial/.test(packedText) && /42/.test(packedText) && /58/.test(packedText), 'the Submitted spreadsheet version contains the workbook values');
+    await p.close();
+
+    // ---- a .csv on Ultra's file area: Open in Glaze → the grid with its values
+    await reset({ sheets: true });
+    ({ p, el, fr } = await open());
+    await give(p, 'Lab data.csv', 'text/csv', Buffer.from('Time,Temp\n1,20.5\n2,21\n'));
+    await until(() => cardOf(fr), 'the .csv card');
+    check((await cardOf(fr)).tiles.join('|') === 'Open in Glaze|Submit as is' && await p.evaluate(() => __uploads.length === 0), 'a .csv asks Open in Glaze or Submit as is, Ultra hearing nothing');
+    await tap(fr, '.gi-default');
+    await until(async () => (await cellOf(1, 1)) === '20.5', 'the .csv in the grid', 40000);
+    rec = await record();
+    check(rec.kind === 'sheet' && [await cellOf(0, 0), await cellOf(0, 1), await cellOf(2, 1)].join() === 'Time,Temp,21', 'Open in Glaze puts the .csv in the grid, the record a spreadsheet');
+    await p.close();
+
+    // ---- an .xlsx on Ultra's file area: Open in Glaze → the grid reads it; a cell changed; Submit attaches the .xlsx once
+    const budget = SM.workbook();
+    for (const [r, row] of [['Item', 'Cost'], ['Paper', 12], ['Ink', 30]].entries()) budget.sheets[0].rows.set(r, new Map(row.map((v, c) => [c, typeof v === 'number' ? { t: 'n', v } : { t: 's', v }])));
+    budget.sheets[0].rows.get(0).set(2, { t: 'n', v: 42, f: 'SUM(B2:B3)' });
+    const budgetBytes = Buffer.from(await XL.write(budget));
+    await reset({ sheets: true });
+    ({ p, el, fr } = await open());
+    await give(p, 'Budget.xlsx', XLSX, budgetBytes);
+    await until(() => cardOf(fr), 'the .xlsx card');
+    check((await cardOf(fr)).tiles.join('|') === 'Open in Glaze|Submit as is', 'an .xlsx asks Open in Glaze or Submit as is');
+    await tap(fr, '.gi-default');
+    await until(async () => (await cellOf(2, 1)) === '30', 'the .xlsx in the grid', 40000);
+    check([await cellOf(0, 0), await cellOf(1, 0), await cellOf(0, 2)].join() === 'Item,Paper,42' && (await record()).kind === 'sheet', 'Open in Glaze reads the .xlsx into the grid, its formula calculated');
+    await tap(fr, '.gk #gx-name');
+    await fr.fill('.gk #gx-name', 'B3');
+    await p.keyboard.press('Enter');
+    await until(() => fr.evaluate(() => document.querySelector('.gk #gx-name')?.value === 'B3' && document.activeElement?.id === 'gx-grid'), 'B3 active');
+    await p.keyboard.type('50'); await p.keyboard.press('Enter');
+    await until(async () => (await cellOf(0, 2)) === '62', 'the sum recalculated');
+    await until(async () => !(await fr.evaluate(() => document.querySelector('.gk .gp-state')?.textContent)), 'saved');
+    await tap(fr, '.gk .gp-submit');
+    await until(() => sheetOf(fr), 'the .xlsx sheet');
+    check((await sheetOf(fr)).name === 'Rivera_Essay2.xlsx', `the sheet names it Rivera_Essay2.xlsx (${(await sheetOf(fr)).name})`);
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => __clicks.filter((c) => /footer\.submit/.test(c)).length === 1), 'Ultra\'s Submit clicked for the .xlsx', 40000);
+    await quiet(() => p.evaluate(() => __uploads.length > 1), 'a second upload');
+    const xup = await p.evaluate(() => __uploads.map((u) => ({ name: u.name, type: u.type, bytes: u.bytes })));
+    const xwb = await XL.read(new Uint8Array(xup[0]?.bytes || [])).catch(() => null);
+    const xr = (r, c) => xwb?.sheets[0].rows.get(r)?.get(c);
+    check(xup.length === 1 && xup[0].name === 'Rivera_Essay2.xlsx' && xup[0].type === XLSX && xr(2, 1)?.v === 50 && xr(0, 2)?.f === 'SUM(B2:B3)' && xr(0, 2)?.v === 62,
+      `the edited .xlsx attached once, its formula kept and its value recalculated (${xup.map((u) => `${u.name} ${u.type} ${u.bytes.length}`).join('; ')})`);
+    await p.close();
+
+    // ---- an attached PDF: Open in Glaze beside its link, straight to the viewer
+    await reset({ pdf: true });
+    ({ p, el, fr } = await open());
+    const opener = await until(() => p.$(`a[href="${FORM}"] + button[data-gz-open-glaze]`), 'Open in Glaze beside the attached PDF', 30000);
+    check(await p.evaluate(() => [...document.querySelectorAll('button[data-gz-open-glaze]')].map((b) => b.textContent).join('|') === 'Open in Glaze'), 'the attached PDF alone gets Open in Glaze (not the Word prompt, the picture, the reading guide or the .csv with Spreadsheets off)');
+    const gets = attachment.gets;
+    await opener.click();
+    await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelectorAll('.gk .pdfViewer .page').length === 3), 'the attachment in the PDF viewer', 40000,
+      async () => ({ gets: attachment.gets - gets, ...await fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, card: !!document.querySelector('.gi-layer'), current: GZ_WRITER_PAPER.current()?.kind?.(), said: [...document.querySelectorAll('[role="status"], [role="alert"]')].map((x) => x.textContent).filter(Boolean).join(' | ') })) }));
+    rec = await record(); vs = await versions();
+    check(attachment.gets === gets + 1 && rec.kind === 'pdf' && sha((await bytesOf(rec))) === sha(pdfBytes) && vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper') && await fr.evaluate(() => !document.querySelector('.gi-layer')) && await p.evaluate(() => __uploads.length === 0),
+      `the attachment fetched once, opened with no card: the record its PDF, the paper a version first, nothing uploaded (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
+    await shot(p, 'kinds-attachment-1440.png');
+    await p.close();
+
+    // ---- an attached .csv: Open in Glaze beside its link with Spreadsheets on, straight to the grid
+    await reset({ sheets: true });
+    ({ p, el, fr } = await open());
+    const labOpener = await until(() => p.$(`a[href="${LAB}"] + button[data-gz-open-glaze]`), 'Open in Glaze beside the attached .csv', 30000);
+    check(await p.evaluate((form) => document.querySelectorAll('button[data-gz-open-glaze]').length === 1 && !document.querySelector(`a[href="${form}"] + button[data-gz-open-glaze]`), FORM),
+      'Spreadsheets on, PDFs off: the attached .csv alone gets Open in Glaze');
+    const labGets = attachment.labGets;
+    await labOpener.click();
+    await until(async () => (await cellOf(1, 1)) === '4.2', 'the attached .csv in the grid', 40000,
+      async () => ({ gets: attachment.labGets - labGets, ...await fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, card: !!document.querySelector('.gi-layer'), said: [...document.querySelectorAll('[role="status"], [role="alert"]')].map((x) => x.textContent).filter(Boolean).join(' | ') })) }));
+    rec = await record(); vs = await versions();
+    check(attachment.labGets === labGets + 1 && rec.kind === 'sheet' && [await cellOf(0, 0), await cellOf(0, 1), await cellOf(2, 1)].join() === 'Trial,Mass,4.5' && vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper')
+      && await fr.evaluate(() => document.documentElement.dataset.doc === 'sheet' && !document.querySelector('.gi-layer')) && await p.evaluate(() => __uploads.length === 0),
+      `the attached .csv fetched once, opened with no card: the record a spreadsheet with its values, the paper a version first, nothing uploaded (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
+    await p.close();
+
+    // ---- switches off: a PDF on Ultra's file area is Ultra's, as before; no attachment gets Open in Glaze
+    await reset({});
+    ({ p, el, fr } = await open());
+    await until(() => p.$(`a[href="${FORM}"]`), 'the attachment link');
+    await until(() => fr.evaluate(() => (GZ_WRITER_FRAME.context()?.assignment?.files || []).some((f) => f.name === 'Field trip form.pdf')), 'the context with the attachment', 30000);
+    await quiet(() => p.evaluate(() => !!document.querySelector('button[data-gz-open-glaze]')), 'Open in Glaze with PDFs off', 2000);
+    await give(p, 'Field trip form.pdf', 'application/pdf', pdfBytes);
+    await until(() => p.evaluate(() => __uploads.length === 1), 'Ultra took the PDF');
+    check(await p.evaluate(() => __uploads[0].via === 'drop' && !document.querySelector('button[data-gz-open-glaze]')) && await fr.evaluate(() => !document.querySelector('.gi-layer, .gs-layer') && !document.documentElement.dataset.doc), 'PDFs and Slides off: a PDF on Ultra\'s file area is Ultra\'s, no card, no viewer, no Open in Glaze beside the attachment');
+    await p.close();
+
+    check(!errors.length, `no page errors (${errors.join(' | ')})`);
+    passed = true;
+  } catch (e) {
+    console.error(e);
+    if (errors.length) console.error('page errors:', errors.join('\n'));
+    process.exitCode = 1;
+  } finally {
+    await context?.close().catch(() => {});
+    if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+    if (held) fs.rmSync(lock, { recursive: true, force: true });
+    console.log(`${passed ? 'PASS' : 'FAIL'} writer-kinds-check: ${checks.length} checks`);
+  }
+})();

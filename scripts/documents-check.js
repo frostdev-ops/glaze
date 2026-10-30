@@ -135,9 +135,13 @@ const PROBE = ({ lang }) => {
     // ---- the page and the New band
     let home = await openHome();
     check(await home.evaluate(() => document.title === 'Documents' && document.querySelector('h1').textContent === 'Documents'), 'title and h1 read Documents');
-    const tiles = await home.evaluate(() => [...document.querySelectorAll('.gd-new .gd-tile')].map((a) => ({ name: a.querySelector('.gd-tile-name').textContent, label: a.querySelector('.gt-thumb')?.getAttribute('aria-hidden'), href: a.getAttribute('href'), thumb: !!a.querySelector('.gt-thumb'), format: a.dataset.format, text: a.querySelector('.gt-thumb')?.textContent })));
+    // The formats' tiles, then Spreadsheets' (on by default: sheet-kind.js create).
+    const all = await home.evaluate(() => [...document.querySelectorAll('.gd-new .gd-tile')].map((a) => ({ name: a.querySelector('.gd-tile-name').textContent, label: a.querySelector('.gt-thumb, .gx-thumb')?.getAttribute('aria-hidden'), href: a.getAttribute('href'), thumb: !!a.querySelector('.gt-thumb'), format: a.dataset.format, kind: a.dataset.kind, text: a.querySelector('.gt-thumb')?.textContent })));
+    const tiles = all.filter((x) => x.format);
     check(await home.evaluate(() => document.querySelector('.gd-new h2')?.textContent === 'New'), 'the New band has its h2');
-    check(tiles.map((x) => x.name).join('|') === 'Blank|MLA 9|APA 7|Chicago 17' && tiles.every((x) => x.thumb && x.label === 'true'), `New tiles Blank, MLA 9, APA 7, Chicago 17, each drawn (${JSON.stringify(tiles.map((x) => x.name))})`);
+    check(all.map((x) => x.name).join('|') === 'Blank|MLA 9|APA 7|Chicago 17|Spreadsheet' && tiles.every((x) => x.thumb && x.label === 'true'), `New tiles Blank, MLA 9, APA 7, Chicago 17, each drawn, then Spreadsheet (${JSON.stringify(all.map((x) => x.name))})`);
+    const sheetTile = all.find((x) => x.kind === 'sheet');
+    check(sheetTile?.label === 'true' && /^papers\.html\?sheet=doc%3A[0-9a-f-]{36}&new$/.test(sheetTile.href), `the Spreadsheet tile draws an empty grid and links a new spreadsheet (${JSON.stringify(sheetTile)})`);
     check(tiles.every((x) => /^papers\.html\?paper=doc%3A[0-9a-f-]{36}&format=(plain|mla9|apa7|chicago17)$/.test(x.href)), 'each tile links papers.html?paper=<new doc: key>&format=<id>');
 
     check(tiles.every((x) => x.format === 'plain' ? !/Your name|Instructor|Course|Date|Title/.test(x.text) : ['Your name', 'Instructor', 'Course', 'Date', 'Title'].every((v) => x.text.includes(v))), 'format tiles show their opening placeholders; Blank stays empty');
@@ -219,7 +223,7 @@ const PROBE = ({ lang }) => {
         listName: document.getElementById(document.getElementById('gd-docs').getAttribute('aria-labelledby'))?.textContent, live: document.getElementById('gd-count').getAttribute('aria-live'),
         tabbable: [...document.querySelectorAll('#gd-docs a, #gd-docs button')].filter((e) => e.tabIndex >= 0).length };
     });
-    check(names.search === 'Search' && names.course === 'Course' && names.sort === 'Sort' && names.grid === 'Grid' && names.listB === 'List' && names.pressed === 'true,false' && names.imp === 'Import .docx…' && names.file === names.imp, `the toolbar's controls are named (${JSON.stringify(names)})`);
+    check(names.search === 'Search' && names.course === 'Course' && names.sort === 'Sort' && names.grid === 'Grid' && names.listB === 'List' && names.pressed === 'true,false' && names.imp === 'Import…' && names.file === names.imp, `the toolbar's controls are named (${JSON.stringify(names)})`);
     check(names.more === 'More' && names.popup === 'menu' && names.described && names.link && names.kindHidden === 'true' && names.listName === 'Documents' && names.live === 'polite', 'cards: a titled link, a More menu button described by its title, the kind icon hidden; the list is named Documents');
     check(names.tabbable === 1, `the cards are one Tab stop (${names.tabbable} tabbable)`);
     const darkContrast = await home.evaluate(() => {
@@ -520,11 +524,12 @@ const PROBE = ({ lang }) => {
     check(/^doc:/.test(riverKey) && river.kind === 'paper' && river.format === 'mla9' && JSON.stringify(river.doc).includes('the river keeps what the town forgets') && riverVersions?.length >= 1, `a dropped .docx becomes a new document in the default format, with a version (${river.format}; ${riverVersions?.map((v) => v.reason).join(', ')})`);
     check((await shown()).length === before + 1, 'one document per file');
     await drop(home, [{ name: 'notes.txt', type: 'text/plain', bytes: [104, 105] }]);
-    await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'That file could not be read as a Word document.'), 'refusal');
-    check((await shown()).length === before + 1, 'a .txt is refused with "That file could not be read as a Word document." and adds nothing');
+    // No kind takes it, and Word is not the only one taking files: the plain refusal.
+    await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'That file could not be read.'), 'refusal');
+    check((await shown()).length === before + 1, 'a .txt is refused with "That file could not be read." and adds nothing');
     await home.setInputFiles('#gd-file', docxPaths);
     await until(async () => (await cards(home)).filter((c) => c.title === 'River notes').length === 3, 'imported two');
-    check(await home.evaluate(() => document.getElementById('gd-said').textContent === ''), 'Import .docx… takes several files, one document each, and clears the old refusal');
+    check(await home.evaluate(() => document.getElementById('gd-said').textContent === ''), 'Import… takes several files, one document each, and clears the old refusal');
 
     await drop(home, [{ name: 'Broken.docx', bytes: [1, 2, 3] }]);
     await until(() => home.evaluate(() => document.getElementById('gd-said').textContent === 'That file could not be read as a Word document.'), 'broken Word refusal');
@@ -848,7 +853,7 @@ const PROBE = ({ lang }) => {
       for (const width of [1280, 640]) {
         await pg.setViewportSize({ width, height: 900 }); await pg.evaluate(() => scrollTo(0, 0));
         const rows = await pg.evaluate(() => new Set([...document.querySelectorAll('.gd-tile')].map((t) => t.offsetTop)).size);
-        check(rows === 1, `${name} ${width}: the four New tiles keep one row inside the panel (${rows})`);
+        check(rows === 1, `${name} ${width}: the five New tiles keep one row inside the panel (${rows})`);
         await shot(pg, `look-${name}-${width}.png`);
       }
       await pg.close();
