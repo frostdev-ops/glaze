@@ -1,5 +1,5 @@
 // Settings → Writer: the choices its selects offer (a new paper's format, zoom, versions kept, the dialect), the papers saved
-// on this device by course with Clear… for a course and Clear all papers (every paper, a course's or not) behind one
+// on this device by course with Clear… for a course and Clear all papers and documents (every one, in Trash too) behind one
 // question (lib/writer-papers.js: the list from storage.local, each removal through the worker, which keeps every paper
 // write in one queue), and the personal dictionary (storage.local writerWords, the frames' and Harper's) with a remove for
 // each word and Clear. The switches and selects themselves save through options.js's data-key binding (storage.sync
@@ -80,8 +80,8 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
       asked = list;
       const n = list.reduce((k, c) => k + c.keys.length, 0);
       const documents = list !== everything && list[0].id === 'documents';
-      $('writer-clear-title').textContent = list === everything ? t('Clear all papers?') : documents ? t('Clear documents?') : t('Clear {course}’s papers?', { course: list[0].name });
-      $('writer-clear-note').textContent = `${t(documents ? '{n} documents' : '{n} papers', { n })}. ${t('They and their versions are deleted from this device. What you submitted stays in Blackboard.')}`;
+      $('writer-clear-title').textContent = list === everything ? t('Clear all papers and documents?') : documents ? t('Clear documents?') : t('Clear {course}’s papers?', { course: list[0].name });
+      $('writer-clear-note').textContent = `${t(list === everything ? '{n} papers and documents' : documents ? '{n} documents' : '{n} papers', { n })}. ${t('They and their versions are deleted from this device. What you submitted stays in Blackboard.')}`;
       dialog.returnValue = '';
       dialog.showModal();
       $('writer-clear-cancel').focus(); // not autofocus: Settings can be a frame of a school page, where browsers refuse it
