@@ -135,7 +135,7 @@ const worker4 = (sync) => {
     const ch = Object.fromEntries(Object.keys(sync).filter((k) => JSON.stringify(was[k]) !== JSON.stringify(sync[k])).map((k) => [k, { oldValue: was[k], newValue: sync[k] }]));
     for (const f of env.changed) f(ch, 'sync');
   };
-  return { writes, arrive, settle: env.settle };
+  return { writes, arrive, settle: env.settle, area: env.context.chrome.storage.sync };
 };
 const wears = (sync, cid) => G.GZ_COURSE_LOOK_ID(G.GZ_SANITIZE(sync), cid, saved);
 
@@ -225,4 +225,33 @@ test('a 4.0 pick of a kept Look landing before the worker gets to a 3.x pick for
     assert.deepEqual(sync.courseLooks, { _2_1: K1 }, `${first} first`);
     assert.equal(wears(sync, '_2_1'), K1, `${first} first: the 4.0 pick`);
   }
+});
+
+test('a built-in pick arriving during an older read waits for its own stored snapshot', async () => {
+  const s = G.GZ_SANITIZE({}); pick(s, '_2_1', K1);
+  const sync = structuredClone(s), w = worker4(sync);
+  await w.settle();
+  const get = w.area.get;
+  let started, resume, held = false;
+  const reading = new Promise((resolve) => { started = resolve; });
+  const release = new Promise((resolve) => { resume = resolve; });
+  w.area.get = async (keys) => {
+    const snapshot = await get(keys);
+    if (!held && Array.isArray(keys) && keys.includes('courses') && keys.includes('courseLooks')) {
+      held = true; started(); await release;
+    }
+    return snapshot;
+  };
+  try {
+    w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', 'Terminal')));
+    await reading; // Terminal is in the snapshot; the next pick isn't.
+    w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', 'Library')));
+  } finally { resume(); }
+  await w.settle();
+  assert.deepEqual(sync.courseLooks, {}, 'the newer pick still clears the kept Look');
+  assert.deepEqual(sync.courses.looks, { _2_1: 'Library' });
+  assert.equal(w.writes.length, 1, 'one write, after reading the newer pick');
+  w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', '')));
+  await w.settle();
+  assert.equal(wears(sync, '_2_1'), '', 'Your theme cannot bring the kept Look back');
 });
