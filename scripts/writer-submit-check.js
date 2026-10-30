@@ -132,7 +132,7 @@ const tap = async (fr, sel, { count = 1 } = {}) => {
     }
     if (heard === 'heard') return;
     if (!heard) throw Error(`${sel}: the click reached nothing`);
-    if (heard !== 'given to the page\'s <iframe>') throw Error(`${sel}: ${heard}`);
+    if (heard !== 'given to the page\'s <iframe>') throw Error(`${sel}: ${heard} (aimed at ${Math.round(aim.x)},${Math.round(aim.y)} in the frame; ${Math.round(at.x)},${Math.round(at.y)} in the page)`);
     taps.again.push(`${sel}: ${heard} (aimed at ${Math.round(aim.x)},${Math.round(aim.y)} in the frame)`);
     console.log(`tap retry: ${taps.again.at(-1)}`);
     if (attempt >= 5) throw Error(`${sel}: ${attempt} clicks, none heard (${taps.again.slice(-attempt).join('; ')})`);
@@ -909,8 +909,11 @@ const HARNESS = `(() => {
     await tap(fr, '.gs-primary');
     await until(() => p.evaluate(() => __clicks.length === 1 && __uploads.length === 1), 'the over-limit paper submitted as a Word file', 60000);
     const longRun = await p.evaluate(() => ({ clicks: __clicks, uploads: __uploads, text: __text() }));
-    const longText = squash(await DT.docx(new Uint8Array(longRun.uploads[0].bytes)));
-    check(longRun.clicks.join() === 'assignment.attempt.authoring.footer.submit' && longRun.uploads[0].type === MIME && longText.replace(/\s/g, '').length === 26000 && !longRun.text.includes('Short start.'), 'Full writer submits the entire over-limit paper as one .docx, once; the stale compact text is absent');
+    const longBytes = new Uint8Array(longRun.uploads[0].bytes);
+    fs.writeFileSync(path.join(out, 'over-limit.docx'), longBytes);
+    // doctext.docx includes the running header; compare the body alone with all 26,000 digits, in order.
+    const longZip = DT.unzip(longBytes), longBody = [...DT.tokens(await longZip.text('word/document.xml'))].filter((t) => t.text).map((t) => DT.decode(t.text)).join('').replace(/\s/g, '');
+    check(longRun.clicks.join() === 'assignment.attempt.authoring.footer.submit' && longRun.uploads[0].type === MIME && longBody === '1234567890'.repeat(2600) && !longRun.text.includes('Short start.'), 'Full writer submits the entire over-limit paper as one .docx, once; the stale compact text is absent');
     await p.close();
     await setFull(false);
     await blankPaper();
