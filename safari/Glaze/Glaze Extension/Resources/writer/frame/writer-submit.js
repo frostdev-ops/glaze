@@ -166,7 +166,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const review = issues ? h('button', { type: 'button', class: 'gs-review', text: t('Review') }) : null;
     const atts = h('ul', { class: 'gs-atts' });
     const attachB = typeof P()?.pick === 'function' ? h('button', { type: 'button', class: 'gs-attach', text: t('Attach from Documents') }) : null;
-    const driveB = globalThis.GZ_DRIVE?.page?.connected?.() === true ? h('button', { type: 'button', class: 'gs-attach gs-drive', text: t('From Google Drive') }) : null;
+    const driveB = globalThis.GZ_DRIVE?.page?.picker?.() === true ? h('button', { type: 'button', class: 'gs-attach gs-drive', text: t('From Google Drive') }) : null;
     const layer = h('div', { class: 'gs-layer' },
       h('div', { class: 'gs-dim' }),
       h('div', { class: `gs-sheet${file || other || only ? ' gs-asis' : ''}${only ? ' gs-only' : ''}`, role: 'dialog', tabindex: '-1', 'aria-modal': 'true', 'aria-labelledby': 'gs-title' },
@@ -325,7 +325,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       const doc = await P().pick({ back: attachB });
       if (doc && sheet === mine) mine.addDoc(doc);
     });
-    // From Google Drive (shown while Drive is connected): the files picked in Google's Picker (the worker opens it), each
+    // From Google Drive (shown while Drive is connected and Google's Picker works here): the files picked in Google's Picker (the worker opens it), each
     // read as it is through the worker's Drive port (documents/drive.js raw: any type up to 50 MB, a Google Doc, Sheet or
     // deck exported as Open from Drive exports it), one at a time in the attachments' queue, its row saying Reading… until
     // it's staged. Remove, Cancel or the sheet closing aborts its read, a stalled one included. A file that can't come names
