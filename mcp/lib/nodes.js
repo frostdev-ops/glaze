@@ -3,7 +3,8 @@
 // ELECTRON_RUN_AS_NODE, so started by a browser it would open Claude; or a node inside Claude's app, which moves at each
 // update. ELECTRON_RUN_AS_NODE in a plain node's environment changes nothing, so it alone isn't Claude's. choose() keeps
 // the node running this when it is a system one; under Claude it finds one (PATH, then where installers put one), the
-// first that is safe to run and says v18 or later, or none. trust() is doctor's check of a path it would run.
+// first that is safe to run and says v18 or later, or none. all() is every such node, for a launcher to fall back on.
+// trust() is doctor's check of a path it would run.
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -98,19 +99,27 @@ const trust = (platform, fix = '', io = {}) => {
   return { modes, loose, path: trustedPath };
 };
 
-// The first candidate that is a regular executable file, outside Claude, safe to run, and says v18 or later when asked.
+// Whether a candidate is a regular executable file, outside Claude, safe to run, and says v18 or later when asked.
+const usable = async (c, t, run) => {
+  if (inClaude(c)) return false;
+  let st;
+  try { st = fs.statSync(c); } catch { return false; }
+  if (!st.isFile() || (t.modes && !(st.mode & 0o111)) || t.path(c)) return false;
+  const v = await Promise.resolve().then(() => run(c, ['--version'])).then((r) => String(r.stdout).trim(), () => '');
+  const m = /^v(\d+)\.\d+\.\d+/.exec(v);
+  return !!m && +m[1] >= MIN;
+};
+// The first usable candidate, or null.
 const find = async ({ platform = process.platform, env = process.env, run, list = places(platform, env) } = {}) => {
   const t = trust(platform);
-  for (const c of list) {
-    if (inClaude(c)) continue;
-    let st;
-    try { st = fs.statSync(c); } catch { continue; }
-    if (!st.isFile() || (t.modes && !(st.mode & 0o111)) || t.path(c)) continue;
-    const v = await Promise.resolve().then(() => run(c, ['--version'])).then((r) => String(r.stdout).trim(), () => '');
-    const m = /^v(\d+)\.\d+\.\d+/.exec(v);
-    if (m && +m[1] >= MIN) return c;
-  }
+  for (const c of list) if (await usable(c, t, run)) return c;
   return null;
+};
+// Every usable candidate but those in skip, in order, at most 8: what a launcher tries after its own node.
+const all = async ({ platform = process.platform, env = process.env, run, list = places(platform, env), skip = [] } = {}) => {
+  const t = trust(platform), out = [];
+  for (const c of list) if (out.length < 8 && !skip.includes(c) && await usable(c, t, run)) out.push(c);
+  return out;
 };
 const choose = async (o = {}) => {
   const platform = o.platform || process.platform, env = o.env || process.env;
@@ -120,4 +129,4 @@ const choose = async (o = {}) => {
   return find({ ...o, platform, env, list: [...new Set([...(current ? [current] : []), ...list])] });
 };
 
-module.exports = { MIN, MISSING, claude, stable, places, trust, find, choose };
+module.exports = { MIN, MISSING, claude, stable, places, trust, find, all, choose };

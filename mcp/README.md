@@ -34,6 +34,9 @@ given to it.
 Setup refuses symlinked destinations and files or registrations belonging to another installation. On Windows, Chromium
 browsers sharing a registry location use the first installed browser's host manifest.
 
+Browsers start the helper with the Node.js that ran setup, or else another Node.js 18 or later setup found. After you
+change Node.js, run setup again.
+
 ## App bundle
 
 Releases include `glaze-mcp-<version>.mcpb` for apps that install MCP bundles. With **Set up browsers** on (the
@@ -55,9 +58,10 @@ now. It exits 1 when something fails.
 npx glaze-mcp uninstall
 ```
 
-This removes the helper's manifests, launchers and unchanged versioned copies. It leaves the run folder and modified
-copies alone. On Windows it removes its registry default values or an otherwise empty host key, preserving unrelated
-values and subkeys.
+This removes the helper's manifests, launchers, unchanged versioned copies and run folder, except a running helper's run
+file. It leaves modified copies alone. On Windows it removes its registry default values or an otherwise empty host
+key, preserving unrelated values and subkeys.
+Restart your browser to stop a helper that is still running.
 
 ## Browsers
 

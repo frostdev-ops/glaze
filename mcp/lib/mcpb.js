@@ -48,7 +48,9 @@ const start = async (o = {}) => {
       log('no supported browser found to set up');
       return { env, node, setup: null };
     }
-    const setup = await I.ensure({ platform, env, run, node, browsers, ifNeeded: true, keepNewer: true });
+    // The launchers fall back on the other nodes found here, so an upgrade or removal of this one doesn't break them.
+    const also = node === null ? [] : await N.all({ platform, env, run, list: o.list, skip: [node] });
+    const setup = await I.ensure({ platform, env, run, node, also, browsers, ifNeeded: true, keepNewer: true });
     if (setup.node !== undefined) node = setup.node;
     if (setup.newer) log(`leaving glaze-mcp ${setup.newer}, set up already, in place`);
     else {

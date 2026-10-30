@@ -122,3 +122,136 @@ test('removing a kept Look takes it off every course, in both maps', () => {
   assert.deepEqual([s.courses.looks, s.courseLooks], [{ _4_1: 'Terminal' }, { _3_1: K2 }]);
   assert.equal(C.unmap(s.courses, K1, s.courseLooks), false, 'none left to take off');
 });
+
+// The real 4.0 worker (lib/background.js) over `sync`: its writes of course Looks, and `arrive` for a change another device
+// synced (in storage and heard, not written here).
+const worker4 = (sync) => {
+  const env = require('./helpers/worker-env.cjs')({ store: { sync, local: { ultra: [] }, session: {} } });
+  const writes = [], set = env.context.chrome.storage.sync.set;
+  env.context.chrome.storage.sync.set = (v) => { if ('courses' in v || 'courseLooks' in v) writes.push(structuredClone(v)); return set(v); };
+  const arrive = (fn) => {
+    const was = structuredClone(sync);
+    fn(sync);
+    const ch = Object.fromEntries(Object.keys(sync).filter((k) => JSON.stringify(was[k]) !== JSON.stringify(sync[k])).map((k) => [k, { oldValue: was[k], newValue: sync[k] }]));
+    for (const f of env.changed) f(ch, 'sync');
+  };
+  return { writes, arrive, settle: env.settle, area: env.context.chrome.storage.sync };
+};
+const wears = (sync, cid) => G.GZ_COURSE_LOOK_ID(G.GZ_SANITIZE(sync), cid, saved);
+
+test('a built-in Look a 3.x device picks over a kept one clears the kept one, so its "Your theme" after is the theme on 4.0', async () => {
+  const s = G.GZ_SANITIZE({});
+  pick(s, '_1_1', 'Library'); pick(s, '_2_1', K1); pick(s, '_3_1', K2);
+  const sync = structuredClone(s);
+  const w = worker4(sync);
+  await w.settle();
+  assert.deepEqual(w.writes, [], 'nothing to clear: no write');
+  w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', 'Terminal')));
+  assert.equal(wears(sync, '_2_1'), 'Terminal', 'every device wears the 3.x pick');
+  await w.settle();
+  assert.equal(wears(sync, '_2_1'), 'Terminal', 'and still does');
+  assert.deepEqual(sync.courseLooks, { _3_1: K2 }, 'the kept Look it replaced goes; one with no built-in beside it stays');
+  assert.deepEqual(sync.courses.looks, { _1_1: 'Library', _2_1: 'Terminal' });
+  assert.equal(w.writes.length, 1, 'one write');
+  assert.ok(!('courses' in w.writes[0]), 'courses stay as the 3.x device wrote them');
+  w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', '')));
+  await w.settle();
+  assert.equal(wears(sync, '_2_1'), '', '"Your theme" on 3.x: the theme on 4.0 too');
+  assert.equal(wears(sync, '_3_1'), K2);
+  assert.equal(wears(sync, '_1_1'), 'Library');
+  assert.equal(w.writes.length, 1, 'nothing more to clear: no write');
+});
+
+// What a 4.0 device's pick writes, in one set (GZ_COURSE_EDIT.look): sync may hand another device its keys one at a time.
+const pick4 = (sync, cid, id) => { const s = G.GZ_SANITIZE(sync); pick(s, cid, id); return { courses: s.courses, courseLooks: s.courseLooks }; };
+
+test('the clear goes with the kept ids the worker moves, in one write; a 3.x edit of anything else or a restart writes nothing', async () => {
+  const sync = { version: 2, courses: { ...G.GZ_DEFAULTS.courses, looks: { _1_1: 'Library' } }, courseLooks: { _2_1: K1, _3_1: K2 } };
+  const w = worker4(sync);
+  await w.settle();
+  assert.deepEqual(w.writes, []);
+  // A restore of a backup from an earlier 4.0, with a 3.x device's pick in it.
+  w.arrive((x) => { x.courses = { ...x.courses, looks: { _1_1: 'Library', _2_1: 'Terminal', _4_1: K2 } }; });
+  await w.settle();
+  assert.deepEqual(sync.courses.looks, { _1_1: 'Library', _2_1: 'Terminal' });
+  assert.deepEqual(sync.courseLooks, { _3_1: K2, _4_1: K2 });
+  assert.equal(w.writes.length, 1, 'one write');
+  for (const [cid, id] of [['_1_1', 'Library'], ['_2_1', 'Terminal'], ['_3_1', K2], ['_4_1', K2]]) assert.equal(wears(sync, cid), id);
+  w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.color(c, '_2_1', '#ff0000')));
+  w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.name(c, '_3_1', 'Bio')));
+  await w.settle();
+  const again = worker4(sync);
+  await again.settle();
+  assert.equal(w.writes.length, 1, 'none for an edit that picks no built-in');
+  assert.deepEqual(again.writes, [], 'none on a restart');
+  assert.deepEqual(sync.courseLooks, { _3_1: K2, _4_1: K2 });
+});
+
+test('a start over a built-in beside a kept Look writes nothing: it can be a 4.0 pick half delivered', async () => {
+  const sync = { version: 2, courses: { ...G.GZ_DEFAULTS.courses, looks: { _2_1: 'Terminal' } }, courseLooks: { _2_1: K1, _3_1: K2 } };
+  const w = worker4(sync);
+  await w.settle();
+  assert.deepEqual(w.writes, []);
+  assert.deepEqual([sync.courses.looks, sync.courseLooks], [{ _2_1: 'Terminal' }, { _2_1: K1, _3_1: K2 }]);
+});
+
+test('a 4.0 device\'s pick of a kept Look over a built-in survives its keys arriving one at a time, a worker start between', async () => {
+  const sync = structuredClone(G.GZ_SANITIZE({ courses: { looks: { _2_1: 'Terminal' } } }));
+  const mine = pick4(sync, '_2_1', K1);
+  sync.courseLooks = structuredClone(mine.courseLooks); // courseLooks first, while this device's worker is off
+  const w = worker4(sync); // it starts
+  await w.settle();
+  w.arrive((x) => { x.courses = structuredClone(mine.courses); }); // then courses, the built-in gone
+  await w.settle();
+  assert.deepEqual(w.writes, []);
+  assert.deepEqual(sync.courseLooks, { _2_1: K1 });
+  assert.equal(wears(sync, '_2_1'), K1, 'the 4.0 pick, everywhere');
+});
+
+test('a 4.0 pick of a kept Look landing before the worker gets to a 3.x pick for the course survives, whichever key comes first', async () => {
+  for (const first of ['courseLooks', 'courses']) {
+    const s = G.GZ_SANITIZE({}); pick(s, '_2_1', K2);
+    const sync = structuredClone(s);
+    const w = worker4(sync);
+    await w.settle();
+    w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', 'Terminal')));
+    const mine = pick4(sync, '_2_1', K1);
+    const second = first === 'courses' ? 'courseLooks' : 'courses';
+    w.arrive((x) => { x[first] = structuredClone(mine[first]); }); // all in this turn: the worker hasn't read yet
+    await w.settle();
+    w.arrive((x) => { x[second] = structuredClone(mine[second]); });
+    await w.settle();
+    assert.deepEqual(w.writes, [], `${first} first: no write`);
+    assert.deepEqual(sync.courseLooks, { _2_1: K1 }, `${first} first`);
+    assert.equal(wears(sync, '_2_1'), K1, `${first} first: the 4.0 pick`);
+  }
+});
+
+test('a built-in pick arriving during an older read waits for its own stored snapshot', async () => {
+  const s = G.GZ_SANITIZE({}); pick(s, '_2_1', K1);
+  const sync = structuredClone(s), w = worker4(sync);
+  await w.settle();
+  const get = w.area.get;
+  let started, resume, held = false;
+  const reading = new Promise((resolve) => { started = resolve; });
+  const release = new Promise((resolve) => { resume = resolve; });
+  w.area.get = async (keys) => {
+    const snapshot = await get(keys);
+    if (!held && Array.isArray(keys) && keys.includes('courses') && keys.includes('courseLooks')) {
+      held = true; started(); await release;
+    }
+    return snapshot;
+  };
+  try {
+    w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', 'Terminal')));
+    await reading; // Terminal is in the snapshot; the next pick isn't.
+    w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', 'Library')));
+  } finally { resume(); }
+  await w.settle();
+  assert.deepEqual(sync.courseLooks, {}, 'the newer pick still clears the kept Look');
+  assert.deepEqual(sync.courses.looks, { _2_1: 'Library' });
+  assert.equal(w.writes.length, 1, 'one write, after reading the newer pick');
+  w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', '')));
+  await w.settle();
+  assert.equal(wears(sync, '_2_1'), '', 'Your theme cannot bring the kept Look back');
+});

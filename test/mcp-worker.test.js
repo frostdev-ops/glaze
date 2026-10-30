@@ -420,6 +420,32 @@ test('triggers: worker start, permissions.onAdded, onStartup and onInstalled bri
   await connected(again);
 });
 
+// Finding 2 of the 4.0.0 beta: Settings' state read is a trigger, so opening Settings (or its one ask after a wait on
+// Starting…) connects a helper installed since, with no toggle; a worker that predates the grant still answers restart.
+test('glaze:mcp-config state brings the link to the setting: a helper installed since connects; restart stays restart', async () => {
+  const env = boot();
+  const host = nodeHost(env.w, { missing: true });
+  await until(() => env.store.session.mcpLink?.state === 'not-installed', 'not installed at worker start');
+  host.missing = false;
+  const s = await config(env, { op: 'state' });
+  assert.equal(s.ok, true);
+  assert.equal(s.on, true);
+  await connected(env);
+  assert.equal(host.ports.length, 2, 'one more try, for the state read');
+  assert.equal((await config(env, { op: 'state' })).link.state, 'connected');
+  assert.equal(host.ports.length, 2, 'a connected link is left as it is');
+
+  const old = boot();
+  await until(() => old.store.session.mcpLink?.state === 'restart', 'no connectNative at worker start');
+  assert.equal((await config(old, { op: 'state' })).link.state, 'restart', 'what Settings reads as still waiting for a new worker');
+
+  const off = boot({ store: store0({ on: false }) });
+  const h3 = nodeHost(off.w);
+  assert.equal((await config(off, { op: 'state' })).link.state, 'off');
+  assert.equal(h3.ports.length, 0, 'off starts nothing');
+  assert.equal(inWorker(off.w, 'typeof GZ_AGENT_LINK'), 'undefined', 'nor loads the link');
+});
+
 test('the mods broker loads lib/modtools.js before lib/modbundle.js, with MCP off', async () => {
   const env = boot({ store: store0({ on: false }) });
   assert.deepEqual(await env.w.send({ type: 'glaze:mods', op: 'list' }, EDITOR), { ok: true, mods: [] });

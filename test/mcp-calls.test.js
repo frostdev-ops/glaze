@@ -257,7 +257,7 @@ test('arguments are checked against the listed inputSchema; errors come back as 
   assert.match(text(await io.call('document_read', {})), /missing document/);
   assert.equal(io.runs.length, 0);
   assert.equal(io.asks.length, 0);
-  assert.ok(io.rows.every((x) => x.outcome === 'refused'));
+  assert.ok(io.rows.length && io.rows.every((x) => x.outcome === 'invalid'), 'logged as an invalid request, not a refusal');
 });
 
 test("the scope's argument is resolved and taken out before the tool runs; the rest reach it as they were sent", async () => {

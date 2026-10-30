@@ -1629,13 +1629,30 @@ const pointerToLook = () => (brokerTurn ||= GZ_CARDS.queue())(async () => {
 Promise.resolve().then(pointerToLook).catch(() => {});
 // A course's saved or gallery Look an earlier 4.0 kept in courses.looks moves to courseLooks (lib/looks.js move) whenever the worker
 // starts, before a 3.x device on the same sync account writes it away; one write, none once moved, a refused one tried again.
+// With it, the kept Looks of courses a 3.x device just gave a built-in one go (lib/looks.js picked, clear), courses written only if moved.
+// A pick waits here until the worker gets to it; a change to that course's courseLooks first (a 4.0 pick, newer) drops it.
+const builtinPicks = new Map();
 const moveCourseLooks = () => (brokerTurn ||= GZ_CARDS.queue())(async () => {
+  const pending = [...builtinPicks];
   const s = GZ_SANITIZE(await chrome.storage.sync.get(['courses', 'courseLooks']));
-  if (GZ_CATALOG.move(s)) await chrome.storage.sync.set({ version: 2, courses: s.courses, courseLooks: s.courseLooks });
+  // A pick that arrives during this read needs the next snapshot; a cancelled or replaced one must not use this one.
+  const picks = [];
+  for (const [cid, pick] of pending) if (builtinPicks.get(cid) === pick) {
+    builtinPicks.delete(cid);
+    picks.push([cid, pick.name]);
+  }
+  const moved = GZ_CATALOG.move(s), cleared = GZ_CATALOG.clear(s, picks);
+  if (moved || cleared) await chrome.storage.sync.set({ ...(moved && { version: 2, courses: s.courses }), courseLooks: s.courseLooks });
 });
 Promise.resolve().then(moveCourseLooks).catch(() => {});
-// And whenever courses change (a restore, a device on an earlier 4.0): none to move writes nothing.
-chrome.storage.onChanged.addListener((c, area) => { if (area === 'sync' && c.courses) moveCourseLooks().catch(() => {}); });
+// And whenever courses change (a restore, a device on an earlier 4.0 or on 3.x): nothing to do writes nothing.
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area !== 'sync') return;
+  if (c.courseLooks) for (const cid of builtinPicks.keys()) if (c.courseLooks.oldValue?.[cid] !== c.courseLooks.newValue?.[cid]) builtinPicks.delete(cid);
+  if (!c.courses) return;
+  for (const [cid, name] of GZ_CATALOG.picked(c.courses.oldValue, c.courses.newValue)) builtinPicks.set(cid, { name });
+  moveCourseLooks().catch(() => {});
+});
 // Once, on the update from 3.3.4: that one list goes under its site, and Ultra's one ten-minute gate for its course list
 // (seenCoursesAt) goes, now that each Ultra site has its own (`seenCoursesAt <origin>`, content-ultra.js record).
 const perSite = async () => {
@@ -2689,7 +2706,9 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const MCP_OFF = { state: 'off', at: null };
 const mcpConfig = async (m) => {
   const local = chrome.storage.local;
-  if (m.op === 'state') return { ok: true, on: await mcpOn(), link: mcpLink?.status() ?? MCP_OFF };
+  // Settings asks as it opens and once after a wait on Starting… (lib/editor-agents.js WAIT); each ask is a trigger, so a
+  // helper installed since connects, and a worker started for the ask connects at its start.
+  if (m.op === 'state') { const link = (await mcpEnsure()) ?? MCP_OFF; return { ok: true, on: await mcpOn(), link }; }
   if (m.op === 'set') {
     if (typeof m.on !== 'boolean') return { ok: false, error: 'args' };
     await mcpConsent(m.on);
