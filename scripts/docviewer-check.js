@@ -185,11 +185,26 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     await f.evaluate(() => { const p = document.getElementById('page-1'); p.replaceChildren(...[...p.children].filter((c) => !c.matches('.gz-ink')).map((c) => c.cloneNode(true))); });
     await f.waitForFunction(() => document.querySelector('#page-1 > svg.gz-ink path'), null, { polling: 50, timeout: 5000 }).catch(() => {});
     ok(await f.locator('#page-1 > svg.gz-ink path').count() === 1, 'a page drawn again gets its layer and marks back');
-    // Zoom: the page doubles in width; the layer follows, the stroke keeps its place in page units.
-    await f.evaluate(() => { document.getElementById('page-1').style.width = '1224px'; });
-    await page.waitForTimeout(300);
-    const vb = await f.locator('#page-1 > svg.gz-ink').getAttribute('viewBox');
-    ok(/^0 0 1000 \d+$/.test(vb), `viewBox in page units at any zoom: ${vb}`);
+    // Zoom: the viewer scales the page and its picture together, here to twice the size with no redraw. A mark drawn at a
+    // known spot stays on the same spot of the page's picture.
+    await bar.locator('button[aria-label="Pen"]').click();
+    await f.locator('#page-1').evaluate((p) => p.scrollIntoView());
+    const cb = await f.locator('#page-1 canvas').boundingBox();
+    await page.mouse.move(cb.x + 150, cb.y + 120); await page.mouse.down(); await page.mouse.move(cb.x + 350, cb.y + 120, { steps: 8 }); await page.mouse.up();
+    await page.keyboard.press('Escape');
+    // The newest stroke's middle line, as fractions of the page's picture.
+    const onPicture = () => f.evaluate(() => {
+      const pg = document.getElementById('page-1'), c = pg.querySelector('canvas').getBoundingClientRect();
+      const s = [...pg.querySelectorAll(':scope > svg.gz-ink path')].pop()?.getBoundingClientRect();
+      return s && { x0: (s.left - c.left) / c.width, x1: (s.right - c.left) / c.width, y: (s.top + s.height / 2 - c.top) / c.height, w: c.width, h: c.height };
+    });
+    const before = await onPicture();
+    ok(before && Math.abs(before.x0 * before.w - 150) < 2 && Math.abs(before.x1 * before.w - 350) < 2 && Math.abs(before.y * before.h - 120) < 2, `a stroke sits where it was drawn: ${JSON.stringify(before)}`);
+    await f.evaluate(() => { const p = document.getElementById('page-1'); p.style.width = '1224px'; Object.assign(p.querySelector('canvas').style, { width: '1224px', height: '1584px' }); });
+    const offBy = (a) => a && Math.max(Math.abs(a.x0 - before.x0) * a.w, Math.abs(a.x1 - before.x1) * a.w, Math.abs(a.y - before.y) * a.h);
+    let zoomed;
+    for (const end = Date.now() + 5000; ; await new Promise((r) => setTimeout(r, 50))) { zoomed = await onPicture(); if (zoomed?.w === 1224 && offBy(zoomed) < 1 || Date.now() > end) break; }
+    ok(zoomed?.w === 1224 && offBy(zoomed) < 1, `zoom: the stroke stays on its spot of the page (${offBy(zoomed)?.toFixed(1)} px off at ${zoomed?.w}x${zoomed?.h})`);
     // Rotation: a click on the rotate button turns the frame a quarter turn.
     await f.locator('button[aria-label="Rotate Page Clockwise By 90 Degrees"]').click();
     await f.waitForFunction(() => /^matrix\(0,1,-1,0,/.test(document.querySelector('#page-1 > svg.gz-ink g')?.getAttribute('transform')), null, { polling: 50, timeout: 5000 }).catch(() => {});
