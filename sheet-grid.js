@@ -683,9 +683,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
           const d = dirtyAll || foreign ? null : new Set(dirty), patch = nextPatch, pend = nextVersion;
           dirty.clear(); dirtyAll = false; nextPatch = {}; nextVersion = null;
           if (foreign) sigs = new Map([...sigs.keys()].map((n) => [n, 'stale']));
-          let version = pend ? await pend : null;
-          if (!version && (fresh || Date.now() - lastVersion >= EVERY)) version = { reason: fresh ? 'start' : 'auto', gz: await SD.pack(wb), cells: SD.measure(wb).cells };
+          let version = null;
           try {
+            version = pend ? await pend : null;
+            if (!version && (fresh || Date.now() - lastVersion >= EVERY)) version = { reason: fresh ? 'start' : 'auto', gz: await SD.pack(wb), cells: SD.measure(wb).cells };
             const out = await SD.write(papers, key, wb, sigs, { base: rec?.revision || 0, dirty: d, version, patch: { ...(fresh && !patch.title && { title: '', named: false }), ...patch }, show: shown0() });
             sigs = out.sigs;
             if (out.saved) { rec = out.saved.paper; lastVersion = rec.lastVersion || lastVersion; }
