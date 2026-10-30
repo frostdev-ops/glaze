@@ -487,3 +487,12 @@ test('final subtraction cancellation follows binary magnitude and excludes a par
     ['1.333+1.225-1.333-1.225', 0],
   ]);
 });
+
+test('lib.used: a range of more than 4,096 rows or columns reads to the sheet\'s last used cell', () => {
+  C.define('TESTUSED', { p: ['r'], min: 1, max: 1, fn: ([ref], ctx) => C.lib.used(ref, ctx).map((k, i) => k - (i ? ref.c0 : ref.r0) + 1).join('x') });
+  const e = book({ C5: 1, E3: 2 });
+  cases(e, [
+    ['TESTUSED(A1:B2)', '2x2'], ['TESTUSED(A1:A4096)', '4096x1'], ['TESTUSED(A1:A4097)', '5x1'], ['TESTUSED(A:A)', '5x1'],
+    ['TESTUSED(1:1)', '1x5'], ['TESTUSED(A:XFD)', '5x5'], ['TESTUSED(Z10:Z5000)', '1x1'], ['TESTUSED(B2:F5000)', '4x4'],
+  ]);
+});
