@@ -18,8 +18,10 @@
 //   needs-permission  nativeMessaging isn't granted
 //   restart           granted after this worker started, so it has no connectNative; the next worker start connects
 //   not-installed     no helper for this browser (on Safari, an app without the agent bridge)  ┐
-//   forbidden         the helper's manifest doesn't allow this extension                       ├ tried again on a trigger
-//   old-helper        the helper's hello has another version, or a frame doesn't fit           ┘
+//   forbidden         the helper's manifest doesn't allow this extension                       │
+//   old-helper        the helper's hello has another version, or a frame doesn't fit           ├ tried again on a trigger
+//   no-node           the helper's launcher has no Node.js to run it: instead of a hello it    │
+//                     said {t:'error',why:'no-node'} (mcp/lib/launcher.js) and exited          ┘
 //   exited            the helper left: tried again after 1 s, doubling to 60 s, from 1 s again after 5 minutes connected
 //   connecting        waiting up to 30 s for the helper's hello; a retry keeps showing the last answer instead
 //   connected
@@ -40,9 +42,10 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
   const F = typeof GZ_AGENT_FRAMES !== 'undefined' ? GZ_AGENT_FRAMES : require('./agent-frames.js');
   const HOST = 'io.frostdev.glaze_mcp', SAFARI = 'io.frostdev.Glaze';
   const KEY = 'mcpLink', INSTANCE = 'mcpInstance', SETTING = 'mcp';
-  const STATES = ['off', 'needs-permission', 'restart', 'not-installed', 'forbidden', 'exited', 'connecting', 'connected', 'old-helper'];
+  const STATES = ['off', 'needs-permission', 'restart', 'not-installed', 'forbidden', 'exited', 'connecting', 'connected', 'old-helper', 'no-node'];
+  const NO_NODE = 'no-node';
   // Tries from these keep showing them until they have an answer; the live ones keep Safari's worker up.
-  const RETRYING = new Set(['not-installed', 'forbidden', 'old-helper', 'exited']), LIVE = new Set(['connecting', 'connected', 'exited']);
+  const RETRYING = new Set(['not-installed', 'forbidden', 'old-helper', 'exited', NO_NODE]), LIVE = new Set(['connecting', 'connected', 'exited']);
   const FIRST = 1e3, LAST = 60e3, SETTLED = 5 * 60e3, HELLO = 30e3, DRAIN = 1e3, ERROR_MAX = 200;
   // The browsers' own words as a native port closes: Chromium's, as the spike recorded them (progress.md, 2026-10-29), and
   // Firefox's, which says the same for a missing manifest and for one that doesn't list Glaze (NativeMessaging.sys.mjs).
@@ -170,7 +173,7 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
       for (const c of open) call('close', c, why);
     };
     // The far side ended it (or never answered): the state from what was said, and for exited a retry after the backoff.
-    const ended = (error, state = (typeof error === 'string' && SAID.get(error)) || 'exited') => {
+    const ended = (error, state = (!hello && hostError === NO_NODE && NO_NODE) || (typeof error === 'string' && SAID.get(error)) || 'exited') => {
       const lasted = !!hello && now() - since >= SETTLED, why = hostError || error;
       teardown('gone');
       if (state === 'exited') {
@@ -185,6 +188,7 @@ var GZ_AGENT_LINK = globalThis.GZ_AGENT_LINK || (() => {
     // for one the worker closed may still be on their way).
     const take = (f) => {
       if (!hello) {
+        if (F.valid.toWorker(f) && f.t === 'error' && f.why === NO_NODE) { hostError = f.why; return; }
         if (isObj(f) && f.t === 'hello' && f.v !== 1) return mismatch('version');
         if (!F.valid.toWorker(f) || f.t !== 'hello') return mismatch('frame');
         hello = f;

@@ -2,7 +2,9 @@
 // <data>/<version>, keeping the version it replaces, and writes one launcher and one host manifest per browser that is
 // present. On Windows the manifests sit beside the launchers and a key under HKCU points at each; keys go through
 // run('…\System32\reg.exe', argv), never a shell. ensure({ ifNeeded: true }) is the same code, writing only what
-// differs: a moved node or a new version rewrites the launchers, and nothing else is touched. Uninstall removes only
+// differs: a moved node or a new version rewrites the launchers, and nothing else is touched; with keepNewer it also
+// leaves launchers that run a newer copy alone (Claude Desktop's bundle after an npx setup). node: null writes
+// launchers that say there is no node (launcher.js). Uninstall removes only
 // manifests and keys with our host name whose path points into our folder (of a key that holds more, only our value),
 // our launchers and our copies.
 'use strict';
@@ -14,6 +16,7 @@ const { execFile } = require('node:child_process');
 const B = require('./browsers.js');
 const IDS = require('./ids.js');
 const L = require('./launcher.js');
+const N = require('./nodes.js');
 
 const PKG = path.join(__dirname, '..');
 const DESCRIPTION = 'Lets AI apps on this computer use Glaze.';
@@ -33,19 +36,11 @@ const usage = (message) => Object.assign(new Error(message), { code: 'USAGE' });
 const context = (o = {}) => {
   const platform = o.platform || process.platform;
   const env = o.env || { ...process.env, HOME: process.env.HOME || os.homedir() };
-  return { platform, env, node: o.node || stableNode(process.execPath, platform, env), src: o.src || PKG, run: o.run || runFile, tmp: o.tmp || os.tmpdir(), ...B.folder(platform, env) };
+  // By default this node, unless it is Claude's own runtime, which a browser can't start (nodes.js).
+  const node = o.node !== undefined ? o.node : N.claude() ? null : stableNode(process.execPath, platform, env);
+  return { platform, env, node, src: o.src || PKG, run: o.run || runFile, tmp: o.tmp || os.tmpdir(), ...B.folder(platform, env) };
 };
-// This node, named by the first PATH entry that leads to the same file: Homebrew's own path (…/Cellar/node/<version>)
-// goes away at the next upgrade, its /opt/homebrew/bin/node doesn't.
-const stableNode = (exe, platform, env) => {
-  const want = real(exe);
-  for (const dir of String(env.PATH || env.Path || '').split(platform === 'win32' ? ';' : ':')) {
-    if (!dir || !path.isAbsolute(dir)) continue;
-    const c = path.join(dir, platform === 'win32' ? 'node.exe' : 'node');
-    if (fs.existsSync(c) && real(c) === want) return c;
-  }
-  return exe;
-};
+const stableNode = N.stable;
 
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 const readText = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
@@ -199,11 +194,25 @@ const launchers = (ctx) => {
     return VERSION.test(v) && equalPath(ctx, l.script, path.join(ctx.root, v, SCRIPT)) && versionOf(path.join(ctx.root, v)) === v;
   });
 };
-const newest = (a, b) => {
-  const n = (v) => v.split(/[.-]/).slice(0, 3).map(Number);
-  const x = n(a), y = n(b);
-  return y[0] - x[0] || y[1] - x[1] || y[2] - x[2] || (a < b ? 1 : -1);
+const triple = (v) => v.split(/[.-]/).slice(0, 3).map(Number);
+const newer = (a, b) => {
+  const x = triple(a), y = triple(b);
+  const core = x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+  if (core) return core;
+  const pre = (v) => (v.includes('-') ? v.slice(v.indexOf('-') + 1).split('.') : []);
+  const p = pre(a), q = pre(b);
+  if (!p.length || !q.length) return +!p.length - +!q.length;
+  for (let i = 0; i < Math.max(p.length, q.length); i++) {
+    if (p[i] === undefined || q[i] === undefined) return p.length - q.length;
+    if (p[i] === q[i]) continue;
+    const pn = /^\d+$/.test(p[i]), qn = /^\d+$/.test(q[i]);
+    if (pn && qn) return BigInt(p[i]) > BigInt(q[i]) ? 1 : -1;
+    if (pn !== qn) return pn ? -1 : 1;
+    return p[i] > q[i] ? 1 : -1;
+  }
+  return 0;
 };
+const newest = (a, b) => newer(b, a);
 // Keeps this version and the one the launchers ran before (else the newest other one).
 const prune = (ctx, version, before) => {
   const others = copies(ctx).filter((v) => v !== version).sort(newest);
@@ -280,6 +289,14 @@ const ensure = async (o = {}) => {
     if (v !== null && !equalPath(ctx, v, manifestPath(ctx, b)) && !all.some((x) => x.keys.includes(k) && equalPath(ctx, v, manifestPath(ctx, x)) && ours(ctx, x, v, readJson(v)))) throw new Error(`refusing registry value we do not own: ${k}`);
   }
   const before = new Set(launchers(ctx).map(({ l }) => path.relative(ctx.root, l.script).split(path.sep)[0]));
+  if (o.keepNewer) {
+    const ahead = [...before].filter((v) => newer(v, version) > 0).sort(newest)[0];
+    if (ahead) return { ...out, newer: ahead };
+    // The bundle's PATH can omit the node an earlier setup found. Recheck it before replacing a working launcher.
+    if (ctx.node === null) ctx.node = await N.find({ platform: ctx.platform, env: ctx.env, run: ctx.run,
+      list: [...new Set(priorLaunchers.map(({ l }) => l.node).filter((n) => n !== null))] });
+  }
+  out.node = ctx.node;
   privateDir(ctx.root);
   privateDir(ctx.hosts);
   out.copied = copy(ctx, version, !force);
