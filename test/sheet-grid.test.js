@@ -172,3 +172,8 @@ test('Sheets\' R1C1 formula as A1 at the cell it lands in', () => {
   assert.equal(G.fromR1C1('SUM(R1C1:R[-1]C)', 9, 1), 'SUM($A$1:B9)');
   assert.equal(G.fromR1C1('R[-10]C', 2, 0), '#REF!');
 });
+
+test('fill text-number series preserves signs across zero in either direction', () => {
+  assert.deepEqual(vals(G.fill([s('Item 0')], 2, { back: true })), ['Item -1', 'Item -2']);
+  assert.deepEqual(vals(G.fill([s('Item -02'), s('Item -01')], 3)), ['Item 00', 'Item 01', 'Item 02']);
+});
