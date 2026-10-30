@@ -3424,17 +3424,32 @@ const openDriveSync = () => {
       // Notes' joins write through their own queue's run; the rest in one turn of the broker's.
       return ['notes', 'noteFolders', 'noteFiles'].includes(cat) ? GZ_DRIVE_STORE.join(cat, key, value, local, notesArea) : turn(() => GZ_DRIVE_STORE.join(cat, key, value, local, notesArea));
     },
-    // The daily snapshot: Back up…'s zip as Settings makes it (background/backup.js pack), its Settings, tasks, pet, records and
-    // documents with their files. Notes and share keys stay in Settings' own Back up… for now.
+    // The daily snapshot: Back up…'s zip as Settings makes it (background/backup.js pack), its Settings with the hidden course
+    // folders, tasks, pet, records, every Notes account and documents with their files. Never share keys (the owner's call:
+    // they stay out of Drive; Settings' own Back up… carries them behind its warning).
     snapshot: async () => {
       brokerIn('backup');
       const all = await chrome.storage.local.get(null), raw = await chrome.storage.sync.get(null);
       const tasks = Object.fromEntries(Object.entries(all).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
       const pets = GZ_PET.backup(Object.fromEntries(Object.entries(all).filter(([k]) => GZ_PET.KEY.test(k)))) || {};
       const s0 = GZ_SANITIZE(raw);
-      const settings = { ...s0, nav: { ...s0.nav, i: '', li: '' }, navbar: { ...s0.navbar, ...(s0.navbar?.brand === 'custom' && { brand: 'glaze' }) },
+      const settings = { ...s0, nav: { ...s0.nav, i: '', li: '', ...(s0.nav?.li && { brand: 'glaze' }), ...(s0.nav?.i && { k: 'default', u: '' }) }, navbar: { ...s0.navbar, ...(s0.navbar?.brand === 'custom' && { brand: 'glaze' }) },
         ...Object.fromEntries(['cards', 'links', 'ucards', 'ulinks', 'navItems', 'navbarItems'].filter((k) => raw[k] !== undefined).map((k) => [k, raw[k]])),
-        favorites: GZ_HISTORY.favorites(all.lookFavorites) };
+        folders: GZ_FOLDERS.backup(all), favorites: GZ_HISTORY.favorites(all.lookFavorites) };
+      // Each Notes account read as Back up… reads it (background/backup.js notesOut), here through Notes' own run in the broker's
+      // queue rather than the sessions handler, which would bring its share keys along.
+      const notesSend = (op, m) => turn(async () => {
+        if (op === 'backupNotes') {
+          const idx = GZ_NOTES.clean((await chrome.storage.local.get(m.key))[m.key]);
+          return { ok: true, data: { site: new URL(m.key.slice(9)).origin, folders: GZ_NOTES.folderList(idx).map(([id, f]) => ({ id, ...f })), notes: GZ_NOTES.list(idx).map(([id, n]) => ({ id, ...n })), files: [] } };
+        }
+        const r = await GZ_NOTES.run({ key: m.key, op: op === 'notesRead' ? 'load' : 'getFile', id: m.id }, { local: brokerArea('local') }, NOTES_DB);
+        // Gone since it was listed: read again on the next run. A body Notes can't find: no snapshot today.
+        if (!r?.ok) throw Object.assign(new Error(r?.error || 'notes'), { why: r?.error === 'gone' ? 'changed' : r?.error === 'big' ? 'big' : 'bad' });
+        return r;
+      });
+      const notes = [];
+      for (const account of Object.keys(all).filter((k) => GZ_BACKUP.ACCOUNT.test(k))) notes.push({ account, entries: await GZ_BACKUP.notesOut(account, notesSend) });
       // Files past one upload (documents/drive.js put: GZ_DOC_KINDS.FILE * 4 bytes) make no snapshot, and are never read for one.
       let total = 0;
       try {
@@ -3442,7 +3457,7 @@ const openDriveSync = () => {
           if ((total += ref.size) > GZ_DOC_KINDS.FILE * 4) throw Object.assign(new Error('big'), { why: 'big' });
           return fileBytes(ref).then((b) => { if (!b) throw Object.assign(new Error('missing'), { why: 'missing' }); return b; });
         });
-        const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, version: chrome.runtime.getManifest().version, files });
+        const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, notes, version: chrome.runtime.getManifest().version, files });
         return { name: GZ_BACKUP.fileName(), bytes: new Uint8Array(await new Blob(GZ_ZIP.zip(entries)).arrayBuffer()) };
       } catch (e) { if (e?.why === 'big') return null; throw e; }
     },

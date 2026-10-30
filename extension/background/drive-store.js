@@ -490,7 +490,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // (larger than one upload) waits for tomorrow, never failing the run or being built again on every run.
       const skip = async (e) => { if (e) console.warn('Sync to Google Drive: no snapshot today', e?.why || e); await ctx.state({ snap: now() }); };
       let made;
-      try { made = await env.snapshot(); } catch (e) { return skip(e); }
+      // A note saved while it was read (background/backup.js notesOut 'changed'): the next run tries again.
+      try { made = await env.snapshot(); } catch (e) { if (e?.why === 'changed') return; return skip(e); }
       if (!made) return skip();
       const backups = await sub(ctx, 'backups', 'Backups');
       const r = await ctx.D((c) => c.find(`'${backups}' in parents and appProperties has { key='glaze' and value='snapshot' } and trashed=false`, { fields: 'id,name,trashed,appProperties,version', pageSize: 100 }));
