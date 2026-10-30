@@ -17,7 +17,9 @@
 //   changed here only: pushed (the kind's file first, then its copy). Changed in Drive only: taken (papers.save).
 //   Changed on both sides: both kept, nothing overwritten unseen. This device's stays current; Drive's becomes a version in
 //     writerVersions (a paper, a deck, a spreadsheet's packed workbook), or, for a PDF (one copy, no versions), a document
-//     of its own named "<title> (Drive copy)"; then this device's is pushed.
+//     of its own named "<title> (Drive copy)" (so is one too big to be a version); then this device's is pushed.
+//   Met for the first time on both (a second device joining): as Restore, the later edited (updated) stays current and the
+//     other is kept beside it as above. Two copies of one document (first syncs that overlapped): the lowest id is kept.
 //   A .docx or .xlsx edited outside Glaze is never overwritten: it stays in Drive as it is (glaze: 'kept') and Glaze writes
 //     a new file beside it. A .pdf or .pptx edited outside Glaze is the document's new content, as a change in Drive.
 //   Trash: a document trashed or restored in Glaze moves its two files into or out of Drive's trash; a file trashed or

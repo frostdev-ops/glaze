@@ -1,5 +1,5 @@
 // Sync to Google Drive, beyond Documents: Glaze's own data kept in the Glaze folder's Data folder, one file a record, and a
-// daily snapshot (the Back up… zip) in its Backups folder, the newest 5 kept. Run by documents/drive-sync.js (its more hooks:
+// daily snapshot (the Back up… zip) in its Backups folder, one a day, the newest 5 kept. Run by documents/drive-sync.js (its more hooks:
 // the same runs, page token, account, locks and backoff) in the worker. A record is one stored key of what Back up… covers
 // (background/backup.js): every Settings key (storage.sync), and on this device (storage.local) Better To Do's tasks and the
 // pet, dashboard notes, class schedules, GPA past terms, widgets, Looks history and favorites, the personal dictionary and
@@ -13,13 +13,14 @@
 // the file stays). appProperties { glaze: 'rec', cat, key: h (32 hex of the SHA-256 of area and key), sum, at }. sum: the
 // SHA-256 of { area, key, value | deleted }, as with documents: each side's change is told by content, Glaze's own uploads
 // come back as no news. at: when it changed on the device that wrote it (this device's stamps: storage.local
-// driveSyncStamps, set by the worker as each key changes).
+// driveSyncStamps, set by the worker as each key changes, on or off while bound to an account, and let go once synced).
 // The rules: changed on one side, that side's goes to the other. Changed on both: the later change wins (last writer, by
 // at), per key, Settings key by key. First meeting (a second device connecting, or Sync turned on again): a key on one side
 // only is taken by the other; on both, the same is linked, Settings take the later change, and every other record is
 // joined by Restore's own rules (background/backup.js apply: newer dashboard note, each class and term by its time, words
-// and favorites together…), so a device's own data is never wiped by connecting. A deleted key is a tombstone that deletes
-// it on the other side; a tombstone never deletes a record met for the first time.
+// and favorites together, every task either Better To Do list has…), so a device's own data is never wiped by connecting.
+// Two files for one record (first syncs that overlapped): every device keeps the lowest id, met as a first meeting. A
+// deleted key is a tombstone that deletes it on the other side; a tombstone never deletes a record met for the first time.
 // State: driveSyncRec:<h> { area, key, cat, id, lsum, rsum, at, seen } and driveSyncFile:<id> 'r:<h>'; the folders and the
 // last snapshot on driveSync (data, backups, snap).
 // Classic script for the worker; module.exports for node.
