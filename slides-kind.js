@@ -256,15 +256,15 @@
     const notesB = btn({ id: 'gs-notes', class: 'gs-btn gs-label', 'aria-pressed': String(notesOpen) }, t('Notes'));
     const presentB = btn({ id: 'gs-present', class: 'gs-btn gs-label gs-go' }, icon('present'), h('span', { text: t('Present') }));
     const moreB = btn({ class: 'gs-btn gs-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': t('More'), title: t('More') }, icon('dots'));
-    const canvasEl = h('div', { id: 'gs-canvas', class: 'gs-canvas', tabindex: '-1' });
+    const canvasEl = h('div', { id: 'gs-canvas', class: 'gs-canvas', role: 'tabpanel', tabindex: '0' });
     const notesEl = h('section', { id: 'gs-notes-pane', class: 'gs-notes', 'aria-label': t('Notes'), hidden: !notesOpen });
-    const list = h('ol', { class: 'gs-rail-list' });
+    const list = h('ol', { class: 'gs-rail-list', role: 'tablist', 'aria-label': t('Slides'), 'aria-orientation': 'vertical' });
     const railEl = h('nav', { id: 'gs-rail', class: 'gs-rail', 'aria-label': t('Slides') }, list);
     const rail = (deck?.slides || []).map((s, i) => {
       const name = t('Slide {n}', { n: i + 1 });
-      const b = btn({ class: 'gs-rail-b', 'data-slide': String(i), 'data-hidden': s.hidden, 'aria-label': s.hidden ? `${name} (${t('Hidden')})` : name, onclick: () => show(i) },
+      const b = btn({ class: 'gs-rail-b', role: 'tab', id: `gs-tab-${i}`, tabindex: '-1', 'aria-controls': 'gs-canvas', 'data-slide': String(i), 'data-hidden': s.hidden, 'aria-label': s.hidden ? `${name} (${t('Hidden')})` : name, onclick: () => show(i) },
         h('span', { class: 'gs-rail-n', text: String(i + 1) }), h('span', { class: 'gs-rail-pic' }));
-      list.append(h('li', {}, b));
+      list.append(h('li', { role: 'presentation' }, b));
       return b;
     });
     const view = h('div', { class: 'gp gp-standalone gs-view' },
@@ -300,7 +300,12 @@
       prevB.disabled = cur === 0;
       nextB.disabled = cur === n - 1;
       zoomB.textContent = zoom === 'fit' ? t('Fit') : `${Math.round(zoom * 100)}%`;
-      for (const [i, b] of rail.entries()) b.setAttribute('aria-current', String(i === cur));
+      for (const [i, b] of rail.entries()) {
+        b.setAttribute('aria-current', String(i === cur));
+        b.setAttribute('aria-selected', String(i === cur));
+        b.tabIndex = i === cur ? 0 : -1;
+      }
+      canvasEl.setAttribute('aria-labelledby', `gs-tab-${cur}`);
       rail[cur]?.scrollIntoView({ block: 'nearest' });
       findN.textContent = !term ? '' : hits.length ? t('{n} of {m}', { n: hit + 1, m: hits.length }) : t('No results');
       const x = hits[hit];
@@ -329,6 +334,15 @@
       }
     }, { root: railEl, rootMargin: '100% 0px' });
     for (const b of rail) near.observe(b);
+
+    railEl.addEventListener('keydown', (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const to = { ArrowDown: cur + 1, ArrowRight: cur + 1, ArrowUp: cur - 1, ArrowLeft: cur - 1, Home: 0, End: n - 1 }[e.key];
+      if (to === undefined) return;
+      e.preventDefault(); e.stopPropagation();
+      show(to);
+      rail[cur]?.focus({ preventScroll: true });
+    });
 
     // ---- zoom: Fit, or the next step either way from what shows
     const step = (dir) => {
