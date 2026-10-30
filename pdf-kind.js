@@ -33,7 +33,14 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     // bytes → the record's fields for them.
     put: (bytes) => { if (!(bytes?.length > 0) || bytes.length > STORE.max) throw new RangeError(TOO_BIG); return { file: b64(bytes), size: bytes.length }; },
     // a record → its bytes, or null.
-    get: (rec) => (typeof rec?.file === 'string' && rec.file ? unb64(rec.file) : null),
+    get: (rec) => {
+      if (typeof rec?.file !== 'string' || !rec.file || rec.file.length > 4 * Math.ceil(STORE.max / 3)
+        || (rec.size != null && (!Number.isSafeInteger(rec.size) || rec.size <= 0 || rec.size > STORE.max))) return null;
+      try {
+        const bytes = unb64(rec.file);
+        return bytes.length > 0 && bytes.length <= STORE.max && (rec.size == null || rec.size === bytes.length) ? bytes : null;
+      } catch { return null; }
+    },
   };
 
   // A form only XFA can draw (XFA, and no AcroForm fields to fall back on): pdf.js shows its "needs Adobe Reader" page.
