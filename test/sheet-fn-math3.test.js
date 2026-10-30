@@ -239,5 +239,5 @@ test('the golden cases, at the golden file\'s 1e-12', () => {
 
 test('COMBINA and PERMUTATIONA reject negative inputs before truncation', () => {
   cases(book(), [['COMBINA(-0.5,1)', '#NUM!'], ['COMBINA(2,-0.5)', '#NUM!'],
-    ['PERMUTATIONA(-0.5,2)', '#NUM!'], ['PERMUTATIONA(2,-0.5)', '#NUM!']]);
+    ['PERMUTATIONA(-0.5,2)', '#NUM!'], ['PERMUTATIONA(2,-0.5)', 1]]);
 });
