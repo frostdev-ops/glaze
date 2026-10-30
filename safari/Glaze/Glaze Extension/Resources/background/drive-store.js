@@ -87,7 +87,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     if (!out?.ok) throw new Fail('stale');
   };
 
-  // env: { area(name) → storage.local or storage.sync (get, set, remove, keys), store (storage.local: this layer's state),
+  // env: { area(name) → storage.local or storage.sync (get, set, remove, keys, replace(key, expected, value): atomic CAS), store (storage.local: this layer's state),
   // hash(text), now, snapshot() → { name, bytes } or null; clean and join (above) by default }
   const create = (env) => {
     const now = env.now || Date.now, S = env.store;
@@ -131,8 +131,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     };
 
     const fetchRec = async (ctx, R, h) => {
+      const bytes = await ctx.D((c) => c.media(R.id, MAX));
       let j;
-      try { j = JSON.parse(new TextDecoder().decode(await ctx.D((c) => c.media(R.id, MAX)))); } catch (e) { throw e instanceof Fail || e?.why === 'size' ? e : new Fail('bad'); }
+      try { j = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new Fail('bad'); }
       if (j?.glaze !== 'record' || j.v !== 1 || !['local', 'sync'].includes(j.area) || catOf(j.area, j.key) !== j.cat || (await hk(j.area, j.key)) !== h
         || !Number.isFinite(j.at) || (j.deleted !== true && j.value === undefined)) throw new Fail('bad');
       const value = j.deleted === true ? undefined : (env.clean || clean)(j.cat, j.key, j.value);
@@ -140,15 +141,15 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       return { area: j.area, key: j.key, cat: j.cat, at: j.at, value, sum: R.appProperties?.sum };
     };
     // Drive's value here: written (or removed, for a tombstone) as this layer's own, at its time.
-    const take = async (h, got, R, was) => {
+    const take = async (h, got, R, was, expected) => {
       const a = env.area(got.area), id = `${got.area}:${got.key}`;
       applying.set(id, canon(got.value ?? null));
       try {
-        if (got.value === undefined) await a.remove(got.key); else await a.set({ [got.key]: got.value });
+        if (!await a.replace(got.key, expected, got.value)) throw new Fail('stale');
       } catch (e) { applying.delete(id); throw e; }
-      const here = await valueOf(got.area, got.key);
       await restamp({ [id]: got.at });
-      await put(h, { area: got.area, key: got.key, cat: got.cat, id: R.id, lsum: await sumOf(got.area, got.key, here), rsum: got.sum, at: got.at, seen: got.at }, was);
+      // A later local write is still dirty even if it lands before the sync bookkeeping finishes.
+      await put(h, { area: got.area, key: got.key, cat: got.cat, id: R.id, lsum: await sumOf(got.area, got.key, got.value), rsum: got.sum, at: got.at, seen: got.at }, was);
     };
     // This device's value up, at its time (or a tombstone once it is gone).
     const push = async (ctx, h, area, key, cat, was, at) => {
@@ -181,10 +182,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (!R || R.removed) { if (value !== undefined) await push(ctx, h, area, key, cat, null, at || now()); return; }
         const got = await fetchRec(ctx, R, h);
         if (got.sum === lsum) return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
-        if (value === undefined) { if (got.value !== undefined) await take(h, got, R, null); else await put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: got.at }, null); return; }
+        if (value === undefined) { if (got.value !== undefined) await take(h, got, R, null, value); else await put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: got.at }, null); return; }
         if (got.value === undefined) return push(ctx, h, area, key, cat, { id: R.id }, Math.max(at, got.at + 1) || now());
         // First meeting, both hold it: Settings by time; the rest joined as Restore joins.
-        if (cat === 'settings') { if (got.at > at) return take(h, got, R, null); return push(ctx, h, area, key, cat, { id: R.id }, at || now()); }
+        if (cat === 'settings') { if (got.at > at) return take(h, got, R, null, value); return push(ctx, h, area, key, cat, { id: R.id }, at || now()); }
         applying.delete(`${area}:${key}`);
         await (env.join || ((c, k, v) => join(c, k, v, env.area('local'))))(cat, key, got.value);
         return push(ctx, h, area, key, cat, { id: R.id }, now());
@@ -194,7 +195,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (!ldirty && !rdirty) { if (at > (was.seen || 0)) await put(h, { ...was, seen: at }, was); return; }
       if (rdirty) {
         const got = await fetchRec(ctx, R, h);
-        if (!ldirty || got.at >= (at || 0)) return take(h, got, R, was);
+        if (!ldirty || got.at >= (at || 0)) return take(h, got, R, was, value);
       }
       return push(ctx, h, area, key, cat, was, at || now());
     };
@@ -263,7 +264,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         const cut = id.indexOf(':'), area = id.slice(0, cut), key = id.slice(cut + 1);
         if (!catOf(area, key)) continue;
         const h = await hk(area, key), was = await recOf(h);
-        if (was && (was.seen || 0) >= at) continue;
+        // Times can tie, or a remote device's clock can be ahead of this one. Only unchanged content is settled.
+        if (was && (was.seen || 0) >= at && await sumOf(area, key, await valueOf(area, key)) === was.lsum) continue;
         await each(ctx, h, { area, key });
       }
       await snapshot(ctx);
