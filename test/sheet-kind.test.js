@@ -814,6 +814,7 @@ test('more than 32 charts keep an exact count and prioritize markers that reach 
     const box = k.thumb(rec);
     assert.equal(box.children.filter((e) => e.className === 'gx-th-chart').length, 1, 'chart 40 reaches the card');
     assert.equal(badgeCount(box), 39);
+    assert.equal(badgeCount(k.thumb({ ...rec, chartCount: undefined, charts: SD.charts(wb).slice(0, 32) })), 40, 'old capped summaries recover their total from the drawing');
     const { DK } = load({ sheets: true }, { local: s, GZ_SHEET_DATA: SD });
     await DK.settled();
     const copy = await DK.get('sheet').copy(rec);
