@@ -14,7 +14,8 @@
 // Attach from Documents: the student's documents of any kind (writer-paper.js pick), each exported by its kind's file()
 // as it's picked (progress in its row), named Lastname_Title as the attempt's own file is, listed with its size and
 // removable; up to 10, each at most Blackboard's 50 MB; the page hands each in after the attempt's own file, the note
-// naming them and the 'sending' version keeping them (attached). add({ name, mime, bytes }) lists a file from elsewhere.
+// naming them and the 'sending' version keeping them (attached). Exports are staged in the file store (its orphan-file
+// grace covers the open sheet), then transferred to the page one at a time. add({ name, mime, bytes }) stages an external file.
 // The compact box's ⋯ → Attach from Documents opens the sheet with the files alone: Ultra's text box keeps the paper as
 // the compact box wrote it, the note going after it.
 // frame → page: submit:arm (this paper owns the attempt), submit:held, submit:go { run, name, bytes, note, text, held, keep,
@@ -45,6 +46,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     claimed: 'This attempt is already being submitted or needs review. Use Blackboard editor to continue.',
     large: 'A file is larger than 50 MB. Nothing was submitted.',
     file: 'A file could not be read. Nothing was submitted.',
+    changed: 'The document changed or was deleted. Remove it and pick it again. Nothing was submitted.',
   };
   // A document of Documents as its file, { name, mime, bytes }: a paper as its .docx (as papers.js exports it), another
   // kind by its own file() (writer-kinds.js loads it), report hearing its progress (lib/doc-kinds.js progress).
@@ -64,7 +66,10 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const k = await globalThis.GZ_WRITER_KINDS?.kind(kind);
     return typeof k?.file === 'function' ? k.file(row.key, { progress: report }) : null;
   };
-  const bufferOf = (b) => (b instanceof ArrayBuffer ? b : b.byteOffset === 0 && b.byteLength === b.buffer.byteLength ? b.buffer : b.slice().buffer);
+  const bufferOf = (b) => (b instanceof ArrayBuffer ? b : b.byteOffset === 0 && b.byteLength === b.buffer.byteLength ? b.buffer : b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
+  const files = async () => { await P().need(['lib/doc-files.js']); return GZ_DOC_FILES.client(); };
+  const record = (key) => (store ||= GZ_WRITER_PAPERS.open()).get(key);
+  const stamp = (p) => p && !GZ_WRITER_PAPERS.trashed(p) ? JSON.stringify([p.key, p.kind || 'paper', p.revision, p.updated, p.title]) : null;
   const h = (tag, props = {}, ...kids) => {
     const e = document.createElement(tag);
     for (const [k, v] of Object.entries(props)) {
@@ -209,10 +214,23 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const ask = () => frame.say({ type: 'submit:held' });
     ask();
 
-    // ---- the attached files: each { name, mime, bytes, size } once ready; making ones hold Submit
+    // ---- the attached files: metadata and a file-store ref once ready; making ones hold Submit
     const list = [];
-    let making = 0;
-    const ready = () => { submit.disabled = mine.busy || making > 0 || (only && !list.some((a) => a.bytes)); if (attachB) attachB.disabled = mine.busy || list.length >= L().MAX_ATTACH; };
+    let making = 0, jobs = Promise.resolve();
+    const alive = (a) => !a.gone && sheet === mine && !mine.cancelled;
+    const unchanged = async (a) => { if (a.doc && stamp(await record(a.doc.key)) !== a.stamp) throw { error: 'changed', file: a.name || a.title }; };
+    const validate = async () => { for (const a of list) await unchanged(a); };
+    const stage = async (a, f) => {
+      const why = L().handInError(f);
+      if (why) throw { error: why, file: a.title };
+      if (!alive(a)) return;
+      const client = await files();
+      if (!alive(a)) return;
+      const ref = await client.put(new Uint8Array(bufferOf(f.bytes)), f.mime);
+      if (!alive(a)) return;
+      a.ref = ref; take(a, f);
+    };
+    const ready = () => { submit.disabled = mine.busy || making > 0 || (only && !list.some((a) => a.ref)); if (attachB) attachB.disabled = mine.busy || list.length >= L().MAX_ATTACH; };
     const row = (label, tagText, kindTag) => {
       const nameEl = h('span', { class: 'gs-name', text: label }), sizeEl = h('small', {});
       const x = h('button', { type: 'button', class: 'gs-att-x', 'aria-label': t('Remove {name}', { name: label }), title: t('Remove') }, '×');
@@ -230,7 +248,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const take = (a, f) => {
       a.name = L().attachName({ surname, title: a.title, fallback: t('Document'), name: f.name, taken: [name, ...list.filter((b) => b !== a && b.name).map((b) => b.name)].filter(Boolean) });
       a.mime = typeof f.mime === 'string' && f.mime ? f.mime : L().mimeOf(a.name) || 'application/octet-stream';
-      a.bytes = f.bytes; a.size = f.bytes.byteLength;
+      a.size = f.bytes.byteLength;
       a.ui.nameEl.textContent = a.name;
       a.ui.el.querySelector('.gs-doc').textContent = L().tag(a.name);
       a.ui.el.querySelector('.gs-doc').dataset.kind = L().tag(a.name).toLowerCase();
@@ -240,39 +258,49 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const refuse = (a, why) => { drop(a, false); err.textContent = why; };
     const room = () => { if (list.length < L().MAX_ATTACH) return true; err.textContent = t('Attach up to {n} documents.', { n: L().MAX_ATTACH }); return false; };
     // A document picked from Documents, exported here.
-    mine.addDoc = async (doc) => {
+    mine.addDoc = (doc) => {
       if (mine.busy || sheet !== mine || !doc?.key || !room()) return;
       err.textContent = '';
-      const title = doc.title || t('Untitled document'), a = { title };
+      const title = doc.title || t('Untitled document'), a = { title, doc };
       const tag = L().tag(`x.${{ paper: 'docx', sheet: 'xlsx', pdf: 'pdf', slides: 'pptx' }[doc.kind || 'paper'] || 'file'}`);
       a.ui = row(title, tag, tag.toLowerCase());
       a.ui.x.addEventListener('click', () => drop(a, true));
       list.push(a);
       making++; ready();
-      try {
+      // Queue descriptors, never exported bytes. Every export is staged before the next one starts.
+      jobs = jobs.then(async () => {
+        if (!alive(a)) return;
+        const p = await record(doc.key);
+        if (!alive(a)) return;
+        a.stamp = stamp(p);
+        if (!a.stamp || (p.kind || 'paper') !== (doc.kind || 'paper') || p.updated !== doc.updated || (p.title || '') !== (doc.title || '')) throw { error: 'changed', file: title };
+        // PDFs and decks have a known stored size: refuse before their kind reads the bytes.
+        if (Math.max(p.size || 0, p.file?.size || 0) > L().MAX_FILE) throw { error: 'large', file: title };
         await P().need(['lib/doc-kinds.js']);
+        if (!alive(a)) return;
         const id = doc.kind || 'paper';
-        const report = GZ_DOC_KINDS.progress((p) => { if (p.end || p.failed || a.gone) return; const w = GZ_DOC_KINDS.said(p, id); if (w) a.ui.sizeEl.textContent = t(...w); }, id === 'pdf' || id === 'slides' ? ['copy'] : ['prepare']);
+        const report = GZ_DOC_KINDS.progress((p) => { if (p.end || p.failed || !alive(a)) return; const w = GZ_DOC_KINDS.said(p, id); if (w) a.ui.sizeEl.textContent = t(...w); }, id === 'pdf' || id === 'slides' ? ['copy'] : ['prepare']);
         let f;
-        try { f = await exportDoc(doc, report); } catch (e) { console.error(e); f = null; }
-        report.end();
-        if (a.gone || sheet !== mine) return;
-        if (!f || !(f.bytes?.byteLength > 0)) { refuse(a, t('{name} could not be made.', { name: title })); return; }
-        if (f.bytes.byteLength > L().MAX_FILE) { refuse(a, t('{name} is larger than 50 MB.', { name: title })); return; }
-        take(a, f);
-      } finally { making--; if (sheet === mine) ready(); }
+        try { f = await exportDoc(doc, report); } finally { report.end(); }
+        if (!alive(a)) return;
+        await unchanged(a);
+        if (!f || !(f.bytes?.byteLength > 0)) throw { error: 'made', file: title };
+        await stage(a, f);
+      }).catch((e) => {
+        if (!alive(a)) return;
+        refuse(a, e?.error === 'large' ? t('{name} is larger than 50 MB.', { name: title }) : e?.error === 'changed' ? `${title}: ${t(SAYS.changed)}` : t('{name} could not be made.', { name: title }));
+      }).finally(() => { making--; if (sheet === mine) ready(); });
     };
-    // A file from elsewhere (a Drive file), { name, mime, bytes }, listed as it is.
+    // An external caller retries after the current file is staged; accepting another buffer would retain both.
     mine.add = (f) => {
-      if (mine.busy || sheet !== mine || !room()) return false;
-      const why = L().handInError({ ...f, bytes: f?.bytes });
+      if (mine.busy || making || sheet !== mine || !room()) return false;
+      const why = L().handInError(f);
       if (why) { err.textContent = why === 'large' ? t('{name} is larger than 50 MB.', { name: String(f?.name || '') }) : t(SAYS.file); return false; }
       const a = { title: String(f.name).replace(/\.[^.]+$/, '') };
       a.ui = row(f.name, L().tag(f.name), L().tag(f.name).toLowerCase());
       a.ui.x.addEventListener('click', () => drop(a, true));
-      list.push(a);
-      take(a, { ...f, bytes: f.bytes instanceof ArrayBuffer ? new Uint8Array(f.bytes) : f.bytes });
-      ready();
+      list.push(a); making++; ready();
+      jobs = jobs.then(() => stage(a, f)).catch(() => { if (alive(a)) refuse(a, t(SAYS.file)); }).finally(() => { making--; if (sheet === mine) ready(); });
       return true;
     };
     attachB?.addEventListener('click', async () => {
@@ -282,8 +310,8 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     });
     // What goes with the run: the files, the note naming them, and what the version keeps.
     const extras = () => {
-      const ok = list.filter((a) => a.bytes), names = ok.map((a) => a.name);
-      return { files: ok.map((a) => ({ name: a.name, mime: a.mime, bytes: bufferOf(a.bytes) })), note: L().noteWith(note.value, names, t('Attached: {names}', { names: names.join(', ') })),
+      const ok = list.filter((a) => a.ref), names = ok.map((a) => a.name);
+      return { files: ok.map((a) => ({ name: a.name, mime: a.mime, size: a.size })), note: L().noteWith(note.value, names, t('Attached: {names}', { names: names.join(', ') })),
         attached: ok.map((a) => ({ name: a.name, size: a.size, mime: a.mime })) };
     };
     ready();
@@ -335,7 +363,20 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const send = (run, m) => new Promise((resolve) => {
       const more = 60000 * (m.files?.length || 0), timer = setTimeout(() => resolve({ ok: false, error: 'page' }), 85000 + more);
       waiting = { run, step: (st) => { if (st === 'attach') submit.textContent = t('Attaching…'); else submit.textContent = t('Submitting…'); }, done: (x) => { clearTimeout(timer); resolve(x); } };
-      frame.say({ type: 'submit:go', run, ...m, until: Date.now() + 80000 + more });
+      mine.supply = async (index) => {
+        try {
+          if (mine.cancelled || sheet !== mine || !same()) throw { error: 'page' };
+          if (index === list.length) { await validate(); return { ok: true }; }
+          const a = list[index];
+          if (!a?.ref) throw { error: 'file' };
+          await unchanged(a);
+          const bytes = bufferOf(await (await files()).get(a.ref));
+          await unchanged(a);
+          if (mine.cancelled || sheet !== mine || !same()) throw { error: 'page' };
+          return { ok: true, bytes };
+        } catch (e) { return { ok: false, error: e?.error || 'file', file: e?.file }; }
+      };
+      frame.say({ type: 'submit:go', run, ...m, stream: true, until: Date.now() + 80000 + more }, m.bytes ? [m.bytes] : []);
     }).finally(() => { if (waiting?.run === run) waiting = null; });
     submit.addEventListener('click', async (e) => {
       if (!e.isTrusted || mine.busy || mine.cancelled || making > 0) return;
@@ -348,6 +389,8 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
       if (remember && !file && !other) globalThis.GZ_WRITER_SETTINGS?.patch((w) => ({ ...w, submit: { ...w.submit, text: paste } })).catch((e) => console.error(e));
       let s = L().start({ text: !!L().delta({ note: x.note, text: text || '' }), asis: !!file });
       try {
+        await validate();
+        if (mine.cancelled || sheet !== mine) throw 'page';
         if (file) {
           // As is: the student's own file, byte for byte; the paper isn't touched.
           if (mine.cancelled || sheet !== mine || P()?.current() !== api || api.key() !== snapshot.key || !L().may(s, 'attach')) throw 'page';
@@ -382,7 +425,10 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         if (mine.cancelled || !same() || !L().may(s, 'attach') || sheet !== mine) throw 'page';
         // A kind's file names its own extension (a spreadsheet with macros: .xlsm): the one sent says it too.
         const ext = /(\.[^./\\]+)$/.exec(String(out.name || ''))?.[1].toLowerCase(), sent = other && ext && L().kindOf(`x${ext}`) === kindId && L().kindOf(name) === kindId ? name.replace(/\.[^.]+$/, ext) : name;
-        const r = await send(run, { key: snapshot.key, name: sent, bytes: out.bytes.slice().buffer, note: x.note, text, files: x.files, ...ultra, kind: kindId, mime: out.mime || L().mimeOf(name), version: sending.version?.id ?? null });
+        const mime = out.mime || L().mimeOf(sent);
+        built = null;
+        const bytes = bufferOf(out.bytes); out = null;
+        const r = await send(run, { key: snapshot.key, name: sent, bytes, note: x.note, text, files: x.files, ...ultra, kind: kindId, mime, version: sending.version?.id ?? null });
         if (mine.cancelled || sheet !== mine) return;
         if (!r.ok) throw r;
         mine.back = null;
@@ -408,6 +454,12 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   frame.handle('submit:step', (m) => { if (waiting && m.run === waiting.run) waiting.step(m.step); });
   frame.handle('submit:held', (m) => { sheet?.held?.(m.text); });
   frame.handle('submit:unavailable', (m) => P()?.current()?.notify?.(m.action === 'save' ? 'Not saved. Try again in a moment.' : 'Nothing was submitted. Try again in a moment.'));
+  frame.handle('submit:file', async (m) => {
+    const mine = sheet;
+    if (!mine?.busy || mine.cancelled || mine.run !== m.run || !Number.isInteger(m.index) || m.index < 0 || !mine.supply) return;
+    const reply = await mine.supply(m.index);
+    if (sheet === mine && mine.busy && !mine.cancelled) frame.say({ type: 'submit:file', run: m.run, index: m.index, ...reply }, reply.bytes ? [reply.bytes] : []);
+  });
   frame.handle('submit:done', (m) => { if (waiting && m.run === waiting.run) waiting.done({ ok: m.ok === true, error: typeof m.error === 'string' ? m.error : 'page', file: m.file, retained: m.retained }); });
   // Ultra's Save and Close: the paper saved first (it attaches nothing), then the page lets Ultra's own go on. A press
   // made as the frame opened waits for the paper; a save the worker hasn't answered in SAVE_WAIT says so, and Ultra's

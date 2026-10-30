@@ -233,12 +233,15 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (running || box.saved || submitted.has(box) || !Number.isSafeInteger(m.run) || m.run <= Math.max(runs.get(box) || 0, cancelled.get(box) || 0)) return fail('busy');
     runs.set(box, m.run);
     // kind: what the frame built (a paper's .docx, a PDF as saved, a deck as brought: writer-kinds.js), named for it.
-    const name = m.name, bytes = m.bytes, key = m.key, asis = m.asis === true, kind = typeof m.kind === 'string' ? m.kind : 'paper';
-    // files: the documents attached beside it ({ name, mime, bytes } each, names unique); alone (no name, no bytes) only
+    const name = m.name, key = m.key, asis = m.asis === true, kind = typeof m.kind === 'string' ? m.kind : 'paper';
+    // files: a manifest ({ name, mime, size }, stream) requested one at a time, or legacy byte payloads; names unique.
+    // alone (no name, no bytes) only
     // from the compact box's sheet, which adds the note after Ultra's text (append).
-    const files = Array.isArray(m.files) ? m.files : [], alone = name == null && bytes == null, append = alone && m.append === true;
+    let bytes = m.bytes;
+    const files = Array.isArray(m.files) ? m.files : [], stream = m.stream === true, alone = name == null && bytes == null, append = alone && m.append === true;
+    const fileError = (f) => stream ? (!f || !L().asIsName(f.name) || typeof f.mime !== 'string' || f.mime.length > 200 || !Number.isSafeInteger(f.size) || f.size <= 0 ? 'file' : f.size > L().MAX_FILE ? 'large' : null) : L().handInError(f) || (!(f.bytes instanceof ArrayBuffer) ? 'file' : null);
     const names = [...(alone ? [] : [name]), ...files.map((f) => f?.name)].map((n) => String(n).toLowerCase());
-    if (files.length > L().MAX_ATTACH || files.some((f) => L().handInError(f) || !(f.bytes instanceof ArrayBuffer)) || new Set(names).size !== names.length || (alone && (!files.length || !append))) return fail(files.some((f) => L().handInError(f) === 'large') ? 'large' : 'page');
+    if (files.length > L().MAX_ATTACH || files.some(fileError) || new Set(names).size !== names.length || (alone && (!files.length || !append))) return fail(files.some((f) => fileError(f) === 'large') ? 'large' : 'page');
     if (!key || key !== L().paperKey(box.context?.paper) || !(alone || ((asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name, kind)) && bytes instanceof ArrayBuffer && bytes.byteLength && bytes.byteLength <= 50e6)) || typeof m.note !== 'string' || m.note.length > L().MAX_NOTE ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || (m.held != null && (typeof m.held !== 'string' || m.held.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
@@ -268,9 +271,27 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       // A file an earlier run left in Ultra that this one doesn't send is the student's to review.
       if ([...(attached.get(box)?.keys() || [])].some((n) => !names.includes(n.toLowerCase()))) return fail('review');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
-      for (const f of [...(alone ? [] : [{ name, mime: asis ? m.mime : L().mimeOf(name), bytes }]), ...files]) {
-        file = f.name;
-        const a = await handIn(box, f, here);
+      const request = async (index) => {
+        const pending = transaction.pending = { index, reply: null };
+        say(box, { type: 'submit:file', run: m.run, index });
+        const reply = await until(() => pending.reply, 30000, 100, here);
+        transaction.pending = null;
+        return reply || { ok: false, error: 'page' };
+      };
+      if (!alone) {
+        file = name;
+        const a = await handIn(box, { name, mime: asis ? m.mime : L().mimeOf(name), bytes }, here);
+        bytes = null; m.bytes = null;
+        if (a) return fail(a);
+      }
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i]; file = f.name;
+        let reply = stream ? await request(i) : { ok: true, bytes: f.bytes };
+        if (!reply.ok) return fail(reply.error === 'changed' ? 'changed' : 'file');
+        if (stream && (!(reply.bytes instanceof ArrayBuffer) || reply.bytes.byteLength !== f.size)) return fail('file');
+        const a = await handIn(box, { name: f.name, mime: f.mime, bytes: reply.bytes }, here);
+        reply = null;
+        if (!stream) f.bytes = null;
         if (a) return fail(a);
       }
       file = null;
@@ -286,6 +307,10 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       say(box, { type: 'submit:step', run: m.run, step: 'submit' });
       const b = await until(() => { const x = L().footer(box.editor).submit; return x && L().enabled(x) && x; }, 15000, 100, here);
       if (!b) return fail('submit');
+      if (stream) {
+        const r = await request(files.length);
+        if (!r.ok) { file = r.file || null; return fail(r.error === 'changed' ? 'changed' : 'page'); }
+      }
       const area = L().areaOf(box.editor);
       file = [...(alone ? [] : [name]), ...files.map((f) => f.name)].find((n) => { const rows = L().listings(area, n, visible); return rows.length !== 1 || rows[0] !== attached.get(box)?.get(n)?.row; }) || null;
       if (file) return fail('review');
@@ -348,6 +373,11 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (m.type === 'submit:cancel' && Number.isSafeInteger(m.run) && m.run > 0) {
       cancelled.set(box, Math.max(cancelled.get(box) || 0, m.run));
       if (active?.box === box && active.run <= m.run) active.cancelled = true;
+      return;
+    }
+    if (m.type === 'submit:file') {
+      const p = active?.box === box && active.run === m.run && active.pending;
+      if (p && p.index === m.index && !p.reply) p.reply = m;
       return;
     }
     if (!assignment(box)) return;
