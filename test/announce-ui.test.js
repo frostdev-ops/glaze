@@ -95,6 +95,25 @@ test('the pop-up is a modal dialog named by its title: focus goes in, Escape clo
   assert.equal(p.doc.activeElement, b);
 });
 
+test('a footer with actions ends with a Close button after them; a pop-up without actions has no footer', async () => {
+  const p = page();
+  const a = p.link();
+  a.focus();
+  const go = p.doc.createElement('a'); go.className = 'go'; go.textContent = 'Open in Canvas';
+  p.P.open({ title: 'T', body: 'x', actions: [go], source: a });
+  const foot = p.dialog().querySelector('footer');
+  assert.deepEqual(foot.children.map((c) => `${c.tagName.toLowerCase()}.${c.className}`), ['a.go', 'button.shut']);
+  const shut = foot.children[1];
+  assert.equal(shut.type, 'button');
+  assert.equal(text(shut), 'Close');
+  shut.dispatchEvent({ type: 'click' });
+  assert.equal(p.doc.activeElement, a, 'focus returns to the link');
+  await settle();
+  assert.equal(p.host('gz-popup'), null, 'gone');
+  p.P.open({ title: 'Rubric', body: 'x', source: a });
+  assert.equal(p.dialog().querySelector('footer').children.length, 0, 'no actions, no Close: the footer stays empty and hidden');
+});
+
 test('an async body shows Loading… (busy) until it comes; a rejected one is the caller\'s to handle', async () => {
   const p = page();
   let give;
