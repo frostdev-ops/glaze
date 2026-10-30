@@ -7,7 +7,7 @@
 // the guide's own entry with that slip undone; each such case says so.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../lib/writer-cite.js');
+const C = require('../../extension/lib/writer-cite.js');
 
 // Guide text → the HTML the formatter writes (only <i>; & escaped).
 const h = (s) => s.replace(/&/g, '&amp;');

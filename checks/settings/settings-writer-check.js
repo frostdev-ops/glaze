@@ -2,13 +2,13 @@
 // (writer, enhance.writer and writerUploads), numbers kept as numbers, a dictionary word removed with its ✕, one course's
 // papers cleared behind the question (through the worker) and the rest kept, and the section shot in light and dark, each
 // scheme in a browser of its own since Settings paints its Look when it loads.
-// NODE_PATH=<playwright> nice -n 10 node scripts/settings-writer-check.js [shots folder]
+// NODE_PATH=<playwright> nice -n 10 node checks/settings/settings-writer-check.js [shots folder]
 // (default: none; the stream's evidence goes to glaze-plans/writer/mockups/settings-writer/shots). EXT selects the checkout.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
-const env = require('./check-env.js');
-const lock = require('./check-env.js').lockPath();
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
+const env = require('../../tools/dev/check-env.js');
+const lock = require('../../tools/dev/check-env.js').lockPath();
 const shots = process.argv[2] ? path.resolve(process.argv[2]) : '';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 8000) => {
@@ -48,9 +48,9 @@ async function pass(scheme) {
   try {
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-settings-writer-check-'));
     const ext = env.staged(root, [], scratch);
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 2600 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 2600 }, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: scheme,
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking',
         '--proxy-server=http://127.0.0.1:0', '--proxy-bypass-list=<-loopback>', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });

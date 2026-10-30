@@ -2,13 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const S = require('../lib/writer-schema.js');
-const E = require('../lib/writer-editor.js');
-const ST = require('../lib/writer-styles.js');
-const X = require('../lib/writer-docx.js');
+const S = require('../../extension/lib/writer-schema.js');
+const E = require('../../extension/lib/writer-editor.js');
+const ST = require('../../extension/lib/writer-styles.js');
+const X = require('../../extension/lib/writer-docx.js');
 
 test('whole-paper replacement restores every document attribute and undoes independently', () => {
-  const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-paper.js'), 'utf8');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer-paper.js'), 'utf8');
   const from = source.indexOf('    const setDoc = '), to = source.indexOf('    const setFormat = ', from);
   const view = { state: E.state({ mode: 'paper', html: '<p>before</p>' }), dispatch(tr) { this.state = this.state.apply(tr); } };
   view.state = view.state.apply(view.state.tr.setDocAttribute('paste', 'match'));
@@ -47,7 +47,7 @@ test('the Paragraph dialog retains left when a format centres a heading', () => 
 test('submit previews and picture widths use the paper page setup', () => {
   const setup = ST.pageSetup(ST.FORMATS.mla9, { page: [11.69, 8.27], margins: [0.5, 0.5, 0.5, 0.5] });
   const look = ST.look(ST.FORMATS.mla9, setup), api = { format: () => ST.FORMATS.mla9, look: () => look };
-  const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-submit.js'), 'utf8');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer-submit.js'), 'utf8');
   const from = source.indexOf('  const previews = '), to = source.indexOf('  // The big file', from);
   let measured;
   const stop = new Error('measured');
@@ -55,7 +55,7 @@ test('submit previews and picture widths use the paper page setup', () => {
     GZ_WRITER_STYLES: { geometry: (f) => { measured = f; throw stop; } } };
   assert.throws(() => vm.runInNewContext(`${source.slice(from, to)} previews()`, ctx), (e) => e === stop);
   assert.equal(measured, look, 'the preview clips and scales to the page the student sees');
-  const objects = fs.readFileSync(require('node:path').join(__dirname, '../writer-objects.js'), 'utf8');
+  const objects = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer-objects.js'), 'utf8');
   const a = objects.indexOf('  const content = '), b = objects.indexOf('\n', a);
   assert.equal(vm.runInNewContext(`${objects.slice(a, b)} content()`, { PAPER: () => api, GZ_WRITER_STYLES: ST }), ST.geometry(look).content);
 });

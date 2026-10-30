@@ -765,7 +765,7 @@
 			outputPaths = ();
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "case \"$SRCROOT\" in\n  */safari/Glaze)\n    export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n    /bin/bash \"$SRCROOT/../../scripts/sync-safari-resources.sh\" --check\n    ;;\n  *) echo \"Temporary release project: resources validated by the staging script.\" ;;\nesac\n";
+			shellScript = "case \"$SRCROOT\" in\n  */safari/Glaze)\n    export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n    /bin/bash \"$SRCROOT/../../tools/build/sync-safari-resources.sh\" --check\n    ;;\n  *) echo \"Temporary release project: resources validated by the staging script.\" ;;\nesac\n";
 		};
 		A13D981BFA2040A08E873802 /* Verify extension resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -777,7 +777,7 @@
 			outputPaths = ();
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "case \"$SRCROOT\" in\n  */safari/Glaze)\n    export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n    /bin/bash \"$SRCROOT/../../scripts/sync-safari-resources.sh\" --check\n    ;;\n  *) echo \"Temporary release project: resources validated by the staging script.\" ;;\nesac\n";
+			shellScript = "case \"$SRCROOT\" in\n  */safari/Glaze)\n    export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n    /bin/bash \"$SRCROOT/../../tools/build/sync-safari-resources.sh\" --check\n    ;;\n  *) echo \"Temporary release project: resources validated by the staging script.\" ;;\nesac\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

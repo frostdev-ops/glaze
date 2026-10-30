@@ -2,14 +2,14 @@
 // account or outside network): one working dock at a time (the document on screen), a placement made in a course
 // frame kept through switching and a refresh, rapid switching and Back/Forward, and no sidebar work in hidden documents.
 // Hold $GLAZE_LOCK (default glaze-heavy.lock in the OS temp directory) and run under nice.
-// NODE_PATH=<installed playwright> nice -n 15 node scripts/sidebar-ultra-tabs-check.js [evidence directory]
+// NODE_PATH=<installed playwright> nice -n 15 node checks/navigation/sidebar-ultra-tabs-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', uid = '_42_1';
 const G = require(path.join(ext, 'defaults.js'));
-const html = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-course.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sidebar-ultra-tabs-'));
 const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'glaze-sidebar-ultra-tabs-evidence'));
@@ -73,9 +73,9 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
   let ctx;
   try {
     fs.mkdirSync(out, { recursive: true });
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(),
+      ...require('../../tools/dev/check-env.js').chromeLaunch(),
       headless: true, viewport: { width: 1600, height: 1000 }, reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });

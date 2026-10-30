@@ -2,11 +2,11 @@
 // is refused, the workbook stays as it came and nothing reaches storage. Selecting, moving, copying and Find still work.
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const M = require('../lib/sheet-model.js'), SD = require('../sheet-data.js');
-const CALC = require('../lib/sheet-calc.js'), NF = require('../lib/sheet-numfmt.js');
-require('../lib/sheet-fn-math.js');
-const source = fs.readFileSync(require.resolve('../sheet-grid.js'), 'utf8');
+const { El } = require('../stand-in-dom.js');
+const M = require('../../extension/lib/sheet-model.js'), SD = require('../../extension/sheet-data.js');
+const CALC = require('../../extension/lib/sheet-calc.js'), NF = require('../../extension/lib/sheet-numfmt.js');
+require('../../extension/lib/sheet-fn-math.js');
+const source = fs.readFileSync(require.resolve('../../extension/sheet-grid.js'), 'utf8');
 const REFUSED = 'Save to Documents to edit.';
 
 // A chart layer that records what the grid asks it to change: one chart at the top left, chosen once clicked.
@@ -31,7 +31,7 @@ const frame = () => {
     el.insertBefore = (child, at) => { if (at) at.before(child); else el.append(child); };
     el.setSelectionRange = (start, end) => { el.selectionStart = start; el.selectionEnd = end; };
     el.select = () => el.setSelectionRange(0, el.value.length);
-    el.matches = (selector) => require('./stand-in-dom.js').matches(el, selector);
+    el.matches = (selector) => require('../stand-in-dom.js').matches(el, selector);
     el.classList = { toggle() {} };
     el.setPointerCapture = () => {};
     el.scrollLeft = el.scrollTop = 0;
@@ -52,7 +52,7 @@ const frame = () => {
     return e;
   };
   const ctx = vm.createContext({ console: { error() {}, warn() {} }, document: doc, Map, Set, Uint8Array, structuredClone, performance, Intl,
-    AbortController, innerWidth: 640, innerHeight: 900, GZ_SHEET_MODEL: M, GZ_SHEET_FORMULA: require('../lib/sheet-formula.js'),
+    AbortController, innerWidth: 640, innerHeight: 900, GZ_SHEET_MODEL: M, GZ_SHEET_FORMULA: require('../../extension/lib/sheet-formula.js'),
     GZ_SHEET_CALC: CALC, GZ_SHEET_NUMFMT: NF, GZ_SHEET_DATA: SD, GZ_SHEET_CHART: chartLayer(asked),
     chrome: { storage: { local: store, onChanged: { addListener: (f) => changes.add(f), removeListener: (f) => changes.delete(f) } } },
     getComputedStyle: () => ({ fontSize: '13px', fontFamily: 'Arial' }),

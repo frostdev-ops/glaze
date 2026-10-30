@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
 const fn = (name) => { const start = source.indexOf(`  const ${name} =`); return source.slice(start, source.indexOf('\n  };', start) + 6); };
 
 test('showing and dismissing a tooltip preserves the native title exactly', () => {

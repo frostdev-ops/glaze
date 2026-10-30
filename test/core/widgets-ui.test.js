@@ -5,12 +5,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const W = require('../lib/widgets.js');
+const D = require('../../extension/defaults.js');
+const W = require('../../extension/lib/widgets.js');
 
 const read = (f) => process.env.GZ_P4_WIDGET_BASE && f === 'features/widgets.js'
-  ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_P4_WIDGET_BASE}:${f}`], { cwd: path.join(__dirname, '..'), encoding: 'utf8' })
-  : fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_P4_WIDGET_BASE}:${f}`], { cwd: path.join(__dirname, '../../extension'), encoding: 'utf8' })
+  : fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
 
 class E {
@@ -41,7 +41,7 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
   const c = {
     console, URL, URLSearchParams, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String,
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' },
-    GZ_TODO: require('../lib/todo.js'), GZ_CLASSES: require('../lib/classes.js'),
+    GZ_TODO: require('../../extension/lib/todo.js'), GZ_CLASSES: require('../../extension/lib/classes.js'),
     GZ_CTX: { t: (k) => k, locale: () => 'en', need: async () => {}, capi, settings: () => ({ enhance: { notes: true, widgets: true } }), profile: async () => ({ id: '3', time_zone: tz }),
       ...(ultra && { site: 'ultra', capi: () => { throw new Error('not on Ultra'); }, profile: () => { throw new Error('not on Ultra'); } }) },
     location: ultra ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
@@ -62,7 +62,7 @@ const page = ({ local = {}, sync = {}, replies = [], clock = { t: Date.now() }, 
   vm.createContext(c);
   if (ultra) {
     ultra.requests = []; ultra.asked = []; ultra.pending = [];
-    c.GZ_PAGE = require('../lib/page.js'); c.GZ_COURSES = D.GZ_COURSES;
+    c.GZ_PAGE = require('../../extension/lib/page.js'); c.GZ_COURSES = D.GZ_COURSES;
     c.fetch = async (address, init) => {
       const u = new URL(address), uid = ultra.uid || '_5_1';
       assert.equal(u.origin, c.location.origin); assert.equal(init.credentials, 'same-origin');
@@ -645,7 +645,7 @@ test('a covered agenda neither refetches for storage updates nor paints a late r
 });
 
 test('simultaneous top floating and course-frame timers announce a deadline only after one queued advance wins', async () => {
-  const Store = require('../lib/nav-store.js'), K = require('../lib/cards.js');
+  const Store = require('../../extension/lib/nav-store.js'), K = require('../../extension/lib/cards.js');
   const clock = { t: 1e12 }, running = { phase: 'work', end: clock.t + 1000, left: 0 }, values = { widgetTimer: running };
   const area = { sync: { get: async () => ({}) }, local: { get: async () => values, set: async (v) => { Object.assign(values, v); return true; } } };
   const serial = K.queue(), moments = [];
@@ -675,7 +675,7 @@ test('a covered notes save completes without repainting outgoing content, then p
 });
 
 const dockAndFloat = () => {
-  const { El } = require('./stand-in-dom.js'), S = require('../lib/sidebar.js');
+  const { El } = require('../stand-in-dom.js'), S = require('../../extension/lib/sidebar.js');
   const p = page(), doc = { visibilityState: 'visible' }, loads = [], counts = { contexts: 0, suspended: 0, resumed: 0 }; let visible = true;
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   Object.assign(doc, { documentElement: doc.root, createElement: (tag) => new El(tag, doc), querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s),
@@ -934,7 +934,7 @@ test('a study buddy that was left for good, or stopped, is not brought back by a
 
 test('a pre-bfcache buddy read cannot overwrite newer reads after restore', async () => {
   const p = page(), local = { petCharacter: 'cat' }, pending = [];
-  p.c.GZ_PET_SPRITES = require('../lib/petsprites.js');
+  p.c.GZ_PET_SPRITES = require('../../extension/lib/petsprites.js');
   const choices = [];
   p.c.GZ_PET_PLAYER = { mount: (_, selected) => { choices.push(selected.name); return { stop() {}, rest() {}, sleep() {}, wake() {} }; } };
   p.c.chrome.storage.local.get = (keys, cb) => { const snapshot = structuredClone(local); pending.push(() => cb(snapshot)); };
@@ -966,7 +966,7 @@ test('a buddy restore after invalidation or disabling leaves no lifecycle listen
 
 // WID-9: moving an element that holds an iframe unloads it, so the player restarted whenever the board reordered tiles.
 test('seating a tile moves it with moveBefore where the browser has it; without, a tile holding a player stays and the others move around it', () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   const p = page();
   const doc = {}; doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   const row = (names) => { const parent = new El('div', doc); for (const n of names) { const e = new El('section', doc); e.id = n; parent.append(e); } doc.body.append(parent); return parent; };
@@ -1027,7 +1027,7 @@ test('seating a tile moves it with moveBefore where the browser has it; without,
 // WID-14: the tour is opened from the hub (a dialog that closes first), and ended by Esc, End tour or Finish; the bubble
 // that held focus was removed and focus went to <body>, so a keyboard user started over from the top of the page.
 const tourPage = () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   const p = page(), doc = { visibilityState: 'visible', keys: [] };
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   Object.assign(doc, { documentElement: doc.root, createElement: (tag) => new El(tag, doc), createTextNode: (data) => ({ data }), querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s),

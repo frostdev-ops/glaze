@@ -3,11 +3,11 @@
 // (test/helpers/mcp-caches.cjs makes them with the code that writes them). No account ever sees another's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const GR = require('../lib/mcp/tools-grades.js');
-const B = require('../lib/modbroker.js');
-const AT = require('../lib/ai/tools.js');
-const S = require('../lib/ai/schema.js');
-const C = require('./helpers/mcp-caches.cjs');
+const GR = require('../../extension/lib/mcp/tools-grades.js');
+const B = require('../../extension/lib/modbroker.js');
+const AT = require('../../extension/lib/ai/tools.js');
+const S = require('../../extension/lib/ai/schema.js');
+const C = require('../helpers/mcp-caches.cjs');
 
 const { CANVAS, ULTRA, NOW } = C;
 const A = `${CANVAS}/5`, BEE = `${CANVAS}/6`, UL = `${ULTRA}/${C.ULTRA_UID}`;
@@ -49,7 +49,7 @@ test('grades_list: each account\'s own latest grades, as a mod gets them, kept a
     assert.deepEqual(r, { account: who, at: rec.at, items: await B.CALLS.grades.run([], C.broker(store, who)) }, who);
     assert.ok(r.items.length >= 2, who);
   }
-  // Each course's last trend point: Canvas's own current score (test/insights.test.js holds the trend to it).
+  // Each course's last trend point: Canvas's own current score (test/planner/insights.test.js holds the trend to it).
   const last = (id) => store[`insights:${A}`].courses.find((c) => c.id === id).trend.at(-1)[0];
   assert.deepEqual((await run('grades_list', store, A)).items, [
     { courseId: '25', name: 'BIO 1100', percent: 83.85, at: last('25') },

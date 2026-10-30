@@ -2,11 +2,11 @@
 // id (courses.looks, Look rotation), with old built-in names still read.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../defaults.js');
-const C = require('../lib/looks.js');
-const S = require('../lib/share.js');
-const LX = require('../lib/lookx.js');
-const H = require('../lib/history.js');
+const G = require('../../extension/defaults.js');
+const C = require('../../extension/lib/looks.js');
+const S = require('../../extension/lib/share.js');
+const LX = require('../../extension/lib/lookx.js');
+const H = require('../../extension/lib/history.js');
 
 const look = (name) => G.GZ_LOOKS.find((L) => L.name === name);
 const wear = (name, s = G.GZ_DEFAULTS) => G.GZ_SANITIZE({ ...s, ...G.GZ_LOOK_APPLY(s, look(name)) });
@@ -163,7 +163,7 @@ test('an ambiguous code hash is refused rather than wearing or removing another 
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const worker = (local = {}, syncStore = {}) => {
   const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
   const changed = [], installed = [], messages = [];
@@ -177,7 +177,7 @@ const worker = (local = {}, syncStore = {}) => {
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
       runtime: {
-        id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'),
+        id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'),
         onMessage: { addListener: (f) => messages.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
       storage: { local: area(local, 'local'), sync: area(syncStore, 'sync'), onChanged: { addListener: (f) => changed.push(f) } },
@@ -233,7 +233,7 @@ test('a kept Look put on by id from the popup wears its code as "Use this theme"
   assert.equal(s.navbar.on, false, 'whether the bar is on stays the student\'s');
   assert.ok(w.sync.lookX, 'its parts went with it');
   const got = await S.decode(favorites[3].code);
-  const parts = await require('../lib/lookparts.js').fromStored(w.sync.lookX, { get: async () => ({}) });
+  const parts = await require('../../extension/lib/lookparts.js').fromStored(w.sync.lookX, { get: async () => ({}) });
   assert.deepEqual(parts, got.parts);
   const cat = await C.build(favorites, S.decode);
   assert.equal(C.worn({ ...s, parts }, C.list(cat))?.id, night.id, 'and it is the Look the picker shows pressed');
@@ -258,7 +258,7 @@ test('lib/looks.js loads on demand as the worker injects it: it ends on a value,
 
 test('a course page asks the worker for its Look\'s parts by id: a kept Look\'s from its code, a built-in\'s own', async () => {
   const { favorites } = await fixtures();
-  const shader = fs.readFileSync(path.join(__dirname, '..', 'assets/shaders/aurora.glsl'), 'utf8');
+  const shader = fs.readFileSync(path.join(__dirname, '../../extension/assets/shaders/aurora.glsl'), 'utf8');
   const gallery = C.make(await S.encode(G.GZ_SANITIZE({ colors: G.GZ_PRESET('Midnight'), bg: { kind: 'shader' } }), {}, { x: { bg: { shader: { src: shader } }, pointer: 'lava' } }), 'Shader night', 'mira', 'gallery');
   const w = worker({ lookFavorites: [gallery, ...favorites] });
   assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: gallery.id }, { id: 'glaze', tab: {}, url: 'https://evil.example/' }), { ok: false, error: 'sender' });
@@ -268,7 +268,7 @@ test('a course page asks the worker for its Look\'s parts by id: a kept Look\'s 
   assert.deepEqual(got.parts, (await S.decode(gallery.code)).parts);
   assert.equal(got.parts.x.pointer, 'lava');
   assert.ok(got.parts.x.bg.shader.src.length > 100, 'the shader comes with it');
-  assert.deepEqual((await w.send({ type: 'glaze:looks', op: 'parts', id: 'Graveyard' }, w.popup)).parts, require('../lib/lookset.js')(look('Graveyard')));
+  assert.deepEqual((await w.send({ type: 'glaze:looks', op: 'parts', id: 'Graveyard' }, w.popup)).parts, require('../../extension/lib/lookset.js')(look('Graveyard')));
   assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: 'c:00000000000000' }, w.popup), { ok: false, error: 'gone' });
   assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: 'Nope' }, w.popup), { ok: false, error: 'sender' });
 });

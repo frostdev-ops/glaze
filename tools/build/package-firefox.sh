@@ -5,13 +5,13 @@
 # so its oauth2 key and permission go, as in Safari. DIST: the folder the zips go in (default dist).
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 cd "$root"
 development=false
 case "${1:-}" in
   '') ;;
   --development) development=true ;;
-  *) echo 'usage: sh scripts/package-firefox.sh [--development]' >&2; exit 2 ;;
+  *) echo 'usage: sh tools/build/package-firefox.sh [--development]' >&2; exit 2 ;;
 esac
 branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
 commit=$(git rev-parse --verify HEAD 2>/dev/null || printf unknown)
@@ -26,8 +26,8 @@ else
   echo 'Building a Firefox development package; do not upload it to a store.' >&2
 fi
 dist=${DIST:-dist}
-version=$(node -p 'require("./manifest.json").version')
-DIST=$dist ./package.sh >/dev/null
+version=$(node -p 'require("./extension/manifest.json").version')
+DIST=$dist tools/build/package.sh >/dev/null
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT

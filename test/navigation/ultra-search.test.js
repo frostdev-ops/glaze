@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const U = require('../lib/ultra.js');
-const S = require('../lib/seek.js');
-const D = require('../lib/doctext.js');
-const fixture = require('./fixtures/ultra-search.json');
-const source = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const U = require('../../extension/lib/ultra.js');
+const S = require('../../extension/lib/seek.js');
+const D = require('../../extension/lib/doctext.js');
+const fixture = require('../fixtures/ultra-search.json');
+const source = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const origin = 'https://lms.example.edu';
 const now = Date.parse('2026-10-15T12:00:00Z');
 const course = { id: '_101_1', name: 'BIO 1100' };
@@ -89,7 +89,7 @@ const ui = ({ hold = false, count = 2, loading = null, members = null, failure =
   const ctx = vm.createContext({
     GZ_CTX: { site: 'ultra', on: () => true, settings: () => settings, t: (k, v) => k.replace('{n}', v?.n),
       need: async () => { if (loading) await loading; }, courseId: () => '_102_1', myCourses: async () => memberships },
-    GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES,
+    GZ_PAGE: require('../../extension/lib/page.js'), GZ_COURSES: require('../../extension/defaults.js').GZ_COURSES,
     chrome: { runtime: {}, storage: { onChanged: { addListener: (fn) => changed.push(fn) }, sync: { get: (_, fn) => fn({ enabled: true, enhance: { search: true } }) } } },
     document: { createElement: () => live }, location: { origin, assign() {} },
     fetch: async (url, init) => {
@@ -182,7 +182,7 @@ test('Ultra bounds empty queries to 30 requests and never asks threads, attempts
 });
 
 test('Ultra search stays on demand, with the existing palette accessibility and translations', () => {
-  const manifest = require('../manifest.json');
+  const manifest = require('../../extension/manifest.json');
   for (const c of manifest.content_scripts) assert.ok(!c.js.some((f) => /features\/search|lib\/(seek|ultra|doctext)/.test(f)));
   assert.match(source('features/palette.js'), /const searchHere = \(\) => !moodle && ctx.settings\(\).enhance.search/);
   for (const name of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
@@ -361,5 +361,5 @@ test('the search status is a live region with a visually-hidden class Glaze defi
   const p = ui();
   await p.attach();
   assert.equal(p.live.className, 'gz-sr');
-  assert.match(fs.readFileSync(require.resolve('../features/apps.css'), 'utf8'), /\.gz-sr \{[^}]*clip-path: inset\(50%\)/);
+  assert.match(fs.readFileSync(require.resolve('../../extension/features/apps.css'), 'utf8'), /\.gz-sr \{[^}]*clip-path: inset\(50%\)/);
 });

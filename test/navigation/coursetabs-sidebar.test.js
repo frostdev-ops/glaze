@@ -7,12 +7,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const L = require('../lib/coursetabs.js');
-const S = require('../lib/sidebar.js');
-const { El } = require('./stand-in-dom.js');
-const { parse } = require('./fixture-dom.js');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const D = require('../../extension/defaults.js');
+const L = require('../../extension/lib/coursetabs.js');
+const S = require('../../extension/lib/sidebar.js');
+const { El } = require('../stand-in-dom.js');
+const { parse } = require('../fixture-dom.js');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 const source = read('features/coursetabs.js');
 const part = (a, b) => { const i = source.indexOf(a); assert.ok(i >= 0, a); return source.slice(i, source.indexOf(b, i)); };
@@ -297,7 +297,7 @@ const world = () => {
   const doc = ({ name = 'top', fixture = 'canvas-course-home.html', where = '/courses/25', hold = false } = {}) => {
     const d = { activeElement: null };
     d.root = new El('html', d);
-    d.body = parse(read(`test/fixtures/${fixture}`), d);
+    d.body = parse(read(`../test/fixtures/${fixture}`), d);
     const framed = name !== 'top';
     const sent = [], asked = [], drawers = [], winListeners = [], observers = [], held = [];
     let frames = 0;
@@ -309,7 +309,7 @@ const world = () => {
       document: d, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
       MutationObserver: class { constructor(f) { this.f = f; observers.push(this); } observe() { this.on = true; } disconnect() { this.on = false; } },
       requestAnimationFrame: (f) => { frames++; f(); return 1; }, cancelAnimationFrame() {},
-      GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: require('../lib/widgets.js'), GZ_SIDEBAR: S,
+      GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: require('../../extension/lib/widgets.js'), GZ_SIDEBAR: S,
       // features/coursetabs.js's part: which document is on screen, and the relay a frame's changes go through.
       GZ_CTABS: {
         visible: () => shown === name,

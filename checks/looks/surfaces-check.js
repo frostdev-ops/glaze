@@ -1,17 +1,17 @@
 // Real unpacked extension, synthetic preview only. All external requests are blocked.
-// EXT=/path/to/checkout NODE_PATH=/path/to/playwright node scripts/surfaces-check.js /path/to/receipts
+// EXT=/path/to/checkout/extension NODE_PATH=/path/to/playwright node checks/looks/surfaces-check.js /path/to/receipts
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
-const ext = process.env.EXT || path.resolve(__dirname, '..'), G = require(path.join(ext, 'defaults.js'));
+const ext = process.env.EXT || path.resolve(__dirname, '../../extension'), G = require(path.join(ext, 'defaults.js'));
 const output = process.argv[2]; if (!output) throw Error('Choose a receipt folder.');
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const until = async (fn, check) => { const end = Date.now() + 10000; while (Date.now() < end) { const value = await fn(); if (check(value)) return value; await new Promise((r) => setTimeout(r, 30)); } throw Error('Preview did not settle.'); };
 (async () => {
   fs.mkdirSync(output, { recursive: true }); const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-surfaces-'));
   let context; const results = [], errors = [], external = [];
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(scratch, { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 850 }, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-webgl', '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await context.route('**/*', (route) => { if (route.request().url().startsWith('chrome-extension:')) return route.continue(); external.push(route.request().url()); return route.abort(); });

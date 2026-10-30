@@ -3,12 +3,12 @@
 // Each read that fails leaves its part empty; the instructor is always left for the student.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../lib/writer-context-assignment.js');
-const R = require('../lib/rubric.js');
-const grades = require('./fixtures/ultra-writer-gradebook.json');
-const members = require('./fixtures/ultra-memberships.json');
-const rubric = require('./fixtures/ultra-rubric-numeric.json');
-const item = require('./fixtures/ultra-writer-content.json');
+const C = require('../../extension/lib/writer-context-assignment.js');
+const R = require('../../extension/lib/rubric.js');
+const grades = require('../fixtures/ultra-writer-gradebook.json');
+const members = require('../fixtures/ultra-memberships.json');
+const rubric = require('../fixtures/ultra-rubric-numeric.json');
+const item = require('../fixtures/ultra-writer-content.json');
 
 const path = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
 const column = { ...rubric.column, id: '_810_1', contentId: '_7_1', rubricAssociations: rubric.column.rubricAssociations.map((a) => ({ ...a, entityId: '_810_1' })) };
@@ -47,7 +47,7 @@ test('what fails stays empty; without the student\'s id there is no key, so noth
 });
 
 test('an item not yet opened: Ultra\'s row has no userId and its rubric is still read', async () => {
-  // The keys Ultra sends for a row never opened (live, 2026-10-27; test/rubric-ultra-state.test.js has the same).
+  // The keys Ultra sends for a row never opened (live, 2026-10-27; test/courses/rubric-ultra-state.test.js has the same).
   const KEEP = ['columnId', 'courseId', 'averageScore', 'submissionStatus', 'column', 'isCorrupt', 'columnUrl'];
   const rows = grades.results.map((r) => (r.column?.contentId === '_7_1' ? { ...Object.fromEntries(Object.entries(r).filter(([k]) => KEEP.includes(k))), submissionStatus: { actionCount: null, status: 'UNOPENED' } } : r));
   assert.equal(rows.find((r) => r.column?.contentId === '_7_1').userId, undefined);
@@ -77,10 +77,10 @@ test('the rubric is read only for the student\'s own row and a single associatio
 });
 test('the production worker allows the assignment context builder', () => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-  const src = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const list = vm.runInNewContext(src.match(/const LOADABLE = (new Set\([^;]+\));/)[1]);
   assert.ok(list.has('lib/writer-context-assignment.js'));
-  const check = fs.readFileSync(path.join(__dirname, '../scripts/writer-paper-check.js'), 'utf8');
+  const check = fs.readFileSync(path.join(__dirname, '../../checks/writer/writer-paper-check.js'), 'utf8');
   assert.doesNotMatch(check, /fs\.writeFileSync\(bg,/);
 });
 

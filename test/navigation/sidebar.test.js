@@ -3,10 +3,10 @@
 // the layout or the sidebar.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/sidebar.js');
-const W = require('../lib/widgets.js');
-const G = require('../defaults.js');
-const share = require('../lib/share.js');
+const S = require('../../extension/lib/sidebar.js');
+const W = require('../../extension/lib/widgets.js');
+const G = require('../../extension/defaults.js');
+const share = require('../../extension/lib/share.js');
 
 const CANVAS = 'https://school.instructure.com', ULTRA = 'https://bb.example.edu';
 const ops = (rec, ...list) => S.apply(rec, list, { lms: 'canvas' });
@@ -406,7 +406,7 @@ test("a shared Look carries the sidebar's style, surface and corners, never its 
 
 test('a code whose sidebar part has anything but its appearance, or a value Glaze would change, is refused', async () => {
   for (const bad of [{ width: 400 }, { style: 'sideways' }, { title: 'x' }]) {
-    const L = require('../lib/lookparts.js');
+    const L = require('../../extension/lib/lookparts.js');
     const code = await share.encode(G.GZ_SANITIZE({}), {});
     const raw = JSON.parse(new TextDecoder().decode(await L.inflate(L.unb64(code.slice(7)), 8192)));
     raw.s = bad;
@@ -470,7 +470,7 @@ test('mode keeps the room the settings give the main column', () => {
 
 // ---- the editor's Sidebar section ---------------------------------------------------------------------------------
 test('the editor has one control for each sidebar setting, offering exactly what the settings accept, in the Sidebar section', () => {
-  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'options.html'), 'utf8');
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/options.html'), 'utf8');
   const sec = html.slice(html.indexOf('<section id="side-panel" data-editor-section="navigation/sidebar"'), html.indexOf('</section>', html.indexOf('id="side-panel"')));
   assert.ok(sec.length > 100, 'the section');
   assert.match(sec, /<\/div>\n<div class="has-info nb-master"><label class="check"><input type="checkbox" data-key="enhance.sidebar"/, 'the switch, first and prominent');

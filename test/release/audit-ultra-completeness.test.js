@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const U = require('../lib/ultra.js');
+const U = require('../../extension/lib/ultra.js');
 
 const origin = 'https://lms.example.edu';
 const operations = {

@@ -3,10 +3,10 @@
 // prompt, the daily throttle, stop following, and an unreachable relay.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../lib/sharing.js');
-const M = require('../lib/modbundle.js');
-const CH = require('../lib/modchannel.js');
-const { relay } = require('../server/relay.js');
+const G = require('../../extension/lib/sharing.js');
+const M = require('../../extension/lib/modbundle.js');
+const CH = require('../../extension/lib/modchannel.js');
+const { relay } = require('../../server/relay.js');
 
 const u8 = (s) => new TextEncoder().encode(s);
 const memory = () => { const m = new Map(); return { put: async (k, b) => { m.set(k, Buffer.from(b)); }, get: async (k) => m.get(k) || null, del: async (k) => { m.delete(k); } }; };
@@ -356,7 +356,7 @@ test('an incomplete or damaged session sync never downloads a stale bundle refer
   for (const result of [{ more: true }, { bad: 1 }]) {
     let downloads = 0;
     const module = { exports: {} };
-    vm.runInNewContext(fs.readFileSync(require.resolve('../lib/modchannel.js'), 'utf8'), {
+    vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/lib/modchannel.js'), 'utf8'), {
       module, require: () => M,
       GZ_SHARING: { ...G, session: (st) => ({
         sync: async () => { st.type = 'modchannel'; return result; },

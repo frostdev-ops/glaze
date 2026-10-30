@@ -6,11 +6,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-logical.js');
-require('../lib/sheet-fn-text.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-logical.js');
+require('../../extension/lib/sheet-fn-text.js');
 
 // A workbook from { 'A1': typed input, 'Sheet2!B1': ... }, calculated.
 const book = (cells = {}, { sheets = ['Sheet1'], date1904 = false, names = [] } = {}) => {
@@ -267,8 +267,8 @@ test('dynamic typing examines untaken branches and single-element array results'
 
 test('legacy formula editing makes scalar references explicit without recalculating aggregate ranges', () => {
   const e = book({ B1: 3, B5: 7 }), sh = e.wb.sheets[0];
-  require('../lib/sheet-fn-lookup.js');
-  require('../lib/sheet-fn-math2.js');
+  require('../../extension/lib/sheet-fn-lookup.js');
+  require('../../extension/lib/sheet-fn-math2.js');
   for (const [f, want] of [
     ['B:B*2', '@B:B*2'], ['SUM(B:B)', 'SUM(B:B)'], ['SUM(B:B*2)', 'SUM(@B:B*2)'],
     ['ABS(B:B)', 'ABS(@B:B)'], ['@B:B*2', '@B:B*2'], ['(B:B)*2', '@(B:B)*2'],
@@ -395,7 +395,7 @@ test('volatile functions recalculate on every edit and never by themselves', () 
   assert.equal(val(e, 'A1'), 3, 'an edit anywhere recalculates it');
   for (const name of ['NOW', 'TODAY', 'RAND', 'RANDBETWEEN', 'OFFSET', 'INDIRECT']) assert.ok(C.VOLATILE.has(name), name);
   for (const f of ['sheet-calc.js', 'sheet-fn-math.js', 'sheet-fn-logical.js', 'sheet-fn-text.js']) {
-    assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', f), 'utf8')), `${f} sets no timer`);
+    assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib', f), 'utf8')), `${f} sets no timer`);
   }
 });
 
@@ -616,7 +616,7 @@ test('define() refuses a name already defined, so no file can replace another\'s
 });
 
 test('every function file loads beside the others', () => {
-  const lib = path.join(__dirname, '..', 'lib');
+  const lib = path.join(__dirname, '../../extension/lib');
   const files = fs.readdirSync(lib).filter((f) => /^sheet-fn-.*\.js$/.test(f)).map((f) => path.join(lib, f));
   const out = require('node:child_process').execFileSync(process.execPath, ['-e', `for (const f of ${JSON.stringify(files)}) require(f); console.log(require(${JSON.stringify(path.join(lib, 'sheet-calc.js'))}).fn('ROW') ? 'ok' : 'none')`], { encoding: 'utf8' });
   assert.equal(out.trim(), 'ok');

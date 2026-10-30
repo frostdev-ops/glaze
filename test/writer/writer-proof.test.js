@@ -1,13 +1,13 @@
 // lib/writer-proof.js and lib/writer-issues.js at the EditorState level: the sure fixes and where they never go, each fix
 // one undo step, Harper's lints as issues, the text Harper reads, the context's words, and issues following edits. Typing
-// goes through the plugins' own handleTextInput with a stand-in view, as test/writer-editor.test.js does. Harper itself
-// (lib/harper/shared.js) is test/writer-proof-harper.test.js; the frame in a browser is scripts/writer-proof-check.js.
+// goes through the plugins' own handleTextInput with a stand-in view, as test/writer/writer-editor.test.js does. Harper itself
+// (lib/harper/shared.js) is test/writer/writer-proof-harper.test.js; the frame in a browser is checks/writer/writer-proof-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/writer-schema.js');
-const E = require('../lib/writer-editor.js');
-const P = require('../lib/writer-proof.js');
-const I = require('../lib/writer-issues.js');
+const S = require('../../extension/lib/writer-schema.js');
+const E = require('../../extension/lib/writer-editor.js');
+const P = require('../../extension/lib/writer-proof.js');
+const I = require('../../extension/lib/writer-issues.js');
 const { TextSelection } = GZ_PM.state;
 const { undo } = GZ_PM.history;
 
@@ -450,7 +450,7 @@ test('address proofing stays responsive on a long dotted token with no valid hos
     const P = require('./lib/writer-proof.js');
     const token = 'a.'.repeat(35000);
     console.log(JSON.stringify([P.literalLike(token, 0, 1), P.literalLike(token + 'example.test', 0, 1)]));
-  `], { cwd: require('node:path').join(__dirname, '..'), encoding: 'utf8', timeout: 2000 });
+  `], { cwd: require('node:path').join(__dirname, '../../extension'), encoding: 'utf8', timeout: 2000 });
   assert.equal(run.status, 0, run.error?.message || run.stderr);
   assert.deepEqual(JSON.parse(run.stdout), [false, true]);
 });

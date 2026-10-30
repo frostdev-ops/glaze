@@ -4,12 +4,12 @@
 // standard groupings; the kinds still framed name their type; the work stays bounded; and the parts round-trip untouched.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const X = require('../lib/sheet-xlsx.js');
-const C = require('../lib/sheet-calc.js');
-const D = require('../lib/doctext.js');
-const CX = require('../lib/sheet-chart-xml.js');
-const CH = require('../lib/sheet-chart.js');
-const FX = require('./fixtures/sheets/charts.js');
+const X = require('../../extension/lib/sheet-xlsx.js');
+const C = require('../../extension/lib/sheet-calc.js');
+const D = require('../../extension/lib/doctext.js');
+const CX = require('../../extension/lib/sheet-chart-xml.js');
+const CH = require('../../extension/lib/sheet-chart.js');
+const FX = require('../fixtures/sheets/charts.js');
 
 const RAD = Math.PI / 180;
 const near = (a, b, eps = 0.02) => Math.abs(a - b) <= eps;
@@ -199,7 +199,7 @@ test('3-D pie: rotations are reduced to one turn before geometry work', () => {
     const FX = require('./test/fixtures/sheets/charts.js');
     const xml = FX.CHARTS.pie3d.replace('<c:rotY val="0"/>', '<c:rotY val="1.3282328232823282e+22"/>');
     console.log(JSON.stringify(CH.scene(CX.resolve(CX.chart(xml), () => null), 480, 300).marks));
-  `], { cwd: require('node:path').join(__dirname, '..'), timeout: 2000, encoding: 'utf8' });
+  `], { cwd: require('node:path').join(__dirname, '../../extension'), timeout: 2000, encoding: 'utf8' });
   assert.equal(run.error, undefined, `rotation must finish: ${run.error}`);
   assert.equal(run.status, 0, run.stderr);
   const marks = JSON.parse(run.stdout);

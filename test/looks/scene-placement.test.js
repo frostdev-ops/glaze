@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
-const host = fs.readFileSync(require.resolve('../lib/scene-host.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
+const host = fs.readFileSync(require.resolve('../../extension/lib/scene-host.js'), 'utf8');
 const start = source.indexOf('  const placeScene = '), end = source.indexOf('  const stopScene = ', start);
 
 test('the lazy script returns its API to the injection broker', () => {

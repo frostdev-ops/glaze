@@ -5,25 +5,25 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const D = require('../defaults.js');
+const D = require('../../extension/defaults.js');
 
 // As the editor has them (options.html): the cleaners a code goes through, with the parts registry loaded.
 Object.assign(globalThis, D);
-globalThis.GZ_NAV = require('../lib/nav.js');
-globalThis.GZ_NAV_ITEMS = require('../lib/nav-items.js');
-globalThis.GZ_NAV_LAYOUT = require('../lib/navlayout.js');
-globalThis.GZ_MX = require('../lib/motionx.js');
-globalThis.GZ_PARTS = require('../lib/parts.js');
-globalThis.GZ_GLSL = require('../lib/glsl.js');
-const X = globalThis.GZ_XPARTS = require('../lib/lookparts.js');
-globalThis.GZ_CARDS = require('../lib/cards.js');
-const S = require('../lib/share.js');
+globalThis.GZ_NAV = require('../../extension/lib/nav.js');
+globalThis.GZ_NAV_ITEMS = require('../../extension/lib/nav-items.js');
+globalThis.GZ_NAV_LAYOUT = require('../../extension/lib/navlayout.js');
+globalThis.GZ_MX = require('../../extension/lib/motionx.js');
+globalThis.GZ_PARTS = require('../../extension/lib/parts.js');
+globalThis.GZ_GLSL = require('../../extension/lib/glsl.js');
+const X = globalThis.GZ_XPARTS = require('../../extension/lib/lookparts.js');
+globalThis.GZ_CARDS = require('../../extension/lib/cards.js');
+const S = require('../../extension/lib/share.js');
 const L = globalThis.GZ_NAV_LAYOUT;
-const M = require('../lib/navbar.js');
-const E = require('../lib/editor-navbar.js');
-const F = require('../lib/fonts.js');
+const M = require('../../extension/lib/navbar.js');
+const E = require('../../extension/lib/editor-navbar.js');
+const F = require('../../extension/lib/fonts.js');
 
-const read = (f) => fs.readFileSync(require.resolve(`../${f}`), 'utf8');
+const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 // A sentence as the editor shows it in English: lists joined, everything else as it is.
 const say = ({ why, vars = {} }) => why.replace(/\{(\w+)\}/g, (_, k) => (Array.isArray(vars[k]) ? vars[k].join(', ') : String(vars[k])));
 
@@ -165,7 +165,7 @@ test("the editor refuses the audit's Look and says why; a Look that may be offer
 });
 
 test('hidden-native name matching follows every shipped catalogue', () => {
-  for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) require(`../i18n/${lang}.js`);
+  for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) require(`../../extension/i18n/${lang}.js`);
   for (const [id, name] of Object.entries({ ...L.NAMES, profile: 'Your account' })) {
     for (const c of Object.values(GZ_LANGS)) assert.ok(L.mimics(c[name] || name, [id]), `${id}: ${c[name] || name}`);
   }

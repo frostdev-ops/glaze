@@ -8,13 +8,13 @@
 // back with the list as it was, glides, menus, the toast; Expressive, Subtle, Off and reduced motion). Screenshots at 1280
 // and 640 px in English and German, look-*.png on four Looks, and motion-*.png frames of the motion. Synthetic records
 // only; the browser reaches no network (a Look's fonts are refused and counted apart, the photo is served here).
-// NODE_PATH=<playwright> nice -n 10 node scripts/documents-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/documents/documents-check.js [evidence directory]
 // DOCUMENTS_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-documents).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-documents-check');
 const shots = process.env.DOCUMENTS_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-documents');
 const checks = [], errors = [], requests = [], fontRequests = [];
@@ -90,7 +90,7 @@ const PROBE = ({ lang }) => {
 
 (async () => {
   let context, held = false, tmp, ext;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\ndocuments-check\n`); break; }
@@ -99,9 +99,9 @@ const PROBE = ({ lang }) => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-documents-'));
     fs.mkdirSync(out, { recursive: true });
     fs.mkdirSync(shots, { recursive: true });
-    ext = require('./check-env.js').staged(root, []);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, locale: 'en-US', timezoneId: 'America/New_York',
+    ext = require('../../tools/dev/check-env.js').staged(root, []);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, locale: 'en-US', timezoneId: 'America/New_York',
       reducedMotion: 'reduce', acceptDownloads: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     // A Look's web fonts load from their CDNs (lib/fonts.js): refused here like everything else, and counted apart.
@@ -1438,7 +1438,7 @@ const PROBE = ({ lang }) => {
         new MutationObserver(() => R.spoken.push(count.textContent)).observe(count, { childList: true, characterData: true, subtree: true });
       });
       const imports = () => im.evaluate(() => globalThis.__imp);
-      const pdfBytes = require('./pdf-fixtures.js').large({ count: 30, size: 12e6 }), pdfPath = path.join(tmp, 'Course reader.pdf');
+      const pdfBytes = require('../../tools/fidelity/pdf-fixtures.js').large({ count: 30, size: 12e6 }), pdfPath = path.join(tmp, 'Course reader.pdf');
       fs.writeFileSync(pdfPath, pdfBytes);
       await recordImports();
       await im.setInputFiles('#gd-file', pdfPath);
@@ -1467,7 +1467,7 @@ const PROBE = ({ lang }) => {
         GZ_DOC_FILES.client = (...a) => { GZ_DOC_FILES.client = real; const c = real(...a); return { ...c, put: async () => { throw GZ_DOC_FILES.fail('quota'); } }; };
       });
       const fullPath = path.join(tmp, 'Lab manual.pdf');
-      fs.writeFileSync(fullPath, require('./pdf-fixtures.js').FIXTURES.three());
+      fs.writeFileSync(fullPath, require('../../tools/fidelity/pdf-fixtures.js').FIXTURES.three());
       await im.setInputFiles('#gd-file', fullPath);
       const room = "There isn't enough room in this browser for this file.";
       const failed = await until(() => im.evaluate(() => { const el = [...document.querySelectorAll('#gd-docs > .gd-pending')].find((x) => x.querySelector('.gd-title').textContent === 'Lab manual.pdf');
@@ -1501,7 +1501,7 @@ const PROBE = ({ lang }) => {
         GZ_DOC_FILES.client = (...a) => { GZ_DOC_FILES.client = real; const c = real(...a); return { ...c, put: async (bytes, type, sent) => { sent(bytes.length / 2, bytes.length); await gate; return c.put(bytes, type, sent); } }; };
       });
       const heldPath = path.join(tmp, 'Week 4 reading.pdf');
-      fs.writeFileSync(heldPath, require('./pdf-fixtures.js').large({ count: 10, size: 6e6 }));
+      fs.writeFileSync(heldPath, require('../../tools/fidelity/pdf-fixtures.js').large({ count: 10, size: 6e6 }));
       await im.setInputFiles('#gd-file', heldPath);
       await until(() => im.evaluate(() => /^Copying… [\d.]+ \/ [\d.]+ MB$/.test(document.querySelector('#gd-docs > .gd-pending .gd-meta')?.textContent || '')), 'the held import halfway');
       await im.screenshot({ path: path.join(out, 'import-copying-1280-en.png'), animations: 'disabled' });
@@ -1510,7 +1510,7 @@ const PROBE = ({ lang }) => {
 
       // A deck shows the same, its own word for the middle stage.
       const Z = require(path.join(root, 'lib/zip.js'));
-      const deckDir = path.join(root, 'test/fixtures/pptx/deck');
+      const deckDir = path.join(__dirname, '../../test/fixtures/pptx/deck');
       const walk = (d, base = '') => fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
         .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), `${base}${e.name}/`) : [{ name: `${base}${e.name}`, data: new Uint8Array(fs.readFileSync(path.join(d, e.name))), date: new Date(2026, 9, 29, 12) }]));
       const deckPath = path.join(tmp, 'Cell Biology week 3.pptx');
@@ -1599,7 +1599,7 @@ const PROBE = ({ lang }) => {
         const dt = new DataTransfer();
         for (let i = 1; i <= 20; i++) dt.items.add(new File([new Uint8Array(bytes)], `Queued ${i}.pdf`, { type: 'application/pdf' }));
         document.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
-      }, Array.from(require('./pdf-fixtures.js').FIXTURES.three()));
+      }, Array.from(require('../../tools/fidelity/pdf-fixtures.js').FIXTURES.three()));
       await until(() => im.evaluate(() => typeof __batchRead === 'function'), 'batch reading');
       const queued = await im.evaluate(() => [...document.querySelectorAll('.gd-pending')].map((el) => el.querySelector('.gd-meta').textContent));
       check(queued.length === 20 && queued.every((s) => s === 'Reading…'), `twenty dropped files each show a stage immediately (${JSON.stringify(queued)})`);

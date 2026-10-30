@@ -5,16 +5,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const B = require('../lib/backup.js');
-const Z = require('../lib/zip.js');
-const F = require('../lib/doc-files.js');
-const PA = require('../lib/writer-papers.js');
-const D = require('../defaults.js');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
+const B = require('../../extension/lib/backup.js');
+const Z = require('../../extension/lib/zip.js');
+const F = require('../../extension/lib/doc-files.js');
+const PA = require('../../extension/lib/writer-papers.js');
+const D = require('../../extension/defaults.js');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-globalThis.GZ_WRITER_STYLES = require('../lib/writer-styles.js');
+globalThis.GZ_WRITER_STYLES = require('../../extension/lib/writer-styles.js');
 
 const NOW = Date.now() - 60000;
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
@@ -167,13 +167,13 @@ test('a reader from before the store refuses a backup whose documents it would s
   const a = device();
   await seeded(a);
   // The 4.0.0 reader before the file store, lib/backup.js as of 8434813b, kept as a file: CI's shallow checkout lacks it.
-  const oldSource = fs.readFileSync(path.join(__dirname, 'fixtures', 'backup-before-store.js'), 'utf8');
+  const oldSource = fs.readFileSync(path.join(__dirname, '../fixtures/backup-before-store.js'), 'utf8');
   const old = { exports: {} };
-  vm.runInNewContext(oldSource, { module: old, require: (p) => require(`../lib/${p}`), Blob, TextEncoder, TextDecoder, Uint8Array, DataView, URL });
+  vm.runInNewContext(oldSource, { module: old, require: (p) => require(`../../extension/lib/${p}`), Blob, TextEncoder, TextDecoder, Uint8Array, DataView, URL });
   const { file } = await backUp(a);
   await assert.rejects(old.exports.read(file), (e) => e.why === 'newer');
   assert.ok((await B.read(file)).cats.papers, 'the store-aware reader still takes every document');
-  const options = fs.readFileSync(require.resolve('../options.js'), 'utf8');
+  const options = fs.readFileSync(require.resolve('../../extension/options.js'), 'utf8');
   assert.match(options, /newer:.*Update Glaze to restore it\./, 'the old reader gives its existing update instruction');
 });
 

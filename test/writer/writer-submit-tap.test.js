@@ -1,6 +1,6 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../scripts/frame-tap.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../checks/mocks/frame-tap.js'), 'utf8');
 const code = source.slice(source.indexOf('const taps = '), source.indexOf('module.exports'));
 
 // Exercise tap's routing decisions without Chromium: a pre-click hit test passes, then the browser reports where the

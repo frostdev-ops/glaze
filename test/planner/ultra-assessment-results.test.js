@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 // Every rule as [selector, body], @media and @supports flattened.
 const rules = (file) => {
   const css = read(file), out = [];
@@ -39,7 +39,7 @@ test('the Assessment Results heading wears every rule the other overview section
 });
 
 test('the Assessment Results content gets the wells\' surface, padding and solid-background treatment', () => {
-  const fixture = read('test/fixtures/ultra-assessment-rubric.html');
+  const fixture = read('../test/fixtures/ultra-assessment-rubric.html');
   assert.match(fixture, /assessment-results-section main-section-container"><div class="assessment-results-header">[\s\S]*?<\/div><ul class="section-content"><li class="details-list-item assessment-result-options">/, 'the Results fixture uses the native list shape');
   const wells = THEME.filter(([s]) => s.includes('.section-well'));
   assert.ok(wells.length >= 2, 'the well surface and its solid-background rule');

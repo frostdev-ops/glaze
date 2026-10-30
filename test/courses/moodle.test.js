@@ -1,17 +1,17 @@
 // Moodle (W20): the detector and host registration, the parsers in lib/moodle.js, what features/moodle.js does with them,
 // and the fixtures they are checked against (test/fixtures/moodle-*: pages captured from the local Moodle with
-// `scripts/canvas-shots.js --lms moodle --settings '{enabled:false}' --html test/fixtures …`, service answers scrubbed).
+// `tools/dev/canvas-shots.js --lms moodle --settings '{enabled:false}' --html test/fixtures …`, service answers scrubbed).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../lib/moodle.js');
-const { score } = require('../lib/page.js');
+const M = require('../../extension/lib/moodle.js');
+const { score } = require('../../extension/lib/page.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const dir = path.join(__dirname, 'fixtures');
+const dir = path.join(__dirname, '../fixtures');
 const fixtures = fs.readdirSync(dir).filter((f) => /^moodle-.*\.html$/.test(f)).map((f) => ({ f, html: fs.readFileSync(path.join(dir, f), 'utf8') }));
 const json = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
 const ORIGIN = 'http://localhost:8081';
@@ -88,7 +88,7 @@ test('the detector stays under 2 KB', () => {
 // ---- the background: a Moodle host, once the student says yes, is injected now and registered for good, in its own list --
 // Each LMS's first content script: Canvas's is the manifest's for *.instructure.com, with its part; Moodle's is the same
 // without it (B0b). Before the yes, the page gets only the question (WP-C2, features/consent.js), in Glaze's words.
-const CANVAS_FIRST = require('../manifest.json').content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
+const CANVAS_FIRST = require('../../extension/manifest.json').content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
 const MOODLE_FIRST = CANVAS_FIRST.filter((f) => f !== 'content-canvas.js');
 const ASK = ['lib/i18n.js', 'features/consent.js'];
 const asked = (first) => first.filter((f) => f !== 'lib/i18n.js'); // the question brought Glaze's words in already
@@ -101,7 +101,7 @@ test('a Moodle host is asked about, then injected now and registered from then o
     URL, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto,
     importScripts: (...files) => { for (const file of files) vm.runInContext(read(path.join('lib', file)), context); },
     chrome: {
-      runtime: { id: 'id', getURL: (p = '') => `chrome-extension://id/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => { message ||= []; message.push(f); } }, onInstalled: none, onStartup: none, onConnect: none },
+      runtime: { id: 'id', getURL: (p = '') => `chrome-extension://id/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => { message ||= []; message.push(f); } }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, store[x]])), set: async (o) => Object.assign(store, o) }, sync: { get: async () => ({}) }, onChanged: none },
       permissions: { contains: async () => true }, // the student granted every host (Chrome)
       scripting: {
@@ -205,7 +205,7 @@ test('a total\'s chip: Moodle\'s own text, and its share where it says a percent
 });
 
 // ---- features/moodle.js, in a stand-in page ---------------------------------------------------------------------------
-const D = require('../defaults.js');
+const D = require('../../extension/defaults.js');
 const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = [], settings = { enabled: true, enhance: { overall: true } }, overview = '', courses = [], stored = {}, root = ORIGIN, list = {}, dark = true, live = { on: true } } = {}) => {
   const asked = [];
   // storage.local, as GZ_CTX.local hands it over.
@@ -219,7 +219,7 @@ const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = []
   };
   const context = vm.createContext({ solo: false, tabFrame: '',
     URL, Promise, JSON, Date, document, location: { origin: ORIGIN }, matchMedia: () => ({ matches: dark }),
-    GZ_COURSE_COLOR: D.GZ_COURSE_COLOR, GZ_SURFACE_VARS: D.GZ_SURFACE_VARS, GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../lib/color.js'),
+    GZ_COURSE_COLOR: D.GZ_COURSE_COLOR, GZ_SURFACE_VARS: D.GZ_SURFACE_VARS, GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../../extension/lib/color.js'),
     GZ_MOODLE: M, GZ_PAGE: { score },
     GZ_CTX: { t: (k) => k, settings: () => settings, local: (fn) => fn(local), canvasCourseKey: (id) => (id ? `moodle:${root}/${id}` : null), courseList: () => list, on: () => live.on },
     fetch: async (url, opts = {}) => { asked.push({ url, ...opts }); return { ok: true, status: 200, text: async () => overview, json: async () => [{ error: false, data: { events: [], courses } }] }; },
@@ -287,9 +287,9 @@ test('Moodle\'s files load on demand, end on a value, and keep the first copy wh
 });
 
 test('Moodle is packaged: its stylesheet is exposed to pages, and the zip carries it and features/', () => {
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   assert.ok(m.web_accessible_resources[0].resources.includes('moodle.css'));
-  const pkg = read('package.sh');
+  const pkg = read('../tools/build/package.sh');
   for (const f of ['moodle.css', 'features']) assert.equal(pkg.match(new RegExp(` ${f} `, 'g'))?.length, 2, `package.sh: ${f}`);
 });
 
@@ -297,8 +297,8 @@ test('the words features/moodle.js shows are in every language', () => {
   const src = read('features/moodle.js');
   const words = [...src.matchAll(/\bt\('([^']+)'\)/g), ...src.matchAll(/\['\/[^']*', '([^']+)'\]/g)].map((m) => m[1]);
   assert.ok(words.length >= 8);
-  require('../lib/i18n.js');
-  for (const f of fs.readdirSync(path.join(root, 'i18n'))) require(`../i18n/${f}`);
+  require('../../extension/lib/i18n.js');
+  for (const f of fs.readdirSync(path.join(root, 'i18n'))) require(`../../extension/i18n/${f}`);
   for (const [lang, cat] of Object.entries(globalThis.GZ_LANGS)) for (const w of words) assert.ok(w in cat, `${lang}: "${w}"`);
 });
 
@@ -351,7 +351,7 @@ test('every page fixture still has what Glaze keys on', () => {
 });
 
 test('the capture scrubber takes Moodle\'s session key and login token out, wherever they sit', () => {
-  const { redact, fixture } = require('../scripts/redact.js');
+  const { redact, fixture } = require('../../tools/dev/redact.js');
   for (const [raw, want] of [
     ['/login/logout.php?sesskey=Ab12Cd34Ef', '/login/logout.php?sesskey=REDACTED'],
     ['/course/mod.php?update=136&amp;return=1&amp;sesskey=Myb5ZNzBEH"', '/course/mod.php?update=136&amp;return=1&amp;sesskey=REDACTED"'],
@@ -362,8 +362,8 @@ test('the capture scrubber takes Moodle\'s session key and login token out, wher
   assert.match(fixture('/', '<html></html>'), /on the local Canvas/, 'Canvas stays the default');
 });
 
-// scripts/canvas-shots.js needs Playwright, so its Moodle lookup is run from its source with a stand-in browser context.
-const shots = read('scripts/canvas-shots.js');
+// tools/dev/canvas-shots.js needs Playwright, so its Moodle lookup is run from its source with a stand-in browser context.
+const shots = read('../tools/dev/canvas-shots.js');
 const sliceFn = (name) => { const a = shots.indexOf(`const ${name} = `); return shots.slice(a, shots.indexOf('\n};\n', a) + 4); };
 const harness = () => vm.runInNewContext(`${shots.match(/^const fail = .*$/m)[0]}\n${sliceFn('moodleLookup')}\n${sliceFn('moodlePages')}\n({ moodleLookup, moodlePages })`, {
   BASE: ORIGIN, COURSES: { bio: 'BIO 1100', eng: 'ENG 1100' }, Object, Array, Error, RegExp,
@@ -400,7 +400,7 @@ const courseKey = ({ site = 'moodle', body, sheet = `${ORIGIN}/theme/styles.php/
   site, moodle: site === 'moodle', location: { origin }, canvasCourseId: () => canvasId,
   document: { body: body === undefined ? null : { className: body }, querySelector: (sel) => (sel.includes('/theme/styles') && sheet ? { href: sheet } : null) },
 });
-const G = require('../defaults.js');
+const G = require('../../extension/defaults.js');
 
 test('a Moodle course is keyed by its site\'s root and its id, from Moodle\'s own markup, on its pages and nowhere else', () => {
   for (const { f, html } of fixtures) {
@@ -634,7 +634,7 @@ test('content.js hands Moodle\'s keys to keys.js, with Canvas\'s guards: not rep
   const line = read('content.js').match(/^ {2}const keyOn = [^\n]*\n[^\n]*;$/m)[0];
   const keyOn = (site, e, pathname = '/course/view.php') => vm.runInNewContext(`${line} keyOn`, {
     chrome: { runtime: { id: 'glaze' } },
-    settings: { enhance: { keys: true } }, observer: {}, typing: () => false, ultra: site === 'ultra', moodle: site === 'moodle', location: { pathname }, GZ_PAGE: require('../lib/page.js'),
+    settings: { enhance: { keys: true } }, observer: {}, typing: () => false, ultra: site === 'ultra', moodle: site === 'moodle', location: { pathname }, GZ_PAGE: require('../../extension/lib/page.js'),
   })({ key: 'g', target: { closest: () => null }, ...e });
   assert.ok(keyOn('moodle', {}));
   for (const e of [{ repeat: true }, { defaultPrevented: true }, { ctrlKey: true }, { target: { closest: () => ({}) } }]) assert.ok(!keyOn('moodle', e), JSON.stringify(e));

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(path.join(__dirname, '../scripts/agent-link-check.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../checks/agents/agent-link-check.js'), 'utf8');
 
 test('T9 does not force the optional-grant worker to restart', () => {
   assert.ok(!/ServiceWorker\.stop|runtime\.reload\(/.test(source), 'a forced restart cannot prove the idle restart decision');

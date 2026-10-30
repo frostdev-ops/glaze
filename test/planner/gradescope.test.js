@@ -8,13 +8,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
-const D = require('../defaults.js');
-const T = require('../lib/todo.js');
-const G = require('../lib/gradescope.js');
+const D = require('../../extension/defaults.js');
+const T = require('../../extension/lib/todo.js');
+const G = require('../../extension/lib/gradescope.js');
 
 const at = (s) => Date.parse(s);
 const O = D.GZ_SANITIZE({}).todo;
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const EMAIL = 'student@school.edu';
 const A1 = nodeCrypto.createHash('sha256').update(EMAIL).digest('hex').slice(0, 24);
 const A2 = 'f'.repeat(24);
@@ -259,7 +259,7 @@ test('on a Canvas page: off means no file is asked for and nothing is added', ()
 });
 
 test('the worker: who may write, the script on Gradescope only while on, and the daily read kept to its course, account and day', async () => {
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   const store = { sync: { enhance: { gradescope: false } }, local: {} };
   let onSet = null;
   const area = (s) => ({

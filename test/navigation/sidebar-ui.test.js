@@ -7,12 +7,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const W = require('../lib/widgets.js');
-const S = require('../lib/sidebar.js');
-const { El } = require('./stand-in-dom.js');
-const { parse } = require('./fixture-dom.js');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const D = require('../../extension/defaults.js');
+const W = require('../../extension/lib/widgets.js');
+const S = require('../../extension/lib/sidebar.js');
+const { El } = require('../stand-in-dom.js');
+const { parse } = require('../fixture-dom.js');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 const O = 'https://board.instructure.com';
 const KEY = S.key('canvas', O, '3');
@@ -22,7 +22,7 @@ const KEY = S.key('canvas', O, '3');
 const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', width = 1440, left = 276, stored = {}, enhance = {}, widgets = false, tall = false } = {}) => {
   const doc = { activeElement: null };
   doc.root = new El('html', doc);
-  doc.body = parse(read(`test/fixtures/${fixture}`), doc);
+  doc.body = parse(read(`../test/fixtures/${fixture}`), doc);
   const store = structuredClone(stored), sent = [], loads = [], storeListeners = [], keyListeners = [], winListeners = [], observers = [], sizes = [];
   const net = { fail: false }, timers = new Map();
   let timerId = 0;
@@ -603,7 +603,7 @@ test('off returns exactly to before (Canvas\'s column, the Dashboard\'s To Do ti
   const stored = { widgetLayout: lay, ...record({ dock: [{ id: 'todo' }, { id: 'notes' }], dest: { todo: 'dock', notes: 'dock' } }) };
   const sw = {};
   const p = page({ fixture: 'canvas-dashboard-cards.html', where: '/', width: 1700, left: 84, stored, enhance: sw, widgets: true });
-  p.c.GZ_TODO = require('../lib/todo.js');
+  p.c.GZ_TODO = require('../../extension/lib/todo.js');
   p.c.GZ_TODO_UI = { mount: (target) => { target.append(Object.assign(p.doc.createElement('section'), { id: 'gz-todo' })); return true; }, unmount() {}, sync() {} };
   const wrapper = p.$('#right-side-wrapper'), attrs = { ...wrapper.attrs }, data = { ...wrapper.dataset };
   // Before the sidebar: the legacy page, as with the switch off from the start.
@@ -923,13 +923,13 @@ test('Canvas page switches restore the legacy To Do hook when that page kind is 
 });
 
 test('Canvas off matches the frozen pre-sidebar DOM and html attributes, including the Dashboard and To Do board tile', async () => {
-  const baseline = require('./fixtures/sidebar-legacy.json').canvas;
-  const snapshot = require('./sidebar-snapshot.js');
+  const baseline = require('../fixtures/sidebar-legacy.json').canvas;
+  const snapshot = require('../sidebar-snapshot.js');
   for (const kindOff of [false, true]) {
     const sw = { sidebar: false, widgets: false, notes: false, pet: false, todo: true };
     const p = page({ fixture: 'canvas-dashboard-cards.html', where: '/', width: 1700, left: 84, widgets: true, enhance: sw,
       stored: { widgetLayout: W.layout({ canvasTodo: true, boards: { cdash: [{ id: 'todo', on: true }, { id: 'notes', on: false }] } }) } });
-    p.c.GZ_TODO = require('../lib/todo.js');
+    p.c.GZ_TODO = require('../../extension/lib/todo.js');
     p.c.GZ_TODO_UI = { sync() {}, mount() {}, unmount() {} };
     p.ui.sync(true); await settle();
     assert.deepEqual(snapshot(p, ['#right-side-wrapper', '#gz-dash']), baseline, 'off from startup');

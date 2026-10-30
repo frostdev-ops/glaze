@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const I = require('../lib/ics.js');
+const I = require('../../extension/lib/ics.js');
 
-const fixture = (name) => fs.readFileSync(path.join(__dirname, 'fixtures/ics', name));
+const fixture = (name) => fs.readFileSync(path.join(__dirname, '../fixtures/ics', name));
 const at = (s) => Date.parse(s);
 const iso = (ms) => new Date(ms).toISOString().replace('.000', '');
 const FALL = [at('2026-08-01T00:00:00Z'), at('2027-01-01T00:00:00Z')];
@@ -385,7 +385,7 @@ test('expanding distant years bounds retained zone years across calls', () => {
     }
   }
   const context = { module: { exports: {} }, TextEncoder, TextDecoder, Map: TrackedMap };
-  require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../lib/ics.js'), 'utf8'), context);
+  require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/ics.js'), 'utf8'), context);
   const parser = context.module.exports;
   const cal = parser.parse(cal1(vtz('Custom', US), ev('UID:y', 'DTSTART;TZID=Custom:20260601T090000', 'RRULE:FREQ=YEARLY')));
   for (const end of [2100, 2200]) {

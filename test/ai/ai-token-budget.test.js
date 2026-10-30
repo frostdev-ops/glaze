@@ -4,12 +4,12 @@
 // at three times its English length, which is how an ordinary paper reaches the budget.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../lib/ai/task.js');
-const L = require('../lib/ai/loop.js');
-const F = require('../lib/ai/failure.js');
-require('../lib/ai/providers/mock.js');
-const RV = require('../lib/ai/tasks/writer-review.js');
-const O = require('../lib/ai/tasks/writer-outline.js');
+const T = require('../../extension/lib/ai/task.js');
+const L = require('../../extension/lib/ai/loop.js');
+const F = require('../../extension/lib/ai/failure.js');
+require('../../extension/lib/ai/providers/mock.js');
+const RV = require('../../extension/lib/ai/tasks/writer-review.js');
+const O = require('../../extension/lib/ai/tasks/writer-outline.js');
 
 const WIDE = { context: 400000 }; // a cloud model's window, far past the loop's default budget
 const CJK = (n) => '記憶は川のように流れて町の忘れたものを運ぶ。'.repeat(Math.ceil(n / 21)).slice(0, n);
@@ -34,7 +34,7 @@ test('writer.outline: a section past the run\'s budget falls back to the local o
 // Feedback's and Outline's orchestrators split and refuse by the fits() they are given (writer-feedback.js room,
 // writer-outline.js): a request the run's budget refuses never fits, and one that fits is never refused by the loop.
 test('fits() and ask() agree with the run\'s token budget on a wide model', async () => {
-  const X = require('../lib/ai/text.js');
+  const X = require('../../extension/lib/ai/text.js');
   const ask = (n) => X.request({ system: 'Read the passage.', data: [{ label: 'passage', text: CJK(n) }], maxTokens: 256 });
   const seen = {};
   const task = T.define({ id: 'example.budget', version: 1, caps: {}, input: (raw) => raw, build: () => ({}), check: (out) => out, output: 'text',

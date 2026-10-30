@@ -5,18 +5,18 @@
 // prompt). Allowed, the check also stands in for the grant in the worker (its chrome.permissions.contains says yes for that
 // host, as the browser would once granted) and the zip completes; refused, the panel's error; a redirect to another host
 // can't be asked for (the worker never sees where it goes): that file fails.
-//   NODE_PATH=<installed playwright> nice node scripts/download-check.js [screenshots directory]
+//   NODE_PATH=<installed playwright> nice node checks/core/download-check.js [screenshots directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const G = require('../defaults.js');
-const env = require('./check-env.js');
-const ext = env.staged(process.env.EXT || path.join(__dirname, '..'), ['https://files.redirect.test/*']);
+const G = require('../../extension/defaults.js');
+const env = require('../../tools/dev/check-env.js');
+const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://files.redirect.test/*']);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const O = 'https://school.instructure.com', A = 'files.cdn-a.test', B = 'files.cdn-b.test', C = 'files.cdn-c.test';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-download-'));
 const out = path.resolve(process.argv[2] || path.join(tmp, 'shots'));
 fs.mkdirSync(out, { recursive: true });
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const PAGE = fixture('canvas-modules.html').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
   .replace(/class="context_module_item (?!student-view attachment)/g, 'class="context_module_item attachment '); // a File row in each module: its button
 // Each module one file: 73 on A (asked for, allowed), 74 on C (asked for, refused), 75 on A redirecting to B.
@@ -97,8 +97,8 @@ const allowFrame = (page, mid, host) => {
   let ctx;
   const fetched = [], errors = [], apiAsked = [];
   try {
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce', acceptDownloads: true,
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce', acceptDownloads: true,
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
     env.noFirstRun(ctx);
     await ctx.route('**/*', (route) => {

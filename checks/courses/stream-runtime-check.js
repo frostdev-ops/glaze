@@ -1,9 +1,9 @@
 // Real unpacked extension: background loader, native Stream mutations, closed-root keyboard focus and editor preview.
-// NODE_PATH=<playwright node_modules> node scripts/stream-runtime-check.js [evidence-directory]
+// NODE_PATH=<playwright node_modules> node checks/courses/stream-runtime-check.js [evidence-directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['https://bb.school.test/*']), G = require(path.join(ext, 'defaults.js'));
-const site = 'https://bb.school.test', out = process.argv[2], lock = require('./check-env.js').lockPath();
+const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, '../../extension'), ['https://bb.school.test/*']), G = require(path.join(ext, 'defaults.js'));
+const site = 'https://bb.school.test', out = process.argv[2], lock = require('../../tools/dev/check-env.js').lockPath();
 const fixture = `<!doctype html><html lang="en-US"><head><base href="https://cdn.school.test/ultra/"><style>body{font:16px system-ui;padding:24px}.element-card{padding:20px}.stream-item-container{margin-bottom:28px;list-style:none}</style></head><body><div id="site-wrap"><section class="js-base-stream-container route-view-container"><h1>Activity Stream</h1><div id="activity-stream" class="activity-stream"><div class="activity-group"><h2>Upcoming</h2><ul class="activity-feed"><li id="deadline" class="stream-item-container"><div class="stream-item"><div class="element-card"><div class="element-details" analytics-context='{"streamType":"GB:DUE"}'><div class="timestamp"><div><span class="date">Sep 16, 2026</span><span class="time">9:30 AM</span></div></div><div class="name">Due: Chapter 4 assignment</div><div class="content"><span class="due-date"><bb-translate translate-values='{"datetime":"10/25/26, 11:59 PM","timezone":"EDT"}'>Due Date: 10/25/26, 11:59 PM (EDT)</bb-translate></span></div></div></div></div></li></ul></div></div></section></div><div id="notification-settings"><form><div id="panel-stream"><h2>Stream Notifications</h2><label><input id="native" type="checkbox" checked>New grades</label></div></form></div></body></html>`;
 let checks = 0;
 const check = (ok, message) => { if (!ok) throw Error(message); checks++; console.log(`ok ${message}`); };
@@ -13,9 +13,9 @@ const findNode = (node, match) => match(node) ? node : [...(node.children || [])
   const errors = [];
   try {
     fs.mkdirSync(lock); held = true; tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-stream-runtime-'));
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      headless: true, ...require('./check-env.js').chromeLaunch(), viewport: { width: 1400, height: 1000 },
+      headless: true, ...require('../../tools/dev/check-env.js').chromeLaunch(), viewport: { width: 1400, height: 1000 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     context.setDefaultTimeout(12000);
@@ -34,7 +34,7 @@ const findNode = (node, match) => match(node) ? node : [...(node.children || [])
     const page = await context.newPage(); page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`chrome-extension://${id}/popup.html`);
     await worker.evaluate(() => queue);
-    await require('./check-env.js').ultraReady(page);
+    await require('../../tools/dev/check-env.js').ultraReady(page);
     await page.goto(`${site}/ultra/stream`);
     await page.waitForSelector('#gz-stream-settings');
     await page.waitForFunction(() => document.querySelector('#deadline .gz-stream-date .date')?.textContent === 'Due Oct 25');

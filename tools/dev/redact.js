@@ -1,5 +1,5 @@
-// What scripts/canvas-shots.js --html takes out of a captured page before it becomes a test fixture: anything that
-// would let someone act as the student. Plain node, no dependencies, so test/canvas-fixtures.test.js can check it.
+// What tools/dev/canvas-shots.js --html takes out of a captured page before it becomes a test fixture: anything that
+// would let someone act as the student. Plain node, no dependencies, so test/courses/canvas-fixtures.test.js can check it.
 
 // Query values that unlock something: file verifiers, tokens. The whole value goes. In a plain query it ends at the next
 // & (an encoded %26 there is part of the value); inside an encoded URL (a file preview's ?url=…%3Fverifier%3D…) at %26.
@@ -21,6 +21,6 @@ const redact = (html) => html
 
 // A fixture as written to disk: its provenance note (which names the captured address) and the page, scrubbed together.
 const SEEDS = { canvas: 'the local Canvas (seed: ~/Projects/canvas-lms/glaze/seed.rb)', moodle: 'the local Moodle (seed: ~/Projects/moodle-dev/seed.php)' };
-const fixture = (url, html, lms = 'canvas') => redact(`<!-- Glaze test fixture: ${url} on ${SEEDS[lms]}, rendered DOM after load. Made by scripts/canvas-shots.js --html; scripts emptied, tokens redacted, repeated rows trimmed. -->\n${html}`);
+const fixture = (url, html, lms = 'canvas') => redact(`<!-- Glaze test fixture: ${url} on ${SEEDS[lms]}, rendered DOM after load. Made by tools/dev/canvas-shots.js --html; scripts emptied, tokens redacted, repeated rows trimmed. -->\n${html}`);
 
 module.exports = { redact, fixture };

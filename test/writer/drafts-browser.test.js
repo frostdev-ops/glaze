@@ -1,11 +1,11 @@
-// Opt-in native HTML parser/editing check: NODE_PATH=/path/to/node_modules DRAFT_BROWSER=1 nice -n 10 node --test test/drafts-browser.test.js
+// Opt-in native HTML parser/editing check: NODE_PATH=/path/to/node_modules DRAFT_BROWSER=1 nice -n 10 node --test test/writer/drafts-browser.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
 test('Restore sanitizes legacy HTML at the native editing boundary', { skip: !process.env.DRAFT_BROWSER }, async (t) => {
-  // The browser checks' own lock (scripts/check-env.js): $GLAZE_LOCK, or glaze-heavy.lock in the OS temp directory.
+  // The browser checks' own lock (tools/dev/check-env.js): $GLAZE_LOCK, or glaze-heavy.lock in the OS temp directory.
   const lock = process.env.GLAZE_LOCK || path.join(require('node:os').tmpdir(), 'glaze-heavy.lock');
   let held = false, browser;
   try {
@@ -13,7 +13,7 @@ test('Restore sanitizes legacy HTML at the native editing boundary', { skip: !pr
       try { fs.mkdirSync(lock); held = true; }
       catch (e) { if (e.code !== 'EEXIST' || i >= 120) throw e; await new Promise((r) => setTimeout(r, 5000)); }
     }
-    await require('../scripts/wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     browser = await require('playwright').chromium.launch({ headless: true });
     const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1wAAAABJRU5ErkJggg==';
     const cases = [
@@ -28,7 +28,7 @@ test('Restore sanitizes legacy HTML at the native editing boundary', { skip: !pr
       try {
         await page.route('**/*', (r) => r.fulfill({ contentType: 'text/html', body: '<html><body><div id="ed1" class="ql-editor" contenteditable="true"></div></body></html>' }));
         await page.goto('https://bb.school.test/ultra/courses/_5_1/outline');
-        await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../lib/drafts.js'), 'utf8') });
+        await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../../extension/lib/drafts.js'), 'utf8') });
         await page.evaluate((html) => {
           const key = GZ_DRAFTS.ultraKey({ origin: location.origin, user: '_7_1', path: location.pathname, near: '_12_3', id: 'ed1' });
           const store = { [key]: { html, text: 'A sufficiently long recovery paragraph.', at: Date.now() } };
@@ -41,7 +41,7 @@ test('Restore sanitizes legacy HTML at the native editing boundary', { skip: !pr
             account: async () => '_7_1', local: (f) => f(chrome.storage.local), draftEditor: '.ql-editor[contenteditable="true"]',
             draftAt: (ed) => ({ ed, id: ed.id, near: '_12_3', path: location.pathname, text: ed.textContent, html: ed.innerHTML, at: Date.now() }) };
         }, html);
-        await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../features/drafts.js'), 'utf8') });
+        await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../../extension/features/drafts.js'), 'utf8') });
         await page.evaluate(() => GZ_DRAFT_UI.watch());
         await page.getByRole('button', { name: 'Restore', exact: true }).click();
         const got = await page.evaluate(() => {

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Run the release ZIP on the dedicated Android emulator; never use a connected personal device.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 root=$PWD
-version=$(node -p 'require("./manifest.json").version')
+version=$(node -p 'require("./extension/manifest.json").version')
 state="$root/release/$version/firefox/android"
 sdk="${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}"
 emulator="$sdk/emulator/emulator"
@@ -38,7 +38,7 @@ case "${1:-run}" in
     exit
     ;;
   run) ;;
-  *) die 'Usage: sh scripts/firefox-android.sh [run|check|stop]' ;;
+  *) die 'Usage: sh tools/dev/firefox-android.sh [run|check|stop]' ;;
 esac
 
 command -v adb >/dev/null || die 'Missing adb; see docs/firefox-android.md.'

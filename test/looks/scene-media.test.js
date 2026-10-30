@@ -4,7 +4,7 @@
 // the gradient left alone, with the reason told, when it can't be shown.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { env } = require('./helpers/media-env.cjs');
+const { env } = require('../helpers/media-env.cjs');
 
 // Long enough for the page's promises to settle (the env's digest of a kept file is one of them).
 const settle = () => new Promise((done) => setTimeout(done, 20));
@@ -338,8 +338,8 @@ test('a video or picture the decoder finds past the side limit is dropped, whate
 });
 
 test('the page and the worker agree on the longest side', () => {
-  const side = Number(/^const SIDE = (\d+);/m.exec(require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/scene-media.js'), 'utf8'))[1]);
-  assert.equal(side, require('../lib/media.js').LIMIT.bg.image.side);
+  const side = Number(/^const SIDE = (\d+);/m.exec(require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/scene-media.js'), 'utf8'))[1]);
+  assert.equal(side, require('../../extension/lib/media.js').LIMIT.bg.image.side);
 });
 
 test('video decoder dimensions are refused at metadata time before waiting for a first frame', async () => {

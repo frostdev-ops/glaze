@@ -1,7 +1,7 @@
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const root = process.env.GZ_B6_REPO || path.join(__dirname, '..');
+const root = process.env.GZ_B6_REPO || path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 class El {

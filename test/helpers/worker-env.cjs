@@ -1,4 +1,4 @@
-// The real lib/background.js in a vm, as test/sidebar-broker.test.js runs it, with in-memory storage and what the tests of
+// The real lib/background.js in a vm, as test/navigation/sidebar-broker.test.js runs it, with in-memory storage and what the tests of
 // frame trust and starter flags also need: the worker's ports, tab events (removed, updated), session storage, and a count of the reads of
 // all of sync. Pass a previous run's `store` to restart the worker over the same storage, and `globals` for more of the
 // worker's own (indexedDB). chrome.permissions answers as
@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..', '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 
 // Whether match pattern `p` covers `want` (a pattern or an origin's `scheme://host[:port]/*`).

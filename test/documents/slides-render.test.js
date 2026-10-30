@@ -1,15 +1,15 @@
 // The slides viewer's renderer (lib/slides-render.js): one slide of lib/pptx.js's model as DOM, built with createElement,
 // createElementNS and textContent only, on a document stub that refuses HTML strings. The fixture deck is
-// test/fixtures/pptx/deck, zipped with lib/zip.js as test/pptx.test.js does.
+// test/fixtures/pptx/deck, zipped with lib/zip.js as test/documents/pptx.test.js does.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const Z = require('../lib/zip.js');
-const P = require('../lib/pptx.js');
-const R = require('../lib/slides-render.js');
+const Z = require('../../extension/lib/zip.js');
+const P = require('../../extension/lib/pptx.js');
+const R = require('../../extension/lib/slides-render.js');
 
-const DIR = path.join(__dirname, 'fixtures/pptx/deck');
+const DIR = path.join(__dirname, '../fixtures/pptx/deck');
 const walk = (dir, base = '') => fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
   .flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name), `${base}${e.name}/`) : [[`${base}${e.name}`, fs.readFileSync(path.join(dir, e.name))]]));
 const bytes = new Uint8Array(Buffer.concat(Z.zip(walk(DIR).sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, data]) => ({ name, data: new Uint8Array(data), date: new Date(2026, 9, 29, 12) })))));
@@ -303,7 +303,7 @@ test('find marks each match in the slide\'s text; text() is what find searches; 
 test('every slide of the fixture draws, through DOM calls alone', async () => {
   const d = await deck();
   for (const s of d.slides) R.slide(s, d, { document: doc, media: MEDIA, labels: LABELS });
-  const src = fs.readFileSync(path.join(__dirname, '../lib/slides-render.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/lib/slides-render.js'), 'utf8');
   for (const sink of ['innerHTML', 'outerHTML', 'insertAdjacentHTML', 'document.write', 'createContextualFragment', 'DOMParser']) assert.ok(!src.includes(sink), sink);
   assert.ok(!/setAttribute\(\s*['"]style['"]/.test(src), 'styles through the CSSOM, never a style attribute (papers.html allows no inline style)');
 });
@@ -336,8 +336,8 @@ test('find work stays bounded for text fragmented into many formatted runs', asy
   let work = 0;
   const math = Object.create(Math);
   math.max = (...args) => { work++; return Math.max(...args); };
-  const ctx = { Math: math, GZ_PPTX_GEOM: require('../lib/pptx-geom.js'), module: { exports: {} } };
-  require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../lib/slides-render.js'), 'utf8'), ctx);
+  const ctx = { Math: math, GZ_PPTX_GEOM: require('../../extension/lib/pptx-geom.js'), module: { exports: {} } };
+  require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/slides-render.js'), 'utf8'), ctx);
   const el = ctx.module.exports.slide(s, d, { document: doc, find: 'x' });
   assert.equal(all(el).filter(tag('mark')).length, 256);
   assert.ok(work < 256 * 12, `${work} range-bound operations for 256 runs and matches`);

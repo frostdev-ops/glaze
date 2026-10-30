@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../defaults.js');
+const G = require('../../extension/defaults.js');
 
 // The menu on a course's card edits settings.courses through GZ_COURSE_EDIT; whatever it leaves must be what
 // GZ_SANITIZE would keep, or the next read would undo it.
@@ -106,7 +106,7 @@ test('Canvas course tint and Look survive sanitizing without colliding with Ultr
 // would vanish or look alike. Each site's sheet keeps them visible.
 const forced = (css) => { const at = css.indexOf('@media screen and (forced-colors: active)'); return at < 0 ? '' : css.slice(at, css.indexOf('\n}\n', at)); };
 test('in forced colours the course menu keeps its swatches, its Tint switch and what is picked visible, on every site', () => {
-  const read = (f) => require('node:fs').readFileSync(require.resolve(`../${f}`), 'utf8');
+  const read = (f) => require('node:fs').readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
   for (const f of ['extras.css', 'canvas.css', 'moodle.css']) {
     const fc = forced(read(f).slice(read(f).indexOf('#gz-cm .gz-cm-look[aria-pressed="true"]')));
     assert.match(fc, /#gz-cm \.gz-cm-sw \{ forced-color-adjust: none; border-color: CanvasText; \}/, `${f}: swatches in their own colours`);

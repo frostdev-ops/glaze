@@ -11,7 +11,7 @@ const { execFileSync } = require('node:child_process');
 const MCPB = '@anthropic-ai/mcpb@2.1.2';
 const PKG = path.join(__dirname, '..');
 const ROOT = path.join(PKG, '..');
-const ICON = path.join(ROOT, 'icons', 'icon128.png');
+const ICON = path.join(ROOT, 'extension', 'icons', 'icon128.png');
 
 const files = (dir, rel = '') => fs.readdirSync(path.join(dir, rel), { withFileTypes: true }).flatMap((e) => (e.isDirectory()
   ? files(dir, path.join(rel, e.name)) : [path.join(rel, e.name)])).sort();

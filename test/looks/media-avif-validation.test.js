@@ -2,10 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/media.js');
+const M = require('../../extension/lib/media.js');
 
 test('animated AVIF measures track samples as well as the primary image before decoding', () => {
-  const bytes = fs.readFileSync(path.join(__dirname, 'fixtures/media/anim.avif'));
+  const bytes = fs.readFileSync(path.join(__dirname, '../fixtures/media/anim.avif'));
   const small = Buffer.from(bytes), ispe = small.indexOf('ispe');
   assert.ok(ispe > 0);
   small.writeUInt32BE(1, ispe + 8); small.writeUInt32BE(1, ispe + 12);
@@ -15,7 +15,7 @@ test('animated AVIF measures track samples as well as the primary image before d
 });
 
 test('a malformed AVIF track is refused without throwing', () => {
-  const bytes = fs.readFileSync(path.join(__dirname, 'fixtures/media/anim.avif'));
+  const bytes = fs.readFileSync(path.join(__dirname, '../fixtures/media/anim.avif'));
   bytes.writeUInt32BE(0x7fffffff, bytes.indexOf('trak') - 4);
   assert.equal(M.avif(new Uint8Array(bytes), M.LIMIT.bg.image), null);
 });

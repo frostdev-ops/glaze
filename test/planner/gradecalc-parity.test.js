@@ -4,10 +4,10 @@
 //   reproduces Canvas's search; kept here only to measure against.
 // - `exact`: Dinkelbach's iteration, which always finds a best set, given Canvas's ceiling for work worth no points
 //   and its tie rules as far as they can be stated without the search: the alternative that was turned down.
-// `node --test` runs a sample (SAMPLE groups per corpus). The full run: GZ_PARITY_FULL=1 node --test test/gradecalc-parity.test.js
+// `node --test` runs a sample (SAMPLE groups per corpus). The full run: GZ_PARITY_FULL=1 node --test test/planner/gradecalc-parity.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../lib/gradecalc.js');
+const G = require('../../extension/lib/gradecalc.js');
 
 const FULL = !!process.env.GZ_PARITY_FULL;
 const SAMPLE = 1000;

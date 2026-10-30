@@ -4,11 +4,11 @@
 // results in call order and within 12k characters, the round cap, and the conversation repaired before each request.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../lib/ai/providers.js');
-require('../lib/ai/providers/mock.js');
-const TL = require('../lib/ai/tools.js');
-const L = require('../lib/ai/loop.js');
-const S = require('../lib/ai/schema.js');
+const P = require('../../extension/lib/ai/providers.js');
+require('../../extension/lib/ai/providers/mock.js');
+const TL = require('../../extension/lib/ai/tools.js');
+const L = require('../../extension/lib/ai/loop.js');
+const S = require('../../extension/lib/ai/schema.js');
 
 const courses = TL.define({ name: 'courses_list', kind: 'read', description: 'The student\'s courses.', parameters: S.obj({ term: { type: 'string', enum: ['fall', 'spring'] } }, ['term']),
   run: async ({ term }) => [{ id: 'c1', name: `Biology (${term})` }] });

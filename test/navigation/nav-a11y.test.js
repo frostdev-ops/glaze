@@ -4,12 +4,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const M = require('../lib/navbar.js');
-const L = require('../lib/navlayout.js');
-const E = require('../lib/editor-navbar.js');
+const { El } = require('../stand-in-dom.js');
+const M = require('../../extension/lib/navbar.js');
+const L = require('../../extension/lib/navlayout.js');
+const E = require('../../extension/lib/editor-navbar.js');
 
-const read = (file) => fs.readFileSync(require.resolve(`../${file}`), 'utf8');
+const read = (file) => fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
 // ---- a stylesheet's rules, and which of them hide an element for a page's attributes ------------------------------------
@@ -183,7 +183,7 @@ test('the editor draws the LMS an item is for beside it, but not for items every
   const stored = {};
   for (const id of ['nbar-items', 'nbar-glaze', 'nbar-widgets', 'nbar-links', 'nbar-status', 'nbar-link-form', 'nbar-reset']) elements[id] = Object.assign(new El('div', doc), { id });
   doc.querySelector = (s) => elements[s.slice(1)]; doc.createElement = (s) => new El(s, doc); doc.createElementNS = (_, s) => new El(s, doc);
-  const ctx = vm.createContext({ document: doc, TextEncoder, URL, GZ_NAVBAR: M, GZ_NAV_ITEMS: require('../lib/nav-items.js'),
+  const ctx = vm.createContext({ document: doc, TextEncoder, URL, GZ_NAVBAR: M, GZ_NAV_ITEMS: require('../../extension/lib/nav-items.js'),
     chrome: { storage: { sync: { get: async () => stored, set: async (v) => { Object.assign(stored, plain(v)); } }, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/editor-navbar.js'), ctx);
   ctx.GZ_NAVBAREDIT.mount({ t: (s) => ({ Blackboard: 'Blackboard', Canvas: 'Canvas', Moodle: 'Moodle' }[s] || s), settings: () => ({ enhance: {} }) });
@@ -208,7 +208,7 @@ test("Ultra's Skip to content aims at the course tab's frame when one shows", ()
   const doc = (name) => ({ name, getElementById: (id) => (id === 'main-content' ? { in: name } : null), querySelector: () => null });
   const page = doc('page'), frame = doc('frame');
   const ctx = vm.createContext({ document: page, location: { origin: 'https://bb.test', pathname: '/ultra/courses/_1_1/outline' }, URL,
-    chrome: { storage: { local: { get() {}, set() {} } } }, MutationObserver: class { observe() {} disconnect() {} }, NodeFilter: {}, GZ_NAV: require('../lib/nav.js') });
+    chrome: { storage: { local: { get() {}, set() {} } } }, MutationObserver: class { observe() {} disconnect() {} }, NodeFilter: {}, GZ_NAV: require('../../extension/lib/nav.js') });
   const Ultra = vm.runInContext(src.slice(src.indexOf('function GZ_NAVBAR_ULTRA(X) {'), src.indexOf('if (typeof module')) + '\nGZ_NAVBAR_ULTRA;', ctx);
   const site = Ultra({ t: (s) => s, settings: () => ({ enhance: {} }) });
   assert.deepEqual(plain(site.main()), { in: 'page' });
@@ -225,7 +225,7 @@ test('the palette runs nothing on the Enter that commits an IME composition', ()
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   doc.createElement = (tag) => new El(tag, doc);
   const assigned = [];
-  const ctx = vm.createContext({ document: doc, location: { origin: 'https://bb.school.test', pathname: '/ultra/stream', assign: (u) => assigned.push(u) }, GZ_PAGE: require('../lib/page.js'), URL,
+  const ctx = vm.createContext({ document: doc, location: { origin: 'https://bb.school.test', pathname: '/ultra/stream', assign: (u) => assigned.push(u) }, GZ_PAGE: require('../../extension/lib/page.js'), URL,
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ({ enhance: {} }), need: () => new Promise(() => {}), courseId: () => '' } });
   const cmd = vm.runInContext(read('features/palette.js'), ctx);
   cmd.open();

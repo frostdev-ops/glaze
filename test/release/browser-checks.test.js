@@ -3,15 +3,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const scripts = path.join(__dirname, '../scripts');
+const checks = path.join(__dirname, '../../checks'), tools = path.join(__dirname, '../../tools/dev');
 
 test('every browser check waits before launching', () => {
-  for (const file of fs.readdirSync(scripts).filter((f) => f.endsWith('-check.js'))) {
-    const lines = fs.readFileSync(path.join(scripts, file), 'utf8').split('\n');
+  for (const file of fs.readdirSync(checks).flatMap((a) => fs.readdirSync(path.join(checks, a)).map((f) => `${a}/${f}`)).filter((f) => f.endsWith('-check.js'))) {
+    const lines = fs.readFileSync(path.join(checks, file), 'utf8').split('\n');
     lines.forEach((line, i) => {
       if (/chromium\.launch|launchPersistentContext/.test(line)) {
         const before = lines.slice(Math.max(0, i - 2), i).filter((l) => !l.includes('watchdog ='));
-        assert.equal(before.at(-1).trim(), "await require('./wait-for-browser.js')();", file);
+        assert.equal(before.at(-1).trim(), "await require('../../tools/dev/wait-for-browser.js')();", file);
       }
     });
   }
@@ -19,7 +19,7 @@ test('every browser check waits before launching', () => {
 
 const waiter = (probe) => {
   const module = { exports: {} }, calls = [];
-  vm.runInNewContext(fs.readFileSync(path.join(scripts, 'wait-for-browser.js'), 'utf8'), {
+  vm.runInNewContext(fs.readFileSync(path.join(tools, 'wait-for-browser.js'), 'utf8'), {
     module, console: { error() {} }, setTimeout: (f) => f(),
     require: (name) => {
       assert.equal(name, 'node:child_process');
@@ -48,7 +48,7 @@ test('browser wait fails closed if the probe fails or another browser never exit
 
 test('browser wait on Windows, which has no pgrep, goes straight on', async () => {
   const module = { exports: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(scripts, 'wait-for-browser.js'), 'utf8'), {
+  vm.runInNewContext(fs.readFileSync(path.join(tools, 'wait-for-browser.js'), 'utf8'), {
     module, process: { platform: 'win32' },
     require: () => ({ execFileSync: () => assert.fail('no probe on Windows') }),
   });
@@ -56,15 +56,15 @@ test('browser wait on Windows, which has no pgrep, goes straight on', async () =
 });
 
 test('the mod channel browser check is available alongside the Mods section check', () => {
-  assert.ok(fs.existsSync(path.join(scripts, 'mods-channel-check.js')));
+  assert.ok(fs.existsSync(path.join(checks, 'mods/mods-channel-check.js')));
 });
 
 test('the blocklist browser check seeds complete installed manifests for the real editor', () => {
-  const source = fs.readFileSync(path.join(scripts, 'blocklist-check.js'), 'utf8');
+  const source = fs.readFileSync(path.join(checks, 'mods/blocklist-check.js'), 'utf8');
   const fixture = source.slice(source.indexOf('const record = '), source.indexOf('\n(async () =>'));
   const rec = vm.runInNewContext(`${fixture}\nrecord('aaaaaaaaaaaaaaaa')`);
   const files = Object.fromEntries(Object.entries(rec.files || {}).map(([p, b]) => [p, new Uint8Array(Buffer.from(b, 'base64'))]));
-  assert.doesNotThrow(() => require('../lib/modbundle.js').clean(rec.manifest, files));
+  assert.doesNotThrow(() => require('../../extension/lib/modbundle.js').clean(rec.manifest, files));
   assert.equal(typeof rec.manifest.author.name, 'string');
 });
 
@@ -80,14 +80,14 @@ test('the course background check waits for installation and site registration b
   const env = { staged: () => '/fixture/extension', chromeLaunch: () => ({}), noFirstRun: () => {},
     installed: async () => { await Promise.resolve(); events.push('installed'); },
     ultraReady: async () => { await Promise.resolve(); events.push('registered'); } };
-  await vm.runInNewContext(fs.readFileSync(path.join(scripts, 'ctab-background-check.js'), 'utf8'), {
-    process: { env: {}, argv: [] }, __dirname: scripts, console: { log() {}, error() {} }, setTimeout,
+  await vm.runInNewContext(fs.readFileSync(path.join(checks, 'navigation/ctab-background-check.js'), 'utf8'), {
+    process: { env: {}, argv: [] }, __dirname: path.join(checks, 'navigation'), console: { log() {}, error() {} }, setTimeout,
     require: (name) => {
       if (name === 'playwright') return { chromium: { launchPersistentContext: async () => ctx } };
-      if (name === './check-env.js') return env;
-      if (name === './wait-for-browser.js') return async () => {};
+      if (name === '../../tools/dev/check-env.js') return env;
+      if (name === '../../tools/dev/wait-for-browser.js') return async () => {};
       if (name === 'node:fs') return { readFileSync: () => '<html></html>', mkdtempSync: () => '/fixture/profile', rmSync: () => events.push('removed') };
-      if (name.endsWith('/defaults.js')) return require('../defaults.js');
+      if (name.endsWith('/defaults.js')) return require('../../extension/defaults.js');
       return require(name);
     },
   });

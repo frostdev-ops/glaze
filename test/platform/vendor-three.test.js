@@ -1,4 +1,4 @@
-// scripts/vendor-three.sh installs exact, integrity-pinned versions without running their install scripts, and checks
+// tools/vendor/vendor-three.sh installs exact, integrity-pinned versions without running their install scripts, and checks
 // what npm installed against the pins before anything it installed is executed. These tests never run the script (it
 // installs from the network); they read it, run its integrity checker on synthetic lockfiles, and pin the checked-in output.
 const test = require('node:test');
@@ -9,9 +9,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const script = read('scripts/vendor-three.sh');
+const script = read('../tools/vendor/vendor-three.sh');
 const code = script.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
 const SRI = /^sha512-[A-Za-z0-9+/]{86}==$/;
 const variable = (name) => script.match(new RegExp(`^${name}=(\\S+)\\s*$`, 'm'))?.[1];
@@ -69,7 +69,7 @@ test('the build is compared with the recorded hash of lib/three.js, which is the
 
 // ---- the checker ----
 
-const checker = () => require('../scripts/npm-integrity.js');
+const checker = () => require('../../tools/vendor/npm-integrity.js');
 const integrity = (text) => `sha512-${crypto.createHash('sha512').update(text).digest('base64')}`;
 const entry = (name, version, extra = {}) => [`node_modules/${name}`, { version, resolved: `https://registry.npmjs.org/${name}/-/${name.split('/').pop()}-${version}.tgz`, integrity: integrity(`${name}@${version}`), ...extra }];
 const lockOf = (...entries) => ({ name: 'tmp', lockfileVersion: 3, requires: true, packages: Object.fromEntries(entries) });
@@ -135,7 +135,7 @@ test('the command line checks a lockfile against pins on stdin and fails closed'
   try {
     const { lock, pins } = good();
     fs.writeFileSync(path.join(dir, '.package-lock.json'), JSON.stringify(lock));
-    const run = (args, input) => spawnSync(process.execPath, [path.join(root, 'scripts/npm-integrity.js'), ...args], { input, encoding: 'utf8' });
+    const run = (args, input) => spawnSync(process.execPath, [path.join(__dirname, '../../tools/vendor/npm-integrity.js'), ...args], { input, encoding: 'utf8' });
     let result = run([path.join(dir, '.package-lock.json'), '-', 'three', 'esbuild'], pins + '\n');
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /3 packages match their pinned integrity/);

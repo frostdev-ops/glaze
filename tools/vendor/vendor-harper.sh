@@ -8,9 +8,9 @@
 # starts it from a blob: or data: URL (and builds that Blob on every import), and the Node path that reads the binary with a
 # dynamic import('fs'). The tarball is checked against the SHA-256 pinned here. Run it to upgrade harper.js (new version,
 # new hashes, check the cuts); the output is checked in, so the extension itself still has no build step.
-# Usage: scripts/vendor-harper.sh
+# Usage: tools/vendor/vendor-harper.sh
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../extension"
 
 version=3.0.0
 sha256=339d7f8e81276a5c2a36397f2e8264b300cd438f664f007b5ccb0d9dc1ccf19d

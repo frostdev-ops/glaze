@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const B = require('../lib/modbroker.js');
+const B = require('../../extension/lib/modbroker.js');
 
 const SITE = 'https://school.instructure.com';
 const ID = 'abcdefghijklmnop', OTHER = 'qrstuvwxyz234567';
@@ -58,7 +58,7 @@ test('dev mode suspends unsigned mods without changing their saved on/off state'
 });
 
 test('the worker cached record preserves the unsigned flag for the broker', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const code = source.slice(source.indexOf('const modKept ='), source.indexOf('chrome.runtime.onMessage.addListener', source.indexOf('const modKept =')));
   const data = { [`mod:${ID}`]: rec({ dev: true }) };
   const ctx = vm.createContext({ GZ_MODBROKER: B, Map, chrome: { storage: { local: area(data), onChanged: { addListener() {} } } } });
@@ -69,7 +69,7 @@ test('the worker cached record preserves the unsigned flag for the broker', asyn
 });
 
 test('the worker cached record preserves the fixed media source for checked overrides', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const code = source.slice(source.indexOf('const modKept ='), source.indexOf('chrome.runtime.onMessage.addListener', source.indexOf('const modKept =')));
   const parts = { bg: { media: { type: 'image', src: 'https://media.example/background.webp' } } };
   const data = { [`mod:${ID}`]: rec({ manifest: { permissions: [], parts }, grants: {} }) };
@@ -170,7 +170,7 @@ test('schedule refuses invalid timestamps, reversed ranges and ranges over 60 da
 });
 
 test('the host exposes schedule and sends both timestamps to the broker', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../mods/host.js'), 'utf8').match(/function glazeClient\(port\) \{[\s\S]*?\n    return glaze;\n  \}/)[0];
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/mods/host.js'), 'utf8').match(/function glazeClient\(port\) \{[\s\S]*?\n    return glaze;\n  \}/)[0];
   const e = env(), listeners = [], sent = [];
   const port = { start() {}, addEventListener(t, f) { listeners.push(f); }, postMessage(m) {
     sent.push(m);
@@ -342,7 +342,7 @@ test('whether the sandbox runs here is kept for the editor, written only when it
 
 // ---- the worker's sender check (lib/background.js) -------------------------------------------------------------------------
 test('only Glaze\'s content script in the top frame of an LMS page it runs on, with Glaze on, off quiz and tool pages', async () => {
-  const src = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const helpers = src.slice(src.indexOf('const fromEditor ='), src.indexOf('// Gradescope (lib/gradescope.js)'));
   const mine = src.slice(src.indexOf('const modQuiet ='), src.indexOf('const modKept ='));
   const store = { local: { canvas: ['https://canvas.school.edu/*'], moodle: ['https://moodle.school.edu/*'], ultra: ['https://bb.school.edu'] }, sync: { enabled: true } };
@@ -350,7 +350,7 @@ test('only Glaze\'s content script in the top frame of an LMS page it runs on, w
     runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, getManifest: () => ({ host_permissions: ['<all_urls>'] }) },
     storage: Object.fromEntries(['local', 'sync'].map((a) => [a, { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in store[a]).map((x) => [x, store[a][x]])) }])),
   };
-  const ctx = vm.createContext({ chrome, URL, GZ_LX: require('../lib/lookx.js'), GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../defaults.js').GZ_LOCAL_DEV, Promise });
+  const ctx = vm.createContext({ chrome, URL, GZ_LX: require('../../extension/lib/lookx.js'), GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../../extension/defaults.js').GZ_LOCAL_DEV, Promise });
   vm.runInContext(`${helpers}\n${mine}\nthis.fromLms = fromLms;`, ctx);
   const s = (url, over = {}) => ({ id: 'glaze', url, frameId: 0, tab: { id: 1, url }, ...over });
   const yes = { 'https://x.instructure.com/courses/1': 'https://x.instructure.com', 'https://canvas.school.edu/': 'https://canvas.school.edu', 'https://moodle.school.edu/my/': 'https://moodle.school.edu', 'https://bb.school.edu/ultra/course': 'https://bb.school.edu' };
@@ -379,7 +379,7 @@ test('only Glaze\'s content script in the top frame of an LMS page it runs on, w
 
 
 test('the broker reads and invalidates the blocklist package storage shape', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const cache = source.slice(source.indexOf('const modKept ='), source.indexOf('chrome.runtime.onMessage.addListener', source.indexOf('const modKept =')));
   let changed;
   const data = { modsBlocklist: { list: { mods: [ID] }, sig: 'checked', seq: 1 } };
@@ -432,7 +432,7 @@ test('code media overrides reuse only the manifest source and type, including lo
 
 
 for (const revoke of [{ [`mod:${ID}`]: { newValue: { enabled: false } } }, { modDev: { newValue: false } }]) test(`revocation ${Object.keys(revoke)[0]} aborts an in-flight broker fetch, including its response body`, async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const code = source.slice(source.indexOf('const modKept ='), source.indexOf('// Code on demand', source.indexOf('const modKept =')));
   const e = env();
   let message, signal, finish;
@@ -466,7 +466,7 @@ test('revocation during a data read or queued write releases neither data nor a 
 
 
 test('a storage read crossed by revocation retries instead of returning a stale grant', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const code = source.slice(source.indexOf('const modKept ='), source.indexOf('chrome.runtime.onMessage.addListener', source.indexOf('const modKept =')));
   let changed, release, first = true;
   const data = { [`mod:${ID}`]: rec() };
@@ -483,7 +483,7 @@ test('a storage read crossed by revocation retries instead of returning a stale 
 });
 
 test('the worker cancels an in-flight declarative widget read on revocation', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const code = source.slice(source.indexOf('const modKept ='), source.indexOf('// Code on demand', source.indexOf('const modKept =')));
   const e = env();
   let message, signal, finish;

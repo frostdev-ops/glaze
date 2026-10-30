@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const source = fs.readFileSync(process.env.PERF_ULTRA_SOURCE || require.resolve('../content-ultra.js'), 'utf8');
+const source = fs.readFileSync(process.env.PERF_ULTRA_SOURCE || require.resolve('../../extension/content-ultra.js'), 'utf8');
 const settle = () => new Promise(setImmediate);
-const light = vm.runInNewContext(fs.readFileSync(require.resolve('../features/light.js'), 'utf8'), { document: { addEventListener() {} } });
+const light = vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/features/light.js'), 'utf8'), { document: { addEventListener() {} } });
 const covered = vm.runInNewContext(`(${source.match(/  const covered = ([^\n]+);/)[1]})`);
 // bookFor's failure gate (WP-A1), and its reader: lib/ultra.js's, through the site's queue; here its get() alone.
 const gate = source.match(/(?:  const route = [^\n]+\n)?  const failed = [^\n]+\n  const askAgain = [^\n]+\n/)[0];
@@ -55,7 +55,7 @@ test('an unchanged gradebook remembers a successful empty late-status answer', a
 });
 
 test('Ultra native-added-subtree hooks run synchronously before the batched pass', () => {
-  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../content.js'), 'utf8');
+  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../../extension/content.js'), 'utf8');
   const start = core.indexOf('  const schedule = '), end = core.indexOf('  const startSweep = ', start);
   const added = [], dirty = new Set(); let pass;
   const schedule = vm.runInNewContext(`${core.slice(start, end)} schedule`, {
@@ -69,7 +69,7 @@ test('Ultra native-added-subtree hooks run synchronously before the batched pass
 });
 
 test('a course tab\'s hidden frame sweeps nothing and owes one full pass; the pointer light\'s writes are skipped', () => {
-  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../content.js'), 'utf8');
+  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../../extension/content.js'), 'utf8');
   const start = core.indexOf('  const schedule = '), end = core.indexOf('  const startSweep = ', start);
   let hidden = true, timers = 0;
   const context = vm.createContext({
@@ -87,7 +87,7 @@ test('a course tab\'s hidden frame sweeps nothing and owes one full pass; the po
 });
 
 test('a lit card still sweeps native style, class and child changes', () => {
-  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../content.js'), 'utf8');
+  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../../extension/content.js'), 'utf8');
   const start = core.indexOf('  const schedule = '), end = core.indexOf('  const startSweep = ', start);
   const dirty = new Set(), added = [];
   const schedule = vm.runInNewContext(`${core.slice(start, end)} schedule`, {
@@ -106,7 +106,7 @@ test('a lit card still sweeps native style, class and child changes', () => {
 });
 
 test('a queued flush stays paused while hidden and rediscovers native roots on reveal', () => {
-  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../content.js'), 'utf8');
+  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../../extension/content.js'), 'utf8');
   const start = core.indexOf('  const flush = '), end = core.indexOf('  // Throttle,', start);
   let hidden = true, sweeps = 0;
   const body = {}, gates = [], tags = [];
@@ -131,7 +131,7 @@ test('a queued flush stays paused while hidden and rediscovers native roots on r
 });
 
 test('draft cleanup reads only listed drafts; without a key listing it reads everything at most once a day', async () => {
-  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../content.js'), 'utf8');
+  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../../extension/content.js'), 'utf8');
   const start = core.indexOf('  const tidyDrafts = '), end = core.indexOf('  // ---- download all', start);
   for (const mode of ['keys', 'absent', 'rejected']) {
     const read = [], removed = [], rejected = [];
@@ -151,7 +151,7 @@ test('draft cleanup reads only listed drafts; without a key listing it reads eve
     window.top = window;
     const tidy = vm.runInNewContext(`${core.slice(start, end)} tidyDrafts`, {
       window, local: (fn) => fn(area), Promise: { resolve: promise }, Date,
-      need: async () => {}, GZ_DRAFTS: require('../lib/drafts.js'), settings: { enabled: true, enhance: { drafts: false } },
+      need: async () => {}, GZ_DRAFTS: require('../../extension/lib/drafts.js'), settings: { enabled: true, enhance: { drafts: false } },
     });
     tidy();
     await new Promise(setImmediate);

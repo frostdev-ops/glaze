@@ -2,14 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const G = require('../defaults.js');
-require('../lib/nav.js');
+const G = require('../../extension/defaults.js');
+require('../../extension/lib/nav.js');
 const read = (file) => process.env.GZ_NAVBAR_POLISH_BASE
   ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_NAVBAR_POLISH_BASE}:${file}`], { cwd: __dirname, encoding: 'utf8' })
-  : fs.readFileSync(require.resolve(`../${file}`), 'utf8');
+  : fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
 const S = process.env.GZ_NAVBAR_POLISH_BASE
-  ? vm.runInNewContext(read('lib/share.js') + '\nGZ_SHARE;', { require: require('node:module').createRequire(require.resolve('../lib/share.js')), TextEncoder, TextDecoder, module: { exports: {} } })
-  : require('../lib/share.js');
+  ? vm.runInNewContext(read('lib/share.js') + '\nGZ_SHARE;', { require: require('node:module').createRequire(require.resolve('../../extension/lib/share.js')), TextEncoder, TextDecoder, module: { exports: {} } })
+  : require('../../extension/lib/share.js');
 const part = (src, a, b) => {
   const start = src.indexOf(a), end = src.indexOf(b, start);
   assert.ok(start >= 0 && end > start, `${a} exists`);
@@ -99,10 +99,10 @@ const backupFixture = () => {
   const elements = {}, writes = [], downloads = [];
   let staged;
   const s = G.GZ_SANITIZE({ navbar: { brand: 'custom' }, nav: { brand: 'custom', li: 'aaaaaaaaaaaa' } });
-  const c = { s, navItems: {}, GZ_UI: { load: async () => ({ ...staged.restore.settings, parts: staged.restore.parts }) }, navigator: {}, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: require('../lib/cards.js'), GZ_XPARTS: require('../lib/lookparts.js'),
-    GZ_NAVBAR: require('../lib/navbar.js'), GZ_TODO: { STORE_KEY: /^todo:/ }, GZ_PET: { KEY: /^pet:/, backup: () => ({}) }, GZ_FOLDERS: { backup: () => ({}) },
+  const c = { s, navItems: {}, GZ_UI: { load: async () => ({ ...staged.restore.settings, parts: staged.restore.parts }) }, navigator: {}, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: require('../../extension/lib/cards.js'), GZ_XPARTS: require('../../extension/lib/lookparts.js'),
+    GZ_NAVBAR: require('../../extension/lib/navbar.js'), GZ_TODO: { STORE_KEY: /^todo:/ }, GZ_PET: { KEY: /^pet:/, backup: () => ({}) }, GZ_FOLDERS: { backup: () => ({}) },
     N: { clean: () => ({}) }, Blob, URL: { createObjectURL: (blob) => { downloads.push(blob); return 'blob:backup'; }, revokeObjectURL() {} }, setTimeout() {},
-    GZ_BACKUP: require('../lib/backup.js'), GZ_HISTORY: require('../lib/history.js'), GZ_ZIP: require('../lib/zip.js'), askRestore: async (file, plan) => ({ ticked: new Set(Object.keys(plan.cats)), account: '' }),
+    GZ_BACKUP: require('../../extension/lib/backup.js'), GZ_HISTORY: require('../../extension/lib/history.js'), GZ_ZIP: require('../../extension/lib/zip.js'), askRestore: async (file, plan) => ({ ticked: new Set(Object.keys(plan.cats)), account: '' }),
     document: { createElement: () => ({ click() {} }) },
     $: (id) => (elements[id] ||= { focus() {}, addEventListener: (type, fn) => { elements[id][type] = fn; } }),
     addEventListener() {}, removeEventListener() {}, flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true, hint() {}, t: (s) => s,
@@ -114,7 +114,7 @@ const backupFixture = () => {
 
 test('a settings backup exports Glaze in place of the device-only navigation logo', async () => {
   const f = backupFixture(); await f.elements['#export'].click({ isTrusted: true });
-  const zip = require('../lib/doctext.js').unzip(new Uint8Array(await f.downloads[0].arrayBuffer()));
+  const zip = require('../../extension/lib/doctext.js').unzip(new Uint8Array(await f.downloads[0].arrayBuffer()));
   const saved = JSON.parse(await zip.text('glaze-backup.json')).settings;
   assert.equal(saved.navbar.brand, 'glaze'); assert.equal(saved.nav.li, '');
 });

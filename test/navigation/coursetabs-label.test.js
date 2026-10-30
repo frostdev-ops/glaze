@@ -1,6 +1,6 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const path = require('node:path'), fs = require('node:fs'), vm = require('node:vm');
-const root = process.env.GZ_B8_REPO || path.join(__dirname, '..');
+const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
 const D = require(path.join(root, 'defaults.js')), L = require(path.join(root, 'lib/coursetabs.js'));
 
 test('auto short name is the default and explicit old name/code choices stay unchanged', () => {

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8');
 const day = 24 * 60 * 60 * 1000;
 const now = 5 * day;
 const settle = () => new Promise(setImmediate);
@@ -23,11 +23,11 @@ function worker({ protocol = 'safari-web-extension:', stored = {}, get, set, sen
   };
   const context = vm.createContext({
     URL, console, Date: { now: () => now },
-    importScripts: (file) => vm.runInContext(fs.readFileSync(require.resolve(`../lib/${file}`), 'utf8'), context),
+    importScripts: (file) => vm.runInContext(fs.readFileSync(require.resolve(`../../extension/lib/${file}`), 'utf8'), context),
     chrome: {
       runtime: {
         getURL: () => `${protocol}//extension/`,
-        getManifest: () => require('../manifest.json'),
+        getManifest: () => require('../../extension/manifest.json'),
         onMessage: listener, onInstalled: listener, onStartup: listener, onConnect: listener,
         sendNativeMessage(app, message) {
           calls.push(['send', app, message]);

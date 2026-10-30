@@ -8,12 +8,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const G = require('../lib/sharing.js');
-const S = require('../lib/sessions.js');
-const N = require('../lib/notes.js');
-const T = require('../lib/todo.js');
-const K = require('../lib/cards.js');
-const { relay, diskStore } = require('../server/relay.js');
+const G = require('../../extension/lib/sharing.js');
+const S = require('../../extension/lib/sessions.js');
+const N = require('../../extension/lib/notes.js');
+const T = require('../../extension/lib/todo.js');
+const K = require('../../extension/lib/cards.js');
+const { relay, diskStore } = require('../../server/relay.js');
 
 const NK = 'notesIdx:https://school.instructure.com/5', TK = 'todo:https://school.instructure.com/5';
 const clone = (x) => (x === undefined ? x : structuredClone(x));
@@ -108,7 +108,7 @@ const PROTO = ['toString', 'valueOf', 'hasOwnProperty', 'constructor', 'isProtot
 test('syllabus-generated tasks remain shareable and survive reopening an existing share', async (t) => {
   const { url } = await start(t), a = device(url), b = device(url);
   t.after(() => { a.worker.stop(); b.worker.stop(); });
-  const L = require('../lib/syllabus.js'), id = L.taskId('_123_1', { day: '2026-11-01', title: 'Essay' });
+  const L = require('../../extension/lib/syllabus.js'), id = L.taskId('_123_1', { day: '2026-11-01', title: 'Essay' });
   a.local.data[TK] = T.clean({ tasks: [{ id, title: 'Essay', at: 1 }] });
   assert.ok((await a.send('list')).sources.some((s) => s.kind === 'todo' && s.ids[0] === id), 'a real syllabus task is offered');
   const { sid } = await a.send('create', { kind: 'todo', title: 'Dates', key: TK, ids: [id] });

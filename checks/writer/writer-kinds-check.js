@@ -1,6 +1,6 @@
 // An assignment's PDF and slide deck in Glaze Writer (writer-kinds.js), in the real unpacked extension on the synthetic
 // Ultra attempt writer-submit-check.js uses (test/fixtures/ultra-writer-attempt.html, Quill 1.3.7, its Ultra stand-in:
-// scripts/ultra-attempt-harness.js), from the compact box (Full writer off, the default). With Settings → Writer → PDFs and
+// checks/mocks/ultra-attempt-harness.js), from the compact box (Full writer off, the default). With Settings → Writer → PDFs and
 // Slides on: a .pdf dropped on Ultra's file area reaches the frame before Ultra hears it; the card asks Open in Glaze or
 // Submit as is; Open in Glaze keeps the paper as a version, makes the attempt's record a PDF and shows pdf.js's viewer in
 // the paper's place, as tall as a paper; a field filled is saved; Submit… sends the saved PDF (its bytes, application/pdf,
@@ -16,21 +16,21 @@
 // GET and opens in the viewer with no card, the paper a version first. An attached .csv the same, Spreadsheets on: the grid.
 // Each step turns on only the switches it names (they ship on: defaults.js). Switches off: a PDF on Ultra's file area is
 // Ultra's, as before, and no attachment gets Open in Glaze (writer-submit-check.js covers the rest of today's flows).
-// GETs only, synthetic. NODE_PATH=<playwright> node scripts/writer-kinds-check.js [evidence directory]
+// GETs only, synthetic. NODE_PATH=<playwright> node checks/writer/writer-kinds-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
-const HARNESS = require('./ultra-attempt-harness.js');
-const { tap } = require('./frame-tap.js');
-const PDF = require('./pdf-fixtures.js');
-const Z = require('../lib/zip.js');
-const XL = require('../lib/sheet-xlsx.js'), SM = require('../lib/sheet-model.js');
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
+const HARNESS = require('../mocks/ultra-attempt-harness.js');
+const { tap } = require('../mocks/frame-tap.js');
+const PDF = require('../../tools/fidelity/pdf-fixtures.js');
+const Z = require('../../extension/lib/zip.js');
+const XL = require('../../extension/lib/sheet-xlsx.js'), SM = require('../../extension/lib/sheet-model.js');
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
 const FORM = '/bbcswebdav/pid-4968850-dt-asiobject-rid-14533106_1/xid-14533106_1', LAB = '/bbcswebdav/pid-4968850-dt-asiobject-rid-14533107_1/xid-14533107_1';
 // The content item with the attachments its fixture has, and a PDF and a .csv besides.
@@ -58,9 +58,9 @@ const FRAME_SHOWN_MS = 50000;
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 const quiet = async (fn, label, ms = 800) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) throw Error(`${label}: it happened`); await pause(80); } return true; };
 const sha = (b) => crypto.createHash('sha256').update(Buffer.from(b)).digest('hex');
-// The fixture deck as its package (scripts/slides-check.js's): every part under test/fixtures/pptx/deck, stored.
+// The fixture deck as its package (checks/documents/slides-check.js's): every part under test/fixtures/pptx/deck, stored.
 const deck = () => {
-  const dir = path.join(root, 'test/fixtures/pptx/deck');
+  const dir = path.join(__dirname, '../../test/fixtures/pptx/deck');
   const walk = (d, base = '') => fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
     .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), `${base}${e.name}/`) : [[`${base}${e.name}`, fs.readFileSync(path.join(d, e.name))]]));
   return Buffer.concat(Z.zip(walk(dir).sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, data]) => ({ name, data: new Uint8Array(data), date: new Date(2026, 9, 29, 12) }))));
@@ -74,7 +74,7 @@ const holds = (bytes, value) => {
 
 (async () => {
   let context, held = false, tmp;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-kinds-check\n`); break; }
@@ -84,9 +84,9 @@ const holds = (bytes, value) => {
     fs.mkdirSync(out, { recursive: true });
     const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
-    const ext = require('./check-env.js').staged(root, [`${site}/*`]);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    const ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json')), members = JSON.parse(fixture('ultra-memberships.json'));
     const attachment = { bytes: null, gets: 0, labGets: 0 };
@@ -437,7 +437,7 @@ const holds = (bytes, value) => {
     // ---- a macro workbook: the sheet, upload name/type and retained VBA project agree.
     await reset({ sheets: true });
     ({ p, el, fr } = await open());
-    const XM = require('../test/fixtures/sheet-xlsm.js'), DT = require('../lib/doctext.js');
+    const XM = require('../../test/fixtures/sheet-xlsm.js'), DT = require('../../extension/lib/doctext.js');
     await give(p, 'Budget.xlsm', XM.MIME, XM.xlsm());
     await until(() => cardOf(fr), 'the .xlsm card');
     await tap(fr, '.gi-default');

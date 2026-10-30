@@ -2,15 +2,15 @@
 // tab shown, for its course, wherever the keyboard is (the tab's frame or the page around it); one still loading opens
 // it once drawn. Real unpacked extension, headless Chrome, the synthetic Ultra (test/fixtures/ultra-course.html), no
 // account or outside network.
-// NODE_PATH=<installed playwright> node scripts/ctab-palette-check.js [evidence directory]
+// NODE_PATH=<installed playwright> node checks/navigation/ctab-palette-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', key = `ctabs:${site}:_42_1`;
 const G = require(path.join(ext, 'defaults.js'));
-const html = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-course.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ctab-palette-'));
 const out = process.argv[2];
@@ -27,9 +27,9 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
   let ctx;
   const holding = new Set(), held = new Map(); // course ids whose next page is held back; their releases
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(),
+      ...require('../../tools/dev/check-env.js').chromeLaunch(),
       headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
@@ -55,7 +55,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       await chrome.storage.local.set({ ultra: [site] });
       await chrome.storage.local.set({ [key]: { tabs: courses.map(([cid, name], i) => ({ cid, name, path: `/ultra/courses/${cid}/outline`, top: 0, at: i, pin: false })) } });
     }, { settings, key, site, courses: COURSES });
-    await require('./check-env.js').ultraReady(opts);
+    await require('../../tools/dev/check-env.js').ultraReady(opts);
     const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));
     const frame = (cid) => page.frames().find((f) => f.name() === `gz-ctab:${cid}`);
     const shown = (cid) => page.evaluate((cid) => { const f = document.querySelector(`iframe[name="gz-ctab:${cid}"]`); return !!f && !f.inert && getComputedStyle(f).visibility === 'visible' && !!document.querySelector('#gz-ctabs-frames[data-on]'); }, cid);

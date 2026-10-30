@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const zlib = require('node:zlib');
-const Z = require('../lib/zip.js');
+const Z = require('../../extension/lib/zip.js');
 
 // Reads an archive back the way an unzipper does: end record → central directory → local headers.
 const unzip = (buf) => {
@@ -155,7 +155,7 @@ test('Canvas omits unmet views before deduplication while retaining completed an
 });
 
 // zipAsync: the same archive, deflated where that saves bytes (.xlsx parts are XML, which shrinks tenfold).
-const D = require('../lib/doctext.js');
+const D = require('../../extension/lib/doctext.js');
 // xorshift32: bytes deflate cannot shrink.
 const noise = (n) => { let x = 2463534242; return Uint8Array.from({ length: n }, () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return x & 255; }); };
 const deflateCases = () => {

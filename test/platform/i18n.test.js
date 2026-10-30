@@ -2,21 +2,21 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const I = require('../lib/i18n.js');
-const D = require('../defaults.js');
-const F = require('../lib/fonts.js');
-const N = require('../lib/news.js');
-const P = require('../lib/parts.js');
-const XP = require('../lib/lookparts.js');
-const X = require('../lib/editor-x.js');
-const BG = require('../lib/editor-xbg.js');
-const M = require('../lib/editor-xmotion.js');
-const MX = require('../lib/motionx.js');
-const PTR = require('../lib/editor-pointer.js');
-const XE = require('../lib/editor-xparts.js');
-const PET = require('../lib/pet.js');
+const I = require('../../extension/lib/i18n.js');
+const D = require('../../extension/defaults.js');
+const F = require('../../extension/lib/fonts.js');
+const N = require('../../extension/lib/news.js');
+const P = require('../../extension/lib/parts.js');
+const XP = require('../../extension/lib/lookparts.js');
+const X = require('../../extension/lib/editor-x.js');
+const BG = require('../../extension/lib/editor-xbg.js');
+const M = require('../../extension/lib/editor-xmotion.js');
+const MX = require('../../extension/lib/motionx.js');
+const PTR = require('../../extension/lib/editor-pointer.js');
+const XE = require('../../extension/lib/editor-xparts.js');
+const PET = require('../../extension/lib/pet.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const LANGS = globalThis.GZ_LANGS;
 const files = fs.readdirSync(path.join(root, 'i18n'));
@@ -96,7 +96,7 @@ const writerWords = [
   ...[...read('writer-paper.js').matchAll(/\['\w+', '([A-Z][^']*)'\]/g)].map((m) => m[1]),
   // Format messages (the frame translates each issue's key) and the list titles they name.
   ...fromJs(read('lib/writer-format.js'), /\badd\('\w+',\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*/g),
-  ...Object.values(require('../lib/writer-styles.js').FORMATS).map((f) => f.list.title), ...Object.values(require('../lib/writer-cite.js').TITLES),
+  ...Object.values(require('../../extension/lib/writer-styles.js').FORMATS).map((f) => f.list.title), ...Object.values(require('../../extension/lib/writer-cite.js').TITLES),
   // .docx import warnings and the refusals worded for students.
   ...[...read('lib/writer-docx.js').matchAll(/\b(?:warn|RangeError)\('((?:[^'\\]|\\.)+)'\)/g)].map((m) => m[1].replace(/\\(.)/g, '$1')).filter((s) => /^[A-Z]/.test(s)),
 ];
@@ -112,9 +112,9 @@ const tableWords = [
   ...[...MX.SHAPES, ...MX.MARKS, ...MX.KINDS, ...MX.CURSORS, ...Object.keys(MX.EASES), ...XP.BLENDS].map(X.tokenName),
   ...Object.values(M.POINTERS), ...Object.values(M.TYPES), ...Object.values(PTR.NAMES),
   // Ultra's own gradebook categories, named in the what-if calculator (features/grades.js).
-  ...Object.values(require('../lib/gradecalc.js').ULTRA_CATS),
+  ...Object.values(require('../../extension/lib/gradecalc.js').ULTRA_CATS),
   // A chart Glaze doesn't draw shows its kind in a frame (lib/sheet-chart-xml.js, through lib/sheet-chart.js's t()).
-  ...require('../lib/sheet-chart-xml.js').WORDS,
+  ...require('../../extension/lib/sheet-chart-xml.js').WORDS,
 ];
 const used = new Set([
   ...tableWords, ...writerWords,
@@ -171,7 +171,7 @@ test('review: stale-key evidence ignores comments and substrings but retains dyn
 
 test('no shipped file points at a DECISIONS.md the repo does not have', () => {
   // A comment that cites a file the repo lacks sends the reader nowhere: say what it means instead.
-  for (const f of [...CODE, ...files.map((x) => `i18n/${x}`), 'test/gcal.test.js', 'test/gradecalc-parity.test.js']) assert.ok(!read(f).includes('DECISIONS.md'), `${f} cites DECISIONS.md`);
+  for (const f of [...CODE, ...files.map((x) => `i18n/${x}`), '../test/planner/gcal.test.js', '../test/planner/gradecalc-parity.test.js']) assert.ok(!read(f).includes('DECISIONS.md'), `${f} cites DECISIONS.md`);
 });
 
 test('translations keep their placeholders, and counts have an other form', () => {
@@ -217,7 +217,7 @@ test('review: all English count forms select one only for one and preserve inter
 test('every catalogue is loaded wherever Glaze speaks', () => {
   // On the LMS, only the page's own, on demand (content.js words(), lib/background.js LOADABLE); the extension's
   // pages have them all.
-  const content = require('../manifest.json').content_scripts.flatMap((c) => c.js);
+  const content = require('../../extension/manifest.json').content_scripts.flatMap((c) => c.js);
   assert.deepEqual(I.CODES, files.map((f) => f.replace(/\.js$/, '')), 'GZ_I18N.CODES lists i18n/');
   for (const f of files) {
     assert.ok(!content.includes(`i18n/${f}`), `manifest: i18n/${f} loads on demand, not with every page`);
@@ -276,7 +276,7 @@ test('numbers and percentages in the language', () => {
 // The stores take the name and summary from the manifest. The name says what Glaze is for ("for Canvas, Blackboard & Moodle"),
 // never that it belongs to them; toolbars and menus show the short name.
 test('the manifest name and description are localized and fit the stores', () => {
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   assert.equal(m.name, '__MSG_name__');
   assert.equal(m.default_locale, 'en');
   assert.equal(m.short_name, 'Glaze');

@@ -5,27 +5,27 @@
 # signed package into release/ without uploading. The app record must already exist in App Store Connect.
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 cd "$root"
 : "${ASC_KEY_PATH:?ASC_KEY_PATH is required}" "${ASC_KEY_ID:?ASC_KEY_ID is required}" "${ASC_ISSUER_ID:?ASC_ISSUER_ID is required}"
 team=${SAFARI_TEAM_ID:-22AAZFMTV8}
-version=$(node -p 'require("./manifest.json").version')
+version=$(node -p 'require("./extension/manifest.json").version')
 # Every upload needs a new build number; the time keeps them increasing.
 build=${BUILD_NUMBER:-$(date -u +%Y%m%d%H%M)}
-./package.sh
+tools/build/package.sh
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 cp -R safari/Glaze "$stage/Glaze"
 # Xcode registers what it archives: under build ids and signed ad hoc, as in build-safari.sh, it isn't Glaze to Safari.
-python3 scripts/safari-build-ids.py project "$stage/Glaze/Glaze.xcodeproj/project.pbxproj"
+python3 tools/build/safari-build-ids.py project "$stage/Glaze/Glaze.xcodeproj/project.pbxproj"
 resources="$stage/Glaze/Glaze Extension/Resources"
 rm -rf "$resources"
 mkdir -p "$resources"
 unzip -q "dist/glaze-v$version.zip" -d "$resources"
-sh scripts/safari-manifest.sh "$resources/manifest.json"
+sh tools/build/safari-manifest.sh "$resources/manifest.json"
 # The app bundles only what the Xcode project lists: stop before building if the package has something it doesn't.
-node scripts/safari-resources.js "$resources"
+node tools/build/safari-resources.js "$resources"
 
 set -- -allowProvisioningUpdates -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 out=release/$version
@@ -42,7 +42,7 @@ fi
 
 # Glaze's ids back in the archive, re-signed ad hoc to match; the export signs it for the App Store.
 archived="$stage/Glaze.xcarchive/Products/Applications/Glaze.app"
-python3 scripts/safari-build-ids.py app "$archived"
+python3 tools/build/safari-build-ids.py app "$archived"
 plutil -replace ApplicationProperties.CFBundleIdentifier -string io.frostdev.Glaze "$stage/Glaze.xcarchive/Info.plist"
 for bundle in "$archived/Contents/PlugIns/Glaze Extension.appex" "$archived"; do
   codesign --force --sign - --preserve-metadata=entitlements,flags "$bundle"

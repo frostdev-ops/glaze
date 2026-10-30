@@ -4,13 +4,13 @@
 // tampered list and a second check within the day changing nothing, and the worker loading blocklist.js lazily after a
 // restart. The copy pins a test key made here for this run (the real OWNER_KEY is the owner's, and stays untouched); the worker's
 // fetch is replaced inside it, so nothing leaves this computer, and every request outside the extension is aborted.
-//   NODE_PATH=/path/to/node_modules nice -n 10 node scripts/blocklist-check.js
+//   NODE_PATH=/path/to/node_modules nice -n 10 node checks/mods/blocklist-check.js
 // One headless browser at a time across agents: it waits while another runs. The profile and the copy are removed.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 
-const src = fs.realpathSync(path.join(__dirname, '..'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const src = fs.realpathSync(path.join(__dirname, '../../extension'));
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const B = require(path.join(src, 'lib/blocklist.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
@@ -38,7 +38,7 @@ const record = (id) => ({ id, manifest: { glaze: 1, name: id, version: '1.0.0', 
     if (code.split(pinned).length !== 2) throw Error('expected exactly one OWNER_KEY declaration in the temporary copy');
     fs.writeFileSync(path.join(ext, 'lib/blocklist.js'), code.replace(pinned, `const OWNER_KEY = '${pub}';`));
     const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...chromeLaunch, headless: true, viewport: { width: 1200, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],

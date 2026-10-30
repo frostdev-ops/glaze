@@ -2,7 +2,7 @@
 // ways prompts really say them, and nothing read where a prompt doesn't say it plainly.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../lib/writer-target.js');
+const T = require('../../extension/lib/writer-target.js');
 
 const NONE = { minWords: null, maxWords: null, sources: null, replies: null, reply: { minWords: null, maxWords: null, sources: null } };
 // The fields a case names, the rest null.

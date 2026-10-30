@@ -1,4 +1,4 @@
-// lib/pm.js, ProseMirror for the writer frame (scripts/vendor-prosemirror.sh): the script installs exact, integrity-pinned
+// lib/pm.js, ProseMirror for the writer frame (tools/vendor/vendor-prosemirror.sh): the script installs exact, integrity-pinned
 // versions with install scripts off and checks them before esbuild runs; the checked-in files are the recorded build; and
 // the bundle is a classic script that sets GZ_PM to working packages. These tests never run the script (it installs from
 // the network).
@@ -9,9 +9,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const script = read('scripts/vendor-prosemirror.sh');
+const script = read('../tools/vendor/vendor-prosemirror.sh');
 const code = script.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
 const variable = (name) => script.match(new RegExp(`^${name}=(\\S+)\\s*$`, 'm'))?.[1];
 const packages = () => script.match(/^packages="([^"]*)"/m)[1].split(/\s+/).filter(Boolean);

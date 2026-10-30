@@ -3,9 +3,9 @@
 // carries the file, beside its code.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const X = require('../lib/lookparts.js');
-const S = require('../lib/share.js');
-const G = require('../defaults.js');
+const X = require('../../extension/lib/lookparts.js');
+const S = require('../../extension/lib/share.js');
+const G = require('../../extension/defaults.js');
 
 const HASH = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ';
 const LINK = 'https://cdn.example.com/loops/rain.webm';
@@ -53,10 +53,10 @@ test('the offer does not say a file came with a code that cannot bring one', () 
   assert.equal(d({ type: 'video', src: LINK })[0].why, 'Plays a video behind your pages, loaded from {host}.');
 });
 
-// The editor's "Copy theme code" button, run from options.js itself with the real encoder (the way test/look-offer-review.test.js runs the offer).
+// The editor's "Copy theme code" button, run from options.js itself with the real encoder (the way test/looks/look-offer-review.test.js runs the offer).
 const copyButton = async (parts, kind = 'media') => {
   const fs = require('node:fs'), vm = require('node:vm');
-  const source = fs.readFileSync(require.resolve('../options.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/options.js'), 'utf8');
   const section = source.slice(source.indexOf("  $('#share-copy').addEventListener"), source.indexOf('  // from: the gallery Look the code came with'));
   assert.ok(section.includes('GZ_SHARE.encode('), 'the section is the copy button');
   const handlers = {}, hints = [], copied = [], box = { value: '', select() {} };

@@ -3,9 +3,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const L = require('../lib/lookx.js');
-const MX = require('../lib/motionx.js');
-const G = require('../defaults.js');
+const L = require('../../extension/lib/lookx.js');
+const MX = require('../../extension/lib/motionx.js');
+const G = require('../../extension/defaults.js');
 
 test('placements: bundled or own stickers only, with an id each, numbers clamped, junk dropped, capped per page', () => {
   assert.deepEqual(L.clean([
@@ -45,7 +45,7 @@ test('a page\'s stickers are keyed by origin and path, a trailing slash ignored'
   assert.ok(L.PAGE_KEY.test(L.pageKey('https://u.instructure.com', '/courses/1')));
   assert.ok(!L.PAGE_KEY.test('stk:javascript:alert(1)'));
   // content.js works out the same key without loading lib/lookx.js.
-  const content = fs.readFileSync(path.join(__dirname, '../content.js'), 'utf8');
+  const content = fs.readFileSync(path.join(__dirname, '../../extension/content.js'), 'utf8');
   assert.ok(content.includes("`stk:${location.origin}${location.pathname.replace(/(.)\\/+$/, '$1')}`"));
 });
 
@@ -58,12 +58,12 @@ test('no stickers on a quiz being taken or reviewed, or a tool\'s page: Canvas, 
 
 test('every bundled sticker is a file, named after its pack and name', () => {
   assert.equal(L.BUNDLED.size, 57);
-  for (const id of L.BUNDLED.keys()) assert.ok(fs.existsSync(path.join(__dirname, '..', L.file(id))), id);
+  for (const id of L.BUNDLED.keys()) assert.ok(fs.existsSync(path.join(__dirname, '../../extension', L.file(id))), id);
   assert.equal(L.BUNDLED.get('cozy-autumn/steaming-cocoa-mug'), 'Steaming cocoa mug');
 });
 
 test('the pointer sets\' hotspots are the art README\'s, inside their 32 × 32 files', () => {
-  const readme = fs.readFileSync(path.join(__dirname, '../assets/art/README.md'), 'utf8');
+  const readme = fs.readFileSync(path.join(__dirname, '../../extension/assets/art/README.md'), 'utf8');
   const rows = [...readme.matchAll(/`cursors\/(\w+)\/(default|pointer)\.png` \| (\d+), (\d+) \|/g)];
   assert.equal(rows.length, 6);
   for (const [, set, kind, x, y] of rows) assert.deepEqual(L.CURSORS[set][kind], [+x, +y], `${set}/${kind}`);
@@ -73,12 +73,12 @@ test('the pointer sets\' hotspots are the art README\'s, inside their 32 × 32 f
   for (const [, set, dx, dy, px, py] of svg) assert.deepEqual([L.CURSORS[set].default, L.CURSORS[set].pointer, L.CURSORS[set].svg], [[+dx, +dy], [+px, +py], true], set);
   // Every set a Look part may name, and 'own'.
   assert.deepEqual([...Object.keys(L.CURSORS), 'own'], MX.POINTERS);
-  const size = (f) => { const png = fs.readFileSync(path.join(__dirname, `../assets/art/cursors/${f}`)); return [png.readUInt32BE(16), png.readUInt32BE(20)]; };
+  const size = (f) => { const png = fs.readFileSync(path.join(__dirname, `../../extension/assets/art/cursors/${f}`)); return [png.readUInt32BE(16), png.readUInt32BE(20)]; };
   for (const [set, c] of Object.entries(L.CURSORS)) for (const kind of ['default', 'pointer']) {
     assert.deepEqual(size(`${set}/${kind}.png`), [32, 32], `${set}/${kind}`);
     if (!c.svg) continue;
     assert.deepEqual(size(`${set}/${kind}@2x.png`), [64, 64], `${set}/${kind}@2x`);
-    const src = fs.readFileSync(path.join(__dirname, `../assets/art/cursors/${set}/${kind}.svg`), 'utf8');
+    const src = fs.readFileSync(path.join(__dirname, `../../extension/assets/art/cursors/${set}/${kind}.svg`), 'utf8');
     // Firefox draws an SVG cursor only with its own width and height; nothing in one may load or run anything.
     assert.match(src, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="32" height="32" viewBox="0 0 32 32">/, `${set}/${kind}.svg`);
     assert.doesNotMatch(src, /<script|<image|href=|url\(|<style|on\w+=/i, `${set}/${kind}.svg`);

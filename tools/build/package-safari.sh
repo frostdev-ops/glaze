@@ -3,19 +3,19 @@
 # This replaces the project, native edits included; to rebuild the app, use build-safari.sh.
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 cd "$root"
 if [ "$(uname)" != Darwin ]; then
   echo "package-safari: this needs macOS and Xcode (xcrun safari-web-extension-packager)." >&2
   exit 1
 fi
 
-./package.sh
-version=$(node -p 'require("./manifest.json").version')
+tools/build/package.sh
+version=$(node -p 'require("./extension/manifest.json").version')
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 unzip -q "dist/glaze-v$version.zip" -d "$stage"
-sh scripts/safari-manifest.sh "$stage/manifest.json"
+sh tools/build/safari-manifest.sh "$stage/manifest.json"
 
 rm -rf safari
 xcrun safari-web-extension-packager "$stage" \

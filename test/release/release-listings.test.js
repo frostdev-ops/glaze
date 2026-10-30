@@ -1,4 +1,4 @@
-// scripts/store-listings.mjs: each store's listing text in six languages, read from store/ and checked before a release
+// tools/release/store-listings.mjs: each store's listing text in six languages, read from store/ and checked before a release
 // builds or sends anything. The fixtures are the listings in the repository, for the manifest's version.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -6,20 +6,21 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const real = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const version = JSON.parse(real('manifest.json')).version;
-const load = () => import('../scripts/store-listings.mjs');
+const load = () => import('../../tools/release/store-listings.mjs');
 const LANGS = ['en', 'de', 'es', 'fr', 'nl', 'pt-BR'];
-const listingFile = (lang) => `store/listing${lang === 'en' ? '' : `-${lang}`}.md`;
-const appStoreFile = (lang) => `store/app-store${lang === 'en' ? '' : `-${lang}`}.md`;
+const listingFile = (lang) => `../store/listing${lang === 'en' ? '' : `-${lang}`}.md`;
+const appStoreFile = (lang) => `../store/app-store${lang === 'en' ? '' : `-${lang}`}.md`;
 const section = (text, heading) => text.split(`\n## ${heading}`)[1].replace(/^[^\n]*\n\n/, '').split(/\n## /)[0].trim();
 // A reader that changes one file and leaves the rest as committed.
-const readWith = (changes) => (file) => (file in changes ? changes[file] : real(file));
+const repoFile = (file) => real(`../${file}`);
+const readWith = (changes) => (file) => (file in changes ? changes[file] : repoFile(file));
 
 test('six languages, each with its AMO and App Store locale code', async () => {
   const { readListings } = await load();
-  const listings = readListings(real, version);
+  const listings = readListings(repoFile, version);
   assert.deepEqual(Object.keys(listings), LANGS);
   assert.deepEqual(LANGS.map((l) => listings[l].amoLocale), ['en-US', 'de', 'es-ES', 'fr', 'nl', 'pt-BR']);
   assert.deepEqual(LANGS.map((l) => listings[l].appleLocale), ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'nl-NL', 'pt-BR']);
@@ -28,7 +29,7 @@ test('six languages, each with its AMO and App Store locale code', async () => {
 for (const lang of LANGS) {
   test(`${lang}: Chrome gets the listing's short summary and description exactly`, async () => {
     const { readListings } = await load();
-    const { chrome } = readListings(real, version)[lang];
+    const { chrome } = readListings(repoFile, version)[lang];
     const text = real(listingFile(lang));
     assert.equal(chrome.summary, section(text, 'Short summary'));
     assert.equal(chrome.description, section(text, 'Detailed description'));
@@ -36,7 +37,7 @@ for (const lang of LANGS) {
 
   test(`${lang}: the release notes are this version's own "new in" block in ## Release notes, with each browser's bullet in its own store's notes`, async () => {
     const { readListings } = await load();
-    const { firefox, apple, chrome } = readListings(real, version)[lang];
+    const { firefox, apple, chrome } = readListings(repoFile, version)[lang];
     assert.ok(firefox.notes.startsWith('• '), firefox.notes.slice(0, 40));
     assert.ok(section(real(listingFile(lang)), 'Release notes').includes(firefox.notes), 'the block is taken from the listing as written');
     assert.ok(!chrome.description.includes(firefox.notes), 'and is not in the description');
@@ -54,10 +55,10 @@ for (const lang of LANGS) {
 
   test(`${lang}: AMO keeps the summary, and the description with Firefox's privacy, within its 15,000`, async () => {
     const { readListings } = await load();
-    const { firefox, chrome } = readListings(real, version)[lang];
+    const { firefox, chrome } = readListings(repoFile, version)[lang];
     assert.equal(firefox.summary, chrome.summary);
     assert.ok(firefox.description.length <= 15000, `${firefox.description.length} characters`);
-    const privacy = section(real(`store/firefox${lang === 'en' ? '' : `-${lang}`}.md`), 'Privacy');
+    const privacy = section(real(`../store/firefox${lang === 'en' ? '' : `-${lang}`}.md`), 'Privacy');
     const [before, after] = chrome.description.split(/\n\n(?:PRIVACY|DATENSCHUTZ|PRIVACIDAD|CONFIDENTIALITÉ|PRIVACIDADE)\n\n[^\n]+/);
     assert.ok(firefox.description.startsWith(before) && firefox.description.endsWith(after) && firefox.description.includes(privacy));
     assert.ok(!/^•\s*Safari\s*:/m.test(firefox.description), 'a Safari-only bullet is not Firefox copy');
@@ -66,7 +67,7 @@ for (const lang of LANGS) {
 
   test(`${lang}: the App Store text is its own, translated, within Apple's limits and names no other browser`, async () => {
     const { readListings } = await load();
-    const listings = readListings(real, version), { apple } = listings[lang];
+    const listings = readListings(repoFile, version), { apple } = listings[lang];
     const limits = { name: 30, subtitle: 30, promotionalText: 170, keywords: 100, description: 4000 };
     for (const [field, max] of Object.entries(limits)) {
       assert.ok(apple[field], `${field} is set`);
@@ -84,7 +85,7 @@ for (const lang of LANGS) {
 // The stores list each version's notes on their own; a description is what Glaze does now.
 for (const lang of LANGS) test(`${lang}: the description has no release notes or version history`, async () => {
   const { readListings } = await load();
-  const { chrome, firefox } = readListings(real, version)[lang];
+  const { chrome, firefox } = readListings(repoFile, version)[lang];
   const history = /^(?:NEW IN|FROM|NEU IN|AUS|NOVEDADES DE|DE|NOUVEAUTÉS DE LA VERSION|DE LA VERSION|NIEUW IN|UIT|NOVO NA|DA)\s+\d+\.\d+(?:\.\d+)?$/m;
   for (const text of [chrome.description, firefox.description]) {
     assert.doesNotMatch(text, history);
@@ -96,7 +97,7 @@ for (const lang of LANGS) test(`${lang}: the description has no release notes or
 test('a description with a release block stops the release, naming where notes go', async () => {
   const { readListings } = await load();
   for (const heading of ['NOVEDADES DE 3.4.2', 'NOVEDADES DE 3.4.2 ', 'Novedades de 3.4.2', '### De 3.4.2']) {
-    const es = real('store/listing-es.md').replace('\nTU ASPECTO\n', `\n${heading}\n\n• Algo.\n\nTU ASPECTO\n`);
+    const es = real('../store/listing-es.md').replace('\nTU ASPECTO\n', `\n${heading}\n\n• Algo.\n\nTU ASPECTO\n`);
     assert.throws(() => readListings(readWith({ 'store/listing-es.md': es }), version), /store\/listing-es\.md: the detailed description has release notes .*; they go in ## Release notes/, heading);
   }
 });
@@ -113,7 +114,7 @@ const SEARCH = {
 };
 for (const lang of LANGS) test(`${lang}: search copy leads with themes and scopes study tools to Canvas and Blackboard`, async () => {
   const { readListings } = await load();
-  const { chrome } = readListings(real, version)[lang];
+  const { chrome } = readListings(repoFile, version)[lang];
   const opening = chrome.description.split('\n\n')[0];
   const has = (text, term) => text.toLowerCase().includes(term.toLowerCase());
   for (const text of [chrome.summary, opening]) {
@@ -137,7 +138,7 @@ test('the App Store name and subtitle name no other company\'s product, in any l
 
 test('App Store keywords hold the platforms and repeat no word of the name or subtitle', async () => {
   const { readListings } = await load();
-  const listings = readListings(real, version, ['apple']);
+  const listings = readListings(repoFile, version, ['apple']);
   for (const lang of LANGS) {
     const { name, subtitle, keywords } = listings[lang].apple;
     assert.doesNotMatch(keywords, /, /, `${lang}: no space after a comma`);
@@ -155,10 +156,10 @@ test('App Store keywords hold the platforms and repeat no word of the name or su
 
 test('English App Store copy keeps the generic name and subtitle, useful keywords and privacy disclosures', async () => {
   const { readListings } = await load();
-  const { apple } = readListings(real, version).en;
+  const { apple } = readListings(repoFile, version).en;
   assert.equal(apple.name, 'Glaze: Course Themes & Planner');
   assert.equal(apple.subtitle, 'Dark mode, GPA, notes & to-do');
-  assert.equal(apple.description, section(real('store/app-store.md'), 'Description'));
+  assert.equal(apple.description, section(real('../store/app-store.md'), 'Description'));
   assert.match(apple.description, /Glaze does not collect or sell your data\./);
   assert.match(apple.description, /^Make Blackboard Ultra, Canvas and Moodle feel like your own study space\. Glaze is a Safari extension/);
   assert.equal(apple.keywords, 'canvas,blackboard,moodle,student,grades,deadlines,study,school,college,homework,calendar,ultra,focus');
@@ -166,7 +167,7 @@ test('English App Store copy keeps the generic name and subtitle, useful keyword
 
 test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listing', async () => {
   const { readListings } = await load();
-  const de = real('store/listing-de.md'), fr = real('store/listing-fr.md');
+  const de = real('../store/listing-de.md'), fr = real('../store/listing-fr.md');
   const block = (text, heading, bullets) => text.replace(`${heading}\n\n`, `${heading}\n\n${bullets}\n`);
   const labelled = '• Chrome: nur Chrome.\n• Firefox: nur Firefox.\n• Safari: nur Safari.';
   const listings = readListings(readWith({
@@ -185,25 +186,25 @@ test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listi
 
 test('a language without this version\'s block stops the release before anything is built', async () => {
   const { readListings } = await load();
-  const nl = real('store/listing-nl.md').replace(`NIEUW IN ${version}`, 'NIEUW IN 3.3.7');
+  const nl = real('../store/listing-nl.md').replace(`NIEUW IN ${version}`, 'NIEUW IN 3.3.7');
   assert.throws(() => readListings(readWith({ 'store/listing-nl.md': nl }), version), (error) => {
     assert.match(error.message, new RegExp(`store/listing-nl\\.md: no "NIEUW IN ${version.replace(/\./g, '\\.')}" block in ## Release notes`));
     return true;
   });
-  assert.throws(() => readListings(real, '9.9.9'), /no "NEW IN 9\.9\.9" block/);
+  assert.throws(() => readListings(repoFile, '9.9.9'), /no "NEW IN 9\.9\.9" block/);
 });
 
 test('every problem is named at once, with the store limit it breaks', async () => {
   const { readListings } = await load();
-  const en = real('store/app-store.md').replace('Dark mode, GPA, notes & to-do', 'Dark mode, GPA, notes & to-do, your Chrome');
-  const es = real('store/listing-es.md').replace(/(## Short summary[^\n]*\n\n)[^\n]+/, `$1${'x'.repeat(140)}`);
+  const en = real('../store/app-store.md').replace('Dark mode, GPA, notes & to-do', 'Dark mode, GPA, notes & to-do, your Chrome');
+  const es = real('../store/listing-es.md').replace(/(## Short summary[^\n]*\n\n)[^\n]+/, `$1${'x'.repeat(140)}`);
   assert.throws(() => readListings(readWith({ 'store/app-store.md': en, 'store/listing-es.md': es }), version), (error) => {
     assert.match(error.message, /store\/app-store\.md: subtitle is 42 characters; the App Store allows 30/);
     assert.match(error.message, /store\/app-store\.md: subtitle names another browser \(Chrome\)/);
     assert.match(error.message, /store\/listing-es\.md: short summary is 140 characters; the Chrome Web Store allows 132/);
     return true;
   });
-  const missing = real('store/listing.md').replace(/## Detailed description\n[\s\S]*?(?=## Release notes)/, '');
+  const missing = real('../store/listing.md').replace(/## Detailed description\n[\s\S]*?(?=## Release notes)/, '');
   for (const stores of [['chrome', 'firefox', 'apple'], ['firefox']]) {
     assert.throws(() => readListings(readWith({ 'store/listing.md': missing, 'store/listing-es.md': es }), version, stores), (error) => {
       assert.match(error.message, /store\/listing\.md: description is missing/);
@@ -216,7 +217,7 @@ test('every problem is named at once, with the store limit it breaks', async () 
 
 test('only the selected stores\' sources are required', async () => {
   const { readListings } = await load();
-  const missing = (file) => { if (file.startsWith('store/app-store')) throw new Error(`no ${file}`); return real(file); };
+  const missing = (file) => { if (file.startsWith('store/app-store')) throw new Error(`no ${file}`); return repoFile(file); };
   assert.throws(() => readListings(missing, version), /app-store/);
   const listings = readListings(missing, version, ['chrome', 'firefox']);
   assert.equal(listings.de.apple, undefined);
@@ -226,22 +227,22 @@ test('only the selected stores\' sources are required', async () => {
 test('App Store keyword limits count UTF-8 bytes before any store requests', async () => {
   const { readListings } = await load();
   const file = 'store/app-store-fr.md';
-  const changed = real(file).replace(/(## Keywords[^\n]*\n\n)[^\n]+/, `$1${'é'.repeat(51)}`);
+  const changed = repoFile(file).replace(/(## Keywords[^\n]*\n\n)[^\n]+/, `$1${'é'.repeat(51)}`);
   assert.throws(() => readListings(readWith({ [file]: changed }), version, ['apple']), /keywords is 102 bytes; the App Store allows 100/);
 });
 
 test('App Store promotional text is optional in a source', async () => {
   const { readListings } = await load();
   const file = 'store/app-store-fr.md';
-  const changed = real(file).replace(/## Promotional text[^\n]*\n[\s\S]*?(?=## Keywords)/, '');
+  const changed = repoFile(file).replace(/## Promotional text[^\n]*\n[\s\S]*?(?=## Keywords)/, '');
   assert.equal(readListings(readWith({ [file]: changed }), version, ['apple']).fr.apple.promotionalText, undefined);
 });
 
 for (const lang of LANGS) test(`${lang}: Firefox privacy describes Firefox and excludes executable mod permissions`, async () => {
   const { readListings } = await load();
-  const { firefox } = readListings(real, version, ['firefox'])[lang];
+  const { firefox } = readListings(repoFile, version, ['firefox'])[lang];
   assert.ok(!/\b(?:Chrome|Chromium|Safari|Microsoft Edge)\b/i.test(firefox.description), 'Firefox copy names another browser');
-  const file = `store/firefox${lang === 'en' ? '' : `-${lang}`}.md`;
+  const file = `../store/firefox${lang === 'en' ? '' : `-${lang}`}.md`;
   const privacy = section(real(file), 'Privacy');
   assert.ok(firefox.description.includes(privacy), 'use the Firefox-specific privacy source');
   assert.ok(!/\bmod\b/i.test(privacy), 'Firefox runs no downloaded mod JavaScript');
@@ -249,7 +250,7 @@ for (const lang of LANGS) test(`${lang}: Firefox privacy describes Firefox and e
 
 test('the Chrome paste kit holds each language\'s exact summary and description, one file per language', async () => {
   const { readListings, writeChromeKit } = await load();
-  const listings = readListings(real, version), dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-kit-'));
+  const listings = readListings(repoFile, version), dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-kit-'));
   try {
     const files = writeChromeKit(dir, listings);
     assert.deepEqual(files.map((f) => path.basename(f)), LANGS.map((l) => `listing-${l}.txt`));
@@ -278,17 +279,17 @@ test('the dry-run report has one line per store and language, naming only what w
 });
 
 test('the listings command is a dry run: it reads the stores, prints what would change, and writes nothing', async () => {
-  const { main } = await import('../scripts/store-release.mjs');
+  const { main } = await import('../../tools/release/store-release.mjs');
   const { readListings } = await load();
-  const listings = readListings(real, version);
+  const listings = readListings(repoFile, version);
   // The command reads committed HEAD; a pending version bump in this checkout is not its selected source.
-  const selectedVersion = JSON.parse(require('node:child_process').execFileSync('git', ['show', 'HEAD:manifest.json'], { cwd: root, encoding: 'utf8' })).version;
+  const selectedVersion = JSON.parse(require('node:child_process').execFileSync('git', ['show', 'HEAD:extension/manifest.json'], { cwd: root, encoding: 'utf8' })).version;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-dry-run-'));
   const { privateKey } = require('node:crypto').generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
   fs.writeFileSync(path.join(dir, 'k.p8'), privateKey.export({ type: 'pkcs8', format: 'pem' }));
   const config = path.join(dir, 'stores.env');
   fs.writeFileSync(config, 'AMO_JWT_ISSUER=user:1:2\nAMO_JWT_SECRET=amo-secret\nASC_KEY_PATH=k.p8\nASC_KEY_ID=KEY123\nASC_ISSUER_ID=issuer-uuid\n');
-  const kit = path.join(root, 'release', selectedVersion, 'chrome-web-store', 'listing-de.txt'), kitBefore = fs.existsSync(kit) && fs.statSync(kit).mtimeMs;
+  const kit = path.join(__dirname, '../../release', selectedVersion, 'chrome-web-store', 'listing-de.txt'), kitBefore = fs.existsSync(kit) && fs.statSync(kit).mtimeMs;
   const answers = [
     [/addons\.mozilla\.org\/api\/v5\/addons\/addon\/glaze@frostdev\.io\/$/, { summary: { 'en-US': listings.en.firefox.summary }, description: {} }],
     [/addons\.mozilla\.org\/.*\/versions\//, null],

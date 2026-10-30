@@ -3,18 +3,18 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 
 // The paths package.sh zips: the arguments of its `zip` command, up to the first option after them.
 const packaged = () => {
-  const cmd = read('package.sh').match(/^zip -q -r -X "\$OUT" ([\s\S]*?)-x /m)[1];
+  const cmd = read('../tools/build/package.sh').match(/^zip -q -r -X "\$OUT" ([\s\S]*?)-x /m)[1];
   return cmd.replace(/\\\n/g, ' ').trim().split(/\s+/);
 };
 const inPackage = (file, roots) => roots.some((r) => file === r || file.startsWith(`${r}/`));
 
 test('the permission and zip lists ship the same files, with only exclusions after -x', () => {
-  const script = read('package.sh').replace(/\\\n/g, ' ');
+  const script = read('../tools/build/package.sh').replace(/\\\n/g, ' ');
   const permissions = script.match(/^chmod -R a\+rX (.+)$/m)[1].trim().split(/\s+/);
   const zip = script.match(/^zip -q -r -X "\$OUT" (.+)$/m)[1].trim().split(/\s+/);
   const exclude = zip.indexOf('-x');
@@ -54,9 +54,9 @@ test('every web-accessible resource is in the package, and only the art the exte
   // sticker folders holding Look stickers and the pet game's buddy looks, plus the pointer sets; and the editor's example
   // shaders.
   assert.deepEqual(roots.filter((p) => p.startsWith('assets/')).sort(), ['assets/art/cursors', 'assets/art/pets', 'assets/art/stickers', 'assets/logo-dark.svg', 'assets/logo.svg', 'assets/shaders']);
-  const L = require('../lib/lookx.js');
+  const L = require('../../extension/lib/lookx.js');
   const files = (dir) => fs.readdirSync(path.join(root, dir), { recursive: true }).filter((f) => !fs.statSync(path.join(root, dir, f)).isDirectory() && !f.endsWith('.DS_Store')).map((f) => `${dir}/${f}`).sort();
-  const P = require('../lib/pet.js');
+  const P = require('../../extension/lib/pet.js');
   const art = [...L.BUNDLED.keys(), ...Object.values(P.WEAR).map((x) => `critters/${x.art}`)];
   assert.deepEqual(files('assets/art/stickers'), [...new Set(art)].map(L.file).sort());
   assert.ok(['', '-happy', '-sleepy'].every((s) => L.BUNDLED.has(`critters/study-buddy${s}`)));

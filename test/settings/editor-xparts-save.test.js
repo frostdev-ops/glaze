@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const source = fs.readFileSync(path.join(__dirname, '../options.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../extension/options.js'), 'utf8');
 const saving = source.slice(source.indexOf('  const pending = new Set()'), source.indexOf('  const get = (path)'));
 const listening = source.slice(source.indexOf('  // Another surface'), source.indexOf('  // ---- share:'));
 const tick = () => new Promise(setImmediate);

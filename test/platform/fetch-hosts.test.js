@@ -13,10 +13,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const manifest = JSON.parse(read('manifest.json'));
-const roots = read('package.sh').match(/^zip -q -r -X "\$OUT" ([\s\S]*?)-x /m)[1].replace(/\\\n/g, ' ').trim().split(/\s+/);
+const roots = read('../tools/build/package.sh').match(/^zip -q -r -X "\$OUT" ([\s\S]*?)-x /m)[1].replace(/\\\n/g, ' ').trim().split(/\s+/);
 const walk = (p) => {
   const f = path.join(root, p);
   if (!fs.existsSync(f)) return [];
@@ -218,7 +218,7 @@ test('the worker asks the browser before reaching a feature host, and Safari\'s 
 test('review: the font loader classification names every catalog file host', () => {
   const entry = SITES['lib/fonts.js'][0];
   const named = new Set(entry.hosts || [entry.host]);
-  const files = require('../lib/fonts.js').LIST.flatMap((f) => Object.values(f.files || {}));
+  const files = require('../../extension/lib/fonts.js').LIST.flatMap((f) => Object.values(f.files || {}));
   for (const url of files) assert.ok(named.has(new URL(url).origin), `${url}: the font host is named`);
 });
 
@@ -229,7 +229,7 @@ const AI_HOSTS = { openai: 'api.openai.com', anthropic: 'api.anthropic.com', gem
 const PRIVACY_AI = Object.entries({ openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google Gemini', openrouter: 'OpenRouter', xai: 'xAI', mistral: 'Mistral', groq: 'Groq', deepseek: 'DeepSeek' })
   .map(([id, name]) => `- \`https://${AI_HOSTS[id]}\` for ${name}`);
 test('each AI provider is an https host asked for from Connect\'s click, none the manifest holds', () => {
-  const { PRESETS } = require('../lib/ai/settings.js');
+  const { PRESETS } = require('../../extension/lib/ai/settings.js');
   assert.deepEqual(Object.fromEntries(Object.entries(PRESETS).map(([id, p]) => [id, new URL(p.base).hostname])), AI_HOSTS, 'a new provider is listed here');
   for (const [id, host] of Object.entries(AI_HOSTS)) {
     assert.equal(new URL(PRESETS[id].base).protocol, 'https:', id);
@@ -241,5 +241,5 @@ test('each AI provider is an https host asked for from Connect\'s click, none th
   // The host first, from the click, before anything is awaited; the key after.
   assert.match(connect, /if \(!e\?\.isTrusted \|\| busy\) return;[\s\S]*const asked = Promise\.resolve\(GZ_SITE\.reach\(S\.PRESETS\[id\]\.base, from\)\)/);
   assert.ok(connect.indexOf('GZ_SITE.reach') < connect.indexOf('await'), 'asked before anything is awaited');
-  assert.ok(PRIVACY_AI.every((line) => read('PRIVACY.md').includes(line)), 'PRIVACY.md names each host');
+  assert.ok(PRIVACY_AI.every((line) => read('../PRIVACY.md').includes(line)), 'PRIVACY.md names each host');
 });

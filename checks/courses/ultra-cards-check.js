@@ -6,20 +6,20 @@
 // term heading starts below the cards and lists above it, and that no card has an empty band.
 // At 375px, a term's three cards are exactly one window (900px) high before their lists come, as can happen on a real
 // page: content.js tags them data-gz-vh, and they must still grow.
-//   NODE_PATH=/path/to/node_modules node scripts/ultra-cards-check.js [out dir for screenshots]   (needs playwright)
+//   NODE_PATH=/path/to/node_modules node checks/courses/ultra-cards-check.js [out dir for screenshots]   (needs playwright)
 //   EXT=/other/extension/dir checks that copy instead (say, the code before a change).
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const G = require('../defaults.js');
+const G = require('../../extension/defaults.js');
 
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-cards-'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
-const PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-courses.html'), 'utf8');
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
+const PAGE = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-courses.html'), 'utf8');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0;
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails++; };
@@ -35,7 +35,7 @@ const MODES = {
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'b7a-'));
-  await require('./wait-for-browser.js')();
+  await require('../../tools/dev/wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
     ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce',
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],

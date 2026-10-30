@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require('node:path').join(__dirname, '../scripts/motion-check.js'), 'utf8');
+const source = fs.readFileSync(require('node:path').join(__dirname, '../../checks/looks/motion-check.js'), 'utf8');
 const parse = vm.runInNewContext(`${source.slice(source.indexOf('const animations ='), source.indexOf('\n(async () =>'))}; animations`);
 
 test('motion receipts retain every compositor failure even when a later sample recovers', () => {

@@ -25,7 +25,7 @@ const editor = ({ loading = false } = {}) => {
       DecorationSet: { empty, create: (_doc, ds) => ({ find: (_a, _b, fn) => ds.filter((d) => !fn || fn(d.spec)), remove: () => empty }) },
     } },
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../lib/writer-paginate.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/writer-paginate.js'), 'utf8'), ctx);
   pluginView = ctx.GZ_WRITER_PAGINATE.plugin({ format: () => ({ notes: { size: 10, line: 1 } }), onLayout: (l) => layouts.push(l) }).spec.view(view);
   const flush = async () => { await new Promise(setImmediate); for (let n = 0; micro.length; n++) { assert.ok(n < 100); micro.shift()(); } };
   const finish = async () => { await flush(); for (let n = 0; tasks.length; n++) { assert.ok(n < 100); tasks.shift()(); await flush(); } };

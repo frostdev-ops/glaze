@@ -1,5 +1,5 @@
 // Does Glaze Writer open a Word file as Word lays it out? Each .docx in the corpus is opened in Microsoft Word on this
-// Mac (through AppleScript, as scripts/writer-word-fidelity.js does) and saved as PDF, and imported into a paper in the
+// Mac (through AppleScript, as tools/fidelity/writer-word-fidelity.js does) and saved as PDF, and imported into a paper in the
 // real unpacked extension on the synthetic assignment attempt (⋯ → Import… → Open in Writer). Both sides' pages are read
 // as lines (Word's from pdftotext's boxes, Writer's from the editor's carets), compared page by page, and drawn side by
 // side. A page passes when the counts agree and it starts on the same Word line. --export also saves the .docx Writer makes of each import, opens that in Word and compares it with the
@@ -7,7 +7,7 @@
 // Word: only the copies this script opens are touched (found by their own unique names, closed unsaved); Word quits only
 // if this script started it. Files go in a temporary folder inside Word's container, so the sandboxed app needs no prompt.
 // Browser: headless, GETs only, synthetic; no account or outside network from the browser.
-// NODE_PATH=<playwright> nice -n 10 lockf -k <lock> node scripts/writer-import-fidelity.js [--export] [--word-only]
+// NODE_PATH=<playwright> nice -n 10 lockf -k <lock> node tools/fidelity/writer-import-fidelity.js [--export] [--word-only]
 //   [--dump] [--typing] [--out <dir>] [file.docx …]   (default corpus: test/fixtures/writer-docx-import.js; default out:
 //   ~/Projects/glaze-plans/writer/parity). --dump prints each block's box as the browser drew it (pt from its page's top);
 //   --typing types 150 characters into the middle of each paper and prints each keystroke's time to the next paint.
@@ -19,7 +19,7 @@ const args = process.argv.slice(2), flag = (k) => { const i = args.indexOf(k); i
 const option = (k) => { const i = args.indexOf(k); if (i < 0) return null; const v = args[i + 1]; args.splice(i, 2); return v; };
 const roundTrip = flag('--export'), wordOnly = flag('--word-only'), dump = flag('--dump'), typing = flag('--typing');
 const out = path.resolve(option('--out') || path.join(os.homedir(), 'Projects/glaze-plans/writer/parity'));
-const root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const WORD = '/Applications/Microsoft Word.app';
 // Text as both sides read: quotes plain, spaces single, and tab leaders (a PDF's dots) gone.
 // Word's PDF of an Aptos paper sets ligature glyphs (ﬁ for fi): letters again, so offsets line up.
@@ -32,7 +32,7 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const corpus = () => {
   fs.mkdirSync(path.join(out, 'files'), { recursive: true });
   if (args.length) return args.map((f) => ({ id: path.basename(f, '.docx').replace(/[^\w-]+/g, '_'), file: path.resolve(f), private: true }));
-  const FX = require('../test/fixtures/writer-docx-import.js');
+  const FX = require('../../test/fixtures/writer-docx-import.js');
   return Object.keys(FX.files).map((id) => {
     const file = path.join(out, 'files', `${id}.docx`);
     fs.writeFileSync(file, FX.bytes(id));
@@ -116,10 +116,10 @@ const regions = (page, m) => ({
 // ---- Writer's side: the extension on the attempt fixture, each file imported, its pages read and drawn
 const writerPages = async (items) => {
   const { chromium } = require('playwright');
-  const env = require('./check-env.js'), FX = require('../test/fixtures/writer-paper-fixtures.js');
+  const env = require('../dev/check-env.js'), FX = require('../../test/fixtures/writer-paper-fixtures.js');
   const site = 'https://bb.school.test', ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
   const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
-  const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+  const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
   const until = async (fn, label, ms = 20000) => {
     const start = Date.now(); let last;
     while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(80); }
@@ -144,8 +144,8 @@ const writerPages = async (items) => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-import-'));
     const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
-    const ext = require('./check-env.js').staged(root, [`${site}/*`], tmp);
-    await require('./wait-for-browser.js')();
+    const ext = require('../dev/check-env.js').staged(root, [`${site}/*`], tmp);
+    await require('../dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1440, height: 1400 }, deviceScaleFactor: 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json')), members = JSON.parse(fixture('ultra-memberships.json'));
@@ -321,7 +321,7 @@ const sideBySide = async (it) => {
   execFileSync('pdftoppm', ['-png', '-r', '144', it.pdf, prefix]);
   const wordShots = fs.readdirSync(out).filter((f) => f.startsWith(`${it.id}-word-`) && f.endsWith('.png')).sort().map((f) => path.join(out, f));
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sbs-'));
-  const browser = await chromium.launch({ ...require('./check-env.js').chromeLaunch(), headless: true });
+  const browser = await chromium.launch({ ...require('../dev/check-env.js').chromeLaunch(), headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1660, height: 1150 } });
     it.sideBySide = [];

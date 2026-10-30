@@ -4,20 +4,20 @@
 // read mark, focus in and back, Tab kept inside, Escape), a modifier click keeping the browser's new tab, the fallback to
 // the site's page, the genie mid-open, and saves screenshots at 1440 and 320, light and dark, RTL with larger text (Chrome's
 // default font size at 24 px, as a student would set it). Then the LMSs' own lists on synthetic Ultra, Canvas and Moodle pages
-// (scripts/announce-check-sites.js).
+// (checks/courses/announce-check-sites.js).
 // Takes the heavy lock ($GLAZE_LOCK, default glaze-heavy.lock in the OS temp directory).
-//   NODE_PATH=/path/to/node_modules nice -n 10 node scripts/announce-check.js [screenshots directory]
+//   NODE_PATH=/path/to/node_modules nice -n 10 node checks/courses/announce-check.js [screenshots directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
-const G = require('../defaults.js');
-// A copy holding the synthetic Ultra and Moodle schools' hosts, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(path.resolve(process.env.EXT || path.join(__dirname, '..')), ['https://bb.school.test/*', 'https://moodle.school.test/*']);
+const G = require('../../extension/defaults.js');
+// A copy holding the synthetic Ultra and Moodle schools' hosts, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(path.resolve(process.env.EXT || path.join(__dirname, '../../extension')), ['https://bb.school.test/*', 'https://moodle.school.test/*']);
 const out = path.resolve(process.argv[2] || '/tmp/gz-ann-shots');
-const lock = require('./check-env.js').lockPath();
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const lock = require('../../tools/dev/check-env.js').lockPath();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const O = 'https://ann.school.instructure.com';
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const fixture = (name) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', name), 'utf8');
+const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8');
 const frame = `<style>
   body { margin: 0; font: 14px/1.4 system-ui, sans-serif; }
   #header, #mobile-header, #breadcrumbs, #footer, #right-side, .ic-Layout-watermark { display: none; }
@@ -27,7 +27,7 @@ const frame = `<style>
   @media (max-width: 600px) { #content { padding: 12px; } }
 </style>`;
 const DASH = fixture('canvas-dashboard-cards.html').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '').replace('</head>', `${frame}</head>`);
-const PICTURE = fs.readFileSync(path.join(__dirname, '..', 'icons/icon128.png'));
+const PICTURE = fs.readFileSync(path.join(__dirname, '../../extension/icons/icon128.png'));
 const day = (n) => new Date(Date.now() + n * 864e5).toISOString();
 const ann = (id, title, n) => ({ plannable_type: 'announcement', plannable_id: id, course_id: '25', context_name: 'BIO 1100 · Cell Biology', plannable_date: day(n),
   html_url: `/courses/25/discussion_topics/${id}`, plannable: { title, read_state: 'unread' } });
@@ -64,10 +64,10 @@ const ok = (v, label) => { checks++; if (!v) { failures.push(label); console.err
       try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST' || i > 360) throw e; await new Promise((r) => setTimeout(r, 10000)); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nannounce-check\n${new Date().toISOString()}\n`);
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'America/New_York',
       reducedMotion: 'no-preference', args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'] });
-    require('./check-env.js').noFirstRun(ctx);
+    require('../../tools/dev/check-env.js').noFirstRun(ctx);
     const asked = [];
     const external = new Set();
     ctx.on('request', (r) => { const u = new URL(r.url()); if (/^https?:$/.test(u.protocol) && u.origin !== O) external.add(r.url()); });

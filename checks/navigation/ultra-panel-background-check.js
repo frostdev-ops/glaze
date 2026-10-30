@@ -1,11 +1,11 @@
 // Real CSS on a synthetic Ultra panel, using the native gutter/close-button structure observed on Blackboard.
-// NODE_PATH=/path/to/node_modules nice -n 15 node scripts/ultra-panel-background-check.js [receipt folder]
+// NODE_PATH=/path/to/node_modules nice -n 15 node checks/navigation/ultra-panel-background-check.js [receipt folder]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
-const root = process.env.EXT || path.resolve(__dirname, '..');
+const root = process.env.EXT || path.resolve(__dirname, '../../extension');
 const out = process.argv[2];
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const fixture = `<!doctype html><html><head><style>
   html { --gz-surface-2: #102030; --gz-bg-grad: linear-gradient(#102030, #102030); --gz-bg-dim: 0%;
     --gz-bg-image: linear-gradient(#102030, #102030); --gz-bg-1: #102030; --gz-bg-2: #102030; --gz-bg-3: #102030; }
@@ -34,7 +34,7 @@ const fixture = `<!doctype html><html><head><style>
   const failures = []; let checks = 0;
   const check = (value, message) => { checks++; if (!value) failures.push(message); };
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(profile, { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
     await context.route('**/*', (route) => route.abort());
     const page = await context.newPage(), decoder = await context.newPage();

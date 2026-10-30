@@ -6,12 +6,14 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const root = path.join(__dirname, '..');
-const scripts = path.join(root, 'scripts');
+const root = path.join(__dirname, '../../extension');
+// The checks and tools by file name, wherever their area put them: checks/<area>/ or tools/<kind>/.
+const SCRIPTS = new Map(['checks', 'tools'].flatMap((top) => fs.readdirSync(path.join(root, '..', top)).flatMap((d) => fs.readdirSync(path.join(root, '..', top, d)).map((f) => [f, path.join(root, '..', top, d, f)]))));
+const scriptFile = (f) => SCRIPTS.get(f);
 const scratch = () => fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-check-env-'));
 
 test('the lock defaults to the OS temp directory and GLAZE_LOCK overrides it', () => {
-  const { lockPath } = require('../scripts/check-env.js');
+  const { lockPath } = require('../../tools/dev/check-env.js');
   const tmp = scratch();
   try {
     assert.equal(lockPath({}, tmp), path.join(tmp, 'glaze-heavy.lock'));
@@ -22,7 +24,7 @@ test('the lock defaults to the OS temp directory and GLAZE_LOCK overrides it', (
 });
 
 test('taking the lock works when its parent directory does not exist yet, and a second holder is refused', () => {
-  const { lockPath } = require('../scripts/check-env.js');
+  const { lockPath } = require('../../tools/dev/check-env.js');
   const tmp = scratch();
   try {
     const lock = lockPath({ GLAZE_LOCK: path.join(tmp, 'a', 'b', 'heavy.lock') });
@@ -34,7 +36,7 @@ test('taking the lock works when its parent directory does not exist yet, and a 
 });
 
 test('CHROME picks the browser; otherwise Playwright launches its own full Chromium', () => {
-  const { chromePath, chromeLaunch } = require('../scripts/check-env.js');
+  const { chromePath, chromeLaunch } = require('../../tools/dev/check-env.js');
   assert.equal(chromePath({ CHROME: '/opt/chrome/chrome' }), '/opt/chrome/chrome');
   assert.equal(chromePath({}), undefined);
   assert.equal(chromePath({ CHROME: '' }), undefined);
@@ -45,8 +47,8 @@ test('CHROME picks the browser; otherwise Playwright launches its own full Chrom
 
 test('no script hard-codes one machine\'s lock directory or Chromium build', () => {
   const offenders = [];
-  for (const file of fs.readdirSync(scripts).filter((f) => /\.(js|mjs|sh|py|html)$/.test(f))) {
-    const lines = fs.readFileSync(path.join(scripts, file), 'utf8').split('\n');
+  for (const file of [...SCRIPTS.keys()].sort().filter((f) => /\.(js|mjs|sh|py|html)$/.test(f))) {
+    const lines = fs.readFileSync(scriptFile(file), 'utf8').split('\n');
     lines.forEach((line, i) => {
       if (/claude-\d{3}|ms-playwright\/chromium-\d+|chrome-mac-arm64/.test(line)) offenders.push(`${file}:${i + 1}`);
     });
@@ -55,17 +57,17 @@ test('no script hard-codes one machine\'s lock directory or Chromium build', () 
 });
 
 test('the checks that take the lock get its path from the shared helper', () => {
-  const holders = fs.readdirSync(scripts).filter((f) => /-check\.js$/.test(f) && /\bmkdirSync\(lock\)/.test(fs.readFileSync(path.join(scripts, f), 'utf8')));
+  const holders = [...SCRIPTS.keys()].sort().filter((f) => /-check\.js$/.test(f) && /\bmkdirSync\(lock\)/.test(fs.readFileSync(scriptFile(f), 'utf8')));
   assert.ok(holders.length >= 3, holders.join(', '));
-  for (const file of holders) assert.match(fs.readFileSync(path.join(scripts, file), 'utf8'), /\block\s*=\s*require\('\.\/check-env\.js'\)\.lockPath\(\)/, file);
+  for (const file of holders) assert.match(fs.readFileSync(scriptFile(file), 'utf8'), /\block\s*=\s*require\('(?:\.\.?\/)+(?:tools\/dev\/|dev\/)?check-env\.js'\)\.lockPath\(\)/, file);
 });
 
 test('the checks that launch Chromium resolve it through the shared helper', () => {
-  const launchers = fs.readdirSync(scripts).filter((f) => /\.js$/.test(f) && /chromium\.(?:launch|launchPersistentContext)\(/.test(fs.readFileSync(path.join(scripts, f), 'utf8')));
+  const launchers = [...SCRIPTS.keys()].sort().filter((f) => /\.js$/.test(f) && /chromium\.(?:launch|launchPersistentContext)\(/.test(fs.readFileSync(scriptFile(f), 'utf8')));
   assert.ok(launchers.length >= 40, String(launchers.length));
   for (const file of launchers) {
-    const source = fs.readFileSync(path.join(scripts, file), 'utf8');
-    assert.match(source, /require\('\.\/check-env\.js'\)\.(?:chromeLaunch|chromePath)\(\)|process\.env\.CHROME \?/, file);
+    const source = fs.readFileSync(scriptFile(file), 'utf8');
+    assert.match(source, /require\('(?:\.\.?\/)+(?:tools\/dev\/|dev\/)?check-env\.js'\)\.(?:chromeLaunch|chromePath)\(\)|process\.env\.CHROME \?/, file);
     assert.doesNotMatch(source, /os\.homedir\(\)[^\n]*(?:Library|\.cache)[^\n]*(?:chrom|playwright)/i, file);
   }
 });
@@ -80,7 +82,7 @@ test('a staged copy holds the hosts named, links every other file, leaves the so
     const manifest = { name: 'Glaze', host_permissions: ['https://*.instructure.com/*'] };
     fs.writeFileSync(path.join(src, 'manifest.json'), JSON.stringify(manifest));
     fs.writeFileSync(path.join(src, 'lib', 'a.js'), 'a');
-    const script = `const d = require(${JSON.stringify(path.join(scripts, 'check-env.js'))}).staged(${JSON.stringify(src)}, ['https://bb.school.test/*', 'https://*.instructure.com/*'], ${JSON.stringify(tmp)});
+    const script = `const d = require(${JSON.stringify(scriptFile('check-env.js'))}).staged(${JSON.stringify(src)}, ['https://bb.school.test/*', 'https://*.instructure.com/*'], ${JSON.stringify(tmp)});
       const fs = require('fs'), path = require('path');
       console.log(JSON.stringify({ d, m: JSON.parse(fs.readFileSync(path.join(d, 'manifest.json'), 'utf8')), same: fs.statSync(path.join(d, 'lib/a.js')).ino === fs.statSync(${JSON.stringify(path.join(src, 'lib/a.js'))}).ino, git: fs.existsSync(path.join(d, '.git')) }));`;
     const r = JSON.parse(require('node:child_process').execFileSync(process.execPath, ['-e', script], { encoding: 'utf8' }));
@@ -94,27 +96,27 @@ test('a staged copy holds the hosts named, links every other file, leaves the so
 });
 
 test('the checks that load Glaze on a school\'s own host give it a staged copy holding that host', () => {
-  const own = fs.readdirSync(scripts).filter((f) => /\.js$/.test(f)).filter((f) => {
-    const src = fs.readFileSync(path.join(scripts, f), 'utf8');
+  const own = [...SCRIPTS.keys()].sort().filter((f) => /\.js$/.test(f)).filter((f) => {
+    const src = fs.readFileSync(scriptFile(f), 'utf8');
     return /--load-extension=/.test(src) && /'https:\/\/[\w.-]+\.(?:school|moodle)\.test'?/.test(src) && !/writeFileSync\(path\.join\(ext, 'manifest\.json'\)/.test(src);
   });
   assert.ok(own.length >= 15, own.join(', '));
-  for (const f of own) assert.match(fs.readFileSync(path.join(scripts, f), 'utf8'), /require\('\.\/check-env\.js'\)\.staged\(/, f);
+  for (const f of own) assert.match(fs.readFileSync(scriptFile(f), 'utf8'), /require\('(?:\.\.?\/)+(?:tools\/dev\/|dev\/)?check-env\.js'\)\.staged\(/, f);
 });
 
 test('the Chromium search of the scene check also looks in Playwright\'s Linux cache', () => {
-  assert.match(fs.readFileSync(path.join(scripts, 'scene-check.mjs'), 'utf8'), /\.cache\/ms-playwright/);
+  assert.match(fs.readFileSync(scriptFile('scene-check.mjs'), 'utf8'), /\.cache\/ms-playwright/);
 });
 
 test('the development guide names no machine-specific path and documents the overrides', () => {
-  const doc = fs.readFileSync(path.join(root, 'docs/development.md'), 'utf8');
+  const doc = fs.readFileSync(path.join(__dirname, '../../docs/development.md'), 'utf8');
   assert.doesNotMatch(doc, /claude-\d{3}|\/private\/tmp/);
   assert.match(doc, /GLAZE_LOCK/);
   assert.match(doc, /`CHROME`/);
 });
 
 test('school-host readiness waits for Ultra registration, with static entries and ports respected', async () => {
-  const { ultraReady } = require('../scripts/check-env.js');
+  const { ultraReady } = require('../../tools/dev/check-env.js');
   assert.equal(typeof ultraReady, 'function', 'a stored approval must not race the first navigation');
   let predicate;
   await ultraReady({ evaluate: async (fn) => { predicate = fn; return true; } });
@@ -136,18 +138,18 @@ test('school-host readiness waits for Ultra registration, with static entries an
 });
 
 test('Ultra readiness polls resolved async state instead of treating a predicate Promise as ready', async () => {
-  const { ultraReady } = require('../scripts/check-env.js');
+  const { ultraReady } = require('../../tools/dev/check-env.js');
   let probes = 0;
   await ultraReady({ waitForFunction: async () => {}, evaluate: async () => ++probes > 1 });
   assert.equal(probes, 2, 'wait for the registration result, then poll until it is ready');
 });
 
 test('the first-load glass and background checks wait for their listed Ultra fixture', () => {
-  for (const name of ['glass-remaining', 'background-pages']) assert.match(fs.readFileSync(path.join(scripts, `${name}-check.js`), 'utf8'), /await require\('\.\/check-env\.js'\)\.ultraReady\(opts\)/, name);
+  for (const name of ['glass-remaining', 'background-pages']) assert.match(fs.readFileSync(scriptFile(`${name}-check.js`), 'utf8'), /await require\('(?:\.\.?\/)+(?:tools\/dev\/|dev\/)?check-env\.js'\)\.ultraReady\(opts\)/, name);
 });
 
 test('a check that wants only its own tabs closes Glaze\'s first screen, open already or opening later', async () => {
-  const { noFirstRun } = require('../scripts/check-env.js');
+  const { noFirstRun } = require('../../tools/dev/check-env.js');
   const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
   const tab = (url, later) => {
     const p = { at: url, closed: false, url: () => p.at, close: async () => { p.closed = true; } };
@@ -171,7 +173,7 @@ test('a check that wants only its own tabs closes Glaze\'s first screen, open al
 });
 
 test('noFirstRun says when it has closed Glaze\'s first screen, so a check can start after the install\'s tab', async () => {
-  const { noFirstRun } = require('../scripts/check-env.js');
+  const { noFirstRun } = require('../../tools/dev/check-env.js');
   const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
   let onPage, closed = false, land;
   const closing = noFirstRun({ pages: () => [], on: (e, f) => { if (e === 'page') onPage = f; } });
@@ -187,7 +189,7 @@ test('noFirstRun says when it has closed Glaze\'s first screen, so a check can s
 });
 
 test('noFirstRun never reports a failed tab close as a closed first screen', async () => {
-  const { noFirstRun } = require('../scripts/check-env.js');
+  const { noFirstRun } = require('../../tools/dev/check-env.js');
   const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
   let onPage, closed = false;
   const bad = { url: () => welcome, close: async () => { throw new Error('close failed'); }, waitForURL: async () => {} };
@@ -201,7 +203,7 @@ test('noFirstRun never reports a failed tab close as a closed first screen', asy
 });
 
 test('noFirstRun still closes a first screen that navigates after ten seconds under load', async (t) => {
-  const { noFirstRun } = require('../scripts/check-env.js');
+  const { noFirstRun } = require('../../tools/dev/check-env.js');
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let navigate, gone = false;
   const tab = {
@@ -220,7 +222,7 @@ test('noFirstRun still closes a first screen that navigates after ten seconds un
 });
 
 test('ultraReady polls the page until Glaze has registered its Ultra script, and says so when it never does', async () => {
-  const { ultraReady } = require('../scripts/check-env.js');
+  const { ultraReady } = require('../../tools/dev/check-env.js');
   const answers = [false, false, true];
   const page = { evaluate: async (f) => { assert.equal(typeof f, 'function'); return answers.shift(); } };
   await ultraReady(page);
@@ -229,7 +231,7 @@ test('ultraReady polls the page until Glaze has registered its Ultra script, and
 });
 
 test('installed polls a new profile until each install task has made its last write, and says so when one never does', async () => {
-  const { installed } = require('../scripts/check-env.js');
+  const { installed } = require('../../tools/dev/check-env.js');
   const vm = require('node:vm');
   const done = { fresh: true, pending: false };
   const states = [{}, { freshDefaults: { fresh: true, pending: true } }, { freshDefaults: done, migrated: ['tabs-auto'] }, { freshDefaults: done, channelKeysMoved: true },
@@ -245,11 +247,11 @@ test('installed polls a new profile until each install task has made its last wr
 });
 
 test('the backup check lets each new profile finish installing before it seeds or compares storage', () => {
-  assert.match(fs.readFileSync(path.join(scripts, 'backup-check.js'), 'utf8'), /await env\.installed\(page\)/);
+  assert.match(fs.readFileSync(scriptFile('backup-check.js'), 'utf8'), /await env\.installed\(page\)/);
 });
 
 test('the popup check starts after the install and its first screen, and reads the popup once its row has settled', () => {
-  const source = fs.readFileSync(path.join(scripts, 'popup-check.js'), 'utf8');
+  const source = fs.readFileSync(scriptFile('popup-check.js'), 'utf8');
   assert.match(source, /await env\.installed\(sw\)/);
   assert.match(source, /await Promise\.race\(\[welcomed/);
   assert.match(source, /hasAttribute\('data-settled'\)/);
@@ -257,14 +259,14 @@ test('the popup check starts after the install and its first screen, and reads t
 });
 
 test('the Sites check starts after the install and its first screen, and reads each state once it has landed', () => {
-  const source = fs.readFileSync(path.join(scripts, 'sites-check.js'), 'utf8');
+  const source = fs.readFileSync(scriptFile('sites-check.js'), 'utf8');
   assert.match(source, /await env\.installed\(sw\)/);
   assert.match(source, /await Promise\.race\(\[welcomed/);
   assert.doesNotMatch(source, /pause\(([2-9]\d{2}|\d{4,})\)/, 'no fixed waits stand in for the page');
 });
 
 test('the translated layout case lets its seed Look reach History before any page measures it', () => {
-  const source = fs.readFileSync(path.join(scripts, 'settings-ia-check.js'), 'utf8');
+  const source = fs.readFileSync(scriptFile('settings-ia-check.js'), 'utf8');
   const body = source.slice(source.indexOf("check('translated-large-layout'"), source.indexOf("check('glass-parity'"));
   const filed = body.search(/GZ_HISTORY\.entries\(.*\.lookHistory\)\[0\]\?\.at >= at/);
   assert.ok(filed > 0, 'it waits for the worker to file the seed Look');
@@ -272,7 +274,7 @@ test('the translated layout case lets its seed Look reach History before any pag
 });
 
 test('installed accepts a finished empty profile without requiring a catalogue cache', async () => {
-  const { installed } = require('../scripts/check-env.js');
+  const { installed } = require('../../tools/dev/check-env.js');
   const vm = require('node:vm');
   const local = { freshDefaults: { fresh: true, pending: false }, migrated: ['tabs-auto'], channelKeysMoved: true };
   const page = { evaluate: (fn, keys) => vm.runInContext(`(${fn})(${JSON.stringify(keys)})`, vm.createContext({ chrome: { storage: { local: { get: async () => local } } } })) };
@@ -281,7 +283,7 @@ test('installed accepts a finished empty profile without requiring a catalogue c
 });
 
 test('the pointer check waits for whole attempts at the pointer animation, polled from Node, and says what it missed', () => {
-  const source = fs.readFileSync(path.join(scripts, 'pointer-check.js'), 'utf8');
+  const source = fs.readFileSync(scriptFile('pointer-check.js'), 'utf8');
   assert.doesNotMatch(source, /until\((trail|glow), \d+\)/, 'one 5 s attempt inside a 4 s limit is a single try on a loaded runner');
   const uses = source.match(/await animates\(/g) || [];
   assert.equal(uses.length, 6, 'every "it plays" step: three in the preview, three on the Ultra page');

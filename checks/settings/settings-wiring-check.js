@@ -1,13 +1,13 @@
 // Real editor handlers -> sync storage -> sanitization -> reopened controls, in a disposable Chromium profile.
-// NODE_PATH=<playwright> node scripts/settings-wiring-check.js [evidence directory or report.json]
+// NODE_PATH=<playwright> node checks/settings/settings-wiring-check.js [evidence directory or report.json]
 // WIRING_CASE=cards runs only the preview regression. Network requests outside the extension are blocked.
 // This complements settings-ia-check's real clicks/layout and the feature-specific runtime checks; dispatched
 // input/change events here deliberately reach conditional controls without enabling connected services.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const env = require('./check-env.js'), root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const lock = require('./check-env.js').lockPath(), chromeLaunch = require('./check-env.js').chromeLaunch(), results = [];
+const lock = require('../../tools/dev/check-env.js').lockPath(), chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch(), results = [];
 let context, scratch, held = false;
 const check = async (name, run) => {
   try { await run(); results.push({ name, ok: true }); }
@@ -21,7 +21,7 @@ const check = async (name, run) => {
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nsettings-wiring-check\n`);
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-settings-wiring-'));
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...chromeLaunch, headless: true, viewport: { width: 1440, height: 1000 },
       args: [`--disable-extensions-except=${root}`, `--load-extension=${root}`, '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND'],

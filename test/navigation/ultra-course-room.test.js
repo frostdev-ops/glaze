@@ -5,11 +5,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 test('the course panel keeps the bar\'s room when it holds the course section, and only then', () => {
   // The fixture's course: a panel over the page, absolute, the section inside it; no .inner-wrap around it.
-  const fixture = read('test/fixtures/ultra-course.html');
+  const fixture = read('../test/fixtures/ultra-course.html');
   assert.match(fixture, /el\('course-content-container', `<div class="panel-wrap hide-in-background modern"><section class="course /);
   assert.match(fixture, /\.panel-wrap \{ position: absolute;/);
   assert.doesNotMatch(fixture, /inner-wrap/);

@@ -1,4 +1,4 @@
-// A synthetic Blackboard Ultra for practising with Glaze Writer (scripts/writer-practice.js): a discussion to post and reply
+// A synthetic Blackboard Ultra for practising with Glaze Writer (tools/dev/writer-practice.js): a discussion to post and reply
 // in and an assignment attempt to submit, in the probed shapes (test/fixtures/ultra-practice-discussion.html,
 // ultra-practice-attempt.html), the GETs Glaze reads answered from the writer fixtures, and Ultra's own side of each Quill box
 // as the probe and the live audit saw it (glaze-plans/writer/probe/notes.md, glaze-plans/writer/audit/progress.md): the
@@ -8,7 +8,7 @@
 // upload, non-empty attempt enablement, Ultra's submit confirmation and its receipt. Synthetic data only.
 // Quill 1.3.7 is a stand-in for Ultra's 1.x fork; Angular/React callbacks are modelled here, not loaded from Blackboard.
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto'), zlib = require('node:zlib');
-const DT = require('../lib/doctext.js'), ZIP = require('../lib/zip.js');
+const DT = require('../../extension/lib/doctext.js'), ZIP = require('../../extension/lib/zip.js');
 
 const SITE = 'https://bb.school.test';
 const COURSE = '_101_1', FORUM = '_1101_1';
@@ -20,7 +20,7 @@ const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js
 const ME = { id: '_900_1', userName: 'practice', givenName: 'Alex', familyName: 'Rivera' };
 const MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const json = (f) => JSON.parse(fixture(f));
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
@@ -34,7 +34,7 @@ const quill = async (dir, signal) => {
 };
 
 // What Glaze reads, from the writer fixtures: the student, their courses (the practice course named as the paper fixtures
-// name it), the gradebook (the assignment, a test, and the discussion's column, as scripts/writer-compose-check.js adds
+// name it), the gradebook (the assignment, a test, and the discussion's column, as checks/writer/writer-compose-check.js adds
 // it), the assignment's rubric column, the discussions list, the thread and its replies.
 const seed = () => {
   const grades = json('ultra-writer-gradebook.json'), row = grades.results[0];

@@ -1,17 +1,17 @@
 // Installed mods' Look parts, headless: the real extension on a saved Canvas dashboard under an invented school origin. A
 // parts-only mod (rules and a shader background, no code) is put in storage as the worker keeps an installed one; the open
 // page lays it over the student's Look, and turning it off gives the Look back. All other requests abort; no LMS needed.
-//   NODE_PATH=/path/to/node_modules nice node scripts/mods-parts-check.js
+//   NODE_PATH=/path/to/node_modules nice node checks/mods/mods-parts-check.js
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const ext = process.env.EXT || path.join(__dirname, '..');
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const ext = process.env.EXT || path.join(__dirname, '../../extension');
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const CANVAS = 'https://parts.school.instructure.com';
-const fixture = (name) => fs.readFileSync(path.join(ext, 'test/fixtures', name), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
+const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
 const PAGES = { [`${CANVAS}/`]: 'canvas-dashboard-cards.html', [`${CANVAS}/courses/25/quizzes/7/take`]: 'canvas-quiz-take.html' };
 const MOD = 'partsonlymodaaaa';
 const SHADER = 'vec4 scene(vec2 uv) { return vec4(uC1, 1.0); }';
@@ -25,7 +25,7 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
   let ctx;
   const errors = [];
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await ctx.route('**/*', (route) => {

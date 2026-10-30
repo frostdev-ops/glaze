@@ -2,9 +2,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const PA = require('../lib/writer-papers.js'), ST = require('../lib/writer-styles.js'), I = require('../lib/i18n.js');
-const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || path.join(__dirname, '../writer-paper.js'), 'utf8');
+const { El } = require('../stand-in-dom.js');
+const PA = require('../../extension/lib/writer-papers.js'), ST = require('../../extension/lib/writer-styles.js'), I = require('../../extension/lib/i18n.js');
+const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || path.join(__dirname, '../../extension/writer-paper.js'), 'utf8');
 const block = source.slice(source.indexOf('    let docsSheet'), source.indexOf('    // ---- what the page says'));
 const keys = [PA.newKey(), PA.newKey()];
 const rows = () => keys.map((key, i) => ({ key, kind: 'paper', title: i ? 'Other' : '<img src=x onerror=alert(1)>', format: 'plain', words: 3, updated: 1000 - i }));

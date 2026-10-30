@@ -3,15 +3,15 @@
 //   - The worker loads zip.js and modbundle.js on first use, and again after it is stopped and started (cached at install).
 //   - WebCrypto has Ed25519 in the worker; missing support refuses installs with an update-browser error.
 //   - A changed file is refused in the worker, whatever the editor sent; an LMS page's content script is refused as sender.
-// EXT=/path/to/checkout NODE_PATH=/path/to/playwright/node_modules nice node scripts/modbundle-check.js
+// EXT=/path/to/checkout/extension NODE_PATH=/path/to/playwright/node_modules nice node checks/mods/modbundle-check.js
 // One browser at a time (wait while another agent's run is up); it deletes its own profile when it is done.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const LMS = 'https://school.example.test';
 // A staged copy holding the LMS fixture's host, as a student's grant would: the check runs a script in its tab.
-const ext = require('./check-env.js').staged(process.env.EXT || path.resolve(__dirname, '..'), [`${LMS}/*`]);
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.resolve(__dirname, '../../extension'), [`${LMS}/*`]);
 const M = require(path.join(ext, 'lib/modbundle.js'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const enc = new TextEncoder();
 const std = (b) => Buffer.from(b).toString('base64');
 const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Date.now() < end && !fn()) await new Promise((r) => setTimeout(r, 40)); };
@@ -32,7 +32,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     const next = await M.pack(files, { ...manifest, version: '1.1.0' }, author);
     const changed = M.archive({ ...mod.files, 'hooks.js': enc.encode('steal();\n') });
 
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     watchdog = setTimeout(() => { console.log('FAIL timed out after 120 s'); process.exitCode = 1; context?.close().finally(() => { fs.rmSync(scratch, { recursive: true, force: true }); process.exit(1); }); }, 120000);
     context = await chromium.launchPersistentContext(scratch, { ...chromeLaunch, headless: true, locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'] });

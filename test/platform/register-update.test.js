@@ -9,9 +9,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const manifest = require('../manifest.json');
+const manifest = require('../../extension/manifest.json');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const settle = async (n = 80) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const CANVAS_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-canvas.js')).js;

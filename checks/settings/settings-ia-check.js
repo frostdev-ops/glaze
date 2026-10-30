@@ -1,11 +1,11 @@
 // Settings IA regressions against the unpacked extension. External requests are blocked; no school or user profile.
-// NODE_PATH=<playwright> nice -n 15 node scripts/settings-ia-check.js
+// NODE_PATH=<playwright> nice -n 15 node checks/settings/settings-ia-check.js
 // IA_CASE selects one regression; EXT selects the checkout under test.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
-const env = require('./check-env.js'), lock = require('./check-env.js').lockPath();
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
+const env = require('../../tools/dev/check-env.js'), lock = require('../../tools/dev/check-env.js').lockPath();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const waitFor = async (page, predicate) => {
   for (const end = Date.now() + 5000; !await page.evaluate(predicate);) {
@@ -61,7 +61,7 @@ const check = async (name, test) => {
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nsettings-ia-check\n`);
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-settings-ia-check-'));
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...chromeLaunch, headless: true, viewport: { width: 1440, height: 1000 },
       args: [`--disable-extensions-except=${root}`, `--load-extension=${root}`, '--disable-background-networking'],

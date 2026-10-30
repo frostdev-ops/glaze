@@ -6,14 +6,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-logical.js');
-require('../lib/sheet-fn-date.js');
-require('../lib/sheet-fn-info.js');
-require('../lib/sheet-fn-lookup.js');
-require('../lib/sheet-fn-logical2.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-logical.js');
+require('../../extension/lib/sheet-fn-date.js');
+require('../../extension/lib/sheet-fn-info.js');
+require('../../extension/lib/sheet-fn-lookup.js');
+require('../../extension/lib/sheet-fn-logical2.js');
 
 const book = (cells = {}) => {
   const wb = M.workbook();
@@ -32,7 +32,7 @@ const cases = (e, rows) => { for (const [f, want] of rows) assert.equal(calc(e, 
 
 test('XOR and SWITCH are registered, and nothing sets a timer', () => {
   for (const name of ['XOR', 'SWITCH']) assert.ok(C.fn(name), name);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-logical2.js'), 'utf8')));
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-logical2.js'), 'utf8')));
 });
 
 test('XOR: true when an odd number of its values are TRUE', () => {

@@ -10,9 +10,9 @@
 //  to the worker through dispatchMessage, never through here.
 //  The group channel: a connection per batch, one message each way, framed as native messaging is (a 32-bit little-endian
 //  length, then UTF-8 JSON) and at most `GlazeAgentBridge.cap` bytes; each end refuses another user's process.
-//  GlazeAgentFrames is lib/agent-frames.js's shapes and sizes, shared with the app (test/agent-bridge-native.test.js runs
+//  GlazeAgentFrames is lib/agent-frames.js's shapes and sizes, shared with the app (test/safari/agent-bridge-native.test.js runs
 //  both on test/fixtures/agent-frames.json).
-//  Only scripts/stage-safari-dmg.py adds this file to a build (the Mac extension and the app), and only with GLAZE_DMG: the
+//  Only tools/build/stage-safari-dmg.py adds this file to a build (the Mac extension and the app), and only with GLAZE_DMG: the
 //  App Store build has none of it, so agent.* gets the handler's echo, which the worker reads as not installed.
 //
 #if os(macOS) && GLAZE_DMG

@@ -3,8 +3,8 @@
 // payload; the record keeps the last 40 calls, metadata only; a key goes only over https or to this computer.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const F = require('../lib/ai/failure.js');
-const E = require('../lib/ai/endpoint.js');
+const F = require('../../extension/lib/ai/failure.js');
+const E = require('../../extension/lib/ai/endpoint.js');
 
 test('model failures distinguish causes, keep a reference and carry no payload', () => {
   for (const [error, aborted, category] of [

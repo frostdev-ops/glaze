@@ -1,10 +1,10 @@
 // The pages panel's reducer (lib/pdf-pages.js): what the student does to the tiles (move, rotate, delete, a blank page,
 // another PDF's pages) → one list of page operations for lib/pdf-doc.js bake, which lays them out (layout) and hands
-// pdf.js's extractPages its arguments (entries). Pure: no pdf.js here. The panel on a page is scripts/pdf-check.js.
+// pdf.js's extractPages its arguments (entries). Pure: no pdf.js here. The panel on a page is checks/documents/pdf-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const R = require('../lib/pdf-pages.js');
-const D = require('../lib/pdf-doc.js');
+const R = require('../../extension/lib/pdf-pages.js');
+const D = require('../../extension/lib/pdf-doc.js');
 
 const at = (pages) => pages.map((p) => `${p.source}:${p.page}${p.turn ? `@${p.turn}` : ''}`);
 // What the tiles say the result is, as layout writes it.
@@ -106,7 +106,7 @@ test('Done applies deletions before additions at the 500-page limit', () => {
   assert.deepEqual(at(run(s)), want(s), 'deleted pages from an earlier merge do not occupy capacity');
 });
 
-const UI = require('./helpers/pdf-ui.cjs');
+const UI = require('../helpers/pdf-ui.cjs');
 const panel = (P = {}, apply = async () => {}) => R.panel({ P, doc: { numPages: 2 }, t: (s) => s, h: UI.h, btn: UI.btn, mount: UI.h('main'), bytes: 100, allows: { add: true }, apply });
 test('a merge finishing after Cancel destroys its loading task and leaves the panel closed', async (t) => {
   UI.install(t);

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const K = require('../lib/cards.js');
+const K = require('../../extension/lib/cards.js');
 
 const A = 'canvas:https://school.instructure.com/25';
 const B = 'canvas:http://localhost:3000/26';
@@ -81,7 +81,7 @@ test('contrast is measured, never corrected', () => {
 
 // canvas.css rules, as [selector, body], comments removed; @media blocks flattened.
 const cssRules = (file = 'canvas.css') => {
-  const css = require('fs').readFileSync(require('path').join(__dirname, '..', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = require('fs').readFileSync(require('path').join(__dirname, '../../extension', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const out = [];
   const walk = (text) => {
     for (let i = 0; i < text.length;) {
@@ -165,8 +165,8 @@ test('local pictures: scaled down, capped each and in all, and dropped with thei
 });
 
 test('theme codes carry how cards look and linked card styles, never a picture from this computer', async () => {
-  const G = require('../defaults.js');
-  const S = require('../lib/share.js');
+  const G = require('../../extension/defaults.js');
+  const S = require('../../extension/lib/share.js');
   const s = { ...G.GZ_SANITIZE({}), card: K.settings({ hover: 'glow', pet: 'cat', create: true, width: 300 }) };
   const cards = { [A]: { k: 'image', i: 'abcdef123456' }, [B]: { k: 'image', u: 'https://pics.example/a.jpg', f: 'warm' }, 'canvas:https://s.instructure.com/9': { k: 'solid', c: '#123456' } };
   const got = await S.decode(await S.encode(s, cards));
@@ -192,8 +192,8 @@ test('theme codes carry how cards look and linked card styles, never a picture f
 });
 
 test('every valid saved state gives a code that decodes back to it, or a clear "too long" at copy time', async () => {
-  const G = require('../defaults.js');
-  const S = require('../lib/share.js');
+  const G = require('../../extension/defaults.js');
+  const S = require('../../extension/lib/share.js');
   // Deterministic states: settings at their edges, and card styles with every optional field, including the longest
   // links the cards item can hold (signed links: no repeats for deflate to fold).
   let seed = 7;

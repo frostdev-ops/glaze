@@ -8,8 +8,8 @@ const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
-const G = require('../lib/sharing.js');
-const { relay, LIMIT, RATE, IPV6 } = require('../server/relay.js');
+const G = require('../../extension/lib/sharing.js');
+const { relay, LIMIT, RATE, IPV6 } = require('../../server/relay.js');
 
 const DAY = 864e5;
 const memory = () => { const m = new Map(); return { m, put: async (k, b) => { m.set(k, Buffer.from(b)); }, get: async (k) => m.get(k) || null, del: async (k) => { m.delete(k); } }; };

@@ -4,9 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-// scripts/download-check.js's waits around Download all, without Chromium: the rest before its click and the Allow frame's
+// checks/core/download-check.js's waits around Download all, without Chromium: the rest before its click and the Allow frame's
 // four states, each miss named.
-const source = fs.readFileSync(path.join(__dirname, '../scripts/download-check.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../checks/core/download-check.js'), 'utf8');
 const context = vm.createContext({ setTimeout, clearTimeout, Date, id: 'ext' });
 vm.runInContext(source.slice(source.indexOf('const pause ='), source.indexOf('\n(async () => {')).replace('const SLOW = 60000;', 'const SLOW = 400;')
   + '\nglobalThis.helpers = { resting, allowFrame, press, until, pressAllow: typeof pressAllow === "undefined" ? undefined : pressAllow };', context);

@@ -1,7 +1,7 @@
 // A small macro-enabled workbook (.xlsm) as Excel writes one: the macro-enabled main part, a sheet with A1 "Macro" and
-// B1 42, and its VBA project (xl/vbaProject.bin, opaque bytes kept verbatim). For test/sheet-kind.test.js and
-// scripts/sheets-check.js.
-const Z = require('../../lib/zip.js');
+// B1 42, and its VBA project (xl/vbaProject.bin, opaque bytes kept verbatim). For test/documents/sheet-kind.test.js and
+// checks/documents/sheets-check.js.
+const Z = require('../../extension/lib/zip.js');
 const RT = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 const VBA = Uint8Array.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x56, 0x42, 0x41]);

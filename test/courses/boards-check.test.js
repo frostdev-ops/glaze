@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 test('Ultra geometry check pauses a cycling quote and restores it after comparing', async () => {
-  const source = fs.readFileSync(require('node:path').join(__dirname, '../scripts/ultra-boards-check.js'), 'utf8');
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../checks/courses/ultra-boards-check.js'), 'utf8');
   const start = source.indexOf('    const editingStill = '), end = source.indexOf('    const notes = ', start);
   let paused = false, height = 100, passes = 0;
   const checks = [];

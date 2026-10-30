@@ -5,16 +5,16 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const GLSL = require('../lib/glsl.js');
-const XP = require('../lib/lookparts.js');
-const S = require('../lib/share.js');
-const E = require('../lib/editor-x.js');
-const BG = require('../lib/editor-xbg.js');
-const M = require('../lib/editor-xmotion.js');
-const I = require('../lib/i18n.js');
+const D = require('../../extension/defaults.js');
+const GLSL = require('../../extension/lib/glsl.js');
+const XP = require('../../extension/lib/lookparts.js');
+const S = require('../../extension/lib/share.js');
+const E = require('../../extension/lib/editor-x.js');
+const BG = require('../../extension/lib/editor-xbg.js');
+const M = require('../../extension/lib/editor-xmotion.js');
+const I = require('../../extension/lib/i18n.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 // The checker, as the options page has it (lib/lookparts.js asks for it when it is there).
 const withGlsl = async (fn) => { globalThis.GZ_GLSL = GLSL; try { return await fn(); } finally { delete globalThis.GZ_GLSL; } };
@@ -77,7 +77,7 @@ test('the Ultra preview accepts settings and parts only from its editor parent a
 test('the Ultra preview sanitizes and repaints card edits even when motion stays unchanged', () => {
   const source = read('lib/editor-preview.js'), start = source.indexOf("    addEventListener('message'", source.indexOf("if (site === 'ultra')"));
   const block = source.slice(start, source.indexOf('    // The mock supplies', start));
-  const cards = require('../lib/cards.js'), parent = {}, origin = 'chrome-extension://fixture';
+  const cards = require('../../extension/lib/cards.js'), parent = {}, origin = 'chrome-extension://fixture';
   let receive;
   const painted = [], state = D.GZ_SANITIZE();
   const context = vm.createContext({ parent, location: { origin }, addEventListener: (_, fn) => { receive = fn; },
@@ -195,7 +195,7 @@ test('layer stacks: every preset, a fresh layer of each kind and a reordered sta
 });
 
 test('motion: every ready animation, an added stop, effects and a cursor clean unchanged, round-trip, and are recognised again', async () => {
-  const MX = require('../lib/motionx.js');
+  const MX = require('../../extension/lib/motionx.js');
   assert.deepEqual(Object.keys(M.MOMENTS).sort(), [...MX.MOMENTS].sort(), 'every moment has a label');
   assert.deepEqual(Object.keys(M.EVENTS).sort(), [...MX.EVENTS].sort(), 'every event has a label');
   assert.deepEqual(Object.keys(M.KEYS).sort(), Object.keys(MX.RANGE).sort(), 'every stop value has a slider');
@@ -261,7 +261,7 @@ test('the media builder offers exactly the kinds and fits the cleaner has, each 
 });
 
 test('the event builder offers the canvas marks and shows the Look\'s selected marks', () => {
-  const MX = require('../lib/motionx.js'), checks = [];
+  const MX = require('../../extension/lib/motionx.js'), checks = [];
   let builder;
   const node = () => ({ dataset: {}, querySelector: node, append() {}, closest: () => null, childElementCount: 0, replaceChildren() {} });
   const host = node();
@@ -278,7 +278,7 @@ test('the event builder offers the canvas marks and shows the Look\'s selected m
 });
 
 test('Motion has the Look\'s animations, event effects and typing effect; its pointer and cursor effect are under Look › Pointer', () => {
-  const MX = require('../lib/motionx.js'), labels = [], writes = [], saves = [];
+  const MX = require('../../extension/lib/motionx.js'), labels = [], writes = [], saves = [];
   let builder, resetClick;
   const node = () => ({ dataset: {}, querySelector: node, append() {}, closest: () => null, childElementCount: 0, replaceChildren() {} });
   const section = { querySelector: () => ({ addEventListener: (t, f) => { resetClick = f; } }) };

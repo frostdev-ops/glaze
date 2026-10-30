@@ -2,11 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const H = require('../lib/history.js');
-const G = require('../defaults.js');
-const m = require('../manifest.json');
-const M = require('../lib/media.js');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
+const H = require('../../extension/lib/history.js');
+const G = require('../../extension/defaults.js');
+const m = require('../../extension/manifest.json');
+const M = require('../../extension/lib/media.js');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
 
 const looks = Object.fromEntries(G.GZ_LOOKS.map((L) => [L.name, L]));
 const wearing = (name, s = G.GZ_DEFAULTS) => G.GZ_SANITIZE({ ...s, ...G.GZ_LOOK_APPLY(s, looks[name]) });
@@ -69,7 +69,7 @@ const worker = ({ fetch, manifest = m } = {}) => {
     URL, console: { ...console, warn: (...args) => { warnings.push(args.map(String).join(' ')); console.warn(...args); } }, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto, AbortSignal, fetch,
     ...fakeIDB(), // the worker's own IndexedDB, where it keeps a Look's files
     setTimeout: (f) => timers.push(f), clearTimeout: () => timers.splice(0),
-    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../../extension/lib/${f}`), 'utf8'), context); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => manifest,
@@ -80,7 +80,7 @@ const worker = ({ fetch, manifest = m } = {}) => {
       scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {} },
     },
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8'), context);
   const send = (msg, sender, reply = () => {}) => on.message.forEach((f) => f(msg, sender, reply));
   const change = (changes) => on.changed.forEach((f) => f(changes, 'sync'));
   const tick = () => new Promise(setImmediate);
@@ -256,7 +256,7 @@ test('a burst that starts after Clear history, while older writes are still queu
 });
 
 // ---- Look parts ---------------------------------------------------------------------------------------------------
-const XP = require('../lib/lookparts.js');
+const XP = require('../../extension/lib/lookparts.js');
 const GLOW = { x: { cursor: { kind: 'glow' } } };
 
 test('a Look\'s parts are part of the theme: wearing it brings them, and a theme without any clears them', () => {
@@ -348,10 +348,10 @@ test('gallery Look names and authors lose bidi and control characters before sto
 });
 
 // A gallery Look whose background is a file: the worker fetches that one file from the gallery and keeps it, pending, before
-// the editor opens (test/media-store.test.js follows it there); anything wrong with it still offers the Look, without the file.
+// the editor opens (test/looks/media-store.test.js follows it there); anything wrong with it still offers the Look, without the file.
 test('a gallery Look\'s background file is fetched from the gallery and kept by its name, pending, before the offer', async () => {
-  const S = require('../lib/share.js'), M = require('../lib/media.js');
-  const bytes = fs.readFileSync(require.resolve('./fixtures/media/spin.json'));
+  const S = require('../../extension/lib/share.js'), M = require('../../extension/lib/media.js');
+  const bytes = fs.readFileSync(require.resolve('../fixtures/media/spin.json'));
   const h = await M.sha(M.check(new Uint8Array(bytes), 'bg').bytes);
   const code = await S.encode(G.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'lottie', src: `file:${h}` } } } });
   const url = 'https://frostdev.io/glaze/looks/';
@@ -371,7 +371,7 @@ test('a gallery Look\'s background file is fetched from the gallery and kept by 
   assert.equal(asked.length, 1);
   assert.equal(w.local.galleryOffer?.code, code);
   // The wrong file, or no gallery: offered all the same, nothing kept, and the editor told why.
-  for (const [f, error] of [[serve('{"not":"it"}'), 'type'], [serve(fs.readFileSync(require.resolve('./fixtures/media/clip.webm'))), 'type'], [async () => { throw new TypeError('offline'); }, 'network']]) {
+  for (const [f, error] of [[serve('{"not":"it"}'), 'type'], [serve(fs.readFileSync(require.resolve('../fixtures/media/clip.webm'))), 'type'], [async () => { throw new TypeError('offline'); }, 'network']]) {
     const v = worker({ fetch: f });
     v.send({ gallery: { code, name: 'Spin' } }, { url, frameId: 0 });
     await v.settle();

@@ -4,12 +4,12 @@
 // release scripts (build-safari.sh through stage-safari-dmg.py, appstore-safari.sh, appstore-ios.sh) unzip the Chrome
 // package into that folder and build the project as it is checked in, so a file the package has and the project doesn't
 // list would be left out of the app, silently. Run on the staged folder before a build, this fails when any staged file
-// isn't bundled by both targets; test/safari-resources.test.js holds the project to everything the package ships.
-//   node scripts/safari-resources.js "<stage>/Glaze/Glaze Extension/Resources"
+// isn't bundled by both targets; test/safari/safari-resources.test.js holds the project to everything the package ships.
+//   node tools/build/safari-resources.js "<stage>/Glaze/Glaze Extension/Resources"
 const fs = require('fs');
 const path = require('path');
 
-const PROJECT = path.join(__dirname, '../safari/Glaze/Glaze.xcodeproj/project.pbxproj');
+const PROJECT = path.join(__dirname, '../../safari/Glaze/Glaze.xcodeproj/project.pbxproj');
 const TARGETS = ['Glaze Extension', 'Glaze iOS Extension'];
 
 // { target: Set of paths under Resources, a folder's ending in '/' } from the project file, in Xcode's own text format
@@ -43,7 +43,7 @@ const walk = (dir, pre = '') => fs.readdirSync(dir, { withFileTypes: true })
 if (require.main === module) {
   const dir = process.argv[2];
   if (!dir || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
-    console.error('usage: node scripts/safari-resources.js <staged "Glaze Extension/Resources" folder>');
+    console.error('usage: node tools/build/safari-resources.js <staged "Glaze Extension/Resources" folder>');
     process.exit(2);
   }
   const files = walk(dir);

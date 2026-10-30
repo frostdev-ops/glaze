@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const cp = require('node:child_process');
 const source = (file) => process.env.GZ_NAV_REVIEW_BASE
   ? cp.execFileSync('git', ['show', `${process.env.GZ_NAV_REVIEW_BASE}:${file}`], { cwd: __dirname, encoding: 'utf8' })
-  : fs.readFileSync(require.resolve(`../${file}`), 'utf8');
+  : fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
 
 test('native hidden attribute values survive disabling the rail exactly', () => {
   const src = source('features/nav.js'), start = src.indexOf('  const restore ='), end = src.indexOf('  const loadLogo =', start);
@@ -25,7 +25,7 @@ test('a replacement Glaze settings item does not inherit a hidden native list it
   const make = (tag) => ({ tagName: tag, hidden: true, classList: { contains: () => false, add() {}, remove() {} }, removeAttribute(k) { if (k === 'hidden') this.hidden = false; }, setAttribute() {}, querySelector: () => null, append() {}, addEventListener() {}, cloneNode() { return make(tag); } });
   const li = make('LI'), last = make('A'); last.parentElement = li; li.after = (n) => { inserted = n; };
   const root = { isConnected: true, querySelector: () => null, querySelectorAll: () => [last] }; last.getAttribute = () => '/ultra/course';
-  const c = vm.createContext({ navRoots: new Set([root]), GZ_NAV: require('../lib/nav.js'), t: (s) => s, document: { createTreeWalker: () => ({ nextNode: () => ({}) }) }, NodeFilter: { SHOW_TEXT: 4 } });
+  const c = vm.createContext({ navRoots: new Set([root]), GZ_NAV: require('../../extension/lib/nav.js'), t: (s) => s, document: { createTreeWalker: () => ({ nextNode: () => ({}) }) }, NodeFilter: { SHOW_TEXT: 4 } });
   vm.runInContext(src.slice(start, end) + '\nglazeItem(true);', c);
   assert.equal(inserted.hidden, false);
 });

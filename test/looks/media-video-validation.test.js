@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const M = require('../lib/media.js');
-const webm = new Uint8Array(fs.readFileSync(require('node:path').join(__dirname, 'fixtures/media/clip.webm')));
+const M = require('../../extension/lib/media.js');
+const webm = new Uint8Array(fs.readFileSync(require('node:path').join(__dirname, '../fixtures/media/clip.webm')));
 
 test('WebM requires complete bounded elements and a video track, not just its signature', () => {
   assert.ok(M.video(webm));

@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // Exercise the check's helpers without launching Firefox or packaging the extension.
-const source = fs.readFileSync(path.join(__dirname, '../scripts/firefox-check.mjs'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../checks/firefox/firefox-check.mjs'), 'utf8');
 const context = vm.createContext({ setTimeout, clearTimeout, Date, EXT: 'moz-extension://check/', FILES: 'files.cdn-a.test' });
 vm.runInContext(source.slice(source.indexOf('const pause ='), source.indexOf('const fixture =')).replace('const SLOW = 60000;', 'const SLOW = 30;')
   + source.slice(source.indexOf('const resting ='), source.indexOf('\nconst run =')) + '\nglobalThis.helpers = { until, allowFrame };', context);

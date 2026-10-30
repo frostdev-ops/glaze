@@ -4,7 +4,7 @@
 // unverified, a known lack refuses, nothing is substituted.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../lib/ai/models.js');
+const M = require('../../extension/lib/ai/models.js');
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const store = () => { const m = new Map(); return { m, get: async (k) => m.get(k), set: async (k, v) => { m.set(k, structuredClone(v)); return true; } }; };
@@ -80,7 +80,7 @@ test('catalog cancellation settles even when fetch ignores abort and does not ca
 
 // OpenRouter's catalog as it answered on 2026-10-27 (test/fixtures/openrouter-models.json: a few models, descriptions,
 // prices and benchmarks left out).
-const routed = require('./fixtures/openrouter-models.json');
+const routed = require('../fixtures/openrouter-models.json');
 
 test('a model\'s efforts as OpenRouter states them: its supported_efforts Glaze knows, no none where reasoning is mandatory, none when it states none', async () => {
   const out = await M.list({ base: 'https://openrouter.ai/api/v1' }, { fetch: async () => json(routed) });

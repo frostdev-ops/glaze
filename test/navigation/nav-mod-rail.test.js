@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../features/nav.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/features/nav.js'), 'utf8');
 const section = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 
 const node = (tag = 'div') => ({
@@ -24,9 +24,9 @@ for (const site of ['canvas', 'moodle']) for (const layout of [null, { place: 'l
     const html = node('html'), list = node('ul'), head = node('head'); html.connected = true; html.append(head, list);
     const scripted = node(), declarative = node();
     let mods = [{ key: 'scripted', el: scripted }], widgets = [{ key: 'declarative', el: declarative }];
-    const N = require('../lib/nav-items.js'), EMPTY = N.clean();
+    const N = require('../../extension/lib/nav-items.js'), EMPTY = N.clean();
     const context = vm.createContext({
-      X: { site, parts: () => layout && { nav: layout } }, N, L: require('../lib/navlayout.js'), EMPTY, stored: EMPTY, roots: '', items: '',
+      X: { site, parts: () => layout && { nav: layout } }, N, L: require('../../extension/lib/navlayout.js'), EMPTY, stored: EMPTY, roots: '', items: '',
       GZ_MODS: { rail: () => mods }, GZ_MODWIDGETS: { rail: () => widgets },
       document: { documentElement: html, head, activeElement: {}, querySelector: () => list }, html,
       make: (tag, props = {}, ...children) => { const el = Object.assign(node(tag), props); el.append(...children); return el; },

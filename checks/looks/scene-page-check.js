@@ -1,16 +1,16 @@
 // The real unpacked extension drawing a custom shader and layered backgrounds from a Look's parts: lookX in storage, read by
 // features/lookparts.js, GZ_CTX.parts(), content.js syncScene (the checker loaded on demand through the worker), lib/scene.js
 // imported from the page, and the editor's preview frames telling their parent what the guard did. Software GL (Playwright's
-// Chromium has no GPU in headless), so this checks the wiring, not speed: scripts/scene-check.mjs has the timings.
-//   nice -n 10 NODE_PATH=/path/to/node_modules node scripts/scene-page-check.js [out-dir]
+// Chromium has no GPU in headless), so this checks the wiring, not speed: checks/looks/scene-check.mjs has the timings.
+//   nice -n 10 NODE_PATH=/path/to/node_modules node checks/looks/scene-page-check.js [out-dir]
 // One headless browser at a time across agents: wait while another is running. Every profile is temporary.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 
-const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['https://ultra.fixture.test/*']);
+const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, '../../extension'), ['https://ultra.fixture.test/*']);
 const out = process.argv[2] && path.resolve(process.argv[2]);
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const origin = 'https://ultra.fixture.test';
 const D = require(path.join(ext, 'defaults.js'));
@@ -26,7 +26,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const check = (name, ok, detail) => { results.push({ name, ok: !!ok, detail }); };
   let context, failModule = true, failedModules = 0, failDependency = true, failedDependencies = 0;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...chromeLaunch, headless: true, viewport: { width: 1280, height: 800 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
@@ -66,7 +66,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       await chrome.storage.sync.set({ ...defaults, bg, lookX }); await chrome.storage.local.set({ ultra: [origin] });
     }, { origin, defaults: D.GZ_DEFAULTS, bg: { ...D.GZ_DEFAULTS.bg, ...bg }, lookX }).then(async () => {
       await worker.evaluate(() => queue);
-      await require('./check-env.js').ultraReady(opts);
+      await require('../../tools/dev/check-env.js').ultraReady(opts);
     });
     const look = async (x) => P.pack({ x });
     const open = async () => { const page = await context.newPage(); page.on('pageerror', (e) => errors.push(e.message)); await page.goto(`${origin}/ultra/stream`); await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-font')); return page; };

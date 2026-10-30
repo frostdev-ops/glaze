@@ -1,10 +1,10 @@
 // PDF and picture import (W23). lib/doctext.js's helpers for them; features/import.js handing a file to the reader's
-// frame; then every fixture in test/fixtures/import (made by scripts/import-fixtures.js and scripts/import-check.js;
+// frame; then every fixture in test/fixtures/import (made by tools/fidelity/import-fixtures.js and checks/planner/import-check.js;
 // none is a real student's) through the code the reader runs: pdf.js (lib/pdfjs) for PDFs, the OCR worker itself
 // (lib/ocr.js, in a vm with a worker's globals) for pictures and scanned pages, and each import flow's extractor
 // (lib/classes.js, lib/syllabus.js, lib/gpa.js). A fixture's accuracy is the share of its known fields the extractor
 // got exactly right. Each is printed and must not fall below what was measured when this was written (ACCURACY).
-// What the reader does in a browser (decoding pictures, drawing scanned pages, the frame) is scripts/import-check.js.
+// What the reader does in a browser (decoding pictures, drawing scanned pages, the frame) is checks/planner/import-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -12,10 +12,10 @@ const path = require('node:path');
 const vm = require('node:vm');
 const zlib = require('node:zlib');
 const { pathToFileURL } = require('node:url');
-const D = require('../lib/doctext.js');
+const D = require('../../extension/lib/doctext.js');
 
-const root = path.join(__dirname, '..');
-const fixture = (f) => fs.readFileSync(path.join(__dirname, 'fixtures/import', f));
+const root = path.join(__dirname, '../../extension');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../fixtures/import', f));
 const ascii = (s) => Uint8Array.from(s, (c) => c.charCodeAt(0));
 
 // ---- the helpers ---------------------------------------------------------------------------------------------------
@@ -108,10 +108,10 @@ test('ocrText: a line it mends is reported unsure as mended, so the review still
   const r = D.ocrText({ blocks: [{ paragraphs: [{ lines: [line(...words)] }] }] });
   assert.equal(r.text, 'Office hours: Monday 11:00 AM - 12:15 PM', 'the lost dash between two times is put back');
   assert.deepEqual(r.unsure, [r.text]);
-  // The syllabus reads its office hours from that line (lib/syllabus.js, which scripts/import-truth.js loads with the
+  // The syllabus reads its office hours from that line (lib/syllabus.js, which checks/planner/import-truth.js loads with the
   // class-time reader it needs); the field from it is marked.
-  require('../scripts/import-truth.js');
-  const src = require('../lib/syllabus.js').extract(r.text).hours[0].src;
+  require('../../checks/planner/import-truth.js');
+  const src = require('../../extension/lib/syllabus.js').extract(r.text).hours[0].src;
   assert.ok(importer().I.doubt(r, src), `"${src}" is one of the unsure lines`);
 });
 
@@ -291,8 +291,8 @@ test('ocrText: a table row whose cells are several lines, or centred in it, is o
   ].join('\n'));
   assert.deepEqual(r.unsure, [], 'the icon is no word, so it makes nothing unsure');
   // The syllabus reads a row's date with what is due on the same line (lib/syllabus.js is line by line).
-  require('../scripts/import-truth.js');
-  const dates = require('../lib/syllabus.js').extract(r.text, { start: Date.UTC(2026, 8, 7), hint: 'en' }).dates;
+  require('../../checks/planner/import-truth.js');
+  const dates = require('../../extension/lib/syllabus.js').extract(r.text, { start: Date.UTC(2026, 8, 7), hint: 'en' }).dates;
   assert.ok(dates.some((d) => /Lab report #1/.test(d.title)), JSON.stringify(dates));
   assert.ok(dates.some((d) => /Midterm exam/.test(d.title)), JSON.stringify(dates));
 });
@@ -307,7 +307,7 @@ test('ocrText: a chart\'s label over its value is one line; a table\'s column of
     [[['Final', 944, 1030, 436, 462], ['exam', 1045, 1150, 436, 462]]], [[['35%', 997, 1060, 484, 508]]],
   ));
   assert.equal(chart.text, 'GRADE BREAKDOWN\nProjects 40%\nWeekly quizzes 25%\nFinal exam 35%');
-  const S = require('../lib/syllabus.js');
+  const S = require('../../extension/lib/syllabus.js');
   assert.equal(S.weightsText(S.extract(chart.text).weights.value), 'Projects 40%, Weekly quizzes 25%, Final exam 35%');
   // A table: each value is its row's, under the column's heading.
   const table = D.ocrText(engineJson([
@@ -487,7 +487,7 @@ const workerPasses = () => {
     URL, console, setTimeout, clearTimeout, TextEncoder, crypto, Date,
     importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, 'lib', f), 'utf8'), ctx); },
     chrome: {
-      runtime: { id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
+      runtime: { id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: { get: async () => ({}), set: async () => {} }, sync: { get: async () => ({}), set: async () => {} }, onChanged: none },
       scripting: { executeScript: () => Promise.resolve([]) },
     },
@@ -593,8 +593,8 @@ const scanned = async (bytes, n) => {
   return D.pgm(rgba, w, h);
 };
 
-// ---- what each flow makes of it, scored (scripts/import-truth.js) -------------------------------------------------
-const { SCORE } = require('../scripts/import-truth.js');
+// ---- what each flow makes of it, scored (checks/planner/import-truth.js) -------------------------------------------------
+const { SCORE } = require('../../checks/planner/import-truth.js');
 
 // [fixture, how it is read, lowest accuracy accepted]: the floor is what this code measured, so a change that reads
 // worse fails.
@@ -636,14 +636,14 @@ test('PDFs: a locked one says so, a broken one fails, a scanned one has no text 
 test('extraction accuracy, per fixture', async (t) => {
   const table = [], low = [];
   for (const [f, how, floor] of ACCURACY) {
-    if (!fs.existsSync(path.join(__dirname, 'fixtures/import', f))) { t.diagnostic(`${f}: missing (scripts/import-check.js makes it)`); continue; }
+    if (!fs.existsSync(path.join(__dirname, '../fixtures/import', f))) { t.diagnostic(`${f}: missing (scripts/import-check.js makes it)`); continue; }
     const bytes = fixture(f);
     const at = Date.now();
     let text, conf = '';
     if (f.endsWith('.pdf') && how.startsWith('text')) text = (await pdfText(bytes)).join('\n\n');
     else {
       // A scanned page and a PNG as the reader hands them over (grey pixels); the photo and WebP as files, which the
-      // engine decodes itself (node can't decode them; the browser run is scripts/import-check.js).
+      // engine decodes itself (node can't decode them; the browser run is checks/planner/import-check.js).
       const image = f.endsWith('.pdf') ? await scanned(bytes, 1) : f.endsWith('.png') ? png(bytes) : new Uint8Array(bytes);
       const r = await ocr.read(image);
       text = r.text;

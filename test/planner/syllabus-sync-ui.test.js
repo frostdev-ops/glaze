@@ -6,11 +6,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const workerEnv = require('./helpers/worker-env.cjs');
-const S = require('../lib/syllabus.js');
+const { El } = require('../stand-in-dom.js');
+const workerEnv = require('../helpers/worker-env.cjs');
+const S = require('../../extension/lib/syllabus.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const ORIGIN = 'https://school.instructure.com';
@@ -41,7 +41,7 @@ const stage = async (local = {}) => {
       runtime: { sendMessage: (m, cb) => { w.send(m, sender).then(cb); } },
       storage: { local: { get: (k, cb) => cb(Object.fromEntries([].concat(k).filter((x) => x in w.store.local).map((x) => [x, structuredClone(w.store.local[x])]))) }, onChanged: { addListener() {} } },
     },
-    GZ_I18N: require('../lib/i18n.js'),
+    GZ_I18N: require('../../extension/lib/i18n.js'),
     GZ_CTX: {
       t: (k, v) => String(k).replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', settings: () => ({ enabled: true, enhance: { syllabus: true, todo: true } }), on: () => true, canvasCourseId: () => '25',
       profile: () => Promise.resolve({ id: 3 }), canvasCourses: () => Promise.resolve([{ id: '25' }]),

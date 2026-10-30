@@ -20,21 +20,21 @@ jobs:
         with:
           node-version: 26
 
-      # Install scripts off; every package checked against ci/playwright.pins, and Chromium/FFmpeg against ci/*.pins,
+      # Install scripts off; every package checked against .github/pins/playwright.pins, and Chromium/FFmpeg against .github/pins/*.pins,
       # before either runs.
       - name: Install the pinned Playwright
         run: |
           echo "NODE_PATH=$RUNNER_TEMP/playwright/node_modules" >> "$GITHUB_ENV"
           echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/ms-playwright" >> "$GITHUB_ENV"
           npm install --prefix "$RUNNER_TEMP/playwright" --no-save --no-package-lock --ignore-scripts --no-audit --no-fund --registry https://registry.npmjs.org/ "playwright@$PLAYWRIGHT"
-          node scripts/npm-integrity.js "$RUNNER_TEMP/playwright/node_modules/.package-lock.json" ci/playwright.pins playwright playwright-core
+          node tools/vendor/npm-integrity.js "$RUNNER_TEMP/playwright/node_modules/.package-lock.json" .github/pins/playwright.pins playwright playwright-core
       - name: Install its Chromium
         run: |
           PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps --no-shell chromium
-          node scripts/ci-chromium.js
+          node tools/dev/ci-chromium.js
 
       - name: Settings, popup, sites, pointer and agent link checks
-        run: nice -n 10 node scripts/ci-browser-checks.js "$RUNNER_TEMP/browser-evidence"
+        run: nice -n 10 node tools/dev/ci-browser-checks.js "$RUNNER_TEMP/browser-evidence"
 
       - name: Keep the logs and screenshots
         if: failure()

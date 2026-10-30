@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import time
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[2] / "extension"
 
 
 def apple(source):

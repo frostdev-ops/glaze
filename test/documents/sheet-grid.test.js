@@ -1,9 +1,9 @@
 // The spreadsheet grid's pure parts (sheet-grid.js): the Fenwick tree of row and column offsets, selection maths and the
 // data edge Ctrl+arrow goes to, fill series detection and the formula shift a fill makes, and the clipboard's TSV and HTML
-// both ways (Excel's mso-number-format and Google Sheets' data-sheets-* read on paste). The DOM grid is scripts/sheets-check.js.
+// both ways (Excel's mso-number-format and Google Sheets' data-sheets-* read on paste). The DOM grid is checks/documents/sheets-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../sheet-grid.js');
+const G = require('../../extension/sheet-grid.js');
 
 test('offsets: a Fenwick tree of sizes, hidden ones zero, found back from a pixel', () => {
   const s = new G.Sizes(1e5, 20);

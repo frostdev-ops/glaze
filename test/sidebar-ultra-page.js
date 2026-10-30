@@ -1,15 +1,15 @@
 // The stand-in Ultra pages the sidebar's Ultra tests run features/sidebar.js (and features/widgets.js) on: test/
-// sidebar-ultra.test.js and test/sidebar-absorb.test.js. No tests here.
+// sidebar-ultra.test.js and test/navigation/sidebar-absorb.test.js. No tests here.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const W = require('../lib/widgets.js');
-const S = require('../lib/sidebar.js');
+const D = require('../extension/defaults.js');
+const W = require('../extension/lib/widgets.js');
+const S = require('../extension/lib/sidebar.js');
 const { El } = require('./stand-in-dom.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 const O = 'https://school.blackboard.test';
 const KEY = S.key('ultra', O, '_3_1');

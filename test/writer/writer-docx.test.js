@@ -1,19 +1,19 @@
 // Glaze Writer's .docx (lib/writer-docx.js): the package export writes, part by part, against golden XML; doctext reads
 // it back to the paper's text; importing it gives the paper back; and the import's limits for hostile files. Word opening
-// these files is scripts/writer-word-fidelity.js.
+// these files is tools/fidelity/writer-word-fidelity.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const S = require('../lib/writer-schema.js');
-const X = require('../lib/writer-docx.js');
-const ST = require('../lib/writer-styles.js');
-const D = require('../lib/doctext.js');
-const Z = require('../lib/zip.js');
-const FX = require('./fixtures/writer-paper-fixtures.js');
+const S = require('../../extension/lib/writer-schema.js');
+const X = require('../../extension/lib/writer-docx.js');
+const ST = require('../../extension/lib/writer-styles.js');
+const D = require('../../extension/lib/doctext.js');
+const Z = require('../../extension/lib/zip.js');
+const FX = require('../fixtures/writer-paper-fixtures.js');
 
 const date = new Date('2026-10-27T12:00:00Z');
-const golden = (n) => fs.readFileSync(path.join(__dirname, 'fixtures/writer-docx', n), 'utf8');
+const golden = (n) => fs.readFileSync(path.join(__dirname, '../fixtures/writer-docx', n), 'utf8');
 const pretty = (x) => `${x.replace(/></g, '>\n<')}\n`;
 const mla = () => X.exportDocx(FX.papers.mla9(), { format: 'mla9', surname: 'Rivera', title: 'Essay 2: Memory in Beloved', date });
 const chicago = () => X.exportDocx(FX.papers.chicago17(), { format: 'chicago17', title: 'Essay 2: Memory in Beloved', date });
@@ -172,7 +172,7 @@ test('a coloured, highlighted run exports its stored colour and highlighter, wha
 
 
 test('Blank Word round trip keeps one body and no header or reference list page', async () => {
-  const doc = S.paper.nodeFromJSON(require('../lib/writer-format.js').template(ST.FORMATS.plain, {}, [{ type: 'paragraph', content: [{ type: 'text', text: 'Field notes' }] }]));
+  const doc = S.paper.nodeFromJSON(require('../../extension/lib/writer-format.js').template(ST.FORMATS.plain, {}, [{ type: 'paragraph', content: [{ type: 'text', text: 'Field notes' }] }]));
   const out = X.exportDocx(doc, { format: 'plain', date });
   assert.ok(!Object.keys(out.parts).some((k) => /header\d+\.xml$/.test(k)));
   const back = S.paper.nodeFromJSON((await X.importDocx(out.bytes, { format: 'plain' })).doc);

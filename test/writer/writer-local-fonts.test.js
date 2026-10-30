@@ -3,10 +3,10 @@
 // and its bundled twin where not, named in the .docx's fontTable; a paste still sets only the four.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ST = require('../lib/writer-styles.js');
-const S = require('../lib/writer-schema.js');
-const P = require('../writer-paste.js');
-const X = require('../lib/writer-docx.js');
+const ST = require('../../extension/lib/writer-styles.js');
+const S = require('../../extension/lib/writer-schema.js');
+const P = require('../../extension/writer-paste.js');
+const X = require('../../extension/lib/writer-docx.js');
 
 const mla = ST.FORMATS.mla9;
 
@@ -40,7 +40,7 @@ test('the .docx names the paper\'s own font in its defaults and its font table',
 });
 
 test('a Word 365 paper imports in Aptos, kept by name, with no warning about replaced fonts', async () => {
-  const FX = require('./fixtures/writer-docx-import.js');
+  const FX = require('../fixtures/writer-docx-import.js');
   const r = await X.importDocx(FX.bytes('aptos-word'), { format: 'mla9' });
   assert.equal(r.setup.font, 'Aptos');
   assert.ok(!r.warnings.includes('Fonts Word and Blackboard don\'t share were replaced.'), r.warnings.join(' '));

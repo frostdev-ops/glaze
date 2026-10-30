@@ -6,13 +6,13 @@
 //   - Page tweaks: a Canvas restyle and hide reach the Canvas preview through features/rules.js, an Ultra hide reaches the
 //     Ultra preview, a part that holds Glaze settings can't be hidden, and removing a tweak takes it off.
 //   - Every control the builders draw has a name; removing the layout and the tweaks leaves no parts.
-// EXT=/path/to/checkout NODE_PATH=/path/to/playwright/node_modules nice node scripts/xparts-editor-check.js
+// EXT=/path/to/checkout/extension NODE_PATH=/path/to/playwright/node_modules nice node checks/settings/xparts-editor-check.js
 // One browser at a time (wait while another agent's run is up); it deletes its own profile when it is done.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
-const ext = process.env.EXT || path.resolve(__dirname, '..');
+const ext = process.env.EXT || path.resolve(__dirname, '../../extension');
 const X = require(path.join(ext, 'lib/lookparts.js'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() + ms; let v; while (Date.now() < end) { try { v = await fn(); if (ok(v)) return v; } catch { /* the frame is reloading */ } await new Promise((r) => setTimeout(r, 50)); } throw new Error('Timed out waiting for editor or preview state'); };
 
 (async () => {
@@ -21,7 +21,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
   const errors = [], external = [];
   const check = (name, pass, detail = '') => { if (!pass) fails++; console.log(`${pass ? 'ok  ' : 'FAIL'} ${name}${pass ? '' : ` ${detail}`}`); };
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(scratch, { ...chromeLaunch, headless: true, viewport: { width: 1440, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-webgl', '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await context.route('**/*', (route) => { const url = route.request().url(); if (url.startsWith('chrome-extension:') || url.startsWith('data:')) return route.continue(); external.push(url); return route.abort(); });

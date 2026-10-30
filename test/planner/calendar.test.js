@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const D = require('../defaults.js');
+const D = require('../../extension/defaults.js');
 
 // Ultra's calendar items, as /learn/api/v1/calendars/calendarItems gives them.
 const item = (calendarId, title) => ({ calendarId, title, endDate: '2026-10-16T03:59:00.000Z' });

@@ -1,5 +1,5 @@
 // Canvas HTML fixtures (test/fixtures/canvas-*.html): Canvas pages as the student sees them, captured with Glaze off by
-// `scripts/canvas-shots.js --settings '{enabled:false}' --html test/fixtures name=/path ...`. These tests keep them safe to commit and keep them honest: every class, id and attribute Glaze's
+// `tools/dev/canvas-shots.js --settings '{enabled:false}' --html test/fixtures name=/path ...`. These tests keep them safe to commit and keep them honest: every class, id and attribute Glaze's
 // Canvas code and canvas.css key on must still be found in one, so when a reseed or a Canvas update drops a selector,
 // this fails instead of a page quietly losing its theme.
 const test = require('node:test');
@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const dir = path.join(__dirname, 'fixtures');
+const dir = path.join(__dirname, '../fixtures');
 const fixtures = fs.readdirSync(dir).filter((f) => /^canvas-.*\.html$/.test(f)).map((f) => ({ f, html: fs.readFileSync(path.join(dir, f), 'utf8') }));
 // The DocViewer frame is Instructure's canvadocs app on its own host, not a Canvas page.
 const pages = fixtures.filter(({ f }) => f !== 'canvas-docviewer.html');
@@ -46,7 +46,7 @@ test('every Canvas page fixture carries the marker Glaze detects Canvas by', () 
 });
 
 test('the capture scrubber takes whole secrets out, wherever they sit', () => {
-  const { redact } = require('../scripts/redact.js');
+  const { redact } = require('../../tools/dev/redact.js');
   const cases = [
     ['/files/1/download?verifier=abc123&x=1', '/files/1/download?verifier=REDACTED&x=1'],
     ['/?token=first%2Fsecond', '/?token=REDACTED'],
@@ -66,7 +66,7 @@ test('the capture scrubber takes whole secrets out, wherever they sit', () => {
 });
 
 test('a fixture is scrubbed whole, its provenance note included', () => {
-  const { fixture } = require('../scripts/redact.js');
+  const { fixture } = require('../../tools/dev/redact.js');
   const out = fixture('/courses/1/files/2/download?verifier=SECRET1', '<html><a href="/x?token=SECRET2">x</a></html>');
   assert.match(out, /^<!-- Glaze test fixture: \/courses\/1\/files\/2\/download\?verifier=REDACTED /);
   assert.doesNotMatch(out, /SECRET/);
@@ -76,7 +76,7 @@ test('a fixture is scrubbed whole, its provenance note included', () => {
 const PROVENANCE = new Set(['https://canvas.mit.edu/courses/10076/files/1691040', 'https://canvadocs.instructure.com/1/sessions/<session>/view']);
 
 test('every fixture is already scrubbed, and names no outside address but its listed sources', () => {
-  const { redact } = require('../scripts/redact.js');
+  const { redact } = require('../../tools/dev/redact.js');
   for (const { f, html } of fixtures) {
     assert.equal(redact(html), html, `${f}: the scrubber would still change it`);
     const note = html.slice(0, html.indexOf('-->'));
@@ -137,7 +137,7 @@ const HOOKS = [
 // their selectors: Glaze's own gz-* aside, and features/apps.css's Ultra markup (ULTRA_CSS).
 const ULTRA_CSS = new Set(['#site-wrap', '.todo-panel', '.outline-actions', '.base-header-tools', '.courses-panel', '.course-columns', '.course-banner', '.element-details', '.course-title', '.course-id']);
 const cssNames = () => {
-  const css = ['canvas.css', 'features/apps.css'].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = ['canvas.css', 'features/apps.css'].map((f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
   const selectors = css.replace(/\{[^{}]*\}/g, '{}').replace(/@[^{]*\{/g, '').replace(/url\([^)]*\)/g, '');
   return new Set([...selectors.matchAll(/([.#])(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1] + m[2]).filter((n) => !/^[.#]gz-/.test(n) && !ULTRA_CSS.has(n)));
 };

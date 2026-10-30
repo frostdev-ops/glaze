@@ -11,7 +11,7 @@
 # Chrome Web Store rejects minified pdf.js as obfuscated (2026-10-26). For the same review, core-js's Object.create
 # fallback for old Internet Explorer (an ActiveX document, or an iframe at a script URL) is cut; every browser Glaze
 # supports has Object.create, so it never ran. So is core-js's last way to find the global object, a function made from
-# text (globalThis always answers first), and scripts/vendor-pdfjs-brotli.js has the worker read Brotli's dictionary from
+# text (globalThis always answers first), and tools/vendor/vendor-pdfjs-brotli.js has the worker read Brotli's dictionary from
 # google/brotli's dictionary.bin (pinned here, MIT) instead of the XORed string pdf.js packs it in. pdf.js's few calls of
 # the old escape and unescape functions are written out as the same encoding and decoding.
 # The viewer's import of pdf.js's form-script sandbox (pdf.sandbox.mjs, not shipped) is cut, so a PDF's own JavaScript
@@ -20,13 +20,13 @@
 # includePages by source page index, that turns that page a further multiple of 90 degrees clockwise: the copy's /Rotate
 # is (its own /Rotate + rotations[i]) % 360. pdf.js's own copy always keeps the page's /Rotate. A rotation that is not a
 # multiple of 90 fails the call, as pdf.js's other bad entries do.
-# scripts/vendor-pdfjs-limits.js adds an optional output byte limit, checked before allocating a saved or extracted PDF.
+# tools/vendor/vendor-pdfjs-limits.js adds an optional output byte limit, checked before allocating a saved or extracted PDF.
 # Each cut and the patch match its upstream text exactly once or the script stops. Every download is checked against the
 # SHA-256 pinned here before anything in lib/pdfjs changes. Run it to upgrade pdf.js (new version, new hash); the output
 # is checked in, so the extension itself still has no build step.
-# Usage: scripts/vendor-pdfjs.sh
+# Usage: tools/vendor/vendor-pdfjs.sh
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../extension"
 
 version=6.4.299
 sha256=86269b40170eb41740ea05ad2102d71d33de4f122b34eb2f478be0ea7779c415
@@ -158,8 +158,8 @@ patch('    pageDict.set("Rotate", rotate);\n', '    pageDict.set("Rotate", (rota
 fs.writeFileSync(file, src);
 EOF
 cp "$tmp/brotli-dictionary.bin" "$tmp/LICENSE_BROTLI" "$tmp/LICENSE_MPL" "$tmp/LICENSE_CORE_JS" lib/pdfjs/
-node scripts/vendor-pdfjs-limits.js lib/pdfjs
-node scripts/vendor-pdfjs-brotli.js lib/pdfjs/pdf.worker.mjs lib/pdfjs/brotli-dictionary.bin
+node ../tools/vendor/vendor-pdfjs-limits.js lib/pdfjs
+node ../tools/vendor/vendor-pdfjs-brotli.js lib/pdfjs/pdf.worker.mjs lib/pdfjs/brotli-dictionary.bin
 cp "$src/LICENSE" lib/pdfjs/LICENSE
 for f in jbig2.wasm openjpeg.wasm jbig2_nowasm_fallback.js openjpeg_nowasm_fallback.js LICENSE_JBIG2 LICENSE_PDFJS_JBIG2 LICENSE_OPENJPEG LICENSE_PDFJS_OPENJPEG; do cp "$src/wasm/$f" lib/pdfjs/; done
 { echo "/* pdf.js $version legacy viewer styles (Apache-2.0, lib/pdfjs/LICENSE). Built by scripts/vendor-pdfjs.sh. */"

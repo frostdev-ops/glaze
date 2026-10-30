@@ -4,10 +4,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const T = require('../lib/todo.js');
-const L = require('../lib/lookx.js');
+const T = require('../../extension/lib/todo.js');
+const L = require('../../extension/lib/lookx.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 test('work handed in: an open submission that is now handed in, in the same account', () => {
   const item = (id, sub, type = 'assignment') => ({ type, id, sub });
@@ -253,7 +253,7 @@ test('rotation clock repair is silent even when the stored index names a Look', 
 });
 
 for (const site of ['widget', 'rail']) test(`${site}: a timer loaded already expired is silent; an observed deadline announces once`, async () => {
-  const W = require('../lib/widgets.js');
+  const W = require('../../extension/lib/widgets.js');
   const heard = [];
   const claimed = new Set();
   let now = 10000;

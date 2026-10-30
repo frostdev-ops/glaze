@@ -3,10 +3,10 @@
 // and say what they'd do in Glaze's words; and writer-ai.js's gray-text rules, which match the task's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const TL = require('../lib/ai/tools.js');
-const WT = require('../lib/writer-tools.js');
-const AI = require('../writer-ai.js');
-const C = require('../lib/ai/tasks/writer-complete.js');
+const TL = require('../../extension/lib/ai/tools.js');
+const WT = require('../../extension/lib/writer-tools.js');
+const AI = require('../../extension/writer-ai.js');
+const C = require('../../extension/lib/ai/tasks/writer-complete.js');
 
 const bridge = () => {
   const done = [];

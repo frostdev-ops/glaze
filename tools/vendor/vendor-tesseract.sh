@@ -6,12 +6,12 @@
 # which every browser Glaze supports runs and which is all the fast models use. The models are kept gzipped
 # (lib/ocr.js unpacks them), which halves what the installed extension takes on disk. Every download is checked
 # against the SHA-256 pinned here. The core's loader is published minified only, and the Chrome Web Store can take
-# minified code for obfuscation (2026-10-26), so esbuild (pinned and integrity-checked as in scripts/vendor-three.sh)
+# minified code for obfuscation (2026-10-26), so esbuild (pinned and integrity-checked as in tools/vendor/vendor-three.sh)
 # re-prints it with line breaks and indentation: the same code, still under Emscripten's short names, checked against
 # out_sha256. Run it to upgrade (new versions, new hashes); the output is checked in, so the extension itself still has
-# no build step. Usage: scripts/vendor-tesseract.sh
+# no build step. Usage: tools/vendor/vendor-tesseract.sh
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../extension"
 
 core=7.0.0
 core_sha256=ba584355515eaff877552022853c0e71f2cb70466e759d1d6940484929718ee0
@@ -47,7 +47,7 @@ mkdir -p lib/tesseract
 # --ignore-scripts: esbuild's install script (an optimisation only) never runs; npm-integrity.js checks it before it does.
 npm install --prefix "$tmp/esbuild" --silent --no-save --no-package-lock --ignore-scripts --no-audit --no-fund \
   --registry https://registry.npmjs.org/ "esbuild@$esbuild_version"
-printf '%s\n' "$integrity" | node scripts/npm-integrity.js "$tmp/esbuild/node_modules/.package-lock.json" - esbuild
+printf '%s\n' "$integrity" | node ../tools/vendor/npm-integrity.js "$tmp/esbuild/node_modules/.package-lock.json" - esbuild
 # A plain script (lib/ocr.js loads it with importScripts), re-printed as it is: no bundling, no format change, no lowering.
 { echo "// tesseract.js-core $core loader (Apache-2.0, lib/tesseract/tesseract-core.LICENSE), as published but re-printed with line breaks. Built by scripts/vendor-tesseract.sh."
   "$tmp/esbuild/node_modules/.bin/esbuild" --loader=js --log-level=warning < "$tmp/package/tesseract-core-simd-lstm.js"; } > lib/tesseract/tesseract-core-simd-lstm.js

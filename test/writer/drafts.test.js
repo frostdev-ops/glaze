@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const D = require('../lib/drafts.js');
+const D = require('../../extension/lib/drafts.js');
 
 const essay = 'My response to the reading: the author argues that';
 const NBSP = String.fromCharCode(0xa0);
@@ -177,7 +177,7 @@ test("a Canvas copy is taken only for the destination its key names, and the swe
 
 test("the worker takes draft changes from a page of the copy's own site only, with backup on, one at a time", async () => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
   const listeners = [];
   const store = { local: { canvas: ['https://canvas.school.edu/*'], ultra: ['https://bb.school.test'] }, sync: {} };
   const area = (s) => ({ get: async (k) => Object.fromEntries([].concat(k ?? Object.keys(s)).filter((x) => x in s).map((x) => [x, structuredClone(s[x])])),
@@ -188,7 +188,7 @@ test("the worker takes draft changes from a page of the copy's own site only, wi
     fetch: async (url) => { fetched.push(String(url)); throw new Error('offline'); },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
     },
@@ -276,7 +276,7 @@ test('clearing a newer version also retires an older version of the same tab tha
 
 test('a restarted MV3 worker can import the drafts broker from its installation cache', async () => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
   const cached = new Set(), store = { local: { ultra: ['https://bb.school.test'] }, sync: {} };
   const boot = (installed) => {
     const events = [], listeners = [], noop = { addListener() {} };
@@ -289,7 +289,7 @@ test('a restarted MV3 worker can import the drafts broker from its installation 
         cached.add(f); vm.runInContext(read(`lib/${f}`), ctx);
       } },
       fetch: async () => ({ ok: true, json: async () => ({ id: '_7_1' }) }),
-      chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'),
+      chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'),
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: noop, onStartup: noop, onConnect: noop },
         storage: { local: storage(store.local), sync: storage(store.sync), onChanged: noop } },
     });
@@ -305,7 +305,7 @@ test('a restarted MV3 worker can import the drafts broker from its installation 
 });
 
 test('restored draft HTML is parsed inertly with DOMParser, never assigned as markup (AMO lint)', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'lib/drafts.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/drafts.js'), 'utf8');
   assert.doesNotMatch(src, /\.(?:inner|outer)HTML\s*=/);
   assert.match(src, /parseFromString\(/);
 });

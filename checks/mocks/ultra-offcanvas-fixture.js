@@ -1,9 +1,9 @@
 // The native layer covers its backdrop and the underlying route. Its own sticky header contains the course strip.
 const fs = require('node:fs'), path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const D = require('../defaults.js');
+const D = require('../../extension/defaults.js');
 module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
-  const fixture = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-offcanvas.html'), 'utf8');
+  const fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-offcanvas.html'), 'utf8');
   await page.route('**/*', (r) => r.request().url().startsWith('https://bb.school.test/') ? r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body></body></html>' }) : r.abort());
   await page.route('https://annotate-us.foundations.blackboard.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><label>Annotation <input id="annotation"></label><div style="height:1400px">Document</div>' }));
   const painted = () => page.evaluate(async () => {

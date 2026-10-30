@@ -8,13 +8,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-logical.js');
-require('../lib/sheet-fn-text.js');
-require('../lib/sheet-fn-date.js');
-require('../lib/sheet-fn-lookup.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-logical.js');
+require('../../extension/lib/sheet-fn-text.js');
+require('../../extension/lib/sheet-fn-date.js');
+require('../../extension/lib/sheet-fn-lookup.js');
 
 const book = (cells = {}, { sheets = ['Sheet1'], date1904 = false, names = [] } = {}) => {
   const wb = M.workbook({ date1904 });
@@ -54,7 +54,7 @@ test('the lookup functions are registered, OFFSET and INDIRECT volatile, and not
   for (const name of NAMES) assert.ok(C.fn(name), name);
   assert.ok(C.fn('OFFSET').volatile && C.fn('INDIRECT').volatile);
   assert.ok(!C.fn('INDEX').volatile && !C.fn('XLOOKUP').volatile);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-lookup.js'), 'utf8')));
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-lookup.js'), 'utf8')));
 });
 
 // VLOOKUP's page shows its employee table only in an image; these are the cells its alt text names (Fontana's first name

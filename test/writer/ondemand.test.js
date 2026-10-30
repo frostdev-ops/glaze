@@ -1,13 +1,13 @@
 // What content.js does while a file it loads on demand is on its way: blocks of content.js run in a VM with stand-ins,
-// as test/head.test.js does for the head gate. Sliced between section markers, so they track the real code.
+// as test/platform/head.test.js does for the head gate. Sliced between section markers, so they track the real code.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
 // Ultra's own part (content-ultra.js): what only Ultra does, which content.js hands its live state (I).
-const ultraPart = fs.readFileSync(require.resolve('../content-ultra.js'), 'utf8');
+const ultraPart = fs.readFileSync(require.resolve('../../extension/content-ultra.js'), 'utf8');
 const block = (from, to, src = source) => {
   const a = src.indexOf(from), b = src.indexOf(to, a);
   assert.ok(a > 0 && b > a, `markers ${from} … ${to}`);
@@ -29,7 +29,7 @@ const loader = ({ lang = 'de' } = {}) => {
   const ctx = vm.createContext({ solo: false, tabFrame: '',
     isPreview: false, observer: {}, timer: 0, wordsArrived: 0, flush() {},
     locale: () => lang,
-    GZ_I18N: require('../lib/i18n.js'),
+    GZ_I18N: require('../../extension/lib/i18n.js'),
     chrome: { runtime: { id: 'glaze', sendMessage: (m) => { const r = later(); replies.push({ m, r }); return r; } } },
     setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, Promise, crypto: require('node:crypto').webcrypto,
   });
@@ -91,11 +91,11 @@ const keys = (words = { de: false }, site = 'canvas', typing = () => false) => {
   const document = dom();
   const wordsIn = new Set();
   const ctx = vm.createContext({ solo: false, tabFrame: '',
-    document, location: { pathname: '/' }, navigator: { platform: 'MacIntel' }, Date, GZ_PAGE: require('../lib/page.js'),
+    document, location: { pathname: '/' }, navigator: { platform: 'MacIntel' }, Date, GZ_PAGE: require('../../extension/lib/page.js'),
     GZ_CTX: { site, settings: () => ({ enhance: { keys: true, palette: true } }), on: () => true, typing, keyOn: () => true, wordsIn,
       t: (k) => (words.de && k === 'Keyboard shortcuts' ? 'Tastenkürzel' : k) },
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../features/keys.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/keys.js'), 'utf8'), ctx);
   const press = (key) => ctx.GZ_KEYS.key({ key, target: document.body, preventDefault() {}, stopImmediatePropagation() {} });
   const shown = () => document.body.children.filter((c) => c.isConnected);
   return { document, wordsIn, press, shown };
@@ -171,13 +171,13 @@ test('the keyboard help opened from Glaze\'s bar gives focus back to the bar\'s 
 });
 
 test('the command palette opened from Glaze\'s bar gives focus back to the bar\'s item, not its host', () => {
-  const { El } = require('./stand-in-dom.js');
+  const { El } = require('../stand-in-dom.js');
   const doc = { activeElement: null };
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   doc.createElement = (tag) => new El(tag, doc);
   const ctx = vm.createContext({ document: doc, location: { origin: 'https://bb.school.test', pathname: '/ultra/stream' },
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ({ enhance: {} }), need: () => new Promise(() => {}), courseId: () => '' } });
-  const cmd = vm.runInContext(fs.readFileSync(require.resolve('../features/palette.js'), 'utf8'), ctx);
+  const cmd = vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/palette.js'), 'utf8'), ctx);
   const bar = inBar();
   doc.activeElement = bar.host;
   cmd.open();
@@ -235,13 +235,13 @@ for (const gone of Object.keys(AFTER)) {
       if (gone === 'reused') ctx.api.watchDrafts(); // a pass while the files load
     }
     if (gone === 'gone' || gone === 'reused, gone') { editor.isConnected = false; ctx.document.querySelector = () => null; ctx.location.pathname = '/ultra/stream'; }
-    ctx.GZ_DRAFTS = require('../lib/drafts.js');
+    ctx.GZ_DRAFTS = require('../../extension/lib/drafts.js');
     loads[0].p.resolve();
     await settle();
     assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js', 'features/drafts.js'], 'then the backup itself');
     ctx.GZ_CTX = { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local,
       draftEditor: '.ql-editor[contenteditable="true"]', draftAt: ctx.api.draftAt, account: () => Promise.resolve('_7_1') };
-    vm.runInContext(fs.readFileSync(require.resolve('../features/drafts.js'), 'utf8'), ctx);
+    vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/drafts.js'), 'utf8'), ctx);
     loads[1].p.resolve();
     await settle();
     t.run();
@@ -259,7 +259,7 @@ const hooks = (from, to, extra = {}) => {
   const loads = [];
   class Element {}
   const ctx = vm.createContext({ solo: true, tabFrame: '',
-    Element, Date, Promise, GZ_PAGE: require('../lib/page.js'), isPreview: false, ultra: false, moodle: false, observer: {},
+    Element, Date, Promise, GZ_PAGE: require('../../extension/lib/page.js'), isPreview: false, ultra: false, moodle: false, observer: {},
     chrome: { runtime: { id: 'glaze' } },
     settings: { enhance: { keys: true, palette: true, coursemenu: true, download: true, previews: true } },
     document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => ({}) },
@@ -284,7 +284,7 @@ for (const [site, ultra, to] of [['canvas', false, '/courses'], ['ultra', true, 
     h.fire('keydown', key('c'));
     assert.deepEqual(h.loads.map((l) => l.file), ['features/keys.js'], 'asked for once');
     h.ctx.GZ_CTX = { site, t: (k) => k, settings: () => h.ctx.settings, on: () => true, wordsIn: new Set(), typing: h.ctx.api.typing, keyOn: h.ctx.api.keyOn };
-    vm.runInContext(fs.readFileSync(require.resolve('../features/keys.js'), 'utf8'), h.ctx);
+    vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/keys.js'), 'utf8'), h.ctx);
     h.loads[0].p.resolve();
     await settle();
     assert.deepEqual(h.ctx.went, [`https://school.test${to}`]);
@@ -421,7 +421,7 @@ const ultraPlace = async (touch) => {
   const toggle = { getAttribute: () => 'false', click: () => clicks++ };
   const row = { dataset: { contentId: '_9_1' } };
   const ctx = vm.createContext({ solo: true, tabFrame: '',
-    Element, Date, Promise, URLSearchParams, GZ_PAGE: require('../lib/page.js'), ultra: true, observer: {}, settings: { enhance: { place: true } },
+    Element, Date, Promise, URLSearchParams, GZ_PAGE: require('../../extension/lib/page.js'), ultra: true, observer: {}, settings: { enhance: { place: true } },
     document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => row, querySelectorAll: () => [row], scrollingElement: { scrollTop: 0 }, body: {} },
     location: { pathname: '/ultra/courses/_1_1/outline', search: '' }, courseId: () => '_1_1', canvasCourseKey: () => null,
     need: (file) => { const p = later(); loads.push({ file, p }); return p; },
@@ -438,7 +438,7 @@ const ultraPlace = async (touch) => {
   if (touch) for (const f of listeners.wheel) f({ isTrusted: true });
   ctx.GZ_CTX = { site: 'ultra', settings: () => ctx.settings, on: () => true, local: (fn) => fn(ctx.chrome.storage.local), courseId: ctx.courseId, canvasCourseKey: ctx.canvasCourseKey,
     toggleOf: () => toggle, ROWS: '.content-list-item[data-content-id]', holding: () => false, tapped: ctx.api.tapped, acted: ctx.api.acted, placeAsked: ctx.api.placeAsked, solo: true };
-  vm.runInContext(fs.readFileSync(require.resolve('../features/place.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/place.js'), 'utf8'), ctx);
   ctx.GZ_PLACE.sync();
   await settle();
   for (let i = 0; i < 5 && t.due.length; i++) t.due.shift().f(); // a few of the restore's 200 ms steps
@@ -482,13 +482,13 @@ for (const gone of ['never', 'before the files arrive', 'while the account is as
       globalThis.api = { local, draftAt: typeof draftAt === 'undefined' ? undefined : draftAt };`, ctx);
     for (const f of listeners.input) f({ type: 'input', target: editor });
     if (gone === 'before the files arrive') close();
-    ctx.GZ_DRAFTS = require('../lib/drafts.js');
+    ctx.GZ_DRAFTS = require('../../extension/lib/drafts.js');
     loads[0].p.resolve();
     await settle();
     ctx.GZ_CTX = { site: 'canvas', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local, draftEditor: SEL,
       draftAt: ctx.api.draftAt, profile: () => (account ||= later()), canvasCourses: () => Promise.resolve([{ id: 5, name: 'BIO 1100' }]),
       capi: () => Promise.reject(new Error('offline')) };
-    vm.runInContext(fs.readFileSync(require.resolve('../features/drafts.js'), 'utf8'), ctx);
+    vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/drafts.js'), 'utf8'), ctx);
     loads[1].p.resolve();
     await settle();
     t.run();

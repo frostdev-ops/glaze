@@ -12,7 +12,7 @@
 //  An agent's peer is the program that started it, as the kernel says (LOCAL_PEERPID), so it is verified.
 //  Everything runs on the main queue. onIdle comes once no worker has sent a batch for limits.idle (10 minutes); bye ends
 //  that worker's connections, socket and run file.
-//  Only scripts/stage-safari-dmg.py adds this file to a build: the DMG app's.
+//  Only tools/build/stage-safari-dmg.py adds this file to a build: the DMG app's.
 //
 #if os(macOS) && GLAZE_DMG
 import Foundation

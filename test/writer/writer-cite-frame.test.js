@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const S = require('../lib/writer-sources.js'), C = require('../lib/writer-cite.js');
-const W = require('../lib/writer-schema.js'), PM = globalThis.GZ_PM;
+const S = require('../../extension/lib/writer-sources.js'), C = require('../../extension/lib/writer-cite.js');
+const W = require('../../extension/lib/writer-schema.js'), PM = globalThis.GZ_PM;
 const source = (title) => ({ id: title.toLowerCase(), type: 'book', title });
 const context = (item) => ({ school: 'https://school.edu', user: { id: 'u' }, course: { id: 'c' }, item });
 const frame = (extra = {}, html = '<p>Body</p>', storage) => {
@@ -13,7 +13,7 @@ const frame = (extra = {}, html = '<p>Body</p>', storage) => {
   const scope = vm.createContext({ console, setTimeout: () => 0, clearTimeout() {}, ResizeObserver: class { observe() {} }, addEventListener: (name, fn) => { const before = life[name]; life[name] = (event) => { before?.(event); fn(event); }; }, chrome: { storage }, document: { createElement: element, body: element(), getElementById: () => null, addEventListener() {} },
     GZ_PM: PM, GZ_WRITER_CITE: { ...C }, GZ_WRITER_LOOKUP: {}, GZ_WRITER_SOURCES: { ...S, save: async (key, list) => { writes.push([key, list]); }, ...extra },
     GZ_WRITER_FRAME: { on: (name, fn) => { events[name] = fn; }, slot: () => null, editor: () => ({ view }), mode: () => 'compose', t: (s) => s } });
-  vm.runInContext(fs.readFileSync(process.env.WRITER_CITE_SOURCE || require.resolve('../writer-cite.js'), 'utf8'), scope);
+  vm.runInContext(fs.readFileSync(process.env.WRITER_CITE_SOURCE || require.resolve('../../extension/writer-cite.js'), 'utf8'), scope);
   return { cite: scope.GZ_WRITER_CITE, events, writes, view, nodes, life };
 };
 
@@ -115,7 +115,7 @@ test('a storage reload from an earlier paper never replaces the current sources'
 });
 
 test('changing students clears the old sources and ignores their late read and storage events', async () => {
-  const bus = shared(), pending = [], C = require('../lib/writer-context-discussion.js');
+  const bus = shared(), pending = [], C = require('../../extension/lib/writer-context-discussion.js');
   const contextFor = (id) => C.contextOf({ kind: 'reply', school: 'bb.school.test', course: { id: '_101_1' }, user: { id }, item: '_9_1' });
   const old = contextFor('_42_1'), next = contextFor('_43_1'), oldKey = S.keyOf(old), nextKey = S.keyOf(next);
   bus.data[oldKey] = { sources: [source('Private Alpha')], at: 1 };
@@ -154,7 +154,7 @@ test('a context re-send keeps the open Sources popover unless its store changes'
     document: { createElement: node, createElementNS: node, createTextNode: node, body: node(), getElementById: () => null, addEventListener() {}, activeElement: null },
     GZ_PM: PM, GZ_WRITER_CITE: { ...C }, GZ_WRITER_LOOKUP: {}, GZ_WRITER_SOURCES: { ...S, load: async () => [source('Alpha')], save: async () => {} },
     GZ_WRITER_FRAME: { on: (name, fn) => { events[name] = fn; }, slot: () => null, editor: () => ({ view, focus() {} }), mode: () => 'compose', t: (s) => s } });
-  vm.runInContext(fs.readFileSync(process.env.WRITER_CITE_SOURCE || require.resolve('../writer-cite.js'), 'utf8'), scope);
+  vm.runInContext(fs.readFileSync(process.env.WRITER_CITE_SOURCE || require.resolve('../../extension/writer-cite.js'), 'utf8'), scope);
   const cite = scope.GZ_WRITER_CITE, pop = nodes.find((n) => n.className === 'pop gz-cite');
   const asked = { ...context('_9_1'), kind: 'post' };
   await events.context(asked);

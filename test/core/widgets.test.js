@@ -2,9 +2,9 @@
 // layout and its sanitizer, notes' writes and links, the agenda's day and the feedback link.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const W = require('../lib/widgets.js');
-const L = require('../lib/todo.js');
-const D = require('../defaults.js');
+const W = require('../../extension/lib/widgets.js');
+const L = require('../../extension/lib/todo.js');
+const D = require('../../extension/defaults.js');
 
 test('music: each provider\'s links become its embed, built from checked parts only', () => {
   const ok = {
@@ -93,7 +93,7 @@ test('timer: after the clock is set back it never shows more than its length, an
   const paused = { phase: 'work', end: 0, left: 15 * 6e4 };
   assert.equal(W.advance(paused, back, o), paused);
   // The worker's timer op (lib/nav-store.js) uses the same functions: the stored deadline is corrected, and Pause after it keeps its minutes.
-  const Store = require('../lib/nav-store.js');
+  const Store = require('../../extension/lib/nav-store.js');
   const values = { widgetTimer: s };
   const area = { sync: { get: async () => ({}) }, local: { get: async () => values, set: async (v) => { Object.assign(values, v); return true; } } };
   assert.deepEqual((await Store.timer('advance', area, back)).timer, a);
@@ -130,7 +130,7 @@ test('your place: each change is applied to what is stored now, so two tabs on d
 });
 
 test('your place: the worker keeps the same rules as the page (lib/page.js place), which it cannot load', async () => {
-  const P = require('../lib/page.js');
+  const P = require('../../extension/lib/page.js');
   const cases = [
     { cid: '_5_1', v: { open: ['_7_1', '_7_1', 'x"]', ...Array.from({ length: 120 }, (_, i) => `_${i + 100}_1`)], top: 812.6 } },
     { cid: '_1_1', v: { open: ['_2_1'], top: -5 } },

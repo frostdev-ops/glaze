@@ -4,15 +4,15 @@
 // next to-do, revoking its grant takes the data away at once, and turning it off removes it. The page side then runs again
 // from the Safari-staged package (no sandbox page, no mods/ folder, no features/mods.js), the build Firefox and Safari get.
 // Loopback HTTPS only (macOS sandbox-exec denies everything else). NODE_PATH must name an existing Playwright installation.
-//   NODE_PATH=/path/to/node_modules nice -n 10 node scripts/widgets-builder-check.js
+//   NODE_PATH=/path/to/node_modules nice -n 10 node checks/core/widgets-builder-check.js
 // One headless browser at a time across agents: it waits while another runs. Its profiles, staging and server go when it is done.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), https = require('node:https');
 const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
 // The local LMS (https://127.0.0.1) stands in the staged copy's host_permissions: the student's grant on the narrow manifest.
-const ext = require('./check-env.js').staged(path.resolve(process.env.EXT || path.join(__dirname, '..')), ['https://127.0.0.1/*']);
-const chrome = require('./check-env.js').chromePath() || chromium.executablePath();
+const ext = require('../../tools/dev/check-env.js').staged(path.resolve(process.env.EXT || path.join(__dirname, '../../extension')), ['https://127.0.0.1/*']);
+const chrome = require('../../tools/dev/check-env.js').chromePath() || chromium.executablePath();
 const M = require(path.join(ext, 'lib/modbundle.js'));
 const W = require(path.join(ext, 'lib/widgets.js'));
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -41,7 +41,7 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
     const wrapper = path.join(tmp, 'chrome'), q = (v) => `'${v.replaceAll("'", "'\\''")}'`;
     fs.writeFileSync(path.join(tmp, 'net.sb'), '(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip "localhost:*"))');
     fs.writeFileSync(wrapper, `#!/bin/sh\nexec /usr/bin/sandbox-exec -f ${q(path.join(tmp, 'net.sb'))} ${q(chrome)} "$@"\n`, { mode: 0o700 });
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(profile, { executablePath: wrapper, headless: true, viewport: { width: 1280, height: 900 }, acceptDownloads: true, locale: 'en-US', args: [
       `--disable-extensions-except=${extPath}`, `--load-extension=${extPath}`, `--ignore-certificate-errors-spki-list=${spki}`, '--disable-background-networking', '--disable-component-update', '--no-proxy-server',
       '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] });
@@ -349,9 +349,9 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
     // ========= the package Firefox and Safari get: no sandbox, no code mods' files =========
     const dist = path.join(tmp, 'dist'), stage = path.join(tmp, 'stage');
     fs.mkdirSync(dist);
-    execFileSync('sh', ['package.sh'], { cwd: ext, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    execFileSync('sh', ['../tools/build/package.sh'], { cwd: ext, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
     execFileSync('unzip', ['-q', path.join(dist, fs.readdirSync(dist).find((f) => f.endsWith('.zip'))), '-d', stage]);
-    execFileSync('sh', [path.join(ext, 'scripts/safari-manifest.sh'), path.join(stage, 'manifest.json')]);
+    execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(stage, 'manifest.json')]);
     ok(!fs.existsSync(path.join(stage, 'mods')) && !fs.existsSync(path.join(stage, 'features/mods.js')) && fs.existsSync(path.join(stage, 'features/modwidgets.js')) && fs.existsSync(path.join(stage, 'features/modui.js'))
       && JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json'), 'utf8')).sandbox === undefined, 'the staged package has no sandbox page, no mods/ folder and no features/mods.js, and keeps the widget side and its renderer');
     const second = await launch(stage, path.join(tmp, 'profile-b'));

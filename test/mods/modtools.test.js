@@ -3,11 +3,11 @@
 // consent lines for them (lib/editor-mods.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../lib/modtools.js');
-const B = require('../lib/modbroker.js');
-const S = require('../lib/ai/schema.js');
-const R = require('../lib/ai/request.js');
-const E = require('../lib/editor-mods.js');
+const T = require('../../extension/lib/modtools.js');
+const B = require('../../extension/lib/modbroker.js');
+const S = require('../../extension/lib/ai/schema.js');
+const R = require('../../extension/lib/ai/request.js');
+const E = require('../../extension/lib/editor-mods.js');
 
 const ID = 'abcdefghijklmnop';
 const SITE = 'https://school.instructure.com';
@@ -272,7 +272,7 @@ test('editor: the agents permission, one line per tool saying where its data com
 
 test('the editor loads the schema subset and lib/modtools.js before lib/modbundle.js, which work there as classic scripts', () => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
   const html = read('options.html');
   const at = ['lib/ai/schema.js', 'lib/modtools.js', 'lib/modbundle.js', 'lib/editor-mods.js'].map((f) => html.indexOf(`<script src="${f}"></script>`));
   assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), String(at));

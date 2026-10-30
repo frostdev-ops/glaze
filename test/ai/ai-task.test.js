@@ -3,10 +3,10 @@
 // grounded by the task's check, long inputs in parts, and the refusals each have their code.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../lib/ai/task.js');
-const X = require('../lib/ai/text.js');
-require('../lib/ai/providers/mock.js');
-const A = require('../lib/ai/settings.js');
+const T = require('../../extension/lib/ai/task.js');
+const X = require('../../extension/lib/ai/text.js');
+require('../../extension/lib/ai/providers/mock.js');
+const A = require('../../extension/lib/ai/settings.js');
 
 // example.dates: the dated items in a text, each with the words it was read from; what isn't in the text is dropped.
 const dates = {
@@ -80,7 +80,7 @@ test('a cancel and a whole-run deadline end a task with their codes', async () =
 });
 
 test('the whole-run deadline settles while a tool is still pending', async (t) => {
-  const TL = require('../lib/ai/tools.js');
+  const TL = require('../../extension/lib/ai/tools.js');
   const tools = TL.registry();
   let started, release, outcome;
   const entered = new Promise((r) => { started = r; }), gate = new Promise((r) => { release = r; });

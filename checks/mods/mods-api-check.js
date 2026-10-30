@@ -3,14 +3,14 @@
 // floating tile drawn from its Worker's component tree, with a picture and a canvas, a card decorator, a palette command,
 // the completion effect replaced), a frame-UI mod with a rail widget, and a nav replacement turned on and off. Then motion
 // off, a mod turned off and a mod blocklisted while they run. NODE_PATH must name an existing Playwright installation.
-//   NODE_PATH=/path/to/node_modules node scripts/mods-api-check.js
+//   NODE_PATH=/path/to/node_modules node checks/mods/mods-api-check.js
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), https = require('node:https');
 const { execFileSync } = require('node:child_process');
 const { createHash, X509Certificate } = require('node:crypto');
 // A staged copy holding the loopback Ultra's host (https on 127.0.0.1), as a student's grant for their school would.
-const ext = require('./check-env.js').staged(path.resolve(process.env.EXT || path.join(__dirname, '..')), ['https://127.0.0.1/*']);
-const chrome = require('./check-env.js').chromePath() || chromium.executablePath();
+const ext = require('../../tools/dev/check-env.js').staged(path.resolve(process.env.EXT || path.join(__dirname, '../../extension')), ['https://127.0.0.1/*']);
+const chrome = require('../../tools/dev/check-env.js').chromePath() || chromium.executablePath();
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
   const end = Date.now() + ms;
@@ -67,8 +67,8 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
 </main></div></body></html>`;
 
 (async () => {
-  fs.mkdirSync(path.join(ext, '.sandbox-check'), { recursive: true });
-  const tmp = fs.mkdtempSync(path.join(ext, '.sandbox-check', 'api-'));
+  fs.mkdirSync(path.join(__dirname, '../../.sandbox-check'), { recursive: true });
+  const tmp = fs.mkdtempSync(path.join(__dirname, '../../.sandbox-check/api-'));
   let context, lms, deadline;
   try {
     const key = path.join(tmp, 'k'), cert = path.join(tmp, 'c');
@@ -86,7 +86,7 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
     const wrapper = path.join(tmp, 'chrome'), q = (v) => `'${v.replaceAll("'", "'\\''")}'`;
     fs.writeFileSync(path.join(tmp, 'net.sb'), '(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip "localhost:*"))');
     fs.writeFileSync(wrapper, `#!/bin/sh\nexec /usr/bin/sandbox-exec -f ${q(path.join(tmp, 'net.sb'))} ${q(chrome)} "$@"\n`, { mode: 0o700 });
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { executablePath: wrapper, headless: true, viewport: { width: 1280, height: 800 }, args: [
       `--disable-extensions-except=${ext}`, `--load-extension=${ext}`, `--ignore-certificate-errors-spki-list=${spki}`, '--disable-background-networking', '--disable-component-update', '--no-proxy-server',
       '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] });

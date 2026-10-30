@@ -1,10 +1,10 @@
 // The Documents page in motion (papers-motion.js): which motion each level and setting gives, the keyframes a document
 // opens and closes with (lib/popup.js's genie, scale and fade, one implementation), and what a page leaving tells the next.
-// The page itself is scripts/documents-check.js's motion section.
+// The page itself is checks/documents/documents-check.js's motion section.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const PM = require('../papers-motion.js');
-const P = require('../lib/popup.js');
+const PM = require('../../extension/papers-motion.js');
+const P = require('../../extension/lib/popup.js');
 
 const view = { left: 0, top: 0, width: 1280, height: 900, right: 1280, bottom: 900 };
 const card = { left: 320, top: 400, width: 224, height: 300, right: 544, bottom: 700 };

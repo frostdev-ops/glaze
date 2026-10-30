@@ -20,7 +20,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
   const LIMIT = { json: 16 << 20, member: 64 << 20, command: 32 << 20, zip: 512 << 20, entries: 40000, records: 1000 };
   // In the order the restore list shows them: two columns, row by row.
   const CATS = ['settings', 'notes', 'tasks', 'dashNotes', 'classes', 'gpa', 'widgets', 'shareKeys', 'papers', 'writerWords', 'sources'];
-  // The stores' own keys (lib/widgets.js NOTES_KEY, lib/classes.js STORE_KEY, lib/gpa.js KEY, lib/notes.js KEY; test/backup.test.js
+  // The stores' own keys (lib/widgets.js NOTES_KEY, lib/classes.js STORE_KEY, lib/gpa.js KEY, lib/notes.js KEY; test/settings/backup.test.js
   // keeps them equal): the editor doesn't load those libraries.
   const STORES = {
     dashNotes: /^notes:https?:\/\/[a-z\d.-]+(?::\d+)?\/(\d+|_\d+_\d+)$/i,
@@ -107,7 +107,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     return records;
   };
   const paperKey = /^(writerPaper:|writerVersions:)(?:[a-z\d.-]+(?::\d{1,5})?\|_\d+_\d+\|_\d+_\d+\|_\d+_\d+|recovery:[a-z\d-]+|doc:[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12})$|^writerPresets:[a-z\d.-]+(?::\d{1,5})?\|_\d+_\d+$/i;
-  // The kinds of document this build keeps (lib/doc-kinds.js KINDS; test/backup.test.js holds them equal). A spreadsheet's
+  // The kinds of document this build keeps (lib/doc-kinds.js KINDS; test/settings/backup.test.js holds them equal). A spreadsheet's
   // record goes into its backup file with its bands (writerSheet:<key>:<sheet>:<band>, lib/writer-papers.js PART) as $parts,
   // so one restore step writes them together; a PDF's or deck's record holds its file (base64, at most 3 MB of it).
   const KINDS = ['paper', 'sheet', 'pdf', 'slides'], PART = 'writerSheet:', PART_NAME = /^\d{1,9}:\d{1,5}$/;

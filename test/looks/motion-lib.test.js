@@ -2,7 +2,7 @@
 // an animate() that records what it was asked and resolves when told.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../lib/motion.js');
+const M = require('../../extension/lib/motion.js');
 
 const KNOBS = { '--gz-t-move': '0.32s', '--gz-t': '0.25s', '--gz-ease': 'cubic-bezier(0.22, 1, 0.36, 1)', '--gz-spring': 'linear(0, 1.06 26%, 1)', '--gz-enter': 'gz-in 0.6s ease backwards' };
 const env = ({ knobs = KNOBS, vt = false, busy = false, hidden = false, abort = false } = {}) => {
@@ -205,7 +205,7 @@ test('swap crossfades only where it can: otherwise the change runs now', async (
 });
 
 test('motion.css defines the move knob at every level and zeroes it with transitions', () => {
-  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'motion.css'), 'utf8');
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/motion.css'), 'utf8');
   assert.match(css, /:root \{[^}]*--gz-t-move: 0\.32s/);
   assert.match(css, /html\[data-gz-motion="expressive"\] \{[^}]*--gz-t-move:/);
   assert.match(css, /html\[data-gz-motion="off"\], html\[data-gz-no-trans\] \{[^}]*--gz-t-move: 0s/);
@@ -385,7 +385,7 @@ test('a browser that cannot detect an active transition keeps swaps instant rath
 });
 
 test('a copy left by something that went has no role, so nothing that looks for tabs or rows finds it', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'lib', 'motion.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/motion.js'), 'utf8');
   assert.match(src.match(/GHOSTLESS = \[[^\]]*\]/)[0], /'role'/);
 });
 

@@ -3,8 +3,8 @@
 // comments, a final flush; a tool call rebuilt from its pieces; a stream that ends before it finishes.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ST = require('../lib/ai/stream.js');
-const O = require('../lib/ai/providers/openai.js');
+const ST = require('../../extension/lib/ai/stream.js');
+const O = require('../../extension/lib/ai/providers/openai.js');
 
 test('sseParser frames across chunk boundaries, joins multi-line data, skips comments, flushes on finish', () => {
   const got = [];

@@ -4,17 +4,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const G = require('../defaults.js');
-const MX = require('../lib/motionx.js');
-const X = require('../lib/lookparts.js');
-const S = require('../lib/share.js');
-const LOOK_PARTS = require('../lib/lookset.js');
-const L = require('../lib/lookx.js');
+const G = require('../../extension/defaults.js');
+const MX = require('../../extension/lib/motionx.js');
+const X = require('../../extension/lib/lookparts.js');
+const S = require('../../extension/lib/share.js');
+const LOOK_PARTS = require('../../extension/lib/lookset.js');
+const L = require('../../extension/lib/lookx.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 test('the store listing counts the available built-in scenes and Looks', () => {
-  const listing = read('store/listing.md'), counts = { ten: 10, eleven: 11 };
+  const listing = read('../store/listing.md'), counts = { ten: 10, eleven: 11 };
   assert.equal(counts[listing.match(/one of (\w+) animated scenes/)[1]], G.GZ_SPEC.bg.scene[1].length, 'the advertised scene count');
   assert.equal(counts[listing.match(/one of (\w+) Looks/)[1]], G.GZ_LOOKS.length, 'the advertised Look count');
 });
@@ -74,7 +74,7 @@ const worker = (sync, local = {}, hooks = {}) => {
     URL, console, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: noop, onInstalled: noop, onStartup: noop, onConnect: noop },
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: noop, onInstalled: noop, onStartup: noop, onConnect: noop },
       storage: { local: area(local), sync: area(sync), onChanged: noop },
     },
   });

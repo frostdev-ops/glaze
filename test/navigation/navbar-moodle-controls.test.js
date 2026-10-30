@@ -5,15 +5,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const { parse } = require('./fixture-dom.js');
-const G = require('../defaults.js'), M = require('../lib/navbar.js');
-const L = require('../lib/navlayout.js'), N = require('../lib/nav-items.js');
+const { El } = require('../stand-in-dom.js');
+const { parse } = require('../fixture-dom.js');
+const G = require('../../extension/defaults.js'), M = require('../../extension/lib/navbar.js');
+const L = require('../../extension/lib/navlayout.js'), N = require('../../extension/lib/nav-items.js');
 
-const read = (file) => fs.readFileSync(require.resolve(`../${file}`), 'utf8');
+const read = (file) => fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const origin = 'http://localhost:8081';
-const dashboard = read('test/fixtures/moodle-dashboard.html');
+const dashboard = read('../test/fixtures/moodle-dashboard.html');
 
 // ---- a selector engine for what the adapter and the renderer ask: lists, descendant and child, tag, #id, .class,
 // [attr], [attr=v], [attr*=v], [attr^=v], :not() and :is() ----------------------------------------------------------------
@@ -175,10 +175,10 @@ const reached = async (h) => {
 };
 
 test('every link in the navbar of every captured Moodle page is reachable with the bar on', async () => {
-  const dir = require('node:path').join(__dirname, 'fixtures');
+  const dir = require('node:path').join(__dirname, '../fixtures');
   let pages = 0;
   for (const f of fs.readdirSync(dir).filter((x) => /^moodle-.*\.html$/.test(x))) {
-    const h = await setup({ html: read(`test/fixtures/${f}`), path: '/' + f });
+    const h = await setup({ html: read(`../test/fixtures/${f}`), path: '/' + f });
     if (!nav(h.document)) continue; // the sign-in page has none
     pages++;
     const reach = await reached(h);
@@ -312,7 +312,7 @@ test('a school\'s unmapped same-origin links become items of the bar, and off-or
 });
 
 test('a link\'s name is the same for the same address and fits the bar\'s link ids', () => {
-  const { slug } = require('../features/navbar-moodle.js').data;
+  const { slug } = require('../../extension/features/navbar-moodle.js').data;
   const a = slug(origin + '/local/library/index.php'), b = slug(origin + '/local/library/index.php');
   assert.equal(a, b);
   for (const id of [a, slug(''), slug('menu:Language'), slug('Ünïcödé ✓ 🎓')]) assert.match(`link:${id}`, /^link:[a-z0-9]{12}$/);
@@ -390,7 +390,7 @@ test('the cache of the places last seen holds only the shared vocabulary\'s name
 });
 
 test('native generic items retain their destination and control type when a saved link has the same id', async () => {
-  const library = require('../features/navbar-moodle.js').data.slug(origin + '/local/library/index.php');
+  const library = require('../../extension/features/navbar-moodle.js').data.slug(origin + '/local/library/index.php');
   const h = await setup({ html: menus, prefs: { links: [
     { id: library, n: 'Old link', u: origin + '/wrong', tab: true },
     { id: 'editmode0000', n: 'Old mode', u: origin + '/wrong', tab: true },

@@ -5,10 +5,10 @@ Firefox 158.0 from Mozilla's archive, and web-ext 10.8.0. It loads the existing
 Firefox release ZIP, rather than rebuilding the working tree.
 
 ```sh
-sh scripts/firefox-android.sh check
-sh scripts/firefox-android.sh
+sh tools/dev/firefox-android.sh check
+sh tools/dev/firefox-android.sh
 # Ctrl+C ends web-ext's temporary-extension session.
-sh scripts/firefox-android.sh stop
+sh tools/dev/firefox-android.sh stop
 ```
 
 The emulator is `GlazeAndroid16`, on `emulator-5580`, with two CPU cores and
@@ -46,7 +46,7 @@ export ANDROID_HOME="$HOME/Library/Android/sdk" ANDROID_SDK_ROOT="$HOME/Library/
 sdkmanager --sdk_root="$HOME/Library/Android/sdk" \
   'cmdline-tools;latest' platform-tools emulator 'system-images;android-36;default;arm64-v8a'
 
-version=$(node -p 'require("./manifest.json").version')
+version=$(node -p 'require("./extension/manifest.json").version')
 state="$PWD/release/$version/firefox/android"
 mkdir -p "$state/avd" "$state/extension"
 ANDROID_AVD_HOME="$state/avd" "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name GlazeAndroid16 \

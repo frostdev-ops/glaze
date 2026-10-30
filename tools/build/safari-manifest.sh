@@ -9,7 +9,7 @@
 # drawn by features/modui.js).
 set -eu
 dir=$(CDPATH= cd -- "$(dirname "$1")" && pwd)
-[ "$dir" = "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)" ] || rm -rf "$dir/mods" "$dir/features/mods.js" # a staged copy, never the checkout
+[ "$dir" = "$(CDPATH= cd -- "$(dirname "$0")/../../extension" && pwd)" ] || rm -rf "$dir/mods" "$dir/features/mods.js" # a staged copy, never the checkout
 python3 - "$1" <<'PY'
 import json, sys
 path = sys.argv[1]

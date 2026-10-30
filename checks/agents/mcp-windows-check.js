@@ -14,17 +14,17 @@
 // Files go to a scratch LOCALAPPDATA (HOME elsewhere), given to every process and the browser; the registry is the real
 // HKCU, which setup and uninstall change only for keys pointing into the scratch folder. Windows requires CI=true/1
 // or --allow-registry, even with --dry (which stops before the browser).
-//   NODE_PATH=<playwright> node scripts/mcp-windows-check.js [evidence folder] [--dry]
+//   NODE_PATH=<playwright> node checks/agents/mcp-windows-check.js [evidence folder] [--dry]
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawn, spawnSync } = require('node:child_process');
-const B = require('../mcp/lib/browsers.js');
-const R = require('../mcp/lib/rendezvous.js');
+const B = require('../../mcp/lib/browsers.js');
+const R = require('../../mcp/lib/rendezvous.js');
 
-const BIN = path.join(__dirname, '..', 'mcp', 'bin', 'glaze-mcp.js');
-const VERSION = require('../mcp/package.json').version;
+const BIN = path.join(__dirname, '../../mcp/bin/glaze-mcp.js');
+const VERSION = require('../../mcp/package.json').version;
 const HOST = 'io.frostdev.glaze_mcp';
 const WIN = process.platform === 'win32';
 // The test extension's public key (no private key exists anywhere), and the id Chromium derives from it.
@@ -146,14 +146,14 @@ const value = (key) => { const m = /REG_SZ\s+(.*?)\r?$/m.exec(reg(key, '/ve') ||
 
     if (!dry) {
       const { chromium: browser } = require('playwright');
-      const { chromeLaunch, lockPath } = require('./check-env.js');
+      const { chromeLaunch, lockPath } = require('../../tools/dev/check-env.js');
       held = lockPath();
       while (true) { try { fs.mkdirSync(held); break; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); } }
       fs.writeFileSync(path.join(held, 'owner'), `${process.pid}\nmcp-windows-check\n`);
       const instance = crypto.randomBytes(10).toString('hex');
       let worker = null, record = null;
       await step('Chromium loads the extension under its fixed id', async () => {
-        await require('./wait-for-browser.js')();
+        await require('../../tools/dev/wait-for-browser.js')();
         context = await browser.launchPersistentContext(chromium.data, { ...chromeLaunch(), headless: true, env,
           args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`] });
         const mine = (w) => w.url().startsWith(`chrome-extension://${ID}/`);

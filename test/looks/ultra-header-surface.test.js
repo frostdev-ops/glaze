@@ -7,7 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { matches, specificity, chain, cssRules, winner } = require('./helpers/css-cascade.cjs');
+const { matches, specificity, chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
 
 const theme = cssRules('theme.css');
 // The background the cascade gives `el` from theme.css: [the winning declaration's value, its rule's selector].

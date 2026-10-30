@@ -2,8 +2,8 @@
 // migration of an older Settings' one endpoint connection into a provider's or an endpoint of its own.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const A = require('../lib/ai/settings.js');
-const R = require('../lib/ai/request.js');
+const A = require('../../extension/lib/ai/settings.js');
+const R = require('../../extension/lib/ai/request.js');
 
 const KEY = 'sk-or-v1-0000synthetic0000000000000000000000000000000000000000000000';
 const OFF = { syllabus: false, completion: false, writing: false };

@@ -1,17 +1,17 @@
 // An assignment's paper keeps one set of sources (lib/writer-sources.js keyOf) in its attempt's frame and in Documents:
 // the frame's context as features/writer.js (paperOf, init) and lib/writer-context-assignment.js (build) make it, and
 // papers.js's for the same paper's record. A standalone document keeps its local key. The page is
-// scripts/documents-ai-check.js.
+// checks/documents/documents-ai-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto'), fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const S = require('../lib/writer-sources.js'), PA = require('../lib/writer-papers.js'), U = require('../lib/writer-ultra.js'), A = require('../lib/writer-context-assignment.js');
-const R = require('../lib/rubric.js');
-const grades = require('./fixtures/ultra-writer-gradebook.json'), members = require('./fixtures/ultra-memberships.json'), item = require('./fixtures/ultra-writer-content.json');
+const S = require('../../extension/lib/writer-sources.js'), PA = require('../../extension/lib/writer-papers.js'), U = require('../../extension/lib/writer-ultra.js'), A = require('../../extension/lib/writer-context-assignment.js');
+const R = require('../../extension/lib/rubric.js');
+const grades = require('../fixtures/ultra-writer-gradebook.json'), members = require('../fixtures/ultra-memberships.json'), item = require('../fixtures/ultra-writer-content.json');
 
 const HOST = 'bb.school.test', ORIGIN = `https://${HOST}`, ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
 const slice = (file, from, to) => {
-  const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), a = src.indexOf(from), b = src.indexOf(to, a + 1);
+  const src = fs.readFileSync(path.join(__dirname, '../../extension', file), 'utf8'), a = src.indexOf(from), b = src.indexOf(to, a + 1);
   assert.ok(a >= 0 && b > a, `${file}: ${from.trim()} … ${to.trim()}`);
   return src.slice(a, b);
 };
@@ -90,8 +90,8 @@ test('source key parts encode separators and unicode once without collisions', (
 });
 
 test('Documents paper identity is stripped from AI context', async () => {
-  const W = require('../lib/ai/tasks/writer-context.js');
-  const C = require('../lib/ai/tasks/writer-complete.js');
+  const W = require('../../extension/lib/ai/tasks/writer-context.js');
+  const C = require('../../extension/lib/ai/tasks/writer-complete.js');
   const { full } = await frame(), key = PA.keyOf(full.paper), ctx = await standalone(key, { [key]: recordOf(key, full) });
   const { paper, ...without } = ctx;
   assert.deepEqual(W.clean(ctx), W.clean(without));
@@ -102,7 +102,7 @@ test('Documents paper identity is stripped from AI context', async () => {
 
 test('test boxes still have no source key', async () => {
   // A test leaves contextOf before touching the editor (lib/writer-ultra.js); a message's key comes with its context
-  // (test/writer-discussion-sources.test.js).
+  // (test/writer/writer-discussion-sources.test.js).
   for (const kind of ['test']) {
     const context = U.contextOf(null, kind);
     assert.equal(S.keyOf(context), null);

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 // Every rule as [selector, body], @media and @supports flattened.
 const rules = (file) => {
   const css = read(file), out = [];

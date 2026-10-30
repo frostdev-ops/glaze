@@ -4,19 +4,19 @@
 // in the same frame and Back returns to the list (the tab's history one entry per document, the page told no key); typing
 // there, a delete to Trash and its Undo, the Trash's Restore and Delete forever, an import and two exports work from the frame; Escape, Close, Settings and Search leave or
 // take its place, back to the entry it opened from; Ctrl+K opens it the same way; Writer's AI completes a sentence in a
-// document opened there (the worker's broker on a stand-in for Chrome's Prompt API, as scripts/documents-ai-check.js); a
+// document opened there (the worker's broker on a stand-in for Chrome's Prompt API, as checks/documents/documents-ai-check.js); a
 // frame of papers.html the page makes itself stays blank and the worker refuses its writes; the popup still opens a tab.
 // All other requests abort.
 // Shots: inpage-<site>-<width>.png and inpage-ultra-doc-<width>.png at 1280 and 640.
-//   NODE_PATH=<playwright> nice -n 10 node scripts/documents-page-check.js [shots folder]   (EXT selects the checkout)
+//   NODE_PATH=<playwright> nice -n 10 node checks/documents/documents-page-check.js [shots folder]   (EXT selects the checkout)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const G = require(path.join(root, 'defaults.js'));
 const PA = require(path.join(root, 'lib/writer-papers.js'));
 const ZIP = require(path.join(root, 'lib/zip.js'));
 const CANVAS = 'https://emb.school.instructure.com', MOODLE = 'https://moodle.school.test', ULTRA = 'https://bb.school.test';
-const fixture = (name) => fs.readFileSync(path.join(root, 'test/fixtures', name), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
+const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
 const PAGES = { [`${CANVAS}/`]: 'canvas-dashboard-cards.html', [`${MOODLE}/my/`]: 'moodle-dashboard.html', [`${ULTRA}/ultra/course`]: 'ultra-courses.html' };
 const SITES = [['ultra', `${ULTRA}/ultra/course`], ['canvas', `${CANVAS}/`], ['moodle', `${MOODLE}/my/`]];
 const settings = G.GZ_SANITIZE({ enabled: true, navbar: { ...G.GZ_DEFAULTS.navbar, on: true }, motion: { level: 'off' }, enhance: { ...G.GZ_DEFAULTS.enhance, writer: true, palette: true } });
@@ -32,7 +32,7 @@ const docx = (text) => Buffer.concat(ZIP.zip([{ name: 'word/document.xml', data:
 // Writer's gray text: the model's answer to writer.complete after the student types " it" at the end of LAST.
 const LAST = 'When Sethe returns to the clearing, the memory is not something she owns;';
 const GHOST = ' arrives uninvited and rearranges the present.';
-// In the worker: Chrome's Prompt API as lib/ai/providers/device.js reads it (scripts/documents-ai-check.js's stand-in).
+// In the worker: Chrome's Prompt API as lib/ai/providers/device.js reads it (checks/documents/documents-ai-check.js's stand-in).
 const INSTALL = () => {
   if (globalThis.__lm) return 'kept';
   const lm = globalThis.__lm = { prompts: [] };
@@ -65,7 +65,7 @@ const check = async (name, test) => {
 };
 
 (async () => {
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-documents-page-'));
   const shots = path.resolve(process.argv[2] || path.join(scratch, 'shots'));
   fs.mkdirSync(shots, { recursive: true });
@@ -75,13 +75,13 @@ const check = async (name, test) => {
       try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\ndocuments-page-check\n`);
-    const ext = require('./check-env.js').staged(root, [`${MOODLE}/*`, `${ULTRA}/*`], scratch);
-    await require('./wait-for-browser.js')();
+    const ext = require('../../tools/dev/check-env.js').staged(root, [`${MOODLE}/*`, `${ULTRA}/*`], scratch);
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', acceptDownloads: true,
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', acceptDownloads: true,
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-webgl', '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
-    require('./check-env.js').noFirstRun(context);
+    require('../../tools/dev/check-env.js').noFirstRun(context);
     context.setDefaultTimeout(15000);
     await context.route('**/*', (route) => {
       const u = new URL(route.request().url());
@@ -113,7 +113,7 @@ const check = async (name, test) => {
         if (!r?.ok) throw Error(`seed: ${JSON.stringify(r)}`);
       }
     }, { s: settings, key: KEY, title: TITLE, body: doc('Notes from the archive.'), ai: { key: AI_KEY, body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Reading notes on Beloved' }] }, { type: 'paragraph', content: [{ type: 'text', text: LAST }] }] } } });
-    await require('./check-env.js').ultraReady(own);
+    await require('../../tools/dev/check-env.js').ultraReady(own);
     await own.close();
 
     const page = await context.newPage();
@@ -283,7 +283,7 @@ const check = async (name, test) => {
       length = await page.evaluate(() => history.length);
     });
     await check('ultra: PDF Close waits for the filled file to reach storage', async () => {
-      const key = PA.newKey(), bytes = require('./pdf-fixtures.js').acroform();
+      const key = PA.newKey(), bytes = require('../../tools/fidelity/pdf-fixtures.js').acroform();
       await worker.evaluate(async ({ key, file, size }) => {
         const index = (await chrome.storage.local.get('writerPapers')).writerPapers || [];
         const rec = { key, kind: 'pdf', title: 'PDF close check', named: true, file, size, pages: 3, revision: 1, updated: Date.now() };

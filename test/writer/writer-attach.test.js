@@ -6,20 +6,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const zlib = require('node:zlib');
-const C = require('../lib/writer-context-assignment.js');
-const D = require('../lib/doctext.js');
-const T = require('../lib/ai/task.js');
-require('../lib/ai/providers/mock.js');
-const W = require('../lib/ai/tasks/writer-context.js');
-const FB = require('../lib/ai/tasks/writer-feedback.js');
-const item = require('./fixtures/ultra-writer-attach-content.json');
+const C = require('../../extension/lib/writer-context-assignment.js');
+const D = require('../../extension/lib/doctext.js');
+const T = require('../../extension/lib/ai/task.js');
+require('../../extension/lib/ai/providers/mock.js');
+const W = require('../../extension/lib/ai/tasks/writer-context.js');
+const FB = require('../../extension/lib/ai/tasks/writer-feedback.js');
+const item = require('../fixtures/ultra-writer-attach-content.json');
 
 const ORIGIN = 'https://bb.school.example.edu';
 const PNG_URL = `${ORIGIN}/bbcswebdav/pid-4968850-dt-asiobject-rid-14533104_1/xid-14533104_1`;
 const DOCX_URL = `${ORIGIN}/bbcswebdav/pid-4968850-dt-asiobject-rid-14533105_1/xid-14533105_1`;
 const PROMPT = 'Essay 2 prompt\nCompare two scenes where memory returns unbidden. Quote each scene at least once.';
 
-// A zip of deflated entries, as Word writes them (test/doctext.test.js zipOf).
+// A zip of deflated entries, as Word writes them (test/documents/doctext.test.js zipOf).
 const zipOf = (files) => {
   const parts = [], central = [];
   let offset = 0;
@@ -119,7 +119,7 @@ test('attachments: the page reads the box\'s files once, GET with the session, a
 });
 
 test('features/writer.js hands a paper\'s attachments ask to the context builder', async () => {
-  const content = require('./helpers/writer-content.cjs');
+  const content = require('../helpers/writer-content.cjs');
   const c = content({ fixture: 'attempt' });
   c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
   const asked = [];

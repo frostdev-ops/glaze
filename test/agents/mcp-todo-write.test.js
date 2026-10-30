@@ -5,12 +5,12 @@
 process.env.TZ = 'UTC';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('./helpers/mcp-caches.cjs');
-const H = require('./helpers/mcp-tabs.cjs');
-const T = require('../lib/ai/tools.js');
-const R = require('../lib/mcp/registry.js');
-const TABS = require('../lib/mcp/tabs.js');
-const ST = require('../lib/mcp/tools-study.js');
+const C = require('../helpers/mcp-caches.cjs');
+const H = require('../helpers/mcp-tabs.cjs');
+const T = require('../../extension/lib/ai/tools.js');
+const R = require('../../extension/lib/mcp/registry.js');
+const TABS = require('../../extension/lib/mcp/tabs.js');
+const ST = require('../../extension/lib/mcp/tools-study.js');
 
 const A = `${C.CANVAS}/5`, UL = `${C.ULTRA}/${C.ULTRA_UID}`;
 const CSRF = 'abc+/=123';

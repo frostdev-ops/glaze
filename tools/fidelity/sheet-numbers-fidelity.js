@@ -1,13 +1,13 @@
-// Does Apple Numbers open the .xlsx Glaze writes with Glaze's values? The workbooks of scripts/sheet-fidelity-books.js
+// Does Apple Numbers open the .xlsx Glaze writes with Glaze's values? The workbooks of tools/fidelity/sheet-fidelity-books.js
 // open in Numbers on this Mac (launched hidden when it isn't running, and quit only then) through JXA. A file fails
 // when Numbers won't open it, its sheets aren't Glaze's, or a value Glaze stored as such (text, a number, a date, a
 // boolean) reads otherwise. Formulas Numbers calculates with its own functions: where its answer differs from the value
 // Glaze cached, that is listed apart and doesn't fail the file. Google Sheets stays a manual check.
-// Mac only, the one heavy job running: nice -n 10 node scripts/sheet-numbers-fidelity.js [--keep dir] [file.xlsx …]
+// Mac only, the one heavy job running: nice -n 10 node tools/fidelity/sheet-numbers-fidelity.js [--keep dir] [file.xlsx …]
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { books, expect, agree } = require('./sheet-fidelity-books.js');
-const M = require('../lib/sheet-model.js');
+const M = require('../../extension/lib/sheet-model.js');
 
 const NUMBERS = '/Applications/Numbers.app';
 const pid = () => { try { return +execFileSync('pgrep', ['-x', 'Numbers'], { encoding: 'utf8' }).split('\n')[0]; } catch { return 0; } };

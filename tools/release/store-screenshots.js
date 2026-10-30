@@ -1,7 +1,7 @@
 // Capture the store screenshots (1280x800) from the packaged extension and its sample course, and
 // render the promo tiles from store/promo.html. Runs the real extension in a throwaway Chromium
 // profile; no Blackboard account or real coursework. Animated backgrounds hold still (reduced motion).
-//   NODE_PATH=/path/to/node_modules node scripts/store-screenshots.js     (needs playwright + its chromium)
+//   NODE_PATH=/path/to/node_modules node tools/release/store-screenshots.js     (needs playwright + its chromium)
 //   CHROME=/path/to/chrome runs that browser instead (a Chrome for Testing build, say).
 const { chromium } = require('playwright');
 const { execFileSync } = require('child_process');
@@ -10,9 +10,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const root = path.join(__dirname, '..');
-const out = path.join(root, 'assets/store/screenshots');
-const version = require('../manifest.json').version;
+const root = path.join(__dirname, '../..');
+const out = path.join(root, 'store/art/screenshots');
+const version = require('../../extension/manifest.json').version;
 const size = { width: 1280, height: 800 };
 // The sample assignment is due 10/18/26; a fixed clock keeps its countdown the same in every capture.
 const clock = new Date('2026-10-11T12:00:00-04:00');
@@ -31,7 +31,7 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
   .map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 
 (async () => {
-  execFileSync('./package.sh', { cwd: root, stdio: 'inherit' });
+  execFileSync('tools/build/package.sh', { cwd: root, stdio: 'inherit' });
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-shots-')));
   const ext = path.join(tmp, 'ext');
   execFileSync('unzip', ['-q', path.join(root, `dist/glaze-v${version}.zip`), '-d', ext]);
@@ -90,7 +90,7 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
     await page.goto(`https://promo.test/store/promo.html?size=${name === 'marquee' ? 'marquee' : 'tile'}`);
     await page.waitForSelector('body[data-ready]');
     await page.waitForTimeout(500);
-    const file = path.join(root, `assets/store/${name}.png`);
+    const file = path.join(root, `store/art/${name}.png`);
     await page.screenshot({ path: file });
     console.log(`wrote ${path.relative(root, file)}`);
   }

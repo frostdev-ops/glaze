@@ -1,19 +1,19 @@
 // The editor's builders for a Look's nav layout and page tweaks (lib/editor-xparts.js): what they write is already what
 // the parts' cleaners keep, so it round-trips through GZ_XPARTS and a glaze2 code; Glaze settings can't be hidden; and
-// the options page and the preview are wired to them. The page itself is checked headless (scripts/xparts-editor-check.js).
+// the options page and the preview are wired to them. The page itself is checked headless (checks/settings/xparts-editor-check.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const G = require('../defaults.js');
-const Parts = require('../lib/parts.js');
-const L = require('../lib/navlayout.js');
-const X = require('../lib/lookparts.js');
-const S = require('../lib/share.js');
-const E = require('../lib/editor-xparts.js');
+const G = require('../../extension/defaults.js');
+const Parts = require('../../extension/lib/parts.js');
+const L = require('../../extension/lib/navlayout.js');
+const X = require('../../extension/lib/lookparts.js');
+const S = require('../../extension/lib/share.js');
+const E = require('../../extension/lib/editor-xparts.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const t = (s, vars = {}) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k]);
 
@@ -222,7 +222,7 @@ test('editing an imported link icon replaces its effective override', async () =
 });
 
 test('the headless editor check fails when a saved-state predicate never becomes true', async () => {
-  const script = read('scripts/xparts-editor-check.js');
+  const script = read('../checks/settings/xparts-editor-check.js');
   const helper = script.slice(script.indexOf('const until ='), script.indexOf('\n\n(async () =>'));
   const until = vm.runInNewContext(`${helper}\nuntil`, { setTimeout });
   await assert.rejects(until(async () => ({ stale: true }), (v) => v.saved === true, 1), /Timed out/);

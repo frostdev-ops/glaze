@@ -3,14 +3,14 @@
 // step said in words, a preset layer stack reordered from the keyboard, ready animations played in the Ultra preview, an
 // effect tried and silenced by motion off, a cursor effect, the device-only status, a glaze2 code, and labelled controls.
 // No network: every request outside the extension is aborted. Software GL, so this checks wiring, not speed.
-//   NODE_PATH=/path/to/node_modules nice -n 10 node scripts/editor-x-check.js [out-dir for screenshots]
+//   NODE_PATH=/path/to/node_modules nice -n 10 node checks/settings/editor-x-check.js [out-dir for screenshots]
 // One headless browser at a time across agents: it waits while another runs. The profile is temporary and removed.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 
-const ext = fs.realpathSync(path.join(__dirname, '..'));
+const ext = fs.realpathSync(path.join(__dirname, '../../extension'));
 const out = process.argv[2] && path.resolve(process.argv[2]);
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const AURORA = fs.readFileSync(path.join(ext, 'assets/shaders/aurora.glsl'), 'utf8');
 const BG = require(path.join(ext, 'lib/editor-xbg.js'));
@@ -26,7 +26,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
   const errors = [];
   let context;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...chromeLaunch, headless: true, viewport: { width: 1400, height: 1000 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],

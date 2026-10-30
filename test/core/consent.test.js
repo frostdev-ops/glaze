@@ -7,21 +7,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const manifest = require('../manifest.json');
+const manifest = require('../../extension/manifest.json');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const ID = 'glaze';
 const CANVAS_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
 const ULTRA_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-ultra.js')).js;
-// Safari's manifest, as scripts/safari-manifest.sh makes it.
+// Safari's manifest, as tools/build/safari-manifest.sh makes it.
 const SAFARI = (() => {
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-consent-safari-'));
   try {
     fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
-    require('node:child_process').execFileSync('sh', [path.join(root, 'scripts/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
+    require('node:child_process').execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
     return JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -494,7 +494,7 @@ const ultraPart = ({ origin, local, courses }) => {
     addEventListener() {}, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     chrome: { runtime: { id: ID, sendMessage: (m) => { sent.push(m); return Promise.resolve(); } },
       storage: { local: { get: (k, cb) => cb(structuredClone(local)), set: (o) => { Object.assign(local, structuredClone(o)); calls.push(['set', Object.keys(o)]); } }, sync: { get: (k, cb) => cb({}) }, onChanged: { addListener() {} } } },
-    GZ_NAV: { native: () => null }, GZ_GRADES: require('../lib/grades.js'), GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES,
+    GZ_NAV: { native: () => null }, GZ_GRADES: require('../../extension/lib/grades.js'), GZ_PAGE: require('../../extension/lib/page.js'), GZ_COURSES: require('../../extension/defaults.js').GZ_COURSES,
   });
   ctx.globalThis = ctx; ctx.window = ctx; ctx.top = ctx; ctx.self = ctx;
   vm.runInContext(read('content-ultra.js'), ctx, { filename: 'content-ultra.js' });
@@ -566,7 +566,7 @@ const popupDue = async (here, stored) => {
   const src = read('popup.js');
   const ctx = vm.createContext({ URL, Date, Promise, Object, Array, els, document: { createElement: el },
     chrome: { tabs: { query: async () => [{ url: here }] }, storage: { local: { getKeys: async () => Object.keys(stored), get: async (k) => structuredClone(Object.fromEntries([].concat(k).filter((x) => x in stored).map((x) => [x, stored[x]]))) } } },
-    GZ_UI: { load: async () => require('../defaults.js').GZ_SANITIZE({}) }, GZ_PAGE: require('../lib/page.js'), GZ_I18N: require('../lib/i18n.js') });
+    GZ_UI: { load: async () => require('../../extension/defaults.js').GZ_SANITIZE({}) }, GZ_PAGE: require('../../extension/lib/page.js'), GZ_I18N: require('../../extension/lib/i18n.js') });
   vm.runInContext(`const $ = (s) => els[s]; const t = (k, v) => GZ_I18N.t(k, v, 'en'); ${src.slice(src.indexOf('// Due this week'))}`, ctx);
   await settle();
   return els;
@@ -608,8 +608,8 @@ test('Settings lists the sites said yes to, with their LMS and a Remove only the
   const mk = (tag) => Object.assign(el(), { tagName: tag.toUpperCase(), attrs: {}, on: {}, setAttribute(k, v) { this.attrs[k] = v; }, addEventListener(t, f) { this.on[t] = f; }, focus() { this.focused = true; } });
   for (const id of ['#site-list', '#site-empty', '#site-status', '#heading-backup-sites', '#site-add', '#site-address', '#site-allow', '#site-note', '#site-error', '#site-picks']) nodes[id] = mk('x');
   const lists = { canvas: ['https://canvas.school.edu/*', 'https://school.instructure.com/*', 'https://both.school.edu/*'], moodle: ['https://moodle.school.edu/*', 'https://both.school.edu/*'], ultra: ['https://bb.school.edu', 'https://school.blackboard.com', 'nonsense'] };
-  const ctx = vm.createContext({ URL, Object, Array, Set, Map, document: { createElement: mk }, $: (s) => nodes[s], t: (k, v) => require('../lib/i18n.js').t(k, v, 'en'), GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN,
-    GZ_SITE: { address: require('../lib/site.js').address, handBack: async () => false },
+  const ctx = vm.createContext({ URL, Object, Array, Set, Map, document: { createElement: mk }, $: (s) => nodes[s], t: (k, v) => require('../../extension/lib/i18n.js').t(k, v, 'en'), GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN,
+    GZ_SITE: { address: require('../../extension/lib/site.js').address, handBack: async () => false },
     chrome: { storage: { local: { get: (k, cb) => cb(structuredClone(lists)) } }, runtime: { getManifest: () => ({ host_permissions: [] }), sendMessage: async (m) => { sent.push(plain(m)); return { ok: true }; } } } });
   vm.runInContext(`${block}; this.readSites = readSites;`, ctx);
   ctx.readSites();
@@ -757,7 +757,7 @@ test('review: unknown Ultra has no early render-blocking theme before storage an
   const src = read('content-ultra.js');
   const inserted = [];
   const context = vm.createContext({ document: { contentType: 'text/html', body: null, head: { appendChild: (l) => inserted.push(l) }, createElement: () => ({ setAttribute() {} }) },
-    location: new URL('https://evil.test/ultra/'), GZ_SITE_ULTRA: {}, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, chrome: { runtime: { getURL: (s) => s } }, setTimeout() {} });
+    location: new URL('https://evil.test/ultra/'), GZ_SITE_ULTRA: {}, GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN, chrome: { runtime: { getURL: (s) => s } }, setTimeout() {} });
   vm.runInContext(src.slice(src.indexOf('// Known Ultra entry:')), context);
   assert.deepEqual(inserted, []);
 });
@@ -787,7 +787,7 @@ const consentPage = ({ lang = 'en', frame = false, io = false, reply = { ok: tru
     Intl, Object, Date, setTimeout, performance: { now: () => clock }, matchMedia: () => ({ matches: true }),
     CSSStyleSheet: class { replaceSync(css) { this.css = css; } },
     ...(io && { IntersectionObserver: class { constructor(f, o) { this.f = f; this.trackVisibility = o.trackVisibility; watcher = this; } observe(e) { observed.push(e); } unobserve() {} disconnect() {} } }),
-    GZ_I18N: require('../lib/i18n.js'),
+    GZ_I18N: require('../../extension/lib/i18n.js'),
     chrome: { runtime: { sendMessage: async (m) => { sent.push(plain(m)); return reply; } }, storage: { onChanged: { addListener: (f) => heard.push(f), removeListener: (f) => heard.splice(heard.indexOf(f), 1) } } },
   });
   ctx.window = ctx; ctx.top = frame ? {} : ctx; ctx.globalThis = ctx;

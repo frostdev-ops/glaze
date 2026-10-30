@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const S = require('../lib/sidebar.js');
-const W = require('../lib/widgets.js');
+const S = require('../../extension/lib/sidebar.js');
+const W = require('../../extension/lib/widgets.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const CANVAS = 'https://school.instructure.com', CANVAS2 = 'https://other.instructure.com', ULTRA = 'https://bb.example.edu', ULTRA2 = 'https://bb.other.edu';
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 
@@ -35,7 +35,7 @@ const pageContext = (site, origin, account, reads) => {
 };
 
 const worker = ({ local = {}, state = null, production = false, manualTimers = false } = {}) => {
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   const store = state || { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [ULTRA, ULTRA2], ...local }, session: {} };
   const changed = [], startup = [];
   const fail = { set: 0, layout: 0 }, slow = { get: 0, script: false, ultra: false }, registrations = [];
@@ -297,7 +297,7 @@ test('migration happens once, in the queue, against the layout stored then, befo
 });
 
 test('a new install writes storage.local only what scripts/check-env.js installed() waits for', async () => {
-  const { installed } = require('../scripts/check-env.js');
+  const { installed } = require('../../tools/dev/check-env.js');
   const w = worker(), had = Object.keys(w.store.local);
   const done = () => installed({ evaluate: (f) => vm.runInContext(`(${f})()`, vm.createContext({ chrome: { storage: { local: { get: async () => structuredClone(w.store.local) } } } })) }, 0);
   await assert.rejects(done(), /install/);
@@ -315,7 +315,7 @@ test('a new install marks its layout fresh, an update does not, and the mark giv
   assert.equal(fresh.store.local.widgetLayout.sidebarFresh, true, 'kept by later updates');
   const r = await fresh.send(sb(uKey(), [{ op: 'migrate' }]), UP);
   assert.deepEqual(S.docked(r.rec).map((x) => x.id), ['todo', 'settings']); // owner, 2026-10-20
-  const settings = require('../defaults.js').GZ_SANITIZE(fresh.store.sync, fresh.store.local.freshDefaults.fresh);
+  const settings = require('../../extension/defaults.js').GZ_SANITIZE(fresh.store.sync, fresh.store.local.freshDefaults.fresh);
   assert.equal(settings.enhance.notes, true);
   assert.equal(settings.enhance.pet, true);
   assert.deepEqual(fresh.store.sync.enhance, {}, 'initial feature choices are not uploaded over pending sync');
