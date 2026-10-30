@@ -196,3 +196,13 @@ test('compact attachment retries reuse the note once and reject earlier text cha
   await p.go({ ...structuredClone(message), run: 3 });
   assert.equal(p.clicks.length, 0);
 });
+
+test('the page harness waits for an actual asynchronous digest before asserting native effects', async () => {
+  let release, settled = false;
+  const p = page({ hash: async (...args) => { await new Promise((r) => { release = r; }); return crypto.subtle.digest(...args); } });
+  const going = p.go().then(() => { settled = true; });
+  while (!release) await new Promise(setImmediate);
+  assert.equal(settled, false);
+  release(); await going;
+  assert.equal(p.clicks.length, 1);
+});
