@@ -2085,6 +2085,28 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 
+// Canvas files in Glaze's viewers (features/canvasopen.js): a Canvas page Glaze runs on asks, on the student's click, for the
+// one-use pass of the writer.html frame it opens to show a file it read. The frame claims it as Writer's own ('glaze:writer'
+// above); nothing goes into the page's world, and with no asking frame kept (from: null) the claim seats no AI host.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:canvas-view') return;
+  const pass = typeof m.pass === 'string' && /^[\w-]{32,64}$/.test(m.pass) ? m.pass : '';
+  (async () => {
+    const key = { pdf: 'pdf', slides: 'slides', sheet: 'sheets' }[m.kind];
+    if (!pass || !key || !GZ_DOWNLOAD.sender(s, chrome.runtime.id) || !await fromCanvas(s)) return false;
+    const raw = await chrome.storage.sync.get(['enabled', 'enhance', 'writer']);
+    const { freshDefaults } = await chrome.storage.local.get('freshDefaults');
+    const settings = GZ_SANITIZE(raw, freshDefaults?.fresh === true);
+    if (!settings.enabled || !settings.enhance.bbPreviews || settings.writer[key] !== true) return false;
+    const now = Date.now();
+    for (const [k, v] of readerPasses) if (now - v.at > 60000) readerPasses.delete(k);
+    if (readerPasses.has(pass) || readerPasses.size >= 50) return false;
+    readerPasses.set(pass, { type: 'glaze:writer', tab: s.tab.id, at: now, from: null });
+    return true;
+  })().then((ok) => reply({ ok }), () => reply({ ok: false }));
+  return true;
+});
+
 // Code mods (lib/modbroker.js): a mod's API calls ('glaze:mod') and the page's own asks ('glaze:modpage'),
 // only from Glaze's content script in the top frame of an LMS page Glaze runs on and is on for, never a quiz or a tool's
 // page, or from the Documents page. Parts also go to same-site Ultra course frames. The broker checks everything else.
@@ -2292,7 +2314,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   task.then(reply, () => reply({ ok: false }));
   return true;
 });
-const LOADABLE = new Set(['lib/motion.js', 'lib/scene-host.js', 'lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-moodle.js', 'features/navbar.js', 'features/navbar-widgets.js', 'features/settingspage.js', 'lib/stream.js', 'features/stream.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'features/discussion-nav.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'lib/sidebar.js', 'features/sidebar.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'lib/lookset.js', 'lib/looks.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/bbpreview.js', 'features/docreview.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'lib/syllabus-ai.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/lmsq.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js', 'features/routes.js', 'lib/popup.js', 'features/popup.js', 'lib/announce.js', 'features/announce.js', 'features/announce-read.js', 'lib/rubric.js', 'features/rubric.js', 'features/editor-menu.js', 'features/sticky-fold.js', 'lib/writer-ultra.js', 'features/writer.js', 'lib/writer-target.js', 'lib/writer-context-discussion.js', 'features/writer-quote.js', 'lib/writer-context-assignment.js', 'lib/writer-submit.js', 'features/writer-submit.js']);
+const LOADABLE = new Set(['lib/motion.js', 'lib/scene-host.js', 'lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-moodle.js', 'features/navbar.js', 'features/navbar-widgets.js', 'features/settingspage.js', 'lib/stream.js', 'features/stream.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'features/discussion-nav.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'lib/sidebar.js', 'features/sidebar.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'lib/lookset.js', 'lib/looks.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/bbpreview.js', 'features/canvasopen.js', 'features/docreview.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'lib/syllabus-ai.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/lmsq.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js', 'features/routes.js', 'lib/popup.js', 'features/popup.js', 'lib/announce.js', 'features/announce.js', 'features/announce-read.js', 'lib/rubric.js', 'features/rubric.js', 'features/editor-menu.js', 'features/sticky-fold.js', 'lib/writer-ultra.js', 'features/writer.js', 'lib/writer-target.js', 'lib/writer-context-discussion.js', 'features/writer-quote.js', 'lib/writer-context-assignment.js', 'lib/writer-submit.js', 'features/writer-submit.js']);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m?.type !== 'glaze:load') return;
   const files = Array.isArray(m.files) ? m.files : [];
