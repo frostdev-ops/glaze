@@ -201,6 +201,9 @@ test('AGGREGATE with Microsoft\'s data: its options for errors, hidden rows and 
     ['AGGREGATE(4, 6, A1:A11)', 96], ['AGGREGATE(14, 6, A1:A11, 3)', 72], ['AGGREGATE(15, 6, A1:A11)', '#VALUE!'], ['AGGREGATE(12, 6, A1:A11, B1:B11)', 68], ['MAX(A1:A2)', '#DIV/0!'],
     ['AGGREGATE(4, 4, A1:A11)', '#DIV/0!'], ['AGGREGATE(4, 0, A1:A11)', '#DIV/0!'], ['AGGREGATE(9, 6, A1:A11)', 462], ['AGGREGATE(1, 6, A2:A3)', 51], ['AGGREGATE(2, 4, A1:A11)', 9],
     ['AGGREGATE(3, 6, A1:A11)', 9], ['AGGREGATE(3, 4, A1:A11)', 11], ['AGGREGATE(5, 6, A1:A11)', 30], ['AGGREGATE(6, 6, A2:A3)', 2160], ['AGGREGATE(15, 6, A1:A11, 2)', 31],
+    // k as LARGE (rounded up) and SMALL (truncated) take it, below 1 refused first (Excel 16 on the Mac).
+    ['AGGREGATE(15,6,{10,20,30},1.5)', 10], ['AGGREGATE(15,6,{10,20,30},2.5)', 20], ['AGGREGATE(14,6,{10,20,30},1.5)', 20], ['AGGREGATE(14,6,{10,20,30},2.5)', 10],
+    ['AGGREGATE(14,6,{10,20,30},0.5)', '#NUM!'], ['AGGREGATE(15,6,{10,20,30},0.5)', '#NUM!'],
     ['AGGREGATE(13, 6, A1:B11)', 53], ['AGGREGATE(16, 6, B1:B11, 0.5)', 82], ['AGGREGATE(17, 6, B1:B11, 1)', 64], ['AGGREGATE(18, 6, B1:B11, 0.25)', 63],
     ['AGGREGATE(19, 6, B1:B11, 3)', 91], ['AGGREGATE(19, 6, B1:B11, 4)', '#NUM!'], ['AGGREGATE(14, 6, A1:A11, 10)', '#NUM!'],
     ['AGGREGATE(14, 6, A1:A11/(A1:A11<80), 1)', 72], ['AGGREGATE(9, 6, A1:A11*2)', '#VALUE!'], ['AGGREGATE(20, 6, A1:A11)', '#VALUE!'], ['AGGREGATE(9, 8, A1:A11)', '#VALUE!'],
