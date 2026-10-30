@@ -84,8 +84,10 @@ dispatchMain()
 `;
 
 // glaze-mcp agent, started as an agent app starts it, with this test's HOME.
-const agent = (HOME) => {
-  const child = spawn(process.execPath, [path.join(root, 'mcp/bin/glaze-mcp.js'), 'agent', '--browser', 'safari'], { env: { ...process.env, HOME }, stdio: ['pipe', 'pipe', 'pipe'] });
+const agent = (HOME, npx = false) => {
+  const bin = path.join(root, 'mcp/bin/glaze-mcp.js'), quote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
+  const args = npx ? ['--offline', '--no', '--call', `${quote(process.execPath)} ${quote(bin)} agent --browser safari`] : [bin, 'agent', '--browser', 'safari'];
+  const child = spawn(npx ? 'npx' : process.execPath, args, { env: { ...process.env, HOME, ...(npx && { __CFBundleIdentifier: 'io.test.untrusted-self-report' }) }, detached: npx, stdio: ['pipe', 'pipe', 'pipe'] });
   const out = [];
   let err = '', partial = '';
   child.stdout.setEncoding('utf8').on('data', (d) => { const parts = (partial + d).split('\n'); partial = parts.pop(); out.push(...parts); });
@@ -96,7 +98,15 @@ const agent = (HOME) => {
     for (const until = Date.now() + ms; !out.length; await sleep(10)) if (Date.now() > until) throw new Error(`no line from the agent: ${err}`);
     return out.shift();
   };
-  return { child, line, exit, err: () => err, write: (s) => child.stdin.write(s) };
+  const stop = async () => {
+    child.stdin.end();
+    await Promise.race([exit, sleep(1000)]);
+    if (child.exitCode === null && child.signalCode === null) {
+      if (npx) { try { process.kill(-child.pid, 'SIGTERM'); } catch {} } else child.kill();
+    }
+    await exit;
+  };
+  return { child, line, exit, stop, err: () => err, write: (s) => child.stdin.write(s) };
 };
 
 test('the Swift host serves the real glaze-mcp agent and a stand-in worker across sessions, then quits when idle', { skip: !S.supported, timeout: 240000 }, async (t) => {
@@ -179,6 +189,21 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
       assert.deepEqual(open, { t: 'open', c: cA, peer }, 'its parent, this test, as the kernel says');
       assert.deepEqual(await frame((x) => x.f.t === 'line', 'its line'), { t: 'line', c: cA, d: PING(1) });
       assert.match(A.err(), new RegExp(`connected to Glaze in safari \\(instance ${I}\\)`));
+    });
+
+    await t.test('an npx-started agent is verified as npm\'s Node program, never its inherited bundle self-report', async () => {
+      const a = agent(HOME, true);
+      agents.push(a);
+      a.write(`${PING(100)}\n`);
+      const open = await frame((x) => x.f.t === 'open', 'npx open');
+      assert.equal(open.peer.verified, true);
+      assert.equal(open.peer.exe, fs.realpathSync(process.execPath));
+      assert.ok(open.peer.ppid > 0 && open.peer.ppid !== process.pid, 'the npm parent, not this test');
+      t.diagnostic(`npx kernel parent: ${JSON.stringify(open.peer)}`);
+      await frame((x) => x.f.t === 'line' && x.f.c === open.c, 'npx ping');
+      await a.stop();
+      assert.equal(await a.exit, 0);
+      await frame((x) => x.f.t === 'close' && x.f.c === open.c, 'npx close');
     });
 
     await t.test('lines both ways: whole, in pieces, and a long one cut as agent-frames.js cuts it', async () => {
@@ -310,7 +335,7 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
       assert.equal(d.i, I);
     }
   } finally {
-    for (const a of agents) a.child.kill();
+    await Promise.all(agents.map((a) => a.stop()));
     await swift.stop();
     fs.rmSync(temp, { recursive: true, force: true });
     fs.rmSync(GROUP, { recursive: true, force: true });
@@ -456,7 +481,7 @@ test('a prepared update waits for a long call and its split reply, then quits th
     assert.equal(await a.exit, 1, 'idle agent reconnects after the update');
     assert.equal(fs.existsSync(path.join(group, 'agent.sock')), false);
   } finally {
-    a?.child.kill();
+    await a?.stop();
     await swift.stop();
     fs.rmSync(temp, { recursive: true, force: true });
   }
