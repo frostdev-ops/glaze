@@ -13,6 +13,9 @@
 var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
   const TYPE = 'glaze:mcp-config', LINK = 'mcpLink', CALLS = 'mcpCalls', SETTING = 'mcp';
   const NATIVE = { permissions: ['nativeMessaging'] };
+  // Firefox's listing declares no data collection, and website content as optional: agent apps get course data outside the
+  // browser, so the same click asks for that consent, and turning off gives it back.
+  const FIREFOX = { ...NATIVE, data_collection: ['websiteContent'] };
   const SETUP = 'npx glaze-mcp setup', DOCTOR = 'npx glaze-mcp doctor', UPDATE = 'npx glaze-mcp@latest setup';
   // The link's state from the Claude Desktop bundle's helper (branch mcp-mcpb; not yet in lib/agent-link.js STATES): { state:
   // 'no-node', error: 'no-node' } when the browser-started helper finds no Node.js of the system's own (Claude's runtime
@@ -79,7 +82,8 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
       catch { return Promise.resolve({ ok: false }); }
     };
     // Called first in a click, before anything is awaited.
-    const ask = () => { try { return Promise.resolve(c.permissions.request(NATIVE)).catch(() => false); } catch { return Promise.resolve(false); } };
+    const perms = browser === 'firefox' ? FIREFOX : NATIVE;
+    const ask = () => { try { return Promise.resolve(c.permissions.request(perms)).catch(() => false); } catch { return Promise.resolve(false); } };
     // on: the worker's consent; link: its last status; busy: the switch on its way; unsaved: the last change failed; command:
     // the one the line shows.
     let on = false, link = null, apps = [], mods = [], calls = [], busy = false, unsaved = false, command = '';
@@ -128,7 +132,7 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
         }
         // set can save consent and then fail while starting the link. Read what it saved either way.
         const saved = await loadState();
-        if (!want && !on && (r.ok || saved.ok) && browser !== 'safari') await Promise.resolve(c.permissions.remove(NATIVE)).catch(() => {});
+        if (!want && !on && (r.ok || saved.ok) && browser !== 'safari') await Promise.resolve(c.permissions.remove(perms)).catch(() => {});
       } finally { busy = false; render(); }
     };
     $('agents-on').addEventListener('click', (e) => {
@@ -253,6 +257,6 @@ var GZ_AGENTSEDIT = globalThis.GZ_AGENTSEDIT || (() => {
     });
   };
 
-  return { NATIVE, SETUP, DOCTOR, UPDATE, NO_NODE, GROUPS, OUTCOMES, browserOf, line, groupName, outcome, rows, appsOf, switches, mount };
+  return { NATIVE, FIREFOX, SETUP, DOCTOR, UPDATE, NO_NODE, GROUPS, OUTCOMES, browserOf, line, groupName, outcome, rows, appsOf, switches, mount };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AGENTSEDIT;
