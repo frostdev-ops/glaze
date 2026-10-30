@@ -43,7 +43,12 @@ for (const lang of LANGS) {
     assert.ok(!/\n\n/.test(firefox.notes), 'it stops at the next heading');
     assert.ok(!/^•\s*(?:Chrome|Safari)\s*:/m.test(firefox.notes), 'no other browser\'s bullet on AMO');
     assert.ok(!/^•\s*(?:Chrome|Firefox)\s*:/m.test(apple.whatsNew), 'no other browser\'s bullet on the App Store');
-    assert.equal(apple.whatsNew, firefox.notes, 'this version has no bullet that belongs to one browser');
+    // 4.0.0's Agents bullet is AMO's alone: the App Store build has no Agents, and Chrome has no notes field.
+    const firefoxOnly = (line) => /^•\s*Firefox\s*:/.test(line);
+    assert.equal(apple.whatsNew, firefox.notes.split('\n').filter((line) => !firefoxOnly(line)).join('\n'), 'Apple gets AMO\'s notes without their Firefox bullets');
+    assert.ok(firefox.notes.split('\n').some((line) => firefoxOnly(line) && /\bAgent(?:s|en|es)\b/.test(line)), 'Agents is in AMO\'s notes, labelled Firefox');
+    const agents = /\bagent(?:e|s|en|es)?\b|glaze-mcp|\bMCP\b/i;
+    for (const field of ['whatsNew', 'description', 'promotionalText', 'keywords']) assert.doesNotMatch(apple[field], agents, `no Agents in the App Store ${field}`);
     assert.ok(firefox.notes.length <= 3000 && apple.whatsNew.length <= 4000);
   });
 
