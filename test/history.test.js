@@ -60,13 +60,13 @@ const worker = ({ fetch, manifest = m } = {}) => {
   // hold(): storage reads wait until the returned release() is called, as a slow write queue would.
   let gate = Promise.resolve();
   const hold = () => { let release; gate = new Promise((r) => { release = r; }); return release; };
-  const opened = [];
+  const opened = [], warnings = [];
   const area = (store) => ({
     get: async (k) => (await gate, k === null ? structuredClone(store) : Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, structuredClone(store[x])]))),
     set: async (v) => { Object.assign(store, structuredClone(v)); },
   });
   const context = vm.createContext({
-    URL, console, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto, AbortSignal, fetch,
+    URL, console: { ...console, warn: (...args) => { warnings.push(args.map(String).join(' ')); console.warn(...args); } }, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto, AbortSignal, fetch,
     ...fakeIDB(), // the worker's own IndexedDB, where it keeps a Look's files
     setTimeout: (f) => timers.push(f), clearTimeout: () => timers.splice(0),
     importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
@@ -88,7 +88,7 @@ const worker = ({ fetch, manifest = m } = {}) => {
     for (let i = 0; i < 1000 && !local.galleryOffer; i++) await new Promise((r) => setTimeout(r, 5));
     assert.ok(local.galleryOffer, 'the gallery hand-off finishes');
   };
-  return { send, change, tick, settle, timers, local, sync, opened, hold };
+  return { send, change, tick, settle, timers, local, sync, opened, hold, warnings };
 };
 
 test('editor history checkpoints merge on the recording/clear queue and reject untrusted frames', async () => {
@@ -383,4 +383,12 @@ test('a gallery Look\'s background file is fetched from the gallery and kept by 
   x.send({ gallery: { code, name: 'Spin' } }, { url: 'https://evil.example/glaze/looks/', frameId: 0 });
   for (let i = 0; i < 50; i++) await x.tick();
   assert.deepEqual(x.local, {});
+});
+
+
+test('history sandbox supplies registration APIs used by the settings-change listener', async () => {
+  const w = worker();
+  w.change({ enhance: { newValue: G.GZ_DEFAULTS.enhance } });
+  for (let i = 0; i < 40; i++) await w.tick();
+  assert.deepEqual(w.warnings, [], 'unrelated worker initialization must not print missing scripting API errors');
 });
