@@ -520,8 +520,10 @@ not those unknown legacy copies or unrelated stickers.
   course's new messages. The documents you start or import on Writer's Documents page are kept
   the same way, each under a random key (`doc:<uuid>`) with its text, title, format and versions; Glaze keeps no copy on
   a server. A spreadsheet keeps its cells beside its record (`writerSheet:<key>:<sheet>:<rows>`) and its versions
-  compressed (16 MB in all); a PDF or slide deck keeps the file itself in its record (3 MB at most; a PDF's with the form
-  values you fill), with its size, page or slide count and first page's picture. An assignment attempt you open as one
+  compressed (16 MB in all); a PDF or slide deck (50 MB at most; a PDF's with the form values you fill) is kept in Glaze's
+  own file store on this device (the worker's IndexedDB `glaze-docs`, by the file's SHA-256), its record holding the
+  file's hash, size, page or slide count and first page's picture; where that store isn't available, a file up to 3 MB
+  stays in the record itself. A file goes when no document or version points at it. An assignment attempt you open as one
   of these is kept the same way under the assignment's key. Glaze reads and draws these files on this device, from the
   extension's own files, and sends them nowhere. Delete there moves a paper or document to Trash, which keeps it and its versions on this device; 30 days later
   it is deleted for good, with its versions and saved sources, the next time the browser starts or Documents opens, unless
@@ -841,6 +843,11 @@ you import) are bundled. It makes requests in these cases:
     first 30,000 characters of that page and its address. **AI outline** sends the current document’s sections separately (up to 120,000 characters in total) and interface language to the Feedback model while Outline is open. It defaults on when AI is on and that model is configured; its switch is in Outline and Settings → AI. Generated labels and their section text are saved locally with the paper so unchanged sections can reuse them across reviews and reloads. Reuse is scoped to the paper, model configuration, language and outline version. **AI source extraction** sends individual entries detected in the document’s bibliography to the Feedback model while Sources is open; it defaults on with AI configured and has its own switch in Sources and Settings → AI. Local bibliography extraction works without AI. Imported source metadata, original citations and removal markers stay on this device with Writer’s saved sources. Paper Feedback also asks for an estimated grade against the same rubric, instructions and attached documents; it uses the same supplied material, potentially in multiple evidence, rubric-criterion and synthesis requests. These calls share a bounded run and cancellation; fitting cloud text requests may remain one call. Nothing is sent from a test's box, or from an attempt not known to be an assignment.
 
     When AI Feedback is configured and enabled, visible assignment papers can prepare attached images before you press Review. The Feedback model receives each image with brief assignment context to produce a bounded description, exact requirements and a relevance assessment; later assessment calls use this text. Complete readings stay locally for up to 30 days, with at most 128 entries, scoped to the verified account and assignment and invalidated by changed image content or task context. The cache stores readings and hashes, not original pictures, credentials or full assignment context. Failed readings are not persisted; a short memory guard prevents immediate automatic repeats during joined preparation/review. Turning Feedback or AI off stops pending preparation.
+- **Previews in Glaze** (Blackboard Ultra, on by default; off while Settings → Writer → PDFs is off). When you open an
+  attachment's Preview, Glaze asks Blackboard's document viewer (`basic-doc-viewer…blackboard.com`), signed in as you, for
+  the PDF Blackboard converted the file to, and reads that PDF (50 MB at most) from the address the viewer gives, in
+  Blackboard's file store (`…amazonaws.com`). The PDF is shown from memory and kept only if you choose **Save to
+  Documents**. Nothing goes to Glaze's servers.
 - **PDFs and photos you import** (class schedule, syllabus, transcript): none. A PDF or picture you pick or paste is read
   on your device by Glaze's reader, a page of the extension that the import opens in a hidden frame for that one file:
   pdf.js reads a PDF's text, and the OCR engine reads a picture or a scanned page, both from the extension's own files.
