@@ -235,7 +235,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     // tier: Auto lets the ladder pick for this computer at Download).
     const glaze = () => {
       const words = ours ? [localText(ours, t, pct), ...(ours.size && ours.state !== 'unavailable' ? [gb(ours.size, t)] : [])].join(' · ') : '';
-      const line = el('div', 'line'), state = el('span', 'note', words);
+      const line = el('div', 'line own'), state = el('span', 'note', words);
       state.setAttribute('role', 'status');
       line.append(mark(OWN), el('b', '', label(OWN)), state);
       if (ours?.state === 'download') line.append(button('primary', t('Download'), fetchModel));
