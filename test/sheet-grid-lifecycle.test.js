@@ -231,6 +231,21 @@ test('the grid tracks each applied operation with the codec and refuses a struct
   await settle();
 });
 
+// node:assert prints a failed value at depth 1000: an element that reaches the document from every node prints the page
+// again at each one, and one failed assert.equal(menu, null) took the runner past 6 GB.
+test('a failed assertion on a grid element stays small without printing page links', () => {
+  const f = frame(), button = f.el('gx-versions');
+  // A broken back link must fail cheaply before a real assertion could walk the entire mounted grid.
+  for (const el of [f.doc.root, ...f.doc.root.all()]) {
+    for (const key of ['doc', 'parentNode']) assert.equal(Object.prototype.propertyIsEnumerable.call(el, key), false, `${el.tagName}.${key} stays out of assertion output`);
+  }
+  assert.throws(() => assert.equal(button, null), (e) => {
+    assert.ok(e instanceof assert.AssertionError);
+    assert.ok(e.message.length < 20000, `${e.message.length} characters for the grid button`);
+    return true;
+  });
+});
+
 test('dispose ends every listener outside the grid, so an unmounted grid neither reads storage nor redraws again', async () => {
   const f = frame();
   assert.equal(typeof f.view.dispose, 'function', 'writer-kinds.js unmount calls it');
