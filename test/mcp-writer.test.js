@@ -781,3 +781,37 @@ test('unknown kind values stay unreadable instead of falling back to the legacy 
     assert.equal((await env.run('document_read', { document })).ok, false);
   }
 });
+
+test('the copied citation insert makes the same document as Writer\'s current insert across styles, notes, and escaped italic titles', async () => {
+  // Execute the owner's current insert unchanged; a new signature or boundary fails here rather than silently leaving
+  // MCP on an older copy. Only the caret is supplied directly (the native popover otherwise remembers its selection).
+  const native = fs.readFileSync(path.join(root, 'writer-cite.js'), 'utf8');
+  const helpers = native.slice(native.indexOf('  const unesc = '), native.indexOf('  const paint = '));
+  const start = native.indexOf('  const insert = (src, page = '), end = native.indexOf('\n  // ⋯ Add references', start);
+  assert.ok(start >= 0 && end > start && helpers.includes('const runs ='));
+  const body = native.slice(start, end);
+  const book = SRC.normalize({ id: 's-italic', type: 'book', title: 'A <i>ship & sea</i> and "us"', publisher: 'A & B', issued: { 'date-parts': [[2026]] } });
+  for (const style of ['mla9', 'apa7', 'chicago17']) for (const compact of [false, true]) {
+    const h = hubbed(), p = writerPage({ link: h.link, sources: [book], style, view: compact ? 'compact' : 'full' });
+    p.ready();
+    await until(() => h.hub.size() === 1, 'the citation page');
+    p.pm.dispatch(p.pm.state.tr.setSelection(PM.state.TextSelection.create(p.pm.state.doc, p.pm.state.doc.content.size - 1)));
+    const nativeView = { state: p.pm.state, dispatch(tr) { this.state = this.state.apply(tr); } };
+    const ed = { view: nativeView, focus() {}, run(cmd, html) {
+      assert.equal(cmd, 'footnote');
+      nativeView.dispatch(nativeView.state.tr.insert(nativeView.state.selection.to, SCHEMA.paper.nodes.footnote_ref.create({ content: html })));
+      return true;
+    } };
+    const realm = vm.createContext({ GZ_PM: PM, C: CITE, F: { editor: () => ed, mode: () => 'paper' }, sources: [book], style, saved: null,
+      document: { documentElement: { dataset: { view: compact ? 'compact' : 'full' } } } });
+    vm.runInContext(`const { TextSelection } = GZ_PM.state, { Fragment } = GZ_PM.model;\n${helpers}\n${body}\nglobalThis.put = insert;`, realm);
+    // Two inserts exercise Chicago's full first note and short subsequent note, as well as leading-space handling.
+    for (let n = 0; n < 2; n++) {
+      assert.equal(realm.put(book, '12'), true);
+      const c = await h.hub.call(ESSAY, 'cite', { sourceId: book.id, page: '12' });
+      assert.deepEqual(await h.hub.call(ESSAY, 'insert', { sourceId: book.id, page: '12', inText: c.inText }), { ok: true });
+      assert.equal(JSON.stringify(p.pm.state.doc.toJSON()), JSON.stringify(nativeView.state.doc.toJSON()), `${style}, compact:${compact}, insert:${n}`);
+    }
+    p.events.pagehide();
+  }
+});
