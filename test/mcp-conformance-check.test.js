@@ -168,3 +168,15 @@ test('cleanup reaps adopted descendants, escalates, and never signals a reused P
   assert.equal(table.get(11).start, 'reused');
   assert.equal(fs.existsSync(scratch), false);
 });
+
+test('the check owns browser signal handling until its cleanup has finished', async (t) => {
+  let launch;
+  const context = { setDefaultTimeout() {}, route: async () => {}, pages: () => [], on() {}, newPage: async () => ({ goto: async () => {} }) };
+  const h = harness(t, { require: (name) => {
+    if (name === 'playwright') return { chromium: { launchPersistentContext: async (profile, opts) => { launch = opts; return context; } } };
+    if (name === './wait-for-browser.js') return async () => {};
+  } });
+  h.run(`EXT = { dir: ${JSON.stringify(h.tmp)}, id: 'abcdefghijklmnopabcdefghijklmnop' }; HOME = ${JSON.stringify(h.tmp)};`);
+  await h.run("browse('/profile')");
+  assert.deepEqual([launch.handleSIGINT, launch.handleSIGTERM, launch.handleSIGHUP], [false, false, false]);
+});
