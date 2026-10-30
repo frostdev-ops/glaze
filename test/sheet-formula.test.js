@@ -232,3 +232,13 @@ test('the model\'s shift and rename hooks are these', () => {
   M.apply(wb, { op: 'insert', sheet: sh.id, axis: 'row', at: 0, n: 2 }, F.hooks);
   assert.equal(M.cell(sh, 11, 0).f, 'SUM(A3:A7)');
 });
+
+// Copying a mixed reference cannot produce row 0 or a column past XFD.
+// support.microsoft.com/en-us/excel/how-to-correct-a-ref-error.
+test('copying mixed-anchor ranges checks both endpoints against sheet bounds', () => {
+  for (const [formula, dr, dc] of [
+    ['$A$1:A2', -2, 0], ['A1:$A$2', 1048576, 0],
+    ['$A$1:B1', 0, -2], ['A1:$B$1', 0, 16384],
+    ['$1:2', -2, 0], ['1:$2', 1048576, 0], ['$A:B', 0, -2], ['A:$B', 0, 16384],
+  ]) assert.equal(F.move(formula, dr, dc), '#REF!', formula);
+});

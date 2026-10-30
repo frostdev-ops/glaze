@@ -374,3 +374,81 @@ test('styles are shared: an equal style is the same index', () => {
   assert.equal(M.internStyle(wb, { fmt: 10 }), 2);
   assert.equal(wb.styles.length, 3);
 });
+
+// Excel's legacy array restrictions: support.microsoft.com/en-us/excel/rules-for-changing-array-formulas.
+test('structural edits refuse to split an array before changing formulas or dimensions', () => {
+  for (const axis of ['row', 'col']) for (const op of ['insert', 'delete']) {
+    const wb = shaped(), sh = wb.sheets[0];
+    M.apply(wb, { op: 'set', sheet: sh.id, r: 1, c: 1, cell: { t: 'n', v: 1, f: '{1,2;3,4}', a: 'B2:C3' } });
+    const before = structuredClone(wb);
+    assert.throws(() => M.apply(wb, { op, sheet: sh.id, axis, at: 2, n: 1 }), (e) => e.code === 'array-part');
+    assert.deepEqual(wb, before);
+  }
+});
+
+test('insert undo preserves dimensions and hidden flags pushed off the last row or column', () => {
+  for (const axis of ['row', 'col']) {
+    const wb = shaped(), sh = wb.sheets[0];
+    const max = axis === 'row' ? M.MAX_ROWS : M.MAX_COLS;
+    sh[axis === 'row' ? 'rowH' : 'colW'].set(max - 1, 27);
+    sh.hidden[axis === 'row' ? 'rows' : 'cols'].add(max - 1);
+    const before = structuredClone(wb);
+    const { inverse } = M.apply(wb, { op: 'insert', sheet: sh.id, axis, at: 0, n: 1 });
+    M.apply(wb, inverse);
+    assert.deepEqual(wb, before);
+  }
+});
+
+test('adding a populated sheet cannot bypass the workbook cell cap', () => {
+  const wb = M.workbook(), sh = M.sheet('Imported', 2);
+  sh.rows.set(0, new Map(Array.from({ length: M.CAP.cells + 1 }, (_, i) => [i, { t: 'n', v: i }])));
+  const before = structuredClone(wb);
+  assert.throws(() => M.apply(wb, { op: 'addSheet', sheet: sh }), (e) => e.code === 'cap-cells');
+  assert.deepEqual(wb, before);
+});
+
+// Microsoft: Keeping leading zeros and large numbers, digits beyond the fifteenth are zeroed on entry.
+test('typed numbers discard significant digits past the fifteenth', () => {
+  assert.equal(M.parseInput('1234567890123456').v, 1234567890123450);
+  assert.equal(M.parseInput('0.1234567890123456').v, 0.123456789012345);
+  assert.equal(M.parseInput('-1234567890123456').v, -1234567890123450);
+});
+
+// Microsoft: Control settings in the Format Cells dialog box, Fraction and automatic formats.
+test('an unprefixed slash is a date while a mixed fraction is numeric', () => {
+  assert.deepEqual(M.parseInput('1/2', { year: 2025 }), { t: 'n', v: M.toSerial(2025, 1, 2), fmt: 'd-mmm' });
+  assert.deepEqual(M.parseInput('0 1/2'), { t: 'n', v: 0.5, fmt: '# ?/?' });
+  assert.deepEqual(M.parseInput('1 1/2'), { t: 'n', v: 1.5, fmt: '# ?/?' });
+  assert.deepEqual(M.parseInput('-1 1/2'), { t: 'n', v: -1.5, fmt: '# ?/?' });
+  assert.equal(M.parseInput('$-1,200').v, -1200);
+  assert.deepEqual(M.parseInput("'1/2"), { t: 's', v: '1/2' });
+});
+
+test('undo restores the exact serialized Map and Set order as well as cell and layout values', () => {
+  const serialize = (wb) => Buffer.from(JSON.stringify(wb, (key, value) => value instanceof Map || value instanceof Set ? [...value] : value));
+  for (const op of [
+    { op: 'clear', sheet: 1, r0: 0, c0: 0, r1: 2, c1: 0 },
+    { op: 'delete', sheet: 1, axis: 'row', at: 1, n: 2 },
+    { op: 'delete', sheet: 1, axis: 'col', at: 0, n: 1 },
+  ]) {
+    const wb = shaped(), sh = wb.sheets[0];
+    sh.rows.get(1).set(3, { t: 'n', v: 8, s: M.internStyle(wb, { fmt: '0.00' }) });
+    sh.hidden.rows.add(5);
+    const before = serialize(wb);
+    const { inverse } = M.apply(wb, op);
+    M.apply(wb, inverse);
+    assert.ok(serialize(wb).equals(before), op.op + ' ' + (op.axis || 'cells'));
+  }
+});
+
+// Excel's row/column limits also bound the number of rows or columns an insertion can select.
+test('an insertion beyond the sheet boundary is refused even when no cells would be lost', () => {
+  for (const axis of ['row', 'col']) {
+    const wb = M.workbook(), max = axis === 'row' ? M.MAX_ROWS : M.MAX_COLS;
+    const before = structuredClone(wb);
+    for (const [at, n] of [[max - 1, 2], [0, max + 1]]) {
+      assert.throws(() => M.apply(wb, { op: 'insert', sheet: 1, axis, at, n }), (e) => e.code === 'bounds');
+      assert.deepEqual(wb, before);
+    }
+  }
+});
