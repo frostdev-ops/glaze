@@ -180,8 +180,13 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     await opened.close().catch(() => {});
 
     // ---- Save to Documents above the old 3 MB cap: the merged file store keeps it
+    // Each thing the viewer's line says as it saves, kept.
+    await fr.evaluate(() => { const R = globalThis.__saying = [], st = document.querySelector('.gp-state'); new MutationObserver(() => { if (R.at(-1) !== st.textContent) R.push(st.textContent); }).observe(st, { childList: true, characterData: true, subtree: true }); });
     await fr.click('[data-act="save"]');
     await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'Saved to Documents'), 'large PDF saved', 20000, () => fr.evaluate(() => document.querySelector('.gp-state')?.textContent));
+    const saying = await fr.evaluate(() => globalThis.__saying), pcts = saying.map((x) => /^Saving… (\d+)%$/.exec(x)?.[1]).filter(Boolean).map(Number);
+    check(saying[0] === 'Saving…' && pcts.length >= 3 && pcts.every((n, i) => i === 0 || n > pcts[i - 1]) && saying.at(-1) === 'Saved to Documents',
+      `Save to Documents says Saving… and how far it has gone, then Saved to Documents (${saying.join(' | ')})`);
     const papers = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); return Object.entries(all).filter(([k]) => k.startsWith('writerPaper:doc:')).map(([k, v]) => ({ k, kind: v.kind, title: v.title, size: v.size, pages: v.pages, file: v.file })); });
     const large = await papers();
     check(large.length === 1 && large[0].size === pdfs[SLIDES.hash].length && large[0].file?.size === large[0].size && typeof large[0].file?.hash === 'string', `Save to Documents keeps a ${(pdfs[SLIDES.hash].length / 1e6).toFixed(1)} MB PDF in the file store`);

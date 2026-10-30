@@ -175,10 +175,22 @@ const holds = (bytes, value) => {
     await until(() => cardOf(fr), 'the card');
     const card = await cardOf(fr);
     check(card.tiles.join('|') === 'Open in Glaze|Submit as is' && card.name === 'Field trip form.pdf' && await p.evaluate(() => __uploads.length === 0), `a .pdf on Ultra's file area asks Open in Glaze or Submit as is, Ultra hearing nothing (${JSON.stringify(card)})`);
+    // The file arriving, as the compact bar's line (or the paper's status bar) says it, each change kept.
+    await fr.evaluate(() => {
+      const R = globalThis.__arrive = [];
+      const look = () => {
+        const a = document.querySelector('.gp-arrive:not([hidden]) > span'), s = document.querySelector('.gp-said[data-kind="importing"]'), v = a?.textContent || s?.textContent || '';
+        if (v && R.at(-1) !== v) R.push(v);
+      };
+      new MutationObserver(look).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+    });
     await tap(fr, '.gi-default');
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelectorAll('.gk .pdfViewer .page').length === 3 && !!document.querySelector('.gk .pdfViewer .page[data-page-number="1"] canvas')), 'the PDF viewer', 40000,
       () => fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, pages: document.querySelectorAll('.pdfViewer .page').length, said: document.querySelector('.gq-said')?.textContent })));
     const h1 = await until(async () => { const h = await el.evaluate((f) => f.getBoundingClientRect().height); return h > 600 && h; }, 'a paper\'s height');
+    const arrived = await fr.evaluate(() => ({ said: globalThis.__arrive, left: !document.querySelector('.gp-said[data-kind="importing"]') && !document.querySelector('.gp-arrive:not([hidden])') }));
+    check(['Reading…', 'Preparing pages…', 'Copying…', 'Saving…'].every((w, i, all) => arrived.said.indexOf(w) >= 0 && (i === 0 || arrived.said.indexOf(w) > arrived.said.indexOf(all[i - 1]))) && arrived.left,
+      `Open in Glaze shows the file arriving, stage by stage, until the viewer does (${arrived.said.join(' | ')})`);
     let rec = await record(), vs = await versions();
     check(rec.kind === 'pdf' && sha((await bytesOf(rec))) === sha(pdfBytes) && rec.pages === 3 && rec.doc == null, `the attempt's record is the PDF, its bytes as brought (${JSON.stringify({ kind: rec.kind, pages: rec.pages, size: rec.size })})`);
     check(vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper'), `the paper kept as a version first (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
