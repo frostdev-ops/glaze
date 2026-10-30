@@ -625,3 +625,19 @@ test('two devices\' snapshots of one day are one file, so the five kept are five
   assert.ok(live.every((f) => f.bytes.toString().startsWith('PK B')), 'the day\'s later one');
   noDeletes(drive);
 });
+
+test('a push after one note\'s edit reads that note, not every note ever synced', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  assert.ok((await a.on()).ok);
+  for (let i = 1; i <= 30; i++) { clock.t += 1000; assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(i), base: 0, sid: `s${i}`, html: `<p>Note ${i}</p>` })).ok); }
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await a.run({ push: true })).ok);
+  let reads = 0;
+  const get = a.db.get;
+  a.db.get = async (s, k) => { if (s === 'bodies') reads++; return get(s, k); };
+  clock.t += 1000;
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(7), base: (await idxOf(a)).notes[nid(7)].rev, sid: 's7b', html: '<p>Note 7, again</p>' })).ok);
+  reads = 0;
+  assert.ok((await a.run({ push: true })).ok);
+  assert.ok(reads <= 3, `${reads} note bodies read`);
+  assert.equal(body(recFile(drive, 'notes', `${ACCT}|${nid(7)}`)).value.html, '<p>Note 7, again</p>');
+});
