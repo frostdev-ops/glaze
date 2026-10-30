@@ -273,6 +273,7 @@ const HARNESS = `(() => {
       const v = GZ_WRITER_PAPER.current().editor.view, P = GZ_WRITER_PAGINATE, one = P.whole(v), old = P.whole(v, { legacy: true });
       return one.blocks.map((b, i) => ({ at: b.lines.map((x) => x.at), legacy: old.blocks[i].lines.map((x) => x.at) }));
     });
+    console.log('mixed line starts', JSON.stringify(mixed.map((x, i) => ({ name: mixedStarts[i], ...x }))));
     for (let i = 0; i < mixedStarts.length; i++) check(JSON.stringify(mixed[i].at) === JSON.stringify(mixed[i].legacy), `${mixedStarts[i]}: line starts match posAtCoords (${JSON.stringify(mixed[i])})`);
 
     // ---- incremental: a keystroke measures the block it's in, not the paper

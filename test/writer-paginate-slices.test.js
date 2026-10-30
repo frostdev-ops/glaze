@@ -89,3 +89,30 @@ test('startsOf: each text node and atom of a textblock where ProseMirror\'s view
   assert.equal(P.startsOf(dom('p'), node), null, 'no view of it: null, so the editor asks ProseMirror instead');
   assert.equal(P.startsOf(el, { type: { name: 'heading' } }), null, 'a view of another node: null');
 });
+
+test('measure: a bidi line uses the visual coordinate lookup rather than its first logical character', () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  // A two-line text node. Its second line's left edge is logical offset 8, while its first logical character is 5.
+  // This models the browser's Range and hit-test results, independently of the line-start implementation.
+  const node = { content: { size: 10 }, nodeSize: 12, attrs: {}, textContent: 'שלום עולם!' };
+  const dom = { nodeType: 1, querySelectorAll: () => [], querySelector: () => null, getBoundingClientRect: () => ({ height: 80 }) };
+  const text = { nodeType: 3, nodeValue: node.textContent, parentNode: dom };
+  const rect = (top) => ({ top, bottom: top + 20, height: 20, left: 0 });
+  dom.pmViewDesc = { node, dom, children: [{ node: { isText: true }, nodeDOM: text, size: 10 }] };
+  let offset = 0, hits = 0;
+  const ctx = vm.createContext({
+    getComputedStyle: () => ({ direction: 'ltr' }),
+    NodeFilter: { SHOW_TEXT: 4, SHOW_ELEMENT: 1 },
+    document: {
+      createTreeWalker: () => { let done = false; return { nextNode: () => done ? null : (done = true, text) }; },
+      createRange: () => ({ selectNodeContents() {}, getClientRects: () => [rect(0), rect(40)], setStart: (_, at) => { offset = at; }, setEnd() {}, getBoundingClientRect: () => rect(offset < 5 ? 0 : 40) }),
+    },
+    GZ_WRITER_STYLES: { blockBox: () => ({ line: 40, after: 0, before: 0 }) },
+  });
+  const source = fs.readFileSync(require.resolve('../lib/writer-paginate.js'), 'utf8').replace('return { plan, settled,', 'return { measure, plan, settled,');
+  vm.runInContext(source, ctx);
+  const view = { nodeDOM: () => dom, posAtCoords: () => { hits++; return { pos: 9 }; } };
+  const lines = ctx.GZ_WRITER_PAGINATE.measure(view, { node, pos: 0, kind: 'text' }, {}, 1).lines;
+  assert.equal(lines[1].at, 8, 'the second line starts at the visual left edge, as posAtCoords specifies');
+  assert.equal(hits, 1);
+});
