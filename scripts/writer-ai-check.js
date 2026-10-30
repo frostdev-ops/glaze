@@ -64,7 +64,9 @@ const STUB = `(() => {
   };
   const data = {}, local = { get: async () => ({ ...data, ai: JSON.parse(JSON.stringify(ai.settings)) }), set: async (o) => { Object.assign(data, o); if (o.ai) { ai.settings = JSON.parse(JSON.stringify(o.ai)); ai.changed.forEach((f) => f({ ai: { newValue: o.ai } }, 'local')); } }, remove: async (k) => { delete data[k]; } };
   window.chrome = { runtime: { sendMessage: async (m) => m.type === 'glaze:writerPapers' ? { ok: true, value: await GZ_WRITER_PAPERS.open(local)[m.op](...m.args) } : { ok: true }, connect },
-    storage: { local, onChanged: { addListener: (f) => ai.changed.push(f) } } };
+    // Writer's synced settings (lib/writer-settings.js): Full writer on for a frame opened at #full, where a step needs an
+    // assignment's pages rather than its compact box; the defaults otherwise.
+    storage: { local, sync: { get: async () => ({ writer: location.hash === '#full' ? { full: true } : {} }), set: async () => {} }, onChanged: { addListener: (f) => ai.changed.push(f) } } };
 })();`;
 const CONTEXT = {
   kind: 'reply', course: { id: '_101_1', name: 'ENGL 2110' },
@@ -101,11 +103,11 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
     });
     await context.addInitScript(STUB);
     // A frame opened by the page's side with init { mode, kind, html, context }.
-    const frame = async ({ kind = 'reply', mode = 'compose', html = QUOTED + `<p>${LAST}</p>`, ctx = CONTEXT, settings } = {}) => {
+    const frame = async ({ kind = 'reply', mode = 'compose', html = QUOTED + `<p>${LAST}</p>`, ctx = CONTEXT, settings, full = false } = {}) => {
       const page = await context.newPage();
       page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
       page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
-      await page.goto(`${site}/writer.html`);
+      await page.goto(`${site}/writer.html${full ? '#full' : ''}`);
       for (const f of AI_FILES) await page.addScriptTag({ url: `${site}/${f}` });
       if (settings) await page.evaluate((s) => { __ai.settings = s; }, settings);
       await page.evaluate((init) => {
@@ -456,7 +458,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
           { id: 'claim', label: 'Claim', points: 10, cells: [{ level: 'high', value: 8 }, { level: 'low', value: 4 }] },
           { id: 'evidence', label: 'Evidence', points: 10, cells: [{ level: 'high', value: 8 }, { level: 'low', value: 4 }] },
         ] } };
-      const q = await frame({ mode: 'paper', kind: 'assignment', settings: { on: true, model: { use: 'device' }, outline: true, features: { writing: true } }, ctx: { kind: 'assignment', assignment } });
+      const q = await frame({ mode: 'paper', kind: 'assignment', full: true, settings: { on: true, model: { use: 'device' }, outline: true, features: { writing: true } }, ctx: { kind: 'assignment', assignment } });
       try {
         await q.setViewportSize({ width: 1440, height: 900 });
         await until(() => q.evaluate(() => !!GZ_WRITER_PAPER.current()?.pages()), 'paper for outline and grading', 20000);
@@ -517,7 +519,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
     const FX = require('../test/fixtures/writer-paper-fixtures.js');
     for (const [name, look] of Object.entries(looks)) for (const [wide, size] of [['wide', { width: 1440, height: 900 }], ['narrow', { width: 760, height: 1000 }]]) {
       await check(`Feedback and Outline as mockups E (${name}, ${wide}): head row, states, cards, levels, pages, Outline, focus ring`, async () => {
-        const q = await frame({ mode: 'paper', kind: 'assignment', html: `<p>${LAST}</p>`, ctx: { kind: 'assignment', assignment: { title: 'Essay 2', instructions: 'Write 1,200 words on memory in Beloved.', rubric: RUBRIC } } });
+        const q = await frame({ mode: 'paper', kind: 'assignment', full: true, html: `<p>${LAST}</p>`, ctx: { kind: 'assignment', assignment: { title: 'Essay 2', instructions: 'Write 1,200 words on memory in Beloved.', rubric: RUBRIC } } });
         try {
           await q.setViewportSize(size);
           await q.evaluate((look) => __page.port.postMessage({ type: 'look', look }), look);
