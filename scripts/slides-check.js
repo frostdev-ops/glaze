@@ -26,7 +26,7 @@ const fixture = () => {
   const dir = path.join(root, 'test/fixtures/pptx/deck');
   const walk = (d, base = '') => fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
     .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), `${base}${e.name}/`) : [[`${base}${e.name}`, fs.readFileSync(path.join(d, e.name))]]));
-  const files = walk(dir).sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, data]) => ({ name, data: new Uint8Array(data), date: new Date(2026, 9, 29, 12) }));
+  const files = walk(dir).sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, data]) => ({ name, data: new Uint8Array(name === 'ppt/slides/slide2.xml' ? Buffer.from(data.toString().replace('Passive transport</a:t></a:r>', 'Passive trans</a:t></a:r><a:r><a:rPr b="1"/><a:t>port</a:t></a:r>')) : data), date: new Date(2026, 9, 29, 12) }));
   return Buffer.concat(Z.zip(files));
 };
 
@@ -189,16 +189,30 @@ const fixture = () => {
     await until(() => page.evaluate(() => document.activeElement?.id === 'gs-find-q'), 'find on Ctrl+F');
     await page.keyboard.type('transport');
     const found = await until(() => page.evaluate(() => { const n = document.getElementById('gs-find-n').textContent; return /of/.test(n) ? { n, at: document.getElementById('gs-at').textContent, marks: document.querySelectorAll('#gs-canvas mark.gs-hit').length, cur: document.querySelectorAll('#gs-canvas mark.gs-hit-cur').length } : null; }), 'find hits');
-    check(found.n === '1 of 4' && found.at === '2 / 10' && found.marks === 3 && found.cur === 1, `find "transport": 4 matches, the first on slide 2, marked (${JSON.stringify(found)})`);
+    check(found.n === '1 of 4' && found.at === '2 / 10' && found.marks === 4 && found.cur === 1, `find "transport": 4 matches, the first on slide 2, marked (${JSON.stringify(found)})`);
     await shot('viewer-find-1280.png');
-    for (let i = 0; i < 3; i++) await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    check(await page.evaluate(() => [...document.querySelectorAll('#gs-canvas .gs-hit-cur')].map((m) => m.textContent).join('') === 'transport'), 'one find hit selects all formatted fragments');
+    await page.keyboard.press('Enter');
+    check(await page.evaluate(() => document.querySelector('#gs-canvas .gs-hit-cur')?.parentElement.textContent === 'Active transport'), 'the next hit after a split run selects the next occurrence');
+    await page.keyboard.press('Enter');
     const last = await page.evaluate(() => ({ n: document.getElementById('gs-find-n').textContent, at: document.getElementById('gs-at').textContent }));
     check(last.n === '4 of 4' && last.at === '5 / 10', `Enter walks the matches to slide 5 (${JSON.stringify(last)})`);
+    await page.keyboard.press('Enter');
+    check(await page.evaluate(() => document.getElementById('gs-find-n').textContent === '1 of 4'), 'find wraps forward');
+    await page.keyboard.press('Shift+Enter');
+    check(await page.evaluate(() => document.getElementById('gs-find-n').textContent === '4 of 4'), 'find wraps backward');
     await page.keyboard.press('Shift+Enter');
     check((await page.evaluate(() => document.getElementById('gs-find-n').textContent)) === '3 of 4', 'Shift+Enter goes back');
     await page.keyboard.press('Escape');
     check(await page.evaluate(() => document.getElementById('gs-find-q').value === '' && !document.querySelector('#gs-canvas mark') && document.getElementById('gs-find-n').textContent === ''), 'Esc clears find and its marks');
     check(page.url().includes('?slides='), 'Esc in find stays on the deck');
+
+    await page.fill('#gs-find-q', 'quiz');
+    await until(() => page.evaluate(() => document.querySelector('#gs-notes-pane .gs-hit-cur')), 'notes-only find match');
+    check(await page.evaluate(() => !document.getElementById('gs-notes-pane').hidden && document.getElementById('gs-find-n').textContent === '1 of 1' && document.getElementById('gs-at').textContent === '1 / 10'), 'a notes-only find hit opens the notes on its slide');
+    await page.focus('#gs-find-q');
+    await page.keyboard.press('Escape');
 
     // ---- notes (find opened them while "t" matched only slide 1's notes): the button closes and opens them
     await page.keyboard.press('Home');
@@ -226,6 +240,11 @@ const fixture = () => {
     check((await pc()).n === '1 / 9', 'Present: 9 slides, the hidden one left out');
     const presentFit = await page.evaluate(() => { const r = document.querySelector('dialog.gs-present .gs-stage').getBoundingClientRect(); return { w: r.width, h: r.height, iw: innerWidth, ih: innerHeight }; });
     check(presentFit.w <= presentFit.iw + 1 && presentFit.h <= presentFit.ih + 1 && (Math.abs(presentFit.w - presentFit.iw) < 2 || Math.abs(presentFit.h - presentFit.ih) < 2), `the slide fills the screen (${JSON.stringify(presentFit)})`);
+    await page.focus('dialog.gs-present button:last-child');
+    await page.keyboard.press('Tab');
+    check(await page.evaluate(() => document.activeElement === document.querySelector('dialog.gs-present button')), 'Present traps Tab within the dialog');
+    await page.keyboard.press('Shift+Tab');
+    check(await page.evaluate(() => document.activeElement === document.querySelector('dialog.gs-present button:last-child')), 'Present traps Shift+Tab within the dialog');
     await shot('present-1280.png');
     await page.keyboard.press('ArrowRight');
     check((await pc()).n === '2 / 9', 'Present →');
