@@ -196,7 +196,7 @@ function pageLib() {
   const engine = async (g, o) => {
     const a = await adapter();
     const e = await EN.create(g, { adapter: a, precision: o.precision, profile: !!o.profile, gemm: o.gemm, tiles: o.tiles, subgroups: o.subgroups === 'off' ? false : 'auto', kernels: new URL('/ai/local/kernels/', location.href).href });
-    log(`engine: ${a.info.vendor} ${a.info.architecture}${a.info.isFallbackAdapter ? ' (fallback)' : ''}, ${e.f16 ? 'f16' : 'f32'}, subgroups ${e.subgroups ? `on (${e._k.tpr} lanes a row)` : `off${e.subgroupsOff ? ` (${e.subgroupsOff})` : ''}`}, ${e.layout.buffers.length} weight buffers`);
+    log(`engine: ${a.info.vendor} ${a.info.architecture}${a.info.isFallbackAdapter ? ' (fallback)' : ''}, ${e.f16 ? `f16 (${e.tf32 ? 'f32' : 'f16'} big tiles)` : 'f32'}${e.split ? ', split GEMMs' : ''}, subgroups ${e.subgroups ? `on (${e._k.tpr} lanes a row)` : `off${e.subgroupsOff ? ` (${e.subgroupsOff})` : ''}`}, ${e.layout.buffers.length} weight buffers`);
     return { e, adapter: describe(a) };
   };
 
@@ -494,6 +494,11 @@ function pageLib() {
         const runs = [];
         await k.dispatch('attention', {}, { 0: qb, 1: Kb, 2: Vb, 3: gb, 4: ob }, k.PARAMS.attention({ T: T2, pos, H, Hkv, window, ring, scale: 1 / Math.sqrt(D) }), [H, T2]);
         runs.push(['', await rd(ob, T2 * H * D)]);
+        if (T2 > 1) {
+          // The prompt path: 16 tokens a workgroup.
+          await k.dispatch('attention', { BLOCK: true }, { 0: qb, 1: Kb, 2: Vb, 3: gb, 4: ob }, k.PARAMS.attention({ T: T2, pos, H, Hkv, window, ring, scale: 1 / Math.sqrt(D) }), [H, Math.ceil(T2 / 16)]);
+          runs.push([', blocks of 16', await rd(ob, T2 * H * D)]);
+        }
         if (T2 === 1) {
           // The decode path: a workgroup per head and tile of keys, then merged.
           const tiles = Math.ceil((window ? Math.min(window, pos + 1) : pos + 1) / 128), part = k.buffer(H * tiles * (D + 2) * 4);
