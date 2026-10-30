@@ -305,3 +305,20 @@ test('find spans adjacent formatted runs as one hit and excludes merged table co
   merged.text.paragraphs[0].runs = [{ ...r, text: 'invisible continuation' }];
   assert.equal(R.count(R.text(table), 'invisible continuation'), 0, 'a cell the renderer skips is not a find hit');
 });
+
+
+test('find work stays bounded for text fragmented into many formatted runs', async () => {
+  const d = await deck(), s = structuredClone(d.slides[0]);
+  s.shapes = [s.shapes.find((s) => s.name === 'Title 1')];
+  const body = s.shapes[0].text, p = body.paragraphs[0], r = p.runs[0];
+  p.runs = Array.from({ length: 256 }, () => ({ ...r, text: 'x' }));
+  body.paragraphs = [p];
+  let work = 0;
+  const math = Object.create(Math);
+  math.max = (...args) => { work++; return Math.max(...args); };
+  const ctx = { Math: math, GZ_PPTX_GEOM: require('../lib/pptx-geom.js'), module: { exports: {} } };
+  require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../lib/slides-render.js'), 'utf8'), ctx);
+  const el = ctx.module.exports.slide(s, d, { document: doc, find: 'x' });
+  assert.equal(all(el).filter(tag('mark')).length, 256);
+  assert.ok(work < 256 * 12, `${work} range-bound operations for 256 runs and matches`);
+});
