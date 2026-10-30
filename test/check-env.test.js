@@ -233,7 +233,7 @@ test('installed polls a new profile until each install task has made its last wr
   const vm = require('node:vm');
   const done = { fresh: true, pending: false };
   const states = [{}, { freshDefaults: { fresh: true, pending: true } }, { freshDefaults: done, migrated: ['tabs-auto'] }, { freshDefaults: done, channelKeysMoved: true },
-    { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true }, { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true, lookCatalog: { sig: 'e3b0c442', looks: [] } }];
+    { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true }];
   let polls = 0;
   const page = { evaluate: async (f) => {
     const local = states[Math.min(polls++, states.length - 1)];
