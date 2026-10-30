@@ -267,9 +267,9 @@ const LOOK_CATALOG = 401 + 822 + 117;
 // worker's (lib/looks.js move). Measured against d840dd70.
 const COURSE_LOOKS_SYNC = 1342 + 9;
 // Blackboard's previews in Glaze's PDF viewer (the owner's 4.0.0 ask, 2026-10-30; a named raise under the 2026-10-19
-// approval): content.js keeps Glaze's frame out of PREVIEWS (13), and defaults.js adds enhance.bbPreviews (28), on every
+// approval): content.js keeps Glaze's frame out of PREVIEWS (12), and defaults.js adds enhance.bbPreviews (28), on every
 // site. The viewer's loader lives in the already-lazy features/docs.js. Measured against 90d6220d.
-const BB_PREVIEWS = 13 + 28;
+const BB_PREVIEWS = 12 + 28;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
