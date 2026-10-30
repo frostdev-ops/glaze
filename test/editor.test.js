@@ -195,10 +195,10 @@ test('E1 section and global preference resets preserve pictures, preset librarie
 
 test('resets give back the defaults this device started with: a fresh install keeps Notes and the pet habitat on', () => {
   const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
-  const helper = source.slice(source.indexOf('  let freshHere = false;'), source.indexOf('  // Two clicks, so a stray one'));
+  const helper = source.slice(source.indexOf('  let freshHere = false'), source.indexOf('  // Two clicks, so a stray one'));
   for (const fresh of [true, false]) {
     const defaults = vm.runInNewContext(`${helper}\ndefaultsHere()`, { GZ_SANITIZE: D.GZ_SANITIZE, GZ_CARDS: { settings: () => ({}) }, showResets() {},
-      chrome: { storage: { local: { get: (k, cb) => cb({ freshDefaults: { fresh } }) } } } });
+      chrome: { storage: { local: { get: (k, cb) => cb({ freshDefaults: { fresh } }) }, onChanged: { addListener() {} } } } });
     assert.deepEqual([defaults.enhance.notes, defaults.enhance.pet], [fresh, fresh], fresh ? 'a fresh install' : 'an update');
   }
   for (const site of ["GZ_EDITOR.reset(s, [path], defaultsHere())", "GZ_EDITOR.reset(s, paths, defaultsHere())", "const defaults = defaultsHere();"]) assert.ok(source.includes(site), site);
@@ -210,7 +210,7 @@ test('resets give back the defaults this device started with: a fresh install ke
 
 test('resets follow this device\'s defaults when the install marks it after Settings opened, or a restore unmarks it', () => {
   const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
-  const helper = source.slice(source.indexOf('  let freshHere = false;'), source.indexOf('  // Two clicks, so a stray one'));
+  const helper = source.slice(source.indexOf('  let freshHere = false'), source.indexOf('  // Two clicks, so a stray one'));
   // The read answers before the install's write, or (another process) only after its change event.
   for (const late of [false, true]) {
     let answer, shown = 0;

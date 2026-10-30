@@ -1617,9 +1617,14 @@ GZ_UI.load().then((s) => {
     }
   });
   // The defaults this device started with: a fresh install has Notes and the pet habitat on (GZ_SANITIZE's fresh), so a
-  // reset gives those back rather than turning them off.
-  let freshHere = false;
-  chrome.storage.local.get('freshDefaults', (r) => { freshHere = r?.freshDefaults?.fresh === true; showResets(); });
+  // reset gives those back rather than turning them off. Settings can open before the install marks the device, and a
+  // restore unmarks it: each change counts, and a read answered after one is older than it.
+  let freshHere = false, freshKnown = false;
+  chrome.storage.local.get('freshDefaults', (r) => { if (!freshKnown) { freshHere = r?.freshDefaults?.fresh === true; showResets(); } });
+  chrome.storage.onChanged.addListener((c, area) => {
+    if (area !== 'local' || !c.freshDefaults) return;
+    freshKnown = true; freshHere = c.freshDefaults.newValue?.fresh === true; showResets();
+  });
   const defaultsHere = () => ({ ...GZ_SANITIZE(undefined, freshHere), card: GZ_CARDS.settings() });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
   let armed = 0;
