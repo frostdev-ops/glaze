@@ -364,3 +364,128 @@ test('bounds: slides, shapes, group depth, table cells, text, part size, the arc
   await assert.rejects(P.read(pack({ 'ppt/presentation.xml': null })), /not a PowerPoint presentation/);
   await assert.rejects(P.read(new TextEncoder().encode('%PDF-1.7')), /not a zip/);
 });
+
+test('missing media parts become picture boxes and are not listed as drawable media', async () => {
+  const bytes = pack({ 'ppt/media/image1.png': null, 'ppt/media/image3.svg': null });
+  const d = await P.read(bytes);
+  assert.deepEqual(pick(named(d.slides[3], 'Picture 2'), ['type', 'kind', 'title']), { type: 'box', kind: 'picture', title: 'Cell under a microscope' });
+  assert.deepEqual(pick(named(d.slides[3], 'Icon'), ['type', 'kind']), { type: 'box', kind: 'picture' });
+  assert.deepEqual(d.media, []);
+  assert.equal(await P.media(bytes, 'ppt/media/image1.png'), null);
+});
+
+test('duplicate ZIP part names are refused by the slide and media readers', async () => {
+  const files = [...FILES].map(([name, data]) => ({ name, data: new Uint8Array(data) }));
+  files.push({ name: 'ppt/presentation.xml', data: new Uint8Array(FILES.get('ppt/presentation.xml')) });
+  const bytes = new Uint8Array(Buffer.concat(Z.zip(files)));
+  await assert.rejects(P.read(bytes), /duplicate zip entry/);
+  await assert.rejects(P.media(bytes, 'ppt/media/image1.png'), /duplicate zip entry/);
+});
+
+test('the part byte limit also bounds relationship XML and multibyte slide XML', async () => {
+  const part = 16384;
+  const rels = fixture('ppt/_rels/presentation.xml.rels').replace('<Relationships ', `<Relationships pad="${'x'.repeat(part)}" `);
+  const d = await P.read(pack({ 'ppt/_rels/presentation.xml.rels': rels }), { limits: { part } });
+  assert.equal(d.slides.every((s) => s.missing), true);
+  const slide = `<p:sld xmlns:p="p" note="${'é'.repeat(part / 2)}"><p:cSld><p:spTree/></p:cSld></p:sld>`;
+  assert.ok(slide.length < part);
+  assert.ok(Buffer.byteLength(slide) > part);
+  const multi = await P.read(pack({ 'ppt/slides/slide1.xml': slide }), { limits: { part } });
+  assert.equal(multi.slides[0].broken, true);
+});
+
+test('hostile numeric geometry and nested group scales keep model numbers finite and bounded', async () => {
+  const group = fixture('ppt/slides/slide6.xml').replace('chExt cx="2000000" cy="1000000"', 'chExt cx="1e-320" cy="1"');
+  const geom = fixture('ppt/slides/slide3.xml').replace('val 25000', `val ${'9'.repeat(400)}`);
+  const d = await P.read(pack({ 'ppt/slides/slide6.xml': group, 'ppt/slides/slide3.xml': geom }));
+  for (const s of d.slides.flatMap(all)) {
+    for (const v of Object.values(s.bounds)) assert.ok(Number.isFinite(v) && Math.abs(v) <= 1e9, `${s.name}: ${v}`);
+    if (s.geometry?.avLst && !Array.isArray(s.geometry.avLst)) {
+      for (const v of Object.values(s.geometry.avLst)) assert.ok(Number.isFinite(v));
+    }
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(d)), d);
+});
+
+test('placeholder idx defaults to zero before type fallback', async () => {
+  const layout = fixture('ppt/slideLayouts/slideLayout2.xml').replace('ph type="title"', 'ph type="title" idx="0"');
+  const slide = fixture('ppt/slides/slide2.xml').replace('ph type="title"', 'ph');
+  const d = await P.read(pack({ 'ppt/slideLayouts/slideLayout2.xml': layout, 'ppt/slides/slide2.xml': slide }));
+  const title = named(d.slides[1], 'Title 1');
+  assert.deepEqual(title.bounds, named((await deck()).slides[1], 'Title 1').bounds);
+  assert.equal(title.text.paragraphs[0].runs[0].size, 44);
+});
+
+test('long malformed attribute names do not cause quadratic attribute scans', async () => {
+  const slide = fixture('ppt/slides/slide3.xml').replace('name="Default"', `name="Default" ${'x'.repeat(64000)}`);
+  const bytes = pack({ 'ppt/slides/slide3.xml': slide });
+  const cpu = process.cpuUsage();
+  const d = await P.read(bytes);
+  const used = process.cpuUsage(cpu);
+  assert.equal(named(d.slides[2], 'Default').type, 'shape');
+  assert.ok(used.user + used.system < 500000, `attribute scan used ${used.user + used.system} microseconds of CPU`);
+});
+
+test('paragraph default run properties apply below explicit run and end-paragraph properties', async () => {
+  const p = '<a:p><a:pPr><a:defRPr sz="3600" b="1"><a:solidFill><a:srgbClr val="123456"/></a:solidFill></a:defRPr></a:pPr><a:r><a:t>Inherited</a:t></a:r><a:r><a:rPr sz="2000" b="0"/><a:t>Own</a:t></a:r><a:endParaRPr sz="1400"/></a:p>';
+  const slide = fixture('ppt/slides/slide3.xml').replace(/<a:p>[\s\S]*?<\/a:p>/, p);
+  assert.ok(slide.includes('Inherited'));
+  const d = await P.read(pack({ 'ppt/slides/slide3.xml': slide }));
+  const para = named(d.slides[2], 'Default').text.paragraphs[0];
+  assert.deepEqual(para.runs.map((r) => pick(r, ['text', 'size', 'bold', 'color'])), [
+    { text: 'Inherited', size: 36, bold: true, color: '#123456' }, { text: 'Own', size: 20, bold: false, color: '#123456' },
+  ]);
+  assert.equal(para.endSize, 14);
+});
+
+test('relationship targets stay within the package while root paths and parent paths resolve', async () => {
+  const rels = fixture('ppt/_rels/presentation.xml.rels');
+  for (const target of ['/ppt/slides/slide1.xml', '../ppt/slides/slide1.xml']) {
+    const d = await P.read(pack({ 'ppt/_rels/presentation.xml.rels': rels.replace('Target="slides/slide1.xml"', `Target="${target}"`) }));
+    assert.equal(d.slides[0].title, 'Cell Biology', target);
+  }
+  const escaped = rels.replace('Target="slides/slide1.xml"', 'Target="../../ppt/slides/slide1.xml"');
+  const d = await P.read(pack({ 'ppt/_rels/presentation.xml.rels': escaped }));
+  assert.equal(d.slides[0].missing, true);
+  const D = require('../lib/doctext.js');
+  assert.equal((await D.rels(D.unzip(pack({ 'ppt/_rels/presentation.xml.rels': escaped })), 'ppt/presentation.xml')).get('rId2').path, 'ppt/slides/slide1.xml');
+});
+
+test('preset colours include standard long names and abbreviated aliases', async () => {
+  const values = { aliceBlue: '#f0f8ff', dkBlue: '#00008b', darkBlue: '#00008b', ltBlue: '#add8e6', lightBlue: '#add8e6', medPurple: '#9370db', mediumPurple: '#9370db', tomato: '#ff6347' };
+  for (const [val, color] of Object.entries(values)) {
+    const slide = fixture('ppt/slides/slide3.xml').replace('</p:spPr>', `<a:solidFill><a:prstClr val="${val}"/></a:solidFill></p:spPr>`);
+    const d = await P.read(pack({ 'ppt/slides/slide3.xml': slide }));
+    assert.deepEqual(named(d.slides[2], 'Default').fill, { type: 'solid', color }, val);
+  }
+});
+
+test('a slide masterClrMapping bypasses the layout colour-map override', async () => {
+  const layout = fixture('ppt/slideLayouts/slideLayout1.xml').replace('<a:masterClrMapping/>', '<a:overrideClrMapping bg1="dk1" tx1="lt1"/>');
+  const d = await P.read(pack({ 'ppt/slideLayouts/slideLayout1.xml': layout }));
+  assert.deepEqual(d.slides[0].background, { type: 'solid', color: '#ffffff' });
+  assert.equal(named(d.slides[0], 'Title 1').text.paragraphs[0].runs[0].color, '#000000');
+});
+
+test('shared master chart titles are parsed once per part', async () => {
+  const D = require('../lib/doctext.js'), original = D.tokens;
+  let parsed = 0;
+  D.tokens = function* (src, ...args) {
+    if (src.includes('shared-chart-probe')) parsed++;
+    yield* original(src, ...args);
+  };
+  try {
+    const rels = fixture('ppt/slideMasters/_rels/slideMaster1.xml.rels').replace('</Relationships>', '<Relationship Id="chart" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>');
+    await P.read(pack({ 'ppt/slideMasters/_rels/slideMaster1.xml.rels': rels, 'ppt/charts/chart1.xml': fixture('ppt/charts/chart1.xml').replace('?>', '?><!-- shared-chart-probe -->') }));
+    assert.equal(parsed, 1);
+  } finally { D.tokens = original; }
+});
+
+test('non-placeholder text boxes use presentation defaults while tables keep the master other style', async () => {
+  const pres = fixture('ppt/presentation.xml').replace(/(<p:defaultTextStyle>[\s\S]*?sz=")1800/, (_, prefix) => `${prefix}2600`);
+  const master = fixture('ppt/slideMasters/slideMaster1.xml').replace(/(<p:otherStyle>[\s\S]*?sz=")1800/, (_, prefix) => `${prefix}1400`);
+  const slide = fixture('ppt/slides/slide3.xml').replace('<p:cNvSpPr/>', '<p:cNvSpPr txBox="1"/>');
+  const d = await P.read(pack({ 'ppt/presentation.xml': pres, 'ppt/slideMasters/slideMaster1.xml': master, 'ppt/slides/slide3.xml': slide }));
+  assert.equal(named(d.slides[2], 'Default').text.paragraphs[0].runs[0].size, 26);
+  assert.equal(named(d.slides[4], 'Table 3').rows[0].cells[0].text.paragraphs[0].runs[0].size, 14);
+});

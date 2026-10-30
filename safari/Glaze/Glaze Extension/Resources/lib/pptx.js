@@ -85,7 +85,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
     }
     return '';
   };
-  const ATTR = /([A-Za-z_][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+  const ATTR = /(?:^|\s)([A-Za-z_][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
   const attrs = (node) => {
     if (!node.m) {
       node.m = Object.create(null);
@@ -124,8 +124,34 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   const MAP = { bg1: 'lt1', tx1: 'dk1', bg2: 'lt2', tx2: 'dk2', accent1: 'accent1', accent2: 'accent2', accent3: 'accent3', accent4: 'accent4', accent5: 'accent5', accent6: 'accent6', hlink: 'hlink', folHlink: 'folHlink' };
   const SYSTEM = { windowText: '000000', window: 'FFFFFF', btnFace: 'F0F0F0', btnText: '000000', highlight: '0078D7', highlightText: 'FFFFFF', grayText: '6D6D6D', menu: 'F0F0F0', menuText: '000000', captionText: '000000' };
   const PRESET = {
-    black: '000000', white: 'FFFFFF', red: 'FF0000', green: '008000', lime: '00FF00', blue: '0000FF', yellow: 'FFFF00', cyan: '00FFFF', magenta: 'FF00FF', gray: '808080', grey: '808080',
-    ltGray: 'D3D3D3', dkGray: 'A9A9A9', silver: 'C0C0C0', orange: 'FFA500', purple: '800080', navy: '000080', maroon: '800000', olive: '808000', teal: '008080', brown: 'A52A2A', pink: 'FFC0CB', gold: 'FFD700',
+    aliceBlue: 'F0F8FF', antiqueWhite: 'FAEBD7', aqua: '00FFFF', aquamarine: '7FFFD4', azure: 'F0FFFF', beige: 'F5F5DC', bisque: 'FFE4C4', black: '000000',
+    blanchedAlmond: 'FFEBCD', blue: '0000FF', blueViolet: '8A2BE2', brown: 'A52A2A', burlyWood: 'DEB887', cadetBlue: '5F9EA0', chartreuse: '7FFF00',
+    chocolate: 'D2691E', coral: 'FF7F50', cornflowerBlue: '6495ED', cornsilk: 'FFF8DC', crimson: 'DC143C', cyan: '00FFFF', darkBlue: '00008B',
+    darkCyan: '008B8B', darkGoldenrod: 'B8860B', darkGray: 'A9A9A9', darkGreen: '006400', darkGrey: 'A9A9A9', darkKhaki: 'BDB76B', darkMagenta: '8B008B',
+    darkOliveGreen: '556B2F', darkOrange: 'FF8C00', darkOrchid: '9932CC', darkRed: '8B0000', darkSalmon: 'E9967A', darkSeaGreen: '8FBC8F',
+    darkSlateBlue: '483D8B', darkSlateGray: '2F4F4F', darkSlateGrey: '2F4F4F', darkTurquoise: '00CED1', darkViolet: '9400D3', deepPink: 'FF1493',
+    deepSkyBlue: '00BFFF', dimGray: '696969', dimGrey: '696969', dkBlue: '00008B', dkCyan: '008B8B', dkGoldenrod: 'B8860B', dkGray: 'A9A9A9',
+    dkGreen: '006400', dkGrey: 'A9A9A9', dkKhaki: 'BDB76B', dkMagenta: '8B008B', dkOliveGreen: '556B2F', dkOrange: 'FF8C00', dkOrchid: '9932CC',
+    dkRed: '8B0000', dkSalmon: 'E9967A', dkSeaGreen: '8FBC8F', dkSlateBlue: '483D8B', dkSlateGray: '2F4F4F', dkSlateGrey: '2F4F4F', dkTurquoise: '00CED1',
+    dkViolet: '9400D3', dodgerBlue: '1E90FF', firebrick: 'B22222', floralWhite: 'FFFAF0', forestGreen: '228B22', fuchsia: 'FF00FF', gainsboro: 'DCDCDC',
+    ghostWhite: 'F8F8FF', gold: 'FFD700', goldenrod: 'DAA520', gray: '808080', green: '008000', greenYellow: 'ADFF2F', grey: '808080', honeydew: 'F0FFF0',
+    hotPink: 'FF69B4', indianRed: 'CD5C5C', indigo: '4B0082', ivory: 'FFFFF0', khaki: 'F0E68C', lavender: 'E6E6FA', lavenderBlush: 'FFF0F5',
+    lawnGreen: '7CFC00', lemonChiffon: 'FFFACD', lightBlue: 'ADD8E6', lightCoral: 'F08080', lightCyan: 'E0FFFF', lightGoldenrodYellow: 'FAFAD2',
+    lightGray: 'D3D3D3', lightGreen: '90EE90', lightGrey: 'D3D3D3', lightPink: 'FFB6C1', lightSalmon: 'FFA07A', lightSeaGreen: '20B2AA',
+    lightSkyBlue: '87CEFA', lightSlateGray: '778899', lightSlateGrey: '778899', lightSteelBlue: 'B0C4DE', lightYellow: 'FFFFE0', lime: '00FF00',
+    limeGreen: '32CD32', linen: 'FAF0E6', ltBlue: 'ADD8E6', ltCoral: 'F08080', ltCyan: 'E0FFFF', ltGoldenrodYellow: 'FAFAD2', ltGray: 'D3D3D3',
+    ltGreen: '90EE90', ltGrey: 'D3D3D3', ltPink: 'FFB6C1', ltSalmon: 'FFA07A', ltSeaGreen: '20B2AA', ltSkyBlue: '87CEFA', ltSlateGray: '778899',
+    ltSlateGrey: '778899', ltSteelBlue: 'B0C4DE', ltYellow: 'FFFFE0', magenta: 'FF00FF', maroon: '800000', medAquamarine: '66CDAA', medBlue: '0000CD',
+    mediumAquamarine: '66CDAA', mediumBlue: '0000CD', mediumOrchid: 'BA55D3', mediumPurple: '9370DB', mediumSeaGreen: '3CB371', mediumSlateBlue: '7B68EE',
+    mediumSpringGreen: '00FA9A', mediumTurquoise: '48D1CC', mediumVioletRed: 'C71585', medOrchid: 'BA55D3', medPurple: '9370DB', medSeaGreen: '3CB371',
+    medSlateBlue: '7B68EE', medSpringGreen: '00FA9A', medTurquoise: '48D1CC', medVioletRed: 'C71585', midnightBlue: '191970', mintCream: 'F5FFFA',
+    mistyRose: 'FFE4E1', moccasin: 'FFE4B5', navajoWhite: 'FFDEAD', navy: '000080', oldLace: 'FDF5E6', olive: '808000', oliveDrab: '6B8E23',
+    orange: 'FFA500', orangeRed: 'FF4500', orchid: 'DA70D6', paleGoldenrod: 'EEE8AA', paleGreen: '98FB98', paleTurquoise: 'AFEEEE',
+    paleVioletRed: 'DB7093', papayaWhip: 'FFEFD5', peachPuff: 'FFDAB9', peru: 'CD853F', pink: 'FFC0CB', plum: 'DDA0DD', powderBlue: 'B0E0E6',
+    purple: '800080', red: 'FF0000', rosyBrown: 'BC8F8F', royalBlue: '4169E1', saddleBrown: '8B4513', salmon: 'FA8072', sandyBrown: 'F4A460',
+    seaGreen: '2E8B57', seaShell: 'FFF5EE', sienna: 'A0522D', silver: 'C0C0C0', skyBlue: '87CEEB', slateBlue: '6A5ACD', slateGray: '708090',
+    slateGrey: '708090', snow: 'FFFAFA', springGreen: '00FF7F', steelBlue: '4682B4', tan: 'D2B48C', teal: '008080', thistle: 'D8BFD8', tomato: 'FF6347',
+    turquoise: '40E0D0', violet: 'EE82EE', wheat: 'F5DEB3', white: 'FFFFFF', whiteSmoke: 'F5F5F5', yellow: 'FFFF00', yellowGreen: '9ACD32',
   };
   const rgb = (h) => (typeof h === 'string' && /^[0-9a-f]{6}$/i.test(h) ? { r: parseInt(h.slice(0, 2), 16) / 255, g: parseInt(h.slice(2, 4), 16) / 255, b: parseInt(h.slice(4), 16) / 255, a: 1 } : null);
   const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
@@ -259,7 +285,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
     let media = null, why = 'pictures';
     for (const id of [ref(svg, 'embed'), ref(blip, 'embed')]) {
       const path = id && X.rels.get(id)?.path;
-      if (!path) continue;
+      if (!path || !X.names.has(path)) continue;
       if (mimeOf(path)) { media = { path, mime: mimeOf(path) }; break; }
       if (METAFILES.has(extOf(path))) why = 'metafiles';
     }
@@ -362,7 +388,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   // Paragraph and run properties merge from the most general list to the run itself: the presentation's defaults, the
   // master's title, body or other style, a style's fontRef, the master's and the layout's placeholder list styles, the
   // shape's own, the paragraph, the run. Each list is { list: an lstStyle-like node } or { run: properties for every
-  // level }. A paragraph's own defRPr is left out, as PowerPoint leaves it.
+  // level }.
   const PARA = ['marL', 'indent', 'defTabSz'];
   const mergePara = (P, node, runs = true) => {
     if (!node) return;
@@ -498,7 +524,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
       const level = clamp(Math.trunc(num(at(pPr, 'lvl'), 0)), 0, 8);
       const base = (levels[level] ||= levelStyle(lists, level));
       const P = { ...base, run: { ...base.run } };
-      mergePara(P, pPr, false);
+      mergePara(P, pPr);
       const runs = [];
       for (const k of p.kids) {
         if (k.n !== 'r' && k.n !== 'fld' && k.n !== 'br') continue;
@@ -591,7 +617,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
     const avLst = {};
     for (const gd of kids(kid(g, 'avLst'), 'gd')) {
       const v = /^val\s+(-?\d+(?:\.\d+)?)$/.exec(at(gd, 'fmla') || ''), name = at(gd, 'name') || '';
-      if (v && /^[A-Za-z][A-Za-z0-9]{0,31}$/.test(name)) avLst[name] = Number(v[1]);
+      if (v && Number.isFinite(Number(v[1])) && /^[A-Za-z][A-Za-z0-9]{0,31}$/.test(name)) avLst[name] = Number(v[1]);
     }
     const prst = at(g, 'prst');
     return { prst: /^[A-Za-z0-9]{1,40}$/.test(prst || '') ? prst : 'rect', avLst };
@@ -610,7 +636,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   const baseType = (t) => own(BASE, t) || 'body';
   const phOf = (node) => {
     const ph = kid(nvOf(node), 'nvPr', 'ph');
-    return ph ? { type: at(ph, 'type') || 'obj', idx: at(ph, 'idx') ?? null } : null;
+    return ph ? { type: at(ph, 'type') || 'obj', idx: num(at(ph, 'idx'), 0) } : null;
   };
   const phsOf = (tree) => (kid(tree, 'cSld', 'spTree')?.kids || []).filter((n) => SHAPES.has(n.n)).map((node) => ({ node, ph: phOf(node) })).filter((x) => x.ph);
   const findPh = (list, ph, byIdx) => (byIdx && ph.idx != null && list.find((x) => x.ph.idx === ph.idx))
@@ -621,7 +647,10 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   const chainOf = (node, X) => {
     const self = { node, rels: X.rels };
     const ph = X.level === 'slide' && X.depth === 0 ? phOf(node) : null;
-    if (!ph) return { ph: null, kind: 'otherStyle', list: [self] };
+    if (!ph) {
+      const textBox = flag(at(kid(nvOf(node), 'cNvSpPr'), 'txBox'));
+      return { ph: null, kind: textBox ? null : 'otherStyle', list: [self] };
+    }
     const lay = X.layout && findPh(X.layout.phs, ph, true);
     const mas = X.master && findPh(X.master.phs, lay ? lay.ph : ph, false);
     return { ph, kind: styleKind((mas || lay || { ph }).ph.type), list: [mas && { node: mas.node, rels: X.master.rels }, lay && { node: lay.node, rels: X.layout.rels }, self].filter(Boolean) };
@@ -630,7 +659,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
     const c = kid(nvOf(node), 'cNvPr'), id = num(at(c, 'id'), NaN), off = kid(xfrm, 'off'), ext = kid(xfrm, 'ext');
     const b = X.map(coord(at(off, 'x')), coord(at(off, 'y')), length(at(ext, 'cx')), length(at(ext, 'cy')));
     return {
-      id: Number.isInteger(id) ? id : null, name: (at(c, 'name') || '').slice(0, 256), bounds: { x: round(b.x), y: round(b.y), w: round(b.w), h: round(b.h) },
+      id: Number.isInteger(id) ? id : null, name: (at(c, 'name') || '').slice(0, 256), bounds: { x: round(coord(b.x)), y: round(coord(b.y)), w: round(length(b.w)), h: round(length(b.h)) },
       rotation: angle(at(xfrm, 'rot')), flipH: flag(at(xfrm, 'flipH')), flipV: flag(at(xfrm, 'flipV')),
     };
   };
@@ -861,7 +890,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   // { id, number, hidden, title, background, shapes, notes }, with missing or broken when its part is gone or unreadable.
   const read = async (bytes, opts = {}) => {
     const L = { ...LIMITS, ...opts.limits }, T = D();
-    const z = T.unzip(bytes, { limits: opts.limits });
+    const z = T.unzip(bytes, { limits: { ...opts.limits, duplicates: true } });
     const names = new Set(z.names), cut = {}, budget = { shapes: 0, text: 0 }, media = new Map();
     const count = (k, n = 1) => { cut[k] = (cut[k] || 0) + n; };
     const take = (s) => {
@@ -871,10 +900,15 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
       budget.text += left;
       return left ? s.slice(0, left) : null;
     };
-    const relsOf = (path) => T.rels(z, path).catch(() => new Map());
+    const boundedText = async (path) => {
+      const bytes = await z.bytes(path);
+      if (bytes && bytes.length > L.part) throw new RangeError('document too large');
+      return z.text(path);
+    };
+    const relsOf = (path) => T.rels({ text: boundedText }, path, { withinPackage: true }).catch(() => new Map());
     const typed = (rels, type) => [...rels.values()].find((r) => r.type === type)?.path;
     const kept = new Map();
-    const load = (path) => (path ? z.text(path).then((s) => (s == null || s.length > L.part ? null : parse(s)), () => null) : Promise.resolve(null));
+    const load = (path) => (path ? boundedText(path).then((s) => (s == null ? null : parse(s)), () => null) : Promise.resolve(null));
     const xml = (path, keep) => {
       if (!keep) return load(path);
       if (!kept.has(path)) kept.set(path, load(path));
@@ -882,8 +916,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
     };
 
     const main = typed(await relsOf(''), 'officeDocument') || 'ppt/presentation.xml';
-    const src = await z.text(main);
-    if (src != null && src.length > L.part) throw new RangeError('document too large');
+    const src = await boundedText(main);
     const pres = src == null ? null : parse(src);
     if (!pres || pres.n !== 'presentation') throw new Error('not a PowerPoint presentation');
     const prels = await relsOf(main);
@@ -927,9 +960,13 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
       }
       return layouts.get(path);
     };
+    const chartTitles = new Map();
     const chartsOf = async (rels) => {
       const out = new Map();
-      for (const [id, r] of rels) if (r.type === 'chart') { const t = await xml(r.path); out.set(id, t ? chartTitle(t).slice(0, 500) : ''); }
+      for (const [id, r] of rels) if (r.type === 'chart') {
+        if (!chartTitles.has(r.path)) { const t = await xml(r.path); chartTitles.set(r.path, t ? chartTitle(t).slice(0, 500) : ''); }
+        out.set(id, chartTitles.get(r.path));
+      }
       return out;
     };
 
@@ -945,10 +982,12 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
       const tree = await xml(path);
       if (!tree || tree.n !== 'sld') { slide[path && names.has(path) ? 'broken' : 'missing'] = true; count('parts'); continue; }
       const rels = await relsOf(path), layout = await layoutOf(typed(rels, 'slideLayout')), master = layout?.master || null, theme = master?.theme || DEFAULT_THEME;
-      const map = mapOf(kid(tree, 'clrMapOvr', 'overrideClrMapping'), mapOf(kid(layout?.tree, 'clrMapOvr', 'overrideClrMapping'), master?.map || MAP));
+      const masterMap = master?.map || MAP, override = kid(tree, 'clrMapOvr');
+      const layoutMap = mapOf(kid(layout?.tree, 'clrMapOvr', 'overrideClrMapping'), masterMap);
+      const map = kid(override, 'masterClrMapping') ? masterMap : mapOf(kid(override, 'overrideClrMapping'), layoutMap);
       const colors = { scheme: theme.scheme, map, ph: null };
       const S = {
-        L, count, take, budget, media, number: slide.number, theme, colors, ink: schemeHex('tx1', colors), defaults, master, layout, tableStyle,
+        L, count, take, budget, media, names, number: slide.number, theme, colors, ink: schemeHex('tx1', colors), defaults, master, layout, tableStyle,
         rels, level: 'slide', charts: new Map(), map: IDENTITY, depth: 0, groupFill: undefined, background: null,
       };
       slide.hidden = !flag(at(tree, 'show'), true);
@@ -983,7 +1022,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   // viewer draws.
   const mediaBytes = async (bytes, path, opts = {}) => {
     if (!mimeOf(path)) return null;
-    const b = await D().unzip(bytes, { limits: opts.limits }).bytes(path);
+    const b = await D().unzip(bytes, { limits: { ...opts.limits, duplicates: true } }).bytes(path);
     return b && b.slice();
   };
 
