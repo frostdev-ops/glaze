@@ -53,3 +53,24 @@ test('no other shapes; the highlight colours are pdf.js\'s option string', () =>
   assert.deepEqual(T.SHAPES.map(([k]) => k), ['rect', 'ellipse', 'line', 'arrow']);
   assert.match(T.HIGHLIGHTS, /^yellow=#FFFF98,green=#53FFBC,blue=#80EBFF,pink=#FFCBE6,red=#FF4F5F$/);
 });
+
+const UI = require('./helpers/pdf-ui.cjs');
+test('deferred accessibility placement cannot move a FreeText editor while typing', (t) => {
+  const document = UI.install(t), listeners = new Map(), previous = global.addEventListener;
+  document.addEventListener = () => {};
+  global.addEventListener = () => {};
+  t.after(() => { if (previous === undefined) delete global.addEventListener; else global.addEventListener = previous; });
+  const bus = { on: (name, fn) => listeners.set(name, fn) };
+  const tools = T.mount({ P: { AnnotationEditorType: { FREETEXT: 3 }, AnnotationEditorParamsType: {} }, viewer: {}, bus, t: (s) => s, h: UI.h, btn: UI.btn, scroll: UI.h('div'), modified() {} });
+  t.after(tools.dispose);
+  const ui = { setCurrentDrawingSession() {}, addCommands() {}, undo() {}, redo() {}, addLayer() {} };
+  listeners.get('annotationeditoruimanager')({ uiManager: ui });
+  let moves = 0;
+  const layer = { moveEditorInDOM: () => moves++ }, editor = { mode: 3, isEditing: true };
+  ui.addLayer(layer);
+  layer.moveEditorInDOM(editor);
+  assert.equal(moves, 0, 'keep the live contenteditable and its caret in place');
+  editor.isEditing = false;
+  layer.moveEditorInDOM(editor);
+  assert.equal(moves, 1, 'placement resumes after commit');
+});
