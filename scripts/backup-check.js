@@ -27,6 +27,19 @@ const launch = async (dir) => {
   await page.goto(`chrome-extension://${new URL(worker.url()).host}/options.html#backup/privacy`);
   await page.waitForFunction(() => document.querySelector('#looks button'));
   await env.installed(page);
+  // Settings and its Ultra preview also write local storage on load, independently of onInstalled. Wait for both before
+  // seeding or taking a no-change snapshot; a usable editor (or a fixed pause after Cancel) is no storage-write barrier.
+  for (const end = Date.now() + 10000; ; await pause(50)) {
+    const pending = await page.evaluate(async () => {
+      const nav = `navbarSeen:${location.origin}`, local = await chrome.storage.local.get(['newsSeen', nav]);
+      const waiting = [];
+      if (local.newsSeen !== chrome.runtime.getManifest().version) waiting.push('newsSeen');
+      if (!Array.isArray(local[nav]) || !local[nav].length) waiting.push(nav);
+      return waiting;
+    });
+    if (!pending.length) break;
+    if (Date.now() > end) throw new Error(`backup-check: Settings startup writes never finished: ${pending.join(', ')}`);
+  }
   return { context, page };
 };
 
