@@ -165,6 +165,19 @@ test('editing a legacy range formula shows explicit intersection and preserves i
   f.key('z', { ctrlKey: true }); assert.equal(sh.rows.get(4).get(0).v, 14);
 });
 
+test('Replace all keeps a dynamic formula dynamic and recalculates the replaced expression', () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  for (let r = 0; r < 3; r++) sh.rows.set(r, new Map([[0, { t: 'n', v: r + 1 }], [1, { t: 'n', v: 10 }]]));
+  const f = frame({ wb });
+  f.key('Tab'); f.key('Tab'); for (let r = 0; r < 4; r++) f.key('ArrowDown');
+  f.type('=SUM((A1:A3>2)*B1:B3)'); f.key('Enter');
+  f.el('gx-find-q').value = '>2'; f.fire(f.el('gx-find-q'), 'input');
+  f.el('gx-rep-q').value = '>1'; f.fire(f.el('gx-rep-all'), 'click');
+  assert.deepEqual(sh.rows.get(4).get(2), { t: 'n', v: 20, f: 'SUM((A1:A3>1)*B1:B3)', a: 'C5', cm: '1' });
+  f.key('z', { ctrlKey: true }); assert.equal(sh.rows.get(4).get(2).v, 10);
+  f.key('y', { ctrlKey: true }); assert.equal(sh.rows.get(4).get(2).v, 20);
+});
+
 test('the last shown sheet cannot be deleted while every other sheet is hidden', () => {
   const wb = M.workbook(), hidden = M.sheet('Hidden', 2); hidden.keep.hidden = true; wb.sheets.push(hidden);
   const f = frame({ wb }), tab = f.el('gx-tab-1');
