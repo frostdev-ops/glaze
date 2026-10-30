@@ -57,7 +57,7 @@ const frame = (options = {}) => {
   const el = (id) => doc.getElementById(id), key = (name, more = {}) => fire(doc.activeElement, 'keydown', { key: name, ...more });
   const type = (text) => { key(text[0]); const editor = el('gx-edit'); editor.value = text; fire(editor, 'input'); };
   const unload = () => { const e = { prevented: false, returnValue: undefined, preventDefault() { this.prevented = true; } }; life.beforeunload(e); return e; };
-  return { doc, view, wb, data, timers, fire, el, key, type, unload, life, lives, changes, store };
+  return { doc, view, wb, data, timers, fire, el, key, type, unload, life, lives, changes, store, papers: P };
 };
 
 test('beforeunload protects uncommitted cell text with the browser prompt and saves it; clean views do not prompt', async () => {
@@ -193,6 +193,46 @@ test('dispose ends every listener outside the grid, so an unmounted grid neither
   assert.ok(outside.every((l) => l.opts.signal.aborted));
   assert.equal(f.doc.getElementById('gx-grid'), null, 'its view is gone');
   assert.equal(f.timers.size, 0, 'no timer left');
+});
+
+test('dispose prevents a pending Versions read from reopening the old menu', async () => {
+  let releaseList;
+  const f = frame(), list = new Promise((ok) => { releaseList = ok; });
+  f.papers.versions = () => list;
+  f.fire(f.el('gx-versions'), 'click');
+  await f.view.dispose();
+  releaseList([]);
+  await settle();
+  assert.ok(!f.doc.querySelector('.gx-menu'), 'a late Versions read cannot leave an orphan menu');
+  assert.equal(f.timers.size, 0);
+});
+
+test('dispose prevents a pending restore read from saving over the next viewer', async () => {
+  let releaseBook, reading;
+  const entered = new Promise((ok) => { reading = ok; });
+  const g = frame({ SD: { ...SD, unpack: async (gz) => { reading(); await new Promise((ok) => { releaseBook = ok; }); return SD.unpack(gz); } } });
+  g.type('kept'); g.key('Enter');
+  assert.equal(await g.view.save(), true);
+  g.fire(g.el('gx-versions'), 'click');
+  const menu = await until(() => g.doc.querySelector('.gx-menu'));
+  g.fire(menu.querySelector('[data-act="restore"]'), 'click');
+  await entered;
+  const revision = g.data[`writerPaper:${KEY}`].revision;
+  await g.view.dispose();
+  releaseBook();
+  await settle();
+  assert.equal(g.timers.size, 0, 'a late restore cannot redraw or schedule a save');
+  assert.equal(g.data[`writerPaper:${KEY}`].revision, revision, 'a disposed grid cannot restore over its successor');
+});
+
+test('dispose clears deferred cell and formula-bar blur commits', async () => {
+  const f = frame();
+  f.type('kept');
+  f.fire(f.el('gx-edit'), 'blur');
+  f.fire(f.el('gx-formula'), 'blur');
+  assert.equal(await f.view.save(), true);
+  await f.view.dispose();
+  assert.equal(f.timers.size, 0, 'blur timers end with the other grid timers');
 });
 
 test('Versions offers only spreadsheets when an assignment kept paper and other kinds before becoming a sheet', async () => {
