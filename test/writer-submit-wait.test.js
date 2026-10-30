@@ -346,6 +346,24 @@ test('compact: a held Submit that Ultra turns on just after the text lands goes 
   }
 });
 
+test('compact: Save and Close supersedes a Submit waiting for Ultra to enable it', async () => {
+  const { c, press } = await attempt(false), submit = c.doc.querySelector(SUBMIT), save = c.doc.querySelector(SAVE);
+  c.emit({ type: 'view', full: false });
+  press(SUBMIT);
+  submit.disabled = true; submit.setAttribute('disabled', '');
+  c.emit({ type: 'compact:flushed', request: flushes(c.ports[0])[0].request, ...ok });
+  press(SAVE);
+  assert.equal(flushes(c.ports[0]).length, 2, 'the newer action asks for its own save');
+  submit.disabled = false; submit.removeAttribute('disabled');
+  c.tick(100);
+  assert.equal(c.clicks.length, 0, 'the superseded Submit never goes');
+  c.emit({ type: 'compact:flushed', request: flushes(c.ports[0])[1].request, ...ok });
+  assert.deepEqual(c.clicks, [save]);
+  c.tick(100);
+  assert.equal(submit.hasAttribute('aria-busy'), false);
+  assert.equal(save.hasAttribute('aria-busy'), false);
+});
+
 for (const [label, beforeSave, afterSave, reason] of [['enable deadline', 0, 15001, 'submit'], ['flush deadline', 59000, 1001, 'save']]) {
   test(`compact: an enabled Submit cannot beat its throttled ${label}`, async () => {
     const { c, press } = await attempt(false), b = c.doc.querySelector(SUBMIT);
