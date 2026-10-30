@@ -349,13 +349,19 @@ test('the fidelity script reads pdfinfo and pdftotext, and marks what a reader s
   assert.deepEqual(V.splitPages('Alpha page one\n\n\f\n\fCharlie\n  page\n\f'), ['Alpha page one', '', 'Charlie page']);
   const sources = [{ pages: [{ text: 'A', rotate: 90 }, { text: 'B', rotate: 0 }] }, { pages: [{ text: 'M', rotate: 180 }] }];
   const slots = D.layout(2, [{ op: 'rotate', pages: [0], by: 270 }, { op: 'blank', at: 1 }, { op: 'merge' }, { op: 'rotate', pages: [1], by: 90 }], [1]);
-  assert.deepEqual(V.expectedOf(sources, slots), [{ text: 'A', rotate: 0 }, { text: '', rotate: 90 }, { text: 'B', rotate: 0 }, { text: 'M', rotate: 180 }]);
+  assert.deepEqual(V.expectedOf(sources, slots), [{ text: 'A', rotate: 0 }, { text: '', rotate: 90, blank: true }, { text: 'B', rotate: 0 }, { text: 'M', rotate: 180 }]);
   const want = { pages: [{ text: 'A', rotate: 0 }, { text: 'B', rotate: 90 }], fields: { name: 'Ada' } };
   assert.deepEqual(V.compare(want, { pages: [{ text: 'A', rotate: 0 }, { text: 'B', rotate: 90 }], fields: { name: 'Ada', other: 'x' } }), { pages: 'ok', order: 'ok', rotation: 'ok', fields: 'ok' });
   assert.deepEqual(V.compare(want, { pages: [{ text: 'B', rotate: 0 }, { text: 'A', rotate: 0 }], fields: null }), { pages: 'ok', order: 'pages 1, 2: "B", "A"', rotation: 'pages 2: 0', fields: 'n/a' });
   assert.deepEqual(V.compare(want, { pages: [{ text: 'A', rotate: 0 }], fields: { name: 'Grace' } }), { pages: '1, not 2', order: 'pages 2: null', rotation: 'pages 2: null', fields: 'name="Grace"' });
   assert.deepEqual(V.compare({ ...want, fields: null }, { pages: want.pages, fields: {} }).fields, '', 'no fields asked about');
   assert.deepEqual(V.compare(want, { error: 'locked' }), { pages: 'locked', order: '', rotation: '', fields: '' });
+  const drawn = { pages: [{ text: 'A Glaze note', rotate: 0 }, { text: 'Ada B', rotate: 90 }], fields: null, drawnFields: true };
+  assert.deepEqual(V.compare(want, drawn), { pages: 'ok', order: 'ok', rotation: 'ok', fields: 'drawn' }, "a page's text may hold its annotations' too");
+  assert.equal(V.compare({ ...want, fields: { name: 'Grace', agree: 'Yes' } }, drawn).fields, 'not drawn: name', 'a check box draws no text');
+  assert.equal(V.compare({ pages: [{ text: '', rotate: 0, blank: true }] }, { pages: [{ text: 'A', rotate: 0 }] }).order, 'pages 1: "A"', 'a blank page holds no text');
+  assert.equal(V.compare({ pages: [{ text: '', rotate: 0 }] }, { pages: [{ text: 'Glaze note', rotate: 0 }] }).order, 'ok', 'a scan tells no order by its text');
+  assert.equal(V.compare({ pages: [{ text: '', rotate: 0 }] }, { pages: [] }).order, 'pages 1: null', 'but it is there');
   assert.match(V.table([{ file: 'three', output: 'baked', reader: 'PDFKit', pages: 'ok', order: 'ok', rotation: 'ok', fields: '', notes: 'a | b' }]),
     /^\| three \| baked \| PDFKit \| ok \| ok \| ok \|  \| a \\\| b \|$/m);
 });
