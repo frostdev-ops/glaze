@@ -2399,12 +2399,13 @@ let mcpTabsMade = null;
 const mcpTabs = () => (mcpTabsMade ||= GZ_MCP_TABS.create({ tabs: chrome.tabs, scripting: chrome.scripting, quiet: modQuiet }));
 const mcpRefresh = (account, group, o) => mcpTabs().refresh(account, group, o);
 // C13: Writer's document tools that need an open Writer page (writer-mcp.js) reach it over port glaze:mcp-writer, admitted
-// with the AI port's sender rules while agent access is on (lib/mcp/writer.js pages) → the page's answer, or null with none.
+// from Glaze's own pages only, with the AI port's sender rules, while agent access is on (lib/mcp/writer.js pages) → the
+// page's answer, or null with none.
 let mcpWriterHub = null;
 const mcpWriterPages = () => { if (typeof GZ_MCP_WRITER === 'undefined') importScripts('mcp/writer.js'); return (mcpWriterHub ||= GZ_MCP_WRITER.pages({ runtime: chrome.runtime })); };
 const mcpWriter = (key, op, args, o) => mcpWriterPages().call(key, op, args, o);
 chrome.runtime.onConnect.addListener((p) => {
-  if (p.name === 'glaze:mcp-writer') mcpWriterPages().connect(p, async () => await mcpOn() && await glazeOn() && await aiSender(p.sender || {}, { op: 'run', feature: 'writing' }) === true);
+  if (p.name === 'glaze:mcp-writer') mcpWriterPages().connect(p, async () => fromGlaze(p.sender || {}) && await mcpOn() && await glazeOn() && await aiSender(p.sender || {}, { op: 'run', feature: 'writing' }) === true);
 });
 // C14: a mod's code tool (the registry state's code), answered by its Worker through an open LMS tab.
 let mcpRoute = null;
