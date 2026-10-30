@@ -170,3 +170,47 @@ test('the worker wiring: mcpRefresh reads through the account\'s tab, and todo_l
     assert.equal(await vm.runInContext(`mcpRefresh(${JSON.stringify(A)}, 'writer', {})`, env.w.context), null);
   } finally { await H.off(env); }
 });
+
+test('execution rechecks the account and origin after probing, including a stale page account', async () => {
+  for (const change of ['account', 'origin', 'route', 'session']) {
+    const store = {}, tab = canvasTab({ id: 1, store });
+    const b = H.browser([tab]), execute = b.scripting.executeScript;
+    b.scripting.executeScript = async (a) => {
+      const r = await execute(a);
+      if (a.files) {
+        if (change === 'account') tab.context.GZ_CTX = { ...tab.context.GZ_CTX, account: async () => '6' };
+        if (change === 'origin') tab.context.location.origin = 'https://other.instructure.com';
+        if (change === 'route') { tab.context.location.pathname = '/courses/25/quizzes/3'; tab.context.location.href = `${C.CANVAS}/courses/25/quizzes/3`; }
+        if (change === 'session') tab.context.fetch = async () => H.json({ id: '6', time_zone: 'UTC' });
+      }
+      return r;
+    };
+    const t = TABS.create({ tabs: b.tabs, scripting: b.scripting, quiet: H.quiet });
+    assert.equal((await t.run(A, 'mark', { type: 'assignment', id: '1' }))?.ok, false, change);
+    assert.equal(tab.page.asked.filter((x) => x.method !== 'GET').length, 0, change);
+    assert.equal(tab.page.sent.length, 0, change);
+  }
+});
+
+test('cancellation and an injection delay cannot publish a late planner read', async () => {
+  for (const cancel of [true, false]) {
+    const store = {}, tab = canvasTab({ id: 1, store, routes: { '/api/v1/planner/items': async () => { await H.pause(80); return RAW; } } });
+    const b = H.browser([tab]), execute = b.scripting.executeScript;
+    b.scripting.executeScript = async (a) => { if (a.files && !cancel) await H.pause(80); return execute(a); };
+    const t = TABS.create({ tabs: b.tabs, scripting: b.scripting, quiet: H.quiet, limit: { read: cancel ? 500 : 40 } });
+    const ac = new AbortController(), p = t.refresh(A, 'courses', { signal: ac.signal });
+    if (cancel) { setTimeout(() => ac.abort(), 20); await assert.rejects(p); } else await p;
+    await H.pause(200);
+    assert.equal(tab.page.sent.length, 0, cancel ? 'cancelled' : 'expired before injection');
+    assert.equal(store.todoCache, undefined);
+  }
+});
+
+test('Canvas pagination keeps partial coverage and cannot switch API resources', async () => {
+  for (const next of [`${C.CANVAS}/api/v1/planner/items?page=2`, `${C.CANVAS}/api/v1/users/6`, 'https://other.instructure.com/api/v1/planner/items']) {
+    const store = {}, tab = canvasTab({ id: 1, store, routes: { '/api/v1/planner/items': () => H.json(RAW, 200, { link: `<${next}>; rel="next"` }) } });
+    await make([tab]).t.refresh(A, 'courses');
+    assert.equal(store.todoCache.complete, false, next);
+    assert.ok(!tab.page.asked.some((x) => x.url.includes('/users/6')));
+  }
+});

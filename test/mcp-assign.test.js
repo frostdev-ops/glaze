@@ -185,3 +185,26 @@ test('through the worker: assignments_list and assignment_read in the assignment
     assert.ok(env.store.local[`mcpRubric:${A}/25/171`]);
   } finally { await H.off(env); }
 });
+
+test('assignment_read accepts only bounded rubric definition fields from tabs and storage', async () => {
+  const rubric = { title: 'Definition', total: 10, kind: 'points', score: 8, feedback: 'Private feedback', levels: [{ id: 'l', label: 'Good', selected: true }],
+    criteria: [{ id: 'c', label: 'Method', detail: 'Explain', points: 10, score: 8, comment: 'Private comment', cells: [{ level: 'l', detail: 'Complete', value: 10, selected: true, result: 8 }] }] };
+  const { s, ctx } = store(), key = `mcpRubric:${A}/25/171`;
+  const t = reg({ tabs: { run: async () => ({ ok: true, title: 'Assignment', rubric }) } }).get('assignment_read');
+  const r = await t.run({ course: '25', assignment: '171' }, ctx(A));
+  assert.ok(!/"(score|feedback|comment|selected|result)":/.test(JSON.stringify(r)));
+  s[key].rubric = rubric;
+  const cached = await reg({}).get('assignment_read').run({ course: '25', assignment: '171' }, ctx(A));
+  assert.ok(!/"(score|feedback|comment|selected|result)":/.test(JSON.stringify(cached)));
+  const huge = { ...rubric, criteria: Array.from({ length: 200 }, (_, i) => ({ ...rubric.criteria[0], id: String(i), label: 'Label'.repeat(100), cells: Array(100).fill(rubric.criteria[0].cells[0]) })) };
+  const large = await reg({ tabs: { run: async () => ({ ok: true, rubric: huge }) } }).get('assignment_read').run({ course: '25', assignment: '171' }, ctx(A));
+  assert.ok(JSON.stringify(s[key]).length <= AS.LIMIT.answer);
+  assert.equal(large.cut, true);
+});
+
+test('cancelling an assignment read before delivery keeps nothing', async () => {
+  const ac = new AbortController(), { s, ctx } = store();
+  const t = reg({ tabs: { run: async () => { ac.abort(); return { ok: true, title: 'Late' }; } } }).get('assignment_read');
+  await assert.rejects(t.run({ course: '25', assignment: '171' }, ctx(A, { signal: ac.signal })));
+  assert.deepEqual(s, {});
+});

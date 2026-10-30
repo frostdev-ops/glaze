@@ -149,3 +149,22 @@ test('through the worker: the approval window shows Glaze\'s sentence; Don\'t al
     assert.deepEqual(env.store.local.mcpCalls.filter((x) => x.tool === 'todo_mark_done').map((x) => [x.kind, x.outcome]), [['write', 'declined'], ['write', 'ok']]);
   } finally { await H.off(env); }
 });
+
+test('a pending approval cannot change its title, Canvas target or sync destination', async () => {
+  for (const change of ['title', 'aid', 'override', 'sync']) {
+    const sync = { todo: { sync: change !== 'sync' } }, tab = canvasTab();
+    const { t, ctx, s } = await setup({ sync, tabs: [tab] });
+    const c = ctx(), args = { type: 'quiz', id: '2' };
+    await t.summarize(args, c);
+    const item = s.todoCache.items.find((i) => i.id === '2');
+    if (change === 'title') item.title = 'Different work';
+    if (change === 'aid') item.aid = '999';
+    if (change === 'override') item.ov = { id: '999', done: false };
+    if (change === 'sync') sync.todo.sync = true;
+    const out = await t.run(args, c);
+    assert.equal(out.ok, false, change);
+    assert.match(out.error, /changed|again/i);
+    assert.equal(tab.page.asked.filter((x) => x.method !== 'GET').length, 0, change);
+    assert.equal(s[`todo:${A}`], undefined);
+  }
+});
