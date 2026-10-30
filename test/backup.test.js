@@ -959,3 +959,11 @@ for (const kind of ['pdf', 'deck']) test(`an older ${kind} already versioned in 
     assert.deepEqual(b.store[`writerVersions:${k}`].map((v) => v.id).sort(), a.store[`writerVersions:${k}`].map((v) => v.id).sort(), 'the existing backup version already retains the older file');
   } finally { a.stop(); b.stop(); }
 });
+
+test('Back up refuses a spreadsheet that cannot fit through the restore write fence', () => {
+  const key = `doc:${id(87)}`, rows = Array.from({ length: 100 }, (_, r) => [r, Array.from({ length: 11 }, (_, c) => [c, 's', 'x'.repeat(32000)])]);
+  const local = { [`writerPaper:${key}`]: { key, kind: 'sheet', updated: NOW, book: { sheets: [{ id: 1, name: 'Large' }] }, parts: { '1:0': 1 } },
+    [`writerSheet:${key}:1:0`]: { rev: 1, rows } };
+  const entries = () => B.pack({ settings: SETTINGS, local });
+  assert.throws(entries, (e) => e.why === 'big');
+});
