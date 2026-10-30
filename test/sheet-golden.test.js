@@ -393,7 +393,6 @@ const TODO = {
   'financial.xirr.1': 'Excel\'s XIRR stops 6e-9 short of the root (its residual -1.7e-6) that the engine finds',
   'financial.xirr.2': 'Excel\'s XIRR stops 6e-9 short of the root (its residual -1.7e-6) that the engine finds',
   'format.text.69': 'under a [$-409] tag Excel writes A/P as AM or PM (live probe: "hh:mm A/P" alone gives P); numfmt writes P',
-  'date1904.text.3': 'a 1904 workbook shows a negative date as a minus and the date of its magnitude; numfmt refuses it',
 };
 
 test('every todo names a case', () => {

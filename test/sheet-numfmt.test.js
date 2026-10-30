@@ -197,3 +197,12 @@ test('fractions are convergents', () => {
     ['?/?', 0.05, '0/1'], ['?/?', 0.96, '1/1'], ['?/?', 2.96, '3/1'], ['?/???', 0.333, '1/3  '], ['# ??/??', 3.14159, '3  1/7 '],
   ]);
 });
+
+// Excel 16.114.1, a 1904 workbook (a cell and TEXT): a negative date or time is a minus and its magnitude's date.
+test('the 1904 system shows negative dates and times', () => {
+  const o = { date1904: true };
+  table([
+    ['yyyy-mm-dd', -1, '-1904-01-02', o], ['h:mm', -0.5, '-12:00', o], ['yyyy-mm-dd h:mm', -1.25, '-1904-01-02 6:00', o], ['d', -1, '-2', o],
+    ['yyyy-mm-dd;"neg"', -1, 'neg', o], ['yyyy-mm-dd', -1, null],
+  ]);
+});
