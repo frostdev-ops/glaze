@@ -99,7 +99,7 @@ test('MATCH: types 1, 0 and -1, Microsoft\'s data, wildcards and ~', () => {
     ['MATCH(30,{50,40,30,20},-1)', 3], ['MATCH(35,{50,40,30,20},-1)', 2], ['MATCH(10,{50,40,30,20},-1)', 4], ['MATCH(60,{50,40,30,20},-1)', '#N/A'],
     ['MATCH("bananas",A2:A5,0)', 1], ['MATCH("PEARS",A2:A5,0)', 4], ['MATCH("b*",A2:A5,0)', 1], ['MATCH("?ears",A2:A5,0)', 4], ['MATCH("*e*",A2:A5,0)', 2],
     ['MATCH("*",A2:A5,0)', 1], ['MATCH("??????",A2:A5,0)', 3], ['MATCH("b*",A2:A5,1)', '#N/A'], ['MATCH("Kiwi",A2:A5,0)', '#N/A'],
-    ['MATCH("~*",{"a","*"},0)', 2], ['MATCH("a~?",{"ab","a?"},0)', 2], ['MATCH("a?",{"ab","a?"},0)', 1], ['MATCH("a~~",{"a","a~"},0)', 2], ['MATCH("a~b",{"ab","a~b"},0)', 2],
+    ['MATCH("~*",{"a","*"},0)', 2], ['MATCH("a~?",{"ab","a?"},0)', 2], ['MATCH("a?",{"ab","a?"},0)', 1], ['MATCH("a~~",{"a","a~"},0)', 2], ['MATCH("a~b",{"ab","a~b"},0)', 1],
     ['MATCH("1*",{10,"10"},0)', 2], ['MATCH(#N/A,B2:B5,0)', '#N/A'], ['MATCH(1/0,B2:B5,0)', '#DIV/0!'],
   ]);
 });
@@ -112,7 +112,7 @@ test('approximate matches search by halves: values of another kind are passed ov
     // Sorted as Excel orders kinds: numbers, then text, then FALSE, then TRUE.
     ['MATCH("b",{1,2,"a","b","c"},1)', 4], ['MATCH("bb",{1,2,"a","b","c"},1)', 4], ['MATCH(5,{"a","b","c"},1)', '#N/A'], ['MATCH(1.5,{1,"x",2},1)', 1],
     ['MATCH(TRUE,{1,"a",FALSE,TRUE},1)', 4], ['MATCH(FALSE,{1,"a",FALSE,TRUE},1)', 3], ['MATCH("Cherry",{"Apple","Banana","Date"},1)', 2], ['MATCH("cherry",{"Apple","Banana","Date"})', 2],
-    ['VLOOKUP("a",I1:I4,1)', '#N/A'], ['MATCH(2,{1,2,2,2,3},1)', 4], ['MATCH(2,{1,2,2,2,3},0)', 2], ['MATCH(2,{3,2,2,1},-1)', 3],
+    ['VLOOKUP("a",I1:I4,1)', '#N/A'], ['MATCH(2,{1,2,2,2,3},1)', 4], ['MATCH(2,{1,2,2,2,3},0)', 2], ['MATCH(2,{3,2,2,1},-1)', 2],
     // An exact match is of the same kind: no text for a number, no number for TRUE, and never a blank cell for 0 or "".
     ['MATCH(1,{"1",1},0)', 2], ['MATCH("1",{1},0)', '#N/A'], ['MATCH(TRUE,{1,TRUE},0)', 2], ['MATCH(1,{TRUE,1},0)', 2], ['MATCH(0,K1:K3,0)', '#N/A'], ['MATCH("",K1:K3,0)', 2],
     // The idioms that lean on it: the last match of a condition, the last number or text in a column.
@@ -320,4 +320,62 @@ test('an array past the engine\'s 250,000-cell cap is #NUM!, as the engine\'s ow
     ['FILTER(A1:E60000,E1:E60000=1)', '#NUM!'], ['XLOOKUP(1,E1:E60000,A1:E60000)', 0], ['SEQUENCE(1000,1000)', '#NUM!'], ['SEQUENCE(250000)', 1],
     ['ROW(A1:A300000)', '#NUM!'], ['COLUMN(A1:XFD1)', 1], ['ROWS(A1:E60000)', 60000],
   ]);
+});
+
+// Live Microsoft Excel 16.114.1, 2026-10-30; these cases distinguish lookup rules from the engine's comparisons.
+test('lookup wildcards consume every tilde escape, including a trailing tilde', () => {
+  cases(book(), [
+    ['MATCH("a~b",{"ab","a~b"},0)', 1], ['MATCH("a~",{"a","a~"},0)', 1], ['MATCH("~",{"~",""},0)', 2],
+    ['XLOOKUP("a~b",{"ab","a~b"},{1,2},,2)', 1], ['XMATCH("a~",{"a","a~"},2)', 1],
+    ['VLOOKUP("a~b",{"ab",1;"a~b",2},2,FALSE)', 1], ['HLOOKUP("a~b",{"ab","a~b";1,2},2,FALSE)', 1],
+  ]);
+});
+
+test('descending MATCH chooses the first exact duplicate and the last next-larger duplicate', () => {
+  cases(book(), [
+    ['MATCH(2,{3,2,2,2,1},-1)', 2], ['MATCH(2,{5,3,2,2,2,1},-1)', 3],
+    ['MATCH(1.5,{3,2,2,2,1},-1)', 4], ['MATCH(2,{1,2,2,2,3},1)', 4],
+  ]);
+});
+
+test('XLOOKUP and XMATCH binary modes use type boundaries and directional duplicate rules', () => {
+  cases(book(), [
+    ['XMATCH(2,{1,2,2,2,3},0,2)', 2], ['XMATCH(2,{1,2,2,2,3},-1,2)', 2],
+    ['XMATCH(2,{3,2,2,2,1},0,-2)', 4], ['XMATCH(2,{2,2,2,2,2,2,2},0,2)', 1], ['XMATCH(2,{2,2,2,2,2,2,2},0,-2)', 7],
+    ['XMATCH(2.5,{1,2,2,2,3},-1,2)', 4], ['XMATCH(1.5,{1,2,2,2,3},1,2)', 2],
+    ['XMATCH(3,{1,2,"a",FALSE,TRUE},1,2)', 3], ['XMATCH("0",{1,2,"a",FALSE,TRUE},-1,2)', 2],
+    ['XMATCH(3,{TRUE,FALSE,"b","a",2,1},1,-2)', 4], ['XMATCH(3,{TRUE,FALSE,"b","a",2,1},-1,-2)', 5],
+    ['XMATCH(FALSE,{TRUE,FALSE,"b","a",2,1},0,-2)', 2],
+    ['XLOOKUP(2,{1,2,2,2,3},{10,20,30,40,50},,0,2)', 20],
+    ['XMATCH("ab",{"ab","ac"},2,2)', '#VALUE!'], ['XLOOKUP("a*",{"aa","ab","ba"},{1,2,3},,2,-2)', '#VALUE!'],
+    ['XMATCH(2,{1,#N/A,3},-1,2)', 1], ['XMATCH(2,{1,#N/A,3},1,2)', 2], ['XMATCH(3,{1,#DIV/0!,3},0,2)', '#N/A'],
+  ]);
+});
+
+test('linear next-smaller and next-larger X lookups cross type boundaries', () => {
+  cases(book(), [
+    ['XMATCH(3,{1,2,"a",FALSE,TRUE},1)', 3], ['XMATCH("0",{1,2,"a",FALSE,TRUE},-1)', 2],
+    ['XLOOKUP(3,{1,2,"a",FALSE,TRUE},{10,20,30,40,50},,1)', 30],
+    ['XMATCH(2,{1,#N/A,3},1)', 3], ['XMATCH(3,{1,#DIV/0!,3},0)', 3],
+  ]);
+});
+
+test('LOOKUP extends a one-cell result reference horizontally', () => {
+  const e = book({ A1: 1, A2: 2, A3: 3, D1: 10, E1: 20, F1: 30, D2: 40, D3: 50 });
+  cases(e, [
+    ['LOOKUP(3,A1:A3,D1)', 30], ['LOOKUP(2,A1:A3,D1)', 20], ['LOOKUP(3,A1:A3,D1:D2)', 50],
+    ['LOOKUP(3,A1:A3,{10})', '#N/A'],
+  ]);
+});
+
+test('FILTER accepts Boolean text and still propagates include errors', () => {
+  const e = book();
+  spills(e, [['FILTER({1;2},{"TRUE";"FALSE"})', [[1]]], ['FILTER({1,2},{"true","false"})', [[1]]]]);
+  cases(e, [['FILTER({1;2},{"1";"0"})', '#VALUE!'], ['FILTER({1;2},{" true";"false"})', '#VALUE!'], ['FILTER({1;2},{1;#N/A})', '#N/A']]);
+});
+
+// Distinct cell text must not collide with the internal row-key separator.
+test('UNIQUE preserves distinct rows and columns containing NUL text', () => {
+  const e = book({ A1: 'a', B1: 'b\u0000sc', A2: 'a\u0000sb', B2: 'c' });
+  cases(e, [['ROWS(UNIQUE(A1:B2))', 2], ['ROWS(UNIQUE(A1:B2,,TRUE))', 2], ['COLUMNS(UNIQUE(TRANSPOSE(A1:B2),TRUE))', 2]]);
 });
