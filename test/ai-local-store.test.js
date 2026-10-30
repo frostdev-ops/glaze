@@ -429,20 +429,27 @@ test('a remove in another context cancels a running download with reason removed
   assert.deepEqual(await b.status('tiny-q4'), { state: 'missing' });
 });
 
-test('a download queued in another context before a remove does not run after it', async () => {
-  let loaded;
-  const catalog = new Promise((r) => { loaded = r; });
-  const a = make({ models: () => catalog, channel: null }); // no message reaches it: the lock and OPFS alone decide
-  const b = twin(a);
-  const p = a.store.download('tiny-q4');
-  await settle(); // asked for, and waiting on its catalog
-  await b.remove('tiny-q4');
-  loaded([entry()]);
-  await assert.rejects(p, (e) => e.reason === 'removed');
-  assert.equal(a.fetch.log.length, 0);
-  assert.deepEqual(await b.status('tiny-q4'), { state: 'missing' });
-  // A download asked for after the remove runs.
-  assert.equal((await a.store.download('tiny-q4')).state, 'ready');
+test('a download queued in another context before a remove does not outlive it', async () => {
+  for (const channel of [undefined, null]) {
+    let loaded;
+    const catalog = new Promise((r) => { loaded = r; });
+    // With no message (null) the lock's order alone decides: the download first, then the remove.
+    const a = make({ models: () => catalog, ...(channel === null && { channel }) });
+    const b = twin(a, { channel: a.channel });
+    const p = a.store.download('tiny-q4').then((r) => r.state, (e) => e.reason);
+    await settle(); // asked for, and waiting on its catalog
+    const gone = b.remove('tiny-q4');
+    await settle();
+    loaded([entry()]);
+    await gone;
+    const ended = await p;
+    assert.ok(channel === null ? ['ready', 'removed'].includes(ended) : ended === 'removed', `${channel}: ${ended}`);
+    await settle();
+    assert.deepEqual(await b.status('tiny-q4'), { state: 'missing' }, 'nothing kept after the remove');
+    assert.equal(a.fs.disk.used, 0);
+    // A download asked for after the remove runs.
+    assert.equal((await a.store.download('tiny-q4')).state, 'ready');
+  }
 });
 
 test('verify in another context waits for a running download instead of deleting its chunks', async () => {
@@ -496,15 +503,36 @@ test('removes and downloads in quick succession keep their order whatever the cl
     assert.equal((await a.store.download('tiny-q4')).state, 'ready', 'a download after a remove runs');
     await b.remove('tiny-q4');
     await b.remove('tiny-q4');
-    // Queued before a third remove, with no message to tell it: still refused.
+    // Queued before a third remove, with no message to tell it: it runs first, and the remove still leaves nothing.
     let loaded;
     const catalog = new Promise((r) => { loaded = r; });
     const c = twin(a, { models: () => catalog, channel: null });
-    const p = c.download('tiny-q4');
+    const p = c.download('tiny-q4').catch((e) => e);
     await settle();
-    await b.remove('tiny-q4');
+    const gone = b.remove('tiny-q4');
+    await settle();
     loaded([entry()]);
-    await assert.rejects(p, (e) => e.reason === 'removed');
+    await gone; await p;
+    assert.deepEqual(await b.status('tiny-q4'), { state: 'missing' });
     assert.equal((await a.store.download('tiny-q4')).state, 'ready');
   } finally { performance.now = real; }
+});
+
+test('a download asked for before another context\'s remove never adopts the generation that remove made', async () => {
+  const a = make();
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let first = true;
+  // a's first OPFS read is slow: its snapshot of the removal generation lands after b's remove has written a new one.
+  const slowRoot = async () => { if (first) { first = false; await gate; } return a.fs.root; };
+  const early = S.create({ models: [entry()], fetch: a.fetch, root: slowRoot, estimate: a.fs.estimate, locks: a.locks, channel: a.channel });
+  const b = twin(a);
+  const p = early.download('tiny-q4');
+  const gone = b.remove('tiny-q4');
+  await settle();
+  release();
+  await assert.rejects(p, (e) => e.reason === 'removed');
+  await gone;
+  assert.equal(a.fetch.log.length, 0);
+  assert.deepEqual(await b.status('tiny-q4'), { state: 'missing' });
 });
