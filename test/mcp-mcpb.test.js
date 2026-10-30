@@ -246,6 +246,36 @@ test('choose keeps a plain node by its stable PATH name, and under Claude finds 
   assert.equal(await choose({ ...electron, list: ['/Applications/Claude.app/Contents/MacOS/Claude'] }), null, 'Claude\'s app is never a candidate');
 });
 
+test('a stable PATH alias must be trusted even when it resolves to the running node', { skip: posixOnly('POSIX modes and symlinks') }, async (t) => {
+  const d = scratch(t), node = fakeNode(path.join(d, 'safe'));
+  const shared = mk(d, 'shared'), alias = path.join(shared, 'node');
+  fs.symlinkSync(node, alias);
+  fs.chmodSync(shared, 0o777);
+  const env = { HOME: d, PATH: shared };
+  assert.equal(N().stable(node, 'darwin', env), node, 'an unsafe alias cannot replace a trusted executable');
+  const got = await N().choose({ platform: 'darwin', env, execPath: node, versions: { node: '22.11.0' }, run: I.runFile, list: [] });
+  assert.equal(got, node);
+  fs.unlinkSync(alias);
+  fs.symlinkSync(process.execPath, alias);
+  assert.equal(I.context({ platform: 'darwin', env }).node, process.execPath, 'setup also refuses the unsafe alias');
+});
+
+test('choose checks the running node file, ancestors and symlink targets before using it', { skip: posixOnly('POSIX modes and symlinks') }, async (t) => {
+  for (const which of ['file', 'parent', 'link target', 'old version']) await t.test(which, async (t) => {
+    const d = scratch(t), target = fakeNode(path.join(d, 'target'), which === 'old version' ? 'v16.20.2' : 'v22.11.0');
+    let node = target;
+    if (which === 'link target') {
+      node = path.join(mk(d, 'bin'), 'node');
+      fs.symlinkSync(target, node);
+    }
+    if (which !== 'old version') fs.chmodSync(which === 'file' ? target : path.dirname(target), 0o777);
+    const calls = [], run = (file, args) => { calls.push(file); return I.runFile(file, args); };
+    const got = await N().choose({ platform: 'darwin', env: { HOME: d }, execPath: node, versions: { node: which === 'old version' ? '16.20.2' : '22.11.0' }, run, list: [] });
+    assert.equal(got, null, 'an unusable running executable is not a browser launcher candidate');
+    assert.deepEqual(calls, which === 'old version' ? [node] : [], 'unsafe paths are never probed');
+  });
+});
+
 test('the new helper files reach nothing outside the computer and start processes only through the runner they are given', () => {
   const code = (f) => fs.readFileSync(path.join(PKG, f), 'utf8').replace(/^\s*\/\/.*$/gm, '');
   for (const f of ['lib/nodes.js', 'lib/mcpb.js']) {
