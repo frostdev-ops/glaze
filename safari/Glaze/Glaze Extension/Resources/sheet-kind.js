@@ -1,10 +1,10 @@
 // Spreadsheets on the Documents page (papers.html): the sheet kind's page code (lib/doc-kinds.js). Settings → Writer →
-// Spreadsheets (writer.sheets, off by default) adds the New band's Spreadsheet tile (create) and takes .xlsx and .csv files
+// Spreadsheets (writer.sheets, off by default) adds the New band's Spreadsheet tile (create) and takes .xlsx, .csv and .tsv files
 // (importFile); existing spreadsheets always open, copy and export. A card shows the record's 6×4 text (sheet-data.js
 // glance). Opening one mounts the grid (sheet-grid.js) on the calc engine (lib/sheet-*.js). .xlsx files are read and written
 // by GZ_SHEET_XLSX (lib/sheet-xlsx.js), loaded on demand before a file or the grid opens. Storage is sheet-data.js's alone.
 // In an assignment's frame (writer-kinds.js) the same grid is the attempt's
-// view (view), a brought .xlsx or .csv becomes the attempt's record (into), and an empty attempt can start as a blank
+// view (view), a brought .xlsx, .csv or .tsv becomes the attempt's record (into), and an empty attempt can start as a blank
 // workbook (empty); the view's file() is what submit sends.
 (() => {
   const DK = globalThis.GZ_DOC_KINDS;
@@ -78,32 +78,16 @@
     return { book, grid: got.rec.grid, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
   };
 
-  // ---- files: .xlsx through GZ_SHEET_XLSX, .csv by the grid's reader
+  // ---- files: .xlsx, .csv and .tsv through GZ_SHEET_XLSX
   const stem = (name) => (globalThis.GZ_DOC_HOME ? GZ_DOC_HOME.stem(name) : String(name || '').replace(/\.[^./\\]+$/, '').trim().slice(0, 120));
-  const fromCsv = (textIn) => {
-    const M = GZ_SHEET_MODEL, G = GZ_SHEET_GRID, wb = M.workbook(), sh = wb.sheets[0];
-    const rows = G.parseDelimited(textIn, G.sniff(textIn));
-    let cells = 0;
-    rows.forEach((row, r) => row.forEach((v, c) => {
-      const x = M.parseInput(v, { date1904: false });
-      if (!x || r >= M.MAX_ROWS || c >= M.MAX_COLS) return;
-      if (++cells > M.CAP.cells) throw new RangeError(SAYS.read);
-      const cell = x.f !== undefined ? { t: 'n', v: 0, f: x.f } : { t: x.t, v: x.v };
-      if (x.fmt) cell.s = M.internStyle(wb, { fmt: x.fmt });
-      if (!sh.rows.has(r)) sh.rows.set(r, new Map());
-      sh.rows.get(r).set(c, cell);
-    }));
-    return wb;
-  };
   // A file as a workbook, its formulas calculated; a RangeError (SAYS) when it is too large or can't be read.
   const workbookOf = async (file) => {
     if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > DK.KINDS.sheet.max) throw new RangeError(SAYS.size);
     await need([...ENGINE, 'sheet-grid.js']);
     const raw = await file.arrayBuffer();
     if (!(raw instanceof ArrayBuffer) || raw.byteLength !== file.size) throw new Error('invalid file read');
-    let wb = null;
-    if (/\.csv$/i.test(file.name)) wb = fromCsv(new TextDecoder().decode(raw));
-    else { const X = await codecs(); if (X) wb = await X.read(new Uint8Array(raw)).catch(() => null); }
+    const X = await codecs(), bytes = new Uint8Array(raw);
+    const wb = /\.(csv|tsv)$/i.test(file.name) ? X.readDelimited(bytes, { name: file.name }) : await X.read(bytes).catch(() => null);
     if (!wb?.sheets?.length) throw new RangeError(SAYS.read);
     GZ_SHEET_CALC.engine(wb).recalc();
     return wb;

@@ -332,7 +332,7 @@ test('the assignment frame\'s hooks: view, into over a paper, empty', async () =
   await P.save(K, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'my draft' }] }] }, title: 'Lab 3' });
   const G = require('../sheet-grid.js');
   for (const f of ['date', 'math', 'info']) require(`../lib/sheet-fn-${f}.js`);
-  const { DK } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: G, GZ_SHEET_CALC: require('../lib/sheet-calc.js'),
+  const { DK } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: G, GZ_SHEET_XLSX: require('../lib/sheet-xlsx.js'), GZ_SHEET_CALC: require('../lib/sheet-calc.js'),
     GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob });
   await DK.settled();
   const k = DK.get('sheet');
@@ -449,7 +449,7 @@ test('import into an existing spreadsheet keeps the workbook it replaces as an i
   const s = store(), P = PA.open(s, () => 1000), wb = book();
   await SD.write(P, KEY, wb, new Map());
   const { DK } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD,
-    GZ_SHEET_GRID: require('../sheet-grid.js'), GZ_SHEET_CALC: require('../lib/sheet-calc.js'), GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js') });
+    GZ_SHEET_GRID: require('../sheet-grid.js'), GZ_SHEET_XLSX: require('../lib/sheet-xlsx.js'), GZ_SHEET_CALC: require('../lib/sheet-calc.js'), GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js') });
   await DK.settled();
   const bytes = new TextEncoder().encode('replacement\n');
   await DK.get('sheet').into(KEY, { name: 'new.csv', size: bytes.length, arrayBuffer: async () => bytes.buffer });
