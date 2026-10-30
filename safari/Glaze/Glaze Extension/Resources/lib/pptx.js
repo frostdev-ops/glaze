@@ -663,7 +663,9 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
     return ph ? { type: at(ph, 'type') || 'obj', idx: num(at(ph, 'idx'), 0) } : null;
   };
   const phsOf = (tree) => (kid(tree, 'cSld', 'spTree')?.kids || []).filter((n) => SHAPES.has(n.n)).map((node) => ({ node, ph: phOf(node) })).filter((x) => x.ph);
-  const findPh = (list, ph, byIdx) => (byIdx && ph.idx != null && list.find((x) => x.ph.idx === ph.idx))
+  // By idx among placeholders of the same kind (title, body, date, …), then by type: LibreOffice writes its title and
+  // its body both with idx omitted (0), as <p:ph type="title"/> and <p:ph/>.
+  const findPh = (list, ph, byIdx) => (byIdx && list.find((x) => x.ph.idx === ph.idx && baseType(x.ph.type) === baseType(ph.type)))
     || list.find((x) => x.ph.type === ph.type) || list.find((x) => baseType(x.ph.type) === baseType(ph.type)) || null;
   const styleKind = (t) => (t === 'title' || t === 'ctrTitle' ? 'titleStyle' : t === 'dt' || t === 'ftr' || t === 'sldNum' || t === 'hdr' ? 'otherStyle' : 'bodyStyle');
   // What a slide's shape inherits from: the layout's placeholder of its idx (else of its type), and the master's of that

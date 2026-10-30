@@ -439,13 +439,27 @@ test('hostile numeric geometry and nested group scales keep model numbers finite
   assert.deepEqual(JSON.parse(JSON.stringify(d)), d);
 });
 
-test('placeholder idx defaults to zero before type fallback', async () => {
+test('placeholder idx defaults to zero and matches only a placeholder of the same kind, then type decides', async () => {
+  const base = await deck();
   const layout = fixture('ppt/slideLayouts/slideLayout2.xml').replace('ph type="title"', 'ph type="title" idx="0"');
-  const slide = fixture('ppt/slides/slide2.xml').replace('ph type="title"', 'ph');
+  const slide = fixture('ppt/slides/slide2.xml').replace('ph type="title"', 'ph type="title" idx="0"');
   const d = await P.read(pack({ 'ppt/slideLayouts/slideLayout2.xml': layout, 'ppt/slides/slide2.xml': slide }));
-  const title = named(d.slides[1], 'Title 1');
-  assert.deepEqual(title.bounds, named((await deck()).slides[1], 'Title 1').bounds);
-  assert.equal(title.text.paragraphs[0].runs[0].size, 44);
+  assert.deepEqual(named(d.slides[1], 'Title 1').bounds, named(base.slides[1], 'Title 1').bounds);
+  // LibreOffice's placeholders: the title and the body (<p:ph/>) both idx 0, the subtitle without idx.
+  const lo = await P.read(pack({
+    'ppt/slideLayouts/slideLayout2.xml': fixture('ppt/slideLayouts/slideLayout2.xml').replace('<p:ph idx="1"/>', '<p:ph/>'),
+    'ppt/slides/slide2.xml': fixture('ppt/slides/slide2.xml').replace('<p:ph idx="1"/>', '<p:ph/>'),
+    'ppt/slideLayouts/slideLayout1.xml': fixture('ppt/slideLayouts/slideLayout1.xml').replace('<p:ph type="subTitle" idx="1"/>', '<p:ph type="subTitle"/>'),
+    'ppt/slides/slide1.xml': fixture('ppt/slides/slide1.xml').replace('<p:ph type="subTitle" idx="1"/>', '<p:ph type="subTitle"/>'),
+  }));
+  for (const [n, name] of [[1, 'Content Placeholder 2'], [1, 'Title 1'], [0, 'Subtitle 2'], [0, 'Title 1']]) {
+    const was = named(base.slides[n], name), now = named(lo.slides[n], name);
+    assert.deepEqual(now.bounds, was.bounds, name);
+    assert.equal(now.text.paragraphs[0].runs[0].size, was.text.paragraphs[0].runs[0].size, name);
+  }
+  // A body placeholder written without idx is still the body, never the title.
+  const body = await P.read(pack({ 'ppt/slides/slide2.xml': fixture('ppt/slides/slide2.xml').replace('<p:ph idx="1"/>', '<p:ph type="body"/>') }));
+  assert.deepEqual(named(body.slides[1], 'Content Placeholder 2').bounds, named(base.slides[1], 'Content Placeholder 2').bounds);
 });
 
 test('long malformed attribute names do not cause quadratic attribute scans', async () => {
