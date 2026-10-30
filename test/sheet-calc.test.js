@@ -151,7 +151,7 @@ test('text: CONCAT, CONCATENATE, LEFT, RIGHT, MID, LEN, TRIM, UPPER, LOWER, TEXT
     ['MID("Fluid Flow",1,5)', 'Fluid'], ['MID("Fluid Flow",7,20)', 'Flow'], ['MID("Fluid Flow",20,5)', ''], ['LEFT("abc",-1)', '#VALUE!'],
     ['MID("abc",0,1)', '#VALUE!'], ['LEFT(12345,2)', '12'], ['RIGHT(TRUE,2)', 'UE'],
     ['LEN("Phoenix, AZ")', 11], ['LEN("")', 0], ['LEN("     One   ")', 11], ['LEN(Z9)', 0], ['LEN(1/3)', 17],
-    ['TRIM(" First Quarter Earnings ")', 'First Quarter Earnings'], ['TRIM("a   b")', 'a b'], ['UPPER("total")', 'TOTAL'], ['LOWER("E. E. Cummings")', 'e. e. cummings'],
+    ['TRIM(" First Quarter Earnings ")', 'First Quarter Earnings'], ['TRIM("a   b")', 'a b'], ['UPPER("total")', 'TOTAL'], ['UPPER("straße")', 'STRAßE'], ['LOWER("E. E. Cummings")', 'e. e. cummings'],
     ['TEXT(1234.567,"$#,##0.00")', '$1,234.57'], ['TEXT(0.285,"0.0%")', '28.5%'], ['TEXT(4.34,"# ?/?")', '4 1/3'],
     ['TEXT(1234567898,"[<=9999999]###-####;(###) ###-####")', '(123) 456-7898'], ['TEXT(1234,"0000000")', '0001234'],
     ["TEXT(123456,\"##0° 00' 00''\")", "12° 34' 56''"], ['TEXT(45720,"dddd")', 'Tuesday'], ['TEXT("12","0.00")', '12.00'], ['TEXT("abc","0")', 'abc'],
