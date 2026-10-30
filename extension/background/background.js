@@ -3425,8 +3425,13 @@ const openDriveSync = () => {
       const settings = { ...s0, nav: { ...s0.nav, i: '', li: '' }, navbar: { ...s0.navbar, ...(s0.navbar?.brand === 'custom' && { brand: 'glaze' }) },
         ...Object.fromEntries(['cards', 'links', 'ucards', 'ulinks', 'navItems', 'navbarItems'].filter((k) => raw[k] !== undefined).map((k) => [k, raw[k]])),
         favorites: GZ_HISTORY.favorites(all.lookFavorites) };
+      // Files past one upload (documents/drive.js put: GZ_DOC_KINDS.FILE * 4 bytes) make no snapshot, and are never read for one.
+      let total = 0;
       try {
-        const files = await GZ_BACKUP.filesOf(all, (ref) => fileBytes(ref).then((b) => { if (!b) throw Object.assign(new Error('missing'), { why: 'missing' }); return b; }));
+        const files = await GZ_BACKUP.filesOf(all, (ref) => {
+          if ((total += ref.size) > GZ_DOC_KINDS.FILE * 4) throw Object.assign(new Error('big'), { why: 'big' });
+          return fileBytes(ref).then((b) => { if (!b) throw Object.assign(new Error('missing'), { why: 'missing' }); return b; });
+        });
         const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, version: chrome.runtime.getManifest().version, files });
         return { name: GZ_BACKUP.fileName(), bytes: new Uint8Array(await new Blob(GZ_ZIP.zip(entries)).arrayBuffer()) };
       } catch (e) { if (e?.why === 'big') return null; throw e; }
