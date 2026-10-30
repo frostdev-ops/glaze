@@ -178,6 +178,20 @@ test('read refuses a run file that doesn\'t fit its name or its folder', (t) => 
   assert.equal(R.read(path.join(d, 'missing.json')), null);
 });
 
+test('Windows run files name a pipe of glaze-mcp\'s own, never a path; read and list take the platform given', (t) => {
+  const d = runDir(t), pipe = R.socketPath(d, 'chrome', 'w', { platform: 'win32' });
+  const rec = record(d, { instance: 'w', path: pipe }), file = R.write(d, rec);
+  assert.deepEqual(R.read(file, { platform: 'win32' }), rec);
+  assert.deepEqual(R.list(d, { platform: 'win32' }).map((e) => e.rec), [rec]);
+  for (const other of [path.join(d, 'chrome.w.sock'), '\\\\.\\pipe\\other', pipe.toUpperCase(), `${pipe}0`, pipe.replace('\\\\.\\', '\\\\host\\')]) {
+    fs.writeFileSync(file, JSON.stringify({ ...rec, path: other }));
+    assert.equal(R.read(file, { platform: 'win32' }), null, other);
+  }
+  // And a POSIX reader takes no pipe.
+  fs.writeFileSync(file, JSON.stringify(rec));
+  assert.equal(R.read(file, { platform: 'linux' }), null);
+});
+
 test('list: run files newest first, each with whether its host still runs', (t) => {
   const d = runDir(t);
   R.write(d, record(d, { instance: 'old', at: 1000 }));
