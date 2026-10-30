@@ -420,6 +420,16 @@ test('Firefox and Safari keep their lines: no wait, no ask, no restart', async (
   }
 });
 
+test('Restart only acts on Chrome while its restart offer still applies', async () => {
+  for (const browser of ['chrome', 'firefox', 'safari']) {
+    const p = await open({ browser, on: true, link: { state: 'restart', at: 1 } });
+    await p.elapse();
+    if (browser === 'chrome') await p.linked('connected');
+    await p.click('agents-restart');
+    assert.deepEqual(p.reloads, [], `${browser}: no reload through a hidden or stale Restart control`);
+  }
+});
+
 test('every state lib/agent-link.js reports has its line, with the command to run and Copy', async () => {
   const { line, NO_NODE } = E();
   const states = [...L.STATES, NO_NODE];
