@@ -123,7 +123,7 @@ test('SUBSTITUTE, REPLACE, REPT with Microsoft\'s data', () => {
   cases(e, [
     ['SUBSTITUTE(A2, "Sales", "Cost")', 'Cost Data'], ['SUBSTITUTE(A3, "1", "2", 1)', 'Quarter 2, 2008'], ['SUBSTITUTE(A4, "1", "2", 3)', 'Quarter 1, 2012'],
     ['SUBSTITUTE(A4, "1", "2")', 'Quarter 2, 2022'], ['SUBSTITUTE("aaa","aa","b")', 'ba'], ['SUBSTITUTE("Data","data","x")', 'Data'], ['SUBSTITUTE("abc","","x")', 'abc'],
-    ['SUBSTITUTE(A4,"1","2",4)', 'Quarter 1, 2011'], ['SUBSTITUTE(A4,"1","2",0)', '#VALUE!'], ['SUBSTITUTE(12321,2,"")', '131'],
+    ['SUBSTITUTE(A4,"1","2",4)', 'Quarter 1, 2011'], ['SUBSTITUTE(A4,"1","2",0)', '#VALUE!'], ['SUBSTITUTE("aaa","a","b",)', '#VALUE!'], ['SUBSTITUTE(12321,2,"")', '131'],
     ['REPLACE(B2,6,5,"*")', 'abcde*k'], ['REPLACE(B3,3,2,"10")', '2010'], ['REPLACE(B4,1,3,"@")', '@456'], ['REPLACE("abc",10,1,"Z")', 'abcZ'], ['REPLACE("abc",2,0,"Z")', 'aZbc'],
     ['REPLACE("abc",0,1,"Z")', '#VALUE!'], ['REPLACE("abc",1,-1,"Z")', '#VALUE!'],
     ['REPT("*-", 3)', '*-*-*-'], ['REPT("-",10)', '----------'], ['REPT("ab",0)', ''], ['REPT("ab",2.9)', 'abab'], ['REPT("ab",-1)', '#VALUE!'], ['REPT("ab",16384)', '#VALUE!'],
