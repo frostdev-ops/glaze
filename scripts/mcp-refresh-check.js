@@ -1,5 +1,5 @@
 // Agent apps' live refresh in a real Chromium (lib/mcp/tabs.js, lib/mcp/tab.js), headless, in a staged copy of the extension
-// whose worker carries the wiring handed to lib/background.js (test/helpers/mcp-tabs.cjs WIRING) and a hook for the check
+// whose worker carries a hook for the check
 // (the copy's worker is a new file, the checkout's is untouched). Synthetic Canvas and Ultra schools under invented origins,
 // every other request aborted and DNS resolving nowhere; Glaze's own page features are off, so every planner and gradebook
 // request is the agent read's. Checks: the planner read afresh in the Canvas and the Ultra tab and kept through the page's
@@ -11,7 +11,6 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const env = require('./check-env.js');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
-const { wired } = require(path.join(root, 'test/helpers/mcp-tabs.cjs'));
 const G = require(path.join(root, 'defaults.js'));
 const I = require(path.join(root, 'lib/insights.js'));
 const CANVAS = 'https://school.instructure.com', ULTRA = 'https://bb.school.test';
@@ -83,7 +82,7 @@ const check = async (name, test) => {
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
     const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
     fs.rmSync(path.join(ext, 'lib/background.js'));
-    fs.writeFileSync(path.join(ext, 'lib/background.js'), wired(worker0) + SHIM);
+    fs.writeFileSync(path.join(ext, 'lib/background.js'), worker0 + SHIM);
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC',

@@ -1,5 +1,5 @@
 // Writer's document tools for agent apps in a real Chromium (lib/mcp/writer.js, writer-mcp.js), headless, in a staged copy
-// of the extension whose worker carries the step's wiring (test/helpers/mcp-writer-wiring.cjs) and a stubbed agent link:
+// of the extension whose worker carries a stubbed agent link:
 // the check hands MCP lines to the worker's own connection code (mcpOpen, mcpLine) and reads what it sends back, as
 // lib/agent-link.js would carry them (the copy's worker is a new file, the checkout's is untouched). A fixture paper, made
 // by lib/writer-papers.js's own save, opens in papers.html; with agent access on, its Writer page connects. An app pairs
@@ -11,7 +11,6 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
-const { wired } = require(path.join(root, 'test/helpers/mcp-writer-wiring.cjs'));
 const PA = require(path.join(root, 'lib/writer-papers.js'));
 const SRC = require(path.join(root, 'lib/writer-sources.js'));
 const SCHEMA = require(path.join(root, 'lib/writer-schema.js'));
@@ -68,7 +67,7 @@ const records = async () => {
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
     const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
     fs.rmSync(path.join(ext, 'lib/background.js'));
-    fs.writeFileSync(path.join(ext, 'lib/background.js'), wired(worker0) + SHIM);
+    fs.writeFileSync(path.join(ext, 'lib/background.js'), worker0 + SHIM);
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US',

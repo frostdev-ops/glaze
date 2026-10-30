@@ -2,7 +2,7 @@
 // read from Writer's own store in the broker's turn, and the three tools that need the document open in a Writer page,
 // through the page's port. Papers are made by lib/writer-papers.js's own save and sources by lib/writer-sources.js's, as
 // the editor writes them; the page is the real writer-mcp.js over a ProseMirror state with GZ_WRITER_ISSUES's plugin, and
-// the worker is the real lib/background.js with the step's wiring (test/helpers/mcp-writer-wiring.cjs).
+// the worker is the real lib/background.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -22,7 +22,6 @@ const ISSUES = require('../lib/writer-issues.js');
 const PM = globalThis.GZ_PM;
 const worker = require('./helpers/worker-env.cjs');
 const { fakeIDB } = require('./helpers/fake-idb.cjs');
-const { wired } = require('./helpers/mcp-writer-wiring.cjs');
 
 const root = path.join(__dirname, '..');
 const NOW = Date.parse('2026-10-29T15:00:00Z');
@@ -591,7 +590,7 @@ test('through calls.js: a change waits for the student, then runs in the broker\
 });
 
 // ---- the worker, wired -------------------------------------------------------------------------------------------------
-const BACKGROUND = wired(fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8'));
+const BACKGROUND = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
 // Values from the worker's realm, as plain JSON (its objects' prototypes are its own).
 const inWorker = (w, code) => { const v = vm.runInContext(code, w.context); return v && typeof v.then === 'function' ? v.then((x) => JSON.parse(JSON.stringify(x ?? null))) : v; };
 const DOCS_PAGE = { id: 'glaze', url: `chrome-extension://x/papers.html?paper=${encodeURIComponent(ESSAY)}`, frameId: 0, origin: 'chrome-extension://x', tab: { id: 9, url: `chrome-extension://x/papers.html?paper=${encodeURIComponent(ESSAY)}` } };
