@@ -943,3 +943,53 @@ test('the command: setup, doctor and uninstall through the same context, and the
   const after = io(ctx);
   assert.equal(await CLI.main(['doctor'], after), 1);
 });
+
+// Real files and symlink traversal, with stat identities injected so admin/root/foreign owners need no chown privileges.
+test('doctor accepts Homebrew admin and own-group folders and refuses unsafe owners, modes and symlink targets', { skip: posixOnly('POSIX owners, groups and symlinks') }, async (t) => {
+  const vm = require('node:vm'), { createRequire } = require('node:module');
+  const doctorFile = require.resolve('../mcp/lib/doctor.js'), req = createRequire(doctorFile);
+  const cases = [
+    ['Apple Silicon Homebrew', 'opt/homebrew', 'darwin', 501, 80, 0o775, true],
+    ['Intel Homebrew', 'usr/local', 'darwin', 501, 80, 0o775, true],
+    ['root admin folder', 'usr/local', 'darwin', 0, 80, 0o775, true],
+    ['own group', 'usr/local', 'linux', 501, 20, 0o775, true],
+    ['root own group', 'usr/local', 'linux', 0, 20, 0o775, true],
+    ['unrelated group', 'opt/homebrew', 'darwin', 501, 81, 0o775, false],
+    ['admin gid on Linux', 'usr/local', 'linux', 501, 80, 0o775, false],
+    ['world writable', 'opt/homebrew', 'darwin', 501, 80, 0o777, false],
+    ['foreign owner', 'opt/homebrew', 'darwin', 502, 80, 0o755, false],
+    ['foreign admin owner', 'usr/local', 'darwin', 502, 80, 0o775, false],
+    ['unsafe link parent', 'opt/homebrew', 'darwin', 501, 81, 0o775, false],
+    ['unsafe link target', 'usr/local', 'darwin', 501, 81, 0o775, false],
+    ['group writable executable', 'opt/homebrew', 'darwin', 501, 80, 0o775, false],
+  ];
+  for (const [label, prefix, platform, uid, gid, mode, ok] of cases) await t.test(label, async (t) => {
+    const home = scratch(t), brew = mk(home, ...prefix.split('/'));
+    const bin = mk(brew, 'bin'), cellar = mk(brew, 'Cellar'), target = mk(cellar, 'node', '26.0.0', 'bin');
+    const exe = path.join(target, 'node'), link = path.join(bin, 'node');
+    fs.writeFileSync(exe, '#!/bin/sh\necho v26.0.0\n', { mode: 0o755 });
+    fs.symlinkSync('../Cellar/node/26.0.0/bin/node', link);
+    for (const dir of [brew, bin, cellar]) fs.chmodSync(dir, 0o775);
+    const calls = [], ctx = mac(home, { platform, node: link, run: async (...a) => { calls.push(a); return { stdout: 'v26.0.0' }; } });
+    mk(B.table(platform, ctx.env).find((b) => b.id === 'chrome').data);
+    await I.setup(ctx);
+    const identities = new Map([brew, bin, cellar].map((f) => [f, { uid: 501, gid: 80, mode: 0o775 }]));
+    for (const f of [brew, bin, cellar]) identities.set(f, { uid, gid, mode });
+    if (label === 'unsafe link parent' || label === 'unsafe link target' || label === 'group writable executable') {
+      for (const f of [brew, bin, cellar]) identities.set(f, { uid: 501, gid: 80, mode: 0o775 });
+      identities.set(label === 'unsafe link parent' ? bin : label === 'unsafe link target' ? cellar : exe, { uid, gid, mode });
+    }
+    const stat = (fn, f) => {
+      const st = fs[fn](f), id = identities.get(f);
+      return Object.assign(Object.create(st), { uid: st.uid === 0 ? 0 : 501, ...id, mode: id ? (st.mode & ~0o777) | id.mode : st.mode });
+    };
+    const module = { exports: {} };
+    vm.runInNewContext(fs.readFileSync(doctorFile, 'utf8'), {
+      module, process: { platform: 'darwin', version: process.version, getuid: () => 501, getgid: () => 20 },
+      require: (name) => name === 'node:fs' ? { ...fs, lstatSync: (f) => stat('lstatSync', f), statSync: (f) => stat('statSync', f) } : req(name),
+    });
+    const report = await module.exports.run({ ...ctx, platform });
+    assert.equal(report.ok, ok, D.text(report));
+    assert.deepEqual(calls, ok ? [[link, ['--version']]] : [], D.text(report));
+  });
+});
