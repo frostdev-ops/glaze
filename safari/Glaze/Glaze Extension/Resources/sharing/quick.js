@@ -208,7 +208,8 @@
   $('#settings').addEventListener('click', (e) => {
     if (dead || !e.isTrusted || !navigator.userActivation?.isActive) return;
     const plain = () => { Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:settings-at', hash: '#sharing/sessions' })).catch(() => {}); };
-    if (started) request({ op: 'settings' }).then((r) => { if (!r?.ok) plain(); }, plain); else plain();
+    // Only a definite no tries the other way: a request left unanswered may still have opened the tab.
+    if (started && port && !dead) request({ op: 'settings' }).then((r) => { if (!r?.ok) plain(); }, () => {}); else plain();
   });
 
   const startTimer = setTimeout(expire, 10000);
