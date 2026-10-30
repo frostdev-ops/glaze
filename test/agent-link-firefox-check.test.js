@@ -7,7 +7,7 @@ const vm = require('node:vm');
 const { pathToFileURL } = require('node:url');
 const { EventEmitter } = require('node:events');
 
-const file = path.join(__dirname, '../scripts/agent-link-firefox-check.mjs');
+const file = path.join(process.env.EXT || path.join(__dirname, '..'), 'scripts/agent-link-firefox-check.mjs');
 const source = fs.readFileSync(file, 'utf8');
 const section = (from, to) => {
   const start = source.indexOf(from), end = source.indexOf(to, start);
@@ -48,7 +48,7 @@ const harness = (t, overrides = {}) => {
   // say() also uses the Date constructor.
   vm.runInContext('Date = class extends globalThis.RealDate { static now() { return clock(); } }',
     Object.assign(context, { RealDate: Date, clock: () => now }));
-  const definitions = source.slice(source.indexOf('const require = '), source.indexOf("process.on('exit', cleanup);"))
+  const definitions = source.slice(source.indexOf('const require = '), source.indexOf("process.on('exit'"))
     .replaceAll('import.meta.url', JSON.stringify(pathToFileURL(file).href));
   const api = vm.runInContext(`${definitions}\n({ writeManifest, removeManifest, cleanup, isHelper, made, R, failed,
     MANIFEST, HOSTS, HELPER, NAME, tmp, setFirefox: (p) => { ff = p; } })`, context);
@@ -108,6 +108,22 @@ test('T10 cleanup waits for Firefox descendants and tries graceful shutdown firs
   assert.equal(h.table.has(42), false, 'a Firefox child outliving its parent must be reaped');
   assert.equal(h.table.has(43), true, 'preserve unrelated Firefox');
   assert.equal(fs.existsSync(h.tmp), false);
+});
+
+test('T10 SIGTERM saves evidence and exits only after asynchronous cleanup', async () => {
+  const handlers = {}, events = [];
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  vm.runInNewContext(section("process.on('exit'", 'const watchdog ='), {
+    process: { on: (name, fn) => { handlers[name] = fn; }, exit: (code) => events.push(`exit ${code}`) },
+    cleanup: async () => { events.push('cleanup'); await gate; },
+    save: () => events.push('save'), failed: [], clearTimeout() {}, watchdog: 1,
+  });
+  handlers.SIGTERM();
+  assert.deepEqual(events, ['cleanup']);
+  release();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, ['cleanup', 'save', 'exit 143']);
 });
 
 const claims = async (code, values) => {
