@@ -409,17 +409,21 @@ test('in a school\'s page a crossfade waits for the page world\'s guard, then ha
     await M.swap(() => { n++; });
     assert.deepEqual([n, runs.length], [1, 0], 'no guard in the page\'s world yet: the change runs at once, with no transition');
     guarded = true;
+    const done = async () => { await runs[0].finished; await new Promise(setImmediate); };
     page('https://school.instructure.com');
     M.swap(() => { n++; });
     assert.equal(runs.length, 1, 'with the guard there, it crossfades');
     assert.deepEqual(events, [['glaze:transition', true, 0], ['glaze:transition', false, 1]], 'asked before it starts, then told once it has');
+    await done();
     guarded = false;
     page('https://school.instructure.com', false);
     M.swap(() => { n++; });
     assert.equal(runs.length, 1, 'a browser with no activeViewTransition crossfades as before');
+    await done();
     page('chrome-extension://glaze');
     M.swap(() => { n++; });
     assert.equal(runs.length, 1, 'Glaze\'s own pages handle their own transitions');
+    await done();
   } finally {
     for (const [k, d] of saved) { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; }
   }

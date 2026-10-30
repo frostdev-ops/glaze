@@ -167,13 +167,25 @@ var GZ_MOTION = globalThis.GZ_MOTION || (() => {
   const framed = () => { try { return typeof window !== 'undefined' && window.top !== window; } catch { return true; } };
   // A native crossfade temporarily owns hit testing. Background settings/system changes must stay clickable.
   const asked = () => (typeof navigator === 'undefined' || !navigator.userActivation ? true : navigator.userActivation.isActive);
+  // Chrome rejects a skipped or timed-out transition's ready in the page's own world too, not only in this content script's,
+  // and only the page can handle it there (a school's error tracker would collect it). In a school's page a crossfade waits
+  // for the guard lib/background.js puts in that world (transitionGuard): asked before it starts (it cancels the event), it
+  // is told once one has. Glaze's own pages are that world, and a browser without activeViewTransition can't be guarded.
+  const guarded = () => {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.runtime?.getURL || !('activeViewTransition' in document)) return true;
+      if (chrome.runtime.getURL('').replace(/\/$/, '').toLowerCase() === location.origin.toLowerCase()) return true; // Safari lowercases its own
+      return !dispatchEvent(new Event('glaze:transition', { cancelable: true }));
+    } catch { return false; }
+  };
+  const handOver = () => { try { if (typeof dispatchEvent === 'function') dispatchEvent(new Event('glaze:transition')); } catch { /* no page world to tell */ } };
   const swap = (update) => {
     // A native transition takes its old snapshot before calling us. Flush a queued predecessor before a second
     // change, or the older callback could overwrite it; the eventual native callback then has nothing left to do.
     swapping?.run();
     const html = typeof document !== 'undefined' && document.documentElement;
     const k = html && knobs();
-    if (!k || !k.fade || swapping || typeof document.startViewTransition !== 'function' || document.hidden || html.hasAttribute('data-gz-ctab-framed') || framed() || !asked() || busy()) {
+    if (!k || !k.fade || swapping || typeof document.startViewTransition !== 'function' || document.hidden || html.hasAttribute('data-gz-ctab-framed') || framed() || !asked() || busy() || !guarded()) {
       update();
       return Promise.resolve();
     }
@@ -185,6 +197,7 @@ var GZ_MOTION = globalThis.GZ_MOTION || (() => {
       html.setAttribute('data-gz-swap', '');
       t = document.startViewTransition(run);
     } catch { html.removeAttribute('data-gz-swap'); run(); return done; }
+    handOver();
     swapping = turn;
     t.ready?.catch(() => {});
     const finish = () => { try { run(); } finally { if (swapping === turn) { swapping = null; html.removeAttribute('data-gz-swap'); } } };
