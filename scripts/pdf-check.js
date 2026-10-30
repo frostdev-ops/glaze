@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-pdf-check');
-const checks = [], errors = [], requests = [], workers = [], shots = [];
+const checks = [], errors = [], requests = [], workers = [], shots = [], logs = [];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
   const start = Date.now(); let last;
@@ -47,7 +47,7 @@ const fixture = () => {
 };
 
 (async () => {
-  let context, held = false, tmp, passed = false;
+  let context, held = false, tmp, passed = false, page = null;
   const lock = env.lockPath();
   try {
     for (let i = 0; ; i++) {
@@ -71,10 +71,11 @@ const fixture = () => {
     await worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings(false));
     const HOME = `chrome-extension://${id}/papers.html`;
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
-    const page = await context.newPage();
+    page = await context.newPage();
     page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
-    page.on('console', (m) => { const x = m.text(); if (m.type() === 'error' && !/Failed to load resource/.test(x)) errors.push(`console: ${x}`); if (/fake worker/i.test(x)) errors.push(`fake worker: ${x}`); });
+    page.on('console', (m) => { const x = m.text(); logs.push(`${m.type()}: ${x}`); if (m.type() === 'error' && !/Failed to load resource/.test(x)) errors.push(`console: ${x}`); if (/fake worker/i.test(x)) errors.push(`fake worker: ${x}`); });
     page.on('worker', (w) => workers.push(w.url()));
+    page.on('framenavigated', (f) => { if (f === page.mainFrame()) logs.push(`navigated: ${f.url()}`); });
     const shot = async (name) => { await pause(250); const f = path.join(out, name); await page.screenshot({ path: f }); shots.push(f); };
     const openHome = async () => { await page.goto(HOME); await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'home'); };
 
@@ -112,7 +113,7 @@ const fixture = () => {
     const landmark = await until(() => page.evaluate(() => document.querySelector('.pdfViewer .page[data-page-number="2"]')?.getAttribute('aria-label')), 'page landmarks');
     check(landmark === 'Page 2', `each page is a landmark named in Glaze's words (${landmark})`);
     check(workers.some((u) => u.endsWith('/lib/pdfjs/pdf.worker.mjs')), `pdf.js runs in its module worker (${workers.join(', ')})`);
-    const chrome1 = await page.evaluate(() => ({ title: document.querySelector('.gp-top h1 input, .gp-top h1')?.value ?? document.querySelector('.gp-top h1')?.textContent, back: document.querySelector('.gp-top a')?.getAttribute('href'), mode: document.documentElement.dataset.mode }));
+    const chrome1 = await page.evaluate(() => ({ title: document.querySelector('.gp-top h1 input')?.value ?? document.querySelector('.gp-top h1')?.textContent, back: document.querySelector('.gp-top a')?.getAttribute('href'), mode: document.documentElement.dataset.mode }));
     check(chrome1.title === 'Field trip form' && chrome1.back === 'papers.html' && chrome1.mode === 'pdf', `the top bar: Documents, the title (${JSON.stringify(chrome1)})`);
     // The page is paper under a dark Look; the bar around it is the Look's.
     const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
@@ -154,8 +155,17 @@ const fixture = () => {
     await until(() => page.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent === 'Saved'), 'saved after filling');
     const saved = await local(`writerPaper:${key}`);
     check(saved.revision > rec.revision && Buffer.from(saved.file, 'base64').length > Buffer.from(rec.file, 'base64').length, `the filled file is saved (${rec.size} → ${saved.size} bytes)`);
+    // Saving (and drawing page 1 again for the card) leaves the page on screen as it was: drawn, the field filled.
+    const drawnPage = () => page.evaluate(() => { const p = document.querySelector('.pdfViewer .page[data-page-number="1"]'), c = p?.querySelector('canvas'); return !!c && c.width > 0 && getComputedStyle(c).display !== 'none' && p.querySelector('.annotationLayer input')?.value === 'Ada Lovelace' && !!p.querySelector('.textLayer span'); });
+    check(await until(drawnPage, 'page 1 drawn after saving', 5000), 'page 1 stays drawn with its field after saving');
+    const where = await page.evaluate(() => ({ top: document.querySelector('.gq-scroll').scrollTop, focus: document.activeElement?.className || document.activeElement?.tagName }));
+    await page.evaluate(() => document.querySelector('.gq-scroll').scrollTo(0, 0));
+    // Page 1's words on screen, not only in the DOM.
+    const onScreen = () => page.evaluate(() => { const s = document.querySelector('.gq-scroll').getBoundingClientRect(), r = document.querySelector('.pdfViewer .page[data-page-number="1"] .textLayer span')?.getBoundingClientRect(); return !!r && r.top >= s.top && r.bottom <= s.bottom; });
+    check(await until(onScreen, 'page 1 on screen', 5000), `page 1's words are on screen (after Tab: ${JSON.stringify(where)})`);
     await shot('viewer-1280.png');
     await page.setViewportSize({ width: 640, height: 900 });
+    await until(drawnPage, 'page 1 drawn at 640', 5000);
     await shot('viewer-640.png');
     await page.setViewportSize({ width: 1280, height: 900 });
     // Esc with nothing open leaves the tab where it is (as a paper's does); the ⋯ menu closes on it, focus back on ⋯.
@@ -194,12 +204,20 @@ const fixture = () => {
   } catch (e) {
     console.error(e);
     process.exitCode = 1;
+    // What the page was when it failed: a picture, its address, and the viewer's state.
+    try {
+      fs.mkdirSync(out, { recursive: true });
+      await page?.screenshot({ path: path.join(out, 'failure.png') });
+      fs.writeFileSync(path.join(out, 'failure.json'), JSON.stringify(await page?.evaluate(() => ({ url: location.href, mode: document.documentElement.dataset.mode, route: document.documentElement.getAttribute('data-gd-route'),
+        pages: document.querySelectorAll('.pdfViewer .page').length, canvases: document.querySelectorAll('.pdfViewer canvas').length, said: document.querySelector('.gq-said')?.textContent,
+        scroll: document.querySelector('.gq-scroll')?.getBoundingClientRect().toJSON(), body: document.body.innerHTML.slice(0, 3000) })), null, 1));
+    } catch (err) { console.error(err); }
   } finally {
     await context?.close().catch(() => {});
     if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
     if (held) fs.rmSync(lock, { recursive: true, force: true });
     fs.mkdirSync(out, { recursive: true });
-    fs.writeFileSync(path.join(out, 'pdf-results.json'), JSON.stringify({ passed, checks, errors, requests, workers, shots }, null, 2) + '\n');
+    fs.writeFileSync(path.join(out, 'pdf-results.json'), JSON.stringify({ passed, checks, errors, requests, workers, shots, logs }, null, 2) + '\n');
     console.log(`${passed ? 'PASS' : 'FAIL'} pdf-check: ${checks.length} checks`);
   }
 })();
