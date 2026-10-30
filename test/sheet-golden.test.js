@@ -216,6 +216,11 @@ test('cases: deterministic formulas within Excel limits', () => {
     assert.ok(c.formula.length <= 8192, c.id);
     for (const f of [c.formula, ...Object.values(c.inputs).filter((v) => v?.f).map((v) => v.f)]) {
       assert.doesNotMatch(f.replace(/"(?:[^"]|"")*"/g, ''), VOLATILE, `${c.id} is volatile`);
+      if (/^=SUMIF\(/i.test(f)) {
+        const [range, sum = range] = references(f);
+        assert.equal(sum.r1 - sum.r0, range.r1 - range.r0, `${c.id}: no volatile SUMIF range expansion`);
+        assert.equal(sum.c1 - sum.c0, range.c1 - range.c0, `${c.id}: no volatile SUMIF range expansion`);
+      }
     }
     assert.doesNotMatch(c.formula, /_xl(fn|ws|pm|udf)\./, `${c.id}: written as typed, without file prefixes`);
     if (c.unsupported != null) assert.ok(typeof c.unsupported === 'string' && c.unsupported, `${c.id}: unsupported holds Excel's message`);
