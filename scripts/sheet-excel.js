@@ -30,14 +30,14 @@ const num = (x) => {
   return `${m.includes('.') ? m : `${m}.0`}E${e[0] === '-' ? e : `+${e.replace('+', '')}`}`;
 };
 
-// Runs a script, its result as text. macOS refusing the events (the Automation setting, or its prompt left unanswered)
-// comes back as an Error that says what to allow.
-const osa = (script, timeout = 120000) => {
+// Runs a script, its result as text: AppleScript (osa) or JavaScript for Automation (jxa). macOS refusing the events
+// (the Automation setting, or its prompt left unanswered) comes back as an Error that says what to allow.
+const run = (script, timeout, js) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-excel-'));
-  const file = path.join(dir, 'run.applescript');
+  const file = path.join(dir, js ? 'run.js' : 'run.applescript');
   try {
     fs.writeFileSync(file, script);
-    return execFileSync('osascript', [file], { encoding: 'utf8', timeout, maxBuffer: 64 << 20 }).replace(/\n$/, '');
+    return execFileSync('osascript', [...(js ? ['-l', 'JavaScript'] : []), file], { encoding: 'utf8', timeout, maxBuffer: 64 << 20 }).replace(/\n$/, '');
   } catch (err) {
     const why = `${err.stderr || ''}`.trim() || err.message;
     const from = process.env.__CFBundleIdentifier || process.env.TERM_PROGRAM || 'this terminal';
@@ -48,6 +48,8 @@ const osa = (script, timeout = 120000) => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 };
+const osa = (script, timeout = 120000) => run(script, timeout, false);
+const jxa = (script, timeout = 120000) => run(script, timeout, true);
 
 // Excel ready for Apple events: launched hidden when it isn't running. → { started, pid } for quit().
 const start = () => {
@@ -75,4 +77,4 @@ const quit = ({ started, pid: was }) => {
 // A folder inside Excel's container for one run's files, removed by the caller.
 const box = (name) => { fs.mkdirSync(BOX, { recursive: true }); return fs.mkdtempSync(path.join(BOX, `glaze-${name}-`)); };
 
-module.exports = { EXCEL, str, num, osa, start, quit, box };
+module.exports = { EXCEL, str, num, osa, jxa, start, quit, box };
