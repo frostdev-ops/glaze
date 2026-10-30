@@ -12,7 +12,8 @@
 //   5 The host killed: the link shows exited, then connects to a new host.
 //   6 Agent access off: the host goes and the run folder is emptied.
 //   7 The shipped manifest (nativeMessaging optional), headed under Xvfb, the prompt answered with XTEST keys, the manifest
-//     and launcher written by hand: the link waits in restart with no host, and connects once the worker restarts.
+//     and launcher written by hand: restart with no host, then a natural idle stop and an ordinary page message with
+//     DevTools detached.
 // Evidence in the folder given: results.json, log.txt, each agent's lines, the bare browsers' logs, the probe's reports,
 // the approval window and the prompt.
 //   glaze-remote -o <evidence dir> -- node scripts/agent-link-check.js /out
@@ -37,14 +38,14 @@ const META = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.mode
 const ACCOUNT = `${C.CANVAS}/5`;
 const POLL = { polling: 50 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const until = async (fn, ms = 15000, step = 100) => { for (const end = Date.now() + ms; ; await sleep(step)) { const v = await fn(); if (v) return v; if (Date.now() > end) return null; } };
+const until = async (fn, ms = 15000, step = 100) => { for (const end = Date.now() + ms; ; await sleep(step)) { if (interrupted && !cleaning) throw Error(interrupted); const v = await fn(); if (v) return v; if (Date.now() > end) return null; } };
 const R = { idleMs: IDLE, node: process.version, helper: VERSION, checks: [], phases: {} };
 const lines = [];
 const say = (...a) => { const s = a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' '); lines.push(`${new Date().toISOString()} ${s}`); console.log(s.length > 600 ? `${s.slice(0, 600)}…` : s); };
 const save = () => { fs.writeFileSync(path.join(OUT, 'results.json'), `${JSON.stringify(R, null, 2)}\n`); fs.writeFileSync(path.join(OUT, 'log.txt'), `${lines.join('\n')}\n`); };
 const ok = (step, what, pass, evidence) => { R.checks.push({ step, what, pass: !!pass, ...(evidence !== undefined && { evidence }) }); say(pass ? 'ok' : 'FAIL', `[${step}]`, what, ...(pass || evidence === undefined ? [] : [evidence])); };
-const owned = { contexts: new Set(), procs: new Set() };
-let scratch;
+const owned = { contexts: new Set(), attachments: new Set(), procs: new Set(), sockets: new Set() };
+let scratch, interrupted;
 
 // A scratch HOME: setup, the browser (and so the host it starts) and the agents all get it.
 const envFor = (home) => {
@@ -122,6 +123,7 @@ const put = (file, text, mode) => { fs.rmSync(file, { force: true }); fs.mkdirSy
 // required: nativeMessaging moved from optional_permissions to permissions; else the shipped manifest.
 const STAGED = [];
 function stage(label, required) {
+  if (interrupted) throw Error(interrupted);
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(scratch, `ext-${label}-`)));
   STAGED.push(IDS.origin(IDS.devId(dir)));
   link(src, dir);
@@ -147,6 +149,7 @@ const probeFor = (prof, label, ext) => {
 // ---- browsers ---------------------------------------------------------------------------------------------------------
 const extArgs = (ext) => [`--disable-extensions-except=${ext.dir}`, `--load-extension=${ext.dir}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'];
 async function open(prof, ext, home, display) {
+  if (interrupted) throw Error(interrupted);
   const env = { ...envFor(home), ...(display && { DISPLAY: `:${display}` }) };
   await require('./wait-for-browser.js')();
   const context = await chromium.launchPersistentContext(prof, { ...require('./check-env.js').chromeLaunch(), headless: !display, viewport: { width: 1000, height: 700 }, env, args: extArgs(ext) });
@@ -162,7 +165,7 @@ async function open(prof, ext, home, display) {
 }
 const store = (opt, patch) => opt.evaluate((p) => chrome.storage.local.set(p), patch);
 const who = (opt) => opt.evaluate(() => chrome.runtime.sendMessage({ t9: 'who' }));
-const close = async (context) => { await context.close().catch(() => {}); owned.contexts.delete(context); };
+const close = async (context) => { await context.close(); owned.contexts.delete(context); };
 const config = (opt, m) => opt.evaluate((m) => chrome.runtime.sendMessage({ type: 'glaze:mcp-config', ...m }), m);
 const linkOf = (opt) => opt.evaluate(() => chrome.storage.session.get('mcpLink').then((r) => r.mcpLink || null));
 const connected = (opt) => until(async () => { const l = await linkOf(opt); return l?.state === 'connected' && l; }, 20000);
@@ -172,26 +175,56 @@ const watch = (opt) => opt.evaluate(() => { window.t9Link = []; chrome.storage.o
 const bareArgs = (prof, ext) => ['--headless', '--no-sandbox', `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check',
   '--disable-background-networking', '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
   '--disable-component-update', '--password-store=basic', '--use-mock-keychain', ...extArgs(ext), 'about:blank'];
-function bare(label, prof, ext, home) {
+function bare(label, prof, ext, home, display, debug = false) {
+  if (interrupted) throw Error(interrupted);
   const log = path.join(OUT, `chrome-bare-${label}.log`), out = fs.openSync(log, 'w');
-  const proc = spawn(require('./check-env.js').chromePath() || chromium.executablePath(), bareArgs(prof, ext), { stdio: ['ignore', out, out], env: envFor(home) });
-  owned.procs.add(proc);
+  const args = bareArgs(prof, ext).filter((a) => !display || a !== '--headless');
+  if (debug) args.unshift('--remote-debugging-port=0');
+  let proc;
+  try { proc = spawn(require('./check-env.js').chromePath() || chromium.executablePath(), args, { detached: true, stdio: ['ignore', out, out], env: { ...envFor(home), ...(display && { DISPLAY: `:${display}` }) } }); }
+  finally { fs.closeSync(out); }
+  track(proc);
   return { proc, log, at: Date.now() };
 }
+// Detached children have their own process group, including Chromium's helpers without a profile argument.
+const processInfo = (pid) => {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ').at(-1).split(' ');
+    return { pid: +pid, state: stat[0], parent: +stat[1], group: +stat[2], start: stat[19], argv: cmdline(pid) || [] };
+  } catch { return null; }
+};
+const processes = () => fs.readdirSync('/proc').filter((d) => /^\d+$/.test(d)).map(processInfo).filter((p) => p && p.state !== 'Z');
+const sameProcess = (p) => { const now = processInfo(p.pid); return now && now.state !== 'Z' && now.start === p.start; };
+const processGroup = (pid) => processes().filter((p) => p.group === pid);
+const track = (proc) => {
+  owned.procs.add(proc);
+  proc.on('error', (e) => { R.errors = { ...R.errors, spawn: String(e.stack || e) }; });
+  return proc;
+};
 async function stop(proc) {
-  if (proc.exitCode === null && !proc.signalCode) {
-    proc.kill('SIGTERM');
-    for (let i = 0; i < 50 && proc.exitCode === null && !proc.signalCode; i++) await sleep(100);
-    if (proc.exitCode === null && !proc.signalCode) proc.kill('SIGKILL');
+  const children = processGroup(proc.pid);
+  const running = () => proc.exitCode === null && !proc.signalCode;
+  const remaining = () => running() || children.some(sameProcess);
+  const signal = (sig) => {
+    if (running()) proc.kill(sig);
+    for (const p of children) if (sameProcess(p)) { try { process.kill(p.pid, sig); } catch (e) { if (e.code !== 'ESRCH') throw e; } }
+  };
+  if (remaining()) {
+    signal('SIGTERM');
+    for (let i = 0; i < 50 && remaining(); i++) await sleep(100);
+    if (remaining()) signal('SIGKILL');
+    for (let i = 0; i < 50 && remaining(); i++) await sleep(100);
   }
+  if (remaining()) throw Error(`process ${proc.pid} or its children did not exit`);
   owned.procs.delete(proc);
 }
 
 // ---- agents -----------------------------------------------------------------------------------------------------------
 // A glaze-mcp agent as an app runs it, speaking MCP lines; every line both ways and its stderr in agent-<label>.jsonl.
 function agent(label, home) {
-  const p = spawn(process.execPath, [BIN, 'agent'], { env: envFor(home), stdio: ['pipe', 'pipe', 'pipe'] });
-  owned.procs.add(p);
+  if (interrupted) throw Error(interrupted);
+  const p = spawn(process.execPath, [BIN, 'agent'], { detached: true, env: envFor(home), stdio: ['pipe', 'pipe', 'pipe'] });
+  track(p);
   const a = { label, err: '', exit: null, got: [] }, waits = new Map(), file = path.join(OUT, `agent-${label}.jsonl`);
   const note = (dir, m) => fs.appendFileSync(file, `${JSON.stringify({ at: Date.now(), dir, m })}\n`);
   let next = 1, buf = '';
@@ -254,12 +287,22 @@ const answers = async (r, name) => {
 // ---- X11, for the prompt: XTEST keys and a screenshot of the root window ----------------------------------------------
 async function xclient(display) {
   const sock = net.connect(`/tmp/.X11-unix/X${display}`);
+  owned.sockets.add(sock);
+  sock.once('close', () => owned.sockets.delete(sock));
   await new Promise((res, rej) => { sock.once('connect', res); sock.once('error', rej); });
   let buf = Buffer.alloc(0), seq = 0;
   const reads = [];
+  const failed = (e) => { for (const w of reads.splice(0)) w.rej(e); };
+  sock.on('error', failed);
+  sock.on('close', () => failed(Error('X11 connection closed')));
   const drain = () => { while (reads.length && buf.length >= reads[0].n) { const w = reads.shift(); w.res(buf.subarray(0, w.n)); buf = buf.subarray(w.n); } };
   sock.on('data', (d) => { buf = Buffer.concat([buf, d]); drain(); });
-  const read = (n) => new Promise((res) => { reads.push({ n, res }); drain(); });
+  const read = (n) => new Promise((res, rej) => {
+    if (sock.destroyed) return rej(Error('X11 connection closed'));
+    const timer = setTimeout(() => sock.destroy(Error('X11 request timed out')), 15000);
+    reads.push({ n, res: (v) => { clearTimeout(timer); res(v); }, rej: (e) => { clearTimeout(timer); rej(e); } });
+    drain();
+  });
   const hello = Buffer.alloc(12);
   hello.write('l', 0, 'latin1');
   hello.writeUInt16LE(11, 2);
@@ -313,10 +356,12 @@ async function xclient(display) {
 }
 async function startX() {
   for (let n = 91; n < 140; n++) {
+    if (interrupted) throw Error(interrupted);
     if (fs.existsSync(`/tmp/.X11-unix/X${n}`) || fs.existsSync(`/tmp/.X${n}-lock`)) continue;
-    const proc = spawn('Xvfb', [`:${n}`, '-screen', '0', '1280x900x24', '-nolisten', 'tcp', '-ac'], { stdio: 'ignore' });
-    owned.procs.add(proc);
+    const proc = spawn('Xvfb', [`:${n}`, '-screen', '0', '1280x900x24', '-nolisten', 'tcp', '-ac'], { detached: true, stdio: 'ignore' });
+    track(proc);
     for (let i = 0; i < 50 && !fs.existsSync(`/tmp/.X11-unix/X${n}`) && proc.exitCode === null; i++) await sleep(100);
+    if (interrupted) throw Error(interrupted);
     if (fs.existsSync(`/tmp/.X11-unix/X${n}`)) return { n, proc };
     await stop(proc);
   }
@@ -433,6 +478,8 @@ async function idle() {
   const ph = R.phases.idle = {};
   const port = bare('port', P1.prof, E1, P1.home), ctl = bare('control', P2.prof, E1, P2.home);
   try {
+    ph.browsers = [port, ctl].map((b) => ({ pid: b.proc.pid, argv: cmdline(b.proc.pid) }));
+    ok('4', 'both measured browsers start without a DevTools endpoint', ph.browsers.every((b) => b.argv && !b.argv.some((a) => a.startsWith('--remote-debugging'))), ph.browsers);
     const first = await until(() => hosts(P1.home)[0], 30000);
     const a = agent('idle', P1.home);
     const discover = await a.modern('server/discover'), before = await call(a, 'todo_list', 'modern', 20000);
@@ -511,14 +558,28 @@ async function killAndOff() {
 async function restart() {
   const ph = R.phases.restart = {};
   if (require('node:child_process').spawnSync('sh', ['-c', 'command -v Xvfb']).status !== 0) return ok('7', 'Xvfb is here for the headed run', false, 'no Xvfb');
-  const X = await startX(), x = await xclient(X.n);
+  const X = await startX();
+  let x;
   try {
+    x = await xclient(X.n);
     const ext = stage('shipped', false), home = path.join(scratch, 'home3'), prof = path.join(scratch, 'profile-restart');
     const launcher = path.join(scratch, 'hosts3', 'chromium');
     put(launcher, L.sh({ node: process.execPath, script: BIN, browser: 'chromium' }), 0o755);
     nmh(prof, { name: BR.HOST, description: 'glaze-mcp (T9)', path: launcher, type: 'stdio', allowed_origins: [IDS.origin(ext.id)] });
     ph.manifest = { permissions: ext.permissions, optional: ext.optional };
-    const { context, opt } = await open(prof, ext, home, X.n);
+    probeFor(prof, 'restart', ext);
+    await require('./wait-for-browser.js')();
+    const raw = bare('restart', prof, ext, home, X.n, true);
+    const active = path.join(prof, 'DevToolsActivePort');
+    const port = await until(() => fs.existsSync(active) && +fs.readFileSync(active, 'utf8').split('\n')[0]);
+    if (!port) throw Error('headed browser did not expose its preparation port');
+    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+    owned.attachments.add(browser);
+    const context = browser.contexts()[0];
+    context.setDefaultTimeout(15000);
+    require('./check-env.js').noFirstRun(context);
+    const opt = await context.newPage();
+    await opt.goto(`chrome-extension://${ext.id}/options.html`);
     await opt.bringToFront();
     const born = await who(opt);
     // The switch as Settings will have it: the grant's request is the click's first statement, then set on.
@@ -537,11 +598,15 @@ async function restart() {
         }, (e) => { window.t9 = { state: 'error', error: String(e?.message || e) }; });
       });
     });
-    // The prompt's focus starts on its Deny button (spike Q2): Tab, then Return; Return alone in case it doesn't.
+    // Every attempt must start without the grant and show an unresolved request before any answer keys.
     ph.attempts = [];
     for (const [how, keys] of [['tab-return', [TAB, RETURN]], ['return', [RETURN]]]) {
+      const beforeGrant = await opt.evaluate(() => chrome.permissions.contains({ permissions: ['nativeMessaging'] }));
       await opt.click('#t9-on');
       await sleep(1500);
+      const pending = await opt.evaluate(() => window.t9?.state === 'asking');
+      ok('7', 'the permission request is pending before the native prompt is answered', !beforeGrant && pending, { beforeGrant, pending, how });
+      if (beforeGrant || !pending) throw Error('permission prompt was bypassed');
       const shot = `restart-prompt-${ph.attempts.length + 1}.png`;
       await x.shot(path.join(OUT, shot));
       for (const k of keys) await x.key(k);
@@ -556,35 +621,113 @@ async function restart() {
     const waiting = ph.waiting = { link: await linkOf(opt), worker: await who(opt), run: runFolder(home) };
     ok('7', 'and it waits there: the same worker, no host started', waiting.link?.state === 'restart' && waiting.worker.nonce === born.nonce && !waiting.run?.length, waiting);
     await x.shot(path.join(OUT, 'restart-after.png'));
-    // The next worker: as an idle stop would, DevTools stops it; the options page's message starts a new one.
-    const cdp = await context.newCDPSession(opt);
-    await cdp.send('ServiceWorker.enable');
-    await cdp.send('ServiceWorker.stopAllWorkers');
-    await sleep(1000);
-    const next = ph.next = await who(opt);
-    const up = ph.link = await connected(opt), host = hosts(home)[0];
-    ok('7', 'the next worker connects at its start', next.nonce !== born.nonce && up?.host === VERSION && !!host && cmdline(host.rec.pid)?.includes(IDS.origin(ext.id)), { next, up, host: host?.rec.pid });
+    // A page opened after the grant has the native reporting API; the already open page, like the worker, does not.
+    const probe = await context.newPage();
+    await probe.goto(`chrome-extension://${ext.id}/options.html`);
+    const ready = await probe.evaluate(() => chrome.runtime.sendNativeMessage('io.frostdev.glaze_t9_probe', { t: 'ready' }));
+    ok('7', 'the fresh page can report without holding a native port', ready?.ok === true, ready);
+    // This page reads storage only while idle. Its one ordinary message after IDLE wakes the naturally stopped worker.
+    await probe.evaluate((ms) => {
+      const armed = Date.now();
+      setTimeout(async () => {
+        const report = (m) => chrome.runtime.sendNativeMessage('io.frostdev.glaze_t9_probe', { t: 'restart', ...m });
+        try {
+          const before = await chrome.storage.local.get('t9Starts');
+          const asked = Date.now(), worker = await chrome.runtime.sendMessage({ t9: 'who' });
+          let link;
+          for (const end = Date.now() + 20000; Date.now() < end;) {
+            link = (await chrome.storage.session.get('mcpLink')).mcpLink;
+            if (link?.state === 'connected') break;
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          await report({ armed, asked, worker, link, before: before.t9Starts, starts: (await chrome.storage.local.get('t9Starts')).t9Starts });
+        } catch (e) { await report({ error: String(e.stack || e) }); }
+      }, ms);
+    }, IDLE + 5000);
+    await browser.close(); // connectOverCDP: disconnects from the independently owned browser
+    owned.attachments.delete(browser);
+    const peers = () => ['tcp', 'tcp6'].flatMap((f) => fs.readFileSync(`/proc/net/${f}`, 'utf8').trim().split('\n').slice(1))
+      .filter((l) => { const c = l.trim().split(/\s+/); return parseInt(c[1].split(':')[1], 16) === port && c[3] === '01'; });
+    if (!await until(() => !peers().length, 5000)) throw Error('DevTools client is still connected');
+    const detached = Date.now();
+    const attached = [];
+    const report = await until(() => {
+      if (peers().length) attached.push(Date.now());
+      return probeLog('restart').find((e) => e.m?.t === 'restart') || raw.proc.exitCode !== null;
+    }, IDLE + 35000, 250);
+    const next = ph.next = report?.m;
+    ph.detached = { at: detached, browserPid: raw.proc.pid, attached, report: next };
+    const host = hosts(home)[0];
+    ok('7', 'after a natural idle stop, an ordinary page message reaches a new worker with no DevTools attached', !!next?.worker?.nonce && next.worker.nonce !== born.nonce
+      && next.asked - detached >= IDLE && next.before?.length === 1 && next.before[0].nonce === born.nonce
+      && next.starts?.length === 2 && next.starts[1].nonce === next.worker.nonce && next.worker.born >= next.asked
+      && !attached.length && raw.proc.exitCode === null, ph.detached);
+    ok('7', 'the new worker connects without a forced restart', next?.link?.state === 'connected' && next.link.host === VERSION && !!host && cmdline(host.rec.pid)?.includes(IDS.origin(ext.id)), { next, host: host?.rec.pid });
     const a = agent('restart', home), d = await a.modern('server/discover'), t = await a.modern('tools/list');
     ok('7', 'and an agent reaches it', !!d.result && names(t)?.includes('todo_list'), names(t));
     await a.end();
-    await close(context);
+    await stop(raw.proc);
+    const f = path.join(scratch, 'probe-restart.jsonl');
+    if (fs.existsSync(f)) fs.copyFileSync(f, path.join(OUT, 'probe-restart.jsonl'));
   } catch (e) {
-    await x.shot(path.join(OUT, 'restart-error.png')).catch(() => {});
+    await x?.shot(path.join(OUT, 'restart-error.png')).catch(() => {});
     throw e;
   } finally {
-    x.close();
+    x?.close();
     await stop(X.proc);
   }
 }
 
-const guard = (name, fn) => fn().catch((e) => { say(`ERROR in ${name}:`, e.stack || String(e)); R.errors = { ...R.errors, [name]: String(e.stack || e) }; });
+const guard = async (name, fn) => { if (interrupted) return; await fn().catch((e) => { say(`ERROR in ${name}:`, e.stack || String(e)); R.errors = { ...R.errors, [name]: String(e.stack || e) }; }); };
+
+const lock = require('./check-env.js').lockPath();
+let held = false, cleaning;
+const cleanup = () => cleaning ||= Promise.resolve().then(async () => {
+  const all = scratch ? processes() : [], captured = new Map();
+  for (const p of all) if (p.pid !== process.pid && p.argv.some((s) => s.includes(scratch) || STAGED.includes(s))) captured.set(p.pid, p);
+  for (let n = -1; n !== captured.size;) {
+    n = captured.size;
+    for (const p of all) if (captured.has(p.parent)) captured.set(p.pid, p);
+  }
+  try {
+    for (const sock of owned.sockets) sock.destroy();
+    for (const b of owned.attachments) await b.close().catch((e) => { R.errors = { ...R.errors, detach: String(e) }; });
+    for (const c of owned.contexts) await close(c).catch((e) => { R.errors = { ...R.errors, close: String(e) }; });
+    for (const p of owned.procs) await stop(p).catch((e) => { R.errors = { ...R.errors, stop: String(e) }; });
+    if (scratch) {
+      const ours = () => processes().filter((p) => p.pid !== process.pid && (p.argv.some((s) => s.includes(scratch) || STAGED.includes(s)) || captured.get(p.pid)?.start === p.start));
+      await until(() => !ours().length, 3000);
+      const left = ours();
+      for (const p of left) if (sameProcess(p)) { try { process.kill(p.pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') throw e; } }
+      await until(() => !left.some(sameProcess), 3000);
+      for (const p of left) if (sameProcess(p)) { try { process.kill(p.pid, 'SIGKILL'); } catch (e) { if (e.code !== 'ESRCH') throw e; } }
+      await until(() => !ours().length && !left.some(sameProcess), 5000);
+      const remaining = ours();
+      R.cleanup = { scratch, captured: [...captured.keys()], remaining };
+      ok('cleanup', 'all owned browsers, helpers and agents have exited', !remaining.length && !left.some(sameProcess), remaining);
+      if (remaining.length || left.some(sameProcess)) throw Error('owned processes remain');
+      for (const f of fs.readdirSync(scratch).filter((n) => /^probe-.*\.jsonl$/.test(n))) fs.copyFileSync(path.join(scratch, f), path.join(OUT, f));
+      fs.rmSync(scratch, { recursive: true, force: true });
+      ok('cleanup', 'the scratch HOME and staged profiles are removed', !fs.existsSync(scratch));
+    }
+  } finally {
+    if (held) { fs.rmSync(lock, { recursive: true, force: true }); held = false; }
+  }
+});
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
+  interrupted = signal;
+  R.errors = { ...R.errors, interrupted: signal };
+  // Unblock pending browser and agent requests; the main finally waits for them and runs cleanup once.
+  for (const sock of owned.sockets) sock.destroy();
+  for (const c of owned.contexts) close(c).catch(() => {});
+  for (const p of owned.procs) if (p.exitCode === null && !p.signalCode) p.kill('SIGTERM');
+});
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
-  const lock = require('./check-env.js').lockPath();
-  let held = false;
   try {
     while (!held) {
+      if (interrupted) throw Error(interrupted);
       try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await sleep(1000); }
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nagent-link-check\n`);
@@ -602,22 +745,11 @@ const guard = (name, fn) => fn().catch((e) => { say(`ERROR in ${name}:`, e.stack
     await guard('killOff', killAndOff); save();
     await guard('restart', restart); save();
   } finally {
-    for (const c of owned.contexts) await c.close().catch(() => {});
-    for (const p of owned.procs) await stop(p);
-    // No host outlives its browser: ours by the scratch folder (setup's copy, the probe) or a staged copy's origin.
-    if (scratch && fs.existsSync('/proc')) {
-      await sleep(1500);
-      const left = fs.readdirSync('/proc').filter((d) => /^\d+$/.test(d) && +d !== process.pid).map((d) => [+d, cmdline(d) || []])
-        .filter(([, argv]) => argv.some((s) => s.includes(scratch) || STAGED.includes(s)));
-      for (const [pid] of left) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
-      ok('cleanup', 'no host outlives its browser', !left.length, left);
-    }
-    if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
-    if (held) fs.rmSync(lock, { recursive: true, force: true });
+    await cleanup();
     const failed = R.checks.filter((c) => !c.pass);
     R.summary = { checks: R.checks.length, failed: failed.length, errors: Object.keys(R.errors || {}) };
-    save();
     say(failed.length || R.errors ? `FAILED ${failed.length} of ${R.checks.length}${R.errors ? `, errors in ${Object.keys(R.errors).join(', ')}` : ''}` : `all ${R.checks.length} checks pass`, 'evidence in', OUT);
-    process.exitCode = failed.length || R.errors || !R.checks.length ? 1 : 0;
+    save();
+    process.exitCode = interrupted ? (interrupted === 'SIGINT' ? 130 : 143) : failed.length || R.errors || !R.checks.length ? 1 : 0;
   }
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => { R.errors = { ...R.errors, main: String(e.stack || e) }; save(); console.error(e); process.exit(interrupted ? (interrupted === 'SIGINT' ? 130 : 143) : 1); });
