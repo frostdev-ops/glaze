@@ -30,6 +30,7 @@ nonisolated func json(_ o: Any) -> String { String(data: try! JSONSerialization.
 @MainActor func emit(_ o: [String: Any]) { print(json(o)); fflush(stdout) }
 @MainActor final class Harness {
     var fail = false, buf: [UInt8] = [], host: GlazeAgentHost?, commands: DispatchSourceRead?
+    var prepareUpdate: (() -> Void)?
     func run(_ a: [String]) {
         var limits = GlazeAgentHost.Limits()
         limits.idle = Double(a[3])!; limits.line = Int(a[4])!; limits.queue = Int(a[5])!; limits.drain = 2
@@ -67,6 +68,9 @@ nonisolated func json(_ o: Any) -> String { String(data: try! JSONSerialization.
             case "fail":
                 fail = true
                 emit(["ev": "failing"])
+            case "prepare":
+                prepareUpdate?()
+                emit(["ev": "prepared"])
             default:
                 host?.stop()
                 exit(0)
@@ -372,6 +376,80 @@ test('the bridge reaches the host in a group container whose path exceeds sun_pa
     swift.send({ cmd: 'stop' });
     await swift.done;
     assert.equal(fs.existsSync(path.join(group, 'agent.sock')), false, 'owned socket removed');
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+// Exercise the actual Sparkle callback and hidden-quit guard. No application bundle or installed updater is used.
+const UPDATE_BOOT = `
+@MainActor final class QuitProbe: NSApplication {
+    override func terminate(_ sender: Any?) { emit(["ev": "quit"]); harness.host?.stop(); exit(0) }
+}
+extension AppDelegate {
+    func attachForTest(_ host: GlazeAgentHost) { agents = host }
+}
+let harness = MainActor.assumeIsolated { Harness() }
+let delegate = MainActor.assumeIsolated { AppDelegate() }
+MainActor.assumeIsolated {
+    _ = QuitProbe.shared
+    harness.run(CommandLine.arguments)
+    delegate.attachForTest(harness.host!)
+    harness.prepareUpdate = {
+        let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: SPUStandardUserDriver(hostBundle: .main, delegate: nil), delegate: delegate)
+        _ = delegate.updater(updater, willInstallUpdateOnQuit: SUAppcastItem()) { fatalError("must never install and relaunch immediately") }
+    }
+}
+dispatchMain()
+`;
+
+test('a prepared update waits for a long call and its split reply, then quits the hidden app during an idle gap', { skip: !S.supported, timeout: 180000 }, async () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-update-idle-'));
+  const group = path.join(temp, 'group');
+  fs.mkdirSync(group, { mode: 0o700 });
+  const HOME = path.join(temp, 'home'), file = path.join(temp, 'Update.swift');
+  const app = fs.readFileSync(path.join(__dirname, 'fixtures/sparkle-stand-in.swift'), 'utf8') + fs.readFileSync(appFile, 'utf8').replace(/^import Sparkle$/m, '').replace(/^@main$/m, '');
+  fs.writeFileSync(file, fs.readFileSync(bridgeFile, 'utf8') + fs.readFileSync(hostFile, 'utf8') + app + HARNESS.slice(0, HARNESS.indexOf('let harness =')) + UPDATE_BOOT);
+  const swift = S.run(file, [R.dir({ platform: 'darwin', env: { HOME } }), group, '60', String(LINE), String(QUEUE)], { flags: ['-D', 'GLAZE_DMG', '-default-isolation', 'MainActor'] });
+  const events = [];
+  let over = false, a;
+  (async () => { for (;;) { try { events.push(await swift.next(600000)); } catch { over = true; return; } } })();
+  const take = async (pred, what, ms = 20000) => {
+    for (const until = Date.now() + ms; ; await sleep(10)) {
+      const k = events.findIndex(pred);
+      if (k >= 0) return events.splice(k, 1)[0];
+      if (over || Date.now() > until) throw new Error(`no ${what}; ${JSON.stringify(events).slice(-1500)}; ${swift.stderr().slice(-2000)}`);
+    }
+  };
+  let seq = 0;
+  const send = async (frames) => {
+    swift.send({ cmd: 'batch', id: ++seq, batch: B(1, seq, frames) });
+    assert.deepEqual((await take((m) => m.ev === 'reply' && m.id === seq, 'batch answer')).reply, { ok: true });
+  };
+  try {
+    assert.equal((await take((m) => m.ev === 'ready', 'ready', 120000)).started, true);
+    await send([HELLO]);
+    a = agent(HOME);
+    a.write('{"jsonrpc":"2.0","id":"long-call","method":"tools/call","params":{"name":"slow"}}\n');
+    const opened = await take((m) => m.ev === 'dispatch' && m.info.frames.some((f) => f.t === 'open'), 'open');
+    const c = opened.info.frames.find((f) => f.t === 'open').c;
+    await take((m) => m.ev === 'dispatch' && m.info.frames.some((f) => f.t === 'line'), 'call');
+    swift.send({ cmd: 'prepare' });
+    await take((m) => m.ev === 'prepared', 'prepared');
+    await sleep(6500);
+    assert.equal(over, false, 'a call outlives the quiet gap without losing its agent');
+    assert.equal(events.some((m) => m.ev === 'quit'), false);
+    await send([{ t: 'line', c, d: '{"jsonrpc":"2.0","id":"long-call",', m: 1 }]);
+    await sleep(6500);
+    assert.equal(events.some((m) => m.ev === 'quit'), false, 'a split reply still needs its final piece');
+    await send([{ t: 'line', c, d: '"result":{}}' }]);
+    assert.equal(await a.line(), '{"jsonrpc":"2.0","id":"long-call","result":{}}');
+    await take((m) => m.ev === 'quit', 'prepared update termination after the completed call', 9000);
+    assert.equal(await swift.done, 0, swift.stderr());
+    assert.equal(await a.exit, 1, 'idle agent reconnects after the update');
+    assert.equal(fs.existsSync(path.join(group, 'agent.sock')), false);
+  } finally {
+    a?.child.kill();
+    await swift.stop();
     fs.rmSync(temp, { recursive: true, force: true });
   }
 });
