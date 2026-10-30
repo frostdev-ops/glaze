@@ -418,3 +418,15 @@ test('copy reads the card and search metadata from the same revision as its band
   assert.equal(copied.grid[0][0], 'new card');
   assert.match(copied.text, /new card/);
 });
+
+test('equal band hashes never discard different cell text', async () => {
+  const wb = M.workbook(), sh = wb.sheets[0], s = store(), P = PA.open(s);
+  put(sh, 0, 0, { t: 's', v: 'value y3xu9z 1dkp' });
+  const first = await SD.write(P, KEY, wb, new Map());
+  put(sh, 0, 0, { t: 's', v: 'value r00vn4 2n5s' });
+  const p = SD.plan(wb, first.sigs, new Set(['1:0']));
+  assert.equal(p.sigs.get('1:0'), first.sigs.get('1:0'), 'these different rows have the same 32-bit hash');
+  assert.equal(p.changed, true, 'equal hashes require an exact band comparison');
+  await SD.write(P, KEY, wb, first.sigs, { dirty: new Set(['1:0']) });
+  same((await SD.read((ks) => s.get(ks), KEY)).wb, wb);
+});
