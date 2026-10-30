@@ -200,3 +200,24 @@ test('an imported chart moved after rows were inserted: the others keep their mo
   assert.equal((q['xl/drawings/drawing1.xml'].match(/<xdr:cNvPr id="(\d+)"/g) ?? []).length, 6);
   assert.match(q['xl/drawings/drawing1.xml'], /<xdr:cNvPr id="7" name="Chart 6"\/>/, 'a cNvPr id the drawing doesn\'t have');
 });
+
+test('a duplicated sheet: its charts stay its original\'s, and a chart inserted on it gets a drawing of its own', async () => {
+  const wb = await X.read(FX.workbook({ kinds: ['column'] }));
+  const e = C.engine(wb);
+  e.recalc();
+  const one = wb.sheets[0];
+  const copy = { ...structuredClone({ ...one, rows: null }), id: 9, name: 'Data (2)', rows: new Map([...one.rows].map(([r, row]) => [r, new Map(row)])) };
+  e.apply({ op: 'addSheet', sheet: copy, at: 1, active: 1 });
+  const dup = wb.sheets[1];
+  assert.equal(dup.keep.drawing.path, one.keep.drawing.path, 'Duplicate copies the keep, the drawing with it');
+  assert.equal(CX.charts(wb, dup).length, 0, 'the file writes the drawing with Data alone');
+  const L = mount(wb, dup);
+  L.draw();
+  L.apply(L.insert('line', { r0: 0, c0: 0, r1: 4, c1: 1 }));
+  L.draw();
+  assert.equal(L.list().length, 1);
+  assert.notEqual(dup.keep.drawing.path, one.keep.drawing.path);
+  assert.equal(CX.charts(wb, one).length, 1, 'Data keeps its one chart');
+  const back = await X.read(await X.write(wb, { date: DATE }));
+  assert.deepEqual(back.sheets.map((s) => CX.charts(back, s).map((c) => c.chart.groups[0].type)), [['bar'], ['line']]);
+});
