@@ -671,7 +671,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // ---- saving: the parts the changes marked, the book and the card's text, a while after the last change; a version
     // every 10 minutes of editing, before a big change, a restore or on the first save. Leaving saves at once.
     let timer = 0, saving = null, again = false, lastVersion = rec?.lastVersion || 0, foreign = false;
-    const busy = () => !!(timer || saving || dirty.size || dirtyAll);
+    const busy = () => !!(timer || saving || dirty.size || dirtyAll || Object.keys(nextPatch).length || nextVersion || (editing && editing.surface.value !== editing.orig));
     const pill = () => { state.textContent = busy() ? t('Saving…') : ''; };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { timer = 0; flush(); }, 700); pill(); };
     const flush = () => {
@@ -726,7 +726,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     chrome.storage.onChanged.addListener(onStore);
     addEventListener('pagehide', () => { if (busy()) flush(); });
     // A tab closed while a save waits: the browser asks first, as for a PDF's unsaved form.
-    addEventListener('beforeunload', (e) => { if (busy()) { flush(); e.preventDefault(); e.returnValue = ''; } });
+    addEventListener('beforeunload', (e) => { if (busy()) { commit(); flush(); e.preventDefault(); e.returnValue = ''; } });
     document.addEventListener('visibilitychange', () => { if (document.hidden && busy()) flush(); });
     // Documents: what is unsaved goes first (a frame of a school's page replaces itself, as papers.js's links do).
     back?.addEventListener('click', (e) => {
