@@ -257,6 +257,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     nextB.addEventListener('click', () => find('again', false));
     const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
     document.addEventListener('keydown', (e) => {
+      if (e.defaultPrevented) return;
+      if (e.key === 'Escape' && !findBar.hidden) { e.preventDefault(); e.stopPropagation(); showFind(false); return; }
       if (!(MAC ? e.metaKey : e.ctrlKey) || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === 'f' && doc) { e.preventDefault(); showFind(true); }
