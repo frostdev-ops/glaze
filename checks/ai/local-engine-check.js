@@ -59,7 +59,7 @@ const mode = args.shift();
 const opt = {
   out: flag('--out', null), flags: flag('--flags', mode === 'small' ? 'swiftshader' : 'none'), precision: flag('--precision', 'auto'),
   subgroups: flag('--subgroups', 'auto'), chunk: +flag('--chunk', 512), only: flag('--only', null), steps: +flag('--steps', 64),
-  prompt: +flag('--prompt', 512), decode: +flag('--decode', 128), tokens: flag('--tokens', null), summary: has('--summary'), profile: has('--profile'), api: has('--api'), system: +flag('--system', 1500), gemm: flag('--gemm', 'auto'),
+  prompt: +flag('--prompt', 512), decode: +flag('--decode', 128), tokens: flag('--tokens', null), summary: has('--summary'), profile: has('--profile'), api: has('--api'), system: +flag('--system', 1500), gemm: flag('--gemm', 'auto'), tiles: flag('--tiles', 'auto'), mm: flag('--mm', null),
 };
 
 // ---- Node: summaries of full dumps --------------------------------------------------------------------------------------
@@ -195,7 +195,7 @@ function pageLib() {
   };
   const engine = async (g, o) => {
     const a = await adapter();
-    const e = await EN.create(g, { adapter: a, precision: o.precision, profile: !!o.profile, gemm: o.gemm, subgroups: o.subgroups === 'off' ? false : 'auto', kernels: new URL('/ai/local/kernels/', location.href).href });
+    const e = await EN.create(g, { adapter: a, precision: o.precision, profile: !!o.profile, gemm: o.gemm, tiles: o.tiles, subgroups: o.subgroups === 'off' ? false : 'auto', kernels: new URL('/ai/local/kernels/', location.href).href });
     log(`engine: ${a.info.vendor} ${a.info.architecture}${a.info.isFallbackAdapter ? ' (fallback)' : ''}, ${e.f16 ? 'f16' : 'f32'}, subgroups ${e.subgroups ? `on (${e._k.tpr} lanes a row)` : `off${e.subgroupsOff ? ` (${e.subgroupsOff})` : ''}`}, ${e.layout.buffers.length} weight buffers`);
     return { e, adapter: describe(a) };
   };
@@ -296,11 +296,18 @@ function pageLib() {
       return { M, sw };
     };
     const sumAbs = (X, T, n) => Float64Array.from({ length: T }, (_, t) => { let s = 0; for (let i = 0; i < n; i++) s += Math.abs(X[t * n + i]); return s; });
-    // gemm: false (GEMV a token at a time), 'small' (64 × 64 tiles) or 'big' (128 × 128).
+    // gemm: false (GEMV a token at a time), 'small' (64 × 64 tiles), 'big' (128 × 128) or 'split' (big, split in 3 along
+    // k, then SUM).
     const gpuMm = async (name, X, T, gemm) => {
-      const t = k.tensor(name), xb = up(X), yb = k.buffer(T * t.rows * 4), tile = gemm === 'big' ? 128 : 64;
+      const t = k.tensor(name), xb = up(X), yb = k.buffer(T * t.rows * 4), tile = gemm === 'small' ? 64 : 128, big = gemm === 'big' || gemm === 'split';
       for (const r of t.runs) {
-        if (gemm) await k.dispatch('matmul', { [t.type]: true, BIG: gemm === 'big' }, { 0: r.bind, 1: xb, 2: yb }, k.PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, ldy: t.rows, yOff: r.row }), [Math.ceil(r.rows / tile), Math.ceil(T / tile)]);
+        if (gemm === 'split') {
+          const z = 3, part = k.buffer(z * T * r.rows * 4);
+          await k.dispatch('matmul', { [t.type]: true, BIG: true, TF32: k.tf32 }, { 0: r.bind, 1: xb, 2: part }, k.PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, ldy: r.rows }), [Math.ceil(r.rows / tile), Math.ceil(T / tile), z]);
+          await k.dispatch('matmul', { SUM: true }, { 1: part, 2: yb }, k.PARAMS.matmul({ rows: r.rows, K: z, rowBytes: 0, T, xStride: 0, ldy: t.rows, yOff: r.row }), k.grid(Math.ceil((T * r.rows) / 4 / 256)));
+          await k.read(part, 0, 4);
+          part.destroy();
+        } else if (gemm) await k.dispatch('matmul', { [t.type]: true, BIG: big, TF32: big && k.tf32 }, { 0: r.bind, 1: xb, 2: yb }, k.PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, ldy: t.rows, yOff: r.row }), [Math.ceil(r.rows / tile), Math.ceil(T / tile)]);
         else for (let i = 0; i < T; i++) await k.dispatch('matvec', { [t.type]: true }, { 0: r.bind, 1: xb, 2: yb }, k.PARAMS.matvec({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, xOff: i * t.cols, yOff: i * t.rows + r.row }), k.grid(Math.ceil(r.rows / (256 / k.tpr))));
       }
       const y = await rd(yb, T * t.rows);
@@ -308,16 +315,17 @@ function pageLib() {
       return y;
     };
     // A GEMM case runs both tiles (the big one where the device has the workgroup storage for it).
-    const bigOk = e.device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * (f16 ? 8 : 16);
+    // The big tiles are f32 where the engine chose so (k.tf32) on the f16 path.
+    const bigOk = e.device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * (f16 && !k.tf32 ? 8 : 16);
     const mmCheck = async (name, X, T, gemm) => {
       const W = await mat(name), ref = R._ops.matmul(W, X, T), { M, sw } = absDot(W, X, T), sx = sumAbs(X, T, W.cols);
-      const half = gemm && f16;
-      const bound = Float64Array.from(ref, (y, i) => {
+      const bound = (half) => Float64Array.from(ref, (y, i) => {
         const t = Math.floor(i / W.rows), r = i % W.rows;
         return (W.cols + 16) * u * M[i] + u * Math.abs(y) + (half ? 2 ** -10 * M[i] + h25 * (sw[r] + sx[t]) : 0);
       });
-      for (const how of gemm ? ['small', ...(bigOk ? ['big'] : [])] : [false]) {
-        record(how ? 'gemm' : 'gemv', `${name} ${W.type} ${W.rows}×${W.cols} T=${T}${how === 'big' ? ' big' : ''}`, await gpuMm(name, X, T, how), ref, bound);
+      for (const how of gemm ? ['small', ...(bigOk ? ['big', ...(gemm === 'split' ? ['split'] : [])] : [])] : [false]) {
+        const half = !!how && f16 && !(how !== 'small' && k.tf32);
+        record(how ? 'gemm' : 'gemv', `${name} ${W.type} ${W.rows}×${W.cols} T=${T}${how && how !== 'small' ? ` ${how}` : ''}`, await gpuMm(name, X, T, how), ref, bound(half));
       }
       return ref;
     };
@@ -325,13 +333,13 @@ function pageLib() {
     const gate = await mmCheck(G0, X0, T, false), upv = await mmCheck(U0, X0, T, false);
     const Hff = Float32Array.from(gate, (x, i) => R._ops.silu(x) * upv[i]);
     await mmCheck(D0, Hff, T, false);
-    await mmCheck(D0, Hff, T, true);
+    await mmCheck(D0, Hff, T, 'split');
     for (const n of [b(firstConv, 'shortconv.in_proj'), b(firstFull, 'attn_v'), b(firstFull, 'attn_gate'), b(firstFull, 'attn_k')]) { await mmCheck(n, X0, 1, false); await mmCheck(n, X0, T, true); }
     await mmCheck(b(firstConv, 'shortconv.in_proj'), X70, 70, true);
     await mmCheck(b(firstConv, 'ffn_gate'), X70, 70, true);
     // Past one 128-token tile: 200 tokens on a 512-row matrix.
     const X200 = R._ops.rmsnorm(emb(Array.from({ length: 200 }, (_, i) => (i * 911 + 7) % V)), 200, E, n0, c.eps);
-    await mmCheck(b(firstFull, 'attn_k'), X200, 200, true);
+    await mmCheck(b(firstFull, 'attn_k'), X200, 200, 'split');
     const hN = R._ops.rmsnorm(X0, T, E, await vec('output_norm.weight'), c.eps);
     const lm = await mmCheck('token_embd.weight', hN.subarray((T - 1) * E), 1, false);
     await mmCheck('token_embd.weight', hN, Math.min(T, 4), true);
@@ -722,8 +730,33 @@ function pageLib() {
       out.push({ name, type: t.type, glu, us: best * 1000, GBs: bytes / (best / 1000) / 1e9 });
       log(`bench ${name}${glu ? ' + ffn_up (GLU)' : ''} ${t.type}: ${(best * 1000).toFixed(1)} µs, ${(bytes / (best / 1000) / 1e9).toFixed(0)} GB/s`);
     }
+    // GEMM: --mm 'BIG,TF32;BIG' (each ;-separated set of defines) on each matrix, T = --prompt tokens: ms and TFLOPS.
+    const mm = [];
+    for (const set of o.mm ? o.mm.split(';') : []) {
+      const defs = Object.fromEntries(set.split(',').filter(Boolean).map((d) => [d, true])), tile = defs.BIG ? 128 : 64, T = o.prompt;
+      for (const name of names.slice(0, 3)) {
+        const t = k.tensor(name), r = t.runs[0];
+        const xb = k.upload(Float32Array.from({ length: T * t.cols }, (_, i) => Math.sin(i))), yb = k.buffer(T * t.rows * 4);
+        const p = await k.pipe('matmul', { [t.type]: true, ...defs }), u = k.upload(k.PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, ldy: t.rows }), GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+        const bg = e.device.createBindGroup({ layout: p.getBindGroupLayout(0), entries: [{ binding: 0, resource: r.bind }, { binding: 1, resource: { buffer: xb } }, { binding: 2, resource: { buffer: yb } }, { binding: 3, resource: { buffer: u } }] });
+        const run = async (n) => {
+          const enc = e.device.createCommandEncoder(), pass = enc.beginComputePass();
+          pass.setPipeline(p); pass.setBindGroup(0, bg);
+          for (let i = 0; i < n; i++) pass.dispatchWorkgroups(Math.ceil(r.rows / tile), Math.ceil(T / tile));
+          pass.end(); e.device.queue.submit([enc.finish()]);
+          await e.device.queue.onSubmittedWorkDone();
+        };
+        await run(3);
+        let best = Infinity;
+        for (let i = 0; i < 3; i++) { const t0 = performance.now(); await run(30); best = Math.min(best, (performance.now() - t0) / 30); }
+        const tf = (2 * r.rows * t.cols * T) / (best / 1000) / 1e12;
+        mm.push({ set, name, type: t.type, rows: r.rows, K: t.cols, T, ms: best, tflops: tf });
+        log(`gemm [${set}] ${name} ${t.type} ${r.rows}×${t.cols} T=${T}: ${best.toFixed(3)} ms, ${tf.toFixed(2)} TFLOPS`);
+        xb.destroy(); yb.destroy(); u.destroy();
+      }
+    }
     e.destroy();
-    return { bench: out };
+    return { bench: out, mm };
   };
 
   // ---- small: the tiny random model ----

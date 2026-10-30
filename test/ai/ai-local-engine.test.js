@@ -72,7 +72,8 @@ test('every kernel file is shipped and balanced under every define it uses', () 
       assert.doesNotMatch(out, /\/\/#/, `${k} ${JSON.stringify(d)}`);
     }
     // One deq32 per quant type, so a kernel gets exactly one.
-    if (k === 'quant') for (const q of Object.keys(EN.QUANT)) assert.equal((EN.preprocess(src, { [q]: true }).match(/fn deq32\(/g) || []).length, 1, q);
+    // One deq32, and one of each of the GEMM's row-stream functions, per quant type, so a kernel gets exactly one.
+    if (k === 'quant') for (const q of Object.keys(EN.QUANT)) for (const f of ['deq32', 'hd', 'sc', 'qw', 'v4']) assert.equal((EN.preprocess(src, { [q]: true }).match(new RegExp(`fn ${f}\\(`, 'g')) || []).length, 1, `${q} ${f}`);
   }
 });
 
@@ -83,6 +84,25 @@ test('grid keeps each side within 65535 and covers n', () => {
   }
   assert.deepEqual(EN.grid(0), [1, 1]);
   assert.throws(() => EN.grid(65535 * 65535 + 1), /workgroups/);
+});
+
+test('a big-tile GEMM splits along k only when its tiles cannot fill a GPU, in whole sub-blocks', () => {
+  // LFM3-1.7B's matrices at a 512-token step: ffn_down (2048 × 7680) and the 2048 × 2048 ones split 5 ways, the wide
+  // ones not at all, attn_k / attn_v (512 rows) 8 ways.
+  assert.equal(EN.splits(2048, 7680, 512), 5);
+  assert.equal(EN.splits(2048, 2048, 512), 5);
+  assert.equal(EN.splits(7680, 2048, 512), 1);
+  assert.equal(EN.splits(6144, 2048, 512), 1);
+  assert.equal(EN.splits(512, 2048, 512), 8);
+  // A short step has fewer token tiles, so more splits; never more than 8, nor than the sub-blocks of a row.
+  assert.equal(EN.splits(2048, 7680, 128), 8);
+  assert.equal(EN.splits(512, 64, 128), 2);
+  // The sum reads rows four at a time.
+  assert.equal(EN.splits(2050, 7680, 512), 1);
+  for (const [rows, cols, T] of [[16, 2048, 512], [128000, 2048, 512], [4096, 32, 1024]]) {
+    const z = EN.splits(rows, cols, T);
+    assert.ok(Number.isInteger(z) && z >= 1 && z <= 8 && z <= cols / 32, `${rows}×${cols} T=${T}: ${z}`);
+  }
 });
 
 test('the RoPE table is the reference rope\'s own cos and sin', () => {
