@@ -317,22 +317,25 @@ test('the port: a page saves a document, the worker remembers its Drive file and
   assert.equal(h.log.fetch.length, 0);
 });
 
-test('the port: a page that sends more than it said, or goes away, uploads nothing', async () => {
+test('the port: a page that sends more than it said, or goes away, uploads nothing', { timeout: 5000 }, async () => {
   const records = new Map([['doc:1', null]]);
   const record = { get: async (k) => (records.has(k) ? { drive: records.get(k) } : null), set: async () => true };
   const h = harness([]);
   let [page, worker] = ports();
   D.serve(worker, { drive: h.drive, record, allowed: async () => true });
-  const got = [];
-  page.onMessage.addListener((m) => { got.push(m); if (m.type === 'more') page.postMessage({ op: 'chunk', data: D.b64(new Uint8Array(20)) }); });
+  const refused = new Promise((resolve) => page.onMessage.addListener((m) => {
+    if (m.type === 'more') page.postMessage({ op: 'chunk', data: D.b64(new Uint8Array(20)) });
+    if (m.type === 'fail') resolve(m);
+  }));
   page.postMessage({ op: 'save', key: 'doc:1', name: 'a.pdf', mime: MIME.pdf, size: 10, as: 'file' });
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(got.at(-1).type, 'fail'); assert.equal(got.at(-1).why, 'bad');
+  assert.equal((await refused).why, 'bad');
+  page.disconnect();
   [page, worker] = ports();
   D.serve(worker, { drive: h.drive, record, allowed: async () => true });
+  const disconnected = new Promise((resolve) => worker.onDisconnect.addListener(resolve));
   page.onMessage.addListener((m) => { if (m.type === 'more') page.disconnect(); });
   page.postMessage({ op: 'save', key: 'doc:1', name: 'a.pdf', mime: MIME.pdf, size: 10, as: 'file' });
-  await new Promise((r) => setTimeout(r, 20));
+  await disconnected;
   assert.equal(h.log.fetch.length, 0);
 });
 
@@ -341,4 +344,123 @@ test('the worker\'s Drive forgets a refused token through the sign-in\'s drop, w
   const at = src.indexOf('drive: D.create({'), call = src.slice(at, src.indexOf('}),', at));
   assert.match(call, /drop: \(token\) => openGoogle\(\)\.drop\(token\)/);
   assert.doesNotMatch(call, /removeCachedAuthToken/);
+});
+
+test('concurrent saves of one document reuse the first saved Drive file', async () => {
+  let rec = { drive: null }, made = 0;
+  const targets = [];
+  const record = { get: async () => structuredClone(rec), set: async (_k, drive) => { rec = { drive }; } };
+  const drive = { save: async ({ id }) => {
+    targets.push(id);
+    // Both tabs finish collecting their bytes before the first upload answers.
+    await new Promise((r) => setImmediate(r));
+    return { id: id || `made-${++made}`, fresh: false };
+  } };
+  const save = () => {
+    const [page, worker] = ports();
+    D.serve(worker, { drive, record });
+    return D.client(() => page).save({ key: 'doc:concurrent', name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array([1]), as: 'file' });
+  };
+  const results = await Promise.all([save(), save()]);
+  assert.equal(made, 1, 'two tabs must not create independent remote copies');
+  assert.deepEqual(targets, [null, 'made-1']);
+  assert.equal(results[0].id, results[1].id);
+  assert.equal(rec.drive.id, results[0].id);
+});
+
+test('a sender revoked while uploading bytes cannot publish them to Drive', async () => {
+  const [page, worker] = ports();
+  let allowed = true, uploads = 0, recorded = false;
+  D.serve(worker, {
+    allowed: async () => allowed,
+    record: { get: async () => ({ drive: null }), set: async () => { recorded = true; } },
+    drive: { save: async () => { uploads++; return { id: 'unexpected', fresh: false }; } },
+  });
+  await fails(D.client(() => page).save({ key: 'doc:revoked', name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array([1]), as: 'file' }, () => { allowed = false; }), 'sender');
+  assert.equal(uploads, 0);
+  assert.equal(recorded, false);
+});
+
+test('a sender revoked after a download chunk receives no further bytes', async () => {
+  const n = D.CHUNK * 2, h = harness([json(200, { ...FILES.pdf, size: String(n) }), stream(n, D.CHUNK).res]);
+  const [page, worker] = ports();
+  let allowed = true, received = 0;
+  D.serve(worker, { drive: h.drive, allowed: async () => allowed });
+  await fails(D.client(() => page).open(FILES.pdf.id, ALL, ({ done }) => {
+    received = done;
+    if (done) allowed = false;
+  }), 'sender');
+  assert.equal(received, D.CHUNK);
+});
+
+test('a sender revoked during token acquisition sends no Drive request', async () => {
+  const [page, worker] = ports();
+  let allowed = true, sent = 0;
+  const permitted = async () => allowed;
+  const drive = D.create({
+    allowed: permitted, account: async () => 'student@school.edu',
+    token: async () => { allowed = false; return 'tok'; },
+    fetch: async () => { sent++; return json(200, SAVED.file); },
+  });
+  D.serve(worker, { drive, allowed: permitted, record: { get: async () => ({ drive: null }), set: async () => {} } });
+  await fails(D.client(() => page).save({ key: 'doc:auth', name: 'Essay.docx', mime: MIME.docx, bytes: new Uint8Array([1]), as: 'file' }), 'sender');
+  assert.equal(sent, 0);
+});
+
+test('the worker cancels an upload when its page disconnects while the token is pending', async () => {
+  let release, sent = 0;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const key = 'doc:00000000-0000-4000-8000-000000000001';
+  const w = require('./helpers/worker-env.cjs')({
+    store: { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], [`writerPaper:${key}`]: { key, kind: 'paper' } }, session: {} },
+    globals: {
+      GZ_DRIVE: D, GZ_GOOGLE_CONFIG: {},
+      GZ_GOOGLE: { ON: true, flowOf: () => 'chrome', create: () => ({ account: async () => 'student@school.edu', token: async () => pending }) },
+      GZ_DOC_FILES: { idb: () => null, store: () => ({}) },
+    },
+    fetch: async () => { sent++; return json(200, SAVED.file); },
+  });
+  const c = w.connect(D.PORT, { id: 'glaze', url: 'chrome-extension://x/papers.html', frameId: 0, tab: { id: 7 } });
+  c.say({ op: 'save', key, name: 'Essay.docx', mime: MIME.docx, size: 1, as: 'file' });
+  await w.settle();
+  assert.equal(c.port.posted.at(-1).type, 'more');
+  c.say({ op: 'chunk', data: D.b64(new Uint8Array([1])) });
+  await w.settle();
+  c.say({ op: 'end' });
+  await w.settle();
+  c.close();
+  release('tok');
+  await w.settle();
+  assert.equal(sent, 0, 'a port that went away cannot resume an upload after sign-in');
+  assert.equal(w.store.local[`writerPaper:${key}`].drive, undefined);
+});
+
+test('a download stops delivering bytes when its Google account changes mid-stream', async () => {
+  for (const next of [null, 'other@school.edu']) {
+    let who = 'student@school.edu', calls = 0, received = 0;
+    const body = stream(8, 4);
+    const drive = D.create({
+      account: async () => who, token: async () => 'tok',
+      fetch: async () => ++calls === 1 ? json(200, { ...FILES.pdf, size: '8' }) : body.res,
+    });
+    await fails(drive.open(FILES.pdf.id, ALL, { bytes: (b) => { received += b.length; who = next; } }), 'connect');
+    assert.equal(received, 4, 'no further bytes reach the page after Disconnect or an account switch');
+    assert.equal(body.seen.cancelled, true);
+  }
+});
+
+test('Disconnect stops a download even inside a large network chunk', async () => {
+  let who = 'student@school.edu', calls = 0, received = 0;
+  const n = 2 * D.CHUNK, body = stream(n, n);
+  const drive = D.create({
+    account: async () => who, token: async () => 'tok',
+    fetch: async () => ++calls === 1 ? json(200, { ...FILES.pdf, size: String(n) }) : body.res,
+  });
+  const [page, worker] = ports();
+  D.serve(worker, { drive });
+  await fails(D.client(() => page).open(FILES.pdf.id, ALL, ({ done }) => {
+    received = done;
+    if (done) who = null;
+  }), 'connect');
+  assert.equal(received, D.CHUNK, 'only the chunk acknowledged before Disconnect was delivered');
 });
