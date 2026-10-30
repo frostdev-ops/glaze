@@ -385,11 +385,14 @@ test('stop says bye, then disconnects the port itself (permissions.remove leaves
   p.host({ t: 'open', c: 1, peer: { verified: false } });
   w.events.length = 0;
   w.log.length = 0;
-  assert.deepEqual(await w.link.stop(), { state: 'off', at: w.now() });
-  assert.deepEqual(w.log, [['post', 'bye'], ['disconnect']]);
+  const at = w.now();
+  assert.deepEqual(await w.link.stop(), { state: 'off', at });
+  assert.deepEqual(w.log, [['post', 'bye']], 'the helper ends the port on bye');
+  await w.advance(1000);
+  assert.deepEqual(w.log, [['post', 'bye'], ['disconnect']], 'or it is disconnected after a second');
   assert.deepEqual(p.sent.at(-1), { t: 'bye' });
   assert.deepEqual(w.events, [['close', 1, 'stopped'], ['state', 'off']]);
-  assert.deepEqual(w.storage.session.data.mcpLink, { state: 'off', at: w.now() });
+  assert.deepEqual(w.storage.session.data.mcpLink, { state: 'off', at });
   assert.equal(w.link.send(1, 'x'), false);
   assert.equal(w.jobs.size, 0);
   assert.equal((await w.link.ensure()).state, 'connecting', 'the setting is still on, so a trigger connects again');
@@ -420,7 +423,7 @@ test('stop lets every connection say its last lines before bye, and the helper e
     assert.equal(w.ports.length, 1, 'a new port waits for the old one to go');
     if (exits) p.die('Native host has exited.'); else await w.advance(1000);
     await again;
-    assert.deepEqual(w.log.slice(3, 4), exits ? [] : [['disconnect']]);
+    assert.deepEqual(w.log.slice(3).filter(([k]) => k === 'disconnect'), exits ? [] : [['disconnect']]);
     assert.equal(w.ports.length, 2);
     assert.equal(w.jobs.size > 0, true, 'the new port waits for its hello');
   }
@@ -438,6 +441,7 @@ test('triggers: ensure follows the setting and the grant either way, one pass at
   w.storage.local.data.mcp = { on: false };
   w.log.length = 0;
   assert.equal((await w.link.ensure()).state, 'off', 'turning it off is a trigger too');
+  await w.advance(1000);
   assert.deepEqual(w.log, [['post', 'bye'], ['disconnect']]);
   assert.deepEqual(said(w, 'close'), [['close', 1, 'stopped']]);
 
@@ -447,6 +451,7 @@ test('triggers: ensure follows the setting and the grant either way, one pass at
   w.permissions.granted = false;
   w.log.length = 0;
   assert.equal((await w.link.ensure()).state, 'needs-permission', 'a grant taken away elsewhere');
+  await w.advance(1000);
   assert.deepEqual(w.log, [['post', 'bye'], ['disconnect']]);
 
   w.permissions.granted = true;
