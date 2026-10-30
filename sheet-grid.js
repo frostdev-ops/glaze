@@ -561,7 +561,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const sizing = new ResizeObserver(() => { layout(); draw(true); });
     sizing.observe(gridEl);
     // The sheet's charts (lib/sheet-chart.js, loaded with the grid): a layer in each pane, placed as the cells are drawn.
-    const charts = globalThis.GZ_SHEET_CHART?.layer({ panes: Q, wb: () => wb, sheet: S, geo: () => ({ R, C, FR, FC, FW, FH }), t }) ?? null;
+    const charts = globalThis.GZ_SHEET_CHART?.layer({ panes: Q, wb: () => wb, sheet: S, geo: () => ({ R, C, FR, FC, FW, FH }), reach, t }) ?? null;
 
     // Scrolls the cell into view, past the frozen panes.
     const reveal = (r, c) => {
