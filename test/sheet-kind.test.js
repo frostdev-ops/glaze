@@ -133,6 +133,18 @@ test('grid writes cannot reclaim a record held by another kind, including unchan
   }
 });
 
+test('a new spreadsheet after a round trip through a paper starts with a fresh book', async () => {
+  const s = store(), P = PA.open(s), wb = book();
+  await SD.write(P, KEY, wb, new Map());
+  await P.save(KEY, { kind: 'paper', doc: { type: 'doc', content: [] } }, { reason: 'import' });
+  const { DK } = load({ sheets: true });
+  await DK.settled();
+  await P.save(KEY, { kind: 'sheet', doc: null, words: 0, ...DK.get('sheet').empty() }, { reason: 'import' });
+  const got = await SD.read((ks) => s.get(ks), KEY);
+  same(got.wb, M.workbook());
+  assert.equal(Object.keys(got.rec.parts || {}).length, 0);
+});
+
 test('a sheet save writes its changed parts, the record and the index in one set(), each part under the record\'s revision', async () => {
   let t = 1000;
   const s = store(), P = PA.open(s, () => t, { versions: async () => 40 });
