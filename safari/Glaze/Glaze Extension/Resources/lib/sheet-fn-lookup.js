@@ -109,7 +109,7 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
   const xboundary = (x, vec, up) => {
     let lo = 0, hi = vec.n;
     while (lo < hi) {
-      const mid = (lo + hi) >> 1, c = compare(vec.get(mid), x);
+      const mid = (lo + hi) >> 1, v = vec.get(mid), c = kind(v) < 0 ? 1 : compare(v, x);
       if (up ? c >= 0 : c < 0) hi = mid; else lo = mid + 1;
     }
     return lo;
@@ -222,21 +222,32 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
 
   // INDIRECT's text: an A1 reference or a defined name (as a formula would read it), or R1C1 (R[1]C[-1] relative to
   // the formula's cell; R2 a whole row, C3 a whole column); either may name a sheet. Anything else is #REF!.
-  const fromA1 = (s, ctx) => {
-    let n;
-    try { n = s.startsWith('=') ? null : F.parse(s, 0, 0); } catch { n = null; }
-    if (n?.k === 'ref' && !n.sheet2) {
-      const sheet = n.sheet === null ? ctx.sheet : ctx.eng.sheetNamed(n.sheet);
-      if (sheet) return new Ref(sheet, n.r0, n.c0, n.r1, n.c1);
-    }
+  const referenceText = (s) => {
+    try { return s.startsWith('=') || s.startsWith(' ') ? null : F.parse(s, 0, 0); } catch { return null; }
+  };
+  const namedReference = (n, ctx) => {
     if (n?.k === 'name') {
       const v = ctx.eng.evalName(n, ctx);
       if (v instanceof Ref || v instanceof Areas) return v;
     }
+    return null;
+  };
+  const fromA1 = (s, ctx) => {
+    const n = referenceText(s);
+    if (n?.k === 'ref' && !n.sheet2) {
+      const sheet = n.sheet === null ? ctx.sheet : ctx.eng.sheetNamed(n.sheet);
+      if (sheet) return new Ref(sheet, n.r0, n.c0, n.r1, n.c1);
+    }
+    const named = namedReference(n, ctx);
+    if (named) return named;
     throw ERR.REF;
   };
   const RC = /^(R(\[[+-]?\d+\]|\d+)?)?(C(\[[+-]?\d+\]|\d+)?)?$/i;
   const fromR1C1 = (s, ctx) => {
+    if (s.startsWith(' ')) throw ERR.REF;
+    const ref = namedReference(referenceText(s), ctx);
+    if (ref) return ref;
+    s = s.replace(/ +$/, '');
     let sheet = ctx.sheet, body = s;
     const named = /^(?:'((?:[^']|'')+)'|([^'!]+))!([\s\S]*)$/.exec(s);
     if (named) { sheet = ctx.eng.sheetNamed(named[1] !== undefined ? named[1].replace(/''/g, "'") : named[2]); body = named[3]; }
