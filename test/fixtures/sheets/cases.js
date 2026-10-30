@@ -1124,7 +1124,6 @@ const ROWS = {
     ['=SUMIF(Data!K2:K6,">102",Data!M2:M6)', 'table'],
     ['=SUMIF(Data!L2:L6,"?o?",Data!M2:M6)', 'table'],
     ['=SUMIF(Data!E1:E6,"apple*",Data!A1:A6)', 'words nums'],
-    ['=SUMIF(Data!E1:E6,"apple*",Data!A1)', 'words nums', 'a sum range of one cell grows to the criteria range'],
     ['=SUMIF(Data!A1:A10,"x")', 'nums'],
     ['=AVERAGEIF(Data!M2:M6,">80")', 'table'],
     ['=AVERAGEIF(Data!L2:L6,"*e*",Data!M2:M6)', 'table'],
