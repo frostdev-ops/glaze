@@ -101,9 +101,11 @@ const quiet = (p) => LX.quiet(p) || /\/(quizzes|external_tools|assessment|attemp
 // The worker wiring for lib/background.js's group D stubs, as the orchestrator applies it: [stub, wired] pairs. A source that
 // already holds the wired line is left as it is; one with neither throws, so a moved stub is found at once.
 const WIRING = [
-  ["'mcp/tools-grades.js', 'mcp/wire.js'", "'mcp/tools-grades.js', 'mcp/tabs.js', 'mcp/wire.js'"],
+  ["'mcp/tools-grades.js', 'mcp/wire.js'", "'mcp/tools-grades.js', 'mcp/tabs.js', 'mcp/tools-assign.js', 'mcp/wire.js'"],
   ['const mcpRefresh = async (account, group, { signal, tool } = {}) => null;',
     'let mcpTabsMade = null;\nconst mcpTabs = () => (mcpTabsMade ||= GZ_MCP_TABS.create({ tabs: chrome.tabs, scripting: chrome.scripting, quiet: modQuiet }));\nconst mcpRefresh = (account, group, o) => mcpTabs().refresh(account, group, o);'],
+  ["if (!GZ_AI_TOOLS.get('accounts_list')) { GZ_MCP_STUDY.register(GZ_AI_TOOLS); GZ_MCP_GRADES.register(GZ_AI_TOOLS); }",
+    "if (!GZ_AI_TOOLS.get('accounts_list')) { GZ_MCP_STUDY.register(GZ_AI_TOOLS); GZ_MCP_GRADES.register(GZ_AI_TOOLS); GZ_MCP_ASSIGN.register(GZ_AI_TOOLS, { tabs: mcpTabs() }); }"],
 ];
 const wired = (src = read('lib/background.js')) => WIRING.reduce((s, [stub, line]) => {
   if (s.includes(line)) return s;

@@ -3,7 +3,8 @@
 // (the copy's worker is a new file, the checkout's is untouched). Synthetic Canvas and Ultra schools under invented origins,
 // every other request aborted and DNS resolving nowhere; Glaze's own page features are off, so every planner and gradebook
 // request is the agent read's. Checks: the planner read afresh in the Canvas and the Ultra tab and kept through the page's
-// publish path, Insights read afresh while it is on, no tab for another account, a quiz page or no tab at all.
+// publish path, Insights read afresh while it is on, an assignment read in the tab (its text, files and rubric, through the
+// libraries the page loads on demand, and no submission), no tab for another account, a quiz page or no tab at all.
 //   NODE_PATH=<playwright> nice -n 10 node scripts/mcp-refresh-check.js [evidence folder]   (EXT selects the checkout)
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
@@ -18,6 +19,7 @@ const fixture = (n) => JSON.parse(fs.readFileSync(path.join(root, 'test/fixtures
 // The worker's refresh, for the check to call.
 const SHIM = `
 globalThis.refreshCheck = (account, group) => { if (typeof GZ_MCP_TABS === 'undefined') mcpFiles(); return mcpRefresh(account, group, {}); };
+globalThis.tabRun = (account, op, args) => { if (typeof GZ_MCP_TABS === 'undefined') mcpFiles(); return mcpTabs().run(account, op, args, {}); };
 globalThis.glazeIn = async (url) => {
   const [t] = (await chrome.tabs.query({})).filter((x) => x.url === url);
   if (!t) return { on: false, why: 'no tab', tabs: (await chrome.tabs.query({})).map((x) => x.url) };
@@ -95,6 +97,7 @@ const check = async (name, test) => {
       if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return json({ id: uid, time_zone: 'UTC' });
       if (u.pathname === '/api/v1/courses') return json(COURSES);
       if (u.pathname === '/api/v1/planner/items') return json(PLANNER);
+      if (u.pathname === '/api/v1/courses/25/assignments/171') return json(fixture('canvas-assignment-api.json'));
       const groups = /^\/api\/v1\/courses\/(\d+)\/assignment_groups$/.exec(u.pathname);
       if (groups) return json(GRADES.find((x) => String(x.course.id) === groups[1])?.groups || []);
       if (u.pathname.startsWith('/api/v1/')) return json([]);
@@ -149,6 +152,17 @@ const check = async (name, test) => {
       const n = asked.filter((x) => x.includes('/assignment_groups')).length;
       assert.deepEqual(await refresh(A, 'grades'), { ok: false, source: 'tab' });
       assert.equal(asked.filter((x) => x.includes('/assignment_groups')).length, n);
+    });
+    await check('Canvas: an assignment read in the tab, its text, its files\' names and its rubric, no submission', async () => {
+      const n = asked.length;
+      const r = await worker.evaluate(([a]) => tabRun(a, 'assignment', { course: '25', assignment: '171' }), [A]);
+      assert.equal(r.ok, true, JSON.stringify(r));
+      assert.equal(r.title, 'Lab report 2: Enzyme activity');
+      assert.deepEqual(r.files, ['Lab manual.pdf', 'Data sheet.xlsx']);
+      assert.deepEqual(r.rubric.criteria.map((c) => c.label), ['Method', 'Analysis']);
+      const mine = asked.slice(n).filter((x) => x.startsWith('canvas /api/'));
+      assert.deepEqual(mine, ['canvas /api/v1/courses/25/assignments/171']);
+      return { title: r.title, files: r.files, criteria: r.rubric.criteria.length, loaded: asked.slice(n).filter((x) => !x.startsWith('canvas /api/')) };
     });
     await check('another account\'s tab, or a quiz page, is no tab', async () => {
       uid = '6';

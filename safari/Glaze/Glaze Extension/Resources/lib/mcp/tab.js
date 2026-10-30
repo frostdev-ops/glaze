@@ -2,12 +2,16 @@
 // todo and insights read the planner and Insights afresh as the page's own features do (features/cardtasks.js load,
 // features/insights.js load: the same libraries, requests and record) and keep what they read through the worker's publish
 // paths ('glaze:todo', 'glaze:insights'), so every cache updates the normal way. Insights only while it is on and keeps a
-// record for this account: one the student cleared, or never made, is theirs to make by opening Insights. Past args.ms (at
+// record for this account: one the student cleared, or never made, is theirs to make by opening Insights. assignment reads
+// one assignment's title, due date, points, instructions, the names of the files they attach and its rubric's definition:
+// Ultra's as Writer reads it (lib/writer-context-assignment.js build), Canvas's from its assignment through lib/rubric.js;
+// never a submission or an attempt, so never the student's scores or feedback. Past args.ms (at
 // most LIMIT.ms) nothing more is asked of the site and nothing is kept; a read that didn't finish whole keeps nothing.
 // Content side, in Glaze's own world (GZ_CTX); a second injection keeps the first. run(op, args) → { ok: true, … } or
 // { ok: false, error }.
 var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
-  const LIMIT = { ms: 8e3 };
+  // ms: the most a read takes; text: the characters of an assignment's text.
+  const LIMIT = { ms: 8e3, text: 200000 };
   const ACCEPT = 'application/json+canvas-string-ids, application/json';
   const ID = /^\d{1,20}$/, BB = /^_\d{1,20}_\d{1,20}$/;
   const no = (error) => ({ ok: false, error });
@@ -120,7 +124,63 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     return r?.ok ? { ok: true } : no(r?.error || 'not kept');
   };
 
-  const OPS = { todo, insights };
+  // ---- one assignment: its text, its files' names, its rubric's definition; never a submission or an attempt ----
+  // Rich text as text, block ends as line breaks (lib/writer-context-assignment.js reads Ultra's the same way).
+  const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+  const char = (m, e) => {
+    if (e[0] !== '#') return ENT[e.toLowerCase()] ?? m;
+    const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+    return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+  };
+  const text = (h) => String(h).replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, '').replace(/<(br|\/p|\/div|\/li|\/h\d|\/tr)\b[^>]*>/gi, '\n').replace(/<[^>]*>/g, '')
+    .replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, char).replace(/[ \t\f\r ]+/g, ' ').replace(/ ?\n ?/g, '\n').replace(/\n{2,}/g, '\n').trim().slice(0, LIMIT.text);
+  // The files a Canvas description links on this site (its API writes each as an absolute link to the course's, a group's or a
+  // user's /files/<id>): by the link's text, else its title, each once.
+  const files = (h) => {
+    const out = new Map();
+    for (const [, tag, inner] of String(h).matchAll(/<a\s((?:[^"'<>]|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/a\s*>/gi)) {
+      const attr = (n) => { for (const m of tag.matchAll(/([^\s"'<>/=]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) if (m[1].toLowerCase() === n) return (m[2] ?? m[3] ?? m[4]).replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, char); return ''; };
+      let u;
+      try { u = new URL(attr('href'), location.origin); } catch { continue; }
+      const id = u.origin === location.origin && /^\/(?:(?:courses|groups|users)\/\d+\/)?files\/(\d+)(?:\/|$)/.exec(u.pathname)?.[1];
+      const name = text(inner).replace(/\s+/g, ' ') || attr('title').trim();
+      if (id && name && !out.has(id)) out.set(id, name.slice(0, 200));
+    }
+    return [...out.values()].slice(0, 20);
+  };
+  // Ultra keeps a rubric's descriptions as rich text: as text here, as the rest.
+  const plain = (r) => ({ ...r, ...(typeof r.detail === 'string' && { detail: text(r.detail) }),
+    criteria: r.criteria.map((c) => ({ ...c, detail: text(c.detail || ''), cells: (c.cells || []).map((x) => ({ ...x, detail: text(x.detail || '') })) })) });
+  const assignment = async (go, a) => {
+    const x = X(), ultra = x.site === 'ultra', ok = ultra ? BB : ID;
+    if (!ok.test(a.course || '') || !ok.test(a.assignment || '')) return no('args');
+    await libs(['lib/rubric.js', 'GZ_RUBRIC_LIB'], ['lib/writer-context-assignment.js', 'GZ_WRITER_CONTEXT_ASSIGNMENT'], ...(ultra ? [['lib/ultra.js', 'GZ_ULTRA']] : []));
+    const R = GZ_RUBRIC_LIB, W = GZ_WRITER_CONTEXT_ASSIGNMENT, uid = String(await x.account());
+    if (ultra) {
+      // Writer's own read of an assignment (build), from the course's content item, gradebook row and rubric column; the
+      // rubric as it shows before an attempt, so no evaluation is asked for.
+      const reader = GZ_ULTRA.read({ origin: location.origin, live: go, maxPages: 3, maxRequests: 8 });
+      let rows = null;
+      const c = await W.build({ school: location.host, path: `/ultra/courses/${a.course}/assessment/${a.assignment}/attempt`, url: '', origin: location.origin,
+        uid: async () => uid, me: async () => null, courses: () => x.myCourses(), rows: async () => (rows = await reader.grades(a.course, uid)), get: (u) => reader.get(u), R, instructions: async () => '' });
+      const s = c?.assignment;
+      if (!go()) return no('late');
+      if (!s || (!s.title && !s.instructions && !s.description && !s.rubric)) return no('none');
+      const col = (Array.isArray(rows) ? rows : []).map((r) => r?.column).find((k) => k?.contentId === a.assignment);
+      return { ok: true, title: s.title, due: Date.parse(s.due) || null, points: Number.isFinite(col?.possible) ? col.possible : null, instructions: s.instructions, description: s.description,
+        files: s.files.map((f) => f.name), rubric: s.rubric && plain(s.rubric), incomplete: s.incomplete === true };
+    }
+    let s;
+    try { ({ j: s } = await req(`/api/v1/courses/${a.course}/assignments/${a.assignment}`, go)); } catch (e) { if (/^(401|403|404)$/.test(e.message)) return no('none'); throw e; }
+    if (String(s?.id) !== a.assignment || String(s?.course_id) !== a.course) return no('none');
+    const html = typeof s.description === 'string' ? s.description : '';
+    const m = R.parse.canvas(s, null, { courseId: a.course, assignmentId: a.assignment });
+    return { ok: true, title: typeof s.name === 'string' ? s.name.slice(0, 300) : '', due: Date.parse(s.due_at) || null,
+      points: s.restrict_quantitative_data !== true && Number.isFinite(s.points_possible) ? s.points_possible : null,
+      instructions: text(html), description: '', files: files(html), rubric: m ? W.rubricOf(m) : null, incomplete: html.length > LIMIT.text };
+  };
+
+  const OPS = { todo, insights, assignment };
   const run = async (op, args) => {
     const x = X(), a = args && typeof args === 'object' ? args : {};
     if (!x?.on() || !Object.hasOwn(OPS, op)) return no('here');
