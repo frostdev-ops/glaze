@@ -62,7 +62,9 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
     return null;
   };
 
+  // The text tiers; the picture download's files (models.json `role`) are never a tier.
   const defaults = () => (typeof require === 'function' ? require('./models.json').models : fail('models expected'));
+  const tiers = (models) => models.filter((m) => !m.role);
 
   const pick = (input = {}) => {
     const no = refusal(input);
@@ -73,7 +75,7 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
     const est = storageEstimate;
     const free = est && Number.isFinite(est.quota) ? est.quota - (est.usage || 0) : Infinity;
     const stored = new Set(input.stored || []);
-    const quants = [...(input.models || defaults())].sort((a, b) => a.tier - b.tier).map((m) => {
+    const quants = tiers(input.models || defaults()).sort((a, b) => a.tier - b.tier).map((m) => {
       const q = { id: m.id, tier: m.tier, size: m.size, tps: decodeSpeed(m, bench) };
       if (footprint(m, { f16 }) > budget) q.refused = !f16 && footprint(m, { f16: true }) <= budget ? 'no-f16' : 'memory';
       else if (!stored.has(m.id) && m.size * HEADROOM > free) q.refused = 'storage';

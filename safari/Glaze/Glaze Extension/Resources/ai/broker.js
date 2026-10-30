@@ -433,22 +433,27 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   //     downloaded and loaded; meanwhile env.say({ type: 'glaze:ai-config', event: 'progress', provider, loaded: 0..1 }).
   //     Not queued: a download takes minutes. Its one-time message channel holds the worker until the reply (the
   //     provider's four-minute deadline is below Chrome's five-minute limit). A crash still needs Settings' next 'test'.
+  //     Glaze's own model (provider 'local'): 'test' also says its picture download (pictures: { state, size, progress? });
+  //     'prepare' and 'delete' with part: 'pictures' fetch or remove that download only, its progress events with part.
   const local = (m, env) => {
     const p = typeof m.provider === 'string' && A().PROVIDERS.includes(m.provider) ? P().get(m.provider) : null;
     const cfg = p && typeof p.prepare === 'function' && p.config({});
-    if (!cfg) return Promise.resolve({ ok: false, error: 'setup' });
+    if (!cfg || (m.part !== undefined && (m.part !== 'pictures' || p.id !== 'local' || m.op === 'test'))) return Promise.resolve({ ok: false, error: 'setup' });
+    const part = m.part === 'pictures' ? { part: 'pictures' } : {};
     // Glaze's own model also says its size, tier and the tiers there are (Settings' card), and how far a download is.
     const n = (v) => Number.isSafeInteger(v) && v > 0;
     const done = (st) => ({ ok: true, state: ['ready', 'download', 'downloading', 'unavailable'].includes(st?.state) ? st.state : 'unavailable', ...(typeof st?.reason === 'string' && { reason: st.reason }),
       ...(n(st?.size) && { size: st.size }), ...(n(st?.tier) && { tier: st.tier }), ...(Number.isFinite(st?.progress) && { progress: Math.min(1, Math.max(0, st.progress)) }),
-      ...(Array.isArray(st?.tiers) && { tiers: st.tiers.filter((x) => n(x?.tier) && n(x?.size)).map((x) => ({ tier: x.tier, size: x.size })) }) });
+      ...(Array.isArray(st?.tiers) && { tiers: st.tiers.filter((x) => n(x?.tier) && n(x?.size)).map((x) => ({ tier: x.tier, size: x.size })) }),
+      ...(isObj(st?.pictures) && ['ready', 'download', 'downloading'].includes(st.pictures.state) && n(st.pictures.size) && { pictures: { state: st.pictures.state, size: st.pictures.size,
+        ...(Number.isFinite(st.pictures.progress) && { progress: Math.min(1, Math.max(0, st.pictures.progress)) }) } }) });
     const failed = () => ({ ok: true, state: 'unavailable', reason: 'failed' });
     // The kept connection's settings (Glaze's own model's tier), as a run would take them.
     const kept = async () => { const rec = env.vault ? (await stored(env).catch(() => ({})))[p.id] : null; const c = isObj(rec) && rec.provider === p.id && p.config((({ provider: _, ...r }) => r)(rec)); return c || cfg; };
     if (m.op === 'test') return kept().then((c) => p.status(c, {})).then(done, failed);
-    if (m.op === 'delete') return typeof p.remove === 'function' ? kept().then((c) => p.remove(c)).then(done, failed).finally(() => revoke(p.id, env)) : Promise.resolve({ ok: false, error: 'setup' });
-    // A model just downloaded may take more than the catalog kept from before said.
-    return kept().then((c) => p.prepare(c, { onProgress: (loaded) => { try { env.say?.({ type: 'glaze:ai-config', event: 'progress', provider: p.id, loaded }); } catch { /* no page listening */ } } })
+    if (m.op === 'delete') return typeof p.remove === 'function' ? kept().then((c) => p.remove(c, part)).then(done, failed).finally(() => revoke(p.id, env)) : Promise.resolve({ ok: false, error: 'setup' });
+    // A model just downloaded may take more than the catalog kept from before said (pictures, too).
+    return kept().then((c) => p.prepare(c, { ...part, onProgress: (loaded) => { try { env.say?.({ type: 'glaze:ai-config', event: 'progress', provider: p.id, ...part, loaded }); } catch { /* no page listening */ } } })
       .then(done, failed)).finally(() => { if (env.vault) listed.delete(env.vault); });
   };
   let turn = Promise.resolve();

@@ -49,8 +49,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
   const appleText = (st, t) => (st.state === 'ready' ? t('Ready') : st.reason === 'off' ? t('Apple Intelligence is off')
     : ['os', 'device'].includes(st.reason) ? t('Not available on this device') : st.state === 'downloading' ? t('Downloading…')
       : t('Not available: {reason}', { reason: reason(st.reason, t) }));
-  // Glaze's own model's status (ai/providers/local.js): { state, reason?, size?, tier?, tiers?, progress? }. A download that
-  // stopped keeps Download and says why.
+  // Glaze's own model's status (ai/providers/local.js): { state, reason?, size?, tier?, tiers?, progress?, pictures? }, its
+  // picture download's { state, size, progress? } the same way. A download that stopped keeps Download and says why.
   const localText = (st, t, pct) => (st.state === 'ready' ? t('Ready') : st.state === 'downloading' ? (typeof st.progress === 'number' ? pct(st.progress) : t('Downloading…'))
     : st.state === 'download' ? (st.reason ? reason(st.reason, t) : t('Needs a download'))
       : st.reason === 'browser' ? t('Not available in this browser') : reason(st.reason, t));
@@ -231,8 +231,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       if (said?.text) { const p = el('p', said.err ? 'err-t' : 'ok-t', said.text); p.setAttribute('role', said.err ? 'alert' : 'status'); parts.push(p); }
       box.replaceChildren(...parts);
     };
-    // Glaze's own model: its state, its size, Download, the download's progress, Delete; in Advanced, its size to use (the
-    // tier: Auto lets the ladder pick for this computer at Download).
+    // Glaze's own model: its state, its size, Download, the download's progress, Delete; then its picture download the same
+    // way; in Advanced, its size to use (the tier: Auto lets the ladder pick for this computer at Download).
     const glaze = () => {
       const words = ours ? [localText(ours, t, pct), ...(ours.size && ours.state !== 'unavailable' ? [gb(ours.size, t)] : [])].join(' · ') : '';
       const line = el('div', 'line own'), state = el('span', 'note', words);
@@ -246,6 +246,24 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         Object.assign(bar, { max: 1, value: ours.progress });
         bar.setAttribute('aria-label', label(OWN));
         parts.push(bar);
+      }
+      const pics = ours?.state !== 'unavailable' && ours?.pictures;
+      if (pics) {
+        const row = el('div', 'line own'), note = el('span', 'note', [localText(pics, t, pct), gb(pics.size, t)].join(' · '));
+        row.id = 'ai-local-pictures';
+        note.setAttribute('role', 'status');
+        const gap = el('span');
+        gap.setAttribute('aria-hidden', 'true');
+        row.append(gap, el('b', '', t('Picture reading')), note);
+        if (pics.state === 'download') row.append(button('primary', t('Download'), fetchPictures));
+        if (pics.state === 'downloading' || pics.state === 'ready') row.append(button('', t('Delete'), deletePictures));
+        parts.push(row);
+        if (pics.state === 'downloading' && typeof pics.progress === 'number') {
+          const bar = el('progress');
+          Object.assign(bar, { max: 1, value: pics.progress });
+          bar.setAttribute('aria-label', t('Picture reading'));
+          parts.push(bar);
+        }
       }
       if (s.mode === 'advanced' && ours?.tiers?.length && ours.state !== 'unavailable') {
         const pick = el('select');
@@ -674,13 +692,16 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     };
     // Glaze's own model: its status (the connection kept first, as On this device's is), Download from the click, Delete,
     // and the tier Advanced sets (the connection's).
-    let fetching = false, localPoll = null;
+    let fetching = false, fetchingPics = false, localPoll = null;
     const localResult = (r) => {
-      const keep = (st) => ({ ...st, ...(!st.tiers && ours?.tiers && { tiers: ours.tiers }), ...(!st.size && ours?.size && { size: ours.size }) });
-      ours = r.ok ? keep({ state: r.state, ...['reason', 'size', 'tier', 'tiers', 'progress'].reduce((o, k) => (r[k] === undefined ? o : { ...o, [k]: r[k] }), {}) })
+      const was = ours?.pictures;
+      const keep = (st) => ({ ...st, ...(!st.tiers && ours?.tiers && { tiers: ours.tiers }), ...(!st.size && ours?.size && { size: ours.size }), ...(!st.pictures && ours?.pictures && { pictures: ours.pictures }) });
+      ours = r.ok ? keep({ state: r.state, ...['reason', 'size', 'tier', 'tiers', 'progress', 'pictures'].reduce((o, k) => (r[k] === undefined ? o : { ...o, [k]: r[k] }), {}) })
         : { state: 'unavailable', reason: r.error };
+      // The picture download's own answer is the newer while its Download waits for the worker.
+      if (fetchingPics && ours.pictures && ours.pictures.state !== 'downloading') ours.pictures = { ...ours.pictures, state: 'downloading', ...(typeof was?.progress === 'number' && { progress: was.progress }) };
       clearTimeout(localPoll);
-      localPoll = ours.state === 'downloading' && !fetching ? setTimeout(() => localStatus(), 5000) : null;
+      localPoll = (ours.state === 'downloading' && !fetching) || (ours.pictures?.state === 'downloading' && !fetchingPics) ? setTimeout(() => localStatus(), 5000) : null;
       localPoll?.unref?.();
       render();
     };
@@ -712,6 +733,19 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       busy = true;
       send({ op: 'delete', provider: OWN }).then(localResult).finally(() => { busy = false; });
     };
+    // The picture download: from its own click, beside the text model's.
+    const fetchPictures = (e) => {
+      if (!e?.isTrusted || fetchingPics || !offers() || ours?.pictures?.state !== 'download') return;
+      fetchingPics = true;
+      ours = { ...ours, pictures: { state: 'downloading', size: ours.pictures.size } };
+      render();
+      send({ op: 'prepare', provider: OWN, part: 'pictures' }).then(async () => { fetchingPics = false; await localStatus(); }, () => { fetchingPics = false; });
+    };
+    const deletePictures = (e) => {
+      if (!e?.isTrusted || busy) return;
+      busy = true;
+      send({ op: 'delete', provider: OWN, part: 'pictures' }).then(localResult).finally(() => { busy = false; });
+    };
     const setTier = (tier) => {
       if (busy) return;
       busy = true;
@@ -725,6 +759,13 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       if (sender?.id !== c.runtime.id || m?.type !== TYPE || m.event !== 'progress' || m.provider !== OWN || !offers()) return;
       const n = progress(m);
       if (n === null) return;
+      if (m.part === 'pictures') {
+        if (!ours?.pictures) return;
+        ours = { ...ours, pictures: { ...ours.pictures, state: 'downloading', progress: n } };
+        render();
+        if (n >= 1 && !fetchingPics) localStatus();
+        return;
+      }
       ours = { ...ours, state: 'downloading', progress: n };
       delete ours.reason;
       render();

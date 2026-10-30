@@ -3760,5 +3760,7 @@
   "Glaze’s on-device model could not start.": "La IA local de Glaze no pudo iniciarse.",
   "Glaze’s on-device model stopped. Try again.": "La IA local de Glaze se detuvo. Inténtalo de nuevo.",
   "There isn’t enough free space for the model.": "No hay suficiente espacio libre para el modelo.",
-  "The download lost its connection. Try again.": "La descarga perdió la conexión. Inténtalo de nuevo."
+  "The download lost its connection. Try again.": "La descarga perdió la conexión. Inténtalo de nuevo.",
+  "Picture reading": "Lectura de imágenes",
+  "Picture reading isn’t downloaded. Download it in Settings → AI.": "La lectura de imágenes no está descargada. Descárgala en Ajustes → IA."
 };
