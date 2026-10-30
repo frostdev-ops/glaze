@@ -193,6 +193,21 @@ test('a stored chunk changed without changing its length is refused on read', as
   await assert.rejects(st.read(file.hash, () => {}), (e) => e.why === 'missing');
 });
 
+test('re-importing the original file repairs missing or damaged chunks and keeps its owners', async () => {
+  for (const damage of ['missing', 'changed']) {
+    const { st, data } = make(), { client } = wire(st), original = bytes(F.CHUNK + 10, 52);
+    const file = await client.put(original, 'application/pdf');
+    await st.own('doc:a', [file.hash]);
+    const key = [...data().keys()].find((k) => k.startsWith('c:'));
+    if (damage === 'missing') data().delete(key); else data().get(key)[10] ^= 1;
+    await assert.rejects(client.get(file), (e) => e.why === 'missing');
+    assert.deepEqual(await client.put(original, 'application/pdf'), file);
+    assert.equal(sha(await client.get(file)), file.hash, damage);
+    assert.deepEqual(data().get(`f:${file.hash}`).owners, ['doc:a']);
+    assert.equal([...data().keys()].filter((k) => k.startsWith('c:')).length, 2, 'no old chunk left');
+  }
+});
+
 test('quota exceeded: the put says quota, and leaves no upload or chunk behind', async () => {
   let full = false;
   const { st, data } = make({ wrap: (db) => ({ ...db, write: async (puts, dels) => { if (full && puts.some(([k]) => k.startsWith('c:'))) throw Object.assign(new Error('full'), { name: 'QuotaExceededError' }); return db.write(puts, dels); } }) });
