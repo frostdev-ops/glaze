@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
+const swift = require('./helpers/swift-native.cjs');
 const run = (command, args, options = {}) => spawnSync(command, args, { cwd: root, encoding: 'utf8', ...options });
 const plist = (file) => JSON.parse(run('plutil', ['-convert', 'json', '-o', '-', file]).stdout);
 
@@ -39,6 +40,42 @@ test('DMG staging is repeatable and isolates Sparkle from the checked-in Mac/iOS
     const storyboard = fs.readFileSync(path.join(staged, 'Glaze/Base.lproj/Main.storyboard'), 'utf8');
     assert.ok(!storyboard.includes('initialViewController='));
     assert.ok(storyboard.includes('storyboardIdentifier="GlazeWindow"'));
+    // Agent access is the DMG build's alone: its sources in the Mac targets, the app group, the private URL.
+    const refs = (name) => Object.keys(p.objects).filter((k) => p.objects[k].isa === 'PBXFileReference' && p.objects[k].path === name);
+    const compiled = (name) => objects.find((o) => o.isa === 'PBXNativeTarget' && o.name === name).buildPhases.map((k) => p.objects[k])
+      .filter((ph) => ph.isa === 'PBXSourcesBuildPhase').flatMap((ph) => ph.files.map((f) => p.objects[f].fileRef));
+    const [bridge] = refs('GlazeAgentBridge.swift'), [host] = refs('GlazeAgentHost.swift');
+    assert.deepEqual([refs('GlazeAgentBridge.swift').length, refs('GlazeAgentHost.swift').length], [1, 1]);
+    assert.deepEqual([compiled('Glaze Extension').includes(bridge), compiled('Glaze Extension').includes(host)], [true, false]);
+    assert.deepEqual([compiled('Glaze').includes(bridge), compiled('Glaze').includes(host)], [true, true]);
+    for (const name of ['Glaze iOS', 'Glaze iOS Extension']) assert.ok(!compiled(name).some((r) => r === bridge || r === host), name);
+    assert.deepEqual(fs.readFileSync(path.join(staged, 'Glaze/GlazeAgentHost.swift')), fs.readFileSync(path.join(root, 'safari/dmg/GlazeAgentHost.swift')));
+    assert.ok(fs.existsSync(path.join(staged, 'Glaze Extension/GlazeAgentBridge.swift')));
+    const scheme = /static let start = "([a-z.-]+):\/\/start"/.exec(fs.readFileSync(path.join(root, 'safari/Glaze/Glaze Extension/GlazeAgentBridge.swift'), 'utf8'))[1];
+    assert.equal(scheme, 'io.frostdev.glaze-agent');
+    assert.deepEqual(info.CFBundleURLTypes[1], { CFBundleURLName: scheme, CFBundleURLSchemes: [scheme] });
+    const GROUPS = 'com.apple.security.application-groups';
+    const appEntitlements = plist(path.join(staged, 'Glaze/Release.entitlements')), extensionEntitlements = plist(path.join(staged, 'Glaze Extension/Release.entitlements'));
+    assert.deepEqual([appEntitlements[GROUPS], appEntitlements['com.apple.security.app-sandbox']], [['22AAZFMTV8.io.frostdev.Glaze'], undefined]);
+    assert.deepEqual([extensionEntitlements[GROUPS], extensionEntitlements['com.apple.security.app-sandbox']], [['22AAZFMTV8.io.frostdev.Glaze'], true]);
+    for (const f of ['safari/Glaze/Glaze/Release.entitlements', 'safari/Glaze/Glaze Extension/Release.entitlements']) {
+      assert.equal(plist(path.join(root, f))[GROUPS], undefined, `${f}: the App Store build has no group`);
+    }
+    // What each staged Mac target compiles typechecks with its own settings (test/helpers/swift-native.cjs), Sparkle as a stand-in.
+    if (swift.supported) {
+      const sources = (name) => compiled(name).map((ref) => {
+        const group = objects.find((o) => o.isa === 'PBXGroup' && o.children?.includes(ref));
+        return path.join(staged, group.path, p.objects[ref].path);
+      });
+      const setting = (name, key) => p.objects[objects.find((o) => o.isa === 'PBXNativeTarget' && o.name === name).buildConfigurationList]
+        .buildConfigurations.map((k) => p.objects[k]).find((c) => c.name === 'Release').buildSettings[key];
+      for (const [name, flags] of [['Glaze Extension', []], ['Glaze', ['-parse-as-library', '-module-name', 'Glaze']]]) {
+        assert.equal(setting(name, 'SWIFT_ACTIVE_COMPILATION_CONDITIONS'), '$(inherited) GLAZE_DMG');
+        const r = swift.typecheck(swift.sparkleSources(sources(name), temp), [...flags, '-D', 'GLAZE_DMG', '-default-isolation', setting(name, 'SWIFT_DEFAULT_ACTOR_ISOLATION') || 'nonisolated']);
+        assert.equal(r.status, 0, `${name}: ${r.stderr}`);
+        assert.doesNotMatch(r.stderr, /warning:|error:/, name);
+      }
+    }
     assert.deepEqual(fs.readFileSync(projectPath), original);
     assert.ok(!original.includes(Buffer.from('Sparkle')));
     assert.ok(!fs.readFileSync(path.join(root, 'safari/Glaze/Glaze/AppDelegate.swift'), 'utf8').includes('Sparkle'));
@@ -62,6 +99,13 @@ test('DMG staging is repeatable and isolates Sparkle from the checked-in Mac/iOS
     const moved = run('python3', [path.join(fixture, 'scripts/stage-safari-dmg.py'), path.join(temp, 'drift')]);
     assert.notEqual(moved.status, 0);
     assert.match(moved.stderr, /AppDelegate source reference/);
+    Object.values(source.objects).find((o) => o.isa === 'PBXFileReference' && o.path === 'MovedDelegate.swift').path = 'AppDelegate.swift';
+    source.objects.F17A00000000000000000099 = { isa: 'PBXFileReference', lastKnownFileType: 'sourcecode.swift', path: 'GlazeAgentBridge.swift', sourceTree: '<group>' };
+    fs.writeFileSync(fixtureProject, JSON.stringify(source));
+    assert.equal(run('plutil', ['-convert', 'xml1', fixtureProject]).status, 0);
+    const listed = run('python3', [path.join(fixture, 'scripts/stage-safari-dmg.py'), path.join(temp, 'drift')]);
+    assert.notEqual(listed.status, 0);
+    assert.match(listed.stderr, /agent sources already in the project/, 'the checked-in project never compiles agent code');
     const invalidKey = run('python3', ['scripts/stage-safari-dmg.py', path.join(temp, 'bad')], {
       env: { ...process.env, SAFARI_UPDATE_PUBLIC_KEY: 'bad-key' },
     });
@@ -197,4 +241,64 @@ test('the build-id helper rejects an invalid extension before changing either pl
       } finally { fs.rmSync(temp, { recursive: true, force: true }); }
     });
   }
+});
+
+test('the build-id helper gives a DMG project\'s entitlements the build group, and a built copy\'s signed ones Glaze\'s group back', { skip: process.platform !== 'darwin' }, () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-build-group-'));
+  const GROUPS = 'com.apple.security.application-groups', SANDBOX = 'com.apple.security.app-sandbox';
+  const write = (file, o) => { fs.writeFileSync(file, JSON.stringify(o)); assert.equal(run('plutil', ['-convert', 'xml1', file]).status, 0); };
+  // Only plist fixtures in a project's layout, with no .app directory.
+  const layout = (name, app, ext) => {
+    const srcroot = path.join(temp, name), project = path.join(srcroot, 'Glaze.xcodeproj/project.pbxproj');
+    fs.mkdirSync(path.dirname(project), { recursive: true });
+    fs.copyFileSync(path.join(root, 'safari/Glaze/Glaze.xcodeproj/project.pbxproj'), project);
+    const files = ['Glaze', 'Glaze Extension'].map((t) => path.join(srcroot, t, 'Release.entitlements'));
+    files.forEach((f, n) => { fs.mkdirSync(path.dirname(f)); write(f, [app, ext][n]); });
+    return { project, files };
+  };
+  const ids = (project) => run('python3', ['scripts/safari-build-ids.py', 'project', project]);
+  try {
+    const dmg = layout('dmg', { 'com.apple.security.network.client': true, [GROUPS]: ['22AAZFMTV8.io.frostdev.Glaze'] }, { [SANDBOX]: true, [GROUPS]: ['22AAZFMTV8.io.frostdev.Glaze'] });
+    assert.equal(ids(dmg.project).status, 0);
+    assert.deepEqual(plist(dmg.files[0]), { 'com.apple.security.network.client': true, [GROUPS]: ['22AAZFMTV8.io.frostdev.GlazeBuild'] });
+    assert.deepEqual(plist(dmg.files[1]), { [SANDBOX]: true, [GROUPS]: ['22AAZFMTV8.io.frostdev.GlazeBuild'] }, 'a build copy never shares the installed Glaze\'s group');
+    const store = layout('store', { [SANDBOX]: true, 'com.apple.security.network.client': true }, { [SANDBOX]: true });
+    const before = store.files.map((f) => fs.readFileSync(f));
+    assert.equal(ids(store.project).status, 0);
+    assert.deepEqual(store.files.map((f) => fs.readFileSync(f)), before, 'the App Store build\'s entitlements stay as they are');
+    const foreign = layout('foreign', {}, { [SANDBOX]: true, [GROUPS]: ['22AAZFMTV8.io.example.Other'] });
+    const unchanged = fs.readFileSync(foreign.project), refused = ids(foreign.project);
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /not Glaze's/);
+    assert.deepEqual(fs.readFileSync(foreign.project), unchanged, 'refused before anything changes');
+
+    const built = path.join(temp, 'built.plist'), out = path.join(temp, 'release.plist');
+    const back = () => run('python3', ['scripts/safari-build-ids.py', 'entitlements', built, out]);
+    write(built, { [SANDBOX]: true, [GROUPS]: ['22AAZFMTV8.io.frostdev.GlazeBuild'] });
+    assert.equal(back().status, 0);
+    assert.deepEqual(plist(out), { [SANDBOX]: true, [GROUPS]: ['22AAZFMTV8.io.frostdev.Glaze'] });
+    for (const groups of [['22AAZFMTV8.io.frostdev.Glaze'], ['22AAZFMTV8.io.example.Other'], [], undefined]) {
+      fs.rmSync(out, { force: true });
+      write(built, { [SANDBOX]: true, ...(groups && { [GROUPS]: groups }) });
+      const r = back();
+      assert.notEqual(r.status, 0, JSON.stringify(groups));
+      assert.match(r.stderr, /isn't a build-id copy's entitlements/);
+      assert.ok(!fs.existsSync(out));
+    }
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test('the DMG release signs its extension and app with Glaze\'s app group, from explicit entitlements; the App Store build has no group or agent URL', () => {
+  const build = fs.readFileSync(path.join(root, 'scripts/build-safari.sh'), 'utf8');
+  const loop = build.slice(build.indexOf('for bundle in "$sparkle/XPCServices/Downloader.xpc"'), build.indexOf('codesign --verify --deep'));
+  assert.match(loop, /"\$extension" \| "\$app"\)\n\s+codesign -d --entitlements - --xml "\$bundle" > "\$stage\/built\.entitlements" 2>\/dev\/null\n\s+python3 scripts\/safari-build-ids\.py entitlements "\$stage\/built\.entitlements" "\$stage\/release\.entitlements"\n\s+set -- --entitlements "\$stage\/release\.entitlements" --preserve-metadata=flags ;;/);
+  assert.match(loop, /codesign --force --sign "\$identity" --timestamp --options runtime --identifier "\$id" "\$@" \\/);
+  assert.equal((loop.match(/--preserve-metadata=[a-z,]*entitlements/g) || []).length, 2, 'only Sparkle\'s keep the entitlements they came with');
+  assert.match(build, /CFBundleURLTypes:1:CFBundleURLSchemes:0' "\$app\/Contents\/Info\.plist" \| grep -qx 'io\.frostdev\.glaze-agent'/);
+  assert.match(build, /if entitlements\.get\('com\.apple\.security\.application-groups'\) != \[sys\.argv\[3\] \+ '\.io\.frostdev\.Glaze'\]:/);
+  assert.match(build, /python3 - "\$stage\/entitlements\.plist" "\$bundle" "\$team" <<'PY'/);
+  const store = fs.readFileSync(path.join(root, 'scripts/appstore-safari.sh'), 'utf8');
+  assert.doesNotMatch(store, /stage-safari-dmg|application-groups|glaze-agent/);
 });

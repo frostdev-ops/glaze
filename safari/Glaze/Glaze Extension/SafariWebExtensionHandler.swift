@@ -31,9 +31,23 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         }
 
         #if os(macOS) && GLAZE_DMG
+        // Address this extension's containing app explicitly; never route a caller-supplied URL.
+        let app = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        // Agent access (GlazeAgentBridge.swift): the worker's batches go to the Glaze app, opened hidden for a new session.
+        if let command = message as? [String: Any], (command["type"] as? String)?.hasPrefix("agent.") == true {
+            DispatchQueue.global(qos: .userInitiated).async {
+                let answer = GlazeAgentBridge.reply(to: command, folder: GlazeAgentBridge.folder()) {
+                    let configuration = NSWorkspace.OpenConfiguration()
+                    configuration.activates = false
+                    NSWorkspace.shared.open([URL(string: GlazeAgentBridge.start)!], withApplicationAt: app, configuration: configuration)
+                }
+                let response = NSExtensionItem()
+                response.userInfo = [SFExtensionMessageKey: answer]
+                context.completeRequest(returningItems: [response], completionHandler: nil)
+            }
+            return
+        }
         if let command = message as? [String: String], command == ["type": "check-updates"] {
-            // Address this extension's containing app explicitly; never route a caller-supplied URL.
-            let app = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = false
             NSWorkspace.shared.open([URL(string: "io.frostdev.glaze-update://check")!],
