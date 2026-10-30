@@ -423,3 +423,20 @@ test('an unprefixed slash is a date while a mixed fraction is numeric', () => {
   assert.equal(M.parseInput('$-1,200').v, -1200);
   assert.deepEqual(M.parseInput("'1/2"), { t: 's', v: '1/2' });
 });
+
+test('undo restores the exact serialized Map and Set order as well as cell and layout values', () => {
+  const { serialize } = require('node:v8');
+  for (const op of [
+    { op: 'clear', sheet: 1, r0: 0, c0: 0, r1: 2, c1: 0 },
+    { op: 'delete', sheet: 1, axis: 'row', at: 1, n: 2 },
+    { op: 'delete', sheet: 1, axis: 'col', at: 0, n: 1 },
+  ]) {
+    const wb = shaped(), sh = wb.sheets[0];
+    sh.rows.get(1).set(3, { t: 'n', v: 8, s: M.internStyle(wb, { fmt: '0.00' }) });
+    sh.hidden.rows.add(5);
+    const before = serialize(wb);
+    const { inverse } = M.apply(wb, op);
+    M.apply(wb, inverse);
+    assert.ok(serialize(wb).equals(before), op.op + ' ' + (op.axis || 'cells'));
+  }
+});
