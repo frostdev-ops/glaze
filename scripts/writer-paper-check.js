@@ -251,6 +251,30 @@ const HARNESS = `(() => {
     check(pages.chicago17.count === 6 && pages.chicago17.headers[0] === '' && pages.chicago17.headers[1] === '2', 'Chicago: no number on the title page, then 2…');
     check(pages.chicago17.notes.reduce((a, b) => a + b, 0) === 5 && pages.chicago17.notes[0] === 0, 'Chicago: five footnotes at the foot of their pages');
 
+    // ---- line starts with mixed inline content, including visual order differing from document order
+    const mixedStarts = await fr.evaluate(() => {
+      const S = GZ_WRITER_SCHEMA.paper, text = (s, marks = []) => S.text(s, marks), para = (content, attrs = {}) => S.node('paragraph', attrs, content);
+      const repeat = (s) => s.repeat(18), bold = S.marks.bold.create();
+      const cases = [
+        ['rtl', para([text(repeat('שלום עולם בדיקה של שורות שונות '))], { dir: 'rtl' })],
+        ['bidi', para([text(repeat('English שלום עולם more words العربية '))])],
+        ['direction marks', para([text(repeat('Plain words ')), text(repeat('שלום עולם '), [S.marks.direction.create({ dir: 'rtl' })]), text(repeat(' after words '))])],
+        ['wide and soft hyphen', para([text(repeat('漢字🙂a\u00adb\u00adc wides '), [bold])])],
+        ['hard breaks and notes', para([text(repeat('Words before ')), S.node('hard_break'), S.node('footnote_ref', { content: 'A note.' }), text(repeat(' words after '))])],
+        ['mixed heights', para([text(repeat('normal ')), text(repeat('large '), [S.marks.text_style.create({ size: 26 })]), text(repeat(' small '))])],
+        ['tab stops', para([text('left\tcentre\tright'), S.node('hard_break'), text(repeat('words '))], { tabs: [[1, 'l'], [3, 'c'], [6, 'r']] })],
+      ];
+      const v = GZ_WRITER_PAPER.current().editor.view;
+      v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, cases.map(([, n]) => n)));
+      return cases.map(([name]) => name);
+    });
+    await settle(fr);
+    const mixed = await fr.evaluate(() => {
+      const v = GZ_WRITER_PAPER.current().editor.view, P = GZ_WRITER_PAGINATE, one = P.whole(v), old = P.whole(v, { legacy: true });
+      return one.blocks.map((b, i) => ({ at: b.lines.map((x) => x.at), legacy: old.blocks[i].lines.map((x) => x.at) }));
+    });
+    for (let i = 0; i < mixedStarts.length; i++) check(JSON.stringify(mixed[i].at) === JSON.stringify(mixed[i].legacy), `${mixedStarts[i]}: line starts match posAtCoords (${JSON.stringify(mixed[i])})`);
+
     // ---- incremental: a keystroke measures the block it's in, not the paper
     await load(fr, FX.papers.mla9(), 'mla9');
     const cost = await fr.evaluate(async () => {
