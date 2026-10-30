@@ -70,6 +70,7 @@ const SITES = {
       why: 'the local model\'s weights on the student\'s click: huggingface.co\'s resolve URL echoes the Origin, its CDN answers *; the final host is checked (allowedHost)' },
     { at: "globalThis.fetch(new URL('/ai/local/models.json'", kind: 'extension' },
   ],
+  'ai/local/ladder.js': [{ at: "fetch(chrome.runtime.getURL('ai/local/kernels/bench.wgsl'))", kind: 'extension' }],
   'ai/broker.js': [{ at: 'env.fetch(url, init)', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
   'ai/providers/openai.js': [
     { at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'ai/broker.js', guard: /fetch: pinned\(env, use\)/ },
