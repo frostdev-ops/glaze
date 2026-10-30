@@ -308,7 +308,7 @@ test('on: the sheet kind creates and imports', async () => {
   assert.equal(DK.opens('Grades.xlsx'), 'sheet');
   assert.equal(DK.opens('grades.CSV'), 'sheet');
   assert.equal(k.label, 'Spreadsheet');
-  assert.equal(k.exportLabel, 'Export .csv', 'without the .xlsx writer, a .csv');
+  assert.equal(k.exportLabel, 'Export .xlsx', 'the label stays correct while the codec loads');
   const withXlsx = load({ sheets: true }, { GZ_SHEET_XLSX: { read: async () => null, write: async () => new Uint8Array() } });
   await withXlsx.DK.settled();
   assert.equal(withXlsx.DK.get('sheet').exportLabel, 'Export .xlsx');
@@ -536,4 +536,59 @@ test('a cell\'s dynamic-array and data-table fields (cm, vm, dt) survive a save'
   const row = (r) => back.sheets[0].rows.get(r).get(0);
   assert.deepEqual([row(0).cm, row(1).vm, row(2).dt], [1, 3, { r1: 'A1', dt2D: false }]);
   assert.deepEqual(parts.get('1:0')[3], [3, [[0, 's', 'plain']]], 'a cell without them is stored as before');
+});
+
+test('concurrent import and submit wait for one codec load, preserving the XLSX name and MIME', async () => {
+  const X = require('../lib/sheet-xlsx.js'), s = store(), P = PA.open(s);
+  let release, loads = 0, writes = 0;
+  const gate = new Promise((ok) => { release = ok; });
+  const { DK, ctx } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P },
+    GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_CALC: require('../lib/sheet-calc.js'),
+    GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob,
+    GZ_WRITER_PAPER: { need: async (files) => { if (files.includes('lib/sheet-xlsx.js')) { loads++; await gate; } } } });
+  await DK.settled();
+  const bytes = await X.write(M.workbook());
+  const incoming = DK.get('sheet').into(KEY, { name: 'book.xlsx', size: bytes.length, arrayBuffer: async () => bytes.slice().buffer });
+  const outgoing = ctx.GZ_SHEET_KIND.fileOf(M.workbook(), ' Lab / 3:*? ');
+  let done = false;
+  outgoing.then(() => { done = true; });
+  await new Promise(setImmediate);
+  assert.equal(loads, 1);
+  assert.equal(done, false);
+  ctx.GZ_SHEET_XLSX = { ...X, write: async (wb) => { writes++; return X.write(wb); } };
+  release();
+  const [rec, file] = await Promise.all([incoming, outgoing]);
+  assert.equal(rec.kind, 'sheet');
+  assert.equal(writes, 1);
+  assert.equal(file.name, 'Lab 3.xlsx');
+  assert.equal(file.mime, DK.KINDS.sheet.mime);
+  assert.equal((await X.read(file.bytes)).sheets.length, 1);
+});
+
+test('failed or missing codecs reject file creation with a named error and can be retried', async () => {
+  for (const missing of [false, true]) {
+    let loads = 0;
+    const { DK, ctx } = load({ sheets: true }, { GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'),
+      console: { error() {} }, GZ_WRITER_PAPER: { need: async () => { loads++; if (!missing) throw new Error('lib/zip.js did not load'); } } });
+    await DK.settled();
+    await assert.rejects(ctx.GZ_SHEET_KIND.fileOf(M.workbook(), 'Lab'), (e) => e.code === 'codecs' && /load/i.test(e.message));
+    assert.equal(loads, 1);
+    ctx.GZ_SHEET_XLSX = { write: async () => new Uint8Array([80, 75]) };
+    ctx.GZ_WRITER_PAPER = { need: async () => { loads++; } };
+    assert.equal((await ctx.GZ_SHEET_KIND.fileOf(M.workbook(), 'Lab')).name, 'Lab.xlsx');
+    assert.equal(loads, 2, 'a failed promise is cleared for retry');
+  }
+});
+
+test('a kept workbook never mounts without the codec that tracks its edits', async () => {
+  let mounted = false;
+  const wb = book();
+  const { DK } = load({ sheets: true }, { console: { error() {} },
+    GZ_SHEET_DATA: { read: async () => ({ wb, sigs: new Map() }) },
+    GZ_SHEET_GRID: { mount: () => { mounted = true; } },
+    GZ_WRITER_PAPERS: { open: () => ({}), local: () => true },
+    GZ_WRITER_PAPER: { need: async (files) => { if (files.includes('lib/sheet-xlsx.js')) throw new Error('lib/zip.js did not load'); } } });
+  await DK.settled();
+  await assert.rejects(DK.get('sheet').view(KEY, {}), (e) => e.code === 'codecs');
+  assert.equal(mounted, false);
 });
