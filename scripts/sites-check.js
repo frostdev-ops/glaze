@@ -118,6 +118,7 @@ const stub = (required) => {
     await until(asking);
     await gz(() => __gz.answer(true));
     check(await until(async () => (await state()).rows.some(([h]) => h === 'canvas.school.edu'), 15000), 'granted and checked, the site is listed');
+    await until(async () => !(await state()).busy); // the list follows storage; the field and status follow the add's end
     s = await state();
     check(JSON.stringify(s.rows) === '[["canvas.school.edu","Canvas"]]' && s.status === 'Allowed canvas.school.edu' && s.value === '' && s.focus === 'site-address', `with its LMS named, and the field ready for another (${JSON.stringify(s)})`);
     check((await local()).canvas?.includes(`${CANVAS}/*`), 'the worker checked it again and approved it');
@@ -141,6 +142,7 @@ const stub = (required) => {
     check(JSON.stringify(await gz(() => __gz.asked.at(-1))) === `["${BB}/*"]`, 'picking it asks for that site');
     await gz(() => __gz.answer(true));
     check(await until(async () => (await state()).rows.some(([h]) => h === 'bb.school.edu'), 15000), 'and it is listed');
+    await until(async () => !(await state()).busy);
     s = await state();
     check(JSON.stringify(s.rows) === '[["bb.school.edu","Blackboard Ultra"],["canvas.school.edu","Canvas"]]' && !s.note, `as Blackboard Ultra (${JSON.stringify(s.rows)})`);
     await shot('settings-6-picked');
