@@ -117,6 +117,18 @@ test('lookup: oversized rectangles are refused before reading cells', () => {
   assert.equal(reads, 0, 'check the complete rectangle before allocating or visiting it');
 });
 
+test('resolve: hiding a point keeps each remaining slice and legend in its original colour', async () => {
+  const { wb } = await open();
+  wb.sheets[0].hidden.rows.add(2);
+  const pie = drawn(wb)[2].data;
+  const sc = CH.scene(pie, 500, 300);
+  assert.deepEqual(sc.marks.legend, ['Jan', 'Mar', 'Apr']);
+  assert.deepEqual(sc.marks.slices.map((s) => s.color), [4, 6, 7].map((i) => CX.DEFAULT_THEME[i]));
+  assert.deepEqual(sc.prims.filter((p) => p.cls === 'gc-swatch').map((p) => p.a.fill), sc.marks.slices.map((s) => s.color));
+  const automatic = { ...pie, groups: pie.groups.map((g) => ({ ...g, series: g.series.map((s) => ({ ...s, points: new Map() })) })) };
+  assert.deepEqual(CH.scene(automatic, 500, 300).marks.slices.map((s) => s.color), sc.marks.slices.map((s) => s.color));
+});
+
 test('moving: inserted rows move the anchors and references, a rename follows, undo takes it back', async () => {
   const { wb, e } = await open();
   const id = wb.sheets[0].id;
