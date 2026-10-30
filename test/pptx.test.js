@@ -138,29 +138,28 @@ test('shapes: presets with adjust values, custom geometry, style references, lin
   assert.deepEqual(s3.shapes.map((x) => x.name), ['Default', 'Rounded', 'Arrow', 'Triangle', 'Shadowed', 'Note']); // Blank hides the master's; hidden shapes go
   const def = named(s3, 'Default');
   assert.deepEqual(pick(def, ['type', 'id', 'bounds', 'rotation', 'flipH', 'flipV', 'geometry']), {
-    type: 'shape', id: 2, bounds: { x: 609600, y: 609600, w: 2438400, h: 1219200 }, rotation: 0, flipH: false, flipV: false, geometry: { preset: 'rect', adjust: {} },
+    type: 'shape', id: 2, bounds: { x: 609600, y: 609600, w: 2438400, h: 1219200 }, rotation: 0, flipH: false, flipV: false, geometry: { prst: 'rect', avLst: {} },
   });
   assert.deepEqual(def.line, { width: 12700, color: '#2f528f', dash: 'solid', cap: 'flat', join: 'miter', head: null, tail: null });
   assert.equal(def.text.anchor, 'ctr');
   assert.deepEqual(pick(def.text.paragraphs[0].runs[0], ['text', 'color', 'font', 'size']), { text: 'Default', color: '#ffffff', font: CALIBRI, size: 18 }); // fontRef minor, lt1
 
   const round = named(s3, 'Rounded');
-  assert.deepEqual(pick(round, ['rotation', 'geometry']), { rotation: 90, geometry: { preset: 'roundRect', adjust: { adj: 25000 } } });
+  assert.deepEqual(pick(round, ['rotation', 'geometry']), { rotation: 90, geometry: { prst: 'roundRect', avLst: { adj: 25000 } } });
   assert.deepEqual(round.line, { width: 28575, color: '#ff0000', dash: 'dash', cap: 'round', join: 'round', head: null, tail: null });
 
   const arrow = named(s3, 'Arrow');
-  assert.deepEqual(pick(arrow, ['type', 'flipH', 'flipV', 'fill', 'geometry']), { type: 'shape', flipH: false, flipV: true, fill: null, geometry: { preset: 'straightConnector1', adjust: {} } });
+  assert.deepEqual(pick(arrow, ['type', 'flipH', 'flipV', 'fill', 'geometry']), { type: 'shape', flipH: false, flipV: true, fill: null, geometry: { prst: 'straightConnector1', avLst: {} } });
   assert.deepEqual(arrow.line, { width: 19050, color: '#000000', dash: 'solid', cap: 'flat', join: 'round', head: { type: 'oval', w: 'med', len: 'med' }, tail: { type: 'triangle', w: 'med', len: 'lg' } });
 
   const tri = named(s3, 'Triangle');
   assert.equal(tri.flipH, true);
+  // lib/pptx-geom.js's input: custom geometry as written, values as numbers or guide names.
   assert.deepEqual(tri.geometry, {
-    custom: {
-      av: [], gd: [{ name: 'mid', fmla: '*/ w 1 2' }], rect: { l: '0', t: '0', r: 'r', b: 'b' },
-      paths: [{ w: 100, h: 100, fill: 'norm', stroke: true, commands: [
-        { cmd: 'moveTo', pts: [{ x: '50', y: '0' }] }, { cmd: 'lnTo', pts: [{ x: '100', y: '100' }] }, { cmd: 'lnTo', pts: [{ x: '0', y: '100' }] }, { cmd: 'close' },
-      ] }],
-    },
+    avLst: [], gdLst: [{ name: 'mid', fmla: '*/ w 1 2' }], cxnLst: [], rect: { l: '0', t: '0', r: 'r', b: 'b' },
+    pathLst: [{ w: 100, h: 100, fill: 'norm', stroke: true, cmds: [
+      { cmd: 'moveTo', pts: [{ x: '50', y: '0' }] }, { cmd: 'lnTo', pts: [{ x: '100', y: '100' }] }, { cmd: 'lnTo', pts: [{ x: '0', y: '100' }] }, { cmd: 'close' },
+    ] }],
   });
   assert.deepEqual(tri.fill, { type: 'gradient', kind: 'linear', angle: 90, rotate: true, stops: [{ at: 0, color: '#cfd5ea' }, { at: 1, color: '#2f528f' }] });
   assert.equal(tri.line, null);
@@ -190,7 +189,7 @@ test('pictures: crop, alt text, SVG over its PNG, media parts; metafiles and vid
   const s4 = d.slides[3];
   const pic = named(s4, 'Picture 2');
   assert.deepEqual(pick(pic, ['type', 'media', 'crop', 'alpha', 'alt', 'geometry']), {
-    type: 'picture', media: { path: 'ppt/media/image1.png', mime: 'image/png' }, crop: { l: 0.1, t: 0.2, r: 0.3, b: 0 }, alpha: 1, alt: 'Cell under a microscope', geometry: { preset: 'ellipse', adjust: {} },
+    type: 'picture', media: { path: 'ppt/media/image1.png', mime: 'image/png' }, crop: { l: 0.1, t: 0.2, r: 0.3, b: 0 }, alpha: 1, alt: 'Cell under a microscope', geometry: { prst: 'ellipse', avLst: {} },
   });
   assert.deepEqual(pick(pic.line, ['width', 'color']), { width: 12700, color: '#ed7d31' });
   assert.deepEqual(pick(named(s4, 'Diagram EMF'), ['type', 'kind', 'title', 'bounds']), { type: 'box', kind: 'picture', title: '', bounds: { x: 4343400, y: 1825625, w: 2286000, h: 1714500 } });
@@ -283,7 +282,7 @@ test('a malformed shape degrades alone; an unreadable or missing slide comes bac
   assert.equal(textOf(good), 'Fine');
   const bad = named(s8, 'Bad numbers');
   assert.deepEqual(pick(bad, ['type', 'id', 'bounds', 'rotation', 'flipH', 'geometry', 'fill', 'line']), {
-    type: 'shape', id: null, bounds: { x: 0, y: 0, w: 0, h: 0 }, rotation: 0, flipH: false, geometry: { preset: 'nonsense', adjust: {} }, fill: null, line: null,
+    type: 'shape', id: null, bounds: { x: 0, y: 0, w: 0, h: 0 }, rotation: 0, flipH: false, geometry: { prst: 'nonsense', avLst: {} }, fill: null, line: null,
   });
   assert.equal(textOf(bad), 'Still here');
   assert.equal(bad.text.paragraphs[0].runs[0].size, 18);
