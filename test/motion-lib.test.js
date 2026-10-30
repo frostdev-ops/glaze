@@ -428,3 +428,24 @@ test('in a school\'s page a crossfade waits for the page world\'s guard, then ha
     for (const [k, d] of saved) { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; }
   }
 });
+
+
+test('the handoff carries the exact transition through a native event when supported', async () => {
+  const saved = ['PageRevealEvent', 'dispatchEvent'].map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)]);
+  try {
+    class PageRevealEvent extends Event { constructor(type, init) { super(type); this.viewTransition = init.viewTransition; } }
+    globalThis.PageRevealEvent = PageRevealEvent;
+    const events = [];
+    globalThis.dispatchEvent = (e) => { events.push(e); return true; };
+    const { runs } = env({ vt: true });
+    await M.swap(() => {});
+    await runs[0].finished;
+    await new Promise(setImmediate);
+    assert.equal(events.length, 1);
+    assert.ok(events[0] instanceof PageRevealEvent, 'a native ViewTransition slot creates the receiving world\'s wrapper; CustomEvent detail retains the isolated wrapper');
+    assert.equal(events[0].type, 'glaze:transition');
+    assert.equal(events[0].viewTransition, runs[0]);
+  } finally {
+    for (const [k, d] of saved) { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; }
+  }
+});

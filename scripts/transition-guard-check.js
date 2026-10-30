@@ -8,6 +8,8 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 
 const start = source.indexOf('const transitionGuard = ');
 if (start < 0) throw Error('missing transitionGuard');
 const guard = source.slice(start, source.indexOf('\n};', start) + 3);
+const motion = fs.readFileSync(path.join(__dirname, '..', 'lib/motion.js'), 'utf8');
+const handOver = motion.slice(motion.indexOf('  const handOver = '), motion.indexOf('  const swap = '));
 const rows = [];
 const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}: ${JSON.stringify(detail)}`); };
 
@@ -31,7 +33,7 @@ const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.l
           const vt = document.startViewTransition(() => {});
           vt.ready.catch(() => {});
         }
-      });
+      }, true);
       globalThis.guardListeners = 0;
       const add = window.addEventListener.bind(window);
       window.addEventListener = (...args) => { if (args[0] === 'glaze:transition') guardListeners++; return add(...args); };
@@ -39,6 +41,7 @@ const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.l
       transitionGuard(); transitionGuard();
     `);
     fs.writeFileSync(path.join(ext, 'isolated.js'), `
+      ${handOver}
       addEventListener('vt-probe', (e) => {
         const mode = e.detail;
         const before = !dispatchEvent(new Event('glaze:transition', { cancelable: true }));
@@ -46,7 +49,7 @@ const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.l
         if (!before) return;
         const vt = document.startViewTransition(mode === 'timeout' || mode === 'fallback' ? () => new Promise(() => {}) : () => {});
         for (const p of [vt.ready, vt.finished, vt.updateCallbackDone]) p.catch(() => {});
-        dispatchEvent(new Event('glaze:transition'));
+        handOver(vt);
         if (mode === 'fallback') setTimeout(() => vt.skipTransition(), 100);
         else if (mode !== 'timeout' && mode !== 'nested') vt.skipTransition();
       });

@@ -430,21 +430,29 @@ const pageGuard = async (document) => {
   const context = vm.createContext({ document, addEventListener: (...args) => listeners.push(args) });
   const install = () => vm.runInContext(`(${guard.func})()`, context);
   install();
-  return { listeners, install, send: (cancelable = false) => {
+  return { listeners, install, send: (cancelable = false, viewTransition) => {
     const e = new Event('glaze:transition', { cancelable });
+    if (viewTransition) Object.defineProperty(e, 'viewTransition', { value: viewTransition });
     for (const [, listener] of listeners) listener(e);
     return e.defaultPrevented;
   } };
 };
 
-test('the page-world guard handles handoffs before page bubble listeners, once per document', async () => {
+test('the page-world guard installs once per document', async () => {
   for (let i = 0; i < 2; i++) {
     const g = await pageGuard({ activeViewTransition: null });
     g.install();
     assert.equal(g.listeners.length, 1, 'repeated installation in this document adds no listener');
     assert.equal(g.listeners[0][0], 'glaze:transition');
-    assert.equal(g.listeners[0][2], true, 'capture runs before an earlier page bubble listener can replace the transition');
   }
+});
+
+test('a handoff handles its exact transition even if a page listener already replaced the active one', async () => {
+  let ours = 0, school = 0;
+  const g = await pageGuard({ activeViewTransition: { ready: { then: () => school++ } } });
+  g.send(false, { ready: { then: () => ours++ } });
+  assert.equal(ours, 1, 'the native event carries the transition Glaze started, even after it was aborted');
+  assert.equal(school, 0, 'the school\'s newer transition stays the school\'s');
 });
 
 test('a guard presence probe never handles the school\'s transition; only the handoff handles ready', async () => {
