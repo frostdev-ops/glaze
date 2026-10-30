@@ -34,6 +34,17 @@ Settings → AI, to the model you chose for it: Tab completion sends the text ar
 or assignment, and in a discussion your classmates' posts with their names; Feedback sends your draft with the
 assignment's instructions and rubric. Nothing goes to AI from a test.
 
+[Agent access](../PRIVACY.md#agent-access) (Settings → AI → Agents) is off by default. When it's on, Glaze talks only
+to a helper program on this computer: `glaze-mcp`, or the downloaded Glaze Mac app on Safari. An AI app there gets data
+only after you allow it in Glaze's window, per app and per group: Courses, to-dos and schedule; Grades; Assignments and
+rubrics; Writer documents; each mod's tools. Every change (marking a to-do done, a Writer fix, a citation insert) waits
+for your OK there, and Glaze never submits work. Glaze sends nothing to FrostDev; the app may send what it gets to its
+own AI service, under that app's own policy. On this device Glaze keeps the apps and their groups, the switch, an
+activity list of the last 200 calls (time, app, tool and outcome, never content) and the last 100 assignment reads.
+Turning it off and Forget all apps clear the kept assignment reads, and removing a site clears that site's; the apps
+stay until you Revoke or forget them. On Firefox, turning it on also asks to share website content, which turning it off
+gives back.
+
 Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
 you set in a course's menu. These follow Chrome sync (or Firefox Sync) when it's on; Safari keeps them on this device only.
 
@@ -94,8 +105,8 @@ Course tabs show an automatic short name by default, with common term/section wr
 Reminders, what you've snoozed or muted and your streak stay on your device as well, and so do your marks on documents; reminders show only inside Canvas and Blackboard pages, and Glaze has no notifications permission.
 With Gradescope in To Do on, Glaze reads your own Gradescope course pages (read-only, signed in as you) and keeps the assignments on your device; nothing from Gradescope goes anywhere else.
 It has no analytics. Glaze's writes anywhere are opt-in: with Better To Do's "Tick off in Canvas too" on, ticking an item
-marks it done or not done in your own Canvas planner, as Canvas's List View does. Changing a course's nickname or
-color in its Canvas card menu saves that choice to your own Canvas site too, Sign out in Glaze's Canvas bar signs you out of Canvas as Canvas's own button does, and Moodle's Edit mode switch in Glaze's bar flips Moodle's own control. Apart from those clicks and the optional
+marks it done or not done in your own Canvas planner, as Canvas's List View does, and so does an agent app's mark done
+once you allow it. Changing a course's nickname or color in its Canvas card menu saves that choice to your own Canvas site too, Sign out in Glaze's Canvas bar signs you out of Canvas as Canvas's own button does, and Moodle's Edit mode switch in Glaze's bar flips Moodle's own control. Apart from those clicks and the optional
 sharing and mods described above, the extension's other requests are read-only and go to your own Blackboard, Canvas or Moodle site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards; on Canvas a course's assignment groups when you use its what-if calculator;
