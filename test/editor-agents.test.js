@@ -247,6 +247,24 @@ test('every state lib/agent-link.js reports has its line, with the command to ru
   assert.equal(p.$('agents-state').hidden, true);
 });
 
+test('Firefox: asked in the click; a helper that doesn\'t list Glaze reads as not-installed, whose line runs setup; exited has no error of its own', async () => {
+  const p = await open({ browser: 'firefox', next: { state: 'not-installed', at: 10, error: 'No such native application io.frostdev.glaze_mcp' } });
+  await p.toggle('agents-on');
+  assert.equal(p.asked.length, 1);
+  assert.equal(p.asked[0].gesture, true, 'Firefox forgets the gesture across an await');
+  assert.equal(p.line(), 'In Claude Desktop, add the Glaze extension. For other apps, run npx glaze-mcp setup');
+  await p.linked('exited');
+  assert.equal(p.line(), 'The helper stopped; Glaze is retrying. npx glaze-mcp doctor says why.', 'Firefox gives no error text');
+  await p.linked('connected');
+  assert.equal(p.line(), 'Ready', 'connected at once after the grant: no restart on Firefox');
+});
+
+test('the Claude Desktop bundle\'s no-node state, as its helper reports it', async () => {
+  const p = await open({ on: true, link: { state: 'no-node', at: 1, error: 'no-node' } });
+  assert.equal(p.line(), 'Install Node.js 18+ for browsers to start the helper');
+  assert.equal(p.$('agents-copy').hidden, true);
+});
+
 test('needs-permission: Allow asks for nativeMessaging in its click, and nothing else', async () => {
   const p = await open({ on: true, link: { state: 'needs-permission', at: 1 } });
   const sent = p.sent.length;

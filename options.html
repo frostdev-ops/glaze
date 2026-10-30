@@ -318,6 +318,37 @@
     .ai-prov:hover { transform: none; }
   }
   #ai-said { margin: 0; color: var(--gz-err); }
+  /* Settings → Agents (lib/editor-agents.js): the link's state with its command, a card per app with a switch per group,
+     and the activity list, drawn as Settings → AI's. */
+  #agents-said { margin: 0; color: var(--gz-err); }
+  .ag-state { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .5rem .7rem; padding: .65rem .8rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6);
+    background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); }
+  .ag-state:has(> :is(button, a):not([hidden])) { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .ag-state > p { margin: 0; min-width: 0; font-size: calc(13px * var(--gz-scale, 1)); line-height: 1.5; overflow-wrap: anywhere; }
+  .ag-state code { padding: .05rem .35rem; border-radius: calc(var(--gz-radius, 12px) / 3); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: calc(12.5px * var(--gz-scale, 1));
+    background: var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-line, var(--gz-line)); unicode-bidi: isolate; overflow-wrap: anywhere; }
+  .ag-state > a { color: var(--gz-accent); font-size: calc(12px * var(--gz-scale, 1)); text-decoration: none; white-space: nowrap; }
+  .ag-dot { inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--gz-ink-faint); }
+  .ag-state[data-tone="ok"] .ag-dot { background: var(--gz-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-ok) 20%, transparent); }
+  .ag-state[data-tone="bad"] .ag-dot { background: var(--gz-err); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-err) 20%, transparent); }
+  .ag-state[data-tone="wait"] .ag-dot { background: var(--gz-accent); animation: ag-wait 1.4s var(--gz-ease) infinite alternate; }
+  @keyframes ag-wait { to { opacity: .35; } }
+  .ag-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; }
+  .ag-apps { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+  .ag-app { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .3rem .8rem; padding: .75rem .9rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6);
+    background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-line, var(--gz-line)); }
+  .ag-who { display: grid; gap: .1rem; min-width: 0; overflow-wrap: anywhere; }
+  .ag-who b { font-weight: 600; font-size: calc(14px * var(--gz-scale, 1)); }
+  .ag-who span, .ag-app > small { color: var(--gz-ink-faint); font-size: calc(12px * var(--gz-scale, 1)); }
+  .ag-exe { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; unicode-bidi: isolate; text-align: start; }
+  .ag-app > small { grid-column: 1 / -1; font-size: calc(11.5px * var(--gz-scale, 1)); font-variant-numeric: tabular-nums; }
+  .ag-grants { grid-column: 1 / -1; display: grid; margin-block-start: .35rem; border-block-start: 1px solid var(--gz-border-line, var(--gz-line)); }
+  .ag-grant { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding-block: .5rem; font-size: calc(13px * var(--gz-scale, 1)); cursor: pointer; }
+  .ag-grant span { min-width: 0; overflow-wrap: anywhere; }
+  .ag-grant + .ag-grant { border-block-start: 1px solid var(--gz-border-line, var(--gz-line)); }
+  .ag-calls { max-block-size: 22rem; overflow: auto; }
+  html[data-gz-motion="off"] .ag-state .ag-dot { animation: none; }
+  @media (prefers-reduced-motion: reduce) { .ag-state .ag-dot { animation: none; } }
   .site-add { flex-wrap: nowrap; margin: .75rem 0 .25rem; }
   .site-add .field { flex: 1; min-width: 0; }
   .site-add button[aria-busy="true"] { opacity: .6; cursor: progress; }
@@ -568,7 +599,7 @@
 <div data-editor-jumps="writer" hidden><a href="#writer/setup" data-editor-jump>Writer</a><a href="#writer/papers" data-editor-jump>Papers</a><a href="#writer/typing" data-editor-jump>Typing</a><a href="#writer/proofing" data-editor-jump>Proofing</a><a href="#writer/discussions" data-editor-jump>Discussions</a><a href="#writer/submitting" data-editor-jump>Submitting</a></div>
 <div data-editor-jumps="sharing" hidden><a href="#sharing/sessions" data-editor-jump>Share sessions</a><a href="#sharing/relay" data-editor-jump>Relay</a><a href="#sharing/calendar" data-editor-jump data-gcal-link hidden>Google Calendar sync</a></div>
 <div data-editor-jumps="mods" hidden><a href="#mods/installed" data-editor-jump>Installed mods</a><a href="#mods/add" data-editor-jump>Add a mod</a><a href="#mods/widget" data-editor-jump>Widget builder</a><a href="#mods/dev" data-editor-jump>Mod development</a></div>
-<div data-editor-jumps="ai" hidden><a href="#ai/setup" data-editor-jump>AI</a><a href="#ai/features" data-editor-jump>Features</a><a href="#ai/activity" data-editor-jump>Activity</a></div>
+<div data-editor-jumps="ai" hidden><a href="#ai/setup" data-editor-jump>AI</a><a href="#ai/features" data-editor-jump>Features</a><a href="#ai/activity" data-editor-jump>Activity</a><a href="#ai/agents" data-editor-jump>Agents</a></div>
 <div data-editor-jumps="backup" hidden><a href="#backup/privacy" data-editor-jump>Backup and reset</a><a href="#backup/sites" data-editor-jump>Sites</a></div>
 <div data-editor-jumps="about" hidden><a href="#about/glaze" data-editor-jump>About Glaze</a></div>
     </nav>
@@ -1697,6 +1728,19 @@
 <ul class="ai-calls" id="ai-calls"></ul>
 <p class="desc" id="ai-calls-empty">None yet</p>
 </section>
+<section id="agents" data-editor-section="ai/agents" data-sites="Extension only" aria-labelledby="heading-ai-agents">
+<p class="section-path" data-editor-breadcrumb><a href="#ai/agents" data-editor-alias>Agents</a></p><div class="section-heading"><h2 id="heading-ai-agents">Agents</h2><input type="checkbox" role="switch" id="agents-on" aria-label="Agent access" data-local></div>
+<p class="desc" id="agents-said" role="status" aria-live="polite" hidden></p>
+<div class="ag-state" id="agents-state" hidden><span class="ag-dot" aria-hidden="true"></span><p id="agents-line" role="status" aria-live="polite"></p><button type="button" id="agents-copy" hidden>Copy</button><button type="button" id="agents-allow" hidden>Allow</button><a id="agents-app" href="https://frostdev.io/glaze" target="_blank" rel="noopener" translate="no" hidden>frostdev.io/glaze</a></div>
+<div class="group" id="agents-apps-box" hidden>
+<div class="ag-head"><h3 id="agents-apps-head">Apps</h3><button type="button" id="agents-forget">Forget all apps</button></div>
+<ul class="ag-apps" id="agents-apps" aria-labelledby="agents-apps-head"></ul>
+</div>
+<div class="group" id="agents-activity" hidden>
+<h3 id="agents-calls-head">Activity</h3>
+<ul class="ai-calls ag-calls" id="agents-calls" aria-labelledby="agents-calls-head"></ul>
+</div>
+</section>
 </div>
 <div id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" data-editor-panel="backup" data-no-preview hidden>
 <section id="data" data-editor-section="backup/privacy" data-sites="Extension only" aria-labelledby="heading-backup-privacy">
@@ -1866,6 +1910,7 @@
 <script src="lib/ai/failure.js"></script>
   <script src="lib/ai/endpoint.js"></script>
   <script src="lib/editor-ai.js"></script>
+  <script src="lib/editor-agents.js"></script>
   <script src="lib/writer-papers.js"></script>
   <script src="lib/editor-writer.js"></script>
   <script src="options.js"></script>
