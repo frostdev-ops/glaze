@@ -190,7 +190,7 @@ test('zipAsync deflates what shrinks and stores what does not; doctext and zlib 
   assert.equal(m.empty.method, 0);
   const z = D.unzip(buf);
   assert.deepEqual(z.names, files.map((f) => f.name));
-  for (const f of files) assert.deepEqual(await z.bytes(f.name), f.data, f.name);
+  for (const f of files) assert.deepEqual(new Uint8Array(await z.bytes(f.name)), f.data, f.name);
   const v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const at = 0, nameLen = v.getUint16(at + 26, true), csize = v.getUint32(at + 18, true);
   assert.deepEqual(new Uint8Array(zlib.inflateRawSync(buf.subarray(at + 30 + nameLen, at + 30 + nameLen + csize))), files[0].data);
@@ -210,6 +210,6 @@ test('zipAsync falls back to zlib where CompressionStream is missing', async () 
   let without;
   try { without = Buffer.concat(await Z.zipAsync(files, { deflate: true })); } finally { globalThis.CompressionStream = saved; }
   const z = D.unzip(without);
-  for (const f of files) assert.deepEqual(await z.bytes(f.name), f.data, f.name);
+  for (const f of files) assert.deepEqual(new Uint8Array(await z.bytes(f.name)), f.data, f.name);
   assert.deepEqual(Object.values(methods(without)).map((x) => x.method), Object.values(methods(withStream)).map((x) => x.method));
 });
