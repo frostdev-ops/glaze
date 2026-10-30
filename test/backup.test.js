@@ -961,6 +961,8 @@ for (const kind of ['pdf', 'deck']) test(`an older ${kind} already versioned in 
 });
 
 test('Back up refuses a spreadsheet that cannot fit through the restore write fence', () => {
+  assert.equal(B.LIMIT.command, 32 << 20);
+  assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/background.js'), 'utf8'), /JSON\.stringify\(m\.restore\)\.length > \(32 << 20\)/, 'the worker fence is the same bound');
   const key = `doc:${id(87)}`, rows = Array.from({ length: 100 }, (_, r) => [r, Array.from({ length: 11 }, (_, c) => [c, 's', 'x'.repeat(32000)])]);
   const local = { [`writerPaper:${key}`]: { key, kind: 'sheet', updated: NOW, book: { sheets: [{ id: 1, name: 'Large' }] }, parts: { '1:0': 1 } },
     [`writerSheet:${key}:1:0`]: { rev: 1, rows } };
