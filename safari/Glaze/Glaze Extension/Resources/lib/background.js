@@ -1071,7 +1071,8 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 // A tab opened for a page in tab `tab`: next to it, and the browser goes back to it when it closes.
-const beside = (tab) => ({ openerTabId: tab.id, ...(Number.isInteger(tab.index) && { index: tab.index + 1 }) });
+// In the sender's own window: Chrome refuses an opener from another, and the student may have switched windows since.
+const beside = (tab) => ({ openerTabId: tab.id, ...(Number.isInteger(tab.windowId) && { windowId: tab.windowId }), ...(Number.isInteger(tab.index) && { index: tab.index + 1 }) });
 // Pending controls travel through session storage to one worker-opened Settings tab, never through a page-controlled URL.
 const settingsActionKey = (id) => `settingsAction:${id}`;
 const cleanSettingsAction = (a) => {
@@ -1180,6 +1181,16 @@ const openEditor = () => {
   try { Promise.resolve(chrome.runtime.openOptionsPage()).catch(tab); } catch { tab(); }
 };
 chrome.runtime.onMessage.addListener((m, s) => { if (m === 'options') Promise.resolve(fromGlaze(s) || lmsPage(s)).then((ok) => { if (ok) openEditor(); }, () => {}); });
+// Settings at a section, for a Glaze page framed in a site with no Settings claim (Writer's AI setup, the Notes share panel's
+// sessions): Safari kills the page whose extension frame calls tabs itself. Opening Settings conveys no keys.
+const SETTINGS_AT = new Set(['#ai/setup', '#sharing/sessions']);
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:settings-at') return;
+  if (!fromGlaze(s) || !SETTINGS_AT.has(m.hash)) { reply({ ok: false }); return; }
+  Promise.resolve(chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + m.hash, ...(s.tab && beside(s.tab)) }))
+    .then(() => reply({ ok: true }), () => reply({ ok: false }));
+  return true;
+});
 // Writer's Documents (papers.html), from the palette or Glaze's bar: the same senders.
 chrome.runtime.onMessage.addListener((m, s) => { if (m === 'papers') Promise.resolve(fromGlaze(s) || lmsPage(s)).then((ok) => { if (ok) return chrome.tabs.create({ url: chrome.runtime.getURL('papers.html') }); }).catch(() => {}); });
 
