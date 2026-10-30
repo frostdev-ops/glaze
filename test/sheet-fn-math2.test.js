@@ -136,6 +136,8 @@ test('EXP, LN, LOG, LOG10, PI, RADIANS, DEGREES and the trigonometric functions'
     ['LN(0)', '#NUM!'], ['LN(-1)', '#NUM!'], ['LOG(0)', '#NUM!'], ['LOG(10,0)', '#NUM!'], ['LOG(10,1)', '#DIV/0!'], ['LOG10(-5)', '#NUM!'], ['EXP(710)', '#NUM!'],
     ['ASIN(2)', '#NUM!'], ['ACOS(-1.5)', '#NUM!'], ['ATAN2(0,0)', '#DIV/0!'], ['ATAN2(0,1)', Math.PI / 2], ['COSH(1000)', '#NUM!'], ['SINH(-1000)', '#NUM!'], ['TANH(1000)', 1],
     ['SIN("x")', '#VALUE!'], ['PI(1)', '#VALUE!'],
+    // Excel 16 on the Mac: SIN, COS and TAN refuse a magnitude of 2^27 or more, as COT, CSC and SEC do.
+    ['SIN(2^27)', '#NUM!'], ['SIN(-2^27)', '#NUM!'], ['COS(1E+10)', '#NUM!'], ['TAN(-1E+9)', '#NUM!'], ['ROUND(SIN(134217727.9),6)', -0.824074],
   ]);
 });
 
