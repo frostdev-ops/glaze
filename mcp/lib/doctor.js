@@ -1,8 +1,8 @@
 // doctor: reads what setup wrote and says what is wrong with it. It checks our folders (owner and modes), the manifest of
 // each browser set up (or, on Windows, the key that points at it), the extension ids it lets in, its launcher, the node
-// that launcher names and that node's version, and which copy it runs. Other browsers found are listed, not judged. It reads files, runs `node --version` and
-// `reg export`, and sends nothing anywhere. `live` is where the host and agent steps add a live handshake: an async
-// function returning more rows.
+// that launcher names and that node's version, and which copy it runs. Other browsers found are listed, not judged. It
+// reads files, runs `node --version` and `reg export`, and sends nothing anywhere. `live` is where the host and agent
+// steps add a live handshake: an async function returning more rows.
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -47,7 +47,8 @@ const run = async (o = {}) => {
   const keys = new Map();
   const key = (k) => { if (!keys.has(k)) keys.set(k, I.readKey(ctx, k)); return keys.get(k); };
 
-  // What is wrong with one browser's manifest, launcher and node, or [] when nothing is; warns gets what only needs a rerun.
+  // What is wrong with one browser's manifest, launcher and node, or [] when nothing is; warns gets what only needs a
+  // rerun.
   const check = async (b, file, warns = []) => {
     try { I.safePath(file); } catch (e) { return [e.message]; }
     const fBad = trustedPath(file);
@@ -113,8 +114,8 @@ const run = async (o = {}) => {
     return out;
   };
 
-  // Judged: each browser setup wrote for (its launcher), or with our manifest (on Windows, its key). The others found here
-  // are only listed: setup may have been asked for some browsers only.
+  // Judged: each browser setup wrote for (its launcher), or with our manifest (on Windows, its key). The others found
+  // here are only listed: setup may have been asked for some browsers only.
   const all = B.table(ctx.platform, ctx.env), here = B.present(all);
   const exists = (f) => { try { fs.lstatSync(f); return true; } catch { return false; } };
   const others = [];

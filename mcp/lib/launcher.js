@@ -1,7 +1,7 @@
 // The small script a host manifest points at: browsers start it with no PATH worth trusting, so it names node by its
 // absolute path and passes on what the browser gave it. sh on macOS and Linux (mode 0755), a .bat on Windows.
 // It runs the first of node (the one setup ran with or chose) and also (the other nodes nodes.js found safe and new
-// enough, in its order) that is still there, so a node upgraded or removed since doesn't break it. With none of them, or
+// enough, in its order) that is still there, so a node upgraded or removed since doesn't break it. With none, or
 // no node at all (node: null; Claude Desktop's bundle found none, nodes.js), it writes one native message,
 // {t:'error',why:'no-node'}, which the worker shows as no-node (lib/agent-link.js), and exits 1. It still names the script
 // it would run, so setup, uninstall and doctor know it as theirs.
@@ -46,8 +46,8 @@ const bat = ({ node, also = [], script, browser }) => {
 const text = (platform, o) => (platform === 'win32' ? bat(o) : sh(o));
 const file = (platform, hosts, browser) => path.join(hosts, platform === 'win32' ? `${id(browser)}.bat` : id(browser));
 
-// What a launcher of ours runs ({ node, also, script, browser }; { node: null, script, browser } with none), or null for
-// anything else. SH and BAT are the one-node launchers of glaze-mcp's prereleases, which still count as ours.
+// What a launcher of ours runs ({ node, also, script, browser }; { node: null, script, browser } with none), or null
+// for anything else. SH and BAT are the one-node launchers of glaze-mcp's prereleases, which still count as ours.
 const SH = /^#!\/bin\/sh\nexec '((?:[^']|'\\'')*)' '((?:[^']|'\\'')*)' host --browser=([a-z][a-z-]*) "\$@"\n$/;
 const BAT = /^@echo off\r\n(?:@setlocal DisableDelayedExpansion\r\n)?"([^"\x00-\x1f]*)" "([^"\x00-\x1f]*)" host --browser=([a-z][a-z-]*) %\* & exit \/b\r\n$/;
 // A launcher with nodes is ours only as text() writes it.

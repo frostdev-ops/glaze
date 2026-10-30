@@ -3,8 +3,8 @@
 // present. On Windows the manifests sit beside the launchers and a key under HKCU points at each; keys go through
 // run('…\System32\reg.exe', argv), never a shell. ensure({ ifNeeded: true }) is the same code, writing only what
 // differs: a moved node, other nodes to fall back on or a new version rewrites the launchers, and nothing else is
-// touched; with keepNewer it also leaves launchers that run a newer copy alone (Claude Desktop's bundle after an npx setup). node: null writes
-// launchers that say there is no node (launcher.js). Uninstall removes only
+// touched; with keepNewer it also leaves launchers that run a newer copy alone (Claude Desktop's bundle after an npx
+// setup). node: null writes launchers that say there is no node (launcher.js). Uninstall removes only
 // manifests and keys with our host name whose path points into our folder (of a key that holds more, only our value),
 // our launchers and our copies, and empties the run folder of what hosts that ended left.
 'use strict';
@@ -354,8 +354,8 @@ const uninstall = async (o = {}) => {
   for (const v of copies(ctx)) { fs.rmSync(path.join(ctx.root, v), { recursive: true, force: true }); removed.push(path.join(ctx.root, v)); }
   const g = path.join(ctx.root, GRANTS), saved = readJson(g);
   if (saved && saved.name === B.HOST && Array.isArray(saved.ids) && saved.ids.every(IDS.valid)) { fs.rmSync(g); removed.push(g); }
-  // The run folder (rendezvous.js), if it is private to this user: the files of hosts that have ended, then the folder once
-  // empty. A host still running keeps its own until the browser ends it.
+  // The run folder (rendezvous.js), if it is private to this user: the files of hosts that have ended, then the folder
+  // once empty. A host still running keeps its own until the browser ends it.
   const run = R.dir({ platform: ctx.platform, env: ctx.env });
   try {
     if (R.check(run)) {
