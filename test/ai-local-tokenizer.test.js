@@ -220,3 +220,21 @@ test('a classic script, as importScripts loads it: one global, and it works with
   const tk = ctx.GZ_AI_TOKENIZER.load(neutral());
   assert.equal(tk.decode(tk.encode('a\ud800b\udc00😀')), 'a\ufffdb\ufffd😀');
 });
+
+test('an empty added token is never matched in text, as HF ignores it', () => {
+  // In a context of its own with a timeout: a matcher that loops on empty matches never returns to the event loop.
+  const ctx = vm.createContext({ TextEncoder, TextDecoder, v: neutral({ added: [['', 3], ...ADDED] }) });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../lib/ai/local/tokenizer.js'), 'utf8'), ctx);
+  const [got, want] = JSON.parse(vm.runInContext(`const tk = GZ_AI_TOKENIZER.load(v);
+    JSON.stringify([[...tk.encode('hi<|im_start|>', { specials: true }), -1, ...tk.encode('hello', { specials: true })],
+      [...tk.encode('hi'), tk.id('<|im_start|>'), -1, ...tk.encode('hello')]])`, ctx, { timeout: 2000 }));
+  assert.deepEqual(got, want);
+});
+
+test('fromHF refuses truncation and padding, which it would not apply', () => {
+  const v = neutral();
+  const hf = { model: { type: 'BPE', vocab: Object.fromEntries(v.tokens.map((t, i) => [t, i])), merges: [...MERGES, ['l', 'd']], ignore_merges: true, byte_fallback: false }, normalizer: null, pre_tokenizer: LFM_PRE, decoder: { type: 'ByteLevel' }, added_tokens: [], truncation: null, padding: null };
+  assert.equal(K.fromHF(hf).decode(K.fromHF(hf).encode('hello world')), 'hello world');
+  assert.throws(() => K.fromHF({ ...hf, truncation: { max_length: 8, strategy: 'LongestFirst' } }), /truncation/);
+  assert.throws(() => K.fromHF({ ...hf, padding: { strategy: 'BatchLongest', pad_id: 0 } }), /padding/);
+});
