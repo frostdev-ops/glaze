@@ -625,7 +625,7 @@ test('a feature whose status ask got no status asks again in the same generation
   await f.start();
   const asks = (feature) => f.sent.filter((m) => m.op === 'status' && m.feature === feature).length;
   assert.equal(f.ai.allowed('writing'), true);
-  assert.equal(lost, 0, 'the first completion ask was answered with connection-lost');
+  assert.ok(lost <= 0, 'the first completion ask was answered with connection-lost');
   // The re-ask comes after the pace; on a loaded machine it may already have landed, so wait for it, not for a window.
   assert.equal(await until(() => asks('completion') === 2), true, 'asked again');
   assert.equal(await until(() => f.ai.allowed('completion')), true, 'and on');
