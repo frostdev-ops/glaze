@@ -223,6 +223,18 @@ test('_xlfn. prefixes come off on read and go back on write; entry text is norma
   assert.ok(F.FUTURE.has('XLOOKUP') && F.FUTURE.has('STDEV.S') && !F.FUTURE.has('SUM'));
 });
 
+test('the @ operator is _xlfn.SINGLE() in a file, as Excel writes it', () => {
+  for (const [glaze, file] of [
+    ['@B1:B5+1', '_xlfn.SINGLE(B1:B5)+1'], ['SUM(@A1:A3,2)', 'SUM(_xlfn.SINGLE(A1:A3),2)'], ['@(A1:A3)*2', '_xlfn.SINGLE(A1:A3)*2'],
+    ['@INDEX(A:A,2)%', '_xlfn.SINGLE(INDEX(A:A,2))%'], ['@ Sheet2!A1:B2', '_xlfn.SINGLE(Sheet2!A1:B2)'], ['@A1:INDEX(A:A,3)', '_xlfn.SINGLE(A1:INDEX(A:A,3))'],
+    ['-@Rate^2', '-_xlfn.SINGLE(Rate)^2'], ['@@A1:A2', '_xlfn.SINGLE(_xlfn.SINGLE(A1:A2))'], ['@{1,2}', '_xlfn.SINGLE({1,2})'], ['Table1[@Col1]*2', 'Table1[@Col1]*2'],
+    ['@XLOOKUP(1,A:A,B:B)', '_xlfn.SINGLE(_xlfn.XLOOKUP(1,A:A,B:B))'],
+  ]) assert.equal(F.toFile(glaze), file, glaze);
+  assert.equal(F.fromFile('_xlfn.SINGLE(B1:B5)+1'), '@(B1:B5)+1');
+  assert.equal(F.toFile(F.fromFile('_xlfn.SINGLE(B1:B5)+1')), '_xlfn.SINGLE(B1:B5)+1');
+  assert.deepEqual(F.parse(F.fromFile('_xlfn.SINGLE(B1:B5)')), F.parse('@(B1:B5)'));
+});
+
 test('the model\'s shift and rename hooks are these', () => {
   assert.equal(F.hooks.shift, F.shift);
   assert.equal(F.hooks.rename, F.rename);
