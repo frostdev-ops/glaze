@@ -167,6 +167,8 @@ test('FACT, FACTDOUBLE, GCD, LCM', () => {
     ['FACTDOUBLE(6)', 48], ['FACTDOUBLE(7)', 105], ['FACTDOUBLE(0)', 1], ['FACTDOUBLE(7.9)', 105], ['FACTDOUBLE(-1)', 1], ['FACTDOUBLE("x")', '#VALUE!'],
     ['GCD(5, 2)', 1], ['GCD(24, 36)', 12], ['GCD(7, 1)', 1], ['GCD(5, 0)', 5], ['GCD(24.9, 36.2)', 12], ['GCD(A1:A2)', 12], ['GCD(A1:A2,B1:B2)', 6],
     ['GCD(-1,2)', '#NUM!'], ['GCD(2^53,2)', '#NUM!'], ['GCD("x",2)', '#VALUE!'], ['GCD(A1:A3)', '#VALUE!'], ['GCD(0,0)', 0],
+    // Excel: a boolean is #VALUE! even typed, text that reads as a number counts.
+    ['GCD(TRUE,4)', '#VALUE!'], ['LCM(4,6,TRUE)', '#VALUE!'], ['GCD("4",2)', 2],
     ['LCM(5, 2)', 10], ['LCM(24, 36)', 72], ['LCM(A1:A2,B1:B2)', 72], ['LCM(5,0)', 0], ['LCM(-1,2)', '#NUM!'], ['LCM(2^52+1,2^52+3)', '#NUM!'], ['LCM("x",2)', '#VALUE!'],
   ]);
 });
