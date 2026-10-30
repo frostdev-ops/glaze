@@ -169,7 +169,7 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
     const max = row ? MAX_ROWS : MAX_COLS;
     const insert = op.op === 'insert';
     const { at, n: count } = op;
-    if (!index(at, max) || !Number.isInteger(count) || count < 1 || (!insert && at + count > max)) fail('bounds', 'no such rows or columns');
+    if (!index(at, max) || !Number.isInteger(count) || count < 1 || at + count > max) fail('bounds', 'no such rows or columns');
     const n = insert ? count : -count;
     for (const cells of sh.rows.values()) for (const x of cells.values()) {
       const g = x.a === undefined ? null : rangePosition(x.a);
