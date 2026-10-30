@@ -84,6 +84,7 @@ test('reader: a formula moved as Excel fills it', () => {
     ['SUM(Data!A1:B2)', 1, 0, 'SUM(Data!A2:B3)'],
     ["'Sheet 2'!A1+'it''s'!B1", 0, 1, "'Sheet 2'!B1+'it''s'!C1"],
     ['SUM(Jan:Mar!B2)', 1, 0, 'SUM(Jan:Mar!B3)'],
+    ['SUM(S1:S3!B2)+S1!A1', 1, 1, 'SUM(S1:S3!C3)+S1!B2'],
     ['LOG10(A1)+ATAN2(B1,C1)+DAYS360(A1,A2)', 1, 0, 'LOG10(A2)+ATAN2(B2,C2)+DAYS360(A2,A3)'],
     ['"A1"&A1&"say ""B2"""', 1, 0, '"A1"&A2&"say ""B2"""'],
     ['SUM(A:A)+SUM($B:C)+SUM(1:1)+SUM($2:3)', 1, 1, 'SUM(B:B)+SUM($B:D)+SUM(2:2)+SUM($2:4)'],
