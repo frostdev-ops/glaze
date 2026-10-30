@@ -245,29 +245,38 @@ b.setAttribute('aria-expanded', String(!open)); if (open) { box.querySelector('[
 const c = document.createElement('div'); c.className = 'makeStylesfileViewerContainer-0-2-871'; const f = document.createElement('iframe'); f.title = j.linkName; f.src = j.viewerUrl; c.append(f); box.append(c); });</script></body></html>`;
 // Blackboard's viewer page, a stand-in that says whose file it shows.
 const viewerPage = (f) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Document Rendering</title></head><body style="margin:0;font:14px system-ui;background:#525659;color:#fff"><p data-bb-viewer="${f.hash}" style="padding:16px">Blackboard viewer: ${f.name}</p></body></html>`;
-// The viewer chain for a context.route, with what was asked counted. scenario(f) → { api: 'done' | 'converting' | 'fail' |
-// 'converting-then-done' (converting for the first `converting` asks), expires } per file; pdf: bytes per file's hash.
+// The viewer chain for a context.route, with what was asked counted. scenario(f) → { api: 'done' | 'converting' | 'fail',
+// until (converting before this time, done after), s3: 'fail' | 'fail-first' (S3's refusal of an address that ran out,
+// once), expires } per file; pdf(file): its converted.pdf's bytes.
 const previews = ({ site = SITE, pdf, scenario = () => ({}) } = {}) => {
-  const seen = { viewer: 0, api: 0, s3: 0, ranges: 0, origins: new Set(), asks: new Map() };
+  const seen = { viewer: 0, api: 0, s3: 0, ranges: 0, refused: 0, origins: new Set(), asks: new Map() };
+  const refusedOnce = new Set();
   const byAt = new Map(PREVIEW_FILES.map((f) => [f.at, f])), byHash = new Map(PREVIEW_FILES.map((f) => [f.hash, f]));
   const ok = (p) => p.then(() => true);
+  // viewerUrl's 302: basic-doc-viewer's index.html, converting while the scenario says so; each one counted.
+  const redirect = (u) => {
+    seen.viewer++;
+    const f = byAt.get(u.pathname), s = scenario(f), n = (seen.asks.get(f.hash) || 0) + 1;
+    seen.asks.set(f.hash, n);
+    const converting = s.api === 'converting' || Date.now() < (s.until || 0);
+    return viewerAt(f, Date.now(), converting ? 'converting' : 'done');
+  };
   const handle = async (route) => {
     const req = route.request(), u = new URL(req.url()), method = req.method();
     if (u.origin === site && u.pathname === PREVIEW_ROUTE && req.isNavigationRequest()) return ok(route.fulfill({ status: 200, contentType: 'text/html', body: previewPage(PREVIEW_FILES, site) }));
-    if (u.origin === site && byAt.has(u.pathname) && u.search === VIEW_QUERY) {
-      seen.viewer++;
-      const f = byAt.get(u.pathname), s = scenario(f), n = (seen.asks.get(f.hash) || 0) + 1;
-      seen.asks.set(f.hash, n);
-      const converting = s.api === 'converting' || (s.api === 'converting-then-done' && n <= (s.converting || 1));
-      return ok(route.fulfill({ status: 302, headers: { location: viewerAt(f, Date.now(), converting ? 'converting' : 'done'), 'cache-control': 'no-store' } }));
+    if (u.origin === site && byAt.has(u.pathname) && u.search === VIEW_QUERY) return ok(route.fulfill({ status: 302, headers: { location: redirect(u), 'cache-control': 'no-store' } }));
+    // The same redirect's Location as JSON, for a check standing in for the browser's own following of it (see where).
+    if (u.origin === site && u.pathname === '/gz-check/where') {
+      const from = new URL(u.searchParams.get('u') || '', site);
+      return ok(route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ location: from.origin === site && byAt.has(from.pathname) && from.search === VIEW_QUERY ? redirect(from) : null }) }));
     }
     if (u.origin === VIEWER && u.pathname.startsWith('/ui/')) { const f = byHash.get(u.searchParams.get('hash')); return ok(route.fulfill({ status: 200, contentType: 'text/html', body: viewerPage(f || { hash: '', name: '' }) })); }
     const doc = u.origin === VIEWER && new RegExp(`^/api/v1/tenants/${TENANT}/documents/([0-9a-f]{40})$`).exec(u.pathname);
     if (doc) {
       seen.api++;
-      const f = byHash.get(doc[1]), s = f ? scenario(f) : {}, n = seen.asks.get(f?.hash) || 0;
+      const f = byHash.get(doc[1]), s = f ? scenario(f) : {};
       if (!f || s.api === 'fail') return ok(route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Internal Server Error' }) }));
-      const converting = s.api === 'converting' || (s.api === 'converting-then-done' && n <= (s.converting || 1));
+      const converting = s.api === 'converting' || Date.now() < (s.until || 0);
       return ok(route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(documentOf(f, Date.now(), { status: converting ? 'converting' : 'done', expires: s.expires })) }));
     }
     const file = u.origin === BUCKET && new RegExp(`^/files/${TENANT}/([0-9a-f]{40})/converted\\.pdf$`).exec(u.pathname);
@@ -277,20 +286,37 @@ const previews = ({ site = SITE, pdf, scenario = () => ({}) } = {}) => {
       const cors = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'Accept-Ranges, Content-Range, Content-Length, ETag', 'access-control-allow-headers': 'range', 'access-control-allow-methods': 'GET, HEAD' };
       if (method === 'OPTIONS') return ok(route.fulfill({ status: 200, headers: cors, body: '' }));
       seen.s3++;
-      const bytes = pdf?.(byHash.get(file[1])), s = scenario(byHash.get(file[1])) || {};
+      const raw = pdf?.(byHash.get(file[1])), bytes = raw && Buffer.from(raw), s = scenario(byHash.get(file[1])) || {};
       const date = /^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/.exec(u.searchParams.get('X-Amz-Date') || '');
       const end = date && Date.UTC(+date[1], +date[2] - 1, +date[3], +date[4], +date[5], +date[6]) + Number(u.searchParams.get('X-Amz-Expires')) * 1000;
-      if (!bytes || !end || Date.now() > end || s.s3 === 'fail') return ok(route.fulfill({ status: 403, headers: { ...cors, 'content-type': 'application/xml' }, body: '<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>' }));
+      const first = s.s3 === 'fail-first' && !refusedOnce.has(file[1]);
+      if (first) { refusedOnce.add(file[1]); seen.refused++; }
+      if (!bytes || !end || Date.now() > end || s.s3 === 'fail' || first) return ok(route.fulfill({ status: 403, headers: { ...cors, 'content-type': 'application/xml' }, body: '<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>' }));
       const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers().range || '');
       const head = { ...cors, 'accept-ranges': 'bytes', 'content-type': 'binary/octet-stream', etag: `"${sha(bytes).slice(0, 32)}"` };
-      if (!range) return ok(route.fulfill({ status: 200, headers: { ...head, 'content-length': String(bytes.length) }, body: bytes }));
+      if (!range) return ok(route.fulfill({ status: 200, headers: head, body: bytes }));
       seen.ranges++;
       const from = +range[1], to = Math.min(bytes.length - 1, range[2] ? +range[2] : bytes.length - 1);
-      return ok(route.fulfill({ status: 206, headers: { ...head, 'content-range': `bytes ${from}-${to}/${bytes.length}`, 'content-length': String(to - from + 1) }, body: bytes.subarray(from, to + 1) }));
+      return ok(route.fulfill({ status: 206, headers: { ...head, 'content-range': `bytes ${from}-${to}/${bytes.length}` }, body: bytes.subarray(from, to + 1) }));
     }
     return false;
   };
-  return { handle, seen };
+  return { handle, seen, where: WHERE };
+};
+// Chromium under Playwright doesn't follow a routed 302 for the extension's service worker (a same-origin one fails the same
+// way, "Failed to fetch"; 2026-10-30 on the runner), while it does for pages. In the worker (worker.evaluate(where)) this
+// stands in for the browser's following of viewerUrl's redirect only: the mock's own Location, then that address fetched
+// as the browser would, its response's url the Location. Installed again by a check after the worker may have restarted.
+const WHERE = () => {
+  if (globalThis.__gzWhere) return;
+  const real = globalThis.fetch;
+  globalThis.__gzWhere = true;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = new URL(String(url));
+    if ((init.redirect || 'follow') !== 'follow' || !u.pathname.startsWith('/bbcswebdav/') || !u.searchParams.has('isInlineRender')) return real(url, init);
+    const { location } = await (await real(`${u.origin}/gz-check/where?u=${encodeURIComponent(u.href)}`, { cache: 'no-store' })).json();
+    return real(location || u.href, { ...init, redirect: 'error' });
+  };
 };
 
 // The page's world: Ultra's own scripts around its Quill boxes, run in the page (serialized, so self-contained).

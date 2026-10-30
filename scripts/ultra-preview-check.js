@@ -7,7 +7,9 @@
 // "converting": Blackboard's frame while it waits, then Glaze's; the documents API failing: Blackboard's frame; an address
 // that ran out: asked again, then shown; Save to Documents: a PDF record in Documents; Open original: the file in a new
 // tab; dark documents inverts Blackboard's frame, never Glaze's; the keyboard reaches the frame and Esc returns to the
-// Preview button; at 640 px it fits. GETs only, synthetic. NODE_PATH=<playwright> node scripts/ultra-preview-check.js [dir]
+// Preview button; at 640 px it fits. The browser's following of viewerUrl's 302 in the worker is stood in for (ultra-mock.js
+// WHERE: Playwright doesn't follow a routed redirect there); the real one is the owner's live check.
+// GETs only, synthetic. NODE_PATH=<playwright> node scripts/ultra-preview-check.js [dir]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
@@ -38,8 +40,9 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     }
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-preview-'));
     fs.mkdirSync(out, { recursive: true });
-    // The slides' PDF: six pages, past pdf.js's 128 KB whole-file read so it asks by Range; the lab's: three small ones.
-    const pdfs = { [SLIDES.hash]: PDF.large({ count: 6, size: 600e3 }), [LAB.hash]: PDF.FIXTURES.three() };
+    // The slides' PDF: six pages of about 12 MB, so pdf.js asks by Range while the whole file streams, and too big for
+    // Documents (3 MB); the lab's: three small pages.
+    const pdfs = { [SLIDES.hash]: PDF.large({ count: 6, size: 12e6 }), [LAB.hash]: PDF.FIXTURES.three() };
     const plan = {}; // a file's hash → its scenario (ultra-mock.js previews)
     const mock = P.previews({ site, pdf: (f) => f && pdfs[f.hash], scenario: (f) => plan[f?.hash] || {} });
     const originals = [];
@@ -59,10 +62,16 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
       const data = u.pathname.endsWith('/users/me') ? ME : { results: [] };
       return r.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
     });
+    const failed = [];
+    context.on('requestfailed', (q) => { if (q.url().startsWith(P.BUCKET)) failed.push(`${q.method()} ${q.headers().range || ''} ${q.failure()?.errorText}`); });
+    // The frame's too (S3's refusal of a run-out address is the browser's own "Failed to load resource" line).
+    context.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text().slice(0, 300)}`); });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
     const settings = ({ enhance = {}, writer = {} } = {}) => G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), bbPreviews: true, docPages: 'plain', ...enhance }, writer: { pdf: true, ...writer } });
-    const set = (s) => worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(s));
+    // The worker's stand-in for following viewerUrl's redirect (ultra-mock.js WHERE), put back before each step.
+    const where = () => worker.evaluate(mock.where);
+    const set = async (s) => { await where(); await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(s)); };
     await worker.evaluate(async ({ s, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: [site] }); }, { s: settings(), site });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
 
@@ -79,12 +88,32 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
       const bb = box.querySelector('[class*="fileViewerContainer"] iframe:not(.gz-pv)'), gz = box.querySelector('iframe.gz-pv');
       const seen = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).opacity !== '0' && getComputedStyle(el).visibility !== 'hidden';
       return { expanded: box.querySelector('button.preview').getAttribute('aria-expanded'), bb: !!bb, bbShown: seen(bb), gz: !!gz, gzShown: seen(gz), gzFilter: gz ? getComputedStyle(gz).filter : '', bbFilter: bb ? getComputedStyle(bb).filter : '',
-        gzRect: gz ? gz.getBoundingClientRect().toJSON() : null, boxRect: box.getBoundingClientRect().toJSON(), states: globalThis.GZ_BB_PREVIEW_UI ? 'n/a' : 'not loaded' };
+        gzRect: gz ? gz.getBoundingClientRect().toJSON() : null, boxRect: box.getBoundingClientRect().toJSON(), state: bb?.getAttribute('data-gz-pv') || '' };
     }, f.name);
-    const toggle = (f) => p.click(`button[aria-label="Preview File ${f.name}"]`);
+    // Ultra's Preview button, centred first (at the window's foot Glaze's own bottom controls can sit over it), and its
+    // aria-expanded seen to turn.
+    const toggle = async (f) => {
+      await where();
+      const sel = `button[aria-label="Preview File ${f.name}"]`, was = await p.getAttribute(sel, 'aria-expanded');
+      await p.evaluate((sel) => document.querySelector(sel).scrollIntoView({ block: 'center' }), sel);
+      await p.click(sel);
+      await until(async () => (await p.getAttribute(sel, 'aria-expanded')) !== was, `${f.name}: Preview pressed`, 5000);
+    };
     const frameOf = async (f) => { const el = await p.$(`[data-bbfile*="${f.name}"] iframe.gz-pv`); return el && el.contentFrame(); };
     const glazeIn = async (f, label, ms = 30000) => {
-      await until(async () => { const v = await view(f); return v.gzShown && !v.bbShown && v.bb; }, `${label}: Glaze's viewer in Blackboard's frame's place`, ms, () => view(f));
+      await until(async () => { const v = await view(f); return v.gzShown && !v.bbShown && v.bb; }, `${label}: Glaze's viewer in Blackboard's frame's place`, ms,
+        async () => ({ view: await view(f), seen: { ...mock.seen, origins: [...mock.seen.origins], asks: [...mock.seen.asks] }, failed,
+          frame: await (await frameOf(f))?.evaluate(() => ({ mode: document.documentElement.dataset.mode, doc: document.documentElement.dataset.doc, said: document.querySelector('.gq-said')?.textContent, pages: document.querySelectorAll('.pdfViewer .page').length, gq: !!document.querySelector('.gq') })).catch((e) => e.message),
+          probe: await (await frameOf(f))?.evaluate(async (u) => {
+            const out = {};
+            try { const r = await fetch(u); out.full = `${r.status} ${r.headers.get('accept-ranges')} ${r.headers.get('content-length')} ${(await r.arrayBuffer()).byteLength}`; } catch (e) { out.full = String(e); }
+            try { const r = await fetch(u, { headers: { range: 'bytes=0-99' } }); out.range = `${r.status} ${r.headers.get('content-range')} ${(await r.arrayBuffer()).byteLength}`; } catch (e) { out.range = String(e); }
+            try { const P = await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs')); P.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdfjs/pdf.worker.mjs'); const t = P.getDocument({ url: u, isEvalSupported: false });
+              out.pdfjs = await Promise.race([t.promise.then((d) => `pages ${d.numPages}`, (e) => `err ${e.message}`), new Promise((r) => setTimeout(r, 8000, 'timeout'))]);
+              out.meta = await Promise.race([t.promise.then((d) => d.getMetadata()).then(() => 'meta ok', (e) => `err ${e.message}`), new Promise((r) => setTimeout(r, 5000, 'timeout'))]);
+              out.fields = await Promise.race([t.promise.then((d) => d.getFieldObjects()).then((x) => `fields ${JSON.stringify(x)}`, (e) => `err ${e.message}`), new Promise((r) => setTimeout(r, 5000, 'timeout'))]); } catch (e) { out.pdfjs = String(e); }
+            return out;
+          }, P.pdfOf(f, Date.now())).catch((e) => e.message) }));
       const fr = await until(() => frameOf(f), `${label}: the viewer's document`);
       return fr;
     };
@@ -97,12 +126,16 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     await toggle(SLIDES);
     await until(async () => (await view(SLIDES)).bbShown, "expanding shows Blackboard's frame at once");
     check(true, "expanding shows Blackboard's frame at once (it stays until Glaze's viewer has drawn)");
-    let fr = await glazeIn(SLIDES, 'expanded');
+    let fr = await glazeIn(SLIDES, 'expanded', 22000);
     await until(async () => (await pageText(fr)).includes('Page 1 of 6'), "page 1's text in Glaze's viewer", 20000, () => pageText(fr));
     check(true, "Glaze's viewer takes Blackboard's frame's place and shows the PDF's first page text (\"Page 1 of 6\")");
     check(mock.seen.viewer >= 1 && mock.seen.api >= 1, `the worker followed viewerUrl (${mock.seen.viewer}) and asked the documents API (${mock.seen.api})`);
     check([...mock.seen.origins].every((o) => o === `chrome-extension://${id}`) && mock.seen.origins.size === 1, `the frame read the PDF from S3 itself (Origin ${[...mock.seen.origins].join(', ')})`);
-    check(mock.seen.ranges > 0, `pdf.js asked S3 by Range (${mock.seen.ranges} ranges, 206)`);
+    // pdf.js asks by Range only for what its first stream hasn't brought yet; here the whole file comes at once, so the
+    // frame's own Range read (its CSP and S3's CORS for a Range from the extension's origin) is asked for directly.
+    const ranges = mock.seen.ranges;
+    const ranged = await fr.evaluate(async (u) => { const r = await fetch(u, { headers: { range: 'bytes=0-1023' } }); return { status: r.status, range: r.headers.get('content-range'), n: (await r.arrayBuffer()).byteLength }; }, P.pdfOf(SLIDES, Date.now()));
+    check(ranged.status === 206 && ranged.n === 1024 && ranged.range === `bytes 0-1023/${pdfs[SLIDES.hash].length}`, `a Range read from the frame: 206, ${ranged.range} (pdf.js itself asked ${ranges} ranges)`);
     const title = await fr.evaluate(() => document.querySelector('.gp-top h1')?.textContent);
     check(title === SLIDES.name, `its title is the attachment's name ("${title}")`);
     const v1 = await view(SLIDES);
@@ -134,17 +167,15 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     const tab = context.waitForEvent('page');
     await fr.click('[data-act="original"]');
     const opened = await tab;
-    await until(() => originals.length > 0, 'the original asked for');
-    check(new URL(opened.url()).pathname === SLIDES.at || originals.includes(SLIDES.at), `Open original opens ${SLIDES.at} in a new tab`);
+    await until(() => originals.includes(SLIDES.at), 'the original asked for');
+    check(opened !== p && originals.includes(SLIDES.at), `Open original opens ${SLIDES.at} in a new tab`);
     await opened.close().catch(() => {});
 
-    // ---- Save to Documents: a PDF record, titled by the file
+    // ---- Save to Documents past the kind's cap: refused, nothing kept
     await fr.click('[data-act="save"]');
-    await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'Saved to Documents'), 'Saved to Documents', 20000, () => fr.evaluate(() => document.querySelector('.gp-state')?.textContent));
-    const saved = await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); return Object.entries(all).filter(([k]) => k.startsWith('writerPaper:doc:')).map(([k, v]) => ({ k, kind: v.kind, title: v.title, size: v.size, pages: v.pages })); });
-    check(saved.length === 1 && saved[0].kind === 'pdf' && saved[0].title === 'Week 3 slides' && saved[0].size === pdfs[SLIDES.hash].length && saved[0].pages === 6, `Save to Documents makes one PDF record (${JSON.stringify(saved)})`);
-    const index = await worker.evaluate(async () => (await chrome.storage.local.get('writerPapers')).writerPapers);
-    check(JSON.stringify(index || {}).includes(saved[0].k.slice('writerPaper:'.length)), 'and it lists in Documents (the index row)');
+    await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'This PDF is too big to save.'), 'too big to save', 20000, () => fr.evaluate(() => document.querySelector('.gp-state')?.textContent));
+    const papers = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); return Object.entries(all).filter(([k]) => k.startsWith('writerPaper:doc:')).map(([k, v]) => ({ k, kind: v.kind, title: v.title, size: v.size, pages: v.pages })); });
+    check((await papers()).length === 0 && !(await fr.isDisabled('[data-act="save"]')), `Save to Documents on a ${(pdfs[SLIDES.hash].length / 1e6).toFixed(1)} MB PDF: "This PDF is too big to save.", nothing kept`);
 
     // ---- collapse, then expand again
     await toggle(SLIDES);
@@ -162,12 +193,20 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     const dark = await view(SLIDES);
     check(dark.gzShown && dark.gzFilter === 'none', `dark documents leaves Glaze's frame alone (filter ${dark.gzFilter})`);
     await toggle(LAB);
-    await until(async () => (await view(LAB)).bb, "the lab's preview opens");
+    await until(async () => (await view(LAB)).bb, "the lab's preview opens", 20000, async () => ({ lab: await view(LAB), slides: await view(SLIDES), active: await p.evaluate(() => document.activeElement?.outerHTML.slice(0, 200)) }));
     const bbDark = await view(LAB);
     check(/invert/.test(bbDark.bbFilter), `while Blackboard's frame is inverted as before (${bbDark.bbFilter})`);
     fr = await glazeIn(LAB, 'the lab');
-    await until(async () => (await pageText(fr)).includes('Alpha page one'), "the lab's page 1");
+    await until(async () => (await pageText(fr)).includes('Alpha page one'), "the lab's page 1", 20000, () => pageText(fr));
     check((await view(LAB)).gzFilter === 'none', "the lab's Glaze frame isn't inverted either");
+
+    // ---- Save to Documents: a PDF record, titled by the file, in Documents' list
+    await fr.click('[data-act="save"]');
+    await until(() => fr.evaluate(() => document.querySelector('.gp-state')?.textContent === 'Saved to Documents'), 'Saved to Documents', 20000, () => fr.evaluate(() => document.querySelector('.gp-state')?.textContent));
+    const saved = await papers();
+    check(saved.length === 1 && saved[0].kind === 'pdf' && saved[0].title === 'Lab safety' && saved[0].size === pdfs[LAB.hash].length && saved[0].pages === 3, `Save to Documents makes one PDF record (${JSON.stringify(saved)})`);
+    const index = await worker.evaluate(async () => (await chrome.storage.local.get('writerPapers')).writerPapers);
+    check(JSON.stringify(index || {}).includes(saved[0].k.slice('writerPaper:'.length)), 'and it lists in Documents (the index row)');
     await set({ enhance: { docPages: 'plain' } });
 
     // ---- the switch off: Blackboard's frames back; on with a preview open: Glaze's at once
@@ -198,15 +237,15 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     await toggle(LAB);
 
     // ---- converting: Blackboard's frame while Ultra's 15 s go by, then Glaze's
-    plan[LAB.hash] = { api: 'converting-then-done', converting: 1 };
-    mock.seen.asks.set(LAB.hash, 0);
     const t0 = Date.now();
+    plan[LAB.hash] = { until: t0 + 8000 };
+    mock.seen.asks.set(LAB.hash, 0);
     await toggle(LAB);
     await until(() => (mock.seen.asks.get(LAB.hash) || 0) >= 1, 'asked once');
     await quiet(async () => (await view(LAB)).gzShown, 'shown while converting', 5000);
     check((await view(LAB)).bbShown, "converting: Blackboard's frame while it waits");
     fr = await glazeIn(LAB, 'converted', 40000);
-    check(mock.seen.asks.get(LAB.hash) >= 2 && Date.now() - t0 >= 14000, `then asked again (${mock.seen.asks.get(LAB.hash)} asks, ${Math.round((Date.now() - t0) / 1000)} s) and shown`);
+    check(mock.seen.asks.get(LAB.hash) >= 3 && Date.now() - t0 >= 14000, `then asked again on Ultra's 15 s (${mock.seen.asks.get(LAB.hash)} asks with Blackboard's frame's own, ${Math.round((Date.now() - t0) / 1000)} s) and shown`);
     await toggle(LAB);
 
     // ---- an address that ran out: S3 refuses the first, the frame asks again, and it shows
