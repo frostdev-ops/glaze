@@ -175,9 +175,8 @@ test('criteria ranges: rows OR, columns AND, blanks no condition, labels that na
     mask([[1], [1]], 255),
     // A formula under a column's label is its value (TRUE here, so no name matches).
     mask([['name'], ['=C2>80']], 0),
-    // Computed criteria (a formula under a label that names no column, which Excel works out per record: 11 here) are
-    // not supported: #VALUE!.
-    mask([['zzz'], ['=C2>80']], '#VALUE!'), mask([[null], ['=C2>80']], '#VALUE!'),
+    // Computed criteria are evaluated for every record with relative rows advanced.
+    mask([['zzz'], ['=C2>80']], 11), mask([[null], ['=C2>80']], 11),
     mask([['name']], '#VALUE!'),
     [[['name'], [t('Ann')]], (c, col) => `DSUM(A1:F9,"mask",${col}:${col})`, 255],
   ]);
@@ -215,4 +214,17 @@ test('text, booleans, blanks and errors in the field; no match; one match', () =
     ...[[101, '95'], [103, true], [105, 'abc'], [106, '#VALUE!'], [104, '#N/A'], [107, false]].map(([id, want]) => [[['id'], [id]], (c) => `DGET(A1:F9,"val",${c})`, want]),
     [[['id'], [105]], (c) => `DGET(A1:F9,"when",${c})`, '#VALUE!'], [[['name'], [t('B*')]], (c) => `DGET(A1:F9,"name",${c})`, '#NUM!'],
   ]);
+});
+
+
+test('database computed criteria, empty strings and blank field references agree with Excel', () => {
+  const e = book({ ...grid('A1', [['name', 'value', 'id'], ['Apple', 2, 1], ['Apricot', '=""', 2], ['Pear', null, 3], ['Plum', 4, 4]]),
+    ...grid('H1', [['computed', 'id'], ['=B2>1', '>0']]), J1: 'computed', J2: { s: 'TRUE' } });
+  cases(e, [['DSUM(A1:C5,"value",H1:H2)', 6], ['DCOUNTA(A1:C5,"value",I1:I2)', 3],
+    ['DCOUNT(A1:C5,Z1,I1:I2)', '#VALUE!'], ['DCOUNTA(A1:C5,Z1,I1:I2)', '#VALUE!'], ['DSUM(A1:C5,"value",J1:J2)', 6]]);
+  const f = book({ ...grid('A1', [['name', 'value', 'id'], ['Apple', 2, 1], ['Apricot', 5, 2], ['Pear', '=1/0', 3], ['Plum', 4, 4]]),
+    H1: 'computed', H2: '=B2>AVERAGE($B$2:$B$3)', I1: 'computed', I2: '=B2', J1: 'computed', J2: '=FALSE',
+    K1: 'computed', K2: '=1/0', L1: 'computed', L2: '="TRUE"' });
+  cases(f, [['DSUM(A1:C5,"id",H1:H2)', 6], ['DSUM(A1:C5,"id",I1:I2)', 7], ['DSUM(A1:C5,"id",J1:J2)', 0],
+    ['DSUM(A1:C5,"id",K1:K2)', 0], ['DSUM(A1:C5,"id",L1:L2)', 10]]);
 });
