@@ -129,3 +129,11 @@ test('the last shown sheet cannot be deleted while every other sheet is hidden',
   f.fire(tab, 'contextmenu', { clientX: 20, clientY: 20 });
   assert.equal(f.doc.querySelector('.gx-menu [data-act="delete"]').disabled, true);
 });
+
+test('typed edits obey the undo byte budget as well as the step count', () => {
+  const f = frame();
+  for (let i = 0; i < 140; i++) { f.type(`${'x'.repeat(32000)}${i}`); f.key('Enter'); f.key('ArrowUp'); }
+  let steps = 0;
+  while (!f.el('gx-undo').disabled && steps < 150) { f.key('z', { ctrlKey: true }); steps++; }
+  assert.ok(steps > 100 && steps <= 126, `8 MB holds about 125 of these 64 KB inverses, found ${steps}`);
+});
