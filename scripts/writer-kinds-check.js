@@ -178,11 +178,17 @@ const holds = (bytes, value) => {
     // The file arriving, as the compact bar's line (or the paper's status bar) says it, each change kept.
     await fr.evaluate(() => {
       const R = globalThis.__arrive = [];
+      const spoken = globalThis.__importSpoken = [];
       const look = () => {
         const a = document.querySelector('.gp-arrive:not([hidden]) > span'), s = document.querySelector('.gp-said[data-kind="importing"]'), v = a?.textContent || s?.textContent || '';
         if (v && R.at(-1) !== v) R.push(v);
       };
       new MutationObserver(look).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+      new MutationObserver((records) => {
+        for (const r of records) if (r.target.matches?.('.gp-said[data-kind="importing"], .gp-sr[role="status"]') && r.target.getAttribute('aria-live') !== 'off') {
+          for (const n of r.addedNodes) if (n.textContent) spoken.push(n.textContent);
+        }
+      }).observe(document.body, { subtree: true, childList: true });
     });
     await tap(fr, '.gi-default');
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelectorAll('.gk .pdfViewer .page').length === 3 && !!document.querySelector('.gk .pdfViewer .page[data-page-number="1"] canvas')), 'the PDF viewer', 40000,
@@ -191,6 +197,8 @@ const holds = (bytes, value) => {
     const arrived = await fr.evaluate(() => ({ said: globalThis.__arrive, left: !document.querySelector('.gp-said[data-kind="importing"]') && !document.querySelector('.gp-arrive:not([hidden])') }));
     check(['Reading…', 'Preparing pages…', 'Copying…', 'Saving…'].every((w, i, all) => arrived.said.indexOf(w) >= 0 && (i === 0 || arrived.said.indexOf(w) > arrived.said.indexOf(all[i - 1]))) && arrived.left,
       `Open in Glaze shows the file arriving, stage by stage, until the viewer does (${arrived.said.join(' | ')})`);
+    const spoken = await fr.evaluate(() => globalThis.__importSpoken);
+    check(JSON.stringify(spoken) === JSON.stringify(['Reading…', 'Preparing pages…', 'Copying…', 'Saving…']), `the compact import announces each stage once, without chunk counts (${spoken.join(' | ')})`);
     let rec = await record(), vs = await versions();
     check(rec.kind === 'pdf' && sha((await bytesOf(rec))) === sha(pdfBytes) && rec.pages === 3 && rec.doc == null, `the attempt's record is the PDF, its bytes as brought (${JSON.stringify({ kind: rec.kind, pages: rec.pages, size: rec.size })})`);
     check(vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper'), `the paper kept as a version first (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
