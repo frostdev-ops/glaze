@@ -747,6 +747,23 @@ const PROBE = ({ lang }) => {
     }, SHEET_CHARTS);
     console.log(`50 spreadsheet cards with charts back to back: ${sheetMs.toFixed(3)} ms each`);
     check(sheetMs > 0 && sheetMs <= 6, `a spreadsheet card with charts costs ${sheetMs.toFixed(3)} ms (50 timed together)`);
+    const clipped = await sheets.evaluate(() => {
+      const k = GZ_DOC_KINDS.get('sheet'), results = [];
+      for (const anchor of [[-2, -2, 1, 2], [3, 5, 8, 10], [0, 0, 3, 5]]) {
+        const box = k.thumb({ charts: [{ kind: 'column', anchor, colours: ['url(https://example.test/chart)', '#123456'] }] });
+        document.body.append(box);
+        try {
+          const cells = [...box.querySelectorAll(':scope > .gx-th-c')], a = cells[0].getBoundingClientRect(), z = cells.at(-1).getBoundingClientRect();
+          const marker = box.querySelector('.gx-th-chart').getBoundingClientRect();
+          results.push(marker.left >= a.left && marker.top >= a.top && marker.right <= z.right && marker.bottom <= z.bottom && marker.width > 0 && marker.height > 0
+            && [...box.querySelectorAll('rect')].every((e) => /^#[0-9a-f]{6}$/i.test(e.getAttribute('fill'))));
+        } finally { box.remove(); }
+      }
+      const box = k.thumb({ charts: [{ kind: 'column', anchor: [0, 0, 1, 1], colours: [] }], chartCount: 40 });
+      return { bounds: results, count: box.querySelector('.gx-th-more')?.textContent };
+    });
+    check(clipped.bounds.every(Boolean), `partial chart markers stay within A1:F4 and use hex colours (${JSON.stringify(clipped.bounds)})`);
+    check(clipped.count === '39', `a bounded chart summary retains its exact total (${clipped.count})`);
     await sheets.close();
     await worker.evaluate(async (keys) => { const gone = new Set(keys); await chrome.storage.local.remove(keys.map((k) => `writerPaper:${k}`)); await chrome.storage.local.set({ writerPapers: (await chrome.storage.local.get('writerPapers')).writerPapers.filter((r) => !gone.has(r.key)) }); }, [SHEET_CHARTS, SHEET_PLAIN]);
 
