@@ -9,6 +9,7 @@ const vm = require('node:vm');
 const M = require('../lib/media.js');
 const X = require('../lib/lookparts.js');
 const B = require('../lib/modbroker.js');
+const G = require('../defaults.js');
 
 const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
 const slice = source.slice(source.indexOf('// Media for a Look (lib/media.js)'), source.indexOf("// Share keys and relay traffic"));
@@ -25,6 +26,8 @@ const rig = async ({ worn = URL1, wornType = 'lottie', body = spin, lms = 'https
   const sync = { lookX }, local2 = installed;
   const ctx = vm.createContext({
     BROKER: {}, BROKER_FILES: {}, GZ_MEDIA: M, GZ_XPARTS: X, GZ_MODBROKER: B, importScripts() {}, URL, console,
+    GZ_SANITIZE: G.GZ_SANITIZE, GZ_LOOKS: G.GZ_LOOKS, GZ_CATALOG: require('../lib/looks.js'), GZ_SHARE: require('../lib/share.js'),
+    addressOf: (s) => s.url, approved: async () => false,
     MEDIA_FILES: { get: async () => undefined, put: async () => {}, del: async () => {}, keys: async () => [] },
     chrome: { runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, onMessage: { addListener: (f) => listeners.push(f) } } },
     fromEditor: (s) => s.id === 'glaze' && s.url?.split(/[?#]/)[0] === 'chrome-extension://glaze/options.html',

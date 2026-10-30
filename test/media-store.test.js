@@ -257,7 +257,7 @@ test('list marks the files a saved Look (history or a favorite) names', async ()
 
 // ---- the worker -----------------------------------------------------------------------------------------------------------
 const manifest = require('../manifest.json');
-const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = true } = {}) => {
+const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = true, frames = {} } = {}) => {
   const on = { message: [], changed: [], startup: [], installed: [] };
   const local = { ...seed }, sync = { ...syncSeed }, opened = [];
   const timers = [], localReads = [];
@@ -271,23 +271,33 @@ const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = tru
     ...(keyListing && { getKeys: async () => Object.keys(store) }),
   });
   const { indexedDB, IDBKeyRange } = fakeIDB();
+  const senders = new Map();
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, Blob, Response, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto, AbortSignal, fetch,
     indexedDB, IDBKeyRange, setTimeout: (f) => { timers.push(f); return timers.length; }, clearTimeout: () => {}, navigator: {},
     importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
     chrome: {
+      permissions: { contains: async () => true },
       runtime: {
         id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, getManifest: () => manifest,
         openOptionsPage: () => { opened.push('options'); return Promise.resolve(); },
         onMessage: { addListener: (f) => on.message.push(f) }, onInstalled: { addListener: (f) => on.installed.push(f) }, onStartup: { addListener: (f) => on.startup.push(f) }, onConnect: { addListener() {} },
       },
       storage: { local: area(local), sync: area(sync), onChanged: { addListener: (f) => on.changed.push(f) } },
-      scripting: { unregisterContentScripts: async () => {}, registerContentScripts: async () => {}, getRegisteredContentScripts: async () => [] },
+      scripting: { unregisterContentScripts: async () => {}, registerContentScripts: async () => {}, getRegisteredContentScripts: async () => [],
+        executeScript: async ({ target, func }) => {
+          const f = frames[target.documentIds?.[0] ?? target.frameIds?.[0]] || senders.get(target.tabId);
+          if (!f || f.url === 'about:blank') throw Error('document gone');
+          const result = vm.runInNewContext(`(${func.toString()})()`, { location: new URL(f.url), document: {
+            body: { className: f.body || '' }, querySelector: () => f.styles ? { href: f.styles } : null,
+          } });
+          return [{ result }];
+        } },
       tabs: { onRemoved: { addListener() {} }, create: () => {} },
     },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), context);
-  const ask = (m, s) => new Promise((res) => { for (const f of on.message) if (f(m, s, (r) => res(clone(r))) === true) return; res('ignored'); });
+  const ask = (m, s) => new Promise((res) => { senders.set(s.tab?.id, { url: s.url }); for (const f of on.message) if (f(m, s, (r) => res(clone(r))) === true) return; res('ignored'); });
   const send = (m, s) => on.message.forEach((f) => f(m, s));
   const until = async (ok) => { for (let i = 0; i < 2000 && !ok(); i++) await new Promise((r) => setTimeout(r, 2)); assert.ok(ok(), 'waited too long'); };
   const kept = async () => (await new Promise((res) => {
@@ -361,6 +371,82 @@ test('worker: a page gets the worn Look\'s kept file, and no other; the editor\'
   assert.deepEqual(await w.ask({ type: 'glaze:keptFile', h: other.h }, page), { ok: false, error: 'sender' });
   assert.equal((await w.ask({ type: 'glaze:keptFile', h: other.h }, { id: 'glaze', frameId: 0, url: 'chrome-extension://glaze/preview.html?site=canvas' })).ok, true);
   assert.deepEqual(await w.ask({ type: 'glaze:keptFile', h: put.h }, { ...page, url: 'https://evil.example/' }), { ok: false, error: 'sender' });
+});
+
+test('worker: only the course wearing a video Look can read its file, including live course frames', async () => {
+  const bb = 'https://school.blackboard.com';
+  const url = `${bb}/ultra/courses/_101_1/outline`;
+  const w = worker({ frames: { 'course-doc': { url }, 9: { url: `${bb}/ultra/courses/_202_1/outline` } } });
+  const put = await w.ask({ type: 'glaze:media', op: 'put', kind: 'video', b64: M.std(fx('clip.webm')) }, editor);
+  const code = await codeWith(put.h, 'video'), id = require('../lib/looks.js').idOf(code);
+  w.local.lookFavorites = [{ code, name: 'Course video' }];
+  w.sync.courses = { looks: { _101_1: id } };
+  const course = { ...page, url, origin: bb, tab: { id: 2, url } };
+  const request = { type: 'glaze:keptFile', h: put.h };
+  assert.equal((await w.ask(request, course)).ok, true);
+  for (const sender of [page, { ...course, url: `${bb}/ultra/courses/_202_1/outline` },
+    { ...course, frameId: 3, url: 'chrome-extension://glaze/mods/frame.html', origin: 'null' },
+    { ...course, frameId: 4, tab: { id: 3, url: 'https://evil.example/' } }]) {
+    assert.deepEqual(await w.ask(request, sender), { ok: false, error: 'sender' }, sender.url);
+  }
+  assert.equal((await w.ask(request, { ...course, frameId: 8, documentId: 'course-doc', url: 'about:blank' })).ok, true, 'blank sender uses its current document, not the top course');
+  assert.equal((await w.ask(request, { ...course, frameId: 9, url: 'about:blank' })).ok, false, 'another course frame cannot borrow the top course');
+  assert.equal((await w.ask(request, { ...course, frameId: 10, url: 'about:blank' })).ok, false, 'unreadable frame fails closed');
+  assert.equal((await w.ask(request, { ...course, frameId: 8 })).ok, true, 'normal live frame');
+  w.sync.enabled = false;
+  assert.equal((await w.ask(request, course)).ok, false);
+});
+
+test('worker: course video files work in Canvas and Moodle frames and survive a worker restart', async () => {
+  const moodle = 'https://school.moodlecloud.com';
+  const moodleUrl = `${moodle}/learn/mod/page/view.php?id=99`;
+  const w = worker({ frames: { 'moodle-doc': { url: moodleUrl, body: 'course-42 pagelayout-incourse', styles: `${moodle}/learn/theme/styles.php/boost/1/all` } } });
+  const put = await w.ask({ type: 'glaze:media', op: 'put', kind: 'video', b64: M.std(fx('clip.webm')) }, editor);
+  const code = await codeWith(put.h, 'video'), id = require('../lib/looks.js').idOf(code);
+  w.local.lookFavorites = [{ code, name: 'Video' }];
+  w.sync.courses = { looks: { [`canvas:${page.origin}/1`]: id, [`moodle:${moodle}/learn/42`]: id } };
+  const request = { type: 'glaze:keptFile', h: put.h };
+  assert.equal((await w.ask(request, { ...page, frameId: 7, tab: { id: 1, url: `${page.origin}/courses/2` } })).ok, true);
+  assert.equal((await w.ask(request, { ...page, frameId: 8, documentId: 'moodle-doc', origin: moodle, url: moodleUrl, tab: { id: 2, url: `${moodle}/learn/my/` } })).ok, true);
+  // No in-memory course grants or catalogue are needed after sleep: restore the persisted data and legacy file.
+  const restored = worker({ sync: w.sync, local: { ...w.local, [`${M.KEY}${put.h}`]: { t: 'video/webm', b: M.std(fx('clip.webm')) } } });
+  assert.equal((await restored.ask(request, page)).ok, true);
+  restored.sync.courses.looks[`canvas:${page.origin}/1`] = 'Terminal';
+  assert.equal((await restored.ask(request, page)).ok, false, 'a different Look cannot keep the course file permission');
+});
+
+test('worker: a sender URL from before SPA navigation cannot grant the previous course video', async () => {
+  const frames = { 0: { url: `${page.origin}/courses/2` } };
+  const w = worker({ frames });
+  const put = await w.ask({ type: 'glaze:media', op: 'put', kind: 'video', b64: M.std(fx('clip.webm')) }, editor);
+  const code = await codeWith(put.h, 'video');
+  w.local.lookFavorites = [{ code, name: 'Video' }];
+  w.sync.courses = { looks: { [`canvas:${page.origin}/1`]: require('../lib/looks.js').idOf(code) } };
+  const request = { type: 'glaze:keptFile', h: put.h };
+  assert.equal((await w.ask(request, page)).ok, false, 'current course 2 cannot borrow the initial course 1 URL');
+  frames[0].url = page.url;
+  assert.equal((await w.ask(request, { ...page, url: `${page.origin}/courses/2` })).ok, true, 'current course 1 may read despite its old sender URL');
+});
+
+test('worker: a course Look authorizes its remote video and Lottie, with the same file boundary', async () => {
+  const src = 'https://cdn.school.test/course.webm';
+  let fetched = 0;
+  const w = worker({ fetch: async () => { fetched++; return new Response(fx('clip.webm')); } });
+  const code = await S.encode(G.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'video', src } } } });
+  const id = require('../lib/looks.js').idOf(code);
+  w.local.lookFavorites = [{ code, name: 'Remote course' }];
+  w.sync.courses = { looks: { [`canvas:${page.origin}/1`]: id } };
+  const request = { type: 'glaze:remoteMedia', src, kind: 'video' };
+  assert.equal((await w.ask(request, page)).ok, true);
+  assert.equal(fetched, 1);
+  assert.equal((await w.ask(request, { ...page, url: `${page.origin}/courses/2` })).ok, false);
+  assert.equal(fetched, 1, 'a different course does not fetch');
+  const put = await w.ask({ type: 'glaze:media', op: 'put', kind: 'lottie', b64: M.std(fx('spin.json')) }, editor);
+  const lottie = await codeWith(put.h, 'lottie');
+  w.local.lookFavorites = [{ code: lottie, name: 'Course animation' }];
+  w.sync.courses.looks[`canvas:${page.origin}/1`] = require('../lib/looks.js').idOf(lottie);
+  assert.equal((await w.ask({ type: 'glaze:lottie', src: `file:${put.h}` }, page)).ok, true);
+  assert.equal((await w.ask({ type: 'glaze:lottie', src: `file:${put.h}` }, { ...page, url: `${page.origin}/courses/2` })).ok, false);
 });
 
 test('worker: a kept Lottie request cannot read a file the worn Look does not name', async () => {

@@ -31,6 +31,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       headless: true, viewport: { width: 1280, height: 800 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
     });
+    require('./check-env.js').noFirstRun(ctx);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
@@ -41,6 +42,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       return route.abort();
     });
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
+    await require('./check-env.js').installed(opts);
     // A scene that holds one still frame (motion off), so two screenshots of it can be compared to the pixel.
     const settings = { ...G.GZ_DEFAULTS, bg: { ...G.GZ_DEFAULTS.bg, kind: 'scene', scene: 'contours', intensity: 70 }, motion: { ...G.GZ_DEFAULTS.motion, level: 'off', followSystem: false },
       // Glaze's rail on (the frame sits beside it, where the seam was) and the strip at the top.
@@ -51,6 +53,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (lib/background.js approved)
       await chrome.storage.local.set({ [key]: { tabs: [1, 2].map((i) => ({ cid: `_10${i}_1`, name: `Synthetic course ${i}`, path: `/ultra/courses/_10${i}_1/outline`, top: 0, at: i, pin: false })) } });
     }, { settings, key, site });
+    await require('./check-env.js').ultraReady(opts);
     const page = await ctx.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${site}/ultra/courses/_101_1/outline`);
