@@ -67,7 +67,8 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     context.on('requestfailed', (q) => { if (q.url().startsWith(P.BUCKET)) failed.push(`${q.method()} ${q.headers().range || ''} ${q.failure()?.errorText}`); });
     // The frame's too (S3's refusal of a run-out address is the browser's own "Failed to load resource" line).
     context.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text().slice(0, 300)}`); });
-    const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
+    let worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+    const id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
     const settings = ({ enhance = {}, writer = {} } = {}) => G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), bbPreviews: true, docPages: 'plain', ...enhance }, writer: { pdf: true, ...writer } });
     // The worker's stand-in for following viewerUrl's redirect (ultra-mock.js WHERE), put back before each step.
@@ -344,6 +345,37 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
         await load(); await toggle(LAB); await glazeIn(LAB, 'new page after navigation during fetch');
         check(await p.locator('iframe.gz-pv').count() === 1, "navigation during fetch leaves only the new page's preview");
       } finally { release(); await context.unroute(pattern, navigating); }
+    }
+
+    // Terminate the actual service worker while its documents API request is held, then verify a new page recovers.
+    if (!reviewCase || reviewCase === 'restart') {
+      let release, started = false;
+      const gate = new Promise((r) => { release = r; }), pattern = '**/api/v1/tenants/**';
+      const slow = async (route) => { started = true; await gate; await route.fallback(); };
+      const cdp = await context.newCDPSession(p), versions = new Map();
+      cdp.on('ServiceWorker.workerVersionUpdated', (e) => { for (const v of e.versions) versions.set(v.versionId, v); });
+      await cdp.send('ServiceWorker.enable');
+      await context.route(pattern, slow);
+      try {
+        await load(); await toggle(LAB); await until(() => started, 'API request before worker stop');
+        const v = await until(() => [...versions.values()].find((x) => x.scriptURL === worker.url() && x.runningStatus === 'running'), 'running worker version');
+        await cdp.send('ServiceWorker.stopWorker', { versionId: v.versionId });
+        await until(async () => (await view(LAB)).state.startsWith('ended:'), 'worker interruption falls back', 25000, () => view(LAB));
+        const fallback = await view(LAB);
+        check(fallback.bbShown && !fallback.gz, `worker stopped mid-request: Blackboard stays (${fallback.state})`);
+        release(); await context.unroute(pattern, slow);
+        await cdp.send('ServiceWorker.startWorker', { scopeURL: `chrome-extension://${id}/` });
+        await load();
+        await until(async () => {
+          for (const w of context.serviceWorkers()) {
+            try { if (await w.evaluate(() => !!chrome.runtime.id)) { worker = w; return true; } } catch { /* old execution context */ }
+          }
+          return false;
+        }, 'restarted worker execution context');
+        await where();
+        await toggle(LAB); await glazeIn(LAB, 'after worker restart');
+        check(true, 'a new request succeeds after the actual worker restarts');
+      } finally { release(); await context.unroute(pattern, slow); await cdp.detach(); }
     }
 
     // pdf.js dispatches pagerendered with error even when the draw failed (pdf_viewer.mjs dispatchPageRendered).
