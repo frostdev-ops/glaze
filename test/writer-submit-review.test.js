@@ -179,3 +179,20 @@ test('replacing an earlier attachment while the last file uploads never proves t
   p.addRow('Rivera_Essay2.docx'); p.addRow('Notes.pdf'); await p.tick();
   assert.equal(p.clicks.length, 0);
 });
+
+test('compact attachment retries reuse the note once and reject earlier text changes', async () => {
+  const p = page({ enabled: false }); let writes = 0;
+  p.doc.addEventListener('gz-writer:append', (e) => {
+    const m = JSON.parse(e.detail); writes++;
+    p.setText(p.box.editor.textContent + '\n\n' + m.text + '\n');
+    p.doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: true }) }));
+  });
+  p.setText('Original draft\n');
+  const message = { name: null, bytes: null, append: true, note: 'Attached: Notes.pdf', files: [{ name: 'Notes.pdf', mime: 'application/pdf', bytes: new Uint8Array([4]).buffer }] };
+  await p.go(structuredClone(message)); await p.tick(16000);
+  await p.go({ ...structuredClone(message), run: 2 }); await p.tick(16000);
+  assert.equal(writes, 1);
+  p.setText('Changed draft\n\nAttached: Notes.pdf\n'); p.setEnabled(true);
+  await p.go({ ...structuredClone(message), run: 3 });
+  assert.equal(p.clicks.length, 0);
+});

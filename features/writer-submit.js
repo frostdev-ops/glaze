@@ -31,6 +31,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const submitted = new WeakSet();
   const runs = new WeakMap(), cancelled = new WeakMap(), tokens = new WeakMap();
   const attached = new WeakMap(); // box → each file's name → its byte digest and the row its upload produced
+  const appended = new WeakMap(); // the exact note and complete native text after an append, for a safe retry
   const written = new WeakSet(); // boxes a run has written into
   const imports = new WeakMap();
   let passing = null, running = false, active = null, down = null, giving = false, X = null;
@@ -218,10 +219,16 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const heldOf = (box) => L().lines([...box.editor.children].flatMap((c) => (/^(OL|UL)$/.test(c.tagName) ? [...c.children] : [c]).map((x) => x.textContent)).join('\n')).join('\n');
   const flat = (t) => L().lines(t).map(squash).join('\n');
   // The compact box's sheet: the note after what Ultra's box holds, the box otherwise as the paper left it.
-  const tail = (box, note) => { const want = L().lines(note).map(squash), have = [...box.editor.children].map((p) => squash(p.textContent)); return want.length > 0 && have.slice(-want.length).join('\n') === want.join('\n'); };
   const add = (box, note) => {
+    const old = appended.get(box);
+    if (old) return old.note === note && old.after != null && flat(heldOf(box)) === flat(old.after) ? null : 'review';
+    const entry = { note, after: null }, held = heldOf(box);
+    appended.set(box, entry);
     const said = main('append', { id: box.id, text: L().lines(note).join('\n') });
-    return said.some((r) => r?.ok) && tail(box, note) ? null : 'text';
+    const after = heldOf(box), want = L().lines([held, note].filter(Boolean).join('\n\n')).join('\n');
+    if (!said.some((r) => r?.ok) || flat(after) !== flat(want)) return 'text';
+    entry.after = after;
+    return null;
   };
   const write = (box, d) => {
     const said = main('set', { id: box.id, delta: d });
@@ -315,7 +322,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       file = [...(alone ? [] : [name]), ...files.map((f) => f.name)].find((n) => { const rows = L().listings(area, n, visible); return rows.length !== 1 || rows[0] !== attached.get(box)?.get(n)?.row; }) || null;
       if (file) return fail('review');
       if (!here() || !L().may(s, 'submit') || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected) return fail('page');
-      if (note ? !tail(box, note) : d ? !sameText(box, d) : flat(heldOf(box)) !== flat(held)) return fail('text');
+      if (note ? flat(heldOf(box)) !== flat(appended.get(box)?.after) : d ? !sameText(box, d) : flat(heldOf(box)) !== flat(held)) return fail('text');
       // The worker records the dispatch in the click's own turn: nothing can fail between them, and a page Ultra's
       // navigation tears down after the click has already sent it.
       claimed = false;
