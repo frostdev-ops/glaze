@@ -144,7 +144,7 @@ On by default on Blackboard Ultra (Settings → Writer → Writer → **Glaze Wr
 Settings → Writer, one line each (on by default but Light page and Full writer; MLA 9, Fit, 40 versions and American English to start):
 - **Glaze Writer** and **Open uploads in Writer**: Writer itself, and an assignment's upload area going to Writer first.
 - Papers: **Format for new papers** (MLA 9, APA 7, Chicago 17, Blank); **Zoom** a paper opens at (Fit, 75–150%); **Ruler** above the page; **Light page** keeps the page white with a dark Look; **Full writer** opens an assignment as pages (off, the compact box whose text goes into Blackboard's); **Versions kept** per paper (10, 25, 40, 50, 100; the last submitted always stays).
-- Papers: **Documents** opens the Documents page; **Clear papers** for one course (**Clear…**) or **Clear all papers**, after a question; what you submitted stays in Blackboard.
+- Papers: **Documents** opens the Documents page; **Clear papers** for one course (**Clear…**) or **Clear all papers and documents** (Trash too), after a question; what you submitted stays in Blackboard.
 - Typing: **Fix typos**; **Capital I and sentence starts**; **Doubled words and spaces**; **Smart quotes and dashes**; **Ask how to paste formatting** after a formatted paste.
 - Proofing: **Spelling and grammar** on or off; **Dialect** (American, British, Canadian or Australian English); **Personal dictionary**, each added word with its remove ✕, and **Clear**.
 - Discussions: **Markdown shortcuts** (- , 1. , # , > , \*\*bold\*\*, \*italic\*, [text](address); a paper keeps them either way); **Word target** ring (off: the plain count); **Quote while replying**.
