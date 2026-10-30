@@ -238,6 +238,20 @@ test('IndexedDB unavailable: the put says unavailable', async () => {
   await assert.rejects(wire(broken).client.put(bytes(10), 'application/pdf'), (e) => e.why === 'unavailable');
 });
 
+test('quota exceeded while opening IndexedDB is reported as quota', async () => {
+  for (const mode of ['throw', 'event']) {
+    const indexedDB = { open: () => {
+      const error = Object.assign(new Error('full'), { name: 'QuotaExceededError' });
+      if (mode === 'throw') throw error;
+      const r = {};
+      setImmediate(() => { r.error = error; r.onerror(); });
+      return r;
+    } };
+    const st = F.store(F.idb(indexedDB, 'glaze-docs', fakeIDB().IDBKeyRange));
+    await assert.rejects(wire(st).client.put(bytes(10), 'application/pdf'), (e) => e.why === 'quota', mode);
+  }
+});
+
 test('a transfer cut mid-chunk: interrupted, and the worker drops the half upload', async () => {
   const { st, data } = make();
   // The page goes (its tab closed) after its second chunk.
