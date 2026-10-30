@@ -748,7 +748,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       }
       if (busy() || editing) { foreign = true; return; }
       const got = await SD.read((ks) => chrome.storage.local.get(ks), key).catch(() => null);
-      if (gone) return;
+      if (gone || (got && (got.rec.revision || 0) <= (rec?.revision || 0))) return;
       if (!got || busy() || editing) { foreign = !!got; return; }
       wb = got.wb; rec = got.rec; sigs = got.sigs; lastVersion = rec.lastVersion || lastVersion;
       begin(); undos.length = 0; redos.length = 0; undoBytes = 0;
