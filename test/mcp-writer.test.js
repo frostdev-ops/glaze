@@ -772,3 +772,12 @@ test('open-page discovery rechecks admission before asking for any document key'
   assert.equal(h.pairs[0].worker.posted.length, before);
   assert.equal(h.hub.size(), 0);
 });
+
+test('unknown kind values stay unreadable instead of falling back to the legacy paper kind', async () => {
+  const env = await make(), document = await keyOf(env, 'Reading notes');
+  for (const kind of [42, true, {}, ['paper']]) {
+    await env.store.save(NOTES, { kind });
+    assert.ok(!(await env.run('documents_list')).items.some((i) => i.key === document), JSON.stringify(kind));
+    assert.equal((await env.run('document_read', { document })).ok, false);
+  }
+});
