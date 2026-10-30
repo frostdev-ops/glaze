@@ -139,11 +139,11 @@ On by default on Blackboard Ultra (Settings → Writer → Writer → **Glaze Wr
 - **Tests** get compose mode with proofing on this device only: no completion, no AI, no paper, no submit sheet.
 - **Tab** writes a tab, as Word and Blackboard's editor do (in a list it indents, and Shift+Tab outdents); press Esc, then Tab, to leave the editor.
 
-**Back up…** carries your papers and documents (Trash's too), their versions and presets, your dictionary and saved sources.
+**Back up…** carries your Word documents (Trash's too), their versions and presets, your dictionary and saved sources. Spreadsheets and their versions cannot be restored from a backup yet; export them separately.
 
 Settings → Writer, one line each (on by default but Light page, Full writer and Spreadsheets; MLA 9, Fit, 40 versions and American English to start):
 - **Glaze Writer** and **Open uploads in Writer**: Writer itself, and an assignment's upload area going to Writer first.
-- Papers: **Format for new papers** (MLA 9, APA 7, Chicago 17, Blank); **Zoom** a paper opens at (Fit, 75–150%); **Ruler** above the page; **Light page** keeps the page white with a dark Look; **Full writer** opens an assignment as pages (off, the compact box whose text goes into Blackboard's); **Spreadsheets** lets Documents create and import spreadsheets (.xlsx, .csv; off, Documents shows no Spreadsheet tile and imports Word files only; existing spreadsheets still open); **Versions kept** per paper (10, 25, 40, 50, 100; the last submitted always stays).
+- Papers: **Format for new papers** (MLA 9, APA 7, Chicago 17, Blank); **Zoom** a paper opens at (Fit, 75–150%); **Ruler** above the page; **Light page** keeps the page white with a dark Look; **Full writer** opens an assignment as pages (off, the compact box whose text goes into Blackboard's); **Spreadsheets** lets Documents create spreadsheets and import .csv files (.xlsx requires the spreadsheet file reader; without it, .xlsx is refused and export writes the active sheet as .csv; off, Documents shows no Spreadsheet tile and imports Word files only; existing spreadsheets still open); **Versions kept** per paper (10, 25, 40, 50, 100; the last submitted always stays).
 - Papers: **Documents** opens the Documents page; **Clear papers** for one course (**Clear…**) or **Clear all papers and documents** (Trash too), after a question; what you submitted stays in Blackboard.
 - Typing: **Fix typos**; **Capital I and sentence starts**; **Doubled words and spaces**; **Smart quotes and dashes**; **Ask how to paste formatting** after a formatted paste.
 - Proofing: **Spelling and grammar** on or off; **Dialect** (American, British, Canadian or Australian English); **Personal dictionary**, each added word with its remove ✕, and **Clear**.
