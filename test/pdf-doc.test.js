@@ -233,6 +233,49 @@ test('save refuses a file past the size limit, so every saved file opens again',
   } finally { await doc.loadingTask.destroy(); }
 });
 
+test('open hashes its own byte snapshot, including a Node Buffer', async () => {
+  const pdf = await api(), bytes = F.FIXTURES.three(), expected = sha(bytes);
+  const pending = pdf.open(bytes);
+  bytes.fill(0);
+  const { doc, hash } = await pending;
+  try {
+    assert.equal(hash, expected, 'the hash identifies the PDF actually loaded');
+    assert.equal((await pdf.save(doc)).base, expected);
+  } finally { await doc.loadingTask.destroy(); }
+  const buffer = Buffer.from(F.FIXTURES.three());
+  const r = await pdf.open(buffer);
+  try { assert.equal(r.hash, sha(buffer)); } finally { await r.doc.loadingTask.destroy(); }
+});
+
+test('save refuses closed or untracked documents and names worker write failures', async () => {
+  const pdf = await api(), { doc } = await pdf.open(F.FIXTURES.three());
+  await doc.loadingTask.destroy();
+  await assert.rejects(pdf.save(doc), refused('PdfClosedError'));
+  const foreign = await opened(F.FIXTURES.three());
+  try { await assert.rejects(pdf.save(foreign), refused('PdfInvalidError')); } finally { await foreign.loadingTask.destroy(); }
+  const live = await pdf.open(F.FIXTURES.three());
+  try {
+    live.doc.annotationStorage.setValue('field', { value: 'edited' });
+    live.doc.saveDocument = async () => { throw Error('worker failed'); };
+    await assert.rejects(pdf.save(live.doc), refused('PdfWriteError'));
+    live.doc.saveDocument = async () => F.FIXTURES.three();
+    assert.equal((await pdf.save(live.doc)).base, live.hash, 'a refused write never advances the base');
+  } finally { await live.doc.loadingTask.destroy(); }
+});
+
+test('signature fields protect pages even when SigFlags is missing or a signature cannot be parsed', async () => {
+  const pdf = await api();
+  const bytes = F.FIXTURES.signed();
+  const missing = new Uint8Array(Buffer.from(Buffer.from(bytes).toString('latin1').replace('/SigFlags 3', '           '), 'latin1'));
+  const malformed = new Uint8Array(Buffer.from(Buffer.from(bytes).toString('latin1').replace('/ByteRange', '/WrongName'), 'latin1'));
+  for (const source of [missing, malformed]) {
+    const { doc, signed, allows } = await pdf.open(source);
+    try { assert.equal(signed, true); assert.equal(allows.pages, false); } finally { await doc.loadingTask.destroy(); }
+    await assert.rejects(pdf.bake(source, [{ op: 'rotate', pages: [0], by: 90 }]), refused('PdfSignedError'));
+    await assert.rejects(pdf.bake(F.FIXTURES.three(), [{ op: 'merge', bytes: source }]), refused('PdfSignedError'));
+  }
+});
+
 test('layout applies page operations in order, each counting the pages as the ones before left them', () => {
   const at = (pages) => pages.map((p) => (p.source === 'blank' ? `blank${p.size ? p.size.join('x') : ''}` : `${p.source}:${p.page}`) + (p.turn ? `@${p.turn}` : ''));
   assert.deepEqual(at(D.layout(3, [])), ['0:0', '0:1', '0:2']);
