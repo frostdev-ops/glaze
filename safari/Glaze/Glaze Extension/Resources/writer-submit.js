@@ -272,11 +272,15 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   frame.handle('submit:step', (m) => { if (waiting && m.run === waiting.run) waiting.step(m.step); });
   frame.handle('submit:held', (m) => { sheet?.held?.(m.text); });
   frame.handle('submit:done', (m) => { if (waiting && m.run === waiting.run) waiting.done({ ok: m.ok === true, error: typeof m.error === 'string' ? m.error : 'page' }); });
-  // Ultra's Save and Close: the paper saved first (it attaches nothing), then the page lets Ultra's own go on.
+  // Ultra's Save and Close: the paper saved first (it attaches nothing), then the page lets Ultra's own go on. A press
+  // made as the frame opened waits for the paper; a save the worker hasn't answered in SAVE_WAIT says so, and Ultra's
+  // button stays (the save may still land; it sends nothing then).
+  const SAVE_WAIT = 30000;
   frame.handle('submit:save', async (m) => {
-    const api = P()?.current();
+    const api = P()?.current() || await paper();
     let ok = false;
-    try { ok = !!(api && await api.save()); } catch (e) { console.error(e); }
+    try { ok = !!(api && await Promise.race([api.save(), new Promise((r) => setTimeout(r, SAVE_WAIT, null))])); } catch (e) { console.error(e); }
+    if (!ok) api?.notify?.('Not saved. Try again in a moment.');
     frame.say({ type: 'submit:saved', request: m.request, ok });
   });
   frame.on('ready', () => {

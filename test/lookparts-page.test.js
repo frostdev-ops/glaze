@@ -49,7 +49,7 @@ test('only the top frame and live tab frames read parts, never the editor\'s pre
 test('content.js hands parts to the pages through GZ_CTX.parts(), asks only when storage changes lookX, and feeds the preview', () => {
   // Running code mods lay their parts over the Look's (features/mods.js parts), under the same gate.
   // Course Looks suppress global parts; their pointer is resolved separately.
-  assert.match(content, /const partsOn = \(pointer = false\) => on\(settings\) && \(!isPreview \|\| html\.dataset\.previewPage !== 'quiz'\) && \(pointer \|\| !lookHere\(\)\);/);
+  assert.match(content, /const partsOn = \(\) => on\(settings\) && \(!isPreview \|\| html\.dataset\.previewPage !== 'quiz'\);/);
   assert.match(content, /partsOn, courseLook: lookHere,\n    parts: \(\) => \(partsOn\(\) && \(globalThis\.GZ_MODS \? GZ_MODS\.parts\(globalThis\.GZ_XPARTS_PAGE\?\.now\(\) \|\| null\) : globalThis\.GZ_XPARTS_PAGE\?\.now\(\)\)\) \|\| null,/);
   assert.match(content, /if \(changes\.lookX && area === 'sync'\) lookX = changes\.lookX\.newValue;/);
   assert.match(content, /globalThis\.GZ_XPARTS_PAGE\?\.preview\(e\.data\.gzPreviewParts\);/);
@@ -243,10 +243,10 @@ test('the Ultra preview suppresses parts on its mock quiz and restores them on r
   context.isPreview = false;
   assert.ok(context.ctx.parts(), 'a live page cannot suppress parts with a preview attribute');
   assert.equal(context.ctx.partsOn(), true);
+  // A course Look's parts are features/lookparts.js's to give (its now() is that Look's on that course): no gate here.
   context.lookHere = () => 'Clear';
-  assert.equal(context.ctx.partsOn(), false, 'a course Look suppresses the global Look parts');
-  assert.equal(context.ctx.partsOn(true), true, 'the personal pointer remains eligible on a course Look');
-  assert.equal(context.ctx.parts(), null);
+  assert.equal(context.ctx.partsOn(), true, 'a course Look wears its own parts');
+  assert.ok(context.ctx.parts());
 });
 
 test('changing the mock page announces parts so rules, scenes and nav follow the preview context', () => {

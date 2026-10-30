@@ -1,0 +1,186 @@
+// Ultra's Submit and Save and Close pressed while Writer's paper frame is slow, loading or reopening: never a press that
+// does nothing. The full view's (features/writer-submit.js act): Save and Close waits for the frame's save however long,
+// asks a frame that reopened again, presses Ultra's button once (found again if Ultra redrew it), and lets go when the
+// box is no longer Writer's; Submit waits for a frame to open the sheet in. Before the frame is up (features/writer.js
+// hold): the compact box's press waits for the frame and its view, then asks it to save; the full view's waits for the
+// submit step. Ultra's button is marked busy meanwhile. In the browser: scripts/writer-submit-check.js.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const { El } = require('./stand-in-dom.js');
+const L = require('../lib/writer-submit.js');
+const page = require('./helpers/writer-submit-page.cjs');
+const content = require('./helpers/writer-content.cjs');
+
+const SAVE = '[data-analytics-id="course.content.assessment.footer.buttons.saveAndClose"]', SUBMIT = '[data-analytics-id="assignment.attempt.authoring.footer.submit"]';
+const asks = (sent) => sent.filter((m) => m.type === 'submit:save');
+
+test('full: Save and Close waits for the save however long it takes, then Ultra\'s own goes once', async () => {
+  const p = page(), save = L.footer(p.box.editor).save;
+  assert.equal(p.fire(save, 'click').stopped, true);
+  const [ask] = asks(p.sent);
+  assert.ok(ask, 'the frame is asked to save');
+  assert.equal(save.getAttribute('aria-busy'), 'true', 'Ultra\'s button marked busy');
+  for (const ms of [4000, 15000]) await p.tick(ms);
+  assert.equal(p.clicks.length, 0, 'no give-up at 4 s (or any time) on the page\'s side');
+  assert.equal(asks(p.sent).length, 1, 'asked once');
+  assert.equal(p.fire(save, 'click').stopped, true);
+  assert.equal(asks(p.sent).length, 1, 'a second press waits on the same save');
+  p.hear({ type: 'submit:saved', request: ask.request, ok: true });
+  assert.deepEqual(p.clicks, [save], 'saved: Ultra\'s Save and Close, once');
+  assert.equal(save.hasAttribute('aria-busy'), false);
+  p.hear({ type: 'submit:saved', request: ask.request, ok: true });
+  assert.equal(p.clicks.length, 1, 'a repeated answer presses nothing');
+});
+
+test('full: Save and Close presses the footer Ultra drew meanwhile; a failed save presses nothing', async () => {
+  const p = page(), old = L.footer(p.box.editor).save;
+  p.fire(old, 'click');
+  const fresh = new El('button', p.doc);
+  fresh.setAttribute('type', 'button'); fresh.setAttribute('data-analytics-id', old.getAttribute('data-analytics-id'));
+  fresh.getClientRects = () => [{}];
+  old.replaceWith(fresh);
+  p.hear({ type: 'submit:saved', request: asks(p.sent)[0].request, ok: true });
+  assert.deepEqual(p.clicks, [fresh]);
+  p.fire(fresh, 'click');
+  p.hear({ type: 'submit:saved', request: asks(p.sent)[1].request, ok: false });
+  assert.deepEqual(p.clicks, [fresh], 'not saved: Ultra\'s button stays (the frame says why)');
+  assert.equal(fresh.hasAttribute('aria-busy'), false);
+});
+
+test('full: a frame that reopens before answering is asked again; a box no longer Writer\'s lets go', async () => {
+  const p = page(), save = L.footer(p.box.editor).save, first = p.box.port, again = [];
+  p.fire(save, 'click');
+  const request = asks(p.sent)[0].request;
+  // features/writer.js reopen: a new frame and port, not ready yet.
+  p.box.ready = false; p.box.port = { postMessage: (m) => again.push(m) };
+  await p.tick(100);
+  assert.equal(asks(again).length, 0, 'not asked of a frame that isn\'t up');
+  p.box.ready = true;
+  await p.tick(100);
+  assert.deepEqual(asks(again).map((m) => m.request), [request], 'asked again of the new frame, the same request');
+  await p.tick(100);
+  assert.equal(asks(again).length, 1, 'once');
+  assert.notEqual(first, p.box.port);
+  p.hear({ type: 'submit:saved', request, ok: true });
+  assert.deepEqual(p.clicks, [save]);
+  // Gone: Writer gave the box back (its frame, its armed state): nothing pressed, and a new press asks anew later.
+  p.fire(save, 'click');
+  p.own(false);
+  await p.tick(100);
+  assert.equal(p.clicks.length, 1);
+  assert.equal(save.hasAttribute('aria-busy'), false, 'let go, unmarked');
+});
+
+test('full: a save lost with its frame (no answer past the frame\'s own bound) lets a new press ask anew, once', async () => {
+  const p = page(), save = L.footer(p.box.editor).save;
+  p.fire(save, 'click');
+  const lost = asks(p.sent)[0].request;
+  await p.tick(51000);
+  p.fire(save, 'click');
+  const fresh = asks(p.sent)[1]?.request;
+  assert.ok(fresh && fresh !== lost);
+  p.hear({ type: 'submit:saved', request: lost, ok: true });
+  assert.equal(p.clicks.length, 0, 'the lost one\'s late answer presses nothing');
+  p.hear({ type: 'submit:saved', request: fresh, ok: true });
+  assert.deepEqual(p.clicks, [save]);
+});
+
+test('full: Submit pressed while the frame reopens opens the sheet once the frame is up', async () => {
+  const p = page(), submit = p.button();
+  p.box.ready = false;
+  assert.equal(p.fire(submit, 'click').stopped, true);
+  assert.equal(p.fire(submit, 'click').stopped, true);
+  await p.tick(100);
+  assert.equal(p.sent.filter((m) => m.type === 'submit:open').length, 0);
+  assert.equal(submit.getAttribute('aria-busy'), 'true');
+  p.box.ready = true;
+  await p.tick(100);
+  await p.tick(100);
+  assert.equal(p.sent.filter((m) => m.type === 'submit:open').length, 1, 'one sheet for two presses');
+  assert.equal(submit.hasAttribute('aria-busy'), false);
+});
+
+// ---- before the frame is up (features/writer.js)
+const attempt = async (full) => {
+  const c = content({ fixture: 'attempt', writer: { full } });
+  c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
+  c.ctx.GZ_WRITER_CONTEXT_ASSIGNMENT = { send: async () => {} };
+  await c.start();
+  await new Promise(setImmediate);
+  const press = (sel) => { const target = c.doc.querySelector(sel), e = { type: 'click', target, preventDefault() { this.held = true; }, stopImmediatePropagation() {} }; c.doc.dispatchEvent(e); return e; };
+  const frame = () => c.native().root.previousElementSibling;
+  // features/writer.js reopen (its frame gone), then the new frame up: claimed, ready, its view said.
+  const reopen = () => { frame().remove(); c.ctx.GZ_WRITER.pass(); };
+  const up = async (i, full = false) => { await c.boot(frame()); c.ports[i].onmessage({ data: { type: 'ready' } }); c.emit({ type: 'view', full }, i); };
+  return { c, press, frame, reopen, up };
+};
+const flushes = (port) => port.sent.filter((m) => m.type === 'compact:flush');
+const ok = { ok: true, html: '<p>Last words.</p>', text: 'Last words.', delta: [{ insert: 'Last words.\n' }] };
+
+test('compact: Submit pressed while the frame reopens waits, marked busy, and asks the new frame once it is up', async () => {
+  const { c, press, reopen, up } = await attempt(false);
+  c.emit({ type: 'view', full: false });
+  reopen();
+  const button = c.doc.querySelector(SUBMIT);
+  assert.equal(press(SUBMIT).held, true, 'Ultra doesn\'t hear it');
+  assert.equal(button.getAttribute('aria-busy'), 'true');
+  c.tick(100);
+  assert.equal(flushes(c.ports[1]).length, 0, 'no frame up to ask');
+  await c.boot(c.native().root.previousElementSibling);
+  c.ports[1].onmessage({ data: { type: 'ready' } });
+  c.tick(100);
+  assert.equal(flushes(c.ports[1]).length, 0, 'not before the frame has said its view (which would end it)');
+  c.emit({ type: 'view', full: false }, 1);
+  c.tick(100);
+  const [f] = flushes(c.ports[1]);
+  assert.equal(f?.action, 'submit');
+  assert.equal(c.clicks.length, 0);
+  c.emit({ type: 'compact:flushed', request: f.request, ...ok }, 1);
+  assert.deepEqual(c.clicks, [button], 'then Ultra\'s Submit once, with the frame\'s last words');
+  assert.equal(c.native().editor.innerHTML, '<p>Last words.</p>');
+  c.tick(100);
+  assert.equal(button.hasAttribute('aria-busy'), false);
+});
+
+test('compact: a frame that reopens while it saves is asked again; the old frame\'s late answer sends nothing', async () => {
+  const { c, press, reopen, up } = await attempt(false);
+  c.emit({ type: 'view', full: false });
+  press(SAVE);
+  const [old] = flushes(c.ports[0]);
+  assert.equal(old?.action, 'save');
+  reopen();
+  await up(1);
+  c.tick(100);
+  const [again] = flushes(c.ports[1]);
+  assert.ok(again && again.request !== old.request, 'asked of the new frame');
+  c.ports[0].onmessage({ data: { type: 'compact:flushed', request: old.request, ...ok } });
+  assert.equal(c.clicks.length, 0, 'the old frame\'s answer is heard by no one');
+  c.emit({ type: 'compact:flushed', request: again.request, ...ok }, 1);
+  assert.deepEqual(c.clicks, [c.doc.querySelector(SAVE)], 'Save and Close once');
+  c.tick(100);
+  assert.equal(flushes(c.ports[1]).length, 1, 'and never asked twice');
+});
+
+test('full: a press before the submit step has the box goes to it once it does; one it never takes goes to Ultra', async () => {
+  const { c, press } = await attempt(true);
+  const button = c.doc.querySelector(SUBMIT);
+  assert.equal(press(SUBMIT).held, true, 'Ultra doesn\'t hear it: its box doesn\'t hold the paper');
+  c.tick(100);
+  assert.equal(c.clicks.length, 0);
+  c.ctx.GZ_WRITER_SUBMIT = { armed: () => true, passing: () => false };
+  c.tick(100);
+  assert.deepEqual(c.clicks, [button], 'pressed again, for the submit step (its sheet)');
+  // A box the step never takes (its frame up for HOLD_ARM): Ultra's own button, as before Writer held it.
+  delete c.ctx.GZ_WRITER_SUBMIT;
+  let now = 1e6;
+  c.ctx.__now = () => now;
+  vm.runInContext('Date.now = () => globalThis.__now()', c.ctx);
+  press(SUBMIT);
+  c.tick(100);
+  now += 4000; c.tick(100);
+  assert.equal(c.clicks.length, 1);
+  now += 1500; c.tick(100);
+  assert.deepEqual(c.clicks, [button, button]);
+  assert.equal(button.hasAttribute('aria-busy'), false);
+});

@@ -90,6 +90,9 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
 }
 .look:hover { transform: translateY(-1px); }
 .look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface-2), 0 0 0 4px var(--gz-accent); }
+/* A group's heading (built in, saved, gallery) across the grid, shown when there is more than one group. */
+.looks-head { grid-column: 1 / -1; margin: 0.35rem 0 0; font-size: calc(11px * var(--gz-scale, 1)); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-muted); }
+.looks-head:first-child { margin-top: 0; }
 
 .hint { margin: 0; font-size: calc(11px * var(--gz-scale, 1)); color: var(--gz-ink-faint); }
 .hint.err { color: var(--gz-err); }

@@ -11,7 +11,10 @@
 // dropped on the paper asks, Open in Writer replaces the paper (a version first, Undo in the toast); one chosen in Ultra's
 // own file area reaches the frame before Ultra and Submit as is attaches its very bytes (hashes compared) with the note; a PDF
 // goes straight to the sheet; ⋯ → Import…; with Open uploads in Writer off, Ultra's area takes the file itself. The flows
-// above run in the full view (writer.full on). The compact box (Full writer off, the default): no pages, the frame as tall
+// above run in the full view (writer.full on), as do a slow save (the worker's writes held 6 s) holding Save and Close,
+// Saving… in the title bar, and the sheet's Submit until they land; a worker that never answers (the paper says so after
+// its bound, nothing pressed); and Ultra's Submit or Save and Close pressed as Writer reopens the frame or as a reloaded
+// attempt's frame goes in (held until it is up, Ultra hearing nothing). The compact box (Full writer off, the default): no pages, the frame as tall
 // as its text, typing autosaved to the paper and written into Ultra's box, Ultra's own Submit sending that text with no
 // .docx and no sheet, the "Full writer" switch to the pages and back (caret and its line on screen kept, a 'view' version
 // first), the setting kept across a reload and followed live from Settings, a slow save (the worker's writes held 6 s)
@@ -41,10 +44,12 @@ const shots = process.env.SUBMIT_SHOTS || path.join(os.homedir(), 'Projects/glaz
 const checks = [], requests = [], errors = [];
 let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-const until = async (fn, label, ms = 15000) => {
+// state: what the timeout says was there instead (an object, read at the deadline).
+const until = async (fn, label, ms = 15000, state = null) => {
   const start = Date.now(); let last;
   while (Date.now() - start < ms) { try { const v = await fn(); if (v) return v; } catch (e) { last = e; } await pause(80); }
-  throw Error(`${label} timed out${last ? `: ${last.message}` : ''}`);
+  const was = state ? await Promise.resolve().then(state).then((x) => JSON.stringify(x), (e) => `unreadable: ${e.message}`) : '';
+  throw Error(`${label} timed out after ${ms} ms${last ? `: ${last.message}` : ''}${was ? `; at the deadline ${was}` : ''}`);
 };
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
 const squash = (s) => String(s || '').replace(/\s+/g, ' ').trim();
@@ -525,11 +530,120 @@ const HARNESS = `(() => {
     check(await f.p.evaluate(() => __uploads.length === 1 && !__clicks.some((c) => /submit/.test(c))), 'a second, explicit try doesn\'t attach a second copy, and still never submits');
     await f.p.close();
 
+    // ---- a slow worker, one that never answers, and a press before the frame is up (the full view)
+    // storage: the worker's chrome.storage.local writes held ms each, held until let go ('never'), or as they were ('free').
+    const storage = (mode) => worker.evaluate((mode) => {
+      const a = chrome.storage.local, own = globalThis.__gzSet ||= a.set;
+      globalThis.__gzOpen?.(); globalThis.__gzOpen = null;
+      if (mode === 'free') a.set = own;
+      else if (mode === 'never') { const gate = new Promise((r) => { globalThis.__gzOpen = r; }); a.set = function (...args) { return gate.then(() => own.apply(a, args)); }; }
+      else a.set = function (...args) { return new Promise((r) => setTimeout(r, mode)).then(() => own.apply(a, args)); };
+      return true;
+    }, mode);
+    const stateOf = (fr) => fr.evaluate(() => document.querySelector('.gp-state').textContent);
+    const busyOf = (p, sel) => p.evaluate((s) => document.querySelector(s)?.getAttribute('aria-busy') || '', sel);
+    const SAVED_CLOSE = 'course.content.assessment.footer.buttons.saveAndClose';
+    ({ p, el, fr } = await openAttempt());
+    await storage(6000);
+    let t0 = Date.now();
+    await p.click(SAVE);
+    check(await p.evaluate(() => !__clicks.length) && await busyOf(p, SAVE) === 'true', 'a slow save (the worker\'s writes held 6 s): Ultra\'s Save and Close held, marked busy');
+    await until(async () => (await stateOf(fr)) === 'Saving…', 'the title bar saying Saving…');
+    await until(() => p.evaluate((id) => __clicks.includes(id), SAVED_CLOSE), 'Save and Close after the slow save', 40000);
+    let spent = Date.now() - t0;
+    await quiet(() => p.evaluate(() => __clicks.length > 1), 'a second Save and Close', 800);
+    check(spent >= 5500 && await p.evaluate((id) => __clicks.join() === id, SAVED_CLOSE) && !await busyOf(p, SAVE), `then it goes once the save lands (${spent} ms, past the old 4 s bound), the title bar having said Saving…`);
+    await storage('free');
+    await p.close();
+    ({ p, el, fr } = await openAttempt('empty'));
+    await storage(6000);
+    await tap(fr, '.gp-submit'); await sheetOpen(fr);
+    t0 = Date.now();
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => !!document.getElementById('ultra-confirm')), 'Ultra\'s confirmation after the slow saves', 60000);
+    spent = Date.now() - t0;
+    await storage('free');
+    await quiet(() => p.evaluate(() => __clicks.length > 1 || __uploads.length > 1), 'a second Submit');
+    await until(async () => (await versions())[0] === 'submit', 'the version marked Submitted');
+    check(spent >= 5500 && await p.evaluate(() => __clicks.join() === 'assignment.attempt.authoring.footer.submit' && __uploads.length === 1) && await fr.evaluate(() => !document.querySelector('.gs-layer')), `Submit… with every save held 6 s completes after them (${spent} ms): the .docx attached once, Ultra's Submit once, the version marked Submitted`);
+    await p.close();
+    // The worker never answering: the frame gives up on the save after its bound and says so; Ultra's button is let go,
+    // and isn't pressed when the save lands at last (the student presses again).
+    ({ p, el, fr } = await openAttempt());
+    await storage('never');
+    t0 = Date.now();
+    await p.click(SAVE);
+    const toastOf = () => fr.evaluate(() => document.querySelector('.gp-toast span')?.textContent || '');
+    await until(async () => (await toastOf()) === 'Not saved. Try again in a moment.', 'the frame giving up on the save, saying so', 45000);
+    spent = Date.now() - t0;
+    await until(async () => !await busyOf(p, SAVE), 'Ultra\'s button let go');
+    check(spent >= 25000 && spent < 40000 && await p.evaluate(() => !__clicks.length), `a worker that never answers: after ${spent} ms the paper says "Not saved. Try again in a moment.", Ultra's Save and Close not pressed and no longer busy`);
+    await storage('free');
+    await until(async () => (await stateOf(fr)) === 'Saved', 'the held save landing once the worker answers', 30000);
+    await quiet(() => p.evaluate(() => __clicks.length > 0), 'Save and Close after the late save', 1000);
+    await p.click(SAVE);
+    await until(() => p.evaluate((id) => __clicks.join() === id, SAVED_CLOSE), 'Save and Close pressed again');
+    check(true, 'the held save landing at last presses nothing; pressed again, Save and Close goes');
+    await p.close();
+    // A press as Writer reopens the frame (it reloaded) or as the reloaded page's frame goes in: held until the frame is up
+    // (Ultra hears nothing of it), then the sheet opens, or the paper is saved and Ultra's Save and Close goes once.
+    const watchPress = (p) => p.evaluate(() => { window.__press = []; addEventListener('click', (e) => { const b = e.target.closest?.('footer button'), f = document.querySelector('iframe.gz-writer'); if (b && e.isTrusted) window.__press.push({ id: b.getAttribute('data-analytics-id'), up: !!f && !f.style.opacity }); }, true); });
+    const pressReopening = async (sel) => {
+      const o = await openAttempt();
+      await watchPress(o.p);
+      const old = o.el;
+      await o.fr.evaluate(() => setTimeout(() => location.reload(), 0));
+      await until(() => old.evaluate((f) => !f.isConnected), 'the frame reopening');
+      const t = Date.now(), b = await center(o.p, sel);
+      await o.p.mouse.click(b.x, b.y);
+      const after = Date.now() - t;
+      o.el = await until(() => o.p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'), 'the new frame');
+      o.fr = await until(() => o.el.contentFrame(), 'its document');
+      return { ...o, after };
+    };
+    let r = await pressReopening(SUBMIT);
+    await sheetOpen(r.fr);
+    let press = await r.p.evaluate(() => window.__press);
+    check(r.after < 200 && press.length === 1 && press[0].up === false && await r.p.evaluate(() => !__clicks.length), `Ultra's Submit pressed ${r.after} ms into the frame reopening, before it was up: the sheet opens once it is, Ultra never hearing the press (${JSON.stringify({ press, clicks: await r.p.evaluate(() => __clicks) })})`);
+    await r.p.close();
+    r = await pressReopening(SAVE);
+    await until(() => r.p.evaluate((id) => __clicks.includes(id), SAVED_CLOSE), 'Save and Close once the new frame saved', 30000);
+    await quiet(() => r.p.evaluate(() => __clicks.length > 1), 'a second Save and Close', 800);
+    press = await r.p.evaluate(() => window.__press);
+    check(r.after < 200 && press[0]?.up === false && await r.p.evaluate((id) => __clicks.join() === id, SAVED_CLOSE), `Save and Close pressed ${r.after} ms into the frame reopening: once the new frame has saved the paper, Ultra's own goes, once (${JSON.stringify({ press, clicks: await r.p.evaluate(() => __clicks) })})`);
+    await r.p.close();
+    ({ p, el, fr } = await openAttempt());
+    await p.reload();
+    await watchPress(p);
+    await p.waitForSelector('iframe.gz-writer[data-gz-writer-frame="assignment"]', { state: 'attached', timeout: 30000 });
+    t0 = Date.now();
+    const sub = await center(p, SUBMIT);
+    await p.mouse.click(sub.x, sub.y);
+    spent = Date.now() - t0;
+    el = await until(() => p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'), 'the reloaded page\'s frame');
+    fr = await until(() => el.contentFrame(), 'its document');
+    await sheetOpen(fr);
+    press = await p.evaluate(() => window.__press);
+    check(spent < 200 && press.length === 1 && press[0].up === false && await p.evaluate(() => !__clicks.length && !document.getElementById('ultra-confirm')), `the attempt reloaded, Ultra's Submit (on, its box holding text) pressed ${spent} ms after the paper's frame went in, before it was up: held, then the sheet; Ultra submitted nothing (${JSON.stringify({ press, clicks: await p.evaluate(() => __clicks) })})`);
+    await p.keyboard.press('Escape');
+    await p.close();
+
     // ---- bringing a file: on the paper, in Ultra's own file area, a PDF, ⋯ → Import…, and the switch off
     const ishots = process.env.IMPORT_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/settings-ai/build-import');
     const ishot = async (target, name) => { fs.mkdirSync(ishots, { recursive: true }); await stillAll(target); const f = path.join(ishots, name); await target.screenshot({ path: f }); return f; };
     const sha = (b) => crypto.createHash('sha256').update(Buffer.from(b)).digest('hex');
-    const blankPaper = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => /^writer(Paper|Versions):/.test(k))); });
+    // No paper in Writer's storage, and none coming back: a page just closed may still be saving its paper (its frame's
+    // pagehide save, queued in the worker), which would land after the removal and open in the next page.
+    const papersKept = () => worker.evaluate(async () => Object.keys(await chrome.storage.local.get(null)).filter((k) => /^writer(Paper|Versions):/.test(k)));
+    const blankPaper = async () => {
+      for (let i = 0; i < 10; i++) {
+        await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => /^writer(Paper|Versions):/.test(k))); });
+        let back = [];
+        for (const end = Date.now() + 1500; !back.length && Date.now() < end; await pause(100)) back = await papersKept();
+        if (!back.length) return;
+      }
+      throw Error(`Writer's papers kept coming back: ${(await papersKept()).join(', ')}`);
+    };
     const paperText = (fr) => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent);
     const cardOf = (fr) => fr.evaluate(() => {
       const c = document.querySelector('.gi-layer[data-open] .gi-card');
@@ -700,6 +814,19 @@ const HARNESS = `(() => {
       return { p, el, fr };
     };
     const frameH = (el) => el.evaluate((f) => f.getBoundingClientRect().height);
+    // Typing into the compact box: once the frame's document has the focus and the box's editor is its active element
+    // (polled from Node: on a loaded runner the focus can follow the tap by a moment); the text then waited for in Ultra's
+    // box as long as a loaded runner takes, a miss saying what Ultra's box, the paper and the bar's line held.
+    const SYNC_MS = 60000;
+    const focusOf = (fr) => fr.evaluate(() => ({ focused: document.hasFocus(), active: document.activeElement?.matches?.('#gw .ProseMirror') || `${document.activeElement?.tagName?.toLowerCase()}.${String(document.activeElement?.className || '').slice(0, 40)}` }));
+    const boxFocused = (fr) => until(async () => { const f = await focusOf(fr); return f.focused && f.active === true; }, 'the compact box focused', 15000, () => focusOf(fr));
+    const boxState = (p, fr) => async () => ({
+      ultra: await p.evaluate(() => __text()).then((x) => x.slice(0, 200), (e) => `unreadable: ${e.message}`),
+      paper: await fr.evaluate(() => GZ_WRITER_PAPER.current()?.editor.view.state.doc.textContent.slice(0, 200)).catch((e) => `unreadable: ${e.message}`),
+      bar: await fr.evaluate(() => document.querySelector('.gw-bar .gp-said')?.textContent ?? null).catch(() => null),
+      ...await focusOf(fr).catch(() => ({})),
+    });
+    const inUltra = (p, fr, ok, label) => until(async () => ok(await p.evaluate(() => __text())), label, SYNC_MS, boxState(p, fr));
     await setFull(false);
     await blankPaper();
     await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); });
@@ -711,8 +838,9 @@ const HARNESS = `(() => {
     let h0 = await frameH(el);
     check(Math.abs(h0 - (v.gw + 6)) <= 2 && h0 < 400, `the frame is as tall as the box (${h0}px)`);
     await tap(fr, '#gw .ProseMirror');
+    await boxFocused(fr);
     await p.keyboard.type('Memory in Beloved is a debt the town keeps.', { delay: 2 });
-    await until(async () => (await p.evaluate(() => __text())) === 'Memory in Beloved is a debt the town keeps.\n', 'the text in Ultra\'s box');
+    await inUltra(p, fr, (x) => x === 'Memory in Beloved is a debt the town keeps.\n', 'the text in Ultra\'s box');
     check(true, 'what is typed goes into Ultra\'s text box, as it is');
     check(await p.evaluate(() => !document.querySelector(`${'[data-analytics-id="assignment.attempt.authoring.footer.submit"]'}`).disabled), 'Ultra\'s Submit turns on with the text');
     const paperKey = await fr.evaluate(() => GZ_WRITER_PAPER.current().key());
@@ -838,8 +966,9 @@ const HARNESS = `(() => {
     ({ p, el, fr } = await openCompact('empty'));
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await tap(fr, '#gw .ProseMirror');
+    await boxFocused(fr);
     await p.keyboard.type('Submitted as text.', { delay: 2 });
-    await until(async () => (await p.evaluate(() => __text())) === 'Submitted as text.\n', 'in Ultra\'s box');
+    await inUltra(p, fr, (x) => x === 'Submitted as text.\n', 'in Ultra\'s box');
     await p.click(SUBMIT);
     await until(() => p.evaluate(() => !!document.getElementById('ultra-confirm')), 'Ultra\'s confirmation');
     got = await p.evaluate(() => ({ uploads: __uploads.length, clicks: __clicks, text: __text(), confirm: !!document.getElementById('ultra-confirm') }));
@@ -857,12 +986,14 @@ const HARNESS = `(() => {
     ({ p, el, fr } = await openCompact('empty'));
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await tap(fr, '#gw .ProseMirror');
+    await boxFocused(fr);
     await p.keyboard.type('Sent after a slow save.', { delay: 2 });
     await until(() => fr.evaluate(() => document.querySelector('.gp-state').textContent === 'Saved'), 'saved before the slow part');
     await fr.evaluate(() => { window.__said = []; const s = document.querySelector('.gw-bar .gp-said'); if (s) new MutationObserver(() => window.__said.push(s.textContent)).observe(s, { childList: true, characterData: true, subtree: true }); });
     check(await slowStore(6000), 'the worker\'s storage writes held 6 s');
+    await boxFocused(fr);
     await p.keyboard.type(' Last words.', { delay: 2 });
-    await until(async () => (await p.evaluate(() => __text())).includes('Last words.'), 'the last words in Ultra\'s box');
+    await inUltra(p, fr, (x) => x.includes('Last words.'), 'the last words in Ultra\'s box');
     const pressed = Date.now();
     await p.click(SUBMIT);
     const heldAtOnce = await p.evaluate(() => !__clicks.length);
@@ -885,8 +1016,9 @@ const HARNESS = `(() => {
     ({ p, el, fr } = await openCompact('empty'));
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await tap(fr, '#gw .ProseMirror');
+    await boxFocused(fr);
     await p.keyboard.type('Short start.', { delay: 2 });
-    await until(async () => (await p.evaluate(() => __text())) === 'Short start.\n', 'the short start in Ultra\'s box');
+    await inUltra(p, fr, (x) => x === 'Short start.\n', 'the short start in Ultra\'s box');
     const over = await fr.evaluate(() => {
       const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA.paper, bold = S.marks.bold.create();
       const paras = Array.from({ length: 260 }, (_, i) => S.node('paragraph', null, Array.from({ length: 200 }, (_, j) => (j % 2 ? S.text(' ') : S.text(String((j / 2 + 1) % 10), [bold])))));
@@ -921,8 +1053,8 @@ const HARNESS = `(() => {
     await blankPaper();
     // Submit as is from compact: the sheet owns the native text and its one final click.
     ({ p, el, fr } = await openCompact('empty'));
-    await tap(fr, '#gw .ProseMirror'); await p.keyboard.type('Keep this compact draft.');
-    await until(async () => (await p.evaluate(() => __text())).includes('Keep this compact draft.'), 'compact draft synced');
+    await tap(fr, '#gw .ProseMirror'); await boxFocused(fr); await p.keyboard.type('Keep this compact draft.');
+    await inUltra(p, fr, (x) => x.includes('Keep this compact draft.'), 'compact draft synced');
     await give(p, '[class*="makeStylesinputContainer-"]', 'Compact_original.docx', MIME, essay);
     await until(() => cardOf(fr), 'compact as-is card');
     await tap(fr, '.gi-choice:not(.gi-default)'); await sheetOpen(fr);

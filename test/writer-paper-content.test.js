@@ -119,6 +119,7 @@ test('compact: a sheet over the box takes the paper\'s height while it is open',
 test('compact: Submit and Save and Close wait for a fresh, saved frame snapshot, however slow, and say why one didn\'t go', async () => {
   for (const action of ['submit', 'save']) {
     const { c, box } = await paper(false);
+    c.emit({ type: 'view', full: false }); // the frame's own, once its editor is up
     const button = c.doc.querySelector(`[data-analytics-id="assignment.attempt.authoring.footer.${action === 'save' ? 'saveAndClose' : action}"]`) || c.doc.querySelector('[data-analytics-id="course.content.assessment.footer.buttons.saveAndClose"]');
     assert.ok(button, action);
     const click = () => { const e = { type: 'click', target: button, preventDefault() { this.held = true; }, stopImmediatePropagation() {} }; c.doc.dispatchEvent(e); return e; };
@@ -177,6 +178,7 @@ test('compact: a reformatted Ultra echo never writes HTML back into the paper; a
 test('compact: a lost save times out visibly at 60 s, ignores late replies and permits a fresh retry for either action', async () => {
   for (const action of ['submit', 'saveAndClose']) {
     const { c } = await paper(false);
+    c.emit({ type: 'view', full: false }); // the frame's own, once its editor is up
     const button = [...c.doc.querySelectorAll("button[data-analytics-id]")].find((b) => b.getAttribute("data-analytics-id").endsWith(`.${action}`));
     const click = () => c.doc.dispatchEvent({ type: 'click', target: button, preventDefault() {}, stopImmediatePropagation() {} });
     click();
@@ -199,6 +201,7 @@ test('compact: a lost save times out visibly at 60 s, ignores late replies and p
 test('compact: a footer redrawn during the save sends the replacement button once for either action', async () => {
   for (const action of ['submit', 'saveAndClose']) {
     const { c } = await paper(false);
+    c.emit({ type: 'view', full: false }); // the frame's own, once its editor is up
     const button = [...c.doc.querySelectorAll("button[data-analytics-id]")].find((b) => b.getAttribute("data-analytics-id").endsWith(`.${action}`)), parent = button.parentElement;
     c.doc.dispatchEvent({ type: 'click', target: button, preventDefault() {}, stopImmediatePropagation() {} });
     const request = c.ports[0].sent.at(-1).request;
