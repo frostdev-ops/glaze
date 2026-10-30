@@ -73,3 +73,22 @@ test('SWITCH: matching, laziness, errors and arrays as Excel has them', () => {
   ]);
   assert.equal(calc(e, 'SWITCH(2,1,"a",2,A1:A3)', 'Z2'), 1, 'intersects the row it is on');
 });
+
+test('SWITCH matches array values at each expression position', () => {
+  const e = book();
+  cases(e, [
+    ['SWITCH(0,A1,"blank","other")', 'blank'],
+    ['SWITCH(2,{1,2},"array","other")', 'other'],
+    ['INDEX(SWITCH({1,2},{1,2},"array","other"),1,2)', 'array'],
+    ['INDEX(SWITCH({1,2},{1,2},{10,20},1/0),1,2)', 20],
+  ]);
+});
+
+test('SWITCH materializes each lazy comparison range once', () => {
+  const values = Array.from({ length: 1000 }, (_, i) => [i]), ref = new C.lib.Ref({}, 0, 0, 999, 0);
+  let reads = 0;
+  const ctx = { value: (v) => { if (v === ref) { reads++; return values; } return v; } };
+  const result = C.fn('SWITCH').fn([values, () => ref, () => 7, () => 0], ctx);
+  assert.ok(result.every(([v]) => v === 7));
+  assert.equal(reads, 1, 'repeated range conversion makes an n-cell SWITCH quadratic');
+});

@@ -17,6 +17,7 @@ require('../lib/sheet-fn-math.js');
 require('../lib/sheet-fn-text.js');
 require('../lib/sheet-fn-info.js');
 require('../lib/sheet-fn-date.js');
+require('../lib/sheet-fn-lookup.js');
 require('../lib/sheet-fn-database.js');
 
 // cells: typed input (a string, as a person types it), a number, a boolean, or { s } for text as it is.
@@ -175,9 +176,8 @@ test('criteria ranges: rows OR, columns AND, blanks no condition, labels that na
     mask([[1], [1]], 255),
     // A formula under a column's label is its value (TRUE here, so no name matches).
     mask([['name'], ['=C2>80']], 0),
-    // Computed criteria (a formula under a label that names no column, which Excel works out per record: 11 here) are
-    // not supported: #VALUE!.
-    mask([['zzz'], ['=C2>80']], '#VALUE!'), mask([[null], ['=C2>80']], '#VALUE!'),
+    // Computed criteria are evaluated for every record with relative rows advanced.
+    mask([['zzz'], ['=C2>80']], 11), mask([[null], ['=C2>80']], 11),
     mask([['name']], '#VALUE!'),
     [[['name'], [t('Ann')]], (c, col) => `DSUM(A1:F9,"mask",${col}:${col})`, 255],
   ]);
@@ -215,4 +215,35 @@ test('text, booleans, blanks and errors in the field; no match; one match', () =
     ...[[101, '95'], [103, true], [105, 'abc'], [106, '#VALUE!'], [104, '#N/A'], [107, false]].map(([id, want]) => [[['id'], [id]], (c) => `DGET(A1:F9,"val",${c})`, want]),
     [[['id'], [105]], (c) => `DGET(A1:F9,"when",${c})`, '#VALUE!'], [[['name'], [t('B*')]], (c) => `DGET(A1:F9,"name",${c})`, '#NUM!'],
   ]);
+});
+
+
+test('database computed criteria, empty strings and blank field references agree with Excel', () => {
+  const e = book({ ...grid('A1', [['name', 'value', 'id'], ['Apple', 2, 1], ['Apricot', '=""', 2], ['Pear', null, 3], ['Plum', 4, 4]]),
+    ...grid('H1', [['computed', 'id'], ['=B2>1', '>0']]), J1: 'computed', J2: { s: 'TRUE' } });
+  cases(e, [['DSUM(A1:C5,"value",H1:H2)', 6], ['DCOUNTA(A1:C5,"value",I1:I2)', 3],
+    ['DCOUNT(A1:C5,Z1,I1:I2)', '#VALUE!'], ['DCOUNTA(A1:C5,Z1,I1:I2)', '#VALUE!'], ['DSUM(A1:C5,"value",J1:J2)', 6]]);
+  const f = book({ ...grid('A1', [['name', 'value', 'id'], ['Apple', 2, 1], ['Apricot', 5, 2], ['Pear', '=1/0', 3], ['Plum', 4, 4]]),
+    H1: 'computed', H2: '=B2>AVERAGE($B$2:$B$3)', I1: 'computed', I2: '=B2', J1: 'computed', J2: '=FALSE',
+    K1: 'computed', K2: '=1/0', L1: 'computed', L2: '="TRUE"' });
+  cases(f, [['DSUM(A1:C5,"id",H1:H2)', 6], ['DSUM(A1:C5,"id",I1:I2)', 7], ['DSUM(A1:C5,"id",J1:J2)', 0],
+    ['DSUM(A1:C5,"id",K1:K2)', 0], ['DSUM(A1:C5,"id",L1:L2)', 10]]);
+});
+
+test('computed criteria update with records and refuse untracked shifted references', () => {
+  const e = book({ ...grid('A1', [['id', 'value'], [1, 0], [2, 1], [3, 0]]), H1: 'computed', H2: '=B2>0' });
+  cases(e, [['DSUM(A1:B4,"id",H1:H2)', 2]]);
+  const sh = e.wb.sheets[0];
+  e.apply({ op: 'set', sheet: sh.id, r: 3, c: 1, cell: { t: 'n', v: 1 } });
+  cases(e, [['DSUM(A1:B4,"id",H1:H2)', 5]]);
+  // The engine only tracks the first criterion cell's dependencies. Relative references outside database would
+  // otherwise return stale results after another record changes; support needs an engine dependency hook.
+  const outside = book({ ...grid('A1', [['id'], [1], [2], [3]]), D2: 0, D3: 1, D4: 0, H1: 'computed', H2: '=D2>0' });
+  cases(outside, [['DSUM(A1:A4,"id",H1:H2)', '#VALUE!']]);
+});
+
+test('database field arrays keep errors local to each result', () => {
+  const e = book({ ...grid('A1', [['id', 'value'], [1, 2], [2, 3]]), H1: 'id', H2: '>0' });
+  cases(e, [['INDEX(DCOUNT(A1:B3,{"id","bad"},H1:H2),1,1)', 2],
+    ['INDEX(DCOUNT(A1:B3,{"id","bad"},H1:H2),1,2)', '#VALUE!']]);
 });
