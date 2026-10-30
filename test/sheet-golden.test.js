@@ -1,8 +1,8 @@
 // Glaze Sheets' formula engine against Microsoft Excel. scripts/sheet-excel-golden.js writes the cases
 // (test/fixtures/sheets/cases.js) into Excel, one workbook per family, has Excel calculate and save them as
 // test/fixtures/sheets/<family>.xlsx, and reads what Excel cached back into test/fixtures/sheets/golden.json.
-// Regenerate on a Mac with Excel after changing the cases:
-//   nice -n 10 lockf -k /private/tmp/claude-501/glaze-heavy.lock node scripts/sheet-excel-golden.js
+// Regenerate on a Mac with Excel after changing the cases, as the one heavy job running:
+//   nice -n 10 node scripts/sheet-excel-golden.js [family …]
 // Checked here: the cases themselves, the reader the harness reads workbooks with (test/helpers/xlsx-cache.cjs), the
 // workbooks and golden.json against the cases, and the engine against golden.json (todo until it is wired).
 const test = require('node:test');
@@ -288,6 +288,7 @@ for (const [family, list] of byFamily) {
     for (const c of list) {
       if (c.unsupported != null) continue;
       await t.test(c.id, { todo: REASON }, () => {
+        if (!ENGINE) return;
         const got = run(family, c);
         assert.ok(same(golden?.[c.id], got), `${c.formula}: Excel ${JSON.stringify(golden?.[c.id])}, engine ${JSON.stringify(got)}`);
       });
