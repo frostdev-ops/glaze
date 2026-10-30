@@ -287,7 +287,7 @@ const check = async (name, test) => {
           if (items[`writerPaper:${key}`]) { globalThis.pdfCheckHeld = true; await new Promise((r) => { globalThis.pdfCheckRelease = r; }); }
           return globalThis.pdfCheckSet(items);
         };
-      }, { key, file: bytes.toString('base64'), size: bytes.length });
+      }, { key, file: Buffer.from(bytes).toString('base64'), size: bytes.length });
       try {
         f = await openFromBar(page);
         await f.locator(`.gd-card[data-key="${key}"] .gd-title`).click();
