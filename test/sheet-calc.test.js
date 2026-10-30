@@ -211,6 +211,26 @@ test('an array formula evaluates its ranges whole and fills its range', () => {
   assert.equal(v('E1'), 1);
 });
 
+test('an array formula\'s range moves with it when rows or columns are inserted or deleted', () => {
+  const wb = M.workbook();
+  const sh = wb.sheets[0];
+  for (const [r, v] of [[0, 1], [1, 2], [2, 3]]) M.apply(wb, { op: 'set', sheet: sh.id, r, c: 0, cell: { t: 'n', v } });
+  M.apply(wb, { op: 'cells', sheet: sh.id, cells: [[0, 3, { t: 'n', v: 0, f: 'A1:A3*10', a: 'D1:D3' }], [1, 3, null], [2, 3, null]] });
+  const e = C.engine(wb);
+  e.recalc();
+  const ins = e.apply({ op: 'insert', sheet: sh.id, axis: 'row', at: 0, n: 1 });
+  assert.equal(M.cell(sh, 1, 3).a, 'D2:D4');
+  assert.equal(M.cell(sh, 1, 3).f, 'A2:A4*10');
+  assert.deepEqual([1, 2, 3].map((r) => e.value(sh.id, r, 3)), [10, 20, 30]);
+  e.apply({ op: 'insert', sheet: sh.id, axis: 'col', at: 0, n: 2 });
+  assert.equal(M.cell(sh, 1, 5).a, 'F2:F4');
+  assert.equal(e.value(sh.id, 3, 5), 30);
+  e.apply({ op: 'delete', sheet: sh.id, axis: 'col', at: 0, n: 2 });
+  e.apply(ins.inverse);
+  assert.equal(M.cell(sh, 0, 3).a, 'D1:D3');
+  assert.deepEqual([0, 1, 2].map((r) => e.value(sh.id, r, 3)), [10, 20, 30]);
+});
+
 test('edits recalculate only what depends on them, in order, and report what changed', () => {
   const e = book({ A1: 1, B1: '=A1*2', C1: '=B1+1', D1: '=SUM(A:A)', E1: 7, F1: '=E1' });
   assert.deepEqual([val(e, 'B1'), val(e, 'C1'), val(e, 'D1')], [2, 3, 1]);
