@@ -14,7 +14,11 @@ const layoutState = ({ remember, route, focused = false } = {}) => {
     .filter((el) => !el.closest('.editor-nav') && visible(el));
   if (remember) (window.layoutWant ??= new Map()).set(remember, controls);
   const active = document.activeElement;
-  const wanted = focused ? (active && active !== document.body ? [active] : []) : [...new Set([...controls, ...window.layoutWant?.get(route) || []])];
+  // Preview-ready messages can redraw the Look builders between widths. Follow the same control's data-f key; a
+  // missing or newly hidden replacement still fails, but an old detached node is not a hidden live control.
+  const remembered = (window.layoutWant?.get(route) || []).map((el) => !el.isConnected && el.dataset.f
+    ? document.querySelector(`[data-f="${CSS.escape(el.dataset.f)}"]`) || el : el);
+  const wanted = focused ? (active && active !== document.body ? [active] : []) : [...new Set([...controls, ...remembered])];
   const off = [];
   for (const el of wanted) {
     const name = el.dataset.key || el.id || el.name || el.textContent.trim().slice(0, 30) || el.tagName;
