@@ -216,9 +216,11 @@ test('rubric purge clears its index and blocks a read already in flight from res
   await AS.clear({ local }, A);
   assert.equal(s[one], undefined);
   assert.deepEqual(s.mcpRubrics, [other]);
-  let deliver;
-  const t = reg({ tabs: { run: () => new Promise((res) => { deliver = res; }) } }).get('assignment_read');
+  let deliver, started;
+  const begun = new Promise((res) => { started = res; });
+  const t = reg({ tabs: { run: () => new Promise((res) => { deliver = res; started(); }) } }).get('assignment_read');
   const pending = t.run({ course: '25', assignment: '171' }, ctx(A));
+  await begun;
   await AS.clear({ local });
   deliver({ ok: true, title: 'Private' });
   await pending;
