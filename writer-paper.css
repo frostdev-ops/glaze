@@ -120,6 +120,7 @@
 .gp-submit { padding: 7px 16px; border-radius: 999px; background: var(--gz-accent); color: var(--gz-accent-ink); font-weight: 700; font-size: 13px; white-space: nowrap; flex: none; }
 .gp button:disabled { cursor: default; opacity: .45; }
 .gp-submit:disabled { opacity: .55; }
+a.gp-submit { text-decoration: none; }
 .gp button:focus-visible, .gp [tabindex]:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
 .gp-ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .gp-caret { width: 14px; height: 14px; }

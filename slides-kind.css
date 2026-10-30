@@ -73,3 +73,16 @@ dialog.gs-present::backdrop { background: #000; }
   .gs-find { grid-row: 2; grid-column: 1 / -1; min-width: 0; }
   .gs-canvas { padding: 12px; }
 }
+
+/* Print: the slides alone, a page each (its size and @page: slides-kind.js print, through the CSSOM), the notes below
+   with Print with notes; nothing of the Look around them */
+.gs-print { display: none; }
+@media print {
+  :root[data-gs-print], :root[data-gs-print] body { height: auto !important; overflow: visible !important; background: #fff !important; }
+  :root[data-gs-print] > :not(head, body), :root[data-gs-print] body > :not(.gs-print) { display: none !important; }
+  :root[data-gs-print] body > .gs-print { display: block !important; }
+  .gs-print-page { box-sizing: border-box; overflow: hidden; break-after: page; break-inside: avoid; background: #fff; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .gs-print-page:last-child { break-after: auto; }
+  .gs-print[data-notes] .gs-stage { margin: 0 auto; box-shadow: 0 0 0 1px #000; }
+  .gs-print-notes { margin-top: 24px; white-space: pre-wrap; font: 12pt/1.4 Calibri, Carlito, sans-serif; overflow: hidden; }
+}

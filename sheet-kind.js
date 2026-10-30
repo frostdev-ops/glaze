@@ -283,6 +283,52 @@
     return v;
   };
   const view = (key, host) => edit(key, { host });
+  // A workbook's bytes from elsewhere (src { bytes, name, href }: a Canvas file the page read, writer-kinds.js), in the grid
+  // from memory (sheet-grid.js memory): read-only, nothing kept unless the student saves it. Open original (href) and Save
+  // to Documents (the file as it came, through importFile while Settings → Writer → Spreadsheets takes files; once saved,
+  // Open in Documents, the copy to edit) before ⋯. host: { mount, t, title, shown(), failed(reason), esc() }. → the grid's
+  // surface, or null.
+  const show = async (src, host) => {
+    const tt = host?.t || t, name = String(src?.name || '').slice(0, 200), bytes = src?.bytes?.length ? src.bytes : null;
+    const wb = bytes ? await workbookOf(new File([bytes], name || 'Spreadsheet.xlsx')).catch((e) => { console.warn(e); return null; }) : null;
+    if (!wb) { host?.failed?.(bytes ? 'read' : 'init'); return null; }
+    await need(CHARTS).catch((e) => console.error(e));
+    const button = (act, label, cls) => h('button', { type: 'button', class: cls, 'data-act': act, text: label });
+    const origB = /^https?:/.test(src.href || '') ? button('original', tt('Open original'), 'gp-tbtn') : null, saveB = button('save', tt('Save to Documents'), 'gp-submit');
+    const v = GZ_SHEET_GRID.mount({ key: null, wb, rec: null, sigs: new Map(), fresh: false, memory: true, t: tt, locale, papers: null, show: shower, local: false, fileOf, download,
+      exportLabel: () => 'Export .xlsx', host: { ...host, title: () => name, tools: [origB, saveB].filter(Boolean) } });
+    origB?.addEventListener('click', () => { window.open(src.href, '_blank', 'noopener,noreferrer'); });
+    saveB.addEventListener('click', async () => {
+      if (saveB.disabled) return;
+      saveB.disabled = true;
+      v.say(tt('Saving…'));
+      const progress = DK.progress((p) => { if (!p.end && !p.failed) v.say(tt('Saving… {n}%', { n: Math.floor(p.fraction * 10) * 10 })); });
+      try {
+        const take = DK.get('sheet')?.importFile;
+        if (typeof take !== 'function') throw new Error('off');
+        await need(['lib/writer-papers.js']);
+        const got = await take(new File([bytes], name || 'Spreadsheet.xlsx'), { progress }), key = typeof got === 'string' ? got : got?.key;
+        progress.end();
+        v.say(tt('Saved to Documents'));
+        if (key) {
+          const openA = h('a', { class: 'gp-submit', 'data-act': 'open', href: `papers.html?${DK.KINDS.sheet.param}=${encodeURIComponent(key)}`, target: '_blank', rel: 'noopener', text: tt('Open in Documents') });
+          saveB.replaceWith(openA);
+          openA.focus();
+        }
+      } catch (e) {
+        const big = e instanceof RangeError && e.message === SAYS.size;
+        if (!big) console.error(e);
+        progress.fail(e);
+        v.say(tt(big ? SAYS.size : 'Not saved. Try again in a moment.'));
+        saveB.disabled = false;
+      }
+    });
+    // Esc the grid didn't take (a cell, a menu or a field takes its own): back to the page that opened it.
+    document.addEventListener('keydown', (e) => { if (!e.defaultPrevented && e.key === 'Escape' && !e.target?.closest?.('input, textarea, select, [role="menu"]')) host?.esc?.(); });
+    globalThis.GZ_PAPERS_MOTION?.shown('paper');
+    host?.shown?.();
+    return v;
+  };
 
   // Opening, copying and exporting stay registered; creating and importing follow the switch, read as Settings shows it
   // (defaults.js: its default where none is stored). papers.html loads defaults.js on demand; writer.html has it already,
@@ -290,7 +336,7 @@
   const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
   const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'undefined' ? need(DEFAULTS) : null)).then(() => chrome.storage.sync.get('writer'))
     .then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.sheets === true, () => false);
-  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, exportLabel: 'Export .xlsx', exportLabelOf: (row) => labelOf(row?.ext),
+  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, show, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, exportLabel: 'Export .xlsx', exportLabelOf: (row) => labelOf(row?.ext),
     ...(yes && { importFile, create }) })));
   globalThis.GZ_SHEET_KIND = Object.freeze({ shower, fileOf });
 })();

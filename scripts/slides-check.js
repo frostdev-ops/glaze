@@ -3,7 +3,7 @@
 // with lib/zip.js) imports as a card showing slide 1, opens in the viewer (the rail, slide 1, arrows and Page keys, zoom,
 // find in the slides' text, the notes), presents in a dialog whose keys are Rimeward's and which skips the hidden slide,
 // exports the bytes it was given, and Esc and Back behave as a paper's. The chrome wears a dark Look while the slide stays
-// as authored, and nothing errors, in the page or at the worker's sender check. Screenshots at 1280 and 640 px. The browser
+// as authored, prints a page per shown slide at the deck's size (notes optionally below), and nothing errors, in the page or at the worker's sender check. Screenshots at 1280 and 640 px. The browser
 // reaches no network.
 // NODE_PATH=<playwright> nice -n 10 node scripts/slides-check.js [evidence directory]
 const { chromium } = require('playwright');
@@ -282,6 +282,83 @@ const fixture = (extra = []) => {
     await until(() => page.evaluate(() => !document.querySelector('dialog.gs-present')), 'Esc ends the presentation');
     check(await page.evaluate(() => document.activeElement?.id === 'gs-present' && !document.fullscreenElement), 'Esc ends it, out of full screen, focus back on Present');
     check(page.url().includes('?slides='), 'and the deck stays open');
+
+    // ---- Print…: the print view (the dialog itself stubbed) holds a page per slide a show plays at the slide's own size, its
+    // pictures loaded first; printed for real by page.pdf with the page's own @page, then Print with notes on the notes page
+    await page.evaluate(() => { globalThis.printed = 0; window.print = () => { globalThis.printed++; }; });
+    const printView = () => page.evaluate(() => {
+      const b = document.querySelector('body > .gs-print[data-ready]');
+      if (!b || !globalThis.printed) return null;
+      const pics = [...b.querySelectorAll('img, image')], pages = [...b.querySelectorAll('.gs-print-page')];
+      const rule = document.adoptedStyleSheets.flatMap((x) => [...x.cssRules]).find((r) => r instanceof CSSPageRule);
+      return { pages: pages.length, slides: pages.map((x) => x.dataset.slide).join(), size: rule?.style.getPropertyValue('size'), pics: pics.length, loaded: pics.filter((x) => x.hasAttribute('data-gs-loaded')).length,
+        notes: b.querySelectorAll('.gs-print-notes').length, title: document.title, styled: pages.filter((x) => x.hasAttribute('style')).length, printed: globalThis.printed };
+    });
+    const pdfPages = async () => {
+      await page.emulateMedia({ media: 'print' });
+      const laid = await page.evaluate(() => ({ view: getComputedStyle(document.querySelector('.gs-view')).display, boxes: [...document.querySelectorAll('.gs-print-page')].map((x) => { const r = x.getBoundingClientRect(); return `${Math.round(r.width)}x${Math.round(r.height)}`; }) }));
+      const pdf = (await page.pdf({ preferCSSPageSize: true, printBackground: true })).toString('latin1');
+      await page.emulateMedia({ media: 'screen' });
+      return { ...laid, pages: [...pdf.matchAll(/\/Type\s*\/Page(?![s\w])/g)].length, media: [...new Set([...pdf.matchAll(/\/MediaBox\s*\[([^\]]+)\]/g)].map((m) => m[1].trim().split(/\s+/).map((v) => Math.round(+v)).join(' ')))] };
+    };
+    const afterPrint = async () => {
+      await page.evaluate(() => dispatchEvent(new Event('afterprint')));
+      return page.evaluate(() => !document.querySelector('.gs-print') && !document.adoptedStyleSheets.length && !document.documentElement.hasAttribute('data-gs-print') && document.title !== '');
+    };
+    await page.click('.gs-more');
+    const printItems = await until(() => page.evaluate(() => [...document.querySelectorAll('.gs-menu [role="menuitem"]')].map((b) => b.textContent)), 'Print… in ⋯');
+    check(printItems[0] === 'Print…' && printItems[1] === 'Print with notes…', `⋯ offers Print… and Print with notes… (${JSON.stringify(printItems)})`);
+    await page.click('.gs-menu [data-act="print"]');
+    let pv = await until(printView, 'the print view');
+    check(pv.pages === 9 && pv.slides === '0,1,2,3,4,5,7,8,9' && pv.size === '1280px 720px' && pv.notes === 0 && pv.styled === 0 && pv.printed === 1 && pv.title === 'Cell Biology week 3',
+      `Print…: 9 pages, the hidden slide 7 left out, @page 1280 × 720 px from the deck, no notes, the page boxes styled through the CSSOM (${JSON.stringify(pv)})`);
+    check(pv.pics > 0 && pv.loaded === pv.pics, `the pictures loaded before the print dialog (${pv.loaded} of ${pv.pics})`);
+    let pp = await pdfPages();
+    check(pp.view === 'none' && pp.boxes.length === 9 && pp.boxes.every((b) => b === '1280x720'), `print media: only the slides, each page box 1280 × 720 (${JSON.stringify({ view: pp.view, boxes: [...new Set(pp.boxes)] })})`);
+    check(pp.pages === 9 && pp.media.length === 1 && pp.media[0] === '0 0 960 540', `the printed PDF: 9 pages of 960 × 540 pt, 13.33 × 7.5 in (${JSON.stringify({ pages: pp.pages, media: pp.media })})`);
+    check(await afterPrint(), 'after the print the view, its @page and the mark go');
+    await page.click('.gs-more');
+    await until(() => page.locator('.gs-menu [data-act="print-notes"]').count(), 'Print with notes…');
+    await page.click('.gs-menu [data-act="print-notes"]');
+    pv = await until(printView, 'the print view with notes');
+    const noted = await page.evaluate(() => [...document.querySelectorAll('.gs-print-page')].filter((x) => x.querySelector('.gs-print-notes')).map((x) => x.dataset.slide).join());
+    check(pv.pages === 9 && pv.size === '720px 960px' && pv.notes > 0 && /Start with the quiz/.test(await page.locator('.gs-print').textContent()) && pv.loaded === pv.pics,
+      `Print with notes: 9 notes pages of 720 × 960 px, the notes below their slides (slides ${noted}) (${JSON.stringify(pv)})`);
+    await page.emulateMedia({ media: 'print' });
+    await shot('print-notes-1280.png');
+    await page.emulateMedia({ media: 'screen' });
+    pp = await pdfPages();
+    check(pp.pages === 9 && pp.media.length === 1 && pp.media[0] === '0 0 540 720', `the printed PDF with notes: 9 pages of 540 × 720 pt, 7.5 × 10 in (${JSON.stringify({ pages: pp.pages, media: pp.media })})`);
+    check(await afterPrint(), 'after printing with notes the view goes');
+    const outsidePrint = await page.evaluate(() => {
+      const b = document.createElement('button');
+      document.body.append(b); b.focus();
+      const e = new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true, cancelable: true });
+      const native = b.dispatchEvent(e), pending = !!document.querySelector('.gs-print');
+      b.remove();
+      return { native, pending };
+    });
+    check(outsidePrint.native && !outsidePrint.pending, `Ctrl+P outside the viewer keeps native page printing (${JSON.stringify(outsidePrint)})`);
+    await page.focus('#gs-canvas');
+    await page.keyboard.press('Control+p');
+    pv = await until(printView, 'Ctrl+P');
+    check(pv.pages === 9 && pv.size === '1280px 720px' && pv.printed === 3, `Ctrl+P prints the slides (${JSON.stringify(pv)})`);
+    check(await afterPrint(), 'and its view goes after');
+
+    // A picture that never fires load or error still releases printing at the bounded wait.
+    await page.evaluate(() => {
+      globalThis.printImageListen = Element.prototype.addEventListener;
+      Element.prototype.addEventListener = function (type, ...args) {
+        if (this.matches('img, image') && this.closest('.gs-print') && ['load', 'error'].includes(type)) return;
+        return globalThis.printImageListen.call(this, type, ...args);
+      };
+    });
+    await page.focus('#gs-canvas');
+    await page.keyboard.press('Control+p');
+    pv = await until(printView, 'printing despite a picture with no load or error event', 30000);
+    check(pv.printed === 4 && pv.loaded < pv.pics, 'a picture that never loads cannot hang printing');
+    check(await afterPrint(), 'the timed-out picture leaves no print rule behind');
+    await page.evaluate(() => { Element.prototype.addEventListener = globalThis.printImageListen; delete globalThis.printImageListen; });
 
     // ---- the ⋯ menu: Export .pptx gives back the bytes
     await page.click('.gs-more');

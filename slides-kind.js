@@ -1,8 +1,8 @@
 // Slide decks on the Documents page (papers.html). Settings → Writer → Slides (writer.slides, its default in defaults.js) permits
 // importing .pptx and .ppsx files; existing decks always remain available for viewing. Documents of the slides kind
 // (lib/doc-kinds.js), each card showing slide 1, and open in a viewer: a rail of thumbnails, the slide (lib/slides-render.js
-// on lib/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, and Present (a dialog, full screen
-// where the browser allows, Rimeward's keys, hidden slides skipped). Its chrome wears the Look; the slide stays as authored.
+// on lib/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, Present (a dialog, full screen
+// where the browser allows, Rimeward's keys, hidden slides skipped) and Print (a page per slide, notes optionally below). Its chrome wears the Look; the slide stays as authored.
 // Export gives back the bytes imported. A viewer, never an editor: the record only changes by the page's rename.
 // Storage (STORE): the deck's bytes in the worker's file store (lib/doc-files.js, over its port), the record pointing at
 // them (file: { hash, size, type }), up to the kind's max; a record from before the store holds them as base64, read as
@@ -196,7 +196,8 @@
   // A deck as a new standalone document, titled by its file's name. → its key.
   const importFile = async (file, { progress = null } = {}) => {
     if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > STORE.max) throw new RangeError(SAYS.size);
-    await need(LIBS);
+    // A deck shown from elsewhere saves from writer.html, which has no store of papers loaded until then.
+    await need([...LIBS, 'lib/writer-papers.js']);
     const fields = await bring(file, progress), title = stem(file.name);
     const key = GZ_WRITER_PAPERS.newKey();
     await papers().save(key, { kind: 'slides', ...fields, named: !!title, title }, { reason: 'import' });
@@ -264,19 +265,22 @@
 
   // host: an assignment's frame (writer-kinds.js view): { mount, t, title, tools }, the viewer in mount with the
   // assignment's title and the frame's tools (Submit…) before ⋯, no way back to Documents; → its surface.
-  // o: papers.js's { fresh } (a kind that opens a new document empty), or view's { host }.
-  const edit = async (key, { host = null } = {}) => {
+  // o: papers.js's { fresh } (a kind that opens a new document empty), or view's { host }, or show's { host, src }: a deck's
+  // bytes from elsewhere (src { bytes, name, href }: a Canvas file the page read, writer-kinds.js) opened from memory, nothing
+  // kept; Open original (href) and Save to Documents (the same bytes through importFile) beside ⋯. host then also has
+  // shown() once the slide is drawn, failed(reason), esc().
+  const edit = async (key, { host = null, src = null } = {}) => {
     const root = document.documentElement;
     const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'slides';
     await need(LIBS);
-    const rec = await papers().get(key).catch(() => null);
+    const rec = src ? null : await papers().get(key).catch(() => null);
     // A record from before the store moves into it as it is opened (the worker reads its base64 again).
     if (typeof rec?.file === 'string') papers().migrate?.(key).catch(() => {});
     let failed = null;
-    const bytes = await STORE.get(rec).catch((e) => { failed = e; return null; });
+    const bytes = src ? (src.bytes?.length ? src.bytes : null) : await STORE.get(rec).catch((e) => { failed = e; return null; });
     const deck = bytes ? await GZ_PPTX.read(bytes).catch((e) => { console.warn(e); return null; }) : null;
-    const Rr = R(), labels = LABELS(), title = host?.title?.() || rec?.title || t('Untitled document'), n = deck ? deck.slides.length : 0;
+    const Rr = R(), labels = LABELS(), title = host?.title?.() || rec?.title || src?.name || t('Untitled document'), n = deck ? deck.slides.length : 0;
     const media = deck ? await blobs(bytes, deck, new Set(deck.media.map((m) => m.path))) : new Map();
     let cur = 0, zoom = 'fit', term = '', hits = [], hit = -1, menu = null, showing = null;
     let notesOpen = false;
@@ -295,6 +299,8 @@
     const findNext = btn({ id: 'gs-find-next', class: 'gs-btn', 'aria-label': t('Next'), title: t('Next') }, icon('down'));
     const notesB = btn({ id: 'gs-notes', class: 'gs-btn gs-label', 'aria-pressed': String(notesOpen) }, t('Notes'));
     const presentB = btn({ id: 'gs-present', class: 'gs-btn gs-label gs-go' }, icon('present'), h('span', { text: t('Present') }));
+    const origB = src && /^https?:/.test(src.href || '') ? btn({ class: 'gs-btn gs-label', 'data-act': 'original' }, t('Open original')) : null;
+    const saveB = src ? btn({ class: 'gs-btn gs-label', 'data-act': 'save', disabled: !deck }, t('Save to Documents')) : null;
     const moreB = btn({ class: 'gs-btn gs-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': t('More'), title: t('More') }, icon('dots'));
     const canvasEl = h('div', { id: 'gs-canvas', class: 'gs-canvas', role: 'tabpanel', tabindex: '0' });
     const notesEl = h('section', { id: 'gs-notes-pane', class: 'gs-notes', 'aria-label': t('Notes'), hidden: !notesOpen });
@@ -311,7 +317,7 @@
     const view = h('div', { class: 'gp gp-standalone gs-view' },
       h('header', { class: 'gp-top' }, host ? null : h('a', { href: 'papers.html', text: t('Documents') }), h('h1', { text: title }), h('span', { class: 'grow' }), state),
       h('div', { class: 'gs-tool' }, h('div', { class: 'gs-group' }, prevB, atEl, nextB), h('div', { class: 'gs-group' }, outB, zoomB, inB),
-        h('div', { class: 'gs-find', role: 'search' }, q, findN, findPrev, findNext), h('span', { class: 'grow' }), notesB, presentB, ...(host?.tools || []), moreB),
+        h('div', { class: 'gs-find', role: 'search' }, q, findN, findPrev, findNext), h('span', { class: 'grow' }), notesB, presentB, ...(host?.tools || []), origB, saveB, moreB),
       h('div', { class: 'gs-work' }, railEl, h('div', { class: 'gs-main' }, canvasEl, notesEl)));
     (host?.mount || document.body).append(view);
     if (!deck) {
@@ -319,7 +325,7 @@
       canvasEl.append(said);
       for (const b of [prevB, nextB, outB, zoomB, inB, q, findPrev, findNext, notesB, presentB]) b.disabled = true;
       // A file the store no longer has: Delete (to Trash, as Documents' own) or Import… it again, where this is a document of its own.
-      if (failed?.why === 'missing' && !host && GZ_WRITER_PAPERS.local(key)) {
+      if (failed?.why === 'missing' && !host && !src && GZ_WRITER_PAPERS.local(key)) {
         const pick = h('input', { type: 'file', accept: DK.KINDS.slides.accept.join(','), hidden: true, onchange: () => {
           const f = pick.files[0];
           pick.value = '';
@@ -506,11 +512,59 @@
     };
     presentB.addEventListener('click', present);
 
-    // ---- ⋯: export in the deck's own format
+    // ---- Print…: the slides a show plays, each on a page of its own (GZ_SLIDES_RENDER.printPage, its @page through the
+    // CSSOM), with Print with notes each slide's notes below it on the deck's notes page; the pictures loaded before the
+    // browser's print dialog opens. Only the pages print (slides-kind.css @media print), never the Look's chrome.
+    let printing = null;
+    const PICTURE_WAIT = 15000;
+    const loaded = (el) => new Promise((ok) => {
+      const done = () => { clearTimeout(timer); el.setAttribute('data-gs-loaded', ''); ok(); };
+      const timer = setTimeout(ok, PICTURE_WAIT);
+      el.addEventListener('load', done, { once: true });
+      el.addEventListener('error', () => { clearTimeout(timer); ok(); }, { once: true });
+    });
+    const endPrint = () => {
+      if (!printing) return;
+      printing.box.remove();
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((x) => x !== printing.sheet);
+      root.removeAttribute('data-gs-print');
+      document.title = printing.title;
+      printing = null;
+    };
+    const print = async (withNotes = false) => {
+      if (!deck || printing) return;
+      const pg = Rr.printPage(deck, { notes: withNotes }), seq = Rr.visible(deck);
+      if (!pg || !seq.length) return;
+      const box = h('div', { class: 'gs-print', 'data-notes': withNotes, 'aria-hidden': 'true' });
+      for (const i of seq) {
+        const s = deck.slides[i];
+        box.append(h('section', { class: 'gs-print-page', 'data-slide': String(i) }, Rr.stage(s, deck, { document, media, labels, scale: pg.scale }),
+          withNotes && s.notes ? h('div', { class: 'gs-print-notes', text: s.notes }) : null));
+      }
+      // Each picture heard from as it is drawn, before the pages join the document (a load can't come first).
+      const pictures = [...box.querySelectorAll('img, image')].map(loaded);
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(`@page { size: ${pg.w}px ${pg.h}px; margin: 0; } .gs-print-page { width: ${pg.w}px; height: ${pg.h}px; padding: ${pg.margin}px; }`);
+      printing = { box, sheet, title: document.title };
+      document.title = title;
+      document.body.append(box);
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+      root.setAttribute('data-gs-print', withNotes ? 'notes' : 'slides');
+      await Promise.all([...pictures, document.fonts?.ready]);
+      if (printing?.box !== box) return;
+      box.setAttribute('data-ready', '');
+      addEventListener('afterprint', endPrint, { once: true, signal });
+      window.print();
+    };
+    const notesAny = !!deck?.slides.some((s) => !s.hidden && s.notes);
+
+    // ---- ⋯: print, and export in the deck's own format
     const closeMenu = (back) => { if (!menu) return; menu.remove(); menu = null; moreB.setAttribute('aria-expanded', 'false'); if (back) moreB.focus(); };
     const openMenu = () => {
       menu = h('div', { class: 'pop gp-menu gs-menu', role: 'menu', 'aria-label': t('More') },
-        btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'export', disabled: !bytes, onclick: () => { closeMenu(true); exportFile(key).catch((e) => console.warn(e)); } }, t('Export .pptx').replace('.pptx', rec?.ext === '.ppsx' ? '.ppsx' : '.pptx')));
+        btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'print', disabled: !deck, onclick: () => { closeMenu(true); print(false).catch((e) => { console.warn(e); endPrint(); }); } }, t('Print…')),
+        notesAny ? btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'print-notes', onclick: () => { closeMenu(true); print(true).catch((e) => { console.warn(e); endPrint(); }); } }, t('Print with notes…')) : null,
+        src ? null : btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'export', disabled: !bytes, onclick: () => { closeMenu(true); exportFile(key).catch((e) => console.warn(e)); } }, t('Export .pptx').replace('.pptx', rec?.ext === '.ppsx' ? '.ppsx' : '.pptx')));
       document.body.append(menu);
       const r = moreB.getBoundingClientRect();
       menu.style.setProperty('left', `${Math.max(4, Math.min(r.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 4))}px`);
@@ -534,6 +588,8 @@
     addEventListener('keydown', (e) => {
       if (e.defaultPrevented || presenting || menu || !deck) return;
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); q.focus(); q.select(); }
+      // ⌘P / Ctrl+P: the slides, not the viewer around them.
+      if (view.contains(e.target) && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); e.stopPropagation(); print(false).catch((x) => { console.warn(x); endPrint(); }); }
     }, { capture: true, signal });
     document.addEventListener('keydown', (e) => {
       if (e.defaultPrevented || presenting || menu || !deck) return;
@@ -544,15 +600,41 @@
       show(to);
     }, { signal });
 
+    // A file from elsewhere: the original in a new tab; the deck into Documents as a new document, as an import makes one.
+    origB?.addEventListener('click', () => { window.open(src.href, '_blank', 'noopener,noreferrer'); });
+    saveB?.addEventListener('click', async () => {
+      if (!deck || saveB.disabled) return;
+      saveB.disabled = true;
+      const say = (x) => { state.textContent = x; };
+      say(t('Saving…'));
+      const progress = DK.progress((p) => { if (!p.end && !p.failed) say(t('Saving… {n}%', { n: Math.floor(p.fraction * 10) * 10 })); });
+      try {
+        // Only while Settings → Writer → Slides takes files, as Documents' own import.
+        if (typeof DK.get('slides')?.importFile !== 'function') throw new Error('off');
+        const ext = /\.ppsx$/i.test(src.name || '') ? '.ppsx' : '.pptx', name = /\.pp[ts]x$/i.test(src.name || '') ? src.name : `${src.name || t('Slides')}${ext}`;
+        await importFile(new File([src.bytes], name, { type: MIME[ext] }), { progress });
+        progress.end();
+        say(t('Saved to Documents'));
+      } catch (e) {
+        const big = e instanceof RangeError && e.message === SAYS.size;
+        if (!big) console.error(e);
+        progress.fail(e);
+        say(t(big ? SAYS.size : 'Not saved. Try again in a moment.'));
+        saveB.disabled = false;
+      }
+    });
+    if (src) document.addEventListener('keydown', (e) => { if (!e.defaultPrevented && e.key === 'Escape' && !presenting && !menu) { e.preventDefault(); host?.esc?.(); } }, { signal });
+
     draw();
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
+    if (src) { if (deck) host?.shown?.(); else host?.failed?.(bytes ? 'read' : 'init'); }
     // What an assignment's submit sheet sends (writer-submit.js): the deck as it was brought.
     return { pages: () => null, say: (text) => { if (state.textContent !== text) state.textContent = text || ''; }, ready: () => !!deck, save: async () => true,
       dispose: () => {
-        life.abort(); sizing.disconnect(); near.disconnect(); closeMenu(); presenting?.close();
+        life.abort(); sizing.disconnect(); near.disconnect(); closeMenu(); presenting?.close(); endPrint();
         for (const u of media.values()) { URL.revokeObjectURL(u); made.delete(u); }
       },
-      file: async () => { const f = await file(key); if (!f) throw new Error('no file'); return { bytes: f.bytes, mime: f.mime, ext: rec?.ext === '.ppsx' ? '.ppsx' : '.pptx' }; } };
+      file: async () => { if (src) return { bytes: src.bytes, mime: MIME[/\.ppsx$/i.test(src.name || '') ? '.ppsx' : '.pptx'], ext: /\.ppsx$/i.test(src.name || '') ? '.ppsx' : '.pptx' }; const f = await file(key); if (!f) throw new Error('no file'); return { bytes: f.bytes, mime: f.mime, ext: rec?.ext === '.ppsx' ? '.ppsx' : '.pptx' }; } };
   };
   // A deck brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it held
   // kept as a version first (the 'import' save), its title the assignment's. → the record.
@@ -570,6 +652,6 @@
   const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
   const sanitizer = () => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(DEFAULTS));
   const on = Promise.resolve().then(sanitizer).then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.slides === true).catch(() => false);
-  DK.wait(on.then((yes) => DK.register('slides', { edit, view: (key, host) => edit(key, { host }), into, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
+  DK.wait(on.then((yes) => DK.register('slides', { edit, view: (key, host) => edit(key, { host }), show: (src, host) => edit(null, { host, src: { ...src } }), into, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
   globalThis.GZ_SLIDES_KIND = Object.freeze({ STORE });
 })();
