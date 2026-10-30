@@ -299,6 +299,22 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
       check(await p.evaluate((name) => document.activeElement?.getAttribute('aria-label') === `Preview File ${name}`, LAB.name), 'repeated viewerUrl: Esc returns to the expanded attachment');
     }
 
+    if (!reviewCase || reviewCase === 'addresses') {
+      await load();
+      await p.evaluate((name) => [...document.querySelectorAll('[data-bbfile]')].find((x) => JSON.parse(x.dataset.bbfile).linkName === name).querySelector('a').remove(), LAB.name);
+      await toggle(LAB);
+      const fr = await glazeIn(LAB, 'attachment with no original link');
+      check(await fr.locator('[data-act="original"]').count() === 0, 'a missing original link never opens the course page as the original');
+
+      await load(); await toggle(LAB);
+      await p.evaluate(({ name, src }) => {
+        const box = [...document.querySelectorAll('[data-bbfile]')].find((x) => JSON.parse(x.dataset.bbfile).linkName === name);
+        box.querySelector('iframe:not(.gz-pv)').src = src;
+      }, { name: LAB.name, src: new URL(P.viewerUrlOf(LAB), 'https://other.school.test').href.replace(site, 'https://other.school.test') });
+      await quiet(async () => (await view(LAB)).gz, 'a foreign frame with the same path was taken over', 2500);
+      check((await view(LAB)).bbShown, 'the same path on another origin never matches an attachment preview');
+    }
+
     // Ultra may reuse an iframe node for a different attachment without changing its class or style.
     if (!reviewCase || reviewCase === 'source') {
       await load(); await toggle(SLIDES);
