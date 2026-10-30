@@ -52,7 +52,9 @@ const unpack = (zip, name) => { const dir = path.join(tmp, name); fs.mkdirSync(d
 const pack = (cwd) => {
   const dist = fs.mkdtempSync(path.join(tmp, 'dist-'));
   const { ZIP, ZIPOPT, ...env } = process.env; // zip reads both as its own options
-  execFileSync('sh', ['../tools/build/package-firefox.sh', '--development'], { cwd, env: { ...env, DIST: dist }, stdio: 'pipe' });
+  // An extension folder packs with the repo's tools/build; an old release's checkout (OLD_REF) has its packager in scripts/.
+  const script = fs.existsSync(path.join(cwd, 'scripts/package-firefox.sh')) ? 'scripts/package-firefox.sh' : '../tools/build/package-firefox.sh';
+  execFileSync('sh', [script, '--development'], { cwd, env: { ...env, DIST: dist }, stdio: 'pipe' });
   return path.join(dist, fs.readdirSync(dist).find((f) => f.endsWith('-firefox.zip')));
 };
 const OLD_REF = process.env.OLD_REF || 'v3.3.8';
