@@ -1,4 +1,4 @@
-// The mod blocklist in a real Chrome (lib/blocklist.js, lib/background.js), headless, in an unpacked copy of the extension:
+// The mod blocklist in a real Chrome (mods/blocklist.js, background/background.js), headless, in an unpacked copy of the extension:
 // the editor's switch and its saved value, the worker's check waking when the editor opens (and not without a mod or with the
 // switch off), WebCrypto's Ed25519 verifying a signed list, the matching mod records stopped and their reasons kept, a
 // tampered list and a second check within the day changing nothing, and the worker loading blocklist.js lazily after a
@@ -11,7 +11,7 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 
 const src = fs.realpathSync(path.join(__dirname, '../../extension'));
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
-const B = require(path.join(src, 'lib/blocklist.js'));
+const B = require(path.join(src, 'mods/blocklist.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (name, ok, detail = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `  ${detail}`}`); if (!ok) fails++; };
@@ -33,10 +33,10 @@ const record = (id) => ({ id, manifest: { glaze: 1, name: id, version: '1.0.0', 
   let context;
   try {
     fs.cpSync(src, ext, { recursive: true, filter: (p) => !/^(\.git|\.claude|release|dist|node_modules|safari|notes|store|test)(\/|$)/.test(path.relative(src, p)) });
-    const code = fs.readFileSync(path.join(ext, 'lib/blocklist.js'), 'utf8');
+    const code = fs.readFileSync(path.join(ext, 'mods/blocklist.js'), 'utf8');
     const pinned = `const OWNER_KEY = '${B.OWNER_KEY}';`;
     if (code.split(pinned).length !== 2) throw Error('expected exactly one OWNER_KEY declaration in the temporary copy');
-    fs.writeFileSync(path.join(ext, 'lib/blocklist.js'), code.replace(pinned, `const OWNER_KEY = '${pub}';`));
+    fs.writeFileSync(path.join(ext, 'mods/blocklist.js'), code.replace(pinned, `const OWNER_KEY = '${pub}';`));
     const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {

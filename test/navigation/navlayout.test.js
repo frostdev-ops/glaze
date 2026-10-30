@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const L = require('../../extension/lib/navlayout.js');
+const L = require('../../extension/navigation/navlayout.js');
 
 const link = (id, extra = {}) => ({ id, n: `Link ${id}`, u: `https://example.com/${id}`, i: 'book', ...extra });
 const A = 'aaaaaaaaaaaa', B = 'bbbbbbbbbbbb';
@@ -66,7 +66,7 @@ test('each site\'s native items get the shared names', () => {
   for (const id of [...Object.values({ a: L.canvas('global_nav_courses_link'), b: L.moodle('/my/') })]) assert.ok(L.NATIVE.includes(id));
 });
 
-// The one rule for links a mod's code supplies (lib/modapi.js nav.add, the broker's code-supplied layouts, the bar's own
+// The one rule for links a mod's code supplies (mods/modapi.js nav.add, the broker's code-supplied layouts, the bar's own
 // check): a page of the school's site the tab is on.
 test('onSite: a link from a mod\'s code is a page of the school\'s site; offsite lists a layout\'s links that are not', () => {
   const site = 'https://school.test';

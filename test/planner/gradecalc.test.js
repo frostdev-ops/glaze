@@ -1,9 +1,9 @@
-// Canvas's grade arithmetic (lib/gradecalc.js): table cases worked out from Canvas's rules, and every course on the
+// Canvas's grade arithmetic (planner/gradecalc.js): table cases worked out from Canvas's rules, and every course on the
 // local Canvas, where Glaze's totals must equal the current_score/final_score Canvas reports (fixtures/canvas-grades.json,
 // fetched as the student; rebuild it when the seed changes).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/lib/gradecalc.js');
+const G = require('../../extension/planner/gradecalc.js');
 const live = require('../fixtures/canvas-grades.json');
 
 // The API's shapes: an assignment with the student's submission, a group of them.

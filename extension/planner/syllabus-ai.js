@@ -1,12 +1,12 @@
-// Syllabus import (W15) with AI: what a model read (lib/ai/tasks/syllabus-read.js, every value as the syllabus writes it,
-// with its quote, already grounded) turned into lib/syllabus.js extract()'s shape by Glaze's own readers, and put beside what
+// Syllabus import (W15) with AI: what a model read (ai/tasks/syllabus-read.js, every value as the syllabus writes it,
+// with its quote, already grounded) turned into planner/syllabus.js extract()'s shape by Glaze's own readers, and put beside what
 // extract() found. The model never works out a date or a number: each value goes through extract() on a line made of it
 // ("Due: Friday of week 3", "Office hours: Tue/Thu 2-3:30 PM", "Grading scale" and its rows), so dates fall in the term's
 // year and course weeks count from week 1 exactly as they do for a line in the syllabus; a value Glaze can't read is left
 // out. Every value from AI is to check ('check'), its quote as src and ai: true.
 // The merge (merge): what extract() found stays: a field it filled keeps its value (marked 'check' when AI read it
 // differently), AI fills only what it left empty; a time or a date AI adds must be on a day and at an hour extract() left
-// free, so AI only ever adds. Loaded on demand by features/syllabus.js (lib/background.js LOADABLE); node takes it whole.
+// free, so AI only ever adds. Loaded on demand by planner/page/syllabus.js (background/background.js LOADABLE); node takes it whole.
 var GZ_SYLLABUS_AI = globalThis.GZ_SYLLABUS_AI || (() => {
   const L = () => globalThis.GZ_SYLLABUS || require('./syllabus.js');
   const DAY = 86400000;

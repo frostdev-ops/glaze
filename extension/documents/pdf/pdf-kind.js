@@ -1,27 +1,27 @@
-// The PDF kind on the Documents page (papers.html, after papers.js; lib/doc-kinds.js): with Settings → Writer → PDFs on
+// The PDF kind on the Documents page (papers.html, after papers.js; documents/doc-kinds.js): with Settings → Writer → PDFs on
 // (writer.pdf), a .pdf imports as a document whose record holds the file (STORE below), shows its first page on the home's
-// card, exports as itself, and opens in pdf.js's own viewer (lib/pdfjs: pdf.mjs and pdf_viewer.mjs, imported only when a
+// card, exports as itself, and opens in pdf.js's own viewer (vendor/pdfjs: pdf.mjs and pdf_viewer.mjs, imported only when a
 // PDF is first read; pdf.js parses in its module worker, pdf.worker.mjs): the visible pages drawn, zoom, the text layer and
-// pdf.js's find, AcroForm fields filled and kept (saved by lib/pdf-doc.js, or as pdf.js writes them where that isn't
-// loaded), marks added with the tools (lib/pdf-tools.js: highlights, ink, notes, pictures, shapes) and kept as the
+// pdf.js's find, AcroForm fields filled and kept (saved by documents/pdf/pdf-doc.js, or as pdf.js writes them where that isn't
+// loaded), marks added with the tools (documents/pdf/pdf-tools.js: highlights, ink, notes, pictures, shapes) and kept as the
 // PDF's own annotations, the file's permissions honoured, and a form only XFA can show refused. The page itself stays white, a
 // print document; its chrome is the paper's (writer-paper.css: the top bar, the toolbar, ⋯) in the student's Look.
 // Off, Documents takes Word files only, as before, and a PDF already kept still lists, opens and fills. pdf.js's words are
-// Glaze's (lib/pdf-l10n.js).
+// Glaze's (documents/pdf/pdf-l10n.js).
 var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const url = (f) => chrome.runtime.getURL(f);
   const UNREAD = 'That file could not be read.', TOO_BIG = GZ_DOC_KINDS.KINDS.pdf.big;
   const PAGES = 500;
   const TOO_BIG_SAVE = 'This PDF is too big to save.';
-  // Why the pages can't change (lib/pdf-doc.js says the same).
+  // Why the pages can't change (documents/pdf/pdf-doc.js says the same).
   const SIGNED = 'This PDF is digitally signed: changing its pages would break the signature.', LOCKED = 'The owner of this PDF does not allow changing its pages.';
   const PROTECTED = 'Pages cannot be added to a password-protected PDF, or taken from one.';
 
-  // ---- storage: the one place a PDF's bytes are kept and read back: the worker's file store (lib/doc-files.js, over its
+  // ---- storage: the one place a PDF's bytes are kept and read back: the worker's file store (documents/doc-files.js, over its
   // port), the record pointing at them (file: { hash, size, type }), up to the kind's max. A record from before the store
   // holds them as base64 in `file`: read as before, and moved over as it is opened. Where the store is unavailable, a PDF
   // up to the old 3 MB is kept that way still. Nothing else here reads `file`.
-  const files = () => GZ_WRITER_PAPER.need(['lib/doc-files.js']).then(() => GZ_DOC_FILES);
+  const files = () => GZ_WRITER_PAPER.need(['documents/doc-files.js']).then(() => GZ_DOC_FILES);
   // A refusal of the store's, as the page says it.
   class FileError extends RangeError { constructor(why) { super(GZ_DOC_KINDS.SAYS[why] || UNREAD); this.why = why; } }
   const b64 = (bytes) => {
@@ -70,14 +70,14 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   // ---- pdf.js, imported the first time a PDF is read
   let lib = null, viewerLib = null;
   // Firefox's linter accepts a dynamic import only of a literal or straight through chrome.runtime.getURL.
-  const pdfjs = () => (lib ||= import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs')).then((P) => { P.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.mjs'); return P; }));
-  const viewerjs = () => (viewerLib ||= pdfjs().then(() => import(chrome.runtime.getURL('lib/pdfjs/pdf_viewer.mjs'))));
-  // lib/pdf-doc.js over this pdf.js (papers.html loads it before this file), or null where it isn't loaded: then pdf.js
+  const pdfjs = () => (lib ||= import(chrome.runtime.getURL('vendor/pdfjs/pdf.mjs')).then((P) => { P.GlobalWorkerOptions.workerSrc = url('vendor/pdfjs/pdf.worker.mjs'); return P; }));
+  const viewerjs = () => (viewerLib ||= pdfjs().then(() => import(chrome.runtime.getURL('vendor/pdfjs/pdf_viewer.mjs'))));
+  // documents/pdf/pdf-doc.js over this pdf.js (papers.html loads it before this file), or null where it isn't loaded: then pdf.js
   // directly, the same checks.
-  const GET = { wasmUrl: url('lib/pdfjs/'), isEvalSupported: false, enableXfa: false, verbosity: 0 };
+  const GET = { wasmUrl: url('vendor/pdfjs/'), isEvalSupported: false, enableXfa: false, verbosity: 0 };
   let docLib = null;
   const pdfdoc = () => (typeof globalThis.GZ_PDF_DOC?.use === 'function' ? (docLib ||= pdfjs().then((P) => GZ_PDF_DOC.use(P, GET))) : null);
-  // bytes (a copy goes to the worker) → { task, doc, facts (lib/pdf-doc.js open's: signed, allows…; null without it) }, or a
+  // bytes (a copy goes to the worker) → { task, doc, facts (documents/pdf/pdf-doc.js open's: signed, allows…; null without it) }, or a
   // RangeError(UNREAD) for a file that is no PDF, is locked, has too many pages, is pure XFA or has no first page to show
   // (pdf.js's viewer would wait for it).
   const read = async (bytes) => {
@@ -101,7 +101,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     return { task, doc, facts };
   };
   // Page 1 as a small picture (a data URL), as filled in: what the home's card shows (204 px wide, 408 on a 2× screen).
-  // Try lib/pdf-doc.js's PNG (24 KB at most) once at full size, else a JPEG drawn here: a scan or a photo fits 24 KB of
+  // Try documents/pdf/pdf-doc.js's PNG (24 KB at most) once at full size, else a JPEG drawn here: a scan or a photo fits 24 KB of
   // PNG only as a postage stamp. At most two draws, including the JPEG.
   const picture = async (doc) => {
     const lib2 = pdfdoc(), page = await doc.getPage(1);
@@ -142,7 +142,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const nameOf = (rec) => `${String(rec?.title || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Document'}.pdf`;
 
   // ---- the page code GZ_DOC_KINDS takes
-  // A file's bytes and what pdf.js makes of them, each stage told to progress (lib/doc-kinds.js progress): reading, page 1
+  // A file's bytes and what pdf.js makes of them, each stage told to progress (documents/doc-kinds.js progress): reading, page 1
   // read and drawn, the bytes copied into the store. → the record's fields for the file.
   const bring = async (f, progress) => {
     const p = typeof progress === 'function' ? progress : () => {};
@@ -162,7 +162,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   // A PDF file as a new standalone document, its title the file's name, its first page drawn for the card. → its key.
   const importFile = async (file, { progress = null } = {}) => {
     if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > STORE.max) throw new RangeError(TOO_BIG);
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/doc-home.js']);
+    await GZ_WRITER_PAPER.need(['writer/writer-papers.js', 'documents/doc-home.js']);
     const fields = await bring(file, progress);
     const key = GZ_WRITER_PAPERS.newKey(), title = GZ_DOC_HOME.stem(file.name);
     await papers().save(key, { kind: 'pdf', ...fields, title, named: !!title }, { reason: 'import' });
@@ -177,7 +177,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     STORE.get(rec).then((bytes) => bytes && read(bytes)).then(async (r) => { if (!r) return; const { task, doc } = r; try { const u = await picture(doc); drawn.set(at, u); img.src = u; } finally { await task.destroy().catch(() => {}); } }).catch(() => {});
     return img;
   };
-  // progress (lib/doc-kinds.js progress): the bytes as they come from the file store.
+  // progress (documents/doc-kinds.js progress): the bytes as they come from the file store.
   const file = async (key, { progress = null } = {}) => {
     const rec = await papers().get(key), bytes = await STORE.get(rec, progress && ((done, total) => progress({ stage: 'copy', done, total })));
     return bytes ? { name: nameOf(rec), mime: 'application/pdf', bytes } : null;
@@ -205,12 +205,12 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const root = document.documentElement;
     const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'pdf';
-    // A kept PDF's tools (lib/pdf-tools.js) come with its viewer; a preview has none.
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/pdf-l10n.js', ...(src ? [] : ['lib/pdf-tools.js', 'lib/pdf-sign.js'])]);
+    // A kept PDF's tools (documents/pdf/pdf-tools.js) come with its viewer; a preview has none.
+    await GZ_WRITER_PAPER.need(['writer/writer-papers.js', 'documents/pdf/pdf-l10n.js', ...(src ? [] : ['documents/pdf/pdf-tools.js', 'documents/pdf/pdf-sign.js'])]);
     const sheet = (href) => new Promise((ok) => { document.head.append(h('link', { rel: 'stylesheet', href, onload: ok, onerror: ok })); });
     const st = papers(), PA = GZ_WRITER_PAPERS;
     let rec = src ? null : await st.get(key);
-    const [P, V] = await Promise.all([pdfjs(), viewerjs(), sheet('lib/pdfjs/pdf_viewer.css')]);
+    const [P, V] = await Promise.all([pdfjs(), viewerjs(), sheet('vendor/pdfjs/pdf_viewer.css')]);
 
     // The chrome: Documents and the title, the save state; zoom, find and ⋯; the pages.
     const own = !host && PA.local(key);
@@ -221,7 +221,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const zoomLabel = h('span'), zoomB = btn({ id: 'gq-zoom', class: 'gp-box', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Zoom') }, zoomLabel, icon('caret'));
     const zoomIn = btn({ id: 'gq-zoom-in', class: 'gq-ib', title: t('Zoom in'), 'aria-label': t('Zoom in') }, icon('plus'));
     const findB = btn({ id: 'gq-find-b', class: 'gq-ib', title: t('Find'), 'aria-label': t('Find'), 'aria-expanded': 'false', 'aria-controls': 'gq-find' }, icon('search'));
-    // Versions: the file as it was at each kept point (lib/writer-papers.js), one to go back to.
+    // Versions: the file as it was at each kept point (writer/writer-papers.js), one to go back to.
     const versB = src ? null : btn({ class: 'gq-ib', 'data-act': 'versions', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Versions'), 'aria-label': t('Versions') }, icon('clock'));
     const moreB = src ? null : btn({ class: 'gq-ib gq-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('More'), 'aria-label': t('More') }, icon('dots'));
     // The page you're on, and a page to go to: Enter or leaving the box jumps; Esc puts it back.
@@ -248,17 +248,17 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const bus = new V.EventBus(), links = new V.PDFLinkService({ eventBus: bus, externalLinkTarget: V.LinkTarget.BLANK, externalLinkRel: 'noopener noreferrer nofollow' });
     const finder = new V.PDFFindController({ eventBus: bus, linkService: links });
     const l10n = GZ_PDF_L10N.make({ t, lang: locale() });
-    // A kept PDF's editor (its tools, lib/pdf-tools.js) waits at NONE until a tool is chosen; a preview has none. Signatures
-    // are Glaze's dialog over pdf.js's own signature editor (lib/pdf-sign.js).
+    // A kept PDF's editor (its tools, documents/pdf/pdf-tools.js) waits at NONE until a tool is chosen; a preview has none. Signatures
+    // are Glaze's dialog over pdf.js's own signature editor (documents/pdf/pdf-sign.js).
     const signs = src ? null : GZ_PDF_SIGN.manager({ P, t, h, btn, done: () => modified() });
     const viewer = new V.PDFViewer({ container: scroll, viewer: pagesEl, eventBus: bus, linkService: links, findController: finder, l10n, annotationMode: src ? P.AnnotationMode.ENABLE : P.AnnotationMode.ENABLE_FORMS,
       annotationEditorMode: src ? P.AnnotationEditorType.DISABLE : P.AnnotationEditorType.NONE, annotationEditorHighlightColors: src ? null : GZ_PDF_TOOLS.HIGHLIGHTS,
-      signatureManager: signs, enablePermissions: true, imageResourcesPath: url('lib/pdfjs/images/'), removePageBorders: false });
+      signatureManager: signs, enablePermissions: true, imageResourcesPath: url('vendor/pdfjs/images/'), removePageBorders: false });
     links.setViewer(viewer);
     // Every change the tools make saves as a filled field does (modified, below).
     let modified = () => {};
     const tools = src ? null : GZ_PDF_TOOLS.mount({ P, viewer, bus, t, h, btn, openMenu: (...a) => openMenu(...a), modified: () => modified(), scroll, signatures: signs, say: (x) => say(x) });
-    // Pages (lib/pdf-pages.js, loaded when first opened): off where the file can't take page changes, saying why.
+    // Pages (documents/pdf/pdf-pages.js, loaded when first opened): off where the file can't take page changes, saying why.
     const pagesB = src ? null : btn({ class: 'gq-ib', 'data-act': 'pages', title: t('Pages'), 'aria-label': t('Pages'), 'aria-haspopup': 'dialog', disabled: true }, icon('pages'));
     if (tools) findB.after(h('span', { class: 'gp-sepv' }), pagesB, tools.el);
     l10n.translate(scroll);
@@ -487,7 +487,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       })().catch((e) => { ui.inert = false; throw e; }).finally(() => { replacement = null; });
       return replacement;
     };
-    // ---- the pages panel's Done: the file as saved, its page operations baked into new bytes in one pass (lib/pdf-doc.js
+    // ---- the pages panel's Done: the file as saved, its page operations baked into new bytes in one pass (documents/pdf/pdf-doc.js
     // bake), kept with the file before it as a version ('edit'), and the viewer opened again on them. That version is
     // the one step Undo takes back (pagesUndo, kept for this tab across the reload). Its stages show as an import's do.
     const UNDO = `gq-pages-undo:${key}`;
@@ -515,7 +515,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
         });
       } catch (e) { progress.fail(e); say(''); throw e; }
     };
-    // Back to a kept version: the file as it is now kept first (lib/writer-papers.js restore), then the viewer opened on it.
+    // Back to a kept version: the file as it is now kept first (writer/writer-papers.js restore), then the viewer opened on it.
     const restoreTo = async (id) => {
       try {
         await replaceFile(async () => {
@@ -536,7 +536,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     let panel = null;
     pagesB?.addEventListener('click', async () => {
       if (pagesB.disabled || panel || !doc) return;
-      await GZ_WRITER_PAPER.need(['lib/pdf-pages.js']);
+      await GZ_WRITER_PAPER.need(['documents/pdf/pdf-pages.js']);
       leaveNow();
       ui.dataset.panel = 'pages';
       panel = GZ_PDF_PAGES.panel({ P, doc, t, h, btn, mount: ui.querySelector('.gq-work'), bytes: rec?.size || 0, wasmUrl: GET.wasmUrl,
@@ -598,7 +598,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   // kept as a version first (the 'import' save), its title the assignment's. → the record.
   const into = async (key, f, { progress = null } = {}) => {
     if (!Number.isSafeInteger(f?.size) || f.size <= 0 || f.size > STORE.max) throw new RangeError(TOO_BIG);
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js']);
+    await GZ_WRITER_PAPER.need(['writer/writer-papers.js']);
     const fields = await bring(f, progress);
     return (await papers().save(key, { kind: 'pdf', doc: null, words: 0, ...fields }, { reason: 'import' })).paper;
   };
@@ -608,7 +608,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   // The switch as Settings shows it: the stored value through defaults.js, so no stored key means the default. writer.html
   // has defaults.js already (a second copy would redeclare its constants); papers.html loads it on demand, after the three
   // scripts it reads as it loads, in papers.js's order (need() shares their loads).
-  const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
+  const DEFAULTS = ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js'];
   const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(DEFAULTS)))
     .then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.pdf === true, () => false);
   GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: (key, host) => edit(key, { host }), show: (src, host) => edit(null, { host, src: { ...src } }), into, says: { size: TOO_BIG, read: UNREAD, ...GZ_DOC_KINDS.SAYS }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));

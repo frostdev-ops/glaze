@@ -1,11 +1,11 @@
 // Glaze's OCR worker (W23), started by the reader (reader.js) for a picture or a scanned PDF page: the Tesseract
-// engine (lib/tesseract/, WebAssembly), its models bundled and read from the extension's own files, never fetched
+// engine (vendor/tesseract/, WebAssembly), its models bundled and read from the extension's own files, never fetched
 // from anywhere else. Messages: { type: 'start', langs } → 'ready'; { type: 'read', image: PGM bytes } → 'progress'
 // (p, 0–1) then 'done' (the engine's JSON, as text); any failure → 'error'. The reader terminates it when the file is read.
-importScripts('tesseract/tesseract-core-simd-lstm.js');
+importScripts('../vendor/tesseract/tesseract-core-simd-lstm.js');
 let M = null, api = null;
 const LANGS = new Set(['eng', 'deu', 'spa', 'fra', 'nld', 'por']);
-const here = (f) => new URL(`tesseract/${f}`, location.href).href;
+const here = (f) => new URL(`../vendor/tesseract/${f}`, location.href).href;
 
 const start = async (langs) => {
   // The engine's own notes ("Estimating resolution as 330", "Image too small to scale!!") go nowhere: Chrome lists each

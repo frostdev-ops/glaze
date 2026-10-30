@@ -25,7 +25,7 @@ key = open(key_file).read().strip()
 der = base64.b64decode(key, validate=True)  # a public key in base64, nothing else
 path = f'{out}/manifest.json'
 manifest = json.load(open(path))
-assert 'oauth2' in manifest and 'identity' in manifest.get('optional_permissions', []), 'the package has no Google sync (lib/gcal.js ON off?)'
+assert 'oauth2' in manifest and 'identity' in manifest.get('optional_permissions', []), 'the package has no Google sync (planner/gcal.js ON off?)'
 manifest['key'] = key
 open(path, 'w').write(json.dumps(manifest, indent=2) + '\n')
 # Chrome's extension ID: the key's SHA-256, first 32 hex digits, 0-f read as a-p.

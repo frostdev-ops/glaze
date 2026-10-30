@@ -6,17 +6,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const C = require('../../extension/lib/color.js');
-const F = require('../../extension/lib/fonts.js');
-const S = require('../../extension/lib/share.js');
-const LC = require('../../extension/lib/looks.js');
-const X = require('../../extension/lib/lookparts.js');
-const K = require('../../extension/lib/cards.js');
-const P = require('../../extension/lib/parts.js');
-const H = require('../../extension/lib/history.js');
-const LX = require('../../extension/lib/lookx.js');
-const XE = require('../../extension/lib/editor-xparts.js');
+const D = require('../../extension/content/defaults.js');
+const C = require('../../extension/core/color.js');
+const F = require('../../extension/looks/fonts.js');
+const S = require('../../extension/sharing/share.js');
+const LC = require('../../extension/looks/looks.js');
+const X = require('../../extension/looks/lookparts.js');
+const K = require('../../extension/courses/cards.js');
+const P = require('../../extension/looks/parts.js');
+const H = require('../../extension/looks/history.js');
+const LX = require('../../extension/looks/lookx.js');
+const XE = require('../../extension/settings/editor-xparts.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -25,21 +25,21 @@ const between = (source, from, to) => {
   assert.ok(a >= 0 && b > a, `options.js still has ${from.trim()} … ${to.trim()}`);
   return source.slice(a, b);
 };
-const options = read('options.js');
+const options = read('settings/options.js');
 const plain = (x) => JSON.parse(JSON.stringify(x)); // what a VM made, for deepEqual across realms
 const say = (s, vars = {}) => s.replace(/\{(\w+)(?:\|\w+)?\}/g, (_, k) => vars[k]);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 // ui.js as the popup and the editor load it, over stand-in storage.
 const loadUi = (extra = {}) => {
-  const context = vm.createContext({ ...D, GZ_COLOR: C, GZ_CARDS: K, GZ_XPARTS: X, GZ_LOOK_PARTS: require('../../extension/lib/lookset.js'), GZ_I18N: { t: say, ui: () => 'en' }, chrome: { storage: { sync: {}, local: {} } }, structuredClone, ...extra });
-  vm.runInContext(`${read('ui.js')};globalThis.UI = GZ_UI;`, context);
+  const context = vm.createContext({ ...D, GZ_COLOR: C, GZ_CARDS: K, GZ_XPARTS: X, GZ_LOOK_PARTS: require('../../extension/looks/lookset.js'), GZ_I18N: { t: say, ui: () => 'en' }, chrome: { storage: { sync: {}, local: {} } }, structuredClone, ...extra });
+  vm.runInContext(`${read('core/ui.js')};globalThis.UI = GZ_UI;`, context);
   return context.UI;
 };
 const UI = loadUi();
 
 test('course-tab navigation warning follows placement changes without repainting navigation', () => {
-  require('../../extension/lib/coursetabs.js');
+  require('../../extension/navigation/coursetabs.js');
   const s = D.GZ_SANITIZE({ navbar: { on: false, tabs: false } }), controls = new Map();
   const $ = (key) => {
     if (!controls.has(key)) controls.set(key, { hidden: false, dataset: {}, style: {}, textContent: '', classList: { remove() {} } });
@@ -180,7 +180,7 @@ test('LOOK-3: a whole Look replaces the extras, with the Look left already in Hi
   const run = refreshed(s, { undo: () => { undone++; } });
   const aurora = D.GZ_LOOKS[0];
   run.picks.look(LC.find(LC.list(), aurora.name));
-  assert.deepEqual(s.parts, require('../../extension/lib/lookset.js')(aurora), 'a Look is a whole choice: its own extras replace the ones before');
+  assert.deepEqual(s.parts, require('../../extension/looks/lookset.js')(aurora), 'a Look is a whole choice: its own extras replace the ones before');
   assert.deepEqual(run.log.slice(0, 2), ['leaving', 'save'], 'the Look being left is kept before anything changes');
   assert.equal(run.hints.length, 1);
   assert.match(run.hints[0][0], new RegExp(`${aurora.name} replaced this Look’s extras`));
@@ -244,7 +244,7 @@ test('LOOK-3: leaving a Look with extras records it in History at once, and its 
   assert.deepEqual(run.writes[0].theme.parts, was.parts, 'the shader typed a moment ago goes to the history queue');
   // The Look picked next.
   UI.pickLook(s, D.GZ_LOOKS[0]);
-  assert.deepEqual(s.parts, require('../../extension/lib/lookset.js')(D.GZ_LOOKS[0]));
+  assert.deepEqual(s.parts, require('../../extension/looks/lookset.js')(D.GZ_LOOKS[0]));
   run.undo();
   assert.deepEqual(s.parts, was.parts);
   assert.deepEqual(s.colors, was.colors);
@@ -388,13 +388,13 @@ test('LOOK-4: ticking "Use a custom surface color" starts from the surface being
 });
 
 // ---- LOOK-10: a slider tick ---------------------------------------------------------------------------------------------
-// lib/history.js over a sanitizer and a parts check that count their calls.
+// looks/history.js over a sanitizer and a parts check that count their calls.
 const counted = () => {
   const calls = { sanitize: 0, bundle: 0 };
   const context = vm.createContext({
     GZ_SANITIZE: (raw) => { calls.sanitize++; return D.GZ_SANITIZE(raw); }, GZ_XPARTS: { bundle: (p) => { calls.bundle++; return X.bundle(p); } }, structuredClone, JSON, module: undefined,
   });
-  return { calls, H: vm.runInContext(`${read('lib/history.js').replace(/\nif \(typeof module[\s\S]*$/, '')}\nGZ_HISTORY;`, context) };
+  return { calls, H: vm.runInContext(`${read('looks/history.js').replace(/\nif \(typeof module[\s\S]*$/, '')}\nGZ_HISTORY;`, context) };
 };
 const stored = (n) => Array.from({ length: n }, (_, i) => ({ theme: H.theme({ ...shaded(), parts: { x: { bg: { shader: { src: `${shaded().parts.x.bg.shader.src}\n// v${i}` } } } } }), at: i }));
 
@@ -601,7 +601,7 @@ test('settings contrast covers bright scene pixels at the renderer\'s intensity 
 });
 
 test('the settings page wears the Look: its background from the preview\'s own painter, the Look on offer while previewed', () => {
-  const page = read('options.html'), js = read('options.js'), runtime = read('lib/editor-preview.js');
+  const page = read('options.html'), js = read('settings/options.js'), runtime = read('settings/editor-preview.js');
   assert.match(page, /<iframe id="backdrop" src="preview\.html\?site=canvas&amp;backdrop" aria-hidden="true" tabindex="-1" inert><\/iframe>/);
   assert.match(page, /#backdrop \{ position: fixed; inset: 0;[^}]*z-index: -1; pointer-events: none; \}/);
   assert.match(js, /const paintBackdrop = \(\) => backdrop\.contentWindow\?\.postMessage\(\{ gzPreview: offer \|\| s, gzPreviewParts: \(offer \|\| s\)\.parts \?\? null \}, location\.origin\);/);
@@ -609,7 +609,7 @@ test('the settings page wears the Look: its background from the preview\'s own p
   assert.ok((js.match(/GZ_UI\.paint\((?:s|offer), \{ page: true \}\)/g) || []).length === 3, 'the page paints the Look worn, an offer, and back');
   // In the frame: the Canvas mock's own background painter and scene, none of the mock, its features or its sidebar.
   assert.match(runtime, /const site = backdrop \? 'canvas'/);
-  assert.match(runtime, /if \(!backdrop\) for \(const file of \['lib\/lookx\.js'/);
+  assert.match(runtime, /if \(!backdrop\) for \(const file of \['looks\/lookx\.js'/);
   assert.match(runtime, /if \(site === 'canvas' && !backdrop\) sidebar\(s\);/);
   assert.match(runtime, /body > :not\(#gz-scene\) \{ visibility: hidden !important; \}/);
 });

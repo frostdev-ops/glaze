@@ -1,5 +1,5 @@
 // The approval window (the worker's side): an agent app's pairing, a data group it wants, or one action waits for the
-// student in a Glaze window, never in the app. lib/mcp/calls.js asks; lib/background.js routes glaze:mcp-ask to decide and
+// student in a Glaze window, never in the app. agents/calls.js asks; background/background.js routes glaze:mcp-ask to decide and
 // windows.onRemoved to closed, and calls sweep at worker start.
 //
 // create({ windows, tabs, storage: { session }, runtime, now, timers, url }) → { ask, decide, sweep, closed }
@@ -14,7 +14,7 @@
 //   sweep(): the last worker's asks; ask waits for it.
 // One popup (SIZE, focused) holds every waiting ask and shows the oldest; Glaze closes it when none waits. Each ask is
 // storage.session mcpAsk:<id> = { id, kind, app: { name, exe }, tool: { name, title }, group?, mod?, summary?, at, until, state },
-// which the page (lib/mcp/approve.html) renders from. state: waiting until `until` (TIMEOUT), then yes | no | timeout |
+// which the page (agents/approve.html) renders from. state: waiting until `until` (TIMEOUT), then yes | no | timeout |
 // cancelled | interrupted; consent records do not assert execution. sweep: waiting → interrupted, running →
 // interrupted with mayHaveRun, records made over KEEP ago that no longer wait are dropped. mcpAskWindow: { id, tab }.
 // Classic script for the worker; module.exports for node.

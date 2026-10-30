@@ -10,7 +10,7 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 const LMS = 'https://school.example.test';
 // A staged copy holding the LMS fixture's host, as a student's grant would: the check runs a script in its tab.
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.resolve(__dirname, '../../extension'), [`${LMS}/*`]);
-const M = require(path.join(ext, 'lib/modbundle.js'));
+const M = require(path.join(ext, 'mods/modbundle.js'));
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const enc = new TextEncoder();
 const std = (b) => Buffer.from(b).toString('base64');
@@ -69,7 +69,7 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     // Stop the worker; the next message starts a fresh one, which must import the broker files again (cached at install).
     // Chrome's own reports of the worker's state (no Playwright handle on a stopped worker: touching one can stall it).
     const cdp = await context.newCDPSession(editor), states = [];
-    cdp.on('ServiceWorker.workerVersionUpdated', (e) => { for (const v of e.versions) if (v.scriptURL.endsWith('/lib/background.js')) states.push(v.runningStatus); });
+    cdp.on('ServiceWorker.workerVersionUpdated', (e) => { for (const v of e.versions) if (v.scriptURL.endsWith('/background/background.js')) states.push(v.runningStatus); });
     await cdp.send('ServiceWorker.enable');
     await cdp.send('ServiceWorker.stopAllWorkers');
     await until(() => states.at(-1) === 'stopped');
@@ -117,8 +117,8 @@ const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (Dat
     check('an LMS page is refused as sender', fromPage?.ok === false && fromPage.error === 'sender', JSON.stringify(fromPage));
 
     // A fresh page-side module with WebCrypto's Ed25519 taken away must refuse the install.
-    await editor.addScriptTag({ url: `chrome-extension://${id}/lib/zip.js` });
-    await editor.addScriptTag({ url: `chrome-extension://${id}/lib/modbundle.js` });
+    await editor.addScriptTag({ url: `chrome-extension://${id}/core/zip.js` });
+    await editor.addScriptTag({ url: `chrome-extension://${id}/mods/modbundle.js` });
     const unsupported = await editor.evaluate(async (zip) => {
       const real = crypto.subtle.importKey;
       crypto.subtle.importKey = function (f, k, a, ...rest) { return String(a?.name || a) === 'Ed25519' ? Promise.reject(new DOMException('no', 'NotSupportedError')) : real.call(this, f, k, a, ...rest); };

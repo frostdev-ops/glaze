@@ -1,21 +1,21 @@
-// Glaze Writer's AI tasks (lib/ai/tasks/writer-*.js) through the harness with the mock provider: what each request carries
+// Glaze Writer's AI tasks (ai/tasks/writer-*.js) through the harness with the mock provider: what each request carries
 // (instructions only in the system message, the student's and classmates' text fenced as data, the thread as reusable
 // context), and each check: the completion cut at the sentence end and never starting a new one, issues and feedback quotes
 // anchored in the draft, requirements and citation details grounded in the text they came from, a decision only among the
-// candidates. Then the harness around them: a new completion supersedes the one in flight (lib/ai/broker.js), and the real
-// worker refuses every writer task on a test attempt (lib/background.js aiFiles, the attempt-route rule).
+// candidates. Then the harness around them: a new completion supersedes the one in flight (ai/broker.js), and the real
+// worker refuses every writer task on a test attempt (background/background.js aiFiles, the attempt-route rule).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../../extension/lib/ai/task.js');
-const S = require('../../extension/lib/ai/schema.js');
-require('../../extension/lib/ai/providers/mock.js');
-const W = require('../../extension/lib/ai/tasks/writer-context.js');
-const C = require('../../extension/lib/ai/tasks/writer-complete.js');
-const RV = require('../../extension/lib/ai/tasks/writer-review.js');
-const FB = require('../../extension/lib/ai/tasks/writer-feedback.js');
-const RQ = require('../../extension/lib/ai/tasks/writer-requirements.js');
-const CT = require('../../extension/lib/ai/tasks/writer-cite.js');
-const D = require('../../extension/lib/ai/tasks/writer-decide.js');
+const T = require('../../extension/ai/task.js');
+const S = require('../../extension/ai/schema.js');
+require('../../extension/ai/providers/mock.js');
+const W = require('../../extension/ai/tasks/writer-context.js');
+const C = require('../../extension/ai/tasks/writer-complete.js');
+const RV = require('../../extension/ai/tasks/writer-review.js');
+const FB = require('../../extension/ai/tasks/writer-feedback.js');
+const RQ = require('../../extension/ai/tasks/writer-requirements.js');
+const CT = require('../../extension/ai/tasks/writer-cite.js');
+const D = require('../../extension/ai/tasks/writer-decide.js');
 
 const BEFORE = 'I agree that the river works as a kind of archive.\n\nWhen Sethe returns to the clearing, the memory is not something she owns; it';
 const CONTEXT = {
@@ -40,7 +40,7 @@ const fenced = (data, needle) => {
 // ---- writer.complete ----------------------------------------------------------------------------------------------
 test('writer.complete: a streamed text task at 60 a minute that supersedes; instructions only in the system message, every page text fenced', async () => {
   assert.equal(T.get('writer.complete'), C.task);
-  assert.equal(C.task.warm, true, 'warmed as a box opens (lib/ai/broker.js op warm)');
+  assert.equal(C.task.warm, true, 'warmed as a box opens (ai/broker.js op warm)');
   assert.deepEqual({ output: C.task.output, stream: C.task.stream, rate: { ...C.task.rate } }, { output: 'text', stream: true, rate: { perMinute: 60, supersede: true } });
   const { output, req, events } = await go(C.task, { before: BEFORE, after: '', mode: 'compose', kind: 'reply', context: CONTEXT },
     { deltas: ['it arrives', ' uninvited and rearranges the present.', ' Then it leaves.'] });
@@ -175,7 +175,7 @@ test('writer.complete requires a typed word boundary for an unanchored lower-cas
 });
 
 test('writer.complete keeps open straight single quotes in the caret paragraph closed to completion', () => {
-  const AI = require('../../extension/writer-ai.js');
+  const AI = require('../../extension/writer/frame/writer-ai.js');
   for (const fits of [C.fits, AI.fits]) {
     assert.equal(fits("Baldwin calls it 'the price of the"), false);
     assert.equal(fits("He said 'hello.\n\nThree things I learned are how to"), true);
@@ -431,7 +431,7 @@ test('writer.feedback: a comment says what the draft does, specifically; one off
   const { output } = await go(FB.task, { text: draft, context: ASSIGN }, { json: { criteria: comments.map(([comment], i) => ({ criterion: i % 2 ? '_11_1' : '_10_1', status: 'partly', comment, quotes: [], level: null })) } });
   assert.equal(output.criteria.length, 2);
   assert.equal(output.criteria[0].comment, comments[0][0], 'a specific comment survives');
-  for (const [c, ok] of comments) assert.equal(FB.assesses(c, [draft, ASSIGN.assignment.instructions, '[_10_1] Thesis: A clear, arguable thesis.'].map((x) => require('../../extension/lib/ai/text.js').source(x))) === c.trim(), ok, c);
+  for (const [c, ok] of comments) assert.equal(FB.assesses(c, [draft, ASSIGN.assignment.instructions, '[_10_1] Thesis: A clear, arguable thesis.'].map((x) => require('../../extension/ai/text.js').source(x))) === c.trim(), ok, c);
 });
 
 // ---- writer.requirements ------------------------------------------------------------------------------------------
@@ -488,8 +488,8 @@ test('the page\'s context is bounded, its rich text made plain, and a test refus
 
 // ---- the harness around them ------------------------------------------------------------------------------------
 test('a new completion supersedes the one in flight: the old ends cancelled, the new one\'s text comes back checked', async () => {
-  const B = require('../../extension/lib/ai/broker.js');
-  require('../../extension/lib/ai/providers/openai.js');
+  const B = require('../../extension/ai/broker.js');
+  require('../../extension/ai/providers/openai.js');
   B._reset();
   const waiting = [];
   const json = (body) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });

@@ -1,12 +1,12 @@
 // Mods and Glaze's bar: the nav.read, nav.items and nav.layout permissions in the manifest checker, the broker, the item
-// cleaner, the editor's words and the bar's model. The page side (features/mods.js) is in mods-runtime.test.js.
+// cleaner, the editor's words and the bar's model. The page side (mods/page/mods.js) is in mods-runtime.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../../extension/lib/modbundle.js');
-const B = require('../../extension/lib/modbroker.js');
-const A = require('../../extension/lib/modapi.js');
-const E = require('../../extension/lib/editor-mods.js');
-const NB = require('../../extension/lib/navbar.js');
+const M = require('../../extension/mods/modbundle.js');
+const B = require('../../extension/mods/modbroker.js');
+const A = require('../../extension/mods/modapi.js');
+const E = require('../../extension/settings/editor-mods.js');
+const NB = require('../../extension/navigation/navbar.js');
 
 const u8 = (s) => new TextEncoder().encode(s);
 const BASE = { glaze: 1, name: 'Tiny', version: '1.0.0', author: { name: 'Kai', key: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo' } };
@@ -156,7 +156,7 @@ test('Use my own also removes manifest navigation parts, leaving other parts int
 });
 
 test('the page refreshes installed parts when a navigation layout opt-out changes', () => {
-  const fs = require('node:fs'), vm = require('node:vm'), source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
+  const fs = require('node:fs'), vm = require('node:vm'), source = fs.readFileSync(require.resolve('../../extension/content/content.js'), 'utf8');
   const from = source.indexOf('    if (changes.lookX && area'), to = source.indexOf('    if (isPreview ||', from);
   let reads = 0;
   const changed = vm.runInNewContext(`(changes, area) => { ${source.slice(from, to)} }`, { modsIn: () => reads++, partsIn() {} });

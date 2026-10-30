@@ -1,9 +1,9 @@
 // A save that records something about a document without changing it (Save to Google Drive's drive: { id, as },
-// lib/drive.js): touch: false keeps its Last edited, and so its place in Documents' list; the revision still moves on.
+// documents/drive.js): touch: false keeps its Last edited, and so its place in Documents' list; the revision still moves on.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const PA = require('../../extension/lib/writer-papers.js');
-globalThis.GZ_WRITER_STYLES = require('../../extension/lib/writer-styles.js');
+const PA = require('../../extension/writer/writer-papers.js');
+globalThis.GZ_WRITER_STYLES = require('../../extension/writer/writer-styles.js');
 
 const store = () => {
   const data = {};

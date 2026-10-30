@@ -1,4 +1,4 @@
-// The editor's Mods tab in the real unpacked extension, headless (lib/editor-mods.js, lib/gallery.js, lib/background.js):
+// The editor's Mods tab in the real unpacked extension, headless (settings/editor-mods.js, looks/gallery.js, background/background.js):
 //   - install from a .glazemod file and from a glazemod1: code, each through the install prompt; the prompt's warnings for a
 //     mod that reads grades and has a network host, its focus trap, and only Install installing;
 //   - revoke and grant, turn off and on, a setting, the order, an update that asks for more re-prompting with it marked New
@@ -17,7 +17,7 @@ const { createHash, X509Certificate } = require('node:crypto');
 
 const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, '../../extension'), ['https://api.weather.gov/*']);
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
-const M = require(path.join(ext, 'lib/modbundle.js'));
+const M = require(path.join(ext, 'mods/modbundle.js'));
 const enc = new TextEncoder();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;

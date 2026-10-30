@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const D = require('../../extension/defaults.js');
-const E = require('../../extension/lib/editor.js');
+const D = require('../../extension/content/defaults.js');
+const E = require('../../extension/settings/editor.js');
 
 const defaults = { show: 'auto', inline: true };
 

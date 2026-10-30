@@ -15,14 +15,14 @@ mkdir -p "$dist"
 rm -f "$OUT"
 # Everything packaged is world-readable: a Safari app installed by the App Store is owned by root, and a
 # file only its owner can read (the icons were 0600 here) would be unreadable to Safari.
-chmod -R a+rX manifest.json content.js content-ultra.js content-canvas.js defaults.js lib i18n _locales theme.css motion.css extras.css canvas.css moodle.css features \
-  popup.html popup.js options.html options.js preview.html reader.html reader.js writer.html writer.js writer.css writer-ai.js writer-ai.css writer-mcp.js writer-compose.js writer-compose.css writer-proof.js writer-proof.css writer-cite.js writer-cite.css writer-paper.js writer-paper.css writer-submit.js writer-submit.css writer-import.js writer-import.css writer-kinds.js writer-objects.js writer-objects.css writer-find.js writer-print.js writer-counts.js writer-edit.css writer-paste.js writer-ruler.js writer-ruler.css papers.html papers.js papers.css papers-motion.js sheet-kind.js sheet-grid.js sheet-data.js sheet.css pdf-kind.js pdf-kind.css slides-kind.js slides-kind.css sharing mods ui.js ui.css fonts icons assets/logo.svg assets/logo-dark.svg assets/art/pets assets/art/stickers assets/art/cursors assets/shaders
-zip -q -r -X "$OUT" manifest.json content.js content-ultra.js content-canvas.js defaults.js lib i18n _locales theme.css motion.css extras.css canvas.css moodle.css features \
-  popup.html popup.js options.html options.js preview.html reader.html reader.js writer.html writer.js writer.css writer-ai.js writer-ai.css writer-mcp.js writer-compose.js writer-compose.css writer-proof.js writer-proof.css writer-cite.js writer-cite.css writer-paper.js writer-paper.css writer-submit.js writer-submit.css writer-import.js writer-import.css writer-kinds.js writer-objects.js writer-objects.css writer-find.js writer-print.js writer-counts.js writer-edit.css writer-paste.js writer-ruler.js writer-ruler.css papers.html papers.js papers.css papers-motion.js sheet-kind.js sheet-grid.js sheet-data.js sheet.css pdf-kind.js pdf-kind.css slides-kind.js slides-kind.css sharing mods ui.js ui.css fonts icons assets/logo.svg assets/logo-dark.svg assets/art/pets assets/art/stickers assets/art/cursors assets/shaders -x '*.DS_Store'
+chmod -R a+rX manifest.json popup.html options.html preview.html reader.html writer.html papers.html \
+  background content core looks navigation courses planner writer documents ai agents sharing mods pet settings vendor i18n _locales fonts icons assets/logo.svg assets/logo-dark.svg assets/art/pets assets/art/stickers assets/art/cursors assets/shaders
+zip -q -r -X "$OUT" manifest.json popup.html options.html preview.html reader.html writer.html papers.html \
+  background content core looks navigation courses planner writer documents ai agents sharing mods pet settings vendor i18n _locales fonts icons assets/logo.svg assets/logo-dark.svg assets/art/pets assets/art/stickers assets/art/cursors assets/shaders -x '*.DS_Store'
 
 # Google: the oauth2 key and the optional identity permission go in only for what uses them (tools/build/oauth-manifest.js):
-# Calendar sync behind its build-time switch (lib/gcal.js ON, on since 4.0.1: its scope alone), Drive behind its own
-# (lib/google.js ON) once its clients in lib/google-config.js are real. Without either, the manifest carries neither.
+# Calendar sync behind its build-time switch (planner/gcal.js ON, on since 4.0.1: its scope alone), Drive behind its own
+# (background/google.js ON) once its clients in background/google-config.js are real. Without either, the manifest carries neither.
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 node "$root/tools/build/oauth-manifest.js" chrome manifest.json > "$stage/manifest.json"

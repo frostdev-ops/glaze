@@ -3,12 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const I = require('../../extension/lib/i18n.js');
+const I = require('../../extension/core/i18n.js');
 const read = (file) => fs.readFileSync(path.join(process.env.GZ_WRITER_AUDIT_SOURCE || path.join(__dirname, '../../extension'), file), 'utf8');
 
 // Run the real import handler through its refusal path, without replacing any paper.
 const refusedImport = async (error, lang) => {
-  const source = read('writer-paper.js'), start = source.indexOf('    // The paper becomes the Word file'), end = source.indexOf("    file.addEventListener('change'", start);
+  const source = read('writer/frame/writer-paper.js'), start = source.indexOf('    // The paper becomes the Word file'), end = source.indexOf("    file.addEventListener('change'", start);
   const toasts = [];
   const importFile = vm.runInNewContext(`${source.slice(start, end)} importFile`, {
     RangeError, ArrayBuffer, Uint8Array, console: { error() {} }, current: null, api: null, key: 'paper', root: { isConnected: true }, view: { state: { doc: {} }, props: {}, setProps() {}, focus() {} }, need: async () => {}, DOCX: [], format: 'mla9',
@@ -32,7 +32,7 @@ test('Word import refusals show translated student messages and never raw parser
 });
 
 test('the command palette offers Documents on Ultra and Canvas while Writer is on, and opens it beside the bar only for a trusted choice', async () => {
-  const source = read('features/palette.js'), start = source.indexOf("  // Glaze Writer's Documents"), end = source.indexOf('  // Notes opens', start);
+  const source = read('navigation/page/palette.js'), start = source.indexOf("  // Glaze Writer's Documents"), end = source.indexOf('  // Notes opens', start);
   assert.ok(start > 0 && end > start);
   const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(setImmediate); };
   for (const ultra of [true, false]) {
@@ -57,8 +57,8 @@ test('the command palette offers Documents on Ultra and Canvas while Writer is o
         assert.equal(sent.length, 0, 'a scripted choice opens nothing');
         docs.run({ isTrusted: true });
         await settle();
-        // Beside the bar (features/settingspage.js), else (the page can't hold it) the tab the worker opens.
-        assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['need', 'features/settingspage.js'], ['open', '', 'papers'], ...(opens ? [] : ['papers'])]);
+        // Beside the bar (settings/page/settingspage.js), else (the page can't hold it) the tab the worker opens.
+        assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['need', 'settings/page/settingspage.js'], ['open', '', 'papers'], ...(opens ? [] : ['papers'])]);
       }
     }
   }
@@ -66,7 +66,7 @@ test('the command palette offers Documents on Ultra and Canvas while Writer is o
 
 test("Moodle's command palette offers Documents too, and its row opens the page for the student's own click", async () => {
   const { El } = require('../stand-in-dom.js');
-  const D = require('../../extension/defaults.js');
+  const D = require('../../extension/content/defaults.js');
   for (const [writer, shown] of [[true, true], [false, false]]) {
     const doc = { activeElement: null };
     doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
@@ -74,12 +74,12 @@ test("Moodle's command palette offers Documents too, and its row opens the page 
     doc.createElement = (tag) => Object.assign(new El(tag, doc), { insertBefore(x, at) { if (at) at.before(x); else this.append(x); } });
     const sent = [];
     const settings = D.GZ_SANITIZE({ enhance: { writer } });
-    const ctx = vm.createContext({ document: doc, location: { origin: 'https://moodle.school.test', pathname: '/my/' }, URL, GZ_PAGE: require('../../extension/lib/page.js'), GZ_I18N: I,
+    const ctx = vm.createContext({ document: doc, location: { origin: 'https://moodle.school.test', pathname: '/my/' }, URL, GZ_PAGE: require('../../extension/core/page.js'), GZ_I18N: I,
       GZ_LOOKS: D.GZ_LOOKS, GZ_LOOK_ON: D.GZ_LOOK_ON, GZ_LOOK_APPLY: D.GZ_LOOK_APPLY, GZ_ALL_PRESETS: D.GZ_ALL_PRESETS,
       chrome: { runtime: { sendMessage: async (m) => sent.push(m) }, storage: { sync: { set() {} } } },
       GZ_CTX: { site: 'moodle', t: (k) => k, locale: () => 'en', settings: () => settings, need: () => Promise.reject(new Error('not here')),
         moodleIn: async () => ({ commands: async () => [] }), dueWeek: async () => [], courseId: () => '' } });
-    const cmd = vm.runInContext(read('features/palette.js'), ctx);
+    const cmd = vm.runInContext(read('navigation/page/palette.js'), ctx);
     cmd.open();
     for (let i = 0; i < 20; i++) await new Promise(setImmediate);
     const input = doc.body.querySelector('input');
@@ -96,7 +96,7 @@ test("Moodle's command palette offers Documents too, and its row opens the page 
 });
 
 for (const failure of ['loader', 'commands']) test(`Moodle retains Documents and Glaze commands after a ${failure} failure`, async () => {
-  const source = read('features/palette.js');
+  const source = read('navigation/page/palette.js');
   const start = source.indexOf('  const commands = async () => {'), end = source.indexOf('  // Ultra\'s GPA', start);
   const commands = vm.runInNewContext(`${source.slice(start, end)} commands`, {
     need: async () => {}, keeping: Promise.resolve(), moodle: true, go() {},
@@ -111,7 +111,7 @@ for (const failure of ['loader', 'commands']) test(`Moodle retains Documents and
 });
 
 test('the paper Outline uses document translations while appearance Outline keeps its meaning', () => {
-  const source = read('writer-paper.js');
+  const source = read('writer/frame/writer-paper.js');
   const key = source.match(/\['outline', '([^']+)'\]/)?.[1];
   const translate = (lang) => vm.runInNewContext(`(${source.match(/\bt = (\(k, v\) => [\s\S]+?), store = PA.open\(\)/)[1]})`, { host: { t: (k, v) => I.t(k, v, lang) } });
   assert.ok(key);
@@ -126,7 +126,7 @@ test('Documents opens only from Glaze on an approved LMS page (Ultra, Canvas, Mo
   const local = { ultra: ['https://school.test'], canvas: ['https://canvas.school.test/*'], moodle: ['https://moodle.school.test/*'] };
   const area = (data) => ({ get: async (key) => ({ [key]: data[key] }), set: async () => {}, remove: async () => {} });
   const context = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa,
-    navigator: {}, importScripts: (...files) => { for (const file of files) vm.runInContext(read(`lib/${file}`), context); },
+    navigator: {}, importScripts: (...files) => { for (const file of files) vm.runInContext(read(`background/${file}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (file = '') => `chrome-extension://glaze/${file}`, getManifest: () => require('../../extension/manifest.json'),
         onMessage: { addListener: (fn) => listeners.push(fn) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
@@ -134,7 +134,7 @@ test('Documents opens only from Glaze on an approved LMS page (Ultra, Canvas, Mo
       tabs: { create: async (opts) => opened.push(opts.url) },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const sender = { id: 'glaze', frameId: 0, tab: { id: 1 }, url: 'https://school.test/ultra/course' };
   const send = async (s) => {
     for (const fn of listeners) fn('papers', s, () => {});

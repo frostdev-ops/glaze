@@ -40,7 +40,7 @@ test('the DocViewer fixture is structure only: no code, styles, or anyone else\'
 test('every Canvas page fixture carries the marker Glaze detects Canvas by', () => {
   for (const { f, html } of pages) {
     const head = html.slice(0, html.indexOf('<body'));
-    assert.match(head, /<link[^>]+rel="stylesheet"[^>]+href="[^"]*\/dist\/brandable_css\//, `${f}: no brandable_css stylesheet in <head> (content.js and lib/detect.js look for it)`);
+    assert.match(head, /<link[^>]+rel="stylesheet"[^>]+href="[^"]*\/dist\/brandable_css\//, `${f}: no brandable_css stylesheet in <head> (content.js and content/detect.js look for it)`);
     assert.match(html, /<div id="application" class="ic-app/, `${f}: no #application.ic-app wrapper`);
   }
 });
@@ -133,11 +133,11 @@ const HOOKS = [
   '.ef-file-preview-stretch', '.file_preview', '#doc_preview',
 ];
 
-// The classes and ids canvas.css and features/apps.css (what Glaze draws itself, on Canvas and Ultra) key on, read from
-// their selectors: Glaze's own gz-* aside, and features/apps.css's Ultra markup (ULTRA_CSS).
+// The classes and ids canvas.css and core/page/apps.css (what Glaze draws itself, on Canvas and Ultra) key on, read from
+// their selectors: Glaze's own gz-* aside, and core/page/apps.css's Ultra markup (ULTRA_CSS).
 const ULTRA_CSS = new Set(['#site-wrap', '.todo-panel', '.outline-actions', '.base-header-tools', '.courses-panel', '.course-columns', '.course-banner', '.element-details', '.course-title', '.course-id']);
 const cssNames = () => {
-  const css = ['canvas.css', 'features/apps.css'].map((f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = ['content/canvas.css', 'core/page/apps.css'].map((f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
   const selectors = css.replace(/\{[^{}]*\}/g, '{}').replace(/@[^{]*\{/g, '').replace(/url\([^)]*\)/g, '');
   return new Set([...selectors.matchAll(/([.#])(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1] + m[2]).filter((n) => !/^[.#]gz-/.test(n) && !ULTRA_CSS.has(n)));
 };

@@ -1,0 +1,589 @@
+/* Glaze — backgrounds, course and enhancement extras. Everything here is gated on an html
+   attribute content.js sets, so with the feature off none of it matches. */
+
+/* ---- backgrounds ----
+   One fixed layer, drawn by ::before: on <html> for base pages, and again on each full-screen Ultra
+   overlay (a course opens as a panel over the base page, an item as a panel over the course). Each
+   overlay paints the same viewport-fixed layer, so it covers what is underneath and the picture
+   lines up. Slide-outs (.peek) cover only part of the screen: a viewport-sized layer would hide the
+   page beside them, so they get their own sheet in theme.css instead.
+   The ground goes transparent so the layer shows; cards keep most of their surface.
+   Layer = dim tint over grain over the picture, then blurred. The picture is the gradient content.js
+   builds from the user's shape settings (--gz-bg-grad, colors --gz-bg-1/2/3); an image or the
+   aurora replaces it, and an animated scene draws over it. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) {
+  --gz-ground: transparent;
+  --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) var(--gz-bg-dim, 60%), transparent);
+  --gz-bg-art: var(--gz-bg-grad), var(--gz-surface-2);
+  --gz-bg-grain: linear-gradient(transparent, transparent);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
+}
+/* Fine grey noise a few percent strong: it breaks up the 8-bit banding of soft gradients. Under the
+   tint, so dimming quiets it too. */
+html[data-gz-bg][data-gz-bg-grain]:not([data-gz-bg="solid"]) {
+  --gz-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 .07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
+/* Under a drawn background (a scene, shader, layers or media) the layer is its fallback: the bright gradient, all there is
+   behind the page until the scene draws, and for good without WebGL. Its dim comes from the scene's intensity (30 to 34%
+   in the Looks: text sat on bright colour at about 2.2 to 3.6:1); here it is never under 75%, a quiet gradient's. The
+   scene itself still dims its own colours by intensity. */
+html[data-gz-bg]:is([data-gz-bg="scene"], [data-gz-bg="shader"], [data-gz-bg="layers"], [data-gz-bg="media"]) {
+  --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) max(var(--gz-bg-dim, 60%), 75%), transparent);
+}
+/* Keep viewport backgrounds below a panel's header. Off-canvas shells also own the close button
+   that hangs into Ultra's side gutter: clip vertically, but let the backdrop cover that gutter. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { isolation: isolate; clip-path: inset(0); background: transparent !important; }
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.bb-offcanvas-panel, .bb-offcanvas-panel .panel-wrap):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { clip-path: inset(0 -100vmax); }
+/* :where() keeps this base layer at element specificity, so the per-kind rules below refine it. */
+html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before,
+html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offcanvas-panel):where(:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *))::before {
+  content: "";
+  position: fixed;
+  /* The viewport, or in a course tab's frame the page's (looks/scene-host.js --gz-vx/vy/vw/vh), so its copy lines up. */
+  left: calc(var(--gz-vx, 0px) - var(--gz-bg-blur, 0px) * 2);
+  top: calc(var(--gz-vy, 0px) - var(--gz-bg-blur, 0px) * 2);
+  width: calc(var(--gz-vw, 100%) + var(--gz-bg-blur, 0px) * 4);
+  height: calc(var(--gz-vh, 100%) + var(--gz-bg-blur, 0px) * 4);
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain), var(--gz-bg-art);
+  filter: blur(var(--gz-bg-blur, 0px));
+}
+/* Cards over a picture: a little see-through, never so much that text sits on the image. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .panel, .todo-item, article, .content-list-item .itemContainer),
+html[data-gz-bg]:not([data-gz-bg="solid"]) #site-wrap .content-list-item .content-list-item .itemContainer {
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 88%), transparent) !important;
+}
+
+/* Aurora: richer art, and in Expressive the whole layer drifts. It moves by transform only, so
+   the GPU slides the already-painted layer instead of repainting gradients every frame; the layer
+   is oversized so the drift never shows an edge. */
+html[data-gz-bg="aurora"]::before,
+html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before {
+  left: calc(var(--gz-vx, 0px) - var(--gz-vw, 100%) * .18);
+  top: calc(var(--gz-vy, 0px) - var(--gz-vh, 100%) * .18);
+  width: calc(var(--gz-vw, 100%) * 1.36);
+  height: calc(var(--gz-vh, 100%) * 1.36);
+  background: var(--gz-surface-grain, none), linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain),
+    radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-bg-1) 46%, transparent), transparent 70%),
+    radial-gradient(38% 40% at 78% 70%, color-mix(in srgb, var(--gz-bg-2) 36%, transparent), transparent 70%),
+    radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-bg-3) 28%, transparent), transparent 70%),
+    radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
+    var(--gz-surface-paint-2, var(--gz-surface-2));
+  animation: gz-aurora 42s ease-in-out infinite alternate;
+  animation-play-state: var(--gz-drift);
+}
+/* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
+html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before,
+html[data-gz-motion="expressive"][data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before { will-change: transform; }
+@keyframes gz-aurora {
+  0% { transform: translate3d(-5%, -3%, 0) rotate(-4deg) scale(1); }
+  50% { transform: translate3d(4%, 2%, 0) rotate(3deg) scale(1.06); }
+  100% { transform: translate3d(-2%, 5%, 0) rotate(-2deg) scale(1.02); }
+}
+
+/* Scene: content.js puts one three.js canvas in the topmost full-screen shell (the page, or the
+   open course or item panel), above that shell's ::before and below its content. Until it draws,
+   or without WebGL, the ::before shows the gradient. The canvas is drawn small and stretched. */
+[data-gz-scene-host] { isolation: isolate; }
+/* Keep the base page's card controls, course tabs and board tiles below an open course, even when the course's scene
+   makes its shell a stacking context. Menus and tooltips live on body; floating widgets keep their own layer. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) #main-content { isolation: isolate; }
+html[data-gz-bg]:not([data-gz-bg="solid"]) .course-content-container > .panel-wrap[data-gz-scene-host] { clip-path: none; }
+/* A narrower/shorter scroller must not paint a second fallback over the shell's scene. Its
+   content still clips normally; partial-width sheets retain their own opaque backgrounds. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) [data-gz-scene-host] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before { content: none; }
+/* A course tab's frame wearing the page's background (content.js data-gz-through) is see-through: the page under it draws
+   the one background, edge to edge around the rail. */
+html[data-gz-bg][data-gz-through] { background: transparent !important; }
+html[data-gz-through]::before, html[data-gz-through] :is(.panel-wrap, .bb-offcanvas-panel)::before { content: none; }
+#gz-scene {
+  position: fixed;
+  left: calc(var(--gz-vx, 0px) - var(--gz-bg-blur, 0px) * 2);
+  top: calc(var(--gz-vy, 0px) - var(--gz-bg-blur, 0px) * 2);
+  width: calc(var(--gz-vw, 100%) + var(--gz-bg-blur, 0px) * 4);
+  height: calc(var(--gz-vh, 100%) + var(--gz-bg-blur, 0px) * 4);
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(var(--gz-bg-blur, 0px));
+}
+/* No blur set, no filter: even blur(0) gives the layer an offscreen copy on the GPU. Every element is a style
+   container, so this reads the --gz-bg-blur content.js sets on <html>. */
+@container style(--gz-bg-blur: 0px) {
+  html::before, html :is(.panel-wrap, .bb-offcanvas-panel)::before, #gz-scene { filter: none; }
+}
+
+/* Expressive: a soft light follows the pointer across a hovered card (content.js feeds
+   --gz-mx/--gz-my in viewport pixels, hence the fixed attachment). After the background-mode
+   card rule above so it wins the tie. */
+html[data-gz-motion="expressive"] :is(.element-card, .content-list-item > .itemContainer, .element-list-row, .messages-container-summary):hover {
+  background-image: radial-gradient(240px circle at var(--gz-mx, -999px) var(--gz-my, -999px), color-mix(in srgb, var(--gz-accent) 12%, transparent), transparent 70%) !important;
+  background-attachment: fixed !important;
+}
+
+/* ---- extras (each behind its own switch in the options page) ---- */
+
+/* Reading width: running text keeps to a comfortable measure. Documents are already a centered
+   column (theme.css); capping .document-body here pinned them, narrow, to the left. */
+html[data-gz-enhance-reading] #site-wrap :is(.bb-editor-container.is-read-only .ql-editor, .bbml-content) { max-width: 72ch; }
+/* …in the middle of its card, which is often wider than the measure. */
+html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { margin-inline: auto; }
+/* …except a test's prompts and answers, which keep to the start of their card and rows, in line with each other. */
+html[data-gz-enhance-reading] #site-wrap .assessment-question .bb-editor-container.is-read-only .ql-editor { margin-inline: 0; }
+html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { font-size: 1.04em; }
+
+/* Shorter descriptions: three lines until the item is hovered or focused. Not on touch screens, which
+   can't hover: a tap opens the item instead, so the rest of the text could never be read. */
+@media (hover: hover) {
+html[data-gz-enhance-clamp] #site-wrap .content-list-item .itemContainer:not(:hover, :focus-within) .js-description {
+  display: -webkit-box !important; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
+}
+
+/* Score bars: content.js reads the pill's own numbers into --gz-score (0-1) and a band. */
+/* Specific enough to beat the grade-band tint, whose background shorthand would reset the image. */
+html[data-gz-enhance-scores] #site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style)[data-gz-score][class] {
+  background-image: linear-gradient(var(--gz-score-ink), var(--gz-score-ink)) !important;
+  background-size: calc(var(--gz-score) * 100%) 3px !important;
+  background-position: left bottom !important;
+  background-repeat: no-repeat !important;
+}
+#site-wrap [data-gz-score="hi"] { --gz-score-ink: var(--gz-ok); }
+#site-wrap [data-gz-score="mid"] { --gz-score-ink: var(--gz-warn); }
+#site-wrap [data-gz-score="lo"] { --gz-score-ink: var(--gz-err); }
+
+/* Due-date urgency: content.js tags the due-date text itself. */
+html[data-gz-enhance-urgency] #site-wrap [data-gz-due] {
+  display: inline-block; padding: 0 0.5em; border-radius: 999px; font-weight: 600;
+  color: var(--gz-due) !important; background: color-mix(in srgb, var(--gz-due) 16%, transparent) !important;
+}
+#site-wrap [data-gz-due="overdue"] { --gz-due: var(--gz-err); }
+#site-wrap [data-gz-due="today"] { --gz-due: var(--gz-warn); }
+#site-wrap [data-gz-due="soon"] { --gz-due: var(--gz-accent); }
+
+/* Inline countdowns and grade percentages: drawn from the attributes content.js sets. */
+html[data-gz-enhance-inline] #site-wrap [data-gz-countdown]::after,
+html[data-gz-enhance-overall] #site-wrap [data-gz-grade]::after {
+  content: attr(data-gz-countdown);
+  display: inline-block; margin-left: 0.5em; padding: 0 0.5em; border-radius: 999px;
+  font-size: 0.85em; font-weight: 600; line-height: 1.6; vertical-align: 0.05em;
+  color: var(--gz-chip, var(--gz-due, var(--gz-ink-muted))) !important;
+  background: color-mix(in srgb, var(--gz-chip, var(--gz-due, var(--gz-ink-muted))) 14%, transparent);
+}
+/* Course content's chips say where the work stands: done in green, a grade in its score band, not done
+   by how close the due date is. */
+#site-wrap [data-gz-chip="done"], #site-wrap [data-gz-chip="graded-hi"] { --gz-chip: var(--gz-ok); }
+#site-wrap [data-gz-chip="graded-mid"], #site-wrap [data-gz-chip="today"], #site-wrap [data-gz-chip="late"] { --gz-chip: var(--gz-warn); }
+#site-wrap [data-gz-chip="graded-lo"], #site-wrap [data-gz-chip="overdue"] { --gz-chip: var(--gz-err); }
+#site-wrap [data-gz-chip="soon"] { --gz-chip: var(--gz-accent); }
+#site-wrap [data-gz-chip="later"], #site-wrap [data-gz-chip="muted"] { --gz-chip: var(--gz-ink-muted); }
+/* A course card's overall grade, beside its status, in the same chip and bands. */
+html[data-gz-enhance-overall] #site-wrap [data-gz-grade]::after { content: attr(data-gz-grade); }
+/* Card grades only on hover: shown while the card is pointed at or holds focus; the GPA's figures blurred the same way. */
+html[data-gz-enhance-gradeHover] #site-wrap :is(article.course-element-card, a[class*="courseCard"]):not(:hover, :focus-within) [data-gz-grade]::after { opacity: 0; }
+html[data-gz-enhance-gradeHover] #gz-gpa:not(:hover, :focus-within) .gz-gpa-fig b { filter: blur(0.4em); }
+html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
+  content: attr(data-gz-pct);
+  margin-left: 0.45em; padding-left: 0.45em; border-left: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  font-weight: 500; opacity: 0.8;
+}
+
+/* Folder preview card. */
+#gz-peek {
+  position: fixed; z-index: 2147483002; width: 300px; max-width: calc(100vw - 16px); padding: 0.6rem 0.75rem 0.55rem;
+  pointer-events: none; font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-tip-bg) 94%, transparent); backdrop-filter: blur(var(--gz-glass));
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  animation: var(--gz-tip-in);
+}
+#gz-peek .gz-peek-head { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-faint); margin-bottom: 0.35rem; }
+#gz-peek ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; }
+#gz-peek li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0.5rem; align-items: center; }
+#gz-peek li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--gz-ink-faint); }
+#gz-peek li[data-state="started"]::before { border-color: var(--gz-accent); background: color-mix(in srgb, var(--gz-accent) 40%, transparent); }
+#gz-peek li[data-state="done"]::before { border-color: var(--gz-ok); background: var(--gz-ok); }
+#gz-peek li[data-state="done"] .gz-peek-title { color: var(--gz-ink-muted); }
+#gz-peek .gz-peek-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-peek .gz-peek-due { font-size: 11px; color: var(--gz-ink-muted); white-space: nowrap; }
+#gz-peek .gz-peek-more { margin-top: 0.3rem; font-size: 11px; color: var(--gz-ink-faint); }
+
+/* Course progress bar above the outline. */
+#gz-progress {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem 0.75rem; align-items: baseline;
+  margin: 0 0 calc(14px * var(--gz-space)); padding: 0.7rem 1rem 0.8rem;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius);
+  font-size: 0.85rem; color: var(--gz-ink-muted);
+}
+#gz-progress b { color: var(--gz-ink); font-variant-numeric: tabular-nums; }
+#gz-progress i { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--gz-line); overflow: hidden; position: relative; }
+#gz-progress i::after {
+  content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: var(--gz-pct); border-radius: inherit;
+  background: linear-gradient(90deg, var(--gz-accent), var(--gz-ok));
+  animation: gz-grow-x var(--gz-t-slow) var(--gz-ease) both; transform-origin: left;
+}
+/* Right to left, it fills (and grows) from the right. */
+#gz-progress i:dir(rtl)::after { background: linear-gradient(270deg, var(--gz-accent), var(--gz-ok)); transform-origin: right; }
+@keyframes gz-grow-x { from { transform: scaleX(0); } }
+
+/* Offer to restore what you wrote, above the editor it came from. */
+.gz-draft {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem;
+  margin: 0 0 0.5rem; padding-block: 0.45rem; padding-inline: 0.85rem 0.5rem;
+  font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent) 12%, var(--gz-surface-paint, var(--gz-surface)));
+  border: 1px solid color-mix(in srgb, var(--gz-accent) 40%, var(--gz-border-line, var(--gz-line))); border-radius: var(--gz-radius);
+  animation: var(--gz-enter);
+}
+.gz-draft[hidden] { display: none; }
+.gz-draft span { flex: 1 1 12rem; }
+.gz-draft button {
+  padding: 0.25rem 0.8rem; font: 600 12px/1.5 var(--gz-font); cursor: pointer;
+  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px;
+}
+.gz-draft button:first-of-type { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+.gz-draft button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+/* Download all, beside a folder's title: an arrow that shows while the folder's row is pointed at or
+   focused, and spells out its progress while it works. The fill is that progress. */
+.gz-dl {
+  flex: none; align-self: center; display: inline-grid; place-items: center; min-width: 1.6rem; height: 1.6rem;
+  margin: 0; margin-inline-start: 0.5rem; padding: 0; font: 600 12px/1 var(--gz-font); color: var(--gz-ink-muted);
+  background: linear-gradient(90deg, var(--gz-accent-soft) var(--gz-pct, 0%), transparent 0);
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; cursor: pointer; opacity: 0;
+  transition: opacity var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease);
+}
+.gz-dl::before { content: "\2193"; }
+.gz-dl:dir(rtl) { background: linear-gradient(270deg, var(--gz-accent-soft) var(--gz-pct, 0%), transparent 0); }
+.gz-dl[data-job] { padding: 0 0.65rem; grid-auto-flow: column; gap: 0.35em; }
+.click-to-invoke-container:is(:hover, :focus-within) .gz-dl, .gz-dl:is(:focus-visible, [data-job]) { opacity: 1; }
+.gz-dl:is(:hover, :focus-visible, [data-busy]) { color: var(--gz-accent); border-color: var(--gz-accent); }
+@media (hover: none) { .gz-dl { opacity: 0.75; } }
+
+/* Keyboard shortcut list. */
+#gz-keys {
+  position: fixed; inset: 0; z-index: 2147483003; display: grid; place-items: center;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-surface-opacity, 55%), transparent); backdrop-filter: blur(4px);
+  animation: gz-fade var(--gz-t) var(--gz-ease) both;
+}
+#gz-keys .gz-keys-panel {
+  width: min(360px, calc(100vw - 32px)); padding: 1rem 1.25rem 1.1rem; font-family: var(--gz-font);
+  color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
+  border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-enter);
+}
+#gz-keys h2 { margin: 0 0 0.6rem; font-size: 15px; }
+#gz-keys dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 1rem; align-items: center; }
+#gz-keys dt { display: flex; gap: 0.25rem; }
+#gz-keys dd { margin: 0; color: var(--gz-ink-muted); font-size: 13px; }
+#gz-keys kbd { min-width: 1.6em; padding: 0.1rem 0.4rem; text-align: center; font: 600 12px/1.5 ui-monospace, Menlo, monospace; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-bottom-width: 2px; border-radius: calc(var(--gz-radius, 12px) * 1 / 2); }
+#gz-keys button { margin-top: 0.9rem; padding: 0.4rem 0.75rem; font: inherit; font-size: 13px; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); cursor: pointer; }
+
+/* New grades: a badge on gradebook rows and course cards (content.js sets the label). */
+html[data-gz-enhance-newgrades] [data-gz-new]::after {
+  content: attr(data-gz-new);
+  /* align-self: in a flex link (a Grades page tile) it would otherwise stretch to the row's height. */
+  display: inline-block; align-self: center; flex: none; margin-inline-start: 0.5em; padding: 0 0.55em; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700; line-height: 1.6; letter-spacing: 0.02em; vertical-align: 0.12em; white-space: nowrap;
+  color: var(--gz-accent-ink); background: var(--gz-accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--gz-accent) 45%, transparent);
+  animation: var(--gz-tip-in);
+}
+/* A course card's count: a pill first in the course name, where an ellipsis can't cut it, that opens
+   the gradebook or the course. align-self: inside a flex link (a Grades page tile) it would otherwise
+   stretch. New content puts the same pill after an item's title ("New", not a link) and, quieter, after
+   a closed folder's ("2 new", unfolding it). */
+html:is([data-gz-enhance-newgrades], [data-gz-enhance-newcontent]) .gz-new {
+  display: inline-block; align-self: center; flex: none; margin-inline-end: 0.5em; padding: 0 0.55em; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700; line-height: 1.6; letter-spacing: 0.02em; vertical-align: 0.12em; white-space: nowrap;
+  color: var(--gz-accent-ink); background: var(--gz-accent); cursor: pointer;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--gz-accent) 45%, transparent);
+  animation: var(--gz-tip-in); transition: box-shadow var(--gz-t) var(--gz-ease), transform var(--gz-t) var(--gz-ease);
+}
+/* theme.css has every element in #site-wrap inherit its color, with !important. */
+#site-wrap .gz-new { color: var(--gz-accent-ink) !important; }
+#site-wrap .gz-new[data-kind="inside"] { color: var(--gz-accent) !important; }
+html .gz-new[role="link"]:hover { box-shadow: 0 0 14px color-mix(in srgb, var(--gz-accent) 70%, transparent); }
+html .gz-new:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+html .gz-new:is([data-kind="item"], [data-kind="inside"]) { margin: 0; margin-inline-start: 0.6em; }
+html .gz-new[data-kind="item"] { cursor: inherit; }
+html .gz-new[data-kind="inside"] { color: var(--gz-accent); background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gz-accent) 55%, transparent); }
+html .gz-new[data-kind="inside"]:hover { background: color-mix(in srgb, var(--gz-accent) 14%, transparent); box-shadow: inset 0 0 0 1px var(--gz-accent); }
+html:not([data-gz-enhance-newgrades]) .gz-new[data-kind="grades"], html:not([data-gz-enhance-newcontent]) .gz-new:not([data-kind="grades"]) { display: none; }
+
+/* Command palette. */
+#gz-cmd {
+  position: fixed; inset: 0; z-index: 2147483003; display: grid; justify-items: center; align-items: start; padding-top: min(14vh, 120px);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-surface-opacity, 55%), transparent); backdrop-filter: blur(4px);
+  animation: gz-fade var(--gz-t) var(--gz-ease) both;
+}
+#gz-cmd .gz-cmd-panel {
+  width: min(600px, calc(100vw - 32px)); max-height: min(70vh, 560px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden; font: 14px/1.4 var(--gz-font); color: var(--gz-ink);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  animation: var(--gz-enter-panel);
+}
+#gz-cmd input {
+  margin: 0; padding: 0.9rem 1.1rem; font: inherit; font-size: 16px; color: var(--gz-ink);
+  background: transparent; border: 0; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); outline: none; box-shadow: none;
+}
+#gz-cmd input::placeholder { color: var(--gz-ink-faint); }
+#gz-cmd ul { list-style: none; margin: 0; padding: 0.35rem; overflow: auto; overscroll-behavior: contain; }
+#gz-cmd li { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.45rem 0.75rem; border-radius: calc(var(--gz-radius) * 2 / 3); cursor: pointer; }
+#gz-cmd li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-cmd li small { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-faint); }
+#gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent); box-shadow: inset 3px 0 0 var(--gz-accent); }
+#gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
+#gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
+#gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
+/* Documents in a dark palette (enhance.docPages): the preview frame dimmed, or inverted with hues turned back. 0.9 so
+   white paper lands near the surface rather than on pure black. */
+#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { transition: filter var(--gz-t-slow) var(--gz-ease); }
+html[data-gz-dark-theme][data-gz-enhance-docPages="dim"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv) { filter: brightness(0.8); }
+html[data-gz-dark-theme][data-gz-enhance-docPages="dark"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv) { filter: invert(0.9) hue-rotate(180deg); }
+/* A preview in Glaze's PDF viewer (courses/page/bbpreview.js): Blackboard's frame hidden while Glaze's shows in its place, and
+   the box around them as tall as Glaze's frame. Dark documents leaves Glaze's frame alone (its pages stay print white). */
+#site-wrap iframe[data-gz-pv-hidden] { display: none !important; }
+#site-wrap [data-gz-pv-box] { height: auto !important; max-height: none !important; }
+
+/* Document buttons: a column of round buttons in the bottom-right gutter. Where the window is too
+   narrow for a gutter, the document makes room for one instead of sitting under them. */
+#gz-doc-tools {
+  position: fixed; right: 0.75rem; bottom: 0.75rem; z-index: 1250;
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  font-family: var(--gz-font); animation: var(--gz-tip-in);
+}
+html[data-gz-footer] #gz-doc-tools { bottom: calc(var(--gz-footer-h) + 0.75rem); }
+@container (max-width: 58rem) { html[data-gz-doc-tools] #site-wrap .document-body { padding-right: 3.5rem !important; } }
+#gz-doc-tools button {
+  display: grid; place-items: center; width: 2.5rem; height: 2.5rem; padding: 0; cursor: pointer;
+  color: var(--gz-ink-muted); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
+  backdrop-filter: blur(var(--gz-glass)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; box-shadow: var(--gz-shadow);
+  transition: color var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), scale var(--gz-t) var(--gz-ease);
+}
+#gz-doc-tools button:hover { color: var(--gz-ink); border-color: var(--gz-accent); }
+#gz-doc-tools button:active { scale: var(--gz-press); }
+#gz-doc-tools button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-doc-tools button[aria-pressed="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+#gz-doc-tools [hidden] { display: none; }
+#gz-doc-tools svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#gz-doc-tools .gz-doc-time { max-width: 3rem; font-size: 11px; font-weight: 600; line-height: 1.2; text-align: center; color: var(--gz-ink-muted); }
+
+/* Focus mode: the document alone. Its title bar, a learning module's bar (Contents, the module, its
+   arrows) and Previous / Next go, and the main menu and course tabs under the panel, should they
+   show. A reading-progress line runs along the top. */
+html[data-gz-focus] :is(#base_tools, .bb-ui-navigation-list-horizontal, course-banner),
+html[data-gz-focus] #site-wrap section.route-view-container:has(.document-content-root) > div > div:not(:has(.document-content-root)),
+html[data-gz-focus] #site-wrap div:has(+ div > .document-content-root),
+html[data-gz-focus] #site-wrap div:has(> .js-content-navigator-previous, > .js-content-navigator-next) { display: none !important; }
+#gz-read {
+  position: fixed; inset: 0 0 auto; height: 3px; z-index: 1250; pointer-events: none;
+  background: linear-gradient(90deg, var(--gz-accent), var(--gz-accent-hi));
+  transform: scaleX(var(--gz-read, 0)); transform-origin: left;
+}
+
+/* ---- course menu ----
+   A button in the corner of each course card on the Courses page (content.js), which opens a popover for the
+   course's nickname, color, tint and look. The button shows while the card is pointed at or has focus, and
+   always on a screen that can't hover. theme.css has every button in #site-wrap take the ink color, and every input
+   the surface fill, with !important: the rules here say so too, and are more specific. */
+:where(article:has(> .gz-cm-btn)) { position: relative; }
+html .gz-cm-btn {
+  position: absolute; top: var(--gz-cm-top, 8px); right: var(--gz-cm-right, 8px); z-index: 2;
+  display: grid; place-items: center; width: 28px; height: 28px; margin: 0; padding: 0; cursor: pointer; opacity: 0;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; box-shadow: var(--gz-rest-shadow);
+  transition: opacity var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), scale var(--gz-t-slow) var(--gz-spring) !important;
+}
+html #site-wrap .gz-cm-btn { color: var(--gz-ink-muted) !important; }
+html #site-wrap .gz-cm-btn:is(:hover, :focus-visible, [aria-expanded="true"]) { color: var(--gz-accent) !important; border-color: var(--gz-accent); }
+/* The glass only while it shows: a blur on an invisible button was a GPU layer on every card. */
+*:is(:hover, :focus-within) > .gz-cm-btn, html .gz-cm-btn:is(:focus-visible, [aria-expanded="true"]) { opacity: 1; backdrop-filter: blur(var(--gz-glass)); }
+html .gz-cm-btn:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+.gz-cm-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
+@media (hover: none) { html .gz-cm-btn { opacity: 0.85; backdrop-filter: blur(var(--gz-glass)); } }
+@media (pointer: coarse) { html .gz-cm-btn { width: 36px; height: 36px; } }
+
+#gz-cm {
+  position: fixed; z-index: 2147483002; box-sizing: border-box; width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto;
+  display: grid; gap: 0.35rem; padding: 0.8rem 0.9rem 0.9rem; font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  transform-origin: var(--gz-cm-origin, top right); animation: var(--gz-tip-in);
+}
+#gz-cm * { box-sizing: border-box; }
+#gz-cm .gz-cm-cap { margin-top: 0.4rem; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-faint); }
+#gz-cm .gz-cm-cap:first-child { margin-top: 0; }
+#gz-cm :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-cm button { font: inherit; }
+
+/* The nickname field: Blackboard's name is the placeholder. */
+#gz-cm input.gz-cm-nick {
+  width: 100%; margin: 0; padding: 0.4rem 0.6rem; font: inherit; color: var(--gz-ink) !important;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important;
+}
+#gz-cm input.gz-cm-nick::placeholder { color: var(--gz-ink-faint); }
+#gz-cm input.gz-cm-nick:focus { border-color: var(--gz-accent) !important; outline: none; }
+/* An edit that couldn't be saved, said under the field. */
+#gz-cm .gz-cm-note { margin: 0; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-cm .gz-cm-note[hidden] { display: none; }
+
+/* Colors: Reset sits on the caption's line; the swatches are six to a row. */
+#gz-cm .gz-cm-colorhead { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.4rem; min-height: 24px; }
+#gz-cm .gz-cm-colorhead .gz-cm-cap { margin-top: 0; }
+#gz-cm .gz-cm-reset {
+  padding: 0.1rem 0.7rem; font: 600 12px/1.5 var(--gz-font); cursor: pointer;
+  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px;
+}
+#gz-cm .gz-cm-reset[hidden] { display: none; }
+#gz-cm .gz-cm-reset:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
+#gz-cm .gz-cm-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem 0.25rem; justify-items: center; padding: 0.15rem 0; }
+#gz-cm .gz-cm-sw {
+  width: 28px; height: 28px; padding: 0; cursor: pointer; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--gz-ink) 25%, transparent);
+}
+#gz-cm .gz-cm-sw:hover { transform: var(--gz-pop); }
+#gz-cm .gz-cm-sw[aria-pressed="true"], #gz-cm input.gz-cm-custom[data-on] { box-shadow: 0 0 0 2px var(--gz-surface), 0 0 0 4px var(--gz-accent); }
+/* The custom picker: a ring of hues round the color it holds now. */
+#gz-cm input.gz-cm-custom {
+  appearance: none; -webkit-appearance: none; width: 28px; height: 28px; margin: 0; padding: 3px; cursor: pointer;
+  background: conic-gradient(hsl(0 80% 65%), hsl(60 80% 62%), hsl(120 65% 58%), hsl(180 70% 58%), hsl(240 80% 70%), hsl(300 70% 65%), hsl(360 80% 65%)) !important;
+  border: 0 !important; border-radius: 50% !important;
+}
+#gz-cm input.gz-cm-custom::-webkit-color-swatch-wrapper { padding: 0; }
+#gz-cm input.gz-cm-custom::-webkit-color-swatch { border: 2px solid var(--gz-surface); border-radius: 50%; }
+#gz-cm input.gz-cm-custom::-moz-color-swatch { border: 2px solid var(--gz-surface); border-radius: 50%; }
+
+/* Tint: a slide switch, as in the popup and the editor. */
+#gz-cm .gz-cm-tint { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; cursor: pointer; color: var(--gz-ink); }
+#gz-cm .gz-cm-tint input {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 34px; height: 20px; margin: 0; cursor: pointer;
+  background: var(--gz-line-strong) !important; border: 0 !important; border-radius: 999px !important;
+}
+#gz-cm .gz-cm-tint input::before {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--gz-ink); transition: transform var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease);
+}
+#gz-cm .gz-cm-tint input:checked { background: var(--gz-accent) !important; }
+#gz-cm .gz-cm-tint input:checked::before { transform: translateX(14px); background: var(--gz-accent-ink); }
+
+/* Looks: drawn in their own colors, as the popup's look cards are. */
+#gz-cm .gz-cm-looks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
+#gz-cm .gz-cm-look {
+  min-width: 0; padding: 0.35rem 0.4rem 0.35rem 0.6rem; text-align: left; font-weight: 600; font-size: 11.5px; line-height: 1.3; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gz-ink-muted); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2));
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm);
+}
+#gz-cm .gz-cm-look:hover { transform: var(--gz-lift); }
+#gz-cm .gz-cm-look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface), 0 0 0 4px var(--gz-accent); }
+/* Forced colours (Windows High Contrast) drop fills and shadows: the swatches keep their own colours, edged; the switch
+   and what is picked are drawn in system colours. */
+@media screen and (forced-colors: active) {
+  /* Ultra's ten are read off a hidden probe (content-ultra.js courseColor): its own colour, not the system's. */
+  html > i[class^="course-color-"] { forced-color-adjust: none; }
+  #gz-cm .gz-cm-sw { forced-color-adjust: none; border-color: CanvasText; }
+  #gz-cm .gz-cm-sw[aria-pressed="true"] { border: 3px solid Highlight; }
+  #gz-cm input.gz-cm-custom[data-on] { outline: 2px solid Highlight; outline-offset: 2px; }
+  #gz-cm .gz-cm-look[aria-pressed="true"] { border: 2px solid Highlight !important; } /* over its own colour, set inline */
+  #gz-cm .gz-cm-tint input { forced-color-adjust: none; background: Canvas !important; border: 1px solid ButtonText !important; }
+  #gz-cm .gz-cm-tint input::before { top: 2px; left: 2px; background: ButtonText; }
+  #gz-cm .gz-cm-tint input:checked { background: Highlight !important; border-color: Highlight !important; }
+  #gz-cm .gz-cm-tint input:checked::before { background: HighlightText; }
+}
+
+/* ---- declutter ---- */
+html[data-gz-hide-help] .pagehelp-directive { display: none !important; }
+html[data-gz-hide-banner] #site-wrap course-banner { display: none !important; }
+/* The faculty block when it has nobody in it (no username element rendered). */
+html[data-gz-hide-faculty] #site-wrap bb-course-instructors:not(:has(bb-ui-username, bb-username)) { display: none !important; }
+html[data-gz-hide-tab-calendar] .bb-ui-navigation-list-horizontal li:has(> a[href*="/calendar"]),
+html[data-gz-hide-tab-announcements] .bb-ui-navigation-list-horizontal li:has(> a[href*="/announcements"]),
+html[data-gz-hide-tab-engagement] .bb-ui-navigation-list-horizontal li:has(> a[href*="/engagement"]),
+html[data-gz-hide-tab-grades] .bb-ui-navigation-list-horizontal li:has(> a[href*="/grades"]),
+html[data-gz-hide-tab-messages] .bb-ui-navigation-list-horizontal li:has(> a[href*="/messages"]),
+html[data-gz-hide-tab-groups] .bb-ui-navigation-list-horizontal li:has(> a[href*="/groups/"]),
+html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a[href*="/achievements"]) { display: none !important; }
+
+/* ---- the card editor (courses/page/cards.js): a modal dialog, and the course menu's way into it ---- */
+#gz-cm .gz-cm-more {
+  margin-top: 0.5rem; padding: 0.4rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; color: var(--gz-accent);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm);
+}
+#gz-cm .gz-cm-more:hover { border-color: var(--gz-accent); }
+#gz-ce {
+  box-sizing: border-box; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-tip-in);
+}
+#gz-ce::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-ce * { box-sizing: border-box; }
+#gz-ce .gz-ce-in { display: grid; gap: 0.75rem; padding: 1rem 1.1rem 1.1rem; }
+#gz-ce .gz-ce-head { display: flex; align-items: center; gap: 0.75rem; }
+#gz-ce h2 { flex: 1; min-width: 0; margin: 0; font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-ce button, #gz-ce select, #gz-ce input:not([type="range"], [type="color"], [type="radio"], [type="checkbox"]) {
+  font: inherit; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm);
+  padding: 0.35rem 0.6rem; margin: 0; height: auto; min-height: 2rem; box-shadow: none;
+}
+#gz-ce button { cursor: pointer; }
+#gz-ce button:hover:not(:disabled) { border-color: var(--gz-accent); }
+#gz-ce button:disabled { opacity: 0.45; cursor: default; }
+#gz-ce :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-ce input[type="color"] { width: 2.5rem; height: 2rem; padding: 2px; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
+#gz-ce input[type="range"] { accent-color: var(--gz-accent); }
+#gz-ce .gz-ce-x { min-height: 0; width: 2rem; height: 2rem; padding: 0; border-radius: 999px; font-size: 18px; line-height: 1; }
+#gz-ce .gz-ce-tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
+#gz-ce .gz-ce-tabs button { border: 0; border-radius: 0; background: transparent; color: var(--gz-ink-muted); padding: 0.4rem 0.8rem; box-shadow: inset 0 -2px 0 transparent; }
+#gz-ce .gz-ce-tabs button[aria-selected="true"] { color: var(--gz-accent); box-shadow: inset 0 -2px 0 var(--gz-accent); }
+#gz-ce .gz-ce-panel { display: grid; gap: 0.6rem; }
+#gz-ce [hidden] { display: none !important; }
+#gz-ce .gz-ce-kinds { display: flex; flex-wrap: wrap; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; overflow: hidden; width: max-content; max-width: 100%; }
+#gz-ce .gz-ce-kinds label { display: flex; align-items: center; padding: 0.35rem 0.8rem; cursor: pointer; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-kinds input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+#gz-ce .gz-ce-kinds label:has(input:checked) { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); }
+#gz-ce .gz-ce-kinds label:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
+#gz-ce .gz-ce-field { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) auto; align-items: center; gap: 0.6rem; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-field output { min-width: 3rem; text-align: right; font-variant-numeric: tabular-nums; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-field input[type="color"] { justify-self: start; }
+#gz-ce .gz-ce-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+#gz-ce .gz-ce-row > .gz-ce-field { flex: 1 1 auto; }
+#gz-ce .gz-ce-desc { margin: 0; font-size: 12px; color: var(--gz-ink-faint); }
+#gz-ce .gz-ce-note { margin: 0; padding: 0.45rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-err) 16%, var(--gz-surface-paint, var(--gz-surface))); }
+#gz-ce .gz-ce-contrast { margin: 0; padding: 0.45rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-ok) 14%, var(--gz-surface-paint, var(--gz-surface))); }
+#gz-ce .gz-ce-contrast.gz-ce-warn { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-warn) 20%, var(--gz-surface-paint, var(--gz-surface))); }
+#gz-ce .gz-ce-check { display: flex; align-items: center; gap: 0.4rem; color: var(--gz-ink-muted); white-space: nowrap; }
+#gz-ce .gz-ce-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+#gz-ce .gz-ce-links li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 0.5rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); }
+#gz-ce .gz-ce-links li input[type="text"] { flex: 1 1 7rem; min-width: 0; }
+#gz-ce .gz-ce-links li input[translate="no"] { flex: 2 1 12rem; }
+#gz-ce .gz-ce-links li .gz-ce-check { margin-right: auto; }
+#gz-ce .gz-ce-links li button { min-height: 1.8rem; padding: 0 0.6rem; }
+#gz-ce .gz-ce-icon { display: grid; place-items: center; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-foot { display: flex; justify-content: space-between; gap: 0.6rem; padding-top: 0.25rem; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
+#gz-ce .gz-ce-done { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); font-weight: 600; }
+@media (max-width: 520px) { #gz-ce .gz-ce-field { grid-template-columns: minmax(0, 1fr) auto; } #gz-ce .gz-ce-field > span { grid-column: 1 / -1; } }
+
+#gz-ce svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- course tabs (navigation/page/coursetabs.js) ----
+   One tab per course opened, in the course's sticky top bar (above its two rows, between them or below them), at the
+   header of an item opened over the course, or above a page outside a course. Until the file is in, data-gz-ctabs
+   (content-ultra.js: this browser tab's last strip, else the defaults) holds the strip's place, so nothing jumps when
+   it arrives; the bar grows by the strip, so it never covers Ultra's own controls. */
+html[data-gz-ctabs] div.bb-course-navigation { height: auto !important; max-height: none !important; }
+html[data-gz-ctabs~="above"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
+html[data-gz-ctabs~="below"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h) !important; }
+html[data-gz-ctabs~="between"] div.bb-course-navigation:not(:has(#gz-ctabs)) div:has(> .js-course-navigation) { margin-top: calc(var(--gz-ctabs-h) + var(--gz-float-gap, 12px)) !important; }
+html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
+/* Full routed pages have one header, not the course bar's two rows. Reserve before the lazy feature arrives. A page with a
+   breadcrumb row gets the strip at that row, never in a header under it (an assignment attempt's title had 52px of room
+   for a strip that was above it). */
+html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container:not(:has(content-page-header > header)) [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h); }
+html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .routed-page.bb-offcanvas-container:not(:has(content-page-header > header)) [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h); }
+html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: transparent; }
+#gz-ctabs[data-at="routed"] { position: sticky; top: 0; z-index: 2; }
+/* Native panel headers pull into their scroller's padding; after a tab row that would cover the subtitle. */
+#gz-ctabs[data-at="nested"] + :is(.panel-header, header) { margin-block-start: 0 !important; }
+/* The covered app keeps its layout, scroll and state without drawing its glass panels. The
+   scene moves outside it and keeps moving; its fallback stays too, so the shared navbar's gutters retain their background. */
+html[data-gz-ctab-framed] #site-wrap,
+html[data-gz-ctab-framed] > body > .routed-page.bb-offcanvas-container { visibility: hidden !important; }
+/* Native dialogs and notices can live inside the covered app and still sit above the frame. */
+html[data-gz-ctab-framed] #site-wrap :is(#gz-ctabs, #gz-footer, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"], .MuiModal-root, .MuiPopover-root, .MuiSnackbar-root):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *) { visibility: visible; }

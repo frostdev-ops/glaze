@@ -1,10 +1,10 @@
-// Look parts that move, the pure half (lib/motionx.js): animations compiled to CSS from numbers only, the knobs motion.css
+// Look parts that move, the pure half (looks/motionx.js): animations compiled to CSS from numbers only, the knobs motion.css
 // reads them through, the effects' and the pointer's cleaners, and the particles.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/motionx.js');
+const M = require('../../extension/looks/motionx.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
@@ -55,7 +55,7 @@ test('an entrance becomes one @keyframes and the knob that reads it', () => {
 test('each moment feeds the knob motion.css reads for it, and motion.css reads every one', () => {
   const stops = [{ at: 0, sc: 0.9, o: 0 }, { at: 1, sc: 1, o: 1 }];
   const want = { 'page.enter': 'enter-page', 'panel.enter': 'enter-panel', 'card.enter': 'enter', 'tile.enter': 'enter-tile', 'rail.open': 'rail-open', 'tooltip.in': 'tip-in' };
-  const motion = read('motion.css');
+  const motion = read('content/motion.css');
   for (const [moment, knob] of Object.entries(want)) {
     const css = M.compile({ [moment]: { s: stops } });
     assertSafe(css);
@@ -73,7 +73,7 @@ test('each moment feeds the knob motion.css reads for it, and motion.css reads e
 
 test('motion off, the three switches and reduced motion zero the knobs a Look feeds', () => {
   // Every knob a Look can feed sits in motion.css behind its off group, as the built-in ones do: the groups name them.
-  const css = read('motion.css');
+  const css = read('content/motion.css');
   const group = (sel) => css.match(new RegExp(`html\\[data-gz-motion="off"\\], html\\[data-gz-${sel}\\] \\{([^}]*)\\}`))[1];
   for (const k of ['enter', 'enter-page', 'enter-panel', 'enter-tile', 'rail-open', 'tip-in', 'stagger']) assert.match(group('no-enter'), new RegExp(`--gz-${k}: (none|0s)`), `no-enter zeroes --gz-${k}`);
   for (const k of ['lift', 'press', 'card-hover-filter']) assert.match(group('no-hover'), new RegExp(`--gz-${k}: none`), `no-hover zeroes --gz-${k}`);
@@ -294,7 +294,7 @@ test('a sparkle draws the mark selected in the Look builder', () => {
 
 test('an orbit can have just one mark', () => {
   assert.equal(M.cursor({ kind: 'orbit', len: 1 }).len, 1);
-  const X = require('../../extension/lib/editor-x.js');
+  const X = require('../../extension/settings/editor-x.js');
   assert.deepEqual(X.put(null, 'cursor', { kind: 'orbit', len: 1 }), { x: { cursor: { kind: 'orbit', len: 1 } } });
 });
 
@@ -328,9 +328,9 @@ test('the contour pointer lets go a ring from 4 px to its size over its fade, an
 });
 
 test("the card entrance plays on the boards' course cards too, staggered, under the same switches", () => {
-  const css = read('motion.css').replace(/\/\*[\s\S]*?\*\//g, '');
-  const TILE = '.gz-w[data-tile^="course:"]'; // features/widgets.js tileEl: section.gz-w, data-tile its id; a course card's is course:…
-  assert.match(read('features/widgets.js'), /make\('section', \{ className: 'gz-w' \}\);\s*el\.dataset\.id = id;\s*el\.dataset\.tile = id;/);
+  const css = read('content/motion.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const TILE = '.gz-w[data-tile^="course:"]'; // core/page/widgets.js tileEl: section.gz-w, data-tile its id; a course card's is course:…
+  assert.match(read('core/page/widgets.js'), /make\('section', \{ className: 'gz-w' \}\);\s*el\.dataset\.id = id;\s*el\.dataset\.tile = id;/);
   // A Look's card.enter, and nothing of Glaze's own without one: a board tile still plays tile.enter, which comes first.
   assert.match(css, /--gz-enter-card: var\(--gz-x-enter, none\);/);
   const rule = (sel) => css.match(new RegExp(`(?:^|\\})\\s*${sel.replace(/[.[\]^"()*+?]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] || '';
@@ -344,5 +344,5 @@ test("the card entrance plays on the boards' course cards too, staggered, under 
   assert.match(group('no-enter'), /--gz-enter-card: none/, 'off and the entrances switch stop it');
   assert.match(css.match(/@media \(prefers-reduced-motion: reduce\) \{\s*html:not\(\[data-gz-motion\]\) \{([^}]*)\}/)[1], /--gz-enter-card: none/, 'reduced motion before content.js runs');
   // A Canvas page brought in by its view transition: no second movement, as its own cards.
-  assert.match(read('canvas.css'), /:root\[data-gz-vt-in\] \{[^}]*--gz-enter: none;[^}]*--gz-enter-card: none;/);
+  assert.match(read('content/canvas.css'), /:root\[data-gz-vt-in\] \{[^}]*--gz-enter: none;[^}]*--gz-enter-card: none;/);
 });

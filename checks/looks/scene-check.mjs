@@ -1,7 +1,7 @@
-// Headless checks for lib/scene.js and lib/glsl.js in a real browser: built-in scenes unchanged, the three example shaders,
+// Headless checks for looks/scene.js and looks/glsl.js in a real browser: built-in scenes unchanged, the three example shaders,
 // a heavy shader stepping down, a refused shader never reaching GL, motion off, context loss, layers.
 //   nice -n 10 node checks/looks/scene-check.mjs [--out=dir] [--angle=metal|swiftshader|default] [--base=<git ref>] [--run=a,b,c] [--vp=WxH]
-// --base is the revision whose lib/scene.js and three.js build the built-in scenes are compared with (default: the
+// --base is the revision whose looks/scene.js and three.js build the built-in scenes are compared with (default: the
 // revision this branch was cut from, read as merge-base with `mods`). One headless browser at a time across agents: it waits
 // while another is running, and kills its own and deletes its profile whatever happens. Exit code 1 if any check fails.
 import http from 'node:http';
@@ -37,9 +37,11 @@ fs.mkdirSync(path.join(baseDir, 'lib'));
 // three.js was lib/three.min.js before 3.4.6: take whichever the base has, under the name its scene.js imports.
 for (const f of ['scene.js', 'three.js', 'three.min.js']) {
   let src;
-  for (const dir of ['extension/lib', 'lib']) { try { src = execFileSync('git', ['show', `${ref}:${dir}/${f}`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'ignore'] }); break; } catch {} }
+  for (const dir of [f === 'scene.js' ? 'extension/looks' : 'extension/vendor', 'extension/lib', 'lib']) { try { src = execFileSync('git', ['show', `${ref}:${dir}/${f}`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'ignore'] }); break; } catch {} }
   if (src === undefined) continue;
+  // A scene.js from looks/ imports ../vendor/three.js; an older one imports ./three.js beside it.
   fs.writeFileSync(path.join(baseDir, 'lib', f), src);
+  if (f !== 'scene.js') { fs.mkdirSync(path.join(baseDir, 'vendor'), { recursive: true }); fs.writeFileSync(path.join(baseDir, 'vendor', f), src); }
 }
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css', '.glsl': 'text/plain' };

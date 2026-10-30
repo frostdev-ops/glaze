@@ -1,9 +1,9 @@
-// Glaze Writer's paper formats (lib/writer-styles.js): the three formats' numbers, the page CSS and the .docx styles made
+// Glaze Writer's paper formats (writer/writer-styles.js): the three formats' numbers, the page CSS and the .docx styles made
 // from the same ones, the line heights pagination counts (Word's), and a student's presets kept valid.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ST = require('../../extension/lib/writer-styles.js');
-const S = require('../../extension/lib/writer-schema.js');
+const ST = require('../../extension/writer/writer-styles.js');
+const S = require('../../extension/writer/writer-schema.js');
 const FX = require('../fixtures/writer-paper-fixtures.js');
 
 test('MLA 9, APA 7 and Chicago 17 as their guides set them', () => {
@@ -74,7 +74,7 @@ test('the list page: found by its title in any format, its entries up to the end
 });
 
 test('APA 7 has its fifth heading level: indented, bold italic, on screen and in Word', () => {
-  const ST = require('../../extension/lib/writer-styles.js'), f = ST.FORMATS.apa7;
+  const ST = require('../../extension/writer/writer-styles.js'), f = ST.FORMATS.apa7;
   assert.match(ST.css(f), / h5 \{[^}]*font-weight: 700; font-style: italic;[^}]*text-indent: 0\.5in/);
   const h5 = /<w:style w:type="paragraph" w:styleId="Heading5">[\s\S]*?<\/w:style>/.exec(ST.stylesXML(f))?.[0] || '';
   assert.match(h5, /<w:b( w:val="1")?\/>/);

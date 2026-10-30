@@ -1,15 +1,15 @@
-// LMS parts and rules: the registry and the rule cleaner (lib/parts.js), and the rules put on and taken off a page
-// (features/rules.js, run in a VM over a small stand-in DOM whose elements say which part selectors they match).
+// LMS parts and rules: the registry and the rule cleaner (looks/parts.js), and the rules put on and taken off a page
+// (looks/page/rules.js, run in a VM over a small stand-in DOM whose elements say which part selectors they match).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const P = require('../../extension/lib/parts.js');
-const G = require('../../extension/defaults.js');
-const F = require('../../extension/lib/fonts.js');
-const LX = require('../../extension/lib/lookx.js');
-const C = require('../../extension/lib/color.js');
+const P = require('../../extension/looks/parts.js');
+const G = require('../../extension/content/defaults.js');
+const F = require('../../extension/looks/fonts.js');
+const LX = require('../../extension/looks/lookx.js');
+const C = require('../../extension/core/color.js');
 
 test('the registry: dotted names per LMS, a selector and label each, containers shared by what may move together', () => {
   assert.ok(P.PARTS.size > 60);
@@ -130,8 +130,8 @@ test('a plan folds the rules for one LMS in order: later wins, styles merge, val
   assert.equal(P.plan([{ p: 'canvas.footer', do: 'hide' }], 'moodle').size, 0);
 });
 
-test('features/rules.css has a rule for every style key, and reads only its own variables', () => {
-  const css = fs.readFileSync(path.join(__dirname, '../../extension/features/rules.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+test('looks/page/rules.css has a rule for every style key, and reads only its own variables', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../../extension/looks/page/rules.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   for (const k of P.BOX) assert.match(css, new RegExp(`\\[data-gz-r-st~="${k}"\\][^{]*\\{[^}]*var\\(--gz-r-${k}\\)`), k);
   assert.match(css, /\[data-gz-r-hide\][^{]*\{ display: none !important; \}/);
   assert.deepEqual([...new Set(css.match(/var\(--[\w-]+/g))].sort(), P.BOX.map((k) => `var(--gz-r-${k}`).sort());
@@ -197,7 +197,7 @@ const page = (site, build, at = '/', extra = {}) => {
   const ctx = { site, on: () => on, parts: () => x, need: () => Promise.resolve() };
   const fonts = [];
   const c = vm.createContext({ GZ_CTX: ctx, GZ_PARTS: P, GZ_LX: LX, GZ_COLOR: C, GZ_FONTS: { load: (f) => fonts.push(f) }, document: doc, location: { pathname: at }, NodeFilter: { SHOW_TEXT: 4 }, chrome: { runtime: { getURL: (f) => `ext/${f}` } }, ...extra });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/features/rules.js'), 'utf8'), c);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/looks/page/rules.js'), 'utf8'), c);
   return { doc, body, fonts, R: c.GZ_RULES, wear: (rules) => { x = rules && { rules }; c.GZ_RULES.sync(); }, go: (at) => { c.location.pathname = at; c.GZ_RULES.sync(); }, off: () => { on = false; c.GZ_RULES.sync(); }, sheet: () => doc.getElementById('gz-rules-css') };
 };
 
@@ -240,7 +240,7 @@ test('hide and style: attributes and variables on the part\'s elements, the shee
   const [a, b] = body.querySelectorAll(P.get('canvas.dashboard-card').s);
   const foot = body.querySelector(P.get('canvas.footer').s);
   wear([{ p: 'canvas.footer', do: 'hide' }, { p: 'canvas.dashboard-card', do: 'style', st: { bg: 'accent-soft', r: 16, f: 'lexend' } }]);
-  assert.equal(sheet().href, 'ext/features/rules.css');
+  assert.equal(sheet().href, 'ext/looks/page/rules.css');
   assert.equal(foot.getAttribute('data-gz-r-hide'), '');
   for (const card of [a, b]) {
     assert.equal(card.getAttribute('data-gz-r-st'), 'bg r f');
@@ -434,7 +434,7 @@ test('show removes the rule hide without changing the LMS inline display', () =>
   assert.deepEqual([...foot.style.vars], [['display', 'grid']]);
 });
 
-// ---- the boards' course cards (features/coursecards.js): Glaze's own, drawn from the LMS's -------------------------------
+// ---- the boards' course cards (courses/page/coursecards.js): Glaze's own, drawn from the LMS's -------------------------------
 const BOARD = { ultra: '.gz-w-body > article.gz-course-card', canvas: '.gz-w-body > .ic-DashboardCard[data-gz-tile-card]' };
 const ON_BOARD = {
   'ultra.course-card': BOARD.ultra, 'ultra.course-card.banner': `${BOARD.ultra} .course-banner`, 'ultra.course-card.title': `${BOARD.ultra} .course-title`,
@@ -457,7 +457,7 @@ test("each course-card part names its piece on the boards' cards, or none; the e
   assert.ok(!['ultra', 'canvas'].some((site) => P.list(site).some((p) => /(^|[.-])board/.test(p.name))));
 });
 
-// A board tile (features/widgets.js tileEl) holding its card, built as features/coursecards.js builds each.
+// A board tile (core/page/widgets.js tileEl) holding its card, built as courses/page/coursecards.js builds each.
 const ultraTile = (el, s, title = 'Biology') => el([], [
   el([], [el([], ['BIOLOGY'])], { className: 'gz-w-head' }),
   el([], [el(BOARD.ultra, [
@@ -518,7 +518,7 @@ test('what a label covers on a board card is readable as the real text, and a ni
   nicked.dataset.gzNick = '';
   wear([{ p: 'ultra.course-card.title', do: 'label', t: 'Renamed' }]);
   assert.equal(plain.texts()[0].data, 'Renamed');
-  assert.equal(R.real(plain), 'Biology', 'features/coursecards.js compares its own text with this, not with the label');
+  assert.equal(R.real(plain), 'Biology', 'courses/page/coursecards.js compares its own text with this, not with the label');
   assert.equal(nicked.texts()[0].data, 'Bio (mine)', "the student's nickname is theirs");
 });
 

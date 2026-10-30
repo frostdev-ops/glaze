@@ -102,7 +102,7 @@ var GZ_AI_LOOP = globalThis.GZ_AI_LOOP || (() => {
   };
 
   // ---- the loop ---------------------------------------------------------------------------------------------------------
-  // { request (lib/ai/request.js; its tools are given here instead), tools: [tool], call(request, { signal, onDelta,
+  // { request (ai/request.js; its tools are given here instead), tools: [tool], call(request, { signal, onDelta,
   //   onThinking }) → result, policy: () => current policy (or one), rounds, limits: { ms, tokens }, headless, stream (text
   //   deltas go to emit), signal, emit, ctx (what a tool's run is given), confirms (a Map: parked calls), now }
   // → the last result, with { reply, steps, rounds, usage, pending?, paused? }.

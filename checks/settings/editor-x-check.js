@@ -1,4 +1,4 @@
-// The editor's Look parts builders (lib/editor-x*.js), headless, in the real unpacked extension's options page: a shader
+// The editor's Look parts builders (settings/editor-x*.js), headless, in the real unpacked extension's options page: a shader
 // typed with a mistake (shown at its line, not saved), an example shader saved and drawn in the preview with the guard's
 // step said in words, a preset layer stack reordered from the keyboard, ready animations played in the Ultra preview, an
 // effect tried and silenced by motion off, a cursor effect, the device-only status, a glaze2 code, and labelled controls.
@@ -13,9 +13,9 @@ const out = process.argv[2] && path.resolve(process.argv[2]);
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const AURORA = fs.readFileSync(path.join(ext, 'assets/shaders/aurora.glsl'), 'utf8');
-const BG = require(path.join(ext, 'lib/editor-xbg.js'));
-const M = require(path.join(ext, 'lib/editor-xmotion.js'));
-const XP = require(path.join(ext, 'lib/lookparts.js'));
+const BG = require(path.join(ext, 'settings/editor-xbg.js'));
+const M = require(path.join(ext, 'settings/editor-xmotion.js'));
+const XP = require(path.join(ext, 'looks/lookparts.js'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const check = (name, ok, detail = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `  ${detail}`}`); if (!ok) fails++; };

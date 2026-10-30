@@ -3,8 +3,8 @@
 // filter, sort, rename, copy, export, delete to Trash with Undo (the Trash its own view: Restore, Delete forever), and files
 // dropped or imported as new documents (.docx, and what a switched-on kind takes).
 // ?paper=<key> opens one in the same paper chrome an assignment's frame has (writer-paper.js). Each kind of document
-// (lib/doc-kinds.js) brings its own page code; this file registers the paper's. Reads Writer's storage directly and writes
-// through the worker (lib/writer-papers.js).
+// (documents/doc-kinds.js) brings its own page code; this file registers the paper's. Reads Writer's storage directly and writes
+// through the worker (writer/writer-papers.js).
 (() => {
   // The student's Look as Glaze's own pages wear it (ui.js paint, settings and parts as GZ_UI.load reads them): the
   // palette, dark by the theme or by the system with auto light and dark (until storage answers, the system's mode), and
@@ -13,15 +13,15 @@
   // wears it: fonts, text size, corners, depth, surfaces opaque enough to read over its background, and the background
   // itself drawn behind everything by Settings' own painter (#gd-backdrop: preview.html's backdrop, fed the Look and its
   // parts as options.js feeds #backdrop; there only while Glaze is on and the Look has one). Follows storage live. The home
-  // is an address with no document's key (a kind's param, lib/doc-kinds.js), so its first paint is already the whole Look; a
-  // stale link that falls back home paints again (home below). The Look's surfaces (features/surfaces.css) are the home's.
+  // is an address with no document's key (a kind's param, documents/doc-kinds.js), so its first paint is already the whole Look; a
+  // stale link that falls back home paints again (home below). The Look's surfaces (looks/page/surfaces.css) are the home's.
   const look = { whole: !/[?&](?:paper|sheet|pdf|slides)=/.test(location.search), paint: () => {}, surfaces: null,
-    sheet: () => { look.surfaces ||= new Promise((ok) => { const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'features/surfaces.css', onload: ok, onerror: ok }); document.head.append(l); }); } };
+    sheet: () => { look.surfaces ||= new Promise((ok) => { const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'looks/page/surfaces.css', onload: ok, onerror: ok }); document.head.append(l); }); } };
   const theme = async () => {
     const root = document.documentElement, scheme = matchMedia('(prefers-color-scheme: dark)'), calm = matchMedia('(prefers-reduced-motion: reduce)');
     root.toggleAttribute('data-dark', scheme.matches);
     if (look.whole) look.sheet();
-    await GZ_WRITER_PAPER.need(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'lib/cards.js', 'lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js', 'lib/motionx.js', 'lib/lookparts.js', 'ui.js']);
+    await GZ_WRITER_PAPER.need(['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js', 'courses/cards.js', 'navigation/nav.js', 'navigation/nav-items.js', 'navigation/navlayout.js', 'looks/motionx.js', 'looks/lookparts.js', 'core/ui.js']);
     let turn = 0, worn = null, backdrop = null;
     // The frame shows once it wears this Look's ground (its first paint is the default Look's), at most a second later.
     const post = () => {
@@ -90,7 +90,7 @@
     document.head.append(s);
   });
   // What reading and writing .docx needs (writer-paper.js's DOCX, and the colour rule an import reads runs by).
-  const DOCX = ['lib/writer-color.js', 'lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js'];
+  const DOCX = ['writer/writer-color.js', 'core/zip.js', 'core/doctext.js', 'writer/writer-docx.js', 'writer/writer-objects-docx.js'];
   let store = null;
   const papers = () => (store ||= GZ_WRITER_PAPERS.open());
   // In a frame of a school's page the worker takes this document's writes once it has claimed its pass (embedded below,
@@ -101,7 +101,7 @@
   // ---- the paper kind's page code (GZ_DOC_KINDS.register below)
   // A paper as its .docx: { name, mime, bytes }, or null when it holds no document.
   const file = async (key) => {
-    await GZ_WRITER_PAPER.need([...DOCX, 'lib/writer-submit.js']);
+    await GZ_WRITER_PAPER.need([...DOCX, 'writer/writer-submit.js']);
     const p = await papers().get(key);
     if (!p?.doc) return null;
     const f = GZ_WRITER_STYLES.get(p.format), surname = GZ_WRITER_FORMAT.surname(p.doc, f);
@@ -117,9 +117,9 @@
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   };
-  // A paper's text, a line a paragraph (lib/doc-home.js flat).
+  // A paper's text, a line a paragraph (documents/doc-home.js flat).
   const text = (rec) => GZ_DOC_HOME.flat(rec?.doc);
-  // A paper's page 1, small (lib/writer-thumb.js).
+  // A paper's page 1, small (writer/writer-thumb.js).
   const thumb = (rec, scale = 0.25) => GZ_WRITER_THUMB.render(GZ_WRITER_THUMB.firstPage(rec.doc), rec.format, { scale });
   // A Word file as a new standalone document, as the editor's import reads one (writer-paper.js importFile): in the format
   // Settings → Writer starts papers in, its own formatting kept where the format would flag it, the save taking the
@@ -128,7 +128,7 @@
     if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > GZ_DOC_KINDS.KINDS.paper.max) throw new RangeError('Choose a Word file smaller than 15 MB.');
     const p = typeof progress === 'function' ? progress : () => {};
     p({ stage: 'read', done: 0, total: file.size });
-    await GZ_WRITER_PAPER.need(['lib/writer-styles.js', 'lib/writer-format.js', 'lib/doc-home.js', ...DOCX]);
+    await GZ_WRITER_PAPER.need(['writer/writer-styles.js', 'writer/writer-format.js', 'documents/doc-home.js', ...DOCX]);
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT;
     const id = await chrome.storage.sync.get('writer').then((r) => r?.writer?.format, () => null);
     const format = ST.FORMATS[ST.IDS.includes(id) ? id : 'mla9'];
@@ -146,7 +146,7 @@
   };
   const edit = async (key) => {
     document.documentElement.dataset.mode = 'paper';
-    await GZ_WRITER_PAPER.need(['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'lib/writer-settings.js']);
+    await GZ_WRITER_PAPER.need(['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js', 'writer/writer-settings.js']);
     await GZ_WRITER_SETTINGS.load();
     const plugins = [], hooks = { ready: [], change: [], context: [] };
     const emit = (event, ...a) => { for (const fn of hooks[event]) try { fn(...a); } catch (e) { console.error(e); } };
@@ -165,7 +165,7 @@
       plugin: (p) => { if (editor) editor.addPlugins([p]); else plugins.push(p); },
       item: (text, fn) => { const b = h('button', { type: 'button', role: 'menuitem', text }); b.addEventListener('click', fn); return b; },
     };
-    await GZ_WRITER_PAPER.need(['lib/writer-sources.js', 'lib/writer-bibliography.js', 'lib/writer-cite.js', 'lib/writer-lookup.js', 'lib/ai/failure.js', 'lib/writer-issues.js', 'lib/writer-proof.js', 'lib/ai/tasks/writer-context.js', 'writer-proof.js', 'writer-ai.js', 'writer-mcp.js', 'writer-cite.js', 'lib/writer-export.js', 'writer-objects.js', 'writer-find.js', 'writer-counts.js', 'writer-print.js', 'writer-ruler.js', 'lib/writer-color.js', 'writer-paste.js']);
+    await GZ_WRITER_PAPER.need(['writer/writer-sources.js', 'writer/writer-bibliography.js', 'writer/writer-cite.js', 'writer/writer-lookup.js', 'ai/failure.js', 'writer/writer-issues.js', 'writer/writer-proof.js', 'ai/tasks/writer-context.js', 'writer/frame/writer-proof.js', 'writer/frame/writer-ai.js', 'agents/writer-mcp.js', 'writer/frame/writer-cite.js', 'writer/writer-export.js', 'writer/frame/writer-objects.js', 'writer/frame/writer-find.js', 'writer/frame/writer-counts.js', 'writer/frame/writer-print.js', 'writer/frame/writer-ruler.js', 'writer/writer-color.js', 'writer/frame/writer-paste.js']);
     const mountEl = h('div');
     document.body.append(mountEl);
     editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins, onChange: (change) => emit('change', change) });
@@ -179,7 +179,7 @@
   // ---- the home
   const home = async (error = '') => {
     if (!look.whole) { look.whole = true; look.sheet(); look.paint(); }
-    await GZ_WRITER_PAPER.need(['lib/writer-styles.js', 'lib/writer-format.js', 'lib/writer-thumb.js', 'lib/doc-home.js']);
+    await GZ_WRITER_PAPER.need(['writer/writer-styles.js', 'writer/writer-format.js', 'writer/writer-thumb.js', 'documents/doc-home.js']);
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PA = GZ_WRITER_PAPERS, DK = GZ_DOC_KINDS, DH = GZ_DOC_HOME, TH = GZ_WRITER_THUMB;
     const st = papers(), { INDEX, PAPER } = PA.KEYS;
     const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
@@ -219,7 +219,7 @@
     const sortSel = h('select', { id: 'gd-sort', 'aria-label': t('Sort') }, h('option', { value: 'updated', text: t('Last edited') }), h('option', { value: 'title', text: t('Title') }));
     const gridB = btn({ id: 'gd-grid', 'aria-label': t('Grid'), title: t('Grid') }, icon('grid')), listB = btn({ id: 'gd-list', 'aria-label': t('List'), title: t('List') }, icon('list'));
     const binB = btn({ id: 'gd-trash', 'aria-label': t('Trash'), title: t('Trash'), 'aria-pressed': 'false' }, icon('trash')), binBox = h('div', { class: 'gd-views gd-bin', hidden: true }, binB);
-    // Word files only, unless another kind takes files too (lib/doc-kinds.js taking: a switched-on kind, pdf-kind.js or
+    // Word files only, unless another kind takes files too (documents/doc-kinds.js taking: a switched-on kind, pdf-kind.js or
     // slides-kind.js).
     const many = DK.taking().length > 1, importWord = t(many ? 'Import…' : 'Import .docx…');
     const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept: DK.accept(), hidden: true, tabindex: '-1', 'aria-label': importWord });
@@ -575,7 +575,7 @@
       const rec = await st.get(k);
       return st.save(k, { title: rec?.doc ? F.name(rec.doc, ST.get(rec.format)) : '', named: false });
     };
-    // A copy as a standalone document (lib/writer-papers.js copyOf: the text and its look, never the assignment), with what
+    // A copy as a standalone document (writer/writer-papers.js copyOf: the text and its look, never the assignment), with what
     // its kind keeps of its own (copy: a spreadsheet's book, and its parts written with it).
     const copy = async (k) => {
       const rec = await st.get(k);
@@ -651,7 +651,7 @@
 
     // ---- files dropped anywhere on the page or chosen with Import .docx…: one new document each, at most 20
     // A kind other than the paper says its own refusals (its says: { size, read }, slides-kind.js's; pdf-kind.js's here: the
-    // PDF size its kind opens, lib/doc-kinds.js big, and a file that is no PDF or a form only XFA can show); a file no kind
+    // PDF size its kind opens, documents/doc-kinds.js big, and a file that is no PDF or a form only XFA can show); a file no kind
     // takes gets the Word one, or the plain one while another kind takes files too.
     const REFUSALS = new Set(['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.', DK.KINDS.pdf.big, 'That file could not be read.']);
     const PAPER_SAYS = { size: 'Choose a Word file smaller than 15 MB.', read: 'That file could not be read as a Word document.' };
@@ -659,7 +659,7 @@
     const saysOf = (id) => (id && id !== 'paper' && (DK.get(id)?.says || KIND_SAYS[id])) || PAPER_SAYS;
     const unread = many ? 'That file could not be read.' : PAPER_SAYS.read;
     // ---- imports under way: a card for each file from the moment it is taken, in the list's first place, its stage and
-    // bytes as the kind reports them (lib/doc-kinds.js progress) on a bar, its menu off, until the document it made is
+    // bytes as the kind reports them (documents/doc-kinds.js progress) on a bar, its menu off, until the document it made is
     // listed (render); one that failed says why on its card, with Retry and Remove. The stages are spoken in the count's
     // live region, the failure in the status line too. A batch's files go one after another.
     const STEPS = { pdf: ['read', 'prepare', 'copy', 'save'], slides: ['read', 'prepare', 'copy', 'save'] };
@@ -796,11 +796,11 @@
 
     // ---- GZ_DOCUMENTS: the page's hooks for its own scripts, as GZ_WRITER_FRAME is the editor's. on(event, fn): 'ready'
     // (the home is drawn) and 'change' (the documents changed); list(): every listed document's public summary
-    // (lib/doc-home.js summary), newest first; open(key) and create(format) in this tab; read(key) → { key, title, text } and
+    // (documents/doc-home.js summary), newest first; open(key) and create(format) in this tab; read(key) → { key, title, text } and
     // export(key) → { name, mime, bytes } (its kind's file, GZ_DOC_KINDS), for a listed key only, else null; item(slot, label,
     // fn, { by }): a button in the toolbar ('toolbar') or an entry in every card's ⋯ menu ('card'), fn(summary or null, the
     // click) → { remove() }; style({ radius, glass, thumb, column }): the --gd-* hooks (papers.css), each a number or left
-    // to the Look. Mods reach these through features/mods.js, each call checked by the worker first (lib/modbroker.js).
+    // to the Look. Mods reach these through mods/page/mods.js, each call checked by the worker first (mods/modbroker.js).
     const hooks = { ready: [], change: [] }, slots = { toolbar: new Map(), card: new Map() };
     const tell = (ev) => { for (const fn of hooks[ev]) try { fn(); } catch (e) { console.error(e); } };
     const summary = (r) => DH.summary(r, titleOf(r), DK.kindOf(r));
@@ -833,10 +833,10 @@
     };
     globalThis.GZ_DOCUMENTS = Object.freeze(D);
     hooks.change.push(() => globalThis.GZ_MODS?.documents.change());
-    // Google Drive (lib/drive.js): From Google Drive beside Import, Save to Google Drive in the ⋯ menu, while connected.
+    // Google Drive (documents/drive.js): From Google Drive beside Import, Save to Google Drive in the ⋯ menu, while connected.
     globalThis.GZ_DRIVE?.page?.home(D, { bring, say });
 
-    // ---- mods: the Workers of the mods granted documents run here as on a school page (features/mods.js: its host, its
+    // ---- mods: the Workers of the mods granted documents run here as on a school page (mods/page/mods.js: its host, its
     // watchdog), on this page's calls: what the worker's answer carries is done through GZ_DOCUMENTS. Their items show with
     // the mod's name; opening or starting a document follows a click on one of the mod's own items, within a second, once.
     // The first mod in the student's order to set a --gd-* hook wins it.
@@ -844,7 +844,7 @@
       if (!chrome.runtime.getManifest().sandbox) return; // code mods run only where the manifest has their sandbox (content.js too)
       const a = await chrome.runtime.sendMessage({ type: 'glaze:modpage', op: 'list' }).catch(() => null);
       if (!Array.isArray(a?.mods) || !a.mods.length || !active) return;
-      await GZ_WRITER_PAPER.need(['defaults.js', 'lib/modapi.js']);
+      await GZ_WRITER_PAPER.need(['content/defaults.js', 'mods/modapi.js']);
       const keys = GZ_MODAPI.docKeys();
       const own = new Map(), styles = new Map(), clicked = new Map(); // `${mod}|${slot}|${id}` → item; mod → its hooks; mod → when its item was clicked
       const restyle = () => { const won = {}; for (const id of GZ_MODS.order()) for (const [k, v] of Object.entries(styles.get(id) || {})) won[k] ??= v; D.style(won); };
@@ -872,7 +872,7 @@
       };
       const forget = (id) => { for (const [k, x] of own) if (k.startsWith(`${id}|`)) { x.remove(); own.delete(k); } clicked.delete(id); keys.forget(id); if (styles.delete(id)) restyle(); };
       globalThis.GZ_CTX = Object.freeze({ site: 'documents', need: (f, ready) => (ready() ? Promise.resolve() : GZ_WRITER_PAPER.need([f])), documents: Object.freeze({ call, forget }) });
-      await GZ_WRITER_PAPER.need(['features/mods.js']);
+      await GZ_WRITER_PAPER.need(['mods/page/mods.js']);
       GZ_MODS.start(a.mods);
     };
 
@@ -888,7 +888,7 @@
 
   catalogue().then(async () => {
     document.title = t('Documents');
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js']);
+    await GZ_WRITER_PAPER.need(['writer/writer-papers.js']);
     GZ_DOC_KINDS.register('paper', { edit, thumb, file, exportFile, text, importFile, measure: GZ_WRITER_PAPERS.measure });
     // The other kinds' scripts (sheet-kind.js, pdf-kind.js, slides-kind.js, after this one in papers.html) have run once the
     // document is parsed; each may still be reading its switch.
@@ -919,8 +919,8 @@
   }).catch((e) => console.error(e));
 })();
 
-// ---- embedded: Documents as a page of the school's site (features/settingspage.js). It shows, and the worker takes its
-// writes, only once this document claims the one-use pass Glaze's page sends it after its hello (lib/background.js
+// ---- embedded: Documents as a page of the school's site (settings/page/settingspage.js). It shows, and the worker takes its
+// writes, only once this document claims the one-use pass Glaze's page sends it after its hello (background/background.js
 // 'glaze:papers'): a site framing this page itself gets an empty one. It talks to that page over the pass's MessageChannel:
 //   frame → page: opened { at } (this document's query once the list or a document shows), leave (Close, Escape);
 //   page → frame: go { at } (Back or Forward to the list or a document).

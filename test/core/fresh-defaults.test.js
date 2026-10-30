@@ -1,8 +1,8 @@
 // Owner, 2026-10-20: starter Dashboards and settings in the dock supersede the 2026-10-19 empty default.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const W = require('../../extension/lib/widgets.js');
-const S = require('../../extension/lib/sidebar.js');
+const W = require('../../extension/core/widgets.js');
+const S = require('../../extension/navigation/sidebar.js');
 const starter = ['pet', 'timer', 'notes', 'quotes'];
 const fresh = () => W.fresh();
 const cards = (lms) => Array.from({ length: 6 }, (_, i) => `course:https://school.test/${lms === 'canvas' ? i + 1 : `_${i + 1}_1`}`);
@@ -71,7 +71,7 @@ test('responsive card rows fill the available room, align below starters and ret
 });
 
 test('fresh navigation yields to saved navigation arriving later without writing sync', () => {
-  const N = require('../../extension/lib/navbar.js');
+  const N = require('../../extension/navigation/navbar.js');
   assert.deepEqual(N.initial(undefined, undefined, true).glaze, ['settings']);
   assert.deepEqual(N.initial(undefined, { hidden: ['course'] }, true).glaze, []);
   assert.deepEqual(N.initial({ glaze: [] }, undefined, true).glaze, []);
@@ -97,7 +97,7 @@ test('automatic card rows begin at the reading edge in RTL', () => {
 });
 
 test('initial feature choices are local fallbacks and saved switches arriving through sync win', () => {
-  const D = require('../../extension/defaults.js'), raw = { enhance: { todo: false } };
+  const D = require('../../extension/content/defaults.js'), raw = { enhance: { todo: false } };
   const before = structuredClone(raw);
   const initial = D.GZ_SANITIZE(raw, true);
   assert.equal(initial.enhance.notes, true);
@@ -131,8 +131,8 @@ test('a stale automatic fill cannot add cards to an existing unfilled board with
 });
 
 test('a delayed settings read cannot replace a newer install or sync snapshot', async () => {
-  const fs = require('node:fs'), vm = require('node:vm'), D = require('../../extension/defaults.js');
-  const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
+  const fs = require('node:fs'), vm = require('node:vm'), D = require('../../extension/content/defaults.js');
+  const source = fs.readFileSync(require.resolve('../../extension/content/content.js'), 'utf8');
   const part = source.slice(source.indexOf('  let lookX;'), source.indexOf('  // The previous palette covers storage latency'));
   for (const initial of [false, true]) {
     const sync = [], local = [];

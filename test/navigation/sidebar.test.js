@@ -1,12 +1,12 @@
-// The sidebar's state (lib/sidebar.js): the record and its bounds, each change, the one-time move of To Do into the
+// The sidebar's state (navigation/sidebar.js): the record and its bounds, each change, the one-time move of To Do into the
 // dock, where each widget goes (resolve) and how the page shows the sidebar (mode). Plus: a shared Look never carries
 // the layout or the sidebar.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/sidebar.js');
-const W = require('../../extension/lib/widgets.js');
-const G = require('../../extension/defaults.js');
-const share = require('../../extension/lib/share.js');
+const S = require('../../extension/navigation/sidebar.js');
+const W = require('../../extension/core/widgets.js');
+const G = require('../../extension/content/defaults.js');
+const share = require('../../extension/sharing/share.js');
 
 const CANVAS = 'https://school.instructure.com', ULTRA = 'https://bb.example.edu';
 const ops = (rec, ...list) => S.apply(rec, list, { lms: 'canvas' });
@@ -200,7 +200,7 @@ test('migration on Ultra: boards that agree decide; boards that disagree are lef
     r = S.migrate(split, null, { lms: 'ultra', todo: true });
     assert.equal(r.mig, 1); assert.deepEqual(r.dest, {}); assert.deepEqual(r.dock, []); assert.deepEqual(r.offer, { todo: 'pending' });
   }
-  // Before the Courses page's To Do mark, its off was never a choice (lib/widgets.js layout): it counts as on.
+  // Before the Courses page's To Do mark, its off was never a choice (core/widgets.js layout): it counts as on.
   r = S.migrate({ tiles: [], boards: { courses: all(), dash: all({ todo: { on: true } }) } }, null, { lms: 'ultra', todo: true });
   assert.deepEqual(docked(r), ['todo']);
 });
@@ -406,7 +406,7 @@ test("a shared Look carries the sidebar's style, surface and corners, never its 
 
 test('a code whose sidebar part has anything but its appearance, or a value Glaze would change, is refused', async () => {
   for (const bad of [{ width: 400 }, { style: 'sideways' }, { title: 'x' }]) {
-    const L = require('../../extension/lib/lookparts.js');
+    const L = require('../../extension/looks/lookparts.js');
     const code = await share.encode(G.GZ_SANITIZE({}), {});
     const raw = JSON.parse(new TextDecoder().decode(await L.inflate(L.unb64(code.slice(7)), 8192)));
     raw.s = bad;

@@ -78,13 +78,15 @@ const firefoxFixture = (branch, check) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-audit-firefox-'));
   try {
     const seed = path.join(dir, 'seed'), scripts = path.join(dir, 'tools/build');
-    fs.mkdirSync(path.join(seed, 'lib'), { recursive: true }); fs.mkdirSync(scripts, { recursive: true }); fs.mkdirSync(path.join(dir, 'extension'));
+    fs.mkdirSync(path.join(seed, 'background'), { recursive: true }); fs.mkdirSync(scripts, { recursive: true }); fs.mkdirSync(path.join(dir, 'extension'));
     fs.writeFileSync(path.join(seed, 'manifest.json'), JSON.stringify(manifest));
-    fs.writeFileSync(path.join(seed, 'lib/background.js'), '// offline fixture\n');
+    fs.writeFileSync(path.join(seed, 'background/background.js'), '// offline fixture\n');
+    // The packager replaces Calendar's sign-in with Firefox's stand-in, as it would in a real package.
+    fs.mkdirSync(path.join(seed, 'planner')); fs.writeFileSync(path.join(seed, 'planner/gcal-auth.js'), '// offline fixture\n');
     fs.writeFileSync(path.join(dir, 'extension/manifest.json'), JSON.stringify(manifest));
     fs.copyFileSync(path.join(__dirname, '../../tools/build/package-firefox.sh'), path.join(scripts, 'package-firefox.sh'));
     // What its Google step reads (tools/build/oauth-manifest.js and the Drive config it judges).
-    for (const f of ['../tools/build/oauth-manifest.js', 'lib/google.js', 'lib/google-config.js', 'lib/oauth.js']) {
+    for (const f of ['../tools/build/oauth-manifest.js', 'background/google.js', 'background/google-config.js', 'background/oauth.js']) {
       const to = path.join(dir, f.startsWith('../') ? f.slice(3) : `extension/${f}`);
       fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(path.join(root, f), to);
     }

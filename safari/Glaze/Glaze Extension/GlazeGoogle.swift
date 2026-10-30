@@ -2,7 +2,7 @@
 //  GlazeGoogle.swift
 //  Glaze Extension (and both Glaze apps)
 //
-//  Google sign-in for Drive in Safari: lib/google.js's native flow. Google's "iOS" OAuth client, the authorization code
+//  Google sign-in for Drive in Safari: background/google.js's native flow. Google's "iOS" OAuth client, the authorization code
 //  flow with PKCE (S256), no client secret. ASWebAuthenticationSession needs a window to present from (its
 //  presentationContextProvider), and this extension has none, so the sign-in page runs in the Glaze app
 //  (GlazeGoogleSignIn.swift). The code verifier never leaves this extension: the app gets only the state and the challenge

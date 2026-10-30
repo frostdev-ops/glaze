@@ -1,8 +1,8 @@
 // Look extras on the LMS page (W12): the pointer, Look rotation's clock, and stickers. content.js loads this (need)
 // once one is in use on the page (the worn Look's x.pointer or the student's own choice of pointer, settings.extras, or
 // stickers kept for this page) and calls sync() from applySettings and when the Look's parts change; the
-// command palette loads it for its switches (cmds). The pure parts are lib/lookx.js. What it keeps stays on this
-// device (storage.local), written through the worker's queue (lib/background.js 'glaze:stickers', 'glaze:rotate').
+// command palette loads it for its switches (cmds). The pure parts are looks/lookx.js. What it keeps stays on this
+// device (storage.local), written through the worker's queue (background/background.js 'glaze:stickers', 'glaze:rotate').
 // Stickers never take a click meant for the page: they let pointers through except in sticker mode, and are never
 // on a quiz being taken or a tool's page. Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
@@ -11,14 +11,14 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   const t = (k, v) => ctx.t(k, v);
   const html = document.documentElement;
   const top = window.top === window;
-  const lib = () => ctx.need('lib/lookx.js', () => globalThis.GZ_LX);
+  const lib = () => ctx.need('looks/lookx.js', () => globalThis.GZ_LX);
   const get = (keys) => new Promise((res) => { try { chrome.storage.local.get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   const url = (f) => chrome.runtime.getURL(f);
   const X = () => ctx.settings().extras;
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null)); return e; };
   const button = (text, label, act) => { const b = make('button', { type: 'button', textContent: text }); if (label) b.setAttribute('aria-label', label); b.addEventListener('click', act); return b; };
-  // lib/lookx.js quiet; before it has loaded (the palette's switches), sticker mode checks again once it has.
+  // looks/lookx.js quiet; before it has loaded (the palette's switches), sticker mode checks again once it has.
   const quiz = () => !!globalThis.GZ_LX?.quiet(location.pathname, document);
   // The student's own pictures reach the page as blob: addresses made from the stored bytes, not as data: URLs in its
   // DOM and CSS; each is revoked when replaced or deleted, and all of them when the page is hidden (and remade if the
@@ -30,11 +30,11 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   };
   const sheet = () => {
     if (!ctx.on()) return;
-    if (!document.getElementById('gz-lookx-css')) (document.head || html).append(make('link', { id: 'gz-lookx-css', rel: 'stylesheet', href: url('features/lookx.css') }));
+    if (!document.getElementById('gz-lookx-css')) (document.head || html).append(make('link', { id: 'gz-lookx-css', rel: 'stylesheet', href: url('looks/page/lookx.css') }));
   };
 
-  // ---- the pointer: a set as a CSS cursor on the page (features/lookx.css), the system's I-beam kept on text. The system
-  // draws it, so it never lags; its animation is features/motionx.js's, on the canvas around it. Which one is the student's
+  // ---- the pointer: a set as a CSS cursor on the page (looks/page/lookx.css), the system's I-beam kept on text. The system
+  // draws it, so it never lags; its animation is looks/page/motionx.js's, on the canvas around it. Which one is the student's
   // choice (extras.pointer) over the Look's, including a course's assigned Look. Off on quiz/tool pages, with Glaze off and
   // with the custom pointer off (extras.pointerOn).
   let pointer = '', pointing = 0; // the own pointer's blob: address and the latest read
@@ -143,10 +143,10 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (live && (layer || editing)) { draw(); if (panel && pack.startsWith('mod:')) showPack(); }
     for (const a of old) if (a?.url) URL.revokeObjectURL(a.url);
   };
-  // The Lottie player, imported once (lib/lottie/): the first Lottie sticker asks for it.
+  // The Lottie player, imported once (vendor/lottie/): the first Lottie sticker asks for it.
   let lottieLoad = null, lottieAttempt = 0;
   // A redraw can retry the player without reusing a failed browser module URL.
-  const lottieIn = () => (lottieLoad ||= import(chrome.runtime.getURL(`lib/lottie/lottie_light_canvas.js?gzStickerRetry=${lottieAttempt++}`)).then(() => {
+  const lottieIn = () => (lottieLoad ||= import(chrome.runtime.getURL(`vendor/lottie/lottie_light_canvas.js?gzStickerRetry=${lottieAttempt++}`)).then(() => {
     if (typeof globalThis.lottie?.loadAnimation !== 'function') throw new Error('lottie');
     return globalThis.lottie;
   }).catch((error) => {
@@ -219,7 +219,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (list.some((p) => isMod(p.s))) await readMod(list.map((p) => p.s));
     if (still()) draw();
   };
-  // Changes go to the worker one by one (lib/lookx.js apply), each with when it was made: adding and removing at once,
+  // Changes go to the worker one by one (looks/lookx.js apply), each with when it was made: adding and removing at once,
   // a drag's moves together after it rests.
   const op = (m) => send({ type: 'glaze:stickers', key, at: Date.now(), ...m });
   const flush = () => {
@@ -332,7 +332,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (!ctx.on()) return;
     const was = panel;
     if (pack === 'own') {
-      // The pictures stored (lib/lookx.js imgIds): read in sticker mode only.
+      // The pictures stored (looks/lookx.js imgIds): read in sticker mode only.
       const all = await get(null);
       if (!ctx.on() || !live || panel !== was || !panel || pack !== 'own') return;
       const ids = GZ_LX.imgIds(all);
@@ -442,7 +442,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (Object.keys(c).some((k) => k === 'mods' || k.startsWith('mod:') || k === 'modsBlocklist' || k === 'modDev')) refreshMods();
     if (key && c[key] && !editing && !pending.size) { key = ''; stickers(); }
   });
-  // The Look changed: its pointer may have (features/lookparts.js; the event says nothing, the parts are asked again). The
+  // The Look changed: its pointer may have (looks/page/lookparts.js; the event says nothing, the parts are asked again). The
   // student's choice changing is a settings change: applySettings calls sync().
   document.addEventListener('glaze:parts', () => { if (globalThis.GZ_LX) cursor(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) arm(); mute(); });
@@ -469,7 +469,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     stickers();
   };
 
-  // The command palette's switches (features/palette.js). The custom pointer's switch first (extras.pointerOn); while it is
+  // The command palette's switches (navigation/page/palette.js). The custom pointer's switch first (extras.pointerOn); while it is
   // on, the student's pointer by name, as the editor's Look › Pointer lists them (settings extras.pointer, defaults.js), with
   // their own picture only once there is one (ready(), asked as the palette opens), and its animation's switch.
   const POINTERS = { look: "The Look's pointer", aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal',

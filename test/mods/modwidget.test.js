@@ -1,12 +1,12 @@
-// Declarative widgets (lib/modwidget.js): the strict cleaner for their blocks, what the data paths give, the worker's
+// Declarative widgets (mods/modwidget.js): the strict cleaner for their blocks, what the data paths give, the worker's
 // 'widget' ask (a binding resolves only with its permission declared and granted, for this site's data alone), buttons limited
-// to Glaze's own actions, and a widget bundle's round trip through lib/modbundle.js.
+// to Glaze's own actions, and a widget bundle's round trip through mods/modbundle.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const W = require('../../extension/lib/modwidget.js');
-const API = require('../../extension/lib/modapi.js');
-const B = require('../../extension/lib/modbroker.js');
-const M = require('../../extension/lib/modbundle.js');
+const W = require('../../extension/mods/modwidget.js');
+const API = require('../../extension/mods/modapi.js');
+const B = require('../../extension/mods/modbroker.js');
+const M = require('../../extension/mods/modbundle.js');
 
 const enc = new TextEncoder();
 const NOW = Date.UTC(2026, 9, 17, 12, 0, 0);

@@ -1,8 +1,8 @@
 // Gradescope in Better To Do (W10, enhance.gradescope, off by default). Gradescope has no API for students, so its
-// course pages are read: on www.gradescope.com while the student is there (features/gradescope.js), and, with
+// course pages are read: on www.gradescope.com while the student is there (planner/page/gradescope.js), and, with
 // todo.gsDaily on, at most once a day from a Canvas page through the background worker. Either way with the student's
 // own Gradescope session, as plain GETs, and nothing goes anywhere but this device (storage.local `gradescope`, written
-// only through the worker's queue, lib/background.js 'glaze:gradescope').
+// only through the worker's queue, background/background.js 'glaze:gradescope').
 //
 // Gradescope's markup is read row by row and every row on its own: a row that can't be read is skipped and counted,
 // never the course's whole sync. Ids come from addresses read with URL, never from split('/') positions.
@@ -189,7 +189,7 @@ var GZ_GRADESCOPE = globalThis.GZ_GRADESCOPE || (() => {
       .slice(0, 50).map(([k, b]) => [k, { id: b.id, show: !!b.show }]));
     return acct ? { acct, map, courses: kept, hide: !!r.hide, bind } : { acct, map: {}, courses: {}, hide: false, bind };
   };
-  // A write, in the worker's queue (lib/background.js decides who may ask). m.op:
+  // A write, in the worker's queue (background/background.js decides who may ask). m.op:
   //   'acct', acct: { id, name }: who is signed in to Gradescope now. Another account than the one kept starts afresh
   //     (its placings, what was read, the bar's dismissal); Canvas accounts' answers stay, for the account they named.
   //   'map', acct, list: [{ gid, to, name }]: to a Canvas course, '' for "not this one", null to forget it (the bar asks
@@ -232,7 +232,7 @@ var GZ_GRADESCOPE = globalThis.GZ_GRADESCOPE || (() => {
   };
 
   // ---- on Canvas ------------------------------------------------------------------------------------------------------
-  // The kept rows for one Canvas site as Better To Do's items (lib/todo.js slim's shape, type 'gradescope'), in the
+  // The kept rows for one Canvas site as Better To Do's items (planner/todo.js slim's shape, type 'gradescope'), in the
   // Canvas course each Gradescope course goes to. Missing: nothing handed in and the last due date (the late one, if
   // any) gone by. A row's link opens it on Gradescope. Only for a Canvas account (origin, uid) that said yes to this
   // Gradescope account; for any other, nothing.

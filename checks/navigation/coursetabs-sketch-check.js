@@ -3,7 +3,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), assert = require('node:assert/strict');
 const root = path.join(__dirname, '../../extension');
-const source = fs.readFileSync(process.env.GZ_SKETCH_SOURCE || path.join(root, 'lib/coursetabs.js'), 'utf8');
+const source = fs.readFileSync(process.env.GZ_SKETCH_SOURCE || path.join(root, 'navigation/coursetabs.js'), 'utf8');
 const fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
 (async () => {
   let ctx, tmp;
@@ -18,7 +18,7 @@ const fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-
     const page = await ctx.newPage();
     await page.goto('https://bb.school.test/ultra/courses/_101_1/outline');
     await page.waitForSelector('.content-list-item');
-    for (const file of ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js']) await page.addScriptTag({ path: path.join(root, file) });
+    for (const file of ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js']) await page.addScriptTag({ path: path.join(root, file) });
     await page.addScriptTag({ content: source });
     assert.equal(await page.evaluate(() => typeof GZ_CTABS_LIB?.sketch), 'function', 'the normal library bootstrap is loaded');
     for (const count of [40, 5000]) {

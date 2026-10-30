@@ -1,7 +1,7 @@
 // Ultra's sticky bands fold once the page scrolls under them, and stay whole in their place: a test attempt's progress
 // band (the owner, 2026-10-27: make it smaller and less in the way when scrolled down, as it is in its place) and a course's
 // top bar (the owner, same day: no solid backer behind it scrolled, the same treatment as the progress bar).
-// features/sticky-fold.js marks a band data-gz-stuck once it has left its place, and gives back the height it folds as
+// navigation/page/sticky-fold.js marks a band data-gz-stuck once it has left its place, and gives back the height it folds as
 // --gz-fold (the progress band) or keeps its height as --gz-whole (the bar), so nothing under it moves. Here stand-in
 // layouts: the band's parent scrolls up, or is the scroller itself.
 const test = require('node:test');
@@ -66,7 +66,7 @@ const load = (kind = 'progress') => {
     GZ_CTX: { site: 'ultra', on: () => c.glazeOn, settings: () => c.settings }, glazeOn: true, settings: { enhance: { fold: true } }, ...on('window') };
   c.globalThis = c;
   vm.createContext(c);
-  const ui = vm.runInContext(read('features/sticky-fold.js'), c);
+  const ui = vm.runInContext(read('navigation/page/sticky-fold.js'), c);
   const scrollTo = (y) => { state.scroll = y; for (const l of listeners.filter((x) => x.type === 'scroll')) l.f({ type: 'scroll', target: scroller }); flush(); };
   return { c, ui, header, listeners, scrollTo, flush, el };
 };
@@ -126,14 +126,14 @@ test('routed on a course\'s pages (its tools, a test attempt), and loadable', ()
   const c = { location: { pathname: '' }, GZ_CTX: { site: 'ultra', need: (f) => { need.push(f); return new Promise(() => {}); } }, sessionStorage: { getItem: () => null } };
   c.globalThis = c;
   vm.createContext(c);
-  const routes = vm.runInContext(read('features/routes.js'), c);
-  const asks = (p) => { need.length = 0; c.location.pathname = p; routes.sync(); return need.includes('features/sticky-fold.js'); };
+  const routes = vm.runInContext(read('content/routes.js'), c);
+  const asks = (p) => { need.length = 0; c.location.pathname = p; routes.sync(); return need.includes('navigation/page/sticky-fold.js'); };
   for (const p of ['/ultra/courses/_101_1/assessment/_7_1/attempt/_8_1', '/ultra/courses/_101_1/assessment/_7_1/attempt/create',
     '/ultra/courses/_101_1/outline/assessment/_7_1/attempt/_8_1', '/ultra/courses/_101_1/outline', '/ultra/courses/_101_1/calendar',
     '/ultra/courses/_101_1/announcements']) assert.ok(asks(p), p);
   for (const p of ['/ultra/course', '/ultra/stream', '/ultra/calendar']) assert.ok(!asks(p), p);
-  const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
-  assert.ok(list.includes('features/sticky-fold.js'));
+  const list = JSON.parse(read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
+  assert.ok(list.includes('navigation/page/sticky-fold.js'));
 });
 
 test('a course\'s bar stays whole at the top and folds once the course scrolls under it', () => {
@@ -165,7 +165,7 @@ test('a course\'s bar holding Glaze\'s course strip folds as well, its strip kep
 });
 
 test('folded, the band is a small pill at the column\'s end, its filters row hidden', () => {
-  const theme = cssRules('theme.css');
+  const theme = cssRules('content/theme.css');
   const HEADER = ['html', 'body', 'div#site-wrap', 'div.assessment-attempt-panel', 'section.panel-content', 'div.panel-content-full', 'div.assessment-progress-header'];
   const stuck = Object.assign(chain(...HEADER), { attrs: { 'data-gz-stuck': '' } });
   assert.equal(winner(theme, stuck, 'border-radius')[0], '999px');
@@ -179,7 +179,7 @@ test('folded, the band is a small pill at the column\'s end, its filters row hid
 });
 
 test('folded, a course\'s bar is its tools in a small pill at the end, with no backing; at the top it is as it was', () => {
-  const theme = cssRules('theme.css');
+  const theme = cssRules('content/theme.css');
   // As read on a real course: the bar is the scroller's first child; its tools row is a toolbar in bb-course-navigation.
   const PANEL = ['html', 'body', 'div#site-wrap', 'div.course-content-container', 'div.panel-wrap.hide-in-background.modern'];
   const at = (bar, ...rest) => rest.reduce((parent, spec) => Object.assign(chain(spec), { parent }), bar);

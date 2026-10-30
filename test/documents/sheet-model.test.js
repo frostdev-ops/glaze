@@ -1,8 +1,8 @@
-// The spreadsheet model (lib/sheet-model.js): addresses to XFD1048576, the workbook/sheet/cell shapes, the operations
+// The spreadsheet model (documents/sheets/sheet-model.js): addresses to XFD1048576, the workbook/sheet/cell shapes, the operations
 // the grid and its undo stack drive (each returns its inverse), the caps, Excel's serial dates and typed input.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../../extension/lib/sheet-model.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
 
 test('columns and cells are named to XFD1048576, any case, $ allowed', () => {
   for (const [i, n] of [[0, 'A'], [25, 'Z'], [26, 'AA'], [51, 'AZ'], [701, 'ZZ'], [702, 'AAA'], [16383, 'XFD']]) {

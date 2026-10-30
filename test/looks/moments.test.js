@@ -4,8 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const T = require('../../extension/lib/todo.js');
-const L = require('../../extension/lib/lookx.js');
+const T = require('../../extension/planner/todo.js');
+const L = require('../../extension/looks/lookx.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
@@ -37,7 +37,7 @@ test('the planner answer another tab stores announces a submit once, through GZ_
   ctx.globalThis = ctx;
   ctx.GZ_CTX = { moment: (...a) => heard.push(a) };
   ctx.GZ_SPEC = {};
-  vm.runInContext(read('lib/todo.js'), ctx);
+  vm.runInContext(read('planner/todo.js'), ctx);
   const item = (submitted) => ({ type: 'assignment', id: '7', sub: { submitted } });
   const change = (oldValue, newValue) => ({ todoCache: { oldValue, newValue } });
   const key = 'todo:https://school-a.test/1';
@@ -68,7 +68,7 @@ test('the rotation turned: its Look changed, not its clock started or its mode',
 });
 
 // content.js: moment(), celebrate() and moveParts() run in a VM with stand-ins, sliced between markers.
-const firstScript = read('content.js');
+const firstScript = read('content/content.js');
 const slice = (from, to) => { const a = firstScript.indexOf(from), b = firstScript.indexOf(to, a); assert.ok(a > 0 && b > a, `${from} … ${to}`); return firstScript.slice(a, b); };
 const rig = ({ level = 'expressive', rect = { left: 10, top: 20, width: 30, height: 40 }, parts = null, motionx = null, extras = { pointer: 'look', pointerOn: true, pointerAnim: true }, partsOn = true, courseLook = null } = {}) => {
   const events = [], needed = [], burst = [];
@@ -123,7 +123,7 @@ test('the first script loads motionx only for a Look that moves, or once it is l
   for (const parts of [{ anim: { 'card.enter': {} } }, { fx: { complete: {} } }, { cursor: { kind: 'glow' } }]) {
     const x = rig({ parts });
     x.api.moveParts();
-    assert.deepEqual(x.needed, ['features/motionx.js']);
+    assert.deepEqual(x.needed, ['looks/page/motionx.js']);
   }
   for (const parts of [null, {}, { bg: { layers: [] } }, { nav: {}, rules: [] }]) {
     const x = rig({ parts });
@@ -132,7 +132,7 @@ test('the first script loads motionx only for a Look that moves, or once it is l
   }
   const loaded = rig({ parts: null, motionx: { sync() {} } });
   loaded.api.moveParts();
-  assert.deepEqual(loaded.needed, ['features/motionx.js'], 'loaded already: asked again so it follows the change (a Look without parts clears)');
+  assert.deepEqual(loaded.needed, ['looks/page/motionx.js'], 'loaded already: asked again so it follows the change (a Look without parts clears)');
   assert.match(firstScript, /document\.addEventListener\('glaze:parts', moveParts\)/);
   assert.match(firstScript, /globalThis\.GZ_MOTIONX\?\.off\(\)/, 'turning Glaze off stops it');
 });
@@ -140,38 +140,38 @@ test('the first script loads motionx only for a Look that moves, or once it is l
 test('the first script loads the pointer\'s code only for a pointer that will show, the Look\'s or the student\'s', () => {
   const asked = (o) => { const x = rig(o); x.api.moveParts(); return x.needed; };
   // The Look's pointer, worn while the student follows the Look; not when they chose the system's.
-  assert.deepEqual(asked({ parts: { pointer: 'pumpkin' } }), ['features/lookx.js']);
+  assert.deepEqual(asked({ parts: { pointer: 'pumpkin' } }), ['looks/page/lookx.js']);
   assert.deepEqual(asked({ parts: { pointer: 'pumpkin' }, extras: { pointer: 'look', pointerOn: false, pointerAnim: true } }), []);
   assert.deepEqual(asked({ parts: null }), [], 'following a Look without a pointer: nothing');
-  assert.deepEqual(asked({ parts: null, courseLook: 'Library' }), ['features/lookx.js'], 'a course Look brings its pointer without global parts');
+  assert.deepEqual(asked({ parts: null, courseLook: 'Library' }), ['looks/page/lookx.js'], 'a course Look brings its pointer without global parts');
   // A set or their own picture of the student's: with any Look or none, where the Look's parts would show.
   for (const pointer of ['aqua', 'lava', 'own']) {
-    assert.deepEqual(asked({ parts: null, extras: { pointer, pointerOn: true, pointerAnim: true } }), ['features/lookx.js'], pointer);
-    assert.deepEqual(asked({ parts: { pointer: 'ghost' }, extras: { pointer, pointerOn: true, pointerAnim: true } }), ['features/lookx.js'], pointer);
-    assert.deepEqual(asked({ parts: null, extras: { pointer, pointerOn: true, pointerAnim: true }, courseLook: 'Library' }), ['features/lookx.js'], `${pointer}: also on a course Look`);
+    assert.deepEqual(asked({ parts: null, extras: { pointer, pointerOn: true, pointerAnim: true } }), ['looks/page/lookx.js'], pointer);
+    assert.deepEqual(asked({ parts: { pointer: 'ghost' }, extras: { pointer, pointerOn: true, pointerAnim: true } }), ['looks/page/lookx.js'], pointer);
+    assert.deepEqual(asked({ parts: null, extras: { pointer, pointerOn: true, pointerAnim: true }, courseLook: 'Library' }), ['looks/page/lookx.js'], `${pointer}: also on a course Look`);
     assert.deepEqual(asked({ parts: null, extras: { pointer, pointerOn: true, pointerAnim: true }, partsOn: false }), [], `${pointer}: not with Glaze off or in a quiz preview`);
     assert.deepEqual(asked({ parts: { pointer: 'ghost' }, extras: { pointer, pointerOn: false, pointerAnim: true }, courseLook: 'Library' }), [], `${pointer}: not with the custom pointer off`);
   }
   // The pointer's animation alone brings motionx only while the student leaves it, and the custom pointer, on.
   assert.deepEqual(asked({ parts: { cursor: { kind: 'glow' } }, extras: { pointer: 'look', pointerOn: true, pointerAnim: false } }), []);
   assert.deepEqual(asked({ parts: { cursor: { kind: 'glow' } }, extras: { pointer: 'look', pointerOn: false, pointerAnim: true } }), []);
-  assert.deepEqual(asked({ parts: { cursor: { kind: 'glow' }, type: { kind: 'ink' } }, extras: { pointer: 'look', pointerOn: true, pointerAnim: false } }), ['features/motionx.js'], 'typing still brings it');
-  assert.deepEqual(asked({ parts: { cursor: { kind: 'glow' }, type: { kind: 'ink' } }, extras: { pointer: 'look', pointerOn: false, pointerAnim: true } }), ['features/motionx.js'], 'typing still brings it with the pointer off');
+  assert.deepEqual(asked({ parts: { cursor: { kind: 'glow' }, type: { kind: 'ink' } }, extras: { pointer: 'look', pointerOn: true, pointerAnim: false } }), ['looks/page/motionx.js'], 'typing still brings it');
+  assert.deepEqual(asked({ parts: { cursor: { kind: 'glow' }, type: { kind: 'ink' } }, extras: { pointer: 'look', pointerOn: false, pointerAnim: true } }), ['looks/page/motionx.js'], 'typing still brings it with the pointer off');
 });
 
 test('every place that celebrates leaves the level to celebrate()', () => {
-  assert.doesNotMatch(read('content-canvas.js'), /data-gz-motion/);
-  assert.doesNotMatch(read('features/todo.js').match(/const burst = [^\n]*/)[0], /data-gz-motion/);
+  assert.doesNotMatch(read('content/content-canvas.js'), /data-gz-motion/);
+  assert.doesNotMatch(read('planner/page/todo.js').match(/const burst = [^\n]*/)[0], /data-gz-motion/);
   assert.doesNotMatch(firstScript.match(/r\.oldValue !== 'true'[^\n]*/)[0], /data-gz-motion/);
 });
 
 test('the emitters sit where the data is read', () => {
-  assert.match(read('features/reminders.js'), /if \(run && s\.current > run\.current\) ctx\.moment\?\.\('streak'/);
-  assert.match(read('features/widgets.js'), /chime\(\); ctx\.moment\?\.\('timer\.done'/);
-  assert.match(read('features/nav.js'), /X\.moment\?\.\('timer\.done'/);
-  assert.match(read('features/lookx.js'), /ctx\.moment\?\.\('look\.rotate'\)/);
+  assert.match(read('planner/page/reminders.js'), /if \(run && s\.current > run\.current\) ctx\.moment\?\.\('streak'/);
+  assert.match(read('core/page/widgets.js'), /chime\(\); ctx\.moment\?\.\('timer\.done'/);
+  assert.match(read('navigation/page/nav.js'), /X\.moment\?\.\('timer\.done'/);
+  assert.match(read('looks/page/lookx.js'), /ctx\.moment\?\.\('look\.rotate'\)/);
   assert.match(firstScript, /gradeMoment\(cid, count, pill\)/);
-  assert.match(read('content-canvas.js'), /GZ_CTX\.gradeMoment\(cid, n, pill/);
+  assert.match(read('content/content-canvas.js'), /GZ_CTX\.gradeMoment\(cid, n, pill/);
 });
 
 
@@ -184,7 +184,7 @@ const badgeRig = (site) => {
   const shared = slice('  // ---- new grades (Extras)', '  // Ultra\'s pills');
   vm.runInContext(`${shared}; globalThis.cardBadge = cardBadge; globalThis.GZ_CTX = { moment${/const gradeMoment =/.test(shared) ? ', gradeMoment' : ''} };`, ctx);
   if (site === 'canvas') {
-    const source = read('content-canvas.js');
+    const source = read('content/content-canvas.js');
     vm.runInContext(`${source.slice(source.indexOf('  const canvasNewsBadge ='), source.indexOf('  const renderCanvasNew ='))}; globalThis.badge = canvasNewsBadge;`, ctx);
   } else ctx.badge = ctx.cardBadge;
   return { heard, draw: (n) => ctx.badge(host, 'c1', n, 'grades'), remount: () => pills.clear() };
@@ -203,7 +203,7 @@ for (const site of ['ultra', 'canvas']) test(`${site}: unread grades only announ
 
 test('Ultra does not treat a gradebook still loading as a known zero count', () => {
   const x = badgeRig('ultra');
-  const call = read('content-ultra.js').match(/cardBadge\(el, id, b\.results \?[^;]+;/)[0];
+  const call = read('content/content-ultra.js').match(/cardBadge\(el, id, b\.results \?[^;]+;/)[0];
   const ctx = vm.createContext({ el: {}, id: 'c1', b: { results: null }, GZ_GRADES: { fresh: () => ({ ids: new Set(['a', 'b']) }) }, seen: {}, cardBadge: (_, __, n) => x.draw(n) });
   vm.runInContext(call, ctx);
   ctx.b.results = [];
@@ -253,7 +253,7 @@ test('rotation clock repair is silent even when the stored index names a Look', 
 });
 
 for (const site of ['widget', 'rail']) test(`${site}: a timer loaded already expired is silent; an observed deadline announces once`, async () => {
-  const W = require('../../extension/lib/widgets.js');
+  const W = require('../../extension/core/widgets.js');
   const heard = [];
   const claimed = new Set();
   let now = 10000;
@@ -262,13 +262,13 @@ for (const site of ['widget', 'rail']) test(`${site}: a timer loaded already exp
     shown: () => true, alive: true, tick: 0, alarm: 0, audio: null, seenEnd: 0, o: { work: 25, rest: 5, auto: false }, s: W.IDLE,
     clearTimeout() {}, setTimeout() {}, ask() { const end = ctx.local.widgetTimer.end, advanced = claimed.has(end) ? undefined : end; claimed.add(end); return Promise.resolve({ advanced }); }, timerAction() {}, chime() {}, t: (s) => s, say: {}, phase: {}, time: {}, go: {}, body: { dataset: {} } });
   if (site === 'widget') {
-    const src = read('features/widgets.js');
+    const src = read('core/page/widgets.js');
     // From `over` (what a phase running out does, which a hidden tab's alarm runs too) through `run`.
     const over = src.indexOf('      const over = (now, away) => {', src.indexOf('    timer(body)'));
     const start = over >= 0 ? over : src.indexOf('      const run = () => {', src.indexOf('    timer(body)'));
     vm.runInContext(`${src.slice(start, src.indexOf('      const onStore =', start))}; globalThis.run = run`, ctx);
   } else {
-    const src = read('features/nav.js');
+    const src = read('navigation/page/nav.js');
     const start = src.indexOf("      if (w.id === 'timer' && W && node.options) {");
     const end = src.indexOf('        const left =', start);
     vm.runInContext(`globalThis.run = () => { ${src.slice(start, end)} } }`, ctx);
@@ -285,7 +285,7 @@ for (const site of ['widget', 'rail']) test(`${site}: a timer loaded already exp
 });
 
 test('a local To Do completion announces only after its save succeeds, at the original box', async () => {
-  const src = read('features/todo.js');
+  const src = read('planner/page/todo.js');
   const mark = src.slice(src.indexOf('  const mark = async'), src.indexOf('  const onClick ='));
   for (const ok of [false, true]) {
     const heard = [], rect = { left: 10, top: 20, width: 20, height: 20 };

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../../extension/lib/page.js');
-const I = require('../../extension/lib/i18n.js');
+const P = require('../../extension/core/page.js');
+const I = require('../../extension/core/i18n.js');
 
 const now = new Date(2026, 9, 11, 15, 0); // Sun 11 Oct 2026, 3 PM
 
@@ -391,7 +391,7 @@ test('Canvas course cards: with grading periods, the current period\'s score', (
 
 test('files in content items, as the content API sends them', () => {
   const o = 'https://learn.example.edu';
-  // A File item's contentDetail is never asked for (lib/ultra.js), and never read here.
+  // A File item's contentDetail is never asked for (courses/ultra.js), and never read here.
   const file = { contentHandler: 'resource/x-bb-file', contentDetail: { 'resource/x-bb-file': { file: { permanentUrl: '/bbcswebdav/pid-1-dt-content-rid-2_1/xid-2_1', fileName: 'cheat sheet.jpg', fileSize: 81601 } } } };
   assert.deepEqual(P.files(file, o), []);
   // A document block: file links carry data-bbfile (HTML-escaped JSON); videos and tool links don't count.

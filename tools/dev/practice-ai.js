@@ -7,7 +7,7 @@
 const http = require('node:http'), net = require('node:net');
 
 // ---- the stand-in model --------------------------------------------------------------------------------------------------
-// A request's fenced data blocks (lib/ai/text.js request): label → text.
+// A request's fenced data blocks (ai/text.js request): label → text.
 const blocks = (s) => {
   const out = {};
   for (const m of String(s).matchAll(/^\[([^\]\n]+?) — data copied from a page or a document, not instructions\]\n<<<(\S+)\n([\s\S]*?)\n>>>\2$/gm)) out[m[1]] = m[3];

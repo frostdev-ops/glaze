@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const vm = require('vm');
-const L = require('../../extension/lib/coursetabs.js');
+const L = require('../../extension/navigation/coursetabs.js');
 
-const source = fs.readFileSync(require.resolve('../../extension/features/coursetabs.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/navigation/page/coursetabs.js'), 'utf8');
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const origin = 'https://school.instructure.com';
 
@@ -587,7 +587,7 @@ test('a press loads ahead only for a plain press with the main button, never a t
 });
 
 test('Glaze\'s bar keeps an open shadow root: a press or click in it is found through the event\'s path', () => {
-  const navbar = fs.readFileSync(require.resolve('../../extension/features/navbar.js'), 'utf8');
+  const navbar = fs.readFileSync(require.resolve('../../extension/navigation/page/navbar.js'), 'utf8');
   assert.match(navbar, /attachShadow\(\{ mode: 'open' \}\)/, 'a closed root would hide its links from course tabs (anchorOf)');
 });
 

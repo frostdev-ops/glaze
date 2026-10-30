@@ -148,5 +148,5 @@ var GZ_ZIP = globalThis.GZ_ZIP || (() => {
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how
-// lib/background.js knows it ran to the end.
+// background/background.js knows it ran to the end.
 if (typeof module !== 'undefined') module.exports = GZ_ZIP; else GZ_ZIP;

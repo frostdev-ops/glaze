@@ -1,18 +1,18 @@
-// Better To Do: Glaze's own To Do list, on by default (enhance.todo). With the sidebar (features/sidebar.js), its widget
+// Better To Do: Glaze's own To Do list, on by default (enhance.todo). With the sidebar (navigation/page/sidebar.js), its widget
 // mounts it (mount, unmount): in the dock it follows the page's course, or shows all courses, as the student picks. Without
 // the sidebar, on Canvas it lives in a Dashboard widget and takes the place of the sidebar list on a course's home page; on Blackboard Ultra, of Ultra's own To Do on the Courses page, and on a
 // course's outline it's a block of its own in the right column (that course only). The site's part loads this (need) and
-// calls sync(on) from content.js's passes; the logic is lib/todo.js, loaded from here. The site's own list is hidden by
-// features/apps.css while this list replaces it; the Dashboard board also hides it when its widget is deliberately removed.
+// calls sync(on) from content.js's passes; the logic is planner/todo.js, loaded from here. The site's own list is hidden by
+// core/page/apps.css while this list replaces it; the Dashboard board also hides it when its widget is deliberately removed.
 //
 // What it asks Canvas for, with the student's session: their profile (id, time zone), their planner items (Link
 // paging), and, for a teacher, /users/self/todo and each listed assignment's submission summary. On Ultra: the student,
-// their courses, To Do and the calendar joined with each course's gradebook (lib/ultra.js page.due), in the browser's time
+// their courses, To Do and the calendar joined with each course's gradebook (courses/ultra.js page.due), in the browser's time
 // zone. One answer serves the site's pages (and, on Canvas, the popup's due list), kept in storage.local and asked again
 // after two minutes, only when the page is shown or focused: no polling. The one write is a mark, and only on Canvas with
 // todo.sync on: Canvas's planner override, exactly as Canvas's own List View checkbox sends it. Ultra has nothing like it,
 // so there a tick stays on this device (owner decision). An announcement opened in Glaze's pop-up is marked read, as the
-// site's own page marks it (features/announce.js).
+// site's own page marks it (courses/page/announce.js).
 // Loaded on demand: a second injection into the same frame keeps the first.
 var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -20,7 +20,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const CACHE = 'todoCache';
   const FRESH = 120000;
   const CAP = 6; // rows a group shows before "Show more"
-  let L = null; // lib/todo.js
+  let L = null; // planner/todo.js
   let shareSurface = null;
   let box = null; // section#gz-todo: its head and body are drawn anew; the status line stays, so it's announced
   let head = null, line = null, body = null;
@@ -44,9 +44,9 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // Mounted by its widget (mount): { target, courseId, scope: 'follow' | 'all', setScope?(v), failed?() }; null when the
   // site's own sidebar is where it goes (sync, anchor).
   let mounted = null;
-  let gs = null; // Gradescope's items for this site (lib/todo.js gradescope), once the list first draws
+  let gs = null; // Gradescope's items for this site (planner/todo.js gradescope), once the list first draws
 
-  // The list's own settings (storage.sync `todo`, in GZ_SPEC once lib/todo.js is in); content.js reads only the switch.
+  // The list's own settings (storage.sync `todo`, in GZ_SPEC once planner/todo.js is in); content.js reads only the switch.
   let prefs = null;
   const o = () => prefs;
   const readPrefs = () => new Promise((res) => { try { chrome.storage.sync.get('todo', (r) => res(r?.todo)); } catch { res(); } })
@@ -92,7 +92,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!/^\d+$/.test(String(j?.id))) throw new Error('no override');
     return { id: String(j.id), done: !!j.marked_complete, dismissed: !!j.dismissed };
   };
-  // The planner answer is kept through the worker, only if no newer one is stored (lib/todo.js publishIn); if one is,
+  // The planner answer is kept through the worker, only if no newer one is stored (planner/todo.js publishIn); if one is,
   // the list takes that one.
   const keep = (c, due) => new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:todo', key, cache: c, due }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } }).then((r) => { if (r?.cache && cache === c) cache = r.cache; });
   const covers = (c, now) => {
@@ -100,7 +100,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const need = L.fetchRange(o(), now, who.tz);
     return Date.parse(c.start) <= Date.parse(need.start) && Date.parse(c.end) >= Date.parse(need.end) - L.DAY;
   };
-  // A teacher's planner items the course cards asked for (features/cardtasks.js, teach: null) stand while fresh: only
+  // A teacher's planner items the course cards asked for (courses/page/cardtasks.js, teach: null) stand while fresh: only
   // the grading is asked for. Not when the list asks again on purpose (force).
   const load = async (reuse) => {
     const now = Date.now();
@@ -108,7 +108,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       const { start, end } = L.fetchRange(o(), now, who.tz);
       // Asked only while this list is still the one on the page (off() moves gen on: the switch, Glaze off, another page).
       const g = gen;
-      await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+      await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
       if (g !== gen || !box) throw new Error('stale');
       const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
       // complete: false, the calendar couldn't be read whole: the list says some work may be missing.
@@ -167,7 +167,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
 
   // ---- the student's own -------------------------------------------------------------------------------------
-  // The student's changes go to the background worker ('glaze:todo', lib/todo.js change), which takes every tab's and
+  // The student's changes go to the background worker ('glaze:todo', planner/todo.js change), which takes every tab's and
   // the editor's in one queue and applies each to what storage holds when its turn comes: no tab's edit undoes
   // another's. A change is a list of edits (data: it crosses to the worker) for the account and list it was made in
   // (key and generation taken when it's asked for). It's shown as saved only once storage has it; one storage
@@ -344,13 +344,13 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!r.read) li.dataset.unread = '';
     return li;
   };
-  // An announcement opens in Glaze's pop-up (features/announce.js) where the student's settings say so, and shows a
+  // An announcement opens in Glaze's pop-up (courses/page/announce.js) where the student's settings say so, and shows a
   // preview on hover or focus; Ctrl, Cmd, Shift, Alt or a middle click keep the browser's own. Opening it there marks it read
   // on Canvas, as Canvas's page does: the list's Unread goes with it.
   let newsShown = new Map(); // key -> announcement row, as drawn
   const annRef = (r) => ({ site: ultra ? 'ultra' : 'canvas', entry: 'glaze', courseId: r.cid, id: r.id, url: new URL(r.url, location.origin).href, title: r.title, course: r.course,
     from: () => box?.querySelector(`[data-focus="${CSS.escape(`news ${r.key}`)}"]`), onRead: () => readNews(r.key) });
-  const announceIn = () => ctx.need('features/announce.js', () => globalThis.GZ_ANNOUNCE).then(() => GZ_ANNOUNCE.ready);
+  const announceIn = () => ctx.need('courses/page/announce.js', () => globalThis.GZ_ANNOUNCE).then(() => GZ_ANNOUNCE.ready);
   const openNews = (e, a) => {
     const r = newsShown.get(a.dataset.ann);
     if (e.defaultPrevented || e.button > 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || !human(e)) return;
@@ -441,7 +441,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (scope) scope.setAttribute('aria-label', t('Courses shown'));
     head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }), ...(scope ? [scope] : []),
       ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
-      ...(globalThis.GZ_REMIND_UI?.head() || []), add, more, // the streak and reminders (features/reminders.js), when on
+      ...(globalThis.GZ_REMIND_UI?.head() || []), add, more, // the streak and reminders (planner/page/reminders.js), when on
       ...(tools ? [toolRow(sessions, ics)] : []));
     const parts = [form && taskForm()];
     parts.unshift(gs.question(who.uid, t)); // Gradescope's one-time question, when there is one
@@ -464,7 +464,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
         fold: true, draw: news, count: out.unread.length ? t('{n} unread', { n: out.unread.length }) : String(out.read.length),
       }));
     }
-    // A ticked task glides into Done (open) or fades where it was (Done closed), and the rest close up (lib/motion.js);
+    // A ticked task glides into Done (open) or fades where it was (Done closed), and the rest close up (core/motion.js);
     // not in the list's first drawing.
     const rows = () => [...body.querySelectorAll('li.gz-todo-item[data-key]:not([data-gz-ghost])')];
     const motion = rows().length ? globalThis.GZ_MOTION : null;
@@ -523,7 +523,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const k = el.closest('[data-key]')?.dataset.key;
     if (act === 'add') { form = form ? null : { cid: here() }; render(true); if (form) box.querySelector('[data-focus="form title"]')?.focus(); return; }
     if (act === 'cancel') { form = null; render(true); box.querySelector('[data-focus="add"]')?.focus(); return; }
-    if (act === 'ics') { ctx.need('features/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => note(t("Couldn't make the calendar. Try again in a moment."))); return; }
+    if (act === 'ics') { ctx.need('planner/page/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => note(t("Couldn't make the calendar. Try again in a moment."))); return; }
     if (act === 'all') { open.add(`group:${el.dataset.group}`); render(true); return; }
     if (!k) return;
     if (act === 'more') { if (open.has(k)) open.delete(k); else open.add(k); render(true); return; }
@@ -610,7 +610,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const start = async () => {
     const g = ++gen;
     try {
-      await ctx.need('lib/todo.js', () => globalThis.GZ_TODO);
+      await ctx.need('planner/todo.js', () => globalThis.GZ_TODO);
       if (g !== gen) return;
       L = globalThis.GZ_TODO;
       const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses(), readPrefs()]);
@@ -674,7 +674,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       addEventListener('focus', onShow);
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
       const sharedBox = box;
-      ctx.need('features/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box === sharedBox) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
+      ctx.need('sharing/page/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box === sharedBox) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
       addEventListener('pagehide', keepDraft);
       setBusy(true);
     }
@@ -723,7 +723,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     form = draftForm(d.todo);
     try { store().remove(draftKey()); } catch { /* reloaded */ }
   };
-  // Another document takes the sidebar (a course tab's frame shown, or this one hidden; features/widgets.js): the open
+  // Another document takes the sidebar (a course tab's frame shown, or this one hidden; core/page/widgets.js): the open
   // form goes to the drafts store for whichever document shows next, this one too, and nothing draws or refreshes here
   // meanwhile. Without Back up what you type, it stays in this document's memory only.
   let asleep = false, draftRead = 0;

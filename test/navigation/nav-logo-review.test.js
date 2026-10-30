@@ -1,14 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const K = require('../../extension/lib/cards.js');
-const filename = require.resolve('../../extension/lib/nav-store.js');
+const K = require('../../extension/courses/cards.js');
+const filename = require.resolve('../../extension/navigation/nav-store.js');
 let Store = require(filename);
 if (process.env.GZ_B7C_REVIEW_BASE) {
   const Module = require('node:module');
   const old = new Module(filename, module);
   old.filename = filename;
   old.paths = module.paths;
-  old._compile(require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_B7C_REVIEW_BASE}:lib/nav-store.js`], { cwd: require('node:path').join(__dirname, '../../extension'), encoding: 'utf8' }), filename);
+  old._compile(require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_B7C_REVIEW_BASE}:navigation/nav-store.js`], { cwd: require('node:path').join(__dirname, '../../extension'), encoding: 'utf8' }), filename);
   Store = old.exports;
 }
 

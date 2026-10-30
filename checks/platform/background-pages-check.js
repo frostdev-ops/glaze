@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto'), assert = require('node:assert/strict');
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const root = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.resolve(__dirname, '../../extension'), ['https://bb.school.test/*']);
-const G = require(path.join(root, 'defaults.js'));
+const G = require(path.join(root, 'content/defaults.js'));
 const id = [...crypto.createHash('sha256').update(root).digest('hex').slice(0,32)].map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
 const origin = 'https://bb.school.test', uid = '_42_1', out = process.argv[2];
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(),'glaze-background-pages-'));

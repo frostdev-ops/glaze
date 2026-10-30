@@ -1,6 +1,6 @@
-// Live refresh for agent apps (lib/mcp/tabs.js, lib/mcp/tab.js): the account's own tab found by its origin and the account
+// Live refresh for agent apps (agents/tabs.js, agents/tab.js): the account's own tab found by its origin and the account
 // Glaze's content script there reads, never a quiet page or a discarded or frozen tab; the planner and Insights read afresh
-// in it and kept through the page's own publish paths; nothing kept past its time; and the worker wiring for lib/background.js
+// in it and kept through the page's own publish paths; nothing kept past its time; and the worker wiring for background/background.js
 // mcpRefresh, with a tools/call that answers from the tab.
 process.env.TZ = 'UTC';
 const test = require('node:test');
@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const C = require('../helpers/mcp-caches.cjs');
 const H = require('../helpers/mcp-tabs.cjs');
-const TABS = require('../../extension/lib/mcp/tabs.js');
+const TABS = require('../../extension/agents/tabs.js');
 
 const A = `${C.CANVAS}/5`, UL = `${C.ULTRA}/${C.ULTRA_UID}`;
 const RAW = [
@@ -18,7 +18,7 @@ const RAW = [
 const make = (tabs, o = {}) => { const b = H.browser(tabs); return { b, t: TABS.create({ tabs: b.tabs, scripting: b.scripting, quiet: H.quiet, ...o }) }; };
 const probed = (b) => [...new Set(b.calls.filter((c) => c.func).map((c) => c.target.tabId))];
 const canvasTab = (o = {}) => H.tab({ url: `${C.CANVAS}/`, ...o, routes: { '/api/v1/planner/items': RAW, ...o.routes } });
-// Canvas's courses as /api/v1/courses?include[]=term… gives them to Insights (lib/insights.js term): this term's, as a student.
+// Canvas's courses as /api/v1/courses?include[]=term… gives them to Insights (planner/insights.js term): this term's, as a student.
 const TERM = { id: 5, name: 'Fall 2026', start_at: '2026-08-24T04:00:00Z', end_at: '2026-12-19T05:00:00Z' };
 const insightsCourses = () => C.canvasGrades().map(({ course }) => ({ ...course, name: course.course_code, term: TERM, enrollments: [{ type: 'student', ...course.enrollment }] }));
 const gradeRoutes = () => Object.fromEntries(C.canvasGrades().map((x) => [`/api/v1/courses/${x.course.id}/assignment_groups`, x.groups]));
@@ -71,7 +71,7 @@ test('refresh reads the planner afresh in the tab and keeps it through glaze:tod
   assert.match(asked.url, /^https:\/\/school\.instructure\.com\/api\/v1\/planner\/items\?start_date=.+&end_date=.+&per_page=100$/);
   assert.deepEqual([asked.method, asked.credentials], ['GET', 'same-origin']);
   assert.deepEqual(tab.page.sent.map((m) => [m.type, m.key]), [['glaze:todo', `todo:${A}`]], 'the page\'s own publish path');
-  assert.ok(b.calls.some((c) => c.files?.[0] === 'lib/mcp/tab.js' && c.target.documentIds?.[0] === 'doc-3'), 'the tab side goes into the document that answered');
+  assert.ok(b.calls.some((c) => c.files?.[0] === 'agents/tab.js' && c.target.documentIds?.[0] === 'doc-3'), 'the tab side goes into the document that answered');
   assert.deepEqual(await t.refresh(A, 'assignments', { tool: 'assignments_list' }), { ok: true, source: 'tab' });
   assert.equal(tab.page.sent.length, 2);
 });
@@ -105,7 +105,7 @@ test('a planner read that fails, or outlives its time, keeps nothing', async () 
   await assert.rejects(p);
 });
 
-test('Ultra: the planner read through lib/ultra.js in the tab, from Ultra\'s own answers', async () => {
+test('Ultra: the planner read through courses/ultra.js in the tab, from Ultra\'s own answers', async () => {
   const store = {};
   const fx = (n) => C.load(`ultra-${n}.json`);
   const tab = H.tab({ id: 4, url: `${C.ULTRA}/ultra/course`, site: 'ultra', uid: C.ULTRA_UID, store, routes: {
@@ -120,7 +120,7 @@ test('Ultra: the planner read through lib/ultra.js in the tab, from Ultra\'s own
   assert.equal(store.todoCache.key, `todo:${UL}`);
   const want = [...fx('todo').overdueItems, ...fx('todo').dueTodayItems, ...fx('todo').futureDueItems].map((i) => i.column.id);
   assert.ok(want.length && want.every((id) => store.todoCache.items.some((i) => i.id === id)), 'To Do\'s items, by their columns');
-  assert.ok(tab.page.loaded.includes('lib/ultra.js'));
+  assert.ok(tab.page.loaded.includes('courses/ultra.js'));
 });
 
 test('grades: Insights read afresh only while it is on and the account keeps a record; a cleared record stays cleared', async () => {
@@ -163,7 +163,7 @@ test('the worker wiring: mcpRefresh reads through the account\'s tab, and todo_l
     assert.equal(r.result.isError, undefined, JSON.stringify(r));
     assert.equal(r.result.structuredContent.source, 'tab');
     assert.deepEqual(r.result.structuredContent.items.map((i) => i.title), ['Lab report', 'Reading quiz']);
-    assert.ok(env.b.calls.some((c) => c.files?.[0] === 'lib/mcp/tab.js'));
+    assert.ok(env.b.calls.some((c) => c.files?.[0] === 'agents/tab.js'));
     // Within a minute the same account and group answer from the cache.
     const again = await ask({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'todo_list', arguments: {} } });
     assert.equal(again.result.structuredContent.source, 'cache');

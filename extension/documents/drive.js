@@ -1,11 +1,11 @@
 // Google Drive's files for Documents and Writer, with drive.file only: Glaze reaches the files it made and the ones the
-// student picks in Google's Picker (lib/google.js pick), nothing else. Open from Drive brings a picked file in as its
+// student picks in Google's Picker (background/google.js pick), nothing else. Open from Drive brings a picked file in as its
 // kind's import does (a Google Doc, Sheet or Slides deck exported as .docx, .xlsx or .pptx); Save to Drive puts a
 // document's exported file in My Drive, or a paper as a Google Doc, and remembers it on the record (drive: { id, as }) so a
 // later save updates that file while it is still there, Glaze may edit it and it is still that type, else makes a new one.
-// The Drive v3 client (create) runs in the worker, where the token is (lib/google.js token; its drop forgets one Drive refused):
+// The Drive v3 client (create) runs in the worker, where the token is (background/google.js token; its drop forgets one Drive refused):
 // requests carry no cookies, follow no redirect, skip the cache, and after a 401 ask once more with a fresh token. A file
-// larger than its kind opens (lib/doc-kinds.js max) is refused before its bytes come, by the metadata's size where Drive gives
+// larger than its kind opens (documents/doc-kinds.js max) is refused before its bytes come, by the metadata's size where Drive gives
 // the file's own (not a Google file's, whose export differs), else as they stream. Failures are fixed reasons (WHY).
 // Pages reach the worker over a port each request (PORT: serve, client), the bytes in base64 chunks, each acknowledged, so
 // neither side runs ahead; a page pings while it waits so the worker stays up through a long upload. No page here reaches
@@ -17,7 +17,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   const API = 'https://www.googleapis.com/drive/v3/files';
   const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
   const PORT = 'glaze:drive';
-  const CHUNK = 384 << 10; // 512 KB as base64, as lib/doc-files.js sends (Safari's message size is the tightest)
+  const CHUNK = 384 << 10; // 512 KB as base64, as documents/doc-files.js sends (Safari's message size is the tightest)
   // What Glaze reads of a file (files.get's fields mask), and of one it saved.
   const META = 'id,name,mimeType,size,trashed,capabilities(canEdit,canDownload)';
   const SAVED = 'id,name,mimeType';
@@ -28,7 +28,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   // Drive's 403 reasons that mean try later, and those that mean the Drive is full (its "Resolve errors" guide).
   const BUSY = new Set(['userRateLimitExceeded', 'rateLimitExceeded', 'dailyLimitExceeded', 'sharingRateLimitExceeded']);
   const FULL = new Set(['storageQuotaExceeded', 'activeItemCreationLimitExceeded']);
-  // Every reason a request ends with: the sign-in's (lib/google.js), the Picker's, Drive's, the port's.
+  // Every reason a request ends with: the sign-in's (background/google.js), the Picker's, Drive's, the port's.
   const WHY = ['off', 'connect', 'setup', 'account', 'auth', 'permission', 'cancel', 'scope', 'browser', 'unsupported', 'state', 'picker', 'offline',
     'network', 'missing', 'denied', 'busy', 'quota', 'size', 'type', 'bad', 'sender'];
   const ID = /^[\w-]{1,256}$/, MIME = /^[\w.+-]{1,127}\/[\w.+-]{1,127}$/;
@@ -72,8 +72,8 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     return { kind, name, mime, size, as, max };
   };
 
-  // env: { fetch, token({ interactive }) (lib/google.js token), drop(token) (lib/google.js drop: forget one Drive answered 401 to), account() (the
-  // connected account, lib/google.js account: one client serves one request, which stops as 'connect' if Drive is
+  // env: { fetch, token({ interactive }) (background/google.js token), drop(token) (background/google.js drop: forget one Drive answered 401 to), account() (the
+  // connected account, background/google.js account: one client serves one request, which stops as 'connect' if Drive is
   // connected to another account or none before any of its calls), allowed() (the current sender), boundary() }
   const create = (env) => {
     const bound = env.account ? Promise.resolve().then(env.account).catch(() => null) : null;
@@ -317,7 +317,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   };
 
   // ---- the pages: the entries show while the worker says Drive is connected, asked as the page loads and again when the
-  // connection changes (storage.local google, lib/google.js).
+  // connection changes (storage.local google, background/google.js).
   const page = (() => {
     if (typeof document === 'undefined' || !globalThis.chrome?.runtime?.sendMessage) return null;
     // A framed Documents is answered once its document has claimed its pass: until then 'sender', asked again after 0.5,

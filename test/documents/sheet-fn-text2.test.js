@@ -1,4 +1,4 @@
-// The remaining text functions (lib/sheet-fn-text2.js). Cases are the worked examples on Microsoft's page for each
+// The remaining text functions (documents/sheets/sheet-fn-text2.js). Cases are the worked examples on Microsoft's page for each
 // function, https://support.microsoft.com/en-us/excel/functions/<name>-function: textbefore, textafter, textsplit,
 // textjoin, substitute, replace, rept, search, exact, proper, clean, char, code, unichar, unicode, dollar, fixed,
 // numbervalue, valuetotext, arraytotext; FIND's page is retired, so its cases are from the Internet Archive's copy of
@@ -10,11 +10,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-require('../../extension/lib/sheet-fn-math.js');
-require('../../extension/lib/sheet-fn-text.js');
-require('../../extension/lib/sheet-fn-text2.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+require('../../extension/documents/sheets/sheet-fn-text.js');
+require('../../extension/documents/sheets/sheet-fn-text2.js');
 
 // arrays: { 'D1:F2': formula } entered as array formulas, so a function's whole array result can be read back.
 const book = (cells = {}, arrays = {}) => {
@@ -50,7 +50,7 @@ const NAMES = 'TEXTBEFORE TEXTAFTER TEXTSPLIT TEXTJOIN SUBSTITUTE REPLACE REPT F
 test('the text functions are registered', () => {
   assert.equal(NAMES.length, 23);
   for (const name of NAMES) assert.ok(C.fn(name), name);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-text2.js'), 'utf8')), 'no timers');
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-fn-text2.js'), 'utf8')), 'no timers');
 });
 
 test('TEXTBEFORE and TEXTAFTER with Microsoft\'s data', () => {

@@ -3,18 +3,18 @@
 // the file shows as attached, the note and text as Quill ops, the order the steps run in, and where a file the student
 // brings goes (a .docx asks, and a .pdf, .pptx or .ppsx while its kind opens in the frame; anything else is submitted as
 // is). Pure: elements in, values out.
-// The sheet (writer-submit.js) and the page's side (features/writer-submit.js) do the rest.
+// The sheet (writer-submit.js) and the page's side (writer/page/writer-submit.js) do the rest.
 // Classic script, loaded on demand in the frame and the page; module.exports for node.
 var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   const MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  // The files each document kind takes (lib/doc-kinds.js KINDS accept; test/writer-kinds-submit.test.js holds them equal),
+  // The files each document kind takes (documents/doc-kinds.js KINDS accept; test/writer-kinds-submit.test.js holds them equal),
   // with the type each is sent as. sheet: the spreadsheet kind's (sheets/grid), here so its files route once it opens.
   const EXT = Object.freeze({
     '.docx': { kind: 'paper', mime: MIME }, '.pdf': { kind: 'pdf', mime: 'application/pdf' },
     '.pptx': { kind: 'slides', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
     '.ppsx': { kind: 'slides', mime: 'application/vnd.openxmlformats-officedocument.presentationml.slideshow' },
     '.xlsx': { kind: 'sheet', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
-    // A workbook that keeps its macros (lib/sheet-xlsx.js extension) goes as Excel's macro-enabled file.
+    // A workbook that keeps its macros (documents/sheets/sheet-xlsx.js extension) goes as Excel's macro-enabled file.
     '.xlsm': { kind: 'sheet', mime: 'application/vnd.ms-excel.sheet.macroEnabled.12' }, '.csv': { kind: 'sheet', mime: 'text/csv' },
     '.tsv': { kind: 'sheet', mime: 'text/tab-separated-values' },
   });
@@ -79,7 +79,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
 
   // ---- a file the student brings (writer-import.js): a .docx asks Open in Writer or Submit as is, and a file of a kind
   // that opens in the frame (kinds: its switch on, its viewer here; writer-kinds.js) Open in Glaze or Submit as is; any
-  // other file goes straight to the submit sheet as is. forFile: the registry's (lib/doc-kinds.js) where it is loaded.
+  // other file goes straight to the submit sheet as is. forFile: the registry's (documents/doc-kinds.js) where it is loaded.
   const route = (name, { kinds = [], forFile = kindOf } = {}) => {
     const k = forFile(String(name || ''));
     return k === 'paper' || (!!k && [...kinds].includes(k)) ? 'choose' : 'submit';

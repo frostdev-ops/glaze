@@ -1,16 +1,16 @@
-// Insert chart (lib/sheet-chart.js layer insert, move, remove; lib/sheet-chart-xml.js plan and build; lib/sheet-xlsx.js
+// Insert chart (documents/sheets/sheet-chart.js layer insert, move, remove; documents/sheets/sheet-chart-xml.js plan and build; documents/sheets/sheet-xlsx.js
 // attach, current and the parts Glaze writes): a selection's series, names and categories as Excel reads them; the
 // chart part in Excel's element order; the workbook written with its drawing, relationships and content types, and read
 // back; undo; rows inserted and deleted after (and before) the insert, a log entry taken off included; a chart dragged
 // and deleted, an imported one moved after rows were inserted.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../../extension/lib/sheet-model.js');
-const X = require('../../extension/lib/sheet-xlsx.js');
-const C = require('../../extension/lib/sheet-calc.js');
-const D = require('../../extension/lib/doctext.js');
-const CX = require('../../extension/lib/sheet-chart-xml.js');
-const CH = require('../../extension/lib/sheet-chart.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const X = require('../../extension/documents/sheets/sheet-xlsx.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+const D = require('../../extension/core/doctext.js');
+const CX = require('../../extension/documents/sheets/sheet-chart-xml.js');
+const CH = require('../../extension/documents/sheets/sheet-chart.js');
 const FX = require('../fixtures/sheets/charts.js');
 
 const mount = (wb, sh = wb.sheets[0]) => FX.layerOn(wb, sh);
@@ -248,7 +248,7 @@ test('a duplicated sheet: its charts stay its original\'s, and a chart inserted 
 });
 
 test('chart room: imported anchors and an inserted chart extend beyond the initial grid columns', async () => {
-  const G = require('../../extension/sheet-grid.js'), el = FX.fakeDom();
+  const G = require('../../extension/documents/sheets/sheet-grid.js'), el = FX.fakeDom();
   const mounted = (wb) => {
     const geo = { R: new G.Sizes(1000, 20), C: new G.Sizes(26, 64), FR: 0, FC: 0, FW: 0, FH: 0 };
     const L = CH.layer({ panes: { br: { el: { hidden: false }, inner: el(), fr: false, fc: false } }, wb: () => wb,

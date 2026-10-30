@@ -1,7 +1,7 @@
 // Synthetic OOXML only. No student documents or network resources are used.
-const X = require('../../extension/lib/writer-docx.js');
-const S = require('../../extension/lib/writer-schema.js');
-const Z = require('../../extension/lib/zip.js');
+const X = require('../../extension/writer/writer-docx.js');
+const S = require('../../extension/writer/writer-schema.js');
+const Z = require('../../extension/core/zip.js');
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const r = (s) => `<w:r><w:t xml:space="preserve">${esc(s)}</w:t></w:r>`;
 const p = (s, pr = '') => `<w:p>${pr ? `<w:pPr>${pr}</w:pPr>` : ''}${r(s)}</w:p>`;

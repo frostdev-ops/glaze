@@ -71,10 +71,10 @@ const worker = async (ctx) => until(async () => ctx.serviceWorkers().find((w) =>
     await sw.evaluate(async ([c, u]) => {
       const was = Object.fromEntries((await chrome.scripting.getRegisteredContentScripts()).map((s) => [s.id, s]));
       await chrome.scripting.unregisterContentScripts({ ids: [c, u] });
-      await chrome.scripting.registerContentScripts([{ ...was[c], js: was[c].js.filter((f) => f !== 'content-canvas.js'), matchOriginAsFallback: true, css: ['canvas.css'] }, { ...was[u], matches: [was[u].matches.at(-1)] }]);
+      await chrome.scripting.registerContentScripts([{ ...was[c], js: was[c].js.filter((f) => f !== 'content/content-canvas.js'), matchOriginAsFallback: true, css: ['content/canvas.css'] }, { ...was[u], matches: [was[u].matches.at(-1)] }]);
     }, ids);
     const old = await registered(sw);
-    check(!old[ids[0]].js.includes('content-canvas.js') && old[ids[1]].matches.length === 1 && old[ids[0]].matchOriginAsFallback && old[ids[0]].css.includes('canvas.css'), 'the older registrations are in place');
+    check(!old[ids[0]].js.includes('content/content-canvas.js') && old[ids[1]].matches.length === 1 && old[ids[0]].matchOriginAsFallback && old[ids[0]].css.includes('content/canvas.css'), 'the older registrations are in place');
     const calls = await pass(sw);
     check(JSON.stringify(calls) === JSON.stringify([['updateContentScripts', ids]]), `the pass updates both in place and nothing else (${JSON.stringify(calls)})`);
     const now = await registered(sw);
@@ -119,10 +119,10 @@ const worker = async (ctx) => until(async () => ctx.serviceWorkers().find((w) =>
 
     const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${C}/`);
-    check(await until(async () => (await sheets(page)).includes('canvas.css')), `the Canvas site's page gets Glaze (${(await sheets(page)).join(', ')})`);
+    check(await until(async () => (await sheets(page)).includes('content/canvas.css')), `the Canvas site's page gets Glaze (${(await sheets(page)).join(', ')})`);
     if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, 'canvas.png') }); }
     await page.goto(`${B}/ultra/courses/_101_1/outline`);
-    check(await until(async () => (await sheets(page)).includes('theme.css')), 'the Ultra site\'s page gets Glaze');
+    check(await until(async () => (await sheets(page)).includes('content/theme.css')), 'the Ultra site\'s page gets Glaze');
     check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
     console.log(JSON.stringify({ checks: results.length, errors }, null, 2));
   } finally {

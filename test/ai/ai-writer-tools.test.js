@@ -1,12 +1,12 @@
-// Glaze Writer's editor tools (lib/writer-tools.js) in the AI harness's tool shape, over a stand-in bridge: each passes
-// lib/ai/tools.js define, read tools answer through invokeReadTool, confirm tools check their arguments against the document
+// Glaze Writer's editor tools (writer/writer-tools.js) in the AI harness's tool shape, over a stand-in bridge: each passes
+// ai/tools.js define, read tools answer through invokeReadTool, confirm tools check their arguments against the document
 // and say what they'd do in Glaze's words; and writer-ai.js's gray-text rules, which match the task's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const TL = require('../../extension/lib/ai/tools.js');
-const WT = require('../../extension/lib/writer-tools.js');
-const AI = require('../../extension/writer-ai.js');
-const C = require('../../extension/lib/ai/tasks/writer-complete.js');
+const TL = require('../../extension/ai/tools.js');
+const WT = require('../../extension/writer/writer-tools.js');
+const AI = require('../../extension/writer/frame/writer-ai.js');
+const C = require('../../extension/ai/tasks/writer-complete.js');
 
 const bridge = () => {
   const done = [];

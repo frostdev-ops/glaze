@@ -170,7 +170,7 @@ no school page open:
 
 **Code tools**, `{ name, title, description, code: true, input }`, are answered by the mod's Worker, so they need `hooks`,
 and run in Chrome while a school page is open. `input` is the arguments' JSON Schema: an object at the root, in the subset
-`lib/ai/schema.js` checks, with no `reason` property; none when left out. The student approves each call in Glaze, which
+`ai/schema.js` checks, with no `reason` property; none when left out. The student approves each call in Glaze, which
 then hands it to the mod on an open page of that school, signed in as the account the app asked about. The Worker answers
 with `glaze.tools.handle`:
 
@@ -183,7 +183,7 @@ the call; once dispatched, it runs to its answer or the 15 s timeout. Each broke
 
 ### Look parts
 
-`parts` holds the same data as a theme code's parts, cleaned by `lib/lookparts.js`, which has every field and limit.
+`parts` holds the same data as a theme code's parts, cleaned by `looks/lookparts.js`, which has every field and limit.
 An installed mod's `parts` apply while it is on (and not blocklisted; a development copy only while development mode is on),
 on every browser: a mod with only `parts` and no code is a whole mod, and a code mod's parts apply in Firefox and Safari
 too, where its code can't run. They go where a Look's parts go, including live course tabs, never on quiz or tool pages. The
@@ -194,7 +194,7 @@ running code go on top of all of these. Turning the mod off, removing it or reor
 
 | Key | What |
 |---|---|
-| `bg.shader` | `{ src }`: a fragment shader in GLSL ES 1.00, ASCII, at most 8 KiB, written as `vec4 scene(vec2 uv)` (`uv` 0 to 1, y up; rgb is the colour, a how much covers the ground). Uniforms `uTime` `uAspect` `uPx` `uAmount` `uGround` `uC1` `uC2` `uC3`, helpers `hash` `noise` `fbm` `amt` `rot` `px`. Checked by `lib/glsl.js` before anything draws. |
+| `bg.shader` | `{ src }`: a fragment shader in GLSL ES 1.00, ASCII, at most 8 KiB, written as `vec4 scene(vec2 uv)` (`uv` 0 to 1, y up; rgb is the colour, a how much covers the ground). Uniforms `uTime` `uAspect` `uPx` `uAmount` `uGround` `uC1` `uC2` `uC3`, helpers `hash` `noise` `fbm` `amt` `rot` `px`. Checked by `looks/glsl.js` before anything draws. |
 | `bg.layers` | 1 to 4 layers, bottom first: `scene`, `noise`, `gradient` or `particles`. |
 | `bg.media` | `{ type, src, fit?, dim?, loop? }`: a looping `video`, an animated `image` (WebP or AVIF) or a `lottie` animation. `src` is an `https:` address (the install prompt names its host), or `./<path>`, a file in the bundle: `.webm` or `.mp4` for a video, `.webp` or `.avif` for a picture, `.json` for Lottie. The file must be what `type` says and within a Look background's limits (video 12 MiB, picture 6 MiB, Lottie 1 MiB); it also shares the bundle's 2 MiB with every other file, so in practice a bundled background is a Lottie animation, an animated WebP or AVIF, or a short clip. Otherwise the bundle is refused, as it is for a `file:` source; the file is checked again each time a page or the editor's preview asks for it. A video file may be in a bundle only as this. The gallery takes only `./` files. |
 | `anim` | Keyframes for `page.enter` `panel.enter` `card.enter` `tile.enter` `rail.open` `tooltip.in` `card.hover` `button.press`. |
@@ -342,7 +342,7 @@ bundle's static `parts.nav` carries no data of the student's, so its links may g
 Reserved item names also compare compatibility characters, accents, and common Cyrillic/Greek lookalikes of Latin
 letters (for example, `Glаze settings` with Cyrillic `а`). This comparison does not change the displayed label.
 
-**Rules** (`glaze.rules.set`, `parts.rules`): `{ p, do, ... }` on a named part from `lib/parts.js` (`ultra.course-card.title`).
+**Rules** (`glaze.rules.set`, `parts.rules`): `{ p, do, ... }` on a named part from `looks/parts.js` (`ultra.course-card.title`).
 `do` is `hide`, `show`, `move` (with `to`, the part to move beside, and `at`, `before` or `after`), `style` (with `st`: `bg`
 `fg` `bc` colours, `bw` 0 to 4, `r` 0 to 32, `p` and `g` 0 to 6, `sh` 0 to 3, `o` 0 to 100, `f` a font id) or `label` (with
 `t`, up to 60 characters). At most 64 with the Look's.

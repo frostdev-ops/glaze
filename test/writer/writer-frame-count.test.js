@@ -18,7 +18,7 @@ test('a count renderer owns the slot without intercepting DOM properties, includ
     chrome: { runtime: { sendMessage: async () => ({ ok: true }) } }, GZ_I18N: { t: (k) => k, file: () => null },
     GZ_WRITER_SCHEMA: { compose: {}, loses: () => [] }, GZ_WRITER_EDITOR: { create: () => editor },
   };
-  vm.createContext(sandbox); vm.runInContext(fs.readFileSync(require.resolve('../../extension/writer.js'), 'utf8'), sandbox);
+  vm.createContext(sandbox); vm.runInContext(fs.readFileSync(require.resolve('../../extension/writer/frame/writer.js'), 'utf8'), sandbox);
   const F = sandbox.GZ_WRITER_FRAME, counts = [];
   F.on('count', () => { counts.push(editor.words()); slots.words.textContent = `${editor.words()} words`; });
   const port = { postMessage() {} }; await receive({ ports: [port], data: { type: 'glaze:writer', pass: 'test' } });

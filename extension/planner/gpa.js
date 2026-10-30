@@ -1,16 +1,16 @@
-// Past terms, GPA trends and a GPA goal for the Dashboard's GPA (features/grades.js, features/gpaterms.js), all on the
+// Past terms, GPA trends and a GPA goal for the Dashboard's GPA (planner/page/grades.js, planner/page/gpaterms.js), all on the
 // device. Past terms are typed in, or read from a transcript's text (pasted, or an HTML or Word file through
-// lib/doctext.js) and always reviewed before they are kept. Grade points come from lib/gradecalc.js, the scale the
+// core/doctext.js) and always reviewed before they are kept. Grade points come from planner/gradecalc.js, the scale the
 // current term's GPA uses. Classic script, loaded on demand and by the service worker (its write queue); module.exports
 // for node.
 //
 // Stored per Canvas or Ultra site and user in storage.local (gpaTerms:<origin>:<user id>), changed only through the service
-// worker's queue (lib/background.js 'glaze:gpaterms', change below):
+// worker's queue (background/background.js 'glaze:gpaterms', change below):
 // { t: [{ id, n: name, p: 0 for whole letters (plus/minus otherwise), c: [{ n: course, cr: credits, g: grade as written,
 //   l: bonus (0.5 honors, 1 AP/IB), x: 1 to leave it out }], at: last changed }], g: { k: 'cum' | 'term', v: goal GPA },
 //   d: { term id: removed at } (the last 200), cl: cleared at }.
 var GZ_GPA = globalThis.GZ_GPA || (() => {
-  // lib/gradecalc.js, asked for when used: a page loads it first, the worker imports it first, node requires it.
+  // planner/gradecalc.js, asked for when used: a page loads it first, the worker imports it first, node requires it.
   const C = () => globalThis.GZ_GRADECALC || require('./gradecalc.js');
   const sum = (list, f) => list.reduce((n, x) => n + f(x), 0);
   const okNum = (v, max) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max;
@@ -308,5 +308,5 @@ var GZ_GPA = globalThis.GZ_GPA || (() => {
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how
-// lib/background.js knows it ran to the end.
+// background/background.js knows it ran to the end.
 if (typeof module !== 'undefined') module.exports = GZ_GPA; else GZ_GPA;

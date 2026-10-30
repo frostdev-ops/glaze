@@ -37,7 +37,7 @@ var GZ_PET = globalThis.GZ_PET || (() => {
     // Keep the first account zone and a forward-only day so tabs, reloads and clock rollback cannot refill care. Forward-only holds
     // to a day of skew (a zone, a few hours back). A day further ahead was a clock that was wrong, and counts as unused;
     // a nearer correction keeps the daily spend and never leaves a cooldown locked for hours.
-    const T = (globalThis.GZ_TODO || require('./todo.js')), saved = cleanCare(raw), zone = T.zone(saved?.zone || tz) || new Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const T = (globalThis.GZ_TODO || require('../planner/todo.js')), saved = cleanCare(raw), zone = T.zone(saved?.zone || tz) || new Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     const today = T.dayOf(now, zone), ahead = saved && saved.day > today + 1, day = ahead ? today : Math.max(today, saved?.day || 0);
     const used = saved ? ahead || today > saved.day ? 0 : saved.used : CARE_LIMIT;
     // A future timestamp must not become `now` on every check: that slides the cooldown forward forever. Preserve the
@@ -48,7 +48,7 @@ var GZ_PET = globalThis.GZ_PET || (() => {
   const taskSource = (todo, k) => [k.startsWith('task:') ? todo.tasks.find((x) => `task:${x.id}` === k)?.done ?? null : null, todo.items[k]?.done ?? null, todo.items[k]?.on ?? null];
   const sourceValid = (v) => Array.isArray(v) && v.length === 3 && (v[0] === null || Number.isFinite(v[0]) && v[0] >= 0 && v[0] < 1e14) && (v[1] === null || typeof v[1] === 'boolean') && (v[2] === null || typeof v[2] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v[2]) && Number.isFinite(Date.parse(v[2])) && new Date(v[2]).toISOString().slice(0, 10) === v[2]);
   const restoredTodo = (state, raw) => {
-    const todo = (globalThis.GZ_TODO || require('./todo.js')).clean(raw);
+    const todo = (globalThis.GZ_TODO || require('../planner/todo.js')).clean(raw);
     for (const [k, saved] of Object.entries(state.restored)) {
       const actual = taskSource(todo, k);
       actual.forEach((value, i) => { if (value !== saved.to[i]) saved.from[i] = saved.to[i] = value; });
@@ -63,7 +63,7 @@ var GZ_PET = globalThis.GZ_PET || (() => {
     return todo;
   };
   const timerSignal = (raw, now = Date.now()) => {
-    const timer = (globalThis.GZ_WIDGETS || require('./widgets.js')).cleanTimer(raw);
+    const timer = (globalThis.GZ_WIDGETS || require('../core/widgets.js')).cleanTimer(raw);
     return `${timer.phase}:${timer.end}:${timer.left}:${timer.phase === 'work' && timer.end > now ? 'focus' : 'break'}`;
   };
   const backup = (raw = {}) => {
@@ -83,7 +83,7 @@ var GZ_PET = globalThis.GZ_PET || (() => {
     const training = (brain) => brain.counts.reduce((n, v) => n + v, 0) + brain.observations * .2;
     const brain = current && training(a.brain) >= training(b.brain) ? a.brain : b.brain;
     if (tasks) {
-      const before = restoredTodo(a, tasks.before), after = (globalThis.GZ_TODO || require('./todo.js')).clean(tasks.after);
+      const before = restoredTodo(a, tasks.before), after = (globalThis.GZ_TODO || require('../planner/todo.js')).clean(tasks.after);
       // Imported completion/plan fields are a baseline, not a new user untick or re-tick.
       for (const k of new Set(Object.keys(a.earned).map((id) => id.slice(5)))) {
         const from = taskSource(before, k), to = taskSource(after, k);
@@ -138,7 +138,7 @@ var GZ_PET = globalThis.GZ_PET || (() => {
   };
   // Absent historical data never removes earned progress; an explicit undo or a newer correction does.
   const reconcile = (raw, { todo, insights, planner, cache, streak, streakOn = true, todoO = { done: 'auto', sync: false }, now, tz }) => {
-    const T = (globalThis.GZ_TODO || require('./todo.js')), I = (globalThis.GZ_INSIGHTS || require('./insights.js'));
+    const T = (globalThis.GZ_TODO || require('../planner/todo.js')), I = (globalThis.GZ_INSIGHTS || require('../planner/insights.js'));
     const s = clean(raw, now);
     if (!s) return null;
     const d = restoredTodo(s, todo), known = new Map(), rows = new Map(), undone = new Set();
@@ -191,7 +191,7 @@ var GZ_PET = globalThis.GZ_PET || (() => {
       }
     }
     // W11's calculated record is authoritative, including restores. A stale start cannot verify later days.
-    const saved = (globalThis.GZ_REMIND || require('./remind.js')).clean({ streak }, now).streak;
+    const saved = (globalThis.GZ_REMIND || require('../planner/remind.js')).clean({ streak }, now).streak;
     const today = T.dayOf(now, tz);
     const end = saved?.asOf === null ? null : Math.min(today, saved?.asOf);
     if (streakOn && saved && end !== null && saved.start < end) {
@@ -208,10 +208,10 @@ var GZ_PET = globalThis.GZ_PET || (() => {
     const got = await local.get([m.key, tk, ik, rk, 'todoCache', 'petCharacter', 'widgetTimer']);
     const cur = clean(got[m.key]);
     if (!cur) return { ok: false, error: 'history' };
-    const T = (globalThis.GZ_TODO || require('./todo.js'));
+    const T = (globalThis.GZ_TODO || require('../planner/todo.js'));
     const now = Date.now();
     const prefs = sync?.get ? await sync.get(['todo', 'enhance', 'card']) : {};
-    const sanitize = typeof GZ_SANITIZE !== 'undefined' ? GZ_SANITIZE : require('../defaults.js').GZ_SANITIZE;
+    const sanitize = typeof GZ_SANITIZE !== 'undefined' ? GZ_SANITIZE : require('../content/defaults.js').GZ_SANITIZE;
     const options = sanitize(prefs), cache = got.todoCache?.key === tk ? got.todoCache : null;
     const s = reconcile(cur, { todo: got[tk], insights: got[ik], planner: cache?.items, cache, streak: got[rk]?.streak, streakOn: options.enhance.streak, todoO: { ...options.todo, sync: options.todo.sync && !/_\d+_\d+$/.test(suffix) }, now, tz: T.zone(m.tz) });
     if (!s) return { ok: false, error: 'history', data: view(cur) };

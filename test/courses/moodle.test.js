@@ -1,4 +1,4 @@
-// Moodle (W20): the detector and host registration, the parsers in lib/moodle.js, what features/moodle.js does with them,
+// Moodle (W20): the detector and host registration, the parsers in courses/moodle.js, what courses/page/moodle.js does with them,
 // and the fixtures they are checked against (test/fixtures/moodle-*: pages captured from the local Moodle with
 // `tools/dev/canvas-shots.js --lms moodle --settings '{enabled:false}' --html test/fixtures …`, service answers scrubbed).
 const test = require('node:test');
@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../../extension/lib/moodle.js');
-const { score } = require('../../extension/lib/page.js');
+const M = require('../../extension/courses/moodle.js');
+const { score } = require('../../extension/core/page.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -42,7 +42,7 @@ const detect = (html, { glazed = false, type = 'text/html', url = 'https://schoo
     head: { querySelector: (sel) => els.find((e) => e.matches(sel)) || null },
     addEventListener() {}, removeEventListener() {},
   };
-  vm.runInNewContext(read('lib/detect.js'), {
+  vm.runInNewContext(read('content/detect.js'), {
     document, location: new URL(url), window: { __gzGlaze: glazed },
     chrome: { runtime: { sendMessage: (m) => said.push(m), lastError: null } },
     MutationObserver: class { constructor(fn) { observer = this; this.fn = fn; } observe() { this.on = true; } disconnect() { this.on = false; } },
@@ -82,16 +82,16 @@ test('the detector never takes a page that only talks about Moodle', () => {
 });
 
 test('the detector stays under 2 KB', () => {
-  assert.ok(fs.statSync(path.join(root, 'lib/detect.js')).size < 2048);
+  assert.ok(fs.statSync(path.join(root, 'content/detect.js')).size < 2048);
 });
 
 // ---- the background: a Moodle host, once the student says yes, is injected now and registered for good, in its own list --
 // Each LMS's first content script: Canvas's is the manifest's for *.instructure.com, with its part; Moodle's is the same
-// without it (B0b). Before the yes, the page gets only the question (WP-C2, features/consent.js), in Glaze's words.
-const CANVAS_FIRST = require('../../extension/manifest.json').content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
-const MOODLE_FIRST = CANVAS_FIRST.filter((f) => f !== 'content-canvas.js');
-const ASK = ['lib/i18n.js', 'features/consent.js'];
-const asked = (first) => first.filter((f) => f !== 'lib/i18n.js'); // the question brought Glaze's words in already
+// without it (B0b). Before the yes, the page gets only the question (WP-C2, settings/page/consent.js), in Glaze's words.
+const CANVAS_FIRST = require('../../extension/manifest.json').content_scripts.find((c) => c.js.includes('content/content-canvas.js')).js;
+const MOODLE_FIRST = CANVAS_FIRST.filter((f) => f !== 'content/content-canvas.js');
+const ASK = ['core/i18n.js', 'settings/page/consent.js'];
+const asked = (first) => first.filter((f) => f !== 'core/i18n.js'); // the question brought Glaze's words in already
 test('a Moodle host is asked about, then injected now and registered from then on, apart from Canvas hosts', async () => {
   const store = { canvas: ['https://canvas.school.edu/*'] };
   const injected = [], registered = [], lists = {}, kept = {};
@@ -99,7 +99,7 @@ test('a Moodle host is asked about, then injected now and registered from then o
   const none = { addListener() {} };
   const context = vm.createContext({ solo: false, tabFrame: '',
     URL, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto,
-    importScripts: (...files) => { for (const file of files) vm.runInContext(read(path.join('lib', file)), context); },
+    importScripts: (...files) => { for (const file of files) vm.runInContext(read(path.join('background', file)), context); },
     chrome: {
       runtime: { id: 'id', getURL: (p = '') => `chrome-extension://id/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => { message ||= []; message.push(f); } }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: { get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, store[x]])), set: async (o) => Object.assign(store, o) }, sync: { get: async () => ({}) }, onChanged: none },
@@ -111,7 +111,7 @@ test('a Moodle host is asked about, then injected now and registered from then o
       },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = async (m, url) => { for (const f of message) f(m, { id: 'id', tab: { id: 4 }, frameId: 0, url }, () => {}); for (let i = 0; i < 4; i++) await settle(); };
   const yes = (kind, url) => send({ type: 'glaze:consent', op: 'yes', kind }, url);
   const files = () => injected.filter((o) => o.files).map((o) => plain(o.files));
@@ -123,10 +123,10 @@ test('a Moodle host is asked about, then injected now and registered from then o
   assert.deepEqual(files().at(-1), asked(MOODLE_FIRST), 'Moodle\'s whole first content script, into that page: no Canvas part');
   assert.deepEqual(plain(store.moodle), ['https://moodle.school.edu/*']);
   assert.deepEqual(plain(store.canvas), ['https://canvas.school.edu/*'], 'the Canvas list (which Download all trusts) is untouched');
-  // Every host granted: the detector too (lib/detect.js, registered while the worker holds https://*/*).
+  // Every host granted: the detector too (content/detect.js, registered while the worker holds https://*/*).
   assert.deepEqual(registered.sort(), ['gz-detect', 'https://canvas.school.edu/*', 'https://moodle.school.edu/*']);
-  assert.deepEqual(plain(lists), { 'gz-detect': ['lib/detect.js'], 'https://canvas.school.edu/*': CANVAS_FIRST, 'https://moodle.school.edu/*': MOODLE_FIRST }, 'each host its own LMS\'s list');
-  assert.ok(CANVAS_FIRST.includes('content-canvas.js') && !MOODLE_FIRST.includes('content-canvas.js') && MOODLE_FIRST.at(-1) === 'content.js');
+  assert.deepEqual(plain(lists), { 'gz-detect': ['content/detect.js'], 'https://canvas.school.edu/*': CANVAS_FIRST, 'https://moodle.school.edu/*': MOODLE_FIRST }, 'each host its own LMS\'s list');
+  assert.ok(CANVAS_FIRST.includes('content/content-canvas.js') && !MOODLE_FIRST.includes('content/content-canvas.js') && MOODLE_FIRST.at(-1) === 'content/content.js');
   await send('moodle', 'https://moodle.school.edu/course/view.php?id=2');
   assert.deepEqual(files().at(-1), MOODLE_FIRST, 'an approved host whose page lacks Glaze gets it at once, unasked');
   assert.deepEqual(plain(store.moodle), ['https://moodle.school.edu/*'], 'a host once');
@@ -143,7 +143,7 @@ test('a Moodle host is asked about, then injected now and registered from then o
   assert.deepEqual(plain(lists['https://both.school.edu/*']), CANVAS_FIRST);
 });
 
-// ---- lib/moodle.js ------------------------------------------------------------------------------------------------
+// ---- courses/moodle.js ------------------------------------------------------------------------------------------------
 test('due this week: the Timeline\'s events from now to a week on, soonest first, as paths on this site', () => {
   const answer = json('moodle-timeline.json');
   const now = 1792050235000; // when the fixture was captured
@@ -204,8 +204,8 @@ test('a total\'s chip: Moodle\'s own text, and its share where it says a percent
   assert.equal(M.text('x&#x110000;y&#9999999;z&#99999999999;'), 'xyz&#99999999999;', 'a code point past Unicode is dropped, never thrown on');
 });
 
-// ---- features/moodle.js, in a stand-in page ---------------------------------------------------------------------------
-const D = require('../../extension/defaults.js');
+// ---- courses/page/moodle.js, in a stand-in page ---------------------------------------------------------------------------
+const D = require('../../extension/content/defaults.js');
 const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = [], settings = { enabled: true, enhance: { overall: true } }, overview = '', courses = [], stored = {}, root = ORIGIN, list = {}, dark = true, live = { on: true } } = {}) => {
   const asked = [];
   // storage.local, as GZ_CTX.local hands it over.
@@ -219,13 +219,13 @@ const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = []
   };
   const context = vm.createContext({ solo: false, tabFrame: '',
     URL, Promise, JSON, Date, document, location: { origin: ORIGIN }, matchMedia: () => ({ matches: dark }),
-    GZ_COURSE_COLOR: D.GZ_COURSE_COLOR, GZ_SURFACE_VARS: D.GZ_SURFACE_VARS, GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../../extension/lib/color.js'),
+    GZ_COURSE_COLOR: D.GZ_COURSE_COLOR, GZ_SURFACE_VARS: D.GZ_SURFACE_VARS, GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../../extension/core/color.js'),
     GZ_MOODLE: M, GZ_PAGE: { score },
     GZ_CTX: { t: (k) => k, settings: () => settings, local: (fn) => fn(local), canvasCourseKey: (id) => (id ? `moodle:${root}/${id}` : null), courseList: () => list, on: () => live.on },
     fetch: async (url, opts = {}) => { asked.push({ url, ...opts }); return { ok: true, status: 200, text: async () => overview, json: async () => [{ error: false, data: { events: [], courses } }] }; },
   });
   context.globalThis = context;
-  const api = vm.runInContext(read('features/moodle.js'), context);
+  const api = vm.runInContext(read('courses/page/moodle.js'), context);
   return { api, asked, cards: cardEls, context, stored };
 };
 
@@ -275,29 +275,29 @@ test('course cards get their total from the grades overview, asked once a page l
 });
 
 test('Moodle\'s files load on demand, end on a value, and keep the first copy when loaded twice', () => {
-  const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
-  for (const f of ['lib/moodle.js', 'features/moodle.js']) assert.ok(list.includes(f) && !MOODLE_FIRST.includes(f), f);
+  const list = JSON.parse(read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
+  for (const f of ['courses/moodle.js', 'courses/page/moodle.js']) assert.ok(list.includes(f) && !MOODLE_FIRST.includes(f), f);
   const context = vm.createContext({ solo: false, tabFrame: '', URL, document: {}, location: { origin: ORIGIN } });
   context.globalThis = context;
-  for (const [f, name] of [['lib/moodle.js', 'GZ_MOODLE'], ['features/moodle.js', 'GZ_MOODLE_PAGE']]) {
+  for (const [f, name] of [['courses/moodle.js', 'GZ_MOODLE'], ['courses/page/moodle.js', 'GZ_MOODLE_PAGE']]) {
     const value = vm.runInContext(read(f), context);
     assert.ok(value && value === vm.runInContext(name, context), `${f}: no last value`);
     assert.equal(vm.runInContext(read(f), context), value, `${f}: a second copy replaced the first`);
   }
 });
 
-test('Moodle is packaged: its stylesheet is exposed to pages, and the zip carries it and features/', () => {
+test('Moodle is packaged: its stylesheet is exposed to pages, and the zip carries it and its page code', () => {
   const m = require('../../extension/manifest.json');
-  assert.ok(m.web_accessible_resources[0].resources.includes('moodle.css'));
+  assert.ok(m.web_accessible_resources[0].resources.includes('content/moodle.css'));
   const pkg = read('../tools/build/package.sh');
-  for (const f of ['moodle.css', 'features']) assert.equal(pkg.match(new RegExp(` ${f} `, 'g'))?.length, 2, `package.sh: ${f}`);
+  for (const f of ['content', 'courses']) assert.equal(pkg.match(new RegExp(` ${f} `, 'g'))?.length, 2, `package.sh: ${f}`);
 });
 
-test('the words features/moodle.js shows are in every language', () => {
-  const src = read('features/moodle.js');
+test('the words courses/page/moodle.js shows are in every language', () => {
+  const src = read('courses/page/moodle.js');
   const words = [...src.matchAll(/\bt\('([^']+)'\)/g), ...src.matchAll(/\['\/[^']*', '([^']+)'\]/g)].map((m) => m[1]);
   assert.ok(words.length >= 8);
-  require('../../extension/lib/i18n.js');
+  require('../../extension/core/i18n.js');
   for (const f of fs.readdirSync(path.join(root, 'i18n'))) require(`../../extension/i18n/${f}`);
   for (const [lang, cat] of Object.entries(globalThis.GZ_LANGS)) for (const w of words) assert.ok(w in cat, `${lang}: "${w}"`);
 });
@@ -346,7 +346,7 @@ test('every page fixture still has what Glaze keys on', () => {
   for (const c of CLASSES) {
     const words = c.split(' ');
     assert.ok([...all.matchAll(/class="([^"]*)"/g)].some(([, v]) => { const have = v.split(/\s+/); return words.every((w) => have.includes(w)); }), `no fixture has class "${c}"`);
-    assert.ok(read('moodle.css').includes(`.${words.at(-1)}`), `"${c}" is not keyed on any more: drop it here`);
+    assert.ok(read('content/moodle.css').includes(`.${words.at(-1)}`), `"${c}" is not keyed on any more: drop it here`);
   }
 });
 
@@ -395,12 +395,12 @@ test('the capture harness never repeats Moodle\'s session key when its lookup fa
 
 // ---- course keys, tint, Looks, the course menu and the shortcuts (W20b) -----------------------------------------------
 // content.js's course key, as it runs on a page: Moodle's from <body> and its theme's sheet, Canvas's from the address.
-const keyLine = read('content.js').match(/^ {2}const canvasCourseKey = [^\n]*;$/m)[0];
+const keyLine = read('content/content.js').match(/^ {2}const canvasCourseKey = [^\n]*;$/m)[0];
 const courseKey = ({ site = 'moodle', body, sheet = `${ORIGIN}/theme/styles.php/boost/1792050189_1/all`, origin = ORIGIN, canvasId } = {}) => vm.runInNewContext(`${keyLine} canvasCourseKey`, {
   site, moodle: site === 'moodle', location: { origin }, canvasCourseId: () => canvasId,
   document: { body: body === undefined ? null : { className: body }, querySelector: (sel) => (sel.includes('/theme/styles') && sheet ? { href: sheet } : null) },
 });
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 
 test('a Moodle course is keyed by its site\'s root and its id, from Moodle\'s own markup, on its pages and nowhere else', () => {
   for (const { f, html } of fixtures) {
@@ -454,10 +454,10 @@ test('Moodle courses are kept with Moodle\'s own color for each, the one its car
   for (const bad of [null, {}, { courses: 'no' }]) assert.deepEqual(M.seen(bad, key), {});
 });
 
-// content.js's own recordCourses and dueWeek, as a page load runs them (startSweep), over the real features/moodle.js:
+// content.js's own recordCourses and dueWeek, as a page load runs them (startSweep), over the real courses/page/moodle.js:
 // the course list doesn't wait on the due list's cache, and is fresh per Moodle root, not per host.
 const contentBlock = (start, end) => {
-  const src = read('content.js');
+  const src = read('content/content.js');
   const at = src.indexOf(start);
   return src.slice(at, src.indexOf(end, at) + end.length);
 };
@@ -600,7 +600,7 @@ test('each course card wears its own course\'s Look and tint, painted only on ch
   assert.deepEqual([plain(bio.style.vars), bio.dataset.gzCourseLook, plain(eng.style.vars), eng.dataset.gzCourseLook], [{ '--gz-course-raw': '#b2bec3' }, undefined, { '--gz-course-raw': '#fdcb6e' }, undefined]);
 });
 
-// features/keys.js on Moodle, as content.js hands it keys.
+// navigation/page/keys.js on Moodle, as content.js hands it keys.
 const moodleKeys = ({ id = 'page-course-view-topics', sheet = `${ORIGIN}/theme/styles.php/boost/1/all`, origin = ORIGIN } = {}) => {
   const went = [];
   const document = { body: { id }, querySelector: (sel) => (sel.includes('/theme/styles') ? { href: sheet } : null), addEventListener() {} };
@@ -608,7 +608,7 @@ const moodleKeys = ({ id = 'page-course-view-topics', sheet = `${ORIGIN}/theme/s
     document, location: { origin, pathname: '/course/view.php', assign: (u) => went.push(u) }, navigator: { platform: 'MacIntel' }, Date,
     GZ_CTX: { site: 'moodle', settings: () => ({ enhance: { keys: true } }), typing: () => false, keyOn: () => true, wordsIn: new Set(), t: (k) => k },
   });
-  vm.runInContext(read('features/keys.js'), ctx);
+  vm.runInContext(read('navigation/page/keys.js'), ctx);
   const press = (...keys) => { for (const key of keys) ctx.GZ_KEYS.key({ key, target: document.body, preventDefault() {}, stopImmediatePropagation() {} }); };
   return { press, went };
 };
@@ -631,10 +631,10 @@ test('Moodle\'s shortcuts work on its main pages, a course\'s and its activities
 });
 
 test('content.js hands Moodle\'s keys to keys.js, with Canvas\'s guards: not repeated, not taken, not in a menu or dialog', () => {
-  const line = read('content.js').match(/^ {2}const keyOn = [^\n]*\n[^\n]*;$/m)[0];
+  const line = read('content/content.js').match(/^ {2}const keyOn = [^\n]*\n[^\n]*;$/m)[0];
   const keyOn = (site, e, pathname = '/course/view.php') => vm.runInNewContext(`${line} keyOn`, {
     chrome: { runtime: { id: 'glaze' } },
-    settings: { enhance: { keys: true } }, observer: {}, typing: () => false, ultra: site === 'ultra', moodle: site === 'moodle', location: { pathname }, GZ_PAGE: require('../../extension/lib/page.js'),
+    settings: { enhance: { keys: true } }, observer: {}, typing: () => false, ultra: site === 'ultra', moodle: site === 'moodle', location: { pathname }, GZ_PAGE: require('../../extension/core/page.js'),
   })({ key: 'g', target: { closest: () => null }, ...e });
   assert.ok(keyOn('moodle', {}));
   for (const e of [{ repeat: true }, { defaultPrevented: true }, { ctrlKey: true }, { target: { closest: () => ({}) } }]) assert.ok(!keyOn('moodle', e), JSON.stringify(e));

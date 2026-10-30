@@ -1,9 +1,9 @@
 // Export calendar (.ics) (Canvas and Blackboard Ultra): a file the student saves and imports into Google Calendar, Outlook
 // or Apple Calendar themselves. Opened from Better To Do's header or the command palette (Ctrl+K); the options page keeps
 // the same choices. Made entirely here, on the device: the site is read for the range with the student's own session, as
-// Better To Do reads it (Canvas's planner; Ultra's To Do, calendar and gradebooks, lib/ultra.js page.due), and the file
+// Better To Do reads it (Canvas's planner; Ultra's To Do, calendar and gradebooks, courses/ultra.js page.due), and the file
 // goes to the browser's own download through a blob link (no downloads permission). Nothing is sent anywhere. What goes
-// in it is lib/calexport.js; lib/ics.js writes it.
+// in it is planner/calexport.js; planner/ics.js writes it.
 // Loaded on demand: a second injection keeps the first.
 var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -14,8 +14,8 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
   let box = null, opener = null, say = null, busy = false;
 
   const readTodo = () => new Promise((res) => { try { chrome.storage.sync.get('todo', (r) => res(r?.todo)); } catch { res(); } });
-  const libs = () => ctx.need('lib/todo.js', () => globalThis.GZ_TODO)
-    .then(() => Promise.all([ctx.need('lib/ics.js', () => globalThis.GZ_ICS), ctx.need('lib/calexport.js', () => globalThis.GZ_CALEXPORT)]));
+  const libs = () => ctx.need('planner/todo.js', () => globalThis.GZ_TODO)
+    .then(() => Promise.all([ctx.need('planner/ics.js', () => globalThis.GZ_ICS), ctx.need('planner/calexport.js', () => globalThis.GZ_CALEXPORT)]));
   // Canvas's planner over every page its Link header names, on this site only, as Better To Do reads it.
   // ponytail: ten pages (1,000 items). → { items, complete: false when a next page was left unread }.
   const pages = async (path) => {
@@ -52,9 +52,9 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     return { on: s.enabled, gs, data: kept[key], sig, s, gradescope: kept.gradescope };
   };
 
-  // The events for these choices (o; null: the ones remembered, as Google Calendar sync uses them, features/gcal.js):
+  // The events for these choices (o; null: the ones remembered, as Google Calendar sync uses them, planner/page/gcal.js):
   // { events, from, first (where the range starts: an instant, and that day), guessed, now, recheck(), whole (false: Ultra
-  // couldn't send its calendar whole), consent (what the events were composed under: lib/calexport.js consent, from the
+  // couldn't send its calendar whole), consent (what the events were composed under: planner/calexport.js consent, from the
   // same reads) }, or null when it
   // stopped because something changed while Canvas answered, or couldn't be read back (alive() false: the dialog closed;
   // Glaze turned off; the Gradescope switch or this account's answer changed since it began). recheck(): whether all of
@@ -64,7 +64,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     o ||= GZ_SANITIZE({ todo: await readTodo() }).todo;
     const L = GZ_TODO, X = GZ_CALEXPORT;
     // Every chosen source is read strictly: one that can't be loaded or read stops the export, and nothing is saved.
-    if (ctx.settings().enhance.gradescope && o.icsGs !== false) await ctx.need('lib/gradescope.js', () => globalThis.GZ_GRADESCOPE);
+    if (ctx.settings().enhance.gradescope && o.icsGs !== false) await ctx.need('planner/gradescope.js', () => globalThis.GZ_GRADESCOPE);
     const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses()]);
     if (!L.ID.test(String(p?.id))) throw new Error('no profile');
     const uid = String(p.id), tz = L.zone(p.time_zone), now = Date.now();
@@ -82,7 +82,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     // What either site couldn't read whole (complete: false): Google sync deletes nothing for it; on Ultra the file says so.
     const iso = (ms) => new Date(ms).toISOString();
     let whole = true;
-    const ask = (a, b) => (ultra ? ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => { if (!alive()) throw new Error('stopped'); return GZ_ULTRA.page.due(a, b); }).then((x) => { whole &&= x.complete; return x.items; })
+    const ask = (a, b) => (ultra ? ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => { if (!alive()) throw new Error('stopped'); return GZ_ULTRA.page.due(a, b); }).then((x) => { whole &&= x.complete; return x.items; })
       : pages(`/api/v1/planner/items?start_date=${iso(a)}&end_date=${iso(b)}&per_page=100`).then((x) => { whole &&= x.complete; return x.items.map(L.slim); }));
     let items = o.icsDue || o.icsPlan ? await ask(r.from, r.to + 56 * DAY) : [];
     if (o.icsPlan) {
@@ -92,7 +92,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
       const want = X.planned(mine[key], r).filter((k) => !/^(task|gradescope):/.test(k) && !read.has(k));
       if (want.length) items = [...items, ...await ask(r.from - 180 * DAY, r.from)];
     }
-    // The class schedule (lib/classes.js), when chosen: each meeting in the range, in floating local time. A read or a
+    // The class schedule (planner/classes.js), when chosen: each meeting in the range, in floating local time. A read or a
     // load that fails stops the export (nothing is saved), rather than a file that quietly leaves the classes out.
     let classes = [];
     if (o.icsClasses) {
@@ -100,7 +100,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
       const got = await strict('local', [ck]);
       if (!got) throw new Error('classes');
       if (got[ck]?.courses?.length) {
-        await ctx.need('lib/classes.js', () => globalThis.GZ_CLASSES).catch(() => { throw new Error('classes'); });
+        await ctx.need('planner/classes.js', () => globalThis.GZ_CLASSES).catch(() => { throw new Error('classes'); });
         classes = GZ_CLASSES.icsEvents(got[ck], { site: location.host, from: L.dayKey(r.first), to: L.dayKey(r.last - 1), tz });
       }
     }

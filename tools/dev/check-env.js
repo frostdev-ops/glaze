@@ -45,9 +45,9 @@ function staged(src, hosts, tmp = os.tmpdir()) {
 // A storage write finishes before the worker's list-change handler has registered the script. Polled from Node:
 // waitForFunction resolves at once on an async predicate (its promise is truthy), so pages loaded before Glaze ran.
 const ultraRegistered = async () => {
-  const first = chrome.runtime.getManifest().content_scripts.find((s) => s.js.includes('content-ultra.js'));
+  const first = chrome.runtime.getManifest().content_scripts.find((s) => s.js.includes('content/content-ultra.js'));
   const scripts = await chrome.scripting.getRegisteredContentScripts();
-  const patterns = [...first.matches, ...scripts.filter((s) => s.js?.includes('content-ultra.js')).flatMap((s) => s.matches)];
+  const patterns = [...first.matches, ...scripts.filter((s) => s.js?.includes('content/content-ultra.js')).flatMap((s) => s.matches)];
   const sites = (await chrome.storage.local.get('ultra')).ultra;
   return Array.isArray(sites) && sites.length > 0 && sites.every((site) => {
     const u = new URL(site);
@@ -64,7 +64,7 @@ const ultraReady = async (page, timeout = 10000) => {
   }
 };
 
-// A new profile's install (lib/background.js onInstalled) writes storage.local after Glaze's pages can load, so a check that
+// A new profile's install (background/background.js onInstalled) writes storage.local after Glaze's pages can load, so a check that
 // seeds or compares storage first waits for each install task's last write: the starter widgets (freshDefaults settles
 // with widgetLayout and starterTouched), the tabs-auto migration and the channel-key move. Polled from Node, as ultraReady.
 // With no favorites, catalogue() writes nothing; every reader treats the missing cache as no kept Looks.
@@ -84,15 +84,15 @@ const installed = async (page, timeout = 30000) => {
   }
 };
 
-// Glaze opens its first screen (features/welcome.html) in a tab of its own when it is installed on Chrome. A check that
+// Glaze opens its first screen (settings/welcome.html) in a tab of its own when it is installed on Chrome. A check that
 // counts on its own tabs alone closes it, now or when it opens. → a promise of the first one closed: the install's tab opens
 // seconds into a run, as the active tab, and a check driving the active tab or a popup over it starts after it.
 const noFirstRun = (ctx) => {
   let closed;
   const first = new Promise((r) => { closed = r; });
-  const close = (p) => { if (/^chrome-extension:\/\/[a-p]{32}\/features\/welcome\.html/.test(p.url())) p.close().then(closed, () => {}); };
+  const close = (p) => { if (/^chrome-extension:\/\/[a-p]{32}\/settings\/welcome\.html/.test(p.url())) p.close().then(closed, () => {}); };
   // Observe until the page closes: a caller's first-screen guard, rather than a shorter navigation wait, bounds failure.
-  const watch = (p) => { close(p); p.waitForURL(/\/features\/welcome\.html/, { timeout: 0 }).then(() => close(p), () => {}); };
+  const watch = (p) => { close(p); p.waitForURL(/\/settings\/welcome\.html/, { timeout: 0 }).then(() => close(p), () => {}); };
   ctx.pages().forEach(watch);
   ctx.on('page', watch);
   return first;

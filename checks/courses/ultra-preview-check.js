@@ -1,4 +1,4 @@
-// Ultra's file previews in Glaze's PDF viewer (features/bbpreview.js, lib/bb-preview.js, pdf-kind.js show), in the real
+// Ultra's file previews in Glaze's PDF viewer (courses/page/bbpreview.js, courses/bb-preview.js, pdf-kind.js show), in the real
 // unpacked extension on the synthetic Ultra Document page and viewer chain of checks/mocks/ultra-mock.js PREVIEW (the live probe's
 // shapes: two data-bbfile attachments, viewerUrl → 302 → basic-doc-viewer's index.html → its documents API → a presigned S3
 // converted.pdf, readable with CORS from other origins). An expanded preview: Blackboard's frame until Glaze's viewer has
@@ -70,7 +70,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     context.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text().slice(0, 300)}`); });
     let worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const settings = ({ enhance = {}, writer = {} } = {}) => G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), bbPreviews: true, docPages: 'plain', ...enhance }, writer: { pdf: true, ...writer } });
     // The worker's stand-in for following viewerUrl's redirect (ultra-mock.js WHERE), put back before each step.
     const where = () => worker.evaluate(mock.where);
@@ -425,7 +425,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     if (!reviewCase || reviewCase === 'draw') {
       await p.addInitScript(() => {
         if (location.protocol !== 'chrome-extension:') return;
-        import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs')).then(() => import(chrome.runtime.getURL('lib/pdfjs/pdf_viewer.mjs'))).then((V) => {
+        import(chrome.runtime.getURL('vendor/pdfjs/pdf.mjs')).then(() => import(chrome.runtime.getURL('vendor/pdfjs/pdf_viewer.mjs'))).then((V) => {
           const dispatch = V.EventBus.prototype.dispatch;
           V.EventBus.prototype.dispatch = function (type, data) {
             if (type === 'pagerendered') data = { ...data, error: new Error('synthetic page draw failure') };

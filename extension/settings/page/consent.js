@@ -1,8 +1,8 @@
-// Glaze — "Use Glaze on example.edu?": the question lib/background.js puts on a page that looks like an LMS, on a site the
-// student hasn't approved (Canvas or Moodle on a school's own address, found by lib/detect.js; Blackboard Ultra off
+// Glaze — "Use Glaze on example.edu?": the question background/background.js puts on a page that looks like an LMS, on a site the
+// student hasn't approved (Canvas or Moodle on a school's own address, found by content/detect.js; Blackboard Ultra off
 // blackboard.com). Nothing of Glaze runs on the site before Yes. Yes puts Glaze there for good (Settings' Sites takes it off
 // again); Not now leaves the site alone for a week (the worker keeps when). Top frame only, never while Glaze is off.
-// It is the reminders' toast (features/apps.css .gz-rm-toast) in the student's palette, in a closed shadow root the page
+// It is the reminders' toast (core/page/apps.css .gz-rm-toast) in the student's palette, in a closed shadow root the page
 // can't reach into or restyle, and in the top layer where the browser has one. It never takes focus; it comes first in the
 // page's tab order, as a landmark, and a screen reader hears it arrive (a polite live region). Escape puts it away for this
 // page. Only the student's own click counts: a page can click a button itself, but that click isn't trusted, and where the
@@ -112,7 +112,7 @@ button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px;
     }, 50);
     try { chrome.storage.onChanged.addListener(heard); } catch { /* reloaded */ }
   };
-  // The catalogue the page's language needs, which the worker puts in before show (lib/i18n.js file).
+  // The catalogue the page's language needs, which the worker puts in before show (core/i18n.js file).
   return { show, words: () => GZ_I18N.file(lang()) };
 })();
 GZ_CONSENT;

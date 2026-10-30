@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 
 test('empty or garbage input yields the defaults', () => {
   for (const raw of [undefined, null, 42, 'x', []]) assert.deepEqual(G.GZ_SANITIZE(raw), G.GZ_DEFAULTS);
@@ -125,8 +125,8 @@ test('animated scenes are a background kind, off by default', () => {
   assert.equal(G.GZ_SANITIZE({ bg: { intensity: 140 } }).bg.intensity, 50);
 });
 
-test('every scene the settings allow is drawn by lib/scene.js', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '../../extension/lib/scene.js'), 'utf8');
+test('every scene the settings allow is drawn by looks/scene.js', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../../extension/looks/scene.js'), 'utf8');
   const drawn = src.slice(src.indexOf('const SCENES = {')).match(/^ {2}(\w+):/gm).map((m) => m.trim().slice(0, -1));
   assert.deepEqual([...drawn].sort(), [...G.GZ_SPEC.bg.scene[1]].sort());
 });
@@ -143,12 +143,12 @@ test('a drawn background\'s CSS fallback is dimmed like a quiet gradient, whatev
   // or without WebGL) is what the page's text sits on then.
   for (const L of G.GZ_LOOKS.filter((l) => l.bg.kind === 'scene')) assert.ok(G.GZ_SCENE_LOOK(L.bg.intensity ?? G.GZ_DEFAULTS.bg.intensity).dim < 0.75, L.name);
   const fs = require('node:fs');
-  const css = fs.readFileSync(require.resolve('../../extension/extras.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = fs.readFileSync(require.resolve('../../extension/content/extras.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const base = css.indexOf('html[data-gz-bg]:not([data-gz-bg="solid"]) {');
   const m = css.match(/html\[data-gz-bg\]:is\(([^)]*)\) \{\s*--gz-bg-tint: color-mix\(in srgb, var\(--gz-surface-2\) max\(var\(--gz-bg-dim, 60%\), 75%\), transparent\);\s*\}/);
   assert.ok(m && base >= 0 && m.index > base, 'after the layer\'s own tint, at its specificity, so it wins');
   // The kinds content.js gives the scene's dim to are the ones floored here.
-  const kinds = [...fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8').match(/const look = \(([^)]*)\) && GZ_SCENE_LOOK/)[1].matchAll(/'(\w+)'/g)].map((k) => k[1]);
+  const kinds = [...fs.readFileSync(require.resolve('../../extension/content/content.js'), 'utf8').match(/const look = \(([^)]*)\) && GZ_SCENE_LOOK/)[1].matchAll(/'(\w+)'/g)].map((k) => k[1]);
   assert.deepEqual([...m[1].matchAll(/\[data-gz-bg="(\w+)"\]/g)].map((k) => k[1]).sort(), kinds.sort());
 });
 
@@ -163,7 +163,7 @@ test('gradient: blend sets how long each color holds, spread how much of the lin
 });
 
 test('theme codes round-trip palette, look and background, and nothing else', async () => {
-  const S = require('../../extension/lib/share.js');
+  const S = require('../../extension/sharing/share.js');
   const s = G.GZ_SANITIZE({ colors: G.GZ_PRESET('Midnight'), look: { font: 'Comic Neue', radius: 4, tooltips: false }, bg: { kind: 'image', image: 'https://example.com/a.jpg', dim: 30 }, enhance: { keys: true } });
   const code = await S.encode(s);
   assert.match(code, /^glaze1:[\w-]+$/);
@@ -181,7 +181,7 @@ test('theme codes round-trip palette, look and background, and nothing else', as
 });
 
 test('theme codes are untrusted: anything off refuses the whole code', async () => {
-  const S = require('../../extension/lib/share.js');
+  const S = require('../../extension/sharing/share.js');
   const make = async (obj) => {
     const z = await new Response(new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
     return `glaze1:${Buffer.from(z).toString('base64url')}`;
@@ -213,7 +213,7 @@ test('course tint is off and empty until configured; junk is dropped', () => {
 });
 
 test('course tint never costs a contrast pair, and at full strength is the course color where that reads', () => {
-  const C = require('../../extension/lib/color.js');
+  const C = require('../../extension/core/color.js');
   // Ultra's ten slot colors, plus black and white: the extremes a picked course color can be.
   const courses = ['#c473d4', '#2fd9fc', '#ffe12b', '#ff6417', '#89f3db', '#fe5b91', '#85f472', '#22c7cc', '#ca22ad', '#157afb', '#000000', '#ffffff'];
   for (const [name, colors] of G.GZ_PRESETS) {

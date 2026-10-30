@@ -1,5 +1,5 @@
 // Glaze Writer's AI in its real frame (writer.html with writer-ai.js), headless, with the AI harness's mock provider behind a
-// stand-in of the worker's 'glaze:ai' port: the real tasks (lib/ai/tasks/writer-*.js) run through lib/ai/task.js in the page,
+// stand-in of the worker's 'glaze:ai' port: the real tasks (ai/tasks/writer-*.js) run through ai/task.js in the page,
 // so the gray text shown is what writer.complete's check kept. The page side of the frame's channel is played from here.
 // Flows: the gray text shows after the pause, Tab takes it, ⌥→ (Ctrl+→ off a Mac) takes a word, Esc dismisses it, typing it
 // consumes it, any other key, a click or an IME composition cancels it and the run in flight; Tab still indents a list
@@ -12,8 +12,8 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const root = path.resolve(__dirname, '../../extension'), site = 'https://writer.test';
 const shots = process.argv[2] || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/build-ai');
 const MAC = process.platform === 'darwin', MOD = MAC ? 'Meta' : 'Control', WORD = MAC ? 'Alt+ArrowRight' : 'Control+ArrowRight';
-const AI_FILES = ['lib/writer-sources.js', 'lib/writer-cite.js', ...['schema', 'request', 'stream', 'failure', 'endpoint', 'text', 'providers', 'tools', 'loop', 'task', 'providers/mock',
-  ...['context', 'complete', 'review', 'image', 'feedback', 'outline', 'requirements', 'cite', 'decide'].map((t) => `tasks/writer-${t}`)].map((f) => `lib/ai/${f}.js`)];
+const AI_FILES = ['writer/writer-sources.js', 'writer/writer-cite.js', ...['schema', 'request', 'stream', 'failure', 'endpoint', 'text', 'providers', 'tools', 'loop', 'task', 'providers/mock',
+  ...['context', 'complete', 'review', 'image', 'feedback', 'outline', 'requirements', 'cite', 'decide'].map((t) => `tasks/writer-${t}`)].map((f) => `ai/${f}.js`)];
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 8000) => {
@@ -26,7 +26,7 @@ const until = async (fn, label, ms = 8000) => {
 const STUB = `(() => {
   const ai = window.__ai = { settings: { on: true, outline: false, use: 'main', features: { completion: true, writing: true } }, connects: 0, runs: [], ends: [], cancels: [], next: {}, changed: [], seen: [],
     status: { completion: { allowed: true, ready: true, provider: 'device', caps: { text: true } }, writing: { allowed: true, ready: true, provider: 'device', caps: { text: true, json: true } } } };
-  // The real issues store (lib/writer-issues.js), with every set() recorded as it lands.
+  // The real issues store (writer/writer-issues.js), with every set() recorded as it lands.
   let issues;
   Object.defineProperty(window, 'GZ_WRITER_ISSUES', { configurable: true, get: () => issues, set: (v) => {
     issues = v;
@@ -46,7 +46,7 @@ const STUB = `(() => {
         if (m.op !== 'run') return;
         const task = GZ_AI_TASKS.get(m.task);
         if (!allowed) return post({ id: m.id, type: 'error', error: 'feature' });
-        // A supersede task's newer run cancels the one in flight, as lib/ai/broker.js does.
+        // A supersede task's newer run cancels the one in flight, as ai/broker.js does.
         if (task.rate?.supersede) for (const [id, c] of inflight) if (c.task === m.task) { c.abort(); }
         const c = Object.assign(new AbortController(), { task: m.task });
         inflight.set(m.id, c);
@@ -64,7 +64,7 @@ const STUB = `(() => {
   };
   const data = {}, local = { get: async () => ({ ...data, ai: JSON.parse(JSON.stringify(ai.settings)) }), set: async (o) => { Object.assign(data, o); if (o.ai) { ai.settings = JSON.parse(JSON.stringify(o.ai)); ai.changed.forEach((f) => f({ ai: { newValue: o.ai } }, 'local')); } }, remove: async (k) => { delete data[k]; } };
   window.chrome = { runtime: { sendMessage: async (m) => m.type === 'glaze:writerPapers' ? { ok: true, value: await GZ_WRITER_PAPERS.open(local)[m.op](...m.args) } : { ok: true }, connect },
-    // Writer's synced settings (lib/writer-settings.js): Full writer on for a frame opened at #full, where a step needs an
+    // Writer's synced settings (writer/writer-settings.js): Full writer on for a frame opened at #full, where a step needs an
     // assignment's pages rather than its compact box; the defaults otherwise.
     storage: { local, sync: { get: async () => ({ writer: location.hash === '#full' ? { full: true } : {} }), set: async () => {} }, onChanged: { addListener: (f) => ai.changed.push(f), removeListener: (f) => { const i = ai.changed.indexOf(f); if (i >= 0) ai.changed.splice(i, 1); } } } };
 })();`;
@@ -309,7 +309,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
       await next(p, 'writer.decide', { json: { verdict: 'apply', choice: 'they\'re' } });
       assert.deepEqual(await p.evaluate(() => GZ_WRITER_PROOF.decide({ text: 'They put there coats down.', from: 9, to: 14, suggestions: ['their', 'they\'re'] })), { verdict: 'apply', choice: 1 });
     });
-    // The whole document before the caret (lib/ai/tasks/writer-complete.js): the stub's model has no window, so it reads
+    // The whole document before the caret (ai/tasks/writer-complete.js): the stub's model has no window, so it reads
     // up to READ.unknown bytes of it, the earliest paragraphs left out first.
     const asked = async (html, label) => {
       await p.evaluate((h) => __page.port.postMessage({ type: 'html', html: h }), html);
@@ -555,7 +555,7 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
     });
 
     // The paper's Feedback and Outline tabs as mockups E draw them: every state, Frost and Paper, wide and narrow.
-    const looks = { dark: { dark: true, motion: 'subtle' }, light: { dark: false, motion: 'subtle', tokens: Object.fromEntries(Object.entries(require('../../extension/defaults.js').GZ_PRESETS.find((x) => x[0] === 'Paper')[1]).filter(([k]) => k.startsWith('--gz-'))) } };
+    const looks = { dark: { dark: true, motion: 'subtle' }, light: { dark: false, motion: 'subtle', tokens: Object.fromEntries(Object.entries(require('../../extension/content/defaults.js').GZ_PRESETS.find((x) => x[0] === 'Paper')[1]).filter(([k]) => k.startsWith('--gz-'))) } };
     const built = path.join(shots, 'feedback-outline');
     fs.mkdirSync(built, { recursive: true });
     const level = (id, label, points, a, b) => ({ id, label, points, cells: [{ level: '_1_1', detail: 'Exemplary work.', value: a }, { level: '_2_1', detail: 'Developing work.', value: b }] });

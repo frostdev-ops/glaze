@@ -1,16 +1,16 @@
 // The editor's background builders: a Look's own shader (x.bg.shader), a stack of up to four
 // layers (x.bg.layers) and a video, animated picture or Lottie animation (x.bg.media), shown when Background is Custom shader,
 // Layers or Video or animation. Shared controls and the save path are in
-// lib/editor-x.js. The shader is checked as it is typed (lib/glsl.js, the same checker a theme code goes through): problems
+// settings/editor-x.js. The shader is checked as it is typed (looks/glsl.js, the same checker a theme code goes through): problems
 // are listed by line and nothing is saved until it passes, so the preview keeps the last one that did. What the preview's
-// budget guard does on this device (lib/scene.js tells this page) is said in words. Extension settings page only; the
+// budget guard does on this device (looks/scene.js tells this page) is said in words. Extension settings page only; the
 // tables have module.exports for node.
 var GZ_EDITOR_XBG = globalThis.GZ_EDITOR_XBG || (() => {
   const X = typeof GZ_EDITOR_X !== 'undefined' ? GZ_EDITOR_X : require('./editor-x.js');
   // Example shaders to start from, in assets/shaders/.
   const EXAMPLES = [['aurora', 'Aurora ribbons'], ['starfield', 'Starfield'], ['liquid', 'Liquid gradient']];
   const KINDS = [['scene', 'Animated scene'], ['noise', 'Noise'], ['gradient', 'Gradient'], ['particles', 'Particles']];
-  // Each kind's controls, in order (lib/lookparts.js LAYER has the same keys).
+  // Each kind's controls, in order (looks/lookparts.js LAYER has the same keys).
   const FIELDS = { scene: ['name', 'amount', 'speed', 'blend', 'c'], noise: ['scale', 'amount', 'speed', 'blend', 'c'], gradient: ['style', 'angle', 'amount', 'blend', 'c'], particles: ['count', 'shape', 'size', 'speed', 'drift', 'twinkle', 'amount', 'blend', 'c'] };
   // A new layer of kind k: what it needs to be a layer (a scene's name, a gradient's two colours); the rest is the defaults.
   const fresh = (k) => ({ k, ...(k === 'scene' && { name: 'mist' }), ...(k === 'gradient' && { c: ['accent', 'accent-hi'] }) });
@@ -210,7 +210,7 @@ var GZ_EDITOR_XBG = globalThis.GZ_EDITOR_XBG || (() => {
 
 
   // ---- media --------------------------------------------------------------------------------------------------------------
-  // A video, an animated picture or a Lottie animation, from a link or from a file this computer keeps (lib/media.js, put
+  // A video, an animated picture or a Lottie animation, from a link or from a file this computer keeps (looks/media.js, put
   // through the worker, which reads it again). The editor names the host a link loads from, and says what the preview did.
   const MEDIA_KINDS = [['video', 'Video (WebM or MP4)'], ['image', 'Animated picture (WebP or AVIF)'], ['lottie', 'Lottie animation (JSON)']];
   const MEDIA_FITS = [['cover', 'Fill the screen'], ['contain', 'Fit inside'], ['fill', 'Stretch']];
@@ -247,8 +247,8 @@ var GZ_EDITOR_XBG = globalThis.GZ_EDITOR_XBG || (() => {
     const url = GZ_XPARTS.MEDIA.url(v);
     if (!url) return say(note, tr('That isn’t a link Glaze can use. It must start with https:// and name a website.'));
     input.value = url;
-    // The worker fetches the file (lib/media.js remote) and refuses a host the browser doesn't hold: asked for here, in the
-    // change that takes the link (a paste and Enter, or leaving the box), before anything is awaited (lib/site.js reach).
+    // The worker fetches the file (looks/media.js remote) and refuses a host the browser doesn't hold: asked for here, in the
+    // change that takes the link (a paste and Enter, or leaving the box), before anything is awaited (core/site.js reach).
     const kind = mediaKind;
     GZ_SITE.reach([url], input, { kind: 'media', src: url, mediaKind: kind }).then((held) => {
       if (held === null) return; // sent to Settings' own tab

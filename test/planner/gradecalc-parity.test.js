@@ -1,4 +1,4 @@
-// Dropped scores: lib/gradecalc.js against two reference solvers on seeded, generated assignment groups, so the
+// Dropped scores: planner/gradecalc.js against two reference solvers on seeded, generated assignment groups, so the
 // numbers behind the choice to reproduce Canvas's drop search can be rerun.
 // - `reviewed`: the solver as Codex reviewed it at c84efec (6,912 cases checked against brute force there), which
 //   reproduces Canvas's search; kept here only to measure against.
@@ -7,7 +7,7 @@
 // `node --test` runs a sample (SAMPLE groups per corpus). The full run: GZ_PARITY_FULL=1 node --test test/planner/gradecalc-parity.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/lib/gradecalc.js');
+const G = require('../../extension/planner/gradecalc.js');
 
 const FULL = !!process.env.GZ_PARITY_FULL;
 const SAMPLE = 1000;

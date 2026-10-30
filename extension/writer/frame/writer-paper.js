@@ -1,18 +1,18 @@
 // Glaze Writer's paper mode: an assignment attempt's paper as a word processor, the whole chrome around the editor that
 // writer.js makes (glaze-plans/writer/mockups C): the title bar and save state, the toolbar (format, block style, marks,
 // alignment, lists, Cite, Footnote, Page break, undo and redo, zoom, Focus, Submit…), real pages of the paper's size with
-// the running header and footnotes (lib/writer-paginate.js), the side panel (Checks, Sources, Feedback, Outline) and the status bar.
-// The paper lives in Writer's storage (lib/writer-papers.js), autosaved with versions; in this full view it never goes
-// into Ultra's editor: the submit step attaches it as a .docx (lib/writer-docx.js). The same chrome edits a paper in
+// the running header and footnotes (writer/writer-paginate.js), the side panel (Checks, Sources, Feedback, Outline) and the status bar.
+// The paper lives in Writer's storage (writer/writer-papers.js), autosaved with versions; in this full view it never goes
+// into Ultra's editor: the submit step attaches it as a .docx (writer/writer-docx.js). The same chrome edits a paper in
 // papers.html. An assignment opens compact unless Settings → Writer → Full writer is on (writer.full; the "Full writer"
 // switch in either view sets it): the same paper in writer.html's compose box, its bar and selection toolbar, no pages,
 // panel, ruler or zoom, pagination paused and the format's checks off; its compose projection (project(): what Ultra's
-// Quill can hold) goes into Ultra's text box as a discussion post's does (features/writer.js), and Ultra's own Submit
+// Quill can hold) goes into Ultra's text box as a discussion post's does (writer/page/writer.js), and Ultra's own Submit
 // sends that text. Notes, page breaks, pictures, fonts and colours stay in the paper, for the full view's .docx.
 // Classic script after writer.js; the paper libraries load only when a paper opens. module.exports (project) for node.
 var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
-  const LIBS = ['lib/writer-styles.js', 'lib/writer-paginate.js', 'lib/writer-format.js', 'lib/writer-outline.js', 'lib/writer-papers.js', 'lib/writer-submit.js'];
-  const DOCX = ['lib/writer-color.js', 'lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js'];
+  const LIBS = ['writer/writer-styles.js', 'writer/writer-paginate.js', 'writer/writer-format.js', 'writer/writer-outline.js', 'writer/writer-papers.js', 'writer/writer-submit.js'];
+  const DOCX = ['writer/writer-color.js', 'core/zip.js', 'core/doctext.js', 'writer/writer-docx.js', 'writer/writer-objects-docx.js'];
   const GAP = 26.4; // between pages, in page px (22px at 100%)
   const PX100 = 80 / 96; // 100% shows an inch as 80px, as the mockup does
   const loaded = new Map();
@@ -57,7 +57,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   const SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
   // A paper as compose holds it, what the compact view writes into Ultra's box: headings as Quill's, a block quote as
   // indented lines, a table's cells as lines; notes, page breaks, pictures, fonts and colours left out. → { html, text,
-  // delta } (lib/writer-schema.js compose serialize and Quill ops), or null past compose's input limit.
+  // delta } (writer/writer-schema.js compose serialize and Quill ops), or null past compose's input limit.
   const project = (doc) => {
     const S = globalThis.GZ_WRITER_SCHEMA;
     try {
@@ -75,7 +75,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     host.editor.view.setProps({ editable: () => false });
     await need(LIBS);
     // Settings → Writer (storage.sync writer): the format a new paper starts in and the zoom papers open at.
-    // lib/writer-settings.js's reader where the page loads it (writer.html), else storage as it is (papers.html).
+    // writer/writer-settings.js's reader where the page loads it (writer.html), else storage as it is (papers.html).
     const SET = globalThis.GZ_WRITER_SETTINGS;
     const prefs = await Promise.race([SET ? SET.load().then(() => SET.now() || {}) : Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => (r?.writer && typeof r.writer === 'object' ? r.writer : {})), new Promise((ok) => setTimeout(() => ok({}), 400))]).catch(() => ({}));
     // Settings → Writer → Light page: a dark Look's pages stay white (writer-paper.css).
@@ -368,7 +368,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       zoomEl.style.width = `${geo.width}px`;
       zoomEl.style.height = `${n * stride - GAP}px`;
       zoomEl.style.transform = `scale(${scale})`;
-      // A layout still under way (lib/writer-paginate.js partial): its settled pages, the text after them clipped at the
+      // A layout still under way (writer/writer-paginate.js partial): its settled pages, the text after them clipped at the
       // last one's foot until its pages are laid out.
       flow.style.height = layout.partial ? `${(n - 1) * stride + geo.body}px` : '';
       flow.style.overflow = layout.partial ? 'clip' : '';
@@ -1501,7 +1501,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const KINDS = { paper: 'Document', sheet: 'Spreadsheet', pdf: 'PDF', slides: 'Slides' };
     const thumbOf = async (rec) => {
       const kind = rec.kind || 'paper';
-      if (kind === 'paper') { await need(['lib/writer-thumb.js']); return rec.doc ? GZ_WRITER_THUMB.render(GZ_WRITER_THUMB.firstPage(rec.doc), rec.format, { scale: 0.25 }) : null; }
+      if (kind === 'paper') { await need(['writer/writer-thumb.js']); return rec.doc ? GZ_WRITER_THUMB.render(GZ_WRITER_THUMB.firstPage(rec.doc), rec.format, { scale: 0.25 }) : null; }
       const k = await globalThis.GZ_WRITER_KINDS?.kind(kind);
       return k?.thumb?.(rec) || null;
     };
@@ -1737,7 +1737,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     counts();
     head();
     setState('');
-    // A record of another kind at the paper's key (a PDF or deck the student opened in Glaze: lib/doc-kinds.js) shows that
+    // A record of another kind at the paper's key (a PDF or deck the student opened in Glaze: documents/doc-kinds.js) shows that
     // kind's viewer in the paper's place (writer-kinds.js), the paper parked: none of its saves, projections or views. A
     // kind this frame can't show gives the box back to Blackboard's editor, the record untouched. → whether it was handed.
     const kindOfRec = (r) => (typeof r?.kind === 'string' && r.kind) || 'paper';
@@ -1798,11 +1798,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       setup: (change) => { const s2 = ST.setup({ ...(ST.setup(view.state.doc.attrs.setup) || ST.pageSetup(format)), ...change }); if (s2) setSetup(s2); return !!s2; }, editPart, editingPart: () => editing?.kind || null,
       // What writer-ruler.js draws from: the work column and canvas, the zoom, the page's geometry, redraws.
       view: { col: canvas.parentElement, canvas, size, scale: () => scale, geometry: () => ST.geometry(look()), page: () => page, onDraw: (fn) => drawn.push(fn) },
-      // The last page plan's blocks and breaks (lib/writer-paginate.js), for checks.
+      // The last page plan's blocks and breaks (writer/writer-paginate.js), for checks.
       layout: () => layout && { breaks: layout.breaks, blocks: layout.blocks.map((b) => ({ kind: b.kind, pos: b.pos, lines: (b.lines || []).map((l) => Math.round(l.h * 100) / 100), slack: b.lines?.[0]?.slack || 0, before: b.before || 0, after: b.after || 0 })) },
     };
     // ---- the two views, switched in place: the same document and caret, the caret's line kept where it was on screen
-    // (the page scrolls by what the compact box moved it, features/writer.js; the pages' canvas puts it back once laid
+    // (the page scrolls by what the compact box moved it, writer/page/writer.js; the pages' canvas puts it back once laid
     // out). A switch saves writer.full, which every assignment follows (Settings too). Into the compact box the paper is
     // first kept as a version ('view'), then its projection goes into Ultra's box; out of it, nothing more is written.
     let loaded = false, projecting = false, holding = false, switching = null, flushing = null;
@@ -1844,7 +1844,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       view.setProps({ editable: f.editable });
       if (f.next) setView(f.next.full, f.next.options);
     };
-    // reason (the page's, features/writer.js): Ultra's button didn't go after a save.
+    // reason (the page's, writer/page/writer.js): Ultra's button didn't go after a save.
     const resume = (request, reason) => {
       if (!flushing || flushing.request !== request) return;
       const action = flushing.action;
@@ -1970,7 +1970,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   if (frame) {
     const listeners = [];
     frame.on('context', (c) => { for (const fn of listeners) fn(c); });
-    // Ultra's button pressed as the frame opened (features/writer.js holds it until the frame is up): the paper first.
+    // Ultra's button pressed as the frame opened (writer/page/writer.js holds it until the frame is up): the paper first.
     const mounted = async () => { for (let i = 0; i < 150 && !current; i++) await new Promise((r) => setTimeout(r, 100)); return current; };
     frame.handle('compact:flush', async (m) => { const api = current || await mounted(); return api ? api.flush(m.request, m.action === 'save' ? 'save' : 'submit') : frame.say({ type: 'compact:flushed', request: m.request, ok: false }); });
     frame.handle('compact:resume', (m) => current?.resume(m.request, typeof m.reason === 'string' ? m.reason : null));

@@ -1,5 +1,5 @@
-// The built-in Looks' own parts (lib/lookparts.js, cleaned as any Look's are): each one's pointer set and the pointer's
-// animation, a typing effect, and an effect for each event (lib/motionx.js draws them). Colours are palette tokens, so they
+// The built-in Looks' own parts (looks/lookparts.js, cleaned as any Look's are): each one's pointer set and the pointer's
+// animation, a typing effect, and an effect for each event (looks/motionx.js draws them). Colours are palette tokens, so they
 // follow the Look's palette and a student's own changes to it. Kept out of defaults.js, which every page loads first:
 // this loads only where a built-in Look is put on (the worker, the editor and the popup). Classic script; module.exports
 // for node.
@@ -42,7 +42,7 @@ var GZ_LOOK_PARTS = globalThis.GZ_LOOK_PARTS || (() => {
       fx: fx({ kind: 'confetti', shapes: ['pumpkin', 'leaf', 'star'], c: ['accent', 'warn', 'ok'] }, { kind: 'sprite', shapes: ['pumpkin'], c: ['accent', 'warn'], size: 16 }, { kind: 'burst', shapes: ['star', 'leaf'], c: ['warn', 'accent'] },
         { kind: 'confetti', shapes: ['pumpkin', 'leaf'], c: ['accent', 'warn', 'err'] }, { kind: 'rain', shapes: ['leaf'], c: ['accent', 'err', 'warn'], count: 24, size: 11 }, { kind: 'burst', shapes: ['bat', 'leaf'], c: ['accent', 'ok'], gravity: 0 }) },
   };
-  // A built-in Look's parts as { x } for lib/lookparts.js write (a copy: what is written is never the table itself), or null.
+  // A built-in Look's parts as { x } for looks/lookparts.js write (a copy: what is written is never the table itself), or null.
   return (L) => (L && Object.hasOwn(X, L.name) ? { x: JSON.parse(JSON.stringify(X[L.name])) } : null);
 })();
 

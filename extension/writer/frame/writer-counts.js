@@ -6,7 +6,7 @@
 // elsewhere closes it. Note marks and pictures aren't text; a note's own words aren't counted, as the bar doesn't.
 // counts() is a plain function over a document, for node tests; then the frame.
 var GZ_WRITER_COUNTS = globalThis.GZ_WRITER_COUNTS || (() => {
-  const words = (s) => (globalThis.GZ_WRITER_EDITOR || require('./lib/writer-editor.js')).words(s);
+  const words = (s) => (globalThis.GZ_WRITER_EDITOR || require('../writer-editor.js')).words(s);
   const WPM = 238;
   const seg = (granularity) => (typeof Intl.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity }) : null);
   const graphemes = seg('grapheme'), sentenceOf = seg('sentence');

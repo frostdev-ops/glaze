@@ -89,7 +89,7 @@ extension_sources[0]['files'].append(bridge_extension)
 sources[0]['files'] += [bridge_app, host_app]
 app_ids = {o[k]['buildSettings'].get('PRODUCT_BUNDLE_IDENTIFIER') for k in o[app['buildConfigurationList']]['buildConfigurations']}
 require(len(app_ids) == 1, 'Mac app bundle id')
-# The app and its extension meet in this group's container (lib/agent-link.js, Safari contract).
+# The app and its extension meet in this group's container (agents/agent-link.js, Safari contract).
 app_group = os.environ.get('SAFARI_TEAM_ID', '22AAZFMTV8') + '.' + app_ids.pop()
 for t in (app, extension):
     for key in o[t['buildConfigurationList']]['buildConfigurations']:

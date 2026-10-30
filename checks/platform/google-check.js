@@ -16,18 +16,18 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const env = require('../../tools/dev/check-env.js');
 
-const SHIPPED = require('../../extension/lib/google-config.js');
+const SHIPPED = require('../../extension/background/google-config.js');
 const CHROME_CLIENT = SHIPPED.chrome;
 const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'), []);
 {
   const file = path.join(ext, 'manifest.json'), m = JSON.parse(fs.readFileSync(file, 'utf8'));
   m.permissions = [...m.permissions, 'identity'];
   m.optional_permissions = m.optional_permissions.filter((p) => p !== 'identity');
-  m.oauth2 = { client_id: CHROME_CLIENT, scopes: require('../../extension/lib/google-config.js').scopes };
+  m.oauth2 = { client_id: CHROME_CLIENT, scopes: require('../../extension/background/google-config.js').scopes };
   fs.writeFileSync(file, JSON.stringify(m, null, 2));
   // Drive's build-time switch on in this copy only, as tools/dev/dev-drive.sh does (the staged file is a link: replaced, not edited).
-  const g = path.join(ext, 'lib/google.js'), src = fs.readFileSync(g, 'utf8');
-  if (!src.includes('\n  const ON = false;\n')) throw new Error('lib/google.js: no ON switch');
+  const g = path.join(ext, 'background/google.js'), src = fs.readFileSync(g, 'utf8');
+  if (!src.includes('\n  const ON = false;\n')) throw new Error('background/google.js: no ON switch');
   fs.rmSync(g);
   fs.writeFileSync(g, src.replace('\n  const ON = false;\n', '\n  const ON = true;\n'));
 }
@@ -35,7 +35,7 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
 const REDIRECT = `https://${id}.chromiumapp.org/`;
 const REAL = { chrome: SHIPPED.chrome, web: SHIPPED.web, ios: SHIPPED.ios, apiKey: SHIPPED.apiKey, appId: SHIPPED.appId };
 const BLANK = { chrome: 'PLACEHOLDER-chrome.apps.googleusercontent.com', web: 'PLACEHOLDER-web.apps.googleusercontent.com', ios: 'PLACEHOLDER-ios.apps.googleusercontent.com', apiKey: 'PLACEHOLDER', appId: 'PLACEHOLDER' };
-const PICKER = require('../../extension/lib/google-config.js').picker;
+const PICKER = require('../../extension/background/google-config.js').picker;
 const DRIVE = 'https://www.googleapis.com/auth/drive.file';
 const TOKEN = 'ya29.check-web-token';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-google-'));

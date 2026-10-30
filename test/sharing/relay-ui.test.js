@@ -4,9 +4,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const R = require('../../extension/lib/relay.js');
-const D = require('../../extension/defaults.js'), S = require('../../extension/lib/surfaces.js');
-const G = require('../../extension/lib/sharing.js');
+const R = require('../../extension/sharing/relay.js');
+const D = require('../../extension/content/defaults.js'), S = require('../../extension/looks/surfaces.js');
+const G = require('../../extension/sharing/sharing.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let n = 0; n < 8; n++) await new Promise(setImmediate); };
 const page = async ({ accepted = false, granted = true, selected = G.SERVER, hosts = [] } = {}) => {
@@ -35,7 +35,7 @@ const page = async ({ accepted = false, granted = true, selected = G.SERVER, hos
       },
     },
   });
-  vm.runInContext(read('lib/sessions-ui.js'), context); await settle(); calls.length = 0;
+  vm.runInContext(read('sharing/sessions-ui.js'), context); await settle(); calls.length = 0;
   return { node, state, calls, confirmations, click: async (id, trusted = true) => { node(id).events.click({ isTrusted: trusted }); await settle(); } };
 };
 const link = (server) => G.link(server, { sid: G.b64(new Uint8Array(16)), seed: new Uint8Array(32) }, true);
@@ -65,11 +65,11 @@ test('E1 UI confirms selected and previously approved custom hosts even with req
 
 test('E1 helper stays out of LMS startup, is cached for a worker restart and is packaged for both Safari targets', () => {
   const manifest = require('../../extension/manifest.json');
-  assert.ok(!manifest.content_scripts.flatMap((s) => s.js).includes('lib/relay.js'));
-  assert.ok(!manifest.web_accessible_resources.some((r) => r.resources.includes('lib/relay.js')));
-  assert.match(read('lib/background.js'), /addEventListener\?\.\('install', \(\) => importScripts\('relay\.js', 'sharing\.js', 'sessions\.js'\)\)/);
-  assert.match(read('options.html'), /<script src="lib\/relay\.js"><\/script>/);
+  assert.ok(!manifest.content_scripts.flatMap((s) => s.js).includes('sharing/relay.js'));
+  assert.ok(!manifest.web_accessible_resources.some((r) => r.resources.includes('sharing/relay.js')));
+  assert.match(read('background/background.js'), /addEventListener\?\.\('install', \(\) => importScripts\('\.\.\/sharing\/relay\.js', '\.\.\/sharing\/sharing\.js', '\.\.\/sharing\/sessions\.js'\)\)/);
+  assert.match(read('options.html'), /<script src="sharing\/relay\.js"><\/script>/);
   const safari = require('../../tools/build/safari-resources.js');
-  assert.deepEqual(safari.missing(['lib/relay.js']), []);
-  assert.match(read('../tools/build/package.sh'), /defaults\.js lib i18n/);
+  assert.deepEqual(safari.missing(['sharing/relay.js']), []);
+  assert.match(read('../tools/build/package.sh'), / agents sharing mods /);
 });

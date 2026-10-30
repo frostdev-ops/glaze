@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const D = require('../../extension/lib/drafts.js');
+const D = require('../../extension/writer/drafts.js');
 
 const essay = 'My response to the reading: the author argues that';
 const NBSP = String.fromCharCode(0xa0);
@@ -186,14 +186,14 @@ test("the worker takes draft changes from a page of the copy's own site only, wi
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa, navigator: {},
     fetch: async (url) => { fetched.push(String(url)); throw new Error('offline'); },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (msg, sender) => new Promise((res) => { for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) return; res('ignored'); });
   const page = (url, extra = {}) => ({ id: 'glaze', tab: { id: 1 }, frameId: 0, url, ...extra });
   const now = Date.now();
@@ -286,14 +286,14 @@ test('a restarted MV3 worker can import the drafts broker from its installation 
       addEventListener: (event, f) => { if (event === 'install') events.push(f); },
       importScripts: (...files) => { for (const f of files) {
         if (installed && !cached.has(f)) throw Error('importScripts() of new scripts after service worker installation is not allowed.');
-        cached.add(f); vm.runInContext(read(`lib/${f}`), ctx);
+        cached.add(f); vm.runInContext(read(`background/${f}`), ctx);
       } },
       fetch: async () => ({ ok: true, json: async () => ({ id: '_7_1' }) }),
       chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'),
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: noop, onStartup: noop, onConnect: noop },
         storage: { local: storage(store.local), sync: storage(store.sync), onChanged: noop } },
     });
-    vm.runInContext(read('lib/background.js'), ctx);
+    vm.runInContext(read('background/background.js'), ctx);
     return { install: () => events.forEach((f) => f()), send: (m) => new Promise((resolve) => {
       for (const f of listeners) if (f(m, { id: 'glaze', tab: { id: 1 }, frameId: 0, url: 'https://bb.school.test/ultra/courses/_5_1/outline' }, (r) => resolve(JSON.parse(JSON.stringify(r)))) === true) return;
     }) };
@@ -305,7 +305,7 @@ test('a restarted MV3 worker can import the drafts broker from its installation 
 });
 
 test('restored draft HTML is parsed inertly with DOMParser, never assigned as markup (AMO lint)', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/drafts.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/writer/drafts.js'), 'utf8');
   assert.doesNotMatch(src, /\.(?:inner|outer)HTML\s*=/);
   assert.match(src, /parseFromString\(/);
 });

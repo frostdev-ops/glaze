@@ -1,7 +1,7 @@
-// The "?" popover's placement (lib/editor-info.js): beside its button, on screen, never over it.
+// The "?" popover's placement (settings/editor-info.js): beside its button, on screen, never over it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const I = require('../../extension/lib/editor-info.js');
+const I = require('../../extension/settings/editor-info.js');
 
 const at = (top, bottom, left = 40) => ({ getBoundingClientRect: () => ({ top, bottom, left, right: left + 18 }) });
 const pop = (w, h) => ({ offsetWidth: w, offsetHeight: h, style: {} });

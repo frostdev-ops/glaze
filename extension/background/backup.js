@@ -1,19 +1,19 @@
 // One backup file (Settings → Privacy and data → Backup and reset, options.js): a zip of glaze-backup.json (the categories
-// below), share-keys.json and each Notes account's own export (lib/notes.js exportZip) under notes/<n>/. A PDF's or deck's
-// file (lib/doc-files.js) goes beside its record as papers/<n>.bin. Restore also takes
+// below), share-keys.json and each Notes account's own export (planner/notes.js exportZip) under notes/<n>/. A PDF's or deck's
+// file (documents/doc-files.js) goes beside its record as papers/<n>.bin. Restore also takes
 // a settings file (glaze-settings.json) and a Notes zip from before. All of a file is read and checked before anything is
 // written; each category then joins what is here by its own store's rules. What Glaze read from a school (caches, course
-// names, card pictures) stays out. Classic script for the editor and the worker (lib/background.js 'glaze:backup', apply);
+// names, card pictures) stays out. Classic script for the editor and the worker (background/background.js 'glaze:backup', apply);
 // module.exports for node.
 var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
   // Each library as the page or the worker loaded it (a script's const is no property of globalThis), or node's.
   const LIBS = {
-    GZ_TODO: () => (typeof GZ_TODO !== 'undefined' ? GZ_TODO : require('./todo.js')), GZ_NOTES: () => (typeof GZ_NOTES !== 'undefined' ? GZ_NOTES : require('./notes.js')),
-    GZ_DOCTEXT: () => (typeof GZ_DOCTEXT !== 'undefined' ? GZ_DOCTEXT : require('./doctext.js')), GZ_WIDGETS: () => (typeof GZ_WIDGETS !== 'undefined' ? GZ_WIDGETS : require('./widgets.js')),
-    GZ_CLASSES: () => (typeof GZ_CLASSES !== 'undefined' ? GZ_CLASSES : require('./classes.js')), GZ_GPA: () => (typeof GZ_GPA !== 'undefined' ? GZ_GPA : require('./gpa.js')),
-    GZ_SHARING: () => (typeof GZ_SHARING !== 'undefined' ? GZ_SHARING : require('./sharing.js')), GZ_RELAY: () => (typeof GZ_RELAY !== 'undefined' ? GZ_RELAY : require('./relay.js')),
-    GZ_HISTORY: () => (typeof GZ_HISTORY !== 'undefined' ? GZ_HISTORY : require('./history.js')), GZ_PET: () => (typeof GZ_PET !== 'undefined' ? GZ_PET : require('./pet.js')),
-    GZ_XPARTS: () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('./lookparts.js')),
+    GZ_TODO: () => (typeof GZ_TODO !== 'undefined' ? GZ_TODO : require('../planner/todo.js')), GZ_NOTES: () => (typeof GZ_NOTES !== 'undefined' ? GZ_NOTES : require('../planner/notes.js')),
+    GZ_DOCTEXT: () => (typeof GZ_DOCTEXT !== 'undefined' ? GZ_DOCTEXT : require('../core/doctext.js')), GZ_WIDGETS: () => (typeof GZ_WIDGETS !== 'undefined' ? GZ_WIDGETS : require('../core/widgets.js')),
+    GZ_CLASSES: () => (typeof GZ_CLASSES !== 'undefined' ? GZ_CLASSES : require('../planner/classes.js')), GZ_GPA: () => (typeof GZ_GPA !== 'undefined' ? GZ_GPA : require('../planner/gpa.js')),
+    GZ_SHARING: () => (typeof GZ_SHARING !== 'undefined' ? GZ_SHARING : require('../sharing/sharing.js')), GZ_RELAY: () => (typeof GZ_RELAY !== 'undefined' ? GZ_RELAY : require('../sharing/relay.js')),
+    GZ_HISTORY: () => (typeof GZ_HISTORY !== 'undefined' ? GZ_HISTORY : require('../looks/history.js')), GZ_PET: () => (typeof GZ_PET !== 'undefined' ? GZ_PET : require('../pet/pet.js')),
+    GZ_XPARTS: () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('../looks/lookparts.js')),
   };
   const lib = (name) => LIBS[name]();
   const FORMAT = 'glaze-backup', VERSION = 2, MANIFEST = 'glaze-backup.json', KEYS = 'share-keys.json';
@@ -21,7 +21,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
   const LIMIT = { json: 16 << 20, member: 64 << 20, command: 32 << 20, zip: 512 << 20, entries: 40000, records: 1000 };
   // In the order the restore list shows them: two columns, row by row.
   const CATS = ['settings', 'notes', 'tasks', 'dashNotes', 'classes', 'gpa', 'widgets', 'shareKeys', 'papers', 'writerWords', 'sources'];
-  // The stores' own keys (lib/widgets.js NOTES_KEY, lib/classes.js STORE_KEY, lib/gpa.js KEY, lib/notes.js KEY; test/backup.test.js
+  // The stores' own keys (core/widgets.js NOTES_KEY, planner/classes.js STORE_KEY, planner/gpa.js KEY, planner/notes.js KEY; test/backup.test.js
   // keeps them equal): the editor doesn't load those libraries.
   const STORES = {
     dashNotes: /^notes:https?:\/\/[a-z\d.-]+(?::\d+)?\/(\d+|_\d+_\d+)$/i,
@@ -108,10 +108,10 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     return records;
   };
   const paperKey = /^(writerPaper:|writerVersions:)(?:[a-z\d.-]+(?::\d{1,5})?\|_\d+_\d+\|_\d+_\d+\|_\d+_\d+|recovery:[a-z\d-]+|doc:[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12})$|^writerPresets:[a-z\d.-]+(?::\d{1,5})?\|_\d+_\d+$/i;
-  // The kinds of document this build keeps (lib/doc-kinds.js KINDS; test/backup.test.js holds them equal). A spreadsheet's
-  // record goes into its backup file with its bands (writerSheet:<key>:<sheet>:<band>, lib/writer-papers.js PART) as $parts,
+  // The kinds of document this build keeps (documents/doc-kinds.js KINDS; test/backup.test.js holds them equal). A spreadsheet's
+  // record goes into its backup file with its bands (writerSheet:<key>:<sheet>:<band>, writer/writer-papers.js PART) as $parts,
   // so one restore step writes them together. A PDF's or deck's record holds its file as base64 (at most 3 MB of it: before
-  // the file store) or points at it in the store (lib/doc-files.js ref): such a record, and versions pointing at files, are
+  // the file store) or points at it in the store (documents/doc-files.js ref): such a record, and versions pointing at files, are
   // listed as filePapers, which a reader from before the store passes over, its files as blobs.
   const KINDS = ['paper', 'sheet', 'pdf', 'slides'], PART = 'writerSheet:', PART_NAME = /^\d{1,9}:\d{1,5}$/;
   const kindOf = (v) => (obj(v) && typeof v.kind === 'string' ? v.kind : 'paper');
@@ -153,9 +153,9 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       && Object.keys(bands).length === names.length && names.every((n) => obj(bands[n]) && bands[n].rev === v.parts[n] && bandRows(n, bands[n].rows, v.book) && Object.keys(bands[n]).every((k) => k === 'rows' || k === 'rev'));
   };
   const paperLibraries = async () => {
-    if (typeof module !== 'undefined') return { P: require('./writer-papers.js'), S: require('./writer-schema.js'), ST: require('./writer-styles.js'), SR: require('./writer-sources.js') };
+    if (typeof module !== 'undefined') return { P: require('../writer/writer-papers.js'), S: require('../writer/writer-schema.js'), ST: require('../writer/writer-styles.js'), SR: require('../writer/writer-sources.js') };
     if (!globalThis.GZ_WRITER_SCHEMA || !globalThis.GZ_WRITER_PAPERS || !globalThis.GZ_WRITER_STYLES || !globalThis.GZ_WRITER_SOURCES) {
-      const files = ['lib/pm.js', 'lib/writer-schema.js', 'lib/writer-styles.js', 'lib/writer-papers.js', 'lib/writer-sources.js'];
+      const files = ['vendor/pm.js', 'writer/writer-schema.js', 'writer/writer-styles.js', 'writer/writer-papers.js', 'writer/writer-sources.js'];
       if (typeof importScripts === 'function') importScripts(...files.map((f) => chrome.runtime.getURL(f)));
       else for (const file of files) await new Promise((ok, no) => { const script = document.createElement('script'); script.src = chrome.runtime.getURL(file); script.onload = ok; script.onerror = no; document.head.append(script); });
     }
@@ -204,7 +204,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     return out;
   };
   // The writer's personal dictionary (writer-proof.js 'writerWords': words, the newest last) and each box's saved sources
-  // (lib/writer-sources.js `writer:sources:<school>|<user>|<course>|<item>` → { sources, at }).
+  // (writer/writer-sources.js `writer:sources:<school>|<user>|<course>|<item>` → { sources, at }).
   const WORDS = { max: 5000, length: 60 };
   const sourceKey = /^writer:sources:(?:[\w.!~*'()%-]{1,2700}\|){3}[\w.!~*'()%-]{1,2700}$/;
   const wordsOf = (raw) => {
@@ -335,7 +335,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
   };
 
   // ---- making one ------------------------------------------------------------------------------------------------
-  // One Notes account as its export's entries (lib/notes.js exportZip), read through the worker one note at a time (Chrome's
+  // One Notes account as its export's entries (planner/notes.js exportZip), read through the worker one note at a time (Chrome's
   // message limit is smaller than a Notes account), each at the revision listed: a mixed-revision archive is not a backup.
   // send(op, rest) → the worker's answer, throwing when it isn't ok.
   const notesOut = async (account, send, step = () => {}) => {
@@ -373,7 +373,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     };
     const papers = Object.entries(local).filter(([key]) => paperKey.test(key))
       .map(([key, value], i) => ({ key, value: key.startsWith('writerVersions:') && Array.isArray(value) ? value.filter(paperVersion) : withBands(key, value), file: `papers/${i + 1}.json` }));
-    // Restore stages each record through the worker's 32 MiB write fence (lib/background.js BROKER.backup.allow).
+    // Restore stages each record through the worker's 32 MiB write fence (background/background.js BROKER.backup.allow).
     // Count the whole command, including its UUID token and wrapper, as that fence does: JSON characters, not bytes.
     if (papers.some(({ key, value }) => JSON.stringify({ op: 'stage', token: '0'.repeat(36), action: 'own', value: { papers: { [key]: value } } }).length > LIMIT.command)) throw fail('big');
     const filed = papers.filter((p) => refsOf(p.value).length), plain = papers.filter((p) => !refsOf(p.value).length);
@@ -403,8 +403,8 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
   // bytes; the store's client by default), refused as 'big' before any is read when they can't fit one backup. A file the
   // store no longer has stays out; any other refusal is the backup's.
   const docFiles = async () => {
-    if (typeof module !== 'undefined') return require('./doc-files.js');
-    if (!globalThis.GZ_DOC_FILES) await new Promise((ok, no) => { const script = document.createElement('script'); script.src = chrome.runtime.getURL('lib/doc-files.js'); script.onload = ok; script.onerror = no; document.head.append(script); });
+    if (typeof module !== 'undefined') return require('../documents/doc-files.js');
+    if (!globalThis.GZ_DOC_FILES) await new Promise((ok, no) => { const script = document.createElement('script'); script.src = chrome.runtime.getURL('documents/doc-files.js'); script.onload = ok; script.onerror = no; document.head.append(script); });
     return GZ_DOC_FILES;
   };
   const filesOf = async (local, get) => {
@@ -422,7 +422,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
   const fileName = (d = new Date()) => `glaze-backup-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.zip`;
 
   // ---- restoring -------------------------------------------------------------------------------------------------
-  // The worker's part of a restore (lib/background.js 'glaze:backup'), in one turn of its write queue and one write: r {
+  // The worker's part of a restore (background/background.js 'glaze:backup'), in one turn of its write queue and one write: r {
   // dashNotes, classes, gpa, widgets, favorites, tasks (when the settings, which bring their own, aren't restored), notes
   // (accounts a Notes import then fills), papers, writerWords, sources }, each optional. Everything is checked first; a part that can't be taken whole
   // writes nothing. → { ok } or { ok: false, error }.
@@ -454,13 +454,13 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       ...(r.favorites ? ['lookFavorites'] : []), ...(r.writerWords ? ['writerWords'] : []), ...Object.keys(r.sources || {})];
     const here = keys.length ? await local.get(keys) : {};
     const patch = {};
-    // Dashboard notes: the newer typing stays (lib/widgets.js saveNote).
+    // Dashboard notes: the newer typing stays (core/widgets.js saveNote).
     for (const [k, v] of Object.entries(parts.dashNotes)) {
       const note = W.cleanNote(v);
       if (note.at > W.cleanNote(here[k]).at) patch[k] = note;
     }
     // Class schedules: a course comes back unless this device saved it later, deleted it later, or pressed Delete all later
-    // (lib/classes.js change); the backup's own deletions count the same way here. A period keeps the zone it was saved in.
+    // (planner/classes.js change); the backup's own deletions count the same way here. A period keeps the zone it was saved in.
     for (const [k, v] of Object.entries(parts.classes)) {
       const d = C.clean(here[k]), b = C.clean(v);
       const since = (t, at) => !!t && t >= at; // a time here at or after `at`
@@ -478,7 +478,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       const next = C.clean(d);
       if (JSON.stringify(next) !== JSON.stringify(C.clean(here[k]))) patch[k] = next;
     }
-    // GPA past terms: each term by when it last changed, against removals and Clear (lib/gpa.js change); a goal set here stays.
+    // GPA past terms: each term by when it last changed, against removals and Clear (planner/gpa.js change); a goal set here stays.
     for (const [k, v] of Object.entries(parts.gpa)) {
       const d = G.clean(here[k]), b = G.clean(v), cl = Math.max(d.cl || 0, b.cl || 0), gone = { ...d.d };
       for (const [id, at] of Object.entries(b.d || {})) gone[id] = Math.max(gone[id] || 0, at);
@@ -497,8 +497,8 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       const mine = H.favorites(here.lookFavorites), theirs = H.favorites(r.favorites).filter((f) => f.code.length <= (1 << 20) && !mine.some((x) => x.code === f.code));
       if (theirs.length) patch.lookFavorites = [...mine, ...theirs].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, H.MAX_FAVORITES);
     }
-    // Tasks without the settings: as a settings restore takes them (lib/todo.js restore), each account's list whole, and its
-    // pet's history joined with what is here (lib/pet.js merge).
+    // Tasks without the settings: as a settings restore takes them (planner/todo.js restore), each account's list whole, and its
+    // pet's history joined with what is here (pet/pet.js merge).
     if (parts.tasks) {
       const P = lib('GZ_PET');
       for (const key of petKeys) {
@@ -517,7 +517,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       const theirs = r.writerWords.filter((w) => !low.has(w.toLowerCase()) && low.add(w.toLowerCase()));
       if (theirs.length) patch.writerWords = [...theirs, ...mine].slice(-WORDS.max);
     }
-    // Saved sources: each box's list joined with the backup's, one entry per work (lib/writer-sources.js dedupe).
+    // Saved sources: each box's list joined with the backup's, one entry per work (writer/writer-sources.js dedupe).
     if (r.sources) {
       const { SR } = await paperLibraries();
       for (const [k, v] of Object.entries(r.sources)) {
@@ -531,7 +531,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     }
     return !Object.keys(patch).length || await local.set(patch) ? { ok: true } : { ok: false, error: 'write' };
   };
-  // One Notes account from the zip into account `key`, through the worker's Notes import (lib/sessions.js): its files, then
+  // One Notes account from the zip into account `key`, through the worker's Notes import (sharing/sessions.js): its files, then
   // its notes five at a time, each kept only where it is newer than what is here. → { done, skipped }.
   const notesIn = async (zip, dir, key, send, step = () => {}) => {
     const N = lib('GZ_NOTES');

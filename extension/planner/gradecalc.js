@@ -21,7 +21,7 @@
 // - Grading periods: an assignment belongs to the period its (the student's) due date falls in, or the last one
 //   when it has none. Weighted periods combine each period's rounded score by weight; unweighted ones don't change
 //   the course total. Totals are rounded to two places, halves away from zero.
-// Classic script (content.js and features/grades.js need() it); module.exports for node.
+// Classic script (content.js and planner/page/grades.js need() it); module.exports for node.
 var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   const num = (x) => { const n = parseFloat(x); return Number.isFinite(n) ? n : 0; };
   // To two places, a half away from zero, in decimal: 69.125 is 69.13 (and -69.125 is -69.13) even when the float
@@ -430,7 +430,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     };
   };
   // A what-if change from any tab, applied by the service worker, in its one queue, to what is stored at that moment
-  // (lib/background.js 'glaze:whatif'). m: { op, cid, at: when the student made it }, where op is
+  // (background/background.js 'glaze:whatif'). m: { op, cid, at: when the student made it }, where op is
   // - 'course': the assignment what-ifs of a course (rec: scores, work left out, pretend assignments), from its
   //   Grades page; its what-if course grade stays as stored;
   // - 'grade': that course grade alone (c), from the Dashboard's GPA; the assignment what-ifs stay as stored;
@@ -573,7 +573,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   };
 
   // Glaze 2.2's Ultra scores into an account's record, by the worker in one step with their removal from that old store
-  // (lib/background.js 'glaze:whatif' op 'legacy'), against what is stored then. m: { cid, seen: { column id: score } as
+  // (background/background.js 'glaze:whatif' op 'legacy'), against what is stored then. m: { cid, seen: { column id: score } as
   // the page read them from the old store, keep: the ids among them still waiting for a grade (the page's reconcile) }.
   // The old store names no site or user: taking a course's scores into the account on the page whose gradebook has the
   // same columns is an inference. Those scores were typed before this store existed, so they are older than any Clear all
@@ -604,5 +604,5 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how
-// lib/background.js knows it ran to the end.
+// background/background.js knows it ran to the end.
 if (typeof module !== 'undefined') module.exports = GZ_GRADECALC; else GZ_GRADECALC;

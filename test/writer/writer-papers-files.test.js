@@ -1,13 +1,13 @@
-// A PDF's or deck's bytes in the worker's file store (lib/doc-files.js) as lib/writer-papers.js keeps them: records and
+// A PDF's or deck's bytes in the worker's file store (documents/doc-files.js) as writer/writer-papers.js keeps them: records and
 // versions point at a hash, the store owns each document's hashes, a file goes with the last document or version that
 // points at it, versions keep at most CAP.files of files, and a record from before the store moves over (migrate).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const PA = require('../../extension/lib/writer-papers.js');
-const F = require('../../extension/lib/doc-files.js');
+const PA = require('../../extension/writer/writer-papers.js');
+const F = require('../../extension/documents/doc-files.js');
 const { fakeIDB } = require('../helpers/fake-idb.cjs');
-globalThis.GZ_WRITER_STYLES = require('../../extension/lib/writer-styles.js');
+globalThis.GZ_WRITER_STYLES = require('../../extension/writer/writer-styles.js');
 
 const local = () => {
   const data = {};

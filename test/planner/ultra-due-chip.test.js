@@ -51,14 +51,14 @@ const page = (row, { locale = 'en', labelText = 'Assessment due date:', dateText
     IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} }, MutationObserver: class { observe() {} disconnect() {} },
     addEventListener() {}, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     chrome: { runtime: { id: 'x' }, storage: { local: { get: (k, cb) => cb({}), set() {} }, onChanged: { addListener() {} } } },
-    GZ_GRADES: require('../../extension/lib/grades.js'), GZ_PAGE: require('../../extension/lib/page.js'), GZ_I18N: require('../../extension/lib/i18n.js'), GZ_COURSES: require('../../extension/defaults.js').GZ_COURSES,
+    GZ_GRADES: require('../../extension/planner/grades.js'), GZ_PAGE: require('../../extension/core/page.js'), GZ_I18N: require('../../extension/core/i18n.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES,
   });
   ctx.globalThis = ctx; ctx.window = ctx; ctx.top = ctx;
   // content.js's own: where a due date is written, and how its chip is set.
-  const core = read('content.js');
+  const core = read('content/content.js');
   vm.runInContext(`${core.match(/const DUE_AT = [^\n]+\n\s*const dueLabelled = [^\n]+\n/)[0]}\n${core.match(/const markDue = [\s\S]*?\n {2}\};/)[0]}\n({ dueLabelled, markDue })`, ctx);
   const { dueLabelled, markDue } = vm.runInContext('({ dueLabelled, markDue })', ctx);
-  vm.runInContext(read('content-ultra.js'), ctx);
+  vm.runInContext(read('content/content-ultra.js'), ctx);
   const need = (file, ready) => { if (!ready()) vm.runInContext(read(file), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not ready')); };
   const api = (p) => fetch(`${ORIGIN}/learn/api/v1${p}`).then((r) => r.json());
   const I = { C: {}, html: doc.root, isPreview: false, solo: true, tabFrame: '', need, t: (x) => x, locale: () => locale, api,
@@ -102,7 +102,7 @@ test('assessment date chips use the gradebook date in other locales without tagg
     await p.tag();
     assert.deepEqual(p.chipped(), ['bb-datetime'], locale);
     assert.equal(p.date.getAttribute('data-gz-due'), 'soon', locale);
-    assert.equal(p.date.getAttribute('data-gz-countdown'), require('../../extension/lib/page.js').status(new Date(column.dueDate), null, { column }, new Date(NOW), false, locale).label, locale);
+    assert.equal(p.date.getAttribute('data-gz-countdown'), require('../../extension/core/page.js').status(new Date(column.dueDate), null, { column }, new Date(NOW), false, locale).label, locale);
   }
 });
 

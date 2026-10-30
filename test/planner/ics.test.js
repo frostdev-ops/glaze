@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const I = require('../../extension/lib/ics.js');
+const I = require('../../extension/planner/ics.js');
 
 const fixture = (name) => fs.readFileSync(path.join(__dirname, '../fixtures/ics', name));
 const at = (s) => Date.parse(s);
@@ -188,7 +188,7 @@ test('write: CRLF, escaping, folding at 75 octets without splitting characters, 
   assert.throws(() => I.write({ events: [{ summary: 'no uid', start: now }] }), RangeError);
 });
 
-// Regression tests from the S4 review. Each failed (or hung) on the first version of lib/ics.js.
+// Regression tests from the S4 review. Each failed (or hung) on the first version of planner/ics.js.
 const cal1 = (...lines) => ['BEGIN:VCALENDAR', ...lines, 'END:VCALENDAR'].join('\r\n');
 const ev = (...lines) => ['BEGIN:VEVENT', ...lines, 'END:VEVENT'].join('\r\n');
 const NY = (local) => `DTSTART;TZID=America/New_York:${local}`;
@@ -385,7 +385,7 @@ test('expanding distant years bounds retained zone years across calls', () => {
     }
   }
   const context = { module: { exports: {} }, TextEncoder, TextDecoder, Map: TrackedMap };
-  require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/ics.js'), 'utf8'), context);
+  require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../../extension/planner/ics.js'), 'utf8'), context);
   const parser = context.module.exports;
   const cal = parser.parse(cal1(vtz('Custom', US), ev('UID:y', 'DTSTART;TZID=Custom:20260601T090000', 'RRULE:FREQ=YEARLY')));
   for (const end of [2100, 2200]) {

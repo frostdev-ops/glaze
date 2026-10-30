@@ -1,6 +1,6 @@
 // Settings → Writer: the choices its selects offer (a new paper's format, zoom, versions kept, the dialect), the papers saved
 // on this device by course with Clear… for a course and Clear all papers and documents (every one, in Trash too) behind one
-// question (lib/writer-papers.js: the list from storage.local, each removal through the worker, which keeps every paper
+// question (writer/writer-papers.js: the list from storage.local, each removal through the worker, which keeps every paper
 // write in one queue), and the personal dictionary (storage.local writerWords, the frames' and Harper's) with a remove for
 // each word and Clear. The switches and selects themselves save through options.js's data-key binding (storage.sync
 // `writer`, defaults.js GZ_SPEC.writer).
@@ -8,7 +8,7 @@
 // Extension options page only (mount); the pure helpers are for node tests.
 var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
   const DICT = 'writerWords';
-  // lib/writer-styles.js FORMATS' labels: names, the same in every language but Blank's.
+  // writer/writer-styles.js FORMATS' labels: names, the same in every language but Blank's.
   const FORMATS = [['mla9', 'MLA 9'], ['apa7', 'APA 7'], ['chicago17', 'Chicago 17'], ['plain', 'Blank']];
   const dialects = (t) => [['en-US', t('American English')], ['en-GB', t('British English')], ['en-CA', t('Canadian English')], ['en-AU', t('Australian English')]];
   // Assignment papers by course, the most first; standalone and recovery papers in Documents.
@@ -31,7 +31,7 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
     }
     return [...out.values()].map((c) => ({ ...c, name: c.name || c.id.split('|')[1] })).sort((a, b) => b.keys.length - a.keys.length || a.name.localeCompare(b.name));
   };
-  // The list and its counts leave out what is in the Documents page's Trash (lib/writer-papers.js trashed).
+  // The list and its counts leave out what is in the Documents page's Trash (writer/writer-papers.js trashed).
   const byCourse = (rows) => groups((Array.isArray(rows) ? rows : []).filter((r) => !Number.isFinite(r?.trashed)));
   // Every paper's key, a course's or not, and those in Trash (Clear all leaves nothing behind): a paper whose key never
   // came is kept under a stand-in (writer-paper.js).

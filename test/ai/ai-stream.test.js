@@ -1,10 +1,10 @@
-// The AI harness's stream primitives (lib/ai/stream.js) and the openai provider's stream assembly (chatStream), with the
+// The AI harness's stream primitives (ai/stream.js) and the openai provider's stream assembly (chatStream), with the
 // cases ported from Rimeward's tests/agent-providers.test.ts (MIT): framing across chunk boundaries, multi-line data,
 // comments, a final flush; a tool call rebuilt from its pieces; a stream that ends before it finishes.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ST = require('../../extension/lib/ai/stream.js');
-const O = require('../../extension/lib/ai/providers/openai.js');
+const ST = require('../../extension/ai/stream.js');
+const O = require('../../extension/ai/providers/openai.js');
 
 test('sseParser frames across chunk boundaries, joins multi-line data, skips comments, flushes on finish', () => {
   const got = [];

@@ -8,8 +8,8 @@
 // ONLY=<config name substring> runs part of it. One headless browser at a time across agents: it waits while another runs.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
-const G = require('../../extension/defaults.js');
-const W = require('../../extension/lib/widgets.js');
+const G = require('../../extension/content/defaults.js');
+const W = require('../../extension/core/widgets.js');
 
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-widgets-sizes-'));
@@ -324,7 +324,7 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
     for (const sz of ['m', 'ds']) await run({ name: `board-${sz}-rtl`, rtl: true, layout: board(SIZES[sz]), expect: IDS.length });
     // Floating: four at a time, one in each corner of the window.
     const corners = [[0, 0], [1, 0], [0, 1], [1, 1]];
-    // To Do has no floating place (lib/widgets.js dests), nor does a course card.
+    // To Do has no floating place (core/widgets.js dests), nor does a course card.
     const floaters = IDS.filter((id) => id !== 'todo' && id !== COURSE), groups = [floaters.slice(0, 4), floaters.slice(4, 8), floaters.slice(8)];
     for (const sz of ['s', 'ds']) for (const [i, ids] of groups.entries()) await run({ name: `float-${sz}-${i + 1}`, width: 1600, height: 1000, layout: floating(SIZES[sz], ids, corners), sel: '#gz-float section.gz-w', expect: ids.length });
     // The sidebar dock, at its narrowest and widest, with every widget in it (To Do follows its own place there).
@@ -400,7 +400,7 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
       ok(await page.evaluate(() => !document.querySelector('dialog.gz-game-dialog') && document.activeElement?.dataset.control === 'more'), `More at ${w} px: Escape closes it and the focus is back on More`);
       ok(!errors.length, `More at ${w} px: no page errors`, errors.splice(0).join(' | '));
     }
-    // Glaze's navigation widgets (features/navbar-widgets.js) and the mod's rail widget, in each place the bar shows them: the
+    // Glaze's navigation widgets (navigation/page/navbar-widgets.js) and the mod's rail widget, in each place the bar shows them: the
     // open rail, the icons rail, the top bar and its widgets dock, and a phone's More sheet and its dock. Each fits its place and
     // the window, nothing in it scrolls or is cut sideways without an ellipsis.
     const NAV = () => {

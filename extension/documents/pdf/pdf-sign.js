@@ -1,4 +1,4 @@
-// The PDF tools' Signature (lib/pdf-tools.js): drawn, typed or taken from a picture, put on the page through pdf.js's
+// The PDF tools' Signature (documents/pdf/pdf-tools.js): drawn, typed or taken from a picture, put on the page through pdf.js's
 // own signature editor (its signatureManager: getSignature opens Glaze's dialog, the editor makes the mark). A signature
 // is a mark on the page, not a digital signature: nothing certifies who made it. Up to KEEP of them stay in
 // storage.local (KEY), newest first, each as its outlines only: the strokes or contours pdf.js traced, quantized and

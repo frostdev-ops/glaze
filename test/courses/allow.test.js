@@ -1,6 +1,6 @@
 // Adding a school's own site on a browser that asks for each one (Chrome, Edge, Firefox): the worker's side. The real
-// lib/background.js in a VM with chrome.permissions, scripting, tabs, declarativeContent and action stubbed, and the
-// schools' answers (lib/site.js probe) from a pretend network. Grants come from Glaze's first screen (glaze:allow 'ask', then
+// background/background.js in a VM with chrome.permissions, scripting, tabs, declarativeContent and action stubbed, and the
+// schools' answers (core/site.js probe) from a pretend network. Grants come from Glaze's first screen (glaze:allow 'ask', then
 // 'yes' once its own check found the LMS), the popup ('ask' with the kind its tab showed), Chrome's own menus (onAdded with
 // nothing asked) and All sites (the detector, then the in-page card). The first run opens once; the toolbar icon lights on
 // pages that look like an LMS, and is Glaze's own on pages Glaze runs in.
@@ -16,9 +16,9 @@ const manifest = require('../../extension/manifest.json');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const ID = 'glaze';
-const CANVAS_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-canvas.js')).js;
-const MOODLE_FIRST = CANVAS_FIRST.filter((f) => f !== 'content-canvas.js');
-const ULTRA_FIRST = manifest.content_scripts.find((c) => c.js.includes('content-ultra.js')).js;
+const CANVAS_FIRST = manifest.content_scripts.find((c) => c.js.includes('content/content-canvas.js')).js;
+const MOODLE_FIRST = CANVAS_FIRST.filter((f) => f !== 'content/content-canvas.js');
+const ULTRA_FIRST = manifest.content_scripts.find((c) => c.js.includes('content/content-ultra.js')).js;
 const BUILT_IN = ['https://*.blackboard.com/*', 'https://*.instructure.com/*', 'https://*.moodlecloud.com/*'];
 const SAFARI = (() => {
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-allow-safari-'));
@@ -31,7 +31,7 @@ const SAFARI = (() => {
   }
 })();
 
-// What each LMS answers (lib/site.js, test/core/site.test.js): anything else is a 404 page.
+// What each LMS answers (core/site.js, test/core/site.test.js): anything else is a 404 page.
 const BB = { status: 200, body: '{"learn":{"major":4001,"minor":2,"patch":0}}' };
 const CANVAS = { status: 401, body: '{"status":"unauthenticated","errors":[{"message":"user authorization required"}]}' };
 const MOODLE = { status: 200, body: '{"exception":"core\\\\exception\\\\moodle_exception","errorcode":"invalidtoken"}' };
@@ -82,7 +82,7 @@ const worker = ({ m = manifest, held = [], local = {}, sync = {}, net = {}, tabs
   const context = vm.createContext({
     URL, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto, atob, btoa, navigator: {}, AbortSignal, fetch,
     ...(dc && { OffscreenCanvas, createImageBitmap: async (b) => ({ from: b.url }) }),
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), context, { filename: f }); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('background', f)), context, { filename: f }); },
     chrome: {
       runtime: {
         id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => m,
@@ -126,7 +126,7 @@ const worker = ({ m = manifest, held = [], local = {}, sync = {}, net = {}, tabs
   });
   vm.runInContext('Date.now = () => globalThis.__now();', context);
   context.__now = () => w.now;
-  vm.runInContext(read('lib/background.js'), context, { filename: 'lib/background.js' });
+  vm.runInContext(read('background/background.js'), context, { filename: 'background/background.js' });
   w.send = (msg, s) => new Promise((res) => {
     let kept = false;
     for (const f of listeners) if (f(msg, s, (r) => res(plain(r))) === true) kept = true;
@@ -139,12 +139,12 @@ const worker = ({ m = manifest, held = [], local = {}, sync = {}, net = {}, tabs
   w.files = () => w.ran.filter((r) => r.files);
   w.ids = () => w.registered.map((s) => s.id).sort();
   w.sites = () => w.ids().filter((i) => /^(https?:|ultra:)/.test(i));
-  w.asked = () => w.ran.filter((r) => r.files?.includes('features/consent.js'));
+  w.asked = () => w.ran.filter((r) => r.files?.includes('settings/page/consent.js'));
   return w;
 };
 // Glaze's own pages, as the browser names their sender: the popup (no tab), the first screen and Settings in tabs of their own.
 const ext = (p) => `chrome-extension://${ID}/${p}`;
-const welcome = { id: ID, tab: { id: 3, url: ext('features/welcome.html') }, frameId: 0, url: ext('features/welcome.html'), origin: `chrome-extension://${ID}` };
+const welcome = { id: ID, tab: { id: 3, url: ext('settings/welcome.html') }, frameId: 0, url: ext('settings/welcome.html'), origin: `chrome-extension://${ID}` };
 const popup = { id: ID, url: ext('popup.html'), origin: `chrome-extension://${ID}` };
 const settings = { id: ID, tab: { id: 4, url: ext('options.html') }, frameId: 0, url: ext('options.html'), origin: `chrome-extension://${ID}` };
 const page = (url, more = {}) => ({ id: ID, tab: { id: 7, url }, frameId: 0, url, documentId: 'doc-1', ...more });
@@ -241,20 +241,20 @@ test('Chrome\'s own menus: a grant nobody asked for is checked; a course site is
 test('All sites: the detector goes on every https page but the built-in hosts, the card asks there (Ultra too), and taking it back takes the detector away', async () => {
   const w = worker();
   await w.grant('https://*/*');
-  const d = w.registered.find((s) => s.js?.length === 1 && s.js[0] === 'lib/detect.js');
+  const d = w.registered.find((s) => s.js?.length === 1 && s.js[0] === 'content/detect.js');
   assert.ok(d, 'the detector is registered');
   assert.deepEqual([d.matches, [...d.excludeMatches].sort(), d.runAt, !!d.allFrames], [['https://*/*'], BUILT_IN, 'document_start', false]);
   await w.send('canvas', page('https://canvas.school.edu/'));
   await w.send('ultra', page(`${BBS}/ultra/course`));
   await settle();
-  assert.deepEqual(w.asked().map((r) => r.files), [['lib/i18n.js', 'features/consent.js'], ['lib/i18n.js', 'features/consent.js']], 'the question, with its words, on both');
+  assert.deepEqual(w.asked().map((r) => r.files), [['core/i18n.js', 'settings/page/consent.js'], ['core/i18n.js', 'settings/page/consent.js']], 'the question, with its words, on both');
   // Yes on the Ultra page: approved, registered, and Ultra's own script into that page (but for the words the card brought).
   assert.deepEqual(await w.send({ type: 'glaze:consent', op: 'yes', kind: 'ultra' }, page(`${BBS}/ultra/course`)), { ok: true });
   await settle();
   assert.deepEqual(w.store.local.ultra, [BBS]);
-  assert.deepEqual(w.files().at(-1).files, ULTRA_FIRST.filter((f) => f !== 'lib/i18n.js'));
+  assert.deepEqual(w.files().at(-1).files, ULTRA_FIRST.filter((f) => f !== 'core/i18n.js'));
   await w.revoke('https://*/*');
-  assert.ok(!w.registered.some((s) => s.js?.includes('lib/detect.js')), 'the detector goes');
+  assert.ok(!w.registered.some((s) => s.js?.includes('content/detect.js')), 'the detector goes');
   assert.ok(!w.sites().includes(`ultra:${BBS}`), 'and the site held only through it');
   assert.deepEqual(w.store.local.ultra, [BBS], 'its approval stays');
 });
@@ -264,17 +264,17 @@ test('All sites from the first screen, and an update keeping an all-site grant: 
   w.held.add('https://*/*');
   assert.deepEqual(await w.send(allow('all'), welcome), { ok: true });
   await settle();
-  assert.ok(w.registered.some((s) => s.js?.includes('lib/detect.js')));
+  assert.ok(w.registered.some((s) => s.js?.includes('content/detect.js')));
   const kept = worker({ held: ['https://*/*'] });
   await kept.install('update');
-  assert.ok(kept.registered.some((s) => s.js?.includes('lib/detect.js')), 'an existing student\'s all-site grant keeps the card');
+  assert.ok(kept.registered.some((s) => s.js?.includes('content/detect.js')), 'an existing student\'s all-site grant keeps the card');
   const safari = worker({ m: SAFARI, dc: false });
   await safari.install('update');
-  assert.ok(!safari.registered.some((s) => s.js?.includes('lib/detect.js')), 'Safari\'s manifest runs its own');
+  assert.ok(!safari.registered.some((s) => s.js?.includes('content/detect.js')), 'Safari\'s manifest runs its own');
   const none = worker();
   assert.deepEqual(await none.send(allow('all'), welcome), { ok: true });
   await settle();
-  assert.ok(!none.registered.some((s) => s.js?.includes('lib/detect.js')), 'no grant, no detector, whatever the page says');
+  assert.ok(!none.registered.some((s) => s.js?.includes('content/detect.js')), 'no grant, no detector, whatever the page says');
 });
 
 test('taken back: a site\'s registration goes while its host isn\'t held, its approval and the student\'s data stay, and a grant brings it back; no grant is ever removed', async () => {
@@ -293,7 +293,7 @@ test('taken back: a site\'s registration goes while its host isn\'t held, its ap
   assert.deepEqual(w.removedGrants, []);
   // Sites' grants: the worker never hands one back. Its one removal is Google's identity API permission, released when
   // Calendar's Disconnect is the last holder of their shared grant (inside the grant queue, so a later Connect keeps it).
-  const removals = [...read('lib/background.js').matchAll(/permissions\.remove\(([^)]*)\)/g)].map((m) => m[1].replace(/\s+/g, ' ').trim());
+  const removals = [...read('background/background.js').matchAll(/permissions\.remove\(([^)]*)\)/g)].map((m) => m[1].replace(/\s+/g, ' ').trim());
   assert.deepEqual(removals, ["{ permissions: ['identity'] }"], 'the worker never hands a site\'s grant back');
 });
 
@@ -335,10 +335,10 @@ test('Safari: a grant from its own settings adds no site by itself; its card sti
 test('first run: Glaze\'s first screen opens once on install, never on an update, and never on Safari\'s manifest', async () => {
   const w = worker();
   await w.install('install');
-  assert.deepEqual(w.opened, [ext('features/welcome.html')]);
+  assert.deepEqual(w.opened, [ext('settings/welcome.html')]);
   await w.install('update');
   await w.install('chrome_update');
-  assert.deepEqual(w.opened, [ext('features/welcome.html')]);
+  assert.deepEqual(w.opened, [ext('settings/welcome.html')]);
   const safari = worker({ m: SAFARI, dc: false });
   await safari.install('install');
   assert.deepEqual(safari.opened, []);
@@ -390,12 +390,12 @@ test('the lit icon: a page Glaze runs in shows Glaze\'s own icon for its tab; no
   await ff.send({ type: 'glaze:here' }, page('https://school.instructure.com/courses/1'));
   await settle();
   assert.deepEqual(ff.icons, [], 'Firefox lights nothing, so there is nothing to put back');
-  const src = read('lib/background.js');
+  const src = read('background/background.js');
   for (const call of src.match(/action\.setIcon\([^)]*\)/g) || []) assert.match(call, /tabId/, call);
 });
 
 test('content.js tells the worker each page and frame Glaze starts in', () => {
-  const js = read('content.js');
+  const js = read('content/content.js');
   const line = js.slice(js.indexOf('if (!site) return;')).split('\n').find((l) => l.includes("sendMessage({ type: 'glaze:here' })"));
   assert.ok(line && /!isPreview/.test(line), 'not from Glaze\'s own preview');
   assert.doesNotMatch(line, /window\.top === window/, 'a frame starts crossfades of its own (content-ultra.js), so it needs the guard too');
@@ -486,7 +486,7 @@ test('page changes to the active transition or ready cannot make the guard throw
   assert.doesNotThrow(() => g.send());
 });
 
-test('lib/detect.js reports Ultra on an /ultra page by its base, as content.js knows it', () => {
+test('content/detect.js reports Ultra on an /ultra page by its base, as content.js knows it', () => {
   const run = (url, head) => {
     const sent = [];
     const doc = {
@@ -494,13 +494,13 @@ test('lib/detect.js reports Ultra on an /ultra page by its base, as content.js k
       head: { querySelector: (sel) => (sel.includes('base[href*="/ultra/"]') && head === 'ultra' ? { matches: (s) => s.includes('base[href*="/ultra/"]') && !s.includes('brandable') } : null) },
       addEventListener() {}, removeEventListener() {},
     };
-    vm.runInNewContext(read('lib/detect.js'), { document: doc, location: new URL(url), window: {}, MutationObserver: class { observe() {} disconnect() {} }, chrome: { runtime: { sendMessage: (m) => sent.push(m), lastError: null } } });
+    vm.runInNewContext(read('content/detect.js'), { document: doc, location: new URL(url), window: {}, MutationObserver: class { observe() {} disconnect() {} }, chrome: { runtime: { sendMessage: (m) => sent.push(m), lastError: null } } });
     return sent;
   };
   assert.deepEqual(run(`${BBS}/ultra/course`, 'ultra'), ['ultra']);
   assert.deepEqual(run(`${BBS}/webapps/portal`, 'ultra'), [], 'off /ultra, a base proves nothing');
   assert.deepEqual(run(`${BBS}/ultra/course`, null), []);
-  assert.ok(fs.statSync(path.join(root, 'lib/detect.js')).size < 2048);
+  assert.ok(fs.statSync(path.join(root, 'content/detect.js')).size < 2048);
 });
 
 

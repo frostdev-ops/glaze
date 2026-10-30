@@ -21,13 +21,13 @@ test('the permission and zip lists ship the same files, with only exclusions aft
   assert.ok(exclude > 0);
   assert.deepEqual(zip.slice(exclude + 1), ["'*.DS_Store'"], 'runtime files after -x would be excluded');
   assert.deepEqual(zip.slice(0, exclude).sort(), permissions.sort());
-  for (const file of ['writer-mcp.js', 'writer-kinds.js', 'pdf-kind.js', 'pdf-kind.css', 'slides-kind.js', 'slides-kind.css']) {
-    assert.ok(permissions.includes(file), `${file} needs readable permissions and a place in the zip`);
+  for (const file of ['agents/writer-mcp.js', 'writer/frame/writer-kinds.js', 'documents/pdf/pdf-kind.js', 'documents/pdf/pdf-kind.css', 'documents/slides/slides-kind.js', 'documents/slides/slides-kind.css']) {
+    assert.ok(inPackage(file, permissions), `${file} needs readable permissions and a place in the zip`);
   }
 });
 
 test('every file the loader may inject is in the package', () => {
-  const list = read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1];
+  const list = read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1];
   const files = JSON.parse(list.replace(/'/g, '"'));
   const roots = packaged();
   for (const f of files) {
@@ -54,9 +54,9 @@ test('every web-accessible resource is in the package, and only the art the exte
   // sticker folders holding Look stickers and the pet game's buddy looks, plus the pointer sets; and the editor's example
   // shaders.
   assert.deepEqual(roots.filter((p) => p.startsWith('assets/')).sort(), ['assets/art/cursors', 'assets/art/pets', 'assets/art/stickers', 'assets/logo-dark.svg', 'assets/logo.svg', 'assets/shaders']);
-  const L = require('../../extension/lib/lookx.js');
+  const L = require('../../extension/looks/lookx.js');
   const files = (dir) => fs.readdirSync(path.join(root, dir), { recursive: true }).filter((f) => !fs.statSync(path.join(root, dir, f)).isDirectory() && !f.endsWith('.DS_Store')).map((f) => `${dir}/${f}`).sort();
-  const P = require('../../extension/lib/pet.js');
+  const P = require('../../extension/pet/pet.js');
   const art = [...L.BUNDLED.keys(), ...Object.values(P.WEAR).map((x) => `critters/${x.art}`)];
   assert.deepEqual(files('assets/art/stickers'), [...new Set(art)].map(L.file).sort());
   assert.ok(['', '-happy', '-sleepy'].every((s) => L.BUNDLED.has(`critters/study-buddy${s}`)));

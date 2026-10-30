@@ -1,6 +1,6 @@
-// Glaze Writer's Quote pop, loaded with features/writer.js: while a reply box is open in Glaze's editor, selecting text in a
+// Glaze Writer's Quote pop, loaded with writer/page/writer.js: while a reply box is open in Glaze's editor, selecting text in a
 // post of the thread shows the mockup's "Quote" above the selection. It puts the text, with its author from the thread
-// data (lib/writer-context-discussion.js; none when that isn't read), into the reply that answers the post (else the reply
+// data (writer/writer-context-discussion.js; none when that isn't read), into the reply that answers the post (else the reply
 // box in the same thread), as compose's quote. It only listens to the selection, never changes it before the click. It sits
 // right after the post's text, so Tab from the selection reaches it and Tab again goes on to the post's own controls;
 // scrolling, leaving the window, Escape or a new selection take it away.
@@ -160,7 +160,7 @@ svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width:
     raf = 0; queued = listening = false;
     host = button = null;
   };
-  // features/writer.js, as a reply box's frame comes up (and again when it reopens).
+  // writer/page/writer.js, as a reply box's frame comes up (and again when it reopens).
   const arm = (box) => {
     if (!writerOn() || box?.kind !== 'reply' || !live(box)) return;
     if (!boxes.includes(box)) boxes.push(box);

@@ -44,7 +44,7 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
     await context.route('**/*', (r) => {
       const u = new URL(r.request().url()), file = path.join(root, decodeURIComponent(u.pathname));
       if (u.origin !== site || !file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return r.abort();
-      const source = u.pathname === '/writer-ai.js' && process.env.WRITER_AI_SOURCE || file;
+      const source = u.pathname === '/writer/frame/writer-ai.js' && process.env.WRITER_AI_SOURCE || file;
       return r.fulfill({ contentType: TYPES[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(source) });
     });
     const page = await context.newPage();

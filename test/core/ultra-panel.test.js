@@ -1,4 +1,4 @@
-// Glaze's panel on Blackboard Ultra's Courses page (features/widgets.js on Ultra), on a synthetic page built from B0's
+// Glaze's panel on Blackboard Ultra's Courses page (core/page/widgets.js on Ultra), on a synthetic page built from B0's
 // anchors: first in the To Do column, back after Ultra redraws it, folded away and kept so, gone
 // on other pages; a school without Ultra's To Do gets it above the courses. And a tile another file declares (MORE) and
 // registers, on either site: filled once, stopped when it goes.
@@ -7,8 +7,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const W = require('../../extension/lib/widgets.js');
+const D = require('../../extension/content/defaults.js');
+const W = require('../../extension/core/widgets.js');
 const { El } = require('../stand-in-dom.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
@@ -48,7 +48,7 @@ const page = ({ site = 'ultra', todo = true, local = {}, failLoad = false } = {}
       site, t: (k) => k, locale: () => 'en', settings: () => settings,
       profile: async () => ({ id: site === 'ultra' ? '_5_1' : '5' }),
       // The declared tile's file, when asked for, registers it.
-      need: async (f) => { if (f === 'features/pet.js') { loads.push(f); if (failLoad) throw new Error('load failed'); ui.register('pet', (body, api) => { filled.push([body, api.site]); body.append(make('p')); return { stop: () => stopped.push(body), wake: () => woke.push(doc.visibilityState) }; }); } },
+      need: async (f) => { if (f === 'pet/page/pet.js') { loads.push(f); if (failLoad) throw new Error('load failed'); ui.register('pet', (body, api) => { filled.push([body, api.site]); body.append(make('p')); return { stop: () => stopped.push(body), wake: () => woke.push(doc.visibilityState) }; }); } },
     },
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => cb?.({ ok: true }) },
@@ -62,7 +62,7 @@ const page = ({ site = 'ultra', todo = true, local = {}, failLoad = false } = {}
   c.globalThis = c;
   c.window = c;
   vm.createContext(c);
-  const src = read('features/widgets.js');
+  const src = read('core/page/widgets.js');
   ui = vm.runInContext(src, c);
   // The page hidden or shown again, as the browser reports it.
   const visible = (v) => { doc.visibilityState = v ? 'visible' : 'hidden'; for (const f of docOn.visibilitychange || []) f(); };

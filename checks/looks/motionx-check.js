@@ -9,7 +9,7 @@
 // Part 2, the preview: the same Look on the options preview (preview.html, the real content script on a mock page), with
 // the cost of an effect's frames measured.
 //
-// Look parts come from GZ_CTX.parts() (lib/lookparts.js), the real path: a Look and its parts are saved the way the editor
+// Look parts come from GZ_CTX.parts() (looks/lookparts.js), the real path: a Look and its parts are saved the way the editor
 // saves them (the worker's glaze:look message from the options page, which writes sync `lookX` with the settings in one
 // write), the page reads them after first paint and announces glaze:parts. The editor's preview is handed them in the
 // message that carries its settings (gzPreviewParts), since it ignores storage.
@@ -20,8 +20,8 @@ const crypto = require('crypto');
 const os = require('os');
 
 const root = path.join(__dirname, '../../extension');
-const G = require(path.join(root, 'defaults.js'));
-const M = require(path.join(root, 'lib/motionx.js'));
+const G = require(path.join(root, 'content/defaults.js'));
+const M = require(path.join(root, 'looks/motionx.js'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-motionx-'));
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const PAGE = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-courses.html'), 'utf8');
@@ -86,7 +86,7 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
     opts.on('pageerror', (e) => errors.push(`options: ${e}`));
     await opts.goto(`chrome-extension://${id}/options.html`);
     await opts.evaluate((origin) => chrome.storage.local.set({ ultra: [origin] }), SITE);
-    // The Look as the editor saves it: settings and parts in one write (lib/background.js BROKER.look). `parts` is the Look's x;
+    // The Look as the editor saves it: settings and parts in one write (background/background.js BROKER.look). `parts` is the Look's x;
     // either argument left out keeps what was saved last.
     const worn = { settings: ULTRA_SETTINGS(), parts: null };
     const store = async (settings, parts) => {
@@ -268,7 +268,7 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
     // ---- the boards' course cards: Glaze's own, on the Courses page's board; the Look's card entrance plays on them too ----
     console.log("\n-- the board's course cards --");
     await page.close(); // done with: a settings change under it (the sidebar's) would crossfade a page nobody sees
-    const W = require(path.join(root, 'lib/widgets.js'));
+    const W = require(path.join(root, 'core/widgets.js'));
     const lay = W.layout({ todo: true });
     for (const b of ['courses', 'dash', 'pages']) for (const x of lay.boards[b]) x.on = false;
     const cards = ['_100_1', '_101_1', '_102_1', '_103_1'].map((cid) => ({ id: `course:${SITE}/${cid}`, on: true, size: 's' }));

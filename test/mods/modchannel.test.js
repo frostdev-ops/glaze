@@ -1,11 +1,11 @@
-// Mod channels (lib/modchannel.js) against a local relay (server/relay.js, in memory): links, publish and follow, the
+// Mod channels (mods/modchannel.js) against a local relay (server/relay.js, in memory): links, publish and follow, the
 // bundle checks a channel can't skip (forged, unsigned, another key, older, same), permission growth waiting for the
 // prompt, the daily throttle, stop following, and an unreachable relay.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/lib/sharing.js');
-const M = require('../../extension/lib/modbundle.js');
-const CH = require('../../extension/lib/modchannel.js');
+const G = require('../../extension/sharing/sharing.js');
+const M = require('../../extension/mods/modbundle.js');
+const CH = require('../../extension/mods/modchannel.js');
 const { relay } = require('../../server/relay.js');
 
 const u8 = (s) => new TextEncoder().encode(s);
@@ -356,7 +356,7 @@ test('an incomplete or damaged session sync never downloads a stale bundle refer
   for (const result of [{ more: true }, { bad: 1 }]) {
     let downloads = 0;
     const module = { exports: {} };
-    vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/lib/modchannel.js'), 'utf8'), {
+    vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/mods/modchannel.js'), 'utf8'), {
       module, require: () => M,
       GZ_SHARING: { ...G, session: (st) => ({
         sync: async () => { st.type = 'modchannel'; return result; },

@@ -1,5 +1,5 @@
-// Settings → AI (lib/editor-ai.js) on stand-in elements, with the worker's real broker (lib/ai/broker.js config) over a
-// stand-in store and server, the real lib/site.js asking for hosts, and a stand-in device provider: off by default, the
+// Settings → AI (settings/editor-ai.js) on stand-in elements, with the worker's real broker (ai/broker.js config) over a
+// stand-in store and server, the real core/site.js asking for hosts, and a stand-in device provider: off by default, the
 // switches and models in storage.local ai, the providers' cards and their drawer, Connect asking for exactly the provider's
 // host from the click, a key never shown in clear, the model picker, the effort a model takes, a feature's own model,
 // Advanced's endpoints and tuning, an older store as Settings shows it, the device's states and download, the activity
@@ -7,12 +7,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const I = require('../../extension/lib/i18n.js');
-const AS = require('../../extension/lib/ai/settings.js');
-const B = require('../../extension/lib/ai/broker.js');
-const M = require('../../extension/lib/ai/models.js');
-require('../../extension/lib/ai/providers/openai.js');
-const D = require('../../extension/lib/ai/providers/device.js');
+const I = require('../../extension/core/i18n.js');
+const AS = require('../../extension/ai/settings.js');
+const B = require('../../extension/ai/broker.js');
+const M = require('../../extension/ai/models.js');
+require('../../extension/ai/providers/openai.js');
+const D = require('../../extension/ai/providers/device.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -90,9 +90,9 @@ const page = ({ ai, calls, conns, granted = true, device, providers, features, e
   const settings = { ...AS, ...(providers && { PROVIDERS: [...new Set([...AS.PROVIDERS, ...providers])] }), ...(features && { FEATURES: features, clean: (raw) => ({ ...AS.clean(raw), features: Object.fromEntries(features.map((f) => [f, raw?.features?.[f] === true])) }) }) };
   const window = {}; window.top = embedded ? {} : window;
   const ctx = vm.createContext({ chrome, window, navigator: { locks }, document: doc, URL, Promise, Date, Number, Array, Object, Math, Map, Set, structuredClone, setTimeout, clearTimeout,
-    GZ_AI_FAILURE: require('../../extension/lib/ai/failure.js'), GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../../extension/lib/ai/endpoint.js') });
-  vm.runInContext(read('lib/site.js'), ctx);
-  vm.runInContext(read('lib/editor-ai.js'), ctx);
+    GZ_AI_FAILURE: require('../../extension/ai/failure.js'), GZ_AI_SETTINGS: settings, GZ_AI_ENDPOINT: require('../../extension/ai/endpoint.js') });
+  vm.runInContext(read('core/site.js'), ctx);
+  vm.runInContext(read('settings/editor-ai.js'), ctx);
   ctx.GZ_AIEDIT.mount({ t: (k, v) => I.t(k, v, 'en'), when: (at) => `@${at}`, pct: (x) => `${Math.round(x * 100)}%` });
   const $ = (id) => doc.getElementById(id);
   const target = (x) => (typeof x === 'string' ? $(x) : x);
@@ -185,7 +185,7 @@ test('AI outline defaults on under Feedback and can be opted out independently',
   assert.equal(p.data.ai.model.model, 'gpt-5');
 });
 
-test('features are one row each, from lib/ai/settings.js FEATURES, after the overall model', async () => {
+test('features are one row each, from ai/settings.js FEATURES, after the overall model', async () => {
   const p = await open({ ai: { on: true, features: { syllabus: true } }, features: ['syllabus', 'notes'] });
   assert.deepEqual(p.$('ai-feature-list').children.map((w) => text(w.children[0].children[0])), ['Default', 'Syllabus import', 'notes']);
   assert.deepEqual([p.$('ai-feature-syllabus').checked, p.$('ai-feature-notes').checked], [true, false]);
@@ -603,7 +603,7 @@ test('an unavailable device model distinguishes browser, generic availability an
 });
 
 test('On this device is one card: Apple Intelligence on a Mac that has it, Chrome on-device AI elsewhere', async () => {
-  const markup = read('options.html') + read('lib/editor-ai.js');
+  const markup = read('options.html') + read('settings/editor-ai.js');
   assert.doesNotMatch(markup, /ai-use-apple|ai-choice-apple|id="ai-apple/, 'no separate Apple choice');
   let st = { state: 'ready' };
   const mac = await open({ ai: { on: true, model: { use: 'device' } }, providers: ['openai', 'device', 'apple'], device: async (m) => (m.op === 'set' ? { ok: true } : { ok: true, ...st, provider: 'apple' }) });
@@ -620,7 +620,7 @@ test('On this device is one card: Apple Intelligence on a Mac that has it, Chrom
   // Safari without Apple Intelligence on this Mac: the browser's model, if it has one.
   const other = await open({ ai: { on: true, model: { use: 'device' } }, providers: ['openai', 'device', 'apple'], device: async (m) => (m.op === 'set' ? { ok: true } : { ok: true, state: 'download', provider: 'device' }) });
   assert.equal(other.cards()[0], 'Chrome on-device AI');
-  const t = (k, v) => I.t(k, v, 'en'), E = require('../../extension/lib/editor-ai.js');
+  const t = (k, v) => I.t(k, v, 'en'), E = require('../../extension/settings/editor-ai.js');
   assert.equal(E.appleText({ state: 'unavailable', reason: 'os' }, t), 'Not available on this device');
   assert.equal(E.appleText({ state: 'unavailable', reason: 'native' }, t), 'Not available: Glaze could not reach the Apple Intelligence native handler.');
   assert.equal(E.providerName('apple', t), 'Apple Intelligence');
@@ -707,7 +707,7 @@ test('activity: the recent calls, newest first, feature · provider · model, me
 });
 
 test('the page: an AI tab before Privacy and data, kept out of embedded Settings, every id once, labelled controls and its scripts first', () => {
-  const html = read('options.html'), js = read('lib/editor-ai.js'), opts = read('options.js');
+  const html = read('options.html'), js = read('settings/editor-ai.js'), opts = read('settings/options.js');
   const tabs = [...html.matchAll(/data-editor-tab="([^"]+)"/g)].map((m) => m[1]);
   assert.equal(tabs.indexOf('ai'), tabs.indexOf('backup') - 1);
   assert.match(opts, /\['ai', 'AI'\]/, 'embedded Settings sends it to a tab of its own');
@@ -718,7 +718,7 @@ test('the page: an AI tab before Privacy and data, kept out of embedded Settings
   assert.ok(used.size >= 14, String([...used]));
   for (const id of used) assert.equal(html.split(`id="${id}"`).length - 1, 1, id);
   for (const id of drawn) assert.equal(html.split(`id="${id}"`).length - 1, 0, id);
-  const order = ['lib/site.js', 'lib/ai/settings.js', 'lib/ai/endpoint.js', 'lib/editor-ai.js', 'options.js'].map((f) => html.indexOf(`<script src="${f}"></script>`));
+  const order = ['core/site.js', 'ai/settings.js', 'ai/endpoint.js', 'settings/editor-ai.js', 'settings/options.js'].map((f) => html.indexOf(`<script src="${f}"></script>`));
   assert.ok(order.every((i) => i > 0) && order.every((i, k) => !k || i > order[k - 1]), String(order));
   const panel = html.slice(html.indexOf('<div id="panel-ai"'), html.indexOf('<div id="panel-backup"'));
   for (const [, tag] of panel.matchAll(/(<input[^>]*>)/g)) assert.match(tag, /data-local/, tag);
@@ -736,7 +736,7 @@ test('the page: an AI tab before Privacy and data, kept out of embedded Settings
 });
 
 test('every word of Settings → AI is in every language', () => {
-  const html = read('options.html'), js = read('lib/editor-ai.js').replace(/\/\/[^\n]*/g, '');
+  const html = read('options.html'), js = read('settings/editor-ai.js').replace(/\/\/[^\n]*/g, '');
   const panel = html.slice(html.indexOf('<div id="panel-ai"'), html.indexOf('<div id="panel-backup"'));
   const fromHtml = [...panel.replace(/<(\w+)[^>]*translate="no"[^>]*>[\s\S]*?<\/\1>/g, '').matchAll(/>([^<]+)</g)].map((m) => m[1].replace(/\s+/g, ' ').trim()).filter((s) => /\p{L}/u.test(s));
   const fromJs = [...js.matchAll(/\bt\('((?:\\.|[^'\\])*)'/g)].map((m) => m[1].replace(/\\(.)/g, '$1'));
@@ -750,7 +750,7 @@ test('every word of Settings → AI is in every language', () => {
 });
 
 test('the helpers: a download\'s progress, the record\'s rows, a refused key and the tuning\'s words', () => {
-  const E = require('../../extension/lib/editor-ai.js'), t = (k, v) => I.t(k, v, 'en');
+  const E = require('../../extension/settings/editor-ai.js'), t = (k, v) => I.t(k, v, 'en');
   assert.equal(E.progress({ loaded: 0.5 }), 0.5);
   assert.equal(E.progress({ loaded: 30, total: 60 }), 0.5);
   assert.equal(E.progress({ progress: 2 }), 1);

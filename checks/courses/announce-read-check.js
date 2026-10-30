@@ -37,13 +37,13 @@ const check = (value, label) => { assert.ok(value, label); results.push(label); 
     });
     const setup = async () => {
       await page.goto(`${O}/ultra/courses/_101_1/announcements`);
-      await page.addStyleTag({ path: path.join(root, 'theme.css') });
+      await page.addStyleTag({ path: path.join(root, 'content/theme.css') });
       await page.evaluate(() => {
         window.GZ_CTX = { site: 'ultra', on: () => true, t: (k) => k, need: async () => {} };
         window.GZ_LMSQ = { fetch: (...a) => fetch(...a) };
         window.chrome = Object.assign(window.chrome || {}, { storage: { onChanged: { addListener: (f) => { window.storageChanged = f; } } } });
       });
-      for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/ultra.js', 'features/announce-read.js']) await page.addScriptTag({ path: path.join(root, f) });
+      for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'courses/ultra.js', 'courses/page/announce-read.js']) await page.addScriptTag({ path: path.join(root, f) });
       assert.deepEqual(errors, [], 'fixture loads the same library prerequisites as the extension');
       await page.evaluate(() => { GZ_ANNOUNCE_READ.sync(); window.sweep = setInterval(() => GZ_ANNOUNCE_READ.sync(), 100); });
       reads = [];

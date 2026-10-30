@@ -98,7 +98,7 @@ html[data-gz-bg="solid"] #gz-ctabs::before, html[data-gz-bg="solid"] #gz-doc-too
   border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); box-shadow: var(--gz-shadow); cursor: pointer;
 }
 @media print { #gz-ctabs-say { display: none !important; } }
-/* Course tabs' live frames (features/coursetabs.js): over the whole window, above Glaze's footer; shown only while a tab's
+/* Course tabs' live frames (navigation/page/coursetabs.js): over the whole window, above Glaze's footer; shown only while a tab's
    frame is picked. Floating widgets stay over them. */
 #gz-ctabs-frames { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1250; visibility: hidden; background: var(--gz-ground, Canvas); }
 #gz-ctabs-frames[data-on] { visibility: visible; }
@@ -107,15 +107,15 @@ html[data-gz-bg="solid"] #gz-ctabs::before, html[data-gz-bg="solid"] #gz-doc-too
 .gz-ctabs-retry { position: absolute; z-index: 2; top: 80px; left: 50%; transform: translateX(-50%); box-sizing: border-box; width: min(420px, calc(100% - 32px)); padding: 20px; border: 1px solid var(--gz-line); border-radius: var(--gz-radius, 12px); background: var(--gz-surface-grain, none), var(--gz-surface-paint, var(--gz-surface, Canvas)); color: var(--gz-ink, CanvasText); box-shadow: var(--gz-shadow); }
 .gz-ctabs-retry p { margin: 0 0 12px; }
 .gz-ctabs-retry button { font: inherit; margin-inline-end: 8px; padding: 6px 12px; cursor: pointer; }
-/* The page's strip over a tab's frame that has not drawn its own yet (features/coursetabs.js hoist): at the frame's top,
+/* The page's strip over a tab's frame that has not drawn its own yet (navigation/page/coursetabs.js hoist): at the frame's top,
    above its picture and its Retry, in reach. */
 #gz-ctabs-frames > #gz-ctabs { position: absolute; z-index: 4; top: 0; inset-inline: 0; }
 html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion="off"] #gz-ctabs .gz-ctab { transition: none; }
-/* A Canvas course loading behind the page on screen (features/coursetabs.js reveal): a light sweeping along its tab. */
+/* A Canvas course loading behind the page on screen (navigation/page/coursetabs.js reveal): a light sweeping along its tab. */
 #gz-ctabs .gz-ctab[data-loading]::before { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; border-radius: 1px; background: linear-gradient(90deg, transparent, var(--gz-course, var(--gz-accent)), transparent) 0 0 / 40% 100% no-repeat; animation: gz-ctab-load 0.9s linear infinite; }
 @keyframes gz-ctab-load { from { background-position: -40% 0; } to { background-position: 140% 0; } }
 html[data-gz-motion="off"] #gz-ctabs .gz-ctab[data-loading]::before { animation: none; background: var(--gz-course, var(--gz-accent)); opacity: 0.5; }
-/* Canvas: a frame's next page loading behind the one on screen (features/coursetabs.js turnTo): a light sweeping along the
+/* Canvas: a frame's next page loading behind the one on screen (navigation/page/coursetabs.js turnTo): a light sweeping along the
    page's top edge, from a beat in (a page that comes at once shows none). */
 #gz-ctabs-frames[data-turning]::after { content: ""; position: absolute; z-index: 3; top: var(--gz-navbar-top, 0px); inset-inline: var(--gz-navbar-left, 0px) 0; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, var(--gz-accent, #6fdcff), transparent) 0 0 / 30% 100% no-repeat; animation: gz-ctab-load 1s linear infinite, gz-ctab-beat 0.01s 0.15s both; }
 @keyframes gz-ctab-beat { from { opacity: 0; } to { opacity: 1; } }

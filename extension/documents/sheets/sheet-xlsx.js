@@ -1,4 +1,4 @@
-// Glaze Sheets' files: read(bytes) turns an .xlsx (or .xlsm) into the workbook model (lib/sheet-model.js), write(wb)
+// Glaze Sheets' files: read(bytes) turns an .xlsx (or .xlsm) into the workbook model (documents/sheets/sheet-model.js), write(wb)
 // turns the model back into .xlsx bytes, and readDelimited/writeDelimited do the same for CSV and TSV.
 // What the model holds is read into it; what it doesn't is kept and written back as it came: unknown package parts byte
 // for byte in wb.keep.parts, a part's other relationships, and a sheet's other elements (conditional formats, data
@@ -13,11 +13,11 @@
 // colour came from is remembered (wb.keep.styles.colors) and written back. A rich text cell has rich: [{ text, …the same
 // font fields }]. Sizes are the file's: colW a <col width> (characters of a 7-pixel digit, padding included), rowH a row's
 // height in points; sheet.keep.defaults has the sheet's defaults in the same units. A hidden sheet has keep.hidden.
-// Bounded: the archive by lib/doctext.js's limits, cells and sheets by the model's caps; a part that can't be read is
+// Bounded: the archive by core/doctext.js's limits, cells and sheets by the model's caps; a part that can't be read is
 // left out and listed in wb.keep.problems, so read() fails only for a file that is no workbook at all.
 // Rimeward's parseDelimited (notebook-spreadsheet.ts, MIT, the same owner) is the CSV parser's start.
-// Classic script, loaded with the page: the engine (lib/sheet-model.js, -formula, -numfmt, -calc), lib/doctext.js and
-// lib/zip.js are looked up when a function runs, so they may load later. module.exports for node.
+// Classic script, loaded with the page: the engine (documents/sheets/sheet-model.js, -formula, -numfmt, -calc), core/doctext.js and
+// core/zip.js are looked up when a function runs, so they may load later. module.exports for node.
 var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   const fail = (code, message) => { throw Object.assign(new Error(message || code), { code }); };
   // Firefox's linter refuses require() of a variable, so each caller passes a require of its own file.
@@ -26,7 +26,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   const deps = () => {
     if (CAP) return;
     M = dep('GZ_SHEET_MODEL', './sheet-model.js', () => require('./sheet-model.js')); F = dep('GZ_SHEET_FORMULA', './sheet-formula.js', () => require('./sheet-formula.js'));
-    NF = dep('GZ_SHEET_NUMFMT', './sheet-numfmt.js', () => require('./sheet-numfmt.js')); D = dep('GZ_DOCTEXT', './doctext.js', () => require('./doctext.js'));
+    NF = dep('GZ_SHEET_NUMFMT', './sheet-numfmt.js', () => require('./sheet-numfmt.js')); D = dep('GZ_DOCTEXT', '../../core/doctext.js', () => require('../../core/doctext.js'));
     ({ MAX_ROWS, MAX_COLS, CAP } = M);
     // Indexed colours 0-7 repeat the first eight of the palette; 64 and 65 are the system's text and window colours.
     INDEXED = [...NF.PALETTE.slice(0, 8), ...NF.PALETTE];
@@ -765,7 +765,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
         parts[name] = { type: typeOf(name), data: new Uint8Array(await z.bytes(name)) };
       } catch (e) { problem(null, 'part', `${name}: ${e.message}`); }
     }
-    // A drawing's charts, for the charts lane (lib/sheet-chart-xml.js) to read from keep.parts.
+    // A drawing's charts, for the charts lane (documents/sheets/sheet-chart-xml.js) to read from keep.parts.
     for (const sh of wb.sheets) {
       const d = sh.keep.drawing, rp = d && relsPath(d.path);
       if (d) d.charts = relsOf(await text(rp, false), d.path, problem).filter((r) => r.kind === 'chart' && r.path).map((r) => real(r.path) ?? r.path);
@@ -1412,7 +1412,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     const date = opts.date ?? new Date();
     const order = ['[Content_Types].xml', '_rels/.rels', ...[...files.keys()].filter((p) => p !== '_rels/.rels')];
     const list = [{ name: '[Content_Types].xml', data: new TextEncoder().encode(ct), date }, ...order.slice(1).map((name) => ({ name, data: files.get(name), date }))];
-    const Zp = dep('GZ_ZIP', './zip.js', () => require('./zip.js'));
+    const Zp = dep('GZ_ZIP', '../../core/zip.js', () => require('../../core/zip.js'));
     const chunks = await Zp.zipAsync(list, { deflate: opts.deflate !== false });
     const size = chunks.reduce((n, p) => n + p.length, 0);
     const bytes = new Uint8Array(size);

@@ -1,15 +1,15 @@
-// H4: syllabus.read (lib/ai/tasks/syllabus-read.js) through the harness with the mock provider — the request it builds
+// H4: syllabus.read (ai/tasks/syllabus-read.js) through the harness with the mock provider — the request it builds
 // (instructions only in the system message, the syllabus fenced as data, names as a spelling hint, pictures only for a model
-// that takes them), its check (an ungrounded value is dropped), long syllabi in parts — and lib/syllabus-ai.js, which reads
-// AI's values with lib/syllabus.js and puts them beside extract()'s: extract()'s values stay, AI fills only what is empty.
+// that takes them), its check (an ungrounded value is dropped), long syllabi in parts — and planner/syllabus-ai.js, which reads
+// AI's values with planner/syllabus.js and puts them beside extract()'s: extract()'s values stay, AI fills only what is empty.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-globalThis.GZ_CLASSES = require('../../extension/lib/classes.js');
-const T = require('../../extension/lib/ai/task.js');
-require('../../extension/lib/ai/providers/mock.js');
-const { task, LIMIT } = require('../../extension/lib/ai/tasks/syllabus-read.js');
-const L = require('../../extension/lib/syllabus.js');
-const A = require('../../extension/lib/syllabus-ai.js');
+globalThis.GZ_CLASSES = require('../../extension/planner/classes.js');
+const T = require('../../extension/ai/task.js');
+require('../../extension/ai/providers/mock.js');
+const { task, LIMIT } = require('../../extension/ai/tasks/syllabus-read.js');
+const L = require('../../extension/planner/syllabus.js');
+const A = require('../../extension/planner/syllabus-ai.js');
 
 const TEXT = [
   'CHEM 1210 General Chemistry I',
@@ -33,7 +33,7 @@ const OPTS = { start: Date.UTC(2026, 7, 24), md: true, hint: 'en' };
 // ---- the task -----------------------------------------------------------------------------------------------------
 test('syllabus.read is added to the harness, and its answer is a strict schema', () => {
   assert.equal(T.get('syllabus.read'), task);
-  assert.equal(require('../../extension/lib/ai/schema.js').strict(task.output), true);
+  assert.equal(require('../../extension/ai/schema.js').strict(task.output), true);
   assert.deepEqual(task.output.properties.dates.items.properties.kind.enum, ['exam', 'due', 'other'], 'a closed list');
 });
 
@@ -363,7 +363,7 @@ test('context budgeting includes instructions, schema and the reserved answer be
   assert.equal(tooSmall.seen.length, 0, 'even an empty input part cannot fit the overhead and answer');
   const cfg = { caps: { context: 3000 }, seen: [], replies: () => answer({}) };
   await T.run(task, { text }, { provider: 'mock', cfg });
-  const X = require('../../extension/lib/ai/text.js');
+  const X = require('../../extension/ai/text.js');
   for (const req of cfg.seen) assert.ok(X.estimateTokens({ messages: req.messages, schema: req.schema }) + req.maxTokens <= 3000, 'every request fits the existing token estimate plus its reserved answer');
 });
 

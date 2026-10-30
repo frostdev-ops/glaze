@@ -451,7 +451,7 @@ const check = async (name, test) => {
     });
     await check('translated-large-layout', async () => {
       const problems = [];
-      // The worker files a Look into History once it has rested 4 s (lib/background.js), and Settings then redraws History,
+      // The worker files a Look into History once it has rested 4 s (background/background.js), and Settings then redraws History,
       // replacing the rows the pages measure. Wear the seed Look once and let its entry land before any page measures: each
       // page's own seed then changes nothing in sync, so nothing more is filed.
       const prep = await context.newPage();

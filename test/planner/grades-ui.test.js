@@ -1,11 +1,11 @@
-// The Canvas grades extras as they behave on a page (features/grades.js, and content-canvas.js' card grades), run in a VM
+// The Canvas grades extras as they behave on a page (planner/page/grades.js, and content-canvas.js' card grades), run in a VM
 // on a small stand-in for the DOM and chrome.storage, with Canvas's answers from the local Canvas fixture.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const I = require('../../extension/lib/i18n.js');
+const I = require('../../extension/core/i18n.js');
 const live = require('../fixtures/canvas-grades.json');
 
 const root = path.join(__dirname, '../../extension');
@@ -101,7 +101,7 @@ const shared = (init = {}) => {
   });
   return { data, listeners, worker, tab, fail };
 };
-// The service worker (lib/background.js) on that storage, answering messages as Chrome would.
+// The service worker (background/background.js) on that storage, answering messages as Chrome would.
 const WORKER_ID = 'glaze-test-id';
 const serviceWorker = (store) => {
   const listeners = [];
@@ -109,14 +109,14 @@ const serviceWorker = (store) => {
   const empty = { get: () => Promise.resolve({}), set: () => Promise.resolve(), remove: () => Promise.resolve() };
   const ctx = vm.createContext({
     URL, console, setTimeout, clearTimeout, TextEncoder,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('background', f)), ctx); },
     chrome: {
       runtime: { id: WORKER_ID, getURL: (p = '') => `chrome-extension://${WORKER_ID}/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: store.worker, sync: empty, onChanged: none },
       scripting: { executeScript: () => Promise.resolve([]) },
     },
   });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   return (m, sender) => new Promise((resolve) => {
     let waits = false;
     for (const f of listeners) if (f(m, sender, (r) => resolve(r === undefined ? r : JSON.parse(JSON.stringify(r)))) === true) waits = true;
@@ -130,7 +130,7 @@ const ORIGIN = 'https://school.instructure.com';
 const KEY = `whatIf:${ORIGIN}:3`;
 const row = (more = {}) => ({ ...BIO.course, id: String(BIO.course.id), name: 'Introduction to Biology', enrollments: [{ type: 'student', user_id: '3', ...BIO.course.enrollment }], ...more });
 
-// features/grades.js on a course's Grades page in one tab, with Canvas's answers held until the test lets them through.
+// planner/page/grades.js on a course's Grades page in one tab, with Canvas's answers held until the test lets them through.
 // Tabs share `store` and its service worker; `held.on` holds this tab's storage reads and messages (a slow tab).
 const gradesPage = ({ store = shared(), list = [row()], search = '', groups = BIO.groups, capi = () => Promise.resolve(null), tab = 1 } = {}) => {
   const doc = page();
@@ -154,8 +154,8 @@ const gradesPage = ({ store = shared(), list = [row()], search = '', groups = BI
       need: (f, ready) => (ready() ? Promise.resolve() : Promise.reject(new Error('not loaded'))), settings: () => state.settings, on: () => state.on,
     },
   });
-  vm.runInContext(read('lib/gradecalc.js'), ctx);
-  vm.runInContext(read('features/grades.js'), ctx);
+  vm.runInContext(read('planner/gradecalc.js'), ctx);
+  vm.runInContext(read('planner/page/grades.js'), ctx);
   const release = () => { held.on = false; while (held.queue.length) held.queue.shift()(); };
   return { doc, state, store, held, release, UI: ctx.GZ_GRADES_UI, box: () => doc.getElementById('gz-calc') };
 };
@@ -246,8 +246,8 @@ test('a page may change only its own Canvas site’s what-if records', async () 
   assert.deepEqual(Object.keys(store.data), [`whatIf:${ORIGIN}:3`]);
 });
 
-// Syllabus import (features/syllabus.js) keeps what a syllabus said through the same worker ('glaze:syllabus').
-test('a page keeps or deletes only its own Canvas site’s syllabus records, and only what lib/syllabus.js allows', async () => {
+// Syllabus import (planner/page/syllabus.js) keeps what a syllabus said through the same worker ('glaze:syllabus').
+test('a page keeps or deletes only its own Canvas site’s syllabus records, and only what planner/syllabus.js allows', async () => {
   const store = shared();
   const send = serviceWorker(store);
   const from = (url) => ({ id: WORKER_ID, tab: { id: 3 }, frameId: 0, url });
@@ -326,8 +326,8 @@ const gpaPage = ({ store = shared(), list, capi }) => {
       need: (f, ready) => (ready() ? Promise.resolve() : Promise.reject(new Error('not loaded'))), settings: () => state.settings, on: () => true,
     },
   });
-  vm.runInContext(read('lib/gradecalc.js'), ctx);
-  vm.runInContext(read('features/grades.js'), ctx);
+  vm.runInContext(read('planner/gradecalc.js'), ctx);
+  vm.runInContext(read('planner/page/grades.js'), ctx);
   return { doc, UI: ctx.GZ_GRADES_UI, box: () => doc.getElementById('gz-gpa') };
 };
 
@@ -386,9 +386,9 @@ test('GPA: a scale pasted as ranges counts the course, and text that is no scale
   assert.match(cell(27), /^A · 95% · 4\.00/, 'the course keeps the scale it had');
 });
 
-// The GPA with past terms, trends and a goal (features/gpaterms.js, lib/gpa.js), kept through the service worker.
+// The GPA with past terms, trends and a goal (planner/page/gpaterms.js, planner/gpa.js), kept through the service worker.
 const CALC = [{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 92 }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } }];
-// extra: more of the page's globals (a stand-in features/import.js, say).
+// extra: more of the page's globals (a stand-in planner/page/import.js, say).
 const histPage = (store, held = {}, list = CALC, groups = [], sync = {}, extra = {}) => {
   const doc = page();
   doc.createElementNS = (ns, tag) => new El(tag, doc);
@@ -409,8 +409,8 @@ const histPage = (store, held = {}, list = CALC, groups = [], sync = {}, extra =
     },
     ...extra,
   });
-  vm.runInContext(read('lib/gradecalc.js'), ctx);
-  vm.runInContext(read('features/grades.js'), ctx);
+  vm.runInContext(read('planner/gradecalc.js'), ctx);
+  vm.runInContext(read('planner/page/grades.js'), ctx);
   const box = () => doc.getElementById('gz-gpa');
   const f = (key) => find(box(), (e) => e.dataset.f === key);
   return { doc, UI: ctx.GZ_GRADES_UI, box, f, state, loc, hist: () => find(box(), (e) => /gz-gpa-hist\b/.test(e.className)) };
@@ -603,7 +603,7 @@ test('GPA: of two transcript files picked one after the other, the later one is 
   input.fire('change');
   p.f('imp:file').files = [file('spring.txt', 'Spring 2025\nENG 101 Writing 3 B')];
   p.f('imp:file').fire('change');
-  await settle(10); // both files are being read (features/import.js looks at their first bytes before their text)
+  await settle(10); // both files are being read (planner/page/import.js looks at their first bytes before their text)
   assert.equal(later.length, 2);
   later[1]();
   await settle(10);
@@ -614,7 +614,7 @@ test('GPA: of two transcript files picked one after the other, the later one is 
 });
 
 test('GPA: a PDF or photo being read is called off by the next read and by closing Past terms, and nothing it finds is shown after', async () => {
-  // features/import.js held: each read waits until the test answers it.
+  // planner/page/import.js held: each read waits until the test answers it.
   const reads = [];
   const GZ_IMPORT = { read: (file, opts) => new Promise((resolve) => reads.push({ file, opts, resolve })), note: () => '', doubt: () => false };
   const p = histPage(shared(), {}, CALC, [], {}, { GZ_IMPORT });
@@ -698,7 +698,7 @@ test('GPA: a transcript being read stops the moment the panel goes (Glaze off, t
 });
 
 // ---- content-canvas.js: the Dashboard cards' grade, as a link of its own ----
-const source = read('content-canvas.js');
+const source = read('content/content-canvas.js');
 const block = (from, to) => { const a = source.indexOf(from), b = source.indexOf(to, a); assert.ok(a > 0 && b > a, `${from} … ${to}`); return source.slice(a, b); };
 const dashboard = () => {
   const doc = page();
@@ -709,7 +709,7 @@ const dashboard = () => {
   card.append(el(doc, 'div', { className: 'ic-DashboardCard__header' }, link));
   doc.body.append(card);
   const list = [{ id: '27', enrollments: [{ type: 'student', computed_current_score: 83.5 }] }];
-  const ctx = vm.createContext({ document: doc, I: { observer: {} }, GZ_PAGE: require('../../extension/lib/page.js'), locale: () => 'en', t: (k, v) => I.t(k, v, 'en'), canvasCourses: () => Promise.resolve(list) });
+  const ctx = vm.createContext({ document: doc, I: { observer: {} }, GZ_PAGE: require('../../extension/core/page.js'), locale: () => 'en', t: (k, v) => I.t(k, v, 'en'), canvasCourses: () => Promise.resolve(list) });
   vm.runInContext(`${block('  const tagCanvasCards = () => {', '  // Canvas: its course colors come inline')}; globalThis.tag = tagCanvasCards;`, ctx);
   return { doc, card, list, tag: ctx.tag };
 };
@@ -734,13 +734,13 @@ test('a card’s grade is also a link to the course’s grades, for the keyboard
   assert.equal(d.card.querySelector('.gz-card-grade'), null, 'and gone with the grade');
 });
 
-// ---- Blackboard Ultra (B4): the same what-if and GPA, from Ultra's gradebook through lib/ultra.js ----
+// ---- Blackboard Ultra (B4): the same what-if and GPA, from Ultra's gradebook through courses/ultra.js ----
 const UO = 'https://lms.example.edu';
 const UKEY = `whatIf:${UO}:_900_1`; // the student of test/fixtures/ultra-memberships.json
 const ufix = (n) => JSON.parse(read(`../test/fixtures/ultra-${n}.json`));
 const U_NOW = Date.parse('2026-10-15T12:00:00Z'); // in the fixtures' Fall 2026 term
 class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_NOW])); } static now() { return U_NOW; } }
-// features/grades.js on an Ultra page, with B4's anchors: a course's overall grade header, or the Grades page's terms.
+// planner/page/grades.js on an Ultra page, with B4's anchors: a course's overall grade header, or the Grades page's terms.
 // books: what content-ultra.js's bookFor has for each course (a new array is a new answer, with a new key); answers:
 // Ultra's API by a part of the address. held: this tab's storage reads wait while held.on. failGet(keys, n): whether
 // the page's nth storage.local read (of keys) fails, as Chrome's do (runtime.lastError, no answer). loc: the page's
@@ -753,12 +753,12 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
     : path.includes('/courses/') ? el(doc, 'div', { className: 'grades-list' }, el(doc, 'aside', { className: 'student-grade-overview' }), el(doc, 'div', { className: 'student-tabs' }))
     : el(doc, 'div', { id: 'body-content' }, el(doc, 'div', { className: 'base-grades' }, el(doc, 'div', { className: 'carousel' }, el(doc, 'div', { id: 'container-term-current' })))));
   const state = { settings: { enabled: true, enhance: { gpaPlus: true, ...enhance } }, asked: [], timers: [] };
-  store.data.ultra ||= [UO]; // a site Glaze has found to be Ultra (lib/background.js fromUltra)
+  store.data.ultra ||= [UO]; // a site Glaze has found to be Ultra (background/background.js fromUltra)
   store.send ||= serviceWorker(store);
   const sender = { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${UO}${path}` };
   let ctx;
   const now = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
-  // lazy: a file not here yet comes from the worker a turn later, as content.js's need() has it (lib/ultra.js is here:
+  // lazy: a file not here yet comes from the worker a turn later, as content.js's need() has it (courses/ultra.js is here:
   // content-ultra.js read the page's gradebook with it).
   const need = (f, ready) => (!lazy || ready() ? now(f, ready) : new Promise((res) => setImmediate(res)).then(() => now(f, ready)));
   const fetch = (url, o) => {
@@ -785,7 +785,7 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
     document: doc, location: loc, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome, TextEncoder, fetch, Date: FixedDate, File: class File {}, AbortController,
     MutationObserver: class { observe() {} disconnect() {} },
-    GZ_PAGE: require('../../extension/lib/page.js'), GZ_COURSES: require('../../extension/defaults.js').GZ_COURSES, setTimeout: (f, ms) => { const timer = [f, ms]; state.timers.push(timer); return timer; },
+    GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES, setTimeout: (f, ms) => { const timer = [f, ms]; state.timers.push(timer); return timer; },
     clearTimeout: (timer) => { const i = state.timers.indexOf(timer); if (i >= 0) state.timers.splice(i, 1); },
     GZ_CTX: {
       site: 'ultra', t: (k, v) => I.t(k, v, lang), locale: () => lang, need, settings: () => state.settings, on: () => true,
@@ -793,8 +793,8 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
       bookFor: (cid) => (books[cid] ? { results: books[cid], key: `k${cid}:${bookKey(books[cid])}` } : { key: '' }),
     },
   });
-  if (lazy) vm.runInContext(read('lib/ultra.js'), ctx); else vm.runInContext(read('lib/gradecalc.js'), ctx);
-  vm.runInContext(read('features/grades.js'), ctx);
+  if (lazy) vm.runInContext(read('courses/ultra.js'), ctx); else vm.runInContext(read('planner/gradecalc.js'), ctx);
+  vm.runInContext(read('planner/page/grades.js'), ctx);
   const release = () => { held.on = false; while (held.queue.length) held.queue.shift()(); };
   return { doc, state, store, ctx, loc, books, held, release, UI: ctx.GZ_GRADES_UI, box: () => doc.getElementById('gz-calc'), gpa: () => doc.getElementById('gz-gpa') };
 };
@@ -824,7 +824,7 @@ test("Ultra what-if: under the overall grade, by the course's own recipe (Blackb
   assert.deepEqual(p.state.asked, [], 'nothing asked of Ultra: the page had the gradebook');
 });
 
-test("Ultra what-if: the page's gradebook in hand before lib/gradecalc.js has come still loads", async () => {
+test("Ultra what-if: the page's gradebook in hand before planner/gradecalc.js has come still loads", async () => {
   const p = ultraPage({ lazy: true });
   p.UI.render();
   await settle(20);
@@ -1099,7 +1099,7 @@ test('Ultra what-if: a course with no overall grade is an estimate from the shar
 });
 
 test("Ultra GPA: on Grades, above the terms, this term's courses with Blackboard's grade or an estimate, schemas asked once", async () => {
-  // Each course's gradebook through lib/ultra.js's reader (not the page's own requests); the page's own answers aren't used.
+  // Each course's gradebook through courses/ultra.js's reader (not the page's own requests); the page's own answers aren't used.
   const p = ultraPage({ path: '/ultra/grades', enhance: { gpa: true }, books: {}, answers: { '/gradebook/schemas': { results: [] }, '/courses/_101_1/gradebook/grades?': { results: ufix('grades').results }, '/courses/_102_1/gradebook/grades?': { results: ufix('grades-status').results }, '/gradebook/grades?': { results: [] } } });
   p.UI.render();
   await settle(12);
@@ -1150,7 +1150,7 @@ const CONTENTS = { results: [
 
 test('Ultra syllabus import: on the outline under Ultra\'s details, from a document of the course, kept by site, user and course', async () => {
   const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': CONTENTS } });
-  vm.runInContext(read('features/syllabus.js'), p.ctx);
+  vm.runInContext(read('planner/page/syllabus.js'), p.ctx);
   const S = p.ctx.GZ_SYL_UI;
   S.sync(true);
   await settle(12);
@@ -1202,13 +1202,13 @@ const served = (got, size, type) => (url, o) => {
   got.push({ url: url.replace(UO, ''), credentials: o?.credentials, redirect: o?.redirect, signal: o?.signal });
   return new Response(new Uint8Array(size), { headers: { 'content-length': String(size), 'content-type': type } });
 };
-// The outline with PAGES, the import dialog open; GZ_IMPORT stands in for features/import.js.
+// The outline with PAGES, the import dialog open; GZ_IMPORT stands in for planner/page/import.js.
 const docsPage = async (GZ_IMPORT, files = {}, setup = () => {}) => {
   const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': PAGES, ...files } });
   p.ctx.GZ_IMPORT = GZ_IMPORT;
   p.ctx.File = File;
   setup(p);
-  vm.runInContext(read('features/syllabus.js'), p.ctx);
+  vm.runInContext(read('planner/page/syllabus.js'), p.ctx);
   p.ctx.GZ_SYL_UI.sync(true);
   await settle(12);
   byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');
@@ -1312,7 +1312,7 @@ test('Ultra syllabus import: closing while the importer loads never starts the f
   const reads = [], got = [];
   let held;
   const p = await docsPage({ read: async (file) => { reads.push(file.name); return { text: SYL_TEXT }; } },
-    { '/bbcswebdav/pid-9504-': served(got, 2048, 'application/pdf') }, (p) => { held = holdSylNeed(p, 'features/import.js'); });
+    { '/bbcswebdav/pid-9504-': served(got, 2048, 'application/pdf') }, (p) => { held = holdSylNeed(p, 'planner/page/import.js'); });
   await p.pick('Math Syllabus');
   assert.equal(held.length, 1);
   p.dlg.close();
@@ -1375,7 +1375,7 @@ test('Ultra syllabus import: the document is chosen at the click, before the tex
   const got = [];
   let held;
   const p = await docsPage({ read: async () => ({ text: SYL_TEXT }), note: () => '', doubt: () => false },
-    { '/bbcswebdav/': served(got, 2048, 'application/pdf') }, (p) => { held = holdSylNeed(p, 'lib/doctext.js'); });
+    { '/bbcswebdav/': served(got, 2048, 'application/pdf') }, (p) => { held = holdSylNeed(p, 'core/doctext.js'); });
   await p.pick('Math Syllabus');
   p.doc.getElementById('gz-syl-doc').value = '2'; // Welcome, with no new read click.
   held.shift()();
@@ -1386,7 +1386,7 @@ test('Ultra syllabus import: the document is chosen at the click, before the tex
 
 // Small bounds exercise the exact byte-limit behavior without allocating large files.
 const smallSylLimit = (p) => {
-  vm.runInContext(read('lib/doctext.js'), p.ctx);
+  vm.runInContext(read('core/doctext.js'), p.ctx);
   p.ctx.GZ_DOCTEXT.READ.pdf = 8;
 };
 const streamedSylFile = (length) => {
@@ -1499,7 +1499,7 @@ test('Ultra syllabus import: multiple OCR results retain weighted confidence, un
 // Codex B4 #3: Ultra moves from course to course in one document; what's saved belongs to the course on the page.
 const sylPage = () => {
   const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': { results: [] } } });
-  vm.runInContext(read('features/syllabus.js'), p.ctx);
+  vm.runInContext(read('planner/page/syllabus.js'), p.ctx);
   return { ...p, S: p.ctx.GZ_SYL_UI, dlg: () => p.doc.getElementById('gz-syl-dlg') };
 };
 const pasteAndRead = async (p, text) => {
@@ -1696,7 +1696,7 @@ const weeksPage = async ({ course = () => {}, answers = {} } = {}) => {
   const mem = ufix('memberships').results;
   for (const m of mem) course(m.course);
   p.ctx.GZ_CTX.myCourses = () => Promise.resolve(mem);
-  vm.runInContext(read('features/syllabus.js'), p.ctx);
+  vm.runInContext(read('planner/page/syllabus.js'), p.ctx);
   p.ctx.GZ_SYL_UI.sync(true);
   await settle(12);
   byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');

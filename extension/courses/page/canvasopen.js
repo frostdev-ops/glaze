@@ -1,9 +1,9 @@
 // Canvas's files in Glaze's viewers (enhance.bbPreviews, Settings → Documents → Previews in Glaze; each kind only while its
-// Settings → Writer switch is on: writer.pdf, writer.slides, writer.sheets), loaded on demand: features/docs.js loads this on a
+// Settings → Writer switch is on: writer.pdf, writer.slides, writer.sheets), loaded on demand: courses/page/docs.js loads this on a
 // Canvas page with a file preview or a file link and hands it each pass. A .pdf, .pptx, .ppsx, .xlsx or .csv file's preview (the file page's
 // #doc_preview, Files' preview at ?preview=) gets Open in Glaze among the document buttons; a link to one (a module's File
 // row, a file link in a page) gets it beside the link. Only the click reads the file: Canvas's API names it and signs its
-// address, and the worker's byte port reads it (features/download.js canvasFile, Download all's path; a file server Glaze
+// address, and the worker's byte port reads it (courses/page/download.js canvasFile, Download all's path; a file server Glaze
 // doesn't hold is asked for first, in Glaze's Allow frame). Glaze's viewer (writer.html in view mode, the kind's show) loads
 // out of sight beside Canvas's preview, or below the link, on the one-use pass the worker gives a Canvas page
 // ('glaze:canvas-view'), and once drawn takes the preview's place, or opens. Anything else keeps Canvas's preview and the
@@ -13,10 +13,10 @@ var GZ_CANVAS_OPEN = globalThis.GZ_CANVAS_OPEN || (() => {
   const X = globalThis.GZ_CTX;
   if (!X || X.site !== 'canvas') return null;
   const html = document.documentElement;
-  const HEIGHT = 'max(640px, calc(100vh - 120px))'; // an assignment's paper, as Ultra's previews (features/bbpreview.js)
+  const HEIGHT = 'max(640px, calc(100vh - 120px))'; // an assignment's paper, as Ultra's previews (courses/page/bbpreview.js)
   const SHOW = 30000; // the viewer drawn within this, or Canvas's preview stays
   // The kinds a file opens as, by extension, with the Writer switch each needs and the largest file each reads
-  // (lib/doc-kinds.js KINDS max).
+  // (documents/doc-kinds.js KINDS max).
   const KINDS = { pdf: { kind: 'pdf', on: 'pdf', max: 50e6 }, pptx: { kind: 'slides', on: 'slides', max: 50e6 }, ppsx: { kind: 'slides', on: 'slides', max: 50e6 },
     xlsx: { kind: 'sheet', on: 'sheets', max: 15e6 }, csv: { kind: 'sheet', on: 'sheets', max: 15e6 } };
   const MIMES = { 'application/pdf': 'pdf', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx', 'application/vnd.openxmlformats-officedocument.presentationml.slideshow': 'ppsx',
@@ -64,7 +64,7 @@ var GZ_CANVAS_OPEN = globalThis.GZ_CANVAS_OPEN || (() => {
     return out;
   };
 
-  // ---- the Look as the frame wears it (features/bbpreview.js look)
+  // ---- the Look as the frame wears it (courses/page/bbpreview.js look)
   const TOKENS = [...GZ_COLORS.map(([k]) => k), '--gz-radius', '--gz-font', '--gz-ground', '--gz-surface-paint', '--gz-surface-paint-2', '--gz-surface-opacity', '--gz-glass-mix', '--gz-border-line', '--gz-border-strong'];
   const look = () => {
     const cs = getComputedStyle(html), bg = html.getAttribute('data-gz-bg'), glass = !!bg && bg !== 'solid';
@@ -168,7 +168,7 @@ var GZ_CANVAS_OPEN = globalThis.GZ_CANVAS_OPEN || (() => {
     v.button.setAttribute('aria-busy', 'true');
     label(v, X.t('Open in Glaze'));
     try {
-      await X.need('features/download.js', () => globalThis.GZ_DOWNLOAD);
+      await X.need('courses/page/download.js', () => globalThis.GZ_DOWNLOAD);
       const f = await GZ_DOWNLOAD.canvasFile(v.id, { signal: ctl.signal, max: v.type.max, beside: v.button });
       if (v.ctl !== ctl || !live(v)) return;
       v.ctl = null;
@@ -211,7 +211,7 @@ var GZ_CANVAS_OPEN = globalThis.GZ_CANVAS_OPEN || (() => {
     for (const v of [...views.values()]) if (v !== pv && (!seen.has(v.key) || !v.link.isConnected)) drop(v);
     for (const v of views.values()) if (v.gz && !v.gz.isConnected) close(v);
   };
-  // The round button for the preview on screen, for features/docs.js's group, or null.
+  // The round button for the preview on screen, for courses/page/docs.js's group, or null.
   const previewButton = () => (pv && pv.frame.isConnected ? pv.button : null);
   // What a check reads: each view's state.
   const state = () => [...views.values()].map((v) => ({ key: v.key, name: v.name, kind: v.type.kind, round: v.round, shown: v.shown, state: v.button.getAttribute('data-gz-co') || '' }));

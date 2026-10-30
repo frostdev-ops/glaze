@@ -1,6 +1,6 @@
 // Moodle's data, read: what its own dashboard asks of /lib/ajax/service.php, and its server-rendered grades overview.
 // Pure, so node can test it. Classic script for the content script; module.exports for node.
-// Loaded on demand (content.js moodleIn), before features/moodle.js: a second injection into the same frame keeps the first.
+// Loaded on demand (content.js moodleIn), before courses/page/moodle.js: a second injection into the same frame keeps the first.
 var GZ_MOODLE = globalThis.GZ_MOODLE || (() => {
   // A request to service.php, as Moodle's own pages send it, and its answer: [{ error, data, exception }].
   const call = (methodname, args) => [{ index: 0, methodname, args }];
@@ -86,5 +86,5 @@ var GZ_MOODLE = globalThis.GZ_MOODLE || (() => {
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how
-// lib/background.js knows it ran to the end.
+// background/background.js knows it ran to the end.
 if (typeof module !== 'undefined') module.exports = GZ_MOODLE; else GZ_MOODLE;

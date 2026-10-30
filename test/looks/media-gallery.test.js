@@ -1,14 +1,14 @@
-// Media backgrounds pinned by hash: a gallery Look's `file:<h>` fetched from the gallery's one address (lib/media.js
+// Media backgrounds pinned by hash: a gallery Look's `file:<h>` fetched from the gallery's one address (looks/media.js
 // fromGallery, then put with the name it must have), and a mod's background file carried in its signed bundle (`./<path>`,
-// lib/modbundle.js), handed to the page as `mod:<id>/<path>` and served cleaned only for a mod that is on (lib/modbroker.js).
+// mods/modbundle.js), handed to the page as `mod:<id>/<path>` and served cleaned only for a mod that is on (mods/modbroker.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/media.js');
-const X = require('../../extension/lib/lookparts.js');
-const B = require('../../extension/lib/modbroker.js');
-const BUNDLE = require('../../extension/lib/modbundle.js');
+const M = require('../../extension/looks/media.js');
+const X = require('../../extension/looks/lookparts.js');
+const B = require('../../extension/mods/modbroker.js');
+const BUNDLE = require('../../extension/mods/modbundle.js');
 
 const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
 const b64 = (bytes) => Buffer.from(bytes).toString('base64');
@@ -20,7 +20,7 @@ const area = (data = {}) => ({
   async set(p) { Object.assign(data, structuredClone(p)); return true; },
   async remove(k) { for (const x of [].concat(k)) delete data[x]; return true; },
 });
-// Where the worker keeps a Look's files (lib/media.js): an index in storage.local and the records in its files store.
+// Where the worker keeps a Look's files (looks/media.js): an index in storage.local and the records in its files store.
 const keeping = () => {
   const records = new Map();
   return { records, local: area(), files: { get: async (h) => structuredClone(records.get(h)), put: async (h, v) => { records.set(h, v); }, del: async (hs) => { for (const h of hs) records.delete(h); }, keys: async () => [...records.keys()] } };

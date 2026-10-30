@@ -1,13 +1,13 @@
-// Mod tools (lib/modtools.js): mod.json's `tools`, checked as strictly as the rest of mod.json; each source's fields held to
-// what lib/modbroker.js answers with; the declarative runner; the descriptors the tool registry lists; and the editor's
-// consent lines for them (lib/editor-mods.js).
+// Mod tools (mods/modtools.js): mod.json's `tools`, checked as strictly as the rest of mod.json; each source's fields held to
+// what mods/modbroker.js answers with; the declarative runner; the descriptors the tool registry lists; and the editor's
+// consent lines for them (settings/editor-mods.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../../extension/lib/modtools.js');
-const B = require('../../extension/lib/modbroker.js');
-const S = require('../../extension/lib/ai/schema.js');
-const R = require('../../extension/lib/ai/request.js');
-const E = require('../../extension/lib/editor-mods.js');
+const T = require('../../extension/mods/modtools.js');
+const B = require('../../extension/mods/modbroker.js');
+const S = require('../../extension/ai/schema.js');
+const R = require('../../extension/ai/request.js');
+const E = require('../../extension/settings/editor-mods.js');
 
 const ID = 'abcdefghijklmnop';
 const SITE = 'https://school.instructure.com';
@@ -25,7 +25,7 @@ const said = (f) => (e) => e instanceof Error && e.why === "That mod's mod.json 
   && e.message === `That mod's mod.json has a value Glaze can't use (${f}).`;
 const refuses = (tools, f, manifest = MANIFEST) => assert.throws(() => T.clean(tools, manifest), said(f), `${JSON.stringify(tools).slice(0, 160)} → ${f}`);
 
-test('each source\'s fields are the keys lib/modbroker.js answers with, in its order', async () => {
+test('each source\'s fields are the keys mods/modbroker.js answers with, in its order', async () => {
   const data = {
     todoCache: { key: `todo:${SITE}/5`, items: [{ type: 'assignment', id: '9', cid: '42', course: 'Chem', title: 'Lab', at: 1700000000000, url: '/courses/42/assignments/9', sub: { submitted: true }, ov: { done: true } }] },
     seenCourses: { [`canvas:${SITE}/42`]: { name: 'Chem', code: 'CH', color: '#aabbcc' } },
@@ -270,15 +270,15 @@ test('editor: the agents permission, one line per tool saying where its data com
   assert.equal(E.plain({ ...widget, tools: [] }), true);
 });
 
-test('the editor loads the schema subset and lib/modtools.js before lib/modbundle.js, which work there as classic scripts', () => {
+test('the editor loads the schema subset and mods/modtools.js before mods/modbundle.js, which work there as classic scripts', () => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
   const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
   const html = read('options.html');
-  const at = ['lib/ai/schema.js', 'lib/modtools.js', 'lib/modbundle.js', 'lib/editor-mods.js'].map((f) => html.indexOf(`<script src="${f}"></script>`));
+  const at = ['ai/schema.js', 'mods/modtools.js', 'mods/modbundle.js', 'settings/editor-mods.js'].map((f) => html.indexOf(`<script src="${f}"></script>`));
   assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), String(at));
   // No require on a page: each finds the others as globals.
   const ctx = vm.createContext({ crypto: globalThis.crypto, TextEncoder, TextDecoder, btoa, atob, URL });
-  for (const f of ['lib/ai/schema.js', 'lib/modtools.js', 'lib/modbundle.js']) vm.runInContext(read(f), ctx, { filename: f });
+  for (const f of ['ai/schema.js', 'mods/modtools.js', 'mods/modbundle.js']) vm.runInContext(read(f), ctx, { filename: f });
   const manifest = { ...MANIFEST, author: { name: 'Kai', key: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo' }, tools: [DUE, ASK] };
   const got = vm.runInContext('(m) => { const c = GZ_MODBUNDLE.clean(m, { "hooks.js": new Uint8Array([49]) }); return JSON.stringify([c === m, GZ_MODBUNDLE.caps(m)]); }', ctx)(manifest);
   assert.deepEqual(JSON.parse(got), [true, ['agents', 'todo', 'courses', 'grades', 'code', 'tool:due_soon@todo', 'tool:ask_garden@code']]);

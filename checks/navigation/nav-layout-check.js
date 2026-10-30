@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const src = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://moodle.school.test/*']); // the id is made from the real path
@@ -62,7 +62,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
     await opts.evaluate(async () => { await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'] }); });
-    // The site's own nav: Glaze's bar (on by default, features/navbar.js) wears a layout in its place (test/navigation/navbar.test.js, navbar-check.js).
+    // The site's own nav: Glaze's bar (on by default, navigation/page/navbar.js) wears a layout in its place (test/navigation/navbar.test.js, navbar-check.js).
     const settings = G.GZ_SANITIZE({ preset: 'Paper', colors: G.GZ_PRESET('Paper'), motion: { level: 'off' }, navbar: { on: false } });
     // Settings only: the Look's parts are saved by wear(), and a write here must not take them away.
     const store = (s) => opts.evaluate(async (s) => { await chrome.storage.sync.set(s); }, s);
@@ -84,7 +84,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     const shot = (page, name) => page.screenshot({ path: path.join(out, `${name}.png`) });
     // The visual order of a bar is the DOM order, so the focus order follows what is seen.
     const leftToRight = (list) => `(() => { const xs = [...document.querySelectorAll(${JSON.stringify(list)} + ' a[href], ' + ${JSON.stringify(list)} + ' button')].filter((e) => e.getClientRects().length).map((e) => e.getBoundingClientRect().left); return xs.length > 2 && xs.every((x, i) => !i || x >= xs[i - 1]); })()`;
-    const M = require(path.join(ext, 'lib/modbundle.js'));
+    const M = require(path.join(ext, 'mods/modbundle.js'));
     const mod = await M.pack({}, { glaze: 1, name: 'Nav rail check', version: '1.0.0', author: { name: 'Glaze check' },
       ui: { rail: [{ id: 'check', name: 'Rail check', blocks: [{ type: 'text', text: 'Rail widget check' }] }] } }, await M.makeKey());
     const record = { id: mod.id, manifest: mod.manifest, files: Object.fromEntries(Object.entries(mod.files).map(([k, v]) => [k, M.std(v)])),
@@ -148,7 +148,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
       await page.waitForTimeout(500);
       await wear(page, null);
       await until(page, `document.querySelector('${LIST}').outerHTML`, (v) => v === baseline, 'Ultra: taking the Look off puts the student\'s own nav back exactly');
-      ok(await page.evaluate(`!document.documentElement.hasAttribute('data-gz-nav-place') && !document.querySelector('[data-gz-nav-shell], .gz-nav-group, link[href$="features/navlayout.css"]')`), 'Ultra: no placement, label or sheet is left behind');
+      ok(await page.evaluate(`!document.documentElement.hasAttribute('data-gz-nav-place') && !document.querySelector('[data-gz-nav-shell], .gz-nav-group, link[href$="navigation/page/navlayout.css"]')`), 'Ultra: no placement, label or sheet is left behind');
       const native = await page.evaluate(() => {
         const nav = document.querySelector('nav[data-gz-nav-root]').cloneNode(true);
         nav.querySelector('a[href="#glaze"]').closest('li').remove();

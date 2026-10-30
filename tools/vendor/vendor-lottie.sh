@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild lib/lottie/: the official lottie-web player (MIT, lib/lottie/LICENSE), only its light canvas build, the one lib/scene-media.js
+# Rebuild vendor/lottie/: the official lottie-web player (MIT, vendor/lottie/LICENSE), only its light canvas build, the one looks/scene-media.js
 # and the sticker player import for a Lottie animation. "Light" leaves out expressions, the only part of lottie-web that
 # evaluates text as code, so the player never runs anything a file says; "canvas" draws into one <canvas> instead of
 # building an SVG tree in the page. The file is Bodymovin's readable build/player/lottie_light_canvas.js as published, not
@@ -25,11 +25,11 @@ tar -xzf "$tmp/lottie.tgz" -C "$tmp"
 src="$tmp/package"
 echo "$file_sha256  $src/build/player/lottie_light_canvas.js" | shasum -a 256 -c - >/dev/null
 
-rm -rf lib/lottie
-mkdir -p lib/lottie
+rm -rf vendor/lottie
+mkdir -p vendor/lottie
 { echo "// lottie-web $version light canvas build (MIT, lib/lottie/LICENSE), as published after this line but for one cut. Fetched by scripts/vendor-lottie.sh."
-  cat "$src/build/player/lottie_light_canvas.js"; } > lib/lottie/lottie_light_canvas.js
-node - lib/lottie/lottie_light_canvas.js <<'EOF'
+  cat "$src/build/player/lottie_light_canvas.js"; } > vendor/lottie/lottie_light_canvas.js
+node - vendor/lottie/lottie_light_canvas.js <<'EOF'
 const fs = require('node:fs');
 const file = process.argv[2];
 const src = fs.readFileSync(file, 'utf8');
@@ -38,8 +38,8 @@ const hits = src.match(worker)?.length ?? 0;
 if (hits !== 1) throw new Error(`${file}: lottie's createWorker changed (${hits} matches); update this cut`);
 fs.writeFileSync(file, src.replace(worker, '\n$1// scripts/vendor-lottie.sh cut the Web Worker built from this function\'s text: Glaze never turns it on.'));
 EOF
-echo "$out_sha256  lib/lottie/lottie_light_canvas.js" | shasum -a 256 -c - >/dev/null || {
-  echo "vendor-lottie: lib/lottie/lottie_light_canvas.js is not the recorded out_sha256; if you upgraded on purpose, record its hash." >&2; exit 1; }
-cp "$src/LICENSE.md" lib/lottie/LICENSE
+echo "$out_sha256  vendor/lottie/lottie_light_canvas.js" | shasum -a 256 -c - >/dev/null || {
+  echo "vendor-lottie: vendor/lottie/lottie_light_canvas.js is not the recorded out_sha256; if you upgraded on purpose, record its hash." >&2; exit 1; }
+cp "$src/LICENSE.md" vendor/lottie/LICENSE
 
-echo "lib/lottie: lottie-web $version light canvas ($(du -h lib/lottie/lottie_light_canvas.js | cut -f1), $(gzip -9 < lib/lottie/lottie_light_canvas.js | wc -c | awk '{printf "%.0f KB", $1/1024}') gzipped)"
+echo "vendor/lottie: lottie-web $version light canvas ($(du -h vendor/lottie/lottie_light_canvas.js | cut -f1), $(gzip -9 < vendor/lottie/lottie_light_canvas.js | wc -c | awk '{printf "%.0f KB", $1/1024}') gzipped)"

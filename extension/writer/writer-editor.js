@@ -2,7 +2,7 @@
 // Markdown and typography input rules, and the commands a toolbar runs by name. The frame draws the UI around it;
 // proofing and ghost text come in as plugins, ahead of these so their keys win. Commands, keys and input rules work on an
 // EditorState alone (node tests); only create() needs a page.
-// Classic script after lib/pm.js and lib/writer-schema.js; module.exports for node.
+// Classic script after vendor/pm.js and writer/writer-schema.js; module.exports for node.
 var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
   const S = typeof GZ_WRITER_SCHEMA !== 'undefined' ? GZ_WRITER_SCHEMA : require('./writer-schema.js');
   const { EditorState, TextSelection, Plugin } = GZ_PM.state;

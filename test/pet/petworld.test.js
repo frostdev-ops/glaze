@@ -1,6 +1,6 @@
-// features/petworld.js in a VM with a stand-in DOM, virtual time and a seeded random: the loop the pet runs while it is on the page.
+// pet/page/petworld.js in a VM with a stand-in DOM, virtual time and a seeded random: the loop the pet runs while it is on the page.
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
-const P = require('../../extension/lib/pet.js'), { El } = require('../stand-in-dom.js');
+const P = require('../../extension/pet/pet.js'), { El } = require('../stand-in-dom.js');
 
 const world = ({ record = { earned: { 'work:assignment:1': 20 } }, seed = 1 } = {}) => {
   let state = seed;
@@ -16,7 +16,7 @@ const world = ({ record = { earned: { 'work:assignment:1': 20 } }, seed = 1 } = 
   let reads = 0; const rect = stage.getBoundingClientRect.bind(stage); stage.getBoundingClientRect = () => { reads++; return rect(); };
   const saved = [], data = P.view(record);
   const c = { document: doc, console, Math: M, Date, Object, Array, Number, String, Map, Set, WeakMap, Promise, JSON, Error, RegExp, Infinity, NaN, isFinite, parseFloat,
-    GZ_PET: P, GZ_PET_BRAIN: require('../../extension/lib/petbrain.js'), GZ_PET_PHYSICS: require('../../extension/lib/petphysics.js'),
+    GZ_PET: P, GZ_PET_BRAIN: require('../../extension/pet/petbrain.js'), GZ_PET_PHYSICS: require('../../extension/pet/petphysics.js'),
     GZ_WIDGETS_UI: { avatar: () => ({ play() {}, sleep() {}, wake() {}, stop() {} }) },
     location: { pathname: '/' }, innerWidth: 1000, innerHeight: 700, scrollX: 0, scrollY: 0,
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }), MutationObserver: class { observe() {} disconnect() {} },
@@ -26,7 +26,7 @@ const world = ({ record = { earned: { 'work:assignment:1': 20 } }, seed = 1 } = 
     addEventListener: (type, f) => winEvents.push({ type, f }), removeEventListener() {},
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://x/${p}` }, storage: { local: { get: (k, cb) => cb({}) }, onChanged: { addListener() {}, removeListener() {} } } } };
   c.window = c; c.globalThis = c; vm.createContext(c);
-  const W = vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/petworld.js'), 'utf8'), c);
+  const W = vm.runInContext(fs.readFileSync(require.resolve('../../extension/pet/page/petworld.js'), 'utf8'), c);
   const key = 'pet:https://x.test/1';
   W.mount(stage, { key, data, t: (k) => k, save: async (patch) => { saved.push(patch); return { ok: true, data }; } });
   const actor = stage.children.find((e) => e.className === 'gz-game-actor');

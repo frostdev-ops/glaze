@@ -1,5 +1,5 @@
 // Reading a file for the import dialogs (W14 class schedule, W15 syllabus, W16 transcript), loaded on demand by them,
-// on the device: text, web pages, Word and PowerPoint here (lib/doctext.js); PDFs and pictures (PNG, JPEG, WebP, HEIC
+// on the device: text, web pages, Word and PowerPoint here (core/doctext.js); PDFs and pictures (PNG, JPEG, WebP, HEIC
 // where the browser opens it) in Glaze's reader, an extension page in a hidden frame (reader.html), since pdf.js and
 // the OCR engine need workers and WebAssembly that the LMS page's CSP won't give a content script. The file goes to
 // the frame over a MessageChannel of its own and the text comes back on it; the frame is removed when the read ends,
@@ -10,7 +10,7 @@ var GZ_IMPORT = globalThis.GZ_IMPORT || (() => {
   const t = (k, v) => X.t(k, v);
   const D = () => globalThis.GZ_DOCTEXT;
   const MAX = 32 << 20; // a text, web page, Word or PowerPoint file
-  // The OCR models for the page's language, beside English (lib/tesseract/).
+  // The OCR models for the page's language, beside English (vendor/tesseract/).
   const MODEL = { de: 'deu', es: 'spa', fr: 'fra', nl: 'nld', pt: 'por' };
   // An error whose words are for the student.
   const oops = (msg) => Object.assign(new Error(msg), { mine: true });
@@ -27,7 +27,7 @@ var GZ_IMPORT = globalThis.GZ_IMPORT || (() => {
     }[code] || t("Glaze couldn't read that file.");
   };
 
-  // The reader in a hidden frame for one file, with a one-use pass from the worker (lib/background.js 'glaze:reader')
+  // The reader in a hidden frame for one file, with a one-use pass from the worker (background/background.js 'glaze:reader')
   // that only Glaze can get, so the reader works for this import and nothing else.
   // → { text, pages, ocr: { pages, conf, unsure, blank } | null }
   const cancelled = () => Object.assign(new Error('cancelled'), { cancelled: true });
@@ -67,7 +67,7 @@ var GZ_IMPORT = globalThis.GZ_IMPORT || (() => {
   // has got. → { text, pages, ocr } (ocr: null unless some of it was read from a picture). Throws an error for the
   // student (mine), or one that says it was called off (cancelled).
   const read = async (file, { signal, progress = () => {} } = {}) => {
-    await X.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT);
+    await X.need('core/doctext.js', () => globalThis.GZ_DOCTEXT);
     const kind = D().kind(file.name, file.type, new Uint8Array(await file.slice(0, 16).arrayBuffer()));
     let last = '';
     if (kind === 'pdf' || kind === 'image') return frame(file, kind, signal, (m) => { const s = say(m); if (s !== last) progress(last = s); });

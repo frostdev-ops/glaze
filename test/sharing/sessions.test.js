@@ -5,16 +5,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const vm = require('node:vm');
-const G = require('../../extension/lib/sharing.js');
-const S = require('../../extension/lib/sessions.js');
-const R = require('../../extension/lib/relay.js');
-const N = require('../../extension/lib/notes.js');
-const T = require('../../extension/lib/todo.js');
-const K = require('../../extension/lib/cards.js');
+const G = require('../../extension/sharing/sharing.js');
+const S = require('../../extension/sharing/sessions.js');
+const R = require('../../extension/sharing/relay.js');
+const N = require('../../extension/planner/notes.js');
+const T = require('../../extension/planner/todo.js');
+const K = require('../../extension/courses/cards.js');
 const { relay, diskStore } = require('../../server/relay.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const NK = 'notesIdx:https://school.instructure.com/5', TK = 'todo:https://school.instructure.com/5';
-// Entity ids are the ones Glaze makes (lib/sessions.js ENTITY): a note's UUID, and a To Do task's 13 characters of one.
+// Entity ids are the ones Glaze makes (sharing/sessions.js ENTITY): a note's UUID, and a To Do task's 13 characters of one.
 const SHARED = '6c1d2f4e-8a3b-4c5d-9e6f-0a1b2c3d4e5f';
 const clone = (x) => x === undefined ? x : structuredClone(x);
 const localArea = (data = {}) => ({ data, get: async (keys) => Object.fromEntries([].concat(keys ?? Object.keys(data)).filter((k) => k in data).map((k) => [k, clone(data[k])])),
@@ -354,7 +354,7 @@ test('disconnect during catch-up does not restart the live connection', async (t
 });
 
 test('key-bearing import/export runs only in extension pages; LMS actions route without carrying keys', () => {
-  const notes = read('features/notes.js');
+  const notes = read('planner/page/notes.js');
   const start = notes.indexOf('  const exportAll =');
   assert.match(notes.slice(start), /glaze:sessions-open/);
   assert.doesNotMatch(notes.slice(start), /exportKeys|importKeys|shareKeys|createObjectURL|GZ_ZIP/);
@@ -363,16 +363,16 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   assert.match(page, /Includes all share keys and creator delete tokens/);
   // Only the Notes share panel is framed into LMS pages; Settings never is.
   assert.deepEqual(require('../../extension/manifest.json').web_accessible_resources.flatMap((e) => e.resources.filter((p) => p.startsWith('sharing/'))), ['sharing/quick.html']);
-  const ui = read('lib/sessions-ui.js');
+  const ui = read('sharing/sessions-ui.js');
   assert.match(ui, /const human = \(e\) => e\.isTrusted/);
   assert.match(ui, /if \(!human\(e\) \|\| busy \|\| !state\) return;/);
-  const options = read('options.js');
+  const options = read('settings/options.js');
   for (const id of ['export', 'import']) assert.match(options, new RegExp(`\\$\\('#${id}'\\)\\.addEventListener\\('(?:click|change)', async \\(e\\) => \\{\\n    if \\(!e\\.isTrusted`), id);
   const quick = read('sharing/quick.js');
   assert.match(quick, /!e\.isTrusted/);
   assert.doesNotMatch(quick, /\bconfirm\(|parent\.|top\./, 'a framed panel asks inline and posts nothing to the page');
   assert.doesNotMatch(notes, /type: 'glaze:sessions'|op: 'link'/, 'the LMS world only frames the panel; it never asks the worker for a link');
-  // The default relay is held from the start; another https relay or a local one is asked for when it's set (lib/sessions-ui.js).
+  // The default relay is held from the start; another https relay or a local one is asked for when it's set (sharing/sessions-ui.js).
   const m = require('../../extension/manifest.json');
   assert.ok(m.host_permissions.includes('https://share.frostdev.io/*'));
   for (const p of ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*']) assert.ok(m.optional_host_permissions.includes(p), p);
@@ -382,11 +382,11 @@ test('session worker accepts only exact extension pages; an LMS or another exten
   const listeners = [], imported = [];
   const area = localArea();
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa,
-    importScripts: (...files) => { for (const f of files) { imported.push(f); vm.runInContext(read(`lib/${f}`), ctx); } }, navigator: {},
+    importScripts: (...files) => { for (const f of files) { imported.push(f); vm.runInContext(read(`background/${f}`), ctx); } }, navigator: {},
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   const send = (op, url, id = 'glaze', extra = {}, rest = {}) => new Promise((resolve) => {
     for (const f of listeners) if (f({ type: 'glaze:sessions', op, ...rest }, { id, url, frameId: 0, tab: {}, ...extra }, resolve) === true) return;
   });
@@ -408,11 +408,11 @@ test('E1 Settings is the session caller in its exact top frame; the Notes panel 
   const scopes = [], listeners = [], handled = [], area = localArea();
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     GZ_SESSIONS: { make: () => ({ handle: async (m) => { handled.push(m.op); scopes.push(m.scope); return { ok: true }; } }) },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   const editor = { id: 'glaze', url: 'chrome-extension://glaze/options.html#sharing/relay', origin: 'chrome-extension://glaze', frameId: 0 };
   const send = (op, sender = editor, rest = {}) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op, server: 'http://127.0.0.1:8787', ...rest }, sender, resolve) === true) return; });
   for (const sender of [{ ...editor, frameId: 1 }, { ...editor, origin: 'https://school.instructure.com' }, { ...editor, id: 'other' },
@@ -449,11 +449,11 @@ test('E1 synced relay changes refresh an open Sharing tab without scheduling net
   const changes = [], messages = [], connections = [], area = localArea(); let network = 0;
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     GZ_SESSIONS: { make: () => ({ connect: () => () => {}, changed: () => network++ }) },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (fn) => connections.push(fn) } },
       storage: { local: area, sync: area, onChanged: { addListener: (fn) => changes.push(fn) } } } });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   for (const connect of connections) connect({ name: 'glaze:sessions', sender: { id: 'glaze', url: 'chrome-extension://glaze/options.html', origin: 'chrome-extension://glaze', frameId: 0 },
     onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, postMessage: (message) => messages.push(message), disconnect() {} });
   await new Promise(setImmediate);
@@ -462,13 +462,13 @@ test('E1 synced relay changes refresh an open Sharing tab without scheduling net
 });
 
 test('E1 editor nickname writes sanitize one course against current stored preferences', async () => {
-  const listeners = [], area = localArea({ courses: { ...require('../../extension/defaults.js').GZ_SANITIZE().courses, colors: { '_2_1': '#123456' }, names: { '_2_1': 'Keep me' } } });
+  const listeners = [], area = localArea({ courses: { ...require('../../extension/content/defaults.js').GZ_SANITIZE().courses, colors: { '_2_1': '#123456' }, names: { '_2_1': 'Keep me' } } });
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   const sender = { id: 'glaze', url: 'chrome-extension://glaze/options.html', origin: 'chrome-extension://glaze', frameId: 0 };
   const send = (name, extra = {}) => new Promise((resolve) => {
     for (const f of listeners) if (f({ type: 'glaze:courseName', id: '_1_1', name }, { ...sender, ...extra }, resolve) === true) return;
@@ -488,11 +488,11 @@ test('Pause interrupts a running sync before waiting in the sessions\' queue', a
   const gate = new Promise((r) => { release = r; }), ready = new Promise((r) => { entered = r; });
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa,
     GZ_SESSIONS: { make: () => ({ handle: async (m) => { if (m.op === 'sync') { syncs++; entered(); await gate; } return { ok: true }; }, stop: () => { stopped++; release(); } }) },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); }, navigator: {},
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), ctx); }, navigator: {},
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   const send = (op) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op }, { id: 'glaze', url: 'chrome-extension://glaze/options.html', origin: 'chrome-extension://glaze', frameId: 0 }, resolve) === true) return; });
   const pending = send('sync'); await ready;
   const queued = send('sync');
@@ -511,11 +511,11 @@ test('a session operation waiting on the relay never holds up the storage broker
   const gate = new Promise((r) => { release = r; }), ready = new Promise((r) => { entered = r; });
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     GZ_SESSIONS: { make: () => ({ handle: async (m) => { if (m.op === 'sync') { entered(); await gate; } return { ok: true }; }, stop() {} }) },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   const editor = { id: 'glaze', url: 'chrome-extension://glaze/options.html', origin: 'chrome-extension://glaze', frameId: 0 };
   const send = (m) => new Promise((resolve) => { for (const f of listeners) if (f(m, editor, resolve) === true) return; });
   const syncing = send({ type: 'glaze:sessions', op: 'sync' }); await ready;
@@ -617,7 +617,7 @@ test('disk relay: custom tasks carry only cleaned task/plan fields; joined Looks
 test('a Look session shares the Look with its parts as a glaze2 code, and plain Looks stay glaze1', async (t) => {
   const { url } = await start(t), a = device(url), b = device(url);
   t.after(() => { a.worker.stop(); b.worker.stop(); });
-  const X = require('../../extension/lib/lookparts.js'), L = require('../../extension/lib/share.js');
+  const X = require('../../extension/looks/lookparts.js'), L = require('../../extension/sharing/share.js');
   const parts = { x: { cursor: { kind: 'glow', size: 14 } } };
   Object.assign(a.settings.data, { bg: { kind: 'layers' }, lookX: await X.pack(parts) });
   const look = await a.send('create', { kind: 'look', title: 'Glowing' });

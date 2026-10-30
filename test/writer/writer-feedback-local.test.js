@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../../extension/lib/ai/task.js');
-const F = require('../../extension/lib/ai/tasks/writer-feedback.js');
-require('../../extension/lib/ai/providers/mock.js');
+const T = require('../../extension/ai/task.js');
+const F = require('../../extension/ai/tasks/writer-feedback.js');
+require('../../extension/ai/providers/mock.js');
 const raw = () => ({ text: 'School gardens help students learn together. Students measure growth and share their harvest. ' + 'The class shares weekly records and compares the observations together. '.repeat(6) + '\n\nUnselected middle paragraph discusses the calendar and garden equipment.\n\nA final paragraph considers how the class records observations.', grade: true, context: { kind: 'assignment', assignment: {
   instructions: 'Explain the benefit of school gardens.', files: [{ name: 'Prompt.txt', text: 'Support the claim with two concrete examples.' }], rubric: { criteria: [
     { id: 'claim', label: 'Claim', detail: 'Explain the benefit.', points: 40 }, { id: 'examples', label: 'Examples', detail: 'Use two concrete examples.', points: 60 },
@@ -274,7 +274,7 @@ test('real unread source coverage is never overridden to score a known style mis
 });
 
 test('a normalized weighted rubric scores a verified mismatch and repairs all rows within the reserved eleven calls', async () => {
-  const C = require('../../extension/lib/writer-context-assignment.js'), input = weightedStyleInput();
+  const C = require('../../extension/writer/writer-context-assignment.js'), input = weightedStyleInput();
   const levels = input.context.assignment.rubric.levels;
   input.context.assignment.rubric = C.rubricOf({ kind: 'percent', total: 100, levels, criteria: [
     { id: 'org', label: 'Content Organization', weight: 25 }, { id: 'style', label: 'APA style', weight: 25 }, { id: 'content', label: 'Content Quality', weight: 50 },
@@ -304,7 +304,7 @@ test('a normalized weighted rubric scores a verified mismatch and repairs all ro
 });
 
 test('Feedback never presents a selected Writer preset as the assignment citation style', async () => {
-  const X = require('../../extension/lib/ai/text.js');
+  const X = require('../../extension/ai/text.js');
   for (const paper of [true, false]) {
     const input = weightedStyleInput(); input.context.style = 'mla9';
     if (!paper) { input.mode = 'compose'; delete input.paper; }
@@ -347,7 +347,7 @@ test('a complete 31-word contradiction reaches bounded decision reconsideration'
 });
 
 test('possessive apostrophes do not become invented quotations while genuine quoted wording remains grounded', () => {
-  const X = require('../../extension/lib/ai/text.js');
+  const X = require('../../extension/ai/text.js');
   const native = "The student's draft demonstrates satisfactory APA style with a clear heading, date, and formatted text, meeting the rubric's requirements for organization and presentation.";
   for (const comment of [native, native.replaceAll("'", '’')]) assert.equal(F.assesses(comment, [X.source('APA style')]), comment);
   const known = "Your draft addresses 'the student's stated claim' directly.";
@@ -609,7 +609,7 @@ test('local explanations repair leaked output instructions and passage IDs witho
       assert.ok(JSON.parse(block.text).every((entry) => !Object.hasOwn(entry, 'id')), 'the prose phase needs source text, not decision-only IDs');
     }
   }
-  const X = require('../../extension/lib/ai/text.js'), source = X.source('The example d-0 uses 256 estimated tokens and 1024 UTF-8 bytes to return minified JSON only.');
+  const X = require('../../extension/ai/text.js'), source = X.source('The example d-0 uses 256 estimated tokens and 1024 UTF-8 bytes to return minified JSON only.');
   for (const comment of ['Your draft explains JSON tokens and byte encoding.', 'Your draft explains 256 estimated tokens and the example d-0.']) assert.equal(F.assesses(comment, [source]), comment);
 });
 

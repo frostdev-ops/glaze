@@ -1,15 +1,15 @@
 // Glaze's caches for the MCP read tools' tests (test/agents/mcp-tools-*.test.js), made by the code that writes them, from the
-// live-shaped fixtures: Canvas's planner items through features/todo.js load and lib/todo.js change, and its gradebooks (test/fixtures/canvas-grades.json,
-// read from a local Canvas) through lib/insights.js, as features/todo.js and features/insights.js keep them; Ultra's
-// memberships, To Do and gradebook rows (test/fixtures/ultra-*.json) through lib/ultra.js; course caches through the actual
-// content scripts' record functions; each Insights record through lib/insights.js change, as the worker keeps it.
+// live-shaped fixtures: Canvas's planner items through planner/page/todo.js load and planner/todo.js change, and its gradebooks (test/fixtures/canvas-grades.json,
+// read from a local Canvas) through planner/insights.js, as planner/page/todo.js and planner/page/insights.js keep them; Ultra's
+// memberships, To Do and gradebook rows (test/fixtures/ultra-*.json) through courses/ultra.js; course caches through the actual
+// content scripts' record functions; each Insights record through planner/insights.js change, as the worker keeps it.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const T = require('../../extension/lib/todo.js');
-const U = require('../../extension/lib/ultra.js');
-const I = require('../../extension/lib/insights.js');
-const { GZ_COURSES } = require('../../extension/defaults.js');
+const T = require('../../extension/planner/todo.js');
+const U = require('../../extension/courses/ultra.js');
+const I = require('../../extension/planner/insights.js');
+const { GZ_COURSES } = require('../../extension/content/defaults.js');
 
 const load = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', n), 'utf8'));
 const CANVAS = 'https://school.instructure.com', ULTRA = 'https://lms.example.edu', ULTRA_UID = '_900_1';
@@ -28,7 +28,7 @@ const writerArea = (store) => ({
 });
 const planCache = async (origin, uid, at, scope) => {
   const key = T.storeKey(origin, uid), store = {};
-  const load = vm.runInNewContext(part('features/todo.js', '  const load = async (reuse)', '  // Teachers\' grading progress:') + '\nload;', {
+  const load = vm.runInNewContext(part('planner/page/todo.js', '  const load = async (reuse)', '  // Teachers\' grading progress:') + '\nload;', {
     Date: class extends Date { static now() { return at; } }, L: T, o: () => O, who: { tz: TZ }, key, gen: 0, box: {}, cache: null, ...scope,
   });
   const [cache, due] = await load(false);
@@ -45,10 +45,10 @@ const planner = ({ type = 'assignment', id, course = 25, name = 'BIO 1100', titl
   submissions: type === 'planner_note' ? false : { submitted: false, excused: false, graded: false, late: false, missing: false, redo_request: false, ...sub },
   planner_override: ov,
 });
-// storage.local todoCache, as features/todo.js load() makes it on each site.
+// storage.local todoCache, as planner/page/todo.js load() makes it on each site.
 const canvasPlan = (uid, raw, at = NOW - 60e3) => planCache(CANVAS, uid, at, {
   ultra: false, pages: async () => raw, ctx: { canvasCourses: async () => [] },
-  GZ_CANVAS_DUE_WEEK: require('../../extension/defaults.js').GZ_CANVAS_DUE_WEEK,
+  GZ_CANVAS_DUE_WEEK: require('../../extension/content/defaults.js').GZ_CANVAS_DUE_WEEK,
 });
 const memberships = () => load('ultra-memberships.json').results;
 const ultraPlan = (at = NOW - 120e3, complete = true) => {
@@ -64,17 +64,17 @@ const seenCache = (file, start, end, scope) => new Promise((resolve, reject) => 
   Promise.resolve(record()).catch(reject);
 });
 // Both course caches come from the unmodified content-script writer, with only its LMS/extension APIs replaced.
-const ultraSeen = async () => (await seenCache('content-ultra.js', '  const record = ', '  // ---- the gradebook', {
+const ultraSeen = async () => (await seenCache('content/content-ultra.js', '  const record = ', '  // ---- the gradebook', {
   location: { origin: ULTRA }, myCourses: async () => memberships(), GZ_COURSES, courseSlots: {},
 })).seenCourses;
-const canvasSeen = async (list) => (await seenCache('content-canvas.js', '  const COURSE_CACHE = ', '  // ---- code on demand', {
+const canvasSeen = async (list) => (await seenCache('content/content-canvas.js', '  const COURSE_CACHE = ', '  // ---- code on demand', {
   URL, I: { settings: {}, setCourseList: () => {} }, location: { origin: CANVAS },
   sessionStorage: { getItem: () => null, setItem: () => {} }, canvasCourseKey: (id) => `canvas:${CANVAS}/${id}`,
   capi: async (p) => p.startsWith('/courses?') ? list : p === '/users/self/profile' ? { id: '5' }
     : { custom_colors: Object.fromEntries(list.map((c) => [`course_${c.id}`, c.color])) },
 })).seenCourses;
 
-// Insights' courses, as features/insights.js one() makes them: Canvas's from the live gradebooks (named by their code, which
+// Insights' courses, as planner/page/insights.js one() makes them: Canvas's from the live gradebooks (named by their code, which
 // the fixture keeps in place of the name), Ultra's from its gradebook rows.
 const canvasGrades = () => load('canvas-grades.json').courses;
 const canvasCourse = ({ course, groups, periods }, at, more = {}) => {
@@ -105,7 +105,7 @@ const area = (data) => ({
   async get(k) { this.reads.push(k); const keys = k === null ? Object.keys(data) : [].concat(k); return structuredClone(Object.fromEntries(keys.filter((x) => Object.hasOwn(data, x)).map((x) => [x, data[x]]))); },
 });
 const ctx = (store, account, more = {}) => { const local = area(store); return { account, local, keys: async () => Object.keys(store), now: () => NOW, ...more }; };
-// The broker's own answer for a mod on that account's page (lib/modbroker.js CALLS), over the same storage.
+// The broker's own answer for a mod on that account's page (mods/modbroker.js CALLS), over the same storage.
 const broker = (store, account) => {
   const i = account.lastIndexOf('/');
   return { site: account.slice(0, i), account: async () => account.slice(i + 1), local: area(store), keys: async () => Object.keys(store) };

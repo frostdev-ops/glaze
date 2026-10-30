@@ -1,5 +1,5 @@
-// The Documents page in motion (papers.html): Glaze's motion (lib/motion.js on motion.css's knobs) and its pop-up's genie
-// (lib/popup.js) on the list and between the list and a document. Cards glide to their new places when the search, the
+// The Documents page in motion (papers.html): Glaze's motion (core/motion.js on motion.css's knobs) and its pop-up's genie
+// (core/popup.js) on the list and between the list and a document. Cards glide to their new places when the search, the
 // filters, the order or the view change; a deleted one fades where it was while the rest close up; imported, copied and
 // restored ones settle in. The ⋯ menu genies out of its button (Expressive) or settles in, as the rename field and the Undo
 // toast do, and each goes the way it came; the status line pops. papers.js passes each of those changes through here (its
@@ -14,16 +14,16 @@
 // Loaded in papers.html's head, since the page arriving must listen before its first frame. Classic script; the choices
 // are exported for node.
 var GZ_PAPERS_MOTION = globalThis.GZ_PAPERS_MOTION || (() => {
-  const L = globalThis.GZ_POPUP_LIB || (typeof module !== 'undefined' ? require('./lib/popup.js') : null);
+  const L = globalThis.GZ_POPUP_LIB || (typeof module !== 'undefined' ? require('../core/popup.js') : null);
   const KINDS = ['none', 'fade', 'scale', 'genie'];
 
   // ---- the choices
-  // What something coming or going gets: lib/popup.js's motion (the Pop-up animation setting, the page's level and the
+  // What something coming or going gets: core/popup.js's motion (the Pop-up animation setting, the page's level and the
   // system's reduced motion give none, fade, scale or genie), and none while Glaze's transitions or entrances are off.
   const kind = ({ anim = 'genie', level = 'subtle', reduced = false, trans = true, enter = true } = {}) => (L && trans && enter ? L.motion({ anim, level, reduced }) : 'none');
   const route = kind;
   const px = (v) => `${Math.round(v * 10) / 10}px`;
-  // The keyframes and timing that bring `dest` (a box) out of `box`: lib/popup.js's genie where box is on screen (win: the
+  // The keyframes and timing that bring `dest` (a box) out of `box`: core/popup.js's genie where box is on screen (win: the
   // window) and smaller than dest, else its scale (shrink, closing) about box's middle; or its fade. Played forwards to open,
   // backwards (below) to close. → { kind, frames, timing }, or null for none.
   const frames = (k, box, dest, out = false, win = dest) => {
@@ -34,9 +34,9 @@ var GZ_PAPERS_MOTION = globalThis.GZ_PAPERS_MOTION || (() => {
     const origin = seen ? `${px(box.left + box.width / 2 - dest.left)} ${px(box.top + box.height / 2 - dest.top)}` : '50% 50%';
     return { kind: use, frames: L.FRAMES[use].map((f) => (use === 'fade' ? { ...f } : { ...f, transformOrigin: origin })), timing: L.timing(use, out) };
   };
-  // Frames played the other way: offsets mirrored, order reversed (as features/popup.js closes).
+  // Frames played the other way: offsets mirrored, order reversed (as courses/page/popup.js closes).
   const backwards = (list) => list.map((f) => ({ ...f, ...(typeof f.offset === 'number' && { offset: 1 - f.offset }) })).reverse();
-  // The document an address opens (its key under a kind's param, lib/doc-kinds.js) and a New tile's format. → or null.
+  // The document an address opens (its key under a kind's param, documents/doc-kinds.js) and a New tile's format. → or null.
   const address = (search, params = ['paper']) => {
     const q = new URLSearchParams(search || ''), p = params.find((x) => q.get(x));
     return p ? { key: q.get(p), format: q.get('format') || '' } : null;
@@ -78,7 +78,7 @@ var GZ_PAPERS_MOTION = globalThis.GZ_PAPERS_MOTION || (() => {
 
   // ---- on the list
   // The genie between `el` and `source` (its button), forwards or back; null where it doesn't fit (scrolled away, larger).
-  // Opening, it plays on a copy laid over `el`, which waits unseen in its place, as features/popup.js keeps its dialog under
+  // Opening, it plays on a copy laid over `el`, which waits unseen in its place, as courses/page/popup.js keeps its dialog under
   // its sheet: what el holds can be clicked and focused from the first frame. Closing, el itself folds (inert by then).
   const opening = new Map(); // el → { a, hold, done } while its copy opens
   const settling = new Map(); // fade/scale entrances also obey a live Pop-up None
@@ -112,7 +112,7 @@ var GZ_PAPERS_MOTION = globalThis.GZ_PAPERS_MOTION || (() => {
   };
   const rise = (el) => (el.classList.contains('gd-toast') ? { translate: '0 8px' } : {});
   // What papers.js just put on the page (the ⋯ menu, the rename field, the toast): out of `source` with the genie, else in
-  // as Glaze's entrances settle (lib/motion.js enter).
+  // as Glaze's entrances settle (core/motion.js enter).
   const open = (el, source) => {
     if (!el?.isConnected) return;
     const k = kind(now());
@@ -128,7 +128,7 @@ var GZ_PAPERS_MOTION = globalThis.GZ_PAPERS_MOTION || (() => {
     }
   };
   // …and as it goes: back into its source with the genie (a copy still opening turns back, at the closing pace), else fading
-  // (lib/motion.js exit); removed after, or at once.
+  // (core/motion.js exit); removed after, or at once.
   const going = new WeakSet();
   const leave = (el, source) => {
     if (!el?.isConnected || going.has(el)) return;
@@ -163,7 +163,7 @@ var GZ_PAPERS_MOTION = globalThis.GZ_PAPERS_MOTION || (() => {
     if (!M()) { el.textContent = ''; return; }
     M().exit(el, { remove: false }).then(() => { if (turn === said) el.textContent = ''; });
   };
-  // The cards, from where they show to where `change` puts them (lib/motion.js flip): those within a screen of the window.
+  // The cards, from where they show to where `change` puts them (core/motion.js flip): those within a screen of the window.
   // One that leaves fades where it was, on a layer of its own over the list (the list holds only cards); new ones settle in.
   // Still while the list is put back as it was.
   let ghosts = null, still = false;
@@ -308,7 +308,7 @@ var GZ_PAPERS_MOTION = globalThis.GZ_PAPERS_MOTION || (() => {
     const f = frames(current === 'genie' && p.h.kind !== 'genie' ? p.h.kind : current, back ? restOf(sourceOf({ key: p.h.back, format: p.h.format })) : sameSize ? p.h.box : null, view, back, view);
     settle();
     if (!f) { end(p, true); return; }
-    // A crossfade (Fade) is lib/motion.js swap's: at the transitions' pace, the pictures added (motion.css).
+    // A crossfade (Fade) is core/motion.js swap's: at the transitions' pace, the pictures added (motion.css).
     const k = f.kind === 'fade' && M()?.knobs(), timing = k?.fade ? { duration: k.fade, easing: k.ease } : f.timing;
     html.setAttribute('data-gd-route', back ? 'back' : f.kind === 'fade' ? 'fade' : 'open');
     const old = '::view-transition-old(root)', fresh = '::view-transition-new(root)';

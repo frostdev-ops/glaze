@@ -2,8 +2,8 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
-const source = fs.readFileSync(path.join(root, 'features/coursetabs.js'), 'utf8');
-const L = require(path.join(root, 'lib/coursetabs.js'));
+const source = fs.readFileSync(path.join(root, 'navigation/page/coursetabs.js'), 'utf8');
+const L = require(path.join(root, 'navigation/coursetabs.js'));
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const first = '/ultra/courses/_71_1/document/_81_1', next = '/ultra/courses/_71_1/document/_82_1';
 

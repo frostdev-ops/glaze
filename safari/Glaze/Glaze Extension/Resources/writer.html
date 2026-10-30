@@ -5,18 +5,18 @@
      decoders may compile WebAssembly (pdf.js's local worker fallback) and a deck's pictures are blob: URLs (writer-kinds.js). -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Glaze Writer</title>
-<link rel="stylesheet" href="lib/pm.css">
-<link rel="stylesheet" href="writer.css">
-<link rel="stylesheet" href="writer-ai.css">
-<link rel="stylesheet" href="writer-compose.css">
-<link rel="stylesheet" href="writer-proof.css">
-<link rel="stylesheet" href="writer-cite.css">
-<link rel="stylesheet" href="writer-paper.css">
-<link rel="stylesheet" href="writer-submit.css">
-<link rel="stylesheet" href="writer-import.css">
-<link rel="stylesheet" href="writer-objects.css">
-<link rel="stylesheet" href="writer-edit.css">
-<link rel="stylesheet" href="writer-ruler.css">
+<link rel="stylesheet" href="vendor/pm.css">
+<link rel="stylesheet" href="writer/frame/writer.css">
+<link rel="stylesheet" href="writer/frame/writer-ai.css">
+<link rel="stylesheet" href="writer/frame/writer-compose.css">
+<link rel="stylesheet" href="writer/frame/writer-proof.css">
+<link rel="stylesheet" href="writer/frame/writer-cite.css">
+<link rel="stylesheet" href="writer/frame/writer-paper.css">
+<link rel="stylesheet" href="writer/frame/writer-submit.css">
+<link rel="stylesheet" href="writer/frame/writer-import.css">
+<link rel="stylesheet" href="writer/frame/writer-objects.css">
+<link rel="stylesheet" href="writer/frame/writer-edit.css">
+<link rel="stylesheet" href="writer/frame/writer-ruler.css">
 <body>
 <div class="gw" id="gw">
   <div class="gw-body" id="body"></div>
@@ -40,41 +40,41 @@
 <div class="pop menu" id="menu" role="menu" hidden>
   <button type="button" role="menuitem" data-do="native"></button>
 </div>
-<script src="lib/i18n.js"></script>
-<script src="lib/pm.js"></script>
-<script src="lib/writer-schema.js"></script>
-<script src="lib/writer-editor.js"></script>
-<script src="lib/writer-objects.js"></script>
-<script src="lib/writer-sources.js"></script>
-<script src="lib/writer-bibliography.js"></script>
-<script src="lib/writer-cite.js"></script>
-<script src="lib/writer-lookup.js"></script>
-<script src="lib/ai/failure.js"></script>
-<script src="lib/color.js"></script>
-<script src="lib/surfaces.js"></script>
-<script src="lib/fonts.js"></script>
-<script src="defaults.js"></script>
-<script src="lib/writer-settings.js"></script>
-<script src="writer.js"></script>
-<script src="lib/writer-issues.js"></script>
-<script src="lib/writer-proof.js"></script>
-<script src="lib/ai/tasks/writer-context.js"></script>
-<script src="writer-proof.js"></script>
-<script src="writer-ai.js"></script>
-<script src="writer-mcp.js"></script>
-<script src="writer-compose.js"></script>
-<script src="writer-cite.js"></script>
-<script src="writer-paper.js"></script>
-<script src="writer-submit.js"></script>
-<script src="writer-import.js"></script>
-<script src="lib/drive.js"></script>
-<script src="writer-kinds.js"></script>
-<script src="writer-objects.js"></script>
-<script src="lib/writer-export.js"></script>
-<script src="writer-find.js"></script>
-<script src="writer-counts.js"></script>
-<script src="writer-print.js"></script>
-<script src="lib/writer-color.js"></script>
-<script src="writer-paste.js"></script>
-<script src="writer-ruler.js"></script>
+<script src="core/i18n.js"></script>
+<script src="vendor/pm.js"></script>
+<script src="writer/writer-schema.js"></script>
+<script src="writer/writer-editor.js"></script>
+<script src="writer/writer-objects.js"></script>
+<script src="writer/writer-sources.js"></script>
+<script src="writer/writer-bibliography.js"></script>
+<script src="writer/writer-cite.js"></script>
+<script src="writer/writer-lookup.js"></script>
+<script src="ai/failure.js"></script>
+<script src="core/color.js"></script>
+<script src="looks/surfaces.js"></script>
+<script src="looks/fonts.js"></script>
+<script src="content/defaults.js"></script>
+<script src="writer/writer-settings.js"></script>
+<script src="writer/frame/writer.js"></script>
+<script src="writer/writer-issues.js"></script>
+<script src="writer/writer-proof.js"></script>
+<script src="ai/tasks/writer-context.js"></script>
+<script src="writer/frame/writer-proof.js"></script>
+<script src="writer/frame/writer-ai.js"></script>
+<script src="agents/writer-mcp.js"></script>
+<script src="writer/frame/writer-compose.js"></script>
+<script src="writer/frame/writer-cite.js"></script>
+<script src="writer/frame/writer-paper.js"></script>
+<script src="writer/frame/writer-submit.js"></script>
+<script src="writer/frame/writer-import.js"></script>
+<script src="documents/drive.js"></script>
+<script src="writer/frame/writer-kinds.js"></script>
+<script src="writer/frame/writer-objects.js"></script>
+<script src="writer/writer-export.js"></script>
+<script src="writer/frame/writer-find.js"></script>
+<script src="writer/frame/writer-counts.js"></script>
+<script src="writer/frame/writer-print.js"></script>
+<script src="writer/writer-color.js"></script>
+<script src="writer/frame/writer-paste.js"></script>
+<script src="writer/frame/writer-ruler.js"></script>
 </html>

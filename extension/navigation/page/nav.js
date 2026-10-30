@@ -3,7 +3,7 @@
 var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const X = globalThis.GZ_CTX;
   if (!X) return null; // a frame-only injection can outlive its document
-  // Canvas and Moodle use the rail for a Look's nav layout or mods' widgets; the worker loads lib/nav*.js with this file.
+  // Canvas and Moodle use the rail for a Look's nav layout or mods' widgets; the worker loads navigation/nav*.js with this file.
   const rail = typeof GZ_NAV !== 'undefined' ? GZ_ULTRA_RAIL(X) : null;
   let reading = '', loaded = null, toggle = null;
   const overlay = rail && X.site === 'ultra' ? GZ_ULTRA_OVERLAY(X, () => X.repaintNav(loaded?.src)) : null;
@@ -24,7 +24,7 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const forget = () => { if (loaded) URL.revokeObjectURL(loaded.src); loaded = null; };
   const sync = () => {
     const n = X.nav();
-    // Glaze's own bar (features/navbar.js) stands in for Canvas's, Ultra's and Moodle's nav; their older layout steps aside.
+    // Glaze's own bar (navigation/page/navbar.js) stands in for Canvas's, Ultra's and Moodle's nav; their older layout steps aside.
     let on = X.on() && X.settings().enabled && !(X.site === 'ultra' && X.settings().navbar?.on) && !(X.site === 'moodle' && X.settings().navbar?.on);
     on &&= !(X.site === 'canvas' && X.settings().navbar?.on);
     rail?.sync(on);
@@ -307,7 +307,7 @@ function GZ_ULTRA_RAIL(X) {
         nextItems = (Array.isArray(week) ? week : []).map((i) => ({ title: i?.title, at: i?.due, url: i?.url })); nextError = false;
         return;
       }
-      await Promise.all([X.need('lib/ultra.js', () => globalThis.GZ_ULTRA), X.need('lib/todo.js', () => globalThis.GZ_TODO)]);
+      await Promise.all([X.need('courses/ultra.js', () => globalThis.GZ_ULTRA), X.need('planner/todo.js', () => globalThis.GZ_TODO)]);
       if (!current()) return;
       const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache);
       if (!current()) return;
@@ -399,7 +399,7 @@ function GZ_ULTRA_RAIL(X) {
         node.status = make('span', { role: 'status', className: 'gz-nav-status' });
         go.addEventListener('click', () => timerAction('toggle', node)); reset.addEventListener('click', () => timerAction('reset', node));
         box.append(time, go, reset, node.status); node.go = go;
-        X.need('lib/widgets.js', () => globalThis.GZ_WIDGETS).then(async () => {
+        X.need('core/widgets.js', () => globalThis.GZ_WIDGETS).then(async () => {
           const settings = await get('sync', 'widgets');
           if (!active || token !== rev) return;
           W = GZ_WIDGETS; node.options = GZ_SANITIZE(settings).widgets; drawWidgets();
@@ -407,7 +407,7 @@ function GZ_ULTRA_RAIL(X) {
       }
       if (w.id === 'pet') {
         node.image = make('span', { className: 'gz-nav-pet' }); detail.classList.add('gz-nav-pet-level'); box.append(node.image, detail);
-        X.need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => {
+        X.need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => {
           if (!active || token !== rev || !chrome.runtime?.id) return;
           node.pet = GZ_WIDGETS_UI.avatar(node.image, { onData: (data) => {
             const label = X.t('Level {level}', { level: data?.level || 1 }); setText(detail, label);
@@ -422,7 +422,7 @@ function GZ_ULTRA_RAIL(X) {
     bottom.append(...mods.map((m) => m.el));
     readLocal(); drawWidgets();
   };
-  // A worn Look's link that leaves the site says where it goes (lib/navlayout.js away), so its "Grades" can't pass for the
+  // A worn Look's link that leaves the site says where it goes (navigation/navlayout.js away), so its "Grades" can't pass for the
   // school's own; the student's own links (no layout) are theirs.
   const linkName = (l) => { const host = layout ? L.away(l, location.origin) : ''; return host ? `${l.n} · ${X.t('From {name}', { name: host })}` : l.n; };
   // A Look's layout (x.nav, from GZ_CTX.parts) stands in for the student's own items while that Look is worn; Canvas and
@@ -455,7 +455,7 @@ function GZ_ULTRA_RAIL(X) {
       if (X.site === 'moodle') { list.addEventListener('keydown', menuKey, true); list.addEventListener('focusin', menuFocus, true); }
     }
     if (!layout && !mods.length && sheet) { sheet.remove(); sheet = null; }
-    if ((layout || mods.length) && !sheet) (document.head || html).append(sheet = make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('features/navlayout.css') }));
+    if ((layout || mods.length) && !sheet) (document.head || html).append(sheet = make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('navigation/page/navlayout.css') }));
     for (const a of list.querySelectorAll(items)) {
       const id = nativeOf(a); if (!id) continue;
       if (captured.has(a)) { const r = captured.get(a); if (!r.mark.isConnected) r.unit.before(r.mark); continue; }
@@ -495,7 +495,7 @@ function GZ_ULTRA_RAIL(X) {
       if (X.site === 'moodle') { label.id = `gz-nav-group-${e.key.slice(2)}`; label.setAttribute('aria-hidden', 'true'); } else { label.setAttribute('role', 'heading'); label.setAttribute('aria-level', '2'); }
       const u = unit(label, e.key); if (u !== label) u.setAttribute('role', 'none'); slots.set(e.key, u);
     }
-    // A layout's own icon for a native item, from Glaze's set; the item's own stays, hidden (features/navlayout.css).
+    // A layout's own icon for a native item, from Glaze's set; the item's own stays, hidden (navigation/page/navlayout.css).
     for (const [a, r] of captured) {
       const want = seq?.find((e) => e.key === r.id)?.icon, had = iconed.get(a);
       if (had && had.dataset.icon !== want) { had.remove(); iconed.delete(a); delete a.dataset.gzNavIconed; }
@@ -524,12 +524,12 @@ function GZ_ULTRA_RAIL(X) {
     }
     syncMenu(seq || [], units);
     if (list.contains(focused) && document.activeElement !== focused) focused.focus({ preventScroll: true });
-    if ((config.links.length || config.widgets.some((w) => w.on && w.id === 'next') || iconed.size) && !iconRead) iconRead = X.need('lib/cards.js', () => globalThis.GZ_CARDS).then(() => { icons = GZ_CARDS.ICONS; if (active) { for (const { a } of custom.values()) a.dataset.icon = ''; for (const svg of iconed.values()) svg.dataset.icon = ''; sync(true); } }).catch(() => { iconRead = null; });
+    if ((config.links.length || config.widgets.some((w) => w.on && w.id === 'next') || iconed.size) && !iconRead) iconRead = X.need('courses/cards.js', () => globalThis.GZ_CARDS).then(() => { icons = GZ_CARDS.ICONS; if (active) { for (const { a } of custom.values()) a.dataset.icon = ''; for (const svg of iconed.values()) svg.dataset.icon = ''; sync(true); } }).catch(() => { iconRead = null; });
     place(root);
     if (X.site === 'ultra') loadLogo();
     watch?.takeRecords();
   };
-  // A bar along the top or bottom, or a dock, where the layout asks for one (features/navlayout.css draws them).
+  // A bar along the top or bottom, or a dock, where the layout asks for one (navigation/page/navlayout.css draws them).
   // Ultra's drawer is tagged for that sheet, which can't reach it through :has() without restyling the page.
   const place = (root) => {
     const where = layout?.place && layout.place !== 'left' ? layout.place : '';

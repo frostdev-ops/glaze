@@ -8,7 +8,7 @@
 //   NODE_PATH=<installed playwright> nice node checks/core/download-check.js [screenshots directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 const env = require('../../tools/dev/check-env.js');
 const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://files.redirect.test/*']);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -75,7 +75,7 @@ const pressAllow = async (page, mid, frame) => { await resting(page, '#allow', [
 // header, Glaze's page loaded in it, and its button shown (the worker took the frame's ticket). The error names the first
 // of those not reached.
 const allowFrame = (page, mid, host) => {
-  const states = ['no download running', `no frame in module ${mid}'s header`, `no chrome-extension://${id}/features/allow.html in the frame`, 'its button not shown (no ticket from the worker)'];
+  const states = ['no download running', `no frame in module ${mid}'s header`, `no chrome-extension://${id}/courses/allow.html in the frame`, 'its button not shown (no ticket from the worker)'];
   let at = 0, says = '';
   return until(async () => {
     const [busy, label, added] = await page.evaluate((m) => { const d = document.getElementById(`gz-dl-${m}`); return [!!d?.hasAttribute('data-busy'), d?.textContent ?? '', !!document.querySelector(`#context_module_${m} .ig-header > .gz-dl-allow`)]; }, mid);
@@ -86,7 +86,7 @@ const allowFrame = (page, mid, host) => {
     const element = await page.$(`#context_module_${mid} .ig-header > .gz-dl-allow`);
     let frame;
     try { frame = await element?.contentFrame(); } finally { await element?.dispose(); }
-    if (!frame?.url().startsWith(`chrome-extension://${id}/features/allow.html`)) return null;
+    if (!frame?.url().startsWith(`chrome-extension://${id}/courses/allow.html`)) return null;
     at = 3;
     const shown = await frame.evaluate((h) => { const a = document.getElementById('allow'); return a?.textContent === `Allow ${h}` && !a.hidden; }, host);
     return shown && frame;
@@ -139,7 +139,7 @@ const allowFrame = (page, mid, host) => {
       return state.buttons >= 3;
     }, () => `Download all buttons (${startup}; API requests: ${JSON.stringify(apiAsked.slice(0, 40))})`);
     const label = (mid) => page.locator(`#gz-dl-${mid}`).textContent();
-    const anyAllowFrame = () => page.frames().find((f) => f.url().startsWith(`chrome-extension://${id}/features/allow.html`));
+    const anyAllowFrame = () => page.frames().find((f) => f.url().startsWith(`chrome-extension://${id}/courses/allow.html`));
     // The frame's chrome.permissions.request, recorded with whether it came inside the click, answered when the check says.
     const stub = (f) => f.evaluate(() => {
       globalThis.__gz = { calls: [] };

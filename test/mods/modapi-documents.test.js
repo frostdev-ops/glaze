@@ -1,14 +1,14 @@
 // Mods on the Documents page (papers.html): the documents and documents.read permissions, the cleaners for what a mod
-// hands the page (lib/modapi.js), the broker's documents calls and where each call runs (lib/modbroker.js), the worker's
-// sender check for the page (lib/background.js fromDocuments), install-time permission rules (lib/modbundle.js) and the
-// install prompt's words (lib/editor-mods.js). The page side is checks/documents/documents-check.js.
+// hands the page (mods/modapi.js), the broker's documents calls and where each call runs (mods/modbroker.js), the worker's
+// sender check for the page (background/background.js fromDocuments), install-time permission rules (mods/modbundle.js) and the
+// install prompt's words (settings/editor-mods.js). The page side is checks/documents/documents-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const A = require('../../extension/lib/modapi.js');
-const B = require('../../extension/lib/modbroker.js');
-const M = require('../../extension/lib/modbundle.js');
-const E = require('../../extension/lib/editor-mods.js');
+const A = require('../../extension/mods/modapi.js');
+const B = require('../../extension/mods/modbroker.js');
+const M = require('../../extension/mods/modbundle.js');
+const E = require('../../extension/settings/editor-mods.js');
 
 test('mod document keys hide account identifiers and resolve only within their mod and page', () => {
   const keys = A.docKeys();
@@ -31,7 +31,7 @@ test('mod document keys hide account identifiers and resolve only within their m
 });
 
 test('the page broker masks list and action keys and resolves read and export without returning raw keys', async () => {
-  const src = fs.readFileSync(path.join(__dirname, '../../extension/papers.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/documents/papers.js'), 'utf8');
   // mods() as papers.js defines it, to its closing brace (what follows it in the page changes).
   const start = src.indexOf('    const mods = async () => {'), end = src.indexOf('\n    };\n', start) + '\n    };\n'.length;
   const body = src.slice(start, end);
@@ -92,7 +92,7 @@ test('cleaners: items in the two slots, a key\'s shape, a format, the --gd-* hoo
   assert.deepEqual(A.docCreate({}), { format: 'plain' });
   assert.deepEqual(A.docCreate({ format: 'apa7' }), { format: 'apa7' });
   for (const v of [{ format: 'ieee' }, { format: 'apa7', title: 'x' }, null, []]) assert.equal(A.docCreate(v), null, JSON.stringify(v));
-  assert.deepEqual(A.DOC_FORMATS.slice().sort(), require('../../extension/lib/writer-styles.js').IDS.slice().sort(), 'the formats are Writer\'s');
+  assert.deepEqual(A.DOC_FORMATS.slice().sort(), require('../../extension/writer/writer-styles.js').IDS.slice().sort(), 'the formats are Writer\'s');
   assert.deepEqual(A.docStyle({ radius: 24, column: 300 }), { radius: 24, column: 300 });
   assert.deepEqual(A.docStyle({ glass: 0, thumb: 1.6 }), { glass: 0, thumb: 1.6 });
   for (const v of [{}, { radius: 33 }, { radius: '24px' }, { thumb: 0.5 }, { column: 159 }, { glass: -1 }, { opacity: 50 }, null]) assert.equal(A.docStyle(v), null, JSON.stringify(v));
@@ -164,7 +164,7 @@ test('the Documents page starts only the Workers of mods granted documents, with
 });
 
 test('the worker\'s sender check: only the Documents page in a tab of its own, top frame, with Glaze on', async () => {
-  const src = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const mine = src.slice(src.indexOf('const fromDocuments ='), src.indexOf('// Whose plans and grades'));
   const store = { enabled: true };
   const chrome = { runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}` }, storage: { sync: { get: async () => ({ ...store }) } } };

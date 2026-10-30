@@ -1,7 +1,7 @@
 // The native layer covers its backdrop and the underlying route. Its own sticky header contains the course strip.
 const fs = require('node:fs'), path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
   const fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-offcanvas.html'), 'utf8');
   await page.route('**/*', (r) => r.request().url().startsWith('https://bb.school.test/') ? r.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body></body></html>' }) : r.abort());
@@ -35,9 +35,9 @@ module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
       window.viewerLoads = 0; originalViewer.addEventListener('load', () => viewerLoads++);
       window.nativeParents = [...document.querySelectorAll('#site-wrap *')].map((e) => [e, e.parentNode]);
     }, { rail, rtl, kind, editor });
-    for (const file of ['theme.css', 'features/coursetabs.css', 'features/apps.css', 'features/sidebar.css', 'features/docreview.css']) {
+    for (const file of ['content/theme.css', 'navigation/page/coursetabs.css', 'core/page/apps.css', 'navigation/page/sidebar.css', 'courses/page/docreview.css']) {
       const sheet = await page.addStyleTag({ path: path.join(root, file) });
-      if (file === 'theme.css') await sheet.evaluate((e) => e.id = 'fixture-theme');
+      if (file === 'content/theme.css') await sheet.evaluate((e) => e.id = 'fixture-theme');
     }
     await page.frameLocator('iframe').locator('#annotation').fill('Kept annotation');
     await page.evaluate(() => {
@@ -47,7 +47,7 @@ module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
       window.rubricBytes = document.querySelector('main > aside').outerHTML;
     });
     if (navbarOnly) return;
-    for (const file of ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'lib/widgets.js', 'lib/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
+    for (const file of ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js', 'core/widgets.js', 'navigation/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
     await page.evaluate(({ settings, savedWidth }) => {
       window.SET = settings;
       const key = GZ_SIDEBAR.key('ultra', location.origin, '_42_1');
@@ -61,9 +61,9 @@ module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
       window.GZ_I18N = { locale: () => 'en' }; window.GZ_ULTRA = { page: { profile: async () => ({ id: '_42_1', time_zone: 'UTC' }) } };
       window.GZ_CTX = { site: 'ultra', t: (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => v?.[k] ?? ''), locale: () => 'en', on: () => true, need: async (file, read) => read?.(), account: async () => '_42_1', courseId: () => '_101_1', settings: () => SET };
     }, { settings: D.GZ_SANITIZE({ enhance: { sidebar: true, notes: true, widgets: true, todo: false, pet: false, dashboard: false }, sidebar: { style: 'float' } }), savedWidth });
-    await page.addScriptTag({ path: path.join(root, 'features/sidebar.js') });
+    await page.addScriptTag({ path: path.join(root, 'navigation/page/sidebar.js') });
     await page.evaluate(async () => { GZ_SIDEBAR_UI.sync(true); await GZ_SIDEBAR_UI.ready(); });
-    await page.addScriptTag({ path: path.join(root, 'features/widgets.js') });
+    await page.addScriptTag({ path: path.join(root, 'core/page/widgets.js') });
     await page.evaluate(() => GZ_WIDGETS_UI.sync(true));
     await page.waitForSelector('[data-tile="notes"]', { state: 'attached' });
     await painted();
@@ -182,7 +182,7 @@ module.exports = async ({ page, root, check, shot, navbarOnly = false }) => {
     check(await page.evaluate(() => document.querySelector('#site-wrap').innerHTML === nativeBytes), `${kind}: teardown restores every native byte`);
   }
   await setup();
-  await page.addScriptTag({ path: path.join(root, 'features/docreview.js') });
+  await page.addScriptTag({ path: path.join(root, 'courses/page/docreview.js') });
   await page.evaluate(() => GZ_DOCREVIEW.sync(true));
   await page.waitForSelector('#gz-review-focus');
   check(await page.evaluate(() => document.documentElement.hasAttribute('data-gz-review-compact') && document.querySelector('#layer-close').dataset.gzReviewPart === 'close'), 'integrated review recognizes the native close beside the course strip');

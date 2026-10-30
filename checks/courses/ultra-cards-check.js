@@ -1,6 +1,6 @@
 // Ultra's course cards, headless (B7a): the real extension on a synthetic Courses page (test/fixtures/ultra-courses.html,
 // built from the B7 spike), served under a made-up school's address. Nothing leaves the machine: every other
-// request is aborted and DNS is mapped to nowhere. Each card gets a due list as features/cardtasks.js draws it (four
+// request is aborted and DNS is mapped to nowhere. Each card gets a due list as courses/page/cardtasks.js draws it (four
 // rows and "and 2 more"; Ultra's planner isn't here to ask), then, for each card mode (Ultra's own, a banner height,
 // a short banner, a width and gap, condensed with a pet), it checks that every list ends inside its card, that every
 // term heading starts below the cards and lists above it, and that no card has an empty band.
@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
@@ -59,7 +59,7 @@ const MODES = {
       await page.goto('https://bb.school.test/ultra/course');
       await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-motion'));
       await page.waitForTimeout(600);
-      // The list, as features/cardtasks.js draws it (its markup and classes).
+      // The list, as courses/page/cardtasks.js draws it (its markup and classes).
       await page.evaluate(() => {
         for (const art of document.querySelectorAll('article[id^="course-list-course-"]')) {
           if (art.querySelector(':scope > .gz-ct')) continue;

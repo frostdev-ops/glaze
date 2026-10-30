@@ -6,7 +6,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', key = `ctabs:${site}:_42_1`;
-const G = require(path.join(ext, 'defaults.js')); require(path.join(ext, 'lib/coursetabs.js'));
+const G = require(path.join(ext, 'content/defaults.js')); require(path.join(ext, 'navigation/coursetabs.js'));
 const html = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8')
   .replace("{ id: '_105_1', name: 'Biology Lab', code: 'FA26-BIO120-01', color: 9 },", "{ id: '_105_1', name: 'Biology Lab', code: 'FA26-BIO120-01', color: 9 },\n{ id: '_106_1', name: 'Synthetic Sixth Course', code: 'CS106', color: 1 },\n{ id: '_107_1', name: 'Synthetic Seventh Course', code: 'CS107', color: 2 },");
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -56,14 +56,14 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
     const settings = { ...G.GZ_DEFAULTS, navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, ['tabs', 'place'].includes(k)])), tabs: G.GZ_SANITIZE({}).tabs };
     await opts.evaluate(async ({ settings, key, site }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
-      await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (lib/background.js approved)
+      await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (background/background.js approved)
       // The seventh first: closed at once, its next tab is the page's own course.
       await chrome.storage.local.set({ [key]: { tabs: [7, 1, 2, 3, 4, 5, 6].map((n, i) => ({ cid: `_${100 + n}_1`, name: `Synthetic course ${n}`, path: `/ultra/courses/_${100 + n}_1/outline`, top: 0, at: i, pin: false })) } });
     }, { settings, key, site });
     await require('../../tools/dev/check-env.js').ultraReady(opts);
     check(await opts.evaluate(async (site) => {
       const scripts = [...chrome.runtime.getManifest().content_scripts, ...await chrome.scripting.getRegisteredContentScripts()];
-      return scripts.some((s) => s.js?.includes('content-ultra.js') && s.matches.some((p) => p === `${site}/ultra/*` || p === 'https://*/ultra/*'));
+      return scripts.some((s) => s.js?.includes('content/content-ultra.js') && s.matches.some((p) => p === `${site}/ultra/*` || p === 'https://*/ultra/*'));
     }, site), 'the approved school has its content script before navigation');
     const saved = () => opts.evaluate(async (key) => (await chrome.storage.local.get(key))[key]?.tabs, key);
     const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e)));

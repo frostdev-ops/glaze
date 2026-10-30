@@ -1,19 +1,19 @@
-// A mod's code tools for agent apps (lib/mcp/registry.js's code): an agent app's call, answered by the mod's own Worker in an
+// A mod's code tools for agent apps (agents/registry.js's code): an agent app's call, answered by the mod's own Worker in an
 // open tab of the account's school, in Chrome only, where code mods run. The call goes to Glaze's content script in a tab's
-// top frame (features/mods.js, 'glaze:modtool'): 'call' hands it to the mod's Worker as a 'tool.call' event when that page is
+// top frame (mods/page/mods.js, 'glaze:modtool'): 'call' hands it to the mod's Worker as a 'tool.call' event when that page is
 // the account's and runs the mod, and says at once whether it did, so the next tab is tried when it didn't; 'wait' answers
-// once the call has ended there. The Worker's answer comes as the broker's 'tools.result' (lib/modbroker.js), checked as every
+// once the call has ended there. The Worker's answer comes as the broker's 'tools.result' (mods/modbroker.js), checked as every
 // call of a mod's is, and the broker hands it to settle, for the one call waiting for it from that tab. At most
 // LIMIT.timeout from the call; the mod stopped or the page gone ends it at once. A call once handed over runs to its end
-// (lib/mcp/calls.js: what is logged is what happened), so a cancel is heeded only before.
+// (agents/calls.js: what is logged is what happened), so a cancel is heeded only before.
 // create({ tabs (chrome.tabs: query, sendMessage), browser ('chrome' | 'firefox' | 'safari'), quiet?(path) (a page code mods
-//   never run on: lib/background.js modQuiet), timers?, id?() (a call's id) }) → { code(mod, name, args, ctx) → the Worker's
-//   answer, or a failure ({ ok: false, error } or { cancelled }, lib/ai/tools.js toolFailure), settle(sender, mod, call,
+//   never run on: background/background.js modQuiet), timers?, id?() (a call's id) }) → { code(mod, name, args, ctx) → the Worker's
+//   answer, or a failure ({ ok: false, error } or { cancelled }, ai/tools.js toolFailure), settle(sender, mod, call,
 //   out: { value } | { error }, uid (the broker's current account read)) → whether a call waiting for it took it }.
-// Classic script for the worker, after lib/mcp/tools-study.js (its account parser); module.exports for node.
+// Classic script for the worker, after agents/tools-study.js (its account parser); module.exports for node.
 var GZ_MCP_MODROUTE = globalThis.GZ_MCP_MODROUTE || (() => {
   const P = () => (typeof GZ_MCP_STUDY !== 'undefined' ? GZ_MCP_STUDY : require('./tools-study.js'));
-  // timeout: a call, from its start; args: what one may carry (the broker's limit for a mod's call, lib/modbroker.js); pending:
+  // timeout: a call, from its start; args: what one may carry (the broker's limit for a mod's call, mods/modbroker.js); pending:
   // one mod's calls at once; tabs: the tabs one call tries.
   const LIMIT = { timeout: 15e3, args: (1 << 20) + 16 * 1024, pending: 16, tabs: 8 };
   const TEXT = {

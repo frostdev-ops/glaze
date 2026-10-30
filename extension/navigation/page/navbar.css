@@ -1,4 +1,4 @@
-/* Glaze's own navigation (features/navbar.js), inside its shadow root: the school's CSS can't reach it, and the Look's
+/* Glaze's own navigation (navigation/page/navbar.js), inside its shadow root: the school's CSS can't reach it, and the Look's
    tokens (--gz-*) arrive inherited from <html>. Looks and mods style it by part (::part(bar), ::part(item), ...).
    Motion is transform, opacity and clip-path only, never width; data-motion mirrors <html data-gz-motion>. */
 :host {

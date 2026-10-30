@@ -1,12 +1,12 @@
-// Glaze Writer's objects in the editor frame (writer.html, after writer-paper.js; lib/writer-objects.js does the work):
+// Glaze Writer's objects in the editor frame (writer.html, after writer-paper.js; writer/writer-objects.js does the work):
 // in paper mode the toolbar's Insert menu (Picture… ⌘⇧I, a table grid up to 10 × 10, Link… ⌘K, Horizontal line, Special
 // characters…) and list style menu (presets, each level's numbering or bullet, restart and continue); a picture drawn
 // with its caption, selected with an outline and corner handles that keep its shape, and its popover (in line or a
 // block left, centre or right, width in inches and percent of the text width, alt text, caption, delete); pictures from
-// a file, pasted, or dropped on the page, held in the paper within lib/writer-objects.js's bounds and as Word takes them
+// a file, pasted, or dropped on the page, held in the paper within writer/writer-objects.js's bounds and as Word takes them
 // (a WebP drawn again); the table toolbar
 // over a table the caret is in; the link card on a link (open, edit its text and address, remove) in both modes; and
-// links typed on space, --- lines and Tab between cells (lib/writer-objects.js plugins), as glaze-plans/writer/
+// links typed on space, --- lines and Tab between cells (writer/writer-objects.js plugins), as glaze-plans/writer/
 // mockups/objects draws these. Popovers are writer.css's .pop: they scale in and fade, and go at once.
 // The paper toolbar has no slot of its own yet: Insert goes before its spacer, the list style caret after Numbered list.
 (() => {

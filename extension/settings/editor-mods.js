@@ -1,14 +1,14 @@
-// The editor's Mods tab: the installed mods (lib/modbundle.js records, read and changed only through the worker's
+// The editor's Mods tab: the installed mods (mods/modbundle.js records, read and changed only through the worker's
 // 'glaze:mods' broker), adding one from a .glazemod file, a glazemod1: code or the gallery's offer, the install prompt, and
 // dev mode for authors. Every name, label and reason shown comes from a bundle's sanitized `prompt` view and reaches the
 // page as textContent. The editor's own records, in storage.local: modOrder ([id]: the order the student sets, in which
 // mods win a shared slot and run their transforms), modSettings:<id> ({ setting id: value }, cleaned against the mod's
-// schema), modDev (dev mode) and modAuthor (the author key, lib/modbundle.js).
+// schema), modDev (dev mode) and modAuthor (the author key, mods/modbundle.js).
 // Extension options page only (mount); the pure helpers are for node tests.
 var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
-  const B = () => (typeof GZ_MODBUNDLE !== 'undefined' ? GZ_MODBUNDLE : require('./modbundle.js'));
-  const API = () => (typeof GZ_MODAPI !== 'undefined' ? GZ_MODAPI : require('./modapi.js'));
-  const XP = () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('./lookparts.js'));
+  const B = () => (typeof GZ_MODBUNDLE !== 'undefined' ? GZ_MODBUNDLE : require('../mods/modbundle.js'));
+  const API = () => (typeof GZ_MODAPI !== 'undefined' ? GZ_MODAPI : require('../mods/modapi.js'));
+  const XP = () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('../looks/lookparts.js'));
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   const DATA = ['courses', 'todo', 'grades', 'nav.read', 'documents', 'documents.read'];
 
@@ -32,7 +32,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
                 : id === 'code' ? t('Runs its author’s code — Glaze doesn’t draw it itself.')
                 : id === 'frame' ? t('A page of its own — shows its own HTML, which can contact other sites.')
                 : t('Network — sends and receives data from {host}.', { host: id.slice(8) }));
-  // A tool for agent apps (tool:<name>@<from|code>, lib/modtools.js caps): where its answers come from.
+  // A tool for agent apps (tool:<name>@<from|code>, mods/modtools.js caps): where its answers come from.
   const toolText = (id, view, t) => {
     const [name, from] = id.slice(5).split('@'), title = (view.tools || []).find((x) => x?.name === name)?.title || name;
     return from === 'todo' ? t('Tool “{title}” — gives agent apps your to-dos, as Glaze last read them.', { title })
@@ -49,7 +49,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
   const grantable = (id) => !['code', 'frame', 'bgfile'].includes(id) && !id.startsWith('media:') && !id.startsWith('tool:');
   // Code runs only in Chrome's sandbox.
   const hasCode = (m) => B().hasCode(m);
-  // A widget made of blocks (lib/modwidget.js): no code and no page of its own, so Glaze draws it and nothing of the mod runs.
+  // A widget made of blocks (mods/modwidget.js): no code and no page of its own, so Glaze draws it and nothing of the mod runs.
   // With tools, agent apps get its data too, so it isn't worded as staying on this device.
   const plain = (m) => !hasCode(m) && !m?.tools?.length && [...(m?.ui?.tiles || []), ...(m?.ui?.rail || [])].some((s) => Array.isArray(s?.blocks));
   // Glaze's own warnings, beyond each permission. ctx: { t, and (list → text), signed, source, runs }.
@@ -88,7 +88,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
   };
 
   // ---- the student's records ---------------------------------------------------------------------------------------
-  // A setting's value, cleaned against its schema entry (lib/modbundle.js checked the schema); anything else is the default.
+  // A setting's value, cleaned against its schema entry (mods/modbundle.js checked the schema); anything else is the default.
   const value = (s, v) => {
     if (s.type === 'toggle') return typeof v === 'boolean' ? v : s.default ?? false;
     if (s.type === 'choice') return s.options.includes(v) ? v : s.default ?? s.options[0];
@@ -126,7 +126,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
   // An update keeps what the student granted before and adds what the prompt showed as new; an install grants all it asks.
   const grantsFor = (view, before, fresh) => (view.permissions || []).map((p) => p.id).filter((p) => !before || fresh.includes(p) || before.grants?.[p]);
   // The hosts the worker fetches for a mod with these grants, which the browser must hold too: its network:<host> grants and
-  // an https background its parts name. As addresses, for lib/site.js reach.
+  // an https background its parts name. As addresses, for core/site.js reach.
   const hostsFor = (view, grants) => [
     ...grants.filter((g) => typeof g === 'string' && g.startsWith('network:')).map((g) => `https://${g.slice(8)}/`),
     ...[view.parts?.bg?.media?.src].filter((src) => typeof src === 'string' && src.startsWith('https://')),
@@ -285,7 +285,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
       try { bytes = await B().decode($('mod-code').value); } catch (e) { return say(addSaid, why(e), true); }
       if (await offerBytes(bytes, 'code', addSaid)) $('mod-code').value = '';
     });
-    // The gallery's offer (lib/background.js): the bundle the worker fetched and checked, or why it couldn't.
+    // The gallery's offer (background/background.js): the bundle the worker fetched and checked, or why it couldn't.
     const takeOffer = async () => {
       const { modOffer: o } = await local.get('modOffer');
       if (!isObj(o) || pending || offering) return;
@@ -398,7 +398,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
         // On by default: what a mod stored (perhaps copies of grades) shouldn't outlive it unless the student wants it kept.
         h('label', { className: 'check' }, wipe, h('span', { textContent: t('Remove its stored data too') })),
         h('div', { className: 'row' },
-          // A widget the student made in the builder opens there again (lib/editor-widget.js).
+          // A widget the student made in the builder opens there again (settings/editor-widget.js).
           mine && a.canEdit?.(rec.manifest) && a.edit ? h('button', { type: 'button', textContent: t('Edit in the widget builder'), 'data-f': f('edit'), 'aria-label': `${t('Edit in the widget builder')} · ${v.name}`, onclick: () => a.edit(rec) }) : null,
           h('button', { type: 'button', textContent: t('Export'), 'data-f': f('export'), 'aria-label': `${t('Export')} · ${v.name}`, onclick: async () => {
             const r = await act({ op: 'export', id });
@@ -555,7 +555,7 @@ var GZ_MODSEDIT = globalThis.GZ_MODSEDIT || (() => {
     channel({ op: 'check' }); // the editor opening checks followed channels; their state redraws the cards
   };
 
-  // A mod channel's failure (lib/modchannel.js codes), in Glaze's words. Said once in the Mods tab, never as a notice.
+  // A mod channel's failure (mods/modchannel.js codes), in Glaze's words. Said once in the Mods tab, never as a notice.
   const channelText = (code, t) => (code === 'write' ? t('Glaze couldn’t save that. Try again.')
     : code === 'link' ? t('That isn’t a mod channel link.')
     : code === 'gone' ? t('That channel no longer exists.')

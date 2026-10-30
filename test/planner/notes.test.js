@@ -1,10 +1,10 @@
-// The notes app's pure parts (lib/notes.js): the sanitizer against hostile pastes, Markdown out, the library's changes
+// The notes app's pure parts (planner/notes.js): the sanitizer against hostile pastes, Markdown out, the library's changes
 // as the worker applies them (two tabs, the trash, files), and the export zip's round trip.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const N = require('../../extension/lib/notes.js');
-const Z = require('../../extension/lib/zip.js');
-const D = require('../../extension/lib/doctext.js');
+const N = require('../../extension/planner/notes.js');
+const Z = require('../../extension/core/zip.js');
+const D = require('../../extension/core/doctext.js');
 
 const S = (html, opts) => N.sanitize(html, opts);
 const BASE = 'https://school.instructure.com/courses/7/pages/week-1';
@@ -820,7 +820,7 @@ test('folder times in a backup keep only numeric known fields, and a future one 
 });
 
 test('the backup worker retains field times and counts metadata imports across batches', async () => {
-  const S = require('../../extension/lib/sessions.js'), src = world(), dst = world(), t = src.now;
+  const S = require('../../extension/sharing/sessions.js'), src = world(), dst = world(), t = src.now;
   let turns = 0;
   const worker = (w) => S.make({ local: w.local, sync: w.local, notes: w.idb, db: { all: async () => [] }, enqueue: async (f) => { turns++; return f(); } });
   const source = worker(src), target = worker(dst);

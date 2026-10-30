@@ -1,11 +1,11 @@
-// The formula parser (lib/sheet-formula.js): Excel's grammar to an AST whose relative references are offsets from the
+// The formula parser (documents/sheets/sheet-formula.js): Excel's grammar to an AST whose relative references are offsets from the
 // formula's cell (so cells sharing an R1C1 text share one AST), and the text rewrites the model's operations and the
 // grid's fill and paste drive: shift for inserted or deleted rows and columns, rename for sheets, move for copies,
 // _xlfn. prefixes off and on.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const F = require('../../extension/lib/sheet-formula.js');
-const M = require('../../extension/lib/sheet-model.js');
+const F = require('../../extension/documents/sheets/sheet-formula.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
 
 // The AST as an S-expression, references resolved at (r, c) to A1 text.
 const ref = (n, r, c) => {

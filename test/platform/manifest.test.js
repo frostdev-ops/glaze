@@ -7,11 +7,11 @@ const { execFileSync } = require('node:child_process');
 const m = require('../../extension/manifest.json');
 
 // Glaze's first content script, one entry per LMS's own hosts: Ultra's and Canvas's, each with its own part, and MoodleCloud's.
-const glaze = m.content_scripts.filter((c) => c.js.at(-1) === 'content.js');
-const ultra = glaze.find((c) => c.js.includes('content-ultra.js'));
-const canvas = glaze.find((c) => c.js.includes('content-canvas.js'));
+const glaze = m.content_scripts.filter((c) => c.js.at(-1) === 'content/content.js');
+const ultra = glaze.find((c) => c.js.includes('content/content-ultra.js'));
+const canvas = glaze.find((c) => c.js.includes('content/content-canvas.js'));
 const moodle = glaze.find((c) => c.matches.includes('https://*.moodlecloud.com/*'));
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 // The Safari manifest tools/build/safari-manifest.sh makes from `input`.
 const safari = (input) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-safari-manifest-'));
@@ -24,23 +24,27 @@ const safari = (input) => {
   }
 };
 const V338 = require('../fixtures/manifest-v3.3.8.json');
+// 3.3.8's content scripts under the folders their files have now (the extension's code moved by area after 4.0.0), so its
+// access compares with today's.
+const NOW_AT = { 'content-canvas.js': 'content/content-canvas.js', 'content-ultra.js': 'content/content-ultra.js', 'content.js': 'content/content.js', 'defaults.js': 'content/defaults.js', 'features/docviewer.js': 'courses/page/docviewer.js', 'lib/color.js': 'core/color.js', 'lib/detect.js': 'content/detect.js', 'lib/fonts.js': 'looks/fonts.js', 'lib/gallery.js': 'looks/gallery.js', 'lib/grades.js': 'planner/grades.js', 'lib/i18n.js': 'core/i18n.js', 'lib/ink.js': 'courses/ink.js', 'lib/nav.js': 'navigation/nav.js', 'lib/page.js': 'core/page.js', 'lib/surfaces.js': 'looks/surfaces.js' };
+const V338_NOW = { ...V338, content_scripts: V338.content_scripts.map((c) => ({ ...c, js: c.js.map((f) => NOW_AT[f] || f) })) };
 
 test('Ultra matches its bare entry and descendants on Blackboard\'s hosts, without matching lookalike paths', () => {
   assert.deepEqual(ultra.matches, ['https://*.blackboard.com/ultra', 'https://*.blackboard.com/ultra/*']);
   assert.equal(ultra.exclude_matches, undefined, 'no instructure.com host to leave out');
-  assert.ok(ultra.js.includes('content-ultra.js') && !canvas.js.includes('content-ultra.js'));
+  assert.ok(ultra.js.includes('content/content-ultra.js') && !canvas.js.includes('content/content-ultra.js'));
 });
 
-// lib/background.js registers the Canvas entry's list for Canvas hosts the student approved, and that list without
+// background/background.js registers the Canvas entry's list for Canvas hosts the student approved, and that list without
 // content-canvas.js (as MoodleCloud's entry has it) for Moodle hosts; Ultra sites get Ultra's entry on their /ultra pages.
 test('the first content script is Glaze on each LMS\'s own hosts, and nothing runs on other sites', () => {
   assert.equal(glaze.length, 3);
   assert.deepEqual(canvas.matches, ['https://*.instructure.com/*']);
-  assert.ok(canvas.js.includes('content-canvas.js') && !ultra.js.includes('content-canvas.js'));
+  assert.ok(canvas.js.includes('content/content-canvas.js') && !ultra.js.includes('content/content-canvas.js'));
   for (const g of glaze) assert.deepEqual([g.run_at, g.all_frames], ['document_start', true]);
   assert.deepEqual(canvas.exclude_matches, ['https://canvadocs.instructure.com/*'], 'Canvas\'s leaves canvadocs to its viewer script');
-  assert.deepEqual(moodle, { matches: ['https://*.moodlecloud.com/*'], js: canvas.js.filter((f) => f !== 'content-canvas.js'), run_at: canvas.run_at, all_frames: canvas.all_frames });
-  assert.ok(!m.content_scripts.some((c) => c.js.includes('lib/detect.js')), 'no detector: Chrome\'s own prompt adds a site');
+  assert.deepEqual(moodle, { matches: ['https://*.moodlecloud.com/*'], js: canvas.js.filter((f) => f !== 'content/content-canvas.js'), run_at: canvas.run_at, all_frames: canvas.all_frames });
+  assert.ok(!m.content_scripts.some((c) => c.js.includes('content/detect.js')), 'no detector: Chrome\'s own prompt adds a site');
   assert.ok(m.content_scripts.every((c) => c.matches.every((p) => !p.startsWith('https://*/') && p !== '<all_urls>')), 'no entry on every host');
 });
 
@@ -66,7 +70,7 @@ test('Safari requires native messaging already, so its manifest drops the option
   assert.deepEqual(safari({ ...m, optional_permissions: [...m.optional_permissions, 'bookmarks'] }).optional_permissions, ['bookmarks']);
 });
 
-// content.js, content-ultra.js, options.js and lib/background.js all ask defaults.js GZ_BUILT_IN.
+// content.js, content-ultra.js, options.js and background/background.js all ask defaults.js GZ_BUILT_IN.
 test('the built-in hosts are the manifest\'s, in one place', () => {
   const host = (c) => /^https:\/\/\*\.([^/]+)\//.exec(c.matches[0])[1];
   for (const [kind, entry] of [['canvas', canvas], ['moodle', moodle], ['ultra', ultra]]) {
@@ -78,16 +82,16 @@ test('the built-in hosts are the manifest\'s, in one place', () => {
   }
   assert.equal(D.GZ_BUILT_IN(null, new URL('https://school.instructure.com/')), false, 'no LMS found');
   const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
-  for (const f of ['content.js', 'content-ultra.js', 'options.js', 'lib/background.js']) {
+  for (const f of ['content/content.js', 'content/content-ultra.js', 'settings/options.js', 'background/background.js']) {
     assert.match(read(f), /GZ_BUILT_IN\(/, f);
     assert.doesNotMatch(read(f), /instructure\\\.com\$|blackboard\\\.com\$|endsWith\('\.(instructure|blackboard)\.com'\)/, `${f} keeps no host list of its own`);
   }
 });
 
 test('Safari keeps 3.3.8\'s access: every host, Ultra on /ultra anywhere and the detector; MoodleCloud\'s entry may stay', () => {
-  const now = safari(m), then = safari(V338);
+  const now = safari(m), then = safari(V338_NOW);
   for (const k of ['permissions', 'optional_permissions', 'host_permissions', 'optional_host_permissions']) assert.deepEqual(now[k], then[k], k);
-  const detector = now.content_scripts.find((c) => c.js.includes('lib/detect.js'));
+  const detector = now.content_scripts.find((c) => c.js.includes('content/detect.js'));
   assert.ok(detector.exclude_matches.includes('https://*.moodlecloud.com/*'), 'MoodleCloud has its own entry, so the detector leaves it alone');
   const as338 = now.content_scripts.filter((c) => !c.matches.includes('https://*.moodlecloud.com/*'))
     .map((c) => (c === detector ? { ...c, exclude_matches: c.exclude_matches.filter((p) => p !== 'https://*.moodlecloud.com/*') } : c));
@@ -102,7 +106,7 @@ test('the 3.3.8 manifest fixture is the tagged release\'s', (t) => {
 });
 
 test('Safari runs exactly one first bundle on MoodleCloud, including Ultra paths', () => {
-  const entries = safari(m).content_scripts.filter((c) => c.js.includes('content.js'));
+  const entries = safari(m).content_scripts.filter((c) => c.js.includes('content/content.js'));
   const matches = (p, url) => {
     const [, host, pathname] = /^https:\/\/([^/]+)(\/.*)$/.exec(p), u = new URL(url);
     const hostOK = host === '*' || host === u.hostname || host.startsWith('*.') && (u.hostname === host.slice(2) || u.hostname.endsWith(host.slice(1)));
@@ -150,7 +154,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
     fs.mkdirSync(path.join(dir, 'mods'));
     fs.writeFileSync(path.join(dir, 'mods', 'host.html'), '');
     rewrite();
-    assert.ok(!fs.existsSync(path.join(dir, 'mods')));
+    assert.ok(!fs.existsSync(path.join(dir, 'mods', 'host.html')));
 
     // A clean Chrome manifest also gains the permission on its first conversion.
     fs.writeFileSync(file, JSON.stringify(m));
@@ -168,13 +172,13 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
 const SANDBOX_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data: blob:; worker-src blob:; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
 test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages are frameable, with local scripts and Documents\' approved font hosts and PDF fallback', () => {
   assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'", sandbox: SANDBOX_CSP });
-  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'writer.html', 'sharing/quick.html', 'options.html', 'papers.html', 'preview.html', 'features/allow.html', 'mods/host.html']);
+  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'writer.html', 'sharing/quick.html', 'options.html', 'papers.html', 'preview.html', 'courses/allow.html', 'mods/host.html']);
   // Documents is exposed as Settings is (including dynamic URLs if that group uses them). Its Look's fonts use only the
   // catalogued font endpoints; scripts and styles remain local, with no broader network or form authority.
   assert.deepEqual(m.web_accessible_resources.find((w) => w.resources.includes('papers.html')), m.web_accessible_resources.find((w) => w.resources.includes('options.html')));
   assert.match(fs.readFileSync(path.join(__dirname, '../../extension/papers.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self' https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; connect-src 'self' https:\/\/fonts\.googleapis\.com https:\/\/fonts\.gstatic\.com https:\/\/cdn\.jsdelivr\.net; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // Download all's Allow frame: one button, Glaze's files only, no network from the page itself.
-  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/features/allow.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/courses/allow.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   // The Notes share panel: Glaze's files only, no network from the page itself (the worker talks to the relay).
   assert.match(fs.readFileSync(path.join(__dirname, '../../extension/sharing/quick.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   const reader = fs.readFileSync(path.join(__dirname, '../../extension/reader.html'), 'utf8');

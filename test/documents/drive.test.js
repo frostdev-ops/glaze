@@ -1,11 +1,11 @@
-// Google Drive's files (lib/drive.js) against Drive v3's own shapes (test/fixtures/drive/v3.js): each request's exact
+// Google Drive's files (documents/drive.js) against Drive v3's own shapes (test/fixtures/drive/v3.js): each request's exact
 // address, headers and body, the kinds' size limits before and while bytes come, the one retry after a 401, Drive's
 // errors as fixed reasons, a save that updates the file it made only while that file is still there, and the port that
 // carries the bytes between a page and the worker.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const D = require('../../extension/lib/drive.js');
-const K = require('../../extension/lib/doc-kinds.js');
+const D = require('../../extension/documents/drive.js');
+const K = require('../../extension/documents/doc-kinds.js');
 const { MIME, FILES, SAVED, ERRORS } = require('../fixtures/drive/v3.js');
 
 const API = 'https://www.googleapis.com/drive/v3/files';
@@ -340,7 +340,7 @@ test('the port: a page that sends more than it said, or goes away, uploads nothi
 });
 
 test('the worker\'s Drive forgets a refused token through the sign-in\'s drop, which covers both flows', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/background/background.js'), 'utf8');
   const at = src.indexOf('drive: D.create({'), call = src.slice(at, src.indexOf('}),', at));
   assert.match(call, /drop: \(token\) => openGoogle\(\)\.drop\(token\)/);
   assert.doesNotMatch(call, /removeCachedAuthToken/);

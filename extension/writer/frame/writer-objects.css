@@ -104,7 +104,7 @@
 .gp-flow .ProseMirror hr.gz-rule { border: 0; margin: 0; height: 1lh; background: linear-gradient(var(--sheet-line, #111), var(--sheet-line, #111)) center / 100% 1px no-repeat; }
 .gp-flow .ProseMirror hr.gz-rule.ProseMirror-selectednode { outline: 2px solid rgba(37, 99, 235, .6); outline-offset: 2px; }
 
-/* ---- paper lists: every level counts on its own, in its list's style (lib/writer-schema.js --gzs<level> and
+/* ---- paper lists: every level counts on its own, in its list's style (writer/writer-schema.js --gzs<level> and
    --gzb<level>), a restarted item sets its level (counter-set inline), and a continued list keeps counting */
 .gp .gp-flow .ProseMirror ol { counter-reset: gzl0 0 gzl1 0 gzl2 0 gzl3 0 gzl4 0 gzl5 0 gzl6 0 gzl7 0 gzl8 0; }
 .gp .gp-flow .ProseMirror ol[data-continue] { counter-reset: none; }

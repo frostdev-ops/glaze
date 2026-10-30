@@ -1,7 +1,7 @@
 // Canvas's dashboard cards, loaded on demand (content.js syncCards, and its course menu's "Card style and
 // bookmarks"): the card settings (sync `card`), each card's own style and bookmarks (`cards`, `links`), the pet,
-// the create button and the editor. On Ultra, its boards' Course cards dialog (features/coursecards.js) saves a card's
-// style and picture through here too (setKind, setLink, setPicture), as the editor does. What is kept and what it paints is lib/cards.js; how it looks is canvas.css.
+// the create button and the editor. On Ultra, its boards' Course cards dialog (courses/page/coursecards.js) saves a card's
+// style and picture through here too (setKind, setLink, setPicture), as the editor does. What is kept and what it paints is courses/cards.js; how it looks is canvas.css.
 // Classic script in content.js's isolated world, through GZ_CTX; a second injection keeps the first.
 var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   const { need, t, capi } = globalThis.GZ_CTX;
@@ -22,7 +22,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   });
   let data = null; // { card, cards, links, imgs }
   let reading = null;
-  const read = () => (reading ||= need('lib/cards.js', () => globalThis.GZ_CARDS).then(async () => {
+  const read = () => (reading ||= need('courses/cards.js', () => globalThis.GZ_CARDS).then(async () => {
     K = globalThis.GZ_CARDS;
     const r = await get('sync', ['card', cardsKey, linksKey, 'cards']);
     const cards = K.styles(r[cardsKey]);
@@ -51,7 +51,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   };
   const keyOf = (el) => {
     if (ultra) return /^_\d+_\d+$/.test(el.dataset.courseId) ? `ultra:${location.origin}/${el.dataset.courseId}` : null;
-    // The Course cards dialog's previews (features/coursecards.js) name their course; a card names it in its link.
+    // The Course cards dialog's previews (courses/page/coursecards.js) name their course; a card names it in its link.
     const id = el.hasAttribute('data-gz-card-preview') ? /^\d+$/.exec(el.dataset.courseId || '')?.[0] : el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1];
     return id ? `canvas:${location.origin}/${id}` : null;
   };
@@ -140,7 +140,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
       p.style.animation = 'none'; p.style.background = 'none';
       card.append(p);
       const node = p;
-      need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => {
+      need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => {
         if (!chrome.runtime?.id || !node.isConnected) return;
         const live = GZ_WIDGETS_UI.avatar(node, { interactive: false });
         const hover = (e) => { if (e.pointerType !== 'touch' && html.getAttribute('data-gz-motion') !== 'off' && !html.hasAttribute('data-gz-no-hover')) live.play('waving'); };
@@ -183,8 +183,8 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (!canStart.has(id)) canStart.set(id, capi(`/courses/${id}/permissions?permissions[]=create_discussion_topic`).then((p) => !!p?.create_discussion_topic, () => false));
     const items = [[t('Message the class'), `/conversations?context_id=course_${id}&compose=true`]];
     if (await canStart.get(id)) items.push([t('Start a discussion'), `/courses/${id}/discussion_topics/new`]);
-    // The notes app (features/notes.js), when it's on: a new note for this course.
-    if (GZ_CTX.settings().enhance.notes) items.push([t('New note'), '#', (e) => need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ course: id, create: true, event: e }), () => {})]);
+    // The notes app (planner/page/notes.js), when it's on: a new note for this course.
+    if (GZ_CTX.settings().enhance.notes) items.push([t('New note'), '#', (e) => need('planner/page/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ course: id, create: true, event: e }), () => {})]);
     if (!btn.isConnected) return;
     const box = Object.assign(document.createElement('div'), { id: 'gz-mk' });
     box.setAttribute('role', 'menu');
@@ -237,7 +237,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(commit, soon ? 500 : 0);
   };
-  // Saving goes through the background worker (lib/cards.js change), one change at a time for every tab and site,
+  // Saving goes through the background worker (courses/cards.js change), one change at a time for every tab and site,
   // applied to what is stored then. An editor's own saves also go in order (e.chain), each sending the draft as it is
   // when its turn comes, so a save started before a new picture can't follow it with the old one.
   const SAID = {
@@ -553,10 +553,10 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     (radios.find((r) => r.checked) || radios[0]).focus();
   };
 
-  // A picture from this computer: scaled down (lib/cards.js fit), kept as WebP (JPEG where the browser can't write
+  // A picture from this computer: scaled down (courses/cards.js fit), kept as WebP (JPEG where the browser can't write
   // WebP), within the per-picture and total caps (every picture on this device counts, the one it replaces too), in
   // storage.local. It belongs to the editor it was chosen in (`mine`): if that has closed or moved to another course
-  // by the time the picture is ready, it is dropped. The replaced picture goes once the new style is saved (lib/cards.js change).
+  // by the time the picture is ready, it is dropped. The replaced picture goes once the new style is saved (courses/cards.js change).
   const addPicture = async (f, base, mine) => {
     // Only the latest pick in this editor may be kept: an earlier one that finishes later is dropped.
     const rev = (mine.pick = (mine.pick || 0) + 1);
@@ -658,5 +658,5 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
 
   return { paint, open, closeFor: (parent) => ed?.back && parent.contains(ed.back) ? close() : Promise.resolve(true), styleOf, setKind, setLink, setPicture, flush, cancel, say: told };
 })();
-// The module as the script's last value: how lib/background.js knows it ran to the end.
+// The module as the script's last value: how background/background.js knows it ran to the end.
 GZ_CARD_UI;

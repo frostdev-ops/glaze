@@ -2,7 +2,7 @@
 // NODE_PATH=/path/to/node_modules nice -n 15 node checks/courses/docreview-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 const root = path.resolve(__dirname, '../../extension'), lock = require('../../tools/dev/check-env.js').lockPath();
 const out = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docreview-evidence-')));
 const origin = 'https://review.blackboard.com', route = '/ultra/courses/_1_1/assessment/_2_1/overview/student-submission-view';
@@ -35,7 +35,7 @@ const reachable = (f, selector) => f.locator(selector).evaluateAll((es) => es.le
       catch (e) { if (e.code !== 'EEXIST') throw e; if (n % 6 === 0) console.log('Waiting for the shared browser lock'); await pause(10000); }
     }
     fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-docreview.html'), 'utf8');
-    css = fs.readFileSync(path.join(root, 'features/docreview.css'), 'utf8'); js = fs.readFileSync(path.join(root, 'features/docreview.js'), 'utf8');
+    css = fs.readFileSync(path.join(root, 'courses/page/docreview.css'), 'utf8'); js = fs.readFileSync(path.join(root, 'courses/page/docreview.js'), 'utf8');
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docreview-profile-'));
     await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(tmp, { ...chromeLaunch, headless: true, bypassCSP: true, viewport: { width: 1800, height: 987 }, reducedMotion: 'reduce' });

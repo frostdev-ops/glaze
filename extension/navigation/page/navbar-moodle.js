@@ -1,4 +1,4 @@
-// Moodle's adapter for features/navbar.js (the site adapter contract). Native navigation stays intact for turning off.
+// Moodle's adapter for navigation/page/navbar.js (the site adapter contract). Native navigation stays intact for turning off.
 // Only same-origin Moodle links and AJAX services are used; session keys and panel contents are never cached to disk.
 function GZ_NAVBAR_MOODLE(X) {
   const D = GZ_NAVBAR_MOODLE.data, t = X.t;
@@ -30,8 +30,8 @@ function GZ_NAVBAR_MOODLE(X) {
   };
   const current = (url, id) => id === 'course' && inCourse() || GZ_NAV_LAYOUT.moodle(location.href) === id || same(url);
 
-  // What Moodle's navbar offers that the shared vocabulary (lib/navlayout.js) has no name for. The bar takes each as a link:<id>
-  // of its own (features/navbar.js): an id that holds still page to page, so a student's hiding or renaming of it does too.
+  // What Moodle's navbar offers that the shared vocabulary (navigation/navlayout.js) has no name for. The bar takes each as a link:<id>
+  // of its own (navigation/page/navbar.js): an id that holds still page to page, so a student's hiding or renaming of it does too.
   //   Edit mode: a form with a checkbox. The bar's switch drives that checkbox, so Moodle's own script does what it always does.
   //   A school's menu links, a language menu: a link per link, and one item per dropdown, which the bar opens as a panel.
   //   A search box: a link to its page. Links off this Moodle, scripts and Moodle's menu toggles are not carried.
@@ -185,7 +185,7 @@ function GZ_NAVBAR_MOODLE(X) {
 }
 // Response shaping is pure. Every row is text, never HTML; a response cannot send a link off this Moodle.
 GZ_NAVBAR_MOODLE.data = {
-  // A name for a link the shared vocabulary has none for: 12 of a-z0-9 (lib/navbar.js's link:<id>), the same for the same address.
+  // A name for a link the shared vocabulary has none for: 12 of a-z0-9 (navigation/navbar.js's link:<id>), the same for the same address.
   slug: (s) => { let a = 5381, b = 52711; for (const c of String(s)) { const n = c.codePointAt(0); a = (Math.imul(a, 33) ^ n) >>> 0; b = (Math.imul(b, 31) + n) >>> 0; } return (a.toString(36).padStart(7, '0') + b.toString(36).padStart(7, '0')).slice(1, 13); },
   here: (href, base) => { try { const u = new URL(href, base), b = new URL(base); return typeof href === 'string' && href.trim() && !href.trim().startsWith('#') && (['http:', 'https:'].includes(u.protocol) || /-extension:$/.test(b.protocol) && u.protocol === b.protocol) && u.origin === b.origin && !u.username && !u.password ? u.href : ''; } catch { return ''; } },
   session: (href, origin) => { try { const u = new URL(href); return u.origin === origin && /\/login\/logout\.php$/.test(u.pathname) && u.searchParams.get('sesskey') ? { root: origin + u.pathname.replace(/\/login\/logout\.php$/, ''), sesskey: u.searchParams.get('sesskey') } : null; } catch { return null; } },

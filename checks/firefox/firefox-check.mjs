@@ -17,7 +17,7 @@ import net from 'node:net'; import { spawn, execFileSync } from 'node:child_proc
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 const app = process.env.FIREFOX;
 if (!app) { console.error('usage: FIREFOX=<Firefox.app> nice node checks/firefox/firefox-check.mjs'); process.exit(2); }
 const bin = app.endsWith('.app') ? path.join(app, 'Contents/MacOS/firefox') : app;
@@ -83,7 +83,7 @@ const canvasApi = (u) => {
   if (u.pathname === '/api/v1/users/self' || u.pathname === '/api/v1/users/self/profile') return { id: '3', name: 'Sam' };
   return [];
 };
-// The gallery's Looks page: one Look's "Use this Look in Glaze" (lib/gallery.js), its code made as the editor makes one.
+// The gallery's Looks page: one Look's "Use this Look in Glaze" (looks/gallery.js), its code made as the editor makes one.
 let galleryCode = '';
 const galleryPage = () => `<!doctype html><title>Looks</title><a href="/glaze/" data-glaze-use data-code="${galleryCode}" data-name="Check Frost" data-author="glaze-check" style="display:inline-block;padding:12px">Use this Look in Glaze</a>`;
 const asked = [];
@@ -281,7 +281,7 @@ const resting = (b, context, element, [within, frameAt] = []) => {
 // header, Glaze's page loaded in it, and its button shown (the worker took the frame's ticket). The error names the first
 // of those not reached.
 const allowFrame = (b, tab) => {
-  const states = ['no download running', 'no frame in the module\'s header', `no ${EXT}features/allow.html in the frame`, 'its button not shown (no ticket from the worker)'];
+  const states = ['no download running', 'no frame in the module\'s header', `no ${EXT}courses/allow.html in the frame`, 'its button not shown (no ticket from the worker)'];
   let at = 0, says = '';
   return until(async () => {
     const [busy, label, added] = await b.value(`(() => { const d = document.getElementById('gz-dl-73'); return [!!d?.hasAttribute('data-busy'), d?.textContent ?? '', !!document.querySelector('#context_module_73 .ig-header > .gz-dl-allow')]; })()`, tab);
@@ -289,7 +289,7 @@ const allowFrame = (b, tab) => {
     at = 0; if (!busy) return false;
     at = 1; if (!added) return false;
     at = 2;
-    const frame = await b.frame(tab, `${EXT}features/allow.html`, '#context_module_73 .ig-header > .gz-dl-allow');
+    const frame = await b.frame(tab, `${EXT}courses/allow.html`, '#context_module_73 .ig-header > .gz-dl-allow');
     if (!frame) return false;
     at = 3;
     const shown = await b.value(`(() => { const a = document.getElementById('allow'); return a?.textContent === 'Allow ${FILES}' && !a.hidden; })()`, frame);
@@ -308,7 +308,7 @@ const afterAllow = (b, c, fn, label) => {
 
 const run = async () => {
   packages();
-  galleryCode = await require('../../extension/lib/share.js').encode(G.GZ_SANITIZE({ preset: 'Frost', colors: { ...G.GZ_PRESETS.find(([n]) => n === 'Frost')[1] } }), {}, null);
+  galleryCode = await require('../../extension/sharing/share.js').encode(G.GZ_SANITIZE({ preset: 'Frost', colors: { ...G.GZ_PRESETS.find(([n]) => n === 'Frost')[1] } }), {}, null);
   await require('../../tools/dev/wait-for-browser.js')();
   await serve();
   const manifest = JSON.parse(fs.readFileSync(path.join(fresh, 'manifest.json'), 'utf8'));
@@ -318,10 +318,10 @@ const run = async () => {
   // 1. A new install.
   await session('install', async (b) => {
     await b.install(fresh);
-    const welcome = await until(() => b.find(`${EXT}features/welcome.html`), 'the first-run tab');
+    const welcome = await until(() => b.find(`${EXT}settings/welcome.html`), 'the first-run tab');
     ok(welcome, 'the first-run tab opens on install');
     await pause(1500);
-    ok(await b.count(`${EXT}features/welcome.html`) === 1, 'once');
+    ok(await b.count(`${EXT}settings/welcome.html`) === 1, 'once');
     ok(await b.placement() === 'nav-bar', `the button starts on the toolbar (${await b.placement()})`);
     ok(await b.value(`typeof browser.declarativeContent === 'undefined' && typeof browser.permissions.addHostAccessRequest === 'undefined'`, welcome), 'Firefox has neither declarativeContent nor addHostAccessRequest');
     ok(!manifest.permissions.includes('declarativeContent') && manifest.action.default_area === 'navbar', 'the package asks for no declarativeContent');
@@ -342,7 +342,7 @@ const run = async () => {
     ok(await b.value(`document.querySelector('#go .label').textContent`, welcome) === 'Open', 'the button turns to Open');
     await noErrors(b, 'the first-run tab');
     const ultra = await b.open(`${BB}/ultra/courses/_101_1/outline`);
-    await until(async () => (await b.sheets(ultra)).includes('theme.css'), 'Glaze on its first page');
+    await until(async () => (await b.sheets(ultra)).includes('content/theme.css'), 'Glaze on its first page');
     ok(true, `its first page gets Glaze (${(await b.sheets(ultra)).join(', ')})`);
     await pause(1000);
     ok(!await b.card(ultra), 'with no card');
@@ -365,17 +365,17 @@ const run = async () => {
     // The worker stores the approval before it registers the site: wait for the registration itself.
     await until(async () => (await registered(b, welcome)).includes(`${CANVAS}/*`), 'the worker to register the Canvas site');
     ok(true, 'registered it');
-    await until(async () => (await b.sheets(canvas)).includes('canvas.css'), 'Glaze in the open Canvas tab');
+    await until(async () => (await b.sheets(canvas)).includes('content/canvas.css'), 'Glaze in the open Canvas tab');
     ok(true, 'and put Glaze into the tab that asked, without a reload');
     await b.reload(canvas);
-    await until(async () => (await b.sheets(canvas)).includes('canvas.css'), 'Glaze in the Canvas tab after a reload');
+    await until(async () => (await b.sheets(canvas)).includes('content/canvas.css'), 'Glaze in the Canvas tab after a reload');
     ok((await registered(b, welcome)).includes(`${CANVAS}/*`), 'it stays registered, and a fresh page gets Glaze');
 
     // A grant nobody asked for (as about:addons gives): the worker checks the site itself, approves it and goes into its tab.
     const moodle = await b.open(`${MOODLE}/course/view.php?id=2`);
     await pause(800);
     ok((await b.sheets(moodle)).length === 0, 'a Moodle site nobody approved has no Glaze');
-    const control = await b.open(`${EXT}features/allow.html`);
+    const control = await b.open(`${EXT}courses/allow.html`);
     const button = (c, js) => b.value(`(() => { document.getElementById('gz-check')?.remove(); const x = document.createElement('button'); x.id = 'gz-check'; x.style.cssText = 'position:fixed;left:10px;top:10px;width:120px;height:40px'; x.textContent = 'grant'; document.body.append(x); x.addEventListener('click', () => { window.__gz = 'pending'; ${js}.then((v) => { window.__gz = v; }, (e) => { window.__gz = 'rejected: ' + e.message; }); }); return 1; })()`, c);
     await button(control, `browser.permissions.request({ origins: ['${MOODLE}/*'] })`);
     await b.click(control, '#gz-check');
@@ -388,7 +388,7 @@ const run = async () => {
 
     // A built-in host taken back, as about:addons does (Firefox obeys; Glaze itself never removes one).
     const inst = await b.open(`${INST}/courses/25`);
-    await until(async () => (await b.sheets(inst)).includes('canvas.css'), 'Glaze on the built-in Canvas host');
+    await until(async () => (await b.sheets(inst)).includes('content/canvas.css'), 'Glaze on the built-in Canvas host');
     ok(true, 'Glaze runs on a built-in host');
     ok(await b.value(`browser.permissions.remove({ origins: ['https://*.instructure.com/*'] })`, control) === true, 'Firefox lets the built-in host be taken back');
     ok(!await holds(b, control, `${INST}/*`), 'and no longer holds it');
@@ -402,7 +402,7 @@ const run = async () => {
     await b.click(control, '#gz-check');
     await until(() => b.value('window.__gz === true', control), 'the grant back');
     await b.reload(inst);
-    await until(async () => (await b.sheets(inst)).includes('canvas.css'), 'Glaze back on the built-in host');
+    await until(async () => (await b.sheets(inst)).includes('content/canvas.css'), 'Glaze back on the built-in host');
     ok(true, 'granted again, Glaze is back there');
 
     // Settings → Sites.
@@ -447,12 +447,12 @@ const run = async () => {
     // The page's own word, to the content script's window and to the frame: neither counts.
     await b.value(`(postMessage({ gzAllow: '${FILES}', ok: true }, '*'), document.querySelector('.gz-dl-allow').contentWindow.postMessage({ gzAllow: '${FILES}', ok: true }, '*'), 1)`, mods);
     await pause(1500);
-    ok(!!await b.frame(mods, `${EXT}features/allow.html`) && !asked.some((u) => u.includes(FILES)), 'a message the page posts, saying yes, is ignored: the frame stays and nothing is fetched');
+    ok(!!await b.frame(mods, `${EXT}courses/allow.html`) && !asked.some((u) => u.includes(FILES)), 'a message the page posts, saying yes, is ignored: the frame stays and nothing is fetched');
     // Firefox gives an extension page framed in a web page only some APIs, no permissions among them: its click has the worker
     // open Glaze's Allow tab, whose click asks.
     const apis = await b.value(`Object.keys(chrome).sort().join(', ')`, frame);
     ok(!apis.split(', ').includes('permissions'), `the framed Allow page has no permissions API (${apis})`);
-    const ALLOW_TAB = `${EXT}features/allow.html#${FILES}`;
+    const ALLOW_TAB = `${EXT}courses/allow.html#${FILES}`;
     await b.click(mods, '#allow', [frame, '.gz-dl-allow']);
     const own = await afterAllow(b, frame, () => b.find(ALLOW_TAB), 'the Allow tab');
     await until(() => b.value(`document.getElementById('allow').textContent === 'Allow ${FILES}' && document.activeElement?.id === 'allow'`, own), 'its button', SLOW);
@@ -476,7 +476,7 @@ const run = async () => {
     const zip = await until(async () => fs.readdirSync(downloads).find((f) => f.endsWith('.zip')), 'the saved zip', SLOW);
     const bytes = fs.readFileSync(path.join(downloads, zip));
     ok(bytes.includes(Buffer.from(FILE.name)) && bytes.includes(Buffer.from(FILE.body)), `and the zip saved with ${FILE.name} (${zip}, ${bytes.length} bytes)`);
-    await until(async () => !await b.frame(mods, `${EXT}features/allow.html`), 'the frame to go', SLOW);
+    await until(async () => !await b.frame(mods, `${EXT}courses/allow.html`), 'the frame to go', SLOW);
     ok(true, 'the frame is gone');
     await noErrors(b, 'Download all');
 
@@ -499,7 +499,7 @@ const run = async () => {
     ok(true, 'Cancel in Firefox\'s prompt: the Allow tab closed itself');
     const no = await until(async () => { says = await b.value(`document.getElementById('gz-dl-73').textContent`, mods); return /^Saved|Download failed/.test(says) && says; }, () => `the download to end (Download all says "${says}")`, SLOW);
     ok(no === 'Download failed' && !await holds(b, settings, `https://${FILES}/*`) && !asked.some((u) => u.includes(FILES)), `refused: the panel says "${no}", nothing granted or fetched`);
-    await until(async () => !await b.frame(mods, `${EXT}features/allow.html`), 'the frame to go', SLOW);
+    await until(async () => !await b.frame(mods, `${EXT}courses/allow.html`), 'the frame to go', SLOW);
     ok(!fs.readdirSync(downloads).length, 'the frame is gone and nothing saved');
     await b.inChrome(`(Services.prefs.setBoolPref('extensions.webextOptionalPermissionPrompts', false), 1)`);
     await noErrors(b, 'Download all refused');
@@ -556,11 +556,11 @@ const run = async () => {
     await b.close(course);
     await noErrors(b, 'embedded Settings');
 
-    // Documents beside the bar (features/settingspage.js): Firefox gives its frame no tabs or downloads API, so its Export
+    // Documents beside the bar (settings/page/settingspage.js): Firefox gives its frame no tabs or downloads API, so its Export
     // saves through the frame's own link and its Import through the frame's own file input. The .docx lands in the downloads
     // folder, the click opens the file dialog, and a Word file chosen there is saved through the frame's claimed pass.
     const KEY = `doc:${crypto.randomUUID()}`, word = path.join(tmp, 'Imported notes.docx');
-    fs.writeFileSync(word, Buffer.concat(require('../../extension/lib/zip.js').zip([{ name: 'word/document.xml', data: Buffer.from('<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Brought in from Word.</w:t></w:r></w:p></w:body></w:document>') }])));
+    fs.writeFileSync(word, Buffer.concat(require('../../extension/core/zip.js').zip([{ name: 'word/document.xml', data: Buffer.from('<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Brought in from Word.</w:t></w:r></w:p></w:body></w:document>') }])));
     const papersTab = await b.open(`${EXT}papers.html`);
     ok(await b.value(`browser.storage.sync.get('navbar').then((r) => browser.storage.sync.set({ navbar: { ...r.navbar, on: true }, navbarItems: { glaze: ['settings', 'documents'] } }))
       .then(() => browser.runtime.sendMessage({ type: 'glaze:writerPapers', op: 'save', args: [${JSON.stringify(KEY)}, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Notes from the archive.' }] }] }, format: 'plain', title: 'Field notes', named: true }] }))
@@ -612,7 +612,7 @@ const run = async () => {
     await noErrors(b, 'embedded Documents');
 
     // A web-accessible Allow page opened directly cannot request a host planted in its hash.
-    const planted = await b.open(`${EXT}features/allow.html#planted.example.net`);
+    const planted = await b.open(`${EXT}courses/allow.html#planted.example.net`);
     await pause(400);
     ok(await b.value(`document.getElementById('allow').hidden`, planted) && !await holds(b, settings, 'https://planted.example.net/*'), 'a public Allow URL has no prompt authority');
     await b.close(planted);
@@ -655,8 +655,8 @@ const run = async () => {
     if (was.length) console.log(`note ${OLD_REF} logged: ${was.join(' | ')}`);
     await b.install(fresh);
     await pause(3000);
-    ok(await b.count(`${EXT}features/welcome.html`) === 0, 'the update opens no first-run tab');
-    const control = await b.open(`${EXT}features/allow.html`);
+    ok(await b.count(`${EXT}settings/welcome.html`) === 0, 'the update opens no first-run tab');
+    const control = await b.open(`${EXT}courses/allow.html`);
     ok(await b.value('browser.runtime.getManifest().version', control) === manifest.version, `updated to ${manifest.version}`);
     const after = await grants(b, control);
     ok(after.includes('<all_urls>') && await holds(b, control, `${CANVAS}/*`) && await holds(b, control, 'https://*/*'), `the update keeps the all-site grant (${after.join(', ')})`);
@@ -665,9 +665,9 @@ const run = async () => {
     const ids = await until(async () => { const r = await registered(b, control); return r.includes(`${CANVAS}/*`) && r.includes(`ultra:${BB}`) && r.includes('gz-detect') && r; }, 'the sites registered');
     ok(true, `registered: ${ids.join(', ')}`);
     await b.reload(canvas);
-    await until(async () => (await b.sheets(canvas)).includes('canvas.css'), 'Glaze on the Canvas site after the update');
+    await until(async () => (await b.sheets(canvas)).includes('content/canvas.css'), 'Glaze on the Canvas site after the update');
     await b.reload(ultra);
-    await until(async () => (await b.sheets(ultra)).includes('theme.css'), 'Glaze on the Blackboard site after the update');
+    await until(async () => (await b.sheets(ultra)).includes('content/theme.css'), 'Glaze on the Blackboard site after the update');
     await pause(800);
     ok(!await b.card(canvas) && !await b.card(ultra), 'both keep Glaze, with no card');
     const moodle = await b.open(`${MOODLE}/course/view.php?id=2`);

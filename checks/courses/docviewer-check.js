@@ -12,8 +12,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const G = require('../../extension/defaults.js');
-const C = require('../../extension/lib/color.js');
+const G = require('../../extension/content/defaults.js');
+const C = require('../../extension/core/color.js');
 const opaqueHex = (value) => { const c = C.parse(value); return c?.a === 1 ? C.hex(c) : null; };
 
 const ext = path.join(__dirname, '../../extension');
@@ -73,7 +73,7 @@ const until = async (holds, ms = 5000) => { for (const end = Date.now() + ms; !(
     // The palette message and its shared stylesheet arrive separately; neither has a fixed load time.
     const painted = (f, name) => f.waitForFunction((ground) => document.documentElement.hasAttribute('data-gz-docs')
       && getComputedStyle(document.documentElement).getPropertyValue('--gz-surface-2').trim() === ground
-      && [...document.querySelectorAll('link[rel="stylesheet"]')].some((l) => l.href.endsWith('/features/surfaces.css') && l.sheet),
+      && [...document.querySelectorAll('link[rel="stylesheet"]')].some((l) => l.href.endsWith('/looks/page/surfaces.css') && l.sheet),
     G.GZ_PRESETS.find(([n]) => n === name)[1]['--gz-surface-2'], { polling: 50, timeout: 10000 });
     const load = async () => { await page.goto('https://school.instructure.com/courses/25/files/21'); const f = await frame(); await painted(f, 'Frost'); return f; };
 

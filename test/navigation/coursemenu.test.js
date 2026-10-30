@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 
 // The menu on a course's card edits settings.courses through GZ_COURSE_EDIT; whatever it leaves must be what
 // GZ_SANITIZE would keep, or the next read would undo it.
@@ -107,7 +107,7 @@ test('Canvas course tint and Look survive sanitizing without colliding with Ultr
 const forced = (css) => { const at = css.indexOf('@media screen and (forced-colors: active)'); return at < 0 ? '' : css.slice(at, css.indexOf('\n}\n', at)); };
 test('in forced colours the course menu keeps its swatches, its Tint switch and what is picked visible, on every site', () => {
   const read = (f) => require('node:fs').readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
-  for (const f of ['extras.css', 'canvas.css', 'moodle.css']) {
+  for (const f of ['content/extras.css', 'content/canvas.css', 'content/moodle.css']) {
     const fc = forced(read(f).slice(read(f).indexOf('#gz-cm .gz-cm-look[aria-pressed="true"]')));
     assert.match(fc, /#gz-cm \.gz-cm-sw \{ forced-color-adjust: none; border-color: CanvasText; \}/, `${f}: swatches in their own colours`);
     assert.match(fc, /#gz-cm \.gz-cm-sw\[aria-pressed="true"\] \{ border: 3px solid Highlight; \}/, f);
@@ -116,5 +116,5 @@ test('in forced colours the course menu keeps its swatches, its Tint switch and 
     assert.match(fc, /#gz-cm \.gz-cm-tint input:checked \{ background: Highlight !important;/, `${f}: the switch on`);
   }
   // Ultra's swatches are the colours a hidden probe reads: forced, it would read the system's.
-  assert.match(forced(read('extras.css').slice(read('extras.css').indexOf('#gz-cm .gz-cm-look[aria-pressed="true"]'))), /html > i\[class\^="course-color-"\] \{ forced-color-adjust: none; \}/);
+  assert.match(forced(read('content/extras.css').slice(read('content/extras.css').indexOf('#gz-cm .gz-cm-look[aria-pressed="true"]'))), /html > i\[class\^="course-color-"\] \{ forced-color-adjust: none; \}/);
 });

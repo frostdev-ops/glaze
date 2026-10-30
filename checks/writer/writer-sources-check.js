@@ -30,7 +30,7 @@ const check = (condition, name) => { assert.ok(condition, name); checks++; conso
     const page = async (name, enabled = false) => {
       const key = `doc:${require('node:crypto').randomUUID()}`;
       await worker.evaluate(async ({ key, name }) => chrome.storage.local.set({ [`writerPaper:${key}`]: { key, kind: 'paper', title: name, format: 'mla9', doc: { type: 'doc', content: [{ type: 'paragraph' }] }, updated: Date.now() } }), { key, name });
-      assert.ok(require('../../extension/lib/writer-papers.js').valid(key), 'the Sources fixture opens a valid stored document key');
+      assert.ok(require('../../extension/writer/writer-papers.js').valid(key), 'the Sources fixture opens a valid stored document key');
       const p = await context.newPage(); p.on('pageerror', (e) => errors.push(e.message));
       await p.addInitScript(({ enabled }) => {
         const listeners = new Set(), events = {}; let frame;

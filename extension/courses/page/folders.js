@@ -70,7 +70,7 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
       const r = await chrome.runtime.sendMessage({ type: 'glaze:folders', key: k, ...op });
       if (!sameAction(k, g)) return;
       if (!r?.ok) { if (a === action) fail(); return; }
-      // The student's own change: the rows below a folder that hides glide up, and ones shown come in (lib/motion.js).
+      // The student's own change: the rows below a folder that hides glide up, and ones shown come in (core/motion.js).
       // A repaint for anything else stays still.
       const rows = () => [...document.querySelectorAll(ROW)];
       if (epoch === e && a === action) { data = GZ_FOLDERS.clean(r.data); if (globalThis.GZ_MOTION) GZ_MOTION.flip(rows, paint); else paint(); } else await read();

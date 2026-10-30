@@ -1,12 +1,12 @@
-// Code mods' API v1: the cleaners for what a mod hands Glaze to show or to act on. The worker's broker (lib/modbroker.js)
-// runs every one before it answers a call, and the page (features/mods.js) applies only what that answer carries: a UI
+// Code mods' API v1: the cleaners for what a mod hands Glaze to show or to act on. The worker's broker (mods/modbroker.js)
+// runs every one before it answers a call, and the page (mods/page/mods.js) applies only what that answer carries: a UI
 // slot's component tree, a card's decoration, palette commands, a played effect, the student's settings record for a
 // mod and the values its settings schema gives. Everything here arrives from a mod's code, so a cleaner refuses (null)
 // on an unknown key, a wrong type, a list or string over its limit; nothing is truncated. Rules, a nav layout and Look
-// overrides are Look parts: GZ_XPARTS cleans them (lib/lookparts.js), not this. Classic script; module.exports for node.
+// overrides are Look parts: GZ_XPARTS cleans them (looks/lookparts.js), not this. Classic script; module.exports for node.
 var GZ_MODAPI = globalThis.GZ_MODAPI || (() => {
-  const G = typeof GZ_COLORS !== 'undefined' ? { GZ_COLORS } : require('../defaults.js');
-  const MX = () => (typeof GZ_MX !== 'undefined' ? GZ_MX : require('./motionx.js'));
+  const G = typeof GZ_COLORS !== 'undefined' ? { GZ_COLORS } : require('../content/defaults.js');
+  const MX = () => (typeof GZ_MX !== 'undefined' ? GZ_MX : require('../looks/motionx.js'));
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o) && Object.getPrototypeOf(o) === Object.prototype;
   const own = (o, k) => Object.hasOwn(o, k);
   const TOKENS = G.GZ_COLORS.map(([v]) => v.slice(5));
@@ -117,7 +117,7 @@ var GZ_MODAPI = globalThis.GZ_MODAPI || (() => {
   };
   // glaze.palette.commands([...]) → [{ id, title, hint? }], at most 16, each id once (the function stays in the mod).
   const commands = (v) => { const l = list(shape({ id, title: str(60, { empty: false }), hint: str(40) }, ['id', 'title']), 16)(v); return l && new Set(l.map((c) => c.id)).size === l.length ? l : null; };
-  // glaze.effects.play(kind, opts): one of the Look effects' kinds and its fields (lib/motionx.js), and where, as fractions
+  // glaze.effects.play(kind, opts): one of the Look effects' kinds and its fields (looks/motionx.js), and where, as fractions
   // of the window (the middle third by default). → { fx, x, y }, fx in GZ_MX.fx's form.
   const effect = (kind, opts = {}) => {
     const M = MX();
@@ -129,14 +129,14 @@ var GZ_MODAPI = globalThis.GZ_MODAPI || (() => {
   };
 
   // ---- the navigation bar's items (nav.items) ----------------------------------------------------------------------------
-  // glaze.nav.add({ id, label, icon, href | action, badge, group | slot }) → the item cleaned, for features/navbar.js to draw as
-  // the mod's own. An icon is one of the bar's (lib/navbar.js PICKS) but those only Glaze's own items wear (anything else
-  // gets the link icon), and a label is never the name of one of them (lib/navlayout.js RESERVED, refused), so the item
+  // glaze.nav.add({ id, label, icon, href | action, badge, group | slot }) → the item cleaned, for navigation/page/navbar.js to draw as
+  // the mod's own. An icon is one of the bar's (navigation/navbar.js PICKS) but those only Glaze's own items wear (anything else
+  // gets the link icon), and a label is never the name of one of them (navigation/navlayout.js RESERVED, refused), so the item
   // can't pass for Glaze's settings or signing out. An href is a page of the LMS site the mod runs on (origin, the rule
-  // lib/navlayout.js onSite keeps), never another site's; action: true asks for a 'nav.action' event instead. partial:
+  // navigation/navlayout.js onSite keeps), never another site's; action: true asks for a 'nav.action' event instead. partial:
   // glaze.nav.update's patch, where nothing is required (the page merges it over the item and checks the result again).
-  // The worker, the editor and node load lib/navlayout.js before this; it is asked for only when an item is cleaned.
-  const NL = () => (typeof GZ_NAV_LAYOUT !== 'undefined' ? GZ_NAV_LAYOUT : require('./navlayout.js'));
+  // The worker, the editor and node load navigation/navlayout.js before this; it is asked for only when an item is cleaned.
+  const NL = () => (typeof GZ_NAV_LAYOUT !== 'undefined' ? GZ_NAV_LAYOUT : require('../navigation/navlayout.js'));
   const NAV_ICONS = ['home', 'book', 'calendar', 'inbox', 'grades', 'tools', 'help', 'activity', 'organization', 'groups', 'history', 'admin', 'account', 'notes', 'todo', 'search', 'settings', 'documents', 'link', 'video', 'chat', 'doc', 'folder', 'code', 'star', 'globe', 'bell', 'layers', 'pencil', 'megaphone', 'quiz', 'people', 'timer', 'gear'];
   const navHref = (origin) => (v) => NL().onSite(v, origin) || null;
   const navLabel = (v) => { const l = str(40, { empty: false })(v); return l !== null && !NL().reserved(l) ? l : null; };
@@ -155,7 +155,7 @@ var GZ_MODAPI = globalThis.GZ_MODAPI || (() => {
   const docSlot = (slot, v) => { const s = oneOf(DOC_SLOTS)(slot), i = id(v); return s && i ? { slot: s, id: i } : null; };
   // A document's key as glaze.documents.list() gave it: the page acts only on a key it lists, so here only its shape.
   const docKey = (v) => (typeof v === 'string' && v.length > 0 && v.length <= 320 && !/[\p{Cc}\s]/u.test(v) ? v : null);
-  // glaze.documents.create({ format }): a new document in one of Writer's formats (lib/writer-styles.js IDS), Blank by default.
+  // glaze.documents.create({ format }): a new document in one of Writer's formats (writer/writer-styles.js IDS), Blank by default.
   const DOC_FORMATS = ['plain', 'mla9', 'apa7', 'chicago17'];
   const docCreate = (v = {}) => { const c = shape({ format: oneOf(DOC_FORMATS) })(v); return c ? { format: c.format ?? 'plain' } : null; };
   // glaze.documents.style(vars): the page's --gd-* hooks (papers.css) the mod sets while it runs, each in its range: corner

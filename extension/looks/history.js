@@ -2,9 +2,9 @@
 // server. History is every theme worn, newest first; the background adds to it whatever changed the theme.
 // Classic script after defaults.js; module.exports for node.
 const GZ_HISTORY = (() => {
-  const G = typeof GZ_SANITIZE !== 'undefined' ? { GZ_SANITIZE } : require('../defaults.js');
+  const G = typeof GZ_SANITIZE !== 'undefined' ? { GZ_SANITIZE } : require('../content/defaults.js');
   // What a Look, a palette or a theme code sets. Tooltips and hints are how Glaze behaves, not how it
-  // looks, so they stay the student's. `parts` is the Look's extras ({ x, m }, lib/lookparts.js): not a sync setting
+  // looks, so they stay the student's. `parts` is the Look's extras ({ x, m }, looks/lookparts.js): not a sync setting
   // (the worker and the editor keep them in `lookX`), but part of a Look all the same, so wearing a theme brings them
   // and wearing one without clears them.
   const KEYS = ['colors', 'preset', 'auto', 'look', 'bg', 'parts'];

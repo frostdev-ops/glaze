@@ -1,5 +1,5 @@
 // PKCE (RFC 7636), states and the redirect check for sign-in. Pure: no endpoints, no client IDs, no requests. The worker
-// loads it for Google Drive (lib/google.js); never a page or a content script.
+// loads it for Google Drive (background/google.js); never a page or a content script.
 const GZ_OAUTH = (() => {
   const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const random = () => b64url(crypto.getRandomValues(new Uint8Array(32))); // 43 characters, 256 bits

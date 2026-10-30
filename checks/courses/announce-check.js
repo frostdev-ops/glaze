@@ -9,7 +9,7 @@
 //   NODE_PATH=/path/to/node_modules nice -n 10 node checks/courses/announce-check.js [screenshots directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 // A copy holding the synthetic Ultra and Moodle schools' hosts, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(path.resolve(process.env.EXT || path.join(__dirname, '../../extension')), ['https://bb.school.test/*', 'https://moodle.school.test/*']);
 const out = path.resolve(process.argv[2] || '/tmp/gz-ann-shots');
@@ -289,7 +289,7 @@ const ok = (v, label) => { checks++; if (!v) { failures.push(label); console.err
             t: (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => v?.[k] || ''), locale: () => 'en', need: async () => {},
             moodleIn: async () => ({ session: () => ({ root: location.origin, sesskey: 'fixture' }) }) };
         }, site);
-        for (const f of ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js', 'lib/i18n.js', 'lib/page.js', 'lib/doctext.js', 'lib/notes.js', 'lib/lmsq.js', 'lib/popup.js', 'lib/announce.js', 'lib/ultra.js', 'features/popup.js', 'features/announce.js']) await fixturePage.addScriptTag({ path: path.join(ext, f) });
+        for (const f of ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js', 'core/i18n.js', 'core/page.js', 'core/doctext.js', 'planner/notes.js', 'courses/lmsq.js', 'core/popup.js', 'courses/announce.js', 'courses/ultra.js', 'courses/page/popup.js', 'courses/page/announce.js']) await fixturePage.addScriptTag({ path: path.join(ext, f) });
         await fixturePage.evaluate(async (site) => {
           await GZ_ANNOUNCE.ready;
           window.reference = { site, courseId: site === 'ultra' ? '_25_1' : '25', id: site === 'ultra' ? '_7_1' : '7', url: `${location.origin}/announcement`, title: 'Lab moved', from: document.getElementById('source') };

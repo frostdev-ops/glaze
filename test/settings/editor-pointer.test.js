@@ -1,4 +1,4 @@
-// The student's pointer in the editor (lib/editor-pointer.js, Look › Pointer): the switch, one card per choice the setting
+// The student's pointer in the editor (settings/editor-pointer.js, Look › Pointer): the switch, one card per choice the setting
 // takes, what each shows, and that choosing, uploading and removing write only the student's settings (extras) and their
 // picture on this device, never the Look's parts; the Look's own pointer and cursor effect, which write only the Look's.
 // In a VM with a small stand-in DOM and storage; how it looks is the headless check's.
@@ -7,9 +7,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const G = require('../../extension/defaults.js');
-const L = require('../../extension/lib/lookx.js');
-const P = require('../../extension/lib/editor-pointer.js');
+const G = require('../../extension/content/defaults.js');
+const L = require('../../extension/looks/lookx.js');
+const P = require('../../extension/settings/editor-pointer.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const tick = () => new Promise((r) => setTimeout(r));
@@ -44,8 +44,8 @@ const editor = (s, local = {}) => {
   const context = vm.createContext({
     console, JSON, Object, Array, String, Promise, setTimeout, Option, CSS: { escape: (x) => x },
     ...Object.fromEntries(['GZ_COLORS', 'GZ_SPEC', 'GZ_SYNC_BYTES', 'GZ_SYNC_ITEM_MAX'].map((k) => [k, G[k]])),
-    // What the libraries load in node when the page's globals are not there (defaults.js, lib/lookparts.js).
-    require: (f) => require(path.resolve(__dirname, '../../extension/lib', f)),
+    // What the libraries load in node when the page's globals are not there (defaults.js, looks/lookparts.js).
+    require: (f) => require(path.resolve(__dirname, '../../extension/looks', f)),
     document: {
       createElement: (tag) => (tag === 'canvas' ? Object.assign(new El('canvas'), { getContext: () => ({ drawImage() {} }), toDataURL: () => 'data:image/png;base64,cGljdHVyZQ==' }) : new El(tag)),
       createElementNS: (ns, tag) => Object.assign(new El(tag), { namespaceURI: ns }),
@@ -71,7 +71,7 @@ const editor = (s, local = {}) => {
     },
   });
   context.globalThis = context;
-  for (const f of ['lib/motionx.js', 'lib/lookparts.js', 'lib/lookx.js', 'lib/editor-x.js', 'lib/editor-xmotion.js', 'lib/editor-pointer.js']) vm.runInContext(read(f), context);
+  for (const f of ['looks/motionx.js', 'looks/lookparts.js', 'looks/lookx.js', 'settings/editor-x.js', 'settings/editor-xmotion.js', 'settings/editor-pointer.js']) vm.runInContext(read(f), context);
   ids['pointer-file'].click = () => { picked = 'asked'; };
   context.GZ_EDITOR_X.mount({ s, t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), frame: { contentWindow: null },
     // Kept as plain JSON: what the VM's realm made compares by value here.
@@ -290,10 +290,10 @@ test('the section: the switch in its heading, a body with the cards, the picture
   assert.match(more, /^<summary>This Look's pointer<\/summary>\n<div id="x-pointer" class="group"><\/div>\n<\/details>/);
   // The picture is asked for here only: the old routes to it are gone.
   assert.doesNotMatch(html, /id="cursor-(pick|file|img|own|note)"/);
-  assert.doesNotMatch(read('options.js'), /cursorImg/);
-  assert.doesNotMatch(read('lib/editor-xmotion.js'), /Pointers, stickers and rotation/);
+  assert.doesNotMatch(read('settings/options.js'), /cursorImg/);
+  assert.doesNotMatch(read('settings/editor-xmotion.js'), /Pointers, stickers and rotation/);
   // The Look's pointer offers the student's own picture only to a Look that wears it already.
-  assert.match(read('lib/editor-pointer.js'), /MX\(\)\.POINTERS\.filter\(\(k\) => k !== 'own' \|\| v === 'own'\)/);
+  assert.match(read('settings/editor-pointer.js'), /MX\(\)\.POINTERS\.filter\(\(k\) => k !== 'own' \|\| v === 'own'\)/);
 });
 
 test('the switch: off hides the cards and the animation switch and keeps the choice; on shows them again', async () => {

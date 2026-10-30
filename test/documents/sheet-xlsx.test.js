@@ -1,12 +1,12 @@
-// Glaze Sheets' .xlsx and CSV files (lib/sheet-xlsx.js): the 13 workbooks Excel saved for the golden harness
+// Glaze Sheets' .xlsx and CSV files (documents/sheets/sheet-xlsx.js): the 13 workbooks Excel saved for the golden harness
 // (test/fixtures/sheets) read against golden.json and cases.js, a synthetic workbook for each styles, theme, sheet and
 // package case, and what is kept byte for byte.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
-const Z = require('../../extension/lib/zip.js');
-const M = require('../../extension/lib/sheet-model.js');
-const X = require('../../extension/lib/sheet-xlsx.js');
+const Z = require('../../extension/core/zip.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const X = require('../../extension/documents/sheets/sheet-xlsx.js');
 const { cases, families } = require('../fixtures/sheets/cases.js');
 
 const DIR = path.join(__dirname, '../fixtures/sheets');
@@ -396,10 +396,10 @@ test('caps: 100 sheets and 250,000 cells; the rest are listed, not read', async 
 });
 
 // ── Writing ───────────────────────────────────────────────────────────────────────────────────────────────────────────
-const C = require('../../extension/lib/sheet-calc.js');
-const F = require('../../extension/lib/sheet-formula.js');
-for (const f of fs.readdirSync(path.join(__dirname, '../../extension/lib')).filter((n) => /^sheet-fn-.*\.js$/.test(n)).sort()) require(`../../extension/lib/${f}`);
-const D = require('../../extension/lib/doctext.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+const F = require('../../extension/documents/sheets/sheet-formula.js');
+for (const f of fs.readdirSync(path.join(__dirname, '../../extension/documents/sheets')).filter((n) => /^sheet-fn-.*\.js$/.test(n)).sort()) require(`../../extension/documents/sheets/${f}`);
+const D = require('../../extension/core/doctext.js');
 const DATE = new Date(2026, 0, 1);
 const parts = async (bytes) => { const z = D.unzip(bytes); const out = {}; for (const n of z.names) out[n] = await z.text(n); return out; };
 // What Excel can store of an error: the seven, #GETTING_DATA, and #VALUE! for the newer ones.
@@ -925,15 +925,15 @@ test('review csv: formula caches refresh and sparse rectangles are bounded', () 
 test('review dependencies: a failed early lookup can retry after the engine loads', () => {
   const vm = require('node:vm');
   const ctx = { GZ_SHEET_MODEL: M, module: { exports: {} }, require: () => { throw Error('late dependency'); } };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-xlsx.js'), 'utf8'), ctx);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-xlsx.js'), 'utf8'), ctx);
   assert.throws(() => ctx.module.exports.tinted('#000000', 0), /late dependency/);
-  Object.assign(ctx, { GZ_SHEET_FORMULA: require('../../extension/lib/sheet-formula.js'), GZ_SHEET_NUMFMT: require('../../extension/lib/sheet-numfmt.js'), GZ_DOCTEXT: D });
+  Object.assign(ctx, { GZ_SHEET_FORMULA: require('../../extension/documents/sheets/sheet-formula.js'), GZ_SHEET_NUMFMT: require('../../extension/documents/sheets/sheet-numfmt.js'), GZ_DOCTEXT: D });
   assert.equal(M.cell(ctx.module.exports.readDelimited('1').sheets[0], 0, 0)?.v, 1);
 });
 
 test('review page: Documents defers spreadsheet and document file codecs', () => {
   const html = fs.readFileSync(path.join(__dirname, '../../extension/papers.html'), 'utf8');
-  assert.doesNotMatch(html, /<script src="lib\/(?:sheet-xlsx|doctext|zip)\.js"/);
+  assert.doesNotMatch(html, /<script src="(?:documents\/sheets\/sheet-xlsx|core\/doctext|core\/zip)\.js"/);
 });
 
 test('review charts: relationship lookup honours XML encoding and package case', async () => {

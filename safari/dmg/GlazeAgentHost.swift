@@ -2,7 +2,7 @@
 //  GlazeAgentHost.swift
 //  Glaze (DMG)
 //
-//  The Glaze app as Safari's agent host (the contract is in the header of lib/agent-link.js). For each Safari profile's
+//  The Glaze app as Safari's agent host (the contract is in the header of agents/agent-link.js). For each Safari profile's
 //  worker, by its instance i, it does what mcp/lib/host.js does for Chrome and Firefox: at the worker's hello it publishes
 //  <run>/safari.<i>.sock and its run file (mcp/lib/rendezvous.js's folder, names, modes and lock), lets in each agent that
 //  proves the token (mcp/lib/handshake.js) as a numbered connection, and passes lines both ways as frames, with mux.js's

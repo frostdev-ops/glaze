@@ -1,4 +1,4 @@
-// The worker's part of a restore (lib/background.js 'glaze:backup', lib/backup.js apply): only Settings' own top frame
+// The worker's part of a restore (background/background.js 'glaze:backup', background/backup.js apply): only Settings' own top frame
 // writes a backup's records.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -28,7 +28,7 @@ test("Settings in its own tab restores a backup's records; its frame, a school p
 });
 
 test('the Firefox package loads the backup library with the worker', () => {
-  const src = require('node:fs').readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
   assert.match(src, /importScripts\('backup\.js'\)/);
 });
 

@@ -1,12 +1,12 @@
-// Glaze's own navigation bar: the model (lib/navbar.js), its settings, the worker's pin write and the page hooks.
+// Glaze's own navigation bar: the model (navigation/navbar.js), its settings, the worker's pin write and the page hooks.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const G = require('../../extension/defaults.js');
-const L = require('../../extension/lib/navlayout.js');
-const NI = require('../../extension/lib/nav-items.js');
-const M = require('../../extension/lib/navbar.js');
+const G = require('../../extension/content/defaults.js');
+const L = require('../../extension/navigation/navlayout.js');
+const NI = require('../../extension/navigation/nav-items.js');
+const M = require('../../extension/navigation/navbar.js');
 
 const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 const ULTRA = ['profile', 'institution-page', 'stream', 'course', 'organization', 'calendar', 'messages', 'grades', 'tools', 'logout', 'glaze']
@@ -70,7 +70,7 @@ test("the student's own groups, tabs and Glaze items", () => {
 });
 
 test("Glaze's Documents item: opt-in, drawn when on, and its click opens Documents beside the bar (its own tab in Settings' preview)", async () => {
-  const E = require('../../extension/lib/editor-navbar.js');
+  const E = require('../../extension/settings/editor-navbar.js');
   // Off until the student turns it on, a fresh device too (its one item is Glaze settings).
   assert.deepEqual(M.clean({}).glaze, []);
   assert.deepEqual(M.initial(undefined, undefined, true).glaze, ['settings']);
@@ -89,11 +89,11 @@ test("Glaze's Documents item: opt-in, drawn when on, and its click opens Documen
   const row = E.rows({ glaze: ['documents'] }, { names: (id) => (id === 'glaze:documents' ? 'Dokumente' : id) }).flatMap((g) => g.items).find((i) => i.id === 'glaze:documents');
   assert.deepEqual([row.name, row.icon, row.hidden], ['Dokumente', 'documents', false]);
   // The page's bar names it in the page's language.
-  const src = read('features/navbar.js');
+  const src = read('navigation/page/navbar.js');
   const names = vm.runInNewContext(`(${src.match(/names: (\{ notes: t\('Notes'\)[^}]*\})/)[1]})`, { t: (k) => `«${k}»` });
   assert.equal(names.documents, '«Documents»');
-  // Its click, the student's own only: Documents as a page of the site, as Settings opens (features/settingspage.js); its own
-  // tab, which the worker opens (lib/background.js 'papers'), in Settings' preview of the bar or where the page can't hold it.
+  // Its click, the student's own only: Documents as a page of the site, as Settings opens (settings/page/settingspage.js); its own
+  // tab, which the worker opens (background/background.js 'papers'), in Settings' preview of the bar or where the page can't hold it.
   for (const [isPreview, opens, want] of [[false, true, [['open', '', 'papers']]], [true, true, ['papers']], [false, false, [['open', '', 'papers'], 'papers']]]) {
     const sent = [];
     const ctx = { send: (m) => sent.push(m), isPreview, arranged: () => null, goNative() {}, site: { home: () => 'home' },
@@ -107,7 +107,7 @@ test("Glaze's Documents item: opt-in, drawn when on, and its click opens Documen
     glaze('documents', { isTrusted: true });
     for (let i = 0; i < 5; i++) await new Promise(setImmediate);
     assert.deepEqual(JSON.parse(JSON.stringify(sent.filter((x) => x[0] !== 'need'))), want, JSON.stringify({ isPreview, opens }));
-    if (!isPreview) assert.deepEqual(JSON.parse(JSON.stringify(sent[0])), ['need', 'features/settingspage.js']);
+    if (!isPreview) assert.deepEqual(JSON.parse(JSON.stringify(sent[0])), ['need', 'settings/page/settingspage.js']);
   }
   // Picking it while Settings or Documents is open doesn't leave first: it takes Settings' place, or stays.
   assert.match(src, /!\['glaze:settings', 'glaze:documents'\]\.includes\(target\.dataset\.id\) && !\['customize',[^\n]*GZ_SETTINGS_PAGE\?\.close\(\)/);
@@ -170,7 +170,7 @@ test('on by default: a floating rail, open on wide windows; Look codes carry how
   assert.deepEqual(G.GZ_SANITIZE({ navbar: { on: 1, place: 'side', style: 'glass', rail: 'wide', course: 'gone', brand: 'school' } }).navbar, { ...DEF, brand: 'school' });
   for (const icon of M.PICKS) assert.match(M.ICONS[icon], /^[Mm][\d.\s,a-zA-Z-]+$/, icon);
   assert.ok(NI.ICONS.every((i) => M.PICKS.includes(i)), "every link icon a Look may give is one of the bar's");
-  const S = require('../../extension/lib/share.js');
+  const S = require('../../extension/sharing/share.js');
   const s = G.GZ_SANITIZE({ navbar: { on: false, place: 'top', style: 'embed', course: 'icons', tabs: false } });
   const got = await S.decode(await S.encode(s, {}, null));
   assert.deepEqual(got.navbar, { place: 'top', style: 'embed', course: 'icons', tabs: false }, 'only what differs from the default, never on');
@@ -207,7 +207,7 @@ test('where the bar is: the placement, the course state, the style and the room 
     ['home', 'layers', 'pencil', 'quiz', 'chat', 'grades', 'people', 'folder', 'book', 'megaphone', 'video', 'star', 'gear', 'doc']);
   assert.equal(M.courseIcon('', 'Participants'), 'people', 'by its name where the key says nothing');
   // theme.css reserves the same room at first paint, from the same words.
-  const css = read('theme.css');
+  const css = read('content/theme.css');
   for (const [rule, px] of [['html[data-gz-navbar~="rail"] { --gz-navbar-left', 96], ['html[data-gz-navbar~="rail"][data-gz-navbar~="embed"] { --gz-navbar-left', 72], ['html[data-gz-navbar~="rail"][data-gz-navbar~="open"] { --gz-navbar-left', 272],
     ['html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left', 248], ['html[data-gz-navbar~="top"] { --gz-navbar-top', 80], ['html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top', 56],
     ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left', 272], ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left', 248]]) assert.ok(css.includes(`${rule}: ${px}px; }`), rule);
@@ -222,7 +222,7 @@ test('where the bar is: the placement, the course state, the style and the room 
 });
 
 test('full-window Ultra layers offset their content and keep their covering edges', () => {
-  const css = read('theme.css');
+  const css = read('content/theme.css');
   const selector = 'html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap';
   assert.ok(css.includes(`${selector} { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }`));
   assert.ok(css.match(/@media \(min-width: 900px\) \{[\s\S]*?\n\}/g).some((block) => block.includes(selector)), 'desktop room stays in the existing navbar guard');
@@ -235,7 +235,7 @@ test('full-window Ultra layers offset their content and keep their covering edge
 });
 
 test("below 900px, what Ultra fixes along the window's bottom stands on the bar, not under it", () => {
-  const css = read('theme.css');
+  const css = read('content/theme.css');
   const mobile = css.match(/@media \(max-width: 899\.98px\) \{[\s\S]*?\n\}/g).find((block) => block.includes('--gz-navbar-bottom'));
   assert.ok(mobile, 'the bar\'s bottom room is worded once, for narrow windows');
   const on = 'html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive])';
@@ -250,7 +250,7 @@ test("below 900px, what Ultra fixes along the window's bottom stands on the bar,
 });
 
 test("Ultra's first paint words the bar as the model does, for each setting, in and out of a course", () => {
-  const src = read('content-ultra.js');
+  const src = read('content/content-ultra.js');
   const line = src.match(/ {4}const b = I\.settings\.navbar, c = [^\n]+\n[^\n]+/)[0];
   const first = (navbar, path, tabs = true) => {
     const attrs = {};
@@ -271,7 +271,7 @@ test("Ultra's first paint words the bar as the model does, for each setting, in 
 });
 
 test('the editor may change navbar fields; Ultra and Moodle top frames may only pin their rail', async () => {
-  const source = read('lib/background.js');
+  const source = read('background/background.js');
   const DEF = G.GZ_SANITIZE({}).navbar;
   const store = { navbar: { on: true, rail: 'auto', brand: 'school' } };
   const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, fromEditor: (s) => s.editor === true, fromUltra: async (s) => s.ultra === true, fromMoodle: async (s) => s.moodle === true, fromCanvas: async (s) => s.canvas === true });
@@ -292,25 +292,25 @@ test('the editor may change navbar fields; Ultra and Moodle top frames may only 
   assert.deepEqual(store.navbar, { ...DEF, rail: 'icons', brand: 'school' });
   await h.run({ patch: { badges: false } }, { sync });
   assert.deepEqual(store.navbar, { ...DEF, rail: 'icons', badges: false, brand: 'school' });
-  assert.match(source, /'features\/navbar\.js'\) \? \['lib\/nav\.js', 'lib\/nav-items\.js', 'lib\/navlayout\.js', 'lib\/navbar\.js'\]/, 'the model loads with the bar');
-  assert.ok(require('../../extension/manifest.json').web_accessible_resources.some((w) => w.resources.includes('features/navbar.css')), 'the shadow root can load its sheet');
+  assert.match(source, /'navigation\/page\/navbar\.js'\) \? \['navigation\/nav\.js', 'navigation\/nav-items\.js', 'navigation\/navlayout\.js', 'navigation\/navbar\.js'\]/, 'the model loads with the bar');
+  assert.ok(require('../../extension/manifest.json').web_accessible_resources.some((w) => w.resources.includes('navigation/page/navbar.css')), 'the shadow root can load its sheet');
 });
 
 test("Ultra's part marks first paint from the setting and loads the bar only when it is on; the old rail steps aside", () => {
-  const ultra = read('content-ultra.js');
+  const ultra = read('content/content-ultra.js');
   assert.match(ultra, /if \(!globalThis\.GZ_NAVBAR_UI\?\.live\(\)\) I\.setAttr\('data-gz-navbar', !!b\?\.on && /);
-  assert.match(ultra, /if \(globalThis\.GZ_NAVBAR_UI \|\| \(I\.links\.length && I\.settings\?\.navbar\?\.on\)\) need\('features\/navbar\.js'/);
-  assert.match(read('features/nav.js'), /let on = X\.on\(\) && X\.settings\(\)\.enabled && !\(X\.site === 'ultra' && X\.settings\(\)\.navbar\?\.on\) && !\(X\.site === 'moodle' && X\.settings\(\)\.navbar\?\.on\);/);
+  assert.match(ultra, /if \(globalThis\.GZ_NAVBAR_UI \|\| \(I\.links\.length && I\.settings\?\.navbar\?\.on\)\) need\('navigation\/page\/navbar\.js'/);
+  assert.match(read('navigation/page/nav.js'), /let on = X\.on\(\) && X\.settings\(\)\.enabled && !\(X\.site === 'ultra' && X\.settings\(\)\.navbar\?\.on\) && !\(X\.site === 'moodle' && X\.settings\(\)\.navbar\?\.on\);/);
 });
 
 // The renderer's API: mods add, change and remove only their own items, and nothing unsafe gets through.
 test("a mod's items are checked: name, icon, address, badge, place; one owner can't touch another's", () => {
   const noop = () => {};
-  const ctx = vm.createContext({ GZ_NAV_LAYOUT: L, GZ_NAV_ITEMS: NI, GZ_NAVBAR: M, GZ_NAV: require('../../extension/lib/nav.js'), URL,
+  const ctx = vm.createContext({ GZ_NAV_LAYOUT: L, GZ_NAV_ITEMS: NI, GZ_NAVBAR: M, GZ_NAV: require('../../extension/navigation/nav.js'), URL,
     location: { href: 'https://school.test/ultra/course', origin: 'https://school.test' }, addEventListener: noop, document: { addEventListener: noop }, requestAnimationFrame: noop,
     chrome: { runtime: { id: 'x' }, storage: { onChanged: { addListener: noop } } },
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', on: () => false, settings: () => ({ enabled: true, navbar: { on: false } }), parts: () => null, setVar: noop } });
-  const ui = vm.runInContext(read('features/navbar.js'), ctx);
+  const ui = vm.runInContext(read('navigation/page/navbar.js'), ctx);
   assert.equal(ui.add('countdown', { id: 'next', label: 'Next due', icon: 'star', href: 'https://school.test/ultra/calendar', badge: 3, group: 'main' }), true);
   for (const bad of [{ id: 'Next', label: 'x' }, { id: 'a', label: '' }, { id: 'a', label: 'x'.repeat(41) }, { id: 'a', label: 'x', href: 'javascript:alert(1)' }, { id: 'a', label: 'x', href: 'http://plain.test/' },
     ...['blob:https://school.test/id', 'https://user:pass@due.test/', 'https://due.test/', 'https://school.test.evil.test/', null, 1, {}].map((href) => ({ id: 'a', label: 'x', href })),
@@ -337,8 +337,8 @@ test('a navbar control saves only its edit, preserving a pin from another tab', 
     runtime: { sendMessage: (m, cb) => { sent.push(m); Object.assign(stored.navbar, m.patch); cb({ ok: true }); } },
     storage: { sync: { set: (patch, cb) => { Object.assign(stored, patch); cb(); } } },
   } });
-  vm.runInContext(read('ui.js') + '\nglobalThis.UI = GZ_UI;', ctx);
-  const editor = read('options.js');
+  vm.runInContext(read('core/ui.js') + '\nglobalThis.UI = GZ_UI;', ctx);
+  const editor = read('settings/options.js');
   vm.runInContext(editor.slice(editor.indexOf('  const pending = new Set()'), editor.indexOf('  // Relay preference')) + "\nset('navbar.badges', false); save(['navbar']);", ctx);
   assert.equal(stored.navbar.rail, 'open');
   assert.equal(stored.navbar.badges, false);
@@ -348,7 +348,7 @@ test('a navbar control saves only its edit, preserving a pin from another tab', 
 test('a navbar edit batched with Look parts merges in the worker queue too', async () => {
   const stored = { navbar: { ...G.GZ_SANITIZE().navbar, rail: 'icons' } };
   const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, GZ_XPARTS: { write: async (_area, _parts, patch) => { Object.assign(stored, patch); return true; } } });
-  const source = read('lib/background.js');
+  const source = read('background/background.js');
   const h = vm.runInContext(`({${source.match(/\n {2}look: \{([\s\S]*?)\n {2}\},/)[1]}})`, ctx);
   assert.equal((await h.run({ patch: { navbar: { badges: false } } }, { sync: { get: async () => structuredClone(stored) } })).ok, true);
   assert.equal(stored.navbar.rail, 'icons');
@@ -356,7 +356,7 @@ test('a navbar edit batched with Look parts merges in the worker queue too', asy
 });
 
 test("the editor lists every item where the bar puts it, hidden ones too, with the phone's tabs", () => {
-  const E = require('../../extension/lib/editor-navbar.js');
+  const E = require('../../extension/settings/editor-navbar.js');
   const ids = (gs) => gs.map((g) => g.items.map((i) => i.id));
   // Every LMS's items (WP-N2, NAV-4): Ultra's, Canvas's and Moodle's, in the default groups' order.
   assert.deepEqual(ids(E.rows({})), [['institution-page', 'dashboard', 'home', 'stream', 'course', 'organization', 'groups', 'calendar', 'messages', 'notifications', 'grades'], ['tools', 'history', 'help', 'admin']]);
@@ -371,12 +371,12 @@ test("the editor lists every item where the bar puts it, hidden ones too, with t
   assert.equal(gs[2].items[1].own, true, "the student's own link can be removed here");
   assert.equal(gs.flatMap((g) => g.items).filter((i) => i.tab)[0].id, 'calendar');
   assert.equal(E.rows({ glaze: ['todo'] }, { names: (id) => id === 'glaze:todo' ? 'Tareas' : id }).flatMap((g) => g.items).find((i) => i.id === 'glaze:todo').name, 'Tareas');
-  assert.match(read('options.html'), /<script src="lib\/navbar\.js"><\/script>\s*<script src="lib\/editor-navbar\.js"><\/script>/);
+  assert.match(read('options.html'), /<script src="navigation\/navbar\.js"><\/script>\s*<script src="settings\/editor-navbar\.js"><\/script>/);
 });
 
 test('course tabs show in the bar when it holds them, and at "only in the navigation" their strip steps aside', () => {
-  const src = read('features/coursetabs.js');
-  assert.deepEqual(require('../../extension/lib/coursetabs.js') && require('../../extension/defaults.js').GZ_SPEC.tabs.at, ['auto', ['auto', 'above', 'between', 'below', 'nav']]);
+  const src = read('navigation/page/coursetabs.js');
+  assert.deepEqual(require('../../extension/navigation/coursetabs.js') && require('../../extension/content/defaults.js').GZ_SPEC.tabs.at, ['auto', ['auto', 'above', 'between', 'below', 'nav']]);
   assert.match(src, /\(framed \? parent\.document : document\)\.documentElement\.getAttribute\('data-gz-navbar'\)/, "a tab's frame asks the page around it");
   assert.match(src, /P\(\)\.at !== 'nav' \? P\(\)\.at : navHolds\(\) \? 'nav' : 'above'\);/, "'nav' is the strip's 'above' where no bar holds the tabs");
   assert.match(src, /const hosted = \(\) => at\(\) === 'nav';/);
@@ -384,11 +384,11 @@ test('course tabs show in the bar when it holds them, and at "only in the naviga
   assert.match(src, /v = a === 'nav' \? a : /, 'the first paint keeps no room for a strip');
   assert.match(src, /if \(!framed\) globalThis\.GZ_NAVBAR_UI\?\.sync\(\);/, 'the bar redraws when the tabs change');
   for (const k of ['rows', 'visit', 'shut', 'pin', 'move', 'leave', 'place']) assert.match(src, new RegExp(`\\n    ${k}[:,]`), k);
-  assert.match(read('theme.css'), /html\[data-gz-ctabs~="nav"\] \{ --gz-ctabs-h: 0px !important; \}/, "and the strip's room with it");
+  assert.match(read('content/theme.css'), /html\[data-gz-ctabs~="nav"\] \{ --gz-ctabs-h: 0px !important; \}/, "and the strip's room with it");
 });
 
 const itemEditor = (set) => {
-  const source = read('lib/editor-navbar.js');
+  const source = read('settings/editor-navbar.js');
   const status = { textContent: '' };
   const ctx = vm.createContext({ GZ_NAVBAR: M, TextEncoder, MAX_BYTES: 8000, M: () => M, $: () => status,
     t: (s) => s, hint() {}, render() {}, load() {}, chrome: { storage: { sync: { set } } } });
@@ -442,22 +442,22 @@ const printed = (file) => media(file, '@media print');
 test("printed, a page is the site's own: none of Glaze's fixed parts on every sheet, and no room kept for them", () => {
   // The bar in its shadow root (the phone's bottom bar, the rail, the Skip link), the course tabs' strip, the footer on
   // Ultra (fixed) and Canvas (in the page), floating tiles and the pet out on the page; the sidebar's buttons already.
-  assert.match(printed('features/navbar.css'), /:host\{display:none !important;?\}/);
-  assert.match(printed('features/coursetabs.css'), /#gz-ctabs\{display:none !important;?\}/);
-  assert.match(printed('theme.css'), /html\[data-gz-footer\] #gz-footer\{display:none !important;?\}/);
-  assert.match(printed('canvas.css'), /#gz-footer\{display:none !important;?\}/);
-  assert.match(printed('features/apps.css'), /#gz-float\{display:none !important;?\}/);
-  assert.match(printed('features/apps.css'), /\.gz-game-world\{display:none ?!important;?\}/);
-  assert.match(printed('features/sidebar.css'), /\.gz-sb-own[^{]*\{display:none !important;?\}/);
-  assert.match(read('features/sidebar.js'), /className: 'gz-sb-btn gz-sb-launch gz-sb-own'/, 'the Sidebar button is one of them');
-  // The room: the bar's (set inline by features/navbar.js once drawn, so !important), the strip's and the footer's.
-  assert.match(printed('theme.css'), /html\[data-gz-navbar\]\{--gz-navbar-left:0px !important;--gz-navbar-top:0px !important;--gz-navbar-bottom:0px !important;?\}/);
-  assert.match(printed('theme.css'), /html\[data-gz-footer\]\{--gz-footer-h:0px !important;?\}/);
-  assert.match(printed('canvas.css'), /html\[data-gz-navbar\]\{--gz-navbar-left:0px !important;--gz-navbar-top:0px !important;?\}/);
-  assert.match(printed('features/coursetabs.css'), /html\[data-gz-ctabs\]\{--gz-ctabs-h:0px !important;?\}/);
+  assert.match(printed('navigation/page/navbar.css'), /:host\{display:none !important;?\}/);
+  assert.match(printed('navigation/page/coursetabs.css'), /#gz-ctabs\{display:none !important;?\}/);
+  assert.match(printed('content/theme.css'), /html\[data-gz-footer\] #gz-footer\{display:none !important;?\}/);
+  assert.match(printed('content/canvas.css'), /#gz-footer\{display:none !important;?\}/);
+  assert.match(printed('core/page/apps.css'), /#gz-float\{display:none !important;?\}/);
+  assert.match(printed('core/page/apps.css'), /\.gz-game-world\{display:none ?!important;?\}/);
+  assert.match(printed('navigation/page/sidebar.css'), /\.gz-sb-own[^{]*\{display:none !important;?\}/);
+  assert.match(read('navigation/page/sidebar.js'), /className: 'gz-sb-btn gz-sb-launch gz-sb-own'/, 'the Sidebar button is one of them');
+  // The room: the bar's (set inline by navigation/page/navbar.js once drawn, so !important), the strip's and the footer's.
+  assert.match(printed('content/theme.css'), /html\[data-gz-navbar\]\{--gz-navbar-left:0px !important;--gz-navbar-top:0px !important;--gz-navbar-bottom:0px !important;?\}/);
+  assert.match(printed('content/theme.css'), /html\[data-gz-footer\]\{--gz-footer-h:0px !important;?\}/);
+  assert.match(printed('content/canvas.css'), /html\[data-gz-navbar\]\{--gz-navbar-left:0px !important;--gz-navbar-top:0px !important;?\}/);
+  assert.match(printed('navigation/page/coursetabs.css'), /html\[data-gz-ctabs\]\{--gz-ctabs-h:0px !important;?\}/);
   // The phone bar's room under the page: reset after the rule that keeps it, so the reset wins.
-  for (const [file, sel] of [['theme.css', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) {'],
-    ['canvas.css', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]) body {']]) {
+  for (const [file, sel] of [['content/theme.css', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) {'],
+    ['content/canvas.css', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]) body {']]) {
     const css = read(file), screen = css.search(new RegExp(`${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^}]*padding-bottom: calc\\(96px`));
     assert.ok(screen > 0 && css.lastIndexOf(`${sel} padding-bottom: 0 !important; }`) > screen, `${file}: the print reset comes after the room it resets`);
   }
@@ -466,26 +466,26 @@ test("printed, a page is the site's own: none of Glaze's fixed parts on every sh
 test('a window 420px tall or less (a phone on its side, 400% zoom) keeps more of itself: no footer, a lower, shorter bar, no second row of tabs', () => {
   const short = '@media (max-height: 420px)', phone = '@media (max-width: 899.98px) and (max-height: 420px)';
   // Ultra's fixed footer goes, and the room kept for it with it (the bar's raise reads the same variable).
-  assert.match(media('theme.css', short), /html\[data-gz-footer\]\{--gz-footer-h:0px;?\}/);
-  assert.match(media('theme.css', short), /html\[data-gz-footer\] #gz-footer\{display:none !important;?\}/);
+  assert.match(media('content/theme.css', short), /html\[data-gz-footer\]\{--gz-footer-h:0px;?\}/);
+  assert.match(media('content/theme.css', short), /html\[data-gz-footer\] #gz-footer\{display:none !important;?\}/);
   // The bar: 6px from the bottom, 44px tabs (64px in all, from 84px), after the phone rules it changes so it wins.
-  const bar = media('features/navbar.css', phone);
+  const bar = media('navigation/page/navbar.css', phone);
   assert.match(bar, /\.tabs\{bottom:calc\(6px \+ env\(safe-area-inset-bottom, 0px\)\);?\}/);
   assert.match(bar, /:host\(\[data-footer\]\) \.tabs\{bottom:calc\(6px \+ var\(--gz-footer-h, 2rem\) \+ env\(safe-area-inset-bottom, 0px\)\);?\}/);
   assert.match(bar, /\.tab, \.pill\{height:44px;?\}/);
-  const css = read('features/navbar.css');
+  const css = read('navigation/page/navbar.css');
   assert.ok(css.indexOf(phone) > css.indexOf('@media (max-width: 899.98px) {'));
   const top = 6 + 44 + 2 * 6 + 2; // gap, tab, the bar's padding and border
   // What stands on the bar comes down with it, still clear of it: Ultra's bars and the sidebar's opener.
-  for (const [file, v] of [['theme.css', '--gz-navbar-bottom'], ['features/sidebar.css', '--gz-sb-bottom']]) {
+  for (const [file, v] of [['content/theme.css', '--gz-navbar-bottom'], ['navigation/page/sidebar.css', '--gz-sb-bottom']]) {
     const room = Number(media(file, phone).match(new RegExp(`${v}:calc\\((\\d+)px`))?.[1]);
     assert.ok(room > top && room < 96, `${file} ${v}: ${room}`);
   }
   // The opener stays, smaller: it is the sidebar drawer's only way in.
-  assert.match(media('features/sidebar.css', short), /\.gz-sb-edge, \.gz-sb-launch\{padding:0\.2rem 0\.7rem !important;font-size:0\.8rem;?\}/);
-  assert.doesNotMatch(media('features/sidebar.css', short), /display:none/);
+  assert.match(media('navigation/page/sidebar.css', short), /\.gz-sb-edge, \.gz-sb-launch\{padding:0\.2rem 0\.7rem !important;font-size:0\.8rem;?\}/);
+  assert.doesNotMatch(media('navigation/page/sidebar.css', short), /display:none/);
   // The course tabs' strip goes only where the bar holds the tabs too (its words say `tabs`).
-  const tabs = media('features/coursetabs.css', short);
+  const tabs = media('navigation/page/coursetabs.css', short);
   assert.match(tabs, /html\[data-gz-navbar~="tabs"\]\[data-gz-ctabs\]\{--gz-ctabs-h:0px !important;?\}/);
   assert.match(tabs, /html\[data-gz-navbar~="tabs"\] #gz-ctabs\{display:none !important;?\}/);
   assert.equal(M.layout(G.GZ_SANITIZE({}).navbar, { width: 812, course: true }).words.split(' ').includes('tabs'), true, 'by default the bar holds them');
@@ -494,12 +494,12 @@ test('a window 420px tall or less (a phone on its side, 400% zoom) keeps more of
 test("what focus scrolls to stops clear of the bar on Ultra too, in the boxes Ultra scrolls inside its app (WCAG 2.4.11)", () => {
   // Ultra scrolls inside its app (its main column, a course's panel, a routed page, a box the window's height), not the page.
   const boxes = ':is(#main-content, #main-content-inner, .panel-wrap, .route-view-container, .routed-page, [data-gz-vh])';
-  const css = read('theme.css'), on = 'html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive])';
+  const css = read('content/theme.css'), on = 'html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive])';
   assert.ok(css.includes(`html[data-gz-navbar], html[data-gz-navbar] ${boxes} { scroll-padding-top: var(--gz-navbar-top); }`), 'under the top bar');
   // A phone: the page by the bar's whole room (the footer under it too); the app's boxes end at the footer, so by the bar's.
-  const phone = media('theme.css', '@media (max-width: 899.98px)');
+  const phone = media('content/theme.css', '@media (max-width: 899.98px)');
   assert.ok(phone.includes(`${on}{scroll-padding-bottom:var(--gz-navbar-bottom);}`));
   assert.ok(phone.includes(`${on} ${boxes}{scroll-padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px));}`));
-  assert.ok(media('theme.css', '@media (max-width: 899.98px) and (max-height: 420px)').includes(`${on} ${boxes}{scroll-padding-bottom:calc(72px + env(safe-area-inset-bottom, 0px));}`),
+  assert.ok(media('content/theme.css', '@media (max-width: 899.98px) and (max-height: 420px)').includes(`${on} ${boxes}{scroll-padding-bottom:calc(72px + env(safe-area-inset-bottom, 0px));}`),
     'and the lower, shorter bar of a short window');
 });

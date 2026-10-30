@@ -1,4 +1,4 @@
-// Which frames the worker (lib/background.js) trusts. Course tabs and the Settings page of an LMS tab are frames, so the
+// Which frames the worker (background/background.js) trusts. Course tabs and the Settings page of an LMS tab are frames, so the
 // checks that once said "top frame" now say what the frame is: Download all's port from a course tab's frame on the tab's own
 // site, and nicknames, Look media and the pet library from the Settings frame that claimed its ticket.
 const test = require('node:test');
@@ -184,7 +184,7 @@ test('a claimed Settings frame is trusted for those three writes only, never for
 });
 
 test('a nickname the worker refuses for its sender says to open Settings in its own tab, not that there is too much to sync', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/options.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/settings/options.js'), 'utf8');
   const start = source.indexOf("nickname.addEventListener('change', ");
   const handler = source.slice(start + "nickname.addEventListener('change', ".length, source.indexOf('\n        });', start) + '\n        }'.length);
   const run = async (reply) => {

@@ -7,7 +7,7 @@
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { books, expect, agree } = require('./sheet-fidelity-books.js');
-const M = require('../../extension/lib/sheet-model.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
 
 const NUMBERS = '/Applications/Numbers.app';
 const pid = () => { try { return +execFileSync('pgrep', ['-x', 'Numbers'], { encoding: 'utf8' }).split('\n')[0]; } catch { return 0; } };

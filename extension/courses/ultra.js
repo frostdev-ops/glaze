@@ -1,13 +1,13 @@
 // Blackboard Ultra's answers, in the shapes Glaze's Canvas features already use: courses and terms as the editor and
-// GZ_COURSES have them, due items as lib/todo.js's planner items (which lib/remind.js and lib/calexport.js read), work as
-// lib/insights.js's items, and gradebook rows as lib/gradecalc.js's model() takes them. Pure apart from read(), which
+// GZ_COURSES have them, due items as planner/todo.js's planner items (which planner/remind.js and planner/calexport.js read), work as
+// planner/insights.js's items, and gradebook rows as planner/gradecalc.js's model() takes them. Pure apart from read(), which
 // asks the student's own Ultra. Shapes and rules come from the B0 spike; a rule B0 inferred rather
 // than measured is marked [I] here and in test/ultra.test.js.
 // Classic script, loaded on demand (content.js need()): a second injection keeps the first; module.exports for node.
 var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
-  const P = typeof GZ_PAGE !== 'undefined' ? GZ_PAGE : require('./page.js');
-  const COURSES = typeof GZ_COURSES !== 'undefined' ? GZ_COURSES : require('../defaults.js').GZ_COURSES;
-  const calc = () => globalThis.GZ_GRADECALC || require('./gradecalc.js');
+  const P = typeof GZ_PAGE !== 'undefined' ? GZ_PAGE : require('../core/page.js');
+  const COURSES = typeof GZ_COURSES !== 'undefined' ? GZ_COURSES : require('../content/defaults.js').GZ_COURSES;
+  const calc = () => globalThis.GZ_GRADECALC || require('../planner/gradecalc.js');
   const DAY = 864e5;
   const ID = /^_\d+_\d+$/;
   const str = (v, n = 300) => (typeof v === 'string' ? v.slice(0, n) : '');
@@ -132,7 +132,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
         url,
         // shortcut: first 100,000 HTML characters / 20,000 text characters per item; measure before indexing larger documents.
         text: text(str(k.list === 'discussions' ? x.topic?.body : x.body, 100000)).slice(0, 20000),
-        // An announcement's course and id, for Glaze's pop-up (features/announce.js).
+        // An announcement's course and id, for Glaze's pop-up (courses/page/announce.js).
         ...(k.list === 'announcements' && { cid: course.id, aid: x.id }),
         ...(k.list === 'discussions' && { cid: course.id }),
       };
@@ -142,7 +142,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
   // ---- courses and terms ---------------------------------------------------------------------------------------------
   // GZ_COURSES's map (name, color slot, organization; hidden courses left out), with each course's code, whether it's
   // closed, its term and its banner. A term is the course's own (memberships?expand=course has it inline) or, by
-  // termId, one from /terms; dates only for a date-range term, named as Canvas names them so lib/calexport.js's range
+  // termId, one from /terms; dates only for a date-range term, named as Canvas names them so planner/calexport.js's range
   // reads them. The banner only when shown, and only from origin.
   const term = (t) => (t && ID.test(t.id) ? { id: t.id, name: str(t.name, 120), start_at: t.durationType === 'DATE_RANGE' ? str(t.startDate, 40) || null : null, end_at: t.durationType === 'DATE_RANGE' ? str(t.endDate, 40) || null : null } : null);
   const courses = (memberships, { terms = [], origin } = {}) => {
@@ -215,7 +215,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
 
   // ---- due items -----------------------------------------------------------------------------------------------------
   // To Do (calendars/todo/studentItems: { overdueItems, dueTodayItems, futureDueItems }, one answer per slice) and the
-  // calendar (calendars/calendarItems results) as lib/todo.js's planner items, one per gradebook column: both name it
+  // calendar (calendars/calendarItems results) as planner/todo.js's planner items, one per gradebook column: both name it
   // ([M] column.id in To Do, itemSourceId in the calendar, Engagement items too), and a graded discussion appears in the
   // calendar twice with the same id ([M]), so items are deduped by it. Each joins the course's gradebook rows
   // (rows: course id → rows) by that column id, never by title: an item that joins no row stays on the list with no
@@ -254,7 +254,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
   };
 
   // ---- the course's work, for Insights ---------------------------------------------------------------------------------
-  // Its graded items' columns (not the overall grade, not other calculated columns) as lib/insights.js's items:
+  // Its graded items' columns (not the overall grade, not other calculated columns) as planner/insights.js's items:
   // k, n, d (due), p (points), a (handed in), s (excused, late, missing, on, open; '' when unknown).
   const S = { excused: 'excused', late: 'late', missing: 'missing', 'on-time': 'on', open: 'open', unknown: '' };
   const work = (rows, now, excepted = () => false) => arr(rows).filter((r) => r?.column?.calculationType === 'NON_CALCULATED' && !r.column.externalGrade && ID.test(r.columnId)).map((r) => {
@@ -264,11 +264,11 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
   });
 
   // ---- grades ----------------------------------------------------------------------------------------------------------
-  // The course's gradebook rows through lib/gradecalc.js's model(), and its letter cut-offs. Where the course returns
+  // The course's gradebook rows through planner/gradecalc.js's model(), and its letter cut-offs. Where the course returns
   // no overall formula, one Glaze can't read, or one that doesn't reproduce Blackboard's own figure, the result is
   // the share of points in graded work, flagged estimate: true (owner decision 3), with Blackboard's figure beside it
   // (overall) and why (model's reason, '' for no overall grade). schemas: gradebook/schemas results; the overall column's
-  // own, when it's a letter scale, gives scale: [[letter, min %]], highest first, as lib/gpa.js takes it; letter: the
+  // own, when it's a letter scale, gives scale: [[letter, min %]], highest first, as planner/gpa.js takes it; letter: the
   // letter Blackboard writes for the overall grade, where it writes one. names: category id → category record or title (model()).
   const grade = (rows, schemas = [], names = {}) => {
     if (rows?.complete === false || schemas?.complete === false) throw Object.assign(new Error('Incomplete Ultra gradebook'), { code: 'incomplete' });
@@ -290,7 +290,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const pts = G.model(arr(rows).filter((r) => !r?.column?.externalGrade), names);
     return { ...pts, estimate: true, overall: m.overall ?? null, why: m.kind === 'unsupported' ? m.why : '', ...more };
   };
-  // The course's grade over the term, for Insights (lib/insights.js along): grade()'s figure after each graded item, in
+  // The course's grade over the term, for Insights (planner/insights.js along): grade()'s figure after each graded item, in
   // the order of its due date, else when it was graded or handed in. tz: the student's time zone (the browser's: Ultra
   // doesn't say). → [[ms, percent]].
   const trend = (rows, tz) => {
@@ -298,11 +298,11 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const graded = new Set(g.items.filter((i) => i.score != null).map((i) => i.id));
     const dated = arr(rows).filter((r) => graded.has(String(r?.columnId))).map((r) => [String(r.columnId), ms(r.column?.dueDate) || ms(r.lastAttempt?.attemptLastGradedDate)
       || ms(r.lastAttempt?.attemptFirstGradedDate) || ms(r.lastOverrideDate) || ms(r.lastGradedDateViaLtiAgs) || ms(r.lastAttempt?.attemptDate)]).filter(([, at]) => at);
-    return (globalThis.GZ_INSIGHTS || require('./insights.js')).along(g.course, dated, tz);
+    return (globalThis.GZ_INSIGHTS || require('../planner/insights.js')).along(g.course, dated, tz);
   };
 
   // ---- this term --------------------------------------------------------------------------------------------------------
-  // The student's courses that are on now, as lib/insights.js's term() gives Canvas's: theirs as a student, not an
+  // The student's courses that are on now, as planner/insights.js's term() gives Canvas's: theirs as a student, not an
   // organization or hidden, not closed, and begun and not ended by their term's dates (a term without dates counts as
   // on). → { key (the terms' ids), name (the term's most of them are in, when it has dates), from, to, courses: [{ id,
   // name, code, term, m (the membership) }] }.
@@ -478,7 +478,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     return cols === null ? () => true : (col) => cols.has(col);
   };
 
-  // ---- on an Ultra page: the planning features' reads (features/todo.js, cardtasks.js, reminders.js, calexport.js,
+  // ---- on an Ultra page: the planning features' reads (planner/page/todo.js, cardtasks.js, reminders.js, calexport.js,
   // classes.js, gcal.js), through read() like every Ultra request here, on the page's own origin ----
   // The student and their memberships, asked once a page (asked again after a failure). Ultra keeps no time zone for a
   // student ([M] /users/me has none): days are the browser's, named, so what's kept with a time zone is kept in one.

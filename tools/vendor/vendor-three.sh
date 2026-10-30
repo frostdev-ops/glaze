@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild lib/three.js: only the parts of three.js that lib/scene.js imports, tree-shaken into one readable ES module
+# Rebuild vendor/three.js: only the parts of three.js that looks/scene.js imports, tree-shaken into one readable ES module
 # (three's own names and layout; not minified, which the Chrome Web Store can take for obfuscation, 2026-10-26).
 # The output is checked in, so the extension itself still has no build step.
 # Like the other vendor scripts it trusts nothing it downloads: exact versions, install scripts off, every installed package
@@ -25,8 +25,8 @@ EOF
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-# The destructured exports in lib/scene.js's lazy renderer import.
-names="$(sed -n "/^const {/,/three.js/p" lib/scene.js | tr -d '\n' | sed -E 's/^const \{(.*)\} = await.*/\1/')"
+# The destructured exports in looks/scene.js's lazy renderer import.
+names="$(sed -n "/^const {/,/three.js/p" looks/scene.js | tr -d '\n' | sed -E 's/^const \{(.*)\} = await.*/\1/')"
 echo "export {$names} from 'three';" > "$tmp/entry.js"
 # --ignore-scripts: esbuild's install script (an optimisation only) and any script a dependency might add never run.
 npm install --prefix "$tmp" --silent --no-save --no-package-lock --ignore-scripts --no-audit --no-fund \
@@ -40,11 +40,11 @@ printf '%s\n' "$integrity" | node ../tools/vendor/npm-integrity.js "$tmp/node_mo
   --outfile=three.js)
 built="$(shasum -a 256 "$tmp/three.js" | cut -d' ' -f1)"
 if [ "$built" != "$file_sha256" ]; then
-  echo "vendor-three: the build is $built, not the recorded file_sha256 $file_sha256; lib/ is unchanged." >&2
+  echo "vendor-three: the build is $built, not the recorded file_sha256 $file_sha256; vendor/ is unchanged." >&2
   echo "vendor-three: if you changed the pinned versions on purpose, record the new hash in this script and rerun." >&2
   exit 1
 fi
-cp "$tmp/three.js" lib/three.js
-cp "$tmp/node_modules/three/LICENSE" lib/three.LICENSE
+cp "$tmp/three.js" vendor/three.js
+cp "$tmp/node_modules/three/LICENSE" vendor/three.LICENSE
 
-echo "lib/three.js: three $three_version ($(du -h lib/three.js | cut -f1)), sha256 $built"
+echo "vendor/three.js: three $three_version ($(du -h vendor/three.js | cut -f1)), sha256 $built"

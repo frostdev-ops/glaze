@@ -1,9 +1,9 @@
 // The Glaze Dashboard on Blackboard Ultra (B7b), loaded on demand. Ultra's Institution page gets two tabs in its header:
-// Dashboard (the default: Glaze's board of widgets, features/widgets.js, and the page's heading says Dashboard) and
+// Dashboard (the default: Glaze's board of widgets, core/page/widgets.js, and the page's heading says Dashboard) and
 // Institution page (Ultra's own page and heading, themed, with nothing over it). The last one chosen is kept on this
 // device (storage.local dashTab). Until a tab is chosen the page shows the Dashboard and Ultra's own page waits hidden
 // (content-ultra.js sets html[data-gz-dash], apps.css); a page without the header's anchors gets the tabs above the board.
-// Opt-in (widgets.land, off by default): when Ultra opens on its start page right after sign-in (lib/widgets.js landing),
+// Opt-in (widgets.land, off by default): when Ultra opens on its start page right after sign-in (core/widgets.js landing),
 // go on to the Dashboard, once in this tab (the worker remembers the tab: 'glaze:landed'), through Ultra's own nav link
 // when it's there, and only if the student hasn't done anything on the page meanwhile. It asks nothing of Blackboard.
 // Classic script, through GZ_CTX; a second injection keeps the first.
@@ -103,7 +103,7 @@ var GZ_DASH_UI = globalThis.GZ_DASH_UI || (() => {
     if (s?.widgets?.land !== true || ctx.acted()) return;
     // A reload or Back to the start page isn't a new sign-in.
     if ((performance.getEntriesByType?.('navigation')[0]?.type || 'navigate') !== 'navigate') return;
-    await ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS);
+    await ctx.need('core/widgets.js', () => globalThis.GZ_WIDGETS);
     if (!still(from)) return;
     // The worker marks this tab before it goes (in its session storage, which the page can't read): once in a tab. If it
     // can't, it doesn't go.

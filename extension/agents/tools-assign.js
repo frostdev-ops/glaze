@@ -1,17 +1,17 @@
-// The assignments group's tools for agent apps (lib/mcp/*.js): an account's assignments, quizzes and graded discussions from
+// The assignments group's tools for agent apps (agents/*.js): an account's assignments, quizzes and graded discussions from
 // its planner as Glaze last read it (storage.local todoCache, which the call core refreshes through an open tab first), and
-// one assignment read in the account's own tab (lib/mcp/tab.js assignment, through lib/mcp/tabs.js run): title, due date,
-// points, instructions, the names of the files they attach, and the rubric's definition (lib/writer-context-assignment.js
-// rubricOf over lib/rubric.js's model), never the student's scores or feedback, which are the grades group's. Each read is
+// one assignment read in the account's own tab (agents/tab.js assignment, through agents/tabs.js run): title, due date,
+// points, instructions, the names of the files they attach, and the rubric's definition (writer/writer-context-assignment.js
+// rubricOf over courses/rubric.js's model), never the student's scores or feedback, which are the grades group's. Each read is
 // kept, fitted to what an answer carries, in storage.local mcpRubric:<origin>/<uid>/<course>/<assignment> with its time; the
 // 100 used last stay (mcpRubrics: their keys, the latest first). With no tab open, the kept read answers, dated. clear(ctx,
 // scope?) purges the cache for the worker's agent-off / forget / site-removal controls; scope is an origin or account.
-// Accounts, run and ctx as lib/mcp/tools-study.js's; register(registry, { tabs (lib/mcp/tabs.js create's) }).
-// Classic script for the worker, after lib/mcp/tools-study.js and lib/mcp/tabs.js; module.exports for node.
+// Accounts, run and ctx as agents/tools-study.js's; register(registry, { tabs (agents/tabs.js create's) }).
+// Classic script for the worker, after agents/tools-study.js and agents/tabs.js; module.exports for node.
 var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
-  const B = () => (typeof GZ_MODBROKER !== 'undefined' ? GZ_MODBROKER : require('../modbroker.js'));
+  const B = () => (typeof GZ_MODBROKER !== 'undefined' ? GZ_MODBROKER : require('../mods/modbroker.js'));
   const ST = () => (typeof GZ_MCP_STUDY !== 'undefined' ? GZ_MCP_STUDY : require('./tools-study.js'));
-  // keep: reads kept; answer: the characters a read may take in an answer (lib/ai/loop.js LIMIT.output less the call core's
+  // keep: reads kept; answer: the characters a read may take in an answer (ai/loop.js LIMIT.output less the call core's
   // own fields); files: names listed; text: one text's characters before fitting.
   const LIMIT = { keep: 100, answer: 10500, files: 20, text: 200000, id: 40 };
   const PREFIX = 'mcpRubric:', INDEX = 'mcpRubrics';
@@ -25,7 +25,7 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
   const cut = (s, n) => { const t = s.slice(0, n); return /[\ud800-\udbff]$/.test(t) ? t.slice(0, -1) : t; };
 
   // A planner item that is graded work, with the id assignment_read takes: Canvas's assignment (a quiz's or a graded
-  // discussion's is its assignment's), Ultra's content item (lib/ultra.js due: its column's content).
+  // discussion's is its assignment's), Ultra's content item (courses/ultra.js due: its column's content).
   const TYPES = ['assignment', 'quiz', 'discussion_topic', 'sub_assignment'];
   const link = (u, origin) => {
     if (typeof u !== 'string' || !u) return '';
@@ -186,7 +186,7 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
       },
     },
   ];
-  // Adds them to a lib/ai/tools.js registry (its define checks each) → the tools as added.
+  // Adds them to a ai/tools.js registry (its define checks each) → the tools as added.
   const register = (registry, deps) => tools(deps).map((t) => registry.add(t));
   return { LIMIT, PREFIX, INDEX, tools, register, clear, clean }; // clean: for tests
 })();

@@ -80,7 +80,7 @@ async function pass(scheme) {
     await open();
     const sync = () => page.evaluate(() => chrome.storage.sync.get(['writer', 'enhance']));
     const at = (o, p) => p.split('.').reduce((x, k) => x?.[k], o);
-    const D = require(path.join(root, 'defaults.js'));
+    const D = require(path.join(root, 'content/defaults.js'));
 
     await check(`${scheme}-switches`, async () => {
       const keys = await page.$$eval('#panel-writer input[type="checkbox"][data-key]', (els) => els.map((e) => e.dataset.key));

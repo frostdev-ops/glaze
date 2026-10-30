@@ -2,7 +2,7 @@
 // finishes the word and the sentence the student is typing; Glaze never drafts. The model reads the whole document so far
 // (owner, 2026-10-29) to keep to its names, terms, argument and style, as a rolling window: all of it that the model's
 // input window holds, the earliest paragraphs left out first (a model on this computer, the newest BRIEF.document bytes).
-// A cache marker ends the stable document prefix (lib/ai/text.js; OpenRouter Anthropic routes): the
+// A cache marker ends the stable document prefix (ai/text.js; OpenRouter Anthropic routes): the
 // system message, the page's context, the document so far; then the text after the caret, the suggestions already shown,
 // the sentence at the caret. After a space the model is asked for the next words; mid-word, for the caret's word in full
 // and then the next words, so where its words join the student's is known exactly. check() keeps only what is new, cuts
@@ -11,9 +11,9 @@
 // LIMIT.words.
 // input: { before (the text before the caret, all of it up to LIMIT.raw), after (the text after it: the rest of the
 // paragraph and the next ones, LIMIT.after kept), mode: 'compose' | 'paper', kind, context (the page's,
-// lib/ai/tasks/writer-context.js), past? (the sentences as the gray text shown in this box would have finished them,
+// ai/tasks/writer-context.js), past? (the sentences as the gray text shown in this box would have finished them,
 // oldest first; the newest LIMIT.past kept) }; the output is the text to show, its own leading space included.
-// Classic script for the worker (lib/background.js aiFiles); module.exports for node.
+// Classic script for the worker (background/background.js aiFiles); module.exports for node.
 var GZ_AI_TASK_WRITER_COMPLETE = globalThis.GZ_AI_TASK_WRITER_COMPLETE || (() => {
   const T = typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('../task.js');
   const W = typeof GZ_AI_WRITER !== 'undefined' ? GZ_AI_WRITER : require('./writer-context.js');
@@ -24,10 +24,10 @@ var GZ_AI_TASK_WRITER_COMPLETE = globalThis.GZ_AI_TASK_WRITER_COMPLETE || (() =>
   // it gets the end of the caret's sentence, the newest `document` bytes of the text before it, the newest `past`
   // suggestions and the page's context in brief.
   const BRIEF = { before: 1200, after: 200, context: 600, window: 32000, document: 1500, past: 3 };
-  // How much of the document so far a model reads, in UTF-8 bytes as lib/ai/text.js estimateTokens counts them (four a
-  // token): what `room` of its input window (caps.context), or of `tokens` (the run's own bound, lib/ai/loop.js's default:
+  // How much of the document so far a model reads, in UTF-8 bytes as ai/text.js estimateTokens counts them (four a
+  // token): what `room` of its input window (caps.context), or of `tokens` (the run's own bound, ai/loop.js's default:
   // a request over it is refused), the rest of the request leaves; `unknown` when no window is known. The suggestions
-  // already shown take at most `share` of it first. tokens × room × bytes stays under lib/ai/request.js LIMIT.text.
+  // already shown take at most `share` of it first. tokens × room × bytes stays under ai/request.js LIMIT.text.
   const READ = { bytes: 4, room: 0.9, tokens: 60000, unknown: 60000, share: 0.05, header: 48 };
   const WORD = /[\p{L}\p{N}\p{M}]/u;
   // The word at the caret: letters, digits, and an apostrophe or hyphen inside it.
@@ -144,7 +144,7 @@ var GZ_AI_TASK_WRITER_COMPLETE = globalThis.GZ_AI_TASK_WRITER_COMPLETE || (() =>
     replyTo: ctx.replyTo && { ...ctx.replyTo, text: W.cut(ctx.replyTo.text, BRIEF.context) } });
   // A small model gets the sentence, the newest of the document so far and the context in brief; a large one the whole
   // context, all of the document so far its window holds, and the text after the caret. The window: what the request
-  // without the document so far takes (lib/ai/text.js estimateTokens, as lib/ai/task.js fits() counts) and the answer's
+  // without the document so far takes (ai/text.js estimateTokens, as ai/task.js fits() counts) and the answer's
   // tokens, from READ.room of caps.context or READ.tokens, the smaller; the suggestions get READ.share of it first.
   // Reasoning is asked to be none: a model that thinks first spends the 64 tokens on that (DeepSeek, 2026-10-27).
   const build = (inp, { text, caps }) => {

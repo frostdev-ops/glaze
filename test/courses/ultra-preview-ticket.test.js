@@ -1,6 +1,6 @@
 // Ultra's file previews (Blackboard's document viewer) carry a ticket good for about two minutes, and Ultra reuses the
 // address it got with the page whenever a preview is expanded again. content-ultra.js notes the requests that brought
-// previews; features/docs.js (in a VM with stand-ins) asks one again and swaps in the same document's fresh address.
+// previews; courses/page/docs.js (in a VM with stand-ins) asks one again and swaps in the same document's fresh address.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -15,7 +15,7 @@ const viewer = (doc, expIn, status = 'complete') => `${VIEWER}?env=prod&ticket=$
 const ASK = `${ORIGIN}/learn/api/v1/courses/_1_1/gradebook/attempts/_7_1?expand=toolAttemptDetail,viewUrl`;
 
 test('content-ultra.js notes the requests that asked for viewer addresses, newest first', () => {
-  const line = fs.readFileSync(path.join(root, 'content-ultra.js'), 'utf8').split('\n').find((l) => l.includes('new PerformanceObserver'));
+  const line = fs.readFileSync(path.join(root, 'content/content-ultra.js'), 'utf8').split('\n').find((l) => l.includes('new PerformanceObserver'));
   let seen;
   const ctx = vm.createContext({ PerformanceObserver: class { constructor(f) { seen = f; } observe(o) { assert.equal(JSON.stringify(o), '{"type":"resource","buffered":true}'); } } });
   ctx.self = ctx;
@@ -37,7 +37,7 @@ const page = ({ src, asks = [ASK], answer }) => {
   ctx.globalThis = ctx;
   ctx.GZ_ASKS = asks;
   ctx.GZ_CTX = { site: 'ultra', solo: true, t: (w) => w, on: () => true, darkTheme: () => false, settings: () => ({ enhance: { toggles: true, docPages: 'plain' } }), PREVIEWS: 'iframe', DOC: '.doc' };
-  vm.runInContext(fs.readFileSync(path.join(root, 'features/docs.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'courses/page/docs.js'), 'utf8'), ctx);
   return { iframe, fetched, timers, sync: () => ctx.GZ_DOCS.sync() };
 };
 const settle = () => new Promise((r) => setTimeout(r, 0));

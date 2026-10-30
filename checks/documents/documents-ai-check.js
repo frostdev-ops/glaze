@@ -5,7 +5,7 @@
 // doi.org's saved synthetic answer (test/fixtures/writer-cite-doi.json). Per document: the AI port admitted (completion
 // and writing allowed and ready), the gray text taken with Tab, Feedback's one line without assignment material, Check
 // with AI's anchored issue, the AI outline's labels, Harper's spelling mark in the text and in Checks, and the lookup; and
-// Sources: the assignment's paper has what its attempt saved (lib/writer-sources.js keys it by the paper, as the attempt's
+// Sources: the assignment's paper has what its attempt saved (writer/writer-sources.js keys it by the paper, as the attempt's
 // frame does), so Checks finds its citation's entry, and adds and removes there; the standalone document keeps its own.
 // Every step is reported, passed or failed, so a run before a fix shows each missing part. No other network.
 // NODE_PATH=<playwright> nice -n 10 node checks/documents/documents-ai-check.js [evidence directory]
@@ -39,7 +39,7 @@ const GHOST = ' arrives uninvited and rearranges the present.';
 const NOTES = `doc:${crypto.randomUUID()}`, ESSAY = 'bb.school.test|_900_1|_101_1|_7_1';
 // The sources the essay's attempt saved, under the key its frame keeps them by (test/documents/papers-sources.test.js), and a
 // citation of one in the essay.
-const SR = require(path.join(root, 'lib/writer-sources.js'));
+const SR = require(path.join(root, 'writer/writer-sources.js'));
 const ATTEMPT_SOURCES = 'writer:sources:bb.school.test|_900_1|_101_1|_7_1', LOCAL_SOURCES = (key) => `writer:sources:local|local|papers|${encodeURIComponent(key)}`;
 const SAVED = SR.normalize({ type: 'book', title: 'Beloved', author: [{ family: 'Morrison', given: 'Toni' }], publisher: 'Knopf', issued: { 'date-parts': [[1987]] } });
 const CITED = 'Paul D says the house holds what Sethe will not name (Morrison 35).';
@@ -67,7 +67,7 @@ const records = () => {
   return all;
 };
 
-// In the worker: Chrome's Prompt API as lib/ai/providers/device.js reads it, answering each Writer task as a model would.
+// In the worker: Chrome's Prompt API as ai/providers/device.js reads it, answering each Writer task as a model would.
 const INSTALL = () => {
   if (globalThis.__lm) return 'kept';
   const lm = globalThis.__lm = { creates: 0, prompts: [] };
@@ -160,7 +160,7 @@ const TAP = () => {
     context.on('serviceworker', (w) => { w.evaluate(INSTALL).catch(() => {}); });
     const model = async () => (context.serviceWorkers()[0] || await context.waitForEvent('serviceworker')).evaluate(INSTALL);
     const asked = async () => (context.serviceWorkers()[0] || worker).evaluate(() => globalThis.__lm?.prompts.slice() || []);
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const settings = G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true } });
     await worker.evaluate(async ({ settings, data }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings); await chrome.storage.local.set(data); }, { settings, data: records() });
     await model();

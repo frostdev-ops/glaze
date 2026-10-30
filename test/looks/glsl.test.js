@@ -1,11 +1,11 @@
-// lib/glsl.js: the custom-shader checker and wrapper. Pure JS; the half that needs a
+// looks/glsl.js: the custom-shader checker and wrapper. Pure JS; the half that needs a
 // WebGL2 context (compile, the loop rules ANGLE enforces) is exercised by checks/looks/scene-check.mjs in a headless browser.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const G = require('../../extension/lib/glsl.js');
-const I = require('../../extension/lib/i18n.js');
+const G = require('../../extension/looks/glsl.js');
+const I = require('../../extension/core/i18n.js');
 
 const shader = (name) => fs.readFileSync(path.join(__dirname, '../../extension/assets/shaders', `${name}.glsl`), 'utf8');
 const EXAMPLES = ['aurora', 'starfield', 'liquid'];
@@ -227,10 +227,10 @@ test('wrap: the shared prelude, then #line 1 and the author\'s source, then main
 });
 
 test('the prelude\'s helpers are the built-in scenes\' own, word for word', () => {
-  const scene = fs.readFileSync(path.join(__dirname, '../../extension/lib/scene.js'), 'utf8').replace(/\s+/g, '');
+  const scene = fs.readFileSync(path.join(__dirname, '../../extension/looks/scene.js'), 'utf8').replace(/\s+/g, '');
   const lines = G.PRELUDE.split('\n').filter((l) => /^(float|mat2) (hash|noise|fbm|amt|rot)\(/.test(l));
   assert.equal(lines.length, 5);
-  for (const l of lines) assert.ok(scene.includes(l.replace(/\s+/g, '')), `lib/scene.js has no ${l.slice(0, 30)}…`);
+  for (const l of lines) assert.ok(scene.includes(l.replace(/\s+/g, '')), `looks/scene.js has no ${l.slice(0, 30)}…`);
 });
 
 test('compiler messages come back with the author\'s lines', () => {

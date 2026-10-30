@@ -1,15 +1,15 @@
-// Glaze Writer's discussion context (lib/writer-context-discussion.js) over the probed API shapes
+// Glaze Writer's discussion context (writer/writer-context-discussion.js) over the probed API shapes
 // (test/fixtures/ultra-writer-thread*.json): the forum behind a route, the prompt, the thread within its budget, the post a
-// reply answers, and the reads through lib/ultra.js's reader. What the frame gets in a browser is
+// reply answers, and the reads through courses/ultra.js's reader. What the frame gets in a browser is
 // checks/writer/writer-compose-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const C = require('../../extension/lib/writer-context-discussion.js');
-const T = require('../../extension/lib/writer-target.js');
-const { read } = require('../../extension/lib/ultra.js');
-const text = require('../../extension/lib/doctext.js').html;
+const C = require('../../extension/writer/writer-context-discussion.js');
+const T = require('../../extension/writer/writer-target.js');
+const { read } = require('../../extension/courses/ultra.js');
+const text = require('../../extension/core/doctext.js').html;
 
 const load = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, '../fixtures', f), 'utf8'));
 const LIST = load('ultra-writer-thread-discussions.json'), PAGE1 = load('ultra-writer-thread.json'), PAGE2 = load('ultra-writer-thread-2.json'), REPLIES = load('ultra-writer-thread-replies.json');
@@ -34,7 +34,7 @@ test('routes: a discussion\'s course and content ids, a journal\'s, a message co
 });
 
 test('compose routes agree with rubric discussion routes and never treat new-message as a content id', () => {
-  const R = require('../../extension/lib/rubric.js');
+  const R = require('../../extension/courses/rubric.js');
   const path = '/ultra/courses/_101_1/discussion/_9_1/';
   assert.equal(C.route(path).content, R.route('ultra', path).contentId);
   for (const kind of ['discussion', 'journal']) assert.equal(C.route(`/ultra/courses/_101_1/${kind}/new-message`), null);
@@ -51,7 +51,7 @@ test('the forum behind a route: by the gradebook column its content id has, else
   assert.equal(C.discussionOf(null, { content: '_9_1' }), null);
 });
 
-test('the prompt is topic.body as text, and its requirements come from lib/writer-target.js', () => {
+test('the prompt is topic.body as text, and its requirements come from writer/writer-target.js', () => {
   const p = C.promptOf(LIST.results[1], text);
   assert.equal(p.text, 'How does Morrison use the river and the clearing as places of memory? Respond in at least 250 words, cite two sources, and reply to two classmates.');
   assert.deepEqual(T.forKind(T.parse(p.text), 'reply'), { minWords: null, maxWords: null, sources: null, replies: 2 });
@@ -131,7 +131,7 @@ test('the item a box\'s sources are kept under: the discussion for its post and 
   for (const [kind, where] of [['message', discussion], ['message', journal], ['post', journal], ['journal', discussion], ['reply', compose], ['test', discussion], ['assignment', discussion], ['post', null]]) assert.equal(C.itemOf(kind, where), '', `${kind} at ${JSON.stringify(where)}`);
 });
 
-// lib/ultra.js's reader over the fixtures, counting what it asks.
+// courses/ultra.js's reader over the fixtures, counting what it asks.
 const site = 'https://bb.school.test';
 const fake = (fail = new Set()) => {
   const asked = [];

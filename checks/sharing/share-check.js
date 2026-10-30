@@ -3,7 +3,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { relay, diskStore } = require('../../server/relay.js');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 // A copy holding the school's host and the local relay, as the student's grants do (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, '../../extension'), ['https://bb.school.test/*', 'http://127.0.0.1/*']);
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();

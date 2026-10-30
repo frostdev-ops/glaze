@@ -5,9 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { El } = require('../stand-in-dom.js');
-const M = require('../../extension/lib/navbar.js');
-const L = require('../../extension/lib/navlayout.js');
-const E = require('../../extension/lib/editor-navbar.js');
+const M = require('../../extension/navigation/navbar.js');
+const L = require('../../extension/navigation/navlayout.js');
+const E = require('../../extension/settings/editor-navbar.js');
 
 const read = (file) => fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -38,7 +38,7 @@ const hiddenFor = (css, target, attrs) => rulesOf(css).filter((r) => /display:\s
 
 // ---- NAV-2: compact top-bar items keep an accessible name ------------------------------------------------------------------
 test('compact top-bar items hide their labels visually, never from the accessibility tree', () => {
-  const rules = rulesOf(read('features/navbar.css')).filter((r) => /\[data-compact\]/.test(r.sel) && /\.label/.test(r.sel));
+  const rules = rulesOf(read('navigation/page/navbar.css')).filter((r) => /\[data-compact\]/.test(r.sel) && /\.label/.test(r.sel));
   assert.ok(rules.length, 'a rule for the labels of a compact top bar');
   for (const r of rules) {
     // display: none and visibility: hidden take the label out of the name; an icon's name is its label.
@@ -56,7 +56,7 @@ class Node_ {
   closest(sel) { return topLevel(sel).some((s) => { const m = s.match(/^\[role="(\w+)"\]/); return m ? m[1] === this.role : s === this.tag; }) ? this : null; }
 }
 const keys = (site, { lazy = false } = {}) => {
-  const src = read('content.js');
+  const src = read('content/content.js');
   const block = src.slice(src.indexOf('  const typing = '), src.indexOf('  let keysWaiting'));
   const assigned = [];
   const sandbox = { Element: Node_, chrome: { runtime: { id: 'x' } }, settings: { enhance: { keys: true } }, observer: {}, ultra: site === 'ultra', moodle: false,
@@ -71,7 +71,7 @@ const keys = (site, { lazy = false } = {}) => {
     sandbox.document.addEventListener = (_, f) => { listener = f; };
     sandbox.need = () => new Promise((r) => { release = r; });
     vm.runInContext(src.slice(src.indexOf('  let keysWaiting ='), src.indexOf('  // ---- command palette')), sandbox);
-  } else vm.runInContext(read('features/keys.js'), sandbox);
+  } else vm.runInContext(read('navigation/page/keys.js'), sandbox);
   const ev = (key, target, at, extra = {}) => ({ key, at, target, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, repeat: false, defaultPrevented: false, preventDefault() {}, stopImmediatePropagation() {}, ...extra });
   // "g" then "a" (Calendar), 300 ms apart, with focus on `at` and the key's target `target`.
   const goTo = (at, { target = at, ...extra } = {}) => {
@@ -82,7 +82,7 @@ const keys = (site, { lazy = false } = {}) => {
     return [...assigned];
   };
   return { goTo, assigned, press: (key, extra = {}) => listener(ev(key, new Node_(''), Date.now(), extra)),
-    load: async () => { vm.runInContext(read('features/keys.js'), sandbox); release(); for (let i = 0; i < 4; i++) await new Promise(setImmediate); } };
+    load: async () => { vm.runInContext(read('navigation/page/keys.js'), sandbox); release(); for (let i = 0; i < 4; i++) await new Promise(setImmediate); } };
 };
 
 test('IME flags survive shortcut module loading, and Safari keyCode 229 is never a shortcut', async () => {
@@ -183,9 +183,9 @@ test('the editor draws the LMS an item is for beside it, but not for items every
   const stored = {};
   for (const id of ['nbar-items', 'nbar-glaze', 'nbar-widgets', 'nbar-links', 'nbar-status', 'nbar-link-form', 'nbar-reset']) elements[id] = Object.assign(new El('div', doc), { id });
   doc.querySelector = (s) => elements[s.slice(1)]; doc.createElement = (s) => new El(s, doc); doc.createElementNS = (_, s) => new El(s, doc);
-  const ctx = vm.createContext({ document: doc, TextEncoder, URL, GZ_NAVBAR: M, GZ_NAV_ITEMS: require('../../extension/lib/nav-items.js'),
+  const ctx = vm.createContext({ document: doc, TextEncoder, URL, GZ_NAVBAR: M, GZ_NAV_ITEMS: require('../../extension/navigation/nav-items.js'),
     chrome: { storage: { sync: { get: async () => stored, set: async (v) => { Object.assign(stored, plain(v)); } }, onChanged: { addListener() {} } } } });
-  vm.runInContext(read('lib/editor-navbar.js'), ctx);
+  vm.runInContext(read('settings/editor-navbar.js'), ctx);
   ctx.GZ_NAVBAREDIT.mount({ t: (s) => ({ Blackboard: 'Blackboard', Canvas: 'Canvas', Moodle: 'Moodle' }[s] || s), settings: () => ({ enhance: {} }) });
   for (let i = 0; i < 8; i++) await new Promise(setImmediate);
   const row = (id) => elements['nbar-items'].querySelector(`li[data-id="${id}"]`);
@@ -204,11 +204,11 @@ test('the editor draws the LMS an item is for beside it, but not for items every
 
 // ---- NAV-5: Skip to content on Ultra with a course tab showing ---------------------------------------------------------------
 test("Ultra's Skip to content aims at the course tab's frame when one shows", () => {
-  const src = read('features/navbar.js');
+  const src = read('navigation/page/navbar.js');
   const doc = (name) => ({ name, getElementById: (id) => (id === 'main-content' ? { in: name } : null), querySelector: () => null });
   const page = doc('page'), frame = doc('frame');
   const ctx = vm.createContext({ document: page, location: { origin: 'https://bb.test', pathname: '/ultra/courses/_1_1/outline' }, URL,
-    chrome: { storage: { local: { get() {}, set() {} } } }, MutationObserver: class { observe() {} disconnect() {} }, NodeFilter: {}, GZ_NAV: require('../../extension/lib/nav.js') });
+    chrome: { storage: { local: { get() {}, set() {} } } }, MutationObserver: class { observe() {} disconnect() {} }, NodeFilter: {}, GZ_NAV: require('../../extension/navigation/nav.js') });
   const Ultra = vm.runInContext(src.slice(src.indexOf('function GZ_NAVBAR_ULTRA(X) {'), src.indexOf('if (typeof module')) + '\nGZ_NAVBAR_ULTRA;', ctx);
   const site = Ultra({ t: (s) => s, settings: () => ({ enhance: {} }) });
   assert.deepEqual(plain(site.main()), { in: 'page' });
@@ -225,9 +225,9 @@ test('the palette runs nothing on the Enter that commits an IME composition', ()
   doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   doc.createElement = (tag) => new El(tag, doc);
   const assigned = [];
-  const ctx = vm.createContext({ document: doc, location: { origin: 'https://bb.school.test', pathname: '/ultra/stream', assign: (u) => assigned.push(u) }, GZ_PAGE: require('../../extension/lib/page.js'), URL,
+  const ctx = vm.createContext({ document: doc, location: { origin: 'https://bb.school.test', pathname: '/ultra/stream', assign: (u) => assigned.push(u) }, GZ_PAGE: require('../../extension/core/page.js'), URL,
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ({ enhance: {} }), need: () => new Promise(() => {}), courseId: () => '' } });
-  const cmd = vm.runInContext(read('features/palette.js'), ctx);
+  const cmd = vm.runInContext(read('navigation/page/palette.js'), ctx);
   cmd.open();
   const input = doc.body.querySelector('input');
   input.value = 'Calendar';
@@ -246,7 +246,7 @@ test('the palette runs nothing on the Enter that commits an IME composition', ()
 
 // ---- NAV-7: Canvas on a phone, Inside a course: Hide ---------------------------------------------------------------------------
 test("hiding Glaze's bar inside a course leaves Canvas's own phone header (its menu and global navigation)", () => {
-  const css = read('canvas.css');
+  const css = read('content/canvas.css');
   const attr = 'data-gz-navbar';
   assert.equal(hiddenFor(css, '#mobile-header', { [attr]: 'rail open float' }), true, "with the bar drawn, Canvas's header is replaced");
   assert.equal(hiddenFor(css, '#mobile-header', { [attr]: 'top float menu' }), true);
@@ -256,24 +256,24 @@ test("hiding Glaze's bar inside a course leaves Canvas's own phone header (its m
 });
 
 test('Canvas course frames distinguish a hidden bar from a disabled course menu and keep the phone header', () => {
-  const src = read('content-canvas.js'), at = src.indexOf('  const paintNav = ');
+  const src = read('content/content-canvas.js'), at = src.indexOf('  const paintNav = ');
   const paint = src.slice(at, src.indexOf('  // Course tabs', at));
   for (const [course, cmenu, word] of [['hide', true, 'none'], ['hide', false, 'none'], ['same', false, ''], ['same', true, 'menu']]) {
     const attrs = {};
     const window = { top: {} };
     vm.runInNewContext(paint + '\npaintNav({});', { window, I: { tabFrame: '12', settings: { navbar: { on: true, course, cmenu } } }, setAttr: (k,v) => { attrs[k] = v; } });
     assert.equal(attrs['data-gz-navbar-frame'], word, `${course}/${cmenu}`);
-    assert.equal(hiddenFor(read('canvas.css'), '#mobile-header', attrs), course !== 'hide', 'only a replacement bar hides the native mobile header');
+    assert.equal(hiddenFor(read('content/canvas.css'), '#mobile-header', attrs), course !== 'hide', 'only a replacement bar hides the native mobile header');
   }
 });
 
 // ---- NAV-11: the search status is hidden visually on every site that has search ----------------------------------------------------
 test('the search status line uses a class Glaze defines on Ultra and Canvas', () => {
-  const search = read('features/search.js');
+  const search = read('navigation/page/search.js');
   assert.match(search, /live\.className = 'gz-sr';/);
   assert.doesNotMatch(search, /screenreader-only/, "Canvas's own class; Ultra has none");
-  assert.match(rulesOf(read('features/apps.css')).find((r) => r.sel === '.gz-sr').body, /clip-path:\s*inset\(50%\)/);
+  assert.match(rulesOf(read('core/page/apps.css')).find((r) => r.sel === '.gz-sr').body, /clip-path:\s*inset\(50%\)/);
   // apps.css is among the sheets of Ultra and Canvas (Moodle has no search: palette.js searchHere).
-  assert.match(read('content.js'), /moodle \? \[\] : \['features\/apps\.css'/);
-  assert.match(read('features/palette.js'), /const searchHere = \(\) => !moodle && /);
+  assert.match(read('content/content.js'), /moodle \? \[\] : \['core\/page\/apps\.css'/);
+  assert.match(read('navigation/page/palette.js'), /const searchHere = \(\) => !moodle && /);
 });

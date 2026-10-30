@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const F = require('../../extension/lib/ai/tasks/writer-feedback.js');
-const T = require('../../extension/lib/ai/task.js');
-require('../../extension/lib/ai/providers/mock.js');
+const F = require('../../extension/ai/tasks/writer-feedback.js');
+const T = require('../../extension/ai/task.js');
+require('../../extension/ai/providers/mock.js');
 const rubric = { levels: [{ id: 'strong', label: 'Strong' }, { id: 'developing', label: 'Developing' }], criteria: [
   { id: 'claim', label: 'Claim', points: 40, cells: [{ level: 'strong', value: 40 }, { level: 'developing', value: 20 }] },
   { id: 'evidence', label: 'Evidence', points: 60, cells: [{ level: 'strong', value: 60 }, { level: 'developing', value: 30 }] },

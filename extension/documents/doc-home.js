@@ -31,7 +31,7 @@ var GZ_DOC_HOME = globalThis.GZ_DOC_HOME || (() => {
       : by === 'trashed' ? (a, b) => (b.trashed || 0) - (a.trashed || 0) || newest(a, b) : newest);
   };
 
-  // Whether a row is in Trash (trashed: when, in ms; lib/writer-papers.js), a move the page made and storage hasn't
+  // Whether a row is in Trash (trashed: when, in ms; writer/writer-papers.js), a move the page made and storage hasn't
   // shown yet standing first (pending: key → true into Trash, false out of it). view: the Trash's rows, or the rest.
   const inTrash = (row, pending) => (pending?.has(row?.key) ? pending.get(row.key) === true : Number.isFinite(row?.trashed));
   const view = (rows, trash, pending) => rows.filter((r) => inTrash(r, pending) === trash);

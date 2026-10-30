@@ -1,4 +1,4 @@
-// Declarative widgets on the page (features/modwidgets.js) in a VM with stand-ins: the tiles and rail widgets it hands the
+// Declarative widgets on the page (mods/page/modwidgets.js) in a VM with stand-ins: the tiles and rail widgets it hands the
 // boards, what it asks the worker for, buttons that go only to this site's own pages, and following the mods and their data.
 // content.js's loader for it is read from the source. The browser side is checks/core/widgets-builder-check.js.
 const test = require('node:test');
@@ -48,7 +48,7 @@ const page = ({ site = 'ultra', plainList = [PLAIN()], rawList, widget, hidden =
     GZ_CTX: { site, t: (k) => k, need: async () => {} },
   });
   ctx.globalThis = ctx;
-  vm.runInContext(read('features/modwidgets.js'), ctx);
+  vm.runInContext(read('mods/page/modwidgets.js'), ctx);
   const G = ctx.GZ_MODWIDGETS;
   const tick = async (ms) => {
     const end = clock + ms;
@@ -77,7 +77,7 @@ test('start asks the worker for the declarative widgets and declares their tiles
   assert.equal(p.declared[0].from, 'plain');
   const ids = Object.keys(p.declared[0].tiles);
   eq(ids, [`m${ID.slice(0, 14)}0`]);
-  assert.match(ids[0], /^m[a-z2-7]{14}[0-7]$/, 'the shape the worker keeps stored places for (lib/widgets.js change)');
+  assert.match(ids[0], /^m[a-z2-7]{14}[0-7]$/, 'the shape the worker keeps stored places for (core/widgets.js change)');
   const t = Object.values(p.declared[0].tiles)[0];
   eq([t.name, t.size, t.owner], ['Main', 'm', `${ID}|tile:main`]);
   // Asking again for the same list changes nothing.
@@ -296,13 +296,13 @@ test('nothing runs once the extension has gone', async () => {
 });
 
 test('the page side carries nothing of the sandbox and no way to run a mod\'s code', () => {
-  const src = read('features/modwidgets.js').replace(/\/\/.*$/gm, '');
+  const src = read('mods/page/modwidgets.js').replace(/\/\/.*$/gm, '');
   for (const word of ['host.html', 'boot.js', 'GZ_MODS', 'iframe', 'Worker', 'eval(', 'Function(', 'innerHTML', 'insertAdjacentHTML', 'srcdoc', 'document.write', 'import(', '.src =', 'setAttribute(\'href\'']) assert.ok(!src.includes(word), word);
 });
 
-// ---- content.js: when features/modwidgets.js is asked for ----------------------------------------------------------------------
+// ---- content.js: when mods/page/modwidgets.js is asked for ----------------------------------------------------------------------
 test('content.js loads the declarative widgets on every browser, in the top frame, once the worker names one to show', async () => {
-  const src = read('content.js');
+  const src = read('content/content.js');
   const gate = src.slice(src.indexOf('  const modsIn ='), src.indexOf('  ready.then(() => modsIn(true));'));
   const run = async ({ top = true, isPreview = false, on = true, sandbox = false, index = [ID], mods = [], plainList = [PLAIN()], answer, loaded = {} } = {}) => {
     const asked = [], started = [], messages = [];
@@ -310,7 +310,7 @@ test('content.js loads the declarative widgets on every browser, in the top fram
       isPreview, settings: {}, on: () => on, no: () => {},
       local: (fn) => fn({ get: (k, cb) => { assert.equal(k, 'mods'); cb(index === null ? {} : { mods: index }); } }),
       chrome: { runtime: { getManifest: () => (sandbox ? { sandbox: { pages: ['mods/host.html'] } } : {}), sendMessage: async (m) => { messages.push(m); return answer || { ok: true, mods, plain: plainList }; } } },
-      need: async (file) => { asked.push(file); if (file === 'features/mods.js') ctx.GZ_MODS = { start: () => started.push('mods') }; else ctx.GZ_MODWIDGETS = { start: () => started.push('widgets') }; },
+      need: async (file) => { asked.push(file); if (file === 'mods/page/mods.js') ctx.GZ_MODS = { start: () => started.push('mods') }; else ctx.GZ_MODWIDGETS = { start: () => started.push('widgets') }; },
     });
     ctx.window = {};
     ctx.window.top = top ? ctx.window : {};
@@ -321,15 +321,15 @@ test('content.js loads the declarative widgets on every browser, in the top fram
     await settle();
     return { asked, started: plain(started), messages: plain(messages) };
   };
-  eq(await run(), { asked: ['features/modwidgets.js'], started: ['widgets'], messages: [{ type: 'glaze:modpage', op: 'list' }] }, 'Firefox and Safari: no sandbox, still widgets');
-  eq((await run({ sandbox: true })).asked, ['features/modwidgets.js'], 'Chrome with only widgets installed');
-  eq((await run({ sandbox: true, mods: [{ id: ID }], plainList: [] })).asked, ['features/mods.js'], 'Chrome with only code mods');
-  eq((await run({ sandbox: true, mods: [{ id: ID }] })).asked, ['features/mods.js', 'features/modwidgets.js'], 'both');
+  eq(await run(), { asked: ['mods/page/modwidgets.js'], started: ['widgets'], messages: [{ type: 'glaze:modpage', op: 'list' }] }, 'Firefox and Safari: no sandbox, still widgets');
+  eq((await run({ sandbox: true })).asked, ['mods/page/modwidgets.js'], 'Chrome with only widgets installed');
+  eq((await run({ sandbox: true, mods: [{ id: ID }], plainList: [] })).asked, ['mods/page/mods.js'], 'Chrome with only code mods');
+  eq((await run({ sandbox: true, mods: [{ id: ID }] })).asked, ['mods/page/mods.js', 'mods/page/modwidgets.js'], 'both');
   eq((await run({ sandbox: false, mods: [{ id: ID }], plainList: [] })).asked, [], 'code mods wait for the sandbox, as before');
   for (const [why, opts] of [['a frame', { top: false }], ['the editor preview', { isPreview: true }], ['Glaze off or a quiz page', { on: false }], ['widgets loaded already', { loaded: { widgets: true } }]]) {
     eq((await run(opts)).asked, [], why);
   }
-  eq((await run({ sandbox: true, mods: [{ id: ID }], loaded: { mods: true } })).asked, ['features/modwidgets.js'], 'one loaded, the other still asked for');
+  eq((await run({ sandbox: true, mods: [{ id: ID }], loaded: { mods: true } })).asked, ['mods/page/modwidgets.js'], 'one loaded, the other still asked for');
   eq(await run({ index: [] }), { asked: [], started: [], messages: [] }, 'nothing installed: not even a message');
   eq(await run({ index: null }), { asked: [], started: [], messages: [] }, 'never installed any');
   eq((await run({ plainList: [], mods: [] })).asked, [], 'installed, but none on or none declarative: the worker names none');
@@ -347,5 +347,5 @@ test('dev mode changes refresh the declarative widget list', async () => {
   p.chrome.changed({ modDev: { newValue: true } }, 'local');
   await p.tick(100);
   assert.equal(p.G.stats().list.length, 1);
-  assert.match(read('content.js'), /\/\^mod\(s\$\|:\|Dev\$\|Order\$\|sBlocklist\$\|NavLayout:\)\/\.test\(k\)\)\) modsIn\(true\)/);
+  assert.match(read('content/content.js'), /\/\^mod\(s\$\|:\|Dev\$\|Order\$\|sBlocklist\$\|NavLayout:\)\/\.test\(k\)\)\) modsIn\(true\)/);
 });

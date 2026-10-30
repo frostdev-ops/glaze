@@ -1,6 +1,6 @@
-// Google sign-in for Drive, in the worker only (lib/background.js 'glaze:google'), optional: nothing runs until the student
+// Google sign-in for Drive, in the worker only (background/background.js 'glaze:google'), optional: nothing runs until the student
 // presses Connect in Settings → Writer → Papers, whose click asks the browser for the identity permission first. Scopes:
-// drive.file, openid and email (lib/google-config.js). The access token never leaves the worker and is never stored:
+// drive.file, openid and email (background/google-config.js). The access token never leaves the worker and is never stored:
 // Chrome's own cache (getAuthToken) or this worker's memory (launchWebAuthFlow). storage.local google holds { email, sub, flow,
 // at }: the account connected, by its email and Google's id for it (userinfo sub). A token is used only once its userinfo
 // names that same account: if the browser's account changes (Chrome's default one, Google's session), Drive refuses
@@ -9,7 +9,7 @@
 //   chrome  Google Chrome and Chromium: getAuthToken with the browser's Google account and the "Chrome extension" client
 //           (the packaged manifest's oauth2).
 //   web     Edge, Brave, other Chromium browsers and Firefox: launchWebAuthFlow, the "Web application" client's implicit flow
-//           (response_type=token), its state checked (lib/oauth.js reply), renewed silently (prompt=none, interactive:false).
+//           (response_type=token), its state checked (background/oauth.js reply), renewed silently (prompt=none, interactive:false).
 //   native  Safari: the extension's handler (safari/Glaze/Glaze Extension/GlazeGoogle.swift) holds the refresh token in the
 //           Keychain and mints tokens; the sign-in page runs in the Glaze app, opened by the handler (macOS) or by a tab
 //           the student taps (iOS, env.open). Connect answers why: 'pending' until the app has answered; Settings asks again.

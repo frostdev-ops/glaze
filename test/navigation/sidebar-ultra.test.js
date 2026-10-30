@@ -1,18 +1,18 @@
-// The sidebar on Blackboard Ultra (features/sidebar.js's Ultra adapter, with features/widgets.js for the dock), on
+// The sidebar on Blackboard Ultra (navigation/page/sidebar.js's Ultra adapter, with core/page/widgets.js for the dock), on
 // synthetic Ultra pages in the stand-in DOM: the Courses page's column with Ultra's To Do, a course outline's column
 // (Faculty, Details & Actions, the schedule, and Glaze's own blocks there), a discussion's details layer, and a page
 // without a column. Ultra's own nodes are never moved or copied; late blocks and a column Angular swaps are taken as
 // they come; the Courses page's column board gives way to the dock while course cards stay on the board; one To Do;
-// the offer when Ultra's boards disagreed about To Do. Changes go through the worker's real code (lib/sidebar.js,
-// lib/widgets.js). Geometry and transport are supplied.
+// the offer when Ultra's boards disagreed about To Do. Changes go through the worker's real code (navigation/sidebar.js,
+// core/widgets.js). Geometry and transport are supplied.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const W = require('../../extension/lib/widgets.js');
-const S = require('../../extension/lib/sidebar.js');
+const D = require('../../extension/content/defaults.js');
+const W = require('../../extension/core/widgets.js');
+const S = require('../../extension/navigation/sidebar.js');
 const { page, record, natives, unmoved, settle, read, KEY, O, CARD } = require('../sidebar-ultra-page.js');
 
 test('two sidebar toggles before a snapshot callback compute their states in update order', async () => {
@@ -281,7 +281,7 @@ test('late Angular blocks join This page in place; CSS keeps the widgets visuall
   assert.equal(p.mode(), 'expanded');
   assert.equal(late.parentNode, aside);
   assert.ok(aside.lastElementChild === late, 'native insertion order is untouched');
-  assert.ok(read('features/sidebar.css').includes('[data-gz-sb-self] > #gz-sb-widgets { order: 1; }'));
+  assert.ok(read('navigation/page/sidebar.css').includes('[data-gz-sb-self] > #gz-sb-widgets { order: 1; }'));
   assert.ok(p.$('#gz-sb-widgets') === dock && p.$('.gz-sb-head') === head, 'the same parts');
   // A change inside Glaze's own parts says nothing of the page's.
   const calls = p.observers.filter((o) => o.on).length;
@@ -354,13 +354,13 @@ test('folding This page hides every block but Glaze\'s parts; Course notes and t
   const p = page({ at: 'outline', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
   await p.pass();
   const aside = p.$('aside.outline-actions');
-  // Course notes' block (features/notes.js) and the syllabus's (features/syllabus.js) go above the widgets, not after.
-  assert.match(read('features/notes.js'), /const end = \[\.\.\.side\.children\]\.find\(\(c\) => c\.id === 'gz-sb-widgets'\);\n.*if \(end\) end\.before\(block\); else side\.append\(block\);/);
-  assert.match(read('features/syllabus.js'), /d \? d\.after\(b\) : end \? end\.before\(b\) : aside\.append\(b\)/);
+  // Course notes' block (planner/page/notes.js) and the syllabus's (planner/page/syllabus.js) go above the widgets, not after.
+  assert.match(read('planner/page/notes.js'), /const end = \[\.\.\.side\.children\]\.find\(\(c\) => c\.id === 'gz-sb-widgets'\);\n.*if \(end\) end\.before\(block\); else side\.append\(block\);/);
+  assert.match(read('planner/page/syllabus.js'), /d \? d\.after\(b\) : end \? end\.before\(b\) : aside\.append\(b\)/);
   p.fire(p.$('.gz-sb-pagehead .gz-sb-sec-btn'), 'click'); await settle();
   assert.equal(aside.dataset.gzSbFoldPage, '');
   assert.equal(p.store[KEY].fold.outline.page, true, 'kept for outlines');
-  const css = read('features/sidebar.css');
+  const css = read('navigation/page/sidebar.css');
   assert.ok(css.includes('[data-gz-sb-fold-page][data-gz-sb-self] > :not(.gz-sb-resize, .gz-sb-head, .gz-sb-pagehead, #gz-sb-widgets)'));
 });
 
@@ -436,7 +436,7 @@ test('one To Do: docked, Ultra\'s own steps aside only once Better To Do is in t
   assert.equal(p.doc.root.dataset.gzTodoTile, undefined, 'not the board\'s mark: the board has no To Do');
   assert.ok(!p.todoCalls.some(([k, on]) => k === 'sync' && on), 'the legacy places never asked');
   assert.deepEqual(p.todoCalls.find(([k]) => k === 'mount'), ['mount', '', 'follow'], 'all courses on the Courses page');
-  assert.ok(read('features/apps.css').includes('html[data-gz-sidebar-todo] div.todo-panel > bb-todo { display: none !important; }'));
+  assert.ok(read('core/page/apps.css').includes('html[data-gz-sidebar-todo] div.todo-panel > bb-todo { display: none !important; }'));
   // The page's own column is empty without its To Do: This page doesn't show.
   assert.equal(p.$('.gz-sb-pagehead').hidden, true);
 });
@@ -446,7 +446,7 @@ test('To Do follows the page: an outline\'s course, all courses elsewhere; All c
   await p.pass();
   assert.deepEqual(p.todoCalls.filter(([k]) => k === 'mount').at(-1), ['mount', '_101_1', 'follow']);
   await p.side.op([{ op: 'todoScope', v: 'all' }]); await settle();
-  assert.deepEqual(p.todoCalls.filter(([k]) => k === 'mount').at(-1), ['mount', '_101_1', 'all'], 'the page\'s course, with All courses (features/todo.js shows them all)');
+  assert.deepEqual(p.todoCalls.filter(([k]) => k === 'mount').at(-1), ['mount', '_101_1', 'all'], 'the page\'s course, with All courses (planner/page/todo.js shows them all)');
   const q = page({ at: 'stream', widgets: true, todo: true, stored: record({ dock: [{ id: 'todo' }], dest: { todo: 'dock' } }) });
   await q.pass();
   assert.deepEqual(q.todoCalls.filter(([k]) => k === 'mount').at(-1), ['mount', '', 'follow']);
@@ -508,10 +508,10 @@ test('Ultra\'s Dashboard stays a board; Move to Dashboard sends a docked widget 
 });
 
 test('content-ultra.js: the sidebar on the page and in a course tab\'s frame (dock widgets only there), with Better To Do\'s old places off while it runs', () => {
-  const src = read('content-ultra.js');
+  const src = read('content/content-ultra.js');
   assert.match(src, /const sidebarHere = \(\) => !!top\(\)\?\.sidebar && I\.settings\.sidebar\?\.ultra !== false && \/\^/);
   assert.match(src, /if \(e && tabFrame\) return sidebarOn\(\) && /);
-  assert.match(src, /const syncSidebar = \(\) => load\(sidebarHere, 'features\/sidebar\.js', 'GZ_SIDEBAR_UI'\);/);
+  assert.match(src, /const syncSidebar = \(\) => load\(sidebarHere, 'navigation\/page\/sidebar\.js', 'GZ_SIDEBAR_UI'\);/);
   assert.match(src, /\(e\.todo && sidebarOn\(\)\)/);
   assert.ok(src.includes("sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()"));
   assert.match(src, /const syncWidgets = \(\) => \{\n {4}syncSidebar\(\);/);
@@ -716,8 +716,8 @@ test('an assignment overview gets the assignment family and Glaze\'s own column;
     assert.equal(wide.mode(), w - 200 - 480 - 16 >= 900 ? 'expanded' : 'drawer', `${w} at 480`);
   }
   // The course's absolute tool panel keeps the column's room and the gap for its content; its header spans the window
-  // (features/sidebar.css).
-  const css = read('features/sidebar.css');
+  // (navigation/page/sidebar.css).
+  const css = read('navigation/page/sidebar.css');
   assert.match(css, /html\[data-gz-sb-tool\]:is\(\[data-gz-sidebar="expanded"\], \[data-gz-sidebar="collapsed"\]\) \.course-content-container > \.panel-wrap \{[^}]*padding-inline-end: var\(--gz-sb-room\) !important/);
   assert.doesNotMatch(css, /html\[data-gz-sb-fixed\][^{]*\.panel-wrap[^}]*padding-inline-end/, 'relative outline panels reserve room in their parent only');
   assert.match(css, /html\[data-gz-sidebar="expanded"\] \{ --gz-sb-room: calc\(var\(--gz-sidebar-w\) \+ 16px \+ var\(--gz-sb-inset, 0px\) \+ var\(--gz-sb-safe, 0px\)\); \}/);
@@ -726,7 +726,7 @@ test('an assignment overview gets the assignment family and Glaze\'s own column;
 test("a pinned column's height is its top and bottom's, whatever height the site gives it", () => {
   // Ultra gives a course outline's column a height of its own (in sheets the page can't read): left alone, the pinned
   // column ran past the window's bottom with nothing to scroll. Expanded, the drawer and Glaze's own column alike.
-  const css = read('features/sidebar.css');
+  const css = read('navigation/page/sidebar.css');
   const rule = (head) => { const i = css.indexOf(head); assert.ok(i >= 0, head); return css.slice(i, css.indexOf('}', i)); };
   for (const head of ['html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) [data-gz-sidebar-host] {',
     'html[data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] {',
@@ -747,7 +747,7 @@ test('Ultra page switches restore the legacy To Do hook when that page kind is d
   p.c.solo = true;
   p.c.need = async () => {};
   p.c.GZ_TODO_UI = { sync: (v) => calls.push(v) };
-  const src = read('content-ultra.js');
+  const src = read('content/content-ultra.js');
   const hooks = ['load', 'top', 'sidebarHere', 'sidebarOn', 'syncTodo'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
   await vm.runInContext(`${hooks}\nsyncTodo();`, p.c);
   assert.equal(calls.at(-1), true, 'legacy To Do runs on a disabled Courses page');
@@ -789,7 +789,7 @@ test('a disabled Ultra page kind keeps the legacy widget-loader boundary in cour
   p.c.sidebarSettings = { off: ['dashboard'] };
   p.c.I = { links: [1], get settings() { return p.c.GZ_CTX.settings(); } };
   p.c.solo = true; p.c.tabFrame = 'course';
-  const src = read('content-ultra.js');
+  const src = read('content/content-ultra.js');
   const hooks = ['top', 'sidebarHere', 'sidebarOn', 'widgetsHere'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))?.[0] || '').join('');
   assert.equal(vm.runInContext(`${hooks}\n!!widgetsHere();`, p.c), false);
   p.c.sidebarSettings = {};

@@ -1,4 +1,4 @@
-// The worker's side of media (lib/background.js): who may keep and drop the files a Look names (the editor's top frame), and who may
+// The worker's side of media (background/background.js): who may keep and drop the files a Look names (the editor's top frame), and who may
 // ask for a Lottie file's cleaned JSON (a page Glaze runs on, only for the address the worn Look names; the editor and its preview
 // frame, for the address they are showing). Run from the worker's own source, with stand-ins for storage and the network.
 const test = require('node:test');
@@ -6,13 +6,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../../extension/lib/media.js');
-const X = require('../../extension/lib/lookparts.js');
-const B = require('../../extension/lib/modbroker.js');
-const G = require('../../extension/defaults.js');
+const M = require('../../extension/looks/media.js');
+const X = require('../../extension/looks/lookparts.js');
+const B = require('../../extension/mods/modbroker.js');
+const G = require('../../extension/content/defaults.js');
 
-const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
-const slice = source.slice(source.indexOf('// Media for a Look (lib/media.js)'), source.indexOf("// Share keys and relay traffic"));
+const source = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
+const slice = source.slice(source.indexOf('// Media for a Look (looks/media.js)'), source.indexOf("// Share keys and relay traffic"));
 const frames = source.slice(source.indexOf('// Frames the worker trusts, by what for.'), source.indexOf('const BROKER = {')); // trustedFrame, whose Settings frame none claimed here
 const spin = fs.readFileSync(path.join(__dirname, '../fixtures/media/spin.json'), 'utf8');
 const URL1 = 'https://cdn.example.com/spin.json';
@@ -26,7 +26,7 @@ const rig = async ({ worn = URL1, wornType = 'lottie', body = spin, lms = 'https
   const sync = { lookX }, local2 = installed;
   const ctx = vm.createContext({
     BROKER: {}, BROKER_FILES: {}, GZ_MEDIA: M, GZ_XPARTS: X, GZ_MODBROKER: B, importScripts() {}, URL, console,
-    GZ_SANITIZE: G.GZ_SANITIZE, GZ_LOOKS: G.GZ_LOOKS, GZ_CATALOG: require('../../extension/lib/looks.js'), GZ_SHARE: require('../../extension/lib/share.js'),
+    GZ_SANITIZE: G.GZ_SANITIZE, GZ_LOOKS: G.GZ_LOOKS, GZ_CATALOG: require('../../extension/looks/looks.js'), GZ_SHARE: require('../../extension/sharing/share.js'),
     addressOf: (s) => s.url, approved: async () => false,
     MEDIA_FILES: { get: async () => undefined, put: async () => {}, del: async () => {}, keys: async () => [] },
     chrome: { runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, onMessage: { addListener: (f) => listeners.push(f) } } },

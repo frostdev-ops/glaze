@@ -1,5 +1,5 @@
 // The PDF viewer's tools (pdf-kind.js, loaded with the viewer of a kept PDF): Highlight, Pen, Text, Image, Shapes and
-// Signature over pdf.js's own annotation editor (lib/pdfjs: AnnotationEditorUIManager, reached through the viewer's
+// Signature over pdf.js's own annotation editor (vendor/pdfjs: AnnotationEditorUIManager, reached through the viewer's
 // EventBus), with colour, size, Undo and Redo, as a group in Glaze's toolbar. What they add are the PDF's own annotations
 // (Highlight, Ink, FreeText, Stamp), saved by the viewer's autosave as an incremental update and exported as they are,
 // still editable. A shape is an Ink annotation whose strokes Glaze lays out (shape below), put on the page through
@@ -41,7 +41,7 @@ var GZ_PDF_TOOLS = globalThis.GZ_PDF_TOOLS || (() => {
   const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 
   // ---- the group. o: { P (pdf.mjs), viewer, bus, t, h, btn, openMenu(opener, items), modified(), scroll, signatures
-  // (lib/pdf-sign.js's manager, or null), say(text) }. Mounted before the viewer has its document: pdf.js hands over its
+  // (documents/pdf/pdf-sign.js's manager, or null), say(text) }. Mounted before the viewer has its document: pdf.js hands over its
   // editor once page 1 is read (annotationeditoruimanager). → { el, ready (resolves true when the tools are on, false when
   // the file forbids them), dispose }.
   const SVG = 'http://www.w3.org/2000/svg';

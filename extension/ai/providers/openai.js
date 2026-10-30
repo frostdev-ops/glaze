@@ -1,10 +1,10 @@
 // Ported from Rimeward src/lib/agent/openrouter.ts (chatStream, readChatResponse, toWire, fromWire, callCompat), codex.ts
 // (the typed single fallback remembered per model) and provider.ts (the retry rule) (MIT). The AI harness's `openai`
 // provider (docs/ai-harness.md): any server that speaks Chat Completions (POST <base>/chat/completions): OpenAI, Anthropic,
-// Gemini, OpenRouter, xAI, Mistral, Groq, DeepSeek, Ollama, LM Studio, vLLM. cfg: { base (lib/ai/endpoint.js: https, or
+// Gemini, OpenRouter, xAI, Mistral, Groq, DeepSeek, Ollama, LM Studio, vLLM. cfg: { base (ai/endpoint.js: https, or
 // http on this computer), model (none: a connection not yet used, its key checked by status only), key? (a Bearer
 // token to that server only), images? (the student says the model takes pictures), context? (tokens it reads),
-// generation? (lib/ai/endpoint.js) }. Glaze keeps its own neutral messages; toWire and fromWire are this provider's
+// generation? (ai/endpoint.js) }. Glaze keeps its own neutral messages; toWire and fromWire are this provider's
 // converters. A request asks for json_schema output; a server that refuses that parameter by name gets json_object (the
 // schema then in the system message), and one that refuses that, the schema in words only, the answer read as askJson
 // reads one: remembered for that server and model for an hour. max_tokens, temperature and a reasoning effort step down
@@ -38,14 +38,14 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
     return { base, ...(raw.model && { model: raw.model }), ...(key && { key }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.context && { context: raw.context }), ...(raw.generation && { generation: raw.generation }) };
   };
   // What it can do: text, JSON and streaming always; pictures only when the student says so (unknown is absent, never
-  // false); tools unknown until a catalog says (lib/ai/models.js).
+  // false); tools unknown until a catalog says (ai/models.js).
   const caps = (cfg) => ({ text: true, json: true, stream: true, ...(cfg.images !== undefined && { images: cfg.images }), ...(cfg.context && { context: cfg.context }) });
   // The host the browser must hold for Glaze to reach the server (the manifest's optional https://*/* and loopback hosts).
   const origin = (cfg) => { const u = new URL(cfg.base); return `${u.protocol}//${u.hostname}/*`; };
 
   // ---- wire ------------------------------------------------------------------------------------------------------------
   const words = (m) => m.content.filter((p) => p.type === 'text').map((p) => p.text).join('\n\n');
-  // A neutral message (lib/ai/request.js) → Chat Completions'.
+  // A neutral message (ai/request.js) → Chat Completions'.
   const toWire = (m, cache = false) => {
     if (m.role === 'user' && m.content.some((p) => p.type === 'image' || (cache && p.cache))) {
       return { role: 'user', content: m.content.map((p) => (p.type === 'text' ? { type: 'text', text: p.text, ...(cache && p.cache && { cache_control: { type: 'ephemeral' } }) } : { type: 'image_url', image_url: { url: `data:${p.mime};base64,${p.data}` } })) };
@@ -188,7 +188,7 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
     if (signal?.aborted) stop(); else signal?.addEventListener('abort', stop, { once: true });
   });
 
-  // run(request, cfg, { signal, onDelta, onThinking, fetch }) → the result (lib/ai/request.js). No cookies, no referrer,
+  // run(request, cfg, { signal, onDelta, onThinking, fetch }) → the result (ai/request.js). No cookies, no referrer,
   // no redirect (a redirect would take the key elsewhere).
   const request = async (req, cfg, { signal, onDelta, onThinking, fetch = globalThis.fetch } = {}) => {
     const k = `${cfg.base}\n${cfg.model}`, kept = modes.get(k), stream = typeof onDelta === 'function';
@@ -255,7 +255,7 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
     res.body?.cancel?.().catch(() => {});
     if (!res.ok) throw Object.assign(new Error(`key ${res.status}`), { status: res.status });
   };
-  // Settings' Test: the key (OpenRouter's), the connection's catalog (lib/ai/models.js), and whether it names the model
+  // Settings' Test: the key (OpenRouter's), the connection's catalog (ai/models.js), and whether it names the model
   // (a connection with no model yet: ready once its catalog answers). → { state, reason?, status?, reference?, source? }:
   // a failure's category, HTTP status and reference, never the server's words.
   const status = async (cfg, { fetch = globalThis.fetch, signal, cache } = {}) => {

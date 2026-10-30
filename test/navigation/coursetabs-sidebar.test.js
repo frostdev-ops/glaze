@@ -1,25 +1,25 @@
 // The sidebar with course tabs: only the document on screen (the page, or the tab's frame over it) draws, watches or
-// changes the sidebar; a frame's changes go through the page around it (features/coursetabs.js 'sidebar'), which sends
-// them only for its frame on screen, signed in as the page is, and answers that frame alone. features/sidebar.js on the
-// captured Canvas pages as stand-in DOM, the worker's real changes (lib/sidebar.js), one storage shared by every document.
+// changes the sidebar; a frame's changes go through the page around it (navigation/page/coursetabs.js 'sidebar'), which sends
+// them only for its frame on screen, signed in as the page is, and answers that frame alone. navigation/page/sidebar.js on the
+// captured Canvas pages as stand-in DOM, the worker's real changes (navigation/sidebar.js), one storage shared by every document.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const L = require('../../extension/lib/coursetabs.js');
-const S = require('../../extension/lib/sidebar.js');
+const D = require('../../extension/content/defaults.js');
+const L = require('../../extension/navigation/coursetabs.js');
+const S = require('../../extension/navigation/sidebar.js');
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
-const source = read('features/coursetabs.js');
+const source = read('navigation/page/coursetabs.js');
 const part = (a, b) => { const i = source.indexOf(a); assert.ok(i >= 0, a); return source.slice(i, source.indexOf(b, i)); };
 const O = 'https://board.instructure.com';
 const KEY = S.key('canvas', O, '3');
 
-// ---- the page around the frames: its relay and its message handler, as they are in features/coursetabs.js ----------
+// ---- the page around the frames: its relay and its message handler, as they are in navigation/page/coursetabs.js ----------
 const RELAY = part('  let told = null;', '  let movedTimer = 0;');
 const HANDLER = part("  if (!framed && !preview) addEventListener('message'", "  // In a tab's frame on Ultra");
 const topPage = ({ site = 'canvas', who = '3', replies = [], lib = true } = {}) => {
@@ -280,7 +280,7 @@ test('a fresh tab responds in its first 400ms; only a real drag briefly suppress
   assert.deepEqual(hits, ['25', '25']);
 });
 
-// ---- documents: the page and its tabs' frames, each running features/sidebar.js ----------------------------------------
+// ---- documents: the page and its tabs' frames, each running navigation/page/sidebar.js ----------------------------------------
 // world(): one storage.local and one worker queue; doc({ frame }) a document; show(name) the course tabs' switch.
 const world = () => {
   const store = {}, listeners = new Set(), docs = [];
@@ -309,8 +309,8 @@ const world = () => {
       document: d, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
       MutationObserver: class { constructor(f) { this.f = f; observers.push(this); } observe() { this.on = true; } disconnect() { this.on = false; } },
       requestAnimationFrame: (f) => { frames++; f(); return 1; }, cancelAnimationFrame() {},
-      GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: require('../../extension/lib/widgets.js'), GZ_SIDEBAR: S,
-      // features/coursetabs.js's part: which document is on screen, and the relay a frame's changes go through.
+      GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: require('../../extension/core/widgets.js'), GZ_SIDEBAR: S,
+      // navigation/page/coursetabs.js's part: which document is on screen, and the relay a frame's changes go through.
       GZ_CTABS: {
         visible: () => shown === name,
         sidebar: (key, ops, gen) => { asked.push({ key, ops, gen }); if (shown !== name) return Promise.resolve(null); const p = worker({ key, ops }).then((r) => ({ ...r, gen })); return hold ? new Promise((res) => held.push(() => p.then(res))) : p; },
@@ -334,7 +334,7 @@ const world = () => {
       addEventListener() {}, removeEventListener() {},
     });
     c.globalThis = c; vm.createContext(c);
-    const side = vm.runInContext(read('features/sidebar.js'), c);
+    const side = vm.runInContext(read('navigation/page/sidebar.js'), c);
     const x = { name, c, d, side, sent, asked, drawers, held, observers, winListeners,
       frames: () => frames,
       pass: async () => { side.sync(true); await settle(); },

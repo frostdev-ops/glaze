@@ -1,21 +1,21 @@
 // The MCP view of the tools: Glaze's own (a GZ_AI_TOOLS registry; only those with a group) and the tools of the mods that can
-// run (lib/modtools.js defs, defined with lib/ai/tools.js's keys), as MCP Tool descriptors. The list is the same for every
-// connection, as the spec asks (clientInfo is self-reported); grants are checked when a tool is called (lib/mcp/calls.js).
-// state: { tools (a GZ_AI_TOOLS registry), mods: [the installed records, as lib/background.js modRead keeps them, with name and
+// run (mods/modtools.js defs, defined with ai/tools.js's keys), as MCP Tool descriptors. The list is the same for every
+// connection, as the spec asks (clientInfo is self-reported); grants are checked when a tool is called (agents/calls.js).
+// state: { tools (a GZ_AI_TOOLS registry), mods: [the installed records, as background/background.js modRead keeps them, with name and
 //   tools], dev (storage.local modDev), blocklist (modsBlocklist's list), browser: 'chrome' | 'firefox' | 'safari', runtime
 //   (storage.local modRuntime: { ok }), data(source, account) → { at, items, missing? } (or the items): a source's answer for
-//   an account (<origin>/<uid>), as lib/modbroker.js CALLS give it; code(mod, name, args, ctx) → a code tool's answer (its
+//   an account (<origin>/<uid>), as mods/modbroker.js CALLS give it; code(mod, name, args, ctx) → a code tool's answer (its
 //   Worker's, through an open tab); now() }. A mod is listed while it is on, not blocked and, as an unsigned copy, only in
-//   dev mode (lib/modbroker.js usable); its code tools only in Chrome once a page found the mods sandbox working.
+//   dev mode (mods/modbroker.js usable); its code tools only in Chrome once a page found the mods sandbox working.
 // list(state, era?) → the descriptors, by name; get(name, state) → the defined tool or null; describe(tool, era?) → one
 // descriptor; hash(list) → its fingerprint, for list_changed. Raw output schemas are refused here: calls.js adds its own
 // envelope and may replace large answers with an omission receipt, in both protocol eras.
-// Pure: no extension APIs. Classic script for the worker (it needs lib/ai/tools.js, lib/modtools.js and lib/modbroker.js
+// Pure: no extension APIs. Classic script for the worker (it needs ai/tools.js, mods/modtools.js and mods/modbroker.js
 // first); module.exports for node.
 var GZ_MCP_REGISTRY = globalThis.GZ_MCP_REGISTRY || (() => {
   const T = () => (typeof GZ_AI_TOOLS !== 'undefined' ? GZ_AI_TOOLS : require('../ai/tools.js'));
-  const M = () => (typeof GZ_MODTOOLS !== 'undefined' ? GZ_MODTOOLS : require('../modtools.js'));
-  const B = () => (typeof GZ_MODBROKER !== 'undefined' ? GZ_MODBROKER : require('../modbroker.js'));
+  const M = () => (typeof GZ_MODTOOLS !== 'undefined' ? GZ_MODTOOLS : require('../mods/modtools.js'));
+  const B = () => (typeof GZ_MODBROKER !== 'undefined' ? GZ_MODBROKER : require('../mods/modbroker.js'));
   const NS = 'io.frostdev.glaze/';
   const LEGACY = ['legacy', '2025-11-25', '2025-06-18'];
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);

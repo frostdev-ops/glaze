@@ -1,18 +1,18 @@
 // What a mod carries without any code: sticker packs (a picture, an animated WebP or AVIF, a Lottie file) and pet sprite sheets
-// (mod.json `packs`). Its manifest is checked strictly (lib/media.js packs, lib/modbundle.js), the worker answers only for mods
-// that are on and not blocked and hands back cleaned copies (lib/modbroker.js page ops 'packs' and 'sticker'), a pet goes into
-// the library through the same decoding and checks as an import (lib/petsprites.js 'fromMod'), and the page draws a sticker with
-// motion off, hidden and gone as it must (features/lookx.js).
+// (mod.json `packs`). Its manifest is checked strictly (looks/media.js packs, mods/modbundle.js), the worker answers only for mods
+// that are on and not blocked and hands back cleaned copies (mods/modbroker.js page ops 'packs' and 'sticker'), a pet goes into
+// the library through the same decoding and checks as an import (pet/petsprites.js 'fromMod'), and the page draws a sticker with
+// motion off, hidden and gone as it must (looks/page/lookx.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../../extension/lib/media.js');
-const B = require('../../extension/lib/modbroker.js');
-const BUNDLE = require('../../extension/lib/modbundle.js');
-const PETS = require('../../extension/lib/petsprites.js');
-const L = require('../../extension/lib/lookx.js');
+const M = require('../../extension/looks/media.js');
+const B = require('../../extension/mods/modbroker.js');
+const BUNDLE = require('../../extension/mods/modbundle.js');
+const PETS = require('../../extension/pet/petsprites.js');
+const L = require('../../extension/looks/lookx.js');
 
 const root = path.join(__dirname, '../../extension');
 const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
@@ -221,11 +221,11 @@ test('pets: only a pet a mod declares, from a mod that is installed and not bloc
 });
 
 test('pets: a mod\'s pets are asked for by the editor only', () => {
-  const source = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'background/background.js'), 'utf8');
   const setup = source.slice(source.indexOf('const fromEditor'), source.indexOf('// The notes app'));
   const chrome = { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, getManifest: () => ({ host_permissions: ['<all_urls>'] }) },
     storage: { local: { get: async () => ({ ultra: ['https://school.test'] }) }, sync: { get: async () => ({ enhance: { pet: true } }) } } };
-  const allow = vm.runInNewContext(`${setup} BROKER.petSprites.allow`, { chrome, URL, GZ_PET: require('../../extension/lib/pet.js'), GZ_SANITIZE: require('../../extension/defaults.js').GZ_SANITIZE });
+  const allow = vm.runInNewContext(`${setup} BROKER.petSprites.allow`, { chrome, URL, GZ_PET: require('../../extension/pet/pet.js'), GZ_SANITIZE: require('../../extension/content/defaults.js').GZ_SANITIZE });
   const site = { id: 'glaze', tab: {}, frameId: 0, url: 'https://school.test/ultra/courses' }, key = 'pet:https://school.test/_3_1';
   return Promise.all([allow({ op: 'mods', key }, site), allow({ op: 'fromMod', key }, site)]).then(([a, b]) => assert.deepEqual([a, b], [false, false]));
 });
@@ -302,8 +302,8 @@ const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY, def
     GZ_CTX: { t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), need: () => Promise.resolve(), settings: () => settings, on: () => true, partsOn: () => true, parts: () => null, solo: true },
   });
   context.window = context; context.top = context; context.globalThis = context;
-  vm.runInContext(fs.readFileSync(path.join(root, 'lib/lookx.js'), 'utf8'), context);
-  vm.runInContext(fs.readFileSync(path.join(root, 'features/lookx.js'), 'utf8').replace(/import\(chrome\.runtime\.getURL\((['`])lib\/lottie\/lottie_light_canvas\.js/, "importLottie(chrome.runtime.getURL($1lib/lottie/lottie_light_canvas.js"), context);
+  vm.runInContext(fs.readFileSync(path.join(root, 'looks/lookx.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(path.join(root, 'looks/page/lookx.js'), 'utf8').replace(/import\(chrome\.runtime\.getURL\((['`])vendor\/lottie\/lottie_light_canvas\.js/, "importLottie(chrome.runtime.getURL($1lib/lottie/lottie_light_canvas.js"), context);
   const layer = () => body.find('gz-stickers');
   const settle = async () => { for (let quiet = 0, turns = 0; quiet < 3 && turns < 400; turns++) { await new Promise((r) => setTimeout(r, 5)); quiet = short.size ? 0 : quiet + 1; } };
   return { lx: context.GZ_LOOKX, html, body, log, layer, settle, settings,

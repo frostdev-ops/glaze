@@ -1,20 +1,20 @@
-// Glaze Writer's editor frame (writer.html): Glaze's editor where Ultra shows an editor box, which features/writer.js
+// Glaze Writer's editor frame (writer.html): Glaze's editor where Ultra shows an editor box, which writer/page/writer.js
 // opens in the box's place. An extension page, so the editor has the workers and WebAssembly the LMS page's CSP keeps from
 // a content script (proofing needs both), its own fonts and styles. It opens only with a one-use pass from the worker
-// (lib/background.js 'glaze:writer'). After a public boot signal, it talks to the page over that job's MessageChannel:
+// (background/background.js 'glaze:writer'). After a public boot signal, it talks to the page over that job's MessageChannel:
 //   page → frame: init { mode, kind, html, selection, placeholder, look { tokens, dark, glass, motion }, context, locale },
 //                 look { look }, context { context }, focus, html { html } (Ultra changed its own editor: a post went, a
 //                 draft came back); and for the frame's later parts (handle): quote (writer-compose.js), ai and
 //                 attachments (writer-ai.js), focus-mode (writer-paper.js), import:file (writer-import.js), submit:*
-//                 (writer-submit.js); in view mode (a Blackboard preview, features/bbpreview.js) init { mode: 'view', kind,
+//                 (writer-submit.js); in view mode (a Blackboard preview, courses/page/bbpreview.js) init { mode: 'view', kind,
 //                 view { bytes, name, href }, look, locale } (writer-kinds.js);
 //   frame → page: ready, height { px }, change { html, text, words, delta } (compose's; a paper's compact box sends its
 //                 own: writer-paper.js; delta: its Quill ops, what the page writes into Ultra's editor), send (Mod-Enter),
 //                 native (back to Blackboard's editor; with a reason, the box holds what Writer can't keep and nothing was
 //                 written); and the later parts' attachments, focus-mode, view { full, px, from, to }, room { on } and
 //                 submit:*; in view mode view:shown, view:failed and view:esc.
-// Besides that pass it asks the extension only for the student's Writer settings (lib/writer-settings.js); its later
-// parts keep the paper (lib/writer-papers.js) and ask for proofing and AI on their own channels.
+// Besides that pass it asks the extension only for the student's Writer settings (writer/writer-settings.js); its later
+// parts keep the paper (writer/writer-papers.js) and ask for proofing and AI on their own channels.
 (() => {
   const root = document.documentElement;
   const $ = (id) => document.getElementById(id);
@@ -23,7 +23,7 @@
   const say = (m, transfer = []) => port?.postMessage(m, transfer);
 
   // ---- the editor --------------------------------------------------------------------------------------------------
-  // lib/writer-editor.js (GZ_WRITER_EDITOR) over lib/writer-schema.js: compose holds exactly what Ultra's Quill keeps.
+  // writer/writer-editor.js (GZ_WRITER_EDITOR) over writer/writer-schema.js: compose holds exactly what Ultra's Quill keeps.
 
   // ---- look, words and size ----------------------------------------------------------------------------------------
   const TOKEN = /^--gz-[a-z0-9-]{1,40}$/;
@@ -151,7 +151,7 @@
     init: (m) => {
       if (ed || refused || root.dataset.mode === 'view') return;
       look(m.look);
-      // A file the page hands over (features/bbpreview.js: a Blackboard preview), no editor: its kind's viewer
+      // A file the page hands over (courses/page/bbpreview.js: a Blackboard preview), no editor: its kind's viewer
       // (writer-kinds.js), once the page's words are in.
       if (m.mode === 'view') { root.dataset.mode = 'view'; root.dataset.kind = ''; lang(m.locale).then(() => emit('view', m)); return; }
       root.dataset.mode = m.mode === 'paper' ? 'paper' : 'compose';

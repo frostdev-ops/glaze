@@ -9,17 +9,17 @@ const { execFileSync } = require('node:child_process');
 
 const root = path.join(__dirname, '../../extension');
 const shipped = execFileSync('git', ['ls-files', '-z', '--', '*.js', '*.mjs'], { cwd: root, encoding: 'utf8' })
-  .split('\0').filter((f) => /(?:^|\/)(?:writer|papers)[-.]|^lib\/pm\.js$/.test(f) && !/^(test|scripts|safari)\//.test(f));
+  .split('\0').filter((f) => /(?:^|\/)(?:writer|papers)[-.]|^vendor\/pm\.js$/.test(f) && !/^(test|scripts|safari)\//.test(f));
 const SINK = /\.(?:inner|outer)HTML\s*=(?!=)|\binsertAdjacentHTML\s*\(|\bdocument\.write(?:ln)?\s*\(/;
 
 test('Writer\'s scripts and ProseMirror write no HTML through the sinks Firefox Add-ons flags', () => {
-  assert.ok(shipped.includes('lib/pm.js') && shipped.includes('features/writer.js'), 'the scan covers vendored and own code');
+  assert.ok(shipped.includes('vendor/pm.js') && shipped.includes('writer/page/writer.js'), 'the scan covers vendored and own code');
   const found = shipped.flatMap((f) => fs.readFileSync(path.join(root, f), 'utf8').split('\n')
     .map((line, i) => (SINK.test(line) ? `${f}:${i + 1}` : null)).filter(Boolean));
   assert.deepEqual(found, []);
 });
 
 test('ProseMirror parses pasted HTML with DOMParser, as scripts/vendor-prosemirror.sh patches it', () => {
-  const pm = fs.readFileSync(path.join(root, 'lib/pm.js'), 'utf8');
+  const pm = fs.readFileSync(path.join(root, 'vendor/pm.js'), 'utf8');
   assert.match(pm, /doc3 = new globalThis\.DOMParser\(\)\.parseFromString\(maybeWrapTrusted\("<body>" \+ html\), "text\/html"\);\n {4}elt = doc3\.body;/);
 });

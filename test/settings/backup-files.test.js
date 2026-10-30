@@ -1,20 +1,20 @@
-// Back up… and Restore with Documents' files in the worker's store (lib/doc-files.js): a record pointing at its file goes
+// Back up… and Restore with Documents' files in the worker's store (documents/doc-files.js): a record pointing at its file goes
 // into the backup as filePapers with the file beside it (papers/<n>.bin), Restore puts the file back before its record,
 // a backup made before the store (base64 in the record) still restores and then moves over, and what a reader from before
 // the store sees of a new backup.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const B = require('../../extension/lib/backup.js');
-const Z = require('../../extension/lib/zip.js');
-const F = require('../../extension/lib/doc-files.js');
-const PA = require('../../extension/lib/writer-papers.js');
-const D = require('../../extension/defaults.js');
+const B = require('../../extension/background/backup.js');
+const Z = require('../../extension/core/zip.js');
+const F = require('../../extension/documents/doc-files.js');
+const PA = require('../../extension/writer/writer-papers.js');
+const D = require('../../extension/content/defaults.js');
 const { fakeIDB } = require('../helpers/fake-idb.cjs');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-globalThis.GZ_WRITER_STYLES = require('../../extension/lib/writer-styles.js');
+globalThis.GZ_WRITER_STYLES = require('../../extension/writer/writer-styles.js');
 
 const NOW = Date.now() - 60000;
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
@@ -50,7 +50,7 @@ const ioFor = (dev, o = {}) => {
     put: o.put || ((b, type) => dev.files.put(b, type)),
     finish: async () => {
       const out = await B.atomic(steps, { local: dev.local, sync, files: dev.files, sessions: () => ({ handle: async () => ({ ok: true }), stop() {} }), settings: async () => ({ ok: true }) });
-      // As the worker does once a restore commits (lib/background.js): each document moved over and its files owned.
+      // As the worker does once a restore commits (background/background.js): each document moved over and its files owned.
       if (out.ok) for (const k of new Set(steps.flatMap((s) => Object.keys(s.value.papers || {})).filter((n) => /^writer(?:Paper|Versions):/.test(n)).map((n) => n.replace(/^writer(?:Paper|Versions):/, '')))) { await dev.P.migrate(k); await dev.P.reown(k); }
       return out;
     },
@@ -163,17 +163,20 @@ test('a reader from before the store sees only base64 records in papers, and no 
   assert.ok(entries.filter((e) => e.name.endsWith('.bin')).every((e) => e.data.length <= 64 << 20), 'every file within what any reader takes per entry');
 });
 
+// Where the files the old backup.js requires beside it are now.
+const OLD_LIB = { 'classes.js': 'planner/classes.js', 'doctext.js': 'core/doctext.js', 'gpa.js': 'planner/gpa.js', 'history.js': 'looks/history.js', 'lookparts.js': 'looks/lookparts.js', 'notes.js': 'planner/notes.js', 'pet.js': 'pet/pet.js', 'relay.js': 'sharing/relay.js', 'sharing.js': 'sharing/sharing.js', 'todo.js': 'planner/todo.js', 'widgets.js': 'core/widgets.js', 'writer-papers.js': 'writer/writer-papers.js', 'writer-schema.js': 'writer/writer-schema.js', 'writer-sources.js': 'writer/writer-sources.js', 'writer-styles.js': 'writer/writer-styles.js' };
+
 test('a reader from before the store refuses a backup whose documents it would silently omit', async () => {
   const a = device();
   await seeded(a);
-  // The 4.0.0 reader before the file store, lib/backup.js as of 8434813b, kept as a file: CI's shallow checkout lacks it.
+  // The 4.0.0 reader before the file store, background/backup.js as of 8434813b, kept as a file: CI's shallow checkout lacks it.
   const oldSource = fs.readFileSync(path.join(__dirname, '../fixtures/backup-before-store.js'), 'utf8');
   const old = { exports: {} };
-  vm.runInNewContext(oldSource, { module: old, require: (p) => require(`../../extension/lib/${p}`), Blob, TextEncoder, TextDecoder, Uint8Array, DataView, URL });
+  vm.runInNewContext(oldSource, { module: old, require: (p) => require(`../../extension/${OLD_LIB[p.replace(/^\.\//, '')]}`), Blob, TextEncoder, TextDecoder, Uint8Array, DataView, URL });
   const { file } = await backUp(a);
   await assert.rejects(old.exports.read(file), (e) => e.why === 'newer');
   assert.ok((await B.read(file)).cats.papers, 'the store-aware reader still takes every document');
-  const options = fs.readFileSync(require.resolve('../../extension/options.js'), 'utf8');
+  const options = fs.readFileSync(require.resolve('../../extension/settings/options.js'), 'utf8');
   assert.match(options, /newer:.*Update Glaze to restore it\./, 'the old reader gives its existing update instruction');
 });
 

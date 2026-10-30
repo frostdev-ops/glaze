@@ -1,9 +1,9 @@
 // writer.requirements (docs/ai-harness.md, Writer): a discussion's or assignment's targets read from its prompt, for the
 // compose bar's target ring — the fewest and most words, sources to cite and classmates to reply to — when AI is on (else
-// lib/writer-target.js reads them locally). check() keeps a number only when the prompt says it, in digits ("250", "1,500")
+// writer/writer-target.js reads them locally). check() keeps a number only when the prompt says it, in digits ("250", "1,500")
 // or words ("two", "two hundred and fifty"), and drops numbers out of range.
 // input: { prompt }. output: { minWords, maxWords, sources, replies }, each an integer or null.
-// Classic script for the worker (lib/background.js aiFiles); module.exports for node.
+// Classic script for the worker (background/background.js aiFiles); module.exports for node.
 var GZ_AI_TASK_WRITER_REQUIREMENTS = globalThis.GZ_AI_TASK_WRITER_REQUIREMENTS || (() => {
   const S = typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js');
   const T = typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('../task.js');

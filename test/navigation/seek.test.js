@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const S = require('../../extension/lib/seek.js');
+const S = require('../../extension/navigation/seek.js');
 
 const NOW = Date.parse('2026-10-15T12:00:00Z');
 const term = (start_at, end_at) => ({ start_at, end_at });
@@ -181,8 +181,8 @@ test('an abort stops it: nothing more is asked, nothing more is given, and nothi
   assert.equal(kept.size, 1, 'only the answer that did arrive whole');
 });
 
-// features/search.js in the palette, with a stand-in page: typing, the pause, cancelling, the order things arrive in.
-// `stored` is storage.sync as the attach reads it; `loading` holds lib/seek.js back; `cmd` and `show` can be content.js's own.
+// navigation/page/search.js in the palette, with a stand-in page: typing, the pause, cancelling, the order things arrive in.
+// `stored` is storage.sync as the attach reads it; `loading` holds navigation/seek.js back; `cmd` and `show` can be content.js's own.
 const palette = ({ stored = {}, readFails = false, search = true, loading = null, cmd = { input: { value: '' }, list: {}, shown: [] }, show = null } = {}) => {
   const timers = [];
   const listeners = {};
@@ -220,8 +220,8 @@ const palette = ({ stored = {}, readFails = false, search = true, loading = null
     AbortController, DOMException, Promise, URL, Date, setImmediate,
   });
   vm.runInContext('globalThis.globalThis = this;', ctx);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/seek.js'), 'utf8'), ctx);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/features/search.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/navigation/seek.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/navigation/page/search.js'), 'utf8'), ctx);
   const type = (v) => { cmd.input.value = v; listeners.input?.(); };
   const tick = () => { const due = timers.splice(0); for (const x of due) x.f?.(); };
   const answer = (pred, body) => { for (const q of requests.filter((x) => !x.done && pred(x.url))) { q.done = true; q.r.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(body)) }); } };
@@ -332,7 +332,7 @@ test('palette: turned off while it is open, nothing more is asked, and what was 
 });
 
 test('palette: turned off while the search code is still loading, or before it loaded at all, it never starts', async () => {
-  // The change comes while lib/seek.js loads; content.js's settings haven't caught up (still on).
+  // The change comes while navigation/seek.js loads; content.js's settings haven't caught up (still on).
   const loading = later();
   const p = palette({ loading, stored: { enhance: { search: true } } });
   p.cmd.input.value = 'lab';
@@ -354,9 +354,9 @@ test('palette: turned off while the search code is still loading, or before it l
   assert.ok(!q.cmd.found);
 });
 
-// The palette's list (features/palette.js showCmd), sliced from the source with a stand-in DOM: where search results go.
+// The palette's list (navigation/page/palette.js showCmd), sliced from the source with a stand-in DOM: where search results go.
 const rows = () => {
-  const src = fs.readFileSync(path.join(__dirname, '../../extension/features/palette.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/navigation/page/palette.js'), 'utf8');
   const a = src.indexOf('  let cmd = null; // {'), b = src.indexOf('  const openCmd = () => {', a);
   assert.ok(a > 0 && b > a, 'palette markers');
   const el = () => ({
@@ -366,7 +366,7 @@ const rows = () => {
     insertBefore(c, ref) { const i = this.children.indexOf(ref); this.children.splice(i < 0 ? this.children.length : i, 0, c); },
     querySelector(sel) { return sel === '[aria-selected="true"]' ? this.children.find((c) => c.attrs['aria-selected'] === 'true') || null : null; },
   });
-  const ctx = vm.createContext({ document: { createElement: el }, GZ_PAGE: require('../../extension/lib/page.js'), t: (k) => k });
+  const ctx = vm.createContext({ document: { createElement: el }, GZ_PAGE: require('../../extension/core/page.js'), t: (k) => k });
   // The palette's own callback for its late list, as written in openCmd, with that list handed over at once.
   const late = src.match(/^ {4}commands\(\)\.then\(.*\);$/m)[0];
   vm.runInContext(`${src.slice(a, b)}; globalThis.api = { showCmd, set: (c) => { cmd = c; }, late: (all) => { const mine = cmd; const commands = () => ({ then: (f) => f(all) }); ${late} } };`, ctx);
@@ -466,7 +466,7 @@ test('palette: its own list arriving late keeps every row on screen in place whi
   r.show();
   const before = r.text();
   assert.ok(before.length >= 2 && before.includes('Courses'), before.join());
-  // Search attaches to what was typed (features/search.js input(true)) and a result arrives.
+  // Search attaches to what was typed (navigation/page/search.js input(true)) and a result arrives.
   r.cmd.found = [];
   r.cmd.seeking = true;
   r.cmd.head = r.cmd.shown.slice();
@@ -492,7 +492,7 @@ test('palette: its own list arriving late keeps every row on screen in place whi
   assert.deepEqual(r.text().slice(0, done.length), done);
 });
 
-// An announcement found in Ctrl+K opens in Glaze's pop-up (features/announce.js, stood in for here) for the student's own
+// An announcement found in Ctrl+K opens in Glaze's pop-up (courses/page/announce.js, stood in for here) for the student's own
 // Enter or click; with a modifier, or a script's event, its page opens as before.
 test('palette: an announcement result opens through GZ_ANNOUNCE; a modifier or untrusted event opens its page', async () => {
   const assigned = [];

@@ -2,7 +2,7 @@
 // with the switch on, or a file preview's frame), and calls sync() from its passes and esc() on every keydown.
 // Round buttons in the bottom-right gutter, top frame only: dark documents while a file preview is on screen (dark
 // palettes only), focus mode on a course document, with its reading time, and on Canvas Open in Glaze for a preview of a
-// file Glaze's viewers open (features/canvasopen.js, which this loads). Dark documents invert the preview's frame
+// file Glaze's viewers open (courses/page/canvasopen.js, which this loads). Dark documents invert the preview's frame
 // (extras.css), which works whatever its origin; where a frame is same-origin, its images and videos are turned back.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_DOCS = globalThis.GZ_DOCS || (() => {
@@ -11,7 +11,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
   const { t, typing, docButton, setVar, setDark, PREVIEWS, DOC } = ctx;
   const html = document.documentElement;
   const UNFLIP = 'img, video, picture, canvas { filter: invert(1) hue-rotate(180deg); }';
-  // Where a Canvas file can open in Glaze (features/canvasopen.js): a preview, a module's File row, a file link.
+  // Where a Canvas file can open in Glaze (courses/page/canvasopen.js): a preview, a module's File row, a file link.
   const CANVAS_FILES = '#doc_preview, iframe.ef-file-preview-frame, #file-preview-iframe, .context_module_item.attachment, #content a.instructure_file_link, #content a[data-api-returntype="File"]';
   const framesShown = new Set();
   const framesSeen = new WeakSet();
@@ -97,10 +97,10 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     tellDocs();
     // This part already loads for Ultra's preview frames, even with reading tools off. Keep their viewer hook lazy too.
     if (globalThis.GZ_BB_PREVIEW_UI) GZ_BB_PREVIEW_UI.sync();
-    else if (ultra && ctx.on() && ctx.settings().enhance.bbPreviews && ctx.settings().writer.pdf && document.querySelector(PREVIEWS)) ctx.need('features/bbpreview.js', () => globalThis.GZ_BB_PREVIEW_UI).then(() => GZ_BB_PREVIEW_UI.sync(), () => {});
+    else if (ultra && ctx.on() && ctx.settings().enhance.bbPreviews && ctx.settings().writer.pdf && document.querySelector(PREVIEWS)) ctx.need('courses/page/bbpreview.js', () => globalThis.GZ_BB_PREVIEW_UI).then(() => GZ_BB_PREVIEW_UI.sync(), () => {});
     // Canvas's files in Glaze's viewers, as lazy: loaded where a preview or a file link is (content.js loads this part there).
     if (globalThis.GZ_CANVAS_OPEN) GZ_CANVAS_OPEN.sync();
-    else if (!ultra && ctx.solo && ctx.on() && ctx.settings().enhance.bbPreviews && document.querySelector(CANVAS_FILES)) ctx.need('features/canvasopen.js', () => globalThis.GZ_CANVAS_OPEN).then(sync, () => {});
+    else if (!ultra && ctx.solo && ctx.on() && ctx.settings().enhance.bbPreviews && document.querySelector(CANVAS_FILES)) ctx.need('courses/page/canvasopen.js', () => globalThis.GZ_CANVAS_OPEN).then(sync, () => {});
     const openB = !ultra && ctx.solo ? globalThis.GZ_CANVAS_OPEN?.previewButton() || null : null;
     const on = ctx.solo && ctx.on() && ctx.settings().enhance.toggles;
     const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
@@ -162,7 +162,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     setFocus(false);
   };
   // ---- Canvas's document viewer ----------------------------------------------------------------------------------
-  // features/docviewer.js, in a canvadocs frame of this page, asks (content.js hands the message here) for the palette,
+  // courses/page/docviewer.js, in a canvadocs frame of this page, asks (content.js hands the message here) for the palette,
   // the switches, which file and whose (the frame's /api/v1/canvadoc_session blob names both; else this page's file),
   // and Glaze's words. Answered at that frame's origin only, never '*'; told again when any of it changes (every sync:
   // content.js calls it from applySettings and disable) and once the words are in.

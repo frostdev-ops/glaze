@@ -1,16 +1,16 @@
-// The AI harness's `device` provider (lib/ai/providers/device.js): Chrome's Prompt API (LanguageModel, Chrome on-device AI) in the
+// The AI harness's `device` provider (ai/providers/device.js): Chrome's Prompt API (LanguageModel, Chrome on-device AI) in the
 // worker, against a stand-in LanguageModel: availability → status, a download with progress, a request mapped to a session
 // (system prompt, history, pictures, a schema as responseConstraint, temperature only with topK), deltas streamed, a cancel,
 // input over the context window refused before it is sent, every session destroyed, the broker's prepare and test, and
 // warm sessions prompted through clone().
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../../extension/lib/ai/providers.js');
-const B = require('../../extension/lib/ai/broker.js');
-const T = require('../../extension/lib/ai/task.js');
-const S = require('../../extension/lib/ai/schema.js');
-const A = require('../../extension/lib/ai/settings.js');
-const D = require('../../extension/lib/ai/providers/device.js');
+const P = require('../../extension/ai/providers.js');
+const B = require('../../extension/ai/broker.js');
+const T = require('../../extension/ai/task.js');
+const S = require('../../extension/ai/schema.js');
+const A = require('../../extension/ai/settings.js');
+const D = require('../../extension/ai/providers/device.js');
 
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64');
 const SCHEMA = { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false };
@@ -632,7 +632,7 @@ test('broker readiness accepts only a boolean image capability from provider sta
 });
 
 test('writing readiness exposes a stable identity for model, connection generation, tuning and effort without connection secrets', async () => {
-  require('../../extension/lib/ai/providers/openai.js');
+  require('../../extension/ai/providers/openai.js');
   const settings = { on: true, mode: 'advanced', model: { use: 'alpha', model: 'model-a', effort: 'low' },
     tune: { writing: { temperature: 0.5, context: 8192 } }, features: { writing: true, completion: true } };
   const e = env({ settings: async () => structuredClone(settings), reach: async () => true });

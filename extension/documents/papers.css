@@ -1,6 +1,6 @@
 /* Glaze Writer's Documents home (papers.html, papers.js): the heading and New band, the toolbar, and the documents as a
    grid of cards or as rows, in the student's whole Look as Settings wears it (papers.js theme, ui.js paint): its ground
-   under its background (#gd-backdrop, Settings' own painter), panels of glass over that (features/surfaces.css: fills
+   under its background (#gd-backdrop, Settings' own painter), panels of glass over that (looks/page/surfaces.css: fills
    opaque enough to read on any background, blurred only where there is art behind), its fonts, corners and depth, and
    motion within its level. Menus and the Undo toast are the paper chrome's (.pop, .gp-menu, .gp-toast), glass here too.
    Pages in thumbnails are paper: the sheet's colours, as printed.
@@ -134,7 +134,7 @@
   .gd-home:not([data-view="list"]) .gd-kind { display: none; }
 }
 
-/* motion: Glaze's motion on the page, on motion.css's knobs (papers-motion.js plays lib/motion.js and lib/popup.js's
+/* motion: Glaze's motion on the page, on motion.css's knobs (papers-motion.js plays core/motion.js and core/popup.js's
    genie). Cards, New tiles and buttons lift and give as Glaze's cards do; the drop target fades in and out; the menus and
    the toast move only as papers-motion.js moves them; a card that left fades on .gd-ghosts, over the list. A document
    opens and closes in a view transition across the two page loads, papers-motion.js animating its two pictures

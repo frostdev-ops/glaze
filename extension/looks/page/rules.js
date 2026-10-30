@@ -1,5 +1,5 @@
-// LMS rules on the page: the worn Look's x.rules, folded by lib/parts.js into each named part's
-// end state, put on that part's elements. Hide and style are attributes and --gz-r-* variables that features/rules.css
+// LMS rules on the page: the worn Look's x.rules, folded by looks/parts.js into each named part's
+// end state, put on that part's elements. Hide and style are attributes and --gz-r-* variables that looks/page/rules.css
 // reads (never inline display); a move leaves a marker where the element was; a label swaps the element's first text and
 // puts it back exactly, as nicknames do (content-ultra.js). content.js loads this once the Look has rules and calls
 // sync() on every pass (flush), on glaze:parts and on disable; with the theme off, on a quiz or a tool's page, or with
@@ -8,12 +8,12 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
   const ctx = globalThis.GZ_CTX;
   if (!ctx) return null; // a frame-only injection can outlive its document
   const html = document.documentElement;
-  const libs = () => Promise.all([ctx.need('lib/parts.js', () => globalThis.GZ_PARTS), ctx.need('lib/lookx.js', () => globalThis.GZ_LX)]);
+  const libs = () => Promise.all([ctx.need('looks/parts.js', () => globalThis.GZ_PARTS), ctx.need('looks/lookx.js', () => globalThis.GZ_LX)]);
   // Rules stay off whole quiz and tool routes, including their overview and entry pages.
   const quiet = () => GZ_LX.quiet(location.pathname, document) || /\/(quizzes|external_tools)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(location.pathname)
     || (ctx.site === 'ultra' && /\/(assessment|attempt|lti)(\/|$)/.test(location.pathname));
   // Glaze's own pieces are never a part's, and nothing that holds Glaze settings is hidden. The boards' course cards are
-  // the exception lib/parts.js names (a part's b): Glaze's, drawn from the LMS's card, so a Look's card rules reach them, but
+  // the exception looks/parts.js names (a part's b): Glaze's, drawn from the LMS's card, so a Look's card rules reach them, but
   // never a Glaze piece inside one.
   const OWN = '[id^="gz-"], [class^="gz-"], [class*=" gz-"]';
   const ownIn = (el, card) => { for (let e = el; e && e !== card; e = e.parentElement) if (e.matches(OWN)) return true; return false; };
@@ -24,7 +24,7 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
   const labels = new Map(); // text node -> { real, mine }
   const sheet = (on) => {
     const l = document.getElementById('gz-rules-css');
-    if (on && !l) (document.head || html).append(Object.assign(document.createElement('link'), { id: 'gz-rules-css', rel: 'stylesheet', href: chrome.runtime.getURL('features/rules.css') }));
+    if (on && !l) (document.head || html).append(Object.assign(document.createElement('link'), { id: 'gz-rules-css', rel: 'stylesheet', href: chrome.runtime.getURL('looks/page/rules.css') }));
     else if (!on) l?.remove();
   };
 
@@ -44,7 +44,7 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
     } });
     return walk.nextNode();
   };
-  // What the page wrote under the labels: el's text with each label's put back (features/coursecards.js writes its card's
+  // What the page wrote under the labels: el's text with each label's put back (courses/page/coursecards.js writes its card's
   // text only when this isn't it already, so it doesn't write over a label on every pass).
   const real = (el) => {
     let s = '';
@@ -56,7 +56,7 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
     const n = textOf(el, was);
     if (!n) return null;
     let r = labels.get(n);
-    // A course's nickname (content-ultra.js; a board card marks its own, features/coursecards.js) is the student's own: it
+    // A course's nickname (content-ultra.js; a board card marks its own, courses/page/coursecards.js) is the student's own: it
     // wins, before or after the label.
     if (n.parentElement?.dataset.gzReal !== undefined || n.parentElement?.dataset.gzNick !== undefined) {
       if (r) { unlabel(n, r); labels.delete(n); }

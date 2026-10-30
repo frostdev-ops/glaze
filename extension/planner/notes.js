@@ -1,13 +1,13 @@
 // Notes (Canvas, enhance.notes): the parts that don't touch the page, so node can test them. The rich-text sanitizer
 // (an allowlist, run on paste, on save and on load), plain text and Markdown out of a note, the library's sort, filter
 // and search, the export zip and its import, and every change to the library, applied in the service worker's queue
-// (lib/background.js 'glaze:notesapp', run). Where things live: a small index per Canvas site and user in storage.local
+// (background/background.js 'glaze:notesapp', run). Where things live: a small index per Canvas site and user in storage.local
 // (notesIdx:<origin>/<uid>: titles, folders, courses, times, the trash), and each note's body and its pictures and
 // attachments in the extension's own IndexedDB, which only the worker opens: never the school page's storage.
 // Classic script for the worker and the page (loaded on demand); module.exports for node. A second injection keeps the first.
 var GZ_NOTES = globalThis.GZ_NOTES || (() => {
-  const D = () => globalThis.GZ_DOCTEXT || require('./doctext.js');
-  const Z = () => globalThis.GZ_ZIP || require('./zip.js');
+  const D = () => globalThis.GZ_DOCTEXT || require('../core/doctext.js');
+  const Z = () => globalThis.GZ_ZIP || require('../core/zip.js');
   const DAY = 864e5;
   const TRASH = 30 * DAY; // the trash keeps notes and folders this long, then they go for good
   // Pictures and attachments each, everything stored on this device (all sites and accounts), one note's HTML, a title,
@@ -21,7 +21,7 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
   const set = (s) => new Set(s.split(' '));
 
   // ---- the sanitizer ---------------------------------------------------------------------------------------------
-  // HTML in, HTML out, through the one tokenizer lib/doctext.js uses (no DOMParser: it runs in the worker and in node).
+  // HTML in, HTML out, through the one tokenizer core/doctext.js uses (no DOMParser: it runs in the worker and in node).
   // What comes out is built from scratch: only the elements and attributes below, every attribute quoted and escaped,
   // every text escaped, every element closed. So the browser reads exactly what was checked, whatever the input meant.
   // Dropped with what's in them: scripts, styles, frames, forms' controls, SVG and MathML, media. Kept: headings, bold,

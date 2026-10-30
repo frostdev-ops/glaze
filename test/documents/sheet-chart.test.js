@@ -1,16 +1,16 @@
-// A sheet's charts (lib/sheet-chart-xml.js, lib/sheet-chart.js): the drawing's anchors and the chart parts of a workbook
+// A sheet's charts (documents/sheets/sheet-chart-xml.js, documents/sheets/sheet-chart.js): the drawing's anchors and the chart parts of a workbook
 // built as Excel writes one (test/fixtures/sheets/charts.js) read into descriptions, their references read live and
 // moved with inserted rows and renamed sheets, the types Glaze doesn't draw kept as titled frames; the layout's bar
 // widths, nice axis ticks, pie angles, scatter scale and stacked totals; and a workbook read and written untouched keeps
 // its chart and drawing parts byte for byte, drawn or not.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../../extension/lib/sheet-model.js');
-const X = require('../../extension/lib/sheet-xlsx.js');
-const C = require('../../extension/lib/sheet-calc.js');
-const D = require('../../extension/lib/doctext.js');
-const CX = require('../../extension/lib/sheet-chart-xml.js');
-const CH = require('../../extension/lib/sheet-chart.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const X = require('../../extension/documents/sheets/sheet-xlsx.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+const D = require('../../extension/core/doctext.js');
+const CX = require('../../extension/documents/sheets/sheet-chart-xml.js');
+const CH = require('../../extension/documents/sheets/sheet-chart.js');
 const FX = require('../fixtures/sheets/charts.js');
 
 const open = async (o) => { const wb = await X.read(FX.workbook(o)); const e = C.engine(wb); e.recalc(); return { wb, e }; };

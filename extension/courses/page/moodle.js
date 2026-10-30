@@ -1,7 +1,7 @@
 // Glaze on Moodle: what is due this week (for the popup and the command palette), the palette's pages and courses, and
 // each course card's total. Read-only: it asks the student's own Moodle, with their session, what Moodle's own pages ask
 // (the Timeline and Course overview blocks' service calls), and reads the grades overview page as they would see it.
-// Loaded on demand into the page's Glaze world (content.js moodleIn), after lib/moodle.js; uses content.js's helpers
+// Loaded on demand into the page's Glaze world (content.js moodleIn), after courses/moodle.js; uses content.js's helpers
 // through GZ_CTX. A second injection into the same frame keeps the first.
 var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
   const M = GZ_MOODLE;

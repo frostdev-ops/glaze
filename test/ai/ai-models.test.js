@@ -1,10 +1,10 @@
-// The AI harness's model catalog (lib/ai/models.js): a compat server's ids only (nothing about capabilities invented),
+// The AI harness's model catalog (ai/models.js): a compat server's ids only (nothing about capabilities invented),
 // OpenRouter's public catalog with its capabilities and context, the last good list served when a live one fails, and the
 // selection rules ported from Rimeward's validateSelection (MIT): a live list must name the model, a missing list marks it
 // unverified, a known lack refuses, nothing is substituted.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../../extension/lib/ai/models.js');
+const M = require('../../extension/ai/models.js');
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const store = () => { const m = new Map(); return { m, get: async (k) => m.get(k), set: async (k, v) => { m.set(k, structuredClone(v)); return true; } }; };

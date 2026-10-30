@@ -1,7 +1,7 @@
-// Google Calendar sync, a Canvas or Blackboard Ultra page's side (Chrome). lib/background.js runs this file in Canvas
+// Google Calendar sync, a Canvas or Blackboard Ultra page's side (Chrome). background/background.js runs this file in Canvas
 // sites' and Ultra's top frames only while the student is connected. It works out what Export calendar (.ics) would save,
-// with the same remembered choices (features/calexport.js compose), and hands the events to the worker, which writes what
-// changed to the Glaze calendar (lib/gcal.js). When: as the page opens, if this account's last run was 15 minutes ago or
+// with the same remembered choices (planner/page/calexport.js compose), and hands the events to the worker, which writes what
+// changed to the Glaze calendar (planner/gcal.js). When: as the page opens, if this account's last run was 15 minutes ago or
 // more; every 15 minutes while the page stays open (no alarms permission: with no such page open there's nothing new to read); 10
 // seconds after Better To Do's data, the class schedule, Gradescope's work or the export's choices change; a minute
 // after a run that had more to write. Nothing shows on the page.
@@ -28,7 +28,7 @@
       const src = `${location.origin}/${me.id}`;
       const since = Date.now() - (gcal.last?.[src] || 0);
       if (!force && since < EVERY) { next = EVERY - since; return; }
-      await ctx.need('features/calexport.js', () => globalThis.GZ_CAL_UI);
+      await ctx.need('planner/page/calexport.js', () => globalThis.GZ_CAL_UI);
       const c = await GZ_CAL_UI.compose(null, () => ctx.on());
       if (!c || !await c.recheck()) return;
       // whole: false (Ultra couldn't send its calendar whole): the worker deletes nothing for being missing from it.

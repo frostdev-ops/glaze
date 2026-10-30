@@ -1,17 +1,17 @@
 // The Looks catalogue: every Look the student can pick, as one list. Built in (defaults.js GZ_LOOKS), then their own: the
 // themes they saved and the gallery's they installed or saved, kept on this device in storage.local `lookFavorites`
-// ({ code, name, author, at, id, from }; lib/history.js favor). A Look is known by its id, never by its name, which two can
+// ({ code, name, author, at, id, from }; looks/history.js favor). A Look is known by its id, never by its name, which two can
 // share: a built-in Look's id is its name (never translated, and what an older Glaze on another device reads in the synced
 // courses.looks); a kept one's is `c:` and a hash of its code (in the synced courseLooks, which an older Glaze leaves alone),
-// so the same gallery Look installed on two devices is the same Look on both, and a rename keeps it. The worker decodes the codes (lib/background.js) into storage.local
+// so the same gallery Look installed on two devices is the same Look on both, and a rename keeps it. The worker decodes the codes (background/background.js) into storage.local
 // `lookCatalog`, { sig, looks }, and every page reads that, never the codes: each kept Look's palette, look and background
-// as its code wears them (the keys it carries; the rest stay the student's, as lib/lookx.js wearCode has it), a hash of its
+// as its code wears them (the keys it carries; the rest stay the student's, as looks/lookx.js wearCode has it), a hash of its
 // parts, and its kind: 'saved', 'gallery', or 'background' (a gallery Look whose background moves). Mods that bring a
-// background lay it over whichever Look is worn while they are on (features/mods.js): they stay mods, not Looks.
+// background lay it over whichever Look is worn while they are on (mods/page/mods.js): they stay mods, not Looks.
 // Classic script (the worker, the editor, the popup; the course menu and the palette load it on demand); module.exports
 // for node.
 var GZ_CATALOG = globalThis.GZ_CATALOG || (() => {
-  const G = typeof GZ_LOOKS !== 'undefined' ? { GZ_LOOKS, GZ_LOOK_ON } : require('../defaults.js');
+  const G = typeof GZ_LOOKS !== 'undefined' ? { GZ_LOOKS, GZ_LOOK_ON } : require('../content/defaults.js');
   const KEY = 'lookCatalog';
   const ID = /^c:[0-9a-z]{14}$/; // as defaults.js's courseLooks
   // Two 32-bit FNV-1a passes with different primes, as 14 base36 characters. keptAll refuses a known collision.
@@ -42,13 +42,13 @@ var GZ_CATALOG = globalThis.GZ_CATALOG || (() => {
     }
     return [...by.values()].filter((e) => !conflicts.has(e.id));
   };
-  // A new one to keep (lib/history.js favor puts it first).
+  // A new one to keep (looks/history.js favor puts it first).
   const make = (code, name, author, from) => ({ code, name, author: author || '', at: Date.now(), id: idOf(code), from });
 
   // ---- the catalogue the worker writes --------------------------------------------------------------------------------
   const sig = (favorites) => hash(JSON.stringify(favorites ?? null));
   const px = (parts) => (parts ? hash(JSON.stringify(parts)) : '');
-  // From `favorites` as stored. decode(code) → lib/share.js decode's answer, or null (or a throw) for one Glaze won't wear,
+  // From `favorites` as stored. decode(code) → sharing/share.js decode's answer, or null (or a throw) for one Glaze won't wear,
   // which is left out. `was`, the catalogue before: an entry whose code is unchanged is kept, not decoded again.
   const build = async (favorites, decode, was) => {
     const before = new Map(looks(was).map((E) => [E.id, E]));
@@ -97,10 +97,10 @@ var GZ_CATALOG = globalThis.GZ_CATALOG || (() => {
   };
 
   // Kept ids an earlier 4.0 left in courses.looks, moved to courseLooks where it has room (one it has for the course stays), so
-  // a 3.x device on the same sync account doesn't write them away (lib/background.js): whether any moved. `s` sanitized,
+  // a 3.x device on the same sync account doesn't write them away (background/background.js): whether any moved. `s` sanitized,
   // changed in place.
   const move = (s) => {
-    const D = typeof GZ_SYNC_BYTES !== 'undefined' ? { GZ_SYNC_BYTES, GZ_SYNC_ITEM_MAX } : require('../defaults.js');
+    const D = typeof GZ_SYNC_BYTES !== 'undefined' ? { GZ_SYNC_BYTES, GZ_SYNC_ITEM_MAX } : require('../content/defaults.js');
     let moved = false;
     for (const [cid, v] of Object.entries(s.courses.looks)) {
       if (!ID.test(v)) continue;

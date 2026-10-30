@@ -7,9 +7,9 @@
 // NODE_PATH=/path/to/node_modules nice -n 15 node checks/navigation/sidebar-tabs-check.js [screenshots directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
-const G = require('../../extension/defaults.js');
-const I = require('../../extension/lib/i18n.js');
-const W = require('../../extension/lib/widgets.js');
+const G = require('../../extension/content/defaults.js');
+const I = require('../../extension/core/i18n.js');
+const W = require('../../extension/core/widgets.js');
 for (const lang of I.CODES) require(`../../extension/i18n/${lang}.js`);
 const text = async (root, key) => I.t(key, {}, await root.locator('html').getAttribute('lang'));
 const src = path.resolve(__dirname, '../../extension');
@@ -80,7 +80,7 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
   fs.mkdirSync(out, { recursive: true });
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sidebar-tabs-run-'))); ext = path.join(tmp, 'extension'); fs.mkdirSync(ext);
   try {
-    for (const e of fs.readdirSync(src, { withFileTypes: true })) if (/\.(js|css|html)$/.test(e.name) || ['lib', 'features', 'i18n', '_locales', 'assets', 'fonts', 'icons', 'mods', 'sharing'].includes(e.name)) fs.cpSync(path.join(src, e.name), path.join(ext, e.name), { recursive: true });
+    for (const e of fs.readdirSync(src, { withFileTypes: true })) if (/\.(js|css|html)$/.test(e.name) || ['background', 'content', 'core', 'looks', 'navigation', 'courses', 'planner', 'writer', 'documents', 'ai', 'agents', 'sharing', 'mods', 'pet', 'settings', 'vendor', 'i18n', '_locales', 'assets', 'fonts', 'icons'].includes(e.name)) fs.cpSync(path.join(src, e.name), path.join(ext, e.name), { recursive: true });
     const m = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json')));
     m.host_permissions.push('http://localhost/*');
     m.content_scripts.find((s) => s.matches.includes('https://*.instructure.com/*')).matches.push('http://localhost/*');

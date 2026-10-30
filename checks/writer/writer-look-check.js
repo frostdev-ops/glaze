@@ -56,7 +56,7 @@ const LOOKS = [
       return r.fulfill({ contentType: 'application/json', body: JSON.stringify(u.pathname.endsWith('/users/me') ? { id: '_900_1', userName: 'synthetic', givenName: 'Alex', familyName: 'Rivera' } : { results: [] }) });
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     await worker.evaluate(async (site) => { await chrome.storage.local.set({ ultra: [site] }); }, site);
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
 

@@ -8,7 +8,7 @@
 // upload, non-empty attempt enablement, Ultra's submit confirmation and its receipt. Synthetic data only.
 // Quill 1.3.7 is a stand-in for Ultra's 1.x fork; Angular/React callbacks are modelled here, not loaded from Blackboard.
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto'), zlib = require('node:zlib');
-const DT = require('../../extension/lib/doctext.js'), ZIP = require('../../extension/lib/zip.js');
+const DT = require('../../extension/core/doctext.js'), ZIP = require('../../extension/core/zip.js');
 
 const SITE = 'https://bb.school.test';
 const COURSE = '_101_1', FORUM = '_1101_1';
@@ -233,7 +233,7 @@ const pdfOf = (f, at, expires = 3600) => presign(`${BUCKET}/files/${TENANT}/${f.
 const viewerAt = (f, at, status = 'done') => `${VIEWER}/ui/166/2026.10.21-1a2b3c4/index.html?${new URLSearchParams({ locale: 'en_US', hash: f.hash, render: 'inline', tenantId: TENANT, status, originalUrl: originalOf(f, at) })}`;
 const documentOf = (f, at, { status = 'done', expires = 3600 } = {}) => ({ status, hash: f.hash, requiredConversion: false,
   urls: { original: originalOf(f, at), ...(status === 'done' && { pdf: pdfOf(f, at, expires) }), poll: Buffer.from(sha(`poll|${f.hash}`).repeat(40)).toString('base64').slice(0, 2500) } });
-// The Document page: the course document's root (Ultra's .document-content-root, features/docs.js DOC), its text, and the
+// The Document page: the course document's root (Ultra's .document-content-root, courses/page/docs.js DOC), its text, and the
 // two attachments; the page's world opens and closes each preview as Ultra does.
 const previewPage = (files = PREVIEW_FILES, site = SITE) => `<!doctype html><html lang="en"><head><base href="/ultra/"><meta charset="utf-8"><title>Week 3 readings</title>
 <style>body{margin:0;font:15px system-ui;background:#f4f6f8;color:#262626}#site-wrap{max-width:900px;margin:0 auto;padding:24px}.bb-file{margin:12px 0;padding:10px 14px;border:1px solid #cdd3da;border-radius:6px;background:#fff}.bb-file .row{display:flex;gap:8px;align-items:center}.bb-file a{flex:1}.makeStylesfileViewerContainer-0-2-871{margin-top:10px}.makeStylesfileViewerContainer-0-2-871 iframe{display:block;width:100%;height:785px;border:1px solid #cdd3da}</style></head>

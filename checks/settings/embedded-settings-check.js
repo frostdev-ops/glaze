@@ -1,4 +1,4 @@
-// Settings over the page (features/settingspage.js), headless: the real extension on saved Ultra, Canvas and Moodle pages under
+// Settings over the page (settings/page/settingspage.js), headless: the real extension on saved Ultra, Canvas and Moodle pages under
 // invented school origins, with Glaze navigation, the sidebar (a drawer at this width, its button on the page) and the pet
 // habitat on. Settings opens from the bar's Settings item;
 // over its frame's whole area nothing else may draw or take the pointer: not Glaze's own overlays (the pet, the sidebar's
@@ -11,8 +11,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const G = require('../../extension/defaults.js');
-require('../../extension/lib/widgets.js'); // its settings in GZ_SPEC
+const G = require('../../extension/content/defaults.js');
+require('../../extension/core/widgets.js'); // its settings in GZ_SPEC
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://moodle.school.test/*', 'https://bb.school.test/*']);
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');

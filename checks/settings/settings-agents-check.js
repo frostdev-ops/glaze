@@ -2,7 +2,7 @@
 // browser can't answer the grant's prompt): the switch's permission request, through a stand-in that records whether the
 // click's user activation is still live when it is called, then off before the permission goes; the link's states from real
 // helpers in the profile's NativeMessagingHosts (none, one that doesn't list this copy, one that exits at once, the real
-// glaze-mcp host under a scratch HOME) and every other state lib/agent-link.js reports as the page shows it; an app's card,
+// glaze-mcp host under a scratch HOME) and every other state agents/agent-link.js reports as the page shows it; an app's card,
 // the activity list, 320px, search, and Forget all apps' question; a restart left in storage.session leaves Starting… after the page's one wait (light: the
 // real worker answers; dark: an answer of restart stood in, which gets the restart line). Each state is shot in light and
 // dark, each scheme in a browser of its own. No network.
@@ -122,7 +122,7 @@ async function pass(scheme) {
       await open();
       // The Look follows the system's light or dark (Paper and Frost), so each state is shot in both.
       await page.evaluate(async () => chrome.storage.sync.set({ auto: { ...GZ_SANITIZE().auto, on: true, mode: 'device' } }));
-      // Two apps as lib/mcp/grants.js keeps them (the worker's own database), one declined; a mod with agent tools; activity.
+      // Two apps as agents/grants.js keeps them (the worker's own database), one declined; a mod with agent tools; activity.
       await page.evaluate(async ({ A, C, MOD, now }) => {
         const db = await new Promise((res, rej) => { const r = indexedDB.open('glaze-mcp', 1); r.onupgradeneeded = () => r.result.createObjectStore('apps'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
         await new Promise((res, rej) => {
@@ -227,7 +227,7 @@ async function pass(scheme) {
     });
 
     await check('bounded', async () => {
-      const { WAIT } = require('../../extension/lib/editor-agents.js'), stuck = scheme === 'dark';
+      const { WAIT } = require('../../extension/settings/editor-agents.js'), stuck = scheme === 'dark';
       if (stuck) await page.evaluate(() => {
         const send = chrome.runtime.sendMessage;
         chrome.runtime.sendMessage = (m, ...rest) => (m?.type === 'glaze:mcp-config' && m.op === 'state' ? Promise.resolve({ ok: true, on: true, link: { state: 'restart', at: Date.now() } }) : send(m, ...rest));

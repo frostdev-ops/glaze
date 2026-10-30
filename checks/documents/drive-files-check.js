@@ -1,4 +1,4 @@
-// Google Drive's files (lib/drive.js) on the Documents home, headless, in the real extension (a staged copy, Drive's switch on
+// Google Drive's files (documents/drive.js) on the Documents home, headless, in the real extension (a staged copy, Drive's switch on
 // as tools/dev/dev-drive.sh turns it on) with its real worker. A stand-in answers for Drive v3 (www.googleapis.com, its shapes
 // test/fixtures/drive/v3.js's) and Google's userinfo and revoke, through Playwright's route() and, for what route() can't
 // see, a local HTTPS server those hosts resolve to; every other host is refused. Sign-in is Chrome's getAuthToken (the check's
@@ -15,7 +15,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const env = require('../../tools/dev/check-env.js');
 const { MIME, FILES, SAVED, ERRORS } = require('../../test/fixtures/drive/v3.js');
 
-const CONFIG = require('../../extension/lib/google-config.js');
+const CONFIG = require('../../extension/background/google-config.js');
 const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'), []);
 {
   const file = path.join(ext, 'manifest.json'), m = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -24,8 +24,8 @@ const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'
   m.oauth2 = { client_id: CONFIG.chrome, scopes: CONFIG.scopes };
   fs.writeFileSync(file, JSON.stringify(m, null, 2));
   // Drive's build-time switch on in this copy only (the staged file is a link: replaced, not edited).
-  const g = path.join(ext, 'lib/google.js'), src = fs.readFileSync(g, 'utf8');
-  if (!src.includes('\n  const ON = false;\n')) throw new Error('lib/google.js: no ON switch');
+  const g = path.join(ext, 'background/google.js'), src = fs.readFileSync(g, 'utf8');
+  if (!src.includes('\n  const ON = false;\n')) throw new Error('background/google.js: no ON switch');
   fs.rmSync(g);
   fs.writeFileSync(g, src.replace('\n  const ON = false;\n', '\n  const ON = true;\n'));
 }
@@ -151,7 +151,7 @@ const HOSTS = ['www.googleapis.com', 'openidconnect.googleapis.com', 'oauth2.goo
 
     // A Word file and a Google Doc in the stand-in's Drive, their bytes a real .docx the page itself writes.
     const docx = Buffer.from(await home.evaluate(async () => {
-      await GZ_WRITER_PAPER.need(['lib/writer-styles.js', 'lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js']);
+      await GZ_WRITER_PAPER.need(['writer/writer-styles.js', 'core/zip.js', 'core/doctext.js', 'writer/writer-docx.js', 'writer/writer-objects-docx.js']);
       const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Brought from Drive: the river keeps what the town forgets.' }] }] };
       return Array.from(GZ_WRITER_DOCX.exportDocx(doc, { format: GZ_WRITER_STYLES.FORMATS.plain, surname: '', title: '' }).bytes);
     }));
@@ -163,7 +163,7 @@ const HOSTS = ['www.googleapis.com', 'openidconnect.googleapis.com', 'oauth2.goo
     ok(await home.evaluate(() => { const b = [...document.querySelectorAll('.gd-extra button')].find((x) => x.textContent === 'From Google Drive'); return b?.closest('.gd-tools')?.querySelector('#gd-import') === b.closest('.gd-extra').nextElementSibling; }), 'connected: From Google Drive shows beside Import, without a reload');
     await home.screenshot({ path: path.join(out, 'drive-1-connected.png') });
 
-    // The Picker's answer, as lib/google.js pick hands it back.
+    // The Picker's answer, as background/google.js pick hands it back.
     const picks = (files) => sw.evaluate((f) => { openGoogle().pick = async () => ({ ok: true, files: f }); }, files);
     const titles = () => home.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.querySelector('.gd-title').textContent));
     const keyOf = (title) => home.evaluate((t) => [...document.querySelectorAll('.gd-card')].find((c) => c.querySelector('.gd-title').textContent === t)?.dataset.key, title);

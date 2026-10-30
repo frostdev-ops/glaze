@@ -1,11 +1,11 @@
 // A video or an animated picture a Look names by https address (LOOK-6): the worker fetches it with no cookies, no referrer and no
-// redirect, under a time limit and a byte cap, and reads it as a kept file is read (lib/media.js check: container, size, frames and
-// pixels, metadata gone), so a page is only ever handed a checked file and never the address itself. lib/media.js `remote`.
+// redirect, under a time limit and a byte cap, and reads it as a kept file is read (looks/media.js check: container, size, frames and
+// pixels, metadata gone), so a page is only ever handed a checked file and never the address itself. looks/media.js `remote`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/media.js');
+const M = require('../../extension/looks/media.js');
 
 const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
 const u32 = (n) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255];

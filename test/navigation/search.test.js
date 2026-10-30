@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const F = require('../../extension/lib/search.js');
+const F = require('../../extension/settings/search.js');
 
 const hit = (q, body, head = '') => F.matches(head, body, F.parse(q));
 

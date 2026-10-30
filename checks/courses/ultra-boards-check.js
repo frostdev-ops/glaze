@@ -15,8 +15,8 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const zlib = require('zlib');
-const G = require('../../extension/defaults.js');
-require('../../extension/lib/widgets.js'); // its settings in GZ_SPEC
+const G = require('../../extension/content/defaults.js');
+require('../../extension/core/widgets.js'); // its settings in GZ_SPEC
 
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
@@ -159,7 +159,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     const rect = (sel) => page.evaluate((s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return r && { left: r.left, top: r.top + scrollY, right: r.right, bottom: r.bottom + scrollY, width: r.width }; }, sel);
     const tile = (id) => `section.gz-w[data-tile="${id}"]`;
     // Default card width has no data-gz-card-width override. Its grid must still fill each track.
-    await store(settingsFor('Paper', { enhance: { notes: false, widgets: false, todo: false } }), { widgetLayout: require('../../extension/lib/widgets.js').kept(false) });
+    await store(settingsFor('Paper', { enhance: { notes: false, widgets: false, todo: false } }), { widgetLayout: require('../../extension/core/widgets.js').kept(false) });
     await page.goto(`${O}/ultra/course`);
     await until(() => page.evaluate(() => getComputedStyle(document.querySelector('.term-group')).display), (v) => v === 'grid', 'native course grid did not load');
     for (const dir of ['ltr', 'rtl']) for (const width of [1600, 1280, 768, 390]) {
@@ -200,7 +200,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       }
     };
     // These interaction cases use the retained legacy layout; fresh installs use the 2026-10-20 starter layout.
-    const notes = { widgetLayout: require('../../extension/lib/widgets.js').layout({ todo: true }), [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
+    const notes = { widgetLayout: require('../../extension/core/widgets.js').layout({ todo: true }), [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
 
     if (!process.env.B10_ONLY) {
     // ---- light: both boards as they start, wide and narrow ---------------------------------------------------------
@@ -523,7 +523,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await fresh.close();
     }
     // ---- B10: course cards use the boards, never React's nodes or a new reader ---------------------------------
-    const base = require('../../extension/lib/widgets.js').layout({ todo: true });
+    const base = require('../../extension/core/widgets.js').layout({ todo: true });
     for (const board of ['courses', 'dash', 'pages']) for (const x of base.boards[board]) x.on = false;
     const courseTile = 'section.gz-w[data-tile^="course:"]';
     for (const preset of ['Paper', 'Frost']) for (const width of [1280, 375]) {
@@ -653,7 +653,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display !== 'none'), 'B10: removing every card restores Ultra');
     }
     // The To Do resized by its corner keeps its height independently beside the course-card layout fields.
-    const todoLayout = require('../../extension/lib/widgets.js').layout(base);
+    const todoLayout = require('../../extension/core/widgets.js').layout(base);
     for (const board of ['courses', 'dash']) todoLayout.boards[board].find((x) => x.id === 'todo').on = true;
     await store(settingsFor('Paper', { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: true } }), { widgetLayout: todoLayout });
     await page.setViewportSize({ width: 1280, height: 1400 });

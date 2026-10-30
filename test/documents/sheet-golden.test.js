@@ -9,7 +9,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
-const Z = require('../../extension/lib/zip.js');
+const Z = require('../../extension/core/zip.js');
 const X = require('../helpers/xlsx-cache.cjs');
 const { cases, families } = require('../fixtures/sheets/cases.js');
 
@@ -353,10 +353,10 @@ test('engine comparison: 1e-12 relative, types strict', () => {
   }
 });
 
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-const F = require('../../extension/lib/sheet-formula.js');
-const LIB = path.join(__dirname, '../../extension/lib');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+const F = require('../../extension/documents/sheets/sheet-formula.js');
+const LIB = path.join(__dirname, '../../extension/documents/sheets');
 for (const f of fs.readdirSync(LIB).filter((name) => /^sheet-fn-.*\.js$/.test(name)).sort()) require(path.join(LIB, f));
 
 // A family's workbook as Glaze opens the one Excel saved: the inputs, then each case's formula at its cell, an array

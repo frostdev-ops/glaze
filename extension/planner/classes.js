@@ -1,9 +1,9 @@
 // Class schedule import (Canvas, W14): the parts that don't touch the page, so node can test them. A schedule is read on
-// the device, from an .ics calendar (lib/ics.js), a registrar's page or document (lib/doctext.js gives its text) or
+// the device, from an .ics calendar (planner/ics.js), a registrar's page or document (core/doctext.js gives its text) or
 // pasted text, then shown for review; only what the student saves is kept (storage.local classes:<site>/<user>, through
-// the worker's queue, lib/background.js 'glaze:classes'). Times are wall-clock times in the student's Canvas time zone.
+// the worker's queue, background/background.js 'glaze:classes'). Times are wall-clock times in the student's Canvas time zone.
 // meetings(line) is the meeting-time reader on its own (W15's syllabus import uses it too).
-// Classic script; module.exports for node. Loaded on demand (features/classes.js, the agenda, reminders) and by the
+// Classic script; module.exports for node. Loaded on demand (planner/page/classes.js, the agenda, reminders) and by the
 // background worker for the writes: a second injection keeps the first.
 var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
   const DAY = 864e5;
@@ -493,7 +493,7 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
   };
 
   // ---- matching a label to a Canvas or Ultra course -------------------------------------------------------------
-  // courses: Canvas's list ({ id, name, course_code, friendly_name }), or Ultra's in that shape (lib/ultra.js list). By code first ("MATH 1210" in "MATH-1210-002"),
+  // courses: Canvas's list ({ id, name, course_code, friendly_name }), or Ultra's in that shape (courses/ultra.js list). By code first ("MATH 1210" in "MATH-1210-002"),
   // then by name (most shared words of three letters or more). → the course id, or '' when nothing is close.
   const norm = (s) => bare(String(s || '')).replace(/[^a-z0-9]/g, '');
   const wordsOf = (s) => new Set(bare(String(s || '')).split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !/^\d+$/.test(w)));
@@ -560,7 +560,7 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
   // For a course that isn't on Canvas: an id from its name.
   const otherId = (name) => `o-${bare(name).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 38) || 'class'}`;
 
-  // ---- writes: one at a time, in the background worker (lib/background.js 'glaze:classes') ----------------------
+  // ---- writes: one at a time, in the background worker (background/background.js 'glaze:classes') ----------------------
   // m: { key, op, at (when the student pressed Save or Delete), tz, … } from a Canvas page. add: courses from a review, their
   // periods joined to any already kept for the same course (once, with updated holidays and manual exceptions kept); put:
   // courses edited, each replacing what's kept for it,
@@ -677,7 +677,7 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
   };
 
   // ---- using it -------------------------------------------------------------------------------------------------
-  // The classes on day n (a day number, as lib/todo.js counts them): [{ id, code, name, start, end, loc, p (its period's
+  // The classes on day n (a day number, as planner/todo.js counts them): [{ id, code, name, start, end, loc, p (its period's
   // place in the course) }], earliest first; only the periods `only` picks, when given.
   const onDay = (store, n, only) => {
     const k = keyOf(n), wd = weekday(n);
@@ -694,7 +694,7 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
   // Every class meeting that starts in [from, to) (instants), earliest first: { ...onDay's fields, day (its date in its
   // period's zone), at, until (its start and end instants) }. Chosen by instant, not by matching day numbers, so a class
   // at 23:00 in Phoenix falls on the next day for a student whose Canvas is in New York. A time the clocks skip is read past
-  // the gap, as Better To Do reads typed times (lib/todo.js typed).
+  // the gap, as Better To Do reads typed times (planner/todo.js typed).
   const between = (store, from, to, tz) => {
     const L = T(), s = clean(store), base = zoneOf(s, tz);
     const out = [];
@@ -706,13 +706,13 @@ var GZ_CLASSES = globalThis.GZ_CLASSES || (() => {
     }
     return out.sort((a, b) => a.at - b.at);
   };
-  // Class-start reminders (lib/remind.js events()'s extra shape) from a day back to a week ahead: `lead` minutes before
+  // Class-start reminders (planner/remind.js events()'s extra shape) from a day back to a week ahead: `lead` minutes before
   // each class, until ten minutes into it.
   const events = (store, { now = Date.now(), tz, lead = 10 } = {}) => between(store, now - DAY - 10 * 6e4, now + 8 * DAY, tz).map((x) => ({
     key: `class:${x.id}.${x.p}`, cat: 'class', at: x.at - lead * 6e4, until: x.at + 10 * 6e4, end: x.at, title: x.name, course: x.loc, url: /^\d+$/.test(x.id) ? `/courses/${x.id}` : /^_\d+_\d+$/.test(x.id) ? `/ultra/courses/${x.id}/outline` : '',
   }));
   // For a calendar export (W13's .ics): every class meeting from the start of day `from` to the end of day `to` (day keys
-  // of the student's Canvas zone, tz, as the export's range; a period with no end of term stops there), as lib/ics.js
+  // of the student's Canvas zone, tz, as the export's range; a period with no end of term stops there), as planner/ics.js
   // write() takes events: exact instants, written in UTC, worked out in the schedule's zone, so a 9:00 class in Phoenix
   // is 16:00Z whatever zone the calendar it's imported into is in.
   const icsEvents = (store, { site = '', from, to, tz }) => {

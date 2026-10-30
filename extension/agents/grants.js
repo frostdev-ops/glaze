@@ -5,7 +5,7 @@
 // splits an app in two, and two apps never merge. A record: { id, name, exe, verified, at (first paired), used (last call),
 // grants: { [group]: true }, declined: { pair?: at, [group]?: at } }. An app is paired while declined.pair is unset, and a
 // declined app holds no grants. A decline is remembered so Glaze never asks again; pair or grant clears it. A new app's
-// declined pairing is pair(peer, name, []) then decline(id, 'pair'). Groups are lib/ai/tools.js isGroup's.
+// declined pairing is pair(peer, name, []) then decline(id, 'pair'). Groups are ai/tools.js isGroup's.
 // The activity list (storage.local mcpCalls): the last LIMIT.calls rows of { at, app, tool, group, kind, outcome, ms }. A
 // value outside its key's shape is dropped and a row without a known outcome isn't kept, so no content is ever stored.
 // Classic script for the worker; module.exports for node.
@@ -26,7 +26,7 @@ var GZ_MCP_GRANTS = globalThis.GZ_MCP_GRANTS || (() => {
 
   const clean = (raw) => ({ on: isObj(raw) && raw.on === true });
 
-  // As lib/modbundle.js base32: lowercase RFC 4648, no padding.
+  // As mods/modbundle.js base32: lowercase RFC 4648, no padding.
   const base32 = (bytes) => {
     let out = '', v = 0, n = 0;
     for (const b of bytes) {

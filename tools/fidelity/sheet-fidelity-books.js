@@ -1,13 +1,13 @@
 // The workbooks the fidelity scripts (tools/fidelity/sheet-excel-fidelity.js, tools/fidelity/sheet-numbers-fidelity.js) open in another
-// app: the 13 golden workbooks read and written again by lib/sheet-xlsx.js, a workbook built in Glaze from scratch, and
+// app: the 13 golden workbooks read and written again by documents/sheets/sheet-xlsx.js, a workbook built in Glaze from scratch, and
 // files given on the command line (written by Glaze elsewhere). The source model after recalc is the expectation;
 // reading the exported bytes back to make the expectation would hide anything the writer lost.
 const fs = require('node:fs'), path = require('node:path');
-const LIB = path.join(__dirname, '../../extension/lib');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
+const LIB = path.join(__dirname, '../../extension/documents/sheets');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
 for (const f of fs.readdirSync(LIB).filter((n) => /^sheet-fn-.*\.js$/.test(n)).sort()) require(path.join(LIB, f));
-const X = require('../../extension/lib/sheet-xlsx.js');
+const X = require('../../extension/documents/sheets/sheet-xlsx.js');
 
 const GOLDEN = path.join(__dirname, '../../test/fixtures/sheets');
 
@@ -74,7 +74,7 @@ const books = async (files = []) => {
 
 // What each sheet of a model must show: { name, r1, c1 (the last row and column), cells: Map 'A1' → expectation }.
 // An expectation: { t, v, f (with '='), fmt (the code), array (the head's formula, for an array's other cells) }.
-const NF = require('../../extension/lib/sheet-numfmt.js');
+const NF = require('../../extension/documents/sheets/sheet-numfmt.js');
 const expect = (wb) => wb.sheets.map((sh) => {
   let r1 = 0, c1 = 0;
   const cells = new Map();

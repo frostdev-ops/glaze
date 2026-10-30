@@ -1,8 +1,8 @@
-// A signature kept for next time (lib/pdf-sign.js): its outlines only, quantized and deflated (encode, decode), at most
+// A signature kept for next time (documents/pdf/pdf-sign.js): its outlines only, quantized and deflated (encode, decode), at most
 // KEEP of them, newest first (keep). Signing a page is checks/documents/pdf-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/pdf-sign.js');
+const S = require('../../extension/documents/pdf/pdf-sign.js');
 
 const drawn = { outlines: [[10.5, 20.25, 30, 40.125, 55.5, 41], [100, 100, 101.75, 99.5]], areContours: false, thickness: 3, width: 400, height: 150 };
 

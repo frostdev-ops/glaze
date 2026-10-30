@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const lib = () => require('../../extension/lib/rubric.js');
+const lib = () => require('../../extension/courses/rubric.js');
 const copy = (x) => structuredClone(x);
 const cc = { courseId: '101', assignmentId: '7', userId: '21' };
 const uc = { courseId: '_101_1', contentId: '_7_1', columnId: '_8_1', columnBound: true, userId: '_21_1', attemptId: '_22_1', state: 'graded', pointsPossible: 20 };
@@ -331,7 +331,7 @@ test('Hostile strings stay untrusted data; parser never creates a DOM', () => {
   a.rubric[0].long_description = hostile; s.rubric_assessment.crit1.comments = hostile;
   const m = lib().parse.canvas(a, s, cc);
   assert.equal(m.criteria[0].detail, hostile); assert.equal(m.result.criteria.crit1.comment, hostile);
-  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension/lib/rubric.js'), 'utf8'), /\b(document|DOMParser|innerHTML|fetch)\b/);
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension/courses/rubric.js'), 'utf8'), /\b(document|DOMParser|innerHTML|fetch)\b/);
 });
 
 test('Oversized labels, instructions and visible feedback fall back without truncation', () => {
@@ -397,7 +397,7 @@ test('Routes accept only complete assignment and Ultra overview, attempt or disc
 });
 
 test('Classic-script reinjection keeps the original library without browser dependencies', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/lib/rubric.js'), 'utf8'), context = vm.createContext({});
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/courses/rubric.js'), 'utf8'), context = vm.createContext({});
   vm.runInContext(source, context); const first = context.GZ_RUBRIC_LIB;
   assert.equal(typeof first.parse.canvas, 'function'); vm.runInContext(source, context); assert.equal(context.GZ_RUBRIC_LIB, first);
 });

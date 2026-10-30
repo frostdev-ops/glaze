@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const source = read('features/coursetabs.js');
-const L = require(path.join(root, 'lib/coursetabs.js'));
+const source = read('navigation/page/coursetabs.js');
+const L = require(path.join(root, 'navigation/coursetabs.js'));
 const { El } = require('../stand-in-dom.js');
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const origin = 'https://bb.school.test';
@@ -105,7 +105,7 @@ test('a slow frame on screen that has drawn its own strip keeps it alone: no sec
 });
 
 test('coursetabs.css: the strip over a loading frame sits at its top, above its picture and Retry, and is not hidden as a strip under a see-through frame', () => {
-  const rules = [...read('features/coursetabs.css').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, s, b]) => [s.trim(), b]);
+  const rules = [...read('navigation/page/coursetabs.css').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, s, b]) => [s.trim(), b]);
   const z = (sel) => Number(rules.find(([s]) => s === sel)?.[1].match(/z-index:\s*(\d+)/)?.[1]);
   const over = rules.find(([s]) => s === '#gz-ctabs-frames > #gz-ctabs');
   assert.ok(over, 'a rule for the strip over the frames');

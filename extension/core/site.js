@@ -2,7 +2,7 @@
 // (address), and once that host is held, whether it really is Blackboard, Canvas or Moodle (probe). A host that isn't one
 // gets suggestions for the one that is (nearby): course-site links on its own homepage, and the course-site names schools
 // use that exist on its domain. Allowing one from a click (allow) and handing its grant back (handBack) are here too, for
-// Glaze's first screen (features/welcome.js) and Settings' Sites, and asking for the hosts a feature reaches (reach); the
+// Glaze's first screen (settings/welcome.js) and Settings' Sites, and asking for the hosts a feature reaches (reach); the
 // popup and the worker use the rest. No DOM; classic script; module.exports for node.
 var GZ_SITE = globalThis.GZ_SITE || (() => {
   const LOCAL = new Set(['localhost', '127.0.0.1']);

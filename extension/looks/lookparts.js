@@ -3,17 +3,17 @@
 // effect), a typing effect, a nav layout and restyle rules. `x` holds the parts and `m` the mods a Look works with. Both arrive from other people, so every value
 // is cleaned here before anything reads it, and a code whose parts don't come back unchanged is refused whole.
 //
-// The global is GZ_XPARTS: features/lookx.js (stickers, pointer, rotation) already owns GZ_LOOKX.
+// The global is GZ_XPARTS: looks/page/lookx.js (stickers, pointer, rotation) already owns GZ_LOOKX.
 //
 // - A cleaner is `clean(raw) -> part | null`; null refuses. Numbers are clamped to their range and rounded, text is made
 //   one line, colours are a palette token name (`accent`, as GZ_COLORS without `--gz-`) or `#rrggbb`. An unknown key, a
 //   wrong type, a list over its limit or a part with nothing in it refuses; nothing is truncated or dropped. (x.nav is
-//   cleaned by lib/navlayout.js, which drops entries that don't fit; a code that loses any no longer matches, so it is
+//   cleaned by navigation/navlayout.js, which drops entries that don't fit; a code that loses any no longer matches, so it is
 //   refused all the same.)
 // - Cleaning never invents a value: a key that is absent stays absent, so cleaning is idempotent and a code stays short.
 //   What an absent key means is in DEFAULTS, for whatever draws the part.
-// - Other packages' tables and cleaners are used, not copied. Loaded wherever parts are cleaned: lib/motionx.js (GZ_MX:
-//   the names and limits of animations, effects, the cursor and a layer's particle shapes) and lib/navlayout.js
+// - Other packages' tables and cleaners are used, not copied. Loaded wherever parts are cleaned: looks/motionx.js (GZ_MX:
+//   the names and limits of animations, effects, the cursor and a layer's particle shapes) and navigation/navlayout.js
 //   (GZ_NAV_LAYOUT.clean, x.nav). Used when there: GZ_GLSL.check(src) -> { ok, errors } (shader source) and
 //   GZ_PARTS.rules(list) (the LMS part registry cleans the whole rules part); without them only the shape is checked.
 //
@@ -22,8 +22,8 @@
 // clears the parts in the same write that changes the Look, so everyone sees one change).
 // Classic script (page, worker, extension pages, loaded on demand); module.exports for node.
 var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
-  const G = typeof GZ_COLORS !== 'undefined' ? { GZ_COLORS, GZ_SPEC, GZ_SYNC_BYTES, GZ_SYNC_ITEM_MAX } : require('../defaults.js');
-  // The motion package's tables (lib/motionx.js): the moments, events, kinds, shapes, easing names and the limits of a
+  const G = typeof GZ_COLORS !== 'undefined' ? { GZ_COLORS, GZ_SPEC, GZ_SYNC_BYTES, GZ_SYNC_ITEM_MAX } : require('../content/defaults.js');
+  // The motion package's tables (looks/motionx.js): the moments, events, kinds, shapes, easing names and the limits of a
   // stop. Its drawing code owns what they mean, so the names and ranges are asked of it, not kept here again. Needed
   // wherever animations, effects, a cursor or a layer's particles are cleaned.
   const MX = () => (typeof GZ_MX !== 'undefined' ? GZ_MX : require('./motionx.js'));
@@ -83,7 +83,7 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
   const SHADER_MAX = 8192;
   const shapeName = (v) => oneOf(MX().SHAPES)(v);
   const BLENDS = ['normal', 'add', 'screen', 'multiply'];
-  // GLSL ES 1.00 source: ASCII with line breaks and tabs, 8 KiB at most, and whatever lib/glsl.js says when it is loaded.
+  // GLSL ES 1.00 source: ASCII with line breaks and tabs, 8 KiB at most, and whatever looks/glsl.js says when it is loaded.
   const source = (v) => {
     if (typeof v !== 'string') return null;
     const s = v.replace(/\r\n?/g, '\n');
@@ -106,11 +106,11 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
     const k = isObj(v) && typeof v.k === 'string' && own(LAYER, v.k) ? v.k : null;
     return k && shape({ k: oneOf([k]), ...rules(LAYER[k]) }, ['k', ...REQUIRED[k]])(v);
   };
-  // A looping video, an animated picture or a Lottie animation (lib/scene-media.js draws it, lib/media.js reads the files).
+  // A looping video, an animated picture or a Lottie animation (looks/scene-media.js draws it, looks/media.js reads the files).
   // src is an https address on a public host (never a device, a local network, a port or credentials), kept as the parser
   // writes it, or `file:` and a SHA-256 (base64url) naming a file kept on this computer, which a Look share or the gallery
-  // brings. A mod's parts may instead name one of its bundle's files, `./<path>` (lib/modbundle.js checks the file), which
-  // the worker hands the page as `mod:<id>/<path>` (lib/modbroker.js serves it). Neither is a Look's: bundle() refuses both.
+  // brings. A mod's parts may instead name one of its bundle's files, `./<path>` (mods/modbundle.js checks the file), which
+  // the worker hands the page as `mod:<id>/<path>` (mods/modbroker.js serves it). Neither is a Look's: bundle() refuses both.
   // "Public host only", as far as an extension can tell: it cannot resolve a name before it fetches it, so this names what points
   // inward by its spelling. (1) An IP address never passes in any encoding: the URL parser writes decimal, octal, hex, short and
   // full-width forms as one dotted quad or bracketed IPv6 address, and HOST needs a last label that starts with a letter.
@@ -121,7 +121,7 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
   // (Firefox's needs a `dns` permission Glaze does not hold). Chromium's fetch option `targetAddressSpace: 'public'` makes the
   // browser refuse a connection to a non-public address, but in a test it also refused a fetch made through a proxy on a local
   // address, which would stop all remote media on a network that sends traffic through a private proxy: it is not used. The
-  // worker refuses redirects (lib/media.js), so a public name cannot send its fetch somewhere else.
+  // worker refuses redirects (looks/media.js), so a public name cannot send its fetch somewhere else.
   const HOST = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
   const LOCAL = /(^|\.)(localhost|local|internal|lan|home\.arpa|corp|home|intranet|private|localdomain)$/;
   const REBIND = /(^|\.)(nip\.io|sslip\.io|xip\.io|traefik\.me|localtest\.me|lvh\.me|vcap\.me|lacolhost\.com|local\.gd|localho\.st)$/;
@@ -169,15 +169,15 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
   const type = shape({ kind: (v) => oneOf(MX().TYPES)(v), c: list(col, 1, 3), size: num(2, 24), count: num(1, 8, true) }, ['kind']);
 
   // ---- nav layout -------------------------------------------------------------------------------
-  // lib/navlayout.js (package D) is the one cleaner for x.nav, and the rail's own model. It needs lib/nav.js and
-  // lib/nav-items.js loaded before it, wherever parts are cleaned (the worker, the editor, the popup, the page).
-  const NL = () => (typeof GZ_NAV_LAYOUT !== 'undefined' ? GZ_NAV_LAYOUT : require('./navlayout.js'));
+  // navigation/navlayout.js (package D) is the one cleaner for x.nav, and the rail's own model. It needs navigation/nav.js and
+  // navigation/nav-items.js loaded before it, wherever parts are cleaned (the worker, the editor, the popup, the page).
+  const NL = () => (typeof GZ_NAV_LAYOUT !== 'undefined' ? GZ_NAV_LAYOUT : require('../navigation/navlayout.js'));
   const nav = (v) => NL().clean(v);
 
   // ---- LMS rules --------------------------------------------------------------------------------
-  // Parts are named by lib/parts.js (`ultra.course-card.title`); a rule never holds a selector. With the registry loaded
+  // Parts are named by looks/parts.js (`ultra.course-card.title`); a rule never holds a selector. With the registry loaded
   // (GZ_PARTS, package E) it cleans the whole list: names, what each part can take and the style values. Without it,
-  // this checks the rules' shape and the style allowlist as the registry has it (STYLE below mirrors lib/parts.js).
+  // this checks the rules' shape and the style allowlist as the registry has it (STYLE below mirrors looks/parts.js).
   const PART = /^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*){1,5}$/;
   const part = (v) => (typeof v === 'string' && v.length <= 64 && PART.test(v) ? v : null);
   const font = (v) => (typeof v === 'string' && FONTS().LIST.some((f) => f.id === v) ? v : null);
@@ -343,11 +343,11 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
   // list holds Glaze's own English names (navigation items, page parts), for the offer to translate and join.
   // The account item has no name of Glaze's (its label is the student's name).
   const itemName = (id) => (id === 'profile' ? 'Your account' : NL().NAMES[id] || id);
-  // A part's label (lib/parts.js, loaded wherever an offer is shown), else its name.
+  // A part's label (looks/parts.js, loaded wherever an offer is shown), else its name.
   const REGISTRY = () => (typeof GZ_PARTS !== 'undefined' ? GZ_PARTS : typeof require === 'function' ? require('./parts.js') : null);
   const partName = (p) => REGISTRY()?.get(p)?.label || p;
   const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
-  // Each part's end state as lib/parts.js folds the rules for the page: hidden (a later show undoes it), its last text, its
+  // Each part's end state as looks/parts.js folds the rules for the page: hidden (a later show undoes it), its last text, its
   // last opacity, and whether anything else restyles or moves it.
   const fold = (rules) => {
     const hide = new Set(), text = new Map(), o = new Map(), look = new Set();
@@ -401,7 +401,7 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
   // ---- a Look from someone else -------------------------------------------------------------------
   // A code, a gallery Look or a Look share. It may not take away signing out or the student's account (x.nav hidden: on a
   // shared computer they'd be left with no way out), link to a page without https (anyone on the network can change what it
-  // shows), or name a link as signing out or Glaze settings (lib/navlayout.js reserved, as for mods' items). The editor
+  // shows), or name a link as signing out or Glaze settings (navigation/navlayout.js reserved, as for mods' items). The editor
   // refuses such a code whole, as it refuses any code it can't use, and says why; the student's own Look may do any of
   // these. -> the reasons, as describe's sentences; none when it may be offered.
   const KEEP = ['logout', 'profile'];

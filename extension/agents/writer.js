@@ -1,23 +1,23 @@
-// The writer group's tools for agent apps (lib/mcp/*.js): the student's Writer documents (lib/writer-papers.js), named by
-// opaque keys, and lib/writer-tools.js's tools on one of them. documents_list, document_read, document_sources and
+// The writer group's tools for agent apps (agents/*.js): the student's Writer documents (writer/writer-papers.js), named by
+// opaque keys, and writer/writer-tools.js's tools on one of them. documents_list, document_read, document_sources and
 // document_assignment answer from Writer's own storage; document_issues, citation_insert and fix_apply need the document
 // open in a Writer page (writer-mcp.js), which the worker reaches over port glaze:mcp-writer (pages below).
-// deps: { papers(f) → f(the worker's paper store, lib/background.js openPapers: its list() and get() only), run in the
+// deps: { papers(f) → f(the worker's paper store, background/background.js openPapers: its list() and get() only), run in the
 //   broker's turn; bridge(key, op, args, { signal }) → the open page's answer for that paper ({ ok: false, error } when it
 //   refused or never answered), or null when no Writer page has it open; bridge(null, 'open') → the keys open in one;
 //   session (storage.session: the handles' salt, kept for the browser's session) }. run(args, ctx): ctx.document is the key
 //   documents_list gave, ctx.local storage.local (the sources). A change runs in the broker's turn: its summary keeps that
 //   same store for a fresh list()/get() there, without queuing another turn inside the one already running.
 // Keys: 'document:' and an HMAC of the paper's own key (which holds the school's host and the student's id) under a salt
-// of the session's, as the mod API hands mods theirs (lib/modapi.js docKeys); only a listed document has one. Records in
+// of the session's, as the mod API hands mods theirs (mods/modapi.js docKeys); only a listed document has one. Records in
 // Trash and kinds this file can't read are left out. Every answer fits calls.js's cap: lists go a part at a time (from).
-// Classic script for the worker, after lib/ai/tools.js, lib/doc-home.js, lib/writer-sources.js and lib/writer-tools.js
-// (openPapers brings lib/writer-papers.js); module.exports for node.
+// Classic script for the worker, after ai/tools.js, documents/doc-home.js, writer/writer-sources.js and writer/writer-tools.js
+// (openPapers brings writer/writer-papers.js); module.exports for node.
 var GZ_MCP_WRITER = globalThis.GZ_MCP_WRITER || (() => {
-  const W = () => (typeof GZ_WRITER_TOOLS !== 'undefined' ? GZ_WRITER_TOOLS : require('../writer-tools.js'));
-  const P = () => (typeof GZ_WRITER_PAPERS !== 'undefined' ? GZ_WRITER_PAPERS : require('../writer-papers.js'));
-  const SRC = () => (typeof GZ_WRITER_SOURCES !== 'undefined' ? GZ_WRITER_SOURCES : require('../writer-sources.js'));
-  const DH = () => (typeof GZ_DOC_HOME !== 'undefined' ? GZ_DOC_HOME : require('../doc-home.js'));
+  const W = () => (typeof GZ_WRITER_TOOLS !== 'undefined' ? GZ_WRITER_TOOLS : require('../writer/writer-tools.js'));
+  const P = () => (typeof GZ_WRITER_PAPERS !== 'undefined' ? GZ_WRITER_PAPERS : require('../writer/writer-papers.js'));
+  const SRC = () => (typeof GZ_WRITER_SOURCES !== 'undefined' ? GZ_WRITER_SOURCES : require('../writer/writer-sources.js'));
+  const DH = () => (typeof GZ_DOC_HOME !== 'undefined' ? GZ_DOC_HOME : require('../documents/doc-home.js'));
   // answer: a tool's own JSON characters (calls.js adds its fields within its 12,000); outline: a heading's characters; wait:
   // how long a page has to answer, find: to say what it holds; from: the furthest part a list starts at.
   const LIMIT = { answer: 10000, outline: 120, wait: 5000, find: 1500, from: 10000, summary: 2000 };
@@ -303,7 +303,7 @@ var GZ_MCP_WRITER = globalThis.GZ_MCP_WRITER || (() => {
       },
     ];
   };
-  // Adds them to a lib/ai/tools.js registry (its define checks each) → the tools as added.
+  // Adds them to a ai/tools.js registry (its define checks each) → the tools as added.
   const register = (registry, deps) => tools(deps).map((t) => registry.add(t));
 
   // ---- the open Writer pages ------------------------------------------------------------------------------------------
