@@ -30,7 +30,10 @@
       if (!(bytes?.length <= STORE.max)) throw new RangeError(SAYS.size);
       return { file: b64(bytes), size: bytes.length, ext: String(ext || '').toLowerCase() === '.ppsx' ? '.ppsx' : '.pptx' };
     },
-    get: (rec) => { if (typeof rec?.file !== 'string') return null; try { return unb64(rec.file); } catch { return null; } },
+    get: (rec) => {
+      if (typeof rec?.file !== 'string' || !rec.file.length || rec.file.length > 4 * Math.ceil(STORE.max / 3)) return null;
+      try { const bytes = unb64(rec.file); return bytes.length <= STORE.max ? bytes : null; } catch { return null; }
+    },
   };
   let store = null;
   const papers = () => (store ||= GZ_WRITER_PAPERS.open());
