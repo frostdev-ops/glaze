@@ -153,11 +153,12 @@ const PROBE = ({ lang }) => {
     const probe = await home.evaluate(() => ({ ...__gd, nav: performance.getEntriesByType('navigation')[0]?.startTime || 0, parsed: performance.getEntriesByType('navigation')[0]?.domInteractive || 0 }));
     check(total === 200 && probe.rowsPaint - probe.indexRead < 150, `200 document rows paint within 150 ms of the index read (${(probe.rowsPaint - probe.indexRead).toFixed(1)} ms)`);
     const t12 = probe.renders[11].at, since = t12 - probe.firstCard;
-    // Measured from when the page's HTML and scripts were parsed, against a budget scaled by how long that took in this
-    // run: a loaded machine slows both, a slower thumbnail pipeline only the first. Quiet, it's 400 ms from navigation
-    // (parsed at ~125 ms + 275 ms). On the runner, Glaze's part stayed under 1.1× the parse time at every load (2026-10-30).
+    // domInteractive includes Glaze's blocking scripts, so it is a phase boundary, not an independent load gauge.
+    // Keep a navigation ceiling too: a script-load regression must not enlarge its own budget without limit.
+    // The loaded runner calibration peaked at 1432 ms from navigation (2026-10-30); retain the scaled post-parse budget.
     const work = t12 - probe.parsed, budget = Math.max(275, 1.5 * probe.parsed);
     console.log(`page parsed at ${probe.parsed.toFixed(0)} ms; first card at ${probe.firstCard.toFixed(0)} ms; 12th thumbnail at ${t12.toFixed(0)} ms from navigation (${since.toFixed(0)} ms after the first card)`);
+    check(t12 - probe.nav <= 1500, `the first 12 thumbnails are drawn within 1500 ms of navigation (${(t12 - probe.nav).toFixed(0)} ms)`);
     check(probe.parsed > 0 && work <= budget, `the first 12 thumbnails are drawn within ${budget.toFixed(0)} ms of the page being parsed (${work.toFixed(0)} ms)`);
     let list = await cards(home);
     check(list.length === total, `the grid lists every document (${list.length} of ${total})`);
