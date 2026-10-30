@@ -206,6 +206,14 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     check(optgroups.join() === 'Built in,Saved,Gallery', 'grouped there too', optgroups.join());
     await select.selectOption(ids.field);
     check(await until(async () => (await a.evaluate(async () => (await chrome.storage.sync.get('courses')).courses?.looks?._101_1)) === ids.field), 'the course wears it, by id');
+    await a.evaluate(async () => {
+      const { courses } = await chrome.storage.sync.get('courses');
+      await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: 'c:00000000000000' } } });
+    });
+    await until(async () => await select.inputValue() === '');
+    check(await select.evaluate((s) => s.selectedOptions[0]?.textContent === 'Your theme'), 'a missing kept Look visibly selects Your theme');
+    await select.selectOption(ids.field);
+    await until(async () => (await a.evaluate(async () => (await chrome.storage.sync.get('courses')).courses?.looks?._101_1)) === ids.field);
     await a.goto(`${base}/options.html#look/palette`);
     await a.locator('#looks button').first().waitFor();
     await more();
@@ -239,6 +247,11 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     check(await until(async () => (await ink(lms)) === seminar.colors['--gz-ink']), 'the course wears its saved Look on its page', await ink(lms));
     await a.evaluate(async () => { const { courses } = await chrome.storage.sync.get('courses'); await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: 'c:00000000000000' } } }); });
     check(await until(async () => (await ink(lms)) === field.colors['--gz-ink']), 'a Look this device doesn\'t keep: the student\'s theme', await ink(lms));
+    check(await sw.evaluate(async (url) => {
+      const [tab] = await chrome.tabs.query({ url });
+      const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ look: GZ_CTX.courseLook(), parts: GZ_CTX.parts(), pointerOn: GZ_CTX.partsOn(true) }) });
+      return result.result.look === null && result.result.pointerOn;
+    }, lms.url()), 'a missing kept Look permits the theme parts and personal pointer');
     await lms.keyboard.press('ControlOrMeta+k');
     await lms.locator('#gz-cmd input').fill('Look: Night');
     const cmd = lms.locator('#gz-cmd-list li').filter({ hasText: 'Look: Night walk' }).first();
