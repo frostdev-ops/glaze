@@ -136,14 +136,15 @@ test('a frame without Writer\'s host makes no kinds module', () => {
   assert.equal(ctx.GZ_WRITER_KINDS, null);
 });
 
-const viewer = async () => {
+const viewer = async (id = 'pdf') => {
   const P = PA.open(store(), () => Date.now());
-  await P.save(KEY, { kind: 'pdf', doc: null, file: 'JVBERi0=', size: 5 });
-  const calls = { save: 0, dispose: 0 }, paper = { key: () => KEY, context: () => ({}), paper: () => ({}),
+  await P.save(KEY, { kind: id, doc: null, file: 'JVBERi0=', size: 5 });
+  const calls = { save: 0, dispose: 0, versions: [] }, paper = { key: () => KEY, context: () => ({}), paper: () => ({}),
     hold() {}, unpark() {}, take() {}, release() {}, notify() {}, importFile: async () => null };
   const el = () => ({ dataset: {}, append() {}, remove() {}, addEventListener() {} });
   const document = { documentElement: el(), body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: el };
-  const implementation = { view: async () => ({ save: async () => { calls.save++; return true; }, file: async () => ({ bytes: new Uint8Array([1]) }), dispose: () => { calls.dispose++; } }),
+  const implementation = { ...(id === 'sheet' && { version: async (key, reason) => { calls.versions.push([key, reason]); return { version: { id: 'packed', gz: 'workbook' } }; } }),
+    view: async () => ({ save: async () => { calls.save++; return true; }, file: async () => ({ bytes: new Uint8Array([1]) }), dispose: () => { calls.dispose++; } }),
     into: async () => (await P.save(KEY, { kind: 'pdf', file: 'TkVX', size: 3 }, { reason: 'import' })).paper };
   const DK = require('../lib/doc-kinds.js');
   const ctx = vm.createContext({ console: { error() {} }, document, GZ_WRITER_PAPERS: { open: () => P },
@@ -151,7 +152,7 @@ const viewer = async () => {
     GZ_WRITER_FRAME: { t: (s) => s, say() {}, on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ pdf: true }) },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'writer-kinds.js'), 'utf8'), ctx);
-  const K = ctx.GZ_WRITER_KINDS, surface = await K.mount('pdf', KEY, paper);
+  const K = ctx.GZ_WRITER_KINDS, surface = await K.mount(id, KEY, paper);
   return { K, P, surface, paper, calls };
 };
 
@@ -179,4 +180,11 @@ test('replacing a viewer disposes the previous viewer', async () => {
   const { surface, calls } = await viewer();
   await surface.importFile({ name: 'new.pdf' });
   assert.equal(calls.dispose, 1);
+});
+
+test('the grid uses its kind\'s packed version for submit and before a file replaces it', async () => {
+  const { surface, calls } = await viewer('sheet');
+  assert.equal((await surface.version('sending')).version.gz, 'workbook');
+  await surface.importFile({ name: 'new.pdf' });
+  assert.deepEqual(calls.versions, [[KEY, 'sending'], [KEY, 'import']]);
 });

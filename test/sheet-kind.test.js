@@ -343,6 +343,29 @@ test('the assignment frame\'s hooks: view, into over a paper, empty', async () =
   assert.ok(SD.isGlance(JSON.parse(JSON.stringify(e.grid))) && e.cells === 0 && e.sheets === 1 && !('book' in e));
 });
 
+test('the frame keeps a complete packed spreadsheet for submission and before changing kind', async () => {
+  const s = store(), P = PA.open(s), wb = book();
+  await SD.write(P, KEY, wb, new Map());
+  const { DK } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_DATA: SD });
+  await DK.settled();
+  const k = DK.get('sheet');
+  for (const reason of ['sending', 'import']) {
+    const saved = await k.version(KEY, reason);
+    assert.equal(saved.version.kind, 'sheet');
+    assert.equal(saved.version.reason, reason);
+    same(await SD.unpack(saved.version.gz), wb);
+    if (reason === 'sending') await P.submitted(KEY, saved.version.id);
+  }
+  await P.save(KEY, { kind: 'pdf', doc: null, file: 'JVBERi0=', size: 5 }, { reason: 'import' });
+  const versions = await P.versions(KEY);
+  for (const reason of ['submit', 'import']) {
+    const v = versions.find((v) => v.kind === 'sheet' && v.reason === reason);
+    assert.ok(v, reason);
+    same(await SD.unpack((await P.version(KEY, v.id)).gz), wb);
+  }
+  await assert.rejects(k.version(KEY, 'sending'), /kind/, 'a stale grid cannot version a PDF as a workbook');
+});
+
 test('two editors refuse a stale spreadsheet save before any bands or history change', async () => {
   const s = store(), P = PA.open(s, () => 1), wb = book();
   await SD.write(P, KEY, wb, new Map());
