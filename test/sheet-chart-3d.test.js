@@ -287,5 +287,5 @@ test('round trip: a workbook with 3-D charts read, drawn and written untouched k
   const out = D.unzip(await X.write(wb, { date: new Date(2026, 0, 1) }));
   const names = Object.keys(before).filter((n) => /^xl\/(charts|drawings)\//.test(n));
   assert.equal(names.length, 4);
-  for (const n of names) assert.deepEqual(await out.bytes(n), before[n], n);
+  for (const n of names) assert.deepEqual(new Uint8Array(await out.bytes(n)), new Uint8Array(before[n]), n);
 });
