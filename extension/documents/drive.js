@@ -11,7 +11,8 @@
 // neither side runs ahead; a page pings while it waits so the worker stays up through a long upload. No page here reaches
 // the browser's tab or window APIs (test/frame-tabs.test.js): writer.html and Documents run framed in a school's page.
 // The pages' part (page): From Google Drive beside Documents' Import and in the paper's ⋯ menu, Save to Google Drive in a
-// Documents card's ⋯ menu, each only while Drive is connected.
+// Documents card's ⋯ menu, each only while Drive is connected, From Google Drive only where Google's Picker works (the
+// worker's status picker: not Safari's app sign-in yet).
 // Classic script for the worker and the pages; module.exports for node.
 var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   const API = 'https://www.googleapis.com/drive/v3/files';
@@ -457,7 +458,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     // A framed Documents is answered once its document has claimed its pass: until then 'sender', asked again after 0.5,
     // 1, 2, 4 and 8 seconds.
     // A change while one is asked is asked again once it answers, its answer then set aside as stale.
-    let connected = false, asking = null, again = false;
+    let connected = false, picker = false, asking = null, again = false;
     const shown = new Set();
     const ask = (n = 0) => {
       if (asking) { again = true; return asking; }
@@ -465,8 +466,8 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         asking = null;
         if (again) { again = false; ask(); return; }
         if (r?.why === 'sender' && n < 5) setTimeout(() => ask(n + 1), 500 * 2 ** n);
-        const on = r?.connected === true;
-        if (on !== connected) { connected = on; for (const f of shown) try { f(); } catch (e) { console.error(e); } }
+        const on = r?.connected === true, can = on && r?.picker === true; // picker: Google's Picker works here (not Safari yet)
+        if (on !== connected || can !== picker) { connected = on; picker = can; for (const f of shown) try { f(); } catch (e) { console.error(e); } }
       });
       return asking;
     };
@@ -536,8 +537,8 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         } catch (e) { say(t(says(fail(e)) || 'Not saved. Try again in a moment.')); } finally { busy = false; }
       };
       const show = () => {
-        if (connected && !items) items = [D.item('toolbar', t('From Google Drive'), () => { fromDrive(); }), D.item('card', t('Save to Google Drive'), (doc) => { if (doc) toDrive(doc); })];
-        else if (!connected && items) { for (const x of items) x?.remove(); items = null; }
+        for (const x of items || []) x?.remove();
+        items = connected ? [picker ? D.item('toolbar', t('From Google Drive'), () => { fromDrive(); }) : null, D.item('card', t('Save to Google Drive'), (doc) => { if (doc) toDrive(doc); })] : null;
       };
       shown.add(show);
       show();
@@ -546,7 +547,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     // The paper's ⋯ menu (writer-paper.js), beside Import…: [{ label, run }] while connected. The picked file goes where a
     // file brought to the paper goes (bring: on an assignment writer-import.js's card, else a Word file's import); a paper
     // in Writer takes Word files and the kinds that open there (writer-kinds.js).
-    const items = (api, bring) => (connected ? [{ label: t('From Google Drive'), run: async () => {
+    const items = (api, bring) => (connected && picker ? [{ label: t('From Google Drive'), run: async () => {
       try {
         const [f] = await pick();
         if (!f) return;
@@ -557,7 +558,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
         bring(name === got.name ? got : new File([got], name, { type: got.type }));
       } catch (e) { const w = says(fail(e)); if (w) api?.notify?.(w); }
     } }] : []);
-    return { home, items, connected: () => connected };
+    return { home, items, connected: () => connected, picker: () => picker };
   })();
 
   return { API, UPLOAD, CHANGES, PORT, CHUNK, META, SYNC, SMALL, DOC, WHY, Fail, b64, unb64, fileName, plan, create, serve, client, page };
