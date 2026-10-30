@@ -48,7 +48,7 @@ test('answer: done → the presigned PDF and when it ends; converting; failed; a
 const chain = (over = {}) => {
   const asked = [];
   const fetch = async (url, init) => {
-    asked.push({ url, credentials: init.credentials, redirect: init.redirect });
+    asked.push({ url, credentials: init.credentials, redirect: init.redirect, referrer: init.referrerPolicy });
     const u = new URL(url);
     if (over[u.origin]) return over[u.origin](u, init);
     if (u.origin === SITE) return { ok: true, status: 200, url: P.viewerAt(P.FILES.find((f) => f.at === u.pathname), AT), body: null, headers: new Headers() };
@@ -64,7 +64,7 @@ test('ask: the whole chain with the session, the redirect followed and the API n
   assert.equal(r.ok, true);
   assert.equal(r.status, 'done');
   assert.ok(r.pdf.includes('/converted.pdf?'));
-  assert.deepEqual(c.asked.map((a) => [new URL(a.url).origin, a.credentials, a.redirect]), [[SITE, 'include', 'follow'], [P.VIEWER, 'include', 'error']]);
+  assert.deepEqual(c.asked.map((a) => [new URL(a.url).origin, a.credentials, a.redirect, a.referrer]), [[SITE, 'include', 'follow', 'no-referrer'], [P.VIEWER, 'include', 'error', 'no-referrer']]);
   assert.equal(c.asked[1].url, B.api(B.viewer(P.viewerAt(slides, AT))));
 });
 
