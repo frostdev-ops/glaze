@@ -216,7 +216,7 @@ test('DATEDIF: every unit, and "MD" counting back into a shorter month as Excel 
     ['DATEDIF(B2,A2,"Y")', '#NUM!'], ['DATEDIF(A2,B2,"W")', '#NUM!'], ['DATEDIF(A2,A2,"D")', 0], ['DATEDIF(A2,B2+0.9,"D")', 730],
     // A month counts only once the end's day reaches the start's.
     ['DATEDIF(DATE(2011,1,31),DATE(2011,2,28),"M")', 0], ['DATEDIF(DATE(2011,1,31),DATE(2011,2,28),"MD")', 28], ['DATEDIF(DATE(2016,2,29),DATE(2017,2,28),"Y")', 0],
-    ['DATEDIF(DATE(2016,2,29),DATE(2017,3,1),"Y")', 1], ['DATEDIF(DATE(2011,5,20),DATE(2012,5,19),"YM")', 11], ['DATEDIF(DATE(2011,5,20),DATE(2012,5,19),"YD")', 364],
+    ['DATEDIF(DATE(2016,2,29),DATE(2017,3,1),"Y")', 1], ['DATEDIF(DATE(2011,5,20),DATE(2012,5,19),"YM")', 11], ['DATEDIF(DATE(2011,5,20),DATE(2012,5,19),"YD")', 365],
     ['DATEDIF(DATE(2011,1,31),DATE(2011,3,1),"MD")', -2], ['DATEDIF(DATE(2011,1,31),DATE(2011,3,1),"M")', 1], ['DATEDIF(DATE(2011,3,31),DATE(2011,5,1),"MD")', 0],
     // Excel's, as LibreOffice records them: "MD" rolls a missing day over into the end's month; "YD" adds 365 even across
     // a February 29.
@@ -244,7 +244,7 @@ test('the 1900 system has 1900-02-29, serial 60, and serial 0 is 1900-01-00', ()
   cases(e, [
     ['DATE(1900,2,29)', 60], ['DATE(1900,3,1)', 61], ['DATE(1900,2,28)', 59], ['DATE(1900,3,0)', 60], ['DATE(1900,1,1)', 1], ['DATE(1900,1,0)', 0], ['DATE(1900,1,-1)', '#NUM!'],
     ['DAY(60)', 29], ['MONTH(60)', 2], ['DAY(61)', 1], ['MONTH(61)', 3], ['YEAR(0)', 1900], ['MONTH(0)', 1], ['DAY(0)', 0], ['DATEVALUE("2/29/1900")', 60],
-    ['WEEKDAY(1)', 1], ['WEEKDAY(0)', 7], ['WEEKDAY(60)', 4], ['WEEKDAY(61)', 5], ['DAYS(DATE(1900,3,1),DATE(1900,2,28))', 2], ['EOMONTH(DATE(1900,2,1),0)', 60],
+    ['WEEKDAY(1)', 1], ['WEEKDAY(0)', 7], ['WEEKDAY(60)', 4], ['WEEKDAY(61)', 5], ['DAYS(DATE(1900,3,1),DATE(1900,2,28))', 2], ['EOMONTH(DATE(1900,2,1),0)', 59],
   ]);
 });
 
@@ -260,4 +260,23 @@ test('a 1904 workbook counts from 1904-01-01 and gives the same differences', ()
     ['DATEDIF(DATE(2014,1,1),DATE(2016,5,6),"MD")', 5], ['DATEDIF(DATE(2011,1,31),DATE(2011,3,1),"MD")', -2], ['YEAR(TODAY())', 2011],
   ]);
   near(e, [['YEARFRAC(DATE(2012,1,1),DATE(2012,7,30),1)', 211 / 366], ['YEARFRAC(DATE(2011,1,1),DATE(2013,1,2),1)', 732 / (1096 / 3)]], 1e-12);
+});
+
+// Live Microsoft Excel 16.114.1, 2026-10-30: unlike DATE, these month functions clamp February 1900 to day 28.
+test('EDATE and EOMONTH use February 28 at the 1900 month end', () => {
+  cases(book(), [
+    ['EDATE(31,1)', 59], ['EDATE(60,0)', 59], ['EDATE(60,1)', 89], ['EDATE(60,-1)', 29],
+    ['EOMONTH(60,0)', 59], ['EOMONTH(31,1)', 59],
+  ]);
+});
+
+// Live Excel: YD counts whole months using the start calendar, then the MD remainder using the end calendar.
+test('DATEDIF YD keeps the start calendar for whole months across leap years', () => {
+  for (const date1904 of [false, true]) cases(book({}, { date1904 }), [
+    ['DATEDIF(DATE(2011,1,1),DATE(2012,3,1),"YD")', 59], ['DATEDIF(DATE(2012,1,1),DATE(2013,3,1),"YD")', 60],
+    ['DATEDIF(DATE(2011,5,20),DATE(2012,5,19),"YD")', 365], ['DATEDIF(DATE(2012,5,20),DATE(2013,5,19),"YD")', 364],
+    ['DATEDIF(DATE(2011,2,28),DATE(2012,3,1),"YD")', 2], ['DATEDIF(DATE(2012,2,29),DATE(2013,3,1),"YD")', 0],
+    ['DATEDIF(DATE(2011,1,31),DATE(2012,3,1),"YD")', 30], ['DATEDIF(DATE(2012,1,31),DATE(2013,3,1),"YD")', 29],
+    ['DATEDIF(DATE(2011,5,20),DATE(2014,5,19),"YD")', 365], ['DATEDIF(DATE(1988,6,22),DATE(2012,5,11),"YD")', 323],
+  ]);
 });
