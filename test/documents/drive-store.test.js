@@ -19,13 +19,19 @@ const area = (name, heard) => {
   const m = new Map();
   // Delivered after the write returns, as the browser's onChanged is.
   const tell = async (changes) => { if (Object.keys(changes).length) setTimeout(async () => { for (const f of heard) await f(changes, name); }, 0); };
-  return {
+  const api = {
     m,
     get: async (k) => { const ks = k == null ? [...m.keys()] : Array.isArray(k) ? k : [k]; return Object.fromEntries(ks.filter((x) => m.has(x)).map((x) => [x, structuredClone(m.get(x))])); },
     set: async (o) => { const c = {}; for (const [k, v] of Object.entries(o)) { c[k] = { oldValue: m.get(k), newValue: structuredClone(v) }; m.set(k, structuredClone(v)); } await tell(c); },
     remove: async (k) => { const c = {}; for (const x of [].concat(k)) if (m.has(x)) { c[x] = { oldValue: m.get(x) }; m.delete(x); } await tell(c); },
     keys: async () => [...m.keys()],
   };
+  api.replace = async (key, expected, value) => {
+    if (ST.canon(m.get(key)) !== ST.canon(expected)) return false;
+    if (value === undefined) await api.remove(key); else await api.set({ [key]: value });
+    return true;
+  };
+  return api;
 };
 const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse('2026-10-30T12:00:00Z') }, snapshots = false } = {}) => {
   const heard = [], local = area('local', heard), sync = area('sync', heard), now = () => clock.t, who = { account };
@@ -63,6 +69,60 @@ const todo = (...titles) => T.clean({ tasks: titles.map((t, i) => ({ id: `t${t}`
 const recFile = (drive, area, key) => [...drive.files.values()].find((f) => f.meta.appProperties.glaze === 'rec' && f.meta.appProperties.key === sha(`${area}\n${key}`).slice(0, 32));
 const body = (f) => JSON.parse(f.bytes.toString('utf8'));
 const noDeletes = (drive) => assert.equal(drive.log.filter((x) => x.method === 'DELETE').length, 0, 'nothing deleted for good');
+
+test('a local change syncs when its timestamp equals or precedes the last agreed stamp', async () => {
+  const drive = standin(), a = device(drive);
+  await a.local.set({ writerWords: ['First'] });
+  assert.ok((await a.on()).ok);
+  // Storage events can share a millisecond; a clock can also move backwards after a remote value was taken.
+  for (const [dt, word] of [[0, 'Same millisecond'], [-60000, 'Clock moved back']]) {
+    a.clock.t += dt;
+    await a.local.set({ writerWords: [word] });
+    assert.ok((await a.run({ push: true })).ok);
+    assert.deepEqual(body(recFile(drive, 'local', 'writerWords')).value, [word]);
+  }
+});
+
+test('a failed record download stops the run without consuming its change', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  await a.local.set({ writerWords: ['Original'] });
+  await a.on(); await b.on();
+  a.clock.t += 1000;
+  await a.local.set({ writerWords: ['Remote update'] });
+  assert.ok((await a.run({ push: true })).ok);
+  const token = (await b.local.get(S.STATE))[S.STATE].token;
+  drive.offline((x) => x.query.alt === 'media');
+  assert.deepEqual(await b.run(), { ok: false, why: 'network' });
+  const st = (await b.local.get(S.STATE))[S.STATE];
+  assert.equal(st.token, token);
+  b.clock.t = st.wait + 1;
+  assert.ok((await b.run()).ok);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Remote update']);
+});
+
+test('a local edit arriving during a record download survives and syncs on retry', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  await a.local.set({ [NOTE]: { text: 'Original', at: 1 } });
+  await a.on(); await b.on();
+  a.clock.t += 1000;
+  await a.local.set({ [NOTE]: { text: 'Remote edit', at: 2 } });
+  assert.ok((await a.run({ push: true })).ok);
+  const fetch = drive.fetch;
+  let edited = false;
+  drive.fetch = async (url, init) => {
+    const r = await fetch(url, init);
+    if (!edited && new URL(url).searchParams.get('alt') === 'media') {
+      edited = true; b.clock.t += 2000;
+      await b.local.set({ [NOTE]: { text: 'New local edit', at: 3 } });
+    }
+    return r;
+  };
+  const r = await b.run();
+  assert.equal((await b.local.get(NOTE))[NOTE].text, 'New local edit');
+  if (!r.ok) b.clock.t = (await b.local.get(S.STATE))[S.STATE].wait + 1;
+  assert.ok((await b.run()).ok);
+  assert.equal(body(recFile(drive, 'local', NOTE)).value.text, 'New local edit');
+});
 
 test('every category Back up… covers goes up, one file a record, in Glaze/Data; what never syncs stays here', async () => {
   const drive = standin(), a = device(drive);

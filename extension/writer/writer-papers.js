@@ -177,11 +177,12 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     // the one this save brings). attached: on a 'sending' save, the files the submit attaches beside it ({ name, size,
     // mime }), kept on its version. touch: false keeps Last edited (updated): a field recorded about the document, not a
     // change to it (documents/drive.js drive). → { paper, version }.
-    const save = (k, patch = {}, { reason = 'auto', base = seen.get(k), rename = false, expectedKind, expectedFile, parts = null, drop = null, changed: own, version: packed = null, attached = null, touch = true } = {}) => serial(k, async () => {
+    const save = (k, patch = {}, { reason = 'auto', base = seen.get(k), rename = false, expectedKind, expectedFile, expectedRevision, parts = null, drop = null, changed: own, version: packed = null, attached = null, touch = true } = {}) => serial(k, async () => {
       if (typeof k !== 'string' || !k) throw new Error('no paper key');
       const written = Object.keys(parts || {}), dropped = [...(drop || [])];
       if ([...written, ...dropped].some((n) => typeof n !== 'string' || !PART_NAME.test(n)) || (packed && typeof packed.gz !== 'string')) throw new Error('no such part');
       const prev = (await get(PAPER + k)) || null, t = now();
+      if (expectedRevision !== undefined && (prev?.revision || 0) !== expectedRevision) throw new Error('document changed in another tab');
       if (expectedKind && (prev?.kind || 'paper') !== expectedKind) throw new Error('document kind changed');
       if (expectedFile !== undefined && !sameFile(prev?.file, expectedFile)) throw new Error('document changed in another tab');
       // A save queued in another editor may arrive after Open in Glaze. Only an explicit import or restore can change

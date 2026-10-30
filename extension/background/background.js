@@ -3390,11 +3390,18 @@ const openDriveSync = () => {
   driveLib();
   if (!globalThis.GZ_DRIVE_SYNC) importScripts('../documents/drive-sync.js');
   if (!globalThis.GZ_DRIVE_STORE) importScripts('drive-store.js');
+  brokerIn('backup'); // A restarted worker needs every record's validator before its first download, not after it.
   const turn = (f) => (brokerTurn ||= GZ_CARDS.queue())(f);
   // Everything else Glaze keeps (background/drive-store.js): its writes in the broker's queue, as every other store's are.
   const keysOf = async (a) => (typeof chrome.storage[a].getKeys === 'function' ? chrome.storage[a].getKeys() : Object.keys(await chrome.storage[a].get(null)));
   const areaOf = (a) => ({ get: (k) => chrome.storage[a].get(k), keys: () => keysOf(a),
-    set: (o) => turn(() => chrome.storage[a].set(o)), remove: (k) => turn(() => chrome.storage[a].remove(k)) });
+    set: (o) => turn(() => chrome.storage[a].set(o)), remove: (k) => turn(() => chrome.storage[a].remove(k)),
+    replace: (key, expected, value) => turn(async () => {
+      const here = (await chrome.storage[a].get(key))[key];
+      if (GZ_DRIVE_STORE.canon(here) !== GZ_DRIVE_STORE.canon(expected)) return false;
+      if (value === undefined) await chrome.storage[a].remove(key); else await chrome.storage[a].set({ [key]: value });
+      return true;
+    }) });
   driveStore = GZ_DRIVE_STORE.create({
     area: areaOf, store: { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o), remove: (k) => chrome.storage.local.remove(k), keys: () => keysOf('local') },
     hash: async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map((b) => b.toString(16).padStart(2, '0')).join(''),
@@ -3429,8 +3436,8 @@ const openDriveSync = () => {
   };
   const safeTitle = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
   driveSync = GZ_DRIVE_SYNC.create({
-    drive: () => GZ_DRIVE.create({ fetch: (u, init) => fetch(u, init), token: (o) => openGoogle().token(o), account: () => openGoogle().account(),
-      drop: (token) => openGoogle().drop(token), allowed: async () => googleLib().ON, interactive: false }),
+    drive: (active) => GZ_DRIVE.create({ fetch: (u, init) => fetch(u, init), token: (o) => openGoogle().token(o), account: () => openGoogle().account(),
+      drop: (token) => openGoogle().drop(token), allowed: async () => { await active(); return googleLib().ON; }, interactive: false }),
     account: async () => (googleLib().ON ? openGoogle().account() : null),
     store: { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o), remove: (k) => chrome.storage.local.remove(k),
       keys: async () => (typeof chrome.storage.local.getKeys === 'function' ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null))) },
@@ -3517,7 +3524,11 @@ chrome.storage.onChanged.addListener((c, area) => {
 // from it on a second device.
 chrome.storage.onChanged.addListener((c, area) => {
   if (area !== 'local' || !c.google || typeof c.google.newValue?.email !== 'string' || c.google.oldValue?.email === c.google.newValue.email) return;
-  chrome.storage.local.get('driveSync').then(({ driveSync: st }) => { if (googleLib().ON && st?.off !== true) return openDriveSync().set(true); })
+  chrome.storage.local.get('driveSync').then(({ driveSync: st }) => {
+    if (!googleLib().ON || st?.off === true) return;
+    // Reconnecting a different account must go through the existing binding check, never the explicit enable action.
+    return st?.account && st.account !== c.google.newValue.email ? openDriveSync().run() : openDriveSync().set(true);
+  })
     .catch((e) => console.warn('Sync to Google Drive:', e));
 });
 

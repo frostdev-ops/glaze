@@ -60,7 +60,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
   const safe = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
   const whyOf = (e) => (e instanceof Fail || typeof e?.why === 'string' ? e.why : 'stale');
 
-  // env: { drive() (a documents/drive.js client, interactive: false, bound to the account as it is made), account() (the connected
+  // env: { drive(active) (a documents/drive.js client, interactive: false, with active checked by its allowed hook), account() (the connected
   // account's email, background/google.js account), store (storage.local: get, set, remove, keys), papers (writer/writer-papers.js in
   // the worker's queue: get, list, save, trash, untrash, keep), parts(key, record) (a spreadsheet's stored parts, each
   // without its rev), files { has(hash), put(bytes, type) → ref } (documents/doc-files.js), exportOf(key, record, parts) →
@@ -85,7 +85,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
     // ---- this device's state
     const state = async () => ({ on: false, ...((await S.get(STATE))[STATE] || {}) });
-    const setState = (patch) => held('state', async () => { const next = { ...(await state()), ...patch }; await S.set({ [STATE]: next }); return next; });
+    const setState = (patch, valid = () => true) => held('state', async () => {
+      const was = await state();
+      if (!valid()) return was;
+      const next = { ...was, ...patch }; await S.set({ [STATE]: next }); return next;
+    });
     const docOf = async (h) => (await S.get(DOC + h))[DOC + h] || null;
     const putDoc = async (h, d, was) => {
       const ids = [d.json, d.file].filter(Boolean), gone = [was?.json, was?.file].filter((id) => id && !ids.includes(id));
@@ -105,10 +109,19 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const unmark = (key, n) => held('dirty', async () => { const m = (await S.get(DIRTY))[DIRTY] || {}; if (m[key] === n) { delete m[key]; await S.set({ [DIRTY]: m }); } });
 
     // ---- Drive, through this run's client: busy answers waited out and asked again, up to WAIT.retry's tries.
-    let client = null;
+    let client = null, stopped = 0, runStop = 0, runAccount = null;
+    const active = async () => {
+      if (!(await state()).on || runStop !== stopped) throw new Fail('off');
+      if (await Promise.resolve().then(env.account).catch(() => null) !== runAccount) throw new Fail('connect');
+    };
     const D = async (fn) => {
       for (let i = 0; ; i++) {
-        try { return await fn(client); } catch (e) {
+        try {
+          await active();
+          const value = await fn(client);
+          await active();
+          return value;
+        } catch (e) {
           if (e?.why !== 'busy' || i >= WAIT.retry.length) throw e;
           await sleep(Math.round(WAIT.retry[i] * (1 + random() / 4)));
         }
@@ -131,27 +144,38 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     const fetchCopy = async (R, h, key) => {
       const sum = R.appProperties?.sum;
       if (!SUM.test(sum || '')) throw new Fail('bad');
+      const bytes = await D((c) => c.media(R.id, MAX_JSON));
       let j;
-      try { j = JSON.parse(new TextDecoder().decode(await D((c) => c.media(R.id, MAX_JSON)))); } catch (e) { throw e instanceof Fail ? e : new Fail('bad'); }
+      try { j = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new Fail('bad'); }
       if (j?.glaze !== 'document' || j.v !== 1 || !syncable(j.key) || (key && j.key !== key) || (await hk(j.key)) !== h || !KINDS.includes(j.kind)
         || !j.record || typeof j.record !== 'object' || Array.isArray(j.record) || kindOf(j.record) !== j.kind) throw new Fail('bad');
       if (j.kind === 'sheet' && (!j.parts || typeof j.parts !== 'object' || !Object.keys(j.parts).every((n) => PART.test(n) && Array.isArray(j.parts[n]?.rows)))) throw new Fail('bad');
       const record = { ...strip(j.record), kind: j.kind };
-      if (FILES.includes(j.kind)) await bring(record.file, j.file);
-      return { key: j.key, kind: j.kind, record, parts: j.kind === 'sheet' ? j.parts : null, file: typeof j.file === 'string' ? j.file : null, fileRev: typeof j.fileRev === 'string' ? j.fileRev : null, sum };
+      const replacement = FILES.includes(j.kind) ? await bring(record.file, j.file, sum, j.fileRev, h) : null;
+      if (replacement) Object.assign(record, { file: replacement.ref, size: replacement.ref.size });
+      return { key: j.key, kind: j.kind, record, parts: j.kind === 'sheet' ? j.parts : null, file: typeof j.file === 'string' ? j.file : null,
+        fileRev: replacement?.rev || (typeof j.fileRev === 'string' ? j.fileRev : null), external: !!replacement,
+        sum: replacement ? await env.hash(canon(body(j.key, record, null))) : sum };
     };
-    const bring = async (ref, id) => {
+    const bring = async (ref, id, sum, rev, h) => {
       if (!P().isRef(ref)) throw new Fail('bad');
-      if (await env.files.has(ref.hash)) return;
       if (typeof id !== 'string') throw new Fail('bad');
+      const E = await meta(id);
+      if (E.removed || E.trashed) throw new Fail('bad');
+      const external = E.headRevisionId && E.headRevisionId !== rev && E.appProperties?.sum === sum
+        && E.appProperties?.glaze === 'file' && E.appProperties?.key === h;
+      if (!external && await env.files.has(ref.hash)) return null;
       const bytes = await D((c) => c.media(id, 50e6));
-      const got = await env.files.put(bytes, ref.type || '');
+      const got = await env.files.put(bytes, (external ? E.mimeType : ref.type) || '');
+      // A new device has no earlier mapping or change event for an external replacement. Bring that side in now.
+      if (external) return { ref: { hash: got.hash, size: got.size, type: got.type }, rev: E.headRevisionId };
       // The file moved on since the copy was written (its next copy is on its way): the next run takes both.
       if (got.hash !== ref.hash) throw new Fail('stale');
+      return null;
     };
     // Drive's side written here as the document's current state. → the record and its parts as written.
     const take = async (key, l, got) => {
-      const { paper } = await env.papers.save(key, got.record, { reason: 'auto', base: l ? l.rec.revision || 0 : 0, rename: true,
+      const { paper } = await env.papers.save(key, got.record, { reason: l && kindOf(l.rec) !== got.kind ? 'import' : 'auto', base: l ? l.rec.revision || 0 : 0, expectedRevision: l?.rec.revision || 0, rename: true,
         ...(got.kind === 'sheet' && { parts: got.parts, drop: Object.keys(l?.rec.parts || {}).filter((n) => !Object.hasOwn(got.parts, n)), changed: true }) });
       return { rec: paper, parts: got.kind === 'sheet' ? got.parts : null };
     };
@@ -168,8 +192,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // This device's document up: its kind's file (a new one when it has none, or the one it had is gone), then its copy.
     const push = async (key, h, l, d, folder) => {
       const kind = kindOf(l.rec), b = body(key, l.rec, l.parts), sum = await env.hash(canon(b));
-      let ex = null;
-      try { ex = await env.exportOf(key, l.rec, l.parts); } catch (e) { console.warn('Sync to Google Drive: no file for', kind, e); }
+      const ex = await env.exportOf(key, l.rec, l.parts);
       const base = (ex?.name || `${safe(l.rec.title) || 'Untitled'}${EXT[kind]}`).replace(/\.[^.]+$/, '');
       let file = d?.file || null, fh = d?.fh || null;
       const up = async (id, meta, mime, bytes) => {
@@ -203,8 +226,10 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!d) {
         if (!R || R.removed || R.trashed || lt) { if (l && !lt && !R) await push(key, h, l, null, folder); return; }
         const got = await fetchCopy(R, h, key);
-        if (!l) { const now2 = await take(got.key, null, got); await agreed(got.key, h, R, got, now2, null); return; }
-        if ((await sumOf(key, l)) !== got.sum) { await keepOther(key, l, got); return push(key, h, await local(key), { json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum }, folder); }
+        const source = { json: R.id, file: got.file, fh: got.fileRev, fsum: got.sum };
+        if (!l) { const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
+        if ((await sumOf(key, l)) !== got.sum) { await keepOther(key, l, got); return push(key, h, await local(key), source, folder); }
+        if (got.external) return push(key, h, l, source, folder);
         await agreed(key, h, R, got, l, null);
         return;
       }
@@ -263,6 +288,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
           return push(key, h, l, { ...d, fh: E.headRevisionId }, folder);
         }
         // A .docx or .xlsx edited outside Glaze stays as it is; the document gets a file of its own again.
+        // Detach durably before any more Drive writes: a failed upload or stopped worker must never reuse this id.
+        await putDoc(h, { ...d, file: null, fh: null, fsum: null }, d);
         await D((c) => c.patch(d.file, { appProperties: { glaze: 'kept', sum: null } }));
         Object.assign(d, { file: null, fh: null, fsum: null });
         force = true;
@@ -271,7 +298,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         const got = await fetchCopy(R, h, key);
         if (ldirty) { await keepOther(key, l, got); return push(key, h, await local(key), d, folder); }
         const now2 = await take(key, l, got);
-        if (force) return push(key, h, now2, { ...d, json: R.id }, folder);
+        if (force || got.external) return push(key, h, now2, { ...d, json: R.id }, folder);
         await agreed(key, h, R, got, now2, d);
         return;
       }
@@ -290,6 +317,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       console.warn('Sync to Google Drive: again next run', h, e);
       const k = key || (await docOf(h))?.key;
       if (k) await mark(k);
+      else throw e; // A first download raced a local save: keep its change page available for the next run.
     });
 
     // ---- the folder: the one Glaze made (found by its tag, so a second device finds the first's), or a new one.
@@ -379,19 +407,21 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
 
     const hooks = (folder) => ({ D, folder, state: setState });
     // ---- runs. o.full: everything (turning it on); o.push: only what was saved here.
-    const run = (o = {}) => held('run', async () => {
+    const runNow = async (o = {}) => {
+      runStop = stopped;
       let st = await state();
       if (!st.on) return { ok: false, why: 'off' };
       const who = await Promise.resolve().then(env.account).catch(() => null);
       if (!who) { await setState({ problem: 'connect', busy: 0 }); return { ok: false, why: 'connect' }; }
       if (st.account && st.account !== who) {
         await forget();
-        await S.set({ [STATE]: { on: false } });
+        await S.set({ [STATE]: { on: false, off: true, problem: 'account' } });
         return { ok: false, why: 'account' };
       }
       if (!o.full && st.wait && now() < st.wait) return { ok: false, why: 'later' };
       if (!st.account) st = await setState({ account: who });
-      client = env.drive();
+      runAccount = who;
+      client = env.drive(active);
       await setState({ busy: now() });
       try {
         if (o.full || !st.folder || !st.token) await full(st);
@@ -411,17 +441,27 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         await setState({ problem: why, busy: 0, fails, wait: now() + Math.min(WAIT.most, WAIT.run * 2 ** (fails - 1)) });
         return { ok: false, why };
       } finally { client = null; }
-    });
+    };
+    const run = (o = {}) => held('run', () => runNow(o));
 
     // Settings' switch. On: bound to the account connected now, and a full run. → that run's answer, or { ok: true } off.
+    let switching = 0;
     const set = async (on) => {
-      if (!on) { await setState({ on: false, off: true, busy: 0 }); cancel?.(); cancel = null; return { ok: true }; }
+      const request = ++switching;
+      if (!on) { stopped++; await setState({ on: false, off: true, busy: 0 }); cancel?.(); cancel = null; return { ok: true }; }
       const who = await Promise.resolve().then(env.account).catch(() => null);
+      if (request !== switching) return { ok: false, why: 'off' };
       if (!who) return { ok: false, why: 'connect' };
-      const st = await state();
-      if (st.account && st.account !== who) { await forget(); await S.set({ [STATE]: { on: false } }); }
-      await setState({ on: true, off: false, account: who, problem: null, wait: 0, fails: 0 });
-      return run({ full: true });
+      // Enabling, including a deliberate account switch, waits for the previous run before replacing its bookkeeping.
+      return held('run', async () => {
+        if (request !== switching) return { ok: false, why: 'off' };
+        const st = await state(), changed = st.account && st.account !== who;
+        if (changed) await forget();
+        await setState({ ...(changed && { folder: null, token: null, data: null, backups: null, snap: null, last: null }),
+          on: true, off: false, account: who, problem: null, wait: 0, fails: 0 }, () => request === switching);
+        if (request !== switching) return { ok: false, why: 'off' };
+        return runNow({ full: true });
+      });
     };
     // A document written here (the worker's storage listener): pushed once saving pauses.
     let cancel = null;

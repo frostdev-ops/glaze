@@ -79,7 +79,7 @@ const device = (drive, { account = 'student@school.edu', tokens = ['tok-1', 'tok
     timer: (fn, ms) => { const t = { fn, ms, on: true }; timers.push(t); return () => { t.on = false; }; },
   };
   const sync = S.create(env);
-  return { store, files, papers, sync, who, log, clock, timers, fire: async () => { for (const t of timers.splice(0)) if (t.on) await t.fn(); } };
+  return { store, files, papers, sync, who, log, clock, timers, env, fire: async () => { for (const t of timers.splice(0)) if (t.on) await t.fn(); } };
 };
 const state = async (dev) => (await dev.store.get(S.STATE))[S.STATE];
 const glazeFolder = (drive) => [...drive.files.values()].find((f) => f.meta.mimeType === drive.FOLDER && f.meta.name === 'Glaze');
@@ -470,6 +470,25 @@ test('a write that changes nothing synced (Save to Drive\'s note on the record) 
   assert.equal(exportOf(drive, key).meta.name, 'Renamed.docx', 'the file renamed with it');
 });
 
+test('retrying after detaching an externally edited Word file never overwrites it', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000811';
+  await a.papers.save(key, { doc: doc('Glaze text'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const word = exportOf(drive, key).meta.id;
+  drive.edit(word, enc('Unsynced Word edits'));
+  await a.papers.save(key, { doc: doc('New Glaze edits') });
+  await a.sync.touched(key);
+  drive.offline((x) => x.path.startsWith('/upload/'));
+  assert.deepEqual(await a.sync.run(), { ok: false, why: 'network' });
+  a.clock.t = (await state(a)).wait + 1;
+  assert.ok((await a.sync.run()).ok);
+  assert.equal(dec(drive.files.get(word).bytes), 'Unsynced Word edits');
+  assert.equal(drive.files.get(word).meta.appProperties.glaze, 'kept');
+  assert.notEqual(exportOf(drive, key).meta.id, word);
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'New Glaze edits');
+});
+
 test('pushes wait for a pause in saving; Sync off sends nothing; locks keep runs apart', async () => {
   const drive = standin(), a = device(drive);
   const key = 'doc:00000000-0000-4000-8000-000000000501';
@@ -506,4 +525,168 @@ test('a JSON copy that isn\'t Glaze\'s, or names another document, is left alone
   assert.ok((await b.sync.set(true)).ok);
   assert.equal(await b.papers.get('doc:00000000-0000-4000-8000-000000000999'), null, 'a copy whose key doesn\'t match its tag isn\'t taken');
   assert.equal(await b.papers.get(key), null);
+});
+
+test('turning Sync off during export prevents the pending upload', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000812';
+  await a.papers.save(key, { doc: doc('Private draft'), title: 'Private', named: true });
+  const exportFile = a.env.exportOf;
+  let requestsAtOff;
+  a.env.exportOf = async (...args) => {
+    await a.sync.set(false);
+    requestsAtOff = drive.log.length;
+    return exportFile(...args);
+  };
+  assert.deepEqual(await a.sync.set(true), { ok: false, why: 'off' });
+  assert.equal(drive.log.length, requestsAtOff, 'no request after Off');
+  assert.equal(sidecarOf(drive, key), undefined);
+  assert.equal(exportOf(drive, key), undefined);
+});
+
+test('turning Sync off during a download prevents applying its result', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000813';
+  await a.papers.save(key, { doc: doc('Remote'), title: 'Remote', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const fetch = drive.fetch;
+  drive.fetch = async (url, init) => {
+    const r = await fetch(url, init);
+    if (new URL(url).searchParams.get('alt') === 'media') await b.sync.set(false);
+    return r;
+  };
+  assert.deepEqual(await b.sync.set(true), { ok: false, why: 'off' });
+  assert.equal(await b.papers.get(key), null);
+});
+
+test('a failed document download stops the run without consuming its change', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000814';
+  await a.papers.save(key, { doc: doc('Original'), title: 'Essay', named: true });
+  await a.sync.set(true); await b.sync.set(true);
+  await a.papers.save(key, { doc: doc('Remote update') });
+  await a.sync.touched(key); assert.ok((await a.sync.run({ push: true })).ok);
+  const token = (await state(b)).token;
+  drive.offline((x) => x.query.alt === 'media');
+  assert.deepEqual(await b.sync.run(), { ok: false, why: 'network' });
+  assert.equal((await state(b)).token, token);
+  b.clock.t = (await state(b)).wait + 1;
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(textOf((await b.papers.get(key)).doc), 'Remote update');
+});
+
+test('typing during a document download keeps the local draft current and retains the remote version', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000815';
+  await a.papers.save(key, { doc: doc('Original'), title: 'Essay', named: true });
+  await a.sync.set(true); await b.sync.set(true);
+  await a.papers.save(key, { doc: doc('Remote edit') });
+  await a.sync.touched(key); await a.sync.run({ push: true });
+  const fetch = drive.fetch;
+  let edited = false;
+  drive.fetch = async (url, init) => {
+    const r = await fetch(url, init);
+    if (!edited && new URL(url).searchParams.get('alt') === 'media') {
+      edited = true;
+      await b.papers.save(key, { doc: doc('Typing while downloading') });
+      await b.sync.touched(key);
+    }
+    return r;
+  };
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(textOf((await b.papers.get(key)).doc), 'Typing while downloading');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'Typing while downloading');
+  const versions = await b.papers.versions(key);
+  assert.ok((await Promise.all(versions.map((v) => b.papers.version(key, v.id)))).some((v) => v.reason === 'conflict' && textOf(v.doc) === 'Remote edit'));
+});
+
+test('the background account-change listener stops Sync instead of enabling it for another account', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000816';
+  await a.papers.save(key, { doc: doc('First account only'), title: 'Private', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const requests = drive.log.length;
+  a.who.account = 'other@school.edu';
+  const fs = require('node:fs'), vm = require('node:vm');
+  const source = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
+  let listener, pending;
+  vm.runInNewContext(source.slice(source.indexOf('// Connecting Drive turns Sync on'), source.indexOf('// A Download all wait owns')), {
+    chrome: { storage: { local: a.store, onChanged: { addListener: (fn) => { listener = fn; } } } },
+    googleLib: () => ({ ON: true }), console,
+    openDriveSync: () => ({ set: (on) => (pending = a.sync.set(on)), run: () => (pending = a.sync.run()) }),
+  });
+  listener({ google: { oldValue: { email: 'student@school.edu' }, newValue: { email: a.who.account } } }, 'local');
+  await new Promise(setImmediate); await pending;
+  assert.equal((await state(a)).on, false);
+  assert.equal(drive.log.length, requests, 'nothing is sent with the new account');
+  assert.equal(textOf((await a.papers.get(key)).doc), 'First account only');
+});
+
+test('an account change while the run creates its client cannot rebind the upload', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000817';
+  await a.papers.save(key, { doc: doc('First account only'), title: 'Private', named: true });
+  const make = a.env.drive;
+  a.env.drive = (...args) => { a.who.account = 'other@school.edu'; return make(...args); };
+  assert.deepEqual(await a.sync.set(true), { ok: false, why: 'connect' });
+  assert.equal(drive.log.length, 0);
+});
+
+test('a document converted to another kind on one device reaches the other device', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000818';
+  const ref = await a.files.put(enc('%PDF original'), MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: ref, size: ref.size, title: 'Reading', named: true });
+  await a.sync.set(true); await b.sync.set(true);
+  await a.papers.save(key, { kind: 'paper', doc: doc('Opened in Writer') }, { reason: 'import' });
+  await a.sync.touched(key);
+  assert.ok((await a.sync.run({ push: true })).ok);
+  assert.ok((await b.sync.run()).ok);
+  const got = await b.papers.get(key);
+  assert.equal(got.kind, 'paper');
+  assert.equal(textOf(got.doc), 'Opened in Writer');
+  const versions = await b.papers.versions(key);
+  assert.ok((await Promise.all(versions.map((v) => b.papers.version(key, v.id)))).some((v) => v.kind === 'pdf' && v.file.hash === ref.hash));
+});
+
+test('an export failure leaves both Drive files at the last agreed content until retry', async () => {
+  const drive = standin(), a = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000819';
+  await a.papers.save(key, { doc: doc('Original'), title: 'Essay', named: true });
+  await a.sync.set(true);
+  const make = a.env.exportOf, bytes = Buffer.from(exportOf(drive, key).bytes);
+  a.env.exportOf = async () => { throw new Error('export failed'); };
+  await a.papers.save(key, { doc: doc('New draft') });
+  await a.sync.touched(key); await a.sync.run({ push: true });
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'Original');
+  assert.deepEqual(exportOf(drive, key).bytes, bytes);
+  a.env.exportOf = make;
+  assert.ok((await a.sync.run({ push: true })).ok);
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'New draft');
+  assert.match(dec(exportOf(drive, key).bytes), /New draft/);
+});
+
+test('Off wins over an enable request still waiting for its account', async () => {
+  const drive = standin(), a = device(drive);
+  let waiting = true;
+  a.env.account = async () => {
+    if (waiting) { waiting = false; await a.sync.set(false); }
+    return a.who.account;
+  };
+  assert.deepEqual(await a.sync.set(true), { ok: false, why: 'off' });
+  assert.equal((await state(a)).on, false);
+  assert.equal(drive.log.length, 0);
+});
+
+test('a fresh device can import a PDF replaced in Drive before it connected', async () => {
+  const drive = standin(), a = device(drive), b = device(drive);
+  const key = 'doc:00000000-0000-4000-8000-000000000820';
+  const ref = await a.files.put(enc('%PDF original'), MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: ref, size: ref.size, title: 'Reading', named: true });
+  await a.sync.set(true);
+  drive.edit(exportOf(drive, key).meta.id, enc('%PDF annotated elsewhere'));
+  assert.ok((await b.sync.set(true)).ok);
+  const got = await b.papers.get(key);
+  assert.equal(dec(await b.files.read(got.file.hash)), '%PDF annotated elsewhere');
+  assert.equal(sidecarJson(drive, key).record.file.hash, got.file.hash);
 });
