@@ -53,8 +53,8 @@ test('writer.complete: a streamed text task at 60 a minute that supersedes; inst
     assert.ok(!system.includes(s), `${s}: never in the instructions`);
     assert.ok(fenced(data, s), `${s}: inside the fence`);
   }
-  assert.ok(data.indexOf('[discussion thread') < data.indexOf('[the text before that sentence'), 'the thread first (the cached prefix), the student\'s text after it');
-  assert.ok(data.indexOf('[the text before that sentence') < data.indexOf('[the sentence the student is typing'));
+  assert.ok(data.indexOf('[discussion thread') < data.indexOf('[the document so far'), 'the thread first (the cached prefix), the student\'s text after it');
+  assert.ok(data.indexOf('[the document so far') < data.indexOf('[the sentence the student is typing'));
   assert.match(system, /last word written in full/, 'mid-word: the caret\'s word in full first');
   assert.equal(req.temperature, 0.2);
 });
@@ -119,7 +119,7 @@ test('writer.complete takes a small model\'s reply that repeats the student\'s l
   assert.equal(C.finish('learned in this course are how to.', inp), null, 'nothing new after the repeat');
 });
 
-test('writer.complete sends an on-device model only the caret\'s end of the text and a brief context', async () => {
+test('writer.complete sends an on-device model only the caret\'s end of the text, the newest of the document and a brief context', async () => {
   const long = `${'The river keeps what the town would rather forget, and the clearing keeps the rest. '.repeat(60)}Three things I learned are how to `;
   const ctx = { kind: 'assignment', course: { id: '_1_1', name: 'ENGL 2110' }, assignment: { title: 'Essay 2', instructions: `Write about memory. ${'Detail. '.repeat(400)}`, rubric: 'Thesis: 10 points' }, style: 'mla9' };
   const run = async (caps) => {
@@ -129,7 +129,7 @@ test('writer.complete sends an on-device model only the caret\'s end of the text
   };
   const full = await run(undefined), small = await run({ local: true }), narrow = await run({ context: 6144 });
   for (const data of [small, narrow]) {
-    assert.ok(data.length < 2600, `brief: ${data.length} characters`);
+    assert.ok(data.length < 2600 + C.BRIEF.document, `brief: ${data.length} characters`);
     assert.match(data, /Three things I learned are how to/);
     assert.match(data, /Essay 2/);
     assert.doesNotMatch(data, /Thesis: 10 points/, 'no rubric for the gray text on a small model');
@@ -254,9 +254,9 @@ test('writer.complete asks an endpoint model for the next words too, with the wh
   assert.equal(a.output, 'it narrows a broad topic.');
   assert.match(a.system, /only the next words/);
   assert.doesNotMatch(a.system, /first the word right before the caret/);
-  assert.match(a.system, /text before that sentence and after the caret/);
+  assert.match(a.system, /The document so far \(the student's text before that sentence\) and the text after the caret/);
   assert.equal(a.req.effort, 'none', 'no reasoning: it would spend the 64 tokens');
-  for (const [label, text] of [['the text before that sentence', 'The river keeps the past.'], ['the sentence the student is typing', 'Writing a strong thesis takes practice because'], ['the text after the caret', 'The clearing is different.'], ['rubric', 'Thesis: 10 points']]) {
+  for (const [label, text] of [['the document so far', 'The river keeps the past.'], ['the sentence the student is typing', 'Writing a strong thesis takes practice because'], ['the text after the caret', 'The clearing is different.'], ['rubric', 'Thesis: 10 points']]) {
     const block = a.data.match(new RegExp(`\\[${label} [^\\n]*\\n<<<(DATA-[0-9a-f]+)\\n([\\s\\S]*?)\\n>>>\\1`));
     assert.ok(block && block[2].includes(text), label);
   }
@@ -265,10 +265,11 @@ test('writer.complete asks an endpoint model for the next words too, with the wh
   assert.equal(b.output, 'inal sources.');
   assert.match(b.system, /last word written in full/);
   assert.match(b.data, /\[its last word maybe cut off[^\n]*\n<<<DATA-[0-9a-f]+\norig\n/);
-  assert.doesNotMatch(b.data, /\[the text before that sentence|\[the text after the caret/, 'none when there is none');
+  assert.doesNotMatch(b.data, /\[the document so far|\[the text after the caret/, 'none when there is none');
   const small = await large({ before, after: '\nThe clearing is different.' }, 'it narrows a broad topic.', { local: true });
-  assert.doesNotMatch(small.data, /\[the text before that sentence|\[the text after the caret|Thesis: 10 points/, 'a small model: the sentence and the context in brief');
-  assert.doesNotMatch(small.system, /text before that sentence/);
+  assert.doesNotMatch(small.data, /\[the text after the caret|Thesis: 10 points/, 'a small model: the sentence and the context in brief');
+  assert.match(small.data, /\[the document so far[^\n]*\n<<<DATA-[0-9a-f]+\nThe river keeps the past\.\n/, 'and the newest of the document');
+  assert.doesNotMatch(small.system, /names, terms/);
   // What the echo prompt let through, live: a word of the sentence as all of it, the caret's word alone, a soft hyphen.
   assert.equal((await large({ before: 'Writing a strong thesis takes practice because ' }, 'practice')).output, null);
   assert.equal((await large({ before: 'I also learned how to open' }, 'open')).output, null);
@@ -298,7 +299,7 @@ test('writer.complete runs only where the gray text may show, and never on a tes
   assert.equal(ok(BEFORE, '', { context: { kind: 'test' } }), false, 'a test\'s context');
   assert.equal(C.task.input({ before: BEFORE, extra: 1 }), null);
   const long = C.task.input({ before: `${'word '.repeat(3000)}and the river keeps`, after: `\n${'x '.repeat(2000)}` });
-  assert.ok(long.before.length <= C.LIMIT.before && long.before.endsWith('river keeps') && long.after.length <= C.LIMIT.after, 'bounded each side');
+  assert.ok(long.before.length === 15019 && long.before.endsWith('river keeps') && long.after.length <= C.LIMIT.after, 'all the text before (the task cuts it to the window), the text after bounded');
 });
 
 // ---- writer.review ------------------------------------------------------------------------------------------------
