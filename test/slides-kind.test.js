@@ -120,3 +120,25 @@ test('export blob URLs are revoked when the page closes', async () => {
   listeners.get('pagehide')({ persisted: false });
   assert.deepEqual(revoked, ['blob:export']);
 });
+
+
+test('uncached card thumbnails do not retain blob URLs and read only listed media', async () => {
+  let painted, created = 0;
+  const done = new Promise((r) => { painted = r; }), reads = [];
+  const slide = { shapes: [{ media: { path: 'ppt/media/a.png' } }, { media: { path: 'ppt/private.xml' } }] };
+  const { DK } = load({ slides: true }, {
+    Blob, URL: { createObjectURL: () => { created++; return 'blob:card'; } },
+    document: { createElement: () => ({ replaceChildren() {} }) },
+    GZ_PPTX: {
+      read: async () => ({ size: { w: 1 }, slides: [slide], media: [{ path: 'ppt/media/a.png', mime: 'image/png' }] }),
+      media: async (_, p) => { reads.push(p); return new Uint8Array([1]); },
+    },
+    GZ_SLIDES_RENDER: { px: (w) => w, stage: (_, __, o) => { painted(o.media); return {}; } },
+  });
+  await DK.settled();
+  DK.get('slides').thumb({ file: 'UEsDBA==' });
+  const media = await done;
+  assert.deepEqual(reads, ['ppt/media/a.png']);
+  assert.equal(created, 0, 'discardable card thumbnails do not allocate page-lifetime blobs');
+  assert.equal(media.get('ppt/media/a.png'), 'data:image/png;base64,AQ==');
+});
