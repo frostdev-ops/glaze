@@ -628,7 +628,18 @@ const HARNESS = `(() => {
     const ishots = process.env.IMPORT_SHOTS || path.join(os.homedir(), 'Projects/glaze-plans/writer/mockups/settings-ai/build-import');
     const ishot = async (target, name) => { fs.mkdirSync(ishots, { recursive: true }); await stillAll(target); const f = path.join(ishots, name); await target.screenshot({ path: f }); return f; };
     const sha = (b) => crypto.createHash('sha256').update(Buffer.from(b)).digest('hex');
-    const blankPaper = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => /^writer(Paper|Versions):/.test(k))); });
+    // No paper in Writer's storage, and none coming back: a page just closed may still be saving its paper (its frame's
+    // pagehide save, queued in the worker), which would land after the removal and open in the next page.
+    const papersKept = () => worker.evaluate(async () => Object.keys(await chrome.storage.local.get(null)).filter((k) => /^writer(Paper|Versions):/.test(k)));
+    const blankPaper = async () => {
+      for (let i = 0; i < 10; i++) {
+        await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => /^writer(Paper|Versions):/.test(k))); });
+        let back = [];
+        for (const end = Date.now() + 1500; !back.length && Date.now() < end; await pause(100)) back = await papersKept();
+        if (!back.length) return;
+      }
+      throw Error(`Writer's papers kept coming back: ${(await papersKept()).join(', ')}`);
+    };
     const paperText = (fr) => fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent);
     const cardOf = (fr) => fr.evaluate(() => {
       const c = document.querySelector('.gi-layer[data-open] .gi-card');
