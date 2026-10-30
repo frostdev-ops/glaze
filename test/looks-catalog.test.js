@@ -349,3 +349,38 @@ test('parts reads accept approved LMS documents, reject mod origins, and refuse 
   assert.deepEqual(await w.send({ ...request, id: blocked.id }, sender), { ok: false, error: 'gone' });
   assert.deepEqual(w.sync, {}, 'parts reads grant no settings writes or frame passes');
 });
+
+// 4.0 keeps a course's saved or gallery Look in courseLooks, which 3.x never reads or writes; one an earlier build put in
+// courses.looks moves there when the worker starts, before a 3.x device's next course edit writes it away.
+test('the worker moves kept course Looks out of courses.looks once, in one write, and retries a refused write next start', async () => {
+  const [K1, K2] = ['c:0123456789abcd', 'c:zyxwvutsrqpon0'];
+  const writes = [];
+  const sync = { version: 2, courses: { ...G.GZ_DEFAULTS.courses, looks: { _1_1: 'Library', _2_1: K1, _3_1: K2 } }, courseLooks: { _3_1: K1 } };
+  const refused = worker({}, sync);
+  refused.chrome.storage.sync.set = () => Promise.reject(new Error('MAX_WRITE_OPERATIONS_PER_MINUTE quota exceeded'));
+  refused.install();
+  await new Promise((r) => setTimeout(r, 100));
+  assert.deepEqual(sync.courses.looks, { _1_1: 'Library', _2_1: K1, _3_1: K2 }, 'a refused write changes nothing');
+  const w = worker({}, sync); // the next start
+  const set = w.chrome.storage.sync.set;
+  w.chrome.storage.sync.set = (v) => { if ('courses' in v || 'courseLooks' in v) writes.push(Object.keys(v).sort()); return set(v); };
+  assert.ok(await w.until(() => sync.courseLooks?._2_1 === K1), 'moved on the next start');
+  assert.deepEqual(sync.courses.looks, { _1_1: 'Library' });
+  assert.deepEqual(sync.courseLooks, { _2_1: K1, _3_1: K1 }, 'courseLooks\' own for a course stays');
+  w.install();
+  await new Promise((r) => setTimeout(r, 100));
+  assert.deepEqual(writes, [['courseLooks', 'courses', 'version']], 'one write, and none once moved');
+  const s = G.GZ_SANITIZE(sync);
+  assert.equal(G.GZ_COURSE_LOOK_ID(s, '_2_1', [{ id: K1 }]), K1);
+  assert.equal(G.GZ_COURSE_LOOK_ID(s, '_1_1'), 'Library');
+});
+
+test('removing a kept Look from Settings unmaps the courses wearing it in courses.looks and courseLooks, in one write', async () => {
+  const { favorites } = await fixtures();
+  const [a, b] = favorites.slice(0, 2).map((f) => C.kept(f).id);
+  const w = worker({ lookFavorites: favorites.slice(0, 2) }, G.GZ_SANITIZE({ courses: { looks: { _1_1: a, _4_1: 'Terminal' } }, courseLooks: { _2_1: a, _3_1: b } }));
+  const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/options.html' };
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'remove', id: a }, editor), { ok: true });
+  assert.deepEqual(w.sync.courses.looks, { _4_1: 'Terminal' });
+  assert.deepEqual(w.sync.courseLooks, { _3_1: b });
+});

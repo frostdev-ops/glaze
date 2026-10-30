@@ -337,6 +337,19 @@ test('a backup of every category comes back whole on a new device', async () => 
 });
 const unzipped = async (file) => require('../lib/doctext.js').unzip(file.bytes);
 
+test('a course\'s saved or gallery Look comes back with the settings, in its own synced item beside the built-in ones', async () => {
+  const a = device(), b = device();
+  try {
+    const kept = 'c:0123456789abcd';
+    const mine = D.GZ_SANITIZE({ courses: { looks: { _1_1: 'Library' } }, courseLooks: { _2_1: kept } });
+    const { out } = await restore(b, await backUp(a, { ...SETTINGS, ...mine }));
+    assert.deepEqual(out.failed, []);
+    const back = D.GZ_SANITIZE(b.settings.at(-1));
+    assert.deepEqual([back.courses.looks, back.courseLooks], [{ _1_1: 'Library' }, { _2_1: kept }]);
+    assert.equal(D.GZ_COURSE_LOOK_ID(back, '_2_1', [{ id: kept }]), kept);
+  } finally { a.stop(); b.stop(); }
+});
+
 test('restoring again is a no-op, and a newer record here stays', async () => {
   const a = await seeded(), b = device();
   try {
