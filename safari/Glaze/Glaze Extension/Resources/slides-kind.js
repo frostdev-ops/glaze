@@ -409,10 +409,14 @@
       const seq = Rr.visible(deck);
       if (!seq.length || presenting) return;
       let i = Math.max(0, seq.findIndex((x) => x >= cur));
-      const frame = h('div', { class: 'gs-present-frame' }), counter = h('span', { class: 'gs-present-n' });
+      // The slide holds the focus, so Space and the arrows turn slides; a button the student tabs to presses as a button.
+      const frame = h('div', { class: 'gs-present-frame', tabindex: '-1' }), counter = h('span', { class: 'gs-present-n', 'aria-live': 'polite' });
       const dialog = h('dialog', { class: 'gs-present', 'aria-label': title });
       const paint = () => {
-        frame.replaceChildren(Rr.stage(deck.slides[seq[i]], deck, { document, media, labels, scale: Rr.fit(deck.size, innerWidth, innerHeight) }));
+        const st = Rr.stage(deck.slides[seq[i]], deck, { document, media, labels, scale: Rr.fit(deck.size, innerWidth, innerHeight) });
+        st.setAttribute('role', 'group');
+        st.setAttribute('aria-label', t('Slide {n}', { n: seq[i] + 1 }));
+        frame.replaceChildren(st);
         counter.textContent = `${i + 1} / ${seq.length}`;
       };
       const go = (by) => { const to = Math.max(0, Math.min(seq.length - 1, i + by)); if (to !== i) { i = to; paint(); } };
@@ -430,6 +434,7 @@
             e.preventDefault(); buttons[e.shiftKey ? buttons.length - 1 : 0].focus();
           }
         }
+        if (e.key === ' ' && e.target.closest?.('button')) return;
         if (NEXT.includes(e.key)) { e.preventDefault(); go(1); }
         if (BACK.includes(e.key)) { e.preventDefault(); go(-1); }
         if (e.key === 'Home') { e.preventDefault(); go(-seq.length); }
@@ -447,6 +452,7 @@
       document.body.append(dialog);
       paint();
       dialog.showModal();
+      frame.focus({ preventScroll: true });
       presenting = dialog;
       addEventListener('resize', paint);
       document.addEventListener('fullscreenchange', left);

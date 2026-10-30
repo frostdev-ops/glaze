@@ -243,6 +243,7 @@ const fixture = () => {
     const full = await until(() => page.evaluate(() => globalThis.fullscreenResult), 'fullscreen request settled');
     check(full.ok && await page.evaluate(() => !!document.fullscreenElement), `Present enters fullscreen from the button gesture (${JSON.stringify(full)})`);
     check((await pc()).n === '1 / 9', 'Present: 9 slides, the hidden one left out');
+    check(await page.evaluate(() => document.activeElement === document.querySelector('dialog.gs-present .gs-present-frame')), 'Present opens with the slide focused');
     const presentFit = await page.evaluate(() => { const r = document.querySelector('dialog.gs-present .gs-stage').getBoundingClientRect(); return { w: r.width, h: r.height, iw: innerWidth, ih: innerHeight }; });
     check(presentFit.w <= presentFit.iw + 1 && presentFit.h <= presentFit.ih + 1 && (Math.abs(presentFit.w - presentFit.iw) < 2 || Math.abs(presentFit.h - presentFit.ih) < 2), `the slide fills the screen (${JSON.stringify(presentFit)})`);
     await page.focus('dialog.gs-present button:last-child');
@@ -251,6 +252,7 @@ const fixture = () => {
     await page.keyboard.press('Shift+Tab');
     check(await page.evaluate(() => document.activeElement === document.querySelector('dialog.gs-present button:last-child')), 'Present traps Shift+Tab within the dialog');
     await shot('present-1280.png');
+    await page.focus('dialog.gs-present .gs-present-frame');
     await page.keyboard.press('ArrowRight');
     check((await pc()).n === '2 / 9', 'Present →');
     await page.keyboard.press(' ');
@@ -269,6 +271,11 @@ const fixture = () => {
     check((await pc()).n === '9 / 9', 'Present End');
     await page.keyboard.press('Home');
     check((await pc()).n === '1 / 9', 'Present Home');
+    await page.keyboard.press('ArrowRight');
+    await page.focus('dialog.gs-present button[aria-label="Previous"]');
+    await page.keyboard.press(' ');
+    check((await pc()).n === '1 / 9', 'Space on a focused button presses it (Previous from 2 / 9)');
+    await page.focus('dialog.gs-present .gs-present-frame');
     await page.keyboard.press('Escape');
     await until(() => page.evaluate(() => !document.querySelector('dialog.gs-present')), 'Esc ends the presentation');
     check(await page.evaluate(() => document.activeElement?.id === 'gs-present' && !document.fullscreenElement), 'Esc ends it, out of full screen, focus back on Present');
