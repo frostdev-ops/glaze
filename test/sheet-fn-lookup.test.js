@@ -379,3 +379,11 @@ test('UNIQUE preserves distinct rows and columns containing NUL text', () => {
   const e = book({ A1: 'a', B1: 'b\u0000sc', A2: 'a\u0000sb', B2: 'c' });
   cases(e, [['ROWS(UNIQUE(A1:B2))', 2], ['ROWS(UNIQUE(A1:B2,,TRUE))', 2], ['COLUMNS(UNIQUE(TRANSPOSE(A1:B2),TRUE))', 2]]);
 });
+
+test('CHOOSE caps the combined dimensions before allocating its result', () => {
+  cases(book(), [
+    ['ROWS(CHOOSE({1,2},SEQUENCE(501),SEQUENCE(1,500)))', '#NUM!'],
+    ['COLUMNS(CHOOSE({1;2},SEQUENCE(500),SEQUENCE(1,501)))', '#NUM!'],
+    ['ROWS(CHOOSE({1,2},SEQUENCE(250),SEQUENCE(1,1000)))', 250],
+  ]);
+});
