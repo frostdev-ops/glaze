@@ -188,7 +188,7 @@ td[aria-current] { background:var(--gz-accent-soft,#e2f2ff); box-shadow:inset 0 
       if (!/^_\d+_\d+$/.test(attemptId)) return null;
       try { attempt = await reader.get(`/learn/api/v1/courses/${route.courseId}/gradebook/attempts/${attemptId}?columnId=${columnId}&expand=viewUrl,toolAttemptDetail,feedbackToUser`); }
       catch (e) { if (!live()) throw e; return null; }
-      if (attempt.id !== attemptId || attempt.courseId !== route.courseId || attempt.columnId !== columnId || attempt.userId !== uid) return null;
+      if (attempt.id !== attemptId || attempt.courseId !== route.courseId || attempt.columnId && attempt.columnId !== columnId || attempt.userId !== uid) return null;
     }
     // The student's grade row releases selections; column settings and display grades cannot release a new attempt.
     const evaluation = attempt?.status === 'COMPLETED' ? attempt.rubricEvaluation : null;
