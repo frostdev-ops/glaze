@@ -2360,11 +2360,32 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // (storage.local mcp, lib/mcp/grants.js): nothing of it loads until it is on. While it is on the link loads at worker start,
 // as ensure() must run then (a worker granted nativeMessaging connects once it restarts), and the rest with it; after a
 // switch-on, with the first frame. Glaze or agent access off ends every connection, and with them every ask waiting for
-// one, and the link; the apps and their grants stay. Every file by name in the two calls (scripts/package-firefox.sh).
+// one, and the link; the apps and their grants stay. Every file by name in the three calls (scripts/package-firefox.sh).
+const MCP_BROWSER = SAFARI ? 'safari' : new URL(chrome.runtime.getURL('')).protocol === 'moz-extension:' ? 'firefox' : 'chrome';
 const agentFiles = () => importScripts('agent-frames.js', 'agent-link.js');
+const grantFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'mcp/grants.js');
 const mcpFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'ai/failure.js', 'ai/loop.js', 'modapi.js', 'modwidget.js', 'modbroker.js', 'modtools.js', 'mcp/grants.js', 'mcp/registry.js', 'mcp/tools-study.js', 'mcp/tools-grades.js', 'mcp/wire.js', 'mcp/approve.js', 'mcp/calls.js');
 globalThis.addEventListener?.('install', () => { agentFiles(); mcpFiles(); });
-const MCP_BROWSER = SAFARI ? 'safari' : new URL(chrome.runtime.getURL('')).protocol === 'moz-extension:' ? 'firefox' : 'chrome';
+// The local setting is a UI mirror, writable by content scripts. Only an options message may persist consent in this
+// extension-origin database. A forged local on cannot reconnect a previously paired app after the owner switched off.
+let mcpConsentDB = null;
+const mcpConsent = async (on) => {
+  mcpConsentDB ||= new Promise((resolve, reject) => {
+    const r = indexedDB.open('glaze-mcp-settings', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('settings');
+    r.onsuccess = () => { r.result.onversionchange = () => { r.result.close(); mcpConsentDB = null; }; resolve(r.result); };
+    r.onerror = () => reject(r.error);
+  }).catch((e) => { mcpConsentDB = null; throw e; });
+  const tx = (await mcpConsentDB).transaction('settings', on === undefined ? 'readonly' : 'readwrite');
+  let value = false;
+  const store = tx.objectStore('settings');
+  if (on === undefined) { const r = store.get('on'); r.onsuccess = () => { value = r.result === true; }; }
+  else { store.put(on === true, 'on'); value = on === true; }
+  return new Promise((resolve, reject) => { tx.oncomplete = () => resolve(value); tx.onerror = tx.onabort = () => reject(tx.error); });
+};
+const mcpOn = async () => (await chrome.storage.local.get('mcp')).mcp?.on === true && await mcpConsent().catch(() => false);
+let mcpGrantStore = null;
+const mcpGrants = () => (mcpGrantStore ||= GZ_MCP_GRANTS.open());
 // Only Safari's helper, the Glaze app, outlives this worker and announces its connections to the next one, so only there
 // is each connection's engine state kept (storage.session mcpConn:<c>) and restored. Chrome and Firefox end the helper with
 // the worker's port, and the next helper numbers its connections from 1 again.
@@ -2405,10 +2426,10 @@ const mcpCore = () => (mcpMade ||= (() => {
   const approve = GZ_MCP_APPROVE.create({ windows: chrome.windows, tabs: chrome.tabs, storage: { session: chrome.storage.session }, runtime: chrome.runtime,
     now: Date.now, timers: globalThis, url: chrome.runtime.getURL('lib/mcp/approve.html') });
   chrome.windows?.onRemoved?.addListener((id) => approve.closed(id));
-  const grants = GZ_MCP_GRANTS.open();
+  const grants = mcpGrants();
   const calls = GZ_MCP_CALLS.create({
     registry: GZ_MCP_REGISTRY, state: mcpRead, grants, approve, refresh: mcpRefresh, enabled: glazeOn,
-    settings: async () => GZ_MCP_GRANTS.clean((await chrome.storage.local.get(GZ_MCP_GRANTS.KEY))[GZ_MCP_GRANTS.KEY]),
+    settings: async () => ({ on: await mcpOn() }),
     accounts: async () => (await GZ_AI_TOOLS.get('accounts_list').run({}, mcpCtx(null))).items,
     local: chrome.storage.local, keys: mcpKeys, now: Date.now,
     record: (row) => GZ_MCP_GRANTS.record(chrome.storage.local, row), turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
@@ -2429,7 +2450,7 @@ const mcpCore = () => (mcpMade ||= (() => {
 const mcpConns = new Map();
 const mcpWire = (c, k) => mcpCore().wire.conn(c, k.peer, (line) => { mcpLink?.send(c, line); }, (why) => { mcpLink?.close(c, why); mcpForget(c, k); });
 const mcpSave = (c, k) => {
-  if (!MCP_KEEP || !k.conn) return;
+  if (!MCP_KEEP || !k.conn || mcpConns.get(c) !== k) return;
   const snap = k.conn.snapshot(), text = JSON.stringify(snap);
   if (snap.era === null || text === k.saved) return;
   k.saved = text;
@@ -2453,7 +2474,7 @@ const mcpFeed = (c, k, text) => {
 const mcpOpen = (c, peer) => {
   const k = { peer, conn: null, queue: [], saved: '', fresh: false };
   mcpConns.set(c, k);
-  mcpCore().ready.then(() => {
+  Promise.resolve().then(() => mcpCore().ready).then(() => {
     if (mcpConns.get(c) !== k) return;
     k.conn = mcpWire(c, k);
     const was = mcpKept.get(c);
@@ -2464,7 +2485,7 @@ const mcpOpen = (c, peer) => {
     }
     mcpSave(c, k);
     for (const text of k.queue.splice(0)) mcpFeed(c, k, text);
-  });
+  }).catch(() => { mcpLink?.close(c, 'failed'); mcpClose(c, 'failed'); });
 };
 const mcpLine = (c, text) => {
   const k = mcpConns.get(c);
@@ -2479,18 +2500,23 @@ const mcpClose = (c, why) => {
 };
 // The link brought to the setting and Glaze's own switch, on every trigger (on: the setting, when just read). → its status,
 // or null while it never loaded.
-const mcpEnsure = async (on) => {
-  if (!mcpLink && (on ?? (await chrome.storage.local.get('mcp')).mcp?.on) !== true) return null;
-  mcpLink ||= (() => {
+const mcpEnsure = async () => {
+  if (!await mcpOn() || !await glazeOn()) {
+    mcpKept.clear();
+    if (mcpListTimer) { clearTimeout(mcpListTimer); mcpListTimer = 0; }
+    for (const c of [...mcpConns.keys()]) mcpClose(c, 'stopped');
+    return mcpLink ? mcpLink.stop() : null;
+  }
+  if (!mcpLink) {
     if (typeof GZ_AGENT_LINK === 'undefined') agentFiles();
-    const link = GZ_AGENT_LINK.make({ runtime: chrome.runtime, permissions: chrome.permissions, storage: { local: chrome.storage.local, session: chrome.storage.session }, browser: MCP_BROWSER });
-    link.attach({ open: mcpOpen, line: mcpLine, close: mcpClose });
-    return link;
-  })();
-  if (await glazeOn()) return mcpLink.ensure();
-  const s = await mcpLink.stop();
-  for (const c of [...mcpConns.keys()]) mcpClose(c, 'stopped');
-  return s;
+    mcpLink = (() => {
+      const local = { get: async (keys) => ({ ...await chrome.storage.local.get(keys), mcp: { on: await mcpOn() && await glazeOn() } }), set: (v) => chrome.storage.local.set(v) };
+      const link = GZ_AGENT_LINK.make({ runtime: chrome.runtime, permissions: chrome.permissions, storage: { local, session: chrome.storage.session }, browser: MCP_BROWSER });
+      link.attach({ open: mcpOpen, line: mcpLine, close: mcpClose });
+      return link;
+    })();
+  }
+  return mcpLink.ensure();
 };
 const mcpTrigger = () => { mcpEnsure().catch(() => {}); };
 chrome.runtime.onStartup.addListener(mcpTrigger);
@@ -2504,10 +2530,13 @@ chrome.storage.onChanged.addListener((c, area) => {
   if ((area === 'local' && c.mcp) || (area === 'sync' && c.enabled)) mcpTrigger();
   if (!mcpMade || !((area === 'local' && Object.keys(c).some((k) => ['mcp', 'mods', 'modDev', 'modsBlocklist', 'modRuntime'].includes(k) || k.startsWith('mod:'))) || (area === 'sync' && c.enabled))) return;
   clearTimeout(mcpListTimer);
-  mcpListTimer = setTimeout(() => mcpRead().then((s) => {
+  mcpListTimer = setTimeout(async () => {
+    if (!await mcpOn() || !await glazeOn()) return;
+    mcpRead().then((s) => {
     mcpState = s;
     for (const [n, k] of mcpConns) if (k.conn) { k.conn.changed(); mcpSave(n, k); }
-  }, () => {}), 500);
+    }, () => {});
+  }, 500);
 });
 // The approval window's Allow and Don't allow (lib/mcp/approve.js decide checks it is that window's tab).
 chrome.runtime.onMessage.addListener((m, s, reply) => {
@@ -2519,15 +2548,17 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const MCP_OFF = { state: 'off', at: null };
 const mcpConfig = async (m) => {
   const local = chrome.storage.local;
-  if (m.op === 'state') return { ok: true, on: (await local.get('mcp')).mcp?.on === true, link: mcpLink?.status() ?? MCP_OFF };
+  if (m.op === 'state') return { ok: true, on: await mcpOn(), link: mcpLink?.status() ?? MCP_OFF };
   if (m.op === 'set') {
     if (typeof m.on !== 'boolean') return { ok: false, error: 'args' };
+    await mcpConsent(m.on);
     await local.set({ mcp: { on: m.on } });
     return { ok: true, link: (await mcpEnsure()) ?? MCP_OFF };
   }
   if (m.op === 'activity') { const rows = (await local.get('mcpCalls')).mcpCalls; return { ok: true, rows: Array.isArray(rows) ? rows : [] }; }
   if (!['apps', 'grant', 'revoke', 'forget'].includes(m.op)) return { ok: false, error: 'op' };
-  const { grants } = mcpCore();
+  if (typeof GZ_MCP_GRANTS === 'undefined') grantFiles();
+  const grants = mcpGrants();
   if (m.op === 'apps') return { ok: true, apps: await grants.list() };
   if (m.op === 'grant') return { ok: !!await grants.grant(m.app, m.group, m.on) };
   return { ok: await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget()) };
@@ -2539,7 +2570,10 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 // At worker start: everything while it is on (the approval sweep and the kept connections run then), and the link.
-Promise.resolve().then(() => chrome.storage.local.get('mcp')).then(({ mcp }) => { if (mcp?.on === true) mcpCore(); return mcpEnsure(mcp?.on === true); }).catch(() => {});
+Promise.resolve().then(async () => {
+  if (await mcpOn() && await glazeOn()) mcpCore();
+  return mcpEnsure();
+}).catch(() => {});
 
 // The mod blocklist (lib/blocklist.js): a signed list of mods to stop, asked for at most daily and only while a code mod is
 // installed on Chrome and the setting is on. Nothing is scheduled: a page loading the mods runtime (glaze:load above) and the editor
