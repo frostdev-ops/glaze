@@ -191,6 +191,8 @@ const ok = (v, label) => { checks++; if (!v) { failures.push(label); console.err
     ok(loadedImage?.result.value, 'pop-up: the same-origin picture still loads');
     const d = await box('DIALOG');
     ok(d.left >= 0 && d.right <= 1440, 'pop-up: inside the viewport at 1440');
+    const [goBox, shutBox] = [await box('A', 'go'), await box('BUTTON', 'shut')];
+    ok(goBox && shutBox && shutBox.left >= goBox.right && Math.abs(d.right - shutBox.right) < 40, 'pop-up: Close sits bottom-right, Open in Canvas to its left');
     await shot('popup-light-1440');
     let trapped = true;
     for (const key of ['Tab', 'Shift+Tab']) for (let i = 0; i < 12; i++) {
@@ -228,7 +230,26 @@ const ok = (v, label) => { checks++; if (!v) { failures.push(label); console.err
       const b = await box('DIALOG');
       ok(b.left >= 0 && b.right <= width + 0.5 && b.bottom <= height + 0.5, `${name}: inside the viewport (${Math.round(b.left)}..${Math.round(b.right)} of ${width})`);
       ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: no sideways scroll`);
+      if (rtl) { // Blackboard's longer name, the widest footer the pop-up gets
+        const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+        const n = find(root, (x) => x.nodeName === 'A' && (x.attributes || []).some((v, i, a) => i % 2 === 0 && v === 'class' && a[i + 1] === 'go'));
+        const { object } = await cdp.send('DOM.resolveNode', { nodeId: n.nodeId });
+        await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, functionDeclaration: 'function() { this.textContent = "Open in Blackboard"; }' });
+      }
+      await page.keyboard.press('Shift+Tab');
+      ok(await focusedName() === 'button:Close', `${name}: Shift+Tab from the title reaches the footer's Close`);
+      const [g, c] = [await box('A', 'go'), await box('BUTTON', 'shut')];
+      const inside = (r) => r && r.left >= b.left - 0.5 && r.right <= b.right + 0.5 && r.bottom <= b.bottom + 0.5;
+      ok(inside(g) && inside(c), `${name}: Open and Close are whole inside the pop-up (${JSON.stringify([g, c].map((r) => r && [Math.round(r.left), Math.round(r.right), Math.round(r.bottom)]))})`);
+      ok(g && c && (c.top > g.top || (rtl ? c.right <= g.left : c.left >= g.right)), `${name}: Close after Open in Canvas${rtl ? ', mirrored' : ''}`);
       await shot(`popup-${name}`);
+      if (name === 'dark-1440') {
+        await page.mouse.click(c.left + c.width / 2, c.top + c.height / 2);
+        await page.waitForTimeout(300);
+        ok(!(await popupOpen()), `${name}: the footer's Close closes it`);
+        ok(await page.evaluate(() => document.activeElement?.matches('#gz-todo a[data-ann="announcement:7"]')), `${name}: focus back on the link after Close`);
+        continue;
+      }
       await page.keyboard.press('Escape');
       await page.waitForTimeout(200);
     }
