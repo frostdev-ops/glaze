@@ -394,7 +394,16 @@ const seeded = (key, wb = M.workbook()) => {
     check(await page.evaluate(() => document.activeElement?.id) === 'gx-fmt-code', 'Tab from a format preset reaches Custom format');
     await page.keyboard.press('Escape');
     await saved(key);
-
+    // A card's columns are its active sheet's widths as shares of the card, in the grid's pixels: a wide A gets its room.
+    const wideKey = 'doc:00000000-0000-4000-8000-00000000a1de', wide = M.workbook();
+    wide.sheets[0].colW.set(0, 24); wide.sheets[0].colW.set(2, 4);
+    await worker.evaluate(async (o) => { await chrome.storage.local.set(o); }, seeded(wideKey, wide));
+    await openHome();
+    const cardCols = await until(() => page.evaluate((k) => { const hs = [...document.querySelectorAll(`.gd-card[data-key="${k}"] .gx-thumb > .gx-th-h`)].slice(1, 7); return hs.length === 6 ? hs.map((e) => e.getBoundingClientRect().width) : null; }, wideKey), 'the wide card\'s columns');
+    const { px } = require(path.join(root, 'sheet-grid.js')), wantCols = [px.col(24), 64, px.col(4), 64, 64, 64];
+    const cardSum = cardCols.reduce((a, b) => a + b, 0), wantSum = wantCols.reduce((a, b) => a + b, 0);
+    check(cardCols.every((w, i) => Math.abs(w - (cardSum * wantCols[i]) / wantSum) <= 1.5),
+      `the card's columns follow the sheet's widths (card ${cardCols.map((w) => w.toFixed(1)).join(', ')}; grid ${wantCols.join(', ')})`);
     // The model's largest workbook still draws only a viewport of pooled cells, and scrolling reuses those elements.
     const bigKey = 'doc:00000000-0000-4000-8000-00000000b16b', big = M.workbook();
     for (let r = 0; r < 1000; r++) big.sheets[0].rows.set(r, new Map(Array.from({ length: 250 }, (_, c) => [c, { t: 'n', v: r * 250 + c }])));

@@ -347,6 +347,24 @@ test('the card is the record\'s 6×4 text; its text and measure come from the re
   assert.equal(k.text({}), '');
 });
 
+test('the card\'s columns take the active sheet\'s widths, in the grid\'s pixels, as shares of the card', async () => {
+  const { El } = require('./stand-in-dom.js'), { px } = require('../sheet-grid.js');
+  const doc = { createElement: (tag) => new El(tag, doc) };
+  const { DK } = load({ sheets: true }, { document: doc });
+  await DK.settled();
+  const wb = M.workbook(), second = M.sheet('Wide', 2);
+  wb.sheets[0].colW.set(0, 30); wb.sheets[0].colW.set(2, 4);
+  second.colW.set(1, 50);
+  wb.sheets.push(second);
+  const rec = (w) => ({ kind: 'sheet', book: JSON.parse(JSON.stringify(SD.split(w).book)), grid: SD.glance(w) });
+  const cols = (el) => el.style.gridTemplateColumns;
+  const shares = (ws) => `14px ${ws.map((w) => `minmax(0, ${w}fr)`).join(' ')}`;
+  assert.equal(cols(DK.get('sheet').thumb(rec(wb))), shares([px.col(30), 64, px.col(4), 64, 64, 64]), 'a wide A, a narrow C, the rest the grid\'s default');
+  wb.active = 1;
+  assert.equal(cols(DK.get('sheet').thumb(rec(wb))), shares([64, px.col(50), 64, 64, 64, 64]), 'the active sheet\'s widths, as the card\'s text is');
+  for (const r of [null, { kind: 'sheet', grid: [] }, rec(M.workbook())]) assert.equal(cols(DK.get('sheet').thumb(r)), undefined, 'even columns stay the stylesheet\'s');
+});
+
 // An assignment's frame (writer-kinds.js on the integration lane): the grid as the attempt's view, a brought spreadsheet as
 // the attempt's record (into: the paper kept as a version, parts the record had dropped), a blank start (empty).
 test('the assignment frame\'s hooks: view, into over a paper, empty', async () => {
