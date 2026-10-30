@@ -384,8 +384,8 @@ const run = async (family, list) => {
     return [c.id, x && x.t !== 'z' ? { t: x.t, v: x.v } : { t: 'n', v: 0 }];
   }));
 };
-// Excel caches an error named after Excel 2016 (#CALC!) as #VALUE! and shows its name, which is its answer.
-const excel = (g) => (g.t === 'e' && g.text !== g.v ? { t: 'e', v: g.text } : { t: g.t, v: g.v });
+// Excel stores #CALC! as #VALUE!. Only that known alias uses display text; other errors keep their cached identity.
+const excel = (g) => ({ t: g.t, v: g.t === 'e' && g.v === '#VALUE!' && g.text === '#CALC!' ? '#CALC!' : g.v });
 
 test("only Excel's #CALC! storage alias uses display text as its error", () => {
   assert.deepEqual(excel({ t: 'e', v: '#VALUE!', text: '#CALC!' }), { t: 'e', v: '#CALC!' });
