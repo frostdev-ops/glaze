@@ -619,6 +619,35 @@ var GZ_NOTES = globalThis.GZ_NOTES || (() => {
         }
         return finish({ ok: true, done, skipped });
       }
+      // Sync to Google Drive (background/drive-store.js), each a record another device wrote, its time already judged the later:
+      // 'put' { id, note: the index entry, html }: the note as it is there, a new revision here; 'drop' { id }: deleted for
+      // good there, gone here too (with its tombstone); 'folders' { folders }: the account's folders as they are there.
+      case 'put': {
+        if (!isId(m.id) || !m.note || typeof m.note !== 'object' || typeof m.html !== 'string') return { ok: false, error: 'bad' };
+        const { html, cut } = sanitized(m.html);
+        if (cut || html.length > LIMIT.body) return { ok: false, error: 'big' };
+        const had = idx.notes[m.id];
+        if (!had && count() >= LIMIT.notes) return finish({ ok: false, error: 'many' });
+        const entry = clean({ folders: idx.folders, notes: { [m.id]: { ...m.note, rev: 0 } } }).notes[m.id];
+        if (!entry) return { ok: false, error: 'bad' };
+        delete idx.gone[m.id];
+        await write(m.id, html, { ...entry, rev: (had?.rev || 0) + 1, ex: '', sid: '' }, had?.rev);
+        return finish({ ok: true });
+      }
+      case 'drop': {
+        if (!isId(m.id)) return { ok: false, error: 'bad' };
+        if (idx.notes[m.id]) purged.push(...purge(idx, [m.id], now)); else idx.gone[m.id] = now;
+        return finish({ ok: true });
+      }
+      case 'folders': {
+        if (!m.folders || typeof m.folders !== 'object') return { ok: false, error: 'bad' };
+        const folders = clean({ folders: m.folders }).folders;
+        if (Object.keys(folders).length > LIMIT.folders) return { ok: false, error: 'many' };
+        for (const id of Object.keys(idx.folders)) if (!folders[id]) idx.gone[id] = now;
+        idx.folders = folders;
+        for (const n of Object.values(idx.notes)) { if (n.folder && !folders[n.folder]) n.folder = ''; if (n.with && !folders[n.with]) delete n.with; }
+        return finish({ ok: true });
+      }
       default: return { ok: false, error: 'bad' };
     }
   };

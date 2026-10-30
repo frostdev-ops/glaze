@@ -3402,10 +3402,18 @@ const openDriveSync = () => {
       if (value === undefined) await chrome.storage[a].remove(key); else await chrome.storage[a].set({ [key]: value });
       return true;
     }) });
+  // Notes through their own queue's run, as the Notes app's changes go (BROKER.notesapp).
+  const notesArea = GZ_DRIVE_STORE.notesArea({ local: { get: (k) => chrome.storage.local.get(k), keys: () => keysOf('local') }, db: NOTES_DB,
+    run: (m) => turn(() => GZ_NOTES.run(m, { local: brokerArea('local') }, NOTES_DB)).catch(() => ({ ok: false, error: 'db' })) });
   driveStore = GZ_DRIVE_STORE.create({
-    area: areaOf, store: { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o), remove: (k) => chrome.storage.local.remove(k), keys: () => keysOf('local') },
+    area: (a) => (a === 'notes' ? notesArea : areaOf(a)), store: { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o), remove: (k) => chrome.storage.local.remove(k), keys: () => keysOf('local') },
     hash: async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map((b) => b.toString(16).padStart(2, '0')).join(''),
-    join: (cat, key, value) => { brokerIn('backup'); return turn(() => GZ_DRIVE_STORE.join(cat, key, value, { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o) })); },
+    join: (cat, key, value) => {
+      brokerIn('backup');
+      const local = { get: (k) => chrome.storage.local.get(k), set: (o) => chrome.storage.local.set(o) };
+      // Notes' joins write through their own queue's run; the rest in one turn of the broker's.
+      return ['notes', 'noteFolders', 'noteFiles'].includes(cat) ? GZ_DRIVE_STORE.join(cat, key, value, local, notesArea) : turn(() => GZ_DRIVE_STORE.join(cat, key, value, local, notesArea));
+    },
     // The daily snapshot: Back up…'s zip as Settings makes it (background/backup.js pack), its Settings, tasks, pet, records and
     // documents with their files. Notes and share keys stay in Settings' own Back up… for now.
     snapshot: async () => {
@@ -3517,7 +3525,7 @@ chrome.storage.onChanged.addListener((c, area) => {
     const sync = openDriveSync();
     for (const k of keys) await sync.touched(k.slice(12));
     // Everything else: each key's time of change, and a push once saving pauses.
-    if (other && driveStore.catOf && Object.keys(c).some((k) => driveStore.catOf(area, k))) { await driveStore.stamp(c, area); await sync.nudge(); }
+    if (other && Object.keys(c).some((k) => driveStore.watches(area, k))) { await driveStore.stamp(c, area); await sync.nudge(); }
   }).catch((e) => console.warn('Sync to Google Drive:', e));
 });
 // Connecting Drive turns Sync on, unless the student turned it off: it makes the Glaze folder and fills it, or restores
