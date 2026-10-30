@@ -663,6 +663,30 @@ test('write: cell metadata only where its part is kept; rich values only on the 
   assert.doesNotMatch(q['xl/worksheets/sheet1.xml'], / cm=| vm=/, 'without metadata.xml the indices would point at nothing');
 });
 
+test('write: a formula typed as Excel 365 takes it is an array formula over its own cell, cm where Excel\'s XLDAPR is kept', async () => {
+  const typed = async (wb) => {
+    const e = C.engine(wb), sh = wb.sheets[0];
+    for (const [r, v] of [10, 20, 30, 40, 50].entries()) e.edit(sh.id, 900 + r, 0, String(v));
+    e.edit(sh.id, 900, 2, '=SUM((A901:A905>20)*A901:A905)');
+    e.edit(sh.id, 901, 2, '=SUM(A901:A905)');
+    // A fill copies the cell, its range and all: an array over one cell is still its own.
+    M.apply(wb, { op: 'set', sheet: sh.id, r: 902, c: 2, cell: { ...M.cell(sh, 900, 2), f: 'SUM((A903:A907>20)*A903:A907)' } });
+    const bytes = await X.write(wb, { date: DATE, engine: e });
+    return { ...(await parts(bytes)), bytes };
+  };
+  const made = await typed(M.workbook()), fresh = made['xl/worksheets/sheet1.xml'];
+  assert.match(fresh, /<c r="C901"><f t="array" ref="C901">SUM\(\(A901:A905&gt;20\)\*A901:A905\)<\/f><v>120<\/v><\/c>/, 'a legacy array where no metadata part says dynamic');
+  assert.match(fresh, /<c r="C902"><f>SUM\(A901:A905\)<\/f><v>150<\/v><\/c>/);
+  assert.match(fresh, /<c r="C903"><f t="array" ref="C903">/);
+  const back = await X.read(made.bytes);
+  assert.equal(at(back, 'Sheet1', 'C901').a, 'C901');
+  M.cell(back.sheets[0], 900, 0).v = 25;
+  C.engine(back).recalc();
+  assert.equal(at(back, 'Sheet1', 'C901').v, 145, 'read back, it is still evaluated whole');
+  const excel = (await typed(await X.read(fs.readFileSync(path.join(DIR, 'lookup.xlsx')))))['xl/worksheets/sheet1.xml'];
+  assert.match(excel, /<c r="C901" cm="1"><f t="array" ref="C901">/, 'dynamic, as Excel 365 saves it');
+});
+
 // ── CSV and TSV ───────────────────────────────────────────────────────────────────────────────────────────────────────
 const sheetOf = (wb) => { const sh = wb.sheets[0]; const out = {}; for (const [r, row] of sh.rows) for (const [c, x] of row) out[M.cellName(r, c)] = x; return out; };
 

@@ -89,6 +89,10 @@ test('ISFORMULA and FORMULATEXT read the cell\'s formula', () => {
   assert.deepEqual(e.status.circular, []);
   e.edit(e.wb.sheets[0].id, 2, 0, '=1+1');
   assert.equal(calc(e, 'FORMULATEXT(A3)'), '=1+1');
+  // A dynamic array (an Excel 365 file's, or a formula typed here that takes a range whole) shows as typed, no braces.
+  e.edit(e.wb.sheets[0].id, 9, 5, '=SUM(A2:A5*2)');
+  assert.equal(M.cell(e.wb.sheets[0], 9, 5).cm, '1');
+  assert.equal(calc(e, 'FORMULATEXT(F10)'), '=SUM(A2:A5*2)');
 });
 
 test('N, T, TYPE, ERROR.TYPE, NA', () => {

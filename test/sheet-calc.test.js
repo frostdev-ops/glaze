@@ -214,6 +214,27 @@ test('an array formula evaluates its ranges whole and fills its range', () => {
   assert.equal(v('E1'), 1);
 });
 
+test('a typed formula that reads a range where one value belongs is evaluated whole, as Excel 365 does', () => {
+  const e = book({ A1: 'a', A2: 'b', A3: 'a', A4: 'c', A5: 'a', B1: 10, B2: 20, B3: 30, B4: 40, B5: 50 });
+  const sh = e.wb.sheets[0];
+  const put = (ref, text) => { const res = e.edit(sh.id, ...M.cellPosition(ref), text); assert.ok(!res.error, ref); };
+  const at = (ref) => M.cell(sh, ...M.cellPosition(ref));
+  put('C1', '=SUM((B1:B5>20)*B1:B5)'); put('C3', '=SUM(--(B1:B5>20))'); put('C4', '=MAX(IF(A1:A5="a",B1:B5))'); put('C5', '=B1:B5');
+  put('C6', '=AVERAGE(IF(B1:B5>20,B1:B5))'); put('C7', '=SUM(IF(A1:A5="a",B1:B5))'); put('C8', '=Total*2');
+  put('D1', '=SUM(B1:B5)'); put('D2', '=B2*2'); put('D3', '=@B1:B5'); put('D4', '=SUMIF(A1:A5,"a",B1:B5)'); put('D5', '=COUNTIF(B1:B5,">20")');
+  // Row 3 lies inside B1:B5: intersecting there would quietly give 1 (C3) where Excel 365 counts 3.
+  assert.deepEqual(['C1', 'C3', 'C4', 'C5', 'C6', 'C7'].map((x) => val(e, x)), [120, 3, 50, 10, 40, 90]);
+  assert.deepEqual(at('C1'), { t: 'n', v: 120, f: 'SUM((B1:B5>20)*B1:B5)', a: 'C1', cm: '1' }, 'kept as a dynamic array over its own cell');
+  assert.deepEqual(['D1', 'D2', 'D3', 'D4', 'D5'].map((x) => val(e, x)), [150, 40, 30, 90, 3], 'explicit @ and whole-range arguments intersect nothing new');
+  for (const x of ['D1', 'D2', 'D3', 'D4', 'D5']) assert.equal(at(x).a, undefined, `${x} stays a plain formula`);
+  e.edit(sh.id, 1, 1, '25');
+  assert.equal(val(e, 'C1'), 145, 'recalculated whole');
+  e.apply({ op: 'name', name: 'Total', ref: 'Sheet1!$B$1:$B$5' });
+  assert.equal(val(e, 'C8'), '#VALUE!', 'typed before the name meant a range, it intersects (row 8 is outside it)');
+  put('C8', '=Total*2');
+  assert.deepEqual([val(e, 'C8'), at('C8').a], [20, 'C8'], 'a name for a range is a range');
+});
+
 test('a dynamic array\'s formula is edited at its first cell, as Excel 365 allows; a legacy array\'s is refused', () => {
   const wb = M.workbook();
   const sh = wb.sheets[0];
