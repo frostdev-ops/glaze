@@ -90,7 +90,7 @@ test('assignment_read on Canvas: the assignment through its tab, its text, its f
   assert.deepEqual(r.rubric.criteria.map((c) => [c.label, c.points, c.cells.map((x) => x.value)]), [['Method', 10, [10, 5, 0]], ['Analysis', 10, [10, 5, 0]]]);
   assert.equal(r.rubric.criteria[0].cells[0].detail, 'Every step and amount.');
   assert.ok(!/"(score|result|comment|possible)":/.test(JSON.stringify(r)), 'no result');
-  assert.deepEqual(tab.page.asked.map((x) => new URL(x.url).pathname), ['/api/v1/courses/25/assignments/171'], 'no submission is read');
+  assert.deepEqual(tab.page.asked.map((x) => new URL(x.url).pathname), ['/api/v1/users/self/profile', '/api/v1/courses/25/assignments/171'], 'identity and assignment only, no submission is read');
   // Kept, with its time, under its own key, and first in the index.
   const key = `mcpRubric:${A}/25/171`;
   assert.equal(s[key].at, C.NOW);
@@ -207,4 +207,32 @@ test('cancelling an assignment read before delivery keeps nothing', async () => 
   const t = reg({ tabs: { run: async () => { ac.abort(); return { ok: true, title: 'Late' }; } } }).get('assignment_read');
   await assert.rejects(t.run({ course: '25', assignment: '171' }, ctx(A, { signal: ac.signal })));
   assert.deepEqual(s, {});
+});
+
+test('rubric purge clears its index and blocks a read already in flight from restoring private data', async () => {
+  const one = `mcpRubric:${A}/25/171`, other = `mcpRubric:${C.CANVAS}/6/25/171`;
+  const { s, local, ctx } = store({ [one]: { at: C.NOW }, [other]: { at: C.NOW }, mcpRubrics: [one, other], unrelated: true });
+  assert.equal(typeof AS.clear, 'function');
+  await AS.clear({ local }, A);
+  assert.equal(s[one], undefined);
+  assert.deepEqual(s.mcpRubrics, [other]);
+  let deliver;
+  const t = reg({ tabs: { run: () => new Promise((res) => { deliver = res; }) } }).get('assignment_read');
+  const pending = t.run({ course: '25', assignment: '171' }, ctx(A));
+  await AS.clear({ local });
+  deliver({ ok: true, title: 'Private' });
+  await pending;
+  assert.deepEqual(s, { unrelated: true });
+});
+
+test('worker wiring purges rubric data on agent off, Forget all apps and site removal', async () => {
+  for (const message of [{ type: 'glaze:mcp-config', op: 'set', on: false }, { type: 'glaze:mcp-config', op: 'forget' }, { type: 'glaze:sites', op: 'remove', origin: C.CANVAS }]) {
+    const key = `mcpRubric:${A}/25/171`, env = await H.boot({ local: { [key]: { at: C.NOW }, mcpRubrics: [key] } });
+    try {
+      const r = await env.w.send(message, { id: 'glaze', tab: { id: 11 }, frameId: 0, url: 'chrome-extension://x/options.html' });
+      assert.equal(r.ok, true, JSON.stringify(r));
+      assert.equal(env.store.local[key], undefined, JSON.stringify(message));
+      assert.ok(!env.store.local.mcpRubrics?.includes(key));
+    } finally { await H.off(env); }
+  }
 });
