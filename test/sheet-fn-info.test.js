@@ -121,7 +121,7 @@ test('CELL: address, col, row, contents, type and format; the rest and INFO are 
   const e = book(cells, { sheets: ['Sheet1', 'Sheet 2'], styles: formats.map(([fmt]) => ({ fmt })) });
   cases(e, [
     ['CELL("row",B2)', 2], ['CELL("contents",B3)', 'Hello world!'], ['CELL("type",B4)', 'v'], ['CELL("type",B3)', 'l'], ['CELL("type",Z1)', 'b'],
-    ['CELL("type",B5)', 'v'], ['CELL("type",B6)', 'v'], ['CELL("address",B2)', '$B$2'], ['CELL("address",B2:D9)', '$B$2'], ['CELL("col",D9)', 4], ['CELL("row",B2:D9)', 2],
+    ['CELL("type",B5)', 'l'], ['CELL("type",B6)', 'l'], ['CELL("address",B2)', '$B$2'], ['CELL("address",B2:D9)', '$B$2'], ['CELL("col",D9)', 4], ['CELL("row",B2:D9)', 2],
     ['CELL("contents",B2:B4)', 75], ['CELL("ROW",B2)', 2], ['CELL("format",Z1)', 'G'], ['CELL("row")', 100], ['CELL("col")', 26], ['CELL("address")', '$Z$100'],
     ['CELL("color",B2)', '#VALUE!'], ['CELL("filename",B2)', '#VALUE!'], ['CELL("width",B2)', '#VALUE!'], ['CELL("prefix",B2)', '#VALUE!'],
     ['CELL("protect",B2)', '#VALUE!'], ['CELL("parentheses",B2)', '#VALUE!'], ['CELL("nonsense",B2)', '#VALUE!'], ['CELL("row",5)', '#VALUE!'],
@@ -138,7 +138,7 @@ test('SHEET and SHEETS number sheets in the workbook\'s order', () => {
   cases(e, [
     ['SHEET(QSalesByRegion)', 2], ['SHEET(Hi_Temps)', '#NAME?'], ['SHEET("Stuff")', 3], ['SHEET("stuff")', 3], ['SHEET("badSheetName")', '#N/A'], ['SHEET(Sheet1!#REF!)', '#REF!'],
     ['SHEET()', 1], ['SHEET(Stuff!B2)', 3], ['SHEET(Sales:Stuff!A1)', 2],
-    ['SHEETS()', 3], ['SHEETS(My3DRef)', 2], ['SHEETS(Sales!A1)', 1], ['SHEETS(Sheet1:Stuff!A1:B2)', 3], ['SHEETS((A1,B2))', 1], ['SHEETS(5)', '#REF!'],
+    ['SHEETS()', 3], ['SHEETS(My3DRef)', 2], ['SHEETS(Sales!A1)', 1], ['SHEETS(Sheet1:Stuff!A1:B2)', 3], ['SHEETS((A1,B2))', 1], ['SHEETS(5)', '#N/A'],
   ]);
   cases(e, [['SHEET()', 3], ['SHEET(Hi_Temps)', 3]], 'Stuff!B1');
   assert.deepEqual([val(e, 'A1'), val(e, 'Stuff!A1')], [1, 3]);
@@ -160,4 +160,23 @@ test('ROW, ROWS, COLUMN, COLUMNS', () => {
   assert.deepEqual(['E1', 'E2', 'E3'].map((r) => val(e, r)), [1, 2, 3]);
   assert.deepEqual(['F1', 'F2'].map((r) => val(e, r)), [1, 1], 'ROW of a whole column in an array formula');
   assert.equal(val(e, 'G1'), 2, 'a whole column\'s rows pair with its values, both stopping at the used range');
+});
+
+// Excel 16.114.1: legacy formulas intersect references; an array formula keeps their array type.
+test('TYPE observes implicit intersection and array-formula context', () => {
+  const e = book({ A1: 1, A2: 'text', B1: true, C1: { f: 'TYPE(A1:A2)', a: 'C1' } });
+  assert.equal(calc(e, 'TYPE(A1:A2)', 'Z2'), 2);
+  assert.equal(calc(e, 'TYPE(A1:A2)', 'Z100'), 16);
+  assert.equal(calc(e, 'TYPE((A1,B1))'), 16);
+  assert.equal(calc(e, 'TYPE({1,2})'), 64);
+  assert.equal(val(e, 'C1'), 64);
+});
+
+test('CELL uses the resulting text type and returns numeric zero for blank contents', () => {
+  const e = book({ A1: '="text"', A2: '=""' });
+  cases(e, [
+    ['CELL("type",A1)', 'l'], ['CELL("type",A2)', 'l'],
+    ['ISNUMBER(CELL("contents",Z1))', true], ['ISBLANK(CELL("contents",Z1))', false],
+    ['SHEETS(TRUE)', '#N/A'], ['SHEETS("Sheet1")', '#N/A'], ['SHEETS({1,2})', '#N/A'],
+  ]);
 });
