@@ -36,7 +36,7 @@ Announcements open in a Glaze pop-up from Better To Do, Ctrl+K or the sites' own
 Moodle Boost gets the same Looks, course totals when available, a due list from Timeline and keyboard shortcuts.
 
 GLAZE WRITER AND DOCUMENTS
-On Blackboard Ultra, Glaze Writer replaces the editor in discussions, journals, messages, assignments and tests. Spelling and grammar checks run on your device; tests get proofing only. Full writer adds pages in MLA, APA, Chicago or your own format, citations, footnotes, versions and .docx files. Documents keeps papers and documents together; deleted items stay in Trash for 30 days. AI is optional and off until set up. Tab completion only finishes the current sentence; Feedback assesses your work. Glaze never drafts.
+On Blackboard Ultra, Glaze Writer replaces the editor in discussions, journals, messages, assignments and tests. Spelling and grammar checks run on your device; tests get proofing only. Full writer adds pages in MLA, APA, Chicago or your own format, with citations, footnotes, versions and .docx files. Documents keeps papers and documents together; deleted items stay in Trash for 30 days. AI is optional and off until set up. Tab completion only finishes the current sentence; Feedback assesses your work. Glaze never drafts.
 
 PRIVACY AND CONTROL
 Glaze is free, with no ads, analytics or Glaze account. Glaze settings, notes, tasks, coursework records, papers and documents stay on your device. Optional share sessions start only when you create, join or resume one, and encrypt content before it goes through your chosen relay. Fonts, media, external players and AI providers you choose, and citation lookups you click, can make network requests, as the privacy policy explains. Glaze does not collect or sell your data.
