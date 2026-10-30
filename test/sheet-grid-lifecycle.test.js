@@ -101,3 +101,12 @@ test('saving keeps dirty cells when version compression fails and retries them l
   assert.equal(await f.view.save(), true);
   assert.equal((await SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY)).wb.sheets[0].rows.get(0).get(0).v, 'keep me');
 });
+
+test('keyboard movement skips hidden rows and columns in both directions', () => {
+  const wb = M.workbook(); wb.sheets[0].hidden.rows.add(1); wb.sheets[0].hidden.cols.add(1);
+  const f = frame({ wb });
+  f.key('ArrowDown'); assert.equal(f.el('gx-name').value, 'A3');
+  f.key('ArrowUp'); assert.equal(f.el('gx-name').value, 'A1');
+  f.key('Tab'); assert.equal(f.el('gx-name').value, 'C1');
+  f.key('Tab', { shiftKey: true }); assert.equal(f.el('gx-name').value, 'A1');
+});
