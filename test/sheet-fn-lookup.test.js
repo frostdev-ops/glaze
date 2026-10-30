@@ -387,3 +387,21 @@ test('CHOOSE caps the combined dimensions before allocating its result', () => {
     ['ROWS(CHOOSE({1,2},SEQUENCE(250),SEQUENCE(1,1000)))', 250],
   ]);
 });
+
+test('INDIRECT resolves defined names in R1C1 mode and preserves Excel space rules', () => {
+  const e = book({ A1: 42 }, { names: [{ name: 'Thing', ref: 'Sheet1!$A$1' }] });
+  cases(e, [
+    ['INDIRECT("Thing",FALSE)', 42], ['INDIRECT("Sheet1!Thing",FALSE)', 42], ['INDIRECT("Thing ",FALSE)', 42],
+    ['INDIRECT("R1C1 ",FALSE)', 42], ['INDIRECT("A1 ")', 42],
+    ['INDIRECT(" A1 ")', '#REF!'], ['INDIRECT(" Thing",FALSE)', '#REF!'], ['INDIRECT(" R1C1 ",FALSE)', '#REF!'],
+    ['INDIRECT("[missing.xlsx]Sheet1!Thing",FALSE)', '#REF!'], ['INDIRECT("A1",FALSE)', '#REF!'],
+  ]);
+});
+
+test('X binary searches place blanks after values instead of treating them as zero', () => {
+  const e = book({ A1: 1, A2: 2, A3: 3, B1: 10, B2: 20, B3: 30, D1: 'a', D3: 'c', E1: false, E3: true, Z99: 0 });
+  cases(e, [
+    ['XMATCH(2,A:A,0,2)', 2], ['XMATCH(2,A1:A100,0,2)', 2], ['XLOOKUP(2,A:A,B:B,,0,2)', 20],
+    ['XMATCH("b",D1:D3,-1,2)', 1], ['XMATCH("b",D1:D3,1,2)', 2], ['XMATCH(TRUE,E1:E3,0,2)', '#N/A'],
+  ]);
+});
