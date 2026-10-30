@@ -365,6 +365,21 @@ test('bounds: slides, shapes, group depth, table cells, text, part size, the arc
   await assert.rejects(P.read(new TextEncoder().encode('%PDF-1.7')), /not a zip/);
 });
 
+test('paragraphs, runs and each part\'s elements are bounded: kilobytes of deflated <a:p/> stay small', async () => {
+  const empties = (tag, n) => fixture('ppt/slides/slide3.xml').replace('<a:p>', `${tag.repeat(n)}<a:p>`);
+  const paras = await P.read(pack({ 'ppt/slides/slide3.xml': empties('<a:p/>', 5000) }), { limits: { paragraphs: 300 } });
+  assert.equal(paras.slides.flatMap(all).reduce((n, x) => n + (x.text?.paragraphs.length || 0) + (x.rows || []).flatMap((r) => r.cells).reduce((m, c) => m + c.text.paragraphs.length, 0), 0), 300);
+  assert.ok(paras.cut.text > 0);
+  const runs = await P.read(pack({ 'ppt/slides/slide3.xml': fixture('ppt/slides/slide3.xml').replace('<a:p>', `<a:p>${'<a:r><a:t/></a:r>'.repeat(5000)}`) }), { limits: { runs: 300 } });
+  assert.equal(runs.slides.flatMap(all).flatMap((x) => [x.text, ...(x.rows || []).flatMap((r) => r.cells.map((c) => c.text))]).filter(Boolean).reduce((n, t) => n + t.paragraphs.reduce((m, p) => m + p.runs.length, 0), 0), 300);
+  const nodes = await P.read(pack({ 'ppt/slides/slide3.xml': empties('<a:p/>', 5000) }), { limits: { nodes: 4000 } });
+  assert.equal(nodes.slides[2].broken, true, 'the slide past the element cap is unreadable');
+  assert.equal(nodes.slides[1].title, 'Membrane transport', 'the rest of the deck opens');
+  const cpu = process.cpuUsage(), big = await P.read(pack({ 'ppt/slides/slide3.xml': empties('<a:p/>', 1 << 20) })), used = process.cpuUsage(cpu);
+  assert.equal(big.slides[2].broken, true);
+  assert.ok(used.user + used.system < 2e6, `${used.user + used.system} microseconds of CPU`);
+});
+
 test('missing media parts become picture boxes and are not listed as drawable media', async () => {
   const bytes = pack({ 'ppt/media/image1.png': null, 'ppt/media/image3.svg': null });
   const d = await P.read(bytes);
