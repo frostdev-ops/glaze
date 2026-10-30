@@ -13,7 +13,9 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
     '.docx': { kind: 'paper', mime: MIME }, '.pdf': { kind: 'pdf', mime: 'application/pdf' },
     '.pptx': { kind: 'slides', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
     '.ppsx': { kind: 'slides', mime: 'application/vnd.openxmlformats-officedocument.presentationml.slideshow' },
-    '.xlsx': { kind: 'sheet', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }, '.csv': { kind: 'sheet', mime: 'text/csv' },
+    '.xlsx': { kind: 'sheet', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    // A workbook that keeps its macros (lib/sheet-xlsx.js extension) goes as Excel's macro-enabled file.
+    '.xlsm': { kind: 'sheet', mime: 'application/vnd.ms-excel.sheet.macroEnabled.12' }, '.csv': { kind: 'sheet', mime: 'text/csv' },
     '.tsv': { kind: 'sheet', mime: 'text/tab-separated-values' },
   });
   const extOf = (name) => /(\.[^./\\]+)$/.exec(typeof name === 'string' ? name : '')?.[1].toLowerCase() || '';
@@ -26,15 +28,17 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   // "Essay 2: Memory in Beloved" → "Essay 2": the title before its subtitle, as the mockup's sheet and file name have it.
   const shortTitle = (title) => { const t = squash(title), main = squash(t.split(/:\s/)[0]); return main || t; };
   // Each word capitalized and run together, letters and digits only: "Essay 2" → "Essay2".
-  const word = (s) => squash(s).split(' ').map((w) => w.replace(/[^\p{L}\p{N}]+/gu, '')).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('');
+  const word = (s) => squash(s).normalize('NFC').split(' ').map((w) => w.replace(/[^\p{L}\p{N}\p{M}]+/gu, '')).filter(Boolean).map((w) => { const [first, ...rest] = w; return first.toUpperCase() + rest.join(''); }).join('');
+  // Cap both Unicode characters and UTF-8 bytes without cutting a surrogate pair. Leave room for suffixes and extension.
+  const fit = (s, chars = 101, bytes = 240) => { let out = '', used = 0; for (const c of s) { const n = encodeURIComponent(c).replace(/%[0-9a-f]{2}|./gi, 'x').length; if ([...out].length >= chars || used + n > bytes) break; out += c; used += n; } return out; };
   // Lastname_Title and the kind's extension (Rivera_Essay2.docx, Rivera_FieldTrip.pdf); "Paper.docx" when neither is known.
   const fileName = ({ surname = '', title = '', fallback = 'Paper', ext = '.docx' } = {}) => {
-    const parts = [word(surname).slice(0, 40), word(shortTitle(title)).slice(0, 60)].filter(Boolean);
+    const parts = [fit(word(surname), 40), fit(word(shortTitle(title)), 60)].filter(Boolean);
     const e = String(ext).toLowerCase();
-    return `${parts.length ? parts.join('_') : word(fallback) || 'Paper'}${Object.hasOwn(EXT, e) ? e : '.docx'}`;
+    return `${fit(parts.length ? parts.join('_') : word(fallback) || 'Paper')}${Object.hasOwn(EXT, e) ? e : '.docx'}`;
   };
   // A built file's name: letters, digits and _, then an extension of the kind it is (a paper's when none is said).
-  const safeName = (n, kind = 'paper') => typeof n === 'string' && /^[\p{L}\p{N}_]{1,101}\.[a-z]{3,4}$/u.test(n) && kindOf(n) === kind;
+  const safeName = (n, kind = 'paper') => typeof n === 'string' && /^[\p{L}\p{N}\p{M}_]{1,101}\.[a-z]{3,4}$/u.test(n) && kindOf(n) === kind;
   const paperKey = (p = {}) => /^[a-z0-9.-]{1,253}(:\d{1,5})?$/i.test(p.school || '') && [p.user, p.course, p.content].every((id) => /^_\d+_\d+$/.test(id || '')) ?
     `${p.school.toLowerCase()}|${p.user}|${p.course}|${p.content}` : null;
   const MAX_FILE = 50e6;
@@ -42,6 +46,36 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
     !f || !asIsName(f.name) || !Number.isSafeInteger(f.size) || f.size <= 0 || typeof f.type !== 'string' || f.type.length > 200 ? 'That file could not be read.' : null;
   const fileBytes = (f, bytes) => bytes instanceof ArrayBuffer && bytes.byteLength === f.size && !fileError(f);
   const kb = (bytes) => Math.max(1, Math.round((Number(bytes) || 0) / 1024));
+
+  // ---- the hand-in: a file from any source ({ name, mime, bytes }: a document of Documents exported by its kind's file(),
+  // a Drive file) attached beside the attempt's own file, each one at most Blackboard's 50 MB, at most MAX_ATTACH of them.
+  const MAX_ATTACH = 10;
+  // → null, or why not: 'large' (over 50 MB), 'file' (no bytes, a name a file can't have, no type).
+  const handInError = (f) => {
+    const n = f?.bytes instanceof ArrayBuffer || ArrayBuffer.isView(f?.bytes) ? f.bytes.byteLength : -1;
+    if (n > MAX_FILE) return 'large';
+    return n > 0 && asIsName(f.name) && typeof f.mime === 'string' && f.mime.length <= 200 ? null : 'file';
+  };
+  // A document's file name: Lastname_Title and its kind's extension, as the attempt's own file is named (a file of a type
+  // no kind has keeps its own name), made unique against the names taken (any case) with _2, _3…
+  const attachName = ({ surname = '', title = '', fallback = 'Document', name = '', taken = [] } = {}) => {
+    const ext = extOf(name), known = Object.hasOwn(EXT, ext);
+    const base = known ? fileName({ surname, title, fallback, ext }) : asIsName(name) ? name : fileName({ surname, title, fallback });
+    const e = extOf(base), stem = e ? base.slice(0, -e.length) : base, used = new Set([...taken].map((x) => String(x).toLowerCase()));
+    if (!used.has(base.toLowerCase())) return base;
+    for (let i = 2; ; i++) {
+      const tail = `_${i}`, n = `${fit(stem, (known ? 101 : 255 - e.length) - tail.length, 255 - e.length - tail.length)}${tail}${e}`;
+      if (!used.has(n.toLowerCase())) return n;
+    }
+  };
+  // The note to the instructor with the attached files named after it, on a line of their own (line: the words, as the
+  // sheet's language says them, with {names}).
+  const noteWith = (note, names = [], line = 'Attached: {names}') => {
+    const n = String(note ?? '').replace(/\s+$/, ''), list = [...names].filter(Boolean).join(', ');
+    return list ? [n, String(line).replace('{names}', () => list)].filter(Boolean).join('\n\n') : n;
+  };
+  // What the note sent to the page may hold: the student's 4,000 characters and the files' names.
+  const MAX_NOTE = 4000 + MAX_ATTACH * 260;
 
   // ---- a file the student brings (writer-import.js): a .docx asks Open in Writer or Submit as is, and a file of a kind
   // that opens in the frame (kinds: its switch on, its viewer here; writer-kinds.js) Open in Glaze or Submit as is; any
@@ -84,9 +118,14 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   const listings = (area, name, visible = () => true) => {
     if (!area || !name) return [];
     const stem = String(name).replace(/\.[^.]+$/, '');
-    const match = (s) => s === name || s === stem;
+    const match = (e) => {
+      const title = String(e.getAttribute('title') || '').trim(), text = String(e.textContent || '').trim();
+      // Ultra can shorten the visible name; a full title with another extension must never prove this file.
+      if (extOf(title)) return title === name;
+      return [text, title].some((s) => s === name || s === stem);
+    };
     return [...area.querySelectorAll(TAGS)].filter((e) => !e.firstElementChild && !e.closest('.ql-container') && !e.closest('[aria-live]') && !e.closest('[role="status"]') &&
-      [e.textContent, e.getAttribute('title')].some((s) => match(String(s || '').trim())) && visible(e));
+      match(e) && visible(e));
   };
   const listed = (area, name, visible) => listings(area, name, visible).length;
 
@@ -121,7 +160,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   };
   const may = (s, name) => step(s) === name;
 
-  return { MIME, EXT, SWITCH, switched, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
+  return { MAX_ATTACH, handInError, attachName, noteWith, MAX_NOTE, MIME, EXT, SWITCH, switched, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SUBMIT_LIB;
 GZ_WRITER_SUBMIT_LIB;

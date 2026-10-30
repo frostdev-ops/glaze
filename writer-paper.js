@@ -792,12 +792,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const ours = async (p) => { writing++; try { return await p; } finally { if (!--writing && missed) { missed = false; adopt().catch((e) => console.error(e)); } } };
     // base: the revision what's saved was typed on, when it isn't the one this editor last read (a recovered copy).
     let saves = Promise.resolve(), replacing = null;
-    const save = (reason = 'auto', base) => {
-      const next = saves.then(() => saveNow(reason, base));
+    const save = (reason = 'auto', base, attached = null) => {
+      const next = saves.then(() => saveNow(reason, base, attached));
       saves = next.catch(() => {});
       return next;
     };
-    const saveNow = async (reason = 'auto', base) => {
+    const saveNow = async (reason = 'auto', base, attached = null) => {
       // Imports write the replacement before showing it: a visibility/pagehide autosave must read the new editor,
       // never queue the outgoing document behind that write. The import's own pre-save runs before this barrier.
       if (replacing) await replacing;
@@ -809,7 +809,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       emergency();
       setState('Saving…');
       try {
-        const rec = record(), r = await ours(store.save(key, rec, { reason, base: Number.isSafeInteger(base) ? base : paper?.revision ?? 0, rename: nameAt > nameSaved })); paper = r.paper;
+        const rec = record(), r = await ours(store.save(key, rec, { reason, base: Number.isSafeInteger(base) ? base : paper?.revision ?? 0, rename: nameAt > nameSaved, ...(attached && { attached }) })); paper = r.paper;
         nameSaved = nameAt;
         if (nameAt === nameEdits) { naming(paper); head(); }
         await keepPictures(rec.doc);
@@ -1490,32 +1490,62 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (leaving.length) Promise.allSettled(leaving.map((a) => a.finished)).then(() => s.layer.remove());
       else s.layer.remove();
       for (const [el, was] of s.inert) el.inert = was;
-      if (back) opener().focus();
+      s.done?.(null);
+      if (back) (s.back?.isConnected ? s.back : opener()).focus();
     };
     // What a sheet goes back to: the status bar's Versions, or the compact box's ⋯.
     const opener = () => (compact && document.getElementById('more')) || versionsB;
+    // Attach from Documents (the submit sheet's, attach): every kind of document, each with its thumbnail; the one picked
+    // is what it resolves to (its index row), null when the sheet closes without one. back: where focus goes after.
+    const KINDS = { paper: 'Document', sheet: 'Spreadsheet', pdf: 'PDF', slides: 'Slides' };
+    const thumbOf = async (rec) => {
+      const kind = rec.kind || 'paper';
+      if (kind === 'paper') { await need(['lib/writer-thumb.js']); return rec.doc ? GZ_WRITER_THUMB.render(GZ_WRITER_THUMB.firstPage(rec.doc), rec.format, { scale: 0.25 }) : null; }
+      const k = await globalThis.GZ_WRITER_KINDS?.kind(kind);
+      return k?.thumb?.(rec) || null;
+    };
+    // The thumbnails, a dozen records at a time, while the same sheet is open.
+    const drawThumbs = async (docs, pics, turn) => {
+      for (let i = 0; i < docs.length && turn === docsTurn; i += 12) {
+        const batch = docs.slice(i, i + 12), got = await chrome.storage.local.get(batch.map((r) => `writerPaper:${r.key}`)).catch(() => ({}));
+        for (let j = 0; j < batch.length && turn === docsTurn; j++) {
+          const rec = got[`writerPaper:${batch[j].key}`];
+          if (!rec) continue;
+          try { const el = await thumbOf(rec); if (el && turn === docsTurn) pics[i + j].replaceChildren(el); } catch (e) { console.error(e); }
+        }
+      }
+    };
     // Each row: its title (the one given, else its first line as record() keeps it), format, words and date.
-    const fromDocsSheet = async () => {
+    const fromDocsSheet = async ({ attach = false, back = null } = {}) => {
       closeDocs(false);
       const turn = docsTurn;
       let docs;
-      try { docs = (await store.list()).filter((r) => PA.local(r.key) && r.kind === 'paper' && !PA.trashed(r)).sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
-      catch (e) { console.error(e); if (turn === docsTurn && root.isConnected && current === api) { toast(t('Not saved. Try again in a moment.')); opener().focus(); } return; }
-      if (turn !== docsTurn || !root.isConnected || current !== api || importing || globalThis.GZ_WRITER_SUBMIT_SHEET?.opened()) return;
+      try { docs = (await store.list()).filter((r) => PA.local(r.key) && (attach ? Object.hasOwn(KINDS, r.kind) : r.kind === 'paper') && !PA.trashed(r)).sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
+      catch (e) { console.error(e); if (turn === docsTurn && root.isConnected && (attach || current === api)) { toast(t('Not saved. Try again in a moment.')); (back || opener()).focus(); } return null; }
+      if (turn !== docsTurn || !root.isConnected || (!attach && (current !== api || importing || globalThis.GZ_WRITER_SUBMIT_SHEET?.opened()))) return null;
       const when = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: 'medium' });
       const x = btn({ class: 'gp-fromdocs-x', title: t('Close'), 'aria-label': t('Close'), onclick: () => closeDocs() }, icon('close'));
+      let resolve;
+      const picked = new Promise((r) => { resolve = r; });
+      const pics = [];
       const picks = docs.map((r) => {
         const name = r.title || t('Untitled document');
-        const meta = [labelOf(ST.get(r.format)), t('{n} words', { n: nf(r.words || 0) }), Number.isFinite(r.updated) ? when.format(r.updated) : ''].filter(Boolean).join(' · ');
-        return btn({ class: 'gp-fromdocs-row', 'aria-label': `${name} · ${meta}`, onclick: () => { closeDocs(false); fromDocs(r.key, name); } }, h('b', { text: name }), h('small', { text: meta }));
+        const meta = (attach ? [t(KINDS[r.kind]), r.kind === 'paper' ? t('{n} words', { n: nf(r.words || 0) }) : ''] : [labelOf(ST.get(r.format)), t('{n} words', { n: nf(r.words || 0) })])
+          .concat(Number.isFinite(r.updated) ? when.format(r.updated) : '').filter(Boolean).join(' · ');
+        if (!attach) return btn({ class: 'gp-fromdocs-row', 'aria-label': `${name} · ${meta}`, onclick: () => { closeDocs(false); fromDocs(r.key, name); } }, h('b', { text: name }), h('small', { text: meta }));
+        const pic = h('span', { class: 'gp-fromdocs-pic', 'data-kind': r.kind, 'aria-hidden': 'true' });
+        pics.push(pic);
+        return btn({ class: 'gp-fromdocs-row gp-fromdocs-thumbed', 'data-key': r.key, 'aria-label': `${name} · ${meta}`, onclick: () => { resolve(r); closeDocs(); } }, pic, h('span', {}, h('b', { text: name }), h('small', { text: meta })));
       });
+      const heading = attach ? t('Attach from Documents') : t('Open from Documents');
       const layer = h('div', { class: 'gp-fromdocs-layer' }, h('div', { class: 'gp-fromdocs-dim', onclick: () => closeDocs() }),
         h('div', { class: 'gp-fromdocs', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'gp-fromdocs-h' },
-          h('div', { class: 'gp-fromdocs-head' }, h('h2', { id: 'gp-fromdocs-h', text: t('Open from Documents') }), x), picks.length ? h('div', { class: 'gp-fromdocs-list' }, picks) : null));
+          h('div', { class: 'gp-fromdocs-head' }, h('h2', { id: 'gp-fromdocs-h', text: heading }), x), picks.length ? h('div', { class: 'gp-fromdocs-list' }, picks) : null));
       const inert = [...document.body.children].map((el) => [el, el.inert]);
       for (const [el] of inert) el.inert = true;
       document.body.append(layer);
-      docsSheet = { layer, inert };
+      docsSheet = { layer, inert, back, done: resolve };
+      if (attach) drawThumbs(docs, pics, turn).catch((e) => console.error(e));
       layer.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDocs(); return; }
         if (picks.length && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
@@ -1535,7 +1565,11 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       // A fixed sheet is centred in the frame; Ultra may show only part of that frame. Bring the whole dialog into
       // the outer window too, including a keyboard opening while the status bar is below it.
       layer.querySelector('.gp-fromdocs').scrollIntoView({ block: 'center', inline: 'nearest' });
+      return attach ? picked : null;
     };
+    // The submit sheet's Attach from Documents (writer-submit.js), and the compact box's ⋯, which opens the sheet with it.
+    self.pick = ({ back = null } = {}) => fromDocsSheet({ attach: true, back });
+    const attachFromDocs = async () => { const r = await fromDocsSheet({ attach: true }); if (r) globalThis.GZ_WRITER_SUBMIT_SHEET?.open(api, null, { attach: r }); };
 
     // ---- what the page says: Ultra's names and the paper's key
     // The title field: what the student typed, else its derived name in its place, as wide as what it shows.
@@ -1720,7 +1754,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     const api = {
       editor: ed, key: () => key, format: () => format, look, paper: () => paper, context: () => ctx,
-      docx, save, notify: (message) => toast(t(message)), version: (reason = 'submit') => save(reason), focus: setFocus, refresh: hooks, zoom: setZoom, importFile, importing: () => importing,
+      docx, save, notify: (message) => toast(t(message)), version: (reason = 'submit', { attached = null } = {}) => save(reason, undefined, attached), focus: setFocus, refresh: hooks, zoom: setZoom, importFile, importing: () => importing,
       // What the submit sheet attaches (writer-submit.js): the paper as its .docx. kind: 'paper', as another kind's surface
       // says its own (writer-kinds.js).
       kind: () => 'paper', file: async () => { const out = await docx(); return { bytes: out.bytes, mime: out.type || GZ_WRITER_SUBMIT_LIB.MIME, ext: '.docx' }; },
@@ -1906,7 +1940,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     if (more) {
       more.before(said, compactArriveSay, fullSwitch());
       const panel = async (name) => { await setView(true, { save: true }); if (!compact) { tabs[name].click(); tabs[name].focus(); } };
-      const items = [['Checks', () => panel('checks')], ['Feedback', () => panel('feedback')], ['Cite', () => globalThis.GZ_WRITER_CITE?.open?.({ anchor: more })], ['Versions', () => versions(more)], ['Open from Documents', () => fromDocsSheet()], ['Documents', () => open2('papers.html')]]
+      const items = [['Checks', () => panel('checks')], ['Feedback', () => panel('feedback')], ['Cite', () => globalThis.GZ_WRITER_CITE?.open?.({ anchor: more })], ['Versions', () => versions(more)], ['Open from Documents', () => fromDocsSheet()], ...(globalThis.GZ_WRITER_SUBMIT_SHEET && globalThis.GZ_WRITER_FRAME?.kind?.() === 'assignment' ? [['Attach from Documents', () => attachFromDocs()]] : []), ['Documents', () => open2('papers.html')]]
         .map(([label, run]) => [host.item?.(t(label), run), label]);
       more.addEventListener('click', () => { for (const [b, label] of items) if (b) b.textContent = t(label); }, true);
     }
