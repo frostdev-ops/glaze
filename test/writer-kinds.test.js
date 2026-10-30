@@ -93,6 +93,8 @@ test('a late paper autosave cannot replace a file-kind record', async () => {
   await assert.rejects(late.save(KEY, { kind: 'paper', doc: doc('Late key.') }, { base: old.revision }), /kind/);
   assert.equal((await P.get(KEY)).kind, 'pdf');
   assert.equal((await P.get(KEY)).file, 'JVBERi0=');
+  await P.save('other', { kind: 'later', doc: { cells: [] } }, { reason: 'import' });
+  assert.deepEqual((await P.save('other', { doc: { cells: [1] } })).paper.doc, { cells: [1] }, 'a patch that keeps its own kind remains valid');
 });
 
 // writer-kinds.js in a frame of its own: the frame, the settings and the submit library it reads.
