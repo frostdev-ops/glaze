@@ -601,7 +601,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       top.append(dot, el('span', 'gz-fb-msg', t("AI couldn't give feedback.")));
       const reason = { timeout: t('Timed out'), 'connection-lost': t('Connection lost'), 'provider-unavailable': t('Unavailable'), 'request-rejected': t('Refused'),
         cancelled: t('Cancelled'), permission: t('Glaze isn’t allowed to reach this address.'), setup: t('Choose a model'), busy: t('Running'), often: t('Not ready'),
-        'invalid-response': t('Unreadable answer'), check: t('No usable answer'), refusal: t('No usable answer'), size: t('The document is too large.') }[fb.error] || t('No usable answer');
+        'invalid-response': t('Unreadable answer'), check: t('No usable answer'), refusal: t('No usable answer'), size: t('The document is too large.'), limit: t('The document is too large.') }[fb.error] || t('No usable answer');
       const detail = reasonText(fb.detail) ? t(reasonText(fb.detail)) : reason;
       const counts = Number.isSafeInteger(fb.detail?.actual) && Number.isSafeInteger(fb.detail?.limit) ? (fb.detail.reason === 'response-limit' ? t('{n} bytes', { n: `${fb.detail.actual}/${fb.detail.limit}` }) : `${fb.detail.actual}/${fb.detail.limit}`)
         : Number.isSafeInteger(fb.detail?.tokens) && Number.isSafeInteger(fb.detail?.context) ? t('{n} tokens', { n: `${fb.detail.tokens}/${fb.detail.context}` }) : '';
