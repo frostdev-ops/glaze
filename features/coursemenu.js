@@ -15,8 +15,8 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
   const TONES = ['Purple', 'Cyan', 'Yellow', 'Orange', 'Mint', 'Pink', 'Green', 'Teal', 'Magenta', 'Blue'];
   let menu = null; // { box, btn, cid, nick, edited, note, custom, reset, tint, grid, sw, looks } while the popover is open
   // The student's saved and gallery Looks (lib/looks.js: the worker's storage.local lookCatalog), as they change, for the Looks.
-  let kept = [];
-  const keep = () => Promise.resolve().then(() => ctx.need('lib/looks.js', () => globalThis.GZ_CATALOG)).then(() => chrome.storage.local.get(GZ_CATALOG.KEY)).then((r) => { kept = GZ_CATALOG.looks(r?.[GZ_CATALOG.KEY]); }, () => {});
+  let kept = [], reading = 0;
+  const keep = () => { const n = ++reading; return Promise.resolve().then(() => ctx.need('lib/looks.js', () => globalThis.GZ_CATALOG)).then(() => chrome.storage.local.get(GZ_CATALOG.KEY)).then((r) => { if (n === reading) { kept = GZ_CATALOG.looks(r?.[GZ_CATALOG.KEY]); refreshLooks(); } }, () => {}); };
   keep();
   try { chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.lookCatalog) keep(); }); } catch { /* extension reloaded under the tab */ }
   let fading = null; // a closed menu may paint briefly, but must not duplicate the next menu's ids/label targets
@@ -195,7 +195,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     const { cid } = m;
     const c = ctx.settings().courses;
     m.tint.checked = GZ_COURSE_TINTED(c, cid, ctx.courseList());
-    for (const b of m.looks) b.setAttribute('aria-pressed', String((c.looks[cid] || '') === b.dataset.look));
+    for (const b of m.looks) b.setAttribute('aria-pressed', String((m.looks.some((b) => b.dataset.look === c.looks[cid]) ? c.looks[cid] : '') === b.dataset.look));
     if (canvas) {
       // Canvas's color for it now, as its cards show it: a swatch of the same color is pressed, else the picker is.
       const now = C.parse(colorOf(numOf(cid)));
@@ -264,6 +264,32 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     const { cid, btn } = menu; // sync may have replaced the original opener
     if (closeMenu(false)) cardUI((m) => m.open(cid, btn));
   };
+  const lookButtons = (cid) => [['', null], ...GZ_LOOKS.map((L) => [L.name, L]), ...kept.map((E) => [E.id, E])].map(([look, L]) => {
+    const b = make('button', { type: 'button', className: 'gz-cm-look', textContent: L ? L.name : t('Your theme') });
+    b.dataset.look = look;
+    if (L) {
+      const c = L.colors;
+      const tone = L.bg.colors?.length ? L.bg.colors : L.bg.kind === 'solid' ? [c['--gz-surface-2']] : [c['--gz-accent'], c['--gz-accent-hi']];
+      b.setAttribute('translate', 'no');
+      b.style.color = c['--gz-ink'];
+      b.style.borderColor = c['--gz-line-strong'];
+      b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 3px, transparent 3px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${tone.join(', ')})`;
+    }
+    b.addEventListener('click', () => editCourse(`look ${cid}`, (c) => GZ_COURSE_EDIT.look(c, cid, look)));
+    return b;
+  });
+  const refreshLooks = () => {
+    if (!menu) return;
+    const grid = menu.box.querySelector('.gz-cm-looks');
+    const focused = grid.contains(document.activeElement), id = document.activeElement?.dataset.look;
+    menu.looks = lookButtons(menu.cid);
+    grid.replaceChildren(...menu.looks);
+    paintMenu();
+    const selected = menu.looks.find((b) => b.dataset.look === id) || menu.looks.find((b) => b.getAttribute('aria-pressed') === 'true') || menu.looks[0];
+    rove(grid, selected);
+    if (focused) selected.focus({ preventScroll: true });
+    placeMenu();
+  };
   const openMenu = (btn) => {
     const cid = btn.dataset.cid;
     const real = ctx.courseList()[cid]?.name;
@@ -320,20 +346,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
 
     // Look: the student's own theme, or a Look by its id (built in, then their saved and gallery Looks), drawn as the popup's
     // Look cards are. Look names are names.
-    const looks = [['', null], ...GZ_LOOKS.map((L) => [L.name, L]), ...kept.map((E) => [E.id, E])].map(([look, L]) => {
-      const b = make('button', { type: 'button', className: 'gz-cm-look', textContent: L ? L.name : t('Your theme') });
-      b.dataset.look = look;
-      if (L) {
-        const c = L.colors;
-        const tone = L.bg.colors?.length ? L.bg.colors : L.bg.kind === 'solid' ? [c['--gz-surface-2']] : [c['--gz-accent'], c['--gz-accent-hi']];
-        b.setAttribute('translate', 'no');
-        b.style.color = c['--gz-ink'];
-        b.style.borderColor = c['--gz-line-strong'];
-        b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 3px, transparent 3px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${tone.join(', ')})`;
-      }
-      b.addEventListener('click', () => editCourse(`look ${cid}`, (c) => GZ_COURSE_EDIT.look(c, cid, look)));
-      return b;
-    });
+    const looks = lookButtons(cid);
     const lookGrid = group('gz-cm-look', ...looks);
     lookGrid.className = 'gz-cm-looks';
 
