@@ -128,6 +128,15 @@
   globalThis.addEventListener?.('pagehide', (e) => { if (!e.persisted && exported) { URL.revokeObjectURL(exported); exported = null; } });
   const exportFile = async (key) => { const f = await file(key); if (f) download(f); };
 
+  // The frame's submit and kind-change checkpoints keep the complete workbook, as the grid's own Versions do.
+  const version = async (key, reason) => {
+    await need(ENGINE);
+    const got = await GZ_SHEET_DATA.read(get, key);
+    if (got?.rec.kind !== 'sheet') throw new Error('document kind changed');
+    const gz = await GZ_SHEET_DATA.pack(got.wb);
+    return papers().save(key, {}, { expectedKind: 'sheet', base: got.rec.revision, version: { reason, gz, cells: GZ_SHEET_DATA.measure(got.wb).cells } });
+  };
+
   // ---- the grid
   // A spreadsheet brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it
   // held kept as a version first (the 'import' save), every part it had before dropped. → the record.
@@ -159,7 +168,7 @@
   // Opening, copying and exporting stay registered; creating and importing follow the switch. The page waits before it
   // routes or draws.
   const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.sheets === true, () => false);
-  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, into, empty, thumb, file, exportFile, text, measure, copy, says: SAYS, get exportLabel() { return xlsx() ? 'Export .xlsx' : 'Export .csv'; },
+  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, get exportLabel() { return xlsx() ? 'Export .xlsx' : 'Export .csv'; },
     ...(yes && { importFile, create }) })));
   globalThis.GZ_SHEET_KIND = Object.freeze({ shower, fileOf });
 })();

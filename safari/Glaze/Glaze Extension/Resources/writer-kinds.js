@@ -61,6 +61,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       pages: () => v?.pages?.() || null, notify: (m) => v?.say?.(t(m)), focused: () => {}, resume: () => {}, look: () => null,
       version: async (reason = 'submit') => {
         if (!await surface.save()) return null;
+        if (typeof k.version === 'function') return k.version(key, reason).catch((e) => { console.error(e); return null; });
         return store().save(key, {}, { reason, expectedKind: id }).catch((e) => { console.error(e); return null; });
       },
       save: async () => !!v && await owns() && await v.save() && await owns(),
@@ -101,7 +102,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       k = await kind(id);
       if (typeof k?.into !== 'function' || !key) throw new Error('no viewer');
       // The paper's last words saved first: into's 'import' save keeps them as the version.
-      if (shown) { if (!await shown.surface.save()) throw new Error('not saved'); }
+      if (shown) { if (!await (shown.id === 'sheet' ? shown.surface.version('import') : shown.surface.save())) throw new Error('not saved'); }
       else if (!await paper.save()) throw new Error('paper could not be saved');
       paper.hold();
       const rec = await k.into(key, f);
@@ -118,7 +119,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     const { paper, surface, el } = shown;
     busy = true;
     try {
-      if (!await surface.save()) throw new Error('not saved');
+      if (!await (shown.id === 'sheet' ? surface.version('import') : surface.save())) throw new Error('not saved');
       el.inert = true;
       paper.unpark();
       // The paper importer validates and writes the Word document in one import save. A refusal leaves this file intact.
@@ -147,15 +148,30 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     const row = document.createElement('div');
     row.className = 'gk-choose';
     row.setAttribute('role', 'group');
+    const dismiss = () => { row.remove(); (paper.compact?.() ? frame.editor?.() : paper.editor)?.focus(); };
+    row.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); dismiss(); } });
     for (const [id, label] of [['paper', 'Document'], ['sheet', 'Spreadsheet']]) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'gk-pick'; b.dataset.kind = id; b.textContent = t(label);
-      b.addEventListener('click', () => { row.remove(); if (id !== 'paper') start(paper, id); });
+      b.addEventListener('click', () => { if (id === 'paper') dismiss(); else { row.remove(); start(paper, id); } });
       row.append(b);
     }
     document.getElementById('gw')?.prepend(row);
     return row;
   };
+  let readyPaper = null, newSheet = null;
+  const refreshChoices = () => {
+    if (!readyPaper) return;
+    const paper = P()?.current();
+    if (paper?.kind?.() !== 'paper' || offers().length < 2) {
+      document.querySelector('.gk-choose')?.remove();
+      newSheet?.remove(); newSheet = null;
+      return;
+    }
+    newSheet ||= frame.item(t('New spreadsheet'), () => start(paper, 'sheet', { any: true }));
+    choice(paper);
+  };
+  globalThis.GZ_WRITER_SETTINGS?.follow?.(refreshChoices);
   frame.on('ready', () => {
     if (frame.mode() !== 'paper' || frame.kind() !== 'assignment') return;
     // ⋯ → New spreadsheet, and the choice, once the paper has loaded and only where both are offered.
@@ -163,10 +179,8 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100));
       // The registry says whether this build has the spreadsheet kind (offers).
       if (Object.hasOwn(FRAME, 'sheet')) await P().need(['lib/doc-kinds.js']);
-      const paper = P()?.current();
-      if (!paper || paper.kind?.() !== 'paper' || offers().length < 2) return;
-      frame.item(t('New spreadsheet'), () => start(paper, 'sheet', { any: true }));
-      choice(paper);
+      readyPaper = P()?.current();
+      refreshChoices();
     })().catch((e) => console.error(e));
   });
 

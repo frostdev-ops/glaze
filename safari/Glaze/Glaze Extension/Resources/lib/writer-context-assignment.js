@@ -79,7 +79,7 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   // message), everything read; a picture's shorter side; a document's characters.
   const ATTACH = { files: 6, file: 20 << 20, picture: 3 << 20, pictures: 6 << 20, total: 40 << 20, side: 32, text: MATERIAL };
   const ATT = { quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", '#39': "'" };
-  const PICTURE = /\.(png|jpe?g|gif|webp)$/i, DOCUMENT = /\.(docx|pptx|pdf|txt|text|md|html?)$/i;
+  const PICTURE = /\.(png|jpe?g|gif|webp)$/i, DOCUMENT = /\.(docx|pptx|ppsx|pdf|txt|text|md|html?)$/i;
   const attached = (htmls, origin) => {
     const out = [];
     let incomplete = false;
@@ -237,6 +237,10 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   const fetchBounded = (url, max, live) => GZ_LMSQ.run(async () => {
     if (!live()) throw new Error('stale');
     const r = await fetch(url, { credentials: 'same-origin' });
+    // A followed response may leave the LMS only for the file store observed on Ultra. Never hand an unrelated
+    // redirect's body to Feedback or the frame, even when it permits the page's CORS read.
+    const from = new URL(url), to = new URL(r.url || url);
+    if (to.origin !== from.origin && !(to.protocol === 'https:' && !to.port && !to.username && !to.password && /^[^.]+(?:\.[^.]+)*\.prod\.files\.blackboard\.com$/i.test(to.hostname))) { await r.body?.cancel(); throw new Error('file origin'); }
     if (!r.ok || !r.body) { await r.body?.cancel(); throw r.status; }
     if (+r.headers.get('content-length') > max) { await r.body.cancel(); return null; }
     const body = r.body.getReader(), chunks = [];
@@ -265,7 +269,8 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
     if (box.kind === 'test' || box.context?.kind !== 'assignment') return false;
     const f = openable(box.files, X.settings()?.writer, L).find((x) => x.id === id);
     if (!f) return false;
-    const live = () => alive() && X.on();
+    const port = box.port;
+    const live = () => alive() && X.on() && box.port === port && openable(box.files, X.settings()?.writer, L).some((x) => x.id === f.id && x.url === f.url);
     await X.need('lib/lmsq.js', () => globalThis.GZ_LMSQ);
     let bytes = null;
     try { bytes = await fetchBounded(f.url, ATTACH.file, live); } catch { bytes = null; }
@@ -283,12 +288,11 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   const decorate = (X, box, L = globalThis.GZ_WRITER_SUBMIT_LIB, doc = document) => {
     const want = L && X.on() && box.context?.kind === 'assignment' ? openable(box.files, X.settings()?.writer, L) : [];
     box.openers ||= new Map();
-    for (const [url, b] of box.openers) if (!want.some((f) => f.url === url) || !b.isConnected) { b.remove(); box.openers.delete(url); }
+    for (const [a, b] of box.openers) if (!a.isConnected || !want.some((f) => f.url === a.href && f.id === b.dataset.gzOpenGlaze) || !b.isConnected || b.previousElementSibling !== a) { b.remove(); box.openers.delete(a); }
     if (!want.length) return;
     for (const a of doc.querySelectorAll('a[href*="/bbcswebdav/"]')) {
       const f = want.find((x) => x.url === a.href);
-      if (!f || box.openers.get(f.url)?.previousElementSibling === a) continue;
-      box.openers.get(f.url)?.remove();
+      if (!f || box.openers.has(a)) continue;
       const b = doc.createElement('button');
       b.type = 'button';
       b.dataset.gzOpenGlaze = f.id;
@@ -296,12 +300,12 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
       for (const [k, v] of [['margin-inline-start', '8px'], ['padding', '2px 10px'], ['border', '1px solid var(--gz-line-strong, currentColor)'], ['border-radius', '999px'], ['background', 'var(--gz-surface, transparent)'], ['color', 'var(--gz-accent, inherit)'], ['font', 'inherit'], ['cursor', 'pointer']]) b.style.setProperty(k, v);
       b.addEventListener('click', async (e) => {
         e.preventDefault(); e.stopPropagation();
-        if (b.disabled) return;
+        if (b.disabled || !a.isConnected || a.href !== f.url) return;
         b.disabled = true;
         try { await open(X, box, f.id, L); } finally { b.disabled = false; }
       });
       a.after(b);
-      box.openers.set(f.url, b);
+      box.openers.set(a, b);
     }
   };
 
