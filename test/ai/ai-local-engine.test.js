@@ -77,6 +77,19 @@ test('every kernel file is shipped and balanced under every define it uses', () 
   }
 });
 
+test('no kernel stores one component of a vector in workgroup memory', () => {
+  // WGSL lets such a store touch the whole vector, so invocations filling different components of one vec4 race: on
+  // Metal the big GEMM's tiles kept a quarter of their values (1 in 4 of a probe's stores landed), and every output was 0.
+  const dir = path.join(__dirname, '../../extension/ai/local/kernels');
+  for (const k of EN.KERNELS) {
+    const src = fs.readFileSync(path.join(dir, `${k}.wgsl`), 'utf8');
+    for (const [, name] of src.matchAll(/var<workgroup>\s+(\w+)\s*:\s*array<vec/g)) {
+      const store = new RegExp(`\\b${name}\\[[^\\]\\n]*(?:\\[[^\\]\\n]*\\][^\\]\\n]*)*\\]\\s*(?:\\[[^\\]\\n]*\\]|\\.[xyzw])\\s*[-+*/]?=(?!=)`);
+      assert.doesNotMatch(src, store, `${k}: ${name}`);
+    }
+  }
+});
+
 test('grid keeps each side within 65535 and covers n', () => {
   for (const n of [1, 65535, 65536, 128000, 1e6, 65535 * 65535]) {
     const [x, y] = EN.grid(n);
