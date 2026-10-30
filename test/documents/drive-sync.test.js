@@ -860,3 +860,25 @@ test('after two copies of one document converge, the Glaze folder shows it once 
   assert.equal(textOf((await a.papers.get(key)).doc), 'B, later');
   noDeletes(drive);
 });
+
+test('a device whose JSON copy was moved out of the Glaze folder puts the document back in it, trashing nothing', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000840';
+  await a.papers.save(key, { doc: doc('Shared'), title: 'Notes', named: true });
+  assert.ok((await a.sync.set(true)).ok); assert.ok((await b.sync.set(true)).ok);
+  // The copy B links to leaves the folder (put away by another device's convergence, or moved by the student).
+  const away = drive.seed({ name: 'Elsewhere', mimeType: drive.FOLDER }).meta.id, copy = sidecarOf(drive, key);
+  copy.meta.parents = [away]; drive.trash(copy.meta.id, false);
+  assert.ok((await b.sync.run()).ok);
+  clock.t += 60e3;
+  await b.papers.save(key, { doc: doc('Edited on B') });
+  await b.sync.touched(key); await b.fire();
+  const root = glazeFolder(drive).meta.id;
+  const inside = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'doc' && f.meta.parents.includes(root));
+  assert.equal(inside.length, 1, 'a copy in the Glaze folder again');
+  assert.equal(textOf(JSON.parse(dec(inside[0].bytes)).record.doc), 'Edited on B');
+  assert.ok(!P.trashed(await b.papers.get(key)) && [...drive.files.values()].every((f) => !f.meta.explicitlyTrashed), 'nothing trashed');
+  assert.ok((await a.sync.run()).ok);
+  assert.equal(textOf((await a.papers.get(key)).doc), 'Edited on B', 'and A follows it');
+  noDeletes(drive);
+});
