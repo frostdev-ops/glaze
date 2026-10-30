@@ -286,3 +286,6 @@ test('RATE preserves the observed convergence boundaries for distant guesses', (
   rel(calc(e, 'RATE(360,-1000,100000,0,0,0.42)'), 0.00968924582258194, 'RATE guess 0.42');
   cases(e, [['RATE(360,-1000,100000,0,0,0.5)', '#NUM!']]);
 });
+test('IRR accepts an exact repeated root and XIRR handles balanced same-day flows', () => {
+  cases(book(), [['IRR({-100,200,-100},0)', 0], ['XIRR({-100,100},{1,1})', 0], ['RATE(10,0,0)', '#NUM!']]);
+});
