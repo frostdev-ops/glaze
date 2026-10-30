@@ -248,8 +248,10 @@ const CTAB_PALETTE = { ultra: 209, canvas: 168, moodle: 59 };
 // The Looks catalogue (the owner's request, 2026-10-29: saved and gallery Looks show with the rest; a named raise under the
 // 2026-10-19 approval): defaults.js keeps a course's saved or gallery Look by id and wears it from the catalogue (401 bytes),
 // and content.js reads the catalogue only when a course wears one, and wears the theme for one this device doesn't keep
-// (822), on every site. The catalogue itself (lib/looks.js) loads on demand. Measured against 777d9b35.
-const LOOK_CATALOG = 401 + 822;
+// (822), on every site. The catalogue itself (lib/looks.js) loads on demand. Measured against 777d9b35. A course wears its own
+// Look whole, parts included (features/lookparts.js reads them): content.js asks for them when the course's Look changes (117),
+// measured against e359f896.
+const LOOK_CATALOG = 401 + 822 + 117;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
