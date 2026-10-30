@@ -137,3 +137,27 @@ test('typed edits obey the undo byte budget as well as the step count', () => {
   while (!f.el('gx-undo').disabled && steps < 150) { f.key('z', { ctrlKey: true }); steps++; }
   assert.ok(steps > 100 && steps <= 126, `8 MB holds about 125 of these 64 KB inverses, found ${steps}`);
 });
+
+test('sheet operations undo and redo through autosave with matching books bands and formula results', async () => {
+  const f = frame(); f.type('original'); f.key('Enter');
+  assert.equal(await f.view.save(), true);
+  const original = SD.serialize(f.wb);
+  f.fire(f.el('gx-add'), 'click');
+  f.type('=Sheet1!A1'); f.key('Enter');
+  assert.equal(await f.view.save(), true);
+  f.key('z', { ctrlKey: true }); // clear the new sheet's only cell
+  assert.equal(await f.view.save(), true);
+  assert.equal(f.data[`writerPaper:${KEY}`].parts['2:0'], undefined);
+  assert.equal(f.data[`writerSheet:${KEY}:2:0`], undefined);
+  f.key('z', { ctrlKey: true }); // remove the added sheet
+  assert.equal(await f.view.save(), true);
+  let got = await SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY);
+  assert.equal(SD.serialize(got.wb), original);
+  f.key('y', { ctrlKey: true }); f.key('y', { ctrlKey: true });
+  assert.equal(await f.view.save(), true);
+  got = await SD.read(async (keys) => Object.fromEntries(keys.map((k) => [k, f.data[k]])), KEY);
+  assert.equal(got.wb.sheets.length, 2);
+  assert.equal(got.wb.sheets[1].rows.get(0).get(0).f, 'Sheet1!A1');
+  assert.equal(got.wb.sheets[1].rows.get(0).get(0).v, 'original');
+  assert.equal(f.data[`writerSheet:${KEY}:2:0`].rev, got.rec.parts['2:0']);
+});
