@@ -56,8 +56,8 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     submitB.disabled = typeof P().submit !== 'function';
     const owns = async () => GZ_DOC_KINDS.kindOf(await store().get(key)) === id;
     const surface = {
-      // A spreadsheet's file is .xlsx where the writer is here, else its active sheet as .csv (sheet-kind.js fileOf).
-      kind: () => id, key: () => key, ext: () => (id === 'sheet' ? (globalThis.GZ_SHEET_XLSX ? '.xlsx' : '.csv') : ext), context: () => paper.context(), paper: () => paper.paper(), compact: () => false, blank: () => false, importing: () => busy,
+      // A spreadsheet's file always waits for the .xlsx writer (sheet-kind.js fileOf).
+      kind: () => id, key: () => key, ext: () => (id === 'sheet' ? '.xlsx' : ext), context: () => paper.context(), paper: () => paper.paper(), compact: () => false, blank: () => false, importing: () => busy,
       pages: () => v?.pages?.() || null, notify: (m) => v?.say?.(t(m)), focused: () => {}, resume: () => {}, look: () => null,
       version: async (reason = 'submit') => {
         if (!await surface.save()) return null;

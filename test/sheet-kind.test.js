@@ -350,7 +350,7 @@ test('the assignment frame\'s hooks: view, into over a paper, empty', async () =
   await k.into(K, file('long.csv', big));
   await k.into(K, file('short.csv', 'only\n'));
   assert.deepEqual(Object.keys(s.data).filter((x) => x.startsWith(`writerSheet:${K}:`)), [`writerSheet:${K}:1:0`]);
-  await assert.rejects(k.into(K, file('book.xlsx', 'PK')), (e) => e instanceof RangeError || e.name === 'RangeError', 'an .xlsx without the reader is refused');
+  await assert.rejects(k.into(K, file('book.xlsx', 'PK')), (e) => e instanceof RangeError || e.code === 'codecs', 'an .xlsx without the reader is refused');
   const e = k.empty();
   assert.ok(SD.isGlance(JSON.parse(JSON.stringify(e.grid))) && e.cells === 0 && e.sheets === 1 && !('book' in e));
 });
@@ -603,5 +603,6 @@ test('the New spreadsheet tile leaves codecs unloaded until an actual workbook i
   DK.get('sheet').thumb(null);
   assert.equal(loads, 0, 'an empty Documents home does not load the codecs');
   DK.get('sheet').thumb({ grid: [] });
+  await new Promise(setImmediate);
   assert.equal(loads, 1, 'a saved spreadsheet starts the shared load');
 });

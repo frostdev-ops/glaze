@@ -172,7 +172,7 @@
   };
 
   // ---- the home
-  const home = async () => {
+  const home = async (error = '') => {
     if (!look.whole) { look.whole = true; look.sheet(); look.paint(); }
     await GZ_WRITER_PAPER.need(['lib/writer-styles.js', 'lib/writer-format.js', 'lib/writer-thumb.js', 'lib/doc-home.js']);
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PA = GZ_WRITER_PAPERS, DK = GZ_DOC_KINDS, DH = GZ_DOC_HOME, TH = GZ_WRITER_THUMB;
@@ -789,6 +789,7 @@
     // What has been in Trash past 30 days goes as the page opens, once the worker takes its writes.
     claimed().then(() => st.purge()).catch((e) => console.error(e));
     await Promise.all([refresh(), look.surfaces]);
+    if (error) say(error);
     main.hidden = false;
     tell('ready');
     motion().shown('home');
@@ -812,7 +813,16 @@
       // stale link, malformed key or a kind this build cannot edit returns home without mounting an empty editor over an
       // existing document of another kind.
       const fresh = !rec && GZ_WRITER_PAPERS.local(key) && (id === 'paper' ? ['plain', 'mla9', 'apa7', 'chicago17'].includes(params.get('format')) : params.has('new') && typeof k.create === 'function');
-      if (typeof k.edit === 'function' && ((rec && GZ_DOC_KINDS.kindOf(rec) === id) || fresh)) { await k.edit(key, { fresh: !rec }); return; }
+      if (typeof k.edit === 'function' && ((rec && GZ_DOC_KINDS.kindOf(rec) === id) || fresh)) {
+        try { await k.edit(key, { fresh: !rec }); return; }
+        catch (e) {
+          if (e?.code !== 'codecs') throw e;
+          console.error(e);
+          history.replaceState(null, '', 'papers.html');
+          await home(t('That file could not be read.'));
+          return;
+        }
+      }
       history.replaceState(null, '', 'papers.html');
     }
     await home();

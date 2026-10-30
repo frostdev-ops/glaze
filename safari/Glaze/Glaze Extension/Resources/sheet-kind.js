@@ -2,8 +2,8 @@
 // Spreadsheets (writer.sheets, off by default) adds the New band's Spreadsheet tile (create) and takes .xlsx and .csv files
 // (importFile); existing spreadsheets always open, copy and export. A card shows the record's 6×4 text (sheet-data.js
 // glance). Opening one mounts the grid (sheet-grid.js) on the calc engine (lib/sheet-*.js). .xlsx files are read and written
-// by GZ_SHEET_XLSX (lib/sheet-xlsx.js) where the page has it; without it an .xlsx is refused and Export writes the active
-// sheet as .csv. Storage is sheet-data.js's alone. In an assignment's frame (writer-kinds.js) the same grid is the attempt's
+// by GZ_SHEET_XLSX (lib/sheet-xlsx.js), loaded on demand before a file or the grid opens. Storage is sheet-data.js's alone.
+// In an assignment's frame (writer-kinds.js) the same grid is the attempt's
 // view (view), a brought .xlsx or .csv becomes the attempt's record (into), and an empty attempt can start as a blank
 // workbook (empty); the view's file() is what submit sends.
 (() => {
@@ -17,10 +17,13 @@
   const SAYS = { size: 'Choose a spreadsheet smaller than 15 MB.', read: 'That file could not be read.' };
   const xlsx = () => globalThis.GZ_SHEET_XLSX ?? null;
   // The .xlsx reader and writer and what they stand on, loaded the first time a spreadsheet is listed, opened, imported or
-  // written (never with the page). → the codec, or null where it didn't load (a .csv then).
+  // written (never with the page). One shared load; a failure rejects the operation and allows a later retry.
   const CODECS = ['lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js'];
   let codecLoad = null;
-  const codecs = () => (codecLoad ||= need(CODECS).then(() => true, (e) => { console.error(e); codecLoad = null; return false; })).then(() => xlsx());
+  const codecs = () => (codecLoad ||= Promise.resolve().then(() => need(CODECS)).then(() => {
+    if (!xlsx()) throw new Error('lib/sheet-xlsx.js did not load');
+    return true;
+  }).catch((cause) => { codecLoad = null; throw Object.assign(new Error('Spreadsheet codecs did not load.', { cause }), { code: 'codecs' }); })).then(() => xlsx());
   // What a workbook read with parts left out says, once (lib/sheet-xlsx.js keep.problems), in a line Glaze already has.
   const NOTICE = { 'cap-cells': 'A workbook holds 250,000 cells.', 'cap-sheets': 'A workbook holds 100 sheets.' };
   const noticeOf = (wb) => { const p = wb?.keep?.problems || []; return p.length ? NOTICE[p.find((x) => NOTICE[x.code])?.code] || 'Some pictures, objects or equations were left out.' : undefined; };
@@ -48,7 +51,7 @@
   };
   const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
   const thumb = (rec) => {
-    codecs(); // a spreadsheet listed: its menu's Export says .xlsx once the writer is here
+    if (rec) codecs().catch((e) => console.error(e));
     const g = Array.isArray(rec?.grid) ? rec.grid : [];
     const box = h('div', { class: 'gx-thumb', 'aria-hidden': 'true' }, h('span', { class: 'gx-th-h' }), LETTERS.map((l) => h('span', { class: 'gx-th-h', text: l })));
     for (let r = 0; r < 4; r++) {
@@ -113,15 +116,11 @@
     return notice ? { key, notice } : key;
   };
   const safe = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
-  // A spreadsheet as its file: .xlsx where the writer is here, else its active sheet as .csv. → { name, mime, bytes } or null.
+  // A spreadsheet as .xlsx, waiting for the writer. → { name, mime, bytes }.
   const fileOf = async (wb, title) => {
     const name = safe(title) || t('Spreadsheet');
-    if (await codecs()) { const bytes = await xlsx().write(wb); return { name: `${name}.xlsx`, mime: DK.KINDS.sheet.mime, bytes }; }
-    const sh = wb.sheets[wb.active] || wb.sheets[0], show = shower(wb), rows = [];
-    let cols = 0;
-    for (const [r, row] of sh.rows) { rows[r] = row; for (const c of row.keys()) cols = Math.max(cols, c + 1); }
-    const out = Array.from({ length: rows.length }, (_, r) => Array.from({ length: cols }, (_, c) => { const x = rows[r]?.get(c); return x ? show(sh, r, c, x) : ''; }));
-    return { name: `${name}.csv`, mime: 'text/csv', bytes: new TextEncoder().encode(`﻿${GZ_SHEET_GRID.writeDelimited(out, ',')}`) };
+    const X = await codecs(), bytes = await X.write(wb);
+    return { name: `${name}.xlsx`, mime: DK.KINDS.sheet.mime, bytes };
   };
   const file = async (key) => {
     await need([...ENGINE, 'sheet-grid.js']);
@@ -166,14 +165,14 @@
   const create = () => `papers.html?sheet=${encodeURIComponent(GZ_WRITER_PAPERS.newKey())}&new`;
   // host: an assignment's frame (view below): { mount, t, title, tools }. → the grid's surface (sheet-grid.js mount).
   const edit = async (key, { fresh = false, host = null } = {}) => {
-    if (!host) document.documentElement.dataset.mode = 'sheet';
     await need([...ENGINE, 'sheet-grid.js']);
     const got = fresh ? null : await GZ_SHEET_DATA.read(get, key);
     const wb = got?.wb || GZ_SHEET_MODEL.workbook();
     // A workbook from an .xlsx keeps parts whose references the codec moves as the grid edits: it is here before the grid.
-    if (Object.keys(wb.keep?.parts || {}).length || wb.keep?.log?.length) await codecs(); else codecs();
+    await codecs();
+    if (!host) document.documentElement.dataset.mode = 'sheet';
     const v = GZ_SHEET_GRID.mount({ key, wb, rec: got?.rec || null, sigs: got?.sigs || new Map(), fresh: !got, t: host?.t || t, locale, papers: papers(), show: shower,
-      local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: () => (xlsx() ? 'Export .xlsx' : 'Export .csv'), host });
+      local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: () => 'Export .xlsx', host });
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
     return v;
   };
@@ -182,7 +181,7 @@
   // Opening, copying and exporting stay registered; creating and importing follow the switch. The page waits before it
   // routes or draws.
   const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.sheets === true, () => false);
-  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, get exportLabel() { return xlsx() ? 'Export .xlsx' : 'Export .csv'; },
+  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, exportLabel: 'Export .xlsx',
     ...(yes && { importFile, create }) })));
   globalThis.GZ_SHEET_KIND = Object.freeze({ shower, fileOf });
 })();
