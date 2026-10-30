@@ -19,13 +19,13 @@ const claude = ({ execPath = process.execPath, versions = process.versions } = {
 // This node, named by the first PATH entry that leads to the same file: Homebrew's own path (…/Cellar/node/<version>)
 // goes away at the next upgrade, its /opt/homebrew/bin/node doesn't.
 const stable = (exe, platform, env) => {
-  const want = real(exe);
+  const want = real(exe), t = trust(platform);
   for (const dir of String(env.PATH || env.Path || '').split(platform === 'win32' ? ';' : ':')) {
     if (!dir || !path.isAbsolute(dir)) continue;
     const c = path.join(dir, platform === 'win32' ? 'node.exe' : 'node');
-    if (fs.existsSync(c) && real(c) === want) return c;
+    if (fs.existsSync(c) && real(c) === want && !t.path(c)) return c;
   }
-  return exe;
+  return t.path(exe) ? null : exe;
 };
 
 // nvm's versions under dir, newest first.
@@ -115,7 +115,9 @@ const find = async ({ platform = process.platform, env = process.env, run, list 
 const choose = async (o = {}) => {
   const platform = o.platform || process.platform, env = o.env || process.env;
   const execPath = o.execPath || process.execPath, vers = o.versions || process.versions;
-  return claude({ execPath, versions: vers }) ? find({ ...o, platform, env }) : stable(execPath, platform, env);
+  const list = o.list || places(platform, env);
+  const current = claude({ execPath, versions: vers }) ? null : stable(execPath, platform, env);
+  return find({ ...o, platform, env, list: [...new Set([...(current ? [current] : []), ...list])] });
 };
 
 module.exports = { MIN, MISSING, claude, stable, places, trust, find, choose };
