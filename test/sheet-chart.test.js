@@ -285,6 +285,17 @@ test('layout: stacked and 100% stacked columns, horizontal bars, a line\'s gap',
   assert.equal(CH.scene({ ...gap, blanks: 'span' }, 400, 300).prims.filter((x) => x.cls === 'gc-line').length, 1, '"span" joins it');
 });
 
+test('layout: a markers-only line chart honours its noFill line', async () => {
+  const { wb } = await open({ kinds: ['line'], over: { 'xl/charts/chart1.xml': FX.CHARTS.line
+    .replace('<a:solidFill><a:schemeClr val="accent1"/></a:solidFill><a:round/>', '<a:noFill/><a:round/>')
+    .replace('<c:symbol val="none"/>', '<c:symbol val="circle"/>') } });
+  const data = drawn(wb)[0].data;
+  const sc = CH.scene(data, 400, 300);
+  assert.equal(sc.prims.filter((p) => p.cls === 'gc-mark').length, 4);
+  assert.equal(sc.prims.filter((p) => p.cls === 'gc-line').length, 0);
+  assert.equal(sc.marks.lines.length, 0);
+});
+
 test('round trip: a workbook read, drawn and written untouched keeps its drawing and chart parts byte for byte', async () => {
   const bytes = FX.workbook();
   const before = await parts(bytes);
