@@ -52,10 +52,21 @@
     return e;
   };
   const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+  // A–F's widths in the grid's pixels (sheet-grid.js px.col, 64 where the sheet sets none), from the active sheet's colW in
+  // the record's book (sheet-data.js enc: a Map as { $map: [[i, w]…] }); null when they are all one width.
+  const widths = (book) => {
+    const sh = book?.sheets?.[book.active] || book?.sheets?.[0], pairs = sh?.colW?.$map;
+    if (!Array.isArray(pairs)) return null;
+    const at = new Map(pairs.filter((p) => Array.isArray(p) && p[0] >= 0 && p[0] < 6 && Number.isFinite(p[1]) && p[1] >= 0));
+    const ws = LETTERS.map((_, i) => (at.has(i) ? Math.trunc(((256 * at.get(i) + Math.trunc(128 / 7)) / 256) * 7) : 64));
+    return ws.some((w) => w !== ws[0]) && ws.some((w) => w > 0) ? ws : null;
+  };
   const thumb = (rec) => {
     if (rec) codecs().catch((e) => console.error(e));
     const g = Array.isArray(rec?.grid) ? rec.grid : [];
     const box = h('div', { class: 'gx-thumb', 'aria-hidden': 'true' }, h('span', { class: 'gx-th-h' }), LETTERS.map((l) => h('span', { class: 'gx-th-h', text: l })));
+    const ws = widths(rec?.book);
+    if (ws) box.style.gridTemplateColumns = `14px ${ws.map((w) => `minmax(0, ${w}fr)`).join(' ')}`;
     for (let r = 0; r < 4; r++) {
       box.append(h('span', { class: 'gx-th-h', text: String(r + 1) }));
       for (let c = 0; c < 6; c++) { const s = typeof g[r]?.[c] === 'string' ? g[r][c] : ''; box.append(h('span', { class: /^[-+$€£(]?[\d.,]+%?\)?$/.test(s) ? 'gx-th-c gx-th-n' : 'gx-th-c', text: s })); }
