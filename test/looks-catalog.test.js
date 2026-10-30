@@ -142,6 +142,23 @@ test('a kept Look made now carries its id and where it came from, and favorites 
   assert.equal(C.kept({ code: 1, name: 'n' }), null);
 });
 
+test('kept identity follows the code even when an old entry carries another valid id', async () => {
+  const { favorites } = await fixtures();
+  const first = favorites[0], second = favorites[2];
+  assert.equal(C.kept({ ...first, id: second.id }).id, C.idOf(first.code));
+  assert.equal(C.keptAll([first, { ...first, id: second.id, name: 'Alias' }]).length, 1, 'same code, two names and stored ids: one Look');
+  assert.equal(C.keptAll([first, { ...second, id: first.id }]).length, 2, 'different codes never discard one another because of stored ids');
+});
+
+test('an ambiguous code hash is refused rather than wearing or removing another Look', () => {
+  // Force the rare hash collision at the identity boundary; both original favorites must survive outside the catalogue.
+  const context = vm.createContext({ GZ_LOOKS: G.GZ_LOOKS, GZ_LOOK_ON: G.GZ_LOOK_ON });
+  vm.runInContext(read('lib/looks.js').replace('`c:${hash(code)}`', "'c:00000000000000'"), context);
+  const favorites = [{ code: 'first', name: 'One' }, { code: 'second', name: 'Two' }];
+  assert.equal(context.GZ_CATALOG.keptAll(favorites).length, 0, 'neither ambiguous id may be picked');
+  assert.equal(favorites.length, 2, 'originals stay available for recovery');
+});
+
 // ---- the worker: the catalogue it keeps, wearing a kept Look by id, rotation by id ------------------------------------------
 const fs = require('node:fs');
 const path = require('node:path');
