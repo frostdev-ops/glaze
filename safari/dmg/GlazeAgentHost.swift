@@ -291,13 +291,14 @@ final class GlazeAgentHost {
         x.out = []; x.head = 0; x.waiting = 0; x.flying = false
         for k in x.conns.values { pause(k) }
     }
-    /// The worker's bye: its connections close and its socket and run file go.
+    /// The worker's bye: its connections close as its close does (what it wrote last still goes; closed), and its socket and
+    /// run file go.
     private func stop(_ x: Instance) {
         instances[x.id] = nil
         x.session = nil
         x.gen += 1
-        for k in Array(x.conns.values) + Array(x.joining.values) + Array(x.ending.values) { shut(k) }
-        x.conns = [:]
+        for k in Array(x.joining.values) { shut(k) }
+        for c in Array(x.conns.keys) { closed(x, c) }
         x.listener?.cancel()
         x.listener = nil
         guard x.ino != 0, let dir = try? Run.open(run) else { return }
