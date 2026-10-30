@@ -161,6 +161,23 @@ test('two Drive files, one a Google Doc exported as .docx, are staged beside the
   assert.equal(JSON.stringify(go.files.map((f) => [f.name, f.mime, f.size])), JSON.stringify([[r[0].name, MIME.pdf, 450e3], [r[1].name, MIME.docx, 30e3]]));
 });
 
+for (const [mime, title, expected] of [
+  [MIME.gdoc, 'Lab notes v1.2', 'LabNotesV12.docx'],
+  ['application/vnd.google-apps.spreadsheet', 'Budget.FY26', 'BudgetFY26.xlsx'],
+  ['application/vnd.google-apps.presentation', '.Final slides', 'FinalSlides.pptx'],
+]) test(`a Google export preserves the full dotted title: ${title}`, async () => {
+  const picked = file('1Dotted', title, mime), s = setup({ picked: [picked] });
+  s.d.files.set(picked.id, { meta: picked, bytes: bytes(1000) });
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-drive'); await settle(s, 20);
+  assert.equal(err(s), '');
+  assert.deepEqual(rows(s).map((r) => r.name), [expected], 'strip only the export extension, not part of the Google title');
+  s.click('.gs-primary'); await settle(s);
+  const go = s.messages.find((m) => m.type === 'submit:go');
+  assert.equal(go.files[0].name, expected, 'the reviewed name is submitted');
+  assert.equal(go.note, `Attached: ${expected}`);
+});
+
 test('any type comes as it is, and a file over 15 MB under Blackboard\'s 50 MB is taken', async () => {
   const s = setup({ picked: [file('1Png', 'Photo.png', MIME.png), file('1Zip', 'Data.zip', MIME.zip), file('1Long', 'Long.docx', MIME.docx)] });
   s.d.files.set('1Png', { meta: file('1Png', 'Photo.png', MIME.png, 2000), bytes: bytes(2000, 3) });
