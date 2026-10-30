@@ -364,3 +364,12 @@ test('bounds: slides, shapes, group depth, table cells, text, part size, the arc
   await assert.rejects(P.read(pack({ 'ppt/presentation.xml': null })), /not a PowerPoint presentation/);
   await assert.rejects(P.read(new TextEncoder().encode('%PDF-1.7')), /not a zip/);
 });
+
+test('missing media parts become picture boxes and are not listed as drawable media', async () => {
+  const bytes = pack({ 'ppt/media/image1.png': null, 'ppt/media/image3.svg': null });
+  const d = await P.read(bytes);
+  assert.deepEqual(pick(named(d.slides[3], 'Picture 2'), ['type', 'kind', 'title']), { type: 'box', kind: 'picture', title: 'Cell under a microscope' });
+  assert.deepEqual(pick(named(d.slides[3], 'Icon'), ['type', 'kind']), { type: 'box', kind: 'picture' });
+  assert.deepEqual(d.media, []);
+  assert.equal(await P.media(bytes, 'ppt/media/image1.png'), null);
+});
