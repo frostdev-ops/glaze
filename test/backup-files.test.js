@@ -167,3 +167,23 @@ test('files that cannot fit one backup are refused before any is read', async ()
   await assert.rejects(B.filesOf(local, async () => { reads++; return new Uint8Array(0); }), (e) => e.why === 'big');
   assert.equal(reads, 0);
 });
+
+test('a refused restore cannot delete a live version file while replaying overlays', async () => {
+  const a = device(), k = PA.newKey();
+  const old = await a.files.put(bytes(100, 71), 'application/pdf');
+  const current = await a.files.put(bytes(100, 72), 'application/pdf');
+  const incoming = await a.files.put(bytes(100, 73), 'application/pdf');
+  const { paper } = await a.P.save(k, { kind: 'pdf', doc: null, file: current, size: current.size, pages: 1 }, { reason: 'import' });
+  const history = Array.from({ length: 40 }, (_, i) => ({ id: `v-${i}`, at: NOW - i - 1, reason: 'import', kind: 'pdf', doc: null,
+    file: i === 39 ? old : current, size: 100, pages: 1, bytes: 200 }));
+  a.store[`writerVersions:${k}`] = history;
+  await a.P.reown(k);
+  a.clock.t += F.HOLD + 1;
+  const before = structuredClone(a.store);
+  const steps = [{ action: 'own', value: { papers: { [`writerPaper:${k}`]: { ...paper, file: incoming, updated: NOW - 100 } } } },
+    { action: 'settings', value: {} }];
+  const out = await B.atomic(steps, { local: a.local, sync: a.local, files: a.files, settings: async () => ({ ok: false, error: 'write' }) });
+  assert.equal(out.ok, false);
+  assert.deepEqual(a.store, before, 'the live records and versions did not change');
+  assert.equal(sha(await a.get(old)), old.hash, 'the live version still has its bytes');
+});
