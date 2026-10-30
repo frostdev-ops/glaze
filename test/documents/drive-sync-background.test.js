@@ -131,3 +131,29 @@ test('while Sync is off for its account, each record\'s time of change is still 
   assert.equal((await local.get('driveSyncStamps')).driveSyncStamps, undefined);
   assert.equal(loaded, 0, 'Google\'s libraries never loaded for it');
 });
+
+// The worker's Google sign-in routes (background/background.js), Google's sign-in (background/google.js) as a stand-in.
+const googleWorker = (status) => {
+  const listeners = [];
+  const context = vm.createContext({
+    console, URL, Promise, navigator: {}, importScripts: () => {},
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, onMessage: { addListener: (f) => listeners.push(f) }, onConnect: { addListener() {} } },
+      storage: { local: { get: async () => ({}) } }, permissions: {}, identity: {}, tabs: {} },
+    GZ_GOOGLE: { ON: true, APP: 'app', flowOf: () => 'chrome', create: () => ({ status: async () => status }) }, GZ_GOOGLE_CONFIG: {}, GZ_GCAL: { ON: false },
+    fromEditor: () => false, trustedFrame: () => true, settingsFramesLoaded: Promise.resolve(), grantTurn: (f) => f(),
+  });
+  const source = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
+  const from = source.indexOf('// Google sign-in for Drive (background/google.js)');
+  vm.runInContext(source.slice(from, source.indexOf('// Sync to Google Drive (documents/drive-sync.js', from)), context);
+  const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(m, sender, res); });
+  return { send };
+};
+
+test('Drive\'s status tells Documents and Writer whether Google\'s Picker works there, as well as whether Drive is connected', async () => {
+  const page = { id: 'glaze', url: 'chrome-extension://x/papers.html', frameId: 0 };
+  const ask = async (status) => JSON.parse(JSON.stringify(await googleWorker(status).send({ type: 'glaze:drive', op: 'status' }, page)));
+  assert.deepEqual(await ask({ ok: true, flow: 'chrome', email: 'student@school.edu', picker: true }), { ok: true, connected: true, picker: true });
+  assert.deepEqual(await ask({ ok: true, flow: 'native', email: 'student@school.edu', picker: false }), { ok: true, connected: true, picker: false }, 'Safari\'s app flow: Save to Drive, no Picker');
+  assert.deepEqual(await ask({ ok: true, flow: 'chrome', email: null, picker: true }), { ok: true, connected: false, picker: false }, 'not connected');
+  assert.deepEqual(await ask({ ok: false, why: 'setup' }), { ok: true, connected: false, picker: false });
+});
