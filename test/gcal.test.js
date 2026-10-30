@@ -101,7 +101,7 @@ withMock('incremental: nothing changed costs one read; one changed item is one u
   const r = await G.sync(e, cal, st, { src: SRC, events: [], from: later, first: '2026-10-21', whole: true });
   assert.ok(mock.live(cal).some((x) => x.summary === 'BIO 101') && mock.live(cal).some((x) => x.summary === 'Lab 1 (revised)'), 'past events stay');
   assert.equal(r.wrote, 0);
-  assert.equal(Object.keys(st.map).length, 0, 'and are forgotten here');
+  assert.ok(Object.values(st.map).every((m) => m.removed), 'past events are forgotten; only Glaze removal markers remain');
 });
 
 withMock('conflict rule: an edited deadline is written over, a deleted one stays deleted; a moved or deleted plan moves or clears the plan here', async (mock) => {
@@ -186,6 +186,19 @@ withMock('an expired cursor (410) lists everything again and carries on', async 
   assert.deepEqual(mock.log.map(([m, p]) => [m, /syncToken/.test(p)]), [['GET', true], ['GET', false]]);
 });
 
+withMock('sync query: full and incremental listings preserve showDeleted, including after a cursor expires', async (mock) => {
+  const e = env(mock);
+  const { cal } = await G.connect(e);
+  const st = G.fresh();
+  await run(e, cal, st);
+  await run(e, cal, st);
+  mock.expire();
+  await run(e, cal, st);
+  const listings = mock.log.filter(([m, p]) => m === 'GET' && p.includes('/events?'));
+  assert.ok(listings.some(([, p]) => p.includes('syncToken=')));
+  for (const [, p] of listings) assert.equal(new URL(p, mock.api).searchParams.get('showDeleted'), 'true', p);
+});
+
 withMock('link another device: the code opens the same calendar, and that device\'s events land on the same ones, not duplicates', async (mock) => {
   const a = env(mock);
   const { cal } = await G.connect(a);
@@ -223,6 +236,82 @@ withMock('link another device: a deadline deleted in Google stays deleted on the
   assert.ok(!mock.live(cal).some((x) => x.id === lab), 'not put back');
   assert.ok(st.gone.includes(lab) && !(lab in st.map));
   assert.equal(mock.live(cal).length, 4);
+});
+
+withMock('export choices: events Glaze removed return when selected again, including after a worker restart', async (mock) => {
+  const e = env(mock);
+  const { cal } = await G.connect(e);
+  let st = G.fresh();
+  await run(e, cal, st);
+  const omitted = EVENTS.filter((x) => x.summary !== 'Lab 1' && !x.plan);
+  await run(e, cal, st, omitted);
+  assert.equal(mock.live(cal).length, 2);
+  st = G.fresh(JSON.parse(JSON.stringify(st)));
+  const edits = [];
+  await run(e, cal, st, EVENTS, { plans: async (x) => { edits.push(...x); return true; } });
+  assert.deepEqual(mock.live(cal).map((x) => x.summary).sort(), EVENTS.map((x) => x.summary).sort());
+  assert.deepEqual(edits, [], 'Glaze removing an unselected plan is not a student deleting that plan');
+  assert.deepEqual(st.gone, [], 'only student deletions suppress deadlines');
+  await run(e, cal, st, omitted);
+  mock.log.length = 0;
+  await run(e, cal, st, omitted);
+  assert.equal(writes(mock).length, 0, 'an acknowledged Glaze removal is not deleted again');
+  st = G.fresh(JSON.parse(JSON.stringify(st)));
+  await run(e, cal, st);
+  assert.equal(mock.live(cal).length, EVENTS.length, 'restoring also works after reading the deletion cursor');
+  await run(e, cal, st, omitted);
+  const later = Date.parse('2026-10-25T04:00:00Z');
+  await G.sync(e, cal, st, { src: SRC, events: [], from: later, first: '2026-10-25', whole: true });
+  st = G.fresh(JSON.parse(JSON.stringify(st)));
+  mock.expire();
+  await G.sync(e, cal, st, { src: SRC, events: [{ ...EVENTS[0], start: later + DAY }], from: later, first: '2026-10-25', whole: true });
+  assert.ok(mock.live(cal).some((x) => x.summary === 'Lab 1'), 'a rescheduled deadline also returns after its old date and a full cursor refresh');
+});
+
+withMock('link another device: deleted deadlines survive a sync for another school account and a worker restart', async (mock) => {
+  const a = env(mock);
+  const { cal } = await G.connect(a);
+  await run(a, cal, G.fresh());
+  const lab = mock.live(cal).find((x) => x.summary === 'Lab 1').id;
+  mock.del(cal, lab);
+  const b = env(mock);
+  let st = G.fresh();
+  let saved;
+  await G.sync(b, cal, st, { src: 'https://other.test/7', events: [], from: FROM, first: FIRST, whole: true }, {
+    save: async () => { saved = JSON.parse(JSON.stringify(st)); },
+  });
+  st = G.fresh(saved);
+  await run(b, cal, st);
+  assert.ok(!mock.live(cal).some((x) => x.id === lab), 'advancing the shared calendar cursor must not lose another account deletion');
+  assert.ok(st.gone.includes(lab));
+});
+
+withMock('link another device: a deleted deadline outside the first export survives a later range expansion', async (mock) => {
+  const a = env(mock);
+  const { cal } = await G.connect(a);
+  await run(a, cal, G.fresh());
+  const lab = mock.live(cal).find((x) => x.summary === 'Lab 1').id;
+  mock.del(cal, lab);
+  const b = env(mock);
+  let saved;
+  const st = G.fresh();
+  await assert.rejects(run(b, cal, st, [], { save: async () => { saved = JSON.parse(JSON.stringify(st)); throw new Error('worker stopped'); } }), /worker stopped/);
+  await run(b, cal, G.fresh(saved));
+  assert.ok(!mock.live(cal).some((x) => x.id === lab), 'the deletion must be durable whenever its cursor is saved');
+});
+
+withMock('deletion history: discovering another deleted deadline does not evict an earlier student deletion', async (mock) => {
+  const e = env(mock);
+  const { cal } = await G.connect(e);
+  await run(e, cal, G.fresh(), EVENTS.slice(0, 2));
+  const lab = mock.live(cal).find((x) => x.summary === 'Lab 1').id;
+  for (const x of mock.live(cal)) mock.del(cal, x.id);
+  let st = G.fresh({ gone: [lab, ...Array.from({ length: 999 }, (_, i) => String(i).padStart(64, '0'))] });
+  await run(e, cal, st, EVENTS.slice(0, 2));
+  assert.equal(mock.live(cal).length, 0, 'an older deletion must not be recreated to make room for a newly discovered one');
+  st = G.fresh(JSON.parse(JSON.stringify(st)));
+  await run(e, cal, st, EVENTS.slice(0, 2));
+  assert.equal(mock.live(cal).length, 0, 'the full deletion history survives a worker restart');
 });
 
 withMock('disconnect: the calendar deleted if asked, and the grant revoked with the token in the body, not the address', async (mock) => {

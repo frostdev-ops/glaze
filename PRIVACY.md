@@ -383,7 +383,8 @@ not those unknown legacy copies or unrelated stickers.
   event ID (a SHA-256 hash of the Canvas site, your Canvas user id and the event's identifier), which Canvas account
   and, for a "do on" day or focus session, which Better To Do item it belongs to, that plan's date or time, when the
   event ends, a hash of what was written and Google's version tag for it; Google's sync cursor; and the IDs of deadline
-  events you deleted in Google Calendar, so Glaze doesn't put them back. No sign-in token: Chrome keeps that itself.
+  events you deleted in Google Calendar, so Glaze doesn't put them back, including deleted event IDs not yet matched
+  to an export, and markers for events Glaze removed while unselected. No sign-in token: Chrome keeps that itself.
   **Disconnect** deletes all of it.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),

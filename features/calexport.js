@@ -21,15 +21,17 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
   const pages = async (path) => {
     const out = [];
     let url = location.origin + path;
+    let complete = false;
     for (let i = 0; url && i < 10; i++) {
       const r = await fetch(url, { credentials: 'same-origin', headers: { accept: 'application/json+canvas-string-ids, application/json' } });
       if (!r.ok) throw new Error(String(r.status));
       const j = JSON.parse((await r.text()).replace(/^while\(1\);/, ''));
       if (Array.isArray(j)) out.push(...j);
       const next = r.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
+      complete = !next; // A continuation we cannot safely follow is still an unread page.
       url = next && new URL(next, location.origin).origin === location.origin ? next : null;
     }
-    return { items: out, complete: !url };
+    return { items: out, complete };
   };
 
   // What the file may hold, read afresh from storage: Glaze on, the Gradescope switch and this Canvas account's answer

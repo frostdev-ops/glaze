@@ -221,6 +221,13 @@ test('review: a planner read cut short at ten pages is not whole; one that ends 
   assert.equal((await ended.go()).whole, true);
 });
 
+test('review: a planner continuation on another origin is not followed and is not a whole read', async () => {
+  const p = page({ next: () => 'https://other.test/api/v1/planner/items?page=2' });
+  assert.equal((await p.go(() => true, { icsPlan: false })).whole, false);
+  assert.equal(p.asked.length, 1);
+  assert.ok(p.asked.every((url) => new URL(url).origin === 'https://canvas.test'));
+});
+
 test('review: an export with nothing changed saves Gradescope work and the overdue item\'s plan, after asking further back', async () => {
   const p = page();
   const r = await p.go();
