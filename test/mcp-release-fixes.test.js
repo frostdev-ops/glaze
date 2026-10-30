@@ -27,7 +27,7 @@ const node = (d, code = 37) => {
 const ctx = (home, exe) => ({ platform: 'linux', env: { HOME: home }, node: exe, run: I.runFile });
 const doctor = async (c) => {
   let out = '';
-  const code = await CLI.main(['doctor'], { ctx: c, stdout: { write: (s) => { out += s; } }, stderr: { write: (s) => { out += s; } } });
+  const code = await CLI.main(['doctor'], { ...c, stdout: { write: (s) => { out += s; } }, stderr: { write: (s) => { out += s; } } });
   return { code, out };
 };
 
