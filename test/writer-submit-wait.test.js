@@ -168,7 +168,7 @@ test('full: a press before the submit step has the box goes to it once armed, an
   assert.equal(press(SUBMIT).held, true, 'Ultra doesn\'t hear it: its box doesn\'t hold the paper');
   c.tick(100);
   assert.equal(c.clicks.length, 0);
-  c.ctx.GZ_WRITER_SUBMIT = { armed: () => true, passing: () => false };
+  c.ctx.GZ_WRITER_SUBMIT = { armed: () => true, passing: () => false, press: (_box, b) => c.clicks.push(b) };
   c.tick(100);
   assert.deepEqual(c.clicks, [button], 'pressed again, for the submit step (its sheet)');
   // A box the step never takes cannot submit Ultra's empty or stale text box.

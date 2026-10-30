@@ -86,7 +86,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       box.saved = null; box.saveRequest = null;
       busy(marked, false);
       const x = L().footer(box.editor).save;
-      if (go && ok && live().has(box) && x?.isConnected && L().enabled(x)) pass(x);
+      if (go && ok && Date.now() - saved.at < SAVE_LOST && live().has(box) && x?.isConnected && L().enabled(x)) pass(x);
     };
     saved.at = Date.now();
     box.saved = saved;
@@ -309,7 +309,8 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     else if (m.type === 'submit:review' && armed.has(box)) review(box);
   };
   // armed(box): this step has the box's Ultra buttons (features/writer.js holds a press until it does).
-  return { hear, passing: (button) => button === passing, armed: (box) => live().has(box) };
+  const press = (box, b) => { if (live().has(box) && box.full && ownerOf(b) === box) act(box, b, { type: 'click', preventDefault() {}, stopImmediatePropagation() {} }); };
+  return { hear, press, passing: (button) => button === passing, armed: (box) => live().has(box) };
 })();
 
 GZ_WRITER_SUBMIT;

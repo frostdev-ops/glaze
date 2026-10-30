@@ -373,13 +373,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const step = () => {
       if (box.held !== p) return;
       if (boxes.get(box.editor) !== box || !sameBox(box)) { end(); return; }
-      if (p.request && box.flushing?.request === p.request) { setTimeout(step, 100); return; } // the frame saves it
-      if (p.request && box.port === p.port) { end(); return; } // answered: Ultra's button went, or the bar says why
       const x = button();
       if (x !== p.button) { if (p.button) busy(p.button, false); p.button = x; if (x) busy(x, true); }
+      if (p.request && box.flushing?.request === p.request) { setTimeout(step, 100); return; } // the frame saves it
+      if (p.request && box.port === p.port) { end(); return; } // answered: Ultra's button went, or the bar says why
       if (Date.now() - p.at >= 60000) { fail(); return; }
       if (box.full && x) {
-        if (globalThis.GZ_WRITER_SUBMIT?.armed?.(box)) { end(); x.click(); return; }
+        if (globalThis.GZ_WRITER_SUBMIT?.armed?.(box)) { end(); GZ_WRITER_SUBMIT.press(box, x); return; }
         if (!box.ready || !box.port) p.up = null;
         else if (Date.now() - (p.up ??= Date.now()) > HOLD_ARM) { fail(); return; }
       } else if (!box.full && x && box.ready && box.port && box.viewedOn === box.port) {
