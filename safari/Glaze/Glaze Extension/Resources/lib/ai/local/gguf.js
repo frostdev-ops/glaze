@@ -43,7 +43,7 @@ var GZ_AI_GGUF = globalThis.GZ_AI_GGUF || (() => {
   // Sequential reads over a window of the source, refilled a chunk at a time.
   const cursor = (src, chunk) => {
     let buf = new Uint8Array(0), base = 0, pos = 0, dv = new DataView(buf.buffer);
-    const td = new TextDecoder('utf-8');
+    const td = new TextDecoder('utf-8', { ignoreBOM: true }); // a leading U+FEFF is part of the string
     const c = {
       get pos() { return pos; },
       // Makes the next n bytes readable (awaits only when the window runs out).
