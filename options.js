@@ -1569,7 +1569,8 @@ GZ_UI.load().then((s) => {
         hint(t('Backing up…'));
         notes.push({ account, entries: await GZ_BACKUP.notesOut(account, sessionsOp) });
       }
-      const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, notes, keys: keys.keys, version: chrome.runtime.getManifest().version });
+      const files = await GZ_BACKUP.filesOf(all);
+      const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, notes, keys: keys.keys, version: chrome.runtime.getManifest().version, files });
       const blob = new Blob(GZ_ZIP.zip(entries), { type: 'application/zip' });
       if (blob.size > GZ_BACKUP.LIMIT.zip || entries.length > GZ_BACKUP.LIMIT.entries) throw Object.assign(new Error('big'), { ui: t('Too big for one backup file (up to {size}).', { size: `${GZ_BACKUP.LIMIT.zip >> 20} MB` }) });
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: GZ_BACKUP.fileName() });

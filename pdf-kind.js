@@ -9,14 +9,17 @@
 // Glaze's (lib/pdf-l10n.js).
 var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const url = (f) => chrome.runtime.getURL(f);
-  const UNREAD = 'That file could not be read.', TOO_BIG = 'Choose a PDF smaller than 3 MB.';
+  const UNREAD = 'That file could not be read.', TOO_BIG = GZ_DOC_KINDS.KINDS.pdf.big;
   const PAGES = 500;
   const TOO_BIG_SAVE = 'This PDF is too big to save.';
 
-  // ---- storage: the one place a PDF's bytes are kept and read back. For now a base64 `file` field in the paper record
-  // (chrome.storage.local through the worker, lib/writer-papers.js), within the record's 4 MB: at most 3 MB of PDF. The
-  // worker-owned blob store (glaze-docs, the sheets stage) replaces put and get with a hash into it and lifts max to the
-  // kind's 50 MB; nothing else here reads `file`.
+  // ---- storage: the one place a PDF's bytes are kept and read back: the worker's file store (lib/doc-files.js, over its
+  // port), the record pointing at them (file: { hash, size, type }), up to the kind's max. A record from before the store
+  // holds them as base64 in `file`: read as before, and moved over as it is opened. Where the store is unavailable, a PDF
+  // up to the old 3 MB is kept that way still. Nothing else here reads `file`.
+  const files = () => GZ_WRITER_PAPER.need(['lib/doc-files.js']).then(() => GZ_DOC_FILES);
+  // A refusal of the store's, as the page says it.
+  class FileError extends RangeError { constructor(why) { super(GZ_DOC_KINDS.SAYS[why] || UNREAD); this.why = why; } }
   const b64 = (bytes) => {
     if (typeof bytes.toBase64 === 'function') return bytes.toBase64();
     let s = '';
@@ -29,18 +32,30 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
     return out;
   };
+  const LEGACY = 3e6;
   const STORE = {
-    max: 3e6,
-    // bytes → the record's fields for them.
-    put: (bytes) => { if (!(bytes?.length > 0) || bytes.length > STORE.max) throw new RangeError(TOO_BIG); return { file: b64(bytes), size: bytes.length }; },
-    // a record → its bytes, or null.
-    get: (rec) => {
-      if (typeof rec?.file !== 'string' || !rec.file || rec.file.length > 4 * Math.ceil(STORE.max / 3)
-        || (rec.size != null && (!Number.isSafeInteger(rec.size) || rec.size <= 0 || rec.size > STORE.max))) return null;
-      try {
-        const bytes = unb64(rec.file);
-        return bytes.length > 0 && bytes.length <= STORE.max && (rec.size == null || rec.size === bytes.length) ? bytes : null;
-      } catch { return null; }
+    max: GZ_DOC_KINDS.KINDS.pdf.max,
+    // bytes → the record's fields for them, the bytes kept in the store; a RangeError says why not.
+    put: async (bytes) => {
+      if (!(bytes?.length > 0) || bytes.length > STORE.max) throw new RangeError(TOO_BIG);
+      const F = await files();
+      try { return { file: await F.client().put(bytes, 'application/pdf'), size: bytes.length }; } catch (e) {
+        if (e.why === 'unavailable' && bytes.length <= LEGACY) return { file: b64(bytes), size: bytes.length };
+        throw new FileError(e.why);
+      }
+    },
+    // a record → its bytes, or null for none; a FileError when the store can't give them (missing, unavailable, cut).
+    get: async (rec) => {
+      if (typeof rec?.file === 'string') {
+        if (!rec.file || rec.file.length > 4 * Math.ceil(LEGACY / 3) || (rec.size != null && (!Number.isSafeInteger(rec.size) || rec.size <= 0 || rec.size > LEGACY))) return null;
+        try {
+          const bytes = unb64(rec.file);
+          return bytes.length > 0 && bytes.length <= LEGACY && (rec.size == null || rec.size === bytes.length) ? bytes : null;
+        } catch { return null; }
+      }
+      const F = await files();
+      if (!F.ref(rec?.file) || rec.file.size > STORE.max) return null;
+      try { return await F.client().get(rec.file); } catch (e) { throw new FileError(e.why); }
     },
   };
 
@@ -130,7 +145,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     let thumb = null, pages = 0;
     try { pages = doc.numPages; thumb = await picture(doc).catch(() => null); } finally { await task.destroy().catch(() => {}); }
     const key = GZ_WRITER_PAPERS.newKey(), title = GZ_DOC_HOME.stem(file.name);
-    await papers().save(key, { kind: 'pdf', ...STORE.put(bytes), pages, ...(thumb && { thumb }), title, named: !!title }, { reason: 'import' });
+    await papers().save(key, { kind: 'pdf', ...await STORE.put(bytes), pages, ...(thumb && { thumb }), title, named: !!title }, { reason: 'import' });
     return key;
   };
   // The card's picture: the one the record keeps, else drawn once from its bytes here and kept for its revision.
@@ -139,11 +154,10 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const img = h('img', { class: 'gq-thumb', alt: '', decoding: 'async' });
     const at = `${rec.key}|${rec.revision}`, src = rec.thumb || drawn.get(at);
     if (src) { img.src = src; return img; }
-    const bytes = STORE.get(rec);
-    if (bytes) read(bytes).then(async ({ task, doc }) => { try { const u = await picture(doc); drawn.set(at, u); img.src = u; } finally { await task.destroy().catch(() => {}); } }).catch(() => {});
+    STORE.get(rec).then((bytes) => bytes && read(bytes)).then(async (r) => { if (!r) return; const { task, doc } = r; try { const u = await picture(doc); drawn.set(at, u); img.src = u; } finally { await task.destroy().catch(() => {}); } }).catch(() => {});
     return img;
   };
-  const file = async (key) => { const rec = await papers().get(key), bytes = STORE.get(rec); return bytes ? { name: nameOf(rec), mime: 'application/pdf', bytes } : null; };
+  const file = async (key) => { const rec = await papers().get(key), bytes = await STORE.get(rec); return bytes ? { name: nameOf(rec), mime: 'application/pdf', bytes } : null; };
   const exportFile = async (key) => {
     const f = await file(key);
     if (!f) throw new Error('no file');
@@ -211,11 +225,23 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       annotationEditorMode: P.AnnotationEditorType.DISABLE, enablePermissions: true, imageResourcesPath: url('lib/pdfjs/images/'), removePageBorders: false });
     links.setViewer(viewer);
     l10n.translate(scroll);
-    const refuse = () => { said.textContent = t(UNREAD); said.hidden = false; for (const b of [zoomOut, zoomB, zoomIn, findB, pageIn, saveB]) if (b) b.disabled = true; };
+    const refuse = (e) => {
+      said.textContent = t(e instanceof FileError ? e.message : UNREAD); said.hidden = false; for (const b of [zoomOut, zoomB, zoomIn, findB, pageIn, saveB]) if (b) b.disabled = true;
+      // A file the store no longer has: Delete (to Trash, as Documents' own) or Import… it again, where this is a document of its own.
+      if (e?.why === 'missing' && own) said.append(' ', btn({ class: 'gp-box', 'data-act': 'delete', onclick: () => { st.trash(key).then(() => location[window.top === window ? 'assign' : 'replace']('papers.html'), () => say(t('Not saved. Try again in a moment.'))); } }, t('Delete')),
+        ' ', btn({ class: 'gp-box', 'data-act': 'reimport', onclick: () => { pick.click(); } }, t('Import…')));
+    };
+    const pick = h('input', { type: 'file', accept: '.pdf,application/pdf', hidden: true, onchange: () => {
+      const f = pick.files[0];
+      pick.value = '';
+      if (f) into(key, f).then(() => location.reload(), (e) => { console.error(e); say(t(e instanceof RangeError ? e.message : UNREAD)); });
+    } });
+    ui.append(pick);
+    let bytes = null, task = null, doc = null;
+    // A record from before the store moves into it as it is opened (the worker reads its base64 again).
+    if (!src && typeof rec?.file === 'string') st.migrate?.(key).catch(() => {});
     // A preview's bytes are read as a kept PDF's are (a copy: pdf.js takes what it is given; Save keeps the original).
-    const bytes = src ? (src.bytes?.length ? src.bytes.slice() : null) : STORE.get(rec);
-    let task = null, doc = null;
-    try { if (!bytes) throw new RangeError(UNREAD); ({ task, doc } = await read(bytes)); } catch { refuse(); }
+    try { bytes = src ? (src.bytes?.length ? src.bytes.slice() : null) : await STORE.get(rec); if (!bytes) throw new RangeError(UNREAD); ({ task, doc } = await read(bytes)); } catch (e) { refuse(e); }
     const inited = new Promise((ok) => bus.on('pagesinit', ok, { once: true }));
     const drawn = new Promise((ok) => bus.on('pagerendered', ok, { once: true }));
     if (doc) {
@@ -337,10 +363,10 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       try {
         const lib2 = pdfdoc(), out = lib2 ? (await (await lib2).save(doc)).bytes : await doc.saveDocument();
         const thumbUrl = await picture(doc).catch(() => null);
-        ({ paper: rec } = await st.save(key, { ...STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }, { expectedKind: 'pdf' }));
+        ({ paper: rec } = await st.save(key, { ...await STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }, { expectedKind: 'pdf' }));
         say(dirty ? '' : t('Saved'));
         return true;
-      } catch (e) { console.error(e); dirty = true; say(t(e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); return false; }
+      } catch (e) { console.error(e); dirty = true; say(t(e instanceof FileError ? e.message : e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); return false; }
     };
     const flush = () => {
       clearTimeout(timer);
@@ -396,7 +422,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     }
     // What an assignment's submit sheet sends (writer-submit.js): the PDF as saved, its fields filled.
     return { pages: () => doc?.numPages || 0, say, ready: () => !!doc, save: flush, dispose,
-      file: async () => { if (!await flush()) throw new Error('not saved'); rec = await st.get(key); const bytes = STORE.get(rec); if (!bytes) throw new Error('no file'); return { bytes, mime: 'application/pdf', ext: '.pdf' }; } };
+      file: async () => { if (!await flush()) throw new Error('not saved'); rec = await st.get(key); const bytes = await STORE.get(rec); if (!bytes) throw new Error('no file'); return { bytes, mime: 'application/pdf', ext: '.pdf' }; } };
   };
   // A PDF brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it held
   // kept as a version first (the 'import' save), its title the assignment's. → the record.
@@ -408,7 +434,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const { task, doc } = await read(bytes);
     let thumbUrl = null, pages = 0;
     try { pages = doc.numPages; thumbUrl = await picture(doc).catch(() => null); } finally { await task.destroy().catch(() => {}); }
-    return (await papers().save(key, { kind: 'pdf', doc: null, words: 0, ...STORE.put(bytes), pages, ...(thumbUrl && { thumb: thumbUrl }) }, { reason: 'import' })).paper;
+    return (await papers().save(key, { kind: 'pdf', doc: null, words: 0, ...await STORE.put(bytes), pages, ...(thumbUrl && { thumb: thumbUrl }) }, { reason: 'import' })).paper;
   };
 
   // ---- registration: a PDF already kept lists and opens either way; only Settings → Writer → PDFs on (writer.pdf) lets
@@ -419,7 +445,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
   const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(DEFAULTS)))
     .then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.pdf === true, () => false);
-  GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: (key, host) => edit(key, { host }), show: (src, host) => edit(null, { host, src: { ...src } }), into, says: { size: TOO_BIG, read: UNREAD }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
+  GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: (key, host) => edit(key, { host }), show: (src, host) => edit(null, { host, src: { ...src } }), into, says: { size: TOO_BIG, read: UNREAD, ...GZ_DOC_KINDS.SAYS }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
 
   return { STORE, pureXfa };
 })();
