@@ -190,7 +190,7 @@ const worker = (local = {}, syncStore = {}) => {
     if (!kept) res('ignored');
   });
   const until = async (fn) => { for (let i = 0; i < 400 && !fn(); i++) await new Promise((r) => setTimeout(r, 5)); return fn(); };
-  return { send, local, sync: syncStore, until, set: context.chrome.storage.local.set, install: () => { for (const f of installed) f({ reason: 'update' }); }, popup: { id: 'glaze', url: 'chrome-extension://x/popup.html' } };
+  return { send, local, sync: syncStore, until, chrome: context.chrome, set: context.chrome.storage.local.set, install: () => { for (const f of installed) f({ reason: 'update' }); }, popup: { id: 'glaze', url: 'chrome-extension://x/popup.html' } };
 };
 
 test('the worker keeps the catalogue: built on update, again when a Look is saved, renamed or removed', async () => {
@@ -294,6 +294,19 @@ test('two Settings tabs keep and remove Looks through one worker turn without lo
   assert.deepEqual(w.sync.courses.looks, { _2_1: favorites[2].id });
   assert.equal(w.local.lookCatalog.sig, C.sig(w.local.lookFavorites), 'reply waits for the final catalogue');
   assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'remove', id: favorites[2].id }, w.popup), { ok: false, error: 'sender' });
+});
+
+// Remove unmaps the courses that wore the Look (sync) before it forgets the Look (local): a sync write refused (quota, rate)
+// leaves both as they were and says so, rather than a course still wearing a Look that is gone everywhere else.
+test('remove fails closed when the courses that wore the Look cannot be written', async () => {
+  const { favorites } = await fixtures();
+  const w = worker({ lookFavorites: favorites.slice(0, 2), rotateLooks: [favorites[0].id] }, G.GZ_SANITIZE({ courses: { looks: { _1_1: favorites[0].id } } }));
+  const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/options.html' };
+  w.chrome.storage.sync.set = () => Promise.reject(new Error('QUOTA_BYTES_PER_ITEM quota exceeded'));
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'remove', id: favorites[0].id }, editor), { ok: false, error: 'write' });
+  assert.equal(w.local.lookFavorites.length, 2, 'the Look is still kept');
+  assert.deepEqual(w.local.rotateLooks, [favorites[0].id]);
+  assert.deepEqual(w.sync.courses.looks, { _1_1: favorites[0].id });
 });
 
 test('catalogue rebuilds settle on the latest of consecutive favorites writes', async () => {
