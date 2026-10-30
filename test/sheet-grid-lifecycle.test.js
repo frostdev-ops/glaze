@@ -208,3 +208,32 @@ test('embedded Close waits for the cell being written, and leaving the page comm
   await settle();
   assert.equal(await read(), 'gone', 'pagehide (an iframe removed) keeps the open cell');
 });
+
+test('unsaved work over another tab\'s write saves over it whole, keeping theirs as a version, instead of retrying forever', async () => {
+  const f = frame(), get = (keys) => f.store.get(keys);
+  f.type('mine'); f.key('Enter');
+  assert.equal(await f.view.save(), true);
+  // Another tab: a workbook of two sheets over the one just saved.
+  const theirs = M.workbook();
+  theirs.sheets[0].rows.set(0, new Map([[0, { t: 's', v: 'theirs' }]]));
+  theirs.sheets.push(M.sheet('Extra', 2)); theirs.sheets[1].rows.set(0, new Map([[0, { t: 'n', v: 5 }]]));
+  const other = PA.open(f.store), was = await SD.read(get, KEY);
+  const wrote = await SD.write(other, KEY, theirs, was.sigs, { base: was.rec.revision });
+  // It lands while a cell here is being written.
+  f.el('gx-grid').focus(); f.type('later');
+  for (const l of f.changes) l({ [`writerPaper:${KEY}`]: { newValue: wrote.saved.paper } }, 'local');
+  await settle();
+  f.key('Enter');
+  assert.equal(await f.view.save(), true, 'the save is not refused');
+  const got = await SD.read(get, KEY);
+  assert.equal(got.wb.sheets.length, 1);
+  assert.equal(got.wb.sheets[0].rows.get(0).get(0).v, 'mine');
+  assert.equal(got.wb.sheets[0].rows.get(1).get(0).v, 'later');
+  assert.deepEqual(Object.keys(got.rec.parts), ['1:0'], 'their second sheet\'s band is dropped');
+  assert.equal(f.data[`writerSheet:${KEY}:2:0`], undefined);
+  const kept = (await other.versions(KEY)).find((v) => v.reason === 'conflict');
+  assert.ok(kept, 'their workbook is a version');
+  const back = await SD.unpack((await other.version(KEY, kept.id)).gz);
+  assert.equal(back.sheets[0].rows.get(0).get(0).v, 'theirs');
+  assert.equal(back.sheets[1].rows.get(0).get(0).v, 5);
+});

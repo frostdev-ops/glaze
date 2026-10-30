@@ -701,14 +701,24 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       saving = (async () => {
         do {
           again = false;
-          const d = dirtyAll || foreign ? null : new Set(dirty), patch = nextPatch, pend = nextVersion;
+          const d = dirtyAll || foreign ? null : new Set(dirty), patch = nextPatch;
+          let pend = nextVersion, version = null, base = rec?.revision || 0;
           dirty.clear(); dirtyAll = false; nextPatch = {}; nextVersion = null;
-          if (foreign) sigs = new Map([...sigs.keys()].map((n) => [n, 'stale']));
-          let version = null;
           try {
-            version = pend ? await pend : null;
+            // Another tab wrote while this one had unsaved work, and the worker refuses parts planned on an older revision:
+            // this workbook goes over the stored one whole (its parts this one lacks dropped), the stored one kept as a version.
+            if (foreign) {
+              const cur = await SD.read((ks) => chrome.storage.local.get(ks), key);
+              sigs = new Map([...(cur ? cur.sigs : sigs).keys()].filter(Boolean).map((n) => [n, 'stale']));
+              if (cur) base = cur.rec.revision || 0;
+              if (cur?.rec.kind === 'sheet') {
+                version = { reason: 'conflict', gz: await SD.pack(cur.wb), cells: SD.measure(cur.wb).cells };
+                if (pend) { nextVersion = pend; pend = null; again = true; }
+              }
+            }
+            version ||= pend ? await pend : null;
             if (!version && (fresh || Date.now() - lastVersion >= EVERY)) version = { reason: fresh ? 'start' : 'auto', gz: await SD.pack(wb), cells: SD.measure(wb).cells };
-            const out = await SD.write(papers, key, wb, sigs, { base: rec?.revision || 0, dirty: d, version, patch: { ...(fresh && !patch.title && { title: '', named: false }), ...patch }, show: shown0() });
+            const out = await SD.write(papers, key, wb, sigs, { base, dirty: d, version, patch: { ...(fresh && !patch.title && { title: '', named: false }), ...patch }, show: shown0() });
             sigs = out.sigs;
             if (out.saved) { rec = out.saved.paper; lastVersion = rec.lastVersion || lastVersion; }
             fresh = false; foreign = false;
@@ -716,7 +726,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
             console.error(e);
             if (d) for (const n of d) dirty.add(n); else dirtyAll = true;
             nextPatch = { ...patch, ...nextPatch };
-            if (version && version.reason !== 'auto') nextVersion ||= Promise.resolve(version);
+            if (version && version.reason !== 'auto' && version.reason !== 'conflict') nextVersion ||= Promise.resolve(version);
             say(t('Not saved. Try again in a moment.'));
             timer = setTimeout(() => { timer = 0; flush(); }, 5000);
             break;
