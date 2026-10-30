@@ -90,8 +90,9 @@
     return [svgEl('path', { d: 'M3 15h18M6 15v-5M11 15V3M16 15V8', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 })];
   };
   const svgOf = (kind, colours) => { const g = svgEl('svg', { viewBox: '0 0 24 16', preserveAspectRatio: 'xMidYMid meet' }); g.append(...glyph(kind, colours)); return g; };
-  // Legacy records: scan only the active sheet's owned drawing, with chart children
+  // Legacy records: scan only the active sheet's owned drawing, once per unchanged part. Recognize chart children
   // of the first graphic frame in each anchor, just as the chart reader does (Choice/Fallback is one object).
+  const counts = new WeakMap();
   const countXml = (xml) => {
     const stack = [];
     let anchor = null, n = 0;
@@ -128,10 +129,13 @@
     if ((owners.find((s) => s.keep.sourceId === s.id) || owners[0]) !== sh) return 0;
     const part = parts[path] ?? parts[Object.keys(parts).find((k) => k.toLowerCase() === String(path).toLowerCase())];
     if (!part || typeof part !== 'object') return 0;
-    const data = part.data?.$b64 ?? part.data;
+    const data = part.data?.$b64 ?? part.data, cached = counts.get(part);
+    if (cached?.data === data) return cached.n;
     let xml = data;
     if (typeof part.data?.$b64 === 'string') { try { xml = atob(data); } catch { xml = ''; } }
-    return typeof xml === 'string' ? countXml(xml) : 0;
+    const n = typeof xml === 'string' ? countXml(xml) : 0;
+    counts.set(part, { data, n });
+    return n;
   };
   const chartsOn = (box, rec) => {
     const list = Array.isArray(rec?.charts) ? rec.charts.filter((x) => x && Array.isArray(x.anchor) && x.anchor.length === 4 && x.anchor.every(Number.isSafeInteger)) : null;
