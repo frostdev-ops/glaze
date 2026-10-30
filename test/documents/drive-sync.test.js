@@ -784,3 +784,49 @@ test('back online after a long time offline, the next start, online event or Doc
   assert.equal(textOf(sidecarJson(drive, key).record.doc), 'Offline edit 7');
   noDeletes(drive);
 });
+
+test('a device that stops between a PDF\'s new file and its JSON copy never leaves another device retrying for ever', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  let dying = false;
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  const cut = { ...drive, fetch: async (u, i = {}) => { if (dying && u.includes('/upload/') && text(i.body).includes('"glaze":"doc"')) throw new TypeError('Failed to fetch'); return drive.fetch(u, i); } };
+  const a = device(cut, { clock }), c = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-000000000830';
+  const ref = await a.files.put(enc('%PDF original'), MIME.pdf);
+  await a.papers.save(key, { kind: 'pdf', file: ref, size: ref.size, title: 'Reading', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  // A marks the PDF up; its new file reaches Drive, then A stops for good before the JSON copy goes.
+  const ref2 = await a.files.put(enc('%PDF marked up'), MIME.pdf);
+  await a.papers.save(key, { file: ref2, size: ref2.size }, { reason: 'edit' });
+  await a.sync.touched(key);
+  dying = true;
+  assert.deepEqual(await a.sync.run({ push: true }), { ok: false, why: 'network' });
+  // A new device: a few tries at most, then the PDF comes in from its file alone.
+  let r = await c.sync.set(true), tries = 1;
+  while (!r.ok && tries < 6) { clock.t = (await state(c)).wait + 1; r = await c.sync.run(); tries++; }
+  assert.ok(r.ok, `synced after ${tries} tries`);
+  assert.ok(tries <= 4, `${tries} tries`);
+  assert.equal(dec(await c.files.read((await c.papers.get(key)).file.hash)), '%PDF marked up', 'the file\'s own bytes');
+  assert.ok((await c.sync.run()).ok, 'and settled');
+  noDeletes(drive);
+});
+
+test('a device that stopped between a new document\'s file and its JSON copy reuses that file when it comes back', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  let dying = false;
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  const cut = { ...drive, fetch: async (u, i = {}) => { if (dying && u.includes('/upload/') && text(i.body).includes('"glaze":"doc"')) throw new TypeError('Failed to fetch'); return drive.fetch(u, i); } };
+  const a = device(cut, { clock });
+  assert.ok((await a.sync.set(true)).ok);
+  const key = 'doc:00000000-0000-4000-8000-000000000831';
+  await a.papers.save(key, { doc: doc('New essay'), title: 'Essay', named: true });
+  await a.sync.touched(key);
+  dying = true;
+  assert.deepEqual(await a.sync.run({ push: true }), { ok: false, why: 'network' });
+  dying = false;
+  clock.t = (await state(a)).wait + 1;
+  assert.ok((await a.sync.run({ push: true })).ok);
+  const files = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'file' && f.meta.appProperties.key === sha(key).slice(0, 32));
+  assert.equal(files.length, 1, 'one Essay.docx in Drive');
+  assert.equal(sidecarJson(drive, key).file, files[0].meta.id);
+});
