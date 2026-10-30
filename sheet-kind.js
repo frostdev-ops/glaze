@@ -145,7 +145,7 @@
   const edit = async (key, { fresh = false, host = null } = {}) => {
     if (!host) document.documentElement.dataset.mode = 'sheet';
     await need([...ENGINE, 'sheet-grid.js']);
-    const got = fresh ? null : await GZ_SHEET_DATA.read(get, key).catch((e) => { console.warn(e); return null; });
+    const got = fresh ? null : await GZ_SHEET_DATA.read(get, key);
     const wb = got?.wb || GZ_SHEET_MODEL.workbook();
     const v = GZ_SHEET_GRID.mount({ key, wb, rec: got?.rec || null, sigs: got?.sigs || new Map(), fresh: !got, t: host?.t || t, locale, papers: papers(), show: shower,
       local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: () => (xlsx() ? 'Export .xlsx' : 'Export .csv'), host });
