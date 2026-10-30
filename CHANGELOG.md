@@ -20,6 +20,7 @@ All notable changes to Glaze are documented here. The format follows
 - Settings → AI: providers by name (OpenAI, Anthropic, Google Gemini, OpenRouter, xAI, Mistral, Groq, DeepSeek) beside the model on this device; one model for everything or one per feature; your own OpenAI-compatible endpoints in Advanced. An endpoint set up before moves over by itself.
 - Motion starts at Expressive. Updating moves Subtle to Expressive once; Off stays Off.
 - Text pasted or imported from Word keeps a colour only where it reads on the page.
+- Settings → Writer: Clear all names and removes papers and documents, Trash too.
 
 ### Fixed
 
