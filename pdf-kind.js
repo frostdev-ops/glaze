@@ -5,8 +5,8 @@
 // pdf.js's find, AcroForm fields filled and kept (saved as pdf.js writes them, or by lib/pdf-doc.js's GZ_PDF_DOC.save where
 // that is loaded), the file's permissions honoured, and a form only XFA can show refused. The page itself stays white, a
 // print document; its chrome is the paper's (writer-paper.css: the top bar, the toolbar, ⋯) in the student's Look.
-// Off, nothing registers: the home takes Word files only, as before, and a PDF already kept waits, untouched, for the
-// switch. pdf.js's words are Glaze's (lib/pdf-l10n.js).
+// Off, Documents takes Word files only, as before, and a PDF already kept still lists, opens and fills. pdf.js's words are
+// Glaze's (lib/pdf-l10n.js).
 var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   const url = (f) => chrome.runtime.getURL(f);
   const UNREAD = 'That file could not be read.', TOO_BIG = 'Choose a PDF smaller than 3 MB.';
@@ -283,12 +283,10 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     globalThis.GZ_PAPERS_MOTION?.shown?.('paper');
   };
 
-  // ---- registration: only with Settings → Writer → PDFs on. The page routes once this has answered.
+  // ---- registration: a PDF already kept lists and opens either way; only Settings → Writer → PDFs on (writer.pdf) lets
+  // Documents import new ones (its Import, file chooser and drops: GZ_DOC_KINDS.opens). The page routes once this has answered.
   const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.pdf === true, () => false);
-  GZ_DOC_KINDS.wait(on.then(async (yes) => {
-    if (!yes) return;
-    GZ_DOC_KINDS.register('pdf', { edit, thumb, file, exportFile, text, importFile, measure });
-  }));
+  GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
 
   return { STORE, pureXfa };
 })();
