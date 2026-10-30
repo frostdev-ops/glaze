@@ -437,8 +437,10 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       try {
         const lib2 = pdfdoc(), out = lib2 ? (await (await lib2).save(doc)).bytes : await doc.saveDocument();
         const thumbUrl = await picture(doc).catch(() => null);
-        ({ paper: rec } = await st.save(key, { ...await STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }, { expectedKind: 'pdf', reason: first ? 'edit' : 'auto' }));
-        first = false;
+        const kept = await st.save(key, { ...await STORE.put(out), pages: doc.numPages, ...(thumbUrl && { thumb: thumbUrl }) }, { expectedKind: 'pdf', reason: first ? 'edit' : 'auto' });
+        rec = kept.paper;
+        // Cancelling an empty signature, for example, saves identical bytes and keeps no version.
+        if (kept.version) first = false;
         say(dirty ? '' : t('Saved'));
         return true;
       } catch (e) { console.error(e); if (e?.cause) console.error(e.cause); dirty = true; say(t(e instanceof FileError ? e.message : e instanceof RangeError ? TOO_BIG : 'Not saved. Try again in a moment.')); return false; }
