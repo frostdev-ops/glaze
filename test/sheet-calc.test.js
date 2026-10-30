@@ -227,6 +227,9 @@ test('a typed formula that reads a range where one value belongs is evaluated wh
   assert.deepEqual(at('C1'), { t: 'n', v: 120, f: 'SUM((B1:B5>20)*B1:B5)', a: 'C1', cm: '1' }, 'kept as a dynamic array over its own cell');
   assert.deepEqual(['D1', 'D2', 'D3', 'D4', 'D5'].map((x) => val(e, x)), [150, 40, 30, 90, 3], 'explicit @ and whole-range arguments intersect nothing new');
   for (const x of ['D1', 'D2', 'D3', 'D4', 'D5']) assert.equal(at(x).a, undefined, `${x} stays a plain formula`);
+  // An array result spills in Excel 365: dynamic too, its first value shown here. A scalar from an array stays plain.
+  put('E1', '={1,2,3}'); put('E2', '=B1:B2*{1,2}'); put('E3', '=SUM({1,2,3})'); put('E4', '=MAX({1,2,3}*2)');
+  assert.deepEqual(['E1', 'E2', 'E3', 'E4'].map((x) => [val(e, x), at(x).a ?? null]), [[1, 'E1'], [10, 'E2'], [6, null], [6, null]]);
   e.edit(sh.id, 1, 1, '25');
   assert.equal(val(e, 'C1'), 145, 'recalculated whole');
   e.apply({ op: 'name', name: 'Total', ref: 'Sheet1!$B$1:$B$5' });
