@@ -689,3 +689,220 @@ test('CSV and TSV imports use the codec byte reader and replace the prior tracki
   assert.equal(got.wb.sheets[0].rows.get(1).get(1).v, 42);
   assert.deepEqual(reads, ['scores.csv', 'notes.tsv']);
 });
+
+// The card's charts: sheet-data.js keeps each chart's kind, cells and colours (lib/sheet-chart-xml.js glance); the card
+// draws a small picture of the kind over the cells of A1:F4 it covers, and counts the rest in its corner.
+test('the card draws a chart over the cells it covers and counts the charts outside A1:F4', async () => {
+  const X = require('../lib/sheet-xlsx.js'), CX = require('../lib/sheet-chart-xml.js'), FX = require('./fixtures/sheets/charts.js');
+  const { El } = require('./stand-in-dom.js');
+  const doc = { createElement: (tag) => new El(tag, doc), createElementNS: (ns, tag) => new El(tag, doc) };
+  const { DK } = load({ sheets: true }, { document: doc, GZ_SHEET_XLSX: {} });
+  await DK.settled();
+  const frame = ([c0, r0, c1, r1], i) => `<xdr:twoCellAnchor><xdr:from><xdr:col>${c0}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r0}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${c1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>`
+    + `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${i + 2}" name="Chart ${i + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId${i + 1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`;
+  const drawing = (places) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${places.map(frame).join('')}</xdr:wsDr>`;
+  // A column chart from B2 to the start of F5 (B2:E4), then two pies far off the card.
+  const wb = await X.read(FX.workbook({ kinds: ['column', 'pie', 'pie'], over: { 'xl/drawings/drawing1.xml': drawing([[1, 1, 5, 4], [8, 10, 12, 20], [8, 22, 12, 30]]) } }));
+  assert.equal(SD.charts(wb), null, 'without the chart reader: null, and the card counts the drawing');
+  globalThis.GZ_SHEET_CHART_XML = CX;
+  let summary;
+  try { summary = SD.charts(wb); } finally { delete globalThis.GZ_SHEET_CHART_XML; }
+  assert.deepEqual(summary.map((x) => [x.kind, x.anchor]), [['column', [1, 1, 3, 4]], ['pie', [10, 8, 19, 11]], ['pie', [22, 8, 29, 11]]]);
+  assert.equal(summary[0].colours.length, 2, 'the two series\' colours');
+  assert.equal(summary[1].colours.length, 4, 'a slice colour per cached point');
+  const rec = { kind: 'sheet', book: JSON.parse(JSON.stringify(SD.split(wb).book)), grid: SD.glance(wb), charts: summary };
+  const box = DK.get('sheet').thumb(rec);
+  const marks = box.children.filter((e) => e.className === 'gx-th-chart');
+  assert.equal(marks.length, 1);
+  assert.deepEqual([marks[0].dataset.kind, marks[0].style.gridRow, marks[0].style.gridColumn], ['column', '3 / 6', '3 / 7'], 'rows 2–4 and columns B–E of the card');
+  const shapes = marks[0].children[0].children;
+  assert.ok(shapes.length >= 4 && shapes.length <= 5 && shapes.every((s) => s.tagName === 'RECT' && /^#[0-9A-F]{6}$/i.test(s.attrs.fill)), 'a few bars in the series\' colours');
+  assert.deepEqual([...new Set(shapes.map((s) => s.attrs.fill))], summary[0].colours);
+  const more = box.children.filter((e) => e.className === 'gx-th-more');
+  assert.equal(more.length, 1);
+  assert.equal(more[0].children.at(-1).textContent, '2', 'the two pies off the card, counted');
+  // A record kept before the summary: its drawing's charts counted in the corner.
+  const old = DK.get('sheet').thumb({ ...rec, charts: undefined }).children.find((e) => e.className === 'gx-th-more');
+  assert.equal(old?.children.at(-1).textContent, '3');
+  // No charts: nothing over the cells.
+  const plain = M.workbook();
+  assert.deepEqual(SD.charts(plain), []);
+  const none = DK.get('sheet').thumb({ kind: 'sheet', book: JSON.parse(JSON.stringify(SD.split(plain).book)), grid: SD.glance(plain), charts: [] });
+  assert.ok(!none.children.some((e) => /gx-th-(chart|more)/.test(e.className)));
+});
+
+test('starting an empty spreadsheet clears charts left by a prior spreadsheet kind', async () => {
+  const s = store(), P = PA.open(s), wb = M.workbook();
+  await SD.write(P, KEY, wb, new Map());
+  await P.save(KEY, { charts: [{ kind: 'column', anchor: [0, 0, 2, 2], colours: ['#156082'] }] });
+  await P.save(KEY, { kind: 'paper', doc: { type: 'doc', content: [] } }, { reason: 'import' });
+  const { DK } = load({ sheets: true });
+  await DK.settled();
+  await P.save(KEY, { kind: 'sheet', doc: null, ...DK.get('sheet').empty() }, { reason: 'import' });
+  assert.deepEqual((await P.get(KEY)).charts, []);
+});
+
+const cardKind = async (overrides = {}) => {
+  const { El } = require('./stand-in-dom.js');
+  const document = { createElement: (tag) => new El(tag, document), createElementNS: (ns, tag) => new El(tag, document) };
+  const { DK } = load({ sheets: true }, { document, GZ_SHEET_XLSX: {}, ...overrides });
+  await DK.settled();
+  return DK.get('sheet');
+};
+const badgeCount = (box) => Number(box.children.find((e) => e.className === 'gx-th-more')?.children.at(-1).textContent || 0);
+
+test('legacy chart counting accepts XML quotes and ignores commented graphic frames', async (t) => {
+  const X = require('../lib/sheet-xlsx.js'), FX = require('./fixtures/sheets/charts.js');
+  const wb = await X.read(FX.workbook({ kinds: ['column'] })), k = await cardKind();
+  const rec = { book: JSON.parse(JSON.stringify(SD.split(wb).book)) }, part = rec.book.keep.parts['xl/drawings/drawing1.xml'];
+  const xml = new TextDecoder().decode(SD.dec(part.data));
+  part.data = xml.replaceAll('"', "'");
+  await t.test('single quotes are valid XML', () => assert.equal(badgeCount(k.thumb(rec)), 1));
+  part.data = xml.replace('</xdr:wsDr>', `<!--${xml.slice(xml.indexOf('<xdr:twoCellAnchor'), xml.indexOf('</xdr:wsDr>'))}--></xdr:wsDr>`);
+  await t.test('a comment does not add another chart', () => assert.equal(badgeCount(k.thumb(rec)), 1));
+  part.data = xml.replaceAll('a:', 'draw-ml:').replace('xmlns:a=', 'xmlns:draw-ml=');
+  await t.test('an XML prefix may contain a hyphen', () => assert.equal(badgeCount(k.thumb(rec)), 1));
+});
+
+test('legacy counting follows drawing ownership and counts one frame per anchor', async (t) => {
+  const X = require('../lib/sheet-xlsx.js'), CX = require('../lib/sheet-chart-xml.js'), FX = require('./fixtures/sheets/charts.js');
+  const wb = await X.read(FX.workbook({ kinds: ['column'] })), k = await cardKind();
+  const rec = () => ({ book: JSON.parse(JSON.stringify(SD.split(wb).book)) });
+  const part = wb.keep.parts['xl/drawings/drawing1.xml'], xml = new TextDecoder().decode(part.data);
+  const frame = /<xdr:graphicFrame\b[\s\S]*?<\/xdr:graphicFrame>/.exec(xml)[0];
+  part.data = xml.replace(frame, `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="c">${frame}</mc:Choice><mc:Fallback>${frame}</mc:Fallback></mc:AlternateContent>`);
+  assert.equal(CX.charts(wb, wb.sheets[0]).length, 1);
+  await t.test('Choice and Fallback are the same chart', () => assert.equal(badgeCount(k.thumb(rec())), 1));
+  for (const uri of ['http://schemas.openxmlformats.org/drawingml/2006/table', 'http://schemas.openxmlformats.org/drawingml/2006/diagram', 'http://schemas.openxmlformats.org/drawingml/2006/picture']) {
+    part.data = xml.replace('uri="http://schemas.openxmlformats.org/drawingml/2006/chart"', `uri="${uri}"`).replace(/<c:chart\b[^>]*\/>/, '<a:tbl/>');
+    assert.equal(badgeCount(k.thumb(rec())), 0, uri);
+  }
+  part.data = xml;
+  M.apply(wb, { op: 'addSheet', sheet: { ...structuredClone(wb.sheets[0]), id: 2, name: 'Data (2)' }, at: 1, active: 1 });
+  wb.active = 1;
+  assert.equal(CX.charts(wb, wb.sheets[1]).length, 0, 'the duplicate does not own the shared drawing');
+  assert.equal(badgeCount(k.thumb(rec())), 0, 'fallback agrees with the loaded reader');
+});
+
+test('legacy counting decodes an unchanged part only once and invalidates a replaced part', async () => {
+  const X = require('../lib/sheet-xlsx.js'), FX = require('./fixtures/sheets/charts.js');
+  const wb = await X.read(FX.workbook({ kinds: ['column'] }));
+  let decoded = 0;
+  const k = await cardKind({ atob: (s) => { decoded++; return atob(s); } });
+  const rec = { book: JSON.parse(JSON.stringify(SD.split(wb).book)) };
+  for (let i = 0; i < 5; i++) assert.equal(badgeCount(k.thumb(rec)), 1);
+  assert.equal(decoded, 1);
+  rec.book.keep.parts['xl/drawings/drawing1.xml'].data = { $b64: btoa('<xdr:wsDr/>') };
+  assert.equal(badgeCount(k.thumb(rec)), 0);
+  assert.equal(decoded, 2);
+});
+
+test('more than 32 charts keep an exact count and prioritize markers that reach the card', async () => {
+  const X = require('../lib/sheet-xlsx.js'), CX = require('../lib/sheet-chart-xml.js'), FX = require('./fixtures/sheets/charts.js');
+  const wb = await X.read(FX.workbook({ kinds: ['column'] }));
+  const part = wb.keep.parts['xl/drawings/drawing1.xml'], xml = new TextDecoder().decode(part.data);
+  const a = /<xdr:twoCellAnchor\b[\s\S]*?<\/xdr:twoCellAnchor>/.exec(xml)[0];
+  const inside = a.replace('<xdr:col>6</xdr:col>', '<xdr:col>1</xdr:col>').replace('<xdr:row>1</xdr:row>', '<xdr:row>0</xdr:row>');
+  part.data = xml.replace(a, a.repeat(39) + inside);
+  globalThis.GZ_SHEET_CHART_XML = CX;
+  try {
+    assert.equal(SD.charts(wb).length, 40, 'no charts disappear at the descriptor limit');
+    const s = store(), P = PA.open(s), out = await SD.write(P, KEY, wb, new Map());
+    const rec = out.saved.paper, k = await cardKind();
+    assert.equal(rec.chartCount, 40);
+    assert.ok(rec.charts.length <= 32 && JSON.stringify(rec.charts).length < 8000, 'bounded stored descriptors');
+    const box = k.thumb(rec);
+    assert.equal(box.children.filter((e) => e.className === 'gx-th-chart').length, 1, 'chart 40 reaches the card');
+    assert.equal(badgeCount(box), 39);
+    assert.equal(badgeCount(k.thumb({ ...rec, chartCount: undefined, charts: SD.charts(wb).slice(0, 32) })), 40, 'old capped summaries recover their total from the drawing');
+    const { DK } = load({ sheets: true }, { local: s, GZ_SHEET_DATA: SD });
+    await DK.settled();
+    const copy = await DK.get('sheet').copy(rec);
+    assert.equal(copy.chartCount, 40);
+    assert.deepEqual(copy.charts, rec.charts);
+    const B = require('../lib/backup.js');
+    const entries = B.pack({ settings: {}, tasks: {}, local: s.data });
+    const restored = store(), R = PA.open(restored);
+    const papers = Object.fromEntries(entries.filter((e) => /^papers\/\d+\.json$/.test(e.name)).map((e) => {
+      const value = JSON.parse(new TextDecoder().decode(e.data));
+      return [value.key ? `writerPaper:${value.key}` : `writerVersions:${KEY}`, value];
+    }));
+    await R.merge(papers);
+    assert.equal((await R.get(KEY)).chartCount, 40);
+    assert.deepEqual((await R.get(KEY)).charts, rec.charts);
+  } finally { delete globalThis.GZ_SHEET_CHART_XML; }
+});
+
+test('chart metadata follows sheet switch, rename, deletion, import and packed restoration', async () => {
+  const X = require('../lib/sheet-xlsx.js'), CX = require('../lib/sheet-chart-xml.js'), FX = require('./fixtures/sheets/charts.js');
+  const wb = await X.read(FX.workbook({ kinds: ['column'] })), s = store(), P = PA.open(s);
+  globalThis.GZ_SHEET_CHART_XML = CX;
+  try {
+    let sigs = new Map();
+    const save = async (w) => { const out = await SD.write(P, KEY, w, sigs); sigs = out.sigs; return out.saved?.paper || P.get(KEY); };
+    const first = await save(wb), packed = await SD.pack(wb);
+    assert.equal(first.chartCount, 1);
+    M.apply(wb, { op: 'rename', sheet: 1, name: 'Sales' });
+    assert.equal((await save(wb)).chartCount, 1);
+    M.apply(wb, { op: 'addSheet', at: 1, active: 1 });
+    const plain = await save(wb);
+    assert.deepEqual(plain.charts, []); assert.equal(plain.chartCount, 0);
+    wb.active = 0;
+    assert.equal((await save(wb)).chartCount, 1);
+    M.apply(wb, { op: 'removeSheet', sheet: 1 });
+    assert.equal((await save(wb)).chartCount, 0);
+    const restored = await save(await SD.unpack(packed));
+    assert.equal(restored.chartCount, 1);
+    const { DK } = load({ sheets: true }, { local: s, GZ_SHEET_DATA: SD, GZ_SHEET_XLSX: X, GZ_SHEET_MODEL: M,
+      GZ_SHEET_CALC: { engine: () => ({ recalc() {} }) }, GZ_WRITER_PAPERS: { ...PA, open: () => P } });
+    await DK.settled();
+    // workbookOf takes the codec's real delimited workbook, as an import into this record.
+    const file = { name: 'plain.csv', size: 10, arrayBuffer: async () => new TextEncoder().encode('No charts\n').buffer };
+    assert.deepEqual((await DK.get('sheet').into(KEY, file)).charts, []);
+    const version = (await P.versions(KEY)).find((v) => v.reason === 'import');
+    const back = await SD.unpack((await P.version(KEY, version.id)).gz);
+    assert.equal(SD.charts(back).length, 1, 'import checkpoint keeps the chart workbook');
+    sigs = (await SD.read((ks) => s.get(ks), KEY)).sigs;
+    assert.equal((await save(back)).chartCount, 1);
+  } finally { delete globalThis.GZ_SHEET_CHART_XML; }
+});
+
+test('card clipping, colours and cell text remain safe for untrusted file values', async () => {
+  const k = await cardKind();
+  const box = k.thumb({ grid: [['<img src=x onerror=alert(1)>']], charts: [
+    { kind: 'column', anchor: [-2, -2, 1, 2], colours: ['url(https://example.test/a)', '#123456', '\" onload=\"alert(1)', '#abcdef', '<svg onload=alert(1)>'] },
+    { kind: 'line', anchor: [3, 5, 8, 10], colours: ['url(javascript:alert(1))'] },
+    { kind: 'column', anchor: [2, 2, 1, 1], colours: [] },
+  ] });
+  const markers = box.children.filter((e) => e.className === 'gx-th-chart');
+  assert.deepEqual(markers.map((e) => [e.style.gridRow, e.style.gridColumn]), [['2 / 4', '2 / 5'], ['5 / 6', '7 / 8']]);
+  assert.equal(badgeCount(box), 1);
+  assert.equal(box.children.find((e) => e.className === 'gx-th-c').textContent, '<img src=x onerror=alert(1)>');
+  for (const m of markers) for (const shape of m.children[0].children) for (const attr of ['fill', 'stroke']) {
+    const value = shape.attrs[attr];
+    assert.ok(value === undefined || value === 'none' || /^#[0-9a-f]{6}$/i.test(value), `${attr}: ${value}`);
+  }
+});
+
+test('legacy cards ignore chartsheets and other worksheets drawing parts', async () => {
+  const X = require('../lib/sheet-xlsx.js'), FX = require('./fixtures/sheets/charts.js');
+  const original = await X.read(FX.workbook({ kinds: ['column'] }));
+  const drawing = new TextDecoder().decode(original.keep.parts['xl/drawings/drawing1.xml'].data);
+  const frame = /<xdr:twoCellAnchor\b[\s\S]*?<\/xdr:twoCellAnchor>/.exec(drawing)[0];
+  const ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const wb = await X.read(FX.workbook({ kinds: ['column'], over: {
+    'xl/workbook.xml': `<workbook ${ns}><bookViews><workbookView activeTab="1"/></bookViews><sheets><sheet name="Data" sheetId="1" r:id="rId1"/><sheet name="Chart" sheetId="2" r:id="rId2"/><sheet name="Other" sheetId="3" r:id="rId3"/></sheets></workbook>`,
+    'xl/_rels/workbook.xml.rels': FX.rels([['rId1', 'worksheet', 'worksheets/sheet1.xml'], ['rId2', 'chartsheet', 'chartsheets/sheet2.xml'], ['rId3', 'worksheet', 'worksheets/sheet3.xml'], ['rId4', 'sharedStrings', 'sharedStrings.xml']]),
+    'xl/chartsheets/sheet2.xml': `<chartsheet ${ns}><sheetViews><sheetView workbookViewId="0"/></sheetViews><drawing r:id="rId1"/></chartsheet>`,
+    'xl/chartsheets/_rels/sheet2.xml.rels': FX.rels([['rId1', 'drawing', '../drawings/drawing2.xml']]),
+    'xl/worksheets/sheet3.xml': `<worksheet ${ns}><sheetData/><drawing r:id="rId1"/></worksheet>`,
+    'xl/worksheets/_rels/sheet3.xml.rels': FX.rels([['rId1', 'drawing', '../drawings/drawing3.xml']]),
+    'xl/drawings/drawing2.xml': drawing.replace(frame, frame.repeat(3)),
+    'xl/drawings/drawing3.xml': drawing.replace(frame, frame.repeat(2)),
+  } }));
+  const k = await cardKind(), rec = () => ({ book: JSON.parse(JSON.stringify(SD.split(wb).book)) });
+  assert.equal(wb.sheets.length, 2, 'the model contains worksheets only');
+  assert.equal(badgeCount(k.thumb(rec())), 1, 'the active chartsheet does not leak its drawing into Data');
+  wb.active = 1;
+  assert.equal(badgeCount(k.thumb(rec())), 2, 'Other counts only its own drawing');
+});
