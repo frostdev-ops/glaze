@@ -269,6 +269,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     let wb = o.wb, eng = null, sigs = o.sigs || new Map(), rec = o.rec, fresh = !!o.fresh;
     const begin = () => { eng = CALC.engine(wb); eng.recalc(); };
     begin();
+    // A workbook kept with a hidden sheet active (a file's) opens on the first one shown.
+    if (wb.sheets[wb.active]?.keep?.hidden) wb.active = Math.max(0, wb.sheets.findIndex((x) => !x.keep?.hidden));
     const S = () => wb.sheets[wb.active] || wb.sheets[0];
     const shown0 = () => o.show(wb);
     const root = document.documentElement;
@@ -1108,7 +1110,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         if (it === '-') { el.append(h('div', { class: 'gp-hr', role: 'separator' })); continue; }
         if (it.el) { el.append(it.el); continue; }
         el.append(btn({ role: it.check === undefined ? 'menuitem' : 'menuitemcheckbox', tabindex: '-1', 'data-act': it.act, disabled: it.disabled, 'aria-checked': it.check === undefined ? null : String(!!it.check),
-          onclick: () => { closeMenu(it.keep ? false : true); it.run(); } }, it.label));
+          onclick: () => { const m = menu; closeMenu(false); it.run(); if (!document.activeElement || document.activeElement === document.body || document.activeElement === m?.opener || document.activeElement === m?.back) gridEl.focus({ preventScroll: true }); } }, it.label));
       }
       document.body.append(el);
       const w = el.offsetWidth, hh = el.offsetHeight;
@@ -1300,6 +1302,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     findNext.addEventListener('click', () => step(1)); findPrev.addEventListener('click', () => step(-1));
     repOne.addEventListener('click', replaceOne); repAll.addEventListener('click', replaceAll);
     findX.addEventListener('click', findClose);
+    findBar.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); e.stopPropagation(); findClose(); } });
     findB.addEventListener('click', () => (findBar.hidden ? findOpen() : findClose()));
 
     // ---- the clipboard: the shown text as TSV and a table; Glaze's own copy found again by its TSV's hash keeps formulas
@@ -1410,6 +1413,11 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (k === 'Process' || k === 'Dead') startEdit('', 'enter');
     });
     gridEl.addEventListener('focus', () => draw());
+    // Find from anywhere in the sheet's chrome but a text field.
+    view.addEventListener('keydown', (e) => {
+      if (e.defaultPrevented || e.target === gridEl || isField(e.target) || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.key === 'f' || e.key === 'F' || e.key === 'h' || e.key === 'H') { e.preventDefault(); findOpen(/h/i.test(e.key)); }
+    });
 
     // ---- first paint
     sizes(); layout(); tabsDraw(); told(); circular(); drawNow(true);
