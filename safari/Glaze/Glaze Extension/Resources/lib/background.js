@@ -1838,10 +1838,18 @@ const ownIcon = () => Object.fromEntries(Object.entries(chrome.runtime.getManife
 // Glaze's crossfades (lib/motion.js swap, content-ultra.js's page links) start in its content scripts' world, but Chrome
 // rejects a skipped or timed-out one's ready in the page's own world as well, where only the page's code can handle it and
 // a school's error tracker would collect it. This, in each frame Glaze runs in, answers their glaze:transition event: it
-// cancels the event (the guard is here) and marks the transition started's ready handled in this world.
+// cancels a presence probe (the guard is here) and, on the separate handoff, marks the transition started's ready handled.
 const transitionGuard = () => {
-  if (!('activeViewTransition' in document)) return;
-  addEventListener('glaze:transition', (e) => { document.activeViewTransition?.ready.then(undefined, () => {}); e.preventDefault(); });
+  if (!('activeViewTransition' in document) || globalThis.__gzTransitionGuard) return;
+  addEventListener('glaze:transition', (e) => {
+    try {
+      // A hidden document skips before assigning activeViewTransition: there would be nothing to hand over.
+      // A presence probe must leave any transition the school already owns alone.
+      if (e.cancelable) { if (!document.hidden) e.preventDefault(); }
+      else document.activeViewTransition?.ready.then(undefined, () => {});
+    } catch { /* page code can replace these properties; never throw into its error tracker */ }
+  }, true); // before page bubble listeners can start a newer transition during the handoff
+  globalThis.__gzTransitionGuard = true; // repeated messages, worker restarts and bfcache keep one listener per document
 };
 chrome.runtime.onMessage.addListener((m, s) => {
   if (m?.type !== 'glaze:here' || !s.tab) return;
