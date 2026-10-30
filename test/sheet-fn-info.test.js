@@ -89,6 +89,10 @@ test('ISFORMULA and FORMULATEXT read the cell\'s formula', () => {
   assert.deepEqual(e.status.circular, []);
   e.edit(e.wb.sheets[0].id, 2, 0, '=1+1');
   assert.equal(calc(e, 'FORMULATEXT(A3)'), '=1+1');
+  // A dynamic array (an Excel 365 file's, or a formula typed here that takes a range whole) shows as typed, no braces.
+  e.edit(e.wb.sheets[0].id, 9, 5, '=SUM(A2:A5*2)');
+  assert.equal(M.cell(e.wb.sheets[0], 9, 5).cm, '1');
+  assert.equal(calc(e, 'FORMULATEXT(F10)'), '=SUM(A2:A5*2)');
 });
 
 test('N, T, TYPE, ERROR.TYPE, NA', () => {
@@ -107,6 +111,9 @@ test('N, T, TYPE, ERROR.TYPE, NA', () => {
     ['ERROR.TYPE(SQRT(-1))', 6], ['ERROR.TYPE(NA())', 7], ['ERROR.TYPE(1)', '#N/A'], ['ERROR.TYPE("x")', '#N/A'], ['IF(ERROR.TYPE(A3)<3,"The divisor is zero")', 'The divisor is zero'],
     ['NA()', '#N/A'], ['NA(1)', '#VALUE!'],
   ]);
+  // The newer errors' numbers, from Microsoft's ERROR.TYPE page: #SPILL! (a file's cache) 9 and #CALC! 14.
+  er.apply({ op: 'set', sheet: er.wb.sheets[0].id, r: 0, c: 1, cell: { t: 'e', v: '#SPILL!' } });
+  cases(er, [['ERROR.TYPE(B1)', 9], ['ERROR.TYPE(SEQUENCE(0))', 14], ['ERROR.TYPE(FILTER({1},{FALSE}))', 14]]);
 });
 
 test('CELL: address, col, row, contents, type and format; the rest and INFO are refused', () => {

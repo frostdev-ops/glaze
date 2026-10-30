@@ -660,7 +660,61 @@ test('write: cell metadata only where its part is kept; rich values only on the 
   const fresh = M.workbook();
   fresh.sheets[0].rows.set(0, new Map([[0, { t: 'n', v: 1, f: 'SEQUENCE(1)', a: 'A1', cm: '1' }], [1, { t: 'e', v: '#VALUE!', vm: '1' }]]));
   const q = await parts(await X.write(fresh, { date: DATE, recalc: false }));
-  assert.doesNotMatch(q['xl/worksheets/sheet1.xml'], / cm=| vm=/, 'without metadata.xml the indices would point at nothing');
+  assert.doesNotMatch(q['xl/worksheets/sheet1.xml'], / vm=/, 'without the kept metadata.xml the rich value index would point at nothing');
+  assert.match(q['xl/worksheets/sheet1.xml'], /<c r="A1" cm="1">/, 'a dynamic array names the XLDAPR entry of the part written for it');
+  assert.match(q['xl/metadata.xml'], /<cellMetadata count="1"><bk><rc t="1" v="0"\/><\/bk><\/cellMetadata>/);
+});
+
+test('write: a formula typed as Excel 365 takes it is an array formula over its own cell, cm where Excel\'s XLDAPR is kept', async () => {
+  const typed = async (wb) => {
+    const e = C.engine(wb), sh = wb.sheets[0];
+    for (const [r, v] of [10, 20, 30, 40, 50].entries()) e.edit(sh.id, 900 + r, 0, String(v));
+    e.edit(sh.id, 900, 2, '=SUM((A901:A905>20)*A901:A905)');
+    e.edit(sh.id, 901, 2, '=SUM(A901:A905)');
+    // A fill copies the cell, its range and all: an array over one cell is still its own.
+    M.apply(wb, { op: 'set', sheet: sh.id, r: 902, c: 2, cell: { ...M.cell(sh, 900, 2), f: 'SUM((A903:A907>20)*A903:A907)' } });
+    const bytes = await X.write(wb, { date: DATE, engine: e });
+    return { ...(await parts(bytes)), bytes };
+  };
+  const made = await typed(M.workbook()), fresh = made['xl/worksheets/sheet1.xml'];
+  assert.match(fresh, /<c r="C901" cm="1"><f t="array" ref="C901">SUM\(\(A901:A905&gt;20\)\*A901:A905\)<\/f><v>120<\/v><\/c>/, 'dynamic, as Excel 365 saves it');
+  // The metadata part Excel writes for dynamic arrays (its XLDAPR entry), named by the workbook and its content type.
+  assert.match(made['xl/metadata.xml'], /<metadataType name="XLDAPR"[^>]*cellMeta="1"\/>.*<xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"\/>.*<cellMetadata count="1"><bk><rc t="1" v="0"\/><\/bk><\/cellMetadata>/);
+  assert.match(made['xl/_rels/workbook.xml.rels'], /Type="http:\/\/schemas.openxmlformats.org\/officeDocument\/2006\/relationships\/sheetMetadata" Target="metadata.xml"/);
+  assert.match(made['[Content_Types].xml'], /<Override PartName="\/xl\/metadata.xml" ContentType="application\/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata\+xml"\/>/);
+  const plain = await parts(await X.write(M.workbook(), { date: DATE }));
+  assert.equal(plain['xl/metadata.xml'], undefined, 'only a workbook with dynamic arrays gets one');
+  assert.match(fresh, /<c r="C902"><f>SUM\(A901:A905\)<\/f><v>150<\/v><\/c>/);
+  assert.match(fresh, /<c r="C903" cm="1"><f t="array" ref="C903">/);
+  const back = await X.read(made.bytes);
+  assert.deepEqual([at(back, 'Sheet1', 'C901').a, at(back, 'Sheet1', 'C901').cm], ['C901', '1']);
+  assert.ok(back.keep.parts['xl/metadata.xml'], 'read back, the part is kept and written again as it came');
+  M.cell(back.sheets[0], 900, 0).v = 25;
+  C.engine(back).recalc();
+  assert.equal(at(back, 'Sheet1', 'C901').v, 145, 'read back, it is still evaluated whole');
+  const excel = (await typed(await X.read(fs.readFileSync(path.join(DIR, 'lookup.xlsx')))))['xl/worksheets/sheet1.xml'];
+  assert.match(excel, /<c r="C901" cm="1"><f t="array" ref="C901">/, 'dynamic, as Excel 365 saves it');
+});
+
+test('write: new dynamic cells use a valid XLDAPR record when other metadata already exists', async () => {
+  for (const hasDynamic of [false, true]) {
+    const wb = M.workbook(), sh = wb.sheets[0];
+    const old = `<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><metadataTypes count="${hasDynamic ? 2 : 1}"><metadataType name="OTHER" cellMeta="1"/>${hasDynamic ? '<metadataType name="XLDAPR" cellMeta="1"/>' : ''}</metadataTypes>`
+      + '<futureMetadata name="OTHER" count="1"><bk/></futureMetadata>'
+      + (hasDynamic ? '<futureMetadata name="XLDAPR" count="1"><bk><extLst><ext uri="{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}"><dynamicArrayProperties xmlns="http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray" fDynamic="1" fCollapsed="0"/></ext></extLst></bk></futureMetadata>' : '')
+      + `<cellMetadata count="${hasDynamic ? 2 : 1}"><bk><rc t="1" v="0"/></bk>${hasDynamic ? '<bk><rc t="2" v="0"/></bk>' : ''}</cellMetadata><valueMetadata count="1"><bk><rc t="1" v="0"/></bk></valueMetadata></metadata>`;
+    wb.keep = { book: { path: 'xl/workbook.xml', rels: [{ id: 'rId8', type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sheetMetadata', target: 'meta.xml' }] },
+      parts: { 'xl/meta.xml': { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml', data: new TextEncoder().encode(old) } } };
+    const e = C.engine(wb); e.edit(sh.id, 0, 0, '={1;2}');
+    sh.rows.get(0).set(1, { t: 'e', v: '#VALUE!', vm: '1' });
+    const bytes = await X.write(wb, { recalc: false, date: DATE }), p = await parts(bytes);
+    assert.match(p['xl/worksheets/sheet1.xml'], /<c r="A1" cm="2"><f t="array" ref="A1">/, 'cm is one-based and must reference XLDAPR, not OTHER');
+    assert.match(p['xl/meta.xml'], /<cellMetadata count="2"><bk><rc t="1" v="0"\/><\/bk><bk><rc t="2" v="0"\/><\/bk><\/cellMetadata>/);
+    assert.ok(p['xl/meta.xml'].includes('<valueMetadata count="1"><bk><rc t="1" v="0"/></bk></valueMetadata>'));
+    assert.match(p['xl/worksheets/sheet1.xml'], /vm="1"/, 'value metadata keeps its independent index');
+    const again = await parts(await X.write(await X.read(bytes), { recalc: false, date: DATE }));
+    assert.equal(again['xl/meta.xml'], p['xl/meta.xml'], 'a second export adds no duplicate metadata');
+  }
 });
 
 // ── CSV and TSV ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -773,6 +827,15 @@ test('review reader: imported strings obey the model text cap', async () => {
   const wb = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': `<worksheet ${NS}><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${long}</t></is></c><c r="B1" t="str"><v>${long}</v></c></row></sheetData></worksheet>` }));
   for (const a of ['A1', 'B1']) assert.equal(at(wb, 'One', a).v.length, M.CAP.text);
   assert.ok(wb.keep.problems.some((p) => p.code === 'text'));
+});
+
+test('review reader: an empty cached value is no value, never a shared string or text', async () => {
+  const wb = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': `<worksheet ${NS}><sheetData><row r="1"><c r="A1"><v></v></c><c r="B1" t="s"><v/></c>`
+    + '<c r="C1" t="b"><v> </v></c><c r="D1" t="e"><v></v></c><c r="E1" s="1"><v/></c><c r="F1"><f>1+1</f><v></v></c><c r="G1" t="str"><f>""</f><v></v></c></row></sheetData></worksheet>' }));
+  for (const a of ['A1', 'B1', 'C1', 'D1']) assert.equal(at(wb, 'One', a), null, a);
+  assert.deepEqual(at(wb, 'One', 'E1'), { t: 'z', s: 1 });
+  assert.deepEqual(at(wb, 'One', 'F1'), { t: 'z', f: '1+1' });
+  assert.deepEqual(at(wb, 'One', 'G1'), { t: 's', v: '', f: '""' }, 'a formula\'s empty text stays text');
 });
 
 test('review writer: unchanged cellXfs retain flags, inheritance and unmodelled fields', async () => {

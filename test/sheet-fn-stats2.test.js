@@ -96,6 +96,8 @@ test('PERCENTRANK: Microsoft\'s examples, interpolation, truncation to significa
     ['PERCENTRANK(A1:A10,4,1.9)', 0.5], ['PERCENTRANK.INC(A1:A10,3.3,4)', 0.4777], ['PERCENTRANK.INC(A1:A10,4,16)', 0.555555555555556],
     ['PERCENTRANK(A1:A10,10)', '#N/A'], ['PERCENTRANK(A1:A10,0.5)', '#N/A'], ['PERCENTRANK.INC(A1:A10,2/3,15)', '#N/A'],
     ['PERCENTRANK(A1:A10,4,0)', '#NUM!'], ['PERCENTRANK(Z1:Z3,4)', '#NUM!'],
+    // One value ranks 1 in all three (Excel 16 on the Mac); two equal values rank 0.
+    ['PERCENTRANK({5},5)', 1], ['PERCENTRANK.INC({5},5)', 1], ['PERCENTRANK.EXC({5},5)', 1], ['PERCENTRANK({5,5},5)', 0],
   ]);
 });
 

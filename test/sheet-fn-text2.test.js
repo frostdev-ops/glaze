@@ -123,7 +123,7 @@ test('SUBSTITUTE, REPLACE, REPT with Microsoft\'s data', () => {
   cases(e, [
     ['SUBSTITUTE(A2, "Sales", "Cost")', 'Cost Data'], ['SUBSTITUTE(A3, "1", "2", 1)', 'Quarter 2, 2008'], ['SUBSTITUTE(A4, "1", "2", 3)', 'Quarter 1, 2012'],
     ['SUBSTITUTE(A4, "1", "2")', 'Quarter 2, 2022'], ['SUBSTITUTE("aaa","aa","b")', 'ba'], ['SUBSTITUTE("Data","data","x")', 'Data'], ['SUBSTITUTE("abc","","x")', 'abc'],
-    ['SUBSTITUTE(A4,"1","2",4)', 'Quarter 1, 2011'], ['SUBSTITUTE(A4,"1","2",0)', '#VALUE!'], ['SUBSTITUTE(12321,2,"")', '131'],
+    ['SUBSTITUTE(A4,"1","2",4)', 'Quarter 1, 2011'], ['SUBSTITUTE(A4,"1","2",0)', '#VALUE!'], ['SUBSTITUTE("aaa","a","b",)', '#VALUE!'], ['SUBSTITUTE(12321,2,"")', '131'],
     ['REPLACE(B2,6,5,"*")', 'abcde*k'], ['REPLACE(B3,3,2,"10")', '2010'], ['REPLACE(B4,1,3,"@")', '@456'], ['REPLACE("abc",10,1,"Z")', 'abcZ'], ['REPLACE("abc",2,0,"Z")', 'aZbc'],
     ['REPLACE("abc",0,1,"Z")', '#VALUE!'], ['REPLACE("abc",1,-1,"Z")', '#VALUE!'],
     ['REPT("*-", 3)', '*-*-*-'], ['REPT("-",10)', '----------'], ['REPT("ab",0)', ''], ['REPT("ab",2.9)', 'abab'], ['REPT("ab",-1)', '#VALUE!'], ['REPT("ab",16384)', '#VALUE!'],
@@ -152,7 +152,7 @@ test('EXACT, PROPER, CLEAN, CHAR, CODE, UNICHAR, UNICODE with Microsoft\'s data'
   const e = book({ A2: 'word', B2: 'word', A3: 'Word', B3: 'word', A4: 'w ord', B4: 'word', C2: 'this is a TITLE', C3: '2-way street', C4: '76BudGet', D2: '=CHAR(9)&"Monthly report"&CHAR(10)' });
   cases(e, [
     ['EXACT(A2,B2)', true], ['EXACT(A3,B3)', false], ['EXACT(A4,B4)', false], ['EXACT(1,"1")', true],
-    ['PROPER(C2)', 'This Is A Title'], ['PROPER(C3)', '2-Way Street'], ['PROPER(C4)', '76Budget'], ['PROPER("don\'t")', 'Don\'T'], ['PROPER("élan VITAL")', 'Élan Vital'],
+    ['PROPER(C2)', 'This Is A Title'], ['PROPER(C3)', '2-Way Street'], ['PROPER(C4)', '76Budget'], ['PROPER("don\'t")', 'Don\'T'], ['PROPER("élan VITAL")', 'Élan Vital'], ['PROPER("ßtraße")', 'ßtraße'],
     ['CLEAN(D2)', 'Monthly report'], ['LEN(CLEAN(CHAR(127)&"a"))', 2],
     ['CHAR(65)', 'A'], ['CHAR(33)', '!'], ['CHAR(0)', '#VALUE!'], ['CHAR(256)', '#VALUE!'], ['CHAR(65.9)', 'A'], ['CHAR(128)', '€'], ['CHAR(150)', '–'], ['CHAR(151)', '—'], ['CODE("—")', 151], ['CODE("Ā")', 63], ['CHAR(233)', 'é'],
     ['CODE("A")', 65], ['CODE("!")', 33], ['CODE("Apple")', 65], ['CODE("")', '#VALUE!'], ['CODE("€")', 128], ['CODE(CHAR(200))', 200], ['CODE(CHAR(150))', 150],

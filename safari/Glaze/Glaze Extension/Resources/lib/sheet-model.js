@@ -474,7 +474,7 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
     return fmt ? { v, fmt } : { v };
   };
 
-  const TIME = /^(\d{1,2})(?::(\d{2}))?(?::(\d{2}(?:\.\d+)?))?\s*([ap])?(m)?$/i;
+  const TIME = /^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}(?:\.\d+)?))?\s*([ap])?(m)?$/i;
   const time = (s) => {
     const m = TIME.exec(s);
     if (!m || (m[2] === undefined && !m[4]) || (m[5] && !m[4])) return null;
@@ -486,22 +486,29 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
     return { v: timeSerial(h, min, sec), fmt, elapsed: h > 23 };
   };
 
+  // [pattern, its → [year, month, day], format, format without a year, whether a month's number that can't be its day
+  // (this year) is its year: 3/32, 2/30, 3/0 and Mar-99 are months of 1932, 1930, 2000 and 1999 in Excel].
   const DATES = [
-    [/^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2}|\d{4}))?$/, (x) => [x[3], x[1], x[2]], 'm/d/yyyy', 'd-mmm'],
+    [/^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{1,2}|\d{4}))?$/, (x) => [x[3], x[1], x[2]], 'm/d/yyyy', 'd-mmm', true],
+    [/^(\d{1,2})[/-](\d{4})$/, (x) => [x[2], x[1], 1], 'mmm-yy'],
     [/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/, (x) => [x[1], x[2], x[3]], 'm/d/yyyy'],
     [/^(\d{1,2})[-\s]+([A-Za-z]{3,9})(?:[-\s,]+(\d{2}|\d{4}))?$/, (x) => [x[3], monthOf(x[2]), x[1]], 'd-mmm-yy', 'd-mmm'],
-    [/^([A-Za-z]{3,9})[-\s]+(\d{1,2})(?:,?\s+(\d{4}|\d{2}))?$/, (x) => [x[3], monthOf(x[1]), x[2]], 'd-mmm-yy', 'd-mmm'],
+    [/^([A-Za-z]{3,9})[-\s]+(\d{1,2})(?:,?\s+(\d{4}|\d{2}))?$/, (x) => [x[3], monthOf(x[1]), x[2]], 'd-mmm-yy', 'd-mmm', true],
     [/^([A-Za-z]{3,9})[-\s]+(\d{4})$/, (x) => [x[2], monthOf(x[1]), 1], 'mmm-yy'],
   ];
   const date = (s, o) => {
-    for (const [re, parts, fmt, noYear] of DATES) {
+    for (const [re, parts, fmt, noYear, yearAfter] of DATES) {
       const x = re.exec(s);
       if (!x) continue;
-      const [ys, mo, ds] = parts(x);
-      const y = ys === undefined ? o.year ?? new Date().getFullYear() : fullYear(ys);
+      let [ys, mo, ds] = parts(x), shown = ys === undefined ? noYear : fmt;
+      const year = o.year ?? new Date().getFullYear();
+      if (ys === undefined && yearAfter && Number(mo) >= 1 && Number(mo) <= 12 && !(Number(ds) >= 1 && Number(ds) <= daysIn(year, Number(mo)))) {
+        ys = ds; ds = 1; shown = 'mmm-yy';
+      }
+      const y = ys === undefined ? year : fullYear(ys);
       const m = Number(mo), d = Number(ds);
       if (!m || m > 12 || d < 1 || d > daysIn(y, m) || y > 9999 || y < (o.date1904 ? 1904 : 1900)) return null;
-      return { v: toSerial(y, m, d, o.date1904), fmt: ys === undefined ? noYear : fmt };
+      return { v: toSerial(y, m, d, o.date1904), fmt: shown };
     }
     return null;
   };
@@ -527,7 +534,7 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
     if (t) return { v: t.v, fmt: t.fmt };
     const d = date(s, o);
     if (d) return d;
-    const split = /^(.*?\S)\s+(\d{1,2}(?::\d{2}(?::\d{2}(?:\.\d+)?)?)?\s*(?:[ap]m?)?)$/i.exec(s);
+    const split = /^(.*?\S)\s+(\d{1,2}(?::\d{1,2}(?::\d{1,2}(?:\.\d+)?)?)?\s*(?:[ap]m?)?)$/i.exec(s);
     if (split) {
       const dd = date(split[1], o), tt = time(split[2]);
       if (dd && tt && !tt.elapsed) return { v: dd.v + tt.v, fmt: 'm/d/yyyy h:mm' };

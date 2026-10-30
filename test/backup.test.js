@@ -896,3 +896,76 @@ test('a kind this build does not know stays out, and a damaged spreadsheet or fi
 test('the kinds a backup keeps are the Documents home\'s', () => {
   assert.deepEqual([...B.KINDS].sort(), Object.keys(require('../lib/doc-kinds.js').KINDS).sort());
 });
+
+for (const [label, damage] of [
+  ['a row that cannot be joined', (a, k) => { a.store[`writerSheet:${k.sheet}:1:0`].rows = [null]; }],
+  ['a band whose sheet is absent', (a, k) => { a.store[`writerPaper:${k.sheet}`].book.sheets = []; }],
+  ['duplicate cell columns', (a, k) => { a.store[`writerSheet:${k.sheet}:1:0`].rows = [[0, [[0, 'n', 1], [0, 'n', 2]]]]; }],
+  ['a row outside its band', (a, k) => { a.store[`writerSheet:${k.sheet}:1:0`].rows = [[3000, [[0, 'n', 1]]]]; }],
+  ['a PDF size that disagrees with its bytes', (a, k) => { a.store[`writerPaper:${k.pdf}`].size++; }],
+  ['a version size that disagrees with its bytes', (a, k) => { a.store[`writerVersions:${k.deck}`].find((v) => v.kind === 'slides').size++; }],
+  ['a thumbnail with invalid base64', (a, k) => { a.store[`writerPaper:${k.pdf}`].thumb = 'data:image/png;base64,A'; }],
+]) test(`a backup refuses ${label}`, async () => {
+  const a = device();
+  try {
+    const k = await kinds(a);
+    damage(a, k);
+    assert.equal(await reasonOf(B.read(await backUp(a))), 'bad');
+  } finally { a.stop(); }
+});
+
+for (const kind of ['pdf', 'deck']) test(`replaying an older ${kind} backup does not duplicate its restore version`, async () => {
+  const a = device(), b = device();
+  try {
+    const keys = await kinds(a), k = keys[kind];
+    const P = require('../lib/writer-papers.js').open(b.local, () => NOW + 1e6);
+    const incoming = a.store[`writerPaper:${k}`];
+    await P.save(k, { ...incoming, file: 'TkVX', size: 3 }, { reason: 'import' });
+    const file = await backUp(a);
+    assert.deepEqual((await restore(b, file, ['papers'])).out.failed, []);
+    const first = structuredClone(b.store[`writerVersions:${k}`]);
+    assert.deepEqual((await restore(b, file, ['papers'])).out.failed, []);
+    assert.deepEqual(b.store[`writerVersions:${k}`], first, 'replay must not consume another version slot');
+    assert.equal(b.store[`writerPaper:${k}`].file, 'TkVX', 'the newer device file stays');
+  } finally { a.stop(); b.stop(); }
+});
+
+test('Back up refuses a spreadsheet member larger than its ZIP reader accepts', () => {
+  const key = `doc:${id(86)}`, name = `writerPaper:${key}`;
+  // Each cell fits the model's 32,767-character bound; a workbook can grow across many small band writes.
+  const rows = Array.from({ length: 100 }, (_, r) => [r, Array.from({ length: 22 }, (_, c) => [c, 's', 'x'.repeat(32000)])]);
+  const local = { [name]: { key, kind: 'sheet', updated: NOW, book: { sheets: [{ id: 1, name: 'Large' }] }, parts: { '1:0': 1 } },
+    [`writerSheet:${key}:1:0`]: { rev: 1, rows } };
+  assert.throws(() => B.pack({ settings: SETTINGS, local }), (e) => e.why === 'big');
+});
+
+test('Back up refuses a missing spreadsheet band instead of silently leaving the document out', async () => {
+  const a = device();
+  try {
+    const { sheet } = await kinds(a);
+    delete a.store[`writerSheet:${sheet}:1:3`];
+    assert.throws(() => B.pack({ settings: SETTINGS, local: a.store }), (e) => e.why === 'bad');
+  } finally { a.stop(); }
+});
+
+for (const kind of ['pdf', 'deck']) test(`an older ${kind} already versioned in the backup is not snapshotted again`, async () => {
+  const a = device(), b = device();
+  try {
+    const keys = await kinds(a), k = keys[kind];
+    await keys.P.save(k, {}, { reason: 'sending' });
+    const P = require('../lib/writer-papers.js').open(b.local, () => NOW + 1e6);
+    await P.save(k, { ...a.store[`writerPaper:${k}`], file: 'TkVX', size: 3 }, { reason: 'import' });
+    assert.deepEqual((await restore(b, await backUp(a), ['papers'])).out.failed, []);
+    assert.deepEqual(b.store[`writerVersions:${k}`].map((v) => v.id).sort(), a.store[`writerVersions:${k}`].map((v) => v.id).sort(), 'the existing backup version already retains the older file');
+  } finally { a.stop(); b.stop(); }
+});
+
+test('Back up refuses a spreadsheet that cannot fit through the restore write fence', () => {
+  assert.equal(B.LIMIT.command, 32 << 20);
+  assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/background.js'), 'utf8'), /JSON\.stringify\(m\.restore\)\.length > \(32 << 20\)/, 'the worker fence is the same bound');
+  const key = `doc:${id(87)}`, rows = Array.from({ length: 100 }, (_, r) => [r, Array.from({ length: 11 }, (_, c) => [c, 's', 'x'.repeat(32000)])]);
+  const local = { [`writerPaper:${key}`]: { key, kind: 'sheet', updated: NOW, book: { sheets: [{ id: 1, name: 'Large' }] }, parts: { '1:0': 1 } },
+    [`writerSheet:${key}:1:0`]: { rev: 1, rows } };
+  const entries = () => B.pack({ settings: SETTINGS, local });
+  assert.throws(entries, (e) => e.why === 'big');
+});

@@ -112,7 +112,7 @@ test('CEILING, CEILING.MATH, FLOOR, FLOOR.MATH, MROUND, TRUNC, EVEN, ODD, SIGN',
     ['FLOOR.MATH(24.3,5)', 20], ['FLOOR.MATH(6.7)', 6], ['FLOOR.MATH(-8.1,2)', -10], ['FLOOR.MATH(-5.5,2,-1)', -4],
     ['FLOOR.MATH(6.3)', 6], ['FLOOR.MATH(-6.7)', -7], ['FLOOR.MATH(-6.3,1,-1)', -6],
     ['MROUND(10, 3)', 9], ['MROUND(-10, -3)', -9], ['MROUND(1.3, 0.2)', 1.4], ['MROUND(5, -2)', '#NUM!'], ['MROUND(7.5,5)', 10], ['MROUND(-7.5,-5)', -10],
-    ['TRUNC(8.9)', 8], ['TRUNC(-8.9)', -8], ['TRUNC(0.45)', 0], ['TRUNC(3.14159,2)', 3.14], ['TRUNC(-3.14159,3)', -3.141], ['TRUNC(1234.567,-2)', 1200],
+    ['TRUNC(8.9)', 8], ['TRUNC(-8.9)', -8], ['TRUNC(0.45)', 0], ['TRUNC(3.14159,2)', 3.14], ['TRUNC(-3.14159,3)', -3.141], ['TRUNC(1234.567,-2)', 1200], ['TRUNC(1234567.891,15)', 1234567.891], ['TRUNC(2E+21)', 2e21],
     ['EVEN(1.5)', 2], ['EVEN(3)', 4], ['EVEN(2)', 2], ['EVEN(-1)', -2], ['EVEN(0)', 0], ['EVEN("x")', '#VALUE!'],
     ['ODD(1.5)', 3], ['ODD(3)', 3], ['ODD(2)', 3], ['ODD(-1)', -1], ['ODD(-2)', -3], ['ODD("x")', '#VALUE!'],
     ['SIGN(10)', 1], ['SIGN(4-4)', 0], ['SIGN(-0.00001)', -1],
@@ -136,6 +136,8 @@ test('EXP, LN, LOG, LOG10, PI, RADIANS, DEGREES and the trigonometric functions'
     ['LN(0)', '#NUM!'], ['LN(-1)', '#NUM!'], ['LOG(0)', '#NUM!'], ['LOG(10,0)', '#NUM!'], ['LOG(10,1)', '#DIV/0!'], ['LOG10(-5)', '#NUM!'], ['EXP(710)', '#NUM!'],
     ['ASIN(2)', '#NUM!'], ['ACOS(-1.5)', '#NUM!'], ['ATAN2(0,0)', '#DIV/0!'], ['ATAN2(0,1)', Math.PI / 2], ['COSH(1000)', '#NUM!'], ['SINH(-1000)', '#NUM!'], ['TANH(1000)', 1],
     ['SIN("x")', '#VALUE!'], ['PI(1)', '#VALUE!'],
+    // Excel 16 on the Mac: SIN, COS and TAN refuse a magnitude of 2^27 or more, as COT, CSC and SEC do.
+    ['SIN(2^27)', '#NUM!'], ['SIN(-2^27)', '#NUM!'], ['COS(1E+10)', '#NUM!'], ['TAN(-1E+9)', '#NUM!'], ['ROUND(SIN(134217727.9),6)', -0.824074],
   ]);
 });
 
@@ -165,6 +167,8 @@ test('FACT, FACTDOUBLE, GCD, LCM', () => {
     ['FACTDOUBLE(6)', 48], ['FACTDOUBLE(7)', 105], ['FACTDOUBLE(0)', 1], ['FACTDOUBLE(7.9)', 105], ['FACTDOUBLE(-1)', 1], ['FACTDOUBLE("x")', '#VALUE!'],
     ['GCD(5, 2)', 1], ['GCD(24, 36)', 12], ['GCD(7, 1)', 1], ['GCD(5, 0)', 5], ['GCD(24.9, 36.2)', 12], ['GCD(A1:A2)', 12], ['GCD(A1:A2,B1:B2)', 6],
     ['GCD(-1,2)', '#NUM!'], ['GCD(2^53,2)', '#NUM!'], ['GCD("x",2)', '#VALUE!'], ['GCD(A1:A3)', '#VALUE!'], ['GCD(0,0)', 0],
+    // Excel: a boolean is #VALUE! even typed, text that reads as a number counts.
+    ['GCD(TRUE,4)', '#VALUE!'], ['LCM(4,6,TRUE)', '#VALUE!'], ['GCD("4",2)', 2],
     ['LCM(5, 2)', 10], ['LCM(24, 36)', 72], ['LCM(A1:A2,B1:B2)', 72], ['LCM(5,0)', 0], ['LCM(-1,2)', '#NUM!'], ['LCM(2^52+1,2^52+3)', '#NUM!'], ['LCM("x",2)', '#VALUE!'],
   ]);
 });
@@ -197,6 +201,9 @@ test('AGGREGATE with Microsoft\'s data: its options for errors, hidden rows and 
     ['AGGREGATE(4, 6, A1:A11)', 96], ['AGGREGATE(14, 6, A1:A11, 3)', 72], ['AGGREGATE(15, 6, A1:A11)', '#VALUE!'], ['AGGREGATE(12, 6, A1:A11, B1:B11)', 68], ['MAX(A1:A2)', '#DIV/0!'],
     ['AGGREGATE(4, 4, A1:A11)', '#DIV/0!'], ['AGGREGATE(4, 0, A1:A11)', '#DIV/0!'], ['AGGREGATE(9, 6, A1:A11)', 462], ['AGGREGATE(1, 6, A2:A3)', 51], ['AGGREGATE(2, 4, A1:A11)', 9],
     ['AGGREGATE(3, 6, A1:A11)', 9], ['AGGREGATE(3, 4, A1:A11)', 11], ['AGGREGATE(5, 6, A1:A11)', 30], ['AGGREGATE(6, 6, A2:A3)', 2160], ['AGGREGATE(15, 6, A1:A11, 2)', 31],
+    // k as LARGE (rounded up) and SMALL (truncated) take it, below 1 refused first (Excel 16 on the Mac).
+    ['AGGREGATE(15,6,{10,20,30},1.5)', 10], ['AGGREGATE(15,6,{10,20,30},2.5)', 20], ['AGGREGATE(14,6,{10,20,30},1.5)', 20], ['AGGREGATE(14,6,{10,20,30},2.5)', 10],
+    ['AGGREGATE(14,6,{10,20,30},0.5)', '#NUM!'], ['AGGREGATE(15,6,{10,20,30},0.5)', '#NUM!'],
     ['AGGREGATE(13, 6, A1:B11)', 53], ['AGGREGATE(16, 6, B1:B11, 0.5)', 82], ['AGGREGATE(17, 6, B1:B11, 1)', 64], ['AGGREGATE(18, 6, B1:B11, 0.25)', 63],
     ['AGGREGATE(19, 6, B1:B11, 3)', 91], ['AGGREGATE(19, 6, B1:B11, 4)', '#NUM!'], ['AGGREGATE(14, 6, A1:A11, 10)', '#NUM!'],
     ['AGGREGATE(14, 6, A1:A11/(A1:A11<80), 1)', 72], ['AGGREGATE(9, 6, A1:A11*2)', '#VALUE!'], ['AGGREGATE(20, 6, A1:A11)', '#VALUE!'], ['AGGREGATE(9, 8, A1:A11)', '#VALUE!'],
