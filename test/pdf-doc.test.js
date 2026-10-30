@@ -247,6 +247,40 @@ test('open hashes its own byte snapshot, including a Node Buffer', async () => {
   try { assert.equal(r.hash, sha(buffer)); } finally { await r.doc.loadingTask.destroy(); }
 });
 
+test('overlapping saves keep a continuous base chain', async () => {
+  const pdf = await api(), { doc, hash } = await pdf.open(F.acroform());
+  try {
+    doc.annotationStorage.setValue((await doc.getFieldObjects()).get('name')[0].id, { value: 'Grace Hopper' });
+    const [first, second] = await Promise.all([pdf.save(doc), pdf.save(doc)]);
+    assert.equal(first.base, hash);
+    assert.equal(second.base, first.hash, 'a second save replaces the first completed save');
+    assert.equal(second.changed, second.hash !== second.base);
+  } finally { await doc.loadingTask.destroy(); }
+});
+
+test('thumbnail honours lowered byte limits, caps every result and releases canvases on failure', async () => {
+  const pdf = await api(), fs = require('node:fs'), vm = require('node:vm');
+  const canvases = [];
+  const context = { module: { exports: {} }, crypto: globalThis.crypto, Uint8Array,
+    OffscreenCanvas: class {
+      constructor(width, height) { Object.assign(this, { width, height }); canvases.push(this); }
+      getContext() { return { fillStyle: '', fillRect() {} }; }
+      async convertToBlob() { return { size: 25000, arrayBuffer: async () => new ArrayBuffer(25000) }; }
+    } };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'lib/pdf-doc.js'), 'utf8'), context);
+  const drawn = context.module.exports.use({ AnnotationMode: { ENABLE_STORAGE: 3 } });
+  const page = { getViewport: ({ scale }) => ({ width: 200 * scale, height: 100 * scale }), render: () => ({ promise: Promise.resolve() }) };
+  const result = await drawn.thumbnail(page, 200, { limits: { thumbnail: 100 } });
+  assert.equal(result.png, null, 'never return an oversized PNG, even at the smallest raster');
+  assert.match(result.reason, /size/);
+  assert.ok(canvases.every((c) => c.width === 0 && c.height === 0));
+  page.render = () => ({ promise: Promise.reject(Error('render failed')) });
+  await assert.rejects(drawn.thumbnail(page), /render failed/);
+  assert.equal(canvases.at(-1).width, 0, 'release on render failure');
+  await assert.rejects(drawn.thumbnail(page, NaN), RangeError);
+  assert.equal(await pdf.text({ getTextContent: async () => ({ items: [{ str: 'hello' }] }) }, { limits: { text: 3 } }), 'hel');
+});
+
 test('save refuses closed or untracked documents and names worker write failures', async () => {
   const pdf = await api(), { doc } = await pdf.open(F.FIXTURES.three());
   await doc.loadingTask.destroy();
