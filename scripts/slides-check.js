@@ -306,6 +306,20 @@ const fixture = () => {
     await until(() => page.evaluate(() => !document.getElementById('list').hidden && location.search === ''), 'Back to Documents');
     check(true, 'Back returns to Documents');
 
+    // A slideshow retains its own extension in the viewer and in the unchanged download.
+    await page.setInputFiles('#gd-file', { name: 'Slideshow.ppsx', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.slideshow', buffer: deckBytes });
+    const showKey = await until(() => page.evaluate((k) => [...document.querySelectorAll('.gd-card')].find((c) => c.dataset.key !== k)?.dataset.key, key), 'the slideshow card');
+    await page.click(`.gd-card[data-key="${showKey}"] .gd-title`);
+    await until(() => page.locator('#gs-canvas .gs-slide').count(), 'the slideshow viewer');
+    await page.click('.gs-more');
+    const showLabel = await page.locator('.gs-menu [data-act="export"]').textContent();
+    check(showLabel === 'Export .ppsx', `a slideshow's viewer names Export .ppsx (${showLabel})`);
+    const showDownload = page.waitForEvent('download');
+    await page.click('.gs-menu [data-act="export"]');
+    const showFile = await showDownload, showPath = path.join(tmp, 'export.ppsx');
+    await showFile.saveAs(showPath);
+    check(showFile.suggestedFilename() === 'Slideshow.ppsx' && fs.readFileSync(showPath).equals(deckBytes), 'Export .ppsx downloads the slideshow as given');
+
     // Turning import off preserves the existing deck's card and viewer.
     await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(false));
     await openHome();
