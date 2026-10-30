@@ -278,6 +278,13 @@ test('thumbnail honours lowered byte limits, caps every result and releases canv
   await assert.rejects(drawn.thumbnail(page), /render failed/);
   assert.equal(canvases.at(-1).width, 0, 'release on render failure');
   await assert.rejects(drawn.thumbnail(page, NaN), { name: 'RangeError' });
+  // minPx: the smallest a caller takes (the home's card), so a page no PNG of that size holds stops there.
+  page.render = () => ({ promise: Promise.resolve() });
+  canvases.length = 0;
+  const atLeast = await drawn.thumbnail(page, 528, { limits: { thumbnail: 100 }, minPx: 396 });
+  assert.equal(atLeast.png, null);
+  assert.deepEqual(canvases.map((c) => c.width === 0 && c.height === 0), [true, true], 'drawn at 528 and 396 only, each released');
+  await assert.rejects(drawn.thumbnail(page, 528, { minPx: -1 }), { name: 'RangeError' });
   assert.equal(await pdf.text({ getTextContent: async () => ({ items: [{ str: 'hello' }] }) }, { limits: { text: 3 } }), 'hel');
 });
 
