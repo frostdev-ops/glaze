@@ -220,13 +220,19 @@ const scanned = () => {
 };
 
 // count pages, each its label and a picture of noise (which does not compress), so the file comes to about `size` bytes.
-const large = ({ count = 300, size = 40e6 } = {}) => {
+// form: page 1 has an empty text field, name, to fill.
+const large = ({ count = 300, size = 40e6, form = false } = {}) => {
   const side = Math.floor(Math.sqrt(size / count));
   const pages = Array.from({ length: count }, (_, i) => ({ label: `Page ${i + 1} of ${count}`, content: `q 200 0 0 120 50 10 cm /Im1 Do Q BT /F1 16 Tf 24 150 Td (Page ${i + 1} of ${count}) Tj ET`, resources: ' /XObject << /Im1 %IMG% >>' }));
-  const { objects, refs, add } = pagesOf(pages);
+  const { objects, refs, add } = pagesOf(pages, form ? { catalog: ' /AcroForm %FORM%' } : {});
   for (const ref of refs) {
     const image = add({ dict: `<< /Type /XObject /Subtype /Image /Width ${side} /Height ${side} /ColorSpace /DeviceGray /BitsPerComponent 8 >>`, stream: crypto.randomBytes(side * side) });
     objects[ref - 1] = objects[ref - 1].replace('%IMG%', `${image} 0 R`);
+  }
+  if (form) {
+    const name = add(textField('name', '', [150, 170, 290, 192], refs[0]));
+    objects[0] = objects[0].replace('%FORM%', `${add(formDict([name]))} 0 R`);
+    objects[refs[0] - 1] = objects[refs[0] - 1].replace(/ >>$/, ` /Annots [${name} 0 R] >>`);
   }
   return write(objects, { id: 'large' });
 };
