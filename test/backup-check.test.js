@@ -15,7 +15,7 @@ const harness = (local, expired = false) => {
     runtime: { getManifest: () => ({ version }) },
   } });
   const page = { setDefaultTimeout() {}, goto: async () => {}, waitForFunction: async () => {},
-    evaluate: (fn) => vm.runInContext(`(${fn})()`, pageContext) };
+    evaluate: (fn, arg) => vm.runInContext(`(${fn})`, pageContext)(structuredClone(arg)) };
   const context = { route: async () => {}, serviceWorkers: () => [{ url: () => `${origin}/lib/background.js` }],
     newPage: async () => page, pages: () => [], on() {} };
   let clock = 0;
