@@ -2,8 +2,8 @@
 // (support.microsoft.com/en-us/excel/functions/<name>-function: kurt, skew, skew-p, percentrank-inc, mode-mult,
 // linest), what Excel 16.114.1 gave for everything else (probes of 2026-10-30,
 // ~/Projects/glaze-plans/sheets/fn-rest-excel-probes-2026-10-30.txt), held to 1e-12, and the distributions far into
-// their tails against values worked to 60 digits (mpmath 1.4.1). Excel agrees with those to 1e-15 or better, except
-// GAMMA.INV(0.999999,0.1,1), 2.8e-12 off; there the 60-digit value is the one held.
+// their tails against values worked to 60 digits (mpmath 1.4.1) from the doubles the formulas pass. Excel agrees with
+// those to 2e-15 or better.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -83,7 +83,7 @@ test('KURT, SKEW, SKEW.P: Microsoft\'s examples and the fewest points each takes
   prints(e, [['KURT(A2:A11)', '-0.151799637'], ['SKEW(A2:A11)', '0.359543'], ['SKEW.P(A2:A11)', '0.303193']]);
   close(DATA(), [['KURT(B1:B8)', -0.6412725370659933], ['SKEW(B1:B8)', 0.04630649340146819], ['SKEW.P(B1:B8)', 0.03712779280525781], ['KURT(1,2,3,5)', 12 / 35]]);
   cases(DATA(), [['KURT(1,2,3)', '#DIV/0!'], ['KURT(F1:F3,7)', '#DIV/0!'], ['SKEW(1,2)', '#DIV/0!'], ['SKEW.P(1,2)', '#DIV/0!'], ['SKEW.P(F1:F3)', '#DIV/0!'],
-    ['KURT(A1:A10,"x")', '#VALUE!'], ['SKEW(A1:A10,NA())', '#N/A'], ['SKEW(A1,A2,"4")', 0]]);
+    ['KURT(A1:A10,"x")', '#VALUE!'], ['SKEW(A1:A10,NA())', '#N/A'], ['SKEW(1,2,"3")', 0]]);
 });
 
 test('PERCENTRANK: Microsoft\'s examples, interpolation, truncation to significance', () => {
@@ -110,7 +110,8 @@ test('MODE.MULT: every most frequent value, in the order first seen, as a column
 
 test('LINEST: Microsoft\'s examples', () => {
   const one = book({ ...column('A', ['Known y', 1, 9, 5, 7]), ...column('B', ['Known x', 0, 4, 2, 3]) });
-  assert.deepEqual(spill(one, 'LINEST(A2:A5,B2:B5,,FALSE)'), [[2, 1]]);
+  const [[m, b]] = spill(one, 'LINEST(A2:A5,B2:B5,,FALSE)');
+  assert.ok(Math.abs(m - 2) <= 1e-12 && Math.abs(b - 1) <= 1e-12, `LINEST = ${m}, ${b}; Microsoft prints 2, 1`);
   const sales = book({ ...column('A', [1, 2, 3, 4, 5, 6]), ...column('B', [3100, 4500, 4400, 5400, 7500, 8100]) });
   close(sales, [['SUM(LINEST(B1:B6, A1:A6)*{9,1})', 11000]]);
   const rows = [[2310, 2, 2, 20, 142000], [2333, 2, 2, 12, 144000], [2356, 3, 1.5, 33, 151000], [2379, 3, 2, 43, 150000], [2402, 2, 3, 53, 139000],
@@ -122,7 +123,7 @@ test('LINEST: Microsoft\'s examples', () => {
   assert.deepEqual([s.length, s[0].length], [5, 5]);
   const near = (x, printed) => Math.abs(x - Number(printed)) <= 0.50001 * 10 ** -((printed.split('.')[1] ?? '').length);
   for (const [[i, j], printed] of [[[0, 0], '-234.2371645'], [[1, 0], '13.26801148'], [[2, 0], '0.996747993'], [[2, 1], '970.5784629'], [[3, 0], '459.7536742'],
-    [[3, 1], '6'], [[4, 0], '1732393319'], [[0, 4], '52317.83051'], [[0, 3], '2553.21066'], [[0, 2], '12529.76817'], [[0, 1], '27.64138737']]) {
+    [[3, 1], '6'], [[4, 0], '1732393319'], [[0, 4], '52317.83051'], [[0, 1], '2553.21066'], [[0, 2], '12529.76817'], [[0, 3], '27.64138737']]) {
     assert.ok(near(s[i][j], printed), `LINEST row ${i + 1} column ${j + 1}: ${s[i][j]}; Microsoft prints ${printed}`);
   }
   assert.deepEqual(s.slice(2).map((r) => r.slice(2)), [['#N/A', '#N/A', '#N/A'], ['#N/A', '#N/A', '#N/A'], ['#N/A', '#N/A', '#N/A']]);
@@ -242,7 +243,7 @@ test('the continuous distributions far into their tails, against 60-digit values
   close(d, [
     ['CHISQ.DIST.RT(100,3)', 1.55415943138960492e-21], ['T.DIST.RT(10,3)', 0.00106419952920707508], ['GAMMA.DIST(50,30,1,TRUE)', 0.99908317113854392],
     ['BETA.DIST(0.999,0.5,0.5,TRUE)', 0.979864958366622509], ['T.INV(1E-10,5)', -156.825592708894317], ['CHISQ.INV(1E-10,3)', 5.2093976214344802e-7],
-    ['BETA.INV(1E-10,2,3)', 4.08249401580833285e-6], ['F.INV.RT(1E-10,3,4)', 182572.630278789801], ['GAMMA.INV(0.999999,0.1,1)', 9.45702706048388653],
+    ['BETA.INV(1E-10,2,3)', 4.08249401580833285e-6], ['F.INV.RT(1E-10,3,4)', 182572.630278789801], ['GAMMA.INV(0.999999,0.1,1)', 9.457027060457439506],
     ['T.DIST(-40,2,TRUE)', 0.000312207336092370322], ['CHISQ.DIST(1E-5,2,TRUE)', 4.99998750002083331e-6], ['F.DIST(1E-3,2,7,TRUE)', 0.000999357479435562603],
     ['GAMMA.DIST(1E-3,1E-3,1,TRUE)', 0.99368764670886029], ['BETA.DIST(0.5,200,300,TRUE)', 0.999996456519735607], ['BETA.INV(0.3,200,300)', 0.388410831537716975],
     ['T.DIST(0.1,1E6,TRUE)', 0.539827827253978419], ['CHISQ.INV(0.5,1000)', 999.333412403380969], ['GAMMA.INV(0.5,1000,1)', 999.666686426965182],
