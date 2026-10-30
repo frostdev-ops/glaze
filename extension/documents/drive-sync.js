@@ -179,14 +179,19 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         ...(got.kind === 'sheet' && { parts: got.parts, drop: Object.keys(l?.rec.parts || {}).filter((n) => !Object.hasOwn(got.parts, n)), changed: true }) });
       return { rec: paper, parts: got.kind === 'sheet' ? got.parts : null };
     };
-    // Drive's side of a conflict kept beside this device's: a version, or a PDF's own document.
+    // Drive's side of a conflict kept beside this device's: a version, or a document of its own (a PDF's, and one too big
+    // to be a version: writer/writer-papers.js keep's RangeError).
     const keepOther = async (key, l, got) => {
-      if (got.kind === 'pdf') {
-        const k = P().newKey(), title = env.copyName(String(got.record.title || l?.rec.title || 'PDF'));
-        await env.papers.save(k, { ...got.record, title, named: true }, { reason: 'auto' });
+      const apart = async () => {
+        const k = P().newKey(), title = env.copyName(String(got.record.title || l?.rec.title || (got.kind === 'pdf' ? 'PDF' : '')));
+        await env.papers.save(k, { ...got.record, title, named: true }, { reason: 'auto', ...(got.kind === 'sheet' && { parts: got.parts, changed: true }) });
         await mark(k);
-      } else if (got.kind === 'sheet') await env.papers.keep(key, { kind: 'sheet', gz: await env.pack(got.record, got.parts), cells: got.record.cells });
-      else await env.papers.keep(key, got.record);
+      };
+      if (got.kind === 'pdf') return apart();
+      try {
+        if (got.kind === 'sheet') await env.papers.keep(key, { kind: 'sheet', gz: await env.pack(got.record, got.parts), cells: got.record.cells });
+        else await env.papers.keep(key, got.record);
+      } catch (e) { if (!(e instanceof RangeError)) throw e; await apart(); }
     };
 
     // This device's side kept as a version before Drive's is taken (a first meeting where Drive's was edited later).
@@ -241,8 +246,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
         if (!l) { const now2 = await take(got.key, null, got); if (got.external) return push(got.key, h, now2, source, folder); await agreed(got.key, h, R, got, now2, null); return; }
         if ((await sumOf(key, l)) !== got.sum) {
           // Both hold it, as with Restore: the later edited stays current, the other kept beside it (a PDF: both documents).
-          if (got.kind !== 'pdf' && got.kind === kindOf(l.rec) && got.updated > (l.rec.updated || 0)) {
-            await keepMine(key, l);
+          if (got.kind !== 'pdf' && got.kind === kindOf(l.rec) && got.updated > (l.rec.updated || 0)
+            && await keepMine(key, l).then(() => true, (e) => { if (e instanceof RangeError) return false; throw e; })) {
             const now2 = await take(key, l, got);
             if (got.external) return push(key, h, now2, source, folder);
             await agreed(key, h, R, got, now2, null);
