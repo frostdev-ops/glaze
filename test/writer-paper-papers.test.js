@@ -525,3 +525,20 @@ test('native submit dispatch restores a paper trashed after its sending version 
   assert.deepEqual([paper.updated, paper.revision, paper.doc], [before.updated, before.revision, before.doc]);
   assert.equal((await P.version(k, sending.version.id)).reason, 'submit');
 });
+
+test('filling a PDF in Trash restores it before purge; renaming or unchanged bytes keep it in Trash', async () => {
+  let t = 1000;
+  const P = PA.open(store(), () => t), k = PA.newKey();
+  await P.save(k, { kind: 'pdf', file: 'JVBERi0=', size: 5, pages: 1 });
+  await P.trash(k);
+  await P.save(k, { title: 'Renamed', named: true });
+  assert.ok(PA.trashed(await P.get(k)));
+  await P.save(k, { file: 'JVBERi0=', size: 5 });
+  assert.ok(PA.trashed(await P.get(k)), 'unchanged bytes are not an edit');
+  t++;
+  await P.save(k, { file: 'JVBERi0x', size: 6 });
+  assert.ok(!PA.trashed(await P.get(k)), 'new filled bytes restore the PDF');
+  t += 31 * 86400e3;
+  await P.purge();
+  assert.equal((await P.get(k)).file, 'JVBERi0x');
+});

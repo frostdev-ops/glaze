@@ -143,8 +143,11 @@ const fixture = () => {
     const found = await until(() => page.evaluate(() => { const n = document.getElementById('gq-find-n').textContent, hit = document.querySelector('.page[data-page-number="2"] .textLayer .highlight'); return hit && /1/.test(n) ? { n, hit: hit.textContent } : null; }), 'find hits');
     check(found.n === '1 of 1' && /page 2|2/.test(found.hit), `find "page 2": one hit on page 2 (${JSON.stringify(found)})`);
     await shot('viewer-find-1280.png');
+    await page.click('#gq-find-b');
+    await page.click('#gq-find-b');
+    await page.locator('#gq-zoom-in').focus();
     await page.keyboard.press('Escape');
-    check(await page.evaluate(() => document.getElementById('gq-find').hidden && !document.querySelector('.textLayer .highlight')), 'Esc closes find and clears its highlights');
+    check(await page.evaluate(() => document.getElementById('gq-find').hidden && !document.querySelector('.textLayer .highlight')), 'Esc closes find outside its input and clears its highlights');
 
     // ---- fill the form field, close, open again
     await page.evaluate(() => document.querySelector('.gq-scroll').scrollTo(0, 0));
