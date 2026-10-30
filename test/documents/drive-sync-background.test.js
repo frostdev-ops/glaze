@@ -16,7 +16,7 @@ const worker = () => {
       remove: async (k) => { for (const x of [].concat(k)) m.delete(x); }, getKeys: async () => [...m.keys()],
     };
   };
-  const listener = { addListener() {} }, local = area(), sync = area();
+  const listener = { addListener() {} }, changed = { fns: [], addListener(f) { this.fns.push(f); } }, local = area(), sync = area();
   const stores = { bodies: new Map(), files: new Map(), blobs: new Map() };
   const db = {
     get: async (s, k) => structuredClone(stores[s].get(k)),
@@ -28,7 +28,7 @@ const worker = () => {
   let documents, records;
   const context = vm.createContext({
     console, TextEncoder, TextDecoder,
-    chrome: { storage: { local, sync, onChanged: listener }, runtime: { onMessage: listener, onStartup: listener } },
+    chrome: { storage: { local, sync, onChanged: changed }, runtime: { onMessage: listener, onStartup: listener } },
     GZ_CARDS: { queue: () => { let tail = Promise.resolve(); return (fn) => { const p = tail.then(fn); tail = p.catch(() => {}); return p; }; } },
     GZ_DRIVE_SYNC: { create: (env) => { documents = env; return {}; } }, brokerTurn: null,
     driveLib: () => {}, googleLib: () => ({ ON: true }),
@@ -42,7 +42,7 @@ const worker = () => {
   const from = source.indexOf('// Sync to Google Drive (documents/drive-sync.js');
   vm.runInContext(source.slice(from, source.indexOf('// A Download all wait owns', from)), context);
   vm.runInContext('openDriveSync()', context);
-  return { context, documents, records, local };
+  return { context, documents, records, local, changed };
 };
 
 test('a restarted worker loads validators before accepting class schedules and GPA records', () => {
@@ -111,4 +111,18 @@ test('a daily snapshot whose files are past one upload is no snapshot, its files
   local.get = async (k) => (k === null ? Object.fromEntries(await Promise.all((await local.getKeys()).map(async (x) => [x, (await get(x))[x]]))) : get(k));
   assert.equal(await records.snapshot(), null);
   assert.ok(read <= 4, `read ${read} of the files`);
+});
+
+test('while Sync is off for its account, each record\'s time of change is still kept for when it is turned on again', async () => {
+  const { local, changed } = worker();
+  await local.set({ driveSync: { on: false, off: true, account: 'student@school.edu', folder: 'f', token: '9' } });
+  for (const f of changed.fns) f({ writerWords: { oldValue: ['Alpha'], newValue: ['Alpha', 'Beta'] } }, 'local');
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(Number.isFinite((await local.get('driveSyncStamps')).driveSyncStamps?.['local:writerWords']), 'stamped while off');
+  // Never connected, or its account forgotten: nothing loads, nothing is kept.
+  await local.remove(['driveSyncStamps']);
+  await local.set({ driveSync: { on: false, off: true, problem: 'account' } });
+  for (const f of changed.fns) f({ writerWords: { oldValue: ['Alpha'], newValue: ['Gamma'] } }, 'local');
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal((await local.get('driveSyncStamps')).driveSyncStamps, undefined);
 });
