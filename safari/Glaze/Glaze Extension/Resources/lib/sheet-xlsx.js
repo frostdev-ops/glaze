@@ -930,6 +930,48 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     return out.join('');
   };
 
+  // ── Parts Glaze writes itself ──────────────────────────────────────────────────────────────────────────────────────
+  // A chart inserted on the grid and a drawing whose charts moved are kept parts Glaze wrote, with the rows and columns
+  // as they were then: wb.keep.bases[path] is the log at that moment, and since() the moves to make now (taking back,
+  // newest first, what has come off the log since, then what was added).
+  const sameEntry = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const since = (base, log) => {
+    let k = 0;
+    while (k < base.length && k < log.length && sameEntry(base[k], log[k])) k++;
+    const back = base.slice(k).reverse().map((e) => (e.op === 'shift' ? { ...e, n: -e.n } : { ...e, from: e.to, to: e.from }));
+    return [...back, ...log.slice(k)];
+  };
+  const logOf = (wb, path) => { const log = wb.keep?.log ?? [], base = wb.keep?.bases?.[path]; return base ? since(base, log) : log; };
+  // A kept drawing's or chart's XML as write() writes it now. sh: the sheet a drawing is on.
+  const current = (wb, path, sh = null) => {
+    const part = wb.keep?.parts?.[path];
+    if (!part) return null;
+    const xml = partText(part.data), log = logOf(wb, path);
+    if (!log.length) return xml;
+    if (!sh) return moveXml(xml, { entries: [], log, host: null, part: true, chart: true });
+    return moveXml(xml, { entries: own(log, sh.id), log, host: sh.keep?.name ?? sh.name, anchors: true, part: true });
+  };
+  // The sheet's drawing, made (an empty part, its relationship and <drawing>) when it has none. → sh.keep.drawing.
+  const DRAWING = 'application/vnd.openxmlformats-officedocument.drawing+xml';
+  const attach = (wb, sh) => {
+    wb.keep ??= { parts: {} };
+    wb.keep.parts ??= {};
+    const keep = (sh.keep ??= {});
+    if (keep.drawing && wb.keep.parts[keep.drawing.path]) return keep.drawing;
+    const taken = new Set(Object.keys(wb.keep.parts).map((p) => p.toLowerCase()));
+    let path = keep.drawing?.path;
+    if (!path) { let n = 1; while (taken.has(`xl/drawings/drawing${n}.xml`)) n++; path = `xl/drawings/drawing${n}.xml`; }
+    wb.keep.parts[path] = { type: DRAWING, data: new TextEncoder().encode(`${HEAD}<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"></xdr:wsDr>`) };
+    if (keep.drawing) return keep.drawing;
+    keep.rels ??= [];
+    const id = nextId(new Set(keep.rels.map((r) => r.id)));
+    keep.rels.push({ id, type: `${OD}/drawing`, target: relative(keep.path ?? 'xl/worksheets/sheet.xml', path) });
+    if (!keep.xml) keep.xml = [{ name: 'sheetFormatPr', rank: RANK.get('sheetFormatPr'), xml: '<sheetFormatPr defaultRowHeight="15"/>' }];
+    keep.xml.push({ name: 'drawing', rank: RANK.get('drawing'), xml: `<drawing r:id="${id}"/>` });
+    keep.drawing = { id, path, charts: [] };
+    return keep.drawing;
+  };
+
   // ── Writing ─────────────────────────────────────────────────────────────────────────────────────────────────────────
   // Recalculates, so every formula's cached value is current. A formula with a function Glaze lacks gives #NAME? here;
   // the file keeps the value it came with instead. → Map cell → the { t, v } to write.
@@ -1336,13 +1378,14 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       if (files.has(path)) continue;
       const part = kept[path];
       let data = part.data;
-      const shifting = log.length && /^(comments|threadedComment|table|vmlDrawing|drawing|chart|chartsheet)$/.test(how.kind);
+      const plog = logOf(wb, path);
+      const shifting = plog.length && /^(comments|threadedComment|table|vmlDrawing|drawing|chart|chartsheet)$/.test(how.kind);
       if (shifting) {
         const xml = partText(data);
-        const entries = how.sheet ? own(log, how.sheet.id) : [];
+        const entries = how.sheet ? own(plog, how.sheet.id) : [];
         let moved = xml;
-        if (how.kind === 'chart') moved = moveXml(xml, { entries: [], log, host: null, part: true, chart: true });
-        else if (how.sheet) moved = moveXml(xml, { entries, log, host: how.sheet.keep?.name ?? how.sheet.name, anchors: how.kind === 'drawing', vml: how.kind === 'vmlDrawing', part: true });
+        if (how.kind === 'chart') moved = moveXml(xml, { entries: [], log: plog, host: null, part: true, chart: true });
+        else if (how.sheet) moved = moveXml(xml, { entries, log: plog, host: how.sheet.keep?.name ?? how.sheet.name, anchors: how.kind === 'drawing', vml: how.kind === 'vmlDrawing', part: true });
         if (moved && moved !== xml && !(how.sheet && !moved.trim())) data = new TextEncoder().encode(moved);
       }
       files.set(path, data);
@@ -1506,7 +1549,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     return (opts.bom === false ? '' : '﻿') + lines.join('');
   };
 
-  const api = { read, write, track, locked, extension, readDelimited, writeDelimited, sniff, tinted, fromFile, toFile };
+  const api = { read, write, track, locked, extension, readDelimited, writeDelimited, sniff, tinted, fromFile, toFile, current, attach, since };
   for (const [k, fn] of Object.entries(api)) api[k] = (...args) => { deps(); return fn(...args); };
   return api;
 })();

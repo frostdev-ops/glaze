@@ -256,7 +256,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     undo: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3', redo: 'm15 14 5-5-5-5M20 9H9a5 5 0 0 0 0 10h3', dots: 'M5 12h.01M12 12h.01M19 12h.01', caret: 'm6 9 6 6 6-6',
     az: 'M4 18V6M1 9l3-3 3 3M11 7h6l-6 8h6M11 19h7', za: 'M4 6v12M1 15l3 3 3-3M11 7h6l-6 8h6M11 19h7', find: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
     freeze: 'M4 4h16v16H4zM4 9h16M9 4v16', clock: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', plus: 'M12 5v14M5 12h14', close: 'M6 6l12 12M18 6 6 18',
-    up: 'm18 15-6-6-6 6', down: 'm6 9 6 6 6-6', num: 'M4 9h16M4 15h16M10 3 8 21M16 3l-2 18',
+    up: 'm18 15-6-6-6 6', down: 'm6 9 6 6 6-6', num: 'M4 9h16M4 15h16M10 3 8 21M16 3l-2 18', chart: 'M3 20h18M6 20v-7M11 20V6M16 20v-10',
   };
   const icon = (name) => { const s = document.createElementNS(SVG, 'svg'), p = document.createElementNS(SVG, 'path'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'gp-ico'); s.setAttribute('aria-hidden', 'true'); p.setAttribute('d', PATHS[name]); s.append(p); return s; };
   const HW = 46, HH = 24, OVER = 2, MIN_ROWS = 1000, MIN_COLS = 26, MORE_ROWS = 200, MORE_COLS = 6, MAX_PX = 15e6, BAND = 1000;
@@ -309,10 +309,11 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const azB = tb('gx-sort-az', t('Sort A to Z'), 'az'), zaB = tb('gx-sort-za', t('Sort Z to A'), 'za');
     const freezeB = btn({ id: 'gx-freeze', class: 'gp-tbtn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Freeze') }, icon('freeze'), h('span', { class: 'gx-lbl', text: t('Freeze') }), icon('caret'));
     const findB = tb('gx-find-b', t('Find'), 'find', { 'aria-pressed': 'false' });
+    const chartB = globalThis.GZ_SHEET_CHART ? btn({ id: 'gx-chart', class: 'gp-tbtn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Chart') }, icon('chart'), h('span', { class: 'gx-lbl', text: t('Chart') }), icon('caret')) : null;
     const versB = btn({ id: 'gx-versions', class: 'gp-tbtn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Versions') }, icon('clock'), h('span', { class: 'gx-lbl', text: t('Versions') }));
     const moreB = tb('gx-more', t('More'), 'dots', { 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
     const sep = () => h('span', { class: 'gp-sepv' });
-    const tool = h('div', { class: 'gp-tool gx-tool', role: 'toolbar', 'aria-label': t('Spreadsheet') }, undoB, redoB, sep(), fmtB, sep(), azB, zaB, freezeB, sep(), findB, h('span', { class: 'grow' }), versB, ...(host?.tools || []), moreB);
+    const tool = h('div', { class: 'gp-tool gx-tool', role: 'toolbar', 'aria-label': t('Spreadsheet') }, undoB, redoB, sep(), fmtB, sep(), azB, zaB, freezeB, chartB, sep(), findB, h('span', { class: 'grow' }), versB, ...(host?.tools || []), moreB);
     const nameIn = h('input', { id: 'gx-name', class: 'gx-name', type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': t('Name box') });
     const fx = h('input', { id: 'gx-formula', class: 'gx-fx', type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': t('Formula') });
     const fbar = h('div', { class: 'gx-bar' }, nameIn, fx);
@@ -517,6 +518,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       for (const p of Object.values(Q)) drawPane(p, all);
       for (const hd of Object.values(HD)) drawHead(hd, all);
       overlay();
+      charts?.draw();
       if (editing && editing.surface === editor) placeEditor();
       const id = `gx-c-${sel.active[0]}-${sel.active[1]}`;
       if (document.getElementById(id)) gridEl.setAttribute('aria-activedescendant', id); else gridEl.removeAttribute('aria-activedescendant');
@@ -558,6 +560,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     }, { passive: true });
     const sizing = new ResizeObserver(() => { layout(); draw(true); });
     sizing.observe(gridEl);
+    // The sheet's charts (lib/sheet-chart.js, loaded with the grid): a layer in each pane, placed as the cells are drawn.
+    const charts = globalThis.GZ_SHEET_CHART?.layer({ panes: Q, wb: () => wb, sheet: S, geo: () => ({ R, C, FR, FC, FW, FH }), reach, t }) ?? null;
 
     // Scrolls the cell into view, past the frozen panes.
     const reveal = (r, c) => {
@@ -650,6 +654,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         if (!op.hidden) delete sh.keep.hidden;
         return { inverse: { op: 'gx-hide', sheet: op.sheet, hidden: prev }, changed: [], rebuild: true };
       }
+      if (op.op === 'gx-chart') { if (!charts) throw Object.assign(new Error('no charts'), { code: 'op' }); return { inverse: charts.apply(op), changed: [] }; }
       if (X()?.locked(wb, op)) throw Object.assign(new Error('locked'), { code: 'locked' });
       const res = eng.apply(op);
       X()?.track(wb, op);
@@ -675,6 +680,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (shapes.includes(op.op) || res.rebuild) { if (!wb.sheets[wb.active] || S().keep?.hidden) wb.active = wb.sheets.findIndex((s) => !s.keep?.hidden); sizes(); layout(); tabsDraw(); }
       circular();
       told();
+      charts?.changed();
       drawNow(true);
     };
     const undo = (redo = false) => {
@@ -989,8 +995,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     };
     scroller.addEventListener('pointermove', (e) => {
       if (drag) return;
-      const p = hit(e), ed = edgeAt(p);
-      scroller.style.cursor = ed ? (ed.axis === 'col' ? 'col-resize' : 'row-resize') : onHandle(p) ? 'crosshair' : p.area === 'cell' ? 'cell' : 'default';
+      const p = hit(e), ed = edgeAt(p), ch = p.area === 'cell' && !editing ? charts?.hit(p.ax, p.ay) : null;
+      scroller.style.cursor = ch ? (ch.handle ? 'nwse-resize' : 'move') : ed ? (ed.axis === 'col' ? 'col-resize' : 'row-resize') : onHandle(p) ? 'crosshair' : p.area === 'cell' ? 'cell' : 'default';
     });
     let drag = null;
     // Whole columns or rows from a to b, after the ranges kept (base: Ctrl's earlier ones); the active cell in view.
@@ -1013,6 +1019,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (editing && !commit()) { e.preventDefault(); return; }
       e.preventDefault();
       gridEl.focus({ preventScroll: true });
+      // A chart: chosen, and dragged to move it (or by its corner to size it).
+      const ch = p.area === 'cell' ? charts?.hit(p.ax, p.ay) : null;
+      charts?.choose(ch?.id ?? null);
+      if (ch) { drag = { kind: 'chart', ...ch, x: p.ax, y: p.ay }; scroller.setPointerCapture(e.pointerId); return; }
       const add = e.ctrlKey || e.metaKey;
       const ed = edgeAt(p);
       if (ed) drag = { kind: 'size', ...ed, from: ed.axis === 'col' ? C.offset(ed.i) : R.offset(ed.i), start: ed.axis === 'col' ? C.size(ed.i) : R.size(ed.i) };
@@ -1030,6 +1040,12 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (!drag) return;
       const p = hit(e);
       if (drag.kind === 'point') { if (p.r !== drag.r || p.c !== drag.c) { const q = editing?.point; if (q) point(q.r0, q.c0, p.r, p.c); } return; }
+      if (drag.kind === 'chart') {
+        const dx = p.ax - drag.x, dy = p.ay - drag.y, b = drag.box;
+        drag.to = drag.handle ? { ...b, w: Math.max(40, b.w + dx), h: Math.max(30, b.h + dy) } : { ...b, x: Math.max(0, b.x + dx), y: Math.max(0, b.y + dy) };
+        charts.preview(drag.id, drag.to);
+        return;
+      }
       if (drag.kind === 'cells') { const [er, ec] = end(sel); if (er !== p.r || ec !== p.c) setSel(select(sel, p.r, p.c, { extend: true }), { scroll: false }); }
       else if (drag.kind === 'col' || drag.kind === 'row') setSel(lineSel(drag.kind, drag.a, drag.kind === 'col' ? p.c : p.r, drag.base), { scroll: false });
       else if (drag.kind === 'size') {
@@ -1045,12 +1061,13 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const release = () => {
       const d = drag; drag = null;
       if (!d) return;
+      if (d.kind === 'chart') { const op = d.to && (Math.abs(d.to.x - d.box.x) + Math.abs(d.to.y - d.box.y) + Math.abs(d.to.w - d.box.w) + Math.abs(d.to.h - d.box.h) >= 1) ? charts.move(d.id, d.to) : null; charts.preview(d.id, null); if (op) apply(op); return; }
       if (d.kind === 'size' && d.size !== undefined) apply({ op: 'size', sheet: S().id, axis: d.axis, i: d.i, size: d.axis === 'col' ? px.toCol(d.size) : px.toRow(d.size) });
       else if (d.kind === 'size') { sizes(); layout(); draw(true); }
       if (d.kind === 'fill') { reachG = null; if (d.to) fillOut(d.g, d.to.axis, d.to.n); else overlay(); }
     };
     scroller.addEventListener('pointerup', release);
-    scroller.addEventListener('pointercancel', () => { if (drag?.kind === 'size') { sizes(); layout(); draw(true); } reachG = null; drag = null; overlay(); });
+    scroller.addEventListener('pointercancel', () => { if (drag?.kind === 'size') { sizes(); layout(); draw(true); } if (drag?.kind === 'chart') charts.preview(drag.id, null); reachG = null; drag = null; overlay(); });
     scroller.addEventListener('dblclick', (e) => {
       const p = hit(e), ed = edgeAt(p);
       if (ed?.axis === 'col') { fitColumn(ed.i); return; }
@@ -1230,6 +1247,16 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         { act: 'freeze-here', label: t('Freeze at {cell}', { cell: M.cellName(r, c) }), disabled: !r && !c, run: () => set({ rows: r, cols: c }) },
         { act: 'unfreeze', label: t('Unfreeze'), disabled: !fz?.rows && !fz?.cols, run: () => set(null) }];
     }, t('Freeze'));
+    // Insert → a chart of the selection (or the block of data around the active cell), chosen at its right.
+    const KINDS = [['column', 'Column'], ['bar', 'Bar'], ['line', 'Line'], ['pie', 'Pie'], ['scatter', 'Scatter']];
+    const insertChart = (kind) => {
+      const last = sel.ranges[sel.ranges.length - 1], u = used(S());
+      const g = last.r0 === last.r1 && last.c0 === last.c1 ? region(last.r0, last.c0) : range(last.r0, last.c0, Math.min(last.r1, Math.max(u.r - 1, last.r0)), Math.min(last.c1, Math.max(u.c - 1, last.c0)));
+      const op = charts?.insert(kind, g);
+      if (!op) { say(t('Select the numbers to chart.')); return; }
+      apply(op, { after: () => { const b = charts.list().find((c) => c.id === op.chosen)?.box; if (b) reveal(R.at(b.y), C.at(b.x + Math.min(b.w, vw - HW - FW - 8))); } });
+    };
+    if (chartB) toggle(chartB, () => KINDS.map(([kind, label]) => ({ act: `chart-${kind}`, label: t(label), run: () => insertChart(kind) })), t('Chart'));
     const fileNow = async () => o.fileOf(wb, rec?.title || host?.title?.() || '');
     toggle(moreB, () => [{ act: 'export', label: t(o.exportLabel()), run: () => { flush(); fileNow().then(o.download, (e) => { console.error(e); say(t('Not saved. Try again in a moment.')); }); } }], t('More'));
     const when = new Intl.DateTimeFormat(o.locale || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -1476,6 +1503,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       const altGr = e.getModifierState?.('AltGraph') === true, option = MAC && e.altKey && !e.ctrlKey && !e.metaKey;
       const mod = (e.ctrlKey || e.metaKey) && !altGr, k = e.key;
       const lim = { rows: ext.rows, cols: ext.cols };
+      // A chosen chart: Delete takes it away, Escape lets it go; any other key is the cells'.
+      const chosen = charts?.chosen();
+      if (chosen && !mod && (k === 'Delete' || k === 'Backspace')) { e.preventDefault(); const op = charts.remove(chosen); if (op) apply(op); return; }
+      if (chosen) { charts.choose(null); if (k === 'Escape') { e.preventDefault(); return; } }
       const arrow = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[k];
       if (arrow && !e.altKey) {
         e.preventDefault();
@@ -1541,6 +1572,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       blurTimers.clear();
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
+      charts?.dispose();
       closeMenu();
       view.remove();
     };
