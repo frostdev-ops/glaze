@@ -309,6 +309,16 @@ test('remove fails closed when the courses that wore the Look cannot be written'
   assert.deepEqual(w.sync.courses.looks, { _1_1: favorites[0].id });
 });
 
+test('remove reports a refused local write after courses have been unmapped', async () => {
+  const { favorites } = await fixtures();
+  const w = worker({ lookFavorites: favorites.slice(0, 2), rotateLooks: [favorites[0].id] }, G.GZ_SANITIZE({ courses: { looks: { _1_1: favorites[0].id } } }));
+  const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/options.html' };
+  w.chrome.storage.local.set = () => Promise.reject(new Error('local storage unavailable'));
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'remove', id: favorites[0].id }, editor), { ok: false, error: 'write' });
+  assert.equal(w.local.lookFavorites.length, 2, 'the favorite survives for a retry');
+  assert.deepEqual(w.local.rotateLooks, [favorites[0].id]);
+});
+
 test('catalogue rebuilds settle on the latest of consecutive favorites writes', async () => {
   const { favorites } = await fixtures();
   const w = worker();
