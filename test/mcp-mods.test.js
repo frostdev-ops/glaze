@@ -141,6 +141,36 @@ test('15 seconds from the call, it ends; an answer after that is not taken', asy
   assert.equal(timers[1].cleared, true);
 });
 
+test('cancelling while tabs are being found releases the call immediately and never dispatches it later', async () => {
+  let found;
+  const lookup = new Promise((resolve) => { found = resolve; });
+  const active = new Set(), sent = [];
+  const route = R.create({ browser: 'chrome', tabs: { query: () => lookup, sendMessage: (...a) => sent.push(a) },
+    timers: { setTimeout: (f) => { active.add(f); return f; }, clearTimeout: (f) => active.delete(f) } });
+  // More than the pending limit: each cancelled lookup must release its slot and timer.
+  for (let i = 0; i <= R.LIMIT.pending; i++) {
+    const ac = new AbortController(), pending = route.code(MOD, 'slow', {}, { ...CTX, signal: ac.signal });
+    ac.abort();
+    assert.deepEqual(await Promise.race([pending, new Promise((r) => setImmediate(() => r('still waiting')))]), { cancelled: true });
+    assert.equal(active.size, 0);
+  }
+  found([TAB(7)]);
+  await settle();
+  assert.deepEqual(sent, []);
+});
+
+test('an answer arriving before the tab acknowledges dispatch still drains the page receipt with wait', async () => {
+  let route;
+  const tabs = tabsOf([TAB(7)], (id, m) => {
+    if (m.op === 'call') assert.equal(route.settle(from(7), MOD, m.call, { value: 'quick' }, '5'), true);
+    return { ok: true };
+  });
+  route = R.create({ tabs, browser: 'chrome' });
+  assert.equal(await route.code(MOD, 'echo', {}, CTX), 'quick');
+  await settle();
+  assert.deepEqual(tabs.sent.map(([, m]) => m.op), ['call', 'wait']);
+});
+
 test('arguments too large, too many calls waiting, a call cancelled before it went, or no account to route by: refused before any tab is asked', async () => {
   const tabs = tabsOf([TAB(7)], (t, m) => (m.op === 'call' ? { ok: true } : new Promise(() => {})));
   const route = R.create({ tabs, browser: 'chrome', timers: never });
