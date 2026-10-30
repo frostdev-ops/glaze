@@ -313,8 +313,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       doc.annotationStorage.onSetModified = modified;
       // pdf.js only calls onSetModified once until its current save finishes. Track each input as well, so a field
       // changed during that save cannot be mistaken for the value its worker already captured.
-      ui.addEventListener('input', (e) => { if (e.target.closest?.('.annotationLayer')) modified(); });
-      ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } });
+      ui.addEventListener('input', (e) => { if (e.target.closest?.('.annotationLayer')) modified(); }, { signal });
+      ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } }, { signal });
     }
     back?.addEventListener('click', (e) => {
       if (!dirty && !saving) return;
