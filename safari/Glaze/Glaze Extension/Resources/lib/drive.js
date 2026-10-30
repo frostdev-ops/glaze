@@ -77,6 +77,11 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   // connected to another account or none before any of its calls), boundary() }
   const create = (env) => {
     const bound = env.account ? Promise.resolve().then(env.account).catch(() => null) : null;
+    const still = async () => {
+      if (!bound) return;
+      const was = await bound, now = await Promise.resolve().then(env.account).catch(() => null);
+      if (!was || now !== was) throw new Fail('connect');
+    };
     const send = (url, init) => env.fetch(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store' });
     const reason = async (r) => {
       const j = await r.json().catch(() => null);
@@ -91,11 +96,9 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     const call = async (url, init = {}) => {
       for (let i = 0; ; i++) {
         let t, r;
-        if (bound) {
-          const was = await bound, now = await Promise.resolve().then(env.account).catch(() => null);
-          if (!was || now !== was) throw new Fail('connect');
-        }
+        await still();
         try { t = await env.token({ interactive: true }); } catch (e) { throw new Fail(WHY.includes(e?.why) ? e.why : 'auth'); }
+        await still(); // a Disconnect while the token came: Calendar's grant may keep it valid
         try { r = await send(url, { ...init, headers: { authorization: `Bearer ${t}`, ...init.headers } }); } catch { throw new Fail('network'); }
         if (r.ok) return r;
         if (r.status === 401 && i === 0) {
@@ -289,14 +292,20 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     if (typeof document === 'undefined' || !globalThis.chrome?.runtime?.sendMessage) return null;
     // A framed Documents is answered once its document has claimed its pass: until then 'sender', asked again after 0.5,
     // 1, 2, 4 and 8 seconds.
-    let connected = false, asking = null;
+    // A change while one is asked is asked again once it answers, its answer then set aside as stale.
+    let connected = false, asking = null, again = false;
     const shown = new Set();
-    const ask = (n = 0) => (asking ||= chrome.runtime.sendMessage({ type: 'glaze:drive', op: 'status' }).catch(() => null).then((r) => {
-      asking = null;
-      if (r?.why === 'sender' && n < 5) setTimeout(() => ask(n + 1), 500 * 2 ** n);
-      const on = r?.connected === true;
-      if (on !== connected) { connected = on; for (const f of shown) try { f(); } catch (e) { console.error(e); } }
-    }));
+    const ask = (n = 0) => {
+      if (asking) { again = true; return asking; }
+      asking = chrome.runtime.sendMessage({ type: 'glaze:drive', op: 'status' }).catch(() => null).then((r) => {
+        asking = null;
+        if (again) { again = false; ask(); return; }
+        if (r?.why === 'sender' && n < 5) setTimeout(() => ask(n + 1), 500 * 2 ** n);
+        const on = r?.connected === true;
+        if (on !== connected) { connected = on; for (const f of shown) try { f(); } catch (e) { console.error(e); } }
+      });
+      return asking;
+    };
     ask();
     chrome.storage?.onChanged?.addListener((c, where) => { if (where === 'local' && 'google' in c) ask(); });
     const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return 'en'; } })();
