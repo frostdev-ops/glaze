@@ -185,6 +185,9 @@ const fixture = () => {
     // Esc with nothing open leaves the tab where it is (as a paper's does); the ⋯ menu closes on it, focus back on ⋯.
     await page.keyboard.press('Escape');
     check(page.url().includes('?pdf='), 'Esc with nothing open stays on the document');
+    // ⋯'s dots are drawn as the paper's are (writer-paper.css .gp-more): at its stroke they read as dots, not specks.
+    const dots = await page.evaluate(() => { const w = (s) => parseFloat(getComputedStyle(document.querySelector(s)).strokeWidth); return { pdf: w('.gq-more .gp-ico'), find: w('#gq-find-b .gp-ico') }; });
+    check(dots.pdf >= 3, `⋯ shows its dots (stroke ${JSON.stringify(dots)})`);
     await page.click('.gq-more');
     await until(() => page.evaluate(() => !!document.querySelector('.gq-menu [role="menuitem"]')), 'the ⋯ menu');
     const items = await page.evaluate(() => [...document.querySelectorAll('.gq-menu [role="menuitem"]')].map((b) => b.textContent));
