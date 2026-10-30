@@ -238,3 +238,20 @@ test('lib/looks.js loads on demand as the worker injects it: it ends on a value,
   assert.equal(vm.runInContext(read('lib/looks.js'), context), first);
   assert.equal(vm.runInContext('GZ_CATALOG', context).list().length, G.GZ_LOOKS.length);
 });
+
+test('a course page asks the worker for its Look\'s parts by id: a kept Look\'s from its code, a built-in\'s own', async () => {
+  const { favorites } = await fixtures();
+  const shader = fs.readFileSync(path.join(__dirname, '..', 'assets/shaders/aurora.glsl'), 'utf8');
+  const gallery = C.make(await S.encode(G.GZ_SANITIZE({ colors: G.GZ_PRESET('Midnight'), bg: { kind: 'shader' } }), {}, { x: { bg: { shader: { src: shader } }, pointer: 'lava' } }), 'Shader night', 'mira', 'gallery');
+  const w = worker({ lookFavorites: [gallery, ...favorites] });
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: gallery.id }, { id: 'glaze', tab: {}, url: 'https://evil.example/' }), { ok: false, error: 'sender' });
+  // The page in this harness isn't a registered LMS page either: Glaze's own pages ask the same way.
+  const got = await w.send({ type: 'glaze:looks', op: 'parts', id: gallery.id }, w.popup);
+  assert.equal(got.ok, true);
+  assert.deepEqual(got.parts, (await S.decode(gallery.code)).parts);
+  assert.equal(got.parts.x.pointer, 'lava');
+  assert.ok(got.parts.x.bg.shader.src.length > 100, 'the shader comes with it');
+  assert.deepEqual((await w.send({ type: 'glaze:looks', op: 'parts', id: 'Graveyard' }, w.popup)).parts, require('../lib/lookset.js')(look('Graveyard')));
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: 'c:00000000000000' }, w.popup), { ok: false, error: 'gone' });
+  assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'parts', id: 'Nope' }, w.popup), { ok: false, error: 'sender' });
+});
