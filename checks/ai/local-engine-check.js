@@ -6,11 +6,15 @@
 //   model <model.gguf> <ref dir> [--only a,b] [--steps 64] [--summary]
 //                                             the whole model on checks/ai/local-reference-prompts.json against the
 //                                             reference's saved logits (local-reference-check.js's dumps, or `summarize`d)
+//   model ... --api                           the same through the model interface (load, prefill, decode greedy)
+//   warm <model.gguf> [ref dir] [--system 1500]   a system turn (long-1500's tokens) prefilled once with a snapshot, then
+//                                             restore + a 64- or 256-token user turn + one token, timed; GPU memory
+//                                             (nvidia-smi) before load, loaded, after release
 //   speed <model.gguf> [--prompt 512] [--decode 128] [--profile]   prefill and decode tok/s (after a warm-up); --profile:
 //                                             GPU ms per kernel (timestamp-query) for a decode step and a prompt chunk
 //   bench <model.gguf>                        GEMV GB/s on a few of the model's matrices (200 dispatches in one pass)
 //   small                                     a tiny random lfm3 with every quant type: the kernels, then the whole model
-//                                             without subgroups (SwiftShader, no model file: tools/dev/ci-browser-checks.js runs it)
+//                                             without subgroups, then the model interface (mask, snapshots, cancel) (SwiftShader, no model file: tools/dev/ci-browser-checks.js runs it)
 //   summarize <ref dir> <out dir>             (Node only) per row the reference's top 32 (id, logit), for a machine
 //                                             without the full dumps; `model` then compares top-1 and those logits
 // Options: --out <dir> (results.json, the log), --flags nvidia | swiftshader | none (Chromium's GPU flags; default none,
@@ -55,7 +59,7 @@ const mode = args.shift();
 const opt = {
   out: flag('--out', null), flags: flag('--flags', mode === 'small' ? 'swiftshader' : 'none'), precision: flag('--precision', 'auto'),
   subgroups: flag('--subgroups', 'auto'), chunk: +flag('--chunk', 128), only: flag('--only', null), steps: +flag('--steps', 64),
-  prompt: +flag('--prompt', 512), decode: +flag('--decode', 128), tokens: flag('--tokens', null), summary: has('--summary'), profile: has('--profile'),
+  prompt: +flag('--prompt', 512), decode: +flag('--decode', 128), tokens: flag('--tokens', null), summary: has('--summary'), profile: has('--profile'), api: has('--api'), system: +flag('--system', 1500),
 };
 
 // ---- Node: summaries of full dumps --------------------------------------------------------------------------------------
@@ -551,6 +555,7 @@ function pageLib() {
   const argmax = (v) => { let b = 0; for (let i = 1; i < v.length; i++) if (v[i] > v[b]) b = i; return b; };
   const model = async (o) => {
     if (!o.ids?.length) throw new Error('no reference prompts to validate');
+    if (o.api) return modelApi(o);
     const g = await open(o.model), { e, adapter: ad } = await engine(g, o), V = e.config.vocab;
     const results = { adapter: ad, engine: { f16: e.f16, subgroups: e.subgroups, tpr: e._k.tpr }, prompts: [] };
     let agree = 0, total = 0, maxPrefill = 0, maxDecode = 0;
@@ -744,10 +749,171 @@ function pageLib() {
     const pass = k.pass && rel < 1e-4 && top1 === decided && argOk === 12;
     log(`${pass ? 'ok  ' : 'FAIL'} tiny model: 20-token prompt in chunks of 8 and 12 decode steps, logits max|Δ| ${maxAbs.toExponential(2)} (rel ${rel.toExponential(2)}), top-1 ${top1}/${decided} where the reference's top two differ, GPU argmax ${argOk}/12`);
     gpu.destroy(); e.destroy();
-    return { ...k, model: { maxAbs, rel, top1, decided, argOk }, pass };
+    const api = await apiChecks(o, await open('tiny'));
+    return { ...k, model: { maxAbs, rel, top1, decided, argOk }, api, pass: pass && api.every((r) => r.pass) };
   };
 
-  window.CK = { kernels, model, speed, small, bench, adapter: async () => describe(await adapter()) };
+  // The model interface (EN.load) on a GPU: a mask forcing a token, a masked pick against the reference's logits, snapshot
+  // and restore giving the same tokens, a cancel inside a long prefill, release.
+  const loadModel = async (g, o, extra) => EN.load(g, { adapter: await adapter(), precision: o.precision, subgroups: o.subgroups === 'off' ? false : 'auto', kernels: new URL('/ai/local/kernels/', location.href).href, ...extra });
+  const apiChecks = async (o, g) => {
+    const out = [], say = (pass, what) => { out.push({ pass, what }); log(`${pass ? 'ok  ' : 'FAIL'} api        ${what}`); };
+    const m = await loadModel(g, o, { context: 64, chunk: 8 }), V = m.engine.config.vocab, W = Math.ceil(V / 32);
+    const ref = R.session(await R.load(g));
+    const prompt = Array.from({ length: 20 }, (_, i) => (i * 37 + 5) % V);
+    const logits = ref.forward(prompt);
+    const snap = await m.prefill(prompt, { snapshot: true });
+    const only = (ids) => { const w = new Uint32Array(W); for (const i of ids) w[i >> 5] |= 1 << (i & 31); return w; };
+    // Hot sampling (the tiny random model's greedy choice is nearly always the same id) makes runs differ when state does.
+    const greedy = { temperature: 0 }, sampled = { temperature: 5, topK: 64 };
+    // One id allowed: decode gives it, greedy or sampled, however low its logit.
+    const order = R.top(logits, V).map((x) => x.id), low = order[V - 1], mid = order[Math.floor(V / 2)];
+    let forced = true;
+    for (const id of [order[0], mid, low]) for (const sp of [greedy, sampled]) {
+      await m.restore(snap);
+      forced &&= (await m.decode({ sampler: sp, mask: only([id]) })) === id;
+    }
+    say(forced, `a mask allowing one id forces it (the highest, a middle and the lowest logit; greedy and hot top-k)`);
+    // The highest cleared, and half the vocabulary at random: the pick is the reference's best among the allowed.
+    let seed = 5;
+    const half = Array.from({ length: V }, (_, i) => i).filter(() => ((seed = (seed * 16807) % 2147483647) & 1) === 0);
+    let masked = true;
+    for (const allowed of [order.slice(1), half.filter((i) => i !== order[0])]) {
+      await m.restore(snap);
+      const id = await m.decode({ sampler: greedy, mask: only(allowed) });
+      const best = allowed.slice().sort((a, b) => logits[b] - logits[a] || a - b);
+      masked &&= allowed.includes(id) && (id === best[0] || logits[best[0]] - logits[best[1]] < 1e-3);
+    }
+    say(masked, 'a masked argmax never picks a cleared id, and picks the best allowed');
+    // Snapshot → decode → restore → decode: the same tokens.
+    const run = async (n, sp, random) => { const ids = []; for (let i = 0; i < n; i++) ids.push(await m.decode({ sampler: sp, random })); return ids; };
+    await m.restore(snap);
+    const a = await run(8, greedy);
+    await m.restore(snap);
+    const b = await run(8, greedy);
+    const draw = () => { let x = 1; return () => ((x = (x * 48271) % 2147483647) / 2147483647); };
+    await m.restore(snap);
+    const c = await run(8, sampled, draw());
+    await m.restore(snap);
+    const d = await run(8, sampled, draw());
+    // And the same as the prompt fed afresh from the empty state (restore(base) then prefill), so no state leaked.
+    const base = await m.snapshot();
+    await m.restore(base);
+    await m.restore(snap);
+    await m.decode({ sampler: greedy });
+    const e0 = await m.snapshot();
+    await m.restore(e0);
+    e0.drop();
+    const fresh = await loadModel(g, o, { context: 64, chunk: 8 });
+    await fresh.prefill(prompt);
+    const f = []; const fd = draw();
+    for (let i = 0; i < 8; i++) f.push(await fresh.decode({ sampler: sampled, random: fd }));
+    fresh.release(); base.drop();
+    say(a.join() === b.join() && c.join() === d.join() && c.join() === f.join(), `snapshot, decode 8, restore, decode 8: the same tokens as each other and as a fresh model, greedy (${a.join(' ')}) and seeded hot top-k (${c.join(' ')})`);
+    // Cancel inside a long prefill: it stops at a chunk boundary with the reason given.
+    await m.restore(snap);
+    const ctl = new AbortController(), why = new Error('cancelled by the check');
+    const long = Array.from({ length: 40 }, (_, i) => (i * 13 + 1) % V), start = m.pos;
+    const p = m.prefill(long, { signal: ctl.signal });
+    setTimeout(() => ctl.abort(why), 0);
+    const rej = await p.then(() => null, (e) => e);
+    say(rej === why && m.pos - start < long.length && (m.pos - start) % 8 === 0, `cancel inside a 40-token prefill (chunks of 8) rejects with its reason after ${m.pos - start} tokens`);
+    m.release();
+    say(await m.decode({ sampler: greedy }).then(() => false, (e) => /released/.test(e.message)), 'after release the model refuses');
+    return out;
+  };
+
+  // The whole model through the interface (load, prefill, decode): top-1 at every prompt position and greedy tokens.
+  const modelApi = async (o) => {
+    const g = await open(o.model), refs = [];
+    for (const id of o.ids) refs.push(await (await fetch(`/f/ref/${id}.${o.summary ? 'summary.json' : 'json'}`)).json());
+    const m = await loadModel(g, o, { context: Math.max(...refs.map((r) => r.prompt.length)) + o.steps + 8, chunk: o.chunk });
+    const V = m.engine.config.vocab, base = await m.snapshot();
+    const results = { engine: { f16: m.engine.f16, subgroups: m.engine.subgroups }, prompts: [], api: true };
+    let agree = 0, total = 0;
+    for (const [n, ref] of refs.entries()) {
+      await m.restore(base);
+      let same = 0;
+      const misses = [];
+      const want = (row) => (o.summary ? ref.prefill[row][0][0] : null);
+      const pending = [];
+      const after = await m.prefill(ref.prompt, { snapshot: true, onRows: (first, rows, count) => pending.push((async () => {
+        const full = o.summary ? null : new Float32Array(await (await fetch(`/f/ref/${ref.id}.prefill.f32`, { headers: { Range: `bytes=${first * 4 * V}-${(first + count) * 4 * V - 1}` } })).arrayBuffer());
+        for (let r = 0; r < count; r++) {
+          const got = argmax(rows.subarray(r * V, (r + 1) * V)), w = full ? argmax(full.subarray(r * V, (r + 1) * V)) : want(first + r);
+          if (got === w) same++; else misses.push({ pos: first + r, got, want: w });
+        }
+      })()) });
+      await Promise.all(pending);
+      const gen = [];
+      for (let st = 0; st <= o.steps; st++) gen.push(await m.decode({ sampler: { temperature: 0 } }));
+      // Restore the state after the prompt and generate again: the same tokens.
+      await m.restore(after);
+      const again = [];
+      for (let st = 0; st <= o.steps; st++) again.push(await m.decode({ sampler: { temperature: 0 } }));
+      after.drop();
+      const restored = again.join() === gen.join();
+      let firstDiff = 0;
+      while (firstDiff < gen.length && gen[firstDiff] === ref.gen[firstDiff]) firstDiff++;
+      const genSame = firstDiff === ref.gen.length && gen.length === ref.gen.length;
+      results.prompts.push({ id: o.ids[n], top1: same, of: ref.prompt.length, misses, genAgree: firstDiff, genSame, restored });
+      agree += same; total += ref.prompt.length;
+      log(`${o.ids[n]} (api): top-1 ${same}/${ref.prompt.length}; greedy ${firstDiff}/${gen.length} agree; after restore ${restored ? 'the same' : 'DIFFERENT'}${misses.length ? `; misses ${JSON.stringify(misses.slice(0, 5))}` : ''}`);
+    }
+    m.release();
+    const greedySame = results.prompts.filter((r) => r.genSame).length, n = results.prompts.length;
+    const restoredAll = results.prompts.every((r) => r.restored);
+    const pass = restoredAll && (m.engine.f16 ? agree >= 0.995 * total && greedySame >= Math.ceil(0.9 * n) : agree === total && greedySame === n);
+    Object.assign(results, { top1: agree, of: total, greedySame, restoredAll, pass });
+    log(`all (api): top-1 ${agree}/${total} (${((100 * agree) / total).toFixed(2)}%), greedy identical on ${greedySame}/${n}`);
+    return results;
+  };
+
+  // A warm system turn: prefill it once with a snapshot, then (5 times) restore, prefill a user turn, decode one token.
+  // window.nodeMem(label) (the check's Node side) reads the GPU's memory before the load, loaded, and after release.
+  const warm = async (o) => {
+    const g = await open(o.model), mem = [];
+    const note = async (label) => { if (window.nodeMem) mem.push({ label, mib: await window.nodeMem(label) }); };
+    let sys = null;
+    try { sys = (await (await fetch('/f/ref/long-1500.json')).json()).prompt; } catch { /* synthetic */ }
+    const V0 = 128000;
+    let s0 = 777;
+    const tok = () => { s0 = (s0 * 48271) % 2147483647; return 1000 + (s0 % 100000); };
+    sys = (sys || Array.from({ length: 1500 }, tok)).slice(0, o.system);
+    await adapter();
+    await note('before load');
+    const t0 = performance.now();
+    const m = await loadModel(g, o, { context: 16000, chunk: o.chunk });
+    const loadMs = performance.now() - t0;
+    const base = await m.snapshot();
+    const c0 = performance.now();
+    const snap = await m.prefill(sys, { snapshot: true });
+    await m.decode({ sampler: { temperature: 0 } });
+    const coldMs = performance.now() - c0;
+    await note('loaded');
+    const rows = [];
+    for (const user of [64, 256]) {
+      const turn = Array.from({ length: user }, tok).map((x) => x % V0), times = [];
+      for (let i = 0; i < 5; i++) {
+        const t = performance.now();
+        await m.restore(snap);
+        await m.prefill(turn);
+        await m.decode({ sampler: { temperature: 0.1, topK: 50 } });
+        times.push(performance.now() - t);
+      }
+      const med = times.sort((a, b) => a - b)[2];
+      rows.push({ user, firstTokenMs: med, times });
+      log(`warm: a ${sys.length}-token system turn restored, a ${user}-token user turn, first token in ${med.toFixed(1)} ms (median of 5)`);
+    }
+    base.drop(); snap.drop();
+    m.release();
+    await new Promise((r) => setTimeout(r, 1500));
+    await note('after release');
+    log(`warm: load ${loadMs.toFixed(0)} ms, cold system turn + first token ${coldMs.toFixed(0)} ms; GPU memory ${mem.map((x) => `${x.label} ${x.mib} MiB`).join(', ')}`);
+    return { system: sys.length, loadMs, coldMs, rows, mem };
+  };
+
+  window.CK = { kernels, model, speed, small, bench, warm, adapter: async () => describe(await adapter()) };
 }
 
 // ---- Node: serve, launch, run ---------------------------------------------------------------------------------------------
@@ -795,14 +961,14 @@ const serve = (files) => http.createServer((req, res) => {
 module.exports = { serve, tinyModel, pageLib };
 
 if (require.main === module) (async () => {
-  if (!['adapter', 'kernels', 'model', 'speed', 'small', 'bench'].includes(mode)) {
+  if (!['adapter', 'kernels', 'model', 'speed', 'small', 'bench', 'warm'].includes(mode)) {
     console.error('usage: node checks/ai/local-engine-check.js adapter | kernels <gguf> | model <gguf> <ref dir> | speed <gguf> | small | summarize <ref dir> <out dir>  (see the top of this file)');
     process.exit(2);
   }
   const files = {};
   if (mode === 'small') files.tiny = tinyModel();
   else if (mode !== 'adapter') { files.model = path.resolve(args[0] || ''); if (!fs.existsSync(files.model)) throw new Error(`no model ${args[0]}`); }
-  if (mode === 'model') files.ref = path.resolve(args[1] || '');
+  if (mode === 'model' || (mode === 'warm' && args[1])) files.ref = path.resolve(args[1]);
   const out = opt.out ? path.resolve(opt.out) : null;
   if (out) fs.mkdirSync(out, { recursive: true });
   const logLines = [];
@@ -834,6 +1000,8 @@ if (require.main === module) (async () => {
     await page.goto(`${origin}/`);
     const o = { ...opt, model: 'model' };
     if (opt.tokens) o.tokens = opt.tokens.split(',').map(Number);
+    // GPU memory in use (MiB) for warm, from nvidia-smi where there is one.
+    await page.exposeFunction('nodeMem', () => { try { return +require('node:child_process').execFileSync('nvidia-smi', ['--query-gpu=memory.used', '--format=csv,noheader,nounits'], { encoding: 'utf8' }).trim().split('\n')[0]; } catch { return null; } });
     if (mode === 'model') o.ids = PROMPTS.map((p) => p.id).filter((id) => (!opt.only || opt.only.split(',').includes(id)) && fs.existsSync(path.join(files.ref, `${id}.${opt.summary ? 'summary.json' : 'json'}`)));
     result = await page.evaluate(([m, a]) => window.CK[m](a), [mode, o]);
     if (mode === 'adapter') say(JSON.stringify(result, null, 1));
@@ -848,6 +1016,6 @@ if (require.main === module) (async () => {
     }
   }
   const pass = !!result && result.pass !== false;
-  if (!['adapter', 'speed', 'bench'].includes(mode)) say(pass ? 'PASS' : 'FAIL');
+  if (!['adapter', 'speed', 'bench', 'warm'].includes(mode)) say(pass ? 'PASS' : 'FAIL');
   process.exitCode = pass ? 0 : 1;
 })().catch((e) => { console.error(e); process.exitCode = 1; });

@@ -69,9 +69,12 @@ function host() {
     GPUBuffer: Buffer, GPUBufferUsage: { STORAGE: 1, COPY_SRC: 2, COPY_DST: 4, MAP_READ: 8, UNIFORM: 16 }, GPUMapMode: { READ: 1 },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/engine.js'), 'utf8'), context);
-  return { create: (g = model(), opts = {}) => context.GZ_AI_ENGINE.create(g, {
-    adapter, kernels: (n) => fs.readFileSync(path.join(__dirname, `../../extension/ai/local/kernels/${n}.wgsl`), 'utf8'), ...opts,
-  }), device, buffers, writes, submissions, dispatches };
+  const kernels = (n) => fs.readFileSync(path.join(__dirname, `../../extension/ai/local/kernels/${n}.wgsl`), 'utf8');
+  return {
+    create: (g = model(), opts = {}) => context.GZ_AI_ENGINE.create(g, { adapter, kernels, ...opts }),
+    load: (g = model(), opts = {}) => context.GZ_AI_ENGINE.load(g, { adapter, kernels, ...opts }),
+    engine: context.GZ_AI_ENGINE, context, device, buffers, writes, submissions, dispatches,
+  };
 }
 
 module.exports = { model, host };
