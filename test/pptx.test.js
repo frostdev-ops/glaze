@@ -397,6 +397,16 @@ test('table cells, guides and path commands are bounded across the deck, not onl
   assert.ok(shapes.cut.shapes > 0);
 });
 
+test('the presentation element cap drops trailing content while the deck still opens', async () => {
+  const presentation = fixture('ppt/presentation.xml').replace('</p:presentation>',
+    `<p:extLst><p:ext uri="large-extension">${'<a:p/>'.repeat(5000)}</p:ext></p:extLst></p:presentation>`);
+  const d = await P.read(pack({ 'ppt/presentation.xml': presentation }), { limits: { nodes: 4000 } });
+  assert.equal(d.slides.length, 10);
+  assert.equal(d.slides[0].title, 'Cell Biology');
+  assert.deepEqual(d.size, (await deck()).size);
+  assert.ok(d.cut.parts > 0, 'the truncated presentation is counted');
+});
+
 test('missing media parts become picture boxes and are not listed as drawable media', async () => {
   const bytes = pack({ 'ppt/media/image1.png': null, 'ppt/media/image3.svg': null });
   const d = await P.read(bytes);
