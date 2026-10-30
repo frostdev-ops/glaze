@@ -3494,7 +3494,6 @@
   "Page width": "Paginabreedte",
   "Whole page": "Hele pagina",
   "Export .pdf": ".pdf exporteren",
-  "Choose a PDF smaller than 3 MB.": "Kies een pdf kleiner dan 3 MB.",
   "Choose a PDF smaller than 50 MB.": "Kies een pdf kleiner dan 50 MB.",
   "This file is missing.": "Dit bestand ontbreekt.",
   "There isn't enough room in this browser for this file.": "Er is niet genoeg ruimte in deze browser voor dit bestand.",

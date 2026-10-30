@@ -3494,7 +3494,6 @@
   "Page width": "Largeur de page",
   "Whole page": "Page entière",
   "Export .pdf": "Exporter en .pdf",
-  "Choose a PDF smaller than 3 MB.": "Choisis un PDF de moins de 3 Mo.",
   "Choose a PDF smaller than 50 MB.": "Choisis un PDF de moins de 50 Mo.",
   "This file is missing.": "Ce fichier est introuvable.",
   "There isn't enough room in this browser for this file.": "Il n’y a pas assez de place dans ce navigateur pour ce fichier.",
