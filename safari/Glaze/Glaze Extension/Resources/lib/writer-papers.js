@@ -74,10 +74,16 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       const local = open(chrome.storage.local, now), seen = new Map(), turns = new Map();
       const turn = (k, fn) => { const p = (turns.get(k) || Promise.resolve()).then(fn, fn); turns.set(k, p.catch(() => {})); return p; };
       const send = async (op, args) => {
-        const r = await chrome.runtime.sendMessage({ type: 'glaze:writerPapers', op, args });
-        if (!r?.ok) throw new Error(r?.error || 'paper storage unavailable');
-        if (r.value?.paper) seen.set(args[0], r.value.paper.revision);
-        return r.value;
+        let timer;
+        try {
+          const reply = chrome.runtime.sendMessage({ type: 'glaze:writerPapers', op, args });
+          // A dead worker must not hold this editor's entire save queue forever. A late answer to an expired save cannot
+          // change its revision; the student can retry against the revision last acknowledged, preserving conflicts.
+          const r = await (op === 'save' ? Promise.race([reply, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('paper storage unavailable')), 60000); })]) : reply);
+          if (!r?.ok) throw new Error(r?.error || 'paper storage unavailable');
+          if (r.value?.paper) seen.set(args[0], r.value.paper.revision);
+          return r.value;
+        } finally { clearTimeout(timer); }
       };
       const { submitted: _, merge: __, ...reads } = local; // submit dispatch and backup replay are worker-only
       return { ...reads, get: async (k) => { const p = await local.get(k); seen.set(k, p?.revision || 0); return p; },

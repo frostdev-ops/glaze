@@ -174,6 +174,42 @@ test('compact: a reformatted Ultra echo never writes HTML back into the paper; a
   assert.ok(!c.ports[1].sent.some((m) => m.type === 'html'), 'only the paper store supplies the authoritative document');
 });
 
+test('compact: a lost save times out visibly at 60 s, ignores late replies and permits a fresh retry for either action', async () => {
+  for (const action of ['submit', 'saveAndClose']) {
+    const { c } = await paper(false);
+    const button = [...c.doc.querySelectorAll("button[data-analytics-id]")].find((b) => b.getAttribute("data-analytics-id").endsWith(`.${action}`));
+    const click = () => c.doc.dispatchEvent({ type: 'click', target: button, preventDefault() {}, stopImmediatePropagation() {} });
+    click();
+    const first = c.ports[0].sent.at(-1).request;
+    c.tick(60000);
+    assert.deepEqual({ ...c.ports[0].sent.at(-1) }, { type: 'compact:resume', request: first, reason: 'save' });
+    click();
+    const retry = c.ports[0].sent.at(-1).request;
+    assert.notEqual(retry, first);
+    c.emit({ type: 'compact:flushed', request: first, ok: true, html: '<p>Old.</p>', delta: ops('Old.') });
+    assert.equal(c.clicks.length, 0);
+    c.emit({ type: 'compact:flushed', request: retry, ok: true, html: '<p>Retry.</p>', delta: ops('Retry.') });
+    assert.deepEqual(c.clicks, [button]);
+    const last = c.ports[0].sent.at(-1);
+    c.tick(60000);
+    assert.equal(c.ports[0].sent.at(-1), last, 'success cancels its deadline');
+  }
+});
+
+test('compact: a footer redrawn during the save sends the replacement button once for either action', async () => {
+  for (const action of ['submit', 'saveAndClose']) {
+    const { c } = await paper(false);
+    const button = [...c.doc.querySelectorAll("button[data-analytics-id]")].find((b) => b.getAttribute("data-analytics-id").endsWith(`.${action}`)), parent = button.parentElement;
+    c.doc.dispatchEvent({ type: 'click', target: button, preventDefault() {}, stopImmediatePropagation() {} });
+    const request = c.ports[0].sent.at(-1).request;
+    const replacement = c.doc.createElement('button');
+    replacement.setAttribute('data-analytics-id', button.getAttribute('data-analytics-id'));
+    button.remove(); parent.append(replacement);
+    c.emit({ type: 'compact:flushed', request, ok: true, html: '<p>Current.</p>', delta: ops('Current.') });
+    assert.deepEqual(c.clicks, [replacement]);
+  }
+});
+
 test('compact: Blackboard editor gives the box back holding the paper\'s text', async () => {
   const { c, box, frame } = await paper(false);
   c.emit({ type: 'view', full: false });

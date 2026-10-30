@@ -12,6 +12,32 @@ const memory = () => {
 const doc = (text) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
 const KEY = 'bb.school.test|_900_1|_101_1|_7_1';
 
+test('an unanswered worker save releases its queue at 60 s, and a late answer cannot change the retry revision', async () => {
+  const fs = require('node:fs'), vm = require('node:vm'), timers = new Map(), sent = [];
+  let timer = 0, answer;
+  const ctx = vm.createContext({ crypto, TextEncoder, structuredClone,
+    setTimeout: (fn, ms) => { timers.set(++timer, { fn, ms }); return timer; }, clearTimeout: (id) => timers.delete(id),
+    chrome: { storage: { local: memory() }, runtime: { sendMessage: (m) => {
+      sent.push(m);
+      return sent.length === 1 ? new Promise((r) => { answer = r; }) : Promise.resolve({ ok: true, value: { paper: { revision: sent.length } } });
+    } } } });
+  vm.runInContext(fs.readFileSync(require.resolve('../lib/writer-papers.js'), 'utf8'), ctx);
+  const store = ctx.GZ_WRITER_PAPERS.open();
+  await store.get(KEY);
+  const lost = store.save(KEY, { doc: doc('Before.') }); lost.catch(() => {});
+  await new Promise(setImmediate);
+  const deadline = [...timers.values()].find((t) => t.ms === 60000);
+  assert.ok(deadline, 'a lost worker must not pin every subsequent save');
+  deadline.fn();
+  await assert.rejects(lost, /paper storage unavailable/);
+  assert.equal((await store.save(KEY, { doc: doc('Retry.') })).paper.revision, 2);
+  answer({ ok: true, value: { paper: { revision: 99 } } });
+  await new Promise(setImmediate);
+  await store.save(KEY, { doc: doc('After retry.') });
+  assert.equal(sent.at(-1).args[2].base, 2, 'the late answer cannot advance the cached revision');
+  assert.equal(timers.size, 0, 'every exit clears its deadline');
+});
+
 test('one editor\'s saves sent back to back never file its own text as another editor\'s draft', async (t) => {
   const local = memory();
   let clock = 1e12;

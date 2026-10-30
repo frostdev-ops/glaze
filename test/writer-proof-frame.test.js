@@ -8,12 +8,13 @@ const E = require('../lib/writer-editor.js'), P = require('../lib/writer-proof.j
 const flush = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
 const frame = (options = {}) => {
   const events = {}, hooks = [], ports = [], timers = new Map(), life = {};
+  let pluginViews = [];
   let tid = 0;
   const doc = { activeElement: null, createElement: (t) => { const e = new El(t, doc); e.classList = { toggle() {} }; return e; } };
   doc.root = doc.body = new El('body', doc);
   const proof = { ...P };
   const view = { dom: new El('div', doc), composing: false, hasFocus: () => true, focus() {}, coordsAtPos: () => ({ left: 10, top: 10, bottom: 25 }),
-    dispatch(tr) { const prev = this.state; this.state = this.state.apply(tr); for (const p of hooks) p.spec.view?.().update?.(this, prev); } };
+    dispatch(tr) { const prev = this.state; this.state = this.state.apply(tr); for (const p of pluginViews) p?.update?.(this, prev); } };
   const issues = { ...I.bind(view), look: I.look };
   let context = options.context || {};
   const defaults = require('../defaults.js').GZ_DEFAULTS.writer;
@@ -34,11 +35,13 @@ const frame = (options = {}) => {
     chrome: { storage: { local: options.store || { get: async () => ({}), set: async () => {} }, onChanged: { addListener() {} } } } });
   vm.runInContext(fs.readFileSync(require.resolve('../writer-proof.js'), 'utf8'), ctx);
   view.state = E.state({ html: options.html || '<p>teh</p>', plugins: [I.plugin(), ...hooks] });
+  const replace = (state) => { view.state = state; pluginViews = hooks.map((p) => p.spec.view?.(view)); };
+  replace(view.state);
   events.ready({ view });
   const run = async (ms) => { for (const [id, t] of [...timers]) if (t.ms === ms) { timers.delete(id); t.fn(); } await flush(); };
   const reply = (p, m) => p.onmessage?.({ data: m });
   const lint = (p = ports.at(-1)) => p.sent.findLast((m) => m.op === 'lint');
-  return { proof, view, issues, ports, run, reply, lint, life, events, doc, configure,
+  return { proof, view, issues, ports, run, reply, lint, life, events, doc, configure, replace,
     context: (next, merge = false) => {
       if (merge) { for (const k of Object.keys(context)) if (!Object.hasOwn(next, k)) delete context[k]; Object.assign(context, next); }
       else context = next;
@@ -262,4 +265,29 @@ test('a document replaced whole (a fresh editor state, its versions from 0 again
   f.view.dispatch(f.view.state.tr.insertText('y', 1)); // the fresh state at version 1 too
   assert.doesNotThrow(() => f.reply(f.ports[0], { op: 'lint', id: asked.id, lints: [{ start: 0, end: 3, kind: 'Spelling', problem: 'teh', suggestions: [{ k: 0, t: 'the' }] }] }));
   assert.equal(f.issues.list().length, 0);
+});
+
+test('a fresh state drops pending lints before worker reconnect and lints its own document without an edit', async () => {
+  const f = frame({ html: '<p>Old paper.</p>' }); await flush();
+  const old = f.lint();
+  f.replace(GZ_PM.state.EditorState.create({ doc: E.state({ html: '<p>New.</p>' }).doc, plugins: f.view.state.plugins.slice() }));
+  f.reply(f.ports[0], { op: 'closing' }); await f.run(25);
+  assert.ok(!f.ports.slice(1).some((p) => p.sent.some((m) => m.id === old.id)), 'the old paper must not be retained or replayed');
+  await f.run(1500);
+  assert.equal(f.lint().text, 'New.');
+});
+
+test('decide drops a verdict from another state even if the version and issue match again', async () => {
+  const f = frame({ html: '<p>Their going home. </p>' }); await flush();
+  f.view.dispatch(f.view.state.tr.setMeta(P.key, { typed: [1, 6] }).setSelection(GZ_PM.state.TextSelection.atEnd(f.view.state.doc)));
+  let resolve;
+  f.proof.decide = () => new Promise((r) => { resolve = r; });
+  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [{ start: 0, end: 5, kind: 'Grammar', problem: 'Their', suggestions: [{ k: 0, t: "They're" }] }] });
+  assert.equal(typeof resolve, 'function');
+  const issue = f.issues.list()[0], old = f.view.state;
+  f.replace(GZ_PM.state.EditorState.create({ doc: old.doc, plugins: old.plugins.slice() }));
+  f.view.dispatch(f.view.state.tr.setMeta(P.key, { typed: [1, 6] }).setSelection(GZ_PM.state.TextSelection.atEnd(f.view.state.doc)));
+  f.issues.set('harper', [{ ...issue, id: issue.id.replace(/^harper:/, '') }]);
+  resolve('apply'); await flush();
+  assert.equal(f.view.state.doc.textContent, old.doc.textContent);
 });
