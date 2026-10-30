@@ -199,6 +199,127 @@ const create = ({ quill: quillJs, out, onReset = async () => {}, onReceived = ()
   return { handle, state, received, reset };
 };
 
+// ---- Ultra's file previews, as the live probe of 2026-10-30 saw them (glaze-plans/suite-final/ultra-preview-probe.md):
+// an Ultra Document page whose attachments are each a div[data-bbfile] ({ linkName, mimeType, render "inline", viewerUrl })
+// around the link to the file on the site's own /bbcswebdav/, with buttons "Preview File <name>" (aria-expanded) and
+// "More options for <name>"; expanding adds <iframe title="<name>" src=viewerUrl> in a .makeStylesfileViewerContainer-*.
+// viewerUrl (the file's path + ?locale=en_US&isInlineRender=true&xythos-download=true&render=inline) 302s to
+// basic-doc-viewer's index.html (hash, tenantId, status=done, originalUrl: the original's presigned address); that viewer
+// asks its documents API (JSON, no CORS) → { status, hash, requiredConversion, urls: { original, pdf, poll } }, urls.pdf
+// converted.pdf's presigned S3 address (X-Amz-Expires=3600), served with Range as 206 binary/octet-stream to other origins.
+// Synthetic values throughout. Not seen live, so approximated: whether data-bbfile's viewerUrl is a path or a full address
+// (one of each here), the S3 bucket's exact CORS headers (any origin, Range allowed and its headers exposed: what let the
+// page and the viewer read it), Blackboard's viewer page itself, and every "converting" answer (the scenario's own, below).
+const PREVIEW_ROUTE = `/ultra/courses/${COURSE}/document/_3801_1`;
+const VIEWER = 'https://basic-doc-viewer.us.api.blackboard.com', TENANT = '5d0c6a1e-2f3b-4c8d-9e7f-0a1b2c3d4e5f';
+const BUCKET = 'https://annotate-doc-viewer-prod-filesbucket-1q2w3e4r5t6y.s3-fips.us-east-1.amazonaws.com';
+const XYTHOS = 'https://bb-school-test.prod.files.blackboard.com';
+const PREVIEW_FILES = [
+  { name: 'Week 3 slides.pptx', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', at: '/bbcswebdav/pid-4970001-dt-content-rid-14600001_1/xid-14600001_1', hash: '3f786850e387550fdab836ed7e6dc881de23001b', full: false },
+  { name: 'Lab safety.docx', mime: MIME, at: '/bbcswebdav/pid-4970002-dt-content-rid-14600002_1/xid-14600002_1', hash: '89e6c98d92887913cadf06b2adb97f26cde4849b', full: true },
+];
+const VIEW_QUERY = '?locale=en_US&isInlineRender=true&xythos-download=true&render=inline';
+const viewerUrlOf = (f, site = SITE) => `${f.full ? site : ''}${f.at}${VIEW_QUERY}`;
+const bbfile = (f, site = SITE) => ({ linkName: f.name, mimeType: f.mime, render: 'inline', viewerUrl: viewerUrlOf(f, site) });
+// A presigned address in AWS's form (SigV4 query), signed at `at` for `expires` seconds.
+const presign = (base, at, expires, salt) => {
+  const d = new Date(at).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const q = new URLSearchParams({ 'X-Amz-Algorithm': 'AWS4-HMAC-SHA256', 'X-Amz-Content-Sha256': 'UNSIGNED-PAYLOAD', 'X-Amz-Credential': `ASIAEXAMPLESYNTHETIC/${d.slice(0, 8)}/us-east-1/s3/aws4_request`,
+    'X-Amz-Date': d, 'X-Amz-Expires': String(expires), 'X-Amz-Security-Token': `IQoJb3JpZ2luX2VjE${'x'.repeat(1400)}`, 'X-Amz-Signature': sha(`${salt}|${d}`), 'X-Amz-SignedHeaders': 'host', 'x-id': 'GetObject' });
+  return `${base}?${q}`;
+};
+const originalOf = (f, at) => presign(`${XYTHOS}/5f2a9c0e8b7d4e1f/${f.at.split('/')[2]}`, at, 3600, `orig|${f.hash}`);
+const pdfOf = (f, at, expires = 3600) => presign(`${BUCKET}/files/${TENANT}/${f.hash}/converted.pdf`, at, expires, `pdf|${f.hash}`);
+const viewerAt = (f, at, status = 'done') => `${VIEWER}/ui/166/2026.10.21-1a2b3c4/index.html?${new URLSearchParams({ locale: 'en_US', hash: f.hash, render: 'inline', tenantId: TENANT, status, originalUrl: originalOf(f, at) })}`;
+const documentOf = (f, at, { status = 'done', expires = 3600 } = {}) => ({ status, hash: f.hash, requiredConversion: false,
+  urls: { original: originalOf(f, at), ...(status === 'done' && { pdf: pdfOf(f, at, expires) }), poll: Buffer.from(sha(`poll|${f.hash}`).repeat(40)).toString('base64').slice(0, 2500) } });
+// The Document page: the course document's root (Ultra's .document-content-root, features/docs.js DOC), its text, and the
+// two attachments; the page's world opens and closes each preview as Ultra does.
+const previewPage = (files = PREVIEW_FILES, site = SITE) => `<!doctype html><html lang="en"><head><base href="/ultra/"><meta charset="utf-8"><title>Week 3 readings</title>
+<style>body{margin:0;font:15px system-ui;background:#f4f6f8;color:#262626}#site-wrap{max-width:900px;margin:0 auto;padding:24px}.bb-file{margin:12px 0;padding:10px 14px;border:1px solid #cdd3da;border-radius:6px;background:#fff}.bb-file .row{display:flex;gap:8px;align-items:center}.bb-file a{flex:1}.makeStylesfileViewerContainer-0-2-871{margin-top:10px}.makeStylesfileViewerContainer-0-2-871 iframe{display:block;width:100%;height:785px;border:1px solid #cdd3da}</style></head>
+<body><div id="site-wrap"><div class="routed-page"><main class="document-content-root"><h1>Week 3 readings</h1><div class="bbml-editor"><p>Read both files before Thursday.</p>
+${files.map((f) => `<div data-bbfile="${JSON.stringify(bbfile(f, site)).replace(/"/g, '&quot;')}" class="bb-file"><div class="row"><a href="${f.at}" target="_blank" rel="noopener">${f.name}</a><button type="button" class="preview" aria-label="Preview File ${f.name}" aria-expanded="false">Preview</button><button type="button" aria-label="More options for ${f.name}" aria-haspopup="true">⋯</button><button type="button" aria-label="Download Alternative Formats">A</button></div></div>`).join('\n')}
+<p>Questions go in the discussion.</p></div></main></div></div>
+<script>document.addEventListener('click', (e) => { const b = e.target.closest('button.preview'); if (!b) return; const box = b.closest('[data-bbfile]'), j = JSON.parse(box.getAttribute('data-bbfile')), open = b.getAttribute('aria-expanded') === 'true';
+b.setAttribute('aria-expanded', String(!open)); if (open) { box.querySelector('[class*="fileViewerContainer"]').remove(); return; }
+const c = document.createElement('div'); c.className = 'makeStylesfileViewerContainer-0-2-871'; const f = document.createElement('iframe'); f.title = j.linkName; f.src = j.viewerUrl; c.append(f); box.append(c); });</script></body></html>`;
+// Blackboard's viewer page, a stand-in that says whose file it shows.
+const viewerPage = (f) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Document Rendering</title></head><body style="margin:0;font:14px system-ui;background:#525659;color:#fff"><p data-bb-viewer="${f.hash}" style="padding:16px">Blackboard viewer: ${f.name}</p></body></html>`;
+// The viewer chain for a context.route, with what was asked counted. scenario(f) → { api: 'done' | 'converting' | 'fail',
+// until (converting before this time, done after), s3: 'fail' | 'fail-first' (S3's refusal of an address that ran out,
+// once) | 'huge' (a converted.pdf past 50 MB), expires } per file; pdf(file): its converted.pdf's bytes.
+const previews = ({ site = SITE, pdf, scenario = () => ({}) } = {}) => {
+  const seen = { viewer: 0, api: 0, s3: 0, ranges: 0, refused: 0, cookies: 0, origins: new Set(), asks: new Map() };
+  const refusedOnce = new Set();
+  const byAt = new Map(PREVIEW_FILES.map((f) => [f.at, f])), byHash = new Map(PREVIEW_FILES.map((f) => [f.hash, f]));
+  const ok = (p) => p.then(() => true);
+  // viewerUrl's 302: basic-doc-viewer's index.html, converting while the scenario says so; each one counted.
+  const redirect = (u) => {
+    seen.viewer++;
+    const f = byAt.get(u.pathname), s = scenario(f), n = (seen.asks.get(f.hash) || 0) + 1;
+    seen.asks.set(f.hash, n);
+    const converting = s.api === 'converting' || Date.now() < (s.until || 0);
+    return viewerAt(f, Date.now(), converting ? 'converting' : 'done');
+  };
+  const handle = async (route) => {
+    const req = route.request(), u = new URL(req.url()), method = req.method();
+    if (u.origin === site && u.pathname === PREVIEW_ROUTE && req.isNavigationRequest()) return ok(route.fulfill({ status: 200, contentType: 'text/html', body: previewPage(PREVIEW_FILES, site) }));
+    if (u.origin === site && byAt.has(u.pathname) && u.search === VIEW_QUERY) return ok(route.fulfill({ status: 302, headers: { location: redirect(u), 'cache-control': 'no-store' } }));
+    // The same redirect's Location as JSON, for a check standing in for the browser's own following of it (see where).
+    if (u.origin === site && u.pathname === '/gz-check/where') {
+      const from = new URL(u.searchParams.get('u') || '', site);
+      return ok(route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ location: from.origin === site && byAt.has(from.pathname) && from.search === VIEW_QUERY ? redirect(from) : null }) }));
+    }
+    if (u.origin === VIEWER && u.pathname.startsWith('/ui/')) { const f = byHash.get(u.searchParams.get('hash')); return ok(route.fulfill({ status: 200, contentType: 'text/html', body: viewerPage(f || { hash: '', name: '' }) })); }
+    const doc = u.origin === VIEWER && new RegExp(`^/api/v1/tenants/${TENANT}/documents/([0-9a-f]{40})$`).exec(u.pathname);
+    if (doc) {
+      seen.api++;
+      const f = byHash.get(doc[1]), s = f ? scenario(f) : {};
+      if (!f || s.api === 'fail') return ok(route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Internal Server Error' }) }));
+      const converting = s.api === 'converting' || Date.now() < (s.until || 0);
+      return ok(route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(documentOf(f, Date.now(), { status: converting ? 'converting' : 'done', expires: s.expires })) }));
+    }
+    const file = u.origin === BUCKET && new RegExp(`^/files/${TENANT}/([0-9a-f]{40})/converted\\.pdf$`).exec(u.pathname);
+    if (file) {
+      const origin = req.headers().origin;
+      seen.origins.add(origin || '');
+      if (req.headers().cookie) seen.cookies++;
+      const cors = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'Accept-Ranges, Content-Range, Content-Length, ETag', 'access-control-allow-headers': 'range', 'access-control-allow-methods': 'GET, HEAD' };
+      if (method === 'OPTIONS') return ok(route.fulfill({ status: 200, headers: cors, body: '' }));
+      seen.s3++;
+      const s = scenario(byHash.get(file[1])) || {}, raw = s.s3 === 'huge' ? Buffer.alloc(50e6 + 4096) : pdf?.(byHash.get(file[1])), bytes = raw && Buffer.from(raw);
+      const date = /^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/.exec(u.searchParams.get('X-Amz-Date') || '');
+      const end = date && Date.UTC(+date[1], +date[2] - 1, +date[3], +date[4], +date[5], +date[6]) + Number(u.searchParams.get('X-Amz-Expires')) * 1000;
+      const first = s.s3 === 'fail-first' && !refusedOnce.has(file[1]);
+      if (first) { refusedOnce.add(file[1]); seen.refused++; }
+      if (!bytes || !end || Date.now() > end || s.s3 === 'fail' || first) return ok(route.fulfill({ status: 403, headers: { ...cors, 'content-type': 'application/xml' }, body: '<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>' }));
+      const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers().range || '');
+      const head = { ...cors, 'accept-ranges': 'bytes', 'content-type': 'binary/octet-stream', etag: `"${sha(bytes).slice(0, 32)}"` };
+      if (!range) return ok(route.fulfill({ status: 200, headers: head, body: bytes }));
+      seen.ranges++;
+      const from = +range[1], to = Math.min(bytes.length - 1, range[2] ? +range[2] : bytes.length - 1);
+      return ok(route.fulfill({ status: 206, headers: { ...head, 'content-range': `bytes ${from}-${to}/${bytes.length}` }, body: bytes.subarray(from, to + 1) }));
+    }
+    return false;
+  };
+  return { handle, seen, where: WHERE };
+};
+// Chromium under Playwright doesn't follow a routed 302 for the extension's service worker (a same-origin one fails the same
+// way, "Failed to fetch"; 2026-10-30 on the runner), while it does for pages. In the worker (worker.evaluate(where)) this
+// stands in for the browser's following of viewerUrl's redirect only: the mock's own Location, then that address fetched
+// as the browser would, its response's url the Location. Installed again by a check after the worker may have restarted.
+const WHERE = () => {
+  if (globalThis.__gzWhere) return;
+  const real = globalThis.fetch;
+  globalThis.__gzWhere = true;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = new URL(String(url));
+    if ((init.redirect || 'follow') !== 'follow' || !u.pathname.startsWith('/bbcswebdav/') || !u.searchParams.has('isInlineRender')) return real(url, init);
+    const { location } = await (await real(`${u.origin}/gz-check/where?u=${encodeURIComponent(u.href)}`, { cache: 'no-store' })).json();
+    return real(location || u.href, { ...init, redirect: 'error' });
+  };
+};
+
 // The page's world: Ultra's own scripts around its Quill boxes, run in the page (serialized, so self-contained).
 function world() {
   const cfg = window.__practice;
@@ -440,4 +561,5 @@ function world() {
   }
 }
 
-module.exports = { SITE, ROUTES, BOARD, UPLOAD, ATTEMPT, ME, MIME, QUILL, PROMPT, quill, create, world };
+module.exports = { SITE, ROUTES, BOARD, UPLOAD, ATTEMPT, ME, MIME, QUILL, PROMPT, quill, create, world,
+  PREVIEW: { ROUTE: PREVIEW_ROUTE, FILES: PREVIEW_FILES, VIEWER, TENANT, BUCKET, viewerUrlOf, bbfile, viewerAt, documentOf, pdfOf, previewPage, previews } };

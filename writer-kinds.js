@@ -185,5 +185,28 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     })().catch((e) => console.error(e));
   });
 
+  // ---- a file shown from elsewhere (writer.js view mode; features/bbpreview.js: Blackboard's preview of an attachment,
+  // converted to a PDF, which the page read): init { kind: 'pdf', view: { bytes (an ArrayBuffer, transferred), name, href } }
+  // → the kind's show, nothing kept unless the student saves it to Documents. The page hears view:shown once page 1 is
+  // drawn, view:failed (with a reason) for anything else, so it keeps Blackboard's frame, and view:esc for an Esc the
+  // viewer didn't take.
+  frame.on('view', async (m) => {
+    const v = m.view, failed = (reason) => frame.say({ type: 'view:failed', reason: String(reason || 'error') });
+    const bytes = v?.bytes instanceof ArrayBuffer && v.bytes.byteLength ? new Uint8Array(v.bytes) : null;
+    if (m.kind !== 'pdf' || !bytes) { failed('init'); return; }
+    const k = await kind('pdf').catch((e) => { console.error(e); return null; });
+    if (typeof k?.show !== 'function') { failed('kind'); return; }
+    const root = document.documentElement, el = document.createElement('div');
+    el.className = 'gk';
+    document.body.append(el);
+    root.dataset.doc = 'pdf';
+    root.dataset.view = 'full';
+    const name = typeof v.name === 'string' ? v.name.slice(0, 200) : '', href = typeof v.href === 'string' && /^https?:/.test(v.href) ? v.href : '';
+    try {
+      await k.show({ bytes, name, href }, { mount: el, t, title: () => name,
+        shown: () => frame.say({ type: 'view:shown' }), failed, esc: () => frame.say({ type: 'view:esc' }) });
+    } catch (e) { console.error(e); failed('error'); }
+  });
+
   return { FRAME, opens, offers, mount, open, start, shown: () => shown?.id || null };
 })();

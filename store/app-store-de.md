@@ -21,25 +21,25 @@ canvas,blackboard,moodle,notendurchschnitt,gpa,todo,hausaufgaben,lernen,studium,
 Glaze ist eine Safari-Erweiterung für eigene Farben, Schriften und Hintergründe auf Blackboard Ultra, Canvas und Moodle.
 
 DEIN AUSSEHEN
-Wähle einen Look oder eigene Farben, Schriften, Abstände, Ecken und Oberflächen. Ergänze Verläufe, Bilder oder animierte Hintergründe. Prüfe alles im Editor, kombiniere helle und dunkle Paletten und teile einen Designcode. Bewegung folgt deiner Einstellung für reduzierte Bewegung.
+Wähle einen Look oder eigene Farben, Schriften und Oberflächen. Ergänze Verläufe, Bilder oder animierte Hintergründe, kombiniere helle und dunkle Paletten und teile einen Designcode. Bewegung folgt deiner Einstellung für reduzierte Bewegung.
 
 DEIN ARBEITSBEREICH
-Ordne auf Blackboard Ultra und Canvas Kurskarten und Widgets auf einem Glaze-Dashboard an. Nutze Better To Do und passende Widgets in einer Seitenleiste, die auf schmalen Bildschirmen zur Schublade wird. Öffne Kurs-Tabs, passe die Navigation an und finde Kurse, Seiten und Einstellungen mit der Befehlspalette.
+Ordne auf Blackboard Ultra und Canvas Kurskarten und Widgets auf einem Glaze-Dashboard an. Nutze Better To Do in der Seitenleiste, öffne Kurs-Tabs, passe die Navigation an und finde Kurse, Seiten und Einstellungen mit der Befehlspalette.
 
 PLANEN UND LERNEN
-Better To Do bündelt fällige Arbeiten, eigene Aufgaben, Schritte und Pläne. Notizen bieten Ordner, Bilder und Anhänge, dazu kommen ein Fokus-Timer und ein animierter Lernbegleiter, der auf Fokuszeiten und erledigte Aufgaben reagiert. Prüfe importierte Stundenpläne und Syllabi auf deinem Gerät und exportiere Pläne als Kalenderdatei.
+Better To Do bündelt Kursarbeiten, Aufgaben, Schritte und Pläne. Nutze Notizen mit Ordnern, Bildern und Anhängen, einen Fokus-Timer und einen animierten Begleiter. Prüfe importierte Stundenpläne oder Syllabi auf deinem Gerät und exportiere Pläne als Kalenderdatei.
 
-Sieh Fristenstatus, Kursfortschritt sowie Hinweise auf neue Inhalte und Noten, und teste Was-wäre-wenn-Punkte, ohne echte Noten zu ändern. Die Hilfen hängen von Plattform und Freigaben deiner Schule ab.
+Je nach Plattform und Schule: Fristenstatus, Kursfortschritt, Hinweise auf neue Inhalte und Noten sowie Was-wäre-wenn-Punkte, ohne echte Noten zu ändern.
 
-Ankündigungen öffnen sich im Pop-up von Glaze, aus Better To Do, mit Strg+K oder aus den Listen der Websites, mit Vorschau beim Darüberfahren. Bewertungsraster zeigen deine veröffentlichten Punktzahlen und dein Feedback, auf Blackboard Ultra bei genügend Platz direkt auf der Seite, sonst im Pop-up.
+Ankündigungen öffnen sich im Pop-up von Glaze, mit Vorschau beim Darüberfahren. Bewertungsraster zeigen deine veröffentlichten Punktzahlen und dein Feedback, auf Blackboard Ultra bei genügend Platz direkt auf der Seite, sonst im Pop-up.
 
 Moodle Boost bekommt dieselben Looks, Kursgesamtwerte, wenn verfügbar, eine Fristenliste aus der Zeitleiste und Tastenkürzel.
 
 GLAZE WRITER UND DOKUMENTE
-Auf Blackboard Ultra ersetzt Glaze Writer den Editor in Diskussionen, Journalen, Nachrichten, Aufgaben und Tests. Rechtschreibung und Grammatik werden auf deinem Gerät geprüft; Tests bekommen nur Korrekturhilfen. Voller Writer bietet Seiten in MLA, APA, Chicago oder deinem Format, mit Zitaten, Fußnoten, Versionen und .docx-Dateien. Dokumente bündelt Arbeiten und Dokumente; Gelöschtes bleibt 30 Tage im Papierkorb. KI ist optional und aus, bis du sie einrichtest. Tab-Vervollständigung beendet nur den aktuellen Satz; Feedback bewertet deine Arbeit. Glaze verfasst keine Entwürfe.
+Auf Blackboard Ultra ersetzt Glaze Writer den Editor in Diskussionen, Journalen, Nachrichten, Aufgaben und Tests. Rechtschreibung und Grammatik laufen auf deinem Gerät; Tests bekommen nur Korrekturhilfen. Voller Writer bietet Seiten in MLA, APA, Chicago oder deinem Format, mit Zitaten, Fußnoten, Versionen und .docx-Dateien. Dokumente bündelt Arbeiten, Tabellen mit Excel-Formeln und Diagrammen, ausfüllbare PDFs und PowerPoint-Präsentationen zum Lesen und Vorführen. Gelöschte Dateien bleiben 30 Tage im Papierkorb. Beginne Aufgaben als Dokument oder Tabelle. Hochgeladene PDFs und Präsentationen gibst du in ihrem Format ab, Tabellen als .xlsx. KI ist optional und zunächst aus. Tab-Vervollständigung beendet nur den aktuellen Satz; Feedback folgt Bewertungsraster und Anweisungen. Glaze verfasst keine Entwürfe.
 
 DATENSCHUTZ UND KONTROLLE
-Glaze ist kostenlos, ohne Werbung, Analysen oder Glaze-Konto. Glaze-Einstellungen, Notizen, Aufgaben, Kursdaten, Arbeiten und Dokumente bleiben auf deinem Gerät. Optionale geteilte Sitzungen beginnen erst, wenn du eine erstellst, ihr beitrittst oder sie fortsetzt, und verschlüsseln Inhalte vor dem Versand über das von dir gewählte Relay. Gewählte Schriften, Medien, externe Player und KI-Anbieter sowie Quellensuchen auf deinen Klick können Netzwerkanfragen stellen; Details stehen in der Datenschutzerklärung. Glaze sammelt und verkauft deine Daten nicht.
+Glaze ist kostenlos, ohne Werbung, Analysen oder Glaze-Konto. Glaze-Einstellungen, Notizen, Aufgaben, Kursdaten, Arbeiten und Dokumente bleiben auf deinem Gerät. Optionale geteilte Sitzungen beginnen erst, wenn du eine erstellst, ihr beitrittst oder sie fortsetzt, und verschlüsseln Inhalte vor dem Versand über das von dir gewählte Relay. Gewählte Schriften, Medien, externe Player und KI-Anbieter sowie Quellensuchen auf deinen Klick können Netzwerkanfragen stellen. Glaze sammelt und verkauft deine Daten nicht.
 
 Glaze ändert keine Noten; Bewertungsraster zeigt es nur an. Writer sendet, was du schreibst, nur über Blackboards eigene Schaltflächen, wenn du sie drückst. Optionale Haken im Canvas-Planer sowie Canvas-Kursfarben und -Spitznamen werden im Schulkonto gespeichert. Öffnen markiert ungelesene Canvas-Ankündigungen als gelesen; Moodle markiert Beiträge bei automatischer Leseerfassung im Forum. Safari unterstützt deklarative Mod-Inhalte und führt kein heruntergeladenes Mod-JavaScript aus.
 

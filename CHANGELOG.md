@@ -13,6 +13,7 @@ All notable changes to Glaze are documented here. The format follows
 - Blackboard: **Glaze Writer** in discussion, journal, message, assignment and test boxes; Blackboard's own editor stays one click away in ⋯. Assignments write into Blackboard's box for its own Submit, or become real pages with **Full writer**: MLA 9, APA 7, Chicago 17, Blank or your own format, with format checks, footnotes, versions and .docx import, export and submit. Proofing and autocorrect run on your device; citations look up a DOI, ISBN or web address when you click. Tab completion and AI feedback run only when turned on in Settings → AI; tests get proofing only.
 - **Documents**: every paper, spreadsheet, PDF and slide deck in one place, from the popup, Ctrl/⌘+K or Glaze's bar on Blackboard, Canvas and Moodle. Spreadsheets with more than 380 Excel functions, charts and .xlsx or .csv files; PDFs with zoom, find and fillable forms; PowerPoint decks to read and present. PDFs and decks up to 50 MB. Deleted files wait 30 days in **Trash**, and all of it is in **Back up…**.
 - Assignments: start a document or a spreadsheet; an uploaded PDF, deck or spreadsheet opens in its viewer and is submitted as itself.
+- Blackboard file previews open in Glaze's PDF viewer (Settings → Pages, Previews in Glaze).
 - Agents (off by default): AI apps on your computer can read your courses, to-dos, grades and drafts once you allow them, and ask before any change.
 - Writer's pages follow a dark Look; **Light page** keeps them white. Mods: `glaze.documents`.
 

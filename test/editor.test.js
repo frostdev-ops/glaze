@@ -11,7 +11,7 @@ const ENHANCE = {
   'pages/content': ['urgency', 'clamp', 'scores', 'reading', 'fold', 'previews', 'progress', 'newcontent', 'drafts', 'download', 'place'],
   'writer/setup': ['writer', 'writerUploads'],
   'pages/shortcuts': ['palette', 'search', 'keys'],
-  'pages/documents': ['docPages', 'toggles', 'docTheme', 'docInk', 'quizLight', 'titleScroll'],
+  'pages/documents': ['docPages', 'toggles', 'docTheme', 'docInk', 'quizLight', 'titleScroll', 'bbPreviews'],
   'courses/list': ['coursemenu'],
   'study/grades': ['inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],
   'study/todo': ['todo', 'cardTasks', 'gradescope'],
