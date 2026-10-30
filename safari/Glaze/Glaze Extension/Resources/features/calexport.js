@@ -17,7 +17,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
   const libs = () => ctx.need('lib/todo.js', () => globalThis.GZ_TODO)
     .then(() => Promise.all([ctx.need('lib/ics.js', () => globalThis.GZ_ICS), ctx.need('lib/calexport.js', () => globalThis.GZ_CALEXPORT)]));
   // Canvas's planner over every page its Link header names, on this site only, as Better To Do reads it.
-  // ponytail: ten pages (1,000 items).
+  // ponytail: ten pages (1,000 items). → { items, complete: false when a next page was left unread }.
   const pages = async (path) => {
     const out = [];
     let url = location.origin + path;
@@ -29,7 +29,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
       const next = r.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
       url = next && new URL(next, location.origin).origin === location.origin ? next : null;
     }
-    return out;
+    return { items: out, complete: !url };
   };
 
   // What the file may hold, read afresh from storage: Glaze on, the Gradescope switch and this Canvas account's answer
@@ -77,11 +77,11 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     // Planner items through eight weeks past the range, so a plan in the range for work due later has its title; and,
     // for plans whose work isn't among them (overdue work planned for later), half a year back, as far as Better To Do
     // looks. Past deadlines themselves stay out of the file; any plan still without its item goes in untitled.
-    // Ultra: what it couldn't read whole (complete: false) is said beside the saved file.
+    // What either site couldn't read whole (complete: false): Google sync deletes nothing for it; on Ultra the file says so.
     const iso = (ms) => new Date(ms).toISOString();
     let whole = true;
     const ask = (a, b) => (ultra ? ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => { if (!alive()) throw new Error('stopped'); return GZ_ULTRA.page.due(a, b); }).then((x) => { whole &&= x.complete; return x.items; })
-      : pages(`/api/v1/planner/items?start_date=${iso(a)}&end_date=${iso(b)}&per_page=100`).then((x) => x.map(L.slim)));
+      : pages(`/api/v1/planner/items?start_date=${iso(a)}&end_date=${iso(b)}&per_page=100`).then((x) => { whole &&= x.complete; return x.items.map(L.slim); }));
     let items = o.icsDue || o.icsPlan ? await ask(r.from, r.to + 56 * DAY) : [];
     if (o.icsPlan) {
       const read = new Set(items.map((i) => `${i.type}:${i.id}`));
@@ -151,7 +151,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
       const r = await run(o, () => box === mine && !!mine?.open, save);
       line.textContent = !r ? '' : [!r.n ? t('Nothing to export in that range.') : t('Saved {file}', { file: r.name }),
         r.n && r.guessed && (ultra ? t('Blackboard gives no end date for this term, so this covers the next 16 weeks.') : t('Canvas gives no end date for this term, so this covers the next 16 weeks.')),
-        !r.whole && t('Blackboard sent only part of your calendar, so some work may be missing.')].filter(Boolean).join(' ');
+        !r.whole && ultra && t('Blackboard sent only part of your calendar, so some work may be missing.')].filter(Boolean).join(' ');
     } catch (err) {
       line.textContent = err?.message === 'classes' ? t("Couldn't read your class schedule. Nothing was saved.") : t("Couldn't make the calendar. Try again in a moment.");
     } finally { busy = false; }

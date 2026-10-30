@@ -127,12 +127,13 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
   const sync = async (env, cal, st, { src, events, from, first, whole }, { signal, save = async () => {}, plans = async () => true, mine = null } = {}) => {
     const call = client(env, signal);
     const path = `/calendars/${encodeURIComponent(cal)}/events`;
-    // 1. Google's changes since the cursor. The first run lists every event: none yet, or another device's.
+    // 1. Google's changes since the cursor. The first run lists every event: none yet, or another device's, deleted ones
+    //    too (showDeleted), so a device that links an existing calendar knows which deadlines the student deleted there.
     let got = [], cursor = st.sync, page = null;
     for (let i = 0; ; i++) {
       if (i > 50) throw new Fail('http');
       let r;
-      try { r = await call('GET', path, { query: { maxResults: '2500', ...(cursor && { syncToken: cursor }), ...(page && { pageToken: page }) } }); } catch (e) {
+      try { r = await call('GET', path, { query: { maxResults: '2500', ...(cursor ? { syncToken: cursor } : { showDeleted: 'true' }), ...(page && { pageToken: page }) } }); } catch (e) {
         // An expired cursor: everything again (Google's sync guide).
         if (e.status === 410 && cursor) { cursor = null; page = null; got = []; continue; }
         throw e;
@@ -145,9 +146,10 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
     //    Google, it's written over; deleted there, it stays deleted. A "do on" day or a focus session is the student's
     //    own plan: moved in Google, the plan moves here; deleted there, the plan goes. Each only while the plan here is
     //    still what Glaze last wrote (still()): a change made here since is newer, and goes to Google instead.
-    const edits = [], skip = new Set();
+    const edits = [], skip = new Set(), dead = new Set();
     for (const ev of got) {
       const m = st.map[ev?.id];
+      if (!m && ev?.status === 'cancelled' && typeof ev.id === 'string') dead.add(ev.id); // deleted before this device wrote it
       if (!m || ev.etag === m.e) continue; // not Glaze's, or Glaze's own write
       if (ev.status === 'cancelled') {
         delete st.map[ev.id];
@@ -183,6 +185,9 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
       const d = await mine();
       for (const w of want.values()) if (w.k && !holds(d, w)) skip.add(w.id);
     }
+    // A deadline this device never wrote that Google holds deleted: the student deleted it (another device's copy).
+    for (const w of want.values()) if (!w.k && !st.map[w.id] && dead.has(w.id) && !st.gone.includes(w.id)) st.gone.push(w.id);
+    st.gone = st.gone.slice(-1000);
     const gone = new Set(st.gone);
     const ops = [...want.values()].filter((w) => !gone.has(w.id) && !skip.has(w.id) && st.map[w.id]?.h !== w.h);
     for (const [id, m] of Object.entries(st.map)) {
