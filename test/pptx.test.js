@@ -406,3 +406,12 @@ test('hostile numeric geometry and nested group scales keep model numbers finite
   }
   assert.deepEqual(JSON.parse(JSON.stringify(d)), d);
 });
+
+test('placeholder idx defaults to zero before type fallback', async () => {
+  const layout = fixture('ppt/slideLayouts/slideLayout2.xml').replace('ph type="title"', 'ph type="title" idx="0"');
+  const slide = fixture('ppt/slides/slide2.xml').replace('ph type="title"', 'ph');
+  const d = await P.read(pack({ 'ppt/slideLayouts/slideLayout2.xml': layout, 'ppt/slides/slide2.xml': slide }));
+  const title = named(d.slides[1], 'Title 1');
+  assert.deepEqual(title.bounds, named((await deck()).slides[1], 'Title 1').bounds);
+  assert.equal(title.text.paragraphs[0].runs[0].size, 44);
+});
