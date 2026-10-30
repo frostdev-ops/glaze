@@ -13,9 +13,9 @@
 // An attached PDF (the assignment's content item, test/fixtures/ultra-writer-attach-content.json, with a PDF entry in its
 // .docx entry's shape; on the page a link to the file in the instructions, a stand-in: how Ultra draws an attachment on
 // the attempt page wasn't probed) gets Open in Glaze beside its link, PDFs on, and that alone: the file comes by the page's
-// GET and opens in the viewer with no card, the paper a version first.
-// Switches off: a PDF on Ultra's file area is Ultra's, as before, and no attachment gets Open in Glaze
-// (writer-submit-check.js covers the rest of today's flows).
+// GET and opens in the viewer with no card, the paper a version first. An attached .csv the same, Spreadsheets on: the grid.
+// Each step turns on only the switches it names (they ship on: defaults.js). Switches off: a PDF on Ultra's file area is
+// Ultra's, as before, and no attachment gets Open in Glaze (writer-submit-check.js covers the rest of today's flows).
 // GETs only, synthetic. NODE_PATH=<playwright> node scripts/writer-kinds-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -32,13 +32,14 @@ const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
-const FORM = '/bbcswebdav/pid-4968850-dt-asiobject-rid-14533106_1/xid-14533106_1';
-// The content item with the attachments its fixture has, and a PDF besides.
+const FORM = '/bbcswebdav/pid-4968850-dt-asiobject-rid-14533106_1/xid-14533106_1', LAB = '/bbcswebdav/pid-4968850-dt-asiobject-rid-14533107_1/xid-14533107_1';
+// The content item with the attachments its fixture has, and a PDF and a .csv besides.
+const link = (site, at, name, mimeType) => `<p><a href="${site}${at}" data-bbtype="attachment" data-bbfile="${JSON.stringify({ alternativeText: name, displayName: name, fileName: name, isDecorative: false, mimeType, render: 'link', linkName: name }).replace(/"/g, '&quot;')}">${name}</a></p>`;
 const item = (site) => {
   const j = JSON.parse(fixture('ultra-writer-attach-content.json').replaceAll('https://bb.school.example.edu', site));
-  const pdf = `<p><a href="${site}${FORM}" data-bbtype="attachment" data-bbfile="${JSON.stringify({ alternativeText: 'Field trip form.pdf', displayName: 'Field trip form.pdf', fileName: 'Field trip form.pdf', isDecorative: false, mimeType: 'application/pdf', render: 'link', linkName: 'Field trip form.pdf' }).replace(/"/g, '&quot;')}">Field trip form.pdf</a></p>`;
+  const more = link(site, FORM, 'Field trip form.pdf', 'application/pdf') + link(site, LAB, 'Lab data.csv', 'text/csv');
   const ins = j.contentDetail['resource/x-bb-asmt-test-link'].test.assessment.instructions;
-  ins.rawText += pdf; ins.displayText += pdf;
+  ins.rawText += more; ins.displayText += more;
   return j;
 };
 const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
@@ -86,7 +87,7 @@ const holds = (bytes, value) => {
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json')), members = JSON.parse(fixture('ultra-memberships.json'));
-    const attachment = { bytes: null, gets: 0 };
+    const attachment = { bytes: null, gets: 0, labGets: 0 };
     await context.route('**/*', async (r) => {
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
@@ -94,8 +95,9 @@ const holds = (bytes, value) => {
       if (u.pathname === '/gz-check/quill.js') return r.fulfill({ contentType: 'text/javascript', body: quill });
       if (u.pathname === '/gz-check/harness.js') return r.fulfill({ contentType: 'text/javascript', body: HARNESS });
       if (req.isNavigationRequest() && u.pathname === ATTEMPT) return r.fulfill({ contentType: 'text/html', body: fixture('ultra-writer-attempt.html').replace('<head>', '<head><base href="/ultra/">').replace('</body>', '<script src="/gz-check/quill.js"></script><script src="/gz-check/harness.js"></script></body>')
-        .replace('id="bb-editorassignment-attempt-authoring-instructions">', `id="bb-editorassignment-attempt-authoring-instructions"><p><a href="${FORM}" data-bbtype="attachment">Field trip form.pdf</a></p>`) });
+        .replace('id="bb-editorassignment-attempt-authoring-instructions">', `id="bb-editorassignment-attempt-authoring-instructions"><p><a href="${FORM}" data-bbtype="attachment">Field trip form.pdf</a></p><p><a href="${LAB}" data-bbtype="attachment">Lab data.csv</a></p>`) });
       if (u.pathname === FORM) { attachment.gets++;  return r.fulfill({ status: 200, contentType: 'application/pdf', body: Buffer.from(attachment.bytes) }); }
+      if (u.pathname === LAB) { attachment.labGets++; return r.fulfill({ status: 200, contentType: 'text/csv', body: 'Trial,Mass\n1,4.2\n2,4.5\n' }); }
       if (req.isNavigationRequest()) return r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Blank</title>' });
       let data = { results: [] };
       if (u.pathname.endsWith('/users/me')) data = { id: '_900_1', userName: 'synthetic', givenName: 'Alex', familyName: 'Rivera' };
@@ -106,7 +108,7 @@ const holds = (bytes, value) => {
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
-    const settings = (w) => G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, writerUploads: true, drafts: true }, writer: { full: false, ...w } });
+    const settings = (w) => G.GZ_SANITIZE({ navbar: { on: false }, footer: false, preset: 'Frost', enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), writer: true, writerUploads: true, drafts: true }, writer: { full: false, sheets: false, pdf: false, slides: false, ...w } });
     const reset = (w) => worker.evaluate(async ({ s, site }) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); await chrome.storage.local.set({ ultra: [site] }); }, { s: settings(w), site });
     await reset({ pdf: true, slides: true });
     const opts = await context.newPage(); await opts.goto(`chrome-extension://${id}/popup.html`); await env.ultraReady(opts); await opts.close();
@@ -216,6 +218,11 @@ const holds = (bytes, value) => {
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'slides' && document.querySelectorAll('.gk .gs-rail-b').length === 10 && !!document.querySelector('.gk #gs-canvas [role="group"]')), 'the slides viewer', 40000);
     rec = await record(); vs = await versions();
     check(rec.kind === 'slides' && rec.slides === 10 && sha(Buffer.from(rec.file, 'base64')) === sha(deckBytes) && vs.some((v) => v.reason === 'import'), `the record is the deck, its bytes as brought, the paper a version first (${JSON.stringify({ kind: rec.kind, slides: rec.slides })})`);
+    // Ctrl+F (⌘F) over the viewer is the viewer's own find, never the hidden paper's (writer-find.js).
+    await fr.evaluate(() => document.querySelector('.gk .gs-rail-b')?.focus());
+    await p.keyboard.press('ControlOrMeta+f');
+    const found = await fr.evaluate(() => ({ paper: document.querySelector('.ge-find')?.hidden !== false, own: document.activeElement?.id }));
+    check(found.paper && found.own === 'gs-find-q', `Ctrl+F over the slides finds in the deck, the paper's find closed (${JSON.stringify(found)})`);
     await shot(p, 'kinds-slides-1440.png');
     await tap(fr, '.gk .gp-submit');
     await until(() => sheetOf(fr), 'the deck\'s sheet');
@@ -333,7 +340,7 @@ const holds = (bytes, value) => {
     await reset({ pdf: true });
     ({ p, el, fr } = await open());
     const opener = await until(() => p.$(`a[href="${FORM}"] + button[data-gz-open-glaze]`), 'Open in Glaze beside the attached PDF', 30000);
-    check(await p.evaluate(() => [...document.querySelectorAll('button[data-gz-open-glaze]')].map((b) => b.textContent).join('|') === 'Open in Glaze'), 'the attached PDF alone gets Open in Glaze (not the Word prompt, the picture or the reading guide)');
+    check(await p.evaluate(() => [...document.querySelectorAll('button[data-gz-open-glaze]')].map((b) => b.textContent).join('|') === 'Open in Glaze'), 'the attached PDF alone gets Open in Glaze (not the Word prompt, the picture, the reading guide or the .csv with Spreadsheets off)');
     const gets = attachment.gets;
     await opener.click();
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelectorAll('.gk .pdfViewer .page').length === 3), 'the attachment in the PDF viewer', 40000,
@@ -342,6 +349,22 @@ const holds = (bytes, value) => {
     check(attachment.gets === gets + 1 && rec.kind === 'pdf' && sha(Buffer.from(rec.file, 'base64')) === sha(pdfBytes) && vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper') && await fr.evaluate(() => !document.querySelector('.gi-layer')) && await p.evaluate(() => __uploads.length === 0),
       `the attachment fetched once, opened with no card: the record its PDF, the paper a version first, nothing uploaded (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
     await shot(p, 'kinds-attachment-1440.png');
+    await p.close();
+
+    // ---- an attached .csv: Open in Glaze beside its link with Spreadsheets on, straight to the grid
+    await reset({ sheets: true });
+    ({ p, el, fr } = await open());
+    const labOpener = await until(() => p.$(`a[href="${LAB}"] + button[data-gz-open-glaze]`), 'Open in Glaze beside the attached .csv', 30000);
+    check(await p.evaluate((form) => document.querySelectorAll('button[data-gz-open-glaze]').length === 1 && !document.querySelector(`a[href="${form}"] + button[data-gz-open-glaze]`), FORM),
+      'Spreadsheets on, PDFs off: the attached .csv alone gets Open in Glaze');
+    const labGets = attachment.labGets;
+    await labOpener.click();
+    await until(async () => (await cellOf(1, 1)) === '4.2', 'the attached .csv in the grid', 40000,
+      async () => ({ gets: attachment.labGets - labGets, ...await fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, card: !!document.querySelector('.gi-layer'), said: [...document.querySelectorAll('[role="status"], [role="alert"]')].map((x) => x.textContent).filter(Boolean).join(' | ') })) }));
+    rec = await record(); vs = await versions();
+    check(attachment.labGets === labGets + 1 && rec.kind === 'sheet' && [await cellOf(0, 0), await cellOf(0, 1), await cellOf(2, 1)].join() === 'Trial,Mass,4.5' && vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper')
+      && await fr.evaluate(() => document.documentElement.dataset.doc === 'sheet' && !document.querySelector('.gi-layer')) && await p.evaluate(() => __uploads.length === 0),
+      `the attached .csv fetched once, opened with no card: the record a spreadsheet with its values, the paper a version first, nothing uploaded (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
     await p.close();
 
     // ---- switches off: a PDF on Ultra's file area is Ultra's, as before; no attachment gets Open in Glaze

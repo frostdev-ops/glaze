@@ -11,7 +11,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 // The names stream F's files read (writer-paper.js, writer-ruler.js, writer-paste.js) and the defaults the brief fixes.
 test('the writer key: every name, its default, and what it takes', () => {
   assert.deepEqual(D.GZ_DEFAULTS.writer, {
-    format: 'mla9', zoom: 'fit', ruler: true, lightPage: false, full: false, sheets: false, pdf: false, slides: false, pasteAsk: true, versions: 40, proofing: true, dialect: 'en-US',
+    format: 'mla9', zoom: 'fit', ruler: true, lightPage: false, full: false, sheets: true, pdf: true, slides: true, pasteAsk: true, versions: 40, proofing: true, dialect: 'en-US',
     autocorrect: { typos: true, capitalI: true, doubles: true, smart: true },
     compose: { markdown: true, target: true, quote: true },
     submit: { rememberText: true, text: false },
@@ -31,16 +31,17 @@ test('the writer key sanitises part by part: junk back to its default, the rest 
   const raw = { writer: { format: 'apa7', zoom: 125, ruler: false, full: 'yes', sheets: 1, pdf: 1, slides: 1, pasteAsk: 'no', versions: 33, proofing: false, dialect: 'en-NZ',
     autocorrect: { typos: false, smart: 1, extra: true }, compose: 'off', submit: { rememberText: false, text: true } } };
   const w = D.GZ_SANITIZE(raw).writer;
-  assert.deepEqual(w, { format: 'apa7', zoom: 125, ruler: false, lightPage: false, full: false, sheets: false, pdf: false, slides: false, pasteAsk: true, versions: 40, proofing: false, dialect: 'en-US',
+  assert.deepEqual(w, { format: 'apa7', zoom: 125, ruler: false, lightPage: false, full: false, sheets: true, pdf: true, slides: true, pasteAsk: true, versions: 40, proofing: false, dialect: 'en-US',
     autocorrect: { typos: false, capitalI: true, doubles: true, smart: true }, compose: { markdown: true, target: true, quote: true },
     submit: { rememberText: false, text: true } });
   assert.deepEqual(D.GZ_SANITIZE(D.GZ_SANITIZE(raw)).writer, w);
   assert.equal(D.GZ_SANITIZE({ writer: { zoom: '100' } }).writer.zoom, 'fit', 'a percent is a number');
   for (const n of D.GZ_SPEC.writer.versions[1]) assert.equal(D.GZ_SANITIZE({ writer: { versions: n } }).writer.versions, n, `${n} versions kept`);
   assert.equal(D.GZ_SANITIZE({ writer: { full: true } }).writer.full, true, 'Full writer kept');
-  assert.equal(D.GZ_SANITIZE({ writer: { sheets: true } }).writer.sheets, true, 'Spreadsheets kept');
-  assert.equal(D.GZ_SANITIZE({ writer: { pdf: true } }).writer.pdf, true, 'PDFs kept');
-  assert.equal(D.GZ_SANITIZE({ writer: { slides: true } }).writer.slides, true, 'Slides kept');
+  // Spreadsheets, PDFs and Slides ship on; a student's off stays off.
+  assert.equal(D.GZ_SANITIZE({ writer: { sheets: false } }).writer.sheets, false, 'Spreadsheets off kept');
+  assert.equal(D.GZ_SANITIZE({ writer: { pdf: false } }).writer.pdf, false, 'PDFs off kept');
+  assert.equal(D.GZ_SANITIZE({ writer: { slides: false } }).writer.slides, false, 'Slides off kept');
   // A fresh object each time: editing one never edits the defaults.
   const a = D.GZ_SANITIZE({}).writer;
   a.autocorrect.typos = false;

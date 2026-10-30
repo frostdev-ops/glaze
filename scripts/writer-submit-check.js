@@ -626,12 +626,15 @@ const HARNESS = require('./ultra-attempt-harness.js');
     check(got.text === 'My file is attached as is.\n' && got.clicks.join() === 'assignment.attempt.authoring.footer.submit' && got.log.indexOf('click:assignment.attempt.authoring.footer.submit') > got.log.indexOf('row'), 'the note in Ultra\'s box, Ultra\'s Submit clicked once after the file was listed');
     check((await versions()).length === countAsis && await paperText(fr) === paperBefore, 'the paper untouched: no version saved, its text as it was');
     await p.close();
-    // A PDF on Ultra's drop zone: straight to the sheet as is.
+    // A PDF on Ultra's drop zone (Settings → Writer → PDFs on, the default): Open in Glaze or Submit as is; as is, the sheet.
     ({ p, el, fr } = await openAttempt('empty'));
     await give(p, '[class*="makeStylesinputContainer-"]', 'Rivera_Essay2.pdf', 'application/pdf', pdf);
+    await until(() => cardOf(fr), 'the PDF\'s card');
+    check((await cardOf(fr)).tiles.join('|') === 'Open in Glaze|Submit as is' && await p.evaluate(() => !__uploads.length), 'a PDF dropped on Ultra\'s area asks Open in Glaze or Submit as is, Ultra none the wiser');
+    await tap(fr, '.gi-choice:not(.gi-default)');
     await sheetOpen(fr);
     asis = await asisOf(fr);
-    check(asis.asis && asis.big === 'PDF' && asis.name === 'Rivera_Essay2.pdf' && await fr.evaluate(() => !document.querySelector('.gi-layer') && getComputedStyle(document.querySelector('.gs-big .gs-doc')).backgroundColor === 'rgb(220, 38, 38)') && await p.evaluate(() => !__uploads.length), 'a PDF dropped on Ultra\'s area: no card, straight to the sheet as is, Ultra none the wiser');
+    check(asis.asis && asis.big === 'PDF' && asis.name === 'Rivera_Essay2.pdf' && await fr.evaluate(() => !document.querySelector('.gi-layer') && getComputedStyle(document.querySelector('.gs-big .gs-doc')).backgroundColor === 'rgb(220, 38, 38)') && await p.evaluate(() => !__uploads.length), 'Submit as is: the PDF large in the sheet, Ultra none the wiser');
     saved.submitPdf = await ishot(p, 'import-submit-pdf-dark.png');
     await tap(fr, '.gs-primary');
     await until(() => p.evaluate(() => __clicks.length > 0), 'PDF submitted', 30000);
@@ -938,12 +941,16 @@ const HARNESS = require('./ultra-attempt-harness.js');
     check((await paperText(fr)).includes('Keep this compact draft.'), 'Submit as is leaves the stored paper intact');
     await p.close();
     await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); });
-    // Ultra's file area: a PDF is Ultra's; a .docx asks, over a frame as tall as a paper, and Open in Writer opens the pages.
+    // Ultra's file area: with PDFs off, a PDF is Ultra's; a .docx asks, over a frame as tall as a paper, and Open in Writer
+    // opens the pages.
+    const setPdf = (on) => worker.evaluate(async (on) => { const w = (await chrome.storage.sync.get('writer')).writer || {}; await chrome.storage.sync.set({ writer: { ...w, pdf: on } }); }, on);
+    await setPdf(false);
     ({ p, el, fr } = await openCompact('empty'));
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await give(p, '[class*="makeStylesinputContainer-"]', 'Rivera_Essay2.pdf', 'application/pdf', pdf);
     await until(() => p.evaluate(() => __uploads.length === 1), 'Ultra took the PDF');
-    check(await p.evaluate(() => __uploads[0].via === 'drop') && await fr.evaluate(() => !document.querySelector('.gi-layer, .gs-layer')), 'a PDF on Ultra\'s file area is Ultra\'s, to send with the text');
+    check(await p.evaluate(() => __uploads[0].via === 'drop') && await fr.evaluate(() => !document.querySelector('.gi-layer, .gs-layer')), 'PDFs off: a PDF on Ultra\'s file area is Ultra\'s, to send with the text');
+    await setPdf(true);
     h0 = await frameH(el);
     await give(p, '[class*="makeStylesinputContainer-"]', 'Rivera_Essay2.docx', MIME, essay);
     await until(() => cardOf(fr), 'the card in the compact box');
