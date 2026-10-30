@@ -321,6 +321,26 @@ const scan = () => {
     await page.setInputFiles('#gd-file', scanned);
     const scanCard = await until(() => page.evaluate(() => { const c = [...document.querySelectorAll('.gd-card')].find((x) => x.querySelector('.gd-title')?.textContent === 'Scanned worksheet'), img = c?.querySelector('.gd-pic img'); return img?.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.length } : null; }), 'the scan\'s card');
     check(scanCard.w >= 300 && scanCard.src < 96e3, `a scanned page's card picture keeps its detail (${JSON.stringify(scanCard)})`);
+    // A PDF whose first page can't be read (its page tree points at nothing) is refused at import; one already kept says
+    // so in the viewer instead of an empty viewer waiting for pages that never come.
+    const broken = Buffer.from(fixture().toString('latin1').replace(/\/Kids \[(\d+) 0 R/, '/Kids [99 0 R'), 'latin1');
+    const brokenFile = path.join(tmp, 'Broken form.pdf');
+    fs.writeFileSync(brokenFile, broken);
+    const before = ((await local('writerPapers')) || []).length;
+    await page.evaluate(() => { document.getElementById('gd-said').textContent = ''; });
+    await page.setInputFiles('#gd-file', brokenFile);
+    const brokenSaid = await until(() => page.evaluate(() => document.getElementById('gd-said').textContent), 'the broken PDF\'s refusal');
+    check(brokenSaid === 'That file could not be read.' && ((await local('writerPapers')) || []).length === before, `a PDF whose first page can't be read is refused at import (${brokenSaid})`);
+    const brokenKey = await page.evaluate(async (b64) => {
+      const k = GZ_WRITER_PAPERS.newKey(), bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      await GZ_WRITER_PAPERS.open().save(k, { kind: 'pdf', file: b64, size: bytes.length, pages: 1, title: 'Broken form', named: true }, { reason: 'import' });
+      return k;
+    }, broken.toString('base64'));
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(brokenKey)}`);
+    const brokenView = await until(() => page.evaluate(() => { const s = document.querySelector('.gq-said'); return s && !s.hidden ? { said: s.textContent, zoom: document.getElementById('gq-zoom').disabled } : null; }), 'the kept broken PDF says it could not be read');
+    check(brokenView.said === 'That file could not be read.' && brokenView.zoom, `a kept PDF whose first page can't be read says so (${JSON.stringify(brokenView)})`);
+    // pdf.js's own report of that page; nothing else may error.
+    for (let i = errors.length - 1; i >= 0; i--) if (/Unable to initialize viewer|Page dictionary kid reference/.test(errors[i])) errors.splice(i, 1);
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(!errors.some((e) => /fake worker/i.test(e)), 'pdf.js never fell back to a fake worker');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);
