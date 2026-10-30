@@ -145,7 +145,7 @@
     if (key) storageChanged({ [key]: {} }, 'local');
   });
   F.on('ready', (_, init) => loadFor(init?.context || F.context()).then(() => importBibliography()));
-  F.on('context', (c) => { if (pop.hidden === false) close(); saved = null; return loadFor(c); });
+  F.on('context', (c) => { if (S.keyOf(c) !== key) { if (pop.hidden === false) close(); saved = null; } return loadFor(c); });
 
   // ---- cite issues ------------------------------------------------------------------------------------------------------
   // Off the typing path: a quiet moment after the last change, then one pass over the document.
