@@ -157,6 +157,58 @@ var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
     }
   };
 
+  // The gated short convolution after in_proj, for T tokens: bcx rows are [B | C | x] (3E), state the last K inputs
+  // (rows of E) before them, conv the weights (E rows of K + 1, the last on the current token). → { y (T rows of E), state }.
+  const shortconv = (bcx, state, conv, T, E, K) => {
+    const bx = new Float32Array(T * E), y = new Float32Array(T * E);
+    for (let t = 0; t < T; t++) for (let e = 0; e < E; e++) bx[t * E + e] = bcx[t * 3 * E + e] * bcx[t * 3 * E + 2 * E + e];
+    // The window over [state | bx]: input j < K is state row j, then bx row j − K.
+    const at = (j, e) => (j < K ? state[j * E + e] : bx[(j - K) * E + e]);
+    for (let t = 0; t < T; t++) {
+      for (let e = 0; e < E; e++) {
+        let sum = 0;
+        for (let k = 0; k <= K; k++) sum += at(t + k, e) * conv[e * (K + 1) + k];
+        y[t * E + e] = bcx[t * 3 * E + E + e] * fr(sum);
+      }
+    }
+    const next = new Float32Array(K * E);
+    for (let j = 0; j < K; j++) for (let e = 0; e < E; e++) next[j * E + e] = at(T + j, e);
+    return { y, state: next };
+  };
+
+  // Attention for T queries at positions pos.. (rows of H heads × hd, normed and turned) over the cached keys and values
+  // (rows of Hkv × hd per position, the T new ones already in), each head's output × sigmoid(gate) (T rows of H).
+  // window > 0: a query at p sees keys at p − window < j ≤ p; else every j ≤ p.
+  const attend = (q, K, V, gate, { T, pos, H, Hkv, hd, window = 0 }) => {
+    const width = Hkv * hd, group = H / Hkv;
+    const out = new Float32Array(T * H * hd), scale = 1 / Math.sqrt(hd);
+    const scores = new Float64Array(pos + T), acc = new Float64Array(hd);
+    for (let t = 0; t < T; t++) {
+      const p = pos + t, from = window ? Math.max(0, p - window + 1) : 0;
+      for (let h = 0; h < H; h++) {
+        const qo = (t * H + h) * hd, kh = Math.floor(h / group) * hd;
+        let max = -Infinity;
+        for (let j = from; j <= p; j++) {
+          let d = 0;
+          const ko = j * width + kh;
+          for (let i = 0; i < hd; i++) d += q[qo + i] * K[ko + i];
+          scores[j] = d * scale;
+          if (scores[j] > max) max = scores[j];
+        }
+        let z = 0;
+        for (let j = from; j <= p; j++) { scores[j] = Math.exp(scores[j] - max); z += scores[j]; }
+        acc.fill(0);
+        for (let j = from; j <= p; j++) {
+          const pj = scores[j] / z, vo = j * width + kh;
+          for (let i = 0; i < hd; i++) acc[i] += pj * V[vo + i];
+        }
+        const g = sigmoid(gate[t * H + h]);
+        for (let i = 0; i < hd; i++) out[qo + i] = fr(acc[i]) * fr(g);
+      }
+    }
+    return out;
+  };
+
   // ---- a session: the caches and the forward pass ----------------------------------------------------------------------
   // A sequence's state: per attention layer its keys and values for every position so far (sliding layers too: the mask
   // keeps them to the window), per conv layer the last l_cache − 1 inputs to its convolution (zeros at the start).
@@ -173,25 +225,13 @@ var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
     };
 
     const convBlock = (L, s, n, T) => {
-      const bcx = matmul(L.inProj, n, T), bx = new Float32Array(T * E), y = new Float32Array(T * E);
-      for (let t = 0; t < T; t++) for (let e = 0; e < E; e++) bx[t * E + e] = bcx[t * 3 * E + e] * bcx[t * 3 * E + 2 * E + e];
-      // The window over [state | bx]: input j < K is state row j, then bx row j − K.
-      const at = (j, e) => (j < K ? s.conv[j * E + e] : bx[(j - K) * E + e]);
-      for (let t = 0; t < T; t++) {
-        for (let e = 0; e < E; e++) {
-          let sum = 0;
-          for (let k = 0; k <= K; k++) sum += at(t + k, e) * L.conv[e * (K + 1) + k];
-          y[t * E + e] = bcx[t * 3 * E + E + e] * fr(sum);
-        }
-      }
-      const next = new Float32Array(K * E);
-      for (let j = 0; j < K; j++) for (let e = 0; e < E; e++) next[j * E + e] = at(T + j, e);
+      const { y, state: next } = shortconv(matmul(L.inProj, n, T), s.conv, L.conv, T, E, K);
       s.conv = next;
       return matmul(L.outProj, y, T);
     };
 
     const attnBlock = (L, s, n, T, li) => {
-      const H = c.nHead, Hkv = c.nHeadKv[li], group = H / Hkv, swa = L.kind === 'swa';
+      const H = c.nHead, Hkv = c.nHeadKv[li], swa = L.kind === 'swa';
       const q = matmul(L.wq, n, T), k = matmul(L.wk, n, T), v = matmul(L.wv, n, T);
       rmsnorm(q, T * H, hd, L.qNorm, c.eps, q);
       rmsnorm(k, T * Hkv, hd, L.kNorm, c.eps, k);
@@ -200,32 +240,7 @@ var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
       else { rope(q, T, H, hd, ps, c.nRot, c.ropeBase, w.ropeFreqs); rope(k, T, Hkv, hd, ps, c.nRot, c.ropeBase, w.ropeFreqs); }
       grow(s, (pos + T) * s.width);
       s.k.set(k, pos * s.width); s.v.set(v, pos * s.width);
-      const gate = matmul(L.wGate, n, T);
-      const out = new Float32Array(T * H * hd), scale = 1 / Math.sqrt(hd);
-      const scores = new Float64Array(pos + T), acc = new Float64Array(hd);
-      for (let t = 0; t < T; t++) {
-        const p = pos + t, from = swa ? Math.max(0, p - c.window + 1) : 0;
-        for (let h = 0; h < H; h++) {
-          const qo = (t * H + h) * hd, kh = Math.floor(h / group) * hd;
-          let max = -Infinity;
-          for (let j = from; j <= p; j++) {
-            let d = 0;
-            const ko = j * s.width + kh;
-            for (let i = 0; i < hd; i++) d += q[qo + i] * s.k[ko + i];
-            scores[j] = d * scale;
-            if (scores[j] > max) max = scores[j];
-          }
-          let z = 0;
-          for (let j = from; j <= p; j++) { scores[j] = Math.exp(scores[j] - max); z += scores[j]; }
-          acc.fill(0);
-          for (let j = from; j <= p; j++) {
-            const pj = scores[j] / z, vo = j * s.width + kh;
-            for (let i = 0; i < hd; i++) acc[i] += pj * s.v[vo + i];
-          }
-          const g = sigmoid(gate[t * H + h]);
-          for (let i = 0; i < hd; i++) out[qo + i] = fr(acc[i]) * fr(g);
-        }
-      }
+      const out = attend(q, s.k, s.v, matmul(L.wGate, n, T), { T, pos, H, Hkv, hd, window: swa ? c.window : 0 });
       return matmul(L.wo, out, T);
     };
 
@@ -292,6 +307,6 @@ var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
     return best[best.length - 1].id;
   };
 
-  return { config, load, session, greedy, top, topK, _ops: { matmul, rmsnorm, rope, row } };
+  return { config, load, session, greedy, top, topK, _ops: { matmul, rmsnorm, rope, row, shortconv, attend, silu, sigmoid } };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_REFERENCE; else GZ_AI_REFERENCE;

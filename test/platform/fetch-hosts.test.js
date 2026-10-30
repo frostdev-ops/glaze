@@ -70,6 +70,9 @@ const SITES = {
       why: 'the local model\'s weights on the student\'s click: huggingface.co\'s resolve URL echoes the Origin, its CDN answers *; the final host is checked (allowedHost)' },
     { at: "globalThis.fetch(new URL('/ai/local/models.json'", kind: 'extension' },
   ],
+  'ai/local/ladder.js': [{ at: "fetch(chrome.runtime.getURL('ai/local/kernels/bench.wgsl'))", kind: 'extension' }],
+  // The engine host's Worker reads the ladder's bench kernel beside it (a Worker has no chrome.runtime).
+  'ai/local/host.js': [{ at: "fetch(new URL('kernels/bench.wgsl', location.href))", kind: 'extension' }],
   'ai/broker.js': [{ at: 'env.fetch(url, init)', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
   'ai/providers/openai.js': [
     { at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'ai/broker.js', guard: /fetch: pinned\(env, use\)/ },
@@ -105,6 +108,8 @@ const SITES = {
   // A deck's card picture carries the bundled faces its slide 1 uses (vendor/fonts), read from the extension itself.
   'documents/slides/slides-kind.js': [{ at: 'fetch(chrome.runtime.getURL(`vendor/fonts/', kind: 'extension' }],
   'planner/ocr.js': [{ at: 'fetch(here(', kind: 'extension' }],
+  // The local engine's kernels, read from the package (ai/local/kernels), or from the base its checks name.
+  'ai/local/engine.js': [{ at: 'const r = await fetch(url);', kind: 'extension' }],
   'courses/lmsq.js': [{ at: 'return fetch(url, init)', kind: 'page' }],
   'courses/ultra.js': [{ at: 'f = (...a) => fetch(...a)', kind: 'page' }],
   'content/content.js': [{ at: 'fetch(`${location.origin}${base}${path}`', kind: 'page' }],

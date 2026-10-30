@@ -61,7 +61,9 @@ const engine = ({ reply = 'Hello world.', fail, gate, context = 16000 } = {}) =>
           if (gate) await gate(signal, log.decodes);
           if (signal?.aborted) throw signal.reason;
           pos++;
-          return i < ids.length ? ids[i++] : tok.eos;
+          const want = i < ids.length ? ids[i++] : tok.eos;
+          if (mask && !(mask[want >>> 5] & (1 << (want & 31)))) { log.refused = (log.refused || 0) + 1; for (let k = 0; k < tok.size; k++) if (mask[k >>> 5] & (1 << (k & 31))) return k; }
+          return want;
         },
         snapshot: async () => snap(pos),
         restore: async (s) => { log.restores.push(s.pos); pos = s.pos; },
@@ -105,7 +107,8 @@ const setup = ({ here, hold, reply, fail, gate, grammar = null, ladder = null, g
   class FakeWorker {
     constructor(url) {
       this.url = url; workers.push(this);
-      this.host = H.create({ store: st, gguf: { open: async () => ({ kv: VOCAB }) }, tokenizer: K, engine: () => (noEngine ? null : eng.E), grammar: () => grammar, ladder: () => ladder,
+      this.host = H.create({ store: st, gguf: { open: async () => ({ kv: VOCAB }) }, tokenizer: K, engine: () => (noEngine ? null : eng.E), grammar: () => grammar,
+        ladder: () => ladder && { probe: async () => ({ adapter: {} }), ...ladder },
         gpu: () => gpu, setTimeout: unref, post: (m) => { posted.push(structuredClone(m)); setImmediate(() => this.onmessage?.({ data: structuredClone(m) })); } });
     }
     postMessage(m) { const d = structuredClone(m); setImmediate(() => this.host.handle(d)); }
@@ -549,4 +552,32 @@ test('the broker\'s keepalive covers a local run, and stops with it', async (t) 
     assert.equal(p.posted.length, n, 'the keepalive stops with the run');
   } finally { B.LIMIT.keepalive = was; release?.(); p.close(); }
   void t;
+});
+
+test('with the real grammar (grammar.js): its vocabulary built once per model, each token masked and advanced, the JSON whole', async () => {
+  const G = require('../../extension/ai/local/grammar.js');
+  let vocabs = 0;
+  const grammar = { ...G, vocab: (...a) => { vocabs++; return G.vocab(...a); } };
+  const s = setup({ here: { 'glaze-q4': 'ready' }, reply: '{"text":"hi"}', grammar });
+  const r = await P.run('local', request(TASK, { text: 'hi' }), LOCAL.config({}));
+  assert.deepEqual(r.json, { text: 'hi' });
+  assert.equal(s.eng.log.masks, s.eng.log.decodes, 'every step masked');
+  assert.equal(s.eng.log.refused, undefined, 'the answer\'s tokens were all allowed, the end token only once it was whole');
+  await P.run('local', request(TASK, { text: 'hi' }), LOCAL.config({}));
+  assert.equal(vocabs, 1);
+  // A reply that would break the JSON is held to it: the grammar's mask steers the stub to an allowed token.
+  const t = setup({ here: { 'glaze-q4': 'ready' }, reply: '{"text":"hi"} and more', grammar: G });
+  const out = await P.run('local', request(TASK, { text: 'hi' }), LOCAL.config({}));
+  assert.deepEqual(out.json, { text: 'hi' });
+  assert.ok(t.eng.log.refused >= 1);
+});
+
+test('with the real ladder (ladder.js): a computer without an adapter, or with a CPU fallback, downloads nothing', async () => {
+  const LD = require('../../extension/ai/local/ladder.js');
+  const fallback = { requestAdapter: async () => ({ features: new Set(), limits: { maxBufferSize: 2 ** 32, maxStorageBufferBindingSize: 2 ** 32 }, info: { vendor: 'google', description: 'SwiftShader', isFallbackAdapter: true } }) };
+  for (const gpu of [fallback]) {
+    const s = setup({ ladder: LD, gpu });
+    assert.deepEqual(await LOCAL.prepare(LOCAL.config({})), { state: 'unavailable', reason: 'hardware' });
+    assert.deepEqual(s.st.log.downloads, []);
+  }
 });

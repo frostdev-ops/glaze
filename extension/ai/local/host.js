@@ -32,7 +32,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
   const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
   // env: { store (ai/local/store.js), gguf (gguf.js), tokenizer (tokenizer.js), engine(), grammar(), ladder() (each the
-  // global or null), gpu() (navigator.gpu or null), post(message), setTimeout?, clearTimeout? }.
+  // global or null), gpu() (navigator.gpu or null), bench?() (the ladder's bench kernel's source), post(message),
+  // setTimeout?, clearTimeout? }.
   const create = (env) => {
     const later = env.setTimeout || setTimeout, cancelTimer = env.clearTimeout || clearTimeout;
     const ops = new Map(); // id → { control, kind }
@@ -62,7 +63,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       if (loaded?.id === id) return loaded.ready;
       const retired = unload();
       const E = env.engine();
-      if (!E) return Promise.reject(fail('provider-unavailable', 'engine'));
+      if (typeof E?.load !== 'function') return Promise.reject(fail('provider-unavailable', 'engine'));
       const job = { id, control: new AbortController(), warm: [], schemas: new Map() };
       job.ready = (async () => {
         await retired;
@@ -132,12 +133,16 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       if (here) return { id: here.id };
       const gpu = env.gpu();
       if (!gpu) return { reason: 'webgpu' };
-      const adapter = await Promise.resolve().then(() => gpu.requestAdapter({ powerPreference: 'high-performance' })).catch(() => null);
       const L = env.ladder();
       if (L) {
-        const r = await Promise.resolve().then(() => L.pick({ adapter, models: all })).catch(() => null);
-        return r && typeof r.id === 'string' && all.some((m) => m.id === r.id) ? { id: r.id } : { reason: typeof r?.reason === 'string' ? r.reason : 'hardware' };
+        // ladder.js: probe() asks for the adapter and benches it (its kernel read here: a Worker has no chrome.runtime),
+        // pick() decides. Its refusals, as the provider says them.
+        const r = await Promise.resolve().then(async () => L.pick({ ...await L.probe({ gpu, ...(env.bench && { source: await env.bench().catch(() => undefined) }) }),
+          models: all, stored: all.filter((m) => m.state !== 'missing').map((m) => m.id) })).catch(() => null);
+        if (r && typeof r.id === 'string' && all.some((m) => m.id === r.id)) return { id: r.id };
+        return { reason: r?.reason === 'storage' ? 'quota' : r?.reason === 'no-model' ? 'assets' : 'hardware' };
       }
+      const adapter = await Promise.resolve().then(() => gpu.requestAdapter({ powerPreference: 'high-performance' })).catch(() => null);
       if (!adapter) return { reason: 'hardware' };
       const stock = all.filter((m) => m.stock).sort((a, b) => a.tier - b.tier)[0];
       return stock ? { id: stock.id } : { reason: 'assets' };
@@ -235,6 +240,7 @@ else if (typeof WorkerGlobalScope !== 'undefined' && globalThis instanceof Worke
   for (const f of ['quant.js', 'reference.js', 'engine.js', 'grammar.js', 'ladder.js']) { try { importScripts(f); } catch { /* not shipped yet */ } }
   const g = (name) => (typeof globalThis[name] !== 'undefined' ? globalThis[name] : null);
   const host = GZ_AI_LOCAL_HOST.create({ store: GZ_AI_STORE, gguf: GZ_AI_GGUF, tokenizer: GZ_AI_TOKENIZER, engine: () => g('GZ_AI_ENGINE'),
-    grammar: () => g('GZ_AI_GRAMMAR'), ladder: () => g('GZ_AI_LADDER'), gpu: () => globalThis.navigator?.gpu || null, post: (m) => postMessage(m) });
+    grammar: () => g('GZ_AI_GRAMMAR'), ladder: () => g('GZ_AI_LADDER'), gpu: () => globalThis.navigator?.gpu || null, post: (m) => postMessage(m),
+    bench: () => fetch(new URL('kernels/bench.wgsl', location.href)).then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status))))) });
   addEventListener('message', (e) => host.handle(e.data));
 }
