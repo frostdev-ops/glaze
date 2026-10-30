@@ -1,10 +1,10 @@
 // The agent approval window in a real Chromium (lib/mcp/approve.js, lib/mcp/approve.html), headless, in a staged copy of the
-// extension whose worker also loads approve.js and routes glaze:mcp-ask and windows.onRemoved to it, as the worker glue will
-// (lib/background.js is a new file in the copy; the checkout's is untouched). Asks made in the worker open one popup that
-// shows the oldest; its words are the record's: Glaze's sentence for a pairing and a grant, the summary for an action, the app's
-// name "as the app reports itself" and its program. Allow and Don't allow resolve the ask, Escape is Don't allow, closing the
-// window is Don't allow, a cancel moves the window on to the next ask, a click in the first moment and a decision from another
-// tab change nothing. Every request outside the extension is aborted.
+// extension whose worker hands the check its own approval window (lib/background.js mcpCore, which routes glaze:mcp-ask and
+// windows.onRemoved to it; the copy's worker is a new file, the checkout's is untouched). Asks made in the worker open one
+// popup that shows the oldest; its words are the record's: Glaze's sentence for a pairing and a grant, the summary for an
+// action, the app's name "as the app reports itself" and its program. Allow and Don't allow resolve the ask, Escape is Don't
+// allow, closing the window is Don't allow, a cancel moves the window on to the next ask, a click in the first moment and a
+// decision from another tab change nothing. Every request outside the extension is aborted.
 // Shots: pair-, grant- and action-light.png and -dark.png.
 //   NODE_PATH=<playwright> nice -n 10 node scripts/mcp-approve-check.js [shots folder]   (EXT selects the checkout)
 const { chromium } = require('playwright');
@@ -18,14 +18,9 @@ const VIEWS = {
   grant: { app: CLAUDE, tool: { name: 'grades_list', title: 'Grades' }, group: 'grades' },
   action: { app: CLAUDE, tool: { name: 'todo_mark_done', title: 'Mark a to-do done' }, summary: SUMMARY },
 };
-// The worker glue's part, for this check only: what lib/background.js will route to approve.js.
+// The worker's own approval window, for the check to ask through.
 const SHIM = `
-importScripts('mcp/approve.js');
-globalThis.approveCheck = GZ_MCP_APPROVE.create({ windows: chrome.windows, tabs: chrome.tabs, storage: { session: chrome.storage.session },
-  runtime: chrome.runtime, now: Date.now, timers: globalThis, url: chrome.runtime.getURL('lib/mcp/approve.html') });
-chrome.runtime.onMessage.addListener((m, s, reply) => { if (m?.type !== 'glaze:mcp-ask') return false; reply(approveCheck.decide(m, s)); return false; });
-chrome.windows.onRemoved.addListener((id) => approveCheck.closed(id));
-approveCheck.sweep();
+globalThis.approveCheck = mcpCore().approve;
 `;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 // A popup behind another window may get no animation frames: poll on a timer.

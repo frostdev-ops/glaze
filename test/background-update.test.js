@@ -11,8 +11,9 @@ const settle = () => new Promise(setImmediate);
 function worker({ protocol = 'safari-web-extension:', stored = {}, get, set, send } = {}) {
   const calls = [];
   const listener = { addListener() {} };
+  // Agent access reads its own setting at every worker start (lib/background.js mcpEnsure); that read isn't the update check's.
   const local = {
-    get(key) { calls.push(['get', key]); return get ? get(key) : Promise.resolve({ ...stored }); },
+    get(key) { if (key !== 'mcp') calls.push(['get', key]); return get ? get(key) : Promise.resolve({ ...stored }); },
     set(value) {
       calls.push(['set', value]);
       if (set) return set(value);
