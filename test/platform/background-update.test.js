@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
 const day = 24 * 60 * 60 * 1000;
 const now = 5 * day;
 const settle = () => new Promise(setImmediate);
@@ -11,7 +11,7 @@ const settle = () => new Promise(setImmediate);
 function worker({ protocol = 'safari-web-extension:', stored = {}, get, set, send } = {}) {
   const calls = [];
   const listener = { addListener() {} };
-  // Agent access reads its own setting at every worker start (lib/background.js mcpEnsure); that read isn't the update check's.
+  // Agent access reads its own setting at every worker start (background/background.js mcpEnsure); that read isn't the update check's.
   const local = {
     get(key) { if (key !== 'mcp') calls.push(['get', key]); return get ? get(key) : Promise.resolve({ ...stored }); },
     set(value) {
@@ -37,7 +37,7 @@ function worker({ protocol = 'safari-web-extension:', stored = {}, get, set, sen
       storage: { local, onChanged: listener },
     },
   });
-  vm.runInContext(source, context, { filename: 'lib/background.js' });
+  vm.runInContext(source, context, { filename: 'background/background.js' });
   // Normalize VM objects for strict comparison without exporting production internals.
   return { calls: () => JSON.parse(JSON.stringify(calls)), stored };
 }

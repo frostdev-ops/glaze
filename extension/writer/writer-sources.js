@@ -176,9 +176,9 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
   const part = (v) => (typeof v === 'string' || typeof v === 'number') && String(v).length && String(v).length <= 300 ? encodeURIComponent(String(v)) : null;
   // { school, user, course, item } → the storage key, or null when one is missing (keep them in memory only).
   const key = (p) => { const k = isObj(p) ? [p.school, p.user, p.course, p.item].map(part) : []; return k.length === 4 && k.every(Boolean) ? PREFIX + k.join('|') : null; };
-  // The frame's context (features/writer.js) → its key parts: an assignment's paper (context.paper, as lib/writer-papers.js
+  // The frame's context (writer/page/writer.js) → its key parts: an assignment's paper (context.paper, as writer/writer-papers.js
   // keys it: the school's host, the student, the course, the assignment), the same in its attempt and in Documents; else
-  // the context's own (lib/writer-context-discussion.js: the school's host, the student, the course, the item).
+  // the context's own (writer/writer-context-discussion.js: the school's host, the student, the course, the item).
   const keyOf = (c) => (isObj(c) ? (isObj(c.paper) && key({ school: c.paper.school, user: c.paper.user, course: c.paper.course, item: c.paper.content }))
     || key({ school: c.school, user: c.user?.id, course: c.course?.id, item: c.item?.id ?? c.item }) : null);
   const area = () => globalThis.chrome?.storage?.local;

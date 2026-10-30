@@ -1,0 +1,127 @@
+/* Shared course strip and live frames on Canvas and Blackboard Ultra. */
+/* Glaze's bars float like its rail: inset by its gutter from the window's edges, and from the rail, whose room
+   (--gz-navbar-left) ends with that gutter already. */
+html { --gz-float-gap: 12px; --gz-float-end: var(--gz-float-gap); --gz-float-start: max(0px, calc(var(--gz-float-gap) - var(--gz-navbar-left, 0px))); }
+/* --gz-ctabs-h is the strip's footprint, what the page keeps for it: the bar and the gap above it. */
+html[data-gz-ctabs] { --gz-ctabs-bar: 40px; --gz-ctabs-h: calc(var(--gz-ctabs-bar) + var(--gz-float-gap)); }
+html[data-gz-ctabs~="small"] { --gz-ctabs-bar: 34px; }
+html[data-gz-ctabs~="large"] { --gz-ctabs-bar: 48px; }
+#gz-ctabs {
+  position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; box-sizing: border-box; flex: none; width: 100%;
+  height: var(--gz-ctabs-h, 52px); padding-block: var(--gz-float-gap, 12px) 0; padding-inline: calc(var(--gz-float-start, 12px) + 5px) calc(var(--gz-float-end, 12px) + 5px); margin: 0;
+  font: 500 13px/1.2 var(--gz-font, inherit); color: var(--gz-ink-muted); background: none;
+}
+/* The bar itself: the Look's glass (solid at glass 0), radius, line and resting depth, under the tabs. */
+#gz-ctabs::before {
+  content: ""; position: absolute; z-index: -1; inset-block: var(--gz-float-gap, 12px) 0; inset-inline: var(--gz-float-start, 12px) var(--gz-float-end, 12px); pointer-events: none;
+  border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius, 12px); box-shadow: var(--gz-rest-shadow, none);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
+}
+/* Above a page outside a course, which keeps its own room at the top: the gap goes under the bar instead. */
+#gz-ctabs[data-at="page"] { padding-block: 0 var(--gz-float-gap, 12px); }
+#gz-ctabs[data-at="page"]::before { inset-block: 0 var(--gz-float-gap, 12px); }
+/* Printed, a page is itself: no strip of the other courses' tabs, and no room kept for one. */
+@media print {
+  html[data-gz-ctabs] { --gz-ctabs-h: 0px !important; }
+  #gz-ctabs { display: none !important; }
+}
+/* A window this short (a phone on its side, a page zoomed to 400%) has no room for a row of tabs Glaze's bar holds too (its
+   words say `tabs`: the rail, or the phone's More sheet): they are in the bar alone, as at "only in the navigation". */
+@media (max-height: 420px) {
+  html[data-gz-navbar~="tabs"][data-gz-ctabs] { --gz-ctabs-h: 0px !important; }
+  html[data-gz-navbar~="tabs"] #gz-ctabs { display: none !important; }
+}
+/* Over a solid background the strip and the document buttons would blur a flat colour: a GPU layer for nothing. Same fill. */
+html[data-gz-bg="solid"] #gz-ctabs::before, html[data-gz-bg="solid"] #gz-doc-tools button { backdrop-filter: none; }
+#gz-ctabs[data-size="small"] { font-size: 12px; }
+#gz-ctabs[data-size="large"] { font-size: 14px; }
+#gz-ctabs .gz-ctabs-list { display: flex; align-items: inherit; align-self: stretch; gap: 4px; flex: 1; min-width: 0; overflow: auto hidden; scrollbar-width: none; }
+#gz-ctabs .gz-ctabs-list::-webkit-scrollbar { display: none; }
+#gz-ctabs .gz-ctab {
+  position: relative; display: flex; align-items: center; gap: 7px; box-sizing: border-box; flex: 0 1 var(--gz-ctab-w, 180px); min-width: min(104px, var(--gz-ctab-w, 180px));
+  max-width: var(--gz-ctab-w, 180px); height: calc(var(--gz-ctabs-bar, 40px) - 10px); padding-block: 0; padding-inline: 11px 6px; border: 1px solid transparent;
+  border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); background: transparent; color: var(--gz-ink-muted);
+  cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: pan-x; outline: none;
+  transition: background-color var(--gz-t, 0.2s) var(--gz-ease, ease), color var(--gz-t, 0.2s) var(--gz-ease, ease);
+}
+#gz-ctabs[data-shape="pill"] .gz-ctab { border-radius: 999px; }
+#gz-ctabs[data-shape="square"] .gz-ctab { border-radius: calc(var(--gz-radius, 12px) * 1 / 6); }
+/* Hover and the current tab as the rail draws its items. */
+#gz-ctabs .gz-ctab:hover { background: color-mix(in srgb, var(--gz-ink-muted) 12%, transparent); color: var(--gz-ink); }
+#gz-ctabs .gz-ctab[aria-selected="true"] { background: color-mix(in srgb, var(--gz-accent-hi, var(--gz-accent)) 15%, transparent); color: var(--gz-ink); border-color: color-mix(in srgb, var(--gz-accent-hi, var(--gz-accent)) 26%, transparent); }
+#gz-ctabs .gz-ctab[aria-selected="true"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; border-radius: 2px; background: var(--gz-accent-hi, var(--gz-accent)); }
+/* Tab shape: the line along the bar's bottom edge, under the tab. */
+#gz-ctabs[data-shape="tab"] .gz-ctab[aria-selected="true"]::after { bottom: -5px; left: 8px; right: 8px; height: 3px; border-radius: 3px 3px 0 0; }
+#gz-ctabs .gz-ctab:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
+/* Forced colours drop the fills: the current tab is edged and underlined in the system's highlight, as the rail's item is. */
+@media screen and (forced-colors: active) {
+  #gz-ctabs .gz-ctab[aria-selected="true"] { border: 2px solid Highlight; }
+  #gz-ctabs .gz-ctab[aria-selected="true"]::after { forced-color-adjust: none; background: Highlight; }
+}
+#gz-ctabs .gz-ctab[data-drag] { z-index: 2; cursor: grabbing; box-shadow: var(--gz-shadow); }
+/* Each course's own colour (--gz-course, as Course colors resolves it): the dot or icon, a tint, or more of it. */
+#gz-ctabs .gz-ctab-mark { flex: none; display: grid; place-items: center; }
+#gz-ctabs[data-mark="none"] .gz-ctab-mark { display: none; }
+#gz-ctabs[data-mark="dot"] .gz-ctab-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--gz-course, var(--gz-accent)); }
+#gz-ctabs[data-mark="icon"] .gz-ctab-mark svg { display: block; width: 16px; height: 16px; fill: none; stroke: var(--gz-course, var(--gz-accent)); stroke-width: 1.8; stroke-linejoin: round; }
+#gz-ctabs[data-color="tint"] .gz-ctab[class*="course-color-"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 14%, var(--gz-surface-paint, var(--gz-surface))); }
+#gz-ctabs[data-color="tint"] .gz-ctab[class*="course-color-"][aria-selected="true"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 24%, var(--gz-surface-paint, var(--gz-surface))); border-color: color-mix(in oklab, var(--gz-course) 55%, transparent); }
+#gz-ctabs[data-color="theme"] .gz-ctab[class*="course-color-"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 30%, var(--gz-surface-paint, var(--gz-surface))); color: var(--gz-ink); }
+#gz-ctabs[data-color="theme"] .gz-ctab[class*="course-color-"][aria-selected="true"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 42%, var(--gz-surface-paint, var(--gz-surface))); border-color: var(--gz-course); }
+#gz-ctabs:is([data-color="tint"], [data-color="theme"]) .gz-ctab[class*="course-color-"][aria-selected="true"]::after { background: var(--gz-course); }
+#gz-ctabs .gz-ctab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) { position: relative; flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--gz-ink-faint); }
+/* Drawn at 20px, pressed anywhere within 24 (WCAG 2.5.8). */
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x)::after { content: ""; position: absolute; inset: -2px; }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x):hover { background: color-mix(in srgb, var(--gz-ink) 14%, transparent); color: var(--gz-ink); }
+#gz-ctabs .gz-ctab:not(:hover, :focus-visible, [data-pin]) .gz-ctab-pin { display: none; }
+#gz-ctabs .gz-ctab:not(:hover, :focus-visible, [aria-selected="true"]) .gz-ctab-x { visibility: hidden; }
+#gz-ctabs .gz-ctab[data-pin] .gz-ctab-pin { color: var(--gz-accent); }
+#gz-ctabs .gz-ctab[data-pin] .gz-ctab-x { display: none; }
+#gz-ctabs .gz-ctabs-note { flex: 0 1 auto; align-self: center; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-ctabs .gz-ctabs-note:empty { display: none; }
+/* Narrow: the word lies over the strip's own end for its few seconds (a click lets it go), not over the tabs' room. */
+@media (max-width: 700px) {
+  #gz-ctabs .gz-ctabs-note {
+    position: absolute; z-index: 3; top: calc(var(--gz-float-gap, 12px) + 3px); bottom: 3px; inset-inline-end: calc(var(--gz-float-end, 12px) + 6px); max-width: calc(100% - var(--gz-float-start, 12px) - var(--gz-float-end, 12px) - 12px); display: flex; align-items: center; padding: 0 10px;
+    white-space: normal; line-height: 1.2; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
+    border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); box-shadow: var(--gz-shadow); cursor: pointer;
+  }
+  #gz-ctabs[data-at="page"] .gz-ctabs-note { top: 3px; bottom: calc(var(--gz-float-gap, 12px) + 3px); }
+}
+/* The same word where no strip shows (Glaze's bar holds the tabs, or a short window): over the top of the page, above a
+   shown frame. Empty, it stays in the page with no box, so a screen reader hears what comes into it. */
+#gz-ctabs-say { position: fixed; z-index: 1260; top: calc(var(--gz-navbar-top, 0px) + 10px); inset-inline: 0; width: fit-content; max-width: calc(100% - 32px); margin-inline: auto; box-sizing: border-box; font: 500 13px/1.3 var(--gz-font, inherit); color: var(--gz-ink, CanvasText); }
+#gz-ctabs-say:not(:empty) {
+  padding: 8px 14px; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
+  border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); box-shadow: var(--gz-shadow); cursor: pointer;
+}
+@media print { #gz-ctabs-say { display: none !important; } }
+/* Course tabs' live frames (navigation/page/coursetabs.js): over the whole window, above Glaze's footer; shown only while a tab's
+   frame is picked. Floating widgets stay over them. */
+#gz-ctabs-frames { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1250; visibility: hidden; background: var(--gz-ground, Canvas); }
+#gz-ctabs-frames[data-on] { visibility: visible; }
+#gz-ctabs-frames > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+#gz-ctabs-frames > .gz-ctabs-pic { position: absolute; inset: 0; z-index: 1; overflow: hidden; transition: opacity var(--gz-t-page, 0.28s) var(--gz-ease, ease); }
+.gz-ctabs-retry { position: absolute; z-index: 2; top: 80px; left: 50%; transform: translateX(-50%); box-sizing: border-box; width: min(420px, calc(100% - 32px)); padding: 20px; border: 1px solid var(--gz-line); border-radius: var(--gz-radius, 12px); background: var(--gz-surface-grain, none), var(--gz-surface-paint, var(--gz-surface, Canvas)); color: var(--gz-ink, CanvasText); box-shadow: var(--gz-shadow); }
+.gz-ctabs-retry p { margin: 0 0 12px; }
+.gz-ctabs-retry button { font: inherit; margin-inline-end: 8px; padding: 6px 12px; cursor: pointer; }
+/* The page's strip over a tab's frame that has not drawn its own yet (navigation/page/coursetabs.js hoist): at the frame's top,
+   above its picture and its Retry, in reach. */
+#gz-ctabs-frames > #gz-ctabs { position: absolute; z-index: 4; top: 0; inset-inline: 0; }
+html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion="off"] #gz-ctabs .gz-ctab { transition: none; }
+/* A Canvas course loading behind the page on screen (navigation/page/coursetabs.js reveal): a light sweeping along its tab. */
+#gz-ctabs .gz-ctab[data-loading]::before { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; border-radius: 1px; background: linear-gradient(90deg, transparent, var(--gz-course, var(--gz-accent)), transparent) 0 0 / 40% 100% no-repeat; animation: gz-ctab-load 0.9s linear infinite; }
+@keyframes gz-ctab-load { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+html[data-gz-motion="off"] #gz-ctabs .gz-ctab[data-loading]::before { animation: none; background: var(--gz-course, var(--gz-accent)); opacity: 0.5; }
+/* Canvas: a frame's next page loading behind the one on screen (navigation/page/coursetabs.js turnTo): a light sweeping along the
+   page's top edge, from a beat in (a page that comes at once shows none). */
+#gz-ctabs-frames[data-turning]::after { content: ""; position: absolute; z-index: 3; top: var(--gz-navbar-top, 0px); inset-inline: var(--gz-navbar-left, 0px) 0; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, var(--gz-accent, #6fdcff), transparent) 0 0 / 30% 100% no-repeat; animation: gz-ctab-load 1s linear infinite, gz-ctab-beat 0.01s 0.15s both; }
+@keyframes gz-ctab-beat { from { opacity: 0; } to { opacity: 1; } }
+html[data-gz-motion="off"] #gz-ctabs-frames[data-turning]::after { animation: none; background: var(--gz-accent, #6fdcff); opacity: 0.5; }
+html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }
+/* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
+html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #gz-cm) { visibility: hidden !important; }
+/* A see-through frame (content.js data-gz-through) shows the page under it, whose own strip would show through. */
+html[data-gz-ctab-framed]:has(> body > #gz-ctabs-frames > iframe[data-gz-through]) #gz-ctabs:not([data-at="over"]) { visibility: hidden !important; }

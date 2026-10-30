@@ -1,44 +1,44 @@
-// Spreadsheets on the Documents page (papers.html): the sheet kind's page code (lib/doc-kinds.js). Settings → Writer →
+// Spreadsheets on the Documents page (papers.html): the sheet kind's page code (documents/doc-kinds.js). Settings → Writer →
 // Spreadsheets (writer.sheets, defaults.js) adds the New band's Spreadsheet tile (create) and takes .xlsx, .xlsm, .csv and .tsv files
 // (importFile); existing spreadsheets always open, copy and export. A card shows the record's 6×4 text (sheet-data.js
-// glance). Opening one mounts the grid (sheet-grid.js) on the calc engine (lib/sheet-*.js). .xlsx files are read and written
-// by GZ_SHEET_XLSX (lib/sheet-xlsx.js), loaded on demand before a file or the grid opens. Storage is sheet-data.js's alone.
+// glance). Opening one mounts the grid (sheet-grid.js) on the calc engine (documents/sheets/sheet-*.js). .xlsx files are read and written
+// by GZ_SHEET_XLSX (documents/sheets/sheet-xlsx.js), loaded on demand before a file or the grid opens. Storage is sheet-data.js's alone.
 // In an assignment's frame (writer-kinds.js) the same grid is the attempt's
 // view (view), a brought .xlsx, .csv or .tsv becomes the attempt's record (into), and an empty attempt can start as a blank
 // workbook (empty); the view's file() is what submit sends.
 (() => {
   const DK = globalThis.GZ_DOC_KINDS;
   const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return globalThis.navigator?.language || 'en'; } })();
-  // lib/i18n.js's GZ_I18N is a page-wide const, not a property of the window.
+  // core/i18n.js's GZ_I18N is a page-wide const, not a property of the window.
   const t = (k, v) => (typeof GZ_I18N !== 'undefined' ? GZ_I18N.t(k, v, locale) : k);
   const need = (files) => GZ_WRITER_PAPER.need(files);
   const FNS = ['math', 'math2', 'math3', 'stats', 'stats2', 'logical', 'logical2', 'lookup', 'lookup2', 'text', 'text2', 'date', 'info', 'financial', 'financial2', 'database'];
-  const ENGINE = ['lib/sheet-model.js', 'lib/sheet-numfmt.js', 'lib/sheet-formula.js', 'lib/sheet-calc.js', ...FNS.map((f) => `lib/sheet-fn-${f}.js`), 'sheet-data.js'];
+  const ENGINE = ['documents/sheets/sheet-model.js', 'documents/sheets/sheet-numfmt.js', 'documents/sheets/sheet-formula.js', 'documents/sheets/sheet-calc.js', ...FNS.map((f) => `documents/sheets/sheet-fn-${f}.js`), 'documents/sheets/sheet-data.js'];
   const SAYS = { size: 'Choose a spreadsheet smaller than 15 MB.', read: 'That file could not be read.' };
   const xlsx = () => globalThis.GZ_SHEET_XLSX ?? null;
-  // A workbook that keeps a macro project (lib/sheet-xlsx.js extension) is written, named and labelled .xlsm, its record
+  // A workbook that keeps a macro project (documents/sheets/sheet-xlsx.js extension) is written, named and labelled .xlsm, its record
   // and index row saying ext '.xlsm' (a card's ⋯ menu reads the row); every other one .xlsx.
   const XLSM = 'application/vnd.ms-excel.sheet.macroEnabled.12';
   const extOf = (wb) => (typeof xlsx()?.extension === 'function' && xlsx().extension(wb) === 'xlsm' ? '.xlsm' : '.xlsx');
   const labelOf = (ext) => (ext === '.xlsm' ? 'Export .xlsm' : 'Export .xlsx');
   // The .xlsx reader and writer and what they stand on, loaded the first time a spreadsheet is listed, opened, imported or
   // written (never with the page). One shared load; a failure rejects the operation and allows a later retry.
-  const CODECS = ['lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js'];
+  const CODECS = ['core/doctext.js', 'core/zip.js', 'documents/sheets/sheet-xlsx.js'];
   // The charts a workbook's sheets keep, drawn on the grid; without them the grid opens all the same.
-  const CHARTS = ['lib/sheet-chart-xml.js', 'lib/sheet-chart.js'];
+  const CHARTS = ['documents/sheets/sheet-chart-xml.js', 'documents/sheets/sheet-chart.js'];
   let codecLoad = null;
   const codecs = () => (codecLoad ||= Promise.resolve().then(() => need(CODECS)).then(() => {
-    if (!xlsx()) throw new Error('lib/sheet-xlsx.js did not load');
+    if (!xlsx()) throw new Error('documents/sheets/sheet-xlsx.js did not load');
     return true;
   }).catch((cause) => { codecLoad = null; throw Object.assign(new Error('Spreadsheet codecs did not load.', { cause }), { code: 'codecs' }); })).then(() => xlsx());
-  // What a workbook read with parts left out says, once (lib/sheet-xlsx.js keep.problems), in a line Glaze already has.
+  // What a workbook read with parts left out says, once (documents/sheets/sheet-xlsx.js keep.problems), in a line Glaze already has.
   const NOTICE = { 'cap-cells': 'A workbook holds 250,000 cells.', 'cap-sheets': 'A workbook holds 100 sheets.' };
   const noticeOf = (wb) => { const p = wb?.keep?.problems || []; return p.length ? NOTICE[p.find((x) => NOTICE[x.code])?.code] || 'Some pictures, objects or equations were left out.' : undefined; };
   let store = null;
   const papers = () => (store ||= GZ_WRITER_PAPERS.open());
   const get = (keys) => chrome.storage.local.get(keys);
 
-  // A cell's shown text: its value in its style's number format (lib/sheet-numfmt.js).
+  // A cell's shown text: its value in its style's number format (documents/sheets/sheet-numfmt.js).
   const shower = (wb) => (sh, r, c, x) => {
     if (x.t === 'e' || x.t === 's') return String(x.v ?? '');
     if (x.t === 'b') return x.v ? 'TRUE' : 'FALSE';
@@ -192,13 +192,13 @@
 
   // ---- files: .xlsx, .csv and .tsv through GZ_SHEET_XLSX
   const stem = (name) => (globalThis.GZ_DOC_HOME ? GZ_DOC_HOME.stem(name) : String(name || '').replace(/\.[^./\\]+$/, '').trim().slice(0, 120));
-  // A file as a workbook, its formulas calculated, each stage told to progress (lib/doc-kinds.js progress); a RangeError
+  // A file as a workbook, its formulas calculated, each stage told to progress (documents/doc-kinds.js progress); a RangeError
   // (SAYS) when it is too large or can't be read.
   const workbookOf = async (file, progress = null) => {
     if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > DK.KINDS.sheet.max) throw new RangeError(SAYS.size);
     const p = typeof progress === 'function' ? progress : () => {};
     p({ stage: 'read', done: 0, total: file.size });
-    await need([...ENGINE, 'sheet-grid.js']);
+    await need([...ENGINE, 'documents/sheets/sheet-grid.js']);
     const raw = await file.arrayBuffer();
     if (!(raw instanceof ArrayBuffer) || raw.byteLength !== file.size) throw new Error('invalid file read');
     p({ stage: 'read', done: raw.byteLength, total: raw.byteLength });
@@ -227,7 +227,7 @@
   };
   const file = async (key, { progress = null } = {}) => {
     progress?.({ stage: 'prepare' });
-    await need([...ENGINE, 'sheet-grid.js']);
+    await need([...ENGINE, 'documents/sheets/sheet-grid.js']);
     const got = await GZ_SHEET_DATA.read(get, key);
     return got ? fileOf(got.wb, got.rec.title) : null;
   };
@@ -270,7 +270,7 @@
   const create = () => `papers.html?sheet=${encodeURIComponent(GZ_WRITER_PAPERS.newKey())}&new`;
   // host: an assignment's frame (view below): { mount, t, title, tools }. → the grid's surface (sheet-grid.js mount).
   const edit = async (key, { fresh = false, host = null } = {}) => {
-    await need([...ENGINE, 'sheet-grid.js']);
+    await need([...ENGINE, 'documents/sheets/sheet-grid.js']);
     const got = fresh ? null : await GZ_SHEET_DATA.read(get, key);
     const wb = got?.wb || GZ_SHEET_MODEL.workbook();
     // A workbook from an .xlsx keeps parts whose references the codec moves as the grid edits: it is here before the grid.
@@ -306,7 +306,7 @@
       try {
         const take = DK.get('sheet')?.importFile;
         if (typeof take !== 'function') throw new Error('off');
-        await need(['lib/writer-papers.js']);
+        await need(['writer/writer-papers.js']);
         const got = await take(new File([bytes], name || 'Spreadsheet.xlsx'), { progress }), key = typeof got === 'string' ? got : got?.key;
         progress.end();
         v.say(tt('Saved to Documents'));
@@ -333,7 +333,7 @@
   // Opening, copying and exporting stay registered; creating and importing follow the switch, read as Settings shows it
   // (defaults.js: its default where none is stored). papers.html loads defaults.js on demand; writer.html has it already,
   // and a second load would redeclare its consts. The page waits before it routes or draws.
-  const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
+  const DEFAULTS = ['core/color.js', 'looks/surfaces.js', 'looks/fonts.js', 'content/defaults.js'];
   const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'undefined' ? need(DEFAULTS) : null)).then(() => chrome.storage.sync.get('writer'))
     .then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.sheets === true, () => false);
   DK.wait(on.then((yes) => DK.register('sheet', { edit, view, show, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, exportLabel: 'Export .xlsx', exportLabelOf: (row) => labelOf(row?.ext),

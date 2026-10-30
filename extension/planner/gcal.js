@@ -1,6 +1,6 @@
 // Google Calendar sync (Chrome; W13): a calendar named "Glaze" in the student's
 // Google account, made by Glaze and the only one it touches, kept in step with what Export calendar (.ics) would save
-// (lib/calexport.js, with the same choices). Runs in the background worker (lib/background.js 'glaze:gcal'), which gives
+// (planner/calexport.js, with the same choices). Runs in the background worker (background/background.js 'glaze:gcal'), which gives
 // it Chrome's sign-in; node tests run it against a local mock of the API (scripts/gcal-mock.js).
 // Requests go only to www.googleapis.com (the Calendar API) and oauth2.googleapis.com (revoking the grant), never with
 // cookies, never following a redirect. Classic script; module.exports for node.
@@ -72,7 +72,7 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
   const at = (t) => (t?.date ? t.date : Date.parse(t?.dateTime));
   const look = async (b) => (await sha(JSON.stringify([b.summary || '', b.description || '', b.location || '', at(b.start), at(b.end)]))).slice(0, 16);
 
-  // A page's event (lib/calexport.js, lib/classes.js icsEvents) → what to write, or null. Its id is the SHA-256 of the
+  // A page's event (planner/calexport.js, planner/classes.js icsEvents) → what to write, or null. Its id is the SHA-256 of the
   // Canvas account and the event's UID in hex (base32hex's first 16 letters, as Google asks), so the same item is the same
   // event on every run and every device, and two accounts on one site never share one. Instants are UTC; a deadline (an
   // instant with no end) is the half hour before it; dates are all-day. No reminders (nothing nags) and shown as free.
@@ -110,7 +110,7 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
     dead: Array.isArray(raw?.dead) ? raw.dead.filter((x) => typeof x === 'string') : [],
   });
 
-  // Whether a plan (x: a map entry, or a prepared event: kind k, item i, plan v) is what Better To Do holds (lib/todo.js
+  // Whether a plan (x: a map entry, or a prepared event: kind k, item i, plan v) is what Better To Do holds (planner/todo.js
   // clean()'s data d).
   const holds = (d, x) => {
     const l = d.items[x.i] || {};
@@ -224,8 +224,8 @@ var GZ_GCAL = globalThis.GZ_GCAL || (() => {
     return { wrote, more: ops.length > WRITES };
   };
 
-  // The plan changes from sync() that still hold for one account's Better To Do data (lib/todo.js clean()): each only
-  // while the plan here is what Glaze last wrote. → lib/todo.js edits.
+  // The plan changes from sync() that still hold for one account's Better To Do data (planner/todo.js clean()): each only
+  // while the plan here is what Glaze last wrote. → planner/todo.js edits.
   const still = (d, edits) => edits.filter(({ was }) => holds(d, was)).flatMap((x) => x.edits);
 
   // Connect: a new calendar named Glaze. → { cal, owner }: its id, and the account it's in (its read-only dataOwner,

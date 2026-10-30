@@ -7,9 +7,9 @@
 //   "NOT your official score" by Canvas; Glaze's figures are labelled as its own.
 // - The GPA on the Dashboard (enhance.gpa): per term and cumulative over your current courses, 4.0 or plus/minus,
 //   weighted for honors and AP, with credits, a scale of your own and a what-if grade per course. Past terms, trends
-//   and a goal are features/gpaterms.js (lib/gpa.js), loaded when there are past terms or that view is opened.
-// The arithmetic is lib/gradecalc.js (tested against Canvas's own totals). Canvas's helpers come through GZ_CTX.
-// On Blackboard Ultra (content-ultra.js renderCalc) the same two, read by lib/ultra.js into the same calculator: the what-if
+//   and a goal are planner/page/gpaterms.js (planner/gpa.js), loaded when there are past terms or that view is opened.
+// The arithmetic is planner/gradecalc.js (tested against Canvas's own totals). Canvas's helpers come through GZ_CTX.
+// On Blackboard Ultra (content-ultra.js renderCalc) the same two, read by courses/ultra.js into the same calculator: the what-if
 // under the overall grade on a course's Grades, by the course's own overall-grade recipe where Ultra gives it and Glaze
 // reproduces Ultra's figure with it, and otherwise as an estimate from the share of points, said to be one (owner decision
 // 3); the GPA on Ultra's Grades page, for this term's courses, with each course's letter cut-offs from its own grading
@@ -20,8 +20,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   const ultra = X.site === 'ultra';
   const S = () => X.settings();
   let C = globalThis.GZ_GRADECALC;
-  const calcIn = () => X.need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC).then(() => { C = globalThis.GZ_GRADECALC; });
-  const ultraIn = () => X.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+  const calcIn = () => X.need('planner/gradecalc.js', () => globalThis.GZ_GRADECALC).then(() => { C = globalThis.GZ_GRADECALC; });
+  const ultraIn = () => X.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
   // Which LMS the words name.
   const lms = (canvas, bb) => (ultra ? bb : canvas);
 
@@ -38,7 +38,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   const studentIn = (c) => c?.enrollments?.find((e) => e.type === 'student');
   // Only while Glaze runs in this frame and is switched on: work that finishes after that draws nothing.
   const live = () => X.on() && S().enabled !== false;
-  // Saved what-ifs are changed by the service worker, in the one queue every tab shares (lib/background.js
+  // Saved what-ifs are changed by the service worker, in the one queue every tab shares (background/background.js
   // 'glaze:whatif'): a change made before a Clear all, in this tab or another, can't bring records back.
   // Answers the worker's reply ({ ok }), or null when it couldn't be asked.
   const send = (m) => { try { return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:whatif', at: Date.now(), ...m })).catch(() => null); } catch { return Promise.resolve(null); } };
@@ -103,7 +103,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const none = () => Object.assign(st, { status: 'none', at: Date.now(), tries: (st.tries || 0) + 1 });
     if (!me || (ultra && !/^_\d+_\d+$/.test(me.user_id || ''))) return none();
     Object.assign(st, { row, me, key: whatIfKey(me), status: 'idle' });
-    // With the weights the student's syllabus lists, if one was imported (features/syllabus.js): shown, never used.
+    // With the weights the student's syllabus lists, if one was imported (planner/page/syllabus.js): shown, never used.
     const [saved, syl, old] = await Promise.all([readArea('local', st.key), getArea('local', `syllabus:${location.origin}/${me.user_id}/${st.cid}`), ultra ? readArea('local', 'whatIf') : {}]);
     // What you saved couldn't be read: no calculator over it (a change from here would replace it), asked again later.
     if (!saved.ok) return none();
@@ -116,12 +116,12 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (st.saved || st.old || (ultra && X.bookFor(st.cid).results)) load(st); else whatIf();
   };
   // Ultra: the course's gradebook as its own Grades page already has it (content-ultra.js bookFor, asked there anyway),
-  // else asked through lib/ultra.js; the titles of its categories only when one in the recipe has no work to name it.
+  // else asked through courses/ultra.js; the titles of its categories only when one in the recipe has no work to name it.
   // → { g: GZ_ULTRA.grade(), book: the page's answer it came from (its key), or null }.
   const reader = () => GZ_ULTRA.read({ origin: location.origin, live: () => live() });
   const pageBook = (cid) => (GRADES.test(location.pathname) && courseHere() === cid ? X.bookFor(cid) : {});
-  // lib/ultra.js's grade() works through lib/gradecalc.js, so both are in before it runs: the page's gradebook is often
-  // in hand before lib/gradecalc.js has come.
+  // courses/ultra.js's grade() works through planner/gradecalc.js, so both are in before it runs: the page's gradebook is often
+  // in hand before planner/gradecalc.js has come.
   const ultraGrade = async (st) => {
     await Promise.all([ultraIn(), calcIn()]);
     const b = pageBook(st.cid);
@@ -227,7 +227,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     return send({ op: 'course', key: st.key, cid: st.cid, rec: { s: rec.s, h: rec.h, p: rec.p } });
   };
   // Glaze 2.2's scores for the course move in the worker, in one step with leaving its old store (whatIf, by course id
-  // alone), as of before they were read (st.oldAt) and against the record's last Clear all (lib/gradecalc.js moveLegacy):
+  // alone), as of before they were read (st.oldAt) and against the record's last Clear all (planner/gradecalc.js moveLegacy):
   // seen, as read; keep, those still waiting for a grade. Shown here only once the worker says which came in; a failure
   // leaves both stores as they were, for the next page to try again.
   // A reply that comes after a clear shows nothing (the clear took them too); one that comes after the gradebook was read
@@ -312,7 +312,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const canvas = ultra ? st.g.overall : st.truth?.[0];
     const est = ultra && st.g.estimate;
     if (ultra) {
-      // An exact course's recipe reproduced Blackboard's own figure before it got here (lib/gradecalc.js model).
+      // An exact course's recipe reproduced Blackboard's own figure before it got here (planner/gradecalc.js model).
       if (est) box.append(make('p', { className: 'gz-calc-note', textContent: st.g.why ? `${t("Glaze can't work out this course's overall grade: {why}.", { why: t(st.g.why) })} ${t('These figures are an estimate: your share of the points in graded work.')}` : t('This course has no overall grade in Blackboard. These figures are your share of the points in graded work, which may not be how the course is graded.') }));
     } else if (canvas != null && C.round2(base.current) !== canvas) {
       box.append(make('p', { className: 'gz-calc-note', textContent: t("Canvas shows {canvas}, but your scores add up to {glaze} here: your teacher may have set your grade by hand, or the course has a rule Glaze can't see. The what-if figures may be off by the same.", { canvas: show(canvas), glaze: show(base.current) }) }));
@@ -469,8 +469,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // Your current courses as a student, from the course list content.js already has (with each course's term). A
   // course's letter: the scale you gave it, else Canvas's letter where the course has a scheme, else Canvas's
   // default scheme on its current score. Choices per course sync (gpaCourses); what-if grades stay on this device.
-  // Ultra: on its Grades page, this term's courses (lib/ultra.js current) in the shape of Canvas's list, each one's grade
-  // from its gradebook (ultraRow), read once a page through lib/ultra.js as Canvas's course list is (D.books: course id →
+  // Ultra: on its Grades page, this term's courses (courses/ultra.js current) in the shape of Canvas's list, each one's grade
+  // from its gradebook (ultraRow), read once a page through courses/ultra.js as Canvas's course list is (D.books: course id →
   // rows, null while asked, [] when it couldn't be read); its letter cut-offs are its overall column's grading schema.
   const D = { status: 'start', v: 0, tries: 0, schemes: new Map(), raw: new Map(), books: new Map() };
   const bookOf = (c) => {
@@ -536,10 +536,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       gpa();
     }, () => { D.schemes.set(id, false); D.v++; gpa(); });
   };
-  // Past terms and the goal (lib/gpa.js), as stored: asked for only when there are some, a Remove all happened, or their
+  // Past terms and the goal (planner/gpa.js), as stored: asked for only when there are some, a Remove all happened, or their
   // view is open. A change from any tab redraws; this tab's own (already shown) doesn't. A read from before the last
   // Remove all this page has seen (one held up while it came) is dropped; `fresh` is a read made to set things right.
-  const gpaIn = () => X.need('lib/gpa.js', () => globalThis.GZ_GPA);
+  const gpaIn = () => X.need('planner/gpa.js', () => globalThis.GZ_GPA);
   const pastIn = (raw, fresh) => (raw?.t?.length || raw?.g || raw?.cl || D.hist ? gpaIn() : Promise.resolve()).then(() => {
     const rec = globalThis.GZ_GPA ? GZ_GPA.clean(raw) : { t: [] };
     if (!fresh && (rec.cl || 0) < (D.past?.cl || 0)) return;
@@ -547,7 +547,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     D.past = rec;
     D.refresh?.();
   }, () => {});
-  // One change to them (lib/gpa.js change), shown at once and kept by the service worker's queue ('glaze:gpaterms'),
+  // One change to them (planner/gpa.js change), shown at once and kept by the service worker's queue ('glaze:gpaterms'),
   // with the last Remove all this view knows of. One that isn't kept (refused as made on an older view, or not
   // written) puts back what is stored.
   const savePast = (m) => {
@@ -712,14 +712,14 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       make('p', { className: 'gz-gpa-note', textContent: t(lms('From your current grades in Canvas. Credits and scales sync with your browser; what-if grades stay on this device.', "From your current grades in Blackboard. Where Blackboard doesn't show a course's letter cut-offs, Glaze uses a common scale until you give the course its own. Credits and scales sync with your browser; what-if grades stay on this device.")) }));
     more.addEventListener('toggle', () => { D.more = more.open; });
     more.open = !!D.more;
-    // Past terms, trends and the goal (features/gpaterms.js), drawn while open.
+    // Past terms, trends and the goal (planner/page/gpaterms.js), drawn while open.
     const histBody = make('div', { className: 'gz-gpa-hist-body' });
     const histHead = make('summary', { textContent: t('Past terms, trends and goal') });
     histHead.dataset.f = 'hist';
     const hist = make('details', { className: 'gz-gpa-more gz-gpa-hist' }, histHead, histBody);
     function drawHist() {
       if (!hist.open) return;
-      Promise.all([gpaIn(), X.need('features/gpaterms.js', () => globalThis.GZ_GPA_TERMS)]).then(() => {
+      Promise.all([gpaIn(), X.need('planner/page/gpaterms.js', () => globalThis.GZ_GPA_TERMS)]).then(() => {
         D.past ||= GZ_GPA.clean(null);
         if (hist.open && hist.isConnected) {
           if (incomplete()) {
@@ -743,5 +743,5 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how
-// lib/background.js knows it ran to the end.
+// background/background.js knows it ran to the end.
 if (typeof module !== 'undefined') module.exports = GZ_GRADES_UI; else GZ_GRADES_UI;

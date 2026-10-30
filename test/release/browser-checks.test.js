@@ -64,7 +64,7 @@ test('the blocklist browser check seeds complete installed manifests for the rea
   const fixture = source.slice(source.indexOf('const record = '), source.indexOf('\n(async () =>'));
   const rec = vm.runInNewContext(`${fixture}\nrecord('aaaaaaaaaaaaaaaa')`);
   const files = Object.fromEntries(Object.entries(rec.files || {}).map(([p, b]) => [p, new Uint8Array(Buffer.from(b, 'base64'))]));
-  assert.doesNotThrow(() => require('../../extension/lib/modbundle.js').clean(rec.manifest, files));
+  assert.doesNotThrow(() => require('../../extension/mods/modbundle.js').clean(rec.manifest, files));
   assert.equal(typeof rec.manifest.author.name, 'string');
 });
 
@@ -87,7 +87,7 @@ test('the course background check waits for installation and site registration b
       if (name === '../../tools/dev/check-env.js') return env;
       if (name === '../../tools/dev/wait-for-browser.js') return async () => {};
       if (name === 'node:fs') return { readFileSync: () => '<html></html>', mkdtempSync: () => '/fixture/profile', rmSync: () => events.push('removed') };
-      if (name.endsWith('/defaults.js')) return require('../../extension/defaults.js');
+      if (name.endsWith('/content/defaults.js')) return require('../../extension/content/defaults.js');
       return require(name);
     },
   });

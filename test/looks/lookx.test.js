@@ -1,11 +1,11 @@
-// W12: sticker placements, the pointer sets' hotspots, own-picture caps and Look rotation's schedule (lib/lookx.js).
+// W12: sticker placements, the pointer sets' hotspots, own-picture caps and Look rotation's schedule (looks/lookx.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const L = require('../../extension/lib/lookx.js');
-const MX = require('../../extension/lib/motionx.js');
-const G = require('../../extension/defaults.js');
+const L = require('../../extension/looks/lookx.js');
+const MX = require('../../extension/looks/motionx.js');
+const G = require('../../extension/content/defaults.js');
 
 test('placements: bundled or own stickers only, with an id each, numbers clamped, junk dropped, capped per page', () => {
   assert.deepEqual(L.clean([
@@ -44,8 +44,8 @@ test('a page\'s stickers are keyed by origin and path, a trailing slash ignored'
   assert.equal(L.pageKey('https://u.instructure.com', '/'), 'stk:https://u.instructure.com/');
   assert.ok(L.PAGE_KEY.test(L.pageKey('https://u.instructure.com', '/courses/1')));
   assert.ok(!L.PAGE_KEY.test('stk:javascript:alert(1)'));
-  // content.js works out the same key without loading lib/lookx.js.
-  const content = fs.readFileSync(path.join(__dirname, '../../extension/content.js'), 'utf8');
+  // content.js works out the same key without loading looks/lookx.js.
+  const content = fs.readFileSync(path.join(__dirname, '../../extension/content/content.js'), 'utf8');
   assert.ok(content.includes("`stk:${location.origin}${location.pathname.replace(/(.)\\/+$/, '$1')}`"));
 });
 

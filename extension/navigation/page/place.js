@@ -14,7 +14,7 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
   // Also kept in this tab's sessionStorage, so a reload finds it even when storage.local can't be
   // reached: an extension updated or reloaded under the tab leaves the tab's old script without it.
   const tabPlace = (cid) => `gz-place:${cid}`;
-  // What's kept on this device goes through the worker's one write queue (lib/background.js 'glaze:place'), which applies
+  // What's kept on this device goes through the worker's one write queue (background/background.js 'glaze:place'), which applies
   // only the fields sent to what is stored then: a read and a write from here, at up to two a second while scrolling, let
   // two tabs on different courses write each other's older copy back. The item a tab opened stays with a later scroll.
   const keep = (cid, fields) => { try { chrome.runtime.sendMessage({ type: 'glaze:place', cid, ...fields }, () => void chrome.runtime.lastError); } catch { /* the extension was reloaded under this tab */ } };

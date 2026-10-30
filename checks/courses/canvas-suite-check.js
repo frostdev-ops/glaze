@@ -1,4 +1,4 @@
-// Canvas's files in Glaze's viewers (features/canvasopen.js), headless: the real extension (a staged copy that also holds the
+// Canvas's files in Glaze's viewers (courses/page/canvasopen.js), headless: the real extension (a staged copy that also holds the
 // check's file server) on saved Canvas pages under an invented Canvas cloud host, its API and file server answered by the
 // check; all else aborts and DNS resolves nowhere. A file page's PDF preview gets Open in Glaze with the document buttons:
 // the click (and only it) reads the file through the worker's byte port, Glaze's PDF viewer takes the preview's place, and the
@@ -12,7 +12,7 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
-const G = require(path.join(root, 'defaults.js')), Z = require(path.join(root, 'lib/zip.js'));
+const G = require(path.join(root, 'content/defaults.js')), Z = require(path.join(root, 'core/zip.js'));
 const O = 'https://school.instructure.com', HOST = 'files.cdn-a.test';
 const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'gz-canvas-suite-check'));
 const checks = [], errors = [], fetched = [];

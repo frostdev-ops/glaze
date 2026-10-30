@@ -130,9 +130,9 @@ test('a failed viewer-width check or overflowing sidebar restores the native lay
 });
 
 test('review styles never inset or narrow the full-window layer', () => {
-  const css = read('features/sidebar.css');
+  const css = read('navigation/page/sidebar.css');
   assert.doesNotMatch(css, /\.bb-offcanvas-panel[^{}]*\{[^}]*inset-inline-end: var\(--gz-sb-room\)/);
-  assert.match(read('features/sidebar.js'), /const RUBRIC = .*main > aside:has\(\.rubric-inline-container\)/);
+  assert.match(read('navigation/page/sidebar.js'), /const RUBRIC = .*main > aside:has\(\.rubric-inline-container\)/);
 });
 
 test('release documentation describes visual Rubric absorption and the native attempt fallback', () => {

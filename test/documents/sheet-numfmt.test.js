@@ -1,9 +1,9 @@
-// Excel number formats (lib/sheet-numfmt.js). Expected strings are Excel's: Microsoft's "Number format codes" and
+// Excel number formats (documents/sheets/sheet-numfmt.js). Expected strings are Excel's: Microsoft's "Number format codes" and
 // "Review guidelines for customizing a number format" pages give most of these tables; the rest follow the rules those
 // pages state (rounding to 15 significant digits first, the minus sign at the front, one section for every sign).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const F = require('../../extension/lib/sheet-numfmt.js');
+const F = require('../../extension/documents/sheets/sheet-numfmt.js');
 
 const table = (rows) => { for (const [fmt, v, want, opts] of rows) assert.equal(F.format(v, fmt, opts), want, `${JSON.stringify(fmt)} ${v}`); };
 

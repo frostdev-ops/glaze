@@ -1,10 +1,10 @@
-// The pages panel's reducer (lib/pdf-pages.js): what the student does to the tiles (move, rotate, delete, a blank page,
-// another PDF's pages) → one list of page operations for lib/pdf-doc.js bake, which lays them out (layout) and hands
+// The pages panel's reducer (documents/pdf/pdf-pages.js): what the student does to the tiles (move, rotate, delete, a blank page,
+// another PDF's pages) → one list of page operations for documents/pdf/pdf-doc.js bake, which lays them out (layout) and hands
 // pdf.js's extractPages its arguments (entries). Pure: no pdf.js here. The panel on a page is checks/documents/pdf-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const R = require('../../extension/lib/pdf-pages.js');
-const D = require('../../extension/lib/pdf-doc.js');
+const R = require('../../extension/documents/pdf/pdf-pages.js');
+const D = require('../../extension/documents/pdf/pdf-doc.js');
 
 const at = (pages) => pages.map((p) => `${p.source}:${p.page}${p.turn ? `@${p.turn}` : ''}`);
 // What the tiles say the result is, as layout writes it.

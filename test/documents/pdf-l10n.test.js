@@ -1,15 +1,15 @@
-// pdf.js's words in Glaze's (lib/pdf-l10n.js): every pdfjs-* id pdf_viewer.mjs carries (its en-US fallback, which holds the
+// pdf.js's words in Glaze's (documents/pdf/pdf-l10n.js): every pdfjs-* id pdf_viewer.mjs carries (its en-US fallback, which holds the
 // whole viewer's) or pdf.mjs's annotation layer and editors set is handled once, either by a Glaze key in the five
 // catalogues for the parts the message has (its text, or its attributes), by the date as the student's language writes it,
 // or as nothing shown. The DOM side (data-l10n-id elements as they are added) is checks/documents/pdf-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
-const L = require('../../extension/lib/pdf-l10n.js');
-const I = require('../../extension/lib/i18n.js');
+const L = require('../../extension/documents/pdf/pdf-l10n.js');
+const I = require('../../extension/core/i18n.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
-const viewer = read('lib/pdfjs/pdf_viewer.mjs'), core = read('lib/pdfjs/pdf.mjs');
+const viewer = read('vendor/pdfjs/pdf_viewer.mjs'), core = read('vendor/pdfjs/pdf.mjs');
 const fallback = /const text = ("pdfjs-previous-button[^\n]*");\n/.exec(viewer);
 assert.ok(fallback, 'pdf_viewer.mjs keeps its en-US messages');
 // The en-US messages: each id with whether it has a value, its attributes, and whether it formats a date.

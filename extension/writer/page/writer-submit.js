@@ -1,4 +1,4 @@
-// Glaze Writer's submit, the page's side (loaded on demand by features/writer.js for a paper's frame). While a paper owns
+// Glaze Writer's submit, the page's side (loaded on demand by writer/page/writer.js for a paper's frame). While a paper owns
 // an assignment attempt, Ultra's own Submit opens Writer's submit sheet instead (in the capture phase, before Ultra's
 // React hears it; a disabled one too, since Ultra disables it while its own box is empty), and its Save and Close first
 // saves the paper. Save and Close attaches nothing: a draft file would sit in Ultra's attempt and a later Submit would add
@@ -7,11 +7,11 @@
 //   1. attach: a File on the file area's own input (DataTransfer, then bubbling input and change, which React hears at
 //      its root), or dropped on its drop zone when the input isn't drawn; never a click on a file input (the OS picker);
 //   2. wait, bounded, until Ultra lists the file in the panel;
-//   3. Ultra's Quill through lib/writer-main.js (gz-writer:set), checked: what it held if the student kept it (the sheet
+//   3. Ultra's Quill through writer/writer-main.js (gz-writer:set), checked: what it held if the student kept it (the sheet
 //      showed it: submit:held), then the note and the paper's text; else just those, or emptied;
 //   4. once Ultra's Submit is enabled, one click on it. Ultra's confirmation is Ultra's.
 // Any failure stops before Submit and tells the sheet why; nothing is retried by itself. A test is never touched.
-// The worker's permit for the assignment (lib/background.js) is claimed before 1, released by a run that attached nothing,
+// The worker's permit for the assignment (background/background.js) is claimed before 1, released by a run that attached nothing,
 // and the dispatch recorded in the click's own turn, with the paper's version marked Submitted; the sheet's Blackboard
 // editor clears an uncertain upload's (review).
 // A file the student submits as is (writer-import.js) takes the same steps from 1, its own name, type and bytes unchanged.
@@ -21,13 +21,13 @@
 // Ultra's own file area (enhance.writerUploads, on by default): one file dropped on it or chosen through its input goes to
 // the paper's frame instead, before Ultra hears it (in the capture phase), which asks what to do with it; Ultra
 // never starts that upload, so nothing of it needs undoing. More than one file, a file over 50 MB, Glaze's own attach and
-// the setting off leave the area to Ultra. A paper in its compact box (features/writer.js box.full false) sends text: its
+// the setting off leave the area to Ultra. A paper in its compact box (writer/page/writer.js box.full false) sends text: its
 // Submit and Save and Close stay Ultra's, and its file area gives Writer a Word file (Open in Writer or Submit as is), and a
 // PDF or deck while its Settings → Writer switch is on (Open in Glaze or Submit as is).
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const L = () => globalThis.GZ_WRITER_SUBMIT_LIB;
-  const armed = new Map(); // box → whether it's still features/writer.js's
+  const armed = new Map(); // box → whether it's still writer/page/writer.js's
   const submitted = new WeakSet();
   const runs = new WeakMap(), cancelled = new WeakMap(), tokens = new WeakMap();
   const attached = new WeakMap(); // box → each file's name → its byte digest and the row its upload produced
@@ -41,7 +41,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const say = (box, m) => { try { box.port?.postMessage(m); } catch { /* the frame went */ } };
   const assignment = (box) => box.kind === 'assignment' && box.mode === 'paper' && !document.querySelector('bb-attempt-canvas') &&
     globalThis.GZ_WRITER_ULTRA?.kindOf(box.editor, { path: location.pathname }) === 'assignment';
-  // A box stays armed while its frame reopens (features/writer.js reopen: Ultra's Submit then waits; the new frame, once
+  // A box stays armed while its frame reopens (writer/page/writer.js reopen: Ultra's Submit then waits; the new frame, once
   // up, hears submit:open on its port), and goes when the frame does for good. Ultra's file area goes to a ready frame only.
   const live = () => { for (const [box, ok] of armed) if (!ok() || !box.editor.isConnected || !(box.reopening || (box.frame?.isConnected && box.port)) || !assignment(box)) armed.delete(box); return armed; };
   const mounted = () => [...live().keys()].filter((box) => box.ready && box.frame?.isConnected && box.port);
@@ -50,7 +50,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   // ---- Ultra's footer buttons, caught before Ultra
   const ownerOf = (b) => { for (const box of live().keys()) { if (!box.full) continue; const f = L().footer(box.editor); if (b && (f.submit === b || f.save === b)) return box; } return null; };
   // Ultra's Submit opens the sheet, and its Save and Close saves the paper first, as soon as there is a frame up to ask
-  // (it reopens: features/writer.js box.ready), Ultra's button marked busy until then. The save takes as long as it takes,
+  // (it reopens: writer/page/writer.js box.ready), Ultra's button marked busy until then. The save takes as long as it takes,
   // the paper's title bar saying Saving… (the frame gives up with a word after a while, writer-submit.js); a frame that
   // reopened before answering is asked again; once saved, Ultra's own Save and Close, found again (Ultra may have drawn
   // its footer anew), goes on once. A box no longer Writer's lets go: Ultra's editor is there to press again.
@@ -137,7 +137,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   }, true);
 
   // ---- the sheet's Submit
-  // lib/writer-main.js in the page's world; its answers arrive inside the dispatch.
+  // writer/writer-main.js in the page's world; its answers arrive inside the dispatch.
   const main = (op, m) => {
     const got = [];
     const hear = (e) => { try { const d = JSON.parse(e.detail); if (d?.id === m.id) got.push(d); } catch { /* not ours */ } };
@@ -374,7 +374,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   };
   for (const type of ['drop', 'input', 'change']) document.addEventListener(type, catcher, true);
 
-  // features/writer.js hands over each submit:* message from a box's frame.
+  // writer/page/writer.js hands over each submit:* message from a box's frame.
   const hear = (box, m, ctx, ok) => {
     X = ctx;
     if (m.type === 'submit:cancel' && Number.isSafeInteger(m.run) && m.run > 0) {
@@ -394,7 +394,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     else if (m.type === 'submit:held' && armed.has(box)) say(box, { type: 'submit:held', text: heldOf(box).slice(0, 1e6) });
     else if (m.type === 'submit:review' && armed.has(box)) review(box);
   };
-  // armed(box): this step has the box's Ultra buttons (features/writer.js holds a press until it does).
+  // armed(box): this step has the box's Ultra buttons (writer/page/writer.js holds a press until it does).
   const press = (box, b, type = 'click') => { if (live().has(box) && box.full && ownerOf(b) === box) act(box, b, { type, preventDefault() {}, stopImmediatePropagation() {} }); };
   return { hear, press, handIn, passing: (button) => button === passing, armed: (box) => live().has(box) };
 })();

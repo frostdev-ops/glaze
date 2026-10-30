@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce lib/pptx-geom.js's PRESETS block; Python standard library only.
+"""Reproduce documents/slides/pptx-geom.js's PRESETS block; Python standard library only.
 
 Download ECMA-376 Part 1, 5th edition (2016), then extract
 OfficeOpenXML-DrawingMLGeometries.zip/presetShapeDefinitions.xml:
@@ -7,7 +7,7 @@ https://ecma-international.org/wp-content/uploads/ECMA-376-1_5th_edition_decembe
 XML SHA-256: 2f7c868d857c1e3c4b5a6068759fe0e07d77ad58377a6618d1b02ba3507b6939
 
 python3 test/pptx-geom-presets.py presetShapeDefinitions.xml > presets.js
-Compare that block with lib/pptx-geom.js before replacing it: every preset, in name order.
+Compare that block with documents/slides/pptx-geom.js before replacing it: every preset, in name order.
 Optional remaining arguments select presets; '-' reads XML from stdin. Adjust handles and
 extrusionOk are intentionally omitted. Formula whitespace is normalized.
 upArrow is the one handwritten exception: the addendum's downArrow flipped

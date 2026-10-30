@@ -1,10 +1,10 @@
 // Glaze in Canvas's document viewer, DocViewer: Instructure's canvadocs app on its own host, always in a frame of a Canvas
-// page. Its own manifest entry (with lib/ink.js) on all of instructure.com, regional canvadocs hosts too; it checks the host.
+// page. Its own manifest entry (with courses/ink.js) on all of instructure.com, regional canvadocs hosts too; it checks the host.
 // (1) The palette: the viewer's background, toolbar and thumbnails in Glaze's colors. The pages stay as the document has
 // them, or are dimmed or inverted in a dark palette (enhance.docPages). The toolbar is themed only while it holds nothing
 // but the page, zoom, rotate and full-screen controls, so a signed-in student's annotation tools keep Canvas's own look.
 // (2) Annotations (enhance.docInk, off by default): pen, highlighter and eraser on an SVG layer over each page, kept in
-// storage.local per Canvas site, person and file (lib/ink.js) and never sent anywhere. Undo, redo, clear page, export and
+// storage.local per Canvas site, person and file (courses/ink.js) and never sent anywhere. Undo, redo, clear page, export and
 // import as a file, a page saved as a picture. Canvas's own annotations are left alone: Glaze's layer takes the pointer
 // only while one of its tools is picked, and picking one of Canvas's puts Glaze's down.
 // The Canvas parent supplies palette, switches, file identity and translations, accepted only from that origin.
@@ -55,7 +55,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
     if (!got.on) { html.removeAttribute('data-gz-depth'); style?.remove(); surfaceSheet?.remove(); style = null; return; }
     html.setAttribute('data-gz-depth', got.look.depth);
     style ||= document.createElement('style');
-    surfaceSheet ||= Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('features/surfaces.css') });
+    surfaceSheet ||= Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('looks/page/surfaces.css') });
     if (!surfaceSheet.isConnected) (document.head || html).append(surfaceSheet);
     const vars = GZ_SURFACES.vars({ look: got.look, bg: { kind: 'solid' } });
     const css = `:root { ${got.colors.map(([k, v]) => `${k}: ${v}; `).join('')}${Object.entries(vars).filter(([, value]) => value).map(([k, v]) => `${k}: ${v};`).join('')}--gz-doc-page-shadow: ${got.look.depth ? `0 ${got.look.depth * 2}px ${got.look.depth * 10}px color-mix(in srgb, var(--gz-shadow-color, #000) ${got.look.shadowStrength * 6 / 7}%, transparent)` : '0 0 transparent'}; --gz-radius: ${got.look.radius}px; --gz-radius-sm: ${got.look.radius * 2 / 3}px; --gz-scheme: ${got.dark ? 'dark' : 'light'}; }\n${CSS}`;

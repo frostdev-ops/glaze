@@ -1,16 +1,16 @@
 // Glaze Writer's .docx: a paper (the paper schema's document) out to a Word file, and a Word file in as HTML the paper
 // schema reads. Export writes Word 2013+ OOXML (compatibility mode 15), the paper's pages, the format's styles, header and
-// sections from lib/writer-styles.js, real footnotes, and each list item and quoted paragraph as its own paragraph. Import
-// reads the archive with lib/doctext.js's bounded unzip and tokenizer (no DOMParser, so it runs anywhere), as untrusted
+// sections from writer/writer-styles.js, real footnotes, and each list item and quoted paragraph as its own paragraph. Import
+// reads the archive with core/doctext.js's bounded unzip and tokenizer (no DOMParser, so it runs anywhere), as untrusted
 // input: sizes, entries, elements and nesting are capped, no DTDs, no remote images. A run's colour stays only where it is
-// legible on the paper (lib/writer-color.js; w:themeColor text and page colours and Automatic are the paper's ink).
+// legible on the paper (writer/writer-color.js; w:themeColor text and page colours and Automatic are the paper's ink).
 // Ported from Rimeward's note-docx.ts (MIT, the owner's), onto Glaze's zip and the paper schema.
 // Classic script, loaded by writer-paper.js and papers.html; module.exports for node.
 var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
   const ST = () => (typeof GZ_WRITER_STYLES !== 'undefined' ? GZ_WRITER_STYLES : require('./writer-styles.js'));
   const S = () => (typeof GZ_WRITER_SCHEMA !== 'undefined' ? GZ_WRITER_SCHEMA : require('./writer-schema.js'));
-  const ZIP = () => (typeof GZ_ZIP !== 'undefined' ? GZ_ZIP : require('./zip.js'));
-  const TEXT = () => (typeof GZ_DOCTEXT !== 'undefined' ? GZ_DOCTEXT : require('./doctext.js'));
+  const ZIP = () => (typeof GZ_ZIP !== 'undefined' ? GZ_ZIP : require('../core/zip.js'));
+  const TEXT = () => (typeof GZ_DOCTEXT !== 'undefined' ? GZ_DOCTEXT : require('../core/doctext.js'));
   const LEGIBLE = () => (typeof GZ_WRITER_COLOR !== 'undefined' ? GZ_WRITER_COLOR : require('./writer-color.js'));
 
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -18,7 +18,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
   const NS = `xmlns:w="${W}" xmlns:r="${R}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"`;
   const DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
   const MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  // Text for XML: what XML forbids dropped, markup escaped (lib/writer-objects-docx.js writes with it too).
+  // Text for XML: what XML forbids dropped, markup escaped (writer/writer-objects-docx.js writes with it too).
   const esc = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
   const JC = { left: 'left', center: 'center', right: 'right', justify: 'both' };
   const LIMIT = { file: 15e6, entries: 2000, entry: 10e6, total: 35e6, part: 5e6, elements: 100000, depth: 80, images: 10e6, html: 16 * 1024 * 1024 };
@@ -319,7 +319,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
   // document's defaults through its paragraph style's basedOn chain and its character style to its own, then kept where
   // they differ from what the format gives a paragraph in that place, so the paper follows its format wherever the file
   // does. The last section's page, margins, header and footer, the font and size most of the text is in, the default tab
-  // stop and kerning are the paper's setup (lib/writer-styles.js setup).
+  // stop and kerning are the paper's setup (writer/writer-styles.js setup).
   // → { doc (the paper's JSON, its setup on it), html (the paper schema's parse with { pre: true } reads it), setup,
   // warnings: [key] }.
   const importDocx = async (bytes, o = {}) => {
@@ -644,7 +644,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
     const HR = '<hr class="gz-page-break">';
     // One paragraph's HTML. A page break inside it splits it: the part after continues the paragraph (no first-line indent
     // of its own), and an empty part beside a break is no line at all, as Word draws a paragraph that only holds one.
-    // A paragraph in Word's Caption style is marked data-w-style="caption", for lib/writer-objects-docx.js (the schema
+    // A paragraph in Word's Caption style is marked data-w-style="caption", for writer/writer-objects-docx.js (the schema
     // drops it).
     const paraHTML = (d, where, tag) => {
       const pieces = d.html.split(BREAK), a = attrsOf(d, where), rest = pieces.length > 1 ? attrsOf({ ...d, r: { ...d.r, first: 0, before: 0 } }, where) : a;
@@ -739,7 +739,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
         }
         const tag = d.heading ? `h${d.heading}` : 'p';
         // A page break inside a list item ends the list there; the item's text after it goes on unnumbered at the item's
-        // indent, and the list after it continues (lib/writer-objects-docx.js).
+        // indent, and the list after it continues (writer/writer-objects-docx.js).
         if (d.list) {
           unquote();
           const pieces = d.html.split(BREAK);
@@ -751,7 +751,7 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
             item = false;
             if (!list || list.ordered !== d.list.ordered || list.definition !== d.list.definition) { close(); list = { ordered: d.list.ordered, definition: d.list.definition }; out += d.list.ordered ? '<ol>' : '<ul>'; }
             const [style, gz] = attrsOf(d);
-            // data-w-num: the item's w:numId, for lib/writer-objects-docx.js (the schema drops it).
+            // data-w-num: the item's w:numId, for writer/writer-objects-docx.js (the schema drops it).
             out += `<li${d.list.level ? ` class="ql-indent-${d.list.level}"` : ''}${style ? ` style="${style}"` : ''}${gz ? ` data-gz="${escH(gz)}"` : ''} data-w-num="${escH(d.list.id)}">${x}</li>`;
           });
           return;

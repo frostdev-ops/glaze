@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const E = require('../../extension/lib/editor-xparts.js');
+const E = require('../../extension/settings/editor-xparts.js');
 
 // The real builder with an inert DOM; emulate focus loss when a focused subtree is replaced.
 const page = (parts) => {

@@ -23,13 +23,13 @@ const until = async (fn, ms = 10000) => {
 };
 const results = [], errors = [];
 const check = (value, message) => { assert.ok(value, message); results.push(message); console.log(`ok ${message}`); };
-const welcomeUrl = `chrome-extension://${id}/features/welcome.html`;
+const welcomeUrl = `chrome-extension://${id}/settings/welcome.html`;
 const sheets = (page) => page.evaluate(() => [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href).filter((h) => h.startsWith('chrome-extension://')).map((h) => new URL(h).pathname.slice(1)));
 
 // The first screen's grants: the built-in hosts are held, each request is granted at once (from a click only), and what the
 // page hands back is recorded. Its messages go to the real worker.
 const stub = () => {
-  if (!location.pathname.endsWith('/features/welcome.html')) return;
+  if (!location.pathname.endsWith('/settings/welcome.html')) return;
   const held = new Set(['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*']);
   const covers = (o) => [...held].some((p) => p === o || (p.startsWith('https://*.') && o.startsWith('https://') && new URL(o.replace('/*', '/')).hostname.endsWith(p.slice(10, -2))));
   globalThis.__gz = { asked: [], removed: [], accept: true };
@@ -116,7 +116,7 @@ const stub = () => {
     const p = await ctx.newPage();
     p.on('pageerror', (e) => errors.push(String(e)));
     await p.goto(`${BB}/ultra/courses/_101_1/outline`);
-    check(await until(async () => (await sheets(p)).includes('theme.css')), 'its first page gets Glaze');
+    check(await until(async () => (await sheets(p)).includes('content/theme.css')), 'its first page gets Glaze');
     await pause(1500);
     check(await p.evaluate(() => !document.querySelector('glaze-consent')), 'with no card');
     const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `${u}/*` }))[0]?.id, BB);
@@ -143,7 +143,7 @@ const stub = () => {
     await sw.evaluate((o) => granting(o), `${CANVAS}/*`);
     check(await until(async () => (await local()).canvas?.includes(`${CANVAS}/*`)), 'granted from Chrome\'s menu, it is checked and approved');
     check(await until(async () => (await ids()).includes(`${CANVAS}/*`)), 'registered');
-    check(await until(async () => (await sheets(c)).includes('canvas.css')), 'and Glaze goes into its open tab');
+    check(await until(async () => (await sheets(c)).includes('content/canvas.css')), 'and Glaze goes into its open tab');
     await sw.evaluate((o) => granting(o), `${WWW}/*`);
     await pause(2500);
     const after = await local();

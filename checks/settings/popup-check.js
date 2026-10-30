@@ -185,7 +185,7 @@ const stub = (notHeld) => {
     const order = s.calls.slice(n).filter(([k]) => k === 'send' || k === 'request');
     check(JSON.stringify(order.map(([k]) => k)) === '["send","request"]' && order[1][2] === true, `ask, then the request in the click (${JSON.stringify(order)})`);
     check((await local()).canvas?.includes(`${CANVAS}/*`), 'approved');
-    check(await until(async () => (await sheets(p.tab)).includes('canvas.css')), 'and Glaze is in the tab');
+    check(await until(async () => (await sheets(p.tab)).includes('content/canvas.css')), 'and Glaze is in the tab');
     await p.shot('popup-4-after-canvas');
     await p.close();
 
@@ -200,7 +200,7 @@ const stub = (notHeld) => {
     s = await p.state();
     check(!s.calls.slice(n).some(([k]) => k === 'request'), 'with no browser prompt');
     check((await local()).moodle?.includes(`${MOODLE}/*`), 'approved');
-    check(await until(async () => (await sheets(p.tab)).includes('moodle.css')), 'and Glaze is in the tab');
+    check(await until(async () => (await sheets(p.tab)).includes('content/moodle.css')), 'and Glaze is in the tab');
     await p.close();
 
     // 4. A school's main website: no LMS, nothing added. 5. The Canvas site again: Glaze runs there, no detector.

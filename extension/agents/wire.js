@@ -16,7 +16,7 @@
 //   listeners when listHash() has moved. snapshot() and restore() carry a connection over a worker restart; calls in
 //   flight are lost, as the spec allows.
 //
-// Pure: no extension APIs and no timers. Classic script for the worker (loaded with the rest of lib/mcp on first use);
+// Pure: no extension APIs and no timers. Classic script for the worker (loaded with the rest of agents on first use);
 // module.exports for node.
 var GZ_MCP_WIRE = globalThis.GZ_MCP_WIRE || (() => {
   const MODERN = '2026-07-28', LEGACY = ['2025-11-25', '2025-06-18'];

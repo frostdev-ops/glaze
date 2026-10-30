@@ -1,4 +1,4 @@
-// The real lib/background.js in a vm, as test/navigation/sidebar-broker.test.js runs it, with in-memory storage and what the tests of
+// The real background/background.js in a vm, as test/navigation/sidebar-broker.test.js runs it, with in-memory storage and what the tests of
 // frame trust and starter flags also need: the worker's ports, tab events (removed, updated), session storage, and a count of the reads of
 // all of sync. Pass a previous run's `store` to restart the worker over the same storage, and `globals` for more of the
 // worker's own (indexedDB). chrome.permissions answers as
@@ -20,7 +20,7 @@ const covers = (p, want) => {
   const host = a[2] === '*' || a[2] === b[2] || (a[2].startsWith('*.') && (b[2] === a[2].slice(2) || b[2].endsWith(a[2].slice(1))));
   return (a[1] === '*' ? /^https?$/.test(b[1]) : a[1] === b[1]) && host && (!a[3] || a[3] === b[3]);
 };
-module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [] }, session: {} }, session = true, sessionArea, fetch, grants = new Set(), revoked = [], manifest: edit, globals = {}, background = read('lib/background.js'), base = 'chrome-extension://x/' } = {}) => {
+module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [] }, session: {} }, session = true, sessionArea, fetch, grants = new Set(), revoked = [], manifest: edit, globals = {}, background = read('background/background.js'), base = 'chrome-extension://x/' } = {}) => {
   const manifest = JSON.parse(read('manifest.json'));
   if (edit) edit(manifest);
   const perms = { requested: [], removed: [], added: [], gone: [] };
@@ -50,7 +50,7 @@ module.exports = ({ store = { sync: { version: 2, enabled: true, enhance: {} }, 
   });
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, Intl, setTimeout, clearTimeout, crypto: globalThis.crypto, AbortController, AbortSignal, DOMException, Response, btoa, atob, fetch, navigator: {}, ...globals,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `${base}${f}`, getManifest: () => manifest,
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener: (f) => startup.push(f) },

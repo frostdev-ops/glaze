@@ -1,6 +1,6 @@
 // Glaze Writer's citations, written out by hand for MLA 9, APA 7 and Chicago 17 (notes and bibliography) from each
 // guide's own rules and checked against its own published examples (test/writer-cite.test.js); citeproc-js and CSL style
-// files are AGPL/CPAL, so neither is used. Sources are lib/writer-sources.js's CSL-JSON subset.
+// files are AGPL/CPAL, so neither is used. Sources are writer/writer-sources.js's CSL-JSON subset.
 //   format(source, style) → { entry, inText(page), narrative(page), note(page), short(page) }, all HTML holding only <i>
 //     (Chicago's inText is its note: the first note's full form or a later one's short form is the caller's to pick);
 //   list(sources, style) → { title, entries: [{ id, html }] } in the style's order;

@@ -10,8 +10,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const G = require('../../extension/defaults.js');
-require('../../extension/lib/coursetabs.js'); require('../../extension/lib/nav.js'); // their settings, so GZ_SANITIZE keeps them
+const G = require('../../extension/content/defaults.js');
+require('../../extension/navigation/coursetabs.js'); require('../../extension/navigation/nav.js'); // their settings, so GZ_SANITIZE keeps them
 
 const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-panels-'));
@@ -82,8 +82,8 @@ const MOODLE_DRAWER = `<div id="theme_boost-drawers-blocks" class="drawer drawer
     await send({ place: 'top' });
     await until(bar, 'Ultra: the bar shows');
     ok(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-navbar-top').trim()) === '80px', 'Ultra: the top bar keeps 80px');
-    // The pet, out wandering, with its Return home pill (features/petworld.js, as features/pet.js mounts it).
-    for (const f of ['lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js']) await page.addScriptTag({ url: `chrome-extension://${extensionId(src)}/${f}` });
+    // The pet, out wandering, with its Return home pill (pet/page/petworld.js, as pet/page/pet.js mounts it).
+    for (const f of ['pet/petbrain.js', 'pet/petphysics.js', 'pet/page/petworld.js']) await page.addScriptTag({ url: `chrome-extension://${extensionId(src)}/${f}` });
     const pet = await page.evaluate(() => {
       globalThis.GZ_WIDGETS_UI ||= { avatar: () => ({ play() {}, sleep() {}, wake() {}, stop() {} }) };
       const stage = document.createElement('div'); stage.style.cssText = 'position:fixed;left:300px;top:300px;width:320px;height:240px'; document.body.append(stage);

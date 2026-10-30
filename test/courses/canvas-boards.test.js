@@ -4,8 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const W = require('../../extension/lib/widgets.js');
+const D = require('../../extension/content/defaults.js');
+const W = require('../../extension/core/widgets.js');
 const { El } = require('../stand-in-dom.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
@@ -50,7 +50,7 @@ const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/', enhance
     querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), getElementById: (id) => doc.root.all().find((e) => e.id === id), addEventListener() {}, removeEventListener() {} });
   if (sidebar) c.GZ_SIDEBAR_UI = sidebar;
   c.globalThis = c; vm.createContext(c);
-  const ui = vm.runInContext(read('features/widgets.js'), c);
+  const ui = vm.runInContext(read('core/page/widgets.js'), c);
   const tile = (id) => doc.querySelector(`section[data-tile="${id}"]`);
   const tool = (id, label) => tile(id).querySelector('.gz-w-tools').children.find((e) => e.getAttribute('aria-label') === label);
   const ev = (el, type, extra = {}) => el.dispatchEvent({ type, target: el, button: 0, pointerId: 1, clientX: 0, clientY: 0, preventDefault() {}, stopPropagation() {}, ...extra });
@@ -72,7 +72,7 @@ test('Canvas migration: ordered board after the heading, before GPA/cards, with 
   assert.equal(p.tile('notes').style.width, '512px');
   assert.ok(px(p.grid().style.height) >= px(p.tile('notes').style.top) + 200 + W.GAP);
   assert.equal(p.doc.querySelector('#gz-room'), null);
-  assert.ok(!p.loads.includes('features/coursecards.js') && !p.loads.includes('features/dashboard.js'));
+  assert.ok(!p.loads.includes('courses/page/coursecards.js') && !p.loads.includes('courses/page/dashboard.js'));
   assert.equal(p.sent.filter((m) => m.type === 'glaze:widgetLayout').length, 0, 'reading does not rewrite storage');
   for (let i = 0; i < 3; i++) p.ui.sync(true);
   assert.equal(p.doc.querySelectorAll('#gz-dash').length, 1);
@@ -226,11 +226,11 @@ test('Canvas notes-only floats keep the widgets loader on course pages, without 
     GZ_WIDGETS_UI: { sync: (v) => calls.push(v) } };
   c.globalThis = c; c.window = c; c.top = c;
   vm.createContext(c);
-  const factory = vm.runInContext(read('content-canvas.js'), c);
+  const factory = vm.runInContext(read('content/content-canvas.js'), c);
   const I = { settings: { enhance: { notes: true, widgets: false, pet: false } }, links: [1], need: async (file) => loads.push(file) };
   const site = factory(I);
   site.syncWidgets(); await settle();
-  assert.deepEqual(calls, [true]); assert.deepEqual(loads, ['features/widgets.js']);
+  assert.deepEqual(calls, [true]); assert.deepEqual(loads, ['core/page/widgets.js']);
   c.top = {}; site.syncWidgets(); await settle(); assert.equal(calls.at(-1), false);
   c.top = c; I.settings.enhance.notes = false; site.syncWidgets(); await settle(); assert.equal(calls.at(-1), false);
 });
@@ -247,7 +247,7 @@ test('Canvas edit controls stay below the room and reserve the toolbar width', a
   assert.equal(edit.style.minWidth, '104.5px', 'Done keeps the Edit layout width');
   p.edit();
   assert.equal(edit.style.minWidth, '104.5px');
-  assert.match(read('features/apps.css'), /\.gz-dash-reset\[hidden\]\s*\{[^}]*visibility:\s*hidden[^}]*display:\s*inline-flex\s*!important/, 'Reset keeps its space without remaining interactive');
+  assert.match(read('core/page/apps.css'), /\.gz-dash-reset\[hidden\]\s*\{[^}]*visibility:\s*hidden[^}]*display:\s*inline-flex\s*!important/, 'Reset keeps its space without remaining interactive');
 });
 
 test('with the sidebar switched off, the Dashboard board is as it was, even with the sidebar\'s code in the page', async () => {

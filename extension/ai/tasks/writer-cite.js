@@ -1,12 +1,12 @@
 // writer.cite (docs/ai-harness.md, Writer): a source's citation details read from the text of a page Glaze fetched on the
-// student's click (lib/writer-lookup.js), when its citation_*, og: and JSON-LD meta don't say. Every value must be in that
-// text (lib/ai/text.js source: quotes, dashes and spaces folded): an author, a title, a container, a publisher, volume, issue
+// student's click (writer/writer-lookup.js), when its citation_*, og: and JSON-LD meta don't say. Every value must be in that
+// text (ai/text.js source: quotes, dashes and spaces folded): an author, a title, a container, a publisher, volume, issue
 // and pages as written; a date only from a quote of the text that holds its year (and its month and day when given). A
 // value not in the text is left out; without a title the answer is refused.
 // input: { text (the page's text), url? }. output: the cite stream's source shape (a CSL-JSON subset): { type, title,
 // author: [{ family, given } | { literal }], issued?: { 'date-parts': [[y, m?, d?]] }, container-title?, publisher?, volume?,
 // issue?, page?, DOI?, ISBN?, URL? }.
-// Classic script for the worker (lib/background.js aiFiles); module.exports for node.
+// Classic script for the worker (background/background.js aiFiles); module.exports for node.
 var GZ_AI_TASK_WRITER_CITE = globalThis.GZ_AI_TASK_WRITER_CITE || (() => {
   const S = typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js');
   const T = typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('../task.js');

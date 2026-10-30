@@ -2,14 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const G = require('../../extension/defaults.js');
-require('../../extension/lib/nav.js');
+const G = require('../../extension/content/defaults.js');
+require('../../extension/navigation/nav.js');
 const read = (file) => process.env.GZ_NAVBAR_POLISH_BASE
   ? require('node:child_process').execFileSync('git', ['show', `${process.env.GZ_NAVBAR_POLISH_BASE}:${file}`], { cwd: __dirname, encoding: 'utf8' })
   : fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
 const S = process.env.GZ_NAVBAR_POLISH_BASE
-  ? vm.runInNewContext(read('lib/share.js') + '\nGZ_SHARE;', { require: require('node:module').createRequire(require.resolve('../../extension/lib/share.js')), TextEncoder, TextDecoder, module: { exports: {} } })
-  : require('../../extension/lib/share.js');
+  ? vm.runInNewContext(read('sharing/share.js') + '\nGZ_SHARE;', { require: require('node:module').createRequire(require.resolve('../../extension/sharing/share.js')), TextEncoder, TextDecoder, module: { exports: {} } })
+  : require('../../extension/sharing/share.js');
 const part = (src, a, b) => {
   const start = src.indexOf(a), end = src.indexOf(b, start);
   assert.ok(start >= 0 && end > start, `${a} exists`);
@@ -18,7 +18,7 @@ const part = (src, a, b) => {
 const picture = 'data:image/png;base64,AAAA';
 
 const logoFixture = () => {
-  const src = read('features/navbar.js'), reads = [], blobs = new Map(), revoked = [];
+  const src = read('navigation/page/navbar.js'), reads = [], blobs = new Map(), revoked = [];
   const state = { nav: { li: 'aaaaaaaaaaaa' }, navbar: { brand: 'custom' } };
   let serial = 0, changed;
   const c = vm.createContext({ X: { settings: () => state }, settings: () => state.navbar, on: () => true,
@@ -99,22 +99,22 @@ const backupFixture = () => {
   const elements = {}, writes = [], downloads = [];
   let staged;
   const s = G.GZ_SANITIZE({ navbar: { brand: 'custom' }, nav: { brand: 'custom', li: 'aaaaaaaaaaaa' } });
-  const c = { s, navItems: {}, GZ_UI: { load: async () => ({ ...staged.restore.settings, parts: staged.restore.parts }) }, navigator: {}, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: require('../../extension/lib/cards.js'), GZ_XPARTS: require('../../extension/lib/lookparts.js'),
-    GZ_NAVBAR: require('../../extension/lib/navbar.js'), GZ_TODO: { STORE_KEY: /^todo:/ }, GZ_PET: { KEY: /^pet:/, backup: () => ({}) }, GZ_FOLDERS: { backup: () => ({}) },
+  const c = { s, navItems: {}, GZ_UI: { load: async () => ({ ...staged.restore.settings, parts: staged.restore.parts }) }, navigator: {}, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: require('../../extension/courses/cards.js'), GZ_XPARTS: require('../../extension/looks/lookparts.js'),
+    GZ_NAVBAR: require('../../extension/navigation/navbar.js'), GZ_TODO: { STORE_KEY: /^todo:/ }, GZ_PET: { KEY: /^pet:/, backup: () => ({}) }, GZ_FOLDERS: { backup: () => ({}) },
     N: { clean: () => ({}) }, Blob, URL: { createObjectURL: (blob) => { downloads.push(blob); return 'blob:backup'; }, revokeObjectURL() {} }, setTimeout() {},
-    GZ_BACKUP: require('../../extension/lib/backup.js'), GZ_HISTORY: require('../../extension/lib/history.js'), GZ_ZIP: require('../../extension/lib/zip.js'), askRestore: async (file, plan) => ({ ticked: new Set(Object.keys(plan.cats)), account: '' }),
+    GZ_BACKUP: require('../../extension/background/backup.js'), GZ_HISTORY: require('../../extension/looks/history.js'), GZ_ZIP: require('../../extension/core/zip.js'), askRestore: async (file, plan) => ({ ticked: new Set(Object.keys(plan.cats)), account: '' }),
     document: { createElement: () => ({ click() {} }) },
     $: (id) => (elements[id] ||= { focus() {}, addEventListener: (type, fn) => { elements[id][type] = fn; } }),
     addEventListener() {}, removeEventListener() {}, flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true, hint() {}, t: (s) => s,
     chrome: { storage: { sync: { get: async () => ({}) }, local: { get: async () => ({}) } }, runtime: { getManifest: () => ({ version: '1' }), sendMessage: (m, cb) => { if (m.restore?.op === 'stage' && m.restore.action === 'settings') { staged = m.restore.value; writes.push(staged); } const r = { ok: true, keys: [], token: 'test' }; cb?.(r); return Promise.resolve(r); } } },
   };
-  const src = read('options.js'); vm.runInNewContext(part(src, '  // ---- backup ----', '  // The defaults this device started with'), c);
+  const src = read('settings/options.js'); vm.runInNewContext(part(src, '  // ---- backup ----', '  // The defaults this device started with'), c);
   return { s, elements, writes, downloads };
 };
 
 test('a settings backup exports Glaze in place of the device-only navigation logo', async () => {
   const f = backupFixture(); await f.elements['#export'].click({ isTrusted: true });
-  const zip = require('../../extension/lib/doctext.js').unzip(new Uint8Array(await f.downloads[0].arrayBuffer()));
+  const zip = require('../../extension/core/doctext.js').unzip(new Uint8Array(await f.downloads[0].arrayBuffer()));
   const saved = JSON.parse(await zip.text('glaze-backup.json')).settings;
   assert.equal(saved.navbar.brand, 'glaze'); assert.equal(saved.nav.li, '');
 });
@@ -128,7 +128,7 @@ test('restoring a backup with a custom navigation brand selects Glaze without a 
 });
 
 test('a course frame follows the parent navigation placement and disconnects when disabled', () => {
-  const src = read('features/coursetabs.js'); let words = 'rail tabs', observer, connected = false, flag;
+  const src = read('navigation/page/coursetabs.js'); let words = 'rail tabs', observer, connected = false, flag;
   const strip = { remove() { connected = false; }, contains: () => false, dataset: {} };
   const c = vm.createContext({ framed: '_2_1', on: true, strip, navWatch: null, P: () => ({ at: 'nav', size: 'large' }), loaded: true, tabs: [{}],
     parent: { document: { documentElement: { getAttribute: () => words } } },
@@ -151,14 +151,14 @@ test('a course frame follows the parent navigation placement and disconnects whe
 });
 
 test('the moved course tabs settings name the sites that actually load the feature', () => {
-  assert.match(read('content-ultra.js'), /need\('features\/coursetabs.js'/);
-  assert.match(read('content-canvas.js'), /features\/coursetabs.js/);
+  assert.match(read('content/content-ultra.js'), /need\('navigation\/page\/coursetabs.js'/);
+  assert.match(read('content/content-canvas.js'), /navigation\/page\/coursetabs.js/);
   const section = read('options.html').match(/<section id="tabs"[\s\S]*?<\/section>/)[0];
   assert.match(section, /data-sites="Canvas · Blackboard Ultra"/);
 });
 
 test('first paint reserves the fallback strip when cached nav placement no longer has a host', () => {
-  const src = read('content-ultra.js');
+  const src = read('content/content-ultra.js');
   const paint = part(src, '  const paintCourses =', '    const colors =') + '\n}; paintCourses;';
   for (const [navbar, path, framed, parentWords, expected] of [
     [{ on: false, tabs: true }, '/ultra/course', '', '', 'above medium'],

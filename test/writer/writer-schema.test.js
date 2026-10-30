@@ -1,4 +1,4 @@
-// lib/writer-schema.js: compose serializes to the HTML Ultra's Quill keeps, Quill-shaped and pasted HTML parse into the
+// writer/writer-schema.js: compose serializes to the HTML Ultra's Quill keeps, Quill-shaped and pasted HTML parse into the
 // schemas (and nothing outside the allowlist survives), paper holds a whole paper, and text() maps UTF-16 offsets to
 // document positions.
 const test = require('node:test');
@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const S = require('../../extension/lib/writer-schema.js');
+const S = require('../../extension/writer/writer-schema.js');
 
 const root = path.join(__dirname, '../../extension');
 const C = S.compose, P = S.paper;
@@ -313,19 +313,19 @@ test('loses refuses checklist state and CSS formats the sanitizer cannot preserv
   ]) assert.ok(S.loses(C, html).includes('format'), html);
 });
 
-test('both files are classic scripts that load after lib/pm.js in a page, once', () => {
-  for (const f of ['lib/writer-schema.js', 'lib/writer-editor.js']) {
+test('both files are classic scripts that load after vendor/pm.js in a page, once', () => {
+  for (const f of ['writer/writer-schema.js', 'writer/writer-editor.js']) {
     const src = fs.readFileSync(path.join(root, f), 'utf8');
     assert.doesNotMatch(src, /^\s*(import|export)\s/m, f);
     assert.doesNotMatch(src, /\beval\(|new Function\b|\binnerHTML\s*=|document\.write/, f);
     assert.doesNotMatch(src.split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n'), /[\u0000-\u0008\u000b-\u001f\u00a0\u00ad\u200b-\u200f\ufeff]/, `${f}: invisible characters are written as escapes`);
   }
   const ctx = vm.createContext({ console });
-  for (const f of ['lib/pm.js', 'lib/writer-schema.js', 'lib/writer-editor.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
+  for (const f of ['vendor/pm.js', 'writer/writer-schema.js', 'writer/writer-editor.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
   const first = ctx.GZ_WRITER_SCHEMA;
   assert.equal(typeof first.parse, 'function');
   assert.equal(typeof ctx.GZ_WRITER_EDITOR.create, 'function');
-  vm.runInContext(fs.readFileSync(path.join(root, 'lib/writer-schema.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'writer/writer-schema.js'), 'utf8'), ctx);
   assert.equal(ctx.GZ_WRITER_SCHEMA, first);
   assert.equal(vm.runInContext('GZ_WRITER_SCHEMA.serialize(GZ_WRITER_SCHEMA.compose, GZ_WRITER_SCHEMA.parse(GZ_WRITER_SCHEMA.compose, "<p>x</p>"))', ctx), '<p>x</p>');
 });

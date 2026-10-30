@@ -1,10 +1,10 @@
 // Look extras (W12): the bundled stickers and pointers, sticker placements, and when Look rotation turns next.
 // Everything here stays on this device (storage.local): placements per page under `stk:<origin><path>`, the student's
 // own sticker pictures under `stkImg:<id>`, their own pointer in `cursorImg`, rotation's list in
-// `rotateLooks` and its turn in `rotateState`. Classic script (lib/background.js, and loaded on demand by features/lookx.js;
+// `rotateLooks` and its turn in `rotateState`. Classic script (background/background.js, and loaded on demand by looks/page/lookx.js;
 // a second injection keeps the first); module.exports for node.
 var GZ_LX = globalThis.GZ_LX || (() => {
-  const G = typeof GZ_MATCH_PRESET !== 'undefined' ? { GZ_MATCH_PRESET } : require('../defaults.js');
+  const G = typeof GZ_MATCH_PRESET !== 'undefined' ? { GZ_MATCH_PRESET } : require('../content/defaults.js');
   // Packs in assets/art/stickers/<pack>/<file>.webp, the file being the name lowercased and hyphenated.
   const PACKS = {
     study: ['Blank sticky note', 'Checkmark', 'Closed books', 'Coffee', 'Desk lamp', 'Graduation cap', 'Hourglass', 'Notebook', 'Open book', 'Pencil', 'Reading glasses', 'Star cluster'],
@@ -47,7 +47,7 @@ var GZ_LX = globalThis.GZ_LX || (() => {
   const MAX_ON_PAGE = 200; // ponytail: a cap so one storage item stays small, not a limit anyone will meet
   const ID = /^[\w-]{1,40}$/;
   const OWN = /^own:[\w-]{1,40}$/;
-  // A sticker a mod carries (mod.json packs.stickers): the mod's id and the sticker's, both as lib/media.js and lib/modbundle.js write them.
+  // A sticker a mod carries (mod.json packs.stickers): the mod's id and the sticker's, both as looks/media.js and mods/modbundle.js write them.
   const MOD = /^mod:[a-z2-7]{16}\/[a-z][a-z0-9-]{0,31}$/;
   const num = (v, lo, hi) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v * 10) / 10)) : null);
   const placement = (p) => {
@@ -105,7 +105,7 @@ var GZ_LX = globalThis.GZ_LX || (() => {
     }
     return null;
   };
-  // What rotation turns through: kept Looks (lib/looks.js ids; theme codes as ticked before ids) and built-in Look names, as
+  // What rotation turns through: kept Looks (looks/looks.js ids; theme codes as ticked before ids) and built-in Look names, as
   // chosen; none chosen is every built-in Look. `kept`, the kept Looks' ids (or codes): one removed has no box to untick, so it
   // isn't turned to either.
   const rotation = (chosen, looks, kept) => {
@@ -113,12 +113,12 @@ var GZ_LX = globalThis.GZ_LX || (() => {
     const list = Array.isArray(chosen) ? chosen.filter((v) => typeof v === 'string' && (v.startsWith('glaze1:') ? v.length <= 4000 && fav(v) : v.startsWith('glaze2:') ? v.length <= 20000 && fav(v) : /^c:[0-9a-z]{14}$/.test(v) ? fav(v) : looks.includes(v))) : [];
     return list.length ? [...new Set(list)] : [...looks];
   };
-  // The settings to save for wearing a decoded theme code (lib/share.js) over `s`, as "Use this theme" does (options.js), minus
+  // The settings to save for wearing a decoded theme code (sharing/share.js) over `s`, as "Use this theme" does (options.js), minus
   // card styles (written through the cards queue) and the code's parts (the worker writes them in the same call). Every other
   // group the code carries goes in: a code that carries none leaves the student's own as they are.
   const wearCode = (s, got) => {
     const colors = got.colors;
-    const share = typeof GZ_SHARE !== 'undefined' ? GZ_SHARE : require('./share.js');
+    const share = typeof GZ_SHARE !== 'undefined' ? GZ_SHARE : require('../sharing/share.js');
     return {
       colors, preset: G.GZ_MATCH_PRESET(colors, s.presets), auto: { ...s.auto, on: false }, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg },
       nav: share.nav(s.nav, got.nav || {}), navbar: { ...s.navbar, ...got.navbar }, sidebar: { ...s.sidebar, ...got.sidebar },

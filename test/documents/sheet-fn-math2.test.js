@@ -1,4 +1,4 @@
-// The remaining math functions (lib/sheet-fn-math2.js). Cases are the worked examples on Microsoft's page for each
+// The remaining math functions (documents/sheets/sheet-fn-math2.js). Cases are the worked examples on Microsoft's page for each
 // function, https://support.microsoft.com/en-us/office/<name>-function-<id>:
 //   sumproduct 16753e75-9f68-4874-94ac-4d2145a2fd2e, sumsq e3313c02-51cc-4963-aae6-31442d9ec307, product
 //   8e6b5b24-90ee-4650-aeec-80982a0512ce, quotient 9f7bf099-2a18-4282-8fa4-65290cc99dee, ceiling 0a5cd7c8-0720-4f0a-bd2c-c943e510899f,
@@ -21,10 +21,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-require('../../extension/lib/sheet-fn-math.js');
-require('../../extension/lib/sheet-fn-math2.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+require('../../extension/documents/sheets/sheet-fn-math2.js');
 
 const book = (cells = {}, { sheets = ['Sheet1'], opts, hide = [], filter } = {}) => {
   const wb = M.workbook();
@@ -63,7 +63,7 @@ test('the math functions are registered, volatile where Excel\'s are', () => {
   for (const name of NAMES) assert.ok(C.fn(name), name);
   assert.ok(C.fn('RAND').volatile && C.fn('RANDBETWEEN').volatile);
   assert.ok(!C.fn('PI').volatile);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-math2.js'), 'utf8')), 'no timers');
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-fn-math2.js'), 'utf8')), 'no timers');
 });
 
 test('SUMPRODUCT with the page\'s four tables; non-numbers are 0; sizes must match', () => {

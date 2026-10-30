@@ -1,16 +1,16 @@
-importScripts('download.js', 'color.js', 'fonts.js', 'surfaces.js', '../defaults.js', 'lookset.js', 'history.js', 'cards.js', 'nav.js', 'nav-items.js', 'navlayout.js', 'motionx.js', 'parts.js', 'nav-store.js', 'todo.js', 'petbrain.js', 'pet.js', 'petsprites.js', 'remind.js', 'widgets.js', 'sidebar.js', 'lookparts.js', 'share.js', 'lookx.js', 'looks.js', 'gradescope.js', 'doctext.js', 'folders.js', 'notes.js', 'calexport.js', 'gcal.js', 'gcal-auth.js', 'site.js', 'coursetabs.js');
+importScripts('../courses/download.js', '../core/color.js', '../looks/fonts.js', '../looks/surfaces.js', '../content/defaults.js', '../looks/lookset.js', '../looks/history.js', '../courses/cards.js', '../navigation/nav.js', '../navigation/nav-items.js', '../navigation/navlayout.js', '../looks/motionx.js', '../looks/parts.js', '../navigation/nav-store.js', '../planner/todo.js', '../pet/petbrain.js', '../pet/pet.js', '../pet/petsprites.js', '../planner/remind.js', '../core/widgets.js', '../navigation/sidebar.js', '../looks/lookparts.js', '../sharing/share.js', '../looks/lookx.js', '../looks/looks.js', '../planner/gradescope.js', '../core/doctext.js', '../courses/folders.js', '../planner/notes.js', '../planner/calexport.js', '../planner/gcal.js', '../planner/gcal-auth.js', '../core/site.js', '../navigation/coursetabs.js');
 
 // Cache packaged broker scripts at install; parse them on first use rather than every worker wake.
 const BROKER_FILES = {
-  classes: ['classes.js'], syllabus: ['classes.js', 'syllabus.js'],
-  gpa: ['gradecalc.js'], whatif: ['gradecalc.js'], gpaterms: ['gradecalc.js', 'gpa.js'],
-  insights: ['gradecalc.js', 'insights.js'], pet: ['gradecalc.js', 'insights.js'], petSprites: ['media.js'], drafts: ['drafts.js'],
+  classes: ['../planner/classes.js'], syllabus: ['../planner/classes.js', '../planner/syllabus.js'],
+  gpa: ['../planner/gradecalc.js'], whatif: ['../planner/gradecalc.js'], gpaterms: ['../planner/gradecalc.js', '../planner/gpa.js'],
+  insights: ['../planner/gradecalc.js', '../planner/insights.js'], pet: ['../planner/gradecalc.js', '../planner/insights.js'], petSprites: ['../looks/media.js'], drafts: ['../writer/drafts.js'],
 };
 const brokerFiles = new Set();
 const brokerIn = (name) => {
   for (const file of BROKER_FILES[name] || []) if (!brokerFiles.has(file)) { importScripts(file); brokerFiles.add(file); }
 };
-globalThis.addEventListener?.('install', () => importScripts('gradecalc.js', 'gpa.js', 'insights.js', 'classes.js', 'syllabus.js'));
+globalThis.addEventListener?.('install', () => importScripts('../planner/gradecalc.js', '../planner/gpa.js', '../planner/insights.js', '../planner/classes.js', '../planner/syllabus.js'));
 
 // The storage broker: writes that must not race between tabs, sites and the editor run here, one at a time, in one
 // queue. Page-origin locks wouldn't do: two schools' Canvas sites and the editor page share this storage. Each kind
@@ -30,7 +30,7 @@ const ownOrigin = (o) => typeof o === 'string' && o.toLowerCase() === OWN_ORIGIN
 // The sites Glaze runs on: is `u` on an LMS (`kind`: canvas, moodle or ultra) the student approved? Each LMS's own hosts
 // (defaults.js GZ_BUILT_IN: *.instructure.com, *.moodlecloud.com, *.blackboard.com) are Glaze's from the start. Anywhere
 // else, what a page looks like proves nothing (its markup is its own, and any site can serve an /ultra/ address): only the
-// student's yes (features/consent.js, 'glaze:consent') puts a site on its LMS's list in storage.local, `canvas` and
+// student's yes (settings/page/consent.js, 'glaze:consent') puts a site on its LMS's list in storage.local, `canvas` and
 // `moodle` by `https://host/*`, `ultra` by origin. The lists are the approvals, so the sites on them before Glaze asked
 // stay approved. Registration, the broker's page checks (fromCanvas, fromUltra, fromMoodle), mods and code on demand all
 // ask here; Settings lists and removes them.
@@ -73,14 +73,14 @@ const fromCanvas = async (s) => {
 // An Ultra page: a content script in a tab on an https address under /ultra (the manifest's Ultra match), on an Ultra site
 // the student approved (approved: Blackboard's own hosts, or storage.local `ultra`), by its origin. The address alone isn't
 // proof, as a school's own Canvas host isn't (fromCanvas).
-// A sender's address. A course tab's frame (features/coursetabs.js) reports about:blank, the address of its first, empty
+// A sender's address. A course tab's frame (navigation/page/coursetabs.js) reports about:blank, the address of its first, empty
 // document: its own origin, with its tab's page on that origin, stands in.
 const addressOf = (s) => (s.frameId > 0 && s.url === 'about:blank' && /^(?:https:\/\/[^/]+|http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?)$/.test(s.origin || '') && s.tab?.url?.startsWith(`${s.origin}/`) ? s.tab.url : s.url);
 const ultraAt = (s) => {
   if (s.id !== chrome.runtime.id || !s.tab) return null;
   try { const u = new URL(addressOf(s)); return u.protocol === 'https:' && /^\/ultra(\/|$)/.test(u.pathname) ? u.origin : null; } catch { return null; }
 };
-// A course tab's live frame (features/coursetabs.js) is an Ultra page of its own: a frame of a tab whose page is on the
+// A course tab's live frame (navigation/page/coursetabs.js) is an Ultra page of its own: a frame of a tab whose page is on the
 // same Ultra site counts as that page.
 const ultraPage = (s) => s.frameId === 0 || (s.frameId > 0 && !!ultraAt(s) && !!s.tab?.url?.startsWith(`${ultraAt(s)}/`));
 const fromUltra = async (s) => {
@@ -97,11 +97,11 @@ const moodleAt = async (s) => {
 };
 const fromMoodle = (s) => (s.frameId === 0 ? moodleAt(s) : null);
 // A page of any site Glaze runs on, in a frame Glaze is in (its top frame, a course tab's): what the student does there
-// (the command palette's Look, rotation, opening Settings) and the code it loads. Never a tab where only lib/detect.js runs.
+// (the command palette's Look, rotation, opening Settings) and the code it loads. Never a tab where only content/detect.js runs.
 const lmsPage = async (s) => (await fromCanvas(s)) || (await fromUltra(s)) || (await moodleAt(s));
 // Glaze's own pages: the popup, the editor and the frames it opens.
 const fromGlaze = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && s.url.startsWith(chrome.runtime.getURL('')) && extensionOrigin(s);
-// Gradescope (lib/gradescope.js), with Glaze on (enabled, the master switch) and enhance.gradescope on: its own pages (the
+// Gradescope (planner/gradescope.js), with Glaze on (enabled, the master switch) and enhance.gradescope on: its own pages (the
 // top frame of a tab on www.gradescope.com: who's signed in, placings, what was read, the bar), a Canvas page (what it read
 // for a Gradescope course placed with one of its own site's courses, and its own accounts' answer to "show it here?"),
 // and the editor.
@@ -122,7 +122,7 @@ const gradescopeFor = async (gid, s) => {
 //   frame, and the worker keeps them to the editor's own tab.
 // - 'papers': Documents (papers.html) in a tab of its own, or the Documents frame of an LMS tab whose document claimed its
 //   one-use pass (glaze:papers). A document opened there loads in that frame as its next document, with a pass of its own.
-// - 'download': a course page's top frame, or a course tab's frame of a page on its own site (lib/download.js).
+// - 'download': a course page's top frame, or a course tab's frame of a page on its own site (courses/download.js).
 // A claimed frame is remembered by its tab, frame and document in session storage as well (this worker sleeps while Settings
 // stays open), until the tab closes. Without a document id (some browsers), the frame in that tab is what is known.
 const FRAMED = { settings: new Map(), papers: new Map() }; // what for -> tab id -> { frameId, documentId? }
@@ -209,7 +209,7 @@ const BROKER = {
       return { ok: await GZ_XPARTS.write(area, parts, patch) };
     },
   },
-  // A kept Look (lib/looks.js) put on by its id from the popup or the command palette, as the editor's "Use this theme" puts on
+  // A kept Look (looks/looks.js) put on by its id from the popup or the command palette, as the editor's "Use this theme" puts on
   // its code: palette, look, background, navigation, the bar's and the sidebar's looks, card look and styles, and its parts,
   // through the same write as the editor's (look, above). One gone, or one Glaze won't wear (GZ_XPARTS.outside), isn't.
   // 'build': Settings, having changed the kept Looks, wakes the worker to bring the catalogue up to date (catalogue, below), where
@@ -282,7 +282,7 @@ const BROKER = {
       || (m.op === 'rows' && !!await gradescopeFor(m.gid, s)) || (m.op === 'bind' && typeof m.key === 'string' && m.key.startsWith(`${(await fromCanvas(s)) || (await fromUltra(s))}/`)))),
     run: (m, area) => GZ_GRADESCOPE.change(m, area),
   },
-  // Course cards (lib/cards.js change). A Canvas page saves one course of its own site; the editor does the rest.
+  // Course cards (courses/cards.js change). A Canvas page saves one course of its own site; the editor does the rest.
   cards: {
     allow: async (m, s) => fromEditor(s) || (!!m.key && !m.ultra && !m.nav && !m.set && !m.replace && !m.reset && GZ_CARDS.KEY.test(m.key) && (m.key.startsWith(`canvas:${await fromCanvas(s)}/`) || (m.key.startsWith(`ultra:${await fromUltra(s)}/`) && s.frameId === 0))),
     run: (m, area) => m.ultra || m.key?.startsWith('ultra:') ? GZ_CARDS.ultraChange(m, area) : m.nav ? GZ_NAV_STORE.change(m, area) : GZ_CARDS.change(m, area),
@@ -293,7 +293,7 @@ const BROKER = {
       && (fromEditor(s) || (!m.image && !m.logoImage && !m.items && !m.nav.i && !m.nav.li && !!await fromCanvas(s))),
     run: (m, area) => GZ_NAV_STORE.change({ nav: m.nav, image: m.image, logoImage: m.logoImage, items: m.items }, area),
   },
-  // Glaze's own navigation bar (lib/navbar.js): a Canvas, Ultra or Moodle page pins its rail; the editor changes only its edited fields.
+  // Glaze's own navigation bar (navigation/navbar.js): a Canvas, Ultra or Moodle page pins its rail; the editor changes only its edited fields.
   navbar: {
     allow: async (m, s) => {
       if (!m.patch || typeof m.patch !== 'object' || Array.isArray(m.patch) || !Object.keys(m.patch).length) return false;
@@ -305,13 +305,13 @@ const BROKER = {
       return { ok: await sync.set({ navbar }) };
     },
   },
-  // Better To Do's own data (lib/todo.js change). A Canvas or Ultra page edits its own site's accounts' lists; only the
+  // Better To Do's own data (planner/todo.js change). A Canvas or Ultra page edits its own site's accounts' lists; only the
   // editor restores a backup.
   todo: {
     allow: async (m, s) => (fromEditor(s) ? !!m.restore && m.key === undefined && s.frameId === 0
       : !m.restore && typeof m.key === 'string' && GZ_TODO.STORE_KEY.test(m.key) && m.key.startsWith(`todo:${(await fromCanvas(s)) || (await fromUltra(s))}/`)),
     run: async (m, area) => {
-      // A Canvas planner answer brings its site's due list (lib/todo.js publishIn): kept per site, as content.js keeps it.
+      // A Canvas planner answer brings its site's due list (planner/todo.js publishIn): kept per site, as content.js keeps it.
       let target = { ...area, local: { ...area.local, set: (patch) => area.local.set(dueBySite(patch)) } };
       const pets = m.restore?.pets === undefined ? {} : GZ_PET.backup(m.restore.pets);
       if (!pets) return { ok: false, error: 'bad' };
@@ -337,12 +337,12 @@ const BROKER = {
       return r.ok && m.restore && !await GZ_NAV_STORE.cleanup(area) ? { ...r, cleanup: false } : r;
     },
   },
-  // Dashboard notes (lib/widgets.js saveNote): a Canvas or Ultra page writes its own site's accounts' notes; the newest typing wins.
+  // Dashboard notes (core/widgets.js saveNote): a Canvas or Ultra page writes its own site's accounts' notes; the newest typing wins.
   notes: {
     allow: async (m, s) => typeof m.key === 'string' && GZ_WIDGETS.NOTES_KEY.test(m.key) && m.key.startsWith(`notes:${(await fromCanvas(s)) || (await fromUltra(s))}/`),
     run: (m, { local }) => GZ_WIDGETS.saveNote(m, local),
   },
-  // Where you were in a course (lib/widgets.js placeChange, features/place.js): the top frame of a Canvas page, or an Ultra
+  // Where you were in a course (core/widgets.js placeChange, navigation/page/place.js): the top frame of a Canvas page, or an Ultra
   // page, changes its own site's courses. Each tab's change is applied to what is stored when its turn comes, so two tabs
   // scrolling different courses keep both.
   place: {
@@ -354,17 +354,17 @@ const BROKER = {
     },
     run: (m, { local }) => GZ_WIDGETS.placeChange(m, local),
   },
-  // Reminders and the streak (lib/remind.js change): what a page has seen, snoozed or muted, for its own site's accounts
+  // Reminders and the streak (planner/remind.js change): what a page has seen, snoozed or muted, for its own site's accounts
   // (Canvas or Ultra).
   remind: {
     allow: async (m, s) => typeof m.key === 'string' && GZ_REMIND.STORE_KEY.test(m.key) && m.key.startsWith(`remind:${(await fromCanvas(s)) || (await fromUltra(s))}/`),
     run: (m, area) => GZ_REMIND.change(m, area),
   },
-  // Draft backup (lib/drafts.js change): an Ultra page, or the top frame of a Canvas page, keeps and sweeps its own site's
+  // Draft backup (writer/drafts.js change): an Ultra page, or the top frame of a Canvas page, keeps and sweeps its own site's
   // copies (GZ_DRAFTS.owner: the kind and origin a key names). Each tab's change is applied to what is stored when its turn
   // comes, so two tabs on one editor keep both.
   drafts: (() => {
-    globalThis.addEventListener?.('install', () => importScripts('drafts.js'));
+    globalThis.addEventListener?.('install', () => importScripts('../writer/drafts.js'));
     const site = async (s) => {
       const ultra = ultraPage(s) && await fromUltra(s), canvas = !ultra && s.frameId === 0 && await fromCanvas(s);
       return ultra ? { site: 'ultra', origin: ultra } : canvas ? { site: 'canvas', origin: canvas } : null;
@@ -386,14 +386,14 @@ const BROKER = {
       },
     };
   })(),
-  // Class schedules (lib/classes.js change): a Canvas or Ultra page saves, edits and deletes its own site's accounts' classes.
+  // Class schedules (planner/classes.js change): a Canvas or Ultra page saves, edits and deletes its own site's accounts' classes.
   classes: {
     allow: async (m, s) => typeof m.key === 'string' && GZ_CLASSES.STORE_KEY.test(m.key) && m.key.startsWith(`classes:${(await fromCanvas(s)) || (await fromUltra(s))}/`),
     run: (m, area) => GZ_CLASSES.change(m, area),
   },
-  // What-if scores on Canvas and Ultra (lib/gradecalc.js applyWhatIf): a page changes its own site's records only. Every tab's
+  // What-if scores on Canvas and Ultra (planner/gradecalc.js applyWhatIf): a page changes its own site's records only. Every tab's
   // changes and clears meet here, so a change made before a Clear all in another tab can't bring records back.
-  // Stickers (lib/lookx.js): one change at a time to a page's placements (apply, on what is stored now, so two tabs'
+  // Stickers (looks/lookx.js): one change at a time to a page's placements (apply, on what is stored now, so two tabs'
   // changes both land), which only a page of that origin makes; the student's own sticker pictures, which every site may
   // show; and the editor's Reset everything, which leaves a watermark (stkCleared): a change made before it, still on
   // its way, is dropped instead of bringing a sticker back. Changes and pictures carry `at`, when they were made.
@@ -423,14 +423,14 @@ const BROKER = {
       return await local.set({ [`stkImg:${id}`]: m.img }) ? { ok: true, id } : { ok: false, error: 'write' };
     },
   },
-  // Look rotation (lib/lookx.js turn): every open LMS tab asks when the turn is due, and the queue lets the first change
+  // Look rotation (looks/lookx.js turn): every open LMS tab asks when the turn is due, and the queue lets the first change
   // the Look; the rest find nothing due. `now`: the student asked for the next Look (the command palette).
   rotate: {
     allow: async (m, s) => fromGlaze(s) || !!await lmsPage(s),
     run: async (m, { sync, local }) => {
       const s = GZ_SANITIZE(await sync.get(null));
       const { rotateState, rotateLooks, lookFavorites } = await local.get(['rotateState', 'rotateLooks', 'lookFavorites']);
-      // Ticked by id (lib/looks.js); a tick from before ids, by its code, is its kept Look's.
+      // Ticked by id (looks/looks.js); a tick from before ids, by its code, is its kept Look's.
       const kept = GZ_CATALOG.keptAll(lookFavorites);
       const list = GZ_LX.rotation(GZ_CATALOG.ids(rotateLooks, lookFavorites), GZ_LOOKS.map((L) => L.name), kept.map((f) => f.id));
       const r = GZ_LX.turn(rotateState, Date.now(), s.extras, list, m.now === true);
@@ -457,12 +457,12 @@ const BROKER = {
       return { ok: r.state === rotateState || await local.set({ rotateState: r.state }) };
     },
   },
-  // What a syllabus said (lib/syllabus.js tidy), per Canvas or Ultra site, user and course: a page keeps or deletes its own
+  // What a syllabus said (planner/syllabus.js tidy), per Canvas or Ultra site, user and course: a page keeps or deletes its own
   // site's.
   syllabus: {
     allow: async (m, s) => typeof m.key === 'string' && GZ_SYLLABUS.KEY.test(m.key) && m.key.startsWith(`syllabus:${(await fromCanvas(s)) || (await fromUltra(s))}/`),
     // Applied in the order they were made (m.at), whatever order they arrive in: an older save or one from before a
-    // delete is dropped (lib/syllabus.js change).
+    // delete is dropped (planner/syllabus.js change).
     run: async (m, { local }) => {
       if (m.rec !== null && !GZ_SYLLABUS.tidy(m.rec)) return { ok: false, error: 'bad' };
       const next = GZ_SYLLABUS.change((await local.get(m.key))[m.key], m);
@@ -471,7 +471,7 @@ const BROKER = {
     },
   },
   // The GPA's per-course choices (sync gpaCourses), its one writer: the Dashboard's GPA table and syllabus import each send
-  // one course's change (lib/gradecalc.js patchGpa), applied to what is stored when its turn comes, so changes to two
+  // one course's change (planner/gradecalc.js patchGpa), applied to what is stored when its turn comes, so changes to two
   // courses, from two tabs, both stay. A Canvas page sets its own site's canvas: courses; an Ultra page, its ultra: ones.
   gpa: {
     allow: async (m, s) => {
@@ -496,7 +496,7 @@ const BROKER = {
     },
     run: async (m, { local }) => {
       // Moved and taken out of the old store (whatIf) in one turn of this queue, against the record's last Clear all
-      // (lib/gradecalc.js moveLegacy). A read that fails throws, so nothing changes; a write that fails stops there,
+      // (planner/gradecalc.js moveLegacy). A read that fails throws, so nothing changes; a write that fails stops there,
       // leaving the old store whole for the next try.
       if (m.op === 'legacy') {
         const got = await local.get([m.key, 'whatIfCleared', 'whatIf']);
@@ -518,7 +518,7 @@ const BROKER = {
       return { ok };
     },
   },
-  // Past terms and the GPA goal (lib/gpa.js change): a page changes its own site's records only.
+  // Past terms and the GPA goal (planner/gpa.js change): a page changes its own site's records only.
   gpaterms: {
     // The account after the site, and nothing more: a site's own prefix is also the start of the same host on a port.
     allow: async (m, s) => { const site = `gpaTerms:${(await fromCanvas(s)) || (await fromUltra(s))}:`; return typeof m.key === 'string' && GZ_GPA.KEY.test(m.key) && m.key.startsWith(site) && /^\w{1,40}$/.test(m.key.slice(site.length)) && Number.isFinite(m.at); },
@@ -527,13 +527,13 @@ const BROKER = {
       return rec ? { ok: await local.set({ [m.key]: rec }) } : { ok: false, error: 'stale' };
     },
   },
-  // Insights' saved term summary (lib/insights.js change): a page keeps or clears its own site's accounts' record.
+  // Insights' saved term summary (planner/insights.js change): a page keeps or clears its own site's accounts' record.
   insights: {
     allow: async (m, s) => typeof m.key === 'string' && GZ_INSIGHTS.KEY.test(m.key) && m.key.startsWith(`insights:${(await fromCanvas(s)) || (await fromUltra(s))}/`),
     run: (m, { local }) => GZ_INSIGHTS.change(m, local),
   },
 };
-// The notes app's bodies, pictures and attachments (lib/notes.js run): this extension's own IndexedDB, which only the worker
+// The notes app's bodies, pictures and attachments (planner/notes.js run): this extension's own IndexedDB, which only the worker
 // opens; no school page can. Keys are <origin>/<uid>/<id>, so each site's and account's are apart.
 let notesDb = null;
 const idbDone = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
@@ -561,7 +561,7 @@ const NOTES_DB = {
   keys: (s, prefix) => notesTx(s, 'readonly', (st) => idbDone(st.getAllKeys(IDBKeyRange.bound(prefix, `${prefix}\uffff`)))),
   estimate: () => navigator.storage?.estimate?.(),
 };
-// The files kept for Looks' backgrounds (lib/media.js), by hash: their own IndexedDB, which only the worker opens. Pages get a
+// The files kept for Looks' backgrounds (looks/media.js), by hash: their own IndexedDB, which only the worker opens. Pages get a
 // file through 'glaze:keptFile'; storage.local keeps only their index.
 let mediaDb = null;
 const mediaOpen = () => (mediaDb ||= new Promise((res, rej) => {
@@ -582,13 +582,13 @@ const MEDIA_FILES = {
   del: (hs) => mediaTx('readwrite', (st) => { for (const h of hs) st.delete(h); }),
   keys: () => mediaTx('readonly', (st) => idbDone(st.getAllKeys())),
 };
-// Documents' files (lib/doc-files.js): a PDF's or deck's bytes by hash, in their own IndexedDB, glaze-docs, which only the
+// Documents' files (documents/doc-files.js): a PDF's or deck's bytes by hash, in their own IndexedDB, glaze-docs, which only the
 // worker opens. writer.html, papers.html and Settings' backup put and get them over its port, a chunk at a time; the paper
 // store (openPapers) tells it which files each document holds.
-globalThis.addEventListener?.('install', () => importScripts('doc-files.js'));
+globalThis.addEventListener?.('install', () => importScripts('../documents/doc-files.js'));
 let docFiles = null;
 const openDocFiles = () => {
-  if (!docFiles) { if (!globalThis.GZ_DOC_FILES) importScripts('doc-files.js'); docFiles = GZ_DOC_FILES.store(GZ_DOC_FILES.idb(globalThis.indexedDB, 'glaze-docs')); }
+  if (!docFiles) { if (!globalThis.GZ_DOC_FILES) importScripts('../documents/doc-files.js'); docFiles = GZ_DOC_FILES.store(GZ_DOC_FILES.idb(globalThis.indexedDB, 'glaze-docs')); }
   return docFiles;
 };
 chrome.runtime.onConnect.addListener((p) => {
@@ -600,7 +600,7 @@ chrome.runtime.onConnect.addListener((p) => {
   const files = openDocFiles();
   GZ_DOC_FILES.serve(p, files, framed ? settingsFramesLoaded.then(() => trustedFrame(s, 'papers')) : Promise.resolve(true));
 });
-// The widgets' layout (lib/widgets.js change): a Canvas or Ultra page's changes, applied to what is stored then, so two
+// The widgets' layout (core/widgets.js change): a Canvas or Ultra page's changes, applied to what is stored then, so two
 // tabs' changes never undo each other (B7b).
 BROKER.widgetLayout = {
   allow: async (m, s) => {
@@ -650,7 +650,7 @@ BROKER.widgetLayout = {
     return r.ok ? { ...r, layout: (await area.local.get('widgetLayout')).widgetLayout } : r;
   },
 };
-// The sidebar's record (lib/sidebar.js change): a page's field-level changes to its own site's account's record, applied
+// The sidebar's record (navigation/sidebar.js change): a page's field-level changes to its own site's account's record, applied
 // to what is stored then. Canvas's top frame only (a course tab's frame goes through its top); Ultra's pages and their
 // course tabs' frames, as for the layout. The record's lms must be the sender's.
 BROKER.sidebar = {
@@ -689,7 +689,7 @@ BROKER.notesapp = {
 };
 // Only Settings' own top frame can stage or commit a backup. Uploads live in a scratch database and carry a
 // document-bound token; each commit replays against current storage inside the broker's write queue.
-BROKER_FILES.backup = ['gradecalc.js', 'insights.js', 'gpa.js', 'classes.js', 'relay.js', 'sharing.js', 'sessions.js', 'backup.js'];
+BROKER_FILES.backup = ['../planner/gradecalc.js', '../planner/insights.js', '../planner/gpa.js', '../planner/classes.js', '../sharing/relay.js', '../sharing/sharing.js', '../sharing/sessions.js', 'backup.js'];
 globalThis.addEventListener?.('install', () => importScripts('backup.js'));
 BROKER.backup = (() => {
   let pending = null;
@@ -757,20 +757,20 @@ BROKER.backup = (() => {
     },
   };
 })();
-// Mods (lib/modbundle.js): only the editor's own top frame installs, lists or changes them, and every bundle is read
+// Mods (mods/modbundle.js): only the editor's own top frame installs, lists or changes them, and every bundle is read
 // and checked again here, whatever the editor showed. Nothing here runs a mod's code.
-BROKER_FILES.mods = ['zip.js', 'modapi.js', 'modwidget.js', 'ai/schema.js', 'modtools.js', 'modbundle.js', 'blocklist.js']; // a bundle's widget blocks are checked with modwidget.js, its tools with modtools.js
-BROKER_FILES.modwidget = ['gradecalc.js']; // a widget's GPA
-globalThis.addEventListener?.('install', () => importScripts('zip.js', 'modapi.js', 'modwidget.js', 'ai/schema.js', 'modtools.js', 'modbundle.js'));
+BROKER_FILES.mods = ['../core/zip.js', '../mods/modapi.js', '../mods/modwidget.js', '../ai/schema.js', '../mods/modtools.js', '../mods/modbundle.js', '../mods/blocklist.js']; // a bundle's widget blocks are checked with modwidget.js, its tools with modtools.js
+BROKER_FILES.modwidget = ['../planner/gradecalc.js']; // a widget's GPA
+globalThis.addEventListener?.('install', () => importScripts('../core/zip.js', '../mods/modapi.js', '../mods/modwidget.js', '../ai/schema.js', '../mods/modtools.js', '../mods/modbundle.js'));
 BROKER.mods = {
   allow: (m, s) => fromEditor(s) && s.frameId === 0 && ownOrigin(s.origin) && GZ_MODBUNDLE.OPS.includes(m.op),
   run: (m, area) => GZ_MODBUNDLE.change(m, area),
 };
-// Media for a Look (lib/media.js): the files this computer keeps for a Look's video, animated picture or Lottie animation
+// Media for a Look (looks/media.js): the files this computer keeps for a Look's video, animated picture or Lottie animation
 // (MEDIA_FILES, indexed in storage.local `lookMediaIndex`) are put, listed, kept, dropped and reset only by the editor, which
 // sends the bytes; every one is read again here before it is kept.
-BROKER_FILES.media = ['media.js'];
-globalThis.addEventListener?.('install', () => importScripts('media.js'));
+BROKER_FILES.media = ['../looks/media.js'];
+globalThis.addEventListener?.('install', () => importScripts('../looks/media.js'));
 BROKER.media = {
   allow: (m, s) => fromEditor(s) && trustedFrame(s, 'settings') && ['put', 'list', 'drop', 'keep', 'reset'].includes(m.op),
   run: async (m, area) => {
@@ -819,20 +819,20 @@ const backgroundParts = async (s, area) => {
   if (got && !GZ_XPARTS.outside(got.parts).length) return got.parts;
   return theme();
 };
-// A kept file for a page's background (lib/scene-media.js): as it was kept (checked and named when it was put), for the file
+// A kept file for a page's background (looks/scene-media.js): as it was kept (checked and named when it was put), for the file
 // the worn Look names only; the editor and its preview frame may have any. Read outside the broker's queue: only a file an
 // older Glaze kept in storage.local, moving over, takes a turn.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:keptFile') return;
   (async () => {
-    if (!globalThis.GZ_MEDIA) importScripts('media.js');
+    if (!globalThis.GZ_MEDIA) importScripts('../looks/media.js');
     const area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
     if (!fromPreview(s) && (!await backgroundPage(s) || GZ_MEDIA.fileOf((await backgroundParts(s, area))?.x?.bg?.media?.src) !== m.h)) return { ok: false, error: 'sender' };
     return GZ_MEDIA.change({ op: 'file', h: m.h }, area, { queue: (f) => (brokerTurn ||= GZ_CARDS.queue())(f) });
   })().then(reply, () => reply({ ok: false, error: 'failed' }));
   return true;
 });
-// Kept files no Look names any more go (lib/media.js collect): when the worker starts or Glaze updates (after files an
+// Kept files no Look names any more go (looks/media.js collect): when the worker starts or Glaze updates (after files an
 // older Glaze kept in storage.local have moved), once history has recorded a Look change, and when favorites change. Not
 // while a Look change is still resting before history records it: the Look it left may still be on its way into history.
 const mediaHistory = new Set(); // snapshots queued for history still own the files of the Look just left
@@ -847,7 +847,7 @@ const migrateMedia = async (area) => {
   return GZ_MEDIA.migrate(area, keys);
 };
 const sweepMedia = (update = false) => (brokerTurn ||= GZ_CARDS.queue())(async () => {
-  if (!globalThis.GZ_MEDIA) importScripts('media.js');
+  if (!globalThis.GZ_MEDIA) importScripts('../looks/media.js');
   const local = brokerArea('local'), area = { sync: brokerArea('sync'), local, files: MEDIA_FILES };
   if (update) await migrateMedia(area);
   if (!before && !mediaHistory.size) return GZ_MEDIA.collect(area, { decode: GZ_SHARE.decode });
@@ -855,11 +855,11 @@ const sweepMedia = (update = false) => (brokerTurn ||= GZ_CARDS.queue())(async (
 // The editor and its preview frame: Glaze's own pages, trusted with any address the editor shows, and with installed mods' parts.
 const fromPreview = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && [chrome.runtime.getURL('options.html'), chrome.runtime.getURL('preview.html')].includes(s.url.split(/[?#]/)[0]);
 const mediaDownloads = new Map(); // shared only while loading; never a cache of completed base64 files
-// A file for a page's background from an address (lib/scene-media.js), for the address the worn Look or an eligible installed mod
+// A file for a page's background from an address (looks/scene-media.js), for the address the worn Look or an eligible installed mod
 // names as `type`, and no other; the editor's preview may try any address the editor is showing. A fetch with no cookies, no
 // referrer, no redirect and a size cap, so it is not in the broker's queue, which a slow host would hold up.
 const mediaFetch = async (s, op, type) => {
-  if (!globalThis.GZ_MEDIA) importScripts('media.js');
+  if (!globalThis.GZ_MEDIA) importScripts('../looks/media.js');
   const free = fromPreview(s);
   const site = free ? null : await backgroundPage(s);
   if (!free && !site) return { ok: false, error: 'sender' };
@@ -867,7 +867,7 @@ const mediaFetch = async (s, op, type) => {
   const allow = async (src) => {
     const worn = free ? null : (await backgroundParts(s, area))?.x?.bg?.media;
     if (free || (worn?.src === src && worn.type === type)) return true;
-    if (!globalThis.GZ_MODBROKER) importScripts('modapi.js', 'modwidget.js', 'modbroker.js');
+    if (!globalThis.GZ_MODBROKER) importScripts('../mods/modapi.js', '../mods/modwidget.js', '../mods/modbroker.js');
     const answer = await GZ_MODBROKER.page({ op: 'parts' }, { site, local: area.local,
       blocklist: async () => (await area.local.get('modsBlocklist')).modsBlocklist?.list });
     return (answer.parts || []).some((p) => p.bg?.media?.type === type && p.bg.media.src === src);
@@ -876,7 +876,7 @@ const mediaFetch = async (s, op, type) => {
   // Kept Lottie returns before the loader's network allow check; apply the same worn-source boundary here too.
   if (op.op === 'lottie' && typeof op.src === 'string' && op.src.startsWith('file:') && !await allow(op.src)) return { ok: false, error: 'bad' };
   // An address on a host the browser doesn't hold would fail on CORS: refused here instead. The editor asks for a link's host
-  // as it takes it (lib/editor-xbg.js), and a mod's install for its background's (lib/editor-mods.js).
+  // as it takes it (settings/editor-xbg.js), and a mod's install for its background's (settings/editor-mods.js).
   if (op.op === 'lottie' && typeof op.src === 'string' && /^https:/.test(op.src) && await allow(op.src) && !await reachable(op.src)) return { ok: false, error: 'host' };
   if (op.op !== 'remote') return GZ_MEDIA.change(op, area, env);
   if (!['video', 'image'].includes(type) || GZ_XPARTS.MEDIA.url(op.src) !== op.src || !await allow(op.src)) return { ok: false, error: 'bad' };
@@ -895,7 +895,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   mediaFetch(s, { op: 'lottie', src: m.src }, 'lottie').then(reply, () => reply({ ok: false, error: 'failed' }));
   return true;
 });
-// A video or an animated picture at an address, fetched here and cleaned like a kept file (lib/media.js remote), so the page
+// A video or an animated picture at an address, fetched here and cleaned like a kept file (looks/media.js remote), so the page
 // plays a checked copy under the same size, frame and pixel limits and never loads the address itself.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:remoteMedia') return;
@@ -905,7 +905,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // Share keys and relay traffic are confined to the worker, Settings and the Notes share panel. Loading this broker
 // for a backup never connects: the device-local consent switch and a live surface are checked separately.
 // MV3 caches imports during install; later worker starts still load these modules only when needed.
-globalThis.addEventListener?.('install', () => importScripts('relay.js', 'sharing.js', 'sessions.js'));
+globalThis.addEventListener?.('install', () => importScripts('../sharing/relay.js', '../sharing/sharing.js', '../sharing/sessions.js'));
 let sessionsWorker = null;
 let sessionGeneration = 0;
 // One session operation at a time, in a queue of its own: a sync talks to the relay for a while, and the storage
@@ -931,12 +931,12 @@ const SESSION_NETWORK = new Set(['create', 'join', 'resume', 'sync', 'reupload',
 // are synchronous, packaged and allowlisted, so a language change cannot race a pending sync or select arbitrary code.
 let sessionWords = null;
 globalThis.addEventListener?.('install', () => {
-  if (typeof GZ_I18N === 'undefined') importScripts('i18n.js');
+  if (typeof GZ_I18N === 'undefined') importScripts('../core/i18n.js');
   importScripts('../i18n/de.js', '../i18n/es.js', '../i18n/fr.js', '../i18n/nl.js', '../i18n/pt-BR.js');
 });
 const conflictTitle = (title) => {
   try {
-    if (!sessionWords) { if (typeof GZ_I18N === 'undefined') importScripts('i18n.js'); sessionWords = GZ_I18N; }
+    if (!sessionWords) { if (typeof GZ_I18N === 'undefined') importScripts('../core/i18n.js'); sessionWords = GZ_I18N; }
     const lang = chrome.i18n.getUILanguage(), file = sessionWords.file(lang);
     if (file && /^i18n\/(de|es|fr|nl|pt-BR)\.js$/.test(file) && !globalThis.GZ_LANGS?.[file.slice(5, -3)]) importScripts(`../${file}`);
     return sessionWords.t('{title} (conflict copy)', { title }, lang);
@@ -944,8 +944,8 @@ const conflictTitle = (title) => {
 };
 const sessions = () => {
   if (!sessionsWorker) {
-    if (!globalThis.GZ_MEDIA) importScripts('media.js'); // a Look share carries its media file
-    importScripts('relay.js', 'sharing.js', 'sessions.js');
+    if (!globalThis.GZ_MEDIA) importScripts('../looks/media.js'); // a Look share carries its media file
+    importScripts('../sharing/relay.js', '../sharing/sharing.js', '../sharing/sessions.js');
     GZ_SHARING.ADAPTERS.notes.conflictTitle = conflictTitle;
     // getKeys (where the browser has it) names the Notes and To Do accounts without reading the rest of local storage.
     sessionsWorker = GZ_SESSIONS.make({ local: Object.assign(brokerArea('local'), chrome.storage.local.getKeys && { getKeys: () => chrome.storage.local.getKeys() }), sync: brokerArea('sync'), notes: NOTES_DB, keptFiles: MEDIA_FILES,
@@ -1046,7 +1046,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   }).then(reply, () => reply({ ok: false }));
   return true;
 });
-// Settings as a page of an LMS tab (features/settingspage.js): a one-use ticket for that tab's top frame, claimed by the
+// Settings as a page of an LMS tab (settings/page/settingspage.js): a one-use ticket for that tab's top frame, claimed by the
 // Settings frame it opens there. Settings shows nothing in a frame without one, so another site framing it gets a blank page.
 // The frame that claimed it is the one trustedFrame accepts for Settings' own writes.
 const settingsTickets = new Map(); // ticket -> { tab, at }
@@ -1129,7 +1129,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   })().then(reply, () => reply({ ok: false }));
   return true;
 });
-// The Dashboard's opt-in landing (features/dashboard.js), once in a tab: the first ask from an Ultra tab gets first: true,
+// The Dashboard's opt-in landing (courses/page/dashboard.js), once in a tab: the first ask from an Ultra tab gets first: true,
 // and the tab is remembered in this worker's session storage (in memory, gone when the browser closes, never the page's).
 let brokerTurn = null;
 chrome.runtime.onMessage.addListener((m, s, reply) => {
@@ -1200,10 +1200,10 @@ const packaged = (f) => (f.startsWith(chrome.runtime.getURL('')) ? f.slice(chrom
 const contentScripts = () => chrome.runtime.getManifest().content_scripts.map((c) => ({ ...c, js: (c.js || []).map(packaged) }));
 const entryWith = (file) => contentScripts().find((c) => c.js.includes(file));
 
-// "Use this Look in Glaze" on the gallery (lib/gallery.js): the code waits in storage.local for the editor,
+// "Use this Look in Glaze" on the gallery (looks/gallery.js): the code waits in storage.local for the editor,
 // which previews it and asks. Only from the gallery's own pages, where the manifest runs that script.
 // A pattern ending in /* takes that folder and below; any other is that one page.
-const GALLERY = entryWith('lib/gallery.js')?.matches || [];
+const GALLERY = entryWith('looks/gallery.js')?.matches || [];
 const onGallery = (url) => {
   let here;
   try { const u = new URL(url); here = u.origin + u.pathname; } catch { return false; }
@@ -1214,20 +1214,20 @@ chrome.runtime.onMessage.addListener((m, { url, frameId }) => {
   const g = m?.gallery;
   if (!g || m.galleryMod || frameId !== 0 || !onGallery(url) || onModGallery(url)) return;
   const text = (v, max) => (typeof v === 'string' && v.length <= max ? v : '');
-  // The editor checks the code itself (lib/share.js); this only keeps the sizes sane.
+  // The editor checks the code itself (sharing/share.js); this only keeps the sizes sane.
   const name = (v, max) => text(v, max).replace(/[\p{Cc}\p{Bidi_Control}]/gu, '').trim();
   const offer = { code: text(g.code, GZ_SHARE.MAX_CODE2), name: name(g.name, 40), author: name(g.author, 39) };
   if (offer.code) galleryMedia(offer.code).catch(() => null).then((media) => chrome.storage.local.set({ galleryOffer: media ? { ...offer, media } : offer })).then(openEditor, console.warn);
 });
 // A gallery Look whose background is a file (`file:<h>`) this computer doesn't keep: that one file, from the gallery's fixed
-// address (lib/media.js fromGallery), kept as the editor's are (put: cleaned again, named by its hash, under the total cap)
+// address (looks/media.js fromGallery), kept as the editor's are (put: cleaned again, named by its hash, under the total cap)
 // but pending: the editor previews the Look with it, and lets it go unless the student uses the Look. → the offer's
 // `media`: { h, pending? } when the file is here, { h, error } when it isn't ('full': no room); null for no file. Any
 // failure still offers the Look.
 const galleryMedia = async (code) => {
   if (!code.startsWith(GZ_SHARE.PREFIX2)) return null; // only a glaze2 code has parts
   const m = (await GZ_SHARE.decode(code)).parts?.x?.bg?.media;
-  if (!globalThis.GZ_MEDIA) importScripts('media.js');
+  if (!globalThis.GZ_MEDIA) importScripts('../looks/media.js');
   const h = m && GZ_MEDIA.fileOf(m.src), area = { sync: brokerArea('sync'), local: brokerArea('local'), files: MEDIA_FILES };
   if (!h) return null;
   const had = (await GZ_MEDIA.index(area.local))[h];
@@ -1238,7 +1238,7 @@ const galleryMedia = async (code) => {
   return r.ok ? { h, pending: true } : { h, error: r.error };
 };
 
-// "Use in Glaze" on the gallery's mod pages: { id, hash } only. The worker downloads that exact bundle (lib/modbundle.js
+// "Use in Glaze" on the gallery's mod pages: { id, hash } only. The worker downloads that exact bundle (mods/modbundle.js
 // offer: Glaze's only request to the gallery), and the editor opens on its install prompt; nothing installs until the
 // student says so there.
 chrome.runtime.onMessage.addListener((m, s) => {
@@ -1250,7 +1250,7 @@ chrome.runtime.onMessage.addListener((m, s) => {
     .then(openEditor, console.warn);
 });
 
-// Looks history (lib/history.js), whatever changed the theme: the popup, the editor, Ctrl+K on a course page,
+// Looks history (looks/history.js), whatever changed the theme: the popup, the editor, Ctrl+K on a course page,
 // another computer through sync. A burst of edits (a color being dragged) counts once, when it has rested for
 // 4 seconds. The theme from before the burst goes in too, so "Previous Look" always has the one that was left.
 // Clearing goes through here as well ('clear-history'): it cancels the burst still resting, and its write
@@ -1318,7 +1318,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && (changes.lookHistory || changes.lookFavorites) && !before) sweepMedia();
   if (area === 'local' && changes.lookFavorites) catalogue();
 });
-// The Looks catalogue (lib/looks.js): the kept Looks' codes decoded here, once, into storage.local lookCatalog for every page
+// The Looks catalogue (looks/looks.js): the kept Looks' codes decoded here, once, into storage.local lookCatalog for every page
 // to read. Again whenever they change, and on install and start-up for a change made while the worker was away; one Glaze
 // won't wear (GZ_XPARTS.outside) is left out, as rotation passes it over. One build at a time, each from what is stored then.
 let catalogTurn = Promise.resolve();
@@ -1336,14 +1336,14 @@ const catalogue = () => (catalogTurn = catalogTurn.then(async () => {
 // persistAcrossSessions, and an update may clear registrations or change Glaze's file list.
 // Each LMS's own first content script (entryWith, above): Canvas's is the manifest's for *.instructure.com, Moodle's the same
 // without Canvas's part (content-canvas.js). A host on both lists gets Canvas's, which holds all of Moodle's.
-const canvasEntry = () => entryWith('content-canvas.js');
-const glaze = (lms) => canvasEntry().js.filter((f) => lms === 'canvas' || f !== 'content-canvas.js');
+const canvasEntry = () => entryWith('content/content-canvas.js');
+const glaze = (lms) => canvasEntry().js.filter((f) => lms === 'canvas' || f !== 'content/content-canvas.js');
 // Browser match patterns cannot name a port. The content startup and every worker trust check still use the exact origin.
 const hostOf = (site) => `${new URL(site).protocol}//${new URL(site).hostname}`;
 const script = (id, lms) => ({ id, matches: [`${hostOf(id)}/*`], js: glaze(lms), runAt: 'document_start', allFrames: true, persistAcrossSessions: true });
 // Ultra on a school's own host: where the manifest's Ultra entry takes Blackboard's hosts only, each approved Ultra site gets
 // that entry's script on its /ultra pages. Safari's entry takes /ultra on every host, so there it would run twice.
-const ultraEntry = () => entryWith('content-ultra.js');
+const ultraEntry = () => entryWith('content/content-ultra.js');
 const ultraEverywhere = () => ultraEntry().matches.some((p) => p.startsWith('https://*/'));
 const ultraScript = (origin) => ({ id: `ultra:${origin}`, matches: [`${hostOf(origin)}/ultra`, `${hostOf(origin)}/ultra/*`], js: ultraEntry().js, runAt: 'document_start', allFrames: true, persistAcrossSessions: true });
 // A listed site on its LMS's own host (an approval from before that host was built in) has the manifest's entry already;
@@ -1353,12 +1353,12 @@ const builtInHost = (kind, site) => { try { return GZ_BUILT_IN(kind, new URL(`ht
 let queue = Promise.resolve();
 const serial = (f) => (queue = queue.then(f).catch(console.warn));
 // Where Glaze holds every https site but its manifest has no detector (Chrome, Edge, Firefox with All sites, or an all-site
-// grant kept from before 3.4.0), it registers lib/detect.js itself, so the question (features/consent.js) asks on each
+// grant kept from before 3.4.0), it registers content/detect.js itself, so the question (settings/page/consent.js) asks on each
 // school's pages as Safari's does. The built-in hosts have Glaze already.
 const DETECTOR = 'gz-detect';
-const staticDetector = () => contentScripts().some((c) => c.js.length === 1 && c.js[0] === 'lib/detect.js');
+const staticDetector = () => contentScripts().some((c) => c.js.length === 1 && c.js[0] === 'content/detect.js');
 const builtInHosts = () => (chrome.runtime.getManifest().host_permissions || []).filter((p) => /^https:\/\/\*\.[^/]+\/\*$/.test(p) && LMS.some((k) => GZ_BUILT_IN(k, new URL(p.replace('*.', 'x.').slice(0, -1)))));
-const detector = () => ({ id: DETECTOR, matches: [ALL_SITES], excludeMatches: builtInHosts(), js: ['lib/detect.js'], runAt: 'document_start', persistAcrossSessions: true });
+const detector = () => ({ id: DETECTOR, matches: [ALL_SITES], excludeMatches: builtInHosts(), js: ['content/detect.js'], runAt: 'document_start', persistAcrossSessions: true });
 // What a registration does, as the browser hands it back: Chrome fills in its defaults and sorts its match patterns,
 // Firefox leaves them out and names each file by its full address.
 const shape = (s) => JSON.stringify([[...s.matches || []].sort(), [...s.excludeMatches || []].sort(), (s.js || []).map((f) => packaged(f).replace(/^\//, '')), s.css || [],
@@ -1411,15 +1411,15 @@ const ensure = async () => {
   // Ultra sites stay registered while Glaze is off, as the manifest's Ultra entry does: content.js keeps to the switch.
   const ultra = ultraEverywhere() ? [] : [...new Set((await held(own('ultra'))).map(hostOf))].map(ultraScript);
   const detect = !staticDetector() && await granted(ALL_SITES);
-  // Gradescope's own pages get Glaze only while Glaze and enhance.gradescope are on (lib/gradescope.js, features/gradescope.js).
+  // Gradescope's own pages get Glaze only while Glaze and enhance.gradescope are on (planner/gradescope.js, planner/page/gradescope.js).
   const gs = await gradescopeOn() && await reachable(GZ_GRADESCOPE.HOST);
-  // The notes app's Course notes button (features/notes-home.js) on Canvas sites' course pages, only while Glaze and Notes
+  // The notes app's Course notes button (planner/page/notes-home.js) on Canvas sites' course pages, only while Glaze and Notes
   // are on, so the first content script carries nothing for it, for the sites known now.
   const notes = await switchOn('notes') && notesHome(canvas);
-  // Google Calendar sync's page side (features/gcal.js) on Canvas sites' and Blackboard Ultra's top frames, only while
+  // Google Calendar sync's page side (planner/page/gcal.js) on Canvas sites' and Blackboard Ultra's top frames, only while
   // connected, so the first content script carries nothing for it, for the sites known now.
   const first = canvasEntry();
-  const gcal = GZ_GCAL.ON && (await chrome.storage.local.get('gcal')).gcal?.cal && { id: GCAL_PAGE, js: ['features/gcal.js'], runAt: 'document_idle', persistAcrossSessions: true,
+  const gcal = GZ_GCAL.ON && (await chrome.storage.local.get('gcal')).gcal?.cal && { id: GCAL_PAGE, js: ['planner/page/gcal.js'], runAt: 'document_idle', persistAcrossSessions: true,
     excludeMatches: first.exclude_matches || [], matches: [...new Set([...first.matches, ...canvas, ...ultraEntry().matches, ...ultra.flatMap((s) => s.matches)])] };
   // A site taken off its list (Settings' Sites, Reset everything), or whose host was taken back, loses its registration here.
   const have = new Map((await chrome.scripting.getRegisteredContentScripts()).map((s) => [s.id, s]));
@@ -1440,10 +1440,10 @@ const notesHomeInto = async (s, tabs) => {
 const NOTES_HOME = 'gz-notes-home';
 const notesHome = (canvas) => {
   const first = canvasEntry();
-  return { id: NOTES_HOME, js: ['features/notes-home.js'], runAt: 'document_idle', persistAcrossSessions: true, excludeMatches: first.exclude_matches || [],
+  return { id: NOTES_HOME, js: ['planner/page/notes-home.js'], runAt: 'document_idle', persistAcrossSessions: true, excludeMatches: first.exclude_matches || [],
     matches: [...new Set([...first.matches, ...canvas.map((p) => `${new URL(p).protocol}//${new URL(p).hostname}/*`)].map((p) => p.replace(/\/\*$/, '/courses/*')))] };
 };
-const GRADESCOPE = { id: 'gz-gradescope', matches: ['https://www.gradescope.com/*'], js: ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js'], runAt: 'document_idle', persistAcrossSessions: true };
+const GRADESCOPE = { id: 'gz-gradescope', matches: ['https://www.gradescope.com/*'], js: ['core/color.js', 'core/i18n.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'planner/gradescope.js', 'planner/page/gradescope.js'], runAt: 'document_idle', persistAcrossSessions: true };
 chrome.storage.onChanged.addListener((changes, area) => { if ((area === 'sync' && (changes.enhance || changes.enabled)) || (area === 'local' && (changes.canvas || changes.moodle || changes.ultra))) serial(ensure); });
 // Gradescope's switch turned off (Settings, Reset everything, another device): its grant goes back, as no other part of Glaze
 // reaches it and it isn't a required host. Glaze off as a whole keeps it, for when Glaze is on again.
@@ -1457,7 +1457,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // Removals use separate sync keys: a device still starting up never uploads defaults over another device's choices.
 // They keep a removed starter from returning in a Dashboard that is still the untouched seed (resumeDefaults); a board its
 // student has edited on this device is hers, whatever another device later removes or empties.
-const STARTER_TILES = ['pet', 'timer', 'notes', 'quotes']; // lib/widgets.js STARTER
+const STARTER_TILES = ['pet', 'timer', 'notes', 'quotes']; // core/widgets.js STARTER
 const defaultEdits = async (m, { local, sync }) => {
   const patch = {};
   for (const o of m.ops || []) {
@@ -1567,7 +1567,7 @@ const keepWidgets = async (fresh, provisional = false) => {
     await chrome.storage.local.set({ freshDefaults: { fresh, pending: true } });
   await resumeDefaults();
 };
-// Course tabs' place became 'auto' (lib/coursetabs.js). The editor saved the whole tabs group, so a stored 'above' is mostly
+// Course tabs' place became 'auto' (navigation/coursetabs.js). The editor saved the whole tabs group, so a stored 'above' is mostly
 // the old default: it moves to 'auto' once, on the update ('auto' is 'above' but under a top bar holding the tabs). Done is
 // kept locally and in sync, set on install too: another device must not migrate a newer synced 'above' choice again.
 const tabsAuto = async (update) => {
@@ -1607,7 +1607,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && Object.keys(changes).some((k) => k.startsWith('starterOff:')))
     (brokerTurn ||= GZ_CARDS.queue())(() => resumeDefaults(true)).catch(() => {});
 });
-// Due this week is kept per site (`dueWeek:<origin>`: { at, list }, content.js dueWeek). lib/todo.js still hands a Canvas
+// Due this week is kept per site (`dueWeek:<origin>`: { at, list }, content.js dueWeek). planner/todo.js still hands a Canvas
 // planner's list over as Glaze 3.3.4 kept the one list, whichever site asked last (dueWeek, dueWeekAt, dueWeekFrom).
 const dueBySite = ({ dueWeek, dueWeekAt, dueWeekFrom, ...patch }) => {
   try {
@@ -1662,9 +1662,9 @@ const pointerToLook = () => (brokerTurn ||= GZ_CARDS.queue())(async () => {
 }).catch(() => {});
 // Ordinary service-worker wakes do not fire onStartup. Retry after initialisation; a failed retry must not stop the worker.
 Promise.resolve().then(pointerToLook).catch(() => {});
-// A course's saved or gallery Look an earlier 4.0 kept in courses.looks moves to courseLooks (lib/looks.js move) whenever the worker
+// A course's saved or gallery Look an earlier 4.0 kept in courses.looks moves to courseLooks (looks/looks.js move) whenever the worker
 // starts, before a 3.x device on the same sync account writes it away; one write, none once moved, a refused one tried again.
-// With it, the kept Looks of courses a 3.x device just gave a built-in one go (lib/looks.js picked, clear), courses written only if moved.
+// With it, the kept Looks of courses a 3.x device just gave a built-in one go (looks/looks.js picked, clear), courses written only if moved.
 // A pick waits here until the worker gets to it; a change to that course's courseLooks first (a 4.0 pick, newer) drops it.
 const builtinPicks = new Map();
 const moveCourseLooks = () => (brokerTurn ||= GZ_CARDS.queue())(async () => {
@@ -1701,10 +1701,10 @@ const perSite = async () => {
 };
 
 // ---- Asking first ---------------------------------------------------------------------------------------------------
-// A page that looks like an LMS, from a tab's top frame: lib/detect.js's 'canvas', 'moodle' or 'ultra', or content.js's 'ultra'
+// A page that looks like an LMS, from a tab's top frame: content/detect.js's 'canvas', 'moodle' or 'ultra', or content.js's 'ultra'
 // from an /ultra page off Blackboard's own hosts (Safari's any-host Ultra entry). On a site the student approved, Glaze goes
 // into that page now (a registration an update dropped) and stays registered. Anywhere else the page only makes its site a
-// candidate: with Glaze on, and no Not now there in the past week, Glaze asks on the page (features/consent.js). Nothing is
+// candidate: with Glaze on, and no Not now there in the past week, Glaze asks on the page (settings/page/consent.js). Nothing is
 // registered, read or recorded before Yes.
 const LMS = ['canvas', 'moodle', 'ultra'];
 const LATER = 7 * 864e5;
@@ -1728,22 +1728,22 @@ const approve = (kind, u) => serial(async () => {
   await ensure();
 });
 // Glaze's first content script, into the page that asked rather than whatever its tab has gone on to, then a Canvas site's
-// hook for the notes app (registration covers its next pages). `bar`: the question brought lib/i18n.js in, which can't run twice.
+// hook for the notes app (registration covers its next pages). `bar`: the question brought core/i18n.js in, which can't run twice.
 // Ultra's goes onto its /ultra pages only, as its registration does.
 const glazeInto = async (kind, s, bar) => {
   if (kind === 'ultra' && !/^\/ultra(\/|$)/.test(new URL(s.url).pathname)) return;
   // An all-host /ultra entry may already be waiting in content.js after detecting another LMS's markup.
   const live = await chrome.scripting.executeScript({ target: pageOf(s), func: () => !!window.__gzGlaze }).then((r) => r?.[0]?.result, () => true);
   if (live || !await glazeOn()) return;
-  const first = chrome.scripting.executeScript({ target: pageOf(s), files: (kind === 'ultra' ? ultraEntry().js : glaze(kind)).filter((f) => !bar || f !== 'lib/i18n.js'), injectImmediately: true }).catch(console.warn);
+  const first = chrome.scripting.executeScript({ target: pageOf(s), files: (kind === 'ultra' ? ultraEntry().js : glaze(kind)).filter((f) => !bar || f !== 'core/i18n.js'), injectImmediately: true }).catch(console.warn);
   if (kind === 'canvas') serial(async () => { if (await switchOn('notes')) { await first; await notesHomeInto(notesHome([siteKey(kind, new URL(s.url))]), [s.tab]); } });
 };
-// The question, in the page's language and the student's palette. lib/detect.js's pages have none of Glaze's words yet;
-// Ultra's first content script has them (lib/i18n.js), where the manifest puts it on /ultra everywhere (Safari).
+// The question, in the page's language and the student's palette. content/detect.js's pages have none of Glaze's words yet;
+// Ultra's first content script has them (core/i18n.js), where the manifest puts it on /ultra everywhere (Safari).
 const ask = async (kind, s) => {
   const run = (o) => chrome.scripting.executeScript({ target: pageOf(s), injectImmediately: true, ...o }).then((r) => r?.[0]?.result);
   const wordsIn = (kind === 'ultra' && ultraEverywhere()) || await run({ func: () => typeof GZ_I18N !== 'undefined' });
-  await run({ files: wordsIn ? ['features/consent.js'] : ['lib/i18n.js', 'features/consent.js'] });
+  await run({ files: wordsIn ? ['settings/page/consent.js'] : ['core/i18n.js', 'settings/page/consent.js'] });
   const words = await run({ func: () => globalThis.GZ_CONSENT?.words() });
   if (typeof words === 'string' && words.startsWith('i18n/') && LOADABLE.has(words)) await run({ files: [words] });
   const st = GZ_SANITIZE(await chrome.storage.sync.get(['colors', 'auto', 'presets']));
@@ -1763,7 +1763,7 @@ chrome.runtime.onMessage.addListener((m, s) => {
     await ask(m, s);
   })().catch(console.warn);
 });
-// The answer (features/consent.js, after a real click on its page): 'yes' approves the site, registers it and puts Glaze in
+// The answer (settings/page/consent.js, after a real click on its page): 'yes' approves the site, registers it and puts Glaze in
 // the page (on Safari's Ultra, content.js waiting there starts by itself once the site is on the list); 'join' puts Glaze in
 // a page whose site was approved in another tab; 'later' is Not now, kept for the 50 sites put off last.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
@@ -1843,7 +1843,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // Where Glaze holds only the LMSs' own hosts (Chrome, Edge, Firefox), a school's own site comes with the browser's grant.
 // Glaze's own pages ask for it, each in a page of its own (the popup, the first screen, Settings), and tell the worker first
 // ('glaze:allow'):
-// - 'ask', no kind (the first screen): once granted, the page checks the site itself (lib/site.js probe) and says what it
+// - 'ask', no kind (the first screen): once granted, the page checks the site itself (core/site.js probe) and says what it
 //   found ('yes'), or hands the grant back. The grant waits for it.
 // - 'ask' with a kind and a tab (the popup, whose tab showed the kind): approved and into that tab once the host is held.
 // - 'cancel': the first screen's prompt was dismissed; a later browser grant checks the site itself.
@@ -1863,7 +1863,7 @@ const askedFor = async (pattern) => {
 };
 const asking = (pattern, v) => Promise.resolve().then(() => chrome.storage.session?.set({ [askedKey(pattern)]: { ...v, until: Date.now() + ASKED_FOR } }));
 const answered = (pattern) => Promise.resolve().then(() => chrome.storage.session?.remove(askedKey(pattern))).catch(() => {});
-// One site, as lib/site.js reads it, by its origin or by its grant (`https://host/*`); anything else is null.
+// One site, as core/site.js reads it, by its origin or by its grant (`https://host/*`); anything else is null.
 const siteAt = (origin) => { const s = typeof origin === 'string' ? GZ_SITE.address(origin) : null; return s?.origin === origin ? s : null; };
 const siteFor = (pattern) => { const s = typeof pattern === 'string' && /^https?:\/\/[^/*]+\/\*$/.test(pattern) ? GZ_SITE.address(pattern.slice(0, -1)) : null; return s?.pattern === pattern ? s : null; };
 const holdsSite = (site) => chrome.runtime.getManifest().host_permissions?.includes('<all_urls>') || granted(site.pattern);
@@ -1877,7 +1877,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   approved(m.kind, u).then(reply, () => reply(false));
   return true;
 });
-const ADDERS = ['popup.html', 'features/welcome.html', 'options.html', 'writer.html'];
+const ADDERS = ['popup.html', 'settings/welcome.html', 'options.html', 'writer.html'];
 const fromAdder = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ADDERS.some((p) => p !== 'writer.html' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p))
   && extensionOrigin(s) && (!s.tab || s.frameId === 0);
 // Glaze into tabs already open on a site it now has (their top frames).
@@ -1949,14 +1949,14 @@ chrome.permissions?.onAdded?.addListener((p) => { for (const o of p?.origins || 
 chrome.permissions?.onRemoved?.addListener((p) => { for (const o of p?.origins || []) answered(o); serial(ensure); });
 // The first run (onInstalled, above): where a school's own site needs the student's grant (no detector in the manifest),
 // Glaze's first screen, once.
-const firstRun = () => { if (!staticDetector()) Promise.resolve().then(() => chrome.tabs.create({ url: chrome.runtime.getURL('features/welcome.html') })).catch(() => {}); };
+const firstRun = () => { if (!staticDetector()) Promise.resolve().then(() => chrome.tabs.create({ url: chrome.runtime.getURL('settings/welcome.html') })).catch(() => {}); };
 
 // Citation lookups belong to Writer's pages (writer.html, and papers.html's editor); cache the scripts at install and load
 // them on the first request.
-globalThis.addEventListener?.('install', () => importScripts('writer-sources.js', 'writer-lookup.js'));
+globalThis.addEventListener?.('install', () => importScripts('../writer/writer-sources.js', '../writer/writer-lookup.js'));
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:writer-lookup') return;
-  if (!globalThis.GZ_WRITER_LOOKUP) importScripts('writer-sources.js', 'writer-lookup.js');
+  if (!globalThis.GZ_WRITER_LOOKUP) importScripts('../writer/writer-sources.js', '../writer/writer-lookup.js');
   return GZ_WRITER_LOOKUP.listener(() => ({ fetch: (u, i) => fetch(u, i), reach: reachable, id: chrome.runtime.id, pages: ['writer.html', 'papers.html'].map((f) => chrome.runtime.getURL(f)) }))(m, s, reply);
 });
 
@@ -1990,7 +1990,7 @@ const lightUp = async () => {
   await new Promise((done) => dc.onPageChanged.addRules(LIT.map((c) => ({ conditions: [new dc.PageStateMatcher(c)], actions: [new dc.SetIcon({ imageData })] })), done));
 };
 const ownIcon = () => Object.fromEntries(Object.entries(chrome.runtime.getManifest().action.default_icon).map(([k, v]) => [k, `/${v}`]));
-// Glaze's crossfades (lib/motion.js swap, content-ultra.js's page links) start in its content scripts' world, but Chrome
+// Glaze's crossfades (core/motion.js swap, content-ultra.js's page links) start in its content scripts' world, but Chrome
 // rejects a skipped or timed-out one's ready in the page's own world as well, where only the page's code can handle it and
 // a school's error tracker would collect it. This, in each frame Glaze runs in, answers their glaze:transition event: it
 // cancels a presence probe (the guard is here) and, on the separate handoff, marks the transition started's ready handled.
@@ -2021,10 +2021,10 @@ chrome.runtime.onMessage.addListener((m, s) => {
 // frames the reader itself can't get one, since web pages can't message this worker, so it can't set the reader to
 // work. A pass is a random id, lasts a minute and works once, and only for a reader in the tab that asked for it.
 // Glaze Writer's editor frame (writer.html) opens the same way ('glaze:writer'), and only from an Ultra page Glaze runs
-// on; its job also puts lib/writer-main.js in that page's own world, where Ultra's Quill can be reached (scripting
+// on; its job also puts writer/writer-main.js in that page's own world, where Ultra's Quill can be reached (scripting
 // world MAIN: Chrome 95, Firefox 128, Safari 15.4), into the document that asked. The writer's claim also tells the AI
 // broker which tab and document the frame works for (aiFrameHost, where the AI harness defines it).
-// Documents as a page of an LMS tab (features/settingspage.js, 'glaze:papers'): a pass for each document its frame loads,
+// Documents as a page of an LMS tab (settings/page/settingspage.js, 'glaze:papers'): a pass for each document its frame loads,
 // asked by the top frame of a page Glaze runs on; the frame's claim makes it, as that document, the tab's Documents frame
 // (trustedFrame 'papers'), the one that may write papers the way the Documents tab does.
 const PASS_PAGES = { 'glaze:reader': '/reader.html', 'glaze:writer': '/writer.html', 'glaze:papers': '/papers.html' };
@@ -2044,7 +2044,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (!pass || s.id !== chrome.runtime.id || !s.tab || !from) { reply({ ok: false }); return; }
   if (m.op === 'job' && /^https?:$/.test(from.protocol) && readerPasses.size < 50) {
     const writer = m.type === 'glaze:writer';
-    (writer ? fromUltra(s).then((o) => o && chrome.scripting.executeScript({ target: s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] }, files: ['lib/writer-main.js'], world: 'MAIN', injectImmediately: true }).then(() => true))
+    (writer ? fromUltra(s).then((o) => o && chrome.scripting.executeScript({ target: s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] }, files: ['writer/writer-main.js'], world: 'MAIN', injectImmediately: true }).then(() => true))
       : m.type === 'glaze:papers' ? (s.frameId === 0 ? lmsPage(s) : Promise.resolve(null)).then(Boolean) : Promise.resolve(true))
       .then((ok) => { if (ok) readerPasses.set(pass, { type: m.type, tab: s.tab.id, at: now, from: { tab: s.tab, frameId: s.frameId, documentId: s.documentId } }); reply({ ok: !!ok }); }, () => reply({ ok: false }));
     return true;
@@ -2070,22 +2070,22 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 
-// Ultra's file previews in Glaze's PDF viewer (features/bbpreview.js): an Ultra page's attachment viewerUrl, on its own
-// site, followed with the session to Blackboard's document viewer and its documents API (lib/bb-preview.js ask) → the
+// Ultra's file previews in Glaze's PDF viewer (courses/page/bbpreview.js): an Ultra page's attachment viewerUrl, on its own
+// site, followed with the session to Blackboard's document viewer and its documents API (courses/bb-preview.js ask) → the
 // converted PDF's presigned address and when it ends, still converting, or a named failure. The page's own address only.
-globalThis.addEventListener?.('install', () => importScripts('bb-preview.js'));
+globalThis.addEventListener?.('install', () => importScripts('../courses/bb-preview.js'));
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:bb-preview') return;
   (async () => {
     const origin = ultraPage(s) ? await fromUltra(s) : null;
     if (!origin || typeof m.url !== 'string') return { ok: false, error: 'sender' };
-    if (!globalThis.GZ_BB_PREVIEW) importScripts('bb-preview.js');
+    if (!globalThis.GZ_BB_PREVIEW) importScripts('../courses/bb-preview.js');
     return GZ_BB_PREVIEW.ask(m.url, origin);
   })().then(reply, () => reply({ ok: false, error: 'network' }));
   return true;
 });
 
-// Canvas files in Glaze's viewers (features/canvasopen.js): a Canvas page Glaze runs on asks, on the student's click, for the
+// Canvas files in Glaze's viewers (courses/page/canvasopen.js): a Canvas page Glaze runs on asks, on the student's click, for the
 // one-use pass of the writer.html frame it opens to show a file it read. The frame claims it as Writer's own ('glaze:writer'
 // above); nothing goes into the page's world, and with no asking frame kept (from: null) the claim seats no AI host.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
@@ -2107,10 +2107,10 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 
-// Code mods (lib/modbroker.js): a mod's API calls ('glaze:mod') and the page's own asks ('glaze:modpage'),
+// Code mods (mods/modbroker.js): a mod's API calls ('glaze:mod') and the page's own asks ('glaze:modpage'),
 // only from Glaze's content script in the top frame of an LMS page Glaze runs on and is on for, never a quiz or a tool's
 // page, or from the Documents page. Parts also go to same-site Ultra course frames. The broker checks everything else.
-globalThis.addEventListener?.('install', () => importScripts('modapi.js', 'modwidget.js', 'modbroker.js'));
+globalThis.addEventListener?.('install', () => importScripts('../mods/modapi.js', '../mods/modwidget.js', '../mods/modbroker.js'));
 const modQuiet = (p) => GZ_LX.quiet(p) || /\/(quizzes|external_tools|assessment|attempt|lti)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(p);
 const fromLms = async (s, parts = false) => {
   if (s.id !== chrome.runtime.id || !s.tab || (s.frameId !== 0 && !(parts && ultraPage(s)))) return null;
@@ -2124,7 +2124,7 @@ const fromLms = async (s, parts = false) => {
 // it does not expand S3c's standalone mod authority into a school's page.
 const fromDocuments = async (s) => s.id === chrome.runtime.id && !!s.tab && s.frameId === 0 && typeof s.url === 'string'
   && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('papers.html') && (await chrome.storage.sync.get('enabled')).enabled !== false;
-// Whose plans and grades a mod or widget on that page reads (lib/modbroker.js account): the account signed in on the
+// Whose plans and grades a mod or widget on that page reads (mods/modbroker.js account): the account signed in on the
 // document that asked, as Glaze's own content script there reads it (GZ_CTX.account, as the sidebar's record check does), never what
 // a message says. That document by its documentId, else the frame, which must still hold the document the call names
 // (content.js __gzDoc). null while it is unknown, signed out or slow, or the document changed.
@@ -2165,7 +2165,7 @@ const modRead = async (k) => {
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:mod' && m?.type !== 'glaze:modpage') return;
   (async () => {
-    if (!globalThis.GZ_MODBROKER) importScripts('modapi.js', 'modwidget.js', 'modbroker.js');
+    if (!globalThis.GZ_MODBROKER) importScripts('../mods/modapi.js', '../mods/modwidget.js', '../mods/modbroker.js');
     if (m.op === 'widget') brokerIn('modwidget');
     const local = brokerArea('local');
     const control = m.type === 'glaze:mod' || m.op === 'widget' ? new AbortController() : null;
@@ -2190,12 +2190,12 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 
 // Code on demand (content.js need()): a file the first content script leaves out runs in the frame that asks, when
 // it asks (a site's part too, where its host was registered for the other LMS). Only these files, and only into a
-// frame of a site Glaze runs on (lmsPage), or a catalogue into Gradescope's pages (features/gradescope.js).
+// frame of a site Glaze runs on (lmsPage), or a catalogue into Gradescope's pages (planner/page/gradescope.js).
 const SAFARI = new URL(chrome.runtime.getURL('')).protocol === 'safari-web-extension:';
-// Features that move (lib/motion.js): the worker puts it in ahead of any of them, so each finds it already there.
-const MOVERS = ['features/coursetabs.js', 'features/widgets.js', 'features/todo.js', 'features/reminders.js', 'features/coursemenu.js', 'features/folders.js', 'features/sidebar.js'];
+// Features that move (core/motion.js): the worker puts it in ahead of any of them, so each finds it already there.
+const MOVERS = ['navigation/page/coursetabs.js', 'core/page/widgets.js', 'planner/page/todo.js', 'planner/page/reminders.js', 'navigation/page/coursemenu.js', 'courses/page/folders.js', 'navigation/page/sidebar.js'];
 // Paper writes share one worker queue across framed editors and Papers tabs.
-globalThis.addEventListener?.('install', () => importScripts('writer-styles.js', 'writer-papers.js', 'pm.js', 'writer-schema.js'));
+globalThis.addEventListener?.('install', () => importScripts('../writer/writer-styles.js', '../writer/writer-papers.js', '../vendor/pm.js', '../writer/writer-schema.js'));
 let paperStore = null;
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:writerPapers') return;
@@ -2217,7 +2217,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // purging it must not discard the version a dispatch is about to mark submitted. Paper keys omit the origin's scheme.
 const openPapers = () => {
   if (!paperStore) {
-    importScripts('writer-styles.js', 'writer-papers.js');
+    importScripts('../writer/writer-styles.js', '../writer/writer-papers.js');
     paperStore = GZ_WRITER_PAPERS.open(chrome.storage.local, () => Date.now(), { busy: async (k) => {
       if (!GZ_WRITER_PAPERS.valid(k) || !k.includes('|')) return false;
       const permits = await chrome.storage.local.get(['https', 'http'].map((scheme) => `writerSubmit:${scheme}://${k}`));
@@ -2314,7 +2314,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   task.then(reply, () => reply({ ok: false }));
   return true;
 });
-const LOADABLE = new Set(['lib/motion.js', 'lib/scene-host.js', 'lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-moodle.js', 'features/navbar.js', 'features/navbar-widgets.js', 'features/settingspage.js', 'lib/stream.js', 'features/stream.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'features/discussion-nav.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'lib/sidebar.js', 'features/sidebar.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'lib/lookset.js', 'lib/looks.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/bbpreview.js', 'features/canvasopen.js', 'features/docreview.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'lib/syllabus-ai.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/lmsq.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js', 'features/routes.js', 'lib/popup.js', 'features/popup.js', 'lib/announce.js', 'features/announce.js', 'features/announce-read.js', 'lib/rubric.js', 'features/rubric.js', 'features/editor-menu.js', 'features/sticky-fold.js', 'lib/writer-ultra.js', 'features/writer.js', 'lib/writer-target.js', 'lib/writer-context-discussion.js', 'features/writer-quote.js', 'lib/writer-context-assignment.js', 'lib/writer-submit.js', 'features/writer-submit.js']);
+const LOADABLE = new Set(['core/motion.js', 'looks/scene-host.js', 'navigation/nav.js', 'looks/page/light.js', 'navigation/nav-items.js', 'navigation/navlayout.js', 'content/content-ultra.js', 'content/content-canvas.js', 'navigation/page/nav.js', 'navigation/navbar.js', 'navigation/page/navbar-canvas.js', 'navigation/page/navbar-moodle.js', 'navigation/page/navbar.js', 'navigation/page/navbar-widgets.js', 'settings/page/settingspage.js', 'courses/stream.js', 'courses/page/stream.js', 'courses/folders.js', 'courses/page/folders.js', 'core/zip.js', 'writer/drafts.js', 'planner/gradecalc.js', 'planner/page/grades.js', 'looks/page/schedule.js', 'planner/todo.js', 'planner/page/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'courses/cards.js', 'courses/page/cards.js', 'courses/page/cardtasks.js', 'courses/moodle.js', 'courses/page/moodle.js', 'navigation/seek.js', 'navigation/page/search.js', 'courses/page/discussion-nav.js', 'planner/remind.js', 'planner/page/reminders.js', 'navigation/page/palette.js', 'navigation/page/keys.js', 'navigation/page/coursemenu.js', 'courses/page/previews.js', 'courses/page/download.js', 'core/widgets.js', 'navigation/sidebar.js', 'navigation/page/sidebar.js', 'core/page/widgets.js', 'courses/page/coursecards.js', 'courses/page/dashboard.js', 'looks/lookx.js', 'looks/lookset.js', 'looks/looks.js', 'looks/page/lookx.js', 'looks/lookparts.js', 'looks/page/lookparts.js', 'looks/motionx.js', 'writer/page/drafts.js', 'courses/page/docs.js', 'courses/page/bbpreview.js', 'courses/page/canvasopen.js', 'courses/page/docreview.js', 'navigation/page/place.js', 'planner/gradescope.js', 'planner/ics.js', 'planner/calexport.js', 'planner/page/calexport.js', 'planner/gpa.js', 'core/doctext.js', 'planner/page/import.js', 'planner/page/gpaterms.js', 'planner/syllabus.js', 'planner/syllabus-ai.js', 'planner/page/syllabus.js', 'planner/classes.js', 'planner/page/classes.js', 'planner/insights.js', 'planner/page/insights.js', 'planner/notes.js', 'planner/page/notes.js', 'courses/ultra.js', 'courses/lmsq.js', 'pet/pet.js', 'pet/petbrain.js', 'pet/petphysics.js', 'pet/page/petworld.js', 'pet/petsprites.js', 'pet/petplayer.js', 'pet/page/pet.js', 'navigation/coursetabs.js', 'navigation/page/coursetabs.js', 'sharing/page/sharing.js', 'looks/parts.js', 'looks/page/rules.js', 'looks/page/motionx.js', 'looks/glsl.js', 'mods/page/mods.js', 'mods/page/modui.js', 'mods/page/modwidgets.js', 'content/routes.js', 'core/popup.js', 'courses/page/popup.js', 'courses/announce.js', 'courses/page/announce.js', 'courses/page/announce-read.js', 'courses/rubric.js', 'courses/page/rubric.js', 'writer/page/editor-menu.js', 'navigation/page/sticky-fold.js', 'writer/writer-ultra.js', 'writer/page/writer.js', 'writer/writer-target.js', 'writer/writer-context-discussion.js', 'writer/page/writer-quote.js', 'writer/writer-context-assignment.js', 'writer/writer-submit.js', 'writer/page/writer-submit.js']);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m?.type !== 'glaze:load') return;
   const files = Array.isArray(m.files) ? m.files : [];
@@ -2329,9 +2329,9 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
   return true; // the reply comes once the files have run
 });
 const loadInto = (m, sender, files, reply) => {
-  if (files.includes('features/mods.js')) blocklistCheck(); // a page is about to run mods: the daily blocklist check, if due
-  if (files.includes('features/mods.js')) channelCheck().catch(() => {}); // and the daily check of followed mod channels
-  const injected = [...new Set([...(files.includes('content-ultra.js') ? ['lib/nav.js'] : []), ...(files.includes('features/nav.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js'] : []), ...(files.includes('features/navbar-canvas.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js'] : []), ...(files.includes('features/navbar-moodle.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js'] : []), ...(files.includes('features/navbar.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js', 'lib/navbar.js'] : []), ...(files.includes('lib/navlayout.js') ? ['lib/nav.js', 'lib/nav-items.js'] : []), ...(files.includes('features/coursetabs.js') ? ['lib/coursetabs.js'] : []), ...(files.includes('features/lookparts.js') ? ['lib/lookx.js', 'lib/lookparts.js'] : []), ...(files.some((f) => MOVERS.includes(f)) ? ['lib/motion.js'] : []), ...files])];
+  if (files.includes('mods/page/mods.js')) blocklistCheck(); // a page is about to run mods: the daily blocklist check, if due
+  if (files.includes('mods/page/mods.js')) channelCheck().catch(() => {}); // and the daily check of followed mod channels
+  const injected = [...new Set([...(files.includes('content/content-ultra.js') ? ['navigation/nav.js'] : []), ...(files.includes('navigation/page/nav.js') ? ['navigation/nav.js', 'navigation/nav-items.js', 'navigation/navlayout.js'] : []), ...(files.includes('navigation/page/navbar-canvas.js') ? ['navigation/nav.js', 'navigation/nav-items.js', 'navigation/navlayout.js'] : []), ...(files.includes('navigation/page/navbar-moodle.js') ? ['navigation/nav.js', 'navigation/nav-items.js', 'navigation/navlayout.js'] : []), ...(files.includes('navigation/page/navbar.js') ? ['navigation/nav.js', 'navigation/nav-items.js', 'navigation/navlayout.js', 'navigation/navbar.js'] : []), ...(files.includes('navigation/navlayout.js') ? ['navigation/nav.js', 'navigation/nav-items.js'] : []), ...(files.includes('navigation/page/coursetabs.js') ? ['navigation/coursetabs.js'] : []), ...(files.includes('looks/page/lookparts.js') ? ['looks/lookx.js', 'looks/lookparts.js'] : []), ...(files.some((f) => MOVERS.includes(f)) ? ['core/motion.js'] : []), ...files])];
   // The document that asked, where the browser names it (Chrome): one that has since navigated away gets nothing.
   // Without a documentId, the frame, after asking it whether it still holds the document that asked (content.js's
   // docId, in Glaze's own world there). Pin the probe's document id too where available. Pinned or not, a navigation
@@ -2361,14 +2361,14 @@ const loadInto = (m, sender, files, reply) => {
   }).catch((e) => reply({ ok: false, error: String(e?.message || e) }));
 };
 
-// AI (lib/ai/broker.js, docs/ai-harness.md): off by default, and nothing of it loads until a feature opens a 'glaze:ai' port.
+// AI (ai/broker.js, docs/ai-harness.md): off by default, and nothing of it loads until a feature opens a 'glaze:ai' port.
 // Who may: Glaze's own pages, or Glaze in a frame of a site it runs on (lmsPage), never a quiz's, a test's or a tool's page
 // (modQuiet). Glaze's writer frame (writer.html) is Glaze's own page inside an LMS tab: it is judged by the frame it sits
 // in and the tab's page, read live, and on an Ultra assignment attempt it may ask for the writer's features only once the
 // tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
 // Settings' top frame reads and writes them ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
-// worker's importScripts calls name (scripts/package-firefox.sh). A task (lib/ai/tasks/<id>.js) goes in this list too.
-const aiFiles = () => importScripts('writer-sources.js', 'writer-cite.js', 'ai/schema.js', 'ai/request.js', 'ai/stream.js', 'ai/failure.js', 'ai/endpoint.js', 'ai/text.js', 'ai/visual-cache.js', 'ai/models.js', 'ai/providers.js', 'ai/providers/openai.js', 'ai/providers/device.js', 'ai/providers/apple.js', 'ai/tools.js', 'ai/loop.js', 'ai/task.js', 'ai/tasks/syllabus-read.js', 'ai/tasks/writer-context.js', 'ai/tasks/writer-complete.js', 'ai/tasks/writer-review.js', 'ai/tasks/writer-image.js', 'ai/tasks/writer-feedback.js', 'ai/tasks/writer-outline.js', 'ai/tasks/writer-requirements.js', 'ai/tasks/writer-cite.js', 'ai/tasks/writer-decide.js', 'ai/settings.js', 'ai/broker.js');
+// worker's importScripts calls name (scripts/package-firefox.sh). A task (ai/tasks/<id>.js) goes in this list too.
+const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/settings.js', '../ai/broker.js');
 globalThis.addEventListener?.('install', aiFiles);
 const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ_AI_BROKER; };
 let aiVault = null, aiLocal = null, aiRevision = 0;
@@ -2383,7 +2383,7 @@ const aiEnv = () => ({
   vault: (aiVault ||= GZ_AI_BROKER.vault()), local: (aiLocal ||= brokerArea('local')), reach: reachable, fetch: (u, i) => fetch(u, i), task: (id) => GZ_AI_TASKS.get(id),
   say: (m) => chrome.runtime.sendMessage?.(m)?.catch?.(() => {}), // the device model's download progress, to Settings
 });
-// Ultra's assignment and test attempts share one route (features/sidebar.js reads it too). What the attempt is, Glaze's
+// Ultra's assignment and test attempts share one route (navigation/page/sidebar.js reads it too). What the attempt is, Glaze's
 // content script in that document says ('glaze:attempt-kind' { kind: 'assignment' | 'test' | 'unknown' }), with
 // LMS and live ancestry checks but on this route; kept for that document's own page, including a course-tab frame. Unknown is a test, and
 // takes back an earlier 'assignment' once the page shows it can't be one.
@@ -2595,21 +2595,21 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 });
 
 // ---- Agent apps (MCP) -----------------------------------------------------------------------------------------------
-// Agent apps on this computer reach Glaze's tools through the glaze-mcp helper: lib/agent-link.js carries their
-// connections as frames, lib/mcp/wire.js speaks MCP on each, and every tools/call goes through lib/mcp/calls.js (the
-// switches, the app's pairing and groups in the approval window, lib/mcp/approve.js, then the tool). Off by default
-// (storage.local mcp, lib/mcp/grants.js): nothing of it loads until it is on. While it is on the link loads at worker start,
+// Agent apps on this computer reach Glaze's tools through the glaze-mcp helper: agents/agent-link.js carries their
+// connections as frames, agents/wire.js speaks MCP on each, and every tools/call goes through agents/calls.js (the
+// switches, the app's pairing and groups in the approval window, agents/approve.js, then the tool). Off by default
+// (storage.local mcp, agents/grants.js): nothing of it loads until it is on. While it is on the link loads at worker start,
 // as ensure() must run then (a worker granted nativeMessaging connects once it restarts), and the rest with it; after a
 // switch-on, with the first frame. Glaze or agent access off ends every connection, and with them every ask waiting for
 // one, and the link; the apps and their grants stay. Every file by name in literal importScripts calls (scripts/package-firefox.sh).
 const MCP_BROWSER = SAFARI ? 'safari' : new URL(chrome.runtime.getURL('')).protocol === 'moz-extension:' ? 'firefox' : 'chrome';
-const agentFiles = () => importScripts('agent-frames.js', 'agent-link.js');
-const grantFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'mcp/grants.js');
-const mcpFiles = () => importScripts('ai/request.js', 'ai/schema.js', 'ai/tools.js', 'ai/failure.js', 'ai/loop.js', 'modapi.js', 'modwidget.js', 'modbroker.js', 'modtools.js', 'mcp/grants.js', 'mcp/registry.js', 'mcp/tools-study.js', 'mcp/tools-grades.js', 'doc-home.js', 'writer-sources.js', 'writer-tools.js', 'mcp/writer.js', 'mcp/tabs.js', 'mcp/tools-assign.js', 'mcp/wire.js', 'mcp/approve.js', 'mcp/calls.js', 'mcp/modroute.js');
+const agentFiles = () => importScripts('../agents/agent-frames.js', '../agents/agent-link.js');
+const grantFiles = () => importScripts('../ai/request.js', '../ai/schema.js', '../ai/tools.js', '../agents/grants.js');
+const mcpFiles = () => importScripts('../ai/request.js', '../ai/schema.js', '../ai/tools.js', '../ai/failure.js', '../ai/loop.js', '../mods/modapi.js', '../mods/modwidget.js', '../mods/modbroker.js', '../mods/modtools.js', '../agents/grants.js', '../agents/registry.js', '../agents/tools-study.js', '../agents/tools-grades.js', '../documents/doc-home.js', '../writer/writer-sources.js', '../writer/writer-tools.js', '../agents/writer.js', '../agents/tabs.js', '../agents/tools-assign.js', '../agents/wire.js', '../agents/approve.js', '../agents/calls.js', '../agents/modroute.js');
 globalThis.addEventListener?.('install', () => { agentFiles(); mcpFiles(); });
 // The local setting is a UI mirror, writable by content scripts. Only an options message may persist consent in this
 // extension-origin database. A forged local on cannot reconnect a previously paired app after the owner switched off.
-// The profile's instance (lib/agent-link.js INSTANCE), which names the helper's run file, is kept here too.
+// The profile's instance (agents/agent-link.js INSTANCE), which names the helper's run file, is kept here too.
 let mcpConsentDB = null;
 // key's value, or with value given, put → what was read or put.
 const mcpSetting = async (key, ...value) => {
@@ -2647,10 +2647,10 @@ const mcpGrants = () => (mcpGrantStore ||= GZ_MCP_GRANTS.open());
 // is each connection's engine state kept (storage.session mcpConn:<c>) and restored. Chrome and Firefox end the helper with
 // the worker's port, and the next helper numbers its connections from 1 again.
 const MCP_KEEP = MCP_BROWSER === 'safari';
-// The assignment reads agent apps had Glaze keep (lib/mcp/tools-assign.js clear), cleared with that file alone at off, at
+// The assignment reads agent apps had Glaze keep (agents/tools-assign.js clear), cleared with that file alone at off, at
 // Forget all apps, and for a site removal (scope: its origin) or Reset everything, whether or not agent access was ever on.
 const mcpClearReads = (scope) => {
-  if (typeof GZ_MCP_ASSIGN === 'undefined') importScripts('mcp/tools-assign.js');
+  if (typeof GZ_MCP_ASSIGN === 'undefined') importScripts('../agents/tools-assign.js');
   return GZ_MCP_ASSIGN.clear({ local: chrome.storage.local }, scope);
 };
 
@@ -2659,10 +2659,10 @@ let mcpTabsMade = null;
 const mcpTabs = () => (mcpTabsMade ||= GZ_MCP_TABS.create({ tabs: chrome.tabs, scripting: chrome.scripting, quiet: modQuiet }));
 const mcpRefresh = (account, group, o) => mcpTabs().refresh(account, group, o);
 // Writer's document tools that need an open Writer page (writer-mcp.js) reach it over port glaze:mcp-writer, admitted
-// from Glaze's own pages only, with the AI port's sender rules, while agent access is on (lib/mcp/writer.js pages) → the
+// from Glaze's own pages only, with the AI port's sender rules, while agent access is on (agents/writer.js pages) → the
 // page's answer, or null with none.
 let mcpWriterHub = null;
-const mcpWriterPages = () => { if (typeof GZ_MCP_WRITER === 'undefined') importScripts('mcp/writer.js'); return (mcpWriterHub ||= GZ_MCP_WRITER.pages({ runtime: chrome.runtime })); };
+const mcpWriterPages = () => { if (typeof GZ_MCP_WRITER === 'undefined') importScripts('../agents/writer.js'); return (mcpWriterHub ||= GZ_MCP_WRITER.pages({ runtime: chrome.runtime })); };
 const mcpWriter = (key, op, args, o) => mcpWriterPages().call(key, op, args, o);
 chrome.runtime.onConnect.addListener((p) => {
   if (p.name === 'glaze:mcp-writer') mcpWriterPages().connect(p, async () => fromGlaze(p.sender || {}) && await mcpOn() && await glazeOn() && await aiSender(p.sender || {}, { op: 'run', feature: 'writing' }) === true);
@@ -2674,13 +2674,13 @@ const mcpCode = (mod, name, args, ctx) => (mcpRoute ||= GZ_MCP_MODROUTE.create({
 const mcpKeys = async () => (chrome.storage.local.getKeys ? chrome.storage.local.getKeys() : Object.keys(await chrome.storage.local.get(null)));
 const mcpCtx = (account) => ({ account, local: chrome.storage.local, keys: mcpKeys, now: Date.now });
 // A mod's declarative tool reads what Glaze's own tool for its source reads, for the account calls.js resolved: { at, items,
-// missing? }. A schedule's items are the planner's, which lib/modtools.js keeps to the dated ones.
+// missing? }. A schedule's items are the planner's, which mods/modtools.js keeps to the dated ones.
 const MCP_SOURCES = { todo: 'todo_list', schedule: 'todo_list', courses: 'courses_list', grades: 'grades_list' };
 const mcpData = async (source, account) => {
   const r = Object.hasOwn(MCP_SOURCES, source) ? await GZ_AI_TOOLS.get(MCP_SOURCES[source])?.run({}, mcpCtx(account)) : null;
   return Array.isArray(r?.items) ? { at: r.at ?? null, items: r.items, ...(typeof r.missing === 'string' && { missing: r.missing }) } : { at: null, items: [] };
 };
-// The registry's state (lib/mcp/registry.js), read afresh for each call; mcpState is the last one read, for the list, which
+// The registry's state (agents/registry.js), read afresh for each call; mcpState is the last one read, for the list, which
 // the engine reads at once.
 const mcpRead = async () => {
   const got = await chrome.storage.local.get(['mods', 'modDev', 'modRuntime']);
@@ -2698,7 +2698,7 @@ const mcpCore = () => (mcpMade ||= (() => {
   if (!GZ_AI_TOOLS.get('documents_list')) GZ_MCP_WRITER.register(GZ_AI_TOOLS, { papers: (f) => (brokerTurn ||= GZ_CARDS.queue())(() => f(openPapers())), bridge: mcpWriter });
   mcpWriterPages().wake();
   const approve = GZ_MCP_APPROVE.create({ windows: chrome.windows, tabs: chrome.tabs, storage: { session: chrome.storage.session }, runtime: chrome.runtime,
-    now: Date.now, timers: globalThis, url: chrome.runtime.getURL('lib/mcp/approve.html') });
+    now: Date.now, timers: globalThis, url: chrome.runtime.getURL('agents/approve.html') });
   chrome.windows?.onRemoved?.addListener((id) => approve.closed(id));
   const grants = mcpGrants();
   const calls = GZ_MCP_CALLS.create({
@@ -2803,7 +2803,7 @@ chrome.runtime.onInstalled.addListener(mcpTrigger);
 chrome.permissions?.onAdded?.addListener(mcpTrigger);
 chrome.permissions?.onRemoved?.addListener(mcpTrigger);
 // What the list is made of: once it has settled for 500 ms, the state is read again and each connection hears whether the
-// list moved (lib/mcp/wire.js changed).
+// list moved (agents/wire.js changed).
 let mcpListTimer = 0;
 chrome.storage.onChanged.addListener((c, area) => {
   if ((area === 'local' && c.mcp) || (area === 'sync' && c.enabled)) mcpTrigger();
@@ -2817,7 +2817,7 @@ chrome.storage.onChanged.addListener((c, area) => {
     }, () => {});
   }, 500);
 });
-// The approval window's Allow and Don't allow (lib/mcp/approve.js decide checks it is that window's tab).
+// The approval window's Allow and Don't allow (agents/approve.js decide checks it is that window's tab).
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:mcp-ask') return;
   reply(mcpMade ? mcpMade.approve.decide(m, s) : { ok: false });
@@ -2827,7 +2827,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 const MCP_OFF = { state: 'off', at: null };
 const mcpConfig = async (m) => {
   const local = chrome.storage.local;
-  // Settings asks as it opens and once after a wait on Starting… (lib/editor-agents.js WAIT); each ask is a trigger, so a
+  // Settings asks as it opens and once after a wait on Starting… (settings/editor-agents.js WAIT); each ask is a trigger, so a
   // helper installed since connects, and a worker started for the ask connects at its start.
   if (m.op === 'state') { const link = (await mcpEnsure()) ?? MCP_OFF; return { ok: true, on: await mcpOn(), link }; }
   if (m.op === 'set') {
@@ -2859,12 +2859,12 @@ Promise.resolve().then(async () => {
   return mcpEnsure();
 }).catch(() => {});
 
-// The mod blocklist (lib/blocklist.js): a signed list of mods to stop, asked for at most daily and only while a code mod is
+// The mod blocklist (mods/blocklist.js): a signed list of mods to stop, asked for at most daily and only while a code mod is
 // installed on Chrome and the setting is on. Nothing is scheduled: a page loading the mods runtime (glaze:load above) and the editor
 // opening ('glaze:blocklist') wake it. One check at a time; its writes go through the broker's queue, with the mod records'.
 // The network wait does not.
-globalThis.addEventListener?.('install', () => importScripts('blocklist.js'));
-const blocklist = () => { if (typeof GZ_BLOCKLIST === 'undefined') importScripts('blocklist.js'); return GZ_BLOCKLIST; };
+globalThis.addEventListener?.('install', () => importScripts('../mods/blocklist.js'));
+const blocklist = () => { if (typeof GZ_BLOCKLIST === 'undefined') importScripts('../mods/blocklist.js'); return GZ_BLOCKLIST; };
 let blocklistRun = null;
 const blocklistCheck = () => new URL(chrome.runtime.getURL('')).protocol !== 'chrome-extension:'
   ? Promise.resolve({ ok: false, error: 'off' }) : (blocklistRun ||= blocklist().check({
@@ -2881,29 +2881,29 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 
-// Mod channels (lib/modchannel.js): an author publishes a signed bundle to a share session; a follower's Glaze checks it
+// Mod channels (mods/modchannel.js): an author publishes a signed bundle to a share session; a follower's Glaze checks it
 // when the editor opens (or Check now) and at most daily when a page runs mods, never otherwise. Network waits stay out
-// of the broker's queue; writes to mod records go through it. Every bundle is checked by lib/modbundle.js as a hand install.
-globalThis.addEventListener?.('install', () => importScripts('modchannel.js'));
+// of the broker's queue; writes to mod records go through it. Every bundle is checked by mods/modbundle.js as a hand install.
+globalThis.addEventListener?.('install', () => importScripts('../mods/modchannel.js'));
 const CHANNEL_OPS = new Set(['follow', 'publish', 'ownLink', 'check', 'unfollow', 'dismiss']);
 const channels = () => {
   if (typeof GZ_MODCHANNEL === 'undefined') {
     brokerIn('mods');
-    importScripts('relay.js', 'sharing.js', 'modchannel.js');
+    importScripts('../sharing/relay.js', '../sharing/sharing.js', '../mods/modchannel.js');
   }
   return GZ_MODCHANNEL;
 };
 const queued = (f) => (brokerTurn ||= GZ_CARDS.queue())(f);
 // A channel author's key (storage.local `modChannelOwn:<id>`: the session's edit key and delete token) is kept in the
 // worker's own IndexedDB, beside the share sessions' (glaze-sharing, `vault`): a script in any page can read
-// storage.local, and none can read this. lib/modchannel.js asks for it through this area like any other key. One still
+// storage.local, and none can read this. mods/modchannel.js asks for it through this area like any other key. One still
 // in storage.local moves when it is first asked for, and the rest move once at startup (channelKeysMoved). One area
 // for all, as modchannel.js keys its queues by it.
 const OWN_KEY = /^modChannelOwn:[a-z2-7]{16}$/;
 let channelArea = null;
 const channelLocal = () => {
   if (channelArea) return channelArea;
-  if (typeof GZ_SESSIONS === 'undefined') importScripts('relay.js', 'sharing.js', 'sessions.js');
+  if (typeof GZ_SESSIONS === 'undefined') importScripts('../sharing/relay.js', '../sharing/sharing.js', '../sharing/sessions.js');
   const base = brokerArea('local'), vault = GZ_SESSIONS.database();
   // Startup migration and publishing share this turn: an older copy cannot finish moving over a new author key.
   const turn = GZ_CARDS.queue();
@@ -2951,7 +2951,7 @@ const moveChannelKeys = async () => {
   await chrome.storage.local.set({ [flag]: true });
 };
 // A channel's relay is share.frostdev.io, a required host, or one of the student's own that the editor asked for (Read code);
-// one Glaze doesn't hold is refused before the request (lib/modchannel.js says 'network').
+// one Glaze doesn't hold is refused before the request (mods/modchannel.js says 'network').
 const channelEnv = () => ({ local: channelLocal(), fetch: async (u, i) => { if (!await reachable(u)) throw new TypeError('host'); return fetch(u, i); }, now: () => Date.now(), blocked, enqueue: queued,
   install: (m) => GZ_MODBUNDLE.change(m, { local: brokerArea('local') }) });
 const channelCheck = (opts) => channels().check(channelEnv(), opts);
@@ -2981,12 +2981,12 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 
-// Course tabs' sketches (features/coursetabs.js): of course pages the student was on, as the page drew them (lib/coursetabs.js
+// Course tabs' sketches (navigation/page/coursetabs.js): of course pages the student was on, as the page drew them (navigation/coursetabs.js
 // sketch: boxes and colours, no text but the course's name), kept for a tab switch after a reload. In storage.session, which the
 // browser holds in memory and never writes to disk, and which pages' content scripts can't read (only this worker); where a
 // browser has none, in this worker's memory. Gone when the browser closes, when Glaze or the tabs are switched off (below),
 // when another account turns up on the site, or on sign-out. Only a Canvas or Ultra page's top frame sends one, for its own
-// origin (never one the message names). Shapes and sizes: lib/coursetabs.js clip.
+// origin (never one the message names). Shapes and sizes: navigation/coursetabs.js clip.
 const SNAP_MEM = new Map();
 let snapTurn;
 const snapQueue = (fn) => (snapTurn ||= GZ_CARDS.queue())(fn);
@@ -3089,7 +3089,7 @@ chrome.storage.onChanged.addListener((c, area) => {
   });
 });
 
-// A Gradescope course page for a Canvas or Ultra page (lib/gradescope.js refresh, todo.gsDaily): a content script there can't
+// A Gradescope course page for a Canvas or Ultra page (planner/gradescope.js refresh, todo.gsDaily): a content script there can't
 // read gradescope.com, so the worker GETs it with the student's own Gradescope session and hands back the page, which the
 // Canvas page reads (a worker has no DOMParser) and keeps through 'glaze:gradescope'. Only for a course that goes to one
 // of that page's site's courses, only for a Canvas account of that site that said yes to the Gradescope account kept (the
@@ -3143,14 +3143,14 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   return true;
 });
 
-// Google Calendar sync (lib/gcal.js; Chrome only, with the optional identity permission granted on the editor's Connect).
+// Google Calendar sync (planner/gcal.js; Chrome only, with the optional identity permission granted on the editor's Connect).
 // The editor connects (a new Glaze calendar, or another device's by its link code), clears an error after signing in
-// again, or disconnects; a Canvas page (features/gcal.js) hands over its events for its own site's account. One
+// again, or disconnects; a Canvas page (planner/page/gcal.js) hands over its events for its own site's account. One
 // operation at a time, in a queue of its own: a run talks to Google for a while, and the storage broker's queue mustn't
 // wait on it. Disconnect stops a run under way. State: storage.local gcal (the calendar, its account's label, gen, the
-// last run per Canvas account, the last error) and gcalSync (lib/gcal.js fresh()), both for one connection (gen): a run
+// last run per Canvas account, the last error) and gcalSync (planner/gcal.js fresh()), both for one connection (gen): a run
 // keeps what it learned only while that connection stands. Plans moved in Google reach Better To Do's data through the
-// broker's queue, each only while the plan there is what Glaze last wrote (lib/gcal.js still).
+// broker's queue, each only while the plan there is what Glaze last wrote (planner/gcal.js still).
 const gcalEnv = {
   fetch: (url, init) => fetch(url, init),
   sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
@@ -3201,7 +3201,7 @@ const gcalOps = {
     return { ok: true, revoked, had: !!token };
   },
   // epoch: gcalEpoch when the page's message arrived. A run goes on only while everything its events were composed under
-  // still holds (lib/calexport.js consent: Glaze's switch, the export's choices, the Gradescope switch and this account's
+  // still holds (planner/calexport.js consent: Glaze's switch, the export's choices, the Gradescope switch and this account's
   // answer), the build switch is on, the connection is the one it started on and no Disconnect has come since. act() is
   // the guard nearest each side effect, each request to Google and each write here: one read of all of it (and of the
   // keys the write needs), then the check, then the request or write issued with nothing awaited in between. A failed
@@ -3257,7 +3257,7 @@ const gcalOps = {
       } catch (e) { out = { ok: false, error: e?.code || 'network' }; }
       if (gcalStop === ctl) gcalStop = null;
       if (out.error === 'stopped') return out;
-      // When each account last ran (features/gcal.js waits 15 minutes from it), and how the run ended, for the editor.
+      // When each account last ran (planner/page/gcal.js waits 15 minutes from it), and how the run ended, for the editor.
       await keep((now) => ({ gcal: { ...now, last: { ...Object.fromEntries(Object.entries(now.last || {}).slice(-19)), [m.src]: Date.now() }, error: out.ok ? '' : out.error } })).catch(() => {});
       return out;
     } finally { gcalRuns.delete(run); }
@@ -3267,7 +3267,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:gcal' || typeof m.op !== 'string' || !Object.hasOwn(gcalOps, m.op)) return;
   const epoch = gcalEpoch;
   (async () => {
-    if (!GZ_GCAL.ON) return { ok: false, error: 'off' }; // the build-time switch (lib/gcal.js)
+    if (!GZ_GCAL.ON) return { ok: false, error: 'off' }; // the build-time switch (planner/gcal.js)
     if (m.op === 'sync') {
       // A Canvas or Ultra page, for an account of its own site, with its range's start and the events it worked out, and
       // whether it read them whole (an Ultra read can be partial: then nothing is deleted for being missing).
@@ -3285,7 +3285,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // A Download all wait owns a private ticket, sent over its byte port and the frame's MessageChannel, never a URL.
 // A public Allow page's hash is display text, not authority. Only that wait's frame and the tab opened for it may ask.
 // Download all pings its byte port every 15 s; those onMessage events reset Firefox's idle timer while these waits live.
-const ALLOW_PAGE = 'features/allow.html';
+const ALLOW_PAGE = 'courses/allow.html';
 const allowWaits = new Map(); // ticket -> the byte port's wait (one per download)
 const allowTabs = new Map(); // the Allow tab's id -> its wait
 const allowPage = (s, host) => s.id === chrome.runtime.id && extensionOrigin(s) && s.url === `${chrome.runtime.getURL(ALLOW_PAGE)}#${host}`;
@@ -3385,7 +3385,7 @@ chrome.runtime.onConnect.addListener((port) => {
       const url = GZ_DOWNLOAD.url(m.url, dev);
       if (!url) throw new Error('url');
       // A file server Glaze doesn't hold (Canvas cloud keeps files on hosts of its own, never known ahead): the page shows
-      // Glaze's Allow frame for it (features/allow.html) and sends the file again once the student allowed it. Nothing is
+      // Glaze's Allow frame for it (courses/allow.html) and sends the file again once the student allowed it. Nothing is
       // fetched until the browser holds the host, and nothing is kept but its grant. Noted as a feature's ask, so its grant
       // isn't taken for a school's site (granting, below).
       if (!await reachable(url)) {

@@ -1,4 +1,4 @@
-// The database functions (lib/sheet-fn-database.js). Cases are the worked examples on Microsoft's page for each
+// The database functions (documents/sheets/sheet-fn-database.js). Cases are the worked examples on Microsoft's page for each
 // function, https://support.microsoft.com/en-us/office/<name>-function-<id>:
 //   dsum 53181285-0c4b-4f5a-aaa3-529a322be41b, dcount c1fc7b93-fb0d-4d8d-97db-8d5f076eaeb1, dcounta
 //   00232a6d-5a66-4a01-a25b-c1653fda1244, daverage a6a2d5ac-4b4b-48cd-a1d8-7b37834e5aee, dget 455568bf-4eef-45f7-90f0-ec250d00892e,
@@ -11,14 +11,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-require('../../extension/lib/sheet-fn-math.js');
-require('../../extension/lib/sheet-fn-text.js');
-require('../../extension/lib/sheet-fn-info.js');
-require('../../extension/lib/sheet-fn-date.js');
-require('../../extension/lib/sheet-fn-lookup.js');
-require('../../extension/lib/sheet-fn-database.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+require('../../extension/documents/sheets/sheet-fn-text.js');
+require('../../extension/documents/sheets/sheet-fn-info.js');
+require('../../extension/documents/sheets/sheet-fn-date.js');
+require('../../extension/documents/sheets/sheet-fn-lookup.js');
+require('../../extension/documents/sheets/sheet-fn-database.js');
 
 // cells: typed input (a string, as a person types it), a number, a boolean, or { s } for text as it is.
 const book = (cells = {}, { sheets = ['Sheet1'] } = {}) => {
@@ -59,7 +59,7 @@ const NAMES = 'DSUM DCOUNT DCOUNTA DAVERAGE DGET DMAX DMIN DPRODUCT DSTDEV DSTDE
 test('the database functions are registered', () => {
   for (const name of NAMES) assert.ok(C.fn(name), name);
   for (const name of NAMES) assert.equal(C.fn(name).min, 3, `${name} takes three arguments`);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-database.js'), 'utf8')), 'no timers');
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-fn-database.js'), 'utf8')), 'no timers');
 });
 
 // The pages' orchard: criteria A1:F3 over the table, its labels in row `top`.

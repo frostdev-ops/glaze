@@ -1,4 +1,4 @@
-// features/rubric.js on Ultra's assessment overview, against the response shapes a real graded assignment returns
+// courses/page/rubric.js on Ultra's assessment overview, against the response shapes a real graded assignment returns
 // (fixtures/ultra-rubric-graded.json): the definition shows wherever Ultra's own rubric link does, and the evaluation's
 // selections show only once the grade is posted, displayGraded allows it, and the evaluation is the student's own attempt's.
 const test = require('node:test');
@@ -79,17 +79,17 @@ const page = (data, width = 706, kind = 'overview') => {
   const c = vm.createContext(globals);
   c.globalThis = c;
   const files = {
-    'lib/rubric.js': () => { c.GZ_RUBRIC_LIB = require('../../extension/lib/rubric.js'); },
-    'lib/ultra.js': () => { c.GZ_ULTRA = require('../../extension/lib/ultra.js'); },
-    'lib/lmsq.js': () => { c.GZ_LMSQ = { fetch: (url) => fetch(url) }; },
-    'features/popup.js': () => { c.GZ_POPUP = { ready: Promise.resolve(), safe: (text) => [text], open: (o) => { popups.push(o); return { close() {}, isOpen: () => false }; } }; },
+    'courses/rubric.js': () => { c.GZ_RUBRIC_LIB = require('../../extension/courses/rubric.js'); },
+    'courses/ultra.js': () => { c.GZ_ULTRA = require('../../extension/courses/ultra.js'); },
+    'courses/lmsq.js': () => { c.GZ_LMSQ = { fetch: (url) => fetch(url) }; },
+    'courses/page/popup.js': () => { c.GZ_POPUP = { ready: Promise.resolve(), safe: (text) => [text], open: (o) => { popups.push(o); return { close() {}, isOpen: () => false }; } }; },
   };
   c.GZ_CTX = {
     site: 'ultra', solo: true, tabFrame: '', t: (s) => s, locale: () => 'en', on: () => true, account: async () => '_42_1',
     settings: () => ({ rubric: { show: 'auto', inline: true } }),
     need: async (file, ready) => { if (!ready()) files[file](); assert.ok(ready(), file); },
   };
-  vm.runInContext(fs.readFileSync(path.join(root, 'features/rubric.js'), 'utf8'), c, { filename: 'features/rubric.js' });
+  vm.runInContext(fs.readFileSync(path.join(root, 'courses/page/rubric.js'), 'utf8'), c, { filename: 'courses/page/rubric.js' });
   return { c, box, row, link, asked, listeners, popups };
 };
 
@@ -228,7 +228,7 @@ test('a graded attempt whose association hides graded rubrics shows the definiti
 });
 
 test('the inline rubric keeps sideways scrolling to itself and lets the page scroll vertically over it', () => {
-  const css = fs.readFileSync(path.join(root, 'features/rubric.js'), 'utf8').match(/const CSS = `([\s\S]*?)`;/)[1];
+  const css = fs.readFileSync(path.join(root, 'courses/page/rubric.js'), 'utf8').match(/const CSS = `([\s\S]*?)`;/)[1];
   const scroll = css.match(/\.scroll \{([^}]*)\}/)[1];
   assert.match(scroll, /overflow-x:auto/);
   assert.match(scroll, /overscroll-behavior-x:contain/);
@@ -327,14 +327,14 @@ test('until Glaze has the rubric, the discussion and attempt links still open Ul
   }
 });
 
-test('routes: features/rubric.js loads on Ultra\'s overview, attempt and discussion pages, and Canvas\'s assignment page', async () => {
+test('routes: courses/page/rubric.js loads on Ultra\'s overview, attempt and discussion pages, and Canvas\'s assignment page', async () => {
   const where = async (site, pathname) => {
     const loaded = [];
     const ctx = vm.createContext({ GZ_CTX: { site, need: async (f) => { loaded.push(f); ctx.GZ_RUBRIC_UI = { sync() {} }; ctx.GZ_ANNOUNCE = { sync() {} }; ctx.GZ_EDITOR_MENU = { sync() {} }; ctx.GZ_STICKY_FOLD = { sync() {} }; } }, location: { pathname, search: '' }, Set, Promise });
     ctx.globalThis = ctx;
-    vm.runInContext(fs.readFileSync(path.join(root, 'features/routes.js'), 'utf8'), ctx);
+    vm.runInContext(fs.readFileSync(path.join(root, 'content/routes.js'), 'utf8'), ctx);
     ctx.GZ_ROUTES.sync(); await settle();
-    return loaded.includes('features/rubric.js');
+    return loaded.includes('courses/page/rubric.js');
   };
   for (const p of [PATHS.overview, PATHS.discussion, PATHS.attempt, PATHS.draft, '/ultra/courses/_101_1/assessment/_8120_1/attempt']) assert.equal(await where('ultra', p), true, p);
   assert.equal(await where('canvas', '/courses/101/assignments/7'), true);

@@ -6,7 +6,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
-const G = require(path.join(ext, 'defaults.js'));
+const G = require(path.join(ext, 'content/defaults.js'));
 const site = 'https://bb.school.test', uid = '_42_1';
 const out = path.resolve(process.argv[2] || 'ultra-contents-drawer-evidence');
 const lookArg = process.argv.find((a) => a.startsWith('--looks='));

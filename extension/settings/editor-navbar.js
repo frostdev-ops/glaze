@@ -1,11 +1,11 @@
 // The editor's Navigation items (the Navigation tab): every item of Glaze's own bar with its name, icon, group and order,
 // whether it shows, the four on a phone's bar, Glaze's own items (opt-in), its widgets and the student's links. It edits sync
-// navbarItems, cleaned by lib/navbar.js exactly as the bar cleans it, and shows the bar's own grouping (GZ_NAVBAR.build),
+// navbarItems, cleaned by navigation/navbar.js exactly as the bar cleans it, and shows the bar's own grouping (GZ_NAVBAR.build),
 // so what is listed here is what the bar draws. Extension options page only (mount); `rows` is for node tests.
 var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
-  const M = () => (typeof GZ_NAVBAR !== 'undefined' ? GZ_NAVBAR : require('./navbar.js'));
-  const NI = () => (typeof GZ_NAV_ITEMS !== 'undefined' ? GZ_NAV_ITEMS : require('./nav-items.js'));
-  // The items each LMS's bar shows (the account and signing out sit at its foot), by the ids of lib/navlayout.js. The editor
+  const M = () => (typeof GZ_NAVBAR !== 'undefined' ? GZ_NAVBAR : require('../navigation/navbar.js'));
+  const NI = () => (typeof GZ_NAV_ITEMS !== 'undefined' ? GZ_NAV_ITEMS : require('../navigation/nav-items.js'));
+  // The items each LMS's bar shows (the account and signing out sit at its foot), by the ids of navigation/navlayout.js. The editor
   // lists them all, in the order of the bar's default groups, and says beside each which LMS has it: the options page doesn't
   // know which one a student uses, and a student may use more than one.
   const SITES = {
@@ -18,7 +18,7 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
   const sitesOf = (id) => Object.keys(SITES).filter((site) => SITES[site].includes(id));
   const NAMES = { 'institution-page': 'Institution page', stream: 'Activity', course: 'Courses', organization: 'Organizations', calendar: 'Calendar', messages: 'Messages', grades: 'Grades', tools: 'Tools', dashboard: 'Dashboard', home: 'Site home', groups: 'Groups', history: 'History', help: 'Help', admin: 'Admin', notifications: 'Notifications' };
   const GLAZE = { notes: 'Notes', documents: 'Documents', todo: 'To Do', search: 'Search', settings: 'Glaze settings' };
-  // Glaze's widgets in the bar (features/navbar-widgets.js), by their English names and icons.
+  // Glaze's widgets in the bar (navigation/page/navbar-widgets.js), by their English names and icons.
   const WIDGETS = { clock: ['Clock and date', 'history'], next: ['Next due', 'calendar'], timer: ['Focus timer', 'timer'], pet: ['Pet habitat', 'star'] };
   const MAX_BYTES = 8000;
 

@@ -24,9 +24,9 @@ const { execFileSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 const { isDeepStrictEqual: same } = require('node:util');
 const C = require('../../test/helpers/mcp-caches.cjs');
-const ST = require('../../extension/lib/mcp/tools-study.js'), W = require('../../extension/lib/mcp/wire.js'), A = require('../../extension/lib/mcp/approve.js'), MT = require('../../extension/lib/modtools.js');
+const ST = require('../../extension/agents/tools-study.js'), W = require('../../extension/agents/wire.js'), A = require('../../extension/agents/approve.js'), MT = require('../../extension/mods/modtools.js');
 const IDS = require('../../mcp/lib/ids.js'), BR = require('../../mcp/lib/browsers.js'), RV = require('../../mcp/lib/rendezvous.js');
-const NPM = require('../../tools/vendor/npm-integrity.js'), G = require('../../extension/lib/mcp/grants.js');
+const NPM = require('../../tools/vendor/npm-integrity.js'), G = require('../../extension/agents/grants.js');
 
 const src = fs.realpathSync(path.join(__dirname, '../../extension'));
 const BIN = path.join(__dirname, '../../mcp/bin/glaze-mcp.js');
@@ -221,10 +221,10 @@ async function browse(prof) {
 }
 const config = (m) => bounded(`config ${m.op}`, () => OPT.evaluate((m) => chrome.runtime.sendMessage({ type: 'glaze:mcp-config', ...m }), m));
 const local = (patch) => bounded('seed storage.local', () => OPT.evaluate((p) => chrome.storage.local.set(p), patch));
-// The approval records (lib/mcp/approve.js) in storage.session.
+// The approval records (agents/approve.js) in storage.session.
 const asks = () => bounded('read approval records', () => OPT.evaluate(() => chrome.storage.session.get(null).then((all) => Object.entries(all).filter(([k]) => k.startsWith('mcpAsk:')).map(([, v]) => v))));
 const askOf = async (name) => (await asks()).filter((a) => a.app?.name === name).sort((a, b) => a.at - b.at).at(-1) || null;
-const APPROVE = () => `chrome-extension://${EXT.id}/lib/mcp/approve.html`;
+const APPROVE = () => `chrome-extension://${EXT.id}/agents/approve.html`;
 const windowPage = () => CTX.pages().find((p) => p.url() === APPROVE());
 const shown = (w) => w.evaluate(() => {
   const $ = (id) => document.getElementById(id);
@@ -257,7 +257,7 @@ const answers = async (r, name) => {
   return !!got && r.isError !== true && got.account === ACCOUNT && got.source === 'cache' && got.at === w.at && same(got.items, w.items) && mirrored(r);
 };
 const mirrored = (r) => { try { return !!r.structuredContent && typeof r.structuredContent === 'object' && !Array.isArray(r.structuredContent) && same(JSON.parse(textOf(r)), r.structuredContent); } catch { return false; } };
-// Installed mods with declarative tools (lib/modtools.js), on and granted as the editor leaves them. The first tool has the
+// Installed mods with declarative tools (mods/modtools.js), on and granted as the editor leaves them. The first tool has the
 // longest name a mod tool can have: mod_<id16>_<24 characters>.
 const LONGEST = 'due_within_the_next_week';
 const mod = (n, count) => {

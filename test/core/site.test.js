@@ -1,8 +1,8 @@
-// A school's site as a student names it (lib/site.js): the host Glaze asks for, whether it is a course site, and the course
+// A school's site as a student names it (core/site.js): the host Glaze asks for, whether it is a course site, and the course
 // sites near one that isn't.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/site.js');
+const S = require('../../extension/core/site.js');
 
 test('any address a student would paste or type becomes its host, asked for as https', () => {
   const bb = { host: 'bb.school.edu', origin: 'https://bb.school.edu', pattern: 'https://bb.school.edu/*', url: 'https://bb.school.edu/' };

@@ -1,6 +1,6 @@
 // Ultra opens an editor's toolbar menu below its button, inside the page's scroller; at the foot of a test the colour
 // menu's last colours sat under the scroller's edge, above the Save / Submit footer (the 2026-10-27 audit: Red hidden).
-// features/editor-menu.js, a page feature (features/routes.js), scrolls the open menu into view once Ultra draws it.
+// writer/page/editor-menu.js, a page feature (content/routes.js), scrolls the open menu into view once Ultra draws it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -27,7 +27,7 @@ const load = () => {
   const c = { document: doc, requestAnimationFrame: (f) => { frames.set(++frameId, f); return frameId; }, cancelAnimationFrame: (id) => frames.delete(id), GZ_CTX: { site: 'ultra', on: () => c.glazeOn }, glazeOn: true };
   c.globalThis = c;
   vm.createContext(c);
-  const ui = vm.runInContext(read('features/editor-menu.js'), c);
+  const ui = vm.runInContext(read('writer/page/editor-menu.js'), c);
   const button = el('button', 'bb-editor-toolbar-button bb-editor-toolbar-button--main bb-editor-submenu-is-closed bb-editor-toolbar-dropdown color-picker-normal');
   button.setAttribute('aria-expanded', 'false');
   const icon = el('span', 'icon paint-bucket-normal-icon');
@@ -75,13 +75,13 @@ test('the menu feature loads on Ultra pages with an editor, and the worker may l
   const c = { location: { pathname: '' }, GZ_CTX: { site: 'ultra', need: (f) => { need.push(f); return new Promise(() => {}); } }, sessionStorage: { getItem: () => null } };
   c.globalThis = c;
   vm.createContext(c);
-  const routes = vm.runInContext(read('features/routes.js'), c);
-  const asks = (p) => { need.length = 0; c.location.pathname = p; routes.sync(); return need.includes('features/editor-menu.js'); };
+  const routes = vm.runInContext(read('content/routes.js'), c);
+  const asks = (p) => { need.length = 0; c.location.pathname = p; routes.sync(); return need.includes('writer/page/editor-menu.js'); };
   for (const p of ['/ultra/courses/_101_1/assessment/_7_1/attempt/_8_1', '/ultra/courses/_101_1/assessment/_7_1/attempt/create',
     '/ultra/courses/_101_1/journal/_9_1', '/ultra/courses/_101_1/discussion/_9_1', '/ultra/courses/_101_1/outline/discussion/_9_1']) assert.ok(asks(p), p);
   for (const p of ['/ultra/courses/_101_1/outline', '/ultra/stream', '/ultra/courses/_101_1/assessment/_7_1/overview']) assert.ok(!asks(p), p);
-  const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
-  assert.ok(list.includes('features/editor-menu.js'));
+  const list = JSON.parse(read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
+  assert.ok(list.includes('writer/page/editor-menu.js'));
 });
 
 

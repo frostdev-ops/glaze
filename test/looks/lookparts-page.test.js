@@ -1,4 +1,4 @@
-// Look parts on the page: content.js asks for features/lookparts.js only when a Look has parts, and that module keeps them
+// Look parts on the page: content.js asks for looks/page/lookparts.js only when a Look has parts, and that module keeps them
 // for GZ_CTX.parts() and fires `glaze:parts` when they change. Real scripts in a VM with stand-in storage and document;
 // the browser side is checks/looks/lookparts-check.js.
 const test = require('node:test');
@@ -10,10 +10,10 @@ const vm = require('node:vm');
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const tick = (n = 6) => new Promise((r) => { let i = 0; const go = () => (++i >= n ? r() : setImmediate(go)); go(); });
-const X = require('../../extension/lib/lookparts.js');
+const X = require('../../extension/looks/lookparts.js');
 
 // ---- content.js: when the module is asked for ------------------------------------------------------------------------
-const content = read('content.js');
+const content = read('content/content.js');
 const gate = content.slice(content.indexOf('  const partsIn = (m) => {'), content.indexOf('  // Mods start'));
 
 const gated = ({ stored, solo = true, isPreview = false, loaded = false, lastError, getCalls = [] } = {}) => {
@@ -32,12 +32,12 @@ const gated = ({ stored, solo = true, isPreview = false, loaded = false, lastErr
 test('nothing is loaded for a Look without parts, and the module is asked for once a Look has some', async () => {
   assert.deepEqual(await gated(), { asked: [], reads: [] });
   assert.deepEqual(await gated({ stored: '' }), { asked: [], reads: [] }, 'cleared parts are none');
-  assert.deepEqual(await gated({ stored: 'x1:AAAA' }), { asked: ['features/lookparts.js'], reads: ['read'] });
-  assert.deepEqual(await gated({ stored: { h: 'abc' } }), { asked: ['features/lookparts.js'], reads: ['read'] }, 'parts kept on this computer');
+  assert.deepEqual(await gated({ stored: 'x1:AAAA' }), { asked: ['looks/page/lookparts.js'], reads: ['read'] });
+  assert.deepEqual(await gated({ stored: { h: 'abc' } }), { asked: ['looks/page/lookparts.js'], reads: ['read'] }, 'parts kept on this computer');
 });
 
 test('a module already loaded reads again when the parts go, so the page lets go of them', async () => {
-  assert.deepEqual(await gated({ stored: '', loaded: true }), { asked: ['features/lookparts.js'], reads: ['read'] }, 'need() answers at once when the module is there');
+  assert.deepEqual(await gated({ stored: '', loaded: true }), { asked: ['looks/page/lookparts.js'], reads: ['read'] }, 'need() answers at once when the module is there');
 });
 
 test('only the top frame and live tab frames read parts, never the editor\'s preview, and a failed read does nothing', async () => {
@@ -47,7 +47,7 @@ test('only the top frame and live tab frames read parts, never the editor\'s pre
 });
 
 test('content.js hands parts to the pages through GZ_CTX.parts(), asks only when storage changes lookX, and feeds the preview', () => {
-  // Running code mods lay their parts over the Look's (features/mods.js parts), under the same gate.
+  // Running code mods lay their parts over the Look's (mods/page/mods.js parts), under the same gate.
   // Course Looks suppress global parts; their pointer is resolved separately.
   assert.match(content, /const partsOn = \(\) => on\(settings\) && \(!isPreview \|\| html\.dataset\.previewPage !== 'quiz'\);/);
   assert.match(content, /partsOn, courseLook: lookHere,\n    parts: \(\) => \(partsOn\(\) && \(globalThis\.GZ_MODS \? GZ_MODS\.parts\(globalThis\.GZ_XPARTS_PAGE\?\.now\(\) \|\| null\) : globalThis\.GZ_XPARTS_PAGE\?\.now\(\)\)\) \|\| null,/);
@@ -57,10 +57,10 @@ test('content.js hands parts to the pages through GZ_CTX.parts(), asks only when
   assert.ok(content.indexOf('  ready.then(() => modsIn(true));') > content.indexOf('const ready = load().then('));
   assert.match(content.slice(content.indexOf('const load = () =>'), content.indexOf('// The previous palette covers')), /Object.keys\(GZ_DEFAULTS\), 'lookX'/);
   // The worker allows the two files and brings the files they stand on.
-  const worker = read('lib/background.js');
-  assert.match(worker, /'lib\/lookparts\.js', 'features\/lookparts\.js'/);
-  assert.match(worker, /files\.includes\('features\/lookparts\.js'\) \? \['lib\/lookx\.js', 'lib\/lookparts\.js'\]/);
-  assert.match(worker, /files\.includes\('lib\/navlayout\.js'\) \? \['lib\/nav\.js', 'lib\/nav-items\.js'\]/);
+  const worker = read('background/background.js');
+  assert.match(worker, /'looks\/lookparts\.js', 'looks\/page\/lookparts\.js'/);
+  assert.match(worker, /files\.includes\('looks\/page\/lookparts\.js'\) \? \['looks\/lookx\.js', 'looks\/lookparts\.js'\]/);
+  assert.match(worker, /files\.includes\('navigation\/navlayout\.js'\) \? \['navigation\/nav\.js', 'navigation\/nav-items\.js'\]/);
 });
 
 // ---- the module -------------------------------------------------------------------------------------------------------
@@ -77,8 +77,8 @@ const page = ({ sync = {}, local = {}, path: pathname = '/ultra/courses/_1_1/out
     chrome: { runtime: {}, storage: { sync: area(sync), local: area(local) } },
   });
   context.globalThis = context;
-  context.GZ_CTX = { need: async (file, isThere) => { needed.push(file); for (const f of ({ 'lib/navlayout.js': ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js'] })[file] || [file]) vm.runInContext(read(f), context); assert.ok(isThere()); } };
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/lookx.js', 'lib/lookparts.js', ...files, 'features/lookparts.js']) vm.runInContext(read(f), context, { filename: f });
+  context.GZ_CTX = { need: async (file, isThere) => { needed.push(file); for (const f of ({ 'navigation/navlayout.js': ['navigation/nav.js', 'navigation/nav-items.js', 'navigation/navlayout.js'] })[file] || [file]) vm.runInContext(read(f), context); assert.ok(isThere()); } };
+  for (const f of ['core/color.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'looks/lookx.js', 'looks/lookparts.js', ...files, 'looks/page/lookparts.js']) vm.runInContext(read(f), context, { filename: f });
   return { context, events, needed, listeners, data: { sync, local }, now: () => vm.runInContext('GZ_XPARTS_PAGE.now()', context), run: (code) => vm.runInContext(code, context) };
 };
 const GLOW = { x: { cursor: { kind: 'glow', size: 14 } } };
@@ -152,18 +152,18 @@ test('parts are cleaned again on the way in, and parts with a nav ask for the na
   const p = page({ sync: { lookX: await X.pack({ x: { nav, cursor: { kind: 'glow' } } }) } });
   assert.ok(!p.run('typeof GZ_NAV_LAYOUT !== "undefined"'), 'not there until a nav asks for it');
   await p.run('GZ_XPARTS_PAGE.read()');
-  assert.deepEqual(p.needed, ['lib/navlayout.js', 'lib/motionx.js'], 'a nav and a cursor each ask for what cleans them');
+  assert.deepEqual(p.needed, ['navigation/navlayout.js', 'looks/motionx.js'], 'a nav and a cursor each ask for what cleans them');
   assert.deepEqual(JSON.parse(JSON.stringify(p.now().nav)), nav);
   // Each is asked for only by the parts that stand on it.
   const q = page({ sync: { lookX: await X.pack(GLOW) } });
   await q.run('GZ_XPARTS_PAGE.read()');
-  assert.deepEqual(q.needed, ['lib/motionx.js']);
+  assert.deepEqual(q.needed, ['looks/motionx.js']);
   const shader = page({ sync: { lookX: await X.pack({ x: { bg: { shader: { src: 'vec4 scene(vec2 uv) { return vec4(uC1, 1.0); }' } } } }) } });
   await shader.run('GZ_XPARTS_PAGE.read()');
   assert.deepEqual(shader.needed, [], 'a shader needs neither');
   const layers = page({ sync: { lookX: await X.pack({ x: { bg: { layers: [{ k: 'particles', shape: 'star' }] } } }) } });
   await layers.run('GZ_XPARTS_PAGE.read()');
-  assert.deepEqual(layers.needed, ['lib/motionx.js'], 'particle shapes are motionx.js\'s');
+  assert.deepEqual(layers.needed, ['looks/motionx.js'], 'particle shapes are motionx.js\'s');
   // Stored by a program that cleans differently: what doesn't clean is no parts.
   const forged = 'x1:' + X.b64(await X.deflate(new TextEncoder().encode(JSON.stringify({ x: { cursor: { kind: 'laser' } } }))));
   const f = page({ sync: { lookX: forged } });
@@ -197,7 +197,7 @@ test('the latest read wins however the reads finish, and the preview sets and cl
   const second = slow.run('GZ_XPARTS_PAGE.read()');
   await Promise.all([first, second]);
   assert.equal(slow.now(), null, 'the older read, finishing last, does not bring the parts back');
-  const p = page({ files: ['lib/motionx.js'] }); // the preview's page has it in a script tag
+  const p = page({ files: ['looks/motionx.js'] }); // the preview's page has it in a script tag
   p.run(`GZ_XPARTS_PAGE.preview(${JSON.stringify(GLOW)})`);
   assert.deepEqual(JSON.parse(JSON.stringify(p.now())), GLOW.x);
   assert.equal(p.events.length, 1);
@@ -213,10 +213,10 @@ test('the latest read wins however the reads finish, and the preview sets and cl
 test('loading the module twice keeps the first', () => {
   const p = page();
   const first = p.run('GZ_XPARTS_PAGE');
-  vm.runInContext(read('features/lookparts.js'), p.context);
+  vm.runInContext(read('looks/page/lookparts.js'), p.context);
   assert.equal(p.run('GZ_XPARTS_PAGE'), first);
   const lib = p.run('GZ_XPARTS');
-  vm.runInContext(read('lib/lookparts.js'), p.context);
+  vm.runInContext(read('looks/lookparts.js'), p.context);
   assert.equal(p.run('GZ_XPARTS'), lib);
 });
 
@@ -225,7 +225,7 @@ test('the page loads the registry before accepting rules and refuses unknown par
   const p = page({ sync: { lookX: await X.pack({ x: { rules: [{ p: 'ultra.no-such-part', do: 'hide' }] } }) } });
   await p.run('GZ_XPARTS_PAGE.read()');
   assert.equal(p.now(), null);
-  assert.ok(p.needed.includes('lib/parts.js'));
+  assert.ok(p.needed.includes('looks/parts.js'));
 });
 
 
@@ -237,7 +237,7 @@ test('parts gating reuses the settings read, with no extra storage read for a pl
 
 
 test('Canvas and Moodle preview getters suppress parts while disabled or previewing a quiz', () => {
-  const source = read('lib/editor-preview.js');
+  const source = read('settings/editor-preview.js');
   const getter = source.match(/globalThis\.GZ_CTX \|\|= Object\.freeze\(\{[\s\S]*?\}\);/)[0];
   const context = vm.createContext({ site: 'canvas', settings: { enabled: false }, context: { page: 'courses' }, GZ_XPARTS_PAGE: { now: () => ({ cursor: { kind: 'glow' } }) } });
   vm.runInContext(getter, context);
@@ -270,14 +270,14 @@ test('the Ultra preview suppresses parts on its mock quiz and restores them on r
   context.isPreview = false;
   assert.ok(context.ctx.parts(), 'a live page cannot suppress parts with a preview attribute');
   assert.equal(context.ctx.partsOn(), true);
-  // A course Look's parts are features/lookparts.js's to give (its now() is that Look's on that course): no gate here.
+  // A course Look's parts are looks/page/lookparts.js's to give (its now() is that Look's on that course): no gate here.
   context.lookHere = () => 'Clear';
   assert.equal(context.ctx.partsOn(), true, 'a course Look wears its own parts');
   assert.ok(context.ctx.parts());
 });
 
 test('changing the mock page announces parts so rules, scenes and nav follow the preview context', () => {
-  const source = read('lib/editor-preview.js');
+  const source = read('settings/editor-preview.js');
   const apply = source.slice(source.indexOf('  const applyContext ='), source.indexOf("  addEventListener('message'"));
   const events = [], html = { dataset: {} };
   const ctx = vm.createContext({ html, site: 'ultra', context: { page: 'quiz', viewport: 'desktop' },
@@ -289,20 +289,20 @@ test('changing the mock page announces parts so rules, scenes and nav follow the
 
 
 test('a course Look preview receives its own pointer without the global Look parts', () => {
-  const G = require('../../extension/defaults.js');
+  const G = require('../../extension/content/defaults.js');
   const base = { ...G.GZ_SANITIZE({ courses: { looks: { _1_1: 'Terminal' } } }), parts: GLOW };
   const settings = G.GZ_COURSE_LOOK(base, '_1_1'), sent = [];
   assert.notEqual(settings, base);
-  const lines = read('options.js').split('\n');
+  const lines = read('settings/options.js').split('\n');
   const message = lines.find((line) => line.includes('frame.contentWindow?.postMessage({ gzPreview:') && line.includes('gzPreviewParts:'));
   const pointer = lines.find((line) => line.includes('const coursePointer =')) || '';
-  vm.runInNewContext(`${pointer}\n${message}`, { GZ_LOOK_PARTS: require('../../extension/lib/lookset.js'), GZ_COURSE_LOOK_ID: G.GZ_COURSE_LOOK_ID, catalog: [], id: '_1_1', frame: { contentWindow: { postMessage: (m) => sent.push(m) } }, base, settings, shown: settings, nav: settings.nav, colors: null, location: { origin: 'chrome-extension://x' } });
+  vm.runInNewContext(`${pointer}\n${message}`, { GZ_LOOK_PARTS: require('../../extension/looks/lookset.js'), GZ_COURSE_LOOK_ID: G.GZ_COURSE_LOOK_ID, catalog: [], id: '_1_1', frame: { contentWindow: { postMessage: (m) => sent.push(m) } }, base, settings, shown: settings, nav: settings.nav, colors: null, location: { origin: 'chrome-extension://x' } });
   assert.deepEqual(JSON.parse(JSON.stringify(sent[0].gzPreviewParts)), { x: { pointer: 'terminal' } });
 });
 
 
 test('a plain palette code offer clears the previous Look parts', () => {
-  const source = read('options.js');
+  const source = read('settings/options.js');
   const code = source.slice(source.indexOf('    const paletteOnly ='), source.indexOf('    const palette = offer.preset'));
   const context = vm.createContext({ got: { look: {}, bg: {}, nav: {}, cards: [], parts: null }, offer: {}, s: { parts: GLOW } });
   vm.runInContext(code, context);
@@ -403,7 +403,7 @@ test('a mod-only page loads the module even without a Look', async () => {
   context.globalThis = context;
   vm.runInContext(`${gate}\npartsIn(1);`, context);
   await tick();
-  assert.deepEqual(asked, ['features/lookparts.js']);
+  assert.deepEqual(asked, ['looks/page/lookparts.js']);
 });
 
 const modPage = async ({ look, mods, top = true, tabFrame = '', ids = ['abcdefghijklmnop'] }) => {
@@ -518,11 +518,11 @@ test('a mod\'s background picks the scene\'s kind, but only while parts apply he
   const line = content.split('\n').find((l) => l.startsWith('  const bgKind = '));
   const ctx = vm.createContext({ worn: { bg: { kind: 'gradient' } }, parts: { bg: { shader: { src: 's' } } } });
   ctx.globalThis = ctx;
-  vm.runInContext(`const modBg = true; (() => { ${read('features/lookparts.js').split('\n').find((l) => l.startsWith('  const bgKind ='))}\nglobalThis.GZ_XPARTS_PAGE = { bgKind }; })();`, ctx);
+  vm.runInContext(`const modBg = true; (() => { ${read('looks/page/lookparts.js').split('\n').find((l) => l.startsWith('  const bgKind ='))}\nglobalThis.GZ_XPARTS_PAGE = { bgKind }; })();`, ctx);
   vm.runInContext(`${line}\nconst partsOf = () => parts; globalThis.k = bgKind;`, ctx);
   assert.equal(ctx.k(), 'shader');
   ctx.parts = { bg: { media: { type: 'video', src: 'https://example.com/a.webm' } } };
-  assert.equal(ctx.k(), 'media'); // drawn by lib/scene-media.js
+  assert.equal(ctx.k(), 'media'); // drawn by looks/scene-media.js
   ctx.parts = null; // a course with its own Look, a quiz, Glaze off
   assert.equal(ctx.k(), 'gradient');
 });

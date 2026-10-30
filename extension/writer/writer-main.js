@@ -1,11 +1,11 @@
 // Glaze Writer's hand in the page's own world: the only place Ultra's Quill instance can be reached
-// (`.ql-container.__quill`). lib/background.js puts it into an Ultra page that asked for a writer pass, with
+// (`.ql-container.__quill`). background/background.js puts it into an Ultra page that asked for a writer pass, with
 // scripting.executeScript world MAIN (Chrome 95, Firefox 128, Safari 15.4; a manifest "world" entry needs Safari 18 and
-// misses schools on their own hosts). features/writer.js asks it over document events, each detail a JSON string (an
+// misses schools on their own hosts). writer/page/writer.js asks it over document events, each detail a JSON string (an
 // object doesn't cross between worlds in every browser):
 //   gz-writer:set { id, delta } puts the Quill ops in as the student's edit (setContents, no clipboard heuristics in
 //     between), so Ultra's Post, word count and draft follow it; the ops are checked first and only the compose formats
-//     (lib/writer-schema.js delta) pass;
+//     (writer/writer-schema.js delta) pass;
 //   gz-writer:append { id, text } adds plain paragraphs after what the box holds (a blank one between), its formats kept,
 //     as the student's edit;
 //   gz-writer:get { id };

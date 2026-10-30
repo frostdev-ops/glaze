@@ -1,10 +1,10 @@
-// The MCP protocol engine (lib/mcp/wire.js): both eras on one connection, against fake list, listHash, call and send.
+// The MCP protocol engine (agents/wire.js): both eras on one connection, against fake list, listHash, call and send.
 // Rules are from the MCP spec, 2026-07-28 (modern) and 2025-11-25 (legacy, the initialize handshake).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const W = require('../../extension/lib/mcp/wire.js');
+const W = require('../../extension/agents/wire.js');
 
 const K = {
   version: 'io.modelcontextprotocol/protocolVersion', caps: 'io.modelcontextprotocol/clientCapabilities', client: 'io.modelcontextprotocol/clientInfo',
@@ -679,7 +679,7 @@ test('connections are independent', () => {
 });
 
 test('the engine is pure: a classic script with no chrome.*, no timers and no imports', () => {
-  const src = fs.readFileSync(require.resolve('../../extension/lib/mcp/wire.js'), 'utf8');
+  const src = fs.readFileSync(require.resolve('../../extension/agents/wire.js'), 'utf8');
   for (const word of [/\bchrome\./, /\bbrowser\./, /setTimeout|setInterval|queueMicrotask/, /\bimportScripts\b/, /\brequire\(/, /\bfetch\(/]) assert.equal(word.test(src), false, String(word));
   const context = vm.createContext({ AbortController, TextEncoder, JSON });
   vm.runInContext(src, context);

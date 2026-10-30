@@ -7,8 +7,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
-const G = require('../../extension/defaults.js'), M = require('../../extension/lib/navbar.js');
-const L = require('../../extension/lib/navlayout.js'), N = require('../../extension/lib/nav-items.js');
+const G = require('../../extension/content/defaults.js'), M = require('../../extension/navigation/navbar.js');
+const L = require('../../extension/navigation/navlayout.js'), N = require('../../extension/navigation/nav-items.js');
 
 const read = (file) => fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -142,9 +142,9 @@ async function setup({ html = dashboard, path = '/my/', width = 1440, navbar = {
       storage: { sync: { get: (_, cb) => cb({ navbarItems: prefs }) }, local: { get: (_, cb) => cb({}), set: (v) => writes.push(v) }, onChanged: { addListener() {} } } },
     GZ_CTX: { site: 'moodle', t: (s) => s, settings: () => settings, on: () => true, parts: () => ({}), locale: () => 'en',
       setVar: (key, value) => document.documentElement.style.setProperty(key, value), need: () => Promise.reject(new Error('lazy')) } });
-  const factory = vm.runInContext(read('features/navbar-moodle.js') + '\nGZ_NAVBAR_MOODLE;', context);
+  const factory = vm.runInContext(read('navigation/page/navbar-moodle.js') + '\nGZ_NAVBAR_MOODLE;', context);
   context.GZ_NAVBAR_MOODLE = Object.assign((x) => (adapter = factory(x)), { data: factory.data });
-  const ui = vm.runInContext(read('features/navbar.js') + '\nGZ_NAVBAR_UI;', context);
+  const ui = vm.runInContext(read('navigation/page/navbar.js') + '\nGZ_NAVBAR_UI;', context);
   ui.sync(); await Promise.resolve();
   const host = document.getElementById('gz-navbar'), root = host.shadowRoot;
   root.querySelector('link').dispatchEvent({ type: 'load' });
@@ -312,7 +312,7 @@ test('a school\'s unmapped same-origin links become items of the bar, and off-or
 });
 
 test('a link\'s name is the same for the same address and fits the bar\'s link ids', () => {
-  const { slug } = require('../../extension/features/navbar-moodle.js').data;
+  const { slug } = require('../../extension/navigation/page/navbar-moodle.js').data;
   const a = slug(origin + '/local/library/index.php'), b = slug(origin + '/local/library/index.php');
   assert.equal(a, b);
   for (const id of [a, slug(''), slug('menu:Language'), slug('Ünïcödé ✓ 🎓')]) assert.match(`link:${id}`, /^link:[a-z0-9]{12}$/);
@@ -390,7 +390,7 @@ test('the cache of the places last seen holds only the shared vocabulary\'s name
 });
 
 test('native generic items retain their destination and control type when a saved link has the same id', async () => {
-  const library = require('../../extension/features/navbar-moodle.js').data.slug(origin + '/local/library/index.php');
+  const library = require('../../extension/navigation/page/navbar-moodle.js').data.slug(origin + '/local/library/index.php');
   const h = await setup({ html: menus, prefs: { links: [
     { id: library, n: 'Old link', u: origin + '/wrong', tab: true },
     { id: 'editmode0000', n: 'Old mode', u: origin + '/wrong', tab: true },
@@ -424,7 +424,7 @@ test('the notifications panel also carries the preferences link of Moodle\'s not
 });
 
 test('Moodle\'s own navbar stays hidden under the bar, because everything in it has a place there', () => {
-  const css = read('moodle.css');
+  const css = read('content/moodle.css');
   assert.match(css, /html\[data-gz-navbar\] :is\(nav\.navbar\.fixed-top,/);
   assert.match(css, /::part\(switch-on\)/, 'the lit switch is styled, because the bar\'s own sheet styles only its pin');
 });

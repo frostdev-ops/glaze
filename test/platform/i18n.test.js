@@ -2,19 +2,19 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const I = require('../../extension/lib/i18n.js');
-const D = require('../../extension/defaults.js');
-const F = require('../../extension/lib/fonts.js');
-const N = require('../../extension/lib/news.js');
-const P = require('../../extension/lib/parts.js');
-const XP = require('../../extension/lib/lookparts.js');
-const X = require('../../extension/lib/editor-x.js');
-const BG = require('../../extension/lib/editor-xbg.js');
-const M = require('../../extension/lib/editor-xmotion.js');
-const MX = require('../../extension/lib/motionx.js');
-const PTR = require('../../extension/lib/editor-pointer.js');
-const XE = require('../../extension/lib/editor-xparts.js');
-const PET = require('../../extension/lib/pet.js');
+const I = require('../../extension/core/i18n.js');
+const D = require('../../extension/content/defaults.js');
+const F = require('../../extension/looks/fonts.js');
+const N = require('../../extension/settings/news.js');
+const P = require('../../extension/looks/parts.js');
+const XP = require('../../extension/looks/lookparts.js');
+const X = require('../../extension/settings/editor-x.js');
+const BG = require('../../extension/settings/editor-xbg.js');
+const M = require('../../extension/settings/editor-xmotion.js');
+const MX = require('../../extension/looks/motionx.js');
+const PTR = require('../../extension/settings/editor-pointer.js');
+const XE = require('../../extension/settings/editor-xparts.js');
+const PET = require('../../extension/pet/pet.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -22,7 +22,8 @@ const LANGS = globalThis.GZ_LANGS;
 const files = fs.readdirSync(path.join(root, 'i18n'));
 const squash = (s) => s.replace(/\s+/g, ' ').trim();
 // The code Glaze ships to a browser (not the catalogues, which every key appears in, nor the tests).
-const CODE = [...fs.readdirSync(root).filter((f) => /\.(js|html)$/.test(f)), ...['lib', 'lib/mcp', 'features', 'sharing'].flatMap((d) => fs.readdirSync(path.join(root, d)).filter((f) => /\.(js|html)$/.test(f)).map((f) => `${d}/${f}`))];
+const NOT_CODE = /^(vendor|ai|i18n|_locales|assets|fonts|icons)\/|^mods\/(boot|host)\./;
+const CODE = fs.readdirSync(root, { recursive: true }).map((f) => f.split(path.sep).join('/')).filter((f) => /\.(js|html)$/.test(f) && !NOT_CODE.test(f)).sort();
 // Preserve quoted URLs while dropping comments; literal tables are evidence for dynamic callers, not proof of reachability.
 const withoutComments = (js) => js.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m, q) => q ? m : ' ');
 const literalsOf = (js) => [...withoutComments(js).matchAll(/(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g)].filter((m) => !m[2].includes('${')).map((m) => m[2].replace(/\\(.)/g, '$1'));
@@ -60,11 +61,11 @@ const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
   }
   return out.filter(Boolean);
 };
-// And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
-const JS = ['sharing/quick.js', 'lib/mcp/approve-page.js', 'features/welcome.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-pointer.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/editor-navbar.js', 'lib/editor-ai.js', 'lib/editor-writer.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
-// Glaze Writer's frame (writer.html, papers.html) and the libraries whose words it shows. lib/writer-docx.js's t() reads
+// And every feature loaded on demand (<area>/page/*.js), which writes through GZ_CTX.t.
+const JS = ['sharing/quick.js', 'agents/approve-page.js', 'settings/welcome.js', 'sharing/sessions-ui.js', 'content/content.js', 'content/content-ultra.js', 'content/content-canvas.js', 'settings/options.js', 'settings/popup.js', 'core/ui.js', 'core/page.js', 'pet/petlibrary.js', 'pet/petsprites.js', 'planner/todo.js', 'courses/ultra.js', 'settings/editor-x.js', 'settings/editor-xbg.js', 'settings/editor-xmotion.js', 'settings/editor-pointer.js', 'settings/editor-xparts.js', 'settings/editor-mods.js', 'settings/editor-widget.js', 'settings/editor-navbar.js', 'settings/editor-ai.js', 'settings/editor-writer.js', 'looks/parts.js', 'looks/lookparts.js', ...fs.readdirSync(root, { recursive: true }).map((f) => f.split(path.sep).join('/')).filter((f) => /^[a-z]+\/page\/[^/]+\.js$/.test(f)).sort()];
+// Glaze Writer's frame (writer.html, papers.html) and the libraries whose words it shows. writer/writer-docx.js's t() reads
 // a run's marks, so only its warnings and refusals are words (below).
-const WRITER = ['writer.js', 'papers.js', 'sheet-kind.js', 'sheet-grid.js', 'lib/sheet-chart.js', 'pdf-kind.js', 'lib/pdf-tools.js', 'lib/pdf-sign.js', 'lib/pdf-pages.js', 'slides-kind.js', ...fs.readdirSync(root).filter((f) => /^writer-.+\.js$/.test(f)), ...fs.readdirSync(path.join(root, 'lib')).filter((f) => /^writer-.+\.js$/.test(f) && f !== 'writer-docx.js').map((f) => `lib/${f}`)];
+const WRITER = ['writer/frame/writer.js', 'documents/papers.js', 'documents/sheets/sheet-kind.js', 'documents/sheets/sheet-grid.js', 'documents/sheets/sheet-chart.js', 'documents/pdf/pdf-kind.js', 'documents/pdf/pdf-tools.js', 'documents/pdf/pdf-sign.js', 'documents/pdf/pdf-pages.js', 'documents/slides/slides-kind.js', 'agents/writer-mcp.js', ...fs.readdirSync(path.join(root, 'writer/frame')).filter((f) => /^writer-.+\.js$/.test(f)).map((f) => `writer/frame/${f}`), ...fs.readdirSync(path.join(root, 'writer')).filter((f) => /^writer-.+\.js$/.test(f) && f !== 'writer-docx.js').map((f) => `writer/${f}`)];
 JS.push(...WRITER);
 // The capitalised strings of a `const NAME = …;` table (its labels and messages, not its ids, CSS or numbers).
 const tableOf = (f, ...names) => {
@@ -85,53 +86,53 @@ const tableOf = (f, ...names) => {
   });
 };
 const writerWords = [
-  ...tableOf('writer.js', 'LABELS'), ...tableOf('writer-cite.js', 'TYPES', 'FIELDS'), ...tableOf('writer-ai.js', 'STATUS'),
-  ...tableOf('writer-submit.js', 'SAYS'), ...tableOf('writer-proof.js', 'LABEL'),
-  // The PDF tools' names, colours and the reason a file refuses them (lib/pdf-tools.js).
-  ...tableOf('lib/pdf-tools.js', 'SHAPES', 'INKS', 'MARKS', 'TOOLS', 'NO_TOOLS'), ...tableOf('pdf-kind.js', 'SIGNED', 'PROTECTED', 'PAGE_SAYS'),
-  ...tableOf('writer-paper.js', 'SPACING', 'KIND', 'STYLES', 'REASONS'), ...tableOf('lib/writer-format.js', 'ROWS', 'names'),
-  ...tableOf('lib/ai/tasks/writer-feedback.js', 'GRADE_REASONS'), ...tableOf('lib/ai/failure.js', 'REASONS', 'ERRORS'),
+  ...tableOf('writer/frame/writer.js', 'LABELS'), ...tableOf('writer/frame/writer-cite.js', 'TYPES', 'FIELDS'), ...tableOf('writer/frame/writer-ai.js', 'STATUS'),
+  ...tableOf('writer/frame/writer-submit.js', 'SAYS'), ...tableOf('writer/frame/writer-proof.js', 'LABEL'),
+  // The PDF tools' names, colours and the reason a file refuses them (documents/pdf/pdf-tools.js).
+  ...tableOf('documents/pdf/pdf-tools.js', 'SHAPES', 'INKS', 'MARKS', 'TOOLS', 'NO_TOOLS'), ...tableOf('documents/pdf/pdf-kind.js', 'SIGNED', 'PROTECTED', 'PAGE_SAYS'),
+  ...tableOf('writer/frame/writer-paper.js', 'SPACING', 'KIND', 'STYLES', 'REASONS'), ...tableOf('writer/writer-format.js', 'ROWS', 'names'),
+  ...tableOf('ai/tasks/writer-feedback.js', 'GRADE_REASONS'), ...tableOf('ai/failure.js', 'REASONS', 'ERRORS'),
   // Labels handed to the paper chrome's helpers, which translate them.
-  ...fromJs(read('writer-paper.js'), /\b(?:mark\('\w+',|row\(|setState\()\s*/g),
-  ...[...read('writer-paper.js').matchAll(/\['\w+', '([A-Z][^']*)'\]/g)].map((m) => m[1]),
+  ...fromJs(read('writer/frame/writer-paper.js'), /\b(?:mark\('\w+',|row\(|setState\()\s*/g),
+  ...[...read('writer/frame/writer-paper.js').matchAll(/\['\w+', '([A-Z][^']*)'\]/g)].map((m) => m[1]),
   // Format messages (the frame translates each issue's key) and the list titles they name.
-  ...fromJs(read('lib/writer-format.js'), /\badd\('\w+',\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*/g),
-  ...Object.values(require('../../extension/lib/writer-styles.js').FORMATS).map((f) => f.list.title), ...Object.values(require('../../extension/lib/writer-cite.js').TITLES),
+  ...fromJs(read('writer/writer-format.js'), /\badd\('\w+',\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*/g),
+  ...Object.values(require('../../extension/writer/writer-styles.js').FORMATS).map((f) => f.list.title), ...Object.values(require('../../extension/writer/writer-cite.js').TITLES),
   // .docx import warnings and the refusals worded for students.
-  ...[...read('lib/writer-docx.js').matchAll(/\b(?:warn|RangeError)\('((?:[^'\\]|\\.)+)'\)/g)].map((m) => m[1].replace(/\\(.)/g, '$1')).filter((s) => /^[A-Z]/.test(s)),
+  ...[...read('writer/writer-docx.js').matchAll(/\b(?:warn|RangeError)\('((?:[^'\\]|\\.)+)'\)/g)].map((m) => m[1].replace(/\\(.)/g, '$1')).filter((s) => /^[A-Z]/.test(s)),
 ];
 // Tables and generated labels reach t() through variables, not literal arguments.
 const tableWords = [
   ...Object.values(PET.DECOR).map((item) => item.name), ...Object.values(PET.HABITATS),
   ...['ultra', 'canvas', 'moodle'].flatMap((site) => P.list(site).map((p) => p.label)),
-  ...fromJs(read('lib/lookparts.js'), /\badd\s*\(/g),
+  ...fromJs(read('looks/lookparts.js'), /\badd\s*\(/g),
   ...Object.values(XP.KIND_WORD), ...Object.values(XE.NAMES),
   ...BG.EXAMPLES.map(([, label]) => label), ...BG.KINDS.map(([, label]) => label), ...BG.PRESETS.map(([label]) => label), ...BG.MEDIA_KINDS.map(([, label]) => label), ...BG.MEDIA_FITS.map(([, label]) => label),
   ...Object.values(M.MOMENTS), ...Object.values(M.EVENTS), ...Object.values(M.KEYS).map(([label]) => label),
   ...[M.ENTER, ...Object.values(M.PRESETS)].flatMap((ps) => Object.values(ps).map(([label]) => label)),
   ...[...MX.SHAPES, ...MX.MARKS, ...MX.KINDS, ...MX.CURSORS, ...Object.keys(MX.EASES), ...XP.BLENDS].map(X.tokenName),
   ...Object.values(M.POINTERS), ...Object.values(M.TYPES), ...Object.values(PTR.NAMES),
-  // Ultra's own gradebook categories, named in the what-if calculator (features/grades.js).
-  ...Object.values(require('../../extension/lib/gradecalc.js').ULTRA_CATS),
-  // A chart Glaze doesn't draw shows its kind in a frame (lib/sheet-chart-xml.js, through lib/sheet-chart.js's t()).
-  ...require('../../extension/lib/sheet-chart-xml.js').WORDS,
+  // Ultra's own gradebook categories, named in the what-if calculator (planner/page/grades.js).
+  ...Object.values(require('../../extension/planner/gradecalc.js').ULTRA_CATS),
+  // A chart Glaze doesn't draw shows its kind in a frame (documents/sheets/sheet-chart-xml.js, through documents/sheets/sheet-chart.js's t()).
+  ...require('../../extension/documents/sheets/sheet-chart-xml.js').WORDS,
 ];
 const used = new Set([
   ...tableWords, ...writerWords,
-  ...fromJs(read('lib/editor-xparts.js'), /\bheading\([^,]+,\s*/g),
-  ...[...read('lib/editor-xparts.js').matchAll(/const (?:WIDGETS|ICONS|PLACES|GROUPS|ACTS|STYLE|SHADOWS) = ([^\n]+);/g)].flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((s) => s[1])),
+  ...fromJs(read('settings/editor-xparts.js'), /\bheading\([^,]+,\s*/g),
+  ...[...read('settings/editor-xparts.js').matchAll(/const (?:WIDGETS|ICONS|PLACES|GROUPS|ACTS|STYLE|SHADOWS) = ([^\n]+);/g)].flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((s) => s[1])),
   // Shader diagnostics are translated when the editor groups them by line.
-  ...fromJs(read('lib/glsl.js'), /\b(?:e\([^,]+,|bad\(|message:)\s*/g),
-  ...fromJs(read('lib/scene.js'), /\bmessage:\s*/g),
-  ...['sharing/quick.html', 'lib/mcp/approve.html', 'options.html', 'popup.html', 'features/welcome.html'].flatMap((f) => fromHtml(read(f))),
+  ...fromJs(read('looks/glsl.js'), /\b(?:e\([^,]+,|bad\(|message:)\s*/g),
+  ...fromJs(read('looks/scene.js'), /\bmessage:\s*/g),
+  ...['sharing/quick.html', 'agents/approve.html', 'options.html', 'popup.html', 'settings/welcome.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
   // Helpers that translate their own label argument (t() inside add() and check()).
-  ...fromJs(read('features/docreview.js'), /\badd\('button',\s*[^,]+,\s*/g),
-  ...fromJs(read('lib/editor-navbar.js'), /\bcheck\(/g),
-  // A mod bundle's refusals are translated by the editor's t(error.why, error.vars) (lib/editor-mods.js).
-  ...fromJs(read('lib/modbundle.js'), /\bfail\(/g),
+  ...fromJs(read('courses/page/docreview.js'), /\badd\('button',\s*[^,]+,\s*/g),
+  ...fromJs(read('settings/editor-navbar.js'), /\bcheck\(/g),
+  // A mod bundle's refusals are translated by the editor's t(error.why, error.vars) (settings/editor-mods.js).
+  ...fromJs(read('mods/modbundle.js'), /\bfail\(/g),
   // Import failures are translated by the editor's t(error.message).
-  ...['lib/petsprites.js', 'lib/petlibrary.js'].flatMap((f) => [...read(f).matchAll(/(?:Error|error)\('([^']+)'\)/g)].map((m) => m[1])),
+  ...['pet/petsprites.js', 'pet/petlibrary.js'].flatMap((f) => [...read(f).matchAll(/(?:Error|error)\('([^']+)'\)/g)].map((m) => m[1])),
   ...D.GZ_COLORS.map(([, label]) => label),
   ...D.GZ_TABS.map(([, label]) => label),
   ...D.GZ_SIDEBAR_KINDS.map(([, label]) => label),
@@ -193,7 +194,7 @@ test('every count key has English singular and plural forms', () => {
   // English is the key itself, so a count key with no EN entry prints its plural for every number: "1 fonts".
   const counts = new Set(Object.values(LANGS).flatMap((cat) => Object.keys(cat).filter((k) => typeof cat[k] === 'object')));
   for (const k of counts) {
-    assert.ok(I.EN[k]?.one && I.EN[k]?.other, `lib/i18n.js EN has no singular and plural for "${k}"`);
+    assert.ok(I.EN[k]?.one && I.EN[k]?.other, `core/i18n.js EN has no singular and plural for "${k}"`);
   }
   assert.equal(I.t('{n} fonts', { n: 1 }), '1 font');
   assert.equal(I.t('{n} fonts', { n: 2 }), '2 fonts');
@@ -215,20 +216,20 @@ test('review: all English count forms select one only for one and preserve inter
 });
 
 test('every catalogue is loaded wherever Glaze speaks', () => {
-  // On the LMS, only the page's own, on demand (content.js words(), lib/background.js LOADABLE); the extension's
+  // On the LMS, only the page's own, on demand (content.js words(), background/background.js LOADABLE); the extension's
   // pages have them all.
   const content = require('../../extension/manifest.json').content_scripts.flatMap((c) => c.js);
   assert.deepEqual(I.CODES, files.map((f) => f.replace(/\.js$/, '')), 'GZ_I18N.CODES lists i18n/');
   for (const f of files) {
     assert.ok(!content.includes(`i18n/${f}`), `manifest: i18n/${f} loads on demand, not with every page`);
-    assert.ok(read('lib/background.js').includes(`'i18n/${f}'`), `lib/background.js LOADABLE: i18n/${f}`);
+    assert.ok(read('background/background.js').includes(`'i18n/${f}'`), `background/background.js LOADABLE: i18n/${f}`);
     for (const page of ['options.html', 'popup.html', 'sharing/quick.html']) assert.ok(read(page).includes(`<script src="${page.startsWith('sharing/') ? '../' : ''}i18n/${f}"></script>`), `${page}: i18n/${f}`);
   }
   assert.equal(I.file('de-AT'), 'i18n/de.js');
   assert.equal(I.file('pt-PT'), 'i18n/pt-BR.js');
   for (const tag of ['en', 'en-GB', 'ja', '', undefined, 'not a locale!']) assert.equal(I.file(tag), null, String(tag));
-  assert.ok(content.indexOf('lib/i18n.js') < content.indexOf('lib/page.js'));
-  assert.ok(read('preview.html').includes('<script src="lib/i18n.js"></script>'));
+  assert.ok(content.indexOf('core/i18n.js') < content.indexOf('core/page.js'));
+  assert.ok(read('preview.html').includes('<script src="core/i18n.js"></script>'));
 });
 
 test('lookup, placeholders and plurals', () => {

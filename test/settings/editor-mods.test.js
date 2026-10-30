@@ -1,9 +1,9 @@
-// The editor's Mods tab (lib/editor-mods.js): the prompt's permission lines and Glaze's warnings, what a mod adds, settings
+// The editor's Mods tab (settings/editor-mods.js): the prompt's permission lines and Glaze's warnings, what a mod adds, settings
 // cleaned against their schema, the student's order, the grants an install or update sends, and refusals in words.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const E = require('../../extension/lib/editor-mods.js');
-const M = require('../../extension/lib/modbundle.js');
+const E = require('../../extension/settings/editor-mods.js');
+const M = require('../../extension/mods/modbundle.js');
 const vm = require('node:vm');
 const fs = require('node:fs');
 
@@ -25,8 +25,8 @@ const mounted = (mods, data = {}, read = async (k, v) => v, respond = async () =
     remove: async (k) => { for (const x of [].concat(k)) delete data[x]; } };
   const chrome = { storage: { local, onChanged: { addListener(f) { changed = f; } } }, runtime: { getManifest: () => ({ sandbox: {} }),
     sendMessage: async (m) => { sent.push(m); return m.op === 'list' ? { ok: true, mods: structuredClone(mods) } : respond(m); } } };
-  const ctx = vm.createContext({ chrome, document, GZ_MODBUNDLE: M, GZ_XPARTS: require('../../extension/lib/lookparts.js'), GZ_MODAPI: require('../../extension/lib/modapi.js'), requestAnimationFrame: (f) => f(), confirm: (q) => { asked.push(q); return ask(q); } });
-  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/editor-mods.js'), 'utf8'), ctx);
+  const ctx = vm.createContext({ chrome, document, GZ_MODBUNDLE: M, GZ_XPARTS: require('../../extension/looks/lookparts.js'), GZ_MODAPI: require('../../extension/mods/modapi.js'), requestAnimationFrame: (f) => f(), confirm: (q) => { asked.push(q); return ask(q); } });
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/settings/editor-mods.js'), 'utf8'), ctx);
   ctx.GZ_MODSEDIT.mount({ t, and, when: String });
   const find = (f, e = document.getElementById('mods-list')) => e?.dataset?.f === f ? e : e?.children?.map((c) => find(f, c)).find(Boolean);
   return { document, sent, data, find, changed: (...args) => changed(...args) };
@@ -291,7 +291,7 @@ test('a replacement change during a draw is rendered after the pending read', as
 
 
 test('the install prompt discloses remote backgrounds without claiming there is no network', async () => {
-  const source = fs.readFileSync(require.resolve('../../extension/lib/editor-mods.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/settings/editor-mods.js'), 'utf8');
   const start = source.indexOf('    const prompt = async ');
   const end = source.indexOf('    // A bundle', start);
   const ids = new Map();
@@ -320,7 +320,7 @@ test('the install prompt discloses remote backgrounds without claiming there is 
 });
 
 test('a file offered after Escape survives the previous dialog close event arriving late', async () => {
-  const source = fs.readFileSync(require.resolve('../../extension/lib/editor-mods.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/settings/editor-mods.js'), 'utf8');
   const start = source.indexOf("    const dialog = $('mod-prompt');"), end = source.indexOf('    // ---- adding a mod:', start);
   const ids = new Map(), sent = [], listeners = new Map();
   const $ = (id) => {
@@ -362,7 +362,7 @@ test('a file offered after Escape survives the previous dialog close event arriv
 
 
 test('dev folder scans bound depth and empty directory counts before reading files', async () => {
-  const source = fs.readFileSync(require.resolve('../../extension/lib/editor-mods.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/settings/editor-mods.js'), 'utf8');
   const start = source.indexOf('    const walk = async '), end = source.indexOf('    const loadFolder =', start);
   const ctx = vm.createContext({ B: () => M, Uint8Array });
   vm.runInContext(`${source.slice(start, end)}\nthis.walk = walk;`, ctx);
@@ -381,7 +381,7 @@ test('dev folder scans bound depth and empty directory counts before reading fil
 
 
 test('author creation in the editor uses the shared worker operation', async () => {
-  const source = fs.readFileSync(require.resolve('../../extension/lib/editor-mods.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/settings/editor-mods.js'), 'utf8');
   const start = source.indexOf('    const makeKey = async () =>'), end = source.indexOf("    $('mod-export-signed')", start);
   const requests = [], key = {};
   const ctx = vm.createContext({ send: async (m) => { requests.push(m.op); return { ok: true, key, created: false }; }, say() {}, keySaid: {}, t });

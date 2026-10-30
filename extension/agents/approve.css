@@ -1,6 +1,6 @@
 /* The approval window (approve.html): one card in the student's palette, ui.css's buttons. */
-@font-face { font-family: "Glaze Inter"; src: url("../../fonts/inter.woff2") format("woff2"); font-weight: 100 900; }
-@font-face { font-family: "Glaze Atkinson"; src: url("../../fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; }
+@font-face { font-family: "Glaze Inter"; src: url("../fonts/inter.woff2") format("woff2"); font-weight: 100 900; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; }
 /* First paint, before approve-page.js lays the student's palette over it. */
 :root {
   color-scheme: light dark;

@@ -1,12 +1,12 @@
-// Look parts on the page: the Look's `x` (lib/lookparts.js), read after the first paint and
+// Look parts on the page: the Look's `x` (looks/lookparts.js), read after the first paint and
 // only when a Look has any; content.js asks for this file then, and not otherwise. It keeps the cleaned, frozen `x` for
 // GZ_CTX.parts() and fires `glaze:parts` on the document when it changes (no detail: the feature reading it asks
 // GZ_CTX.parts() again, so a page script faking the event learns nothing and sets nothing).
-// parts() is null on a quiz or tool page (lib/lookx.js quiet) and while Glaze is off (content.js); on a course that wears a
+// parts() is null on a quiz or tool page (looks/lookx.js quiet) and while Glaze is off (content.js); on a course that wears a
 // Look of its own they are that Look's (read), and none until they come. The event does not fire for the first two,
 // so a feature that draws something checks parts() when it draws, as it checks its own switch.
 // The editor's preview feeds it with preview() instead of storage. Classic script; loaded on demand (the worker adds
-// lib/lookx.js and lib/lookparts.js to it); a second injection keeps the first.
+// looks/lookx.js and looks/lookparts.js to it); a second injection keeps the first.
 var GZ_XPARTS_PAGE = globalThis.GZ_XPARTS_PAGE || (() => {
   const L = GZ_XPARTS;
   // of: the course Look (GZ_CTX.courseLook) the parts are, or null for the theme's: a course's are given only on that course.
@@ -23,19 +23,19 @@ var GZ_XPARTS_PAGE = globalThis.GZ_XPARTS_PAGE || (() => {
   const quiet = () => !!globalThis.GZ_LX?.quiet(location.pathname, document)
     || /\/(quizzes|external_tools|assessment|attempt|lti)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(location.pathname);
   // A packed string as { x, m }. What the cleaners stand on is on demand too, asked for only when the parts need it: the
-  // nav cleaner (lib/navlayout.js; the worker brings lib/nav.js and lib/nav-items.js before it) for a nav, and the motion
-  // tables (lib/motionx.js) for animations, effects, a pointer, a cursor effect, typing or a layer's particles.
+  // nav cleaner (navigation/navlayout.js; the worker brings navigation/nav.js and navigation/nav-items.js before it) for a nav, and the motion
+  // tables (looks/motionx.js) for animations, effects, a pointer, a cursor effect, typing or a layer's particles.
   const libs = async (x) => {
-    if (x?.nav && !globalThis.GZ_NAV_LAYOUT) await globalThis.GZ_CTX.need('lib/navlayout.js', () => globalThis.GZ_NAV_LAYOUT);
-    if ((x?.anim || x?.fx || x?.cursor || x?.pointer || x?.type || x?.bg?.layers) && !globalThis.GZ_MX) await globalThis.GZ_CTX.need('lib/motionx.js', () => globalThis.GZ_MX);
-    if (x?.rules && !globalThis.GZ_PARTS) await globalThis.GZ_CTX.need('lib/parts.js', () => globalThis.GZ_PARTS);
+    if (x?.nav && !globalThis.GZ_NAV_LAYOUT) await globalThis.GZ_CTX.need('navigation/navlayout.js', () => globalThis.GZ_NAV_LAYOUT);
+    if ((x?.anim || x?.fx || x?.cursor || x?.pointer || x?.type || x?.bg?.layers) && !globalThis.GZ_MX) await globalThis.GZ_CTX.need('looks/motionx.js', () => globalThis.GZ_MX);
+    if (x?.rules && !globalThis.GZ_PARTS) await globalThis.GZ_CTX.need('looks/parts.js', () => globalThis.GZ_PARTS);
   };
   const unpack = async (packed) => {
     const raw = await L.parse(packed);
     await libs(raw?.x);
     return L.bundle(raw);
   };
-  // Installed mods' parts, on every browser and whether or not their code can run here: the worker's 'parts' ask (lib/modbroker.js)
+  // Installed mods' parts, on every browser and whether or not their code can run here: the worker's 'parts' ask (mods/modbroker.js)
   // hands those of the mods that are on and not blocklisted, cleaned, in the student's order; they are cleaned again here.
   // Like the Look's, these apply in the top frame and live course-tab frames. L.over lays them over the Look's.
   let watching = false, hasMods = false, wasQuiet;
@@ -63,7 +63,7 @@ var GZ_XPARTS_PAGE = globalThis.GZ_XPARTS_PAGE || (() => {
     return out;
   };
   // From storage: sync `lookX`, or local's when sync says so, and the mods'; on a course wearing a Look of its own (GZ_COURSE_LOOK_ID),
-  // that Look's, which the worker gives by its id (lib/background.js looks). The latest read wins, whatever order they finish in.
+  // that Look's, which the worker gives by its id (background/background.js looks). The latest read wins, whatever order they finish in.
   const read = async () => {
     const mine = ++seq, id = course();
     let P = null, M = [];

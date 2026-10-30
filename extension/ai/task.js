@@ -1,16 +1,16 @@
 // The AI harness's tasks (docs/ai-harness.md): what a feature (later, a mod) asks a model to do, defined once, versioned, and
-// run the same way on every provider. A task (lib/ai/tasks/<id>.js, added with define):
+// run the same way on every provider. A task (ai/tasks/<id>.js, added with define):
 //   id: 'syllabus.read' (dotted lower-case words), version: 1 (raise it when its output changes; results carry it),
 //   caps: { images?, tools? } (what a provider must have; json always),
 //   input(raw) → the input cleaned, or null (refused: raw came from a page),
-//   build(input, { caps, text, fence }) → a request without its schema (lib/ai/text.js request() fences the data),
-//   output: the answer's JSON Schema (an object at the root; lib/ai/schema.js), or 'text': the model's words as they are
+//   build(input, { caps, text, fence }) → a request without its schema (ai/text.js request() fences the data),
+//   output: the answer's JSON Schema (an object at the root; ai/schema.js), or 'text': the model's words as they are
 //     (no schema; an answer cut off at maxTokens comes back as far as it got, meta.truncated),
 //   check(output, input, { truncated }) → the output cleaned (grounded, in range), or null (refused); a text task's output
 //     is the text,
-//   tools?: [names] (lib/ai/tools.js; run through lib/ai/loop.js), limits?: { steps (rounds), ms, tokens, maxTokens },
+//   tools?: [names] (ai/tools.js; run through ai/loop.js), limits?: { steps (rounds), ms, tokens, maxTokens },
 //   stream?: true (the page may see the model's words as they come; a keyed endpoint's JSON answer only once checked),
-//   rate?: { perMinute?, supersede? } (lib/ai/broker.js: perMinute, runs a tab's feature may start of this task in a minute,
+//   rate?: { perMinute?, supersede? } (ai/broker.js: perMinute, runs a tab's feature may start of this task in a minute,
 //     instead of the broker's; supersede, a new run of it in the same tab and feature cancels the one in flight instead of
 //     being refused busy, and its runs share one call-record row a minute),
 //   disclose?: true (the feature shows the student where the text goes first: a run must carry status's `to`, and a
@@ -20,7 +20,7 @@
 //   orchestrate?(input, { caps, text, ask, fits, signal, limits }) → a raw output, or undefined for the ordinary run.
 //     Trusted task code only. ask(request, { output?, check? }) uses this run's provider, deadline and accounting; it
 //     never retries. Calls are sequential and bounded by limits.calls (at most LIMIT.calls). fits reserves output room.
-// A run emits lib/ai/loop.js's events (thinking, text_delta, says, step_start, step, pending, usage, reply) and a note
+// A run emits ai/loop.js's events (thinking, text_delta, says, step_start, step, pending, usage, reply) and a note
 // { part, parts } as each part starts. A tool that waits for the student ends the run with `pending` and no output.
 // Classic script for the worker; module.exports for node.
 var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
@@ -63,7 +63,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
   const add = (def) => { const t = defined.has(def) ? def : define(def); if (all.has(t.id) && all.get(t.id) !== t) throw new TypeError(`task ${t.id} is already added`); all.set(t.id, t); return t; };
   const get = (id) => all.get(id) || null;
 
-  // run(task, raw input, { provider (id or object), cfg, signal, emit(event), fetch, tools (a lib/ai/tools.js registry; the
+  // run(task, raw input, { provider (id or object), cfg, signal, emit(event), fetch, tools (a ai/tools.js registry; the
   //   harness's own by default), policy, headless, confirms, ctx, over }) → { output, steps?, pending?, meta: { task,
   //   version, provider, finish, usage, rounds, parts, truncated? } }, or { pending, steps, meta } when a tool waits for the
   //   student. over: what the student set in Settings → AI ({ effort?, temperature?, maxTokens?, timeoutMs? }), each
@@ -80,7 +80,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     const input = task.input(raw);
     if (input === null || input === undefined) throw Q.error('input');
     const kit = (task.tools || []).map((n) => tools.get(n) || (() => { throw Q.error('tool', n); })());
-    // A request's room: the model's window within the run's token budget (lib/ai/loop.js limits.tokens: the task's own, else
+    // A request's room: the model's window within the run's token budget (ai/loop.js limits.tokens: the task's own, else
     // the loop's default), so what fits here and the parts split here are never refused there as a bare `limit`.
     const room = Math.min(can.context || LIMIT.context, L().limit('tokens', task.limits.tokens));
     const budget = Math.floor(room * 0.6);
@@ -89,7 +89,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     // One deadline for the whole run, the caller's cancel within it.
     const F = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('./failure.js');
     if (signal?.aborted) throw Object.assign(Q.error('cancelled'), { category: 'cancelled' });
-    // The loop's own default is 120 s (lib/ai/loop.js LIMIT.ms).
+    // The loop's own default is 120 s (ai/loop.js LIMIT.ms).
     const longer = over.timeoutMs > (task.limits.ms || 120000), limits = longer ? { ...task.limits, ms: over.timeoutMs } : task.limits;
     const timer = F.deadline(Math.max(task.limits.ms || LIMIT.ms, over.timeoutMs || 0)), both = F.anySignal([signal, timer.signal]);
     const outputs = [], steps = [], usage = { input: 0, output: 0 };
@@ -171,7 +171,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     return { output, ...(steps.length && { steps }), meta };
   };
 
-  // The student's settings a request takes: only those Glaze knows, as lib/ai/request.js cleans them.
+  // The student's settings a request takes: only those Glaze knows, as ai/request.js cleans them.
   const own = (over) => Object.fromEntries(['effort', 'temperature', 'maxTokens', 'timeoutMs'].filter((k) => R().isObj(over) && over[k] !== undefined).map((k) => [k, over[k]]));
   // Reasoning counts against a request's output (OpenRouter's docs: an effort takes about a tenth to four fifths of
   // max_tokens; one too small thinks it all away and answers nothing). An effort the student set above the task's own gets
@@ -183,7 +183,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     return out;
   };
   // prepare(task, raw input, { provider, cfg, over }) → the request a run of it would send first, or null: what a warm-up
-  // (lib/ai/broker.js op warm) gives the provider so it reads the instructions before the run comes. A split task: null.
+  // (ai/broker.js op warm) gives the provider so it reads the instructions before the run comes. A split task: null.
   const prepare = (task, raw, { provider, cfg, over = {} } = {}) => {
     const p = typeof provider === 'string' ? P().get(provider) : provider;
     const c = p && p.config(cfg);

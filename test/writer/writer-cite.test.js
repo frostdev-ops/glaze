@@ -1,4 +1,4 @@
-// lib/writer-cite.js against each style guide's own published examples, typed in from the publishers' pages (fetched
+// writer/writer-cite.js against each style guide's own published examples, typed in from the publishers' pages (fetched
 // 2026-10-27): The Chicago Manual of Style 17th ed. Citation Quick Guide, notes and bibliography
 // (chicagomanualofstyle.org/tools_citationguide/citation-guide-1.html, 17th-edition copy); APA Style's reference examples
 // for the Publication Manual 7th ed. (apastyle.apa.org/style-grammar-guidelines/references/examples/*); the MLA Style
@@ -7,7 +7,7 @@
 // the guide's own entry with that slip undone; each such case says so.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../../extension/lib/writer-cite.js');
+const C = require('../../extension/writer/writer-cite.js');
 
 // Guide text → the HTML the formatter writes (only <i>; & escaped).
 const h = (s) => s.replace(/&/g, '&amp;');

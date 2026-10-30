@@ -1,8 +1,8 @@
-// lib/writer-cite.js, final review: Chicago's n.d. for an undated book, report or chapter; APA's translators and the
+// writer/writer-cite.js, final review: Chicago's n.d. for an undated book, report or chapter; APA's translators and the
 // editors of an authored book; parentheses and footnotes that are not citations raise no "no entry" card.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../../extension/lib/writer-cite.js');
+const C = require('../../extension/writer/writer-cite.js');
 
 const d = (y) => ({ 'date-parts': [[y]] });
 const p = (family, given) => ({ family, given });
@@ -55,7 +55,7 @@ test('dates, labels inside a text, named things and sums in brackets are not cit
 });
 
 test('Chicago: an explanatory note is not a citation, Ibid. is the note before\'s source, and a name after "see" is one', () => {
-  const W = require('../../extension/lib/writer-schema.js');
+  const W = require('../../extension/writer/writer-schema.js');
   const SMITH = { id: 'smith', type: 'book', author: [p('Smith', 'Zadie')], title: 'Swing Time', 'publisher-place': 'New York', publisher: 'Penguin Press', issued: d(2016) };
   const paper = (...notes) => W.parse(W.paper, `<p>Time swings${notes.map((n, i) => `${i ? ' again' : ''}<sup class="gz-footnote" data-footnote="${n}"></sup>`).join('')}.</p>`);
   const first = 'Zadie Smith, <em>Swing Time</em> (New York: Penguin Press, 2016), 3.';

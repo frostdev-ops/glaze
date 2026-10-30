@@ -1,14 +1,14 @@
-// The AI harness's tools and agent loop (lib/ai/tools.js, lib/ai/loop.js), with the mock provider and mock tools, on the rules
+// The AI harness's tools and agent loop (ai/tools.js, ai/loop.js), with the mock provider and mock tools, on the rules
 // ported from Rimeward's runLoop (MIT): a batch triaged whole with every refusal answered as data, `reason` required, one
 // approval waiting per batch, the policy re-read before a call and only narrowing, a stop answering every call { notRun },
 // results in call order and within 12k characters, the round cap, and the conversation repaired before each request.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../../extension/lib/ai/providers.js');
-require('../../extension/lib/ai/providers/mock.js');
-const TL = require('../../extension/lib/ai/tools.js');
-const L = require('../../extension/lib/ai/loop.js');
-const S = require('../../extension/lib/ai/schema.js');
+const P = require('../../extension/ai/providers.js');
+require('../../extension/ai/providers/mock.js');
+const TL = require('../../extension/ai/tools.js');
+const L = require('../../extension/ai/loop.js');
+const S = require('../../extension/ai/schema.js');
 
 const courses = TL.define({ name: 'courses_list', kind: 'read', description: 'The student\'s courses.', parameters: S.obj({ term: { type: 'string', enum: ['fall', 'spring'] } }, ['term']),
   run: async ({ term }) => [{ id: 'c1', name: `Biology (${term})` }] });

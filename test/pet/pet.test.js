@@ -1,7 +1,7 @@
 process.env.TZ = 'UTC'; // a few calls leave the zone to the machine, and the fixtures' days are UTC days
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../../extension/lib/pet.js'), T = require('../../extension/lib/todo.js');
+const P = require('../../extension/pet/pet.js'), T = require('../../extension/planner/todo.js');
 const now = Date.parse('2026-10-15T16:00:00Z'), today = T.dayOf(now, 'UTC');
 const item = (patch = {}) => ({ k: 'assignment:1', n: 'One', a: now - T.DAY * 2, d: now - T.DAY, s: 'on', ...patch });
 const insight = (items) => ({ at: now, courses: [{ id: '1', items }] });

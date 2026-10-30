@@ -1,11 +1,11 @@
-// An assignment's attached PDF, deck or spreadsheet opened in Glaze (lib/writer-context-assignment.js): only a .pdf, .pptx,
+// An assignment's attached PDF, deck or spreadsheet opened in Glaze (writer/writer-context-assignment.js): only a .pdf, .pptx,
 // .ppsx, .xlsx, .csv or .tsv attachment whose kind's Settings → Writer switch is on is offered; its bytes come by the same bounded GET Feedback's
 // reader uses, with the session, and go to the paper's frame as import:file { open: true } (writer-import.js then opens
 // it in Glaze: the paper kept as a version first); a file past the bound, a failed read or a file not the box's says so.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../../extension/lib/writer-context-assignment.js');
-const L = require('../../extension/lib/writer-submit.js');
+const C = require('../../extension/writer/writer-context-assignment.js');
+const L = require('../../extension/writer/writer-submit.js');
 
 const FILES = [
   { url: 'https://bb.school.test/bbcswebdav/pid-1-dt-asiobject-rid-11_1/xid-11_1', name: 'Field trip form.pdf', image: false, id: 'attachment-1' },
@@ -63,7 +63,7 @@ test('open refuses what isn\'t the box\'s or is switched off, and says when the 
   // Up to what the submit sheet sends (50 MB), past the 20 MB Feedback reads.
   const fits = page({ [FILES[1].url]: new Uint8Array(8) }, { max: 30e6 });
   assert.equal(await C.open(fits.X, fits.box, 'attachment-2', L), true, 'a 30 MB deck opens');
-  assert.equal(L.MAX_FILE, require('../../extension/lib/doc-kinds.js').FILE);
+  assert.equal(L.MAX_FILE, require('../../extension/documents/doc-kinds.js').FILE);
 });
 
 test('a slideshow attachment reaches the opener through the real attachment-link parser', () => {
@@ -128,7 +128,7 @@ test('a spreadsheet attachment reaches the opener through the real attachment-li
   assert.deepEqual(C.openable(files, { sheets: true }, L).map((f) => f.name), ['Lab data.xlsx']);
   assert.equal(files.incomplete, undefined, 'a spreadsheet is a file the box knows');
   const got = [];
-  const read = await C.read(files, { get: async (url) => { got.push(url); return new Uint8Array([0x89, 0x50, 0x4e, 0x47]); }, text: async () => '', D: require('../../extension/lib/doctext.js'), images: false });
+  const read = await C.read(files, { get: async (url) => { got.push(url); return new Uint8Array([0x89, 0x50, 0x4e, 0x47]); }, text: async () => '', D: require('../../extension/core/doctext.js'), images: false });
   assert.ok(!got.some((u) => files.find((f) => f.name === 'Lab data.xlsx').url === u), 'the spreadsheet is never fetched for Feedback');
   assert.equal(read.incomplete, true, 'Feedback hears a file went unread');
 });

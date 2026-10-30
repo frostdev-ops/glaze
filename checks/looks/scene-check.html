@@ -2,12 +2,12 @@
 <meta charset="utf-8">
 <title>scene check</title>
 <body style="margin:0;background:#202020">
-<script src="/lib/i18n.js"></script>
-<script src="/lib/glsl.js"></script>
+<script src="/core/i18n.js"></script>
+<script src="/looks/glsl.js"></script>
 <script type="module">
-// The page half of checks/looks/scene-check.mjs: lib/scene.js driven the way content.js drives it, in a real browser with a real
+// The page half of checks/looks/scene-check.mjs: looks/scene.js driven the way content.js drives it, in a real browser with a real
 // GPU (or SwiftShader). Sets window.__result = { checks: [{ name, ok, detail }], data, shots } and window.__done.
-// ?run=builtins,examples,heavy,refused,compile,still,lost,layers,hazards   ?base=1 when /base/lib/scene.js is the version to compare to.
+// ?run=builtins,examples,heavy,refused,compile,still,lost,layers,hazards   ?base=1 when /base/looks/scene.js is the version to compare to.
 const params = new URLSearchParams(location.search);
 const run = (params.get('run') || 'builtins,examples,heavy,refused,compile,still,lost,layers,hazards').split(',');
 const out = { checks: [], data: {}, shots: {} };
@@ -53,8 +53,8 @@ const shaderOpts = (src, o = {}) => ({ ...OPTS, kind: 'shader', x: { bg: { shade
 const layerOpts = (layers, o = {}) => ({ ...OPTS, kind: 'layers', x: { bg: { layers } }, ...o });
 const fetchText = async (url) => (await fetch(url)).text();
 
-const mod = await import('/lib/scene.js');
-const base = params.get('base') === '1' ? await import('/base/lib/scene.js') : null;
+const mod = await import('/looks/scene.js');
+const base = params.get('base') === '1' ? await import('/base/looks/scene.js') : null;
 const dbg = contexts[0] || document.createElement('canvas').getContext('webgl2');
 const info = dbg.getExtension('WEBGL_debug_renderer_info');
 out.data.renderer = info ? dbg.getParameter(info.UNMASKED_RENDERER_WEBGL) : 'unknown';

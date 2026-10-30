@@ -12,9 +12,9 @@
 // Ed25519 over utf8('glaze-blocklist-1|' + canon(list)). Checking needs WebCrypto's Ed25519, as sharing does (Chrome 137,
 // Safari 17, Firefox 129); elsewhere nothing verifies, so no list applies.
 //
-// Classic script; module.exports for node. In the worker it's loaded on first use (lib/background.js).
+// Classic script; module.exports for node. In the worker it's loaded on first use (background/background.js).
 var GZ_BLOCKLIST = globalThis.GZ_BLOCKLIST || (() => {
-  const G = typeof GZ_SANITIZE !== 'undefined' ? { GZ_SANITIZE } : require('../defaults.js');
+  const G = typeof GZ_SANITIZE !== 'undefined' ? { GZ_SANITIZE } : require('../content/defaults.js');
   const S = globalThis.crypto.subtle;
   const te = new TextEncoder();
   // The owner's public key: Ed25519, the raw 32 bytes in base64url. Its private key is kept offline by the owner

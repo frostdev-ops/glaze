@@ -2,7 +2,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
 const { deferred, tick, Element } = require('../helpers/pdf-ui.cjs');
-const source = fs.readFileSync(require.resolve('../../extension/pdf-kind.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/documents/pdf/pdf-kind.js'), 'utf8');
 const harness = () => {
   const ui = new Element('main'), life = new AbortController(), bake = deferred(), calls = [], events = new Map();
   const rec = { revision: 1, file: { hash: 'base' }, size: 1 }, target = { id: 'v', kind: 'pdf', file: { hash: 'target' }, pages: 2 };

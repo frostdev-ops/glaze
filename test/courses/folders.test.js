@@ -1,10 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const F = require(process.env.GZ_B9_LIB || '../../extension/lib/folders.js');
-const T = require('../../extension/lib/todo.js');
-const C = require('../../extension/lib/cards.js');
-const D = require('../../extension/defaults.js');
+const F = require(process.env.GZ_B9_LIB || '../../extension/courses/folders.js');
+const T = require('../../extension/planner/todo.js');
+const C = require('../../extension/courses/cards.js');
+const D = require('../../extension/content/defaults.js');
 const key = F.key('https://bb.example.edu', '_7_1', '_8_1');
 const storage = () => {
   const store = {};
@@ -72,11 +72,11 @@ test('backup import enforces the cap against other accounts already stored', asy
 test('B9 is default-on, on-demand and has no request or page-storage path', () => {
   assert.equal(D.GZ_SANITIZE({}).enhance.hideFolders, true);
   assert.equal(D.GZ_SANITIZE({ enhance: { hideFolders: false } }).enhance.hideFolders, false);
-  const source = fs.readFileSync(require.resolve('../../extension/features/folders.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/courses/page/folders.js'), 'utf8');
   assert.doesNotMatch(source, /\b(?:fetch|XMLHttpRequest|sessionStorage|localStorage|profile|myCourses)\s*[.(]/);
-  const core = fs.readFileSync(require.resolve('../../extension/content-ultra.js'), 'utf8');
+  const core = fs.readFileSync(require.resolve('../../extension/content/content-ultra.js'), 'utf8');
   assert.match(core, /GZ_FOLDER_UI\.sync\(!!top\(\)\?\.hideFolders, meId\)/);
-  assert.doesNotMatch(fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8'), /GZ_FOLDER|hideFolders/);
+  assert.doesNotMatch(fs.readFileSync(require.resolve('../../extension/content/content.js'), 'utf8'), /GZ_FOLDER|hideFolders/);
 });
 test('the byte cap bounds both imported records and new single-folder writes', async () => {
   const a = storage(), raw = {};

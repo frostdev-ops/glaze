@@ -2,9 +2,9 @@
 // read by the paper schema as paste reads it (S.slice); what "Match the paper" takes away; what is left as the format's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../../extension/lib/writer-schema.js');
-const ST = require('../../extension/lib/writer-styles.js');
-const P = require('../../extension/writer-paste.js');
+const S = require('../../extension/writer/writer-schema.js');
+const ST = require('../../extension/writer/writer-styles.js');
+const P = require('../../extension/writer/frame/writer-paste.js');
 const FX = require('../fixtures/writer-paste-html.js');
 
 const read = (html, schema = S.paper) => schema.topNodeType.create(null, S.slice(schema, html).content);
@@ -174,7 +174,7 @@ test('pasted headings retain source emphasis and mixed bold text', () => {
   assert.equal(marksOn(bare, 'Default heading').bold, true, 'bare HTML headings retain browser bold emphasis');
 });
 
-// Legibility (lib/writer-color.js): a run's colour stays only where the paper shows it, on its highlight or else the white
+// Legibility (writer/writer-color.js): a run's colour stays only where the paper shows it, on its highlight or else the white
 // page, at 1.6:1 or more. Word's clipboard as it writes shading (background beside mso-shading and mso-pattern), cell and
 // page colours (bgcolor) and theme colours (mso-themecolor beside the hex).
 const fromWord = (body, page = '') => `<html xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta name=ProgId content=Word.Document></head><body lang=EN-US${page}><div class=WordSection1>${body}</div></body></html>`;
@@ -233,7 +233,7 @@ test('Writer copy and paste retains explicit black, pale and tinted colours exac
 
 
 test('automatic or rejected paste ink remains legible on every retained highlighter', () => {
-  const C = require('../../extension/lib/color.js');
+  const C = require('../../extension/core/color.js');
   for (const [name, on] of Object.entries(S.HIGHLIGHT)) {
     for (const color of ['windowtext', 'transparent', 'black', 'white', on]) {
       const marks = runOf(`<p><span style="background:${on};color:${color}">band</span></p>`, 'band');

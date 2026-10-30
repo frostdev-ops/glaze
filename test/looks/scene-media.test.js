@@ -1,4 +1,4 @@
-// lib/scene-media.js in a VM with stand-ins for the page (test/helpers/media-env.cjs): what a video, an animated picture and a
+// looks/scene-media.js in a VM with stand-ins for the page (test/helpers/media-env.cjs): what a video, an animated picture and a
 // Lottie animation do for each of the things a background must always do. Muted and never with controls; first frame only while
 // motion is off; paused while the tab is hidden; the last frame kept when Glaze is cut off; everything freed when it stops; and
 // the gradient left alone, with the reason told, when it can't be shown.
@@ -215,7 +215,7 @@ test('nothing waits on a timer until the page is resized, and a resize does noth
 
 // ---- a file kept on this computer ---------------------------------------------------------------------------------------
 const bytes = Uint8Array.from({ length: 300 }, (_, i) => i & 255);
-// The worker's answer to 'glaze:keptFile' (lib/background.js): the file as it was kept, checked and named when it was put.
+// The worker's answer to 'glaze:keptFile' (background/background.js): the file as it was kept, checked and named when it was put.
 const answer = (h, reply) => async (m) => (m.type === 'glaze:keptFile' && m.h === h ? reply : { ok: false, error: 'missing' });
 const kept = (rec) => answer(rec.h, { ok: true, mime: rec.t, b64: Buffer.from(rec.bytes).toString('base64') });
 
@@ -232,7 +232,7 @@ test('a kept file is asked of the worker and played from a blob address that is 
   assert.deepEqual(r.e.revoked, ['blob:glaze/0']);
 });
 
-// Whether the bytes are the file named was settled when the worker kept them (lib/media.js put); the page doesn't hash them.
+// Whether the bytes are the file named was settled when the worker kept them (looks/media.js put); the page doesn't hash them.
 test('a kept file that is missing, the wrong kind or not an answer is not shown', async () => {
   const h = env().sha(bytes);
   for (const [why, ask, media] of [
@@ -251,7 +251,7 @@ test('a kept file that is missing, the wrong kind or not an answer is not shown'
 });
 
 // ---- an address the Look names: the worker fetches and cleans it; the page plays the checked copy ------------------------------
-// The worker's answer to 'glaze:remoteMedia' (lib/background.js): the file as lib/media.js remote cleaned it, or why not.
+// The worker's answer to 'glaze:remoteMedia' (background/background.js): the file as looks/media.js remote cleaned it, or why not.
 const remote = (reply) => async (m) => (m.type === 'glaze:remoteMedia' ? (typeof reply === 'function' ? reply(m) : reply) : { ok: false, error: 'bad' });
 const wire = (type, mime) => ({ ok: true, type, mime, b64: Buffer.from(bytes).toString('base64') });
 const given = (e) => e.srcs.map(([, src]) => src).filter(Boolean);
@@ -338,8 +338,8 @@ test('a video or picture the decoder finds past the side limit is dropped, whate
 });
 
 test('the page and the worker agree on the longest side', () => {
-  const side = Number(/^const SIDE = (\d+);/m.exec(require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/scene-media.js'), 'utf8'))[1]);
-  assert.equal(side, require('../../extension/lib/media.js').LIMIT.bg.image.side);
+  const side = Number(/^const SIDE = (\d+);/m.exec(require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/looks/scene-media.js'), 'utf8'))[1]);
+  assert.equal(side, require('../../extension/looks/media.js').LIMIT.bg.image.side);
 });
 
 test('video decoder dimensions are refused at metadata time before waiting for a first frame', async () => {

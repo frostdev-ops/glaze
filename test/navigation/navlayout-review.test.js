@@ -8,7 +8,7 @@ const source = (file) => process.env.GZ_NAV_REVIEW_BASE
   : fs.readFileSync(require.resolve(`../../extension/${file}`), 'utf8');
 
 test('native hidden attribute values survive disabling the rail exactly', () => {
-  const src = source('features/nav.js'), start = src.indexOf('  const restore ='), end = src.indexOf('  const loadLogo =', start);
+  const src = source('navigation/page/nav.js'), start = src.indexOf('  const restore ='), end = src.indexOf('  const loadLogo =', start);
   let hidden = 'hidden';
   const unit = { dataset: {}, isConnected: true, get hidden() { return hidden !== null; }, set hidden(v) { hidden = v ? '' : null; }, setAttribute(k, v) { if (k === 'hidden') hidden = v; }, removeAttribute(k) { if (k === 'hidden') hidden = null; } };
   const anchor = { contains: () => false }, mark = { isConnected: true, after() {}, remove() {} };
@@ -20,18 +20,18 @@ test('native hidden attribute values survive disabling the rail exactly', () => 
 });
 
 test('a replacement Glaze settings item does not inherit a hidden native list item', () => {
-  const src = source('content-ultra.js'), start = src.indexOf('  const glazeItem ='), end = src.indexOf('  const queueNav =', start);
+  const src = source('content/content-ultra.js'), start = src.indexOf('  const glazeItem ='), end = src.indexOf('  const queueNav =', start);
   let inserted;
   const make = (tag) => ({ tagName: tag, hidden: true, classList: { contains: () => false, add() {}, remove() {} }, removeAttribute(k) { if (k === 'hidden') this.hidden = false; }, setAttribute() {}, querySelector: () => null, append() {}, addEventListener() {}, cloneNode() { return make(tag); } });
   const li = make('LI'), last = make('A'); last.parentElement = li; li.after = (n) => { inserted = n; };
   const root = { isConnected: true, querySelector: () => null, querySelectorAll: () => [last] }; last.getAttribute = () => '/ultra/course';
-  const c = vm.createContext({ navRoots: new Set([root]), GZ_NAV: require('../../extension/lib/nav.js'), t: (s) => s, document: { createTreeWalker: () => ({ nextNode: () => ({}) }) }, NodeFilter: { SHOW_TEXT: 4 } });
+  const c = vm.createContext({ navRoots: new Set([root]), GZ_NAV: require('../../extension/navigation/nav.js'), t: (s) => s, document: { createTreeWalker: () => ({ nextNode: () => ({}) }) }, NodeFilter: { SHOW_TEXT: 4 } });
   vm.runInContext(src.slice(start, end) + '\nglazeItem(true);', c);
   assert.equal(inserted.hidden, false);
 });
 
 test('bar placement only suppresses the native rail on wide viewports', () => {
-  const src = source('features/nav.js'), expression = src.match(/placed: \(\) => (.*) };/)[1];
+  const src = source('navigation/page/nav.js'), expression = src.match(/placed: \(\) => (.*) };/)[1];
   for (const wide of [false, true]) {
     const placed = vm.runInNewContext(`() => ${expression}`, { html: { hasAttribute: () => true }, matchMedia: () => ({ matches: wide }) });
     assert.equal(placed(), wide);
@@ -39,7 +39,7 @@ test('bar placement only suppresses the native rail on wide viewports', () => {
 });
 
 test('Moodle keyboard order and group descriptions follow visible items and restore native attributes', () => {
-  const src = source('features/nav.js'), start = src.indexOf('  const menuItems ='), end = src.indexOf('  const icon =', start);
+  const src = source('navigation/page/nav.js'), start = src.indexOf('  const menuItems ='), end = src.indexOf('  const icon =', start);
   assert.ok(start > 0, 'the rail must manage the worn menubar');
   const node = (attrs = {}) => ({ attrs: { ...attrs }, visible: true, getAttribute(k) { return this.attrs[k] ?? null; }, setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; },
     get tabIndex() { return Number(this.attrs.tabindex ?? 0); }, set tabIndex(v) { this.setAttribute('tabindex', v); },
@@ -63,7 +63,7 @@ test('Moodle keyboard order and group descriptions follow visible items and rest
 });
 
 test("a Look's bar placed at Canvas's bottom stays over Canvas's other fixed bars, and Previous and Next stand on it", () => {
-  const css = source('features/navlayout.css');
+  const css = source('navigation/page/navlayout.css');
   const wide = css.slice(css.indexOf('@media (min-width: 900px) {'));
   // Canvas's module sequence bar is fixed at z-index 100 later in the page: at the same z-index it painted over the bar.
   const at = wide.indexOf('html[data-gz-nav-place] #header.ic-app-header {');

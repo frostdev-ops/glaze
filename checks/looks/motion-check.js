@@ -6,7 +6,7 @@
 // screen while it closes, and be gone after.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
-const ext = fs.realpathSync(process.env.EXT || path.resolve(__dirname, '../../extension')), G = require(path.join(ext, 'defaults.js'));
+const ext = fs.realpathSync(process.env.EXT || path.resolve(__dirname, '../../extension')), G = require(path.join(ext, 'content/defaults.js'));
 const output = process.argv[2];
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -87,7 +87,7 @@ const animations = (events) => {
         const final = [panel, tip, card].map((e) => ({ x: e.getBoundingClientRect().x, y: e.getBoundingClientRect().y }));
         for (const e of [panel, tip, pulse, card, style]) e.remove();
         return { nearEnd, final };
-      }, require(path.join(ext, 'lib/motionx.js')).compile({ 'card.enter': { ms: 250, ease: 'linear', s: [{ at: 0, x: -20, r: -25, sc: 0.8 }, { at: 1, x: 0, r: 0, sc: 1 }] } }));
+      }, require(path.join(ext, 'looks/motionx.js')).compile({ 'card.enter': { ms: 250, ease: 'linear', s: [{ at: 0, x: -20, r: -25, sc: 0.8 }, { at: 1, x: 0, r: 0, sc: 1 }] } }));
       if (site !== 'ultra') await page.evaluate(async () => {
         if (!document.startViewTransition) throw Error('View transitions are unavailable');
         await document.startViewTransition(() => { document.body.dataset.motionProbe = 'settled'; }).finished;
@@ -145,7 +145,7 @@ const animations = (events) => {
       });
       for (const r of instant) if (r.enter !== 1 || r.display !== 'none') problems.push(`${site}: dialog must be instant with ${r.mode} (${JSON.stringify(r)})`);
 
-      // WP-V2: Glaze's own UI moving (lib/motion.js). The course tabs for real where the preview draws them (Ultra's and
+      // WP-V2: Glaze's own UI moving (core/motion.js). The course tabs for real where the preview draws them (Ultra's and
       // Canvas's tabs page): a keyboard move glides them, a close leaves a fading copy that goes. The dock, the board and To
       // Do don't draw in the previews: the same flip, exit and swap run on probe elements. Everything must composite, and
       // nothing may move at Off.
@@ -247,7 +247,7 @@ const animations = (events) => {
       await page.setViewportSize({ width: 1280, height: 850 }); await page.waitForTimeout(300);
       await cdp2.send('Tracing.end'); await done2;
       const l = ui.lib;
-      if (l.missing) problems.push(`${site}: lib/motion.js is not on the preview`);
+      if (l.missing) problems.push(`${site}: core/motion.js is not on the preview`);
       else {
         if (l.moving < 4) problems.push(`${site}: a reorder should glide every row (${l.moving})`);
         if (l.ghost !== 1 || l.ghostsLeft) problems.push(`${site}: a removal should leave one copy that goes (${l.ghost}, ${l.ghostsLeft} left)`);

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 const { El } = require('../stand-in-dom.js');
 const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
@@ -42,13 +42,13 @@ const page = ({ motion = false } = {}) => {
   const all = doc.querySelectorAll;
   doc.querySelectorAll = (s) => s === '.ic-DashboardCard:not([data-gz-tile-card])' ? cards.filter((c) => c.isConnected && !c.hasAttribute('data-gz-tile-card')) : all(s);
   const courses = { [cid]: { name: 'Biology', canvas: true, color: '#123456' } }, settings = D.GZ_SANITIZE({});
-  const c = vm.createContext({ ...D, GZ_COLOR: require('../../extension/lib/color.js'), GZ_WIDGETS: require('../../extension/lib/widgets.js'), GZ_CARD_UI: { paint() {} }, URL, structuredClone,
+  const c = vm.createContext({ ...D, GZ_COLOR: require('../../extension/core/color.js'), GZ_WIDGETS: require('../../extension/core/widgets.js'), GZ_CARD_UI: { paint() {} }, URL, structuredClone,
     GZ_MOTION: motion ? { exit: (el) => { el.inert = true; return new Promise(() => {}); } } : undefined,
     document: doc, Element: El, Node: El, location: { origin }, innerWidth: 1200, innerHeight: 900,
     setTimeout: (f) => { timers.set(++timerId, f); return timerId; }, clearTimeout: (id) => timers.delete(id),
     addEventListener() {}, matchMedia: () => ({ matches: false }), requestAnimationFrame: () => 0,
     getComputedStyle: (el) => ({ direction: el.closest('[dir]')?.getAttribute('dir') || doc.root.style.direction || 'ltr' }),
-    GZ_CATALOG: require('../../extension/lib/looks.js'), chrome: { runtime: { id: 'glaze' }, storage: { local: { get: async () => ({ lookCatalog: catalog }) }, sync: { set() {} }, onChanged: { addListener: (f) => changed.push(f) } } },
+    GZ_CATALOG: require('../../extension/looks/looks.js'), chrome: { runtime: { id: 'glaze' }, storage: { local: { get: async () => ({ lookCatalog: catalog }) }, sync: { set() {} }, onChanged: { addListener: (f) => changed.push(f) } } },
     fetch: (url, init) => new Promise((resolve, reject) => requests.push({ url, init, ok: () => resolve({ ok: true, json: async () => ({}) }), fail: () => reject(Error('unavailable')) })),
     ultra: false, moodle: false, menuOn: () => true, courseList: courses, settings,
     canvasCourseKey: (id) => `canvas:${origin}/${id}`, X: { nickOf: () => '' }, t: (s) => s,
@@ -56,14 +56,14 @@ const page = ({ motion = false } = {}) => {
     GZ_CTX: { site: 'canvas', on: () => true, need: async () => {}, make, t: (s) => s, nickOf: () => '', cardUI: (f) => f({ open: (...a) => editors.push(a) }), courseColor() {}, courseColors: () => ({}), varText() {},
       settings: () => settings, courseList: () => courses, canvasCourses: async () => rows, setCourses: (v) => { settings.courses = v; } },
   });
-  const src = read('content.js');
+  const src = read('content/content.js');
   vm.runInContext(src.slice(src.indexOf('  const syncCourseMenu = () => {'), src.indexOf("  // Canvas's dashboard cards:")) + '\nsyncCourseMenu();', c);
-  const ui = vm.runInContext(read('features/coursemenu.js'), c);
+  const ui = vm.runInContext(read('navigation/page/coursemenu.js'), c);
   const open = async (card = cards[0]) => { ui.toggle(card.querySelector(':scope > .gz-cm-btn')); await settle(); };
   const nick = (value) => { const n = doc.getElementById('gz-cm-nick'); n.value = value; doc.fire(n, 'input'); doc.fire(n, 'change'); };
   const flush = async () => { const pending = [...timers.values()]; timers.clear(); for (const f of pending) f(); await settle(); };
   const color = () => cards[0].querySelector('.ic-DashboardCard__header_hero').style.backgroundColor;
-  return { doc, cards, requests, ui, open, nick, flush, color, events, editors, catalog: async (next) => { catalog = next; for (const f of changed) f({ lookCatalog: { newValue: next } }, 'local'); await settle(); }, loadCards: () => vm.runInContext(read('features/coursecards.js'), c) };
+  return { doc, cards, requests, ui, open, nick, flush, color, events, editors, catalog: async (next) => { catalog = next; for (const f of changed) f({ lookCatalog: { newValue: next } }, 'local'); await settle(); }, loadCards: () => vm.runInContext(read('courses/page/coursecards.js'), c) };
 };
 
 test('Canvas native and board cards have distinct menu ids', () => {
@@ -217,7 +217,7 @@ test('course-menu arrow direction follows computed CSS direction without a dir a
 
 test('an open course Look selector follows catalogue additions and removals without losing a nickname draft', async () => {
   const p = page(); await p.open();
-  const C = require('../../extension/lib/looks.js'), G = D.GZ_LOOKS[0];
+  const C = require('../../extension/looks/looks.js'), G = D.GZ_LOOKS[0];
   const kept = { id: C.idOf('code'), name: 'Study', kind: 'saved', colors: G.colors, look: G.look, bg: G.bg };
   const nick = p.doc.getElementById('gz-cm-nick');
   nick.value = 'Draft'; p.doc.fire(nick, 'input');

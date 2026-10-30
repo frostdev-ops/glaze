@@ -1,10 +1,10 @@
-// Documents' files (lib/doc-files.js): the worker's store in IndexedDB by SHA-256, its owners and sweep, and the port a
+// Documents' files (documents/doc-files.js): the worker's store in IndexedDB by SHA-256, its owners and sweep, and the port a
 // page puts and gets a file over in chunks, against a fake IndexedDB and ports that carry JSON as Chrome's do.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const F = require('../../extension/lib/doc-files.js');
-const DK = require('../../extension/lib/doc-kinds.js');
+const F = require('../../extension/documents/doc-files.js');
+const DK = require('../../extension/documents/doc-kinds.js');
 const { fakeIDB } = require('../helpers/fake-idb.cjs');
 
 test('a restarted worker loads the file store before answering its first port', async () => {
@@ -52,7 +52,7 @@ test('the largest file is the kinds\' and the submit sheet\'s one number', () =>
   assert.equal(DK.KINDS.pdf.max, F.MAX);
   assert.equal(DK.KINDS.slides.max, F.MAX);
   assert.equal(DK.FILE, F.MAX);
-  assert.equal(require('../../extension/lib/writer-submit.js').MAX_FILE, F.MAX);
+  assert.equal(require('../../extension/writer/writer-submit.js').MAX_FILE, F.MAX);
   assert.ok(4 * Math.ceil(F.CHUNK / 3) <= 512 << 10, 'a chunk is at most 512 KB on the wire');
 });
 

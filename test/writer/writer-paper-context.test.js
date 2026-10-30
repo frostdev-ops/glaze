@@ -1,10 +1,10 @@
-// Glaze Writer's assignment context (lib/writer-context-assignment.js build), from the fixtures' Ultra shapes: the paper's
+// Glaze Writer's assignment context (writer/writer-context-assignment.js build), from the fixtures' Ultra shapes: the paper's
 // key, the student's and course's names, the assignment's title, due date and instructions, and its rubric for the AI.
 // Each read that fails leaves its part empty; the instructor is always left for the student.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../../extension/lib/writer-context-assignment.js');
-const R = require('../../extension/lib/rubric.js');
+const C = require('../../extension/writer/writer-context-assignment.js');
+const R = require('../../extension/courses/rubric.js');
 const grades = require('../fixtures/ultra-writer-gradebook.json');
 const members = require('../fixtures/ultra-memberships.json');
 const rubric = require('../fixtures/ultra-rubric-numeric.json');
@@ -77,9 +77,9 @@ test('the rubric is read only for the student\'s own row and a single associatio
 });
 test('the production worker allows the assignment context builder', () => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-  const src = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const list = vm.runInNewContext(src.match(/const LOADABLE = (new Set\([^;]+\));/)[1]);
-  assert.ok(list.has('lib/writer-context-assignment.js'));
+  assert.ok(list.has('writer/writer-context-assignment.js'));
   const check = fs.readFileSync(path.join(__dirname, '../../checks/writer/writer-paper-check.js'), 'utf8');
   assert.doesNotMatch(check, /fs\.writeFileSync\(bg,/);
 });

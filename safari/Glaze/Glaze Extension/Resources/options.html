@@ -5,8 +5,8 @@
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Glaze settings</title>
-<link rel="stylesheet" href="ui.css">
-  <link rel="stylesheet" href="features/surfaces.css">
+<link rel="stylesheet" href="core/ui.css">
+  <link rel="stylesheet" href="looks/page/surfaces.css">
 <style>
   /* The bundled faces, for the font list. */
   @font-face { font-family: "Glaze Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 100 900; }
@@ -25,7 +25,7 @@
     backdrop-filter: blur(calc(var(--gz-glass, 12px) * 5 / 6)); border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
   }
   .brand { display: flex; align-items: center; gap: 0.6rem; }
-  /* Opened as a page of the school's site (features/settingspage.js): its own tools, and what holds keys and grants sent
+  /* Opened as a page of the school's site (settings/page/settingspage.js): its own tools, and what holds keys and grants sent
      to a tab of its own. */
   .embed-tools { display: flex; gap: .4rem; }
   .embed-tools[hidden] { display: none; }
@@ -43,7 +43,7 @@
   .layout { display: grid; grid-template-columns: 12.5rem minmax(0, 1fr) minmax(340px, 40%); gap: 1.5rem; padding: 1.5rem; max-width: 1640px; margin: 0 auto; }
   .layout:has(> .editor > [data-no-preview]:not([hidden])) { grid-template-columns: 12.5rem minmax(0, 1fr); }
   .layout:has(> .editor > [data-no-preview]:not([hidden])) > .preview { display: none; }
-  /* The categories, and the active one's sections under it (lib/editor.js places them). */
+  /* The categories, and the active one's sections under it (settings/editor.js places them). */
   .editor-nav { position: sticky; top: calc(var(--editor-header, 100px) + 1rem); align-self: start; max-height: calc(100vh - var(--editor-header, 100px) - 2rem); overflow: auto; padding: .4rem; border-radius: calc(var(--gz-radius, 12px) * 7 / 6); }
   html[data-gz-bg]:not([data-gz-bg="solid"]) .editor-nav { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-line, var(--gz-line)); }
   .editor-tabs { display: flex; flex-direction: column; gap: .15rem; }
@@ -96,7 +96,7 @@
   .nav-own { margin-top: .25rem; }
   .group .stack { gap: .6rem; }
   .sub { margin-inline-start: 2.75rem; }
-  /* A setting's longer description: a "?" after its name opens it (lib/editor-info.js). */
+  /* A setting's longer description: a "?" after its name opens it (settings/editor-info.js). */
   .has-info, .has-badge { display: flex; flex-wrap: wrap; align-items: flex-start; }
   .site-badge { display: inline-block; justify-self: start; padding: 0 .45rem; border-radius: 999px; border: 1px solid var(--gz-border-line, var(--gz-line)); color: var(--gz-ink-muted); font-size: calc(11px * var(--gz-scale, 1)); font-weight: 400; line-height: 1.6; white-space: nowrap; }
   .section-heading h2 + .site-badge { margin-inline-end: auto; }
@@ -167,7 +167,7 @@
   .courses .name small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 0.78em; color: var(--gz-ink-faint); }
   .courses li > button[hidden] { display: inline-block !important; visibility: hidden; }
   .sites li { grid-template-columns: minmax(0, 1fr) auto; }
-  /* Settings → AI (lib/editor-ai.js): the providers' cards, one drawer under them, a row per feature with its model and effort. */
+  /* Settings → AI (settings/editor-ai.js): the providers' cards, one drawer under them, a row per feature with its model and effort. */
   .section-heading > .ai-mode { margin-inline-start: auto; }
   .section-heading > .ai-mode:not([hidden]) + [role="switch"] { margin-inline-start: 0; }
   .ai-setup { display: grid; gap: .75rem; }
@@ -244,7 +244,7 @@
   .ai-pick:disabled { opacity: .45; cursor: default; }
   .ai-picker { position: absolute; z-index: 5; inset-block-start: calc(100% + 6px); inset-inline-start: 0; inline-size: min(560px, calc(100vw - 16px)); display: grid; grid-template-columns: 170px minmax(0, 1fr); border-radius: var(--gz-radius, 12px); overflow: hidden;
     background: var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); box-shadow: 0 16px 40px rgb(0 0 0 / .3), 0 2px 6px rgb(0 0 0 / .2); transform-origin: top left; animation: ai-pop .18s var(--gz-ease); }
-  /* In the top layer (lib/editor-ai.js float): over every section, placed under its button, never widening the page. */
+  /* In the top layer (settings/editor-ai.js float): over every section, placed under its button, never widening the page. */
   .ai-picker[popover] { position: fixed; inset: auto; margin: 0; padding: 0; color: inherit; max-block-size: calc(100vh - 16px); }
   .ai-picker[popover]:not(:popover-open) { display: none; }
   .ai-picker.up { transform-origin: bottom left; }
@@ -263,7 +263,7 @@
   .ai-picker li .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ai-picker li small { color: var(--gz-ink-faint); }
   .ai-picker li.none { color: var(--gz-ink-faint); cursor: default; }
-  /* Settings → Writer (lib/editor-writer.js), drawn as Settings → AI: a row per setting, its name and "?" on the left and
+  /* Settings → Writer (settings/editor-writer.js), drawn as Settings → AI: a row per setting, its name and "?" on the left and
      its control on the right, then each section's list (saved papers by course, the personal dictionary's words as pills). */
   .wr-rows { display: grid; }
   .wr-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; align-items: center; padding-block: .65rem; min-block-size: 3rem; border-block-start: 1px solid var(--gz-border-line, var(--gz-line)); }
@@ -318,7 +318,7 @@
     .ai-prov:hover { transform: none; }
   }
   #ai-said { margin: 0; color: var(--gz-err); }
-  /* Settings → Agents (lib/editor-agents.js): the link's state with its command, a card per app with a switch per group,
+  /* Settings → Agents (settings/editor-agents.js): the link's state with its command, a card per app with a switch per group,
      and the activity list, drawn as Settings → AI's. */
   #agents-said { margin: 0; color: var(--gz-err); }
   .ag-state { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .5rem .7rem; padding: .65rem .8rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6);
@@ -365,7 +365,7 @@
   .nav-editor-list li[data-drop] { outline: 2px solid var(--gz-accent); }
   #nav-link-icon-preview { width: 24px; height: 24px; flex: none; }
   .nav-section-heading { display: flex; gap: .5rem; align-items: center; justify-content: space-between; }
-  /* Glaze navigation (the Navigation tab; lib/editor-navbar.js draws the items). Choice cards with a picture of each layout. */
+  /* Glaze navigation (the Navigation tab; settings/editor-navbar.js draws the items). Choice cards with a picture of each layout. */
   .nb-master { padding: .85rem 1rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 5 / 6); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
   .nb-body { display: grid; gap: 1.4rem; margin-top: 1.1rem; }
   .nb-body[hidden], .nb-group[hidden] { display: none; }
@@ -383,7 +383,7 @@
   .nb-thumb .bar { fill: color-mix(in srgb, var(--gz-accent) 32%, var(--gz-surface)); }
   .nb-thumb .ln { fill: color-mix(in srgb, var(--gz-ink-muted) 22%, transparent); }
   .nb-thumb .it { fill: var(--gz-accent-hi); }
-  /* The pointer (lib/editor-pointer.js): a card per pointer, its arrow and hand on a stage half light and half dark, as pages
+  /* The pointer (settings/editor-pointer.js): a card per pointer, its arrow and hand on a stage half light and half dark, as pages
      are. Hovering a card wears its hand. */
   .seg.pt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: .6rem; padding: 0; border: 0; border-radius: 0; background: none; }
   .seg.pt-cards :is(label, button) { position: relative; display: grid; gap: .3rem; align-content: start; justify-items: center; text-align: center; padding: .5rem .5rem .6rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6); border: 1px solid var(--gz-border-line, var(--gz-line)); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); font-size: calc(13px * var(--gz-scale, 1)); cursor: pointer; transition: border-color .2s var(--gz-ease), box-shadow .2s var(--gz-ease), transform .2s var(--gz-ease); }
@@ -519,7 +519,7 @@
   .ss-session h4, .ss-session ul, .ss-session h5, .ss-read p { margin: 0; }
   .ss-session ul { padding-inline-start: 1.2rem; font-size: calc(13px * var(--gz-scale, 1)); }
   .ss-read { display: grid; gap: 0.3rem; padding: 0.6rem; border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
-  /* Look parts builders (lib/editor-x*.js): the shader box with its line numbers, the layer stack, motion moments. */
+  /* Look parts builders (settings/editor-x*.js): the shader box with its line numbers, the layer stack, motion moments. */
   .x-builder, .x-motion, .x-body { display: grid; gap: .6rem; min-width: 0; }
   .x-body > button { justify-self: start; }
   .x-code { display: grid; grid-template-columns: 3.6em minmax(0, 1fr); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); overflow: hidden; }
@@ -535,7 +535,7 @@
   .x-motion details[open] summary { margin-bottom: .6rem; }
   .x-builder .nav-editor-list li, .x-motion .nav-editor-list li { display: grid; gap: .5rem; }
   .x-motion h4, .x-stack h4 { margin: 0; font-size: calc(12px * var(--gz-scale, 1)); }
-  /* Mods (lib/editor-mods.js): one card per mod, the author's reasons set apart from Glaze's words, and the prompt. */
+  /* Mods (settings/editor-mods.js): one card per mod, the author's reasons set apart from Glaze's words, and the prompt. */
   .mods { list-style: none; margin: 0; padding: 0; display: grid; gap: .8rem; }
   .mod-card { display: grid; gap: .45rem; padding: .8rem .9rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 5 / 6); min-width: 0; }
   .mod-card h4 { margin: .3rem 0 0; font-size: calc(12px * var(--gz-scale, 1)); }
@@ -553,7 +553,7 @@
   .mod-new { background: var(--gz-accent-soft); border-radius: calc(var(--gz-radius, 12px) / 2); padding: .2rem .4rem; }
   .mod-warn { color: var(--gz-err); font-size: calc(13px * var(--gz-scale, 1)); }
   .mod-settings { display: grid; gap: .5rem; }
-  /* The widget builder (lib/editor-widget.js): the form beside its live preview, and one card per block. */
+  /* The widget builder (settings/editor-widget.js): the form beside its live preview, and one card per block. */
   .wb { display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 20rem); gap: 1.2rem; align-items: start; }
   .wb-edit { display: grid; gap: .8rem; min-width: 0; }
   .wb-side { position: sticky; top: 1rem; display: grid; gap: .5rem; min-width: 0; }
@@ -846,7 +846,7 @@
 <div class="info-pop" id="info-extras-stickers" popover><span class="desc">Put stickers on any course page from the command palette (Ctrl+K): Place stickers on this page. They are kept on this computer, and never shown on a quiz you are taking.</span></div></div>
         </div>
 </section>
-<!-- A Look's own nav layout and page tweaks (Look parts): drawn by lib/editor-xparts.js, which writes their words. -->
+<!-- A Look's own nav layout and page tweaks (Look parts): drawn by settings/editor-xparts.js, which writes their words. -->
 <section id="look-nav-layout" data-editor-section="look/nav-layout" data-sites="Canvas · Blackboard Ultra · Moodle" data-editor-power aria-labelledby="heading-look-nav-layout">
 <p class="section-path" data-editor-breadcrumb><a href="#look/nav-layout" data-editor-alias>This Look's navigation</a></p><div class="section-heading"><h2 id="heading-look-nav-layout"></h2><button type="button" class="section-reset" data-reset-section="look/nav-layout">Reset section</button></div>
 <div id="xnav"></div>
@@ -1815,7 +1815,7 @@
       <div class="row"><button value="cancel" id="gcal-bye-cancel">Cancel</button><button value="ok" class="primary">Disconnect</button></div>
     </form>
   </dialog>
-  <!-- Settings → Writer's Clear papers question (lib/editor-writer.js): only Clear papers deletes. -->
+  <!-- Settings → Writer's Clear papers question (settings/editor-writer.js): only Clear papers deletes. -->
   <dialog id="writer-clear" aria-labelledby="writer-clear-title" aria-describedby="writer-clear-note">
     <form method="dialog">
       <h3 id="writer-clear-title"></h3>
@@ -1823,7 +1823,7 @@
       <div class="row"><button value="cancel" id="writer-clear-cancel">Cancel</button><button value="ok" class="primary wr-go" id="writer-clear-ok">Clear papers</button></div>
     </form>
   </dialog>
-  <!-- Settings → Agents' Forget all apps question (lib/editor-agents.js): only Forget all forgets. -->
+  <!-- Settings → Agents' Forget all apps question (settings/editor-agents.js): only Forget all forgets. -->
   <dialog id="agents-forget-ask" aria-labelledby="agents-forget-title" aria-describedby="agents-forget-note">
     <form method="dialog">
       <h3 id="agents-forget-title">Forget all apps?</h3>
@@ -1840,7 +1840,7 @@
       <div class="row"><button value="cancel" id="restore-cancel">Cancel</button><button value="ok" class="primary" id="restore-ok">Restore</button></div>
     </form>
   </dialog>
-  <!-- A mod's install prompt (lib/editor-mods.js): only Install installs. -->
+  <!-- A mod's install prompt (settings/editor-mods.js): only Install installs. -->
   <dialog id="mod-prompt" aria-labelledby="mod-prompt-title" aria-describedby="mod-prompt-meta mod-prompt-source">
     <form method="dialog">
       <h3 id="mod-prompt-title"></h3>
@@ -1853,82 +1853,82 @@
     </form>
   </dialog>
   <iframe id="backdrop" src="preview.html?site=canvas&amp;backdrop" aria-hidden="true" tabindex="-1" inert></iframe>
-  <script src="lib/color.js"></script>
-  <script src="lib/fonts.js"></script>
-  <script src="lib/surfaces.js"></script>
-<script src="defaults.js"></script>
-<script src="lib/lookset.js"></script>
-<script src="lib/looks.js"></script>
-  <script src="lib/cards.js"></script>
-  <script src="lib/nav.js"></script>
-<script src="lib/nav-items.js"></script>
-  <script src="lib/navlayout.js"></script>
-  <script src="lib/motionx.js"></script>
-  <script src="lib/parts.js"></script>
-  <script src="lib/editor-xparts.js"></script>
-  <script src="lib/lookparts.js"></script>
-  <script src="lib/share.js"></script>
-  <script src="lib/relay.js"></script>
-  <script src="lib/sharing.js"></script>
-  <script src="lib/editor.js"></script>
-  <script src="lib/editor-info.js"></script>
-  <script src="lib/glsl.js"></script>
-  <script src="lib/media.js"></script>
-  <script src="lib/editor-x.js"></script>
-  <script src="lib/editor-xbg.js"></script>
-  <script src="lib/editor-xmotion.js"></script>
-  <script src="lib/editor-pointer.js"></script>
-  <script src="lib/history.js"></script>
-  <script src="lib/lookx.js"></script>
-  <script src="lib/news.js"></script>
-  <script src="lib/search.js"></script>
-  <script src="lib/todo.js"></script>
-  <script src="lib/folders.js"></script>
-  <script src="lib/widgets.js"></script>
-  <script src="lib/remind.js"></script>
-  <script src="lib/gradescope.js"></script>
-  <script src="lib/gcal.js"></script>
-  <script src="lib/gcal-auth.js"></script>
-  <script src="lib/coursetabs.js"></script>
-  <script src="lib/zip.js"></script>
-  <script src="lib/backup.js"></script>
-  <script src="lib/ai/schema.js"></script>
-  <script src="lib/modtools.js"></script>
-  <script src="lib/modbundle.js"></script>
-  <script src="lib/modapi.js"></script>
-  <script src="lib/gradecalc.js"></script>
-  <script src="lib/gpa.js"></script>
-  <script src="lib/classes.js"></script>
-  <script src="lib/modwidget.js"></script>
-  <script src="lib/modbroker.js"></script>
-  <script src="features/modui.js"></script>
-  <script src="lib/editor-mods.js"></script>
-  <script src="lib/editor-widget.js"></script>
-  <script src="lib/navbar.js"></script>
-  <script src="lib/editor-navbar.js"></script>
+  <script src="core/color.js"></script>
+  <script src="looks/fonts.js"></script>
+  <script src="looks/surfaces.js"></script>
+<script src="content/defaults.js"></script>
+<script src="looks/lookset.js"></script>
+<script src="looks/looks.js"></script>
+  <script src="courses/cards.js"></script>
+  <script src="navigation/nav.js"></script>
+<script src="navigation/nav-items.js"></script>
+  <script src="navigation/navlayout.js"></script>
+  <script src="looks/motionx.js"></script>
+  <script src="looks/parts.js"></script>
+  <script src="settings/editor-xparts.js"></script>
+  <script src="looks/lookparts.js"></script>
+  <script src="sharing/share.js"></script>
+  <script src="sharing/relay.js"></script>
+  <script src="sharing/sharing.js"></script>
+  <script src="settings/editor.js"></script>
+  <script src="settings/editor-info.js"></script>
+  <script src="looks/glsl.js"></script>
+  <script src="looks/media.js"></script>
+  <script src="settings/editor-x.js"></script>
+  <script src="settings/editor-xbg.js"></script>
+  <script src="settings/editor-xmotion.js"></script>
+  <script src="settings/editor-pointer.js"></script>
+  <script src="looks/history.js"></script>
+  <script src="looks/lookx.js"></script>
+  <script src="settings/news.js"></script>
+  <script src="settings/search.js"></script>
+  <script src="planner/todo.js"></script>
+  <script src="courses/folders.js"></script>
+  <script src="core/widgets.js"></script>
+  <script src="planner/remind.js"></script>
+  <script src="planner/gradescope.js"></script>
+  <script src="planner/gcal.js"></script>
+  <script src="planner/gcal-auth.js"></script>
+  <script src="navigation/coursetabs.js"></script>
+  <script src="core/zip.js"></script>
+  <script src="background/backup.js"></script>
+  <script src="ai/schema.js"></script>
+  <script src="mods/modtools.js"></script>
+  <script src="mods/modbundle.js"></script>
+  <script src="mods/modapi.js"></script>
+  <script src="planner/gradecalc.js"></script>
+  <script src="planner/gpa.js"></script>
+  <script src="planner/classes.js"></script>
+  <script src="mods/modwidget.js"></script>
+  <script src="mods/modbroker.js"></script>
+  <script src="mods/page/modui.js"></script>
+  <script src="settings/editor-mods.js"></script>
+  <script src="settings/editor-widget.js"></script>
+  <script src="navigation/navbar.js"></script>
+  <script src="settings/editor-navbar.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>
   <script src="i18n/fr.js"></script>
   <script src="i18n/nl.js"></script>
   <script src="i18n/pt-BR.js"></script>
-  <script src="lib/i18n.js"></script>
-  <script src="ui.js"></script>
-  <script src="lib/doctext.js"></script>
-  <script src="lib/petsprites.js"></script>
-  <script src="lib/petbrain.js"></script>
-  <script src="lib/pet.js"></script>
-  <script src="lib/petplayer.js"></script>
-  <script src="lib/petlibrary.js"></script>
-  <script src="lib/site.js"></script>
-  <script src="lib/ai/settings.js"></script>
-<script src="lib/ai/failure.js"></script>
-  <script src="lib/ai/endpoint.js"></script>
-  <script src="lib/editor-ai.js"></script>
-  <script src="lib/editor-agents.js"></script>
-  <script src="lib/writer-papers.js"></script>
-  <script src="lib/editor-writer.js"></script>
-  <script src="options.js"></script>
-  <script src="lib/notes.js"></script>
-  <script src="lib/sessions-ui.js"></script>
+  <script src="core/i18n.js"></script>
+  <script src="core/ui.js"></script>
+  <script src="core/doctext.js"></script>
+  <script src="pet/petsprites.js"></script>
+  <script src="pet/petbrain.js"></script>
+  <script src="pet/pet.js"></script>
+  <script src="pet/petplayer.js"></script>
+  <script src="pet/petlibrary.js"></script>
+  <script src="core/site.js"></script>
+  <script src="ai/settings.js"></script>
+<script src="ai/failure.js"></script>
+  <script src="ai/endpoint.js"></script>
+  <script src="settings/editor-ai.js"></script>
+  <script src="settings/editor-agents.js"></script>
+  <script src="writer/writer-papers.js"></script>
+  <script src="settings/editor-writer.js"></script>
+  <script src="settings/options.js"></script>
+  <script src="planner/notes.js"></script>
+  <script src="sharing/sessions-ui.js"></script>
 </body>
 </html>

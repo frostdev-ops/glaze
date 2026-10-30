@@ -1,8 +1,8 @@
-// Glaze's own navigation's widgets (features/navbar.js places them): the clock, the next thing due, the focus timer and
+// Glaze's own navigation's widgets (navigation/page/navbar.js places them): the clock, the next thing due, the focus timer and
 // the pet, in the rail (open, or compact in the icons rail), the top bar (compact) or a phone's More sheet. The same timer
 // and pet as the dashboard's widgets: nothing more is recorded. Each widget is one element, kept for as long as it's on,
 // that the bar moves to where it shows; its words and times are drawn in place, every minute (every second while the
-// timer runs). The older rail (features/nav.js) draws the same widgets its own way.
+// timer runs). The older rail (navigation/page/nav.js) draws the same widgets its own way.
 function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
   const t = X.t, NAMES = { clock: 'Clock and date', next: 'Next due', timer: 'Focus timer', pet: 'Pet habitat' };
   const get = (area, keys) => new Promise((res) => { try { chrome.storage[area].get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
@@ -25,7 +25,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
     });
   };
   // What's due next: Canvas and Moodle from the week the palette and the popup read (content.js dueWeek), Ultra from its
-  // planner, done and dismissed work left out (as features/nav.js).
+  // planner, done and dismissed work left out (as navigation/page/nav.js).
   const refreshNext = async () => {
     const token = rev, read = reads, url = location.href;
     const start = new Date(); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(end.getDate() + 7);
@@ -40,7 +40,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
         nextItems = (Array.isArray(week) ? week : []).map((i) => ({ title: i?.title, at: i?.due, url: i?.url })); nextError = false;
         return;
       }
-      await Promise.all([X.need('lib/ultra.js', () => globalThis.GZ_ULTRA), X.need('lib/todo.js', () => globalThis.GZ_TODO)]);
+      await Promise.all([X.need('courses/ultra.js', () => globalThis.GZ_ULTRA), X.need('planner/todo.js', () => globalThis.GZ_TODO)]);
       if (!current()) return;
       const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache);
       if (!current()) return;
@@ -138,7 +138,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
       node.status = make('span', { role: 'status', className: 'w-status' });
       go.addEventListener('click', () => timerAction('toggle', node)); reset.addEventListener('click', () => timerAction('reset', node));
       box.append(icon('timer', 'w-icon'), time, go, reset, node.status); node.go = go;
-      X.need('lib/widgets.js', () => globalThis.GZ_WIDGETS).then(async () => {
+      X.need('core/widgets.js', () => globalThis.GZ_WIDGETS).then(async () => {
         const settings = await get('sync', 'widgets');
         if (!live() || nodes.get(id) !== node) return;
         W = GZ_WIDGETS; node.options ||= GZ_SANITIZE(settings).widgets; draw();
@@ -146,7 +146,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
     }
     if (id === 'pet') {
       node.image = make('span', { className: 'w-pet' }); box.append(node.image, detail);
-      X.need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => {
+      X.need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => {
         if (!live() || nodes.get(id) !== node || !chrome.runtime?.id) return;
         node.pet = GZ_WIDGETS_UI.avatar(node.image, { onData: (data) => {
           const label = t('Level {level}', { level: data?.level || 1 }); setText(detail, label); box.dataset.ready = '';

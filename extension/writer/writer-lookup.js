@@ -6,8 +6,8 @@
 // { kind, value } from those pages only → { ok, text, url, type } | { ok: false, error }): no credentials or referrer, no
 // cache, one 10 s deadline, checked manual redirects, at most 2 MB read (a page's head is in its first bytes; JSON over that is refused), https all the way. The
 // frame parses what comes back as untrusted text: JSON.parse, and DOMParser for HTML (no script runs, nothing loads), and
-// keeps only text fields that lib/writer-sources.js normalize cleans.
-// serve(m, sender, env) and listener(env) are the worker's half (it imports lib/writer-sources.js first); the parsers are
+// keeps only text fields that writer/writer-sources.js normalize cleans.
+// serve(m, sender, env) and listener(env) are the worker's half (it imports writer/writer-sources.js first); the parsers are
 // pure (node tests feed them saved responses); facts(doc) reads a parsed Document. Classic script; module.exports for node.
 var GZ_WRITER_LOOKUP = globalThis.GZ_WRITER_LOOKUP || (() => {
   const S = () => (typeof GZ_WRITER_SOURCES !== 'undefined' ? GZ_WRITER_SOURCES : require('./writer-sources.js'));

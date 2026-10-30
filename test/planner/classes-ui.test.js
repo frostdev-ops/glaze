@@ -1,14 +1,14 @@
-// The class schedule dialog (features/classes.js) in a VM with an inert DOM and the worker's queue: a read still under way
+// The class schedule dialog (planner/page/classes.js) in a VM with an inert DOM and the worker's queue: a read still under way
 // when the dialog moves on or is closed and opened again changes nothing on screen (Codex W14 review), writes carry when
-// they were asked for, and a script's click does nothing. The reading itself is lib/classes.js, tested in classes.test.js.
+// they were asked for, and a script's click does nothing. The reading itself is planner/classes.js, tested in classes.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const C = require('../../extension/lib/classes.js');
-const T = require('../../extension/lib/todo.js');
-const I = require('../../extension/lib/ics.js');
+const C = require('../../extension/planner/classes.js');
+const T = require('../../extension/planner/todo.js');
+const I = require('../../extension/planner/ics.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
@@ -84,7 +84,7 @@ const page = () => {
       };
     },
     GZ_I18N: { locale: () => 'en' }, GZ_TODO: T, GZ_CLASSES: C, GZ_ICS: I,
-    // features/import.js, held: a read is recorded and never answers.
+    // planner/page/import.js, held: a read is recorded and never answers.
     GZ_IMPORT: { read: (file, opts) => { imports.push({ file, opts }); return new Promise(() => {}); }, note: () => '', doubt: () => false },
     GZ_CTX: {
       t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', need: async () => {},
@@ -98,7 +98,7 @@ const page = () => {
   };
   c.globalThis = c;
   vm.createContext(c);
-  const ui = vm.runInContext(read('features/classes.js'), c);
+  const ui = vm.runInContext(read('planner/page/classes.js'), c);
   const dialog = () => document.body.children.find((x) => x.tagName === 'DIALOG' && x.open) || null;
   const find = (text, tag = 'BUTTON') => dialog()?.all.find((n) => n.tagName === tag && n.textContent === text);
   return { ui, c, box, sent, imports, fetches, streams, document, dialog, find, serve: (b) => { feed = b; }, hold: () => { hold = true; }, holdBody: () => { holdBody = true; },
@@ -141,7 +141,7 @@ test('a calendar link still being read when the dialog is closed and opened agai
   assert.equal(p.dialog().querySelectorAll('.gz-cl-entry').length, 1);
 });
 
-// RFC 5545 folds lines by octets, so a fold can fall inside a character ("é", C3 A9): lib/ics.js joins it back only
+// RFC 5545 folds lines by octets, so a fold can fall inside a character ("é", C3 A9): planner/ics.js joins it back only
 // when it is given the bytes, before decoding.
 test('a calendar file or link is read as bytes: a line folded inside a character still reads whole', async () => {
   const enc = (s) => new TextEncoder().encode(s);
@@ -181,7 +181,7 @@ test('writes say when they were asked for; a script\'s click does nothing', asyn
   assert.deepEqual(p.box[KEY].courses, []);
 });
 
-// Codex W14 review: through the real service worker (lib/background.js). A Save's permission check reads storage before
+// Codex W14 review: through the real service worker (background/background.js). A Save's permission check reads storage before
 // the write is queued; held there, a later Delete all from another tab finishes first. The Save, queued after it, must
 // not bring the course back: what counts is when each was pressed, checked inside the queue's turn.
 test('the worker: a Save held before the queue, then Delete all, then the Save: the course stays deleted', async () => {
@@ -203,14 +203,14 @@ test('the worker: a Save held before the queue, then Delete all, then the Save: 
   const none = { addListener() {} };
   const ctx = vm.createContext({
     URL, console, setTimeout, clearTimeout, crypto,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('background', f)), ctx); },
     chrome: {
       runtime: { id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local, sync: { get: () => Promise.resolve({}), set: () => Promise.resolve() }, onChanged: none },
       scripting: { executeScript: () => Promise.resolve([]) },
     },
   });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   const sender = { id: ID, tab: { id: 1 }, frameId: 0, url: `${SITE}/courses` };
   const send = (m) => new Promise((res) => { for (const f of listeners) f(m, sender, (r) => res(JSON.parse(JSON.stringify(r)))); });
   const course = { id: '25', name: 'Biology', periods: [{ days: [2, 4], start: 810, end: 885 }] };
@@ -340,7 +340,7 @@ test('Stop reading while a file is read on this device: a calendar file, or a do
   give();
   await settle();
   stopped(p);
-  // features/import.js answering after it was called off (its text came in as Stop was pressed).
+  // planner/page/import.js answering after it was called off (its text came in as Stop was pressed).
   const q = page();
   let answer;
   q.c.GZ_IMPORT.read = () => new Promise((res) => { answer = () => res({ text: 'BIO 1100 Biology TR 1:30-2:45pm Life Sciences 120' }); });

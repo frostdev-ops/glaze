@@ -44,7 +44,7 @@ html[data-gz-hide-banner] .ic-DashboardCard__header_image { background-image: no
 #gz-doc-tools button[aria-pressed="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); }
 #gz-doc-tools [hidden] { display: none; }
 #gz-doc-tools svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-/* Open in Glaze (features/canvasopen.js): beside a file link; Canvas's preview out of view while Glaze's viewer shows the file. */
+/* Open in Glaze (courses/page/canvasopen.js): beside a file link; Canvas's preview out of view while Glaze's viewer shows the file. */
 [data-gz-co-hidden] { display: none !important; }
 .gz-co { margin-inline-start: 0.5rem; padding: 0.125rem 0.625rem; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; background: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); font: inherit; font-size: 0.8125rem; line-height: 1.5; cursor: pointer; }
 .gz-co:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
@@ -53,7 +53,7 @@ html[data-gz-hide-banner] .ic-DashboardCard__header_image { background-image: no
 .gz-co:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 .gz-doc-time { font-size: 11px; color: var(--gz-ink-muted); }
 /* Documents in a dark palette (enhance.docPages): a preview frame dimmed or inverted whole. Canvas's own viewer (its
-   frame opens /api/v1/canvadoc_session) does this to its pages alone, from inside (features/docviewer.js). */
+   frame opens /api/v1/canvadoc_session) does this to its pages alone, from inside (courses/page/docviewer.js). */
 html[data-gz-dark-theme][data-gz-enhance-docPages="dim"] :is(#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe):not([src*="canvadoc"]) { filter: brightness(0.8); }
 html[data-gz-dark-theme][data-gz-enhance-docPages="dark"] :is(#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe):not([src*="canvadoc"]) { filter: invert(0.9) hue-rotate(180deg); }
 .ef-file-preview-stretch:has(> #gz-doc-tools) { display: flex; flex-direction: column; }
@@ -89,9 +89,9 @@ html[data-gz-focus] #content { max-width: 54rem; margin-inline: auto; }
 
 /* Bundled faces, as in theme.css (which Canvas doesn't load): the fonts Inter and Atkinson Hyperlegible, and the
    Clear look's. Relative URLs resolve against this sheet's own chrome-extension:// URL; fonts/ is web-accessible. */
-@font-face { font-family: "Glaze Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Glaze Inter"; src: url("../fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 
 /* Colors and look values are NOT defaulted here: defaults.js is the one place a default lives,
    and content.js writes every --gz-* value inline on <html> before this sheet is even added.
@@ -192,14 +192,14 @@ html[data-gz-bg][data-gz-bg-grain]:not([data-gz-bg="solid"]) {
   --gz-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 .07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
-/* A scene, shader or layers (lib/scene.js) is mostly its ground with a little colour. The gradient stands in until it draws,
+/* A scene, shader or layers (looks/scene.js) is mostly its ground with a little colour. The gradient stands in until it draws,
    without WebGL, or once a slow device steps down to it; at the scene's own dim it was a bright wash that put the text on
    it near 2:1, so it is mostly the ground too, a little more of the gradient the higher the intensity. */
 html[data-gz-bg]:is([data-gz-bg="scene"], [data-gz-bg="shader"], [data-gz-bg="layers"]) { --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) calc(80% + var(--gz-bg-dim, 60%) / 4), transparent); }
 html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before {
   content: "";
   position: fixed;
-  /* The viewport, or in a course tab's frame the page's (lib/scene-host.js --gz-vx/vy/vw/vh), so its copy lines up. */
+  /* The viewport, or in a course tab's frame the page's (looks/scene-host.js --gz-vx/vy/vw/vh), so its copy lines up. */
   left: calc(var(--gz-vx, 0px) - var(--gz-bg-blur, 0px) * 2);
   top: calc(var(--gz-vy, 0px) - var(--gz-bg-blur, 0px) * 2);
   width: calc(var(--gz-vw, 100%) + var(--gz-bg-blur, 0px) * 4);
@@ -462,7 +462,7 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
 /* The right column: its section titles are labels, not headings. */
 #right-side :is(h2, h3) { color: var(--gz-ink-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); padding-bottom: 0.5rem; }
 #right-side a { color: var(--gz-accent); }
-/* The column's room, width and modes are the sidebar's (features/sidebar.css), on every page that has it. */
+/* The column's room, width and modes are the sidebar's (navigation/page/sidebar.css), on every page that has it. */
 
 /* ---- lists: modules, assignments, quizzes ----
    A module or an assignment group is one card: a band for its title, rows with hairlines under it. */
@@ -787,8 +787,8 @@ html[data-gz-dark-theme] #application [class*="Grouping-styles__title"]::after {
 html[data-gz-dark-theme] [class*="css-"][class*="-pill__text"] { color: oklch(from currentColor max(l, 0.72) c h); }
 
 /* ---- course cards: Glaze's sizes and effects (settings.card), and each card's own style ----
-   features/cards.js marks a card (or a list view group) with data-gz-card="solid|gradient|image" and its variables
-   (lib/cards.js paint): --gz-card-c, --gz-card-grad, or the picture's --gz-card-img, -pos, -zoom, -filter, and its
+   courses/page/cards.js marks a card (or a list view group) with data-gz-card="solid|gradient|image" and its variables
+   (courses/cards.js paint): --gz-card-c, --gz-card-grad, or the picture's --gz-card-img, -pos, -zoom, -filter, and its
    overlay's --gz-card-ov and -ov-a. A card without one is Canvas's own, toned as above. */
 #application :is(.ic-DashboardCard__header_hero, .ic-DashboardCard__header_image) { height: var(--gz-card-h, 146px); }
 /* No overlay: Canvas's own pictures show without their color wash. A card with its own style keeps its fill (its
@@ -859,7 +859,7 @@ html[data-gz-card-hover="none"] #application .ic-DashboardCard:hover { transform
 @keyframes gz-card-twinkle { from { opacity: 0.25; } to { opacity: 1; } }
 @keyframes gz-card-confetti { from { background-position: 20px -10px, 60px -30px, 35px -50px; } to { background-position: 30px 150px, 50px 160px, 45px 150px; } }
 
-/* The pet (features/cards.js) sits on the first card's picture: it idles through frames 0-3, and on a hover plays its
+/* The pet (courses/page/cards.js) sits on the first card's picture: it idles through frames 0-3, and on a hover plays its
    stretch or hop (4-7) once. Frame 0 alone when motion is off. Sheets: 4×2 frames of 128 px, drawn at half size. */
 .gz-pet {
   position: absolute; z-index: 2; right: 10px; top: calc(var(--gz-card-h, 146px) - 62px); width: 64px; height: 64px; pointer-events: none;
@@ -1210,7 +1210,7 @@ html[data-gz-enhance-overall] .ic-DashboardCard [data-gz-grade]::after {
 .ic-DashboardCard [data-gz-chip="graded-mid"] { --gz-chip: var(--gz-warn); }
 .ic-DashboardCard [data-gz-chip="graded-lo"] { --gz-chip: var(--gz-err); }
 /* A click on the chip opens the course's grades (content.js). Card grades only on hover: hidden until the card is
-   pointed at or holds focus, and the GPA's figures blurred the same way (features/grades.js). */
+   pointed at or holds focus, and the GPA's figures blurred the same way (planner/page/grades.js). */
 html[data-gz-enhance-overall] .ic-DashboardCard [data-gz-grade]::after { cursor: pointer; transition: opacity var(--gz-t) var(--gz-ease); }
 html[data-gz-enhance-gradeHover] .ic-DashboardCard:not(:hover, :focus-within) [data-gz-grade]::after { opacity: 0; }
 html[data-gz-enhance-gradeHover] #gz-gpa:not(:hover, :focus-within) .gz-gpa-fig b { filter: blur(0.4em); }
@@ -1420,7 +1420,7 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
   #gz-cm .gz-cm-tint input:checked::before { background: HighlightText; }
 }
 
-/* One menu on a card: Glaze's (nickname, color, tint, look; features/coursemenu.js) in the place of Canvas's ⋮, as three dots.
+/* One menu on a card: Glaze's (nickname, color, tint, look; navigation/page/coursemenu.js) in the place of Canvas's ⋮, as three dots.
    Canvas's own button stays in the card, out of sight, for the menu's "Move or hide" (its popover is placed by it). */
 .ic-DashboardCard:has(> .gz-cm-btn) { position: relative; --gz-cm-top: 8px; --gz-cm-right: 8px; }
 .ic-DashboardCard:has(> .gz-cm-btn) :is(.ic-DashboardCard__header-button, .ic-DashboardCard__header-button-bg) { visibility: hidden; }
@@ -1470,7 +1470,7 @@ html[data-gz-raw-courses] [data-gz-course-color] { --gz-course: var(--gz-course-
 #gz-peek li[data-state="none"]::before { border: 0; width: 4px; height: 4px; background: var(--gz-ink-faint); }
 #gz-peek li[data-state="locked"]::before { border-radius: calc(var(--gz-radius, 12px) * 1 / 6); }
 #application .ig-header > .gz-dl { margin-left: auto; margin-right: 0.75rem; }
-/* Glaze's Allow frame beside it, for a file server Glaze doesn't hold yet (features/download.js, features/allow.html). */
+/* Glaze's Allow frame beside it, for a file server Glaze doesn't hold yet (courses/page/download.js, courses/allow.html). */
 .gz-dl-allow { flex: none; align-self: center; width: 9rem; height: 26px; margin: 0 0.75rem 0 -0.25rem; border: 0; background: transparent; color-scheme: normal; }
 html:not([data-gz-enhance-previews]) #gz-peek { display: none; }
 /* ---- new grades/content and Canvas's native what-if scores ---- */
@@ -1511,7 +1511,7 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 .gz-draft button:first-of-type { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
 .gz-draft button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 
-/* ---- the card editor (features/cards.js): a modal dialog, and the course menu's way into it ---- */
+/* ---- the card editor (courses/page/cards.js): a modal dialog, and the course menu's way into it ---- */
 #gz-cm .gz-cm-more {
   margin-top: 0.5rem; padding: 0.4rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; color: var(--gz-accent);
   background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm);
@@ -1608,7 +1608,7 @@ html[data-gz-bg="solid"] #application .ic-app-nav-toggle-and-crumbs:has(> #gz-ct
 /* Let native dialogs and popovers in the main content rise above the sticky row. */
 .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) ~ #main,
 #mobile-header:has(> #gz-ctabs) ~ #wrapper #main { z-index: auto; }
-/* The course menu sticks below it (--gz-ctabs-row: its height, features/coursetabs.js; unset without a strip there). */
+/* The course menu sticks below it (--gz-ctabs-row: its height, navigation/page/coursetabs.js; unset without a strip there). */
 html[data-gz-ctabs]:not([data-gz-ctabs~="nav"]) #sticky-container { top: var(--gz-ctabs-row, 0px); max-height: calc(100vh - var(--gz-ctabs-row, 0px)); }
 /* Until it's in (it loads on demand), its place is held in a course's row, or in any page's once there is a tab to go back
    to, so the row doesn't move when it comes: data-gz-ctabs (content-canvas.js paintTabs, from the first paint) gives the
@@ -1668,7 +1668,7 @@ html[data-gz-navbar][data-gz-ctabs~="nav"] #sticky-container { top: var(--gz-nav
   html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { bottom: calc(96px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)) !important; }
 }
 
-/* Printed, the page is Canvas's own: the bar doesn't print (features/navbar.css), and the page keeps no room for it. */
+/* Printed, the page is Canvas's own: the bar doesn't print (navigation/page/navbar.css), and the page keeps no room for it. */
 @media print {
   html[data-gz-navbar] { --gz-navbar-left: 0px !important; --gz-navbar-top: 0px !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) body { padding-bottom: 0 !important; }
@@ -1678,7 +1678,7 @@ html[data-gz-navbar-frame] #header { display: none !important; }
 html[data-gz-navbar-frame]:not([data-gz-navbar-frame~="none"]) #mobile-header { display: none !important; }
 html[data-gz-navbar-frame] #wrapper { margin-inline: 0 !important; }
 /* A tab's frame fills the window under the bar, as the page itself does, and keeps the bar's room in it the same way
-   (--gz-navbar-left and -top, the page around's, copied by features/coursetabs.js): the page's own background runs under
+   (--gz-navbar-left and -top, the page around's, copied by navigation/page/coursetabs.js): the page's own background runs under
    the bar's glass rather than the covered page's. */
 html[data-gz-navbar-frame] #wrapper { margin-inline-start: var(--gz-navbar-left, 0px) !important; padding-top: var(--gz-navbar-top, 0px); }
 html[dir="rtl"][data-gz-navbar-frame] #wrapper { margin-left: 0 !important; margin-right: var(--gz-navbar-left, 0px) !important; }

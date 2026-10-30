@@ -1,15 +1,15 @@
-// The sidebar on Canvas pages (features/sidebar.js, with features/widgets.js for the dock), on the captured Canvas pages
+// The sidebar on Canvas pages (navigation/page/sidebar.js, with core/page/widgets.js for the dock), on the captured Canvas pages
 // (test/fixtures/canvas-*.html) as stand-in DOM: the column each kind of page has, Canvas's own nodes never moved or
 // copied, late content, the modes by width, the drawer, section folds, and widgets moving between the dock, the board and
-// floating through the worker's real changes (lib/sidebar.js, lib/widgets.js). Geometry and transport are supplied.
+// floating through the worker's real changes (navigation/sidebar.js, core/widgets.js). Geometry and transport are supplied.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const W = require('../../extension/lib/widgets.js');
-const S = require('../../extension/lib/sidebar.js');
+const D = require('../../extension/content/defaults.js');
+const W = require('../../extension/core/widgets.js');
+const S = require('../../extension/navigation/sidebar.js');
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
@@ -18,7 +18,7 @@ const O = 'https://board.instructure.com';
 const KEY = S.key('canvas', O, '3');
 
 // opts: fixture, path, width (the window), left (where Canvas's #main starts), stored (storage.local), enhance, widgets
-// (run features/widgets.js too), tall (the page's own column is long).
+// (run core/page/widgets.js too), tall (the page's own column is long).
 const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', width = 1440, left = 276, stored = {}, enhance = {}, widgets = false, tall = false } = {}) => {
   const doc = { activeElement: null };
   doc.root = new El('html', doc);
@@ -74,8 +74,8 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
     addEventListener: (type, f) => { if (type === 'keydown') keyListeners.push(f); }, removeEventListener: (type, f) => { if (type === 'keydown') { const i = keyListeners.indexOf(f); if (i >= 0) keyListeners.splice(i, 1); } },
   });
   c.globalThis = c; vm.createContext(c);
-  const side = vm.runInContext(read('features/sidebar.js'), c);
-  const ui = widgets ? vm.runInContext(read('features/widgets.js'), c) : null;
+  const side = vm.runInContext(read('navigation/page/sidebar.js'), c);
+  const ui = widgets ? vm.runInContext(read('core/page/widgets.js'), c) : null;
   const pass = async () => { side.sync(true); await settle(); ui?.sync(true); await settle(); };
   const resize = async (w) => { c.innerWidth = width = w; for (const l of winListeners.filter((x) => x.type === 'resize')) l.f(); await settle(); };
   const $ = (s) => doc.querySelector(s);
@@ -397,8 +397,8 @@ test('the first visit migrates To Do into the dock before showing it; the native
   assert.equal(p.store[KEY].dest.todo, 'dock');
   const tile = p.$('#gz-sb-widgets section[data-tile="todo"]');
   assert.ok(tile, 'To Do docked');
-  assert.ok(p.loads.includes('features/todo.js'));
-  // features/todo.js isn't in this stand-in: until its list is there, Canvas's own stays.
+  assert.ok(p.loads.includes('planner/page/todo.js'));
+  // planner/page/todo.js isn't in this stand-in: until its list is there, Canvas's own stays.
   assert.equal(p.doc.root.dataset.gzSidebarTodo, undefined);
 });
 
@@ -538,7 +538,7 @@ test("Canvas floats keep clear of Glaze's rail and of the course tabs, as Ultra'
   const lay = lay0();
   Object.assign(lay.tiles.find((x) => x.id === 'timer'), { on: true, float: true, x: 0, y: 0 });
   const p = page({ stored: { widgetLayout: lay, ...record() }, widgets: true, width: 1600, left: 96 });
-  // The rail's room (--gz-navbar-left, canvas.css and features/navbar.js), and the strip's row at the page's top.
+  // The rail's room (--gz-navbar-left, canvas.css and navigation/page/navbar.js), and the strip's row at the page's top.
   p.c.getComputedStyle = (e) => ({ position: 'static', getPropertyValue: (k) => (e === p.doc.root && k === '--gz-navbar-left' ? '96px' : '') });
   const row = p.doc.createElement('div'); row.setAttribute('data-gz-keep-clear', ''); row.box = { left: 96, top: 0, width: 1152, height: 112 };
   p.doc.body.append(row);
@@ -603,7 +603,7 @@ test('off returns exactly to before (Canvas\'s column, the Dashboard\'s To Do ti
   const stored = { widgetLayout: lay, ...record({ dock: [{ id: 'todo' }, { id: 'notes' }], dest: { todo: 'dock', notes: 'dock' } }) };
   const sw = {};
   const p = page({ fixture: 'canvas-dashboard-cards.html', where: '/', width: 1700, left: 84, stored, enhance: sw, widgets: true });
-  p.c.GZ_TODO = require('../../extension/lib/todo.js');
+  p.c.GZ_TODO = require('../../extension/planner/todo.js');
   p.c.GZ_TODO_UI = { mount: (target) => { target.append(Object.assign(p.doc.createElement('section'), { id: 'gz-todo' })); return true; }, unmount() {}, sync() {} };
   const wrapper = p.$('#right-side-wrapper'), attrs = { ...wrapper.attrs }, data = { ...wrapper.dataset };
   // Before the sidebar: the legacy page, as with the switch off from the start.
@@ -627,7 +627,7 @@ test('off returns exactly to before (Canvas\'s column, the Dashboard\'s To Do ti
   assert.ok(!p.$('#gz-sidebar') && !p.$('.gz-sb-head'), 'no Glaze column');
   assert.deepEqual(S.clean(p.store[KEY]).dock.map((x) => x.id), ['todo', 'notes'], 'the dock record survives');
   // The CSS hooks the legacy page relies on are still there.
-  assert.match(read('features/apps.css'), /html\[data-gz-canvas-todo\] #right-side :is\(\.Sidebar__TodoListContainer, \.todo-list-header, ul\.to-do-list\) \{ display: none !important; \}/);
+  assert.match(read('core/page/apps.css'), /html\[data-gz-canvas-todo\] #right-side :is\(\.Sidebar__TodoListContainer, \.todo-list-header, ul\.to-do-list\) \{ display: none !important; \}/);
   // On again: the same dock.
   sw.sidebar = true;
   await p.pass();
@@ -666,7 +666,7 @@ test('style: Floating by default, Embedded or like the navigation when chosen; s
   p.side.sync(false);
   assert.deepEqual(rootMarks(p), [], 'all gone when off');
   // The sheet has a rule set for each style and surface.
-  const css = read('features/sidebar.css');
+  const css = read('navigation/page/sidebar.css');
   for (const sel of ['html[data-gz-sb-style="float"]', 'html[data-gz-sb-style="embed"]', 'html[data-gz-sb-surface="solid"]', 'html[data-gz-sb-surface="clear"]', 'html[data-gz-sb-order="widgets"]', '[data-gz-sb-page-hidden]'])
     assert.ok(css.includes(sel), sel);
   // Canvas's ground rule (an id) never wins over the column's surface: the column's selectors carry the ids too.
@@ -778,7 +778,7 @@ test("the drawer's opener stands above a bar the page fixes along the window's b
   bar.box = { left: 12, top: 764, width: 400, height: 40 };
   await p.resize(1280);
   assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-bar'), '');
-  const css = read('features/sidebar.css');
+  const css = read('navigation/page/sidebar.css');
   assert.match(css.slice(css.indexOf('.gz-sb-edge, .gz-sb-launch {')), /^[^}]*bottom: max\(calc\(var\(--gz-sb-end\) \+ 1rem \+ env\(safe-area-inset-bottom, 0px\)\), calc\(var\(--gz-sb-bar, 0px\) \+ 1rem\)\);/);
   bar.box = { left: 276, top: 836, width: 1004, height: 64 }; bar.setAttribute('data-gz-fixed-bottom', '');
   await p.resize(1280);
@@ -914,7 +914,7 @@ test('Canvas page switches restore the legacy To Do hook when that page kind is 
   p.c.I = { links: [1], get settings() { return p.c.GZ_CTX.settings(); } };
   p.c.need = async () => {};
   p.c.GZ_TODO_UI = { sync: (v) => calls.push(v) };
-  const hooks = read('content-canvas.js').match(/ {2}const sidebarHere = .*\n(?: {2}const \w+ = .*\n)*? {2}const syncTodo = .*\n/)[0];
+  const hooks = read('content/content-canvas.js').match(/ {2}const sidebarHere = .*\n(?: {2}const \w+ = .*\n)*? {2}const syncTodo = .*\n/)[0];
   await vm.runInContext(`${hooks}\nsyncTodo();`, p.c);
   assert.equal(calls.at(-1), true, 'legacy To Do runs on a disabled course page');
   p.c.GZ_SIDEBAR_UI = undefined;
@@ -929,7 +929,7 @@ test('Canvas off matches the frozen pre-sidebar DOM and html attributes, includi
     const sw = { sidebar: false, widgets: false, notes: false, pet: false, todo: true };
     const p = page({ fixture: 'canvas-dashboard-cards.html', where: '/', width: 1700, left: 84, widgets: true, enhance: sw,
       stored: { widgetLayout: W.layout({ canvasTodo: true, boards: { cdash: [{ id: 'todo', on: true }, { id: 'notes', on: false }] } }) } });
-    p.c.GZ_TODO = require('../../extension/lib/todo.js');
+    p.c.GZ_TODO = require('../../extension/planner/todo.js');
     p.c.GZ_TODO_UI = { sync() {}, mount() {}, unmount() {} };
     p.ui.sync(true); await settle();
     assert.deepEqual(snapshot(p, ['#right-side-wrapper', '#gz-dash']), baseline, 'off from startup');
@@ -970,7 +970,7 @@ test('a disabled Canvas page kind keeps the legacy widget-loader boundary in cou
   p.c.sidebarSettings = { off: ['course'] };
   p.c.window = p.c; p.c.top = {};
   p.c.I = { links: [1], tabFrame: 'course', get settings() { return p.c.GZ_CTX.settings(); } };
-  const src = read('content-canvas.js');
+  const src = read('content/content-canvas.js');
   const hooks = ['sidebarHere', 'sidebarOn', 'widgetsHere'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))?.[0] || '').join('');
   assert.equal(vm.runInContext(`${hooks}\n!!widgetsHere();`, p.c), false);
   p.c.sidebarSettings = {};

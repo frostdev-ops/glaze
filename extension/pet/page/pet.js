@@ -15,7 +15,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   const ACTIVITIES = { walk: 'Exploring', perch: 'Perching', hide: 'Hide and seek', rest: 'Resting', greet: 'Saying hello', investigate: 'Investigating', follow: 'Following your pointer', play: 'Playing', study: 'Studying beside you', groom: 'Grooming', stretch: 'Stretching', home: 'Returning home' };
   const TIMES = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', night: 'Night' };
   let ready;
-  const start = () => (ready ||= Promise.all([ctx.need('lib/petbrain.js', () => globalThis.GZ_PET_BRAIN), ctx.need('lib/pet.js', () => globalThis.GZ_PET), ctx.need('lib/todo.js', () => globalThis.GZ_TODO), ctx.need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI), ctx.need('lib/petphysics.js', () => globalThis.GZ_PET_PHYSICS), ctx.need('features/petworld.js', () => globalThis.GZ_PET_WORLD)]).catch((e) => { ready = null; throw e; }));
+  const start = () => (ready ||= Promise.all([ctx.need('pet/petbrain.js', () => globalThis.GZ_PET_BRAIN), ctx.need('pet/pet.js', () => globalThis.GZ_PET), ctx.need('planner/todo.js', () => globalThis.GZ_TODO), ctx.need('core/page/widgets.js', () => globalThis.GZ_WIDGETS_UI), ctx.need('pet/petphysics.js', () => globalThis.GZ_PET_PHYSICS), ctx.need('pet/page/petworld.js', () => globalThis.GZ_PET_WORLD)]).catch((e) => { ready = null; throw e; }));
   const send = (m) => new Promise((resolve) => { try { chrome.runtime.sendMessage({ type: 'glaze:pet', ...m }, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
   const mounted = new Set();
   let mounts = 0; // each mount's ids (its panels, its care line) stay its own when a tile and the dialog show at once

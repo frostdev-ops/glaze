@@ -6,7 +6,7 @@
 // '' on this device), effort? (EFFORTS: the student's, over a task's own) }; models: a feature's own model, in that shape
 // (absent: the overall one); tune: a feature's { temperature?, maxTokens?, context?, timeoutMs?, pause? } (TUNE);
 // features: which of Glaze's features may ask (FEATURES). The connections themselves are in the worker's own store
-// (lib/ai/broker.js vault), never here: any page's script can read storage.local. Not in defaults.js, which every page's
+// (ai/broker.js vault), never here: any page's script can read storage.local. Not in defaults.js, which every page's
 // first script loads. outline defaults on once AI and its Feedback model are configured, with its own opt-out.
 // clean() gives what is stored with anything that doesn't fit at its default, as GZ_SANITIZE does.
 // Classic script for the worker and Settings; node exports.
@@ -20,7 +20,7 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
   const safari = (() => { try { return new URL((typeof globalThis.browser?.runtime?.getURL === 'function' ? globalThis.browser.runtime : globalThis.chrome?.runtime).getURL('')).protocol === 'safari-web-extension:'; } catch { return false; } })();
   const PROVIDERS = ['openai', 'device', ...(safari ? ['apple'] : [])];
   const CONNECTION = /^[a-z0-9][a-z0-9-]{0,39}$/;
-  // The providers Settings offers by name, each an OpenAI-compatible Chat Completions server (lib/ai/providers/openai.js)
+  // The providers Settings offers by name, each an OpenAI-compatible Chat Completions server (ai/providers/openai.js)
   // at its own address, kept under its own id with only a key: base, and keys, the page that gives one. Any other id but
   // 'device' and 'apple' is an endpoint the student added (Advanced), with its own address.
   const PRESETS = Object.freeze({
@@ -33,16 +33,16 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
     groq: Object.freeze({ base: 'https://api.groq.com/openai/v1', keys: 'https://console.groq.com/keys' }),
     deepseek: Object.freeze({ base: 'https://api.deepseek.com', keys: 'https://platform.deepseek.com/api_keys' }),
   });
-  // lib/ai/request.js EFFORTS.
+  // ai/request.js EFFORTS.
   const EFFORTS = ['none', 'minimal', 'low', 'medium', 'high'];
-  // A feature's tuning, each [min, max] as lib/ai/request.js and lib/ai/providers/openai.js take it; pause (ms) is the
+  // A feature's tuning, each [min, max] as ai/request.js and ai/providers/openai.js take it; pause (ms) is the
   // gray text's before it asks (writer-ai.js), completion's only.
   const TUNE = Object.freeze({ temperature: [0, 2], maxTokens: [16, 32768], context: [1000, 2000000], timeoutMs: [1000, 300000], pause: [100, 2000] });
   const MODEL = /^[^\p{Cc}\p{Bidi_Control}]{1,200}$/u;
   const NONE = Object.freeze({ use: null, model: '' });
   const DEFAULTS = Object.freeze({ on: false, outline: true, sources: true, mode: 'simple', model: NONE, models: Object.freeze({}), tune: Object.freeze({}), features: Object.freeze(Object.fromEntries(FEATURES.map((f) => [f, false]))) });
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
-  // A selection: { use, model, effort? }; Apple Intelligence was its own choice and is On this device now (lib/ai/broker.js
+  // A selection: { use, model, effort? }; Apple Intelligence was its own choice and is On this device now (ai/broker.js
   // onDevice).
   const pick = (raw) => {
     const r = isObj(raw) ? raw : {}, use = r.use === 'apple' ? 'device' : r.use;
@@ -126,7 +126,7 @@ var GZ_AI_SETTINGS = globalThis.GZ_AI_SETTINGS || (() => {
   // 'device'. migrate(stored settings, stored connections) → { settings (clean), connections, changed: { settings,
   // connections } }: the endpoint under the preset its address is (OpenRouter's, say; else an endpoint of its own, named
   // by its host), and every connection's model moved to the selections that name it and have none. The same input always
-  // gives the same answer, so the broker reads through it before it is written back (lib/ai/broker.js upgrade).
+  // gives the same answer, so the broker reads through it before it is written back (ai/broker.js upgrade).
   const migrate = (raw, stored) => {
     const settings = clean(raw), all = isObj(stored) ? { ...stored } : {};
     const changed = { settings: isObj(raw) && Object.hasOwn(raw, 'use'), connections: false };

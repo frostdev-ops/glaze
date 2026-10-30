@@ -48,7 +48,7 @@ const fixture = `<!doctype html><html><head><style>
     for (const width of [1280, 375]) for (const dir of ['ltr', 'rtl']) for (const kind of ['gradient', 'image', 'aurora', 'scene', 'solid']) {
       await page.setViewportSize({ width, height: 800 });
       await page.setContent(fixture);
-      for (const sheet of ['theme.css', 'motion.css', 'extras.css']) await page.addStyleTag({ path: path.join(root, sheet) });
+      for (const sheet of ['content/theme.css', 'content/motion.css', 'content/extras.css']) await page.addStyleTag({ path: path.join(root, sheet) });
       await page.evaluate(({ dir, kind }) => {
         document.documentElement.dir = dir; document.documentElement.dataset.gzBg = kind;
         document.documentElement.style.setProperty('--gz-bg-blur', '6px');
@@ -100,7 +100,7 @@ const fixture = `<!doctype html><html><head><style>
         <header class="panel-header simple-header"><div class="panel-titles-container"><span class="panel-sub-title">Course Announcements</span><h1>Week 7</h1></div></header>
         <div class="panel-content">Announcement content</div>
       </div><button class="bb-close" aria-label="Close">×</button></div></div></body></html>`);
-      for (const sheet of ['theme.css', 'motion.css', 'extras.css']) await page.addStyleTag({ path: path.join(root, sheet) });
+      for (const sheet of ['content/theme.css', 'content/motion.css', 'content/extras.css']) await page.addStyleTag({ path: path.join(root, sheet) });
       await page.evaluate(({ at, size }) => {
         const strip = document.createElement('div'); strip.id = 'gz-ctabs'; strip.dataset.at = 'nested'; strip.dataset.size = size; strip.dataset.shape = 'pill';
         strip.innerHTML = '<div class="gz-ctabs-list" role="tablist" aria-label="Course tabs"><div class="gz-ctab" role="tab" aria-selected="true"><span class="gz-ctab-name">Spanish 110</span></div><div class="gz-ctab" role="tab" aria-selected="false"><span class="gz-ctab-name">Computer Science</span></div></div>';
@@ -117,7 +117,7 @@ const fixture = `<!doctype html><html><head><style>
       check(geometry.content.top >= Math.max(geometry.header.bottom, geometry.strip.bottom), `${label}: announcement content must follow both header and tabs`);
       if (out && width === 1280 && dir === 'ltr' && at === 'above' && size === 'large') await page.screenshot({ path: path.join(out, 'announcement-course-tabs.png') });
     }
-    // A course open over the Courses page, a scene's host its container (lib/scene-host.js): Glaze's controls on the
+    // A course open over the Courses page, a scene's host its container (looks/scene-host.js): Glaze's controls on the
     // cards underneath (course menu, bookmarks, a condensed title) stay under the course, seen and clicked.
     for (const width of [1280, 375]) for (const dir of ['ltr', 'rtl']) for (const kind of ['gradient', 'image', 'aurora', 'scene', 'shader', 'layers', 'media', 'solid']) {
       const drawn = ['scene', 'shader', 'layers', 'media'].includes(kind);
@@ -133,8 +133,8 @@ const fixture = `<!doctype html><html><head><style>
         <article id="course-list-course-_101_1" class="element-card course-element-card" data-course-id="_101_1"><div class="course-banner"></div><div class="gz-bm"><a href="#">Syllabus</a></div>
         <div class="element-details"><h4 class="course-title">Biology</h4></div><button type="button" class="gz-cm-btn" aria-label="Colour and look"></button></article>
       </div></section></div></main><div class="course-content-container"><div class="panel-wrap"><section class="course"><p>Course content</p></section></div></div></div></body></html>`);
-      for (const sheet of ['theme.css', 'motion.css', 'extras.css', 'features/apps.css', 'features/coursetabs.css']) await page.addStyleTag({ path: path.join(root, sheet) });
-      await page.addScriptTag({ path: path.join(root, 'lib/scene-host.js') });
+      for (const sheet of ['content/theme.css', 'content/motion.css', 'content/extras.css', 'core/page/apps.css', 'navigation/page/coursetabs.css']) await page.addStyleTag({ path: path.join(root, sheet) });
+      await page.addScriptTag({ path: path.join(root, 'looks/scene-host.js') });
       if (drawn) await page.evaluate(() => {
         const canvas = document.createElement('canvas'); canvas.id = 'gz-scene';
         const ctx = canvas.getContext('2d'); ctx.fillStyle = '#184080'; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -158,7 +158,7 @@ const fixture = `<!doctype html><html><head><style>
     // Peek/Fabric side sheets and their descendants never acquire full-page backgrounds or clipping.
     for (const selector of ['bb-offcanvas-panel peek', 'peek-panel__content-wrapper', 'ms-Panel-main']) {
       await page.setContent(`<!doctype html><html data-gz-bg="gradient"><body><div class="${selector}"><div class="bb-offcanvas-panel"><div class="panel-wrap"></div></div></div></body></html>`);
-      await page.addStyleTag({ path: path.join(root, 'extras.css') });
+      await page.addStyleTag({ path: path.join(root, 'content/extras.css') });
       const styles = await page.locator('body div').evaluateAll((els) => els.map((e) => ({ cls: e.className, clip: getComputedStyle(e).clipPath, before: getComputedStyle(e, '::before').content })));
       check(styles.every((s) => s.clip === 'none' && s.before === 'none'), `${selector}: partial-width sheets must keep their own background and clipping (${JSON.stringify(styles)})`);
     }

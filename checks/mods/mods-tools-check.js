@@ -1,8 +1,8 @@
 // Mods' code tools for agent apps in a real Chromium, headless: the real unpacked extension, staged, its worker with a hook
-// for the check to run a tool as the registry lists it, as lib/mcp/calls.js runs one (the checkout's file is untouched). A
+// for the check to run a tool as the registry lists it, as agents/calls.js runs one (the checkout's file is untouched). A
 // Canvas course page Playwright serves for https://school.instructure.com (account 5), whose planner holds one item in the
 // shape of the live-shaped fixtures (test/helpers/mcp-caches.cjs); every other request is aborted and DNS resolves nowhere. A fixture
-// mod's Worker answers its code tools there, in the real sandboxed mods host, through the content script (features/mods.js),
+// mod's Worker answers its code tools there, in the real sandboxed mods host, through the content script (mods/page/mods.js),
 // and its answers come back through the broker. It checks: the tool is listed once the sandbox ran; an answer that reads the
 // page and the student's plan; a mod's error; another account or no tab of the school says to open it; a mod turned off
 // mid-call and a page navigated away mid-call end the call at once; and 15 s without an answer.
@@ -16,7 +16,7 @@ const TEXT = {
   stopped: 'The mod stopped before it answered.',
   timeout: "The mod's tool didn't answer within 15 seconds.",
 };
-// The check's way in: a tool as the registry lists it, run as lib/mcp/calls.js runs one; and the listed names.
+// The check's way in: a tool as the registry lists it, run as agents/calls.js runs one; and the listed names.
 const SHIM = `
 globalThis.toolsCheck = {
   run: async (name, args, account) => {
@@ -42,7 +42,7 @@ const RECORD = { id: ID, enabled: true, hash: 'h-tools', key: 'fixture-key', ver
   files: { 'hooks.js': Buffer.from(HOOKS).toString('base64') } };
 const strip = (html) => html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
 const COURSE = strip(fs.readFileSync(path.join(__dirname, '../../test/fixtures/canvas-course-home.html'), 'utf8'));
-// The planner Glaze reads afresh on the page (features/todo.js), which replaces the plan kept for the account.
+// The planner Glaze reads afresh on the page (planner/page/todo.js), which replaces the plan kept for the account.
 const PLANNER = JSON.stringify([require(path.join(__dirname, '../../test/helpers/mcp-caches.cjs')).planner({ id: 1, course: 25, name: 'Chem', title: 'Lab report', at: new Date(Date.now() + 864e5).toISOString() })]);
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 15000) => {
@@ -71,9 +71,9 @@ const check = async (name, test) => {
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nmods-tools-check\n`);
     const ext = require('../../tools/dev/check-env.js').staged(root, [], scratch);
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
-    const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
-    fs.rmSync(path.join(ext, 'lib/background.js'));
-    fs.writeFileSync(path.join(ext, 'lib/background.js'), worker0 + SHIM);
+    const worker0 = fs.readFileSync(path.join(ext, 'background/background.js'), 'utf8');
+    fs.rmSync(path.join(ext, 'background/background.js'));
+    fs.writeFileSync(path.join(ext, 'background/background.js'), worker0 + SHIM);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 }, locale: 'en-US',
@@ -92,7 +92,7 @@ const check = async (name, test) => {
       external.push(r.request().url());
       return r.abort();
     });
-    const sw = context.serviceWorkers().find((w) => w.url().endsWith('/lib/background.js')) || await context.waitForEvent('serviceworker');
+    const sw = context.serviceWorkers().find((w) => w.url().endsWith('/background/background.js')) || await context.waitForEvent('serviceworker');
     await until(() => sw.evaluate(() => typeof globalThis.toolsCheck?.run === 'function'), 'the worker loads the check\'s hook');
     const run = (name, args = {}, account = ACCOUNT) => sw.evaluate(([n, a, acc]) => toolsCheck.run(n, a, acc), [name, args, account]);
     await sw.evaluate(async ({ record, ID, SCHOOL }) => {

@@ -1,4 +1,4 @@
-// The card editor's storage flows (features/cards.js, through the background worker's lib/cards.js change), run in
+// The card editor's storage flows (courses/page/cards.js, through the background worker's courses/cards.js change), run in
 // VMs with a small stand-in DOM and storage: saving, closing after a failed save, local pictures (caps and clean-up),
 // pictures that are ready only after the editor moved on or a newer one was picked, and two tabs saving at once.
 // The page itself (painting, layout, focus) is checked in a browser, not here.
@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const K = require('../../extension/lib/cards.js');
+const K = require('../../extension/courses/cards.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -42,7 +42,7 @@ class El {
 }
 const all = (el) => [el, ...el.children.flatMap(all)];
 
-// One computer: the storage every tab shares, and the background worker's queue (lib/background.js).
+// One computer: the storage every tab shares, and the background worker's queue (background/background.js).
 const computer = () => {
   const env = { store: { sync: {}, local: {} }, size: 1000, failSync: false, failLocalRemove: false, peak: 0, turn: K.queue() };
   const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
@@ -92,7 +92,7 @@ const tab = (env, site = 'canvas') => {
   context.globalThis = context;
   context.GZ_CTX = { site, need: () => Promise.resolve(), t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), capi: () => Promise.resolve({}), locale: () => 'en' };
   if (site === 'ultra') { context.window = context; context.top = context; }
-  for (const f of ['lib/color.js', 'lib/cards.js', 'features/cards.js']) vm.runInContext(read(f), context, { filename: f });
+  for (const f of ['core/color.js', 'courses/cards.js', 'courses/page/cards.js']) vm.runInContext(read(f), context, { filename: f });
   const ui = vm.runInContext('GZ_CARD_UI', context);
   const dialog = () => body.children.find((e) => e.tagName === 'DIALOG');
   const find = (pred) => all(dialog()).find(pred);
@@ -209,7 +209,7 @@ test('two tabs picking at once can never pass the cap together, and neither lose
 
 test('the background worker takes card writes from this extension only, one at a time', async () => {
   const m = require('../../extension/manifest.json');
-  // bb.school.edu is a site Glaze has found to be Ultra (content-ultra.js reported it; lib/background.js fromUltra).
+  // bb.school.edu is a site Glaze has found to be Ultra (content-ultra.js reported it; background/background.js fromUltra).
   const store = { sync: {}, local: { 'cardImg:cccccccccccc': `data:image/webp;base64,${'C'.repeat(3491977)}`, ultra: ['https://bb.school.edu'] } };
   store.sync.cards = { [C]: { k: 'image', i: 'cccccccccccc' } };
   const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
@@ -221,7 +221,7 @@ test('the background worker takes card writes from this extension only, one at a
   const listeners = [];
   const context = vm.createContext({
     URL, console, TextEncoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
@@ -230,7 +230,7 @@ test('the background worker takes card writes from this extension only, one at a
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   // Replies come out of the worker's VM: compared as plain JSON.
   const send = (msg, sender = { id: 'glaze', tab: {}, url: 'https://school.instructure.com/' }) => new Promise((res) => {
     let kept = false;
@@ -370,8 +370,8 @@ test('Ultra paints its isolated styles on new cards and opens the same editor fr
 });
 
 test('a card pass after Glaze was reloaded under the tab does nothing (no extension context)', async () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '../../extension/features/cards.js'), 'utf8');
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../../extension/courses/page/cards.js'), 'utf8');
   assert.match(src, /const paint = async \(\) => \{\n\s+if \(!chrome\.runtime\?\.id\) return;/);
-  const core = require('fs').readFileSync(require('path').join(__dirname, '../../extension/content.js'), 'utf8');
+  const core = require('fs').readFileSync(require('path').join(__dirname, '../../extension/content/content.js'), 'utf8');
   assert.match(core, /if \(!chrome\.runtime\?\.id\) \{ observer\?\.disconnect\(\); observer = null; return; \}/, 'the main watcher stops itself');
 });

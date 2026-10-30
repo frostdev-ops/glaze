@@ -1,14 +1,14 @@
 // Ultra's Submit and Save and Close pressed while Writer's paper frame is slow, loading or reopening: never a press that
-// does nothing. The full view's (features/writer-submit.js act): Save and Close waits for the frame's save however long,
+// does nothing. The full view's (writer/page/writer-submit.js act): Save and Close waits for the frame's save however long,
 // asks a frame that reopened again, presses Ultra's button once (found again if Ultra redrew it), and lets go when the
-// box is no longer Writer's; Submit waits for a frame to open the sheet in. Before the frame is up (features/writer.js
+// box is no longer Writer's; Submit waits for a frame to open the sheet in. Before the frame is up (writer/page/writer.js
 // hold): the compact box's press waits for the frame and its view, then asks it to save; the full view's waits for the
 // submit step. Ultra's button is marked busy meanwhile. In the browser: checks/writer/writer-submit-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const { El } = require('../stand-in-dom.js');
-const L = require('../../extension/lib/writer-submit.js');
+const L = require('../../extension/writer/writer-submit.js');
 const page = require('../helpers/writer-submit-page.cjs');
 const content = require('../helpers/writer-content.cjs');
 
@@ -52,7 +52,7 @@ test('full: a frame that reopens before answering is asked again; a box no longe
   const p = page(), save = L.footer(p.box.editor).save, first = p.box.port, again = [];
   p.fire(save, 'click');
   const request = asks(p.sent)[0].request;
-  // features/writer.js reopen: a new frame and port, not ready yet.
+  // writer/page/writer.js reopen: a new frame and port, not ready yet.
   p.box.ready = false; p.box.port = { postMessage: (m) => again.push(m) };
   await p.tick(100);
   assert.equal(asks(again).length, 0, 'not asked of a frame that isn\'t up');
@@ -101,7 +101,7 @@ test('full: Submit pressed while the frame reopens opens the sheet once the fram
   assert.equal(submit.hasAttribute('aria-busy'), false);
 });
 
-// ---- before the frame is up (features/writer.js)
+// ---- before the frame is up (writer/page/writer.js)
 const attempt = async (full) => {
   const c = content({ fixture: 'attempt', writer: { full } });
   c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/create';
@@ -110,7 +110,7 @@ const attempt = async (full) => {
   await new Promise(setImmediate);
   const press = (sel) => { const target = c.doc.querySelector(sel), e = { type: 'click', target, preventDefault() { this.held = true; }, stopImmediatePropagation() {} }; c.doc.dispatchEvent(e); return e; };
   const frame = () => c.native().root.previousElementSibling;
-  // features/writer.js reopen (its frame gone), then the new frame up: claimed, ready, its view said.
+  // writer/page/writer.js reopen (its frame gone), then the new frame up: claimed, ready, its view said.
   const reopen = () => { frame().remove(); c.ctx.GZ_WRITER.pass(); };
   const up = async (i, full = false) => { await c.boot(frame()); c.ports[i].onmessage({ data: { type: 'ready' } }); c.emit({ type: 'view', full }, i); };
   return { c, press, frame, reopen, up };
@@ -271,7 +271,7 @@ test('full: a held click handed off after Ultra disables Submit still opens the 
   const b = c.doc.querySelector(SUBMIT); b.disabled = true; b.click = () => {};
   delete c.ctx.GZ_WRITER_SUBMIT;
   c.ctx.GZ_WRITER_SUBMIT_LIB = L;
-  vm.runInContext(require('node:fs').readFileSync(require.resolve('../../extension/features/writer-submit.js'), 'utf8'), c.ctx);
+  vm.runInContext(require('node:fs').readFileSync(require.resolve('../../extension/writer/page/writer-submit.js'), 'utf8'), c.ctx);
   c.ctx.GZ_WRITER_SUBMIT.hear(box, { type: 'submit:arm' }, c.ctx.GZ_CTX, () => true);
   c.tick(100);
   assert.equal(c.clicks.length, 0);

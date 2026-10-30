@@ -7,7 +7,7 @@
 // the header and footer, page size and margins, fonts through the theme. tools/fidelity/writer-import-fidelity.js writes them out
 // and lays them out in Word and in Writer.
 // → { files: { id: { parts } }, bytes(id) → Buffer, text(n, seed) }
-const Z = require('../../extension/lib/zip.js');
+const Z = require('../../extension/core/zip.js');
 
 // ---- words: a fixed stream of plain English, so every run of the file is the same text
 const WORDS = ('the a of to and in that is for it as with on by this be are from at or an was which can their have more not but '

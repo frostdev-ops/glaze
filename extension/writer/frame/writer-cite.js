@@ -1,4 +1,4 @@
-// Glaze Writer's citations in the editor frame (writer.html, after writer.js and lib/writer-{sources,cite,lookup}.js):
+// Glaze Writer's citations in the editor frame (writer.html, after writer.js and writer/writer-{sources,cite,lookup}.js):
 // the selection toolbar's Cite button (slot 'cite') and its popover (look up a DOI, ISBN or address, pick a saved source,
 // or add one by hand; the style's citation goes in at the caret, or a footnote in a Chicago paper), the paper side panel's
 // Sources view, ⋯ Add references in compose mode (the list as plain paragraphs Quill keeps), and the cite issues
@@ -6,7 +6,7 @@
 //   open({ anchor, prefill, form }) · add(prefill) · sourcesView(container) → { refresh, destroy } · count(doc?, sources?, style?)
 //   sources() · setSources(list) · use(style) · style() · on(fn) (sources or style changed) · references()
 // A lookup asks the browser for a page's host from the click itself (GZ_SITE.reach's way), then the worker fetches
-// ('glaze:writer-lookup', lib/writer-lookup.js); what comes back is parsed here as untrusted text. Open writers reload
+// ('glaze:writer-lookup', writer/writer-lookup.js); what comes back is parsed here as untrusted text. Open writers reload
 // sources on storage changes. Simultaneous saves across tabs still use the last write; storage.local has no transaction.
 (() => {
   const F = globalThis.GZ_WRITER_FRAME, C = globalThis.GZ_WRITER_CITE, S = globalThis.GZ_WRITER_SOURCES, LK = globalThis.GZ_WRITER_LOOKUP;
@@ -211,7 +211,7 @@
   };
 
   // ---- the browser's grant for a page's host, from the click ------------------------------------------------------------
-  // As lib/site.js reach: Safari's manifest holds every site; elsewhere exactly https://host/*, asked before anything is
+  // As core/site.js reach: Safari's manifest holds every site; elsewhere exactly https://host/*, asked before anything is
   // awaited. A frame with no permissions API (Firefox's framed extension pages) can't ask: false.
   const reach = (url) => {
     let host;

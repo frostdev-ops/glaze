@@ -8,7 +8,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', user = '_900_1';
-const G = require(path.join(ext, 'defaults.js'));
+const G = require(path.join(ext, 'content/defaults.js'));
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const html = fixture('ultra-course.html');
 // The fixture course's gradebook, its Discussion category titled with Ultra's language key as a real course's is.
@@ -64,7 +64,7 @@ const calc = async (where) => {
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
     await opts.evaluate(async ({ settings, site, user }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
-      await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (lib/background.js approved)
+      await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (background/background.js approved)
       await chrome.storage.local.set({ [`ctabs:${site}:${user}`]: { tabs: [{ cid: '_102_1', name: 'Synthetic course 2', path: '/ultra/courses/_102_1/grades', top: 0, at: 1, pin: false }] } });
     }, { settings: { ...G.GZ_DEFAULTS, enhance: { ...G.GZ_DEFAULTS.enhance, calc: true, tabs: true } }, site, user });
     const page = await ctx.newPage();

@@ -1,13 +1,13 @@
-// Page setup on a paper Writer made (lib/writer-styles.js setup with own: true): the page sizes, orientation, margins and
+// Page setup on a paper Writer made (writer/writer-styles.js setup with own: true): the page sizes, orientation, margins and
 // header and footer distances; the format's running header ("Surname N") kept until the student edits it, then the
 // edited parts with PAGE / NUMPAGES fields; a different first page; the margins check quiet while the student's own setup
 // is there (an imported file's setup still asks); and the .docx made from it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ST = require('../../extension/lib/writer-styles.js');
-const F = require('../../extension/lib/writer-format.js');
-const S = require('../../extension/lib/writer-schema.js');
-const X = require('../../extension/lib/writer-docx.js');
+const ST = require('../../extension/writer/writer-styles.js');
+const F = require('../../extension/writer/writer-format.js');
+const S = require('../../extension/writer/writer-schema.js');
+const X = require('../../extension/writer/writer-docx.js');
 
 const mla = ST.FORMATS.mla9, chicago = ST.FORMATS.chicago17;
 

@@ -1,12 +1,12 @@
-// Agent apps' reads in an LMS tab: lib/mcp/tabs.js puts this into the top frame of the account's own tab and calls run.
-// todo and insights read the planner and Insights afresh as the page's own features do (features/cardtasks.js load,
-// features/insights.js load: the same libraries, requests and record) and keep what they read through the worker's publish
+// Agent apps' reads in an LMS tab: agents/tabs.js puts this into the top frame of the account's own tab and calls run.
+// todo and insights read the planner and Insights afresh as the page's own features do (courses/page/cardtasks.js load,
+// planner/page/insights.js load: the same libraries, requests and record) and keep what they read through the worker's publish
 // paths ('glaze:todo', 'glaze:insights'), so every cache updates the normal way. Insights only while it is on and keeps a
 // record for this account: one the student cleared, or never made, is theirs to make by opening Insights. assignment reads
 // one assignment's title, due date, points, instructions, the names of the files they attach and its rubric's definition:
-// Ultra's as Writer reads it (lib/writer-context-assignment.js build), Canvas's from its assignment through lib/rubric.js;
+// Ultra's as Writer reads it (writer/writer-context-assignment.js build), Canvas's from its assignment through courses/rubric.js;
 // never a submission or an attempt, so never the student's scores or feedback. mark is Canvas's planner mark for an item,
-// with the page's CSRF token (lib/mcp/tools-study.js todo_mark_done, once the student allowed it). The worker binds each
+// with the page's CSRF token (agents/tools-study.js todo_mark_done, once the student allowed it). The worker binds each
 // call to its document, origin, uid and deadline (at most LIMIT.ms), and cancels it by id; no late requests or publishes.
 // Content side, in Glaze's own world (GZ_CTX); a second injection keeps the first. run(op, args) → { ok: true, … } or
 // { ok: false, error }.
@@ -43,23 +43,23 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
   };
   const libs = (...files) => Promise.all(files.map(([f, g]) => X().need(f, () => globalThis[g])));
 
-  // ---- the planner, as features/cardtasks.js load reads it, kept in the list's shape ----
+  // ---- the planner, as courses/page/cardtasks.js load reads it, kept in the list's shape ----
   const prefs = () => new Promise((res) => { try { chrome.storage.sync.get('todo', (r) => res(r?.todo)); } catch { res(); } }).then((raw) => GZ_SANITIZE({ todo: raw }).todo);
   const todo = async (go) => {
     const x = X(), ultra = x.site === 'ultra';
-    await libs(['lib/todo.js', 'GZ_TODO']);
+    await libs(['planner/todo.js', 'GZ_TODO']);
     const L = GZ_TODO, [p, o] = await Promise.all([x.profile(), prefs()]);
     if (!L.ID.test(String(p?.id)) || String(p.id) !== go.uid) return no('profile');
     const key = L.storeKey(location.origin, String(p.id)), now = Date.now(), { start, end } = L.fetchRange(o, now, L.zone(p.time_zone));
     let cache, due;
     if (ultra) {
-      await libs(['lib/ultra.js', 'GZ_ULTRA']);
+      await libs(['courses/ultra.js', 'GZ_ULTRA']);
       const reader = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go });
       const r = await GZ_ULTRA.planner({ ...reader, me: async () => go.uid }, { from: Date.parse(start), to: Date.parse(end), now });
       cache = { key, at: now, start, end, teach: o.teacher, progress: o.progress, items: r.items.map((i) => ({ ...i, url: go.origin + i.url })), complete: r.complete, grading: [], sums: {} };
     } else {
       const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`, go, 10), x.canvasCourses()]);
-      // A teacher's list also wants the grading: teach null, so the list asks for that alone (features/todo.js load).
+      // A teacher's list also wants the grading: teach null, so the list asks for that alone (planner/page/todo.js load).
       const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
       cache = { key, at: now, start, end, teach: o.teacher && teaches ? null : o.teacher, progress: o.progress, items: raw.map(L.slim), complete: !raw.more, grading: [], sums: {} };
       due = GZ_CANVAS_DUE_WEEK(raw, now);
@@ -69,12 +69,12 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     return r?.ok ? { ok: true } : no('not kept');
   };
 
-  // ---- Insights, as features/insights.js load reads it, three courses at a time ----
+  // ---- Insights, as planner/page/insights.js load reads it, three courses at a time ----
   const insights = async (go) => {
     const x = X(), s = x.settings(), ultra = x.site === 'ultra';
     if (s.enabled === false || !s.enhance?.insights) return no('off');
-    await libs(['lib/todo.js', 'GZ_TODO']);
-    await libs(['lib/gradecalc.js', 'GZ_GRADECALC'], ['lib/insights.js', 'GZ_INSIGHTS'], ...(ultra ? [['lib/ultra.js', 'GZ_ULTRA']] : []));
+    await libs(['planner/todo.js', 'GZ_TODO']);
+    await libs(['planner/gradecalc.js', 'GZ_GRADECALC'], ['planner/insights.js', 'GZ_INSIGHTS'], ...(ultra ? [['courses/ultra.js', 'GZ_ULTRA']] : []));
     const I = GZ_INSIGHTS, L = GZ_TODO, now = Date.now();
     let uid, term, tz;
     if (ultra) {
@@ -129,7 +129,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
   };
 
   // ---- one assignment: its text, its files' names, its rubric's definition; never a submission or an attempt ----
-  // Rich text as text, block ends as line breaks (lib/writer-context-assignment.js reads Ultra's the same way).
+  // Rich text as text, block ends as line breaks (writer/writer-context-assignment.js reads Ultra's the same way).
   const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
   const char = (m, e) => {
     if (e[0] !== '#') return ENT[e.toLowerCase()] ?? m;
@@ -158,7 +158,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
   const assignment = async (go, a) => {
     const x = X(), ultra = x.site === 'ultra', ok = ultra ? BB : ID;
     if (!ok.test(a.course || '') || !ok.test(a.assignment || '')) return no('args');
-    await libs(['lib/rubric.js', 'GZ_RUBRIC_LIB'], ['lib/writer-context-assignment.js', 'GZ_WRITER_CONTEXT_ASSIGNMENT'], ...(ultra ? [['lib/ultra.js', 'GZ_ULTRA']] : []));
+    await libs(['courses/rubric.js', 'GZ_RUBRIC_LIB'], ['writer/writer-context-assignment.js', 'GZ_WRITER_CONTEXT_ASSIGNMENT'], ...(ultra ? [['courses/ultra.js', 'GZ_ULTRA']] : []));
     const R = GZ_RUBRIC_LIB, W = GZ_WRITER_CONTEXT_ASSIGNMENT, uid = String(await x.account());
     if (ultra) {
       // Writer's own read of an assignment (build), from the course's content item, gradebook row and rubric column; the
@@ -184,7 +184,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
       instructions: text(html), description: '', files: files(html), rubric: m ? W.rubricOf(m) : null, incomplete: html.length > LIMIT.text };
   };
 
-  // ---- Canvas's planner mark, as features/todo.js write sends it: the page's CSRF token, an assignment behind a quiz or a
+  // ---- Canvas's planner mark, as planner/page/todo.js write sends it: the page's CSRF token, an assignment behind a quiz or a
   // discussion marked as the assignment, PUT to an override Canvas keeps already. → the override Canvas kept ----
   const csrf = () => { const m = document.cookie.match(/(?:^|;\s*)_csrf_token=([^;]*)/); return m ? decodeURIComponent(m[1]) : ''; };
   const mark = async (go, a) => {

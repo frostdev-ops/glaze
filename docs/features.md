@@ -103,7 +103,7 @@ Notes **Back up or restore** opens **Settings → Privacy and data → Backup an
   a slow load then offers **Retry** and **Go back** while continuing to wait for the school’s page.
   Retry replaces only an unedited page. Go back retains the live frame and any native work.
 
-- **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
+- **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `core/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
 
 - **Sites** — Canvas on `*.instructure.com`, Blackboard Ultra on `*.blackboard.com` and Moodle on `*.moodlecloud.com` work without configuration. On Chrome, Edge and Firefox, you can add your school's own address in four ways. The browser asks for access Glaze does not already hold:
   - **Use Glaze on** the site, in Glaze's toolbar popup on one of its pages. On Chrome and Edge, Glaze's icon gets a dot on pages that look like Canvas, Moodle or Blackboard Ultra, and once the popup has opened there, Chrome 133 and later also keep an Allow entry for the tab in the extensions menu.

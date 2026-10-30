@@ -1,9 +1,9 @@
-// The AI harness's request model and JSON Schema subset (lib/ai/request.js, lib/ai/schema.js): one request and one result
+// The AI harness's request model and JSON Schema subset (ai/request.js, ai/schema.js): one request and one result
 // for every provider, cleaners that refuse rather than cut, and the check every model answer goes through.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const R = require('../../extension/lib/ai/request.js');
-const S = require('../../extension/lib/ai/schema.js');
+const R = require('../../extension/ai/request.js');
+const S = require('../../extension/ai/schema.js');
 
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005000201a5d2a1e60000000049454e44ae426082', 'hex');
 const user = (content) => ({ messages: [{ role: 'user', content }] });
@@ -92,8 +92,8 @@ test('a request refuses anything outside its limits or its shape, rather than cu
 test('an effort is one of EFFORTS, kept as it is; the mock provider runs with it and the request it sees holds it', async () => {
   for (const effort of R.EFFORTS) assert.equal(R.clean({ ...user('x'), effort }).effort, effort);
   assert.deepEqual(R.EFFORTS, ['none', 'minimal', 'low', 'medium', 'high']);
-  const P = require('../../extension/lib/ai/providers.js');
-  require('../../extension/lib/ai/providers/mock.js');
+  const P = require('../../extension/ai/providers.js');
+  require('../../extension/ai/providers/mock.js');
   const seen = [];
   assert.equal((await P.run('mock', { ...user('x'), effort: 'none' }, { replies: [{ text: 'ok' }], seen })).text, 'ok');
   assert.equal(seen[0].effort, 'none');

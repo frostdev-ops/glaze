@@ -1,4 +1,4 @@
-// Glaze's first screen (features/welcome.html) through each of its states, in headless Chrome with the real unpacked
+// Glaze's first screen (settings/welcome.html) through each of its states, in headless Chrome with the real unpacked
 // extension. The browser's permission prompt can't be answered headless, so chrome.permissions is the check's: it decides
 // what is held and answers each request when the check says. The schools are the check's too: bb.school.edu answers as
 // Blackboard does, www.school.edu is a school's main website linking to it, and nothing else exists. Screenshots of every
@@ -60,7 +60,7 @@ const stub = (required) => {
       if (u.host === 'www.school.edu') return route.fulfill({ status: 404, contentType: 'text/html', body: '<!doctype html><title>Not found</title>' });
       return route.abort();
     });
-    const url = `chrome-extension://${id}/features/welcome.html`;
+    const url = `chrome-extension://${id}/settings/welcome.html`;
     const open = async (viewport, motion = 'no-preference') => {
       const page = await ctx.newPage();
       page.on('pageerror', (e) => errors.push(String(e)));

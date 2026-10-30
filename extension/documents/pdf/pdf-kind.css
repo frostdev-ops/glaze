@@ -1,5 +1,5 @@
 /* A PDF on the Documents page (pdf-kind.js): the card's first page, and the viewer's chrome around pdf.js's pages
-   (lib/pdfjs/pdf_viewer.css draws the pages, their text layer and form fields). The chrome is the paper's (writer-paper.css
+   (vendor/pdfjs/pdf_viewer.css draws the pages, their text layer and form fields). The chrome is the paper's (writer-paper.css
    .gp-top, .gp-tool, .gp-menu) in the student's Look; the pages are print, white whatever the Look. */
 .gd-pic .gq-thumb { width: 204px; height: auto; align-self: flex-start; zoom: var(--gd-thumb); background: #fff; border-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
 :root:not([data-dark]) .gd-pic .gq-thumb { box-shadow: 0 1px 3px rgba(15,23,42,.16), 0 0 0 1px rgba(15,23,42,.06); }
@@ -46,7 +46,7 @@
   .gq .gp-tool .gp-sepv, #gq-zoom-out, #gq-zoom-in { display: none; }
   .gq .gp-tool .gp-box { min-width: 0; }
 }
-/* The tools (lib/pdf-tools.js): a group in the toolbar, the chosen one pressed; colour and size for the chosen tool. */
+/* The tools (documents/pdf/pdf-tools.js): a group in the toolbar, the chosen one pressed; colour and size for the chosen tool. */
 .gq-tools { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 .gq-tools[hidden] { display: none; }
 .gq-ib[aria-pressed="true"] { background: color-mix(in srgb, var(--gz-accent) 22%, transparent); color: var(--gz-ink); }
@@ -62,7 +62,7 @@
 /* pdf.js's bar on a selected mark (Delete, its colour): Glaze's buttons inherit their font (writer.css), and the mark's
    layer carries the page's text scale, so its buttons take back a control's own size. */
 .gq-scroll .annotationEditorLayer .editToolbar button { font: 13px/1 system-ui, sans-serif; }
-/* Signature (lib/pdf-sign.js): saved ones to put in, then Draw, Name or Image. */
+/* Signature (documents/pdf/pdf-sign.js): saved ones to put in, then Draw, Name or Image. */
 dialog.gq-sign { position: fixed; inset: 0; margin: auto; width: min(460px, calc(100vw - 32px)); height: fit-content; max-height: calc(100vh - 32px); overflow: auto; padding: 16px; display: none; flex-direction: column; gap: 12px; color: var(--gz-ink); }
 dialog.gq-sign[open] { display: flex; }
 dialog.gq-sign::backdrop { background: rgba(0,0,0,.35); }
@@ -81,7 +81,7 @@ dialog.gq-sign::backdrop { background: rgba(0,0,0,.35); }
 .gq-sign-said:empty { display: none; }
 .gq-sign-end { display: flex; justify-content: flex-end; gap: 8px; }
 dialog.gq-sign button:disabled { opacity: .45; cursor: default; }
-/* The pages panel (lib/pdf-pages.js), over the pages while it is open. */
+/* The pages panel (documents/pdf/pdf-pages.js), over the pages while it is open. */
 .gq-pagepanel { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--ground); }
 .gq .gq-pages-bar { flex: none; border-bottom: 1px solid var(--edge); }
 .gq-pages-said { margin: 0 8px; font-size: 13px; color: var(--gz-err); }

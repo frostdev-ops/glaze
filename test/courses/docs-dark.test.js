@@ -1,4 +1,4 @@
-// The page's Dark documents button (features/docs.js, content.js's setDark): it steps through all three choices of
+// The page's Dark documents button (courses/page/docs.js, content.js's setDark): it steps through all three choices of
 // enhance.docPages, and it saves only the choice it changed.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -10,7 +10,7 @@ const { El } = require('../stand-in-dom.js');
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const darkCode = () => {
-  const source = read('content.js');
+  const source = read('content/content.js');
   let a = source.indexOf('  let darkSave = ');
   if (a < 0) a = source.indexOf('  const setDark = ');
   const b = source.indexOf('  const syncDocTools = ', a);
@@ -18,7 +18,7 @@ const darkCode = () => {
   return `${source.slice(a, b)}; setDark`;
 };
 
-// features/docs.js in a VM with a stand-in page: a Canvas wiki page, so the document buttons are drawn.
+// courses/page/docs.js in a VM with a stand-in page: a Canvas wiki page, so the document buttons are drawn.
 const toolbar = (docPages) => {
   const doc = {}; doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
   const content = new El('div', doc); content.setAttribute('class', 'show-content'); doc.body.append(content);
@@ -31,7 +31,7 @@ const toolbar = (docPages) => {
   ctx.GZ_CTX = { site: 'canvas', solo: true, t: (w) => w, on: () => true, darkTheme: () => true, settings: () => settings, PREVIEWS: 'iframe', DOC: '.show-content', wordsIn: new Set(),
     docButton: (key, label, onClick) => { const b = new El('button', doc); b.dataset.gz = key; b.title = label; b.addEventListener('click', onClick); return b; },
     setDark: (v) => { chosen.push(v); settings.enhance = { ...settings.enhance, docPages: v }; ctx.GZ_DOCS.sync(); } };
-  vm.runInContext(read('features/docs.js'), ctx);
+  vm.runInContext(read('courses/page/docs.js'), ctx);
   ctx.GZ_DOCS.sync();
   const button = doc.root.querySelector('button[data-gz="dark"]');
   assert.ok(button, 'the Dark documents button is drawn');

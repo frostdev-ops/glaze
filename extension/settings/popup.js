@@ -1,7 +1,7 @@
 // Popup: the quick controls, as tiles. Every change saves at once (the popup closes the moment focus
 // leaves it, so a pending timer would die with it); the content script listens for the change.
 const $ = (sel) => document.querySelector(sel);
-// In the browser's language (lib/i18n.js).
+// In the browser's language (core/i18n.js).
 GZ_I18N.page();
 const t = (key, vars) => GZ_I18N.t(key, vars, GZ_I18N.ui());
 const hint = (msg) => { $('#hint').textContent = msg || ''; $('#hint').hidden = !msg; $('#hint').classList.toggle('err', !!msg); };
@@ -12,7 +12,7 @@ const AUTO = [['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On 
 
 GZ_UI.load().then((s) => {
   const save = (keys) => GZ_UI.save(s, keys, hint);
-  // The Looks catalogue (lib/looks.js), live: a Look saved, installed or removed in Settings shows here at once.
+  // The Looks catalogue (looks/looks.js), live: a Look saved, installed or removed in Settings shows here at once.
   let catalog = GZ_CATALOG.list();
 
   const render = () => {
@@ -56,7 +56,7 @@ GZ_UI.load().then((s) => {
     render();
   });
   // Every Look on a sheet over the tiles; picking one closes it. A kept one is put on by the worker, from its code, as Settings'
-  // "Use this theme" puts it on (lib/background.js looks), and the tiles follow once it is.
+  // "Use this theme" puts it on (background/background.js looks), and the tiles follow once it is.
   const pick = (E) => {
     $('#sheet').close();
     if (E.L) { save(GZ_UI.pickLook(s, E.L)); render(); return; }
@@ -75,7 +75,7 @@ GZ_UI.load().then((s) => {
   });
   $('#look').addEventListener('click', () => {
     sheet();
-    // The theme worn before this one, from the history the background keeps (lib/history.js).
+    // The theme worn before this one, from the history the background keeps (looks/history.js).
     chrome.storage.local.get('lookHistory', (r) => {
       const back = GZ_HISTORY.previous(GZ_HISTORY.entries(r?.lookHistory), s);
       const b = $('#previous');
@@ -106,7 +106,7 @@ GZ_UI.load().then((s) => {
 
 // Use Glaze on {host}: where the browser asks for each site (no <all_urls>; Safari has it), opening the popup gives it
 // the tab (activeTab). An http(s) tab Glaze can't run on yet (its host not held, or held but not on its LMS's list) has
-// lib/detect.js's check run in it; an LMS gets one button. Its click tells the worker the site, the LMS and the tab, then
+// content/detect.js's check run in it; an LMS gets one button. Its click tells the worker the site, the LMS and the tab, then
 // asks the browser for the host in the same click (held already: the worker approves from the message). The worker
 // finishes when the grant comes (permissions.onAdded), as the popup may close under the prompt; open still, the button
 // goes once the site is on its list. Chrome 133+ also keeps an Allow entry for the tab in its extensions menu.

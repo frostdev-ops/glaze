@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const zlib = require('node:zlib');
-const D = require('../../extension/lib/doctext.js');
+const D = require('../../extension/core/doctext.js');
 
 // A zip whose entries are deflated (method 8), as Word and PowerPoint write them; `stored` names stay method 0.
 const zipOf = (files, stored = []) => {
@@ -118,7 +118,7 @@ Wed  9:00</pre><select><option>Fall</option></select><p>Done</p></body></html>`;
   assert.equal(D.decode('&#0; &#xD800; &#128512; &lt;'), '� � 😀 <');
 });
 
-// Regression tests from the S4 review. Each failed (or ran far over budget) on the first version of lib/doctext.js.
+// Regression tests from the S4 review. Each failed (or ran far over budget) on the first version of core/doctext.js.
 const u32 = (buf, at, v) => new DataView(buf.buffer, buf.byteOffset).setUint32(at, v, true);
 const u16 = (buf, at, v) => new DataView(buf.buffer, buf.byteOffset).setUint16(at, v, true);
 const central = (buf) => Buffer.from(buf).indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
@@ -313,6 +313,6 @@ test('review: a zip whose CRC, local header or sizes disagree is refused as dama
 });
 
 test('inflating an entry writes into the stream directly, never through a Blob stream (Safari content scripts refuse its chunks)', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/doctext.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/core/doctext.js'), 'utf8');
   assert.doesNotMatch(src, /\.stream\(\)\.pipeThrough/);
 });

@@ -3,10 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { El } = require('../stand-in-dom.js');
-const M = require('../../extension/lib/navbar.js');
-const L = require('../../extension/lib/navlayout.js');
+const M = require('../../extension/navigation/navbar.js');
+const L = require('../../extension/navigation/navlayout.js');
 
-const source = fs.readFileSync(require.resolve('../../extension/features/navbar.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/navigation/page/navbar.js'), 'utf8');
 const part = (from, to) => source.slice(source.indexOf(from), source.indexOf(to, source.indexOf(from)));
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const origin = 'https://school.test';

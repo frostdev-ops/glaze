@@ -1,5 +1,5 @@
 // The DMG build's agent bridge in Safari's extension (safari/Glaze/Glaze Extension/GlazeAgentBridge.swift), run with Swift's
-// interpreter and never an app bundle: its frames against the vectors lib/agent-frames.js passes, its framing against
+// interpreter and never an app bundle: its frames against the vectors agents/agent-frames.js passes, its framing against
 // mcp/lib/native.js, and its batches through a stand-in Glaze app on a unix socket.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
-const F = require('../../extension/lib/agent-frames.js');
+const F = require('../../extension/agents/agent-frames.js');
 const N = require('../../mcp/lib/native.js');
 const V = require('../fixtures/agent-frames.json');
 const S = require('../helpers/swift-native.cjs');
@@ -107,7 +107,7 @@ const app = (dir, behaviours) => {
   return new Promise((resolve) => server.listen(path.join(dir, 'agent.sock'), () => resolve({ server, got })));
 };
 
-test('the bridge, its frames and its framing match lib/agent-frames.js and native.js, and it carries batches to the app', { skip: !S.supported }, async () => {
+test('the bridge, its frames and its framing match agents/agent-frames.js and native.js, and it carries batches to the app', { skip: !S.supported }, async () => {
   const temp = fs.mkdtempSync(path.join('/tmp', 'gz-bridge-'));
   const servers = [];
   try {

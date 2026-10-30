@@ -1,8 +1,8 @@
 // Insights (Canvas, W17): the student's term in numbers, worked out on the device from what Canvas already tells them
-// about their own work (features/insights.js reads it, read-only, with their session). Glaze's own design: how much was handed in on time, each course's grade over the term, how
+// about their own work (planner/page/insights.js reads it, read-only, with their session). Glaze's own design: how much was handed in on time, each course's grade over the term, how
 // the work spreads over the weeks, and how often the student's own Better To Do plans were kept. Nothing here tracks
 // anything new: no timers, no "minutes spent", no comparison with anyone else.
-// Days are lib/todo.js day numbers in the student's Canvas time zone; grades are lib/gradecalc.js's (Canvas's rules).
+// Days are planner/todo.js day numbers in the student's Canvas time zone; grades are planner/gradecalc.js's (Canvas's rules).
 // Classic script, loaded on demand after those two (a second injection keeps the first); the service worker loads it
 // for change(); module.exports for node.
 var GZ_INSIGHTS = globalThis.GZ_INSIGHTS || (() => {
@@ -48,9 +48,9 @@ var GZ_INSIGHTS = globalThis.GZ_INSIGHTS || (() => {
     return { k, n: text(x.name, 120), d, p: Math.max(0, Number(x.points_possible) || 0), a, s: st };
   };
   // A course's grade after each graded piece of work, in date order (its due date, else when it was graded or handed
-  // in): Canvas's current score (lib/gradecalc.js) with the work graded later left out. Work graded on the same day
+  // in): Canvas's current score (planner/gradecalc.js) with the work graded later left out. Work graded on the same day
   // makes one point; graded work with no date at all counts from the start. → [[ms, percent]].
-  // info: lib/gradecalc.js fromApi's (weights, grading periods). current: the student's current grading period
+  // info: planner/gradecalc.js fromApi's (weights, grading periods). current: the student's current grading period
   // (Canvas's current_grading_period_id). With one, Canvas's current score is that period's, and each period starts
   // afresh: every point is then its own period's score, [ms, percent, period id], so the current period's last point
   // is the score Canvas shows. Without one, the whole course, as Canvas totals it.
@@ -69,8 +69,8 @@ var GZ_INSIGHTS = globalThis.GZ_INSIGHTS || (() => {
     }
     return along(course, dated, tz, split);
   };
-  // The points themselves, for any course in lib/gradecalc.js's shape and its dated graded work [[id, ms]]: Blackboard's
-  // (lib/ultra.js trend) too, whose overall grade is calc's final where it counts work not graded yet as zero (zeros).
+  // The points themselves, for any course in planner/gradecalc.js's shape and its dated graded work [[id, ms]]: Blackboard's
+  // (courses/ultra.js trend) too, whose overall grade is calc's final where it counts work not graded yet as zero (zeros).
   const along = (course, dated, tz, split = false) => {
     const C = (globalThis.GZ_GRADECALC || require('./gradecalc.js')), T = (globalThis.GZ_TODO || require('./todo.js'));
     const periodOf = new Map(course.groups.flatMap((g) => g.items.map((i) => [i.id, i.period])));
@@ -135,7 +135,7 @@ var GZ_INSIGHTS = globalThis.GZ_INSIGHTS || (() => {
     for (const x of weeks.filter((y) => !y.past && y.n).sort((a, b) => b.n - a.n || b.p - a.p).slice(0, 3)) x.heavy = true;
     return weeks;
   };
-  // Better To Do's plans (lib/todo.js clean()), kept or not: a "do on" day is kept when the work was handed in or ticked
+  // Better To Do's plans (planner/todo.js clean()), kept or not: a "do on" day is kept when the work was handed in or ticked
   // off by the end of that day; focus sessions, when it was done by the end of the day of the last one. Only plans for
   // this term's work and days that are over count; work ticked off at an unknown time (a Canvas item's tick) is left
   // out. items: this term's (with a, handed in); fromDay: the term's first day.
@@ -220,7 +220,7 @@ var GZ_INSIGHTS = globalThis.GZ_INSIGHTS || (() => {
     });
     return { term: text(raw.term, 400), name: text(raw.name, 120), from: when(raw.from), to: when(raw.to), at: when(raw.at), cl: when(raw.cl), cut: count(raw.cut) + all.length - courses.length, courses };
   };
-  // In the service worker's write queue (lib/background.js 'glaze:insights'). m: { key, op, at, base, rec }.
+  // In the service worker's write queue (background/background.js 'glaze:insights'). m: { key, op, at, base, rec }.
   // put: keeps rec as asked for at `at`, unless it was made on a view read before the last clear (base, the clear that
   // view knew of), began before that clear, or a newer one is stored (one term at a time: an older answer, for this
   // term or another, never replaces it). clear: drops the record and

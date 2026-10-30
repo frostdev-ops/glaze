@@ -1,4 +1,4 @@
-// A local stand-in for the parts of Google's Calendar API and token revocation that Glaze uses (lib/gcal.js), for the
+// A local stand-in for the parts of Google's Calendar API and token revocation that Glaze uses (planner/gcal.js), for the
 // node tests (test/planner/gcal.test.js) and headless runs of the extension. It listens on 127.0.0.1 only and reaches nothing.
 // Modeled on Google's documented behavior: client-chosen event ids (base32hex, 5–1024 characters, 409 when taken, even by
 // a deleted event), etags, syncToken listing that includes deletions (a full one only with showDeleted; 410 once a token has expired), 404 for an unknown

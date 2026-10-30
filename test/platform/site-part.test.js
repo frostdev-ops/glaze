@@ -10,7 +10,7 @@ const vm = require('node:vm');
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
-const FIRST = ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js'];
+const FIRST = ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js'];
 const HEAD = { ultra: 'base[href*="/ultra/"]', canvas: 'link[rel~="stylesheet"][href*="/dist/brandable_css/"]' };
 
 // An element that takes whatever content.js does to it and answers "nothing here".
@@ -45,7 +45,7 @@ class El {
 
 const page = ({ site, preload, answer, raw = {}, local: own = {}, pathname }) => {
   const sent = [], held = [], swept = [], storeListeners = [];
-  // An Ultra site the student said yes to (lib/background.js approved): school.test is no Blackboard host of its own.
+  // An Ultra site the student said yes to (background/background.js approved): school.test is no Blackboard host of its own.
   const local = { [site]: [site === 'ultra' ? 'https://school.test' : 'https://school.test/*'], ...own };
   const html = new El('html');
   html.lang = 'en';
@@ -84,13 +84,13 @@ const page = ({ site, preload, answer, raw = {}, local: own = {}, pathname }) =>
         id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, lastError: undefined,
         sendMessage: (m) => {
           sent.push(m);
-          if (m?.files?.includes(`content-${site}.js`)) {
+          if (m?.files?.includes(`content/content-${site}.js`)) {
             if (answer === 'held') return new Promise((resolve) => held.push(resolve));
             return Promise.resolve({ ok: false, error: 'not loadable' });
           }
-          // Ultra's gradebook reads come through lib/ultra.js's reader and the site's request queue (WP-A1): the worker
-          // puts them in, as lib/background.js does.
-          if (m?.type === 'glaze:load' && m.files.every((f) => ['lib/lmsq.js', 'lib/ultra.js'].includes(f))) {
+          // Ultra's gradebook reads come through courses/ultra.js's reader and the site's request queue (WP-A1): the worker
+          // puts them in, as background/background.js does.
+          if (m?.type === 'glaze:load' && m.files.every((f) => ['courses/lmsq.js', 'courses/ultra.js'].includes(f))) {
             for (const f of m.files) vm.runInContext(read(f), c, { filename: f });
             return Promise.resolve({ ok: true });
           }
@@ -104,15 +104,15 @@ const page = ({ site, preload, answer, raw = {}, local: own = {}, pathname }) =>
   for (const f of FIRST) vm.runInContext(read(f), c, { filename: f });
   const loadPart = () => {
     // Ultra's initial list and the worker fallback both put its schema before its part.
-    if (site === 'ultra') vm.runInContext(read('lib/nav.js'), c, { filename: 'lib/nav.js' });
-    vm.runInContext(read(`content-${site}.js`), c);
+    if (site === 'ultra') vm.runInContext(read('navigation/nav.js'), c, { filename: 'navigation/nav.js' });
+    vm.runInContext(read(`content/content-${site}.js`), c);
   };
   if (preload) loadPart();
-  const done = vm.runInContext(read('content.js'), c, { filename: 'content.js' });
+  const done = vm.runInContext(read('content/content.js'), c, { filename: 'content/content.js' });
   const sheets = () => head.kids.map((l) => String(l.href || '').split('/').pop()).filter((f) => f.endsWith('.css'));
-  // The part's file arriving, as lib/background.js would put it in, then the worker's answer.
+  // The part's file arriving, as background/background.js would put it in, then the worker's answer.
   const arrive = () => { loadPart(); held.shift()({ ok: true }); };
-  return { c, html, sent, held, swept, sheets, done, arrive, storeListeners, asked: () => sent.filter((m) => m?.files?.includes(`content-${site}.js`)).length };
+  return { c, html, sent, held, swept, sheets, done, arrive, storeListeners, asked: () => sent.filter((m) => m?.files?.includes(`content/content-${site}.js`)).length };
 };
 
 const noUnhandled = async (run) => {
@@ -182,7 +182,7 @@ for (const site of ['canvas', 'ultra']) {
 
 test('default Dashboard alone does not load widgets on course routes; an explicitly saved global float does', () => noUnhandled(async () => {
   const opts = { site: 'ultra', preload: true, pathname: '/ultra/courses/_1_1/outline', raw: { enhance: { notes: false, widgets: false, pet: false, sidebar: false } } };
-  const asks = (p) => p.sent.filter((m) => m?.files?.includes('features/widgets.js')).length;
+  const asks = (p) => p.sent.filter((m) => m?.files?.includes('core/page/widgets.js')).length;
   const p = page(opts);
   await settle();
   assert.equal(asks(p), 0, 'no global tiles: retain lazy cost');

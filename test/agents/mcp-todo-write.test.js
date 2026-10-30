@@ -1,5 +1,5 @@
-// Marking a to-do done for agent apps (lib/mcp/tools-study.js todo_mark_done, lib/mcp/tab.js mark): Glaze's own sentence for
-// the approval window from the cache alone; the same edit Glaze's list makes for a tick (lib/todo.js change), shown after as
+// Marking a to-do done for agent apps (agents/tools-study.js todo_mark_done, agents/tab.js mark): Glaze's own sentence for
+// the approval window from the cache alone; the same edit Glaze's list makes for a tick (planner/todo.js change), shown after as
 // todo_list's marked; with Canvas sync on, Canvas's planner override through the account's tab with the page's CSRF token,
 // shown after as done; no tab says so before anyone is asked; and through the worker, Allow and Don't allow.
 process.env.TZ = 'UTC';
@@ -7,10 +7,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const C = require('../helpers/mcp-caches.cjs');
 const H = require('../helpers/mcp-tabs.cjs');
-const T = require('../../extension/lib/ai/tools.js');
-const R = require('../../extension/lib/mcp/registry.js');
-const TABS = require('../../extension/lib/mcp/tabs.js');
-const ST = require('../../extension/lib/mcp/tools-study.js');
+const T = require('../../extension/ai/tools.js');
+const R = require('../../extension/agents/registry.js');
+const TABS = require('../../extension/agents/tabs.js');
+const ST = require('../../extension/agents/tools-study.js');
 
 const A = `${C.CANVAS}/5`, UL = `${C.ULTRA}/${C.ULTRA_UID}`;
 const CSRF = 'abc+/=123';

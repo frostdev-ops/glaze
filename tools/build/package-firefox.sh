@@ -32,11 +32,11 @@ DIST=$dist tools/build/package.sh >/dev/null
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 unzip -q "$dist/glaze-v$version.zip" -d "$stage"
-cat > "$stage/lib/firefox-background.js" <<'JS'
+cat > "$stage/background/firefox-background.js" <<'JS'
 // Firefox runs the background as an event page: the manifest already loads every script the worker would import.
 globalThis.importScripts = () => {};
 JS
-cat > "$stage/lib/gcal-auth.js" <<'JS'
+cat > "$stage/planner/gcal-auth.js" <<'JS'
 // Firefox has no Chrome Google sign-in API; calendar-file export remains available.
 var GZ_GCAL_AUTH = {
   token: async () => { throw new Error('Google Calendar sign-in requires Chrome.'); },
@@ -44,7 +44,7 @@ var GZ_GCAL_AUTH = {
   clear: async () => {},
 };
 JS
-node - "$stage/manifest.json" "$stage/lib/background.js" "$stage/popup.js" "$development" "$branch" "$commit" "$dirty" <<'JS'
+node - "$stage/manifest.json" "$stage/background/background.js" "$stage/settings/popup.js" "$development" "$branch" "$commit" "$dirty" <<'JS'
 const fs = require('fs');
 const path = require('path');
 const [file, background, popup, development, branch, commit, dirty] = process.argv.slice(2);
@@ -53,8 +53,8 @@ if (development === 'true') m.name = `${m.short_name} (Firefox development)`;
 fs.writeFileSync(path.join(path.dirname(file), 'glaze-build.json'), JSON.stringify({ target: 'firefox', development: development === 'true', branch, commit, dirty: dirty === 'true' }, null, 2) + '\n');
 // Every importScripts call in the worker, in order, as paths from the package root.
 const imports = [...fs.readFileSync(background, 'utf8').matchAll(/importScripts\(([^)]*)\)/g)]
-  .flatMap(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.join('lib', f)));
-m.background = { scripts: ['lib/firefox-background.js', ...new Set(imports), 'lib/background.js'] };
+  .flatMap(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.join('background', f)));
+m.background = { scripts: ['background/firefox-background.js', ...new Set(imports), 'background/background.js'] };
 delete m.minimum_chrome_version;
 delete m.oauth2;
 m.optional_permissions = (m.optional_permissions || []).filter((p) => p !== 'identity');
@@ -73,20 +73,20 @@ if (fs.existsSync(popup)) {
   if (fs.readFileSync(popup, 'utf8').includes('addHostAccessRequest')) throw new Error('popup.js still names addHostAccessRequest');
 }
 // Code mods need Chrome: no sandbox page, no sandbox CSP and none of its files. content.js starts code mods
-// only where the manifest has the sandbox; declarative widgets (features/modwidgets.js, drawn by features/modui.js) run here.
+// only where the manifest has the sandbox; declarative widgets (mods/page/modwidgets.js, drawn by mods/page/modui.js) run here.
 delete m.sandbox;
 delete m.content_security_policy?.sandbox;
 m.web_accessible_resources = (m.web_accessible_resources || []).map((e) => ({ ...e, resources: e.resources.filter((r) => !r.startsWith('mods/')) })).filter((e) => e.resources.length);
 // 140 (ESR) reads data_collection_permissions; 127+ grants host permissions at install. Glaze sends nothing anywhere
 // on its own: shared sessions and the Looks gallery go out only when the user starts them. Agent access gives course data to
-// an app on this computer, outside the browser, so it asks for website content when it is turned on (lib/editor-agents.js).
+// an app on this computer, outside the browser, so it asks for website content when it is turned on (settings/editor-agents.js).
 m.browser_specific_settings = {
   gecko: { id: 'glaze@frostdev.io', strict_min_version: '140.0', data_collection_permissions: { required: ['none'], optional: ['websiteContent'] } },
   gecko_android: { strict_min_version: '142.0' },
 };
 fs.writeFileSync(file, JSON.stringify(m, null, 2) + '\n');
 JS
-rm -rf "$stage/mods" "$stage/features/mods.js"
+rm -rf "$stage/mods/boot.js" "$stage/mods/host.html" "$stage/mods/host.js" "$stage/mods/page/mods.js"
 chmod -R a+rX "$stage"
 out="$(cd "$dist" && pwd)/glaze-v$version-firefox.zip"
 rm -f "$out"

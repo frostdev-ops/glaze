@@ -124,7 +124,7 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
     });
     await run('import', async () => {
       const p = await page('review-import'); await type(p, 'Unsaved typing before import.');
-      const bytes = await p.evaluate(async () => { await GZ_WRITER_PAPER.need(['lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js']); return Array.from(GZ_WRITER_DOCX.exportDocx(GZ_WRITER_SCHEMA.parse(GZ_WRITER_SCHEMA.paper, '<p>Imported replacement.</p>')).bytes); });
+      const bytes = await p.evaluate(async () => { await GZ_WRITER_PAPER.need(['core/zip.js', 'core/doctext.js', 'writer/writer-docx.js']); return Array.from(GZ_WRITER_DOCX.exportDocx(GZ_WRITER_SCHEMA.parse(GZ_WRITER_SCHEMA.paper, '<p>Imported replacement.</p>')).bytes); });
       await p.locator('input[type=file]').setInputFiles({ name: 'import.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.from(bytes) });
       await p.waitForFunction(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('Imported replacement.'));
       const kept = await p.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(), k = GZ_WRITER_PAPER.current().key(); return (await Promise.all((await P.versions(k)).map((v) => P.version(k, v.id)))).some((v) => JSON.stringify(v.doc).includes('Unsaved typing before import.')); });

@@ -2,9 +2,9 @@
 const GZ_UI = (() => {
   const store = chrome.storage.sync;
 
-  // Settings, and the dashboard cards' (lib/cards.js keeps those apart, out of the content script's first load).
+  // Settings, and the dashboard cards' (courses/cards.js keeps those apart, out of the content script's first load).
   const clean = (raw, fresh) => ({ ...GZ_SANITIZE(raw, fresh), card: GZ_CARDS.settings(raw?.card) });
-  // The Look's parts (lib/lookparts.js) are part of a Look but live in their own key: s.parts is { x, m }, or null.
+  // The Look's parts (looks/lookparts.js) are part of a Look but live in their own key: s.parts is { x, m }, or null.
   const withParts = async (raw) => {
     const local = await Promise.resolve(chrome.storage.local?.get('freshDefaults')).catch(() => null);
     return { ...clean(raw, local?.freshDefaults?.fresh === true), parts: await GZ_XPARTS.fromStored(raw?.lookX, GZ_XPARTS.areas().local).catch(() => null) ?? null };
@@ -124,7 +124,7 @@ const GZ_UI = (() => {
     return ['colors', 'preset', 'auto'];
   };
 
-  // One card per Look of `all` (lib/looks.js list: built in, then the student's saved and gallery Looks, under a heading each
+  // One card per Look of `all` (looks/looks.js list: built in, then the student's saved and gallery Looks, under a heading each
   // when more than one group has any): its name in its own text color on its own surface, fading into its background's
   // colors (GZ_CATALOG.tone), with its accent down the edge; pressed when it is the one the page is wearing. onPick(E).
   const looks = (box, s, onPick, all = GZ_CATALOG.list()) => {
@@ -163,11 +163,11 @@ const GZ_UI = (() => {
     return ['colors', 'preset', 'auto', 'look', 'bg', 'parts', ...(L.card ? ['card'] : [])];
   };
 
-  // A theme's name in the history and favorites: the Look it is (of `all`, lib/looks.js), else its palette's name.
+  // A theme's name in the history and favorites: the Look it is (of `all`, looks/looks.js), else its palette's name.
   const themeName = (th, all = GZ_CATALOG.list()) => GZ_CATALOG.worn(th, all)?.name || th.preset || GZ_I18N.t('Custom theme', {}, GZ_I18N.ui());
 
   // ---- contrast, as the pages draw it ----
-  // features/surfaces.css paints every surface and the ground as color-mix(in srgb, tint X%, surface color): a custom surface
+  // looks/page/surfaces.css paints every surface and the ground as color-mix(in srgb, tint X%, surface color): a custom surface
   // color or a tint changes what text sits on while the palette's own tokens still read well. (A glass surface's opacity over a
   // picture isn't known here.)
   const blend = (from, to, t) => {

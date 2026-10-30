@@ -12,10 +12,10 @@ const worker = () => {
   const context = vm.createContext({ URL, console, TextEncoder, TextDecoder, AbortController, structuredClone, Date, setTimeout, clearTimeout,
     addEventListener: (name, f) => { if (name === 'install') install.push(f); },
     crypto: globalThis.crypto, atob, btoa, navigator: {},
-    importScripts: (...files) => { for (const f of files) { loaded.push(f); if (f === fail) throw new Error('fixture import failure'); vm.runInContext(fs.readFileSync(path.join(root, 'lib', f), 'utf8'), context, { filename: f }); } },
+    importScripts: (...files) => { for (const f of files) { loaded.push(f); if (f === fail) throw new Error('fixture import failure'); vm.runInContext(fs.readFileSync(path.join(root, 'background', f), 'utf8'), context, { filename: f }); } },
     chrome: { i18n: { getUILanguage: () => lang }, runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: none, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: area, sync: area, onChanged: none } } });
-  vm.runInContext(fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(path.join(root, 'background/background.js'), 'utf8'), context);
   vm.runInContext('sessions()', context);
   const copy = (kind = 'notes', title = 'Study') => vm.runInContext(`GZ_SHARING.ADAPTERS[${JSON.stringify(kind)}].copyOf({ title: ${JSON.stringify(title)} }, 'html', '<p>kept</p>')`, context);
   return { loaded, copy, install: () => { for (const f of install) f(); }, language: (l) => { lang = l; }, fail: (f) => { fail = f; } };
@@ -31,7 +31,7 @@ test('review: actual background worker localizes notes and collection conflict t
       assert.equal(copy.html, '<p>kept</p>');
     }
   }
-  assert.equal(w.loaded.filter((f) => f === 'i18n.js').length, 1);
+  assert.equal(w.loaded.filter((f) => f === '../core/i18n.js').length, 1);
   assert.ok(w.loaded.filter((f) => f.startsWith('../i18n/')).every((f) => /^\.\.\/i18n\/(de|es|fr|nl|pt-BR)\.js$/.test(f)));
   assert.ok(w.copy('notes', 'x'.repeat(300)).title.length <= 300);
 });
@@ -49,5 +49,5 @@ test('review: worker language/import failures fall back without stalling conflic
 test('review: service-worker installation caches every later lazy translation import', () => {
   const w = worker();
   w.install();
-  for (const file of ['i18n.js', '../i18n/de.js', '../i18n/es.js', '../i18n/fr.js', '../i18n/nl.js', '../i18n/pt-BR.js']) assert.ok(w.loaded.includes(file), file);
+  for (const file of ['../core/i18n.js', '../i18n/de.js', '../i18n/es.js', '../i18n/fr.js', '../i18n/nl.js', '../i18n/pt-BR.js']) assert.ok(w.loaded.includes(file), file);
 });

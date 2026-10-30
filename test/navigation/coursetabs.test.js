@@ -1,11 +1,11 @@
-// Course tabs on Ultra (B8): lib/coursetabs.js, the part without the page. The page itself is checked headless by
+// Course tabs on Ultra (B8): navigation/coursetabs.js, the part without the page. The page itself is checked headless by
 // checks/navigation/ultra-tabs-check.js on a synthetic Ultra (test/fixtures/ultra-course.html).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const D = require(path.join(process.env.GZ_B8_REPO || path.join(__dirname, '../../extension'), 'defaults.js'));
-const L = require(path.join(process.env.GZ_B8_REPO || path.join(__dirname, '../../extension'), 'lib/coursetabs.js'));
+const D = require(path.join(process.env.GZ_B8_REPO || path.join(__dirname, '../../extension'), 'content/defaults.js'));
+const L = require(path.join(process.env.GZ_B8_REPO || path.join(__dirname, '../../extension'), 'navigation/coursetabs.js'));
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const C = '/ultra/courses/_1_1';
@@ -15,7 +15,7 @@ test('on by default; its settings join GZ_SPEC from here, so the first content s
   assert.equal(D.GZ_SPEC.tabs, L.SPEC);
   assert.deepEqual(D.GZ_SANITIZE({}).tabs, { at: 'auto', cap: 8, place: true, shape: 'tab', size: 'medium', width: 180, label: 'short', mark: 'dot', color: 'off' });
   assert.deepEqual(D.GZ_SANITIZE({ tabs: { at: 'inside', cap: 99, width: 200, color: 'theme' } }).tabs, { ...D.GZ_SANITIZE({}).tabs, width: 200, color: 'theme' });
-  assert.ok(!/\btabs: \{/.test(read('defaults.js')), 'the group itself is not in defaults.js');
+  assert.ok(!/\btabs: \{/.test(read('content/defaults.js')), 'the group itself is not in defaults.js');
 });
 
 test('a tab goes back to any page of its own course, exactly: path and query', () => {
@@ -241,12 +241,12 @@ test('the stand-in draws a sketch: boxes in their colours and radii, text lines 
 });
 
 test('wired up: loadable on demand, in the worker and the editor, and both sites load the shared manager on demand', () => {
-  const bg = read('lib/background.js');
-  assert.ok(bg.includes("'lib/coursetabs.js', 'features/coursetabs.js'") && bg.includes("'coursetabs.js');"));
-  assert.ok(read('options.html').includes('<script src="lib/coursetabs.js"></script>'));
-  assert.ok(read('content-ultra.js').includes("need('lib/coursetabs.js'") && !read('content.js').includes("need('features/coursetabs.js'") && read('content-canvas.js').includes("need('features/coursetabs.js'"));
+  const bg = read('background/background.js');
+  assert.ok(bg.includes("'navigation/coursetabs.js', 'navigation/page/coursetabs.js'") && bg.includes("'../navigation/coursetabs.js');"));
+  assert.ok(read('options.html').includes('<script src="navigation/coursetabs.js"></script>'));
+  assert.ok(read('content/content-ultra.js').includes("need('navigation/coursetabs.js'") && !read('content/content.js').includes("need('navigation/page/coursetabs.js'") && read('content/content-canvas.js').includes("need('navigation/page/coursetabs.js'"));
   // The copies live in storage.session only, never storage.local: what a page stores there is its tab list.
-  const page = read('features/coursetabs.js').replace(/(^|\s)\/\/.*$/gm, '');
+  const page = read('navigation/page/coursetabs.js').replace(/(^|\s)\/\/.*$/gm, '');
   assert.ok(!/storage\.session|indexedDB|localStorage/.test(page));
   assert.ok(/storage\.session/.test(bg));
 });
@@ -261,14 +261,14 @@ test('the hard tab bound holds even if every existing tab is pinned', () => {
 });
 
 test("a strip tab's pin and close, drawn at 20px, take presses over 24 (WCAG 2.5.8)", () => {
-  const css = read('features/coursetabs.css');
+  const css = read('navigation/page/coursetabs.css');
   assert.match(css, /#gz-ctabs :is\(\.gz-ctab-pin, \.gz-ctab-x\) \{ position: relative;[^}]* width: 20px; height: 20px;/);
   assert.match(css, /#gz-ctabs :is\(\.gz-ctab-pin, \.gz-ctab-x\)::after \{ content: ""; position: absolute; inset: -2px; \}/);
 });
 
 test('Delete leaves a pinned strip tab, as its close button, hidden while it is pinned, does', () => {
-  assert.match(read('features/coursetabs.css'), /#gz-ctabs \.gz-ctab\[data-pin\] \.gz-ctab-x \{ display: none; \}/);
-  const src = read('features/coursetabs.js'), shut = [];
+  assert.match(read('navigation/page/coursetabs.css'), /#gz-ctabs \.gz-ctab\[data-pin\] \.gz-ctab-x \{ display: none; \}/);
+  const src = read('navigation/page/coursetabs.js'), shut = [];
   const tab = (cid, pin) => ({ dataset: { courseId: cid }, hasAttribute: (k) => k === 'data-pin' && pin });
   const tabs = [tab('_1_1', true), tab('_2_1', false)];
   const onKey = require('node:vm').runInNewContext(`${src.slice(src.indexOf('  const onKey = '), src.indexOf('  // Dragging a tab:'))}\nonKey;`, {
@@ -280,7 +280,7 @@ test('Delete leaves a pinned strip tab, as its close button, hidden while it is 
 });
 
 test('a pin or a move on the strip is said in its word (role=status), as the widgets say theirs', () => {
-  const vm = require('node:vm'), src = read('features/coursetabs.js'), said = [];
+  const vm = require('node:vm'), src = read('navigation/page/coursetabs.js'), said = [];
   const c = vm.createContext({ framed: '', L, tabs: L.clean([{ cid: '_1_1' }, { cid: '_2_1' }, { cid: '_3_1' }]), save() {}, draw() {}, say: (s) => said.push(s),
     t: (k, v) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), rowsOf: () => c.tabs.map((x) => ({ cid: x.cid, full: `Course ${x.cid}` })) });
   vm.runInContext(`${src.slice(src.indexOf('  const fullOf = '), src.indexOf('  const tabOf = '))}\nglobalThis.pin = pinTab; globalThis.move = moveTab;`, c);

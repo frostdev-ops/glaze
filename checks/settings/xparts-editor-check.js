@@ -1,9 +1,9 @@
-// The editor's builders for a Look's nav layout and page tweaks (lib/editor-xparts.js), headless, in the real unpacked
+// The editor's builders for a Look's nav layout and page tweaks (settings/editor-xparts.js), headless, in the real unpacked
 // extension: options.html with the real options.js and its preview frame. Nothing reaches the network.
 //   - "Start from my navigation" makes the Look's layout and saves it as the Look's parts; Glaze settings has no Hide.
 //   - Hide, keyboard reordering (focus stays on the handle, the move is announced), placement and a link are saved and
 //     reach Blackboard's real rail in the preview; a bad link is refused; Canvas shows the order it lands in.
-//   - Page tweaks: a Canvas restyle and hide reach the Canvas preview through features/rules.js, an Ultra hide reaches the
+//   - Page tweaks: a Canvas restyle and hide reach the Canvas preview through looks/page/rules.js, an Ultra hide reaches the
 //     Ultra preview, a part that holds Glaze settings can't be hidden, and removing a tweak takes it off.
 //   - Every control the builders draw has a name; removing the layout and the tweaks leaves no parts.
 // EXT=/path/to/checkout/extension NODE_PATH=/path/to/playwright/node_modules nice node checks/settings/xparts-editor-check.js
@@ -11,7 +11,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const ext = process.env.EXT || path.resolve(__dirname, '../../extension');
-const X = require(path.join(ext, 'lib/lookparts.js'));
+const X = require(path.join(ext, 'looks/lookparts.js'));
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() + ms; let v; while (Date.now() < end) { try { v = await fn(); if (ok(v)) return v; } catch { /* the frame is reloading */ } await new Promise((r) => setTimeout(r, 50)); } throw new Error('Timed out waiting for editor or preview state'); };
 
@@ -96,7 +96,7 @@ const until = async (fn, ok = (v) => v, ms = 8000) => { const end = Date.now() +
     await ed.click('[data-f="rule:add"]');
     P = await until(parts, (v) => v?.x?.rules?.length === 1);
     check('a Canvas restyle is saved, cleaned', JSON.stringify(P?.x?.rules) === '[{"p":"canvas.dashboard-card.title","do":"style","st":{"fg":"accent"}}]', JSON.stringify(P?.x?.rules));
-    check('the Canvas preview wears it through features/rules.js', await inFrame(() => document.querySelector('.ic-DashboardCard__header-title')?.getAttribute('data-gz-r-st'), null) === 'fg');
+    check('the Canvas preview wears it through looks/page/rules.js', await inFrame(() => document.querySelector('.ic-DashboardCard__header-title')?.getAttribute('data-gz-r-st'), null) === 'fg');
     await ed.selectOption('[data-f="rule:part"]', 'canvas.dashboard-card.subtitle');
     await ed.selectOption('[data-f="rule:act"]', 'hide');
     await ed.click('[data-f="rule:add"]');

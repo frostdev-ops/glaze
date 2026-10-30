@@ -1,5 +1,5 @@
-// ACA-3, as the student does it: features/syllabus.js on a stand-in Canvas page, talking to the real background worker
-// (lib/background.js 'glaze:syllabus' and 'glaze:todo') over in-memory storage. A syllabus date is saved to To Do, then
+// ACA-3, as the student does it: planner/page/syllabus.js on a stand-in Canvas page, talking to the real background worker
+// (background/background.js 'glaze:syllabus' and 'glaze:todo') over in-memory storage. A syllabus date is saved to To Do, then
 // edited, removed or read again, and what To Do holds is checked each time.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -8,7 +8,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { El } = require('../stand-in-dom.js');
 const workerEnv = require('../helpers/worker-env.cjs');
-const S = require('../../extension/lib/syllabus.js');
+const S = require('../../extension/planner/syllabus.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -41,14 +41,14 @@ const stage = async (local = {}) => {
       runtime: { sendMessage: (m, cb) => { w.send(m, sender).then(cb); } },
       storage: { local: { get: (k, cb) => cb(Object.fromEntries([].concat(k).filter((x) => x in w.store.local).map((x) => [x, structuredClone(w.store.local[x])]))) }, onChanged: { addListener() {} } },
     },
-    GZ_I18N: require('../../extension/lib/i18n.js'),
+    GZ_I18N: require('../../extension/core/i18n.js'),
     GZ_CTX: {
       t: (k, v) => String(k).replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', settings: () => ({ enabled: true, enhance: { syllabus: true, todo: true } }), on: () => true, canvasCourseId: () => '25',
       profile: () => Promise.resolve({ id: 3 }), canvasCourses: () => Promise.resolve([{ id: '25' }]),
       need: async (file, ready) => { if (!ready()) vm.runInContext(read(file), ctx); },
     },
   });
-  vm.runInContext(read('features/syllabus.js'), ctx);
+  vm.runInContext(read('planner/page/syllabus.js'), ctx);
   const UI = ctx.GZ_SYL_UI;
   UI.sync(true);
   await settle();

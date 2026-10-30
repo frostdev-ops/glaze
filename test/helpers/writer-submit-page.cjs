@@ -2,9 +2,9 @@
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const { El } = require('../stand-in-dom.js');
 const { parse } = require('../fixture-dom.js');
-const L = require('../../extension/lib/writer-submit.js');
+const L = require('../../extension/writer/writer-submit.js');
 // settings: what the module reads through GZ_CTX (enhance.writerUploads catches Ultra's own file area). full: the paper's
-// view (features/writer.js box.full); false, its compact box.
+// view (writer/page/writer.js box.full); false, its compact box.
 module.exports = ({ listed = true, enabled = true, worker, settings = null, full = true, hash = (...args) => crypto.subtle.digest(...args) } = {}) => {
   const doc = { activeElement: null }, sent = [], uploads = [], clicks = [], timers = new Map(), hashes = new Set();
   const digest = (...args) => { const p = hash(...args); hashes.add(p); p.finally(() => hashes.delete(p)); return p; };
@@ -42,7 +42,7 @@ module.exports = ({ listed = true, enabled = true, worker, settings = null, full
   doc.addEventListener('gz-writer:set', (e) => { const m = JSON.parse(e.detail); setText(m.delta.map((o) => o.insert).join('')); doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: true }) })); });
   const input = L.uploadInput(L.areaOf(editor));
   input.dispatchEvent = (e) => { for (const l of input.listeners.filter((x) => x.type === e.type)) l.f({ type: e.type, target: input }); return true; };
-  vm.runInContext(fs.readFileSync(process.env.WRITER_SUBMIT_SOURCE || path.join(__dirname, '../../extension/features/writer-submit.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(process.env.WRITER_SUBMIT_SOURCE || path.join(__dirname, '../../extension/writer/page/writer-submit.js'), 'utf8'), ctx);
   const ok = () => owned;
   const hear = (m) => ctx.GZ_WRITER_SUBMIT.hear(box, m, settings ? { settings: () => settings } : {}, ok);
   hear({ type: 'submit:arm' });

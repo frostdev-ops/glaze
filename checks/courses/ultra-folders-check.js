@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const assert = require('node:assert/strict');
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const out = process.argv[2] || path.join(__dirname, '../../scratch/b9/shots');

@@ -7,7 +7,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://school.blackboard.com/*']);
-const G = require(path.join(ext, 'defaults.js'));
+const G = require(path.join(ext, 'content/defaults.js'));
 const site = 'https://school.blackboard.com', uid = '_42_1';
 const out = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sidebar-test-')));
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_8123_1/attempt/_8124_1';

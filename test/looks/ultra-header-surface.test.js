@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 
 const { matches, specificity, chain, cssRules, winner } = require('../helpers/css-cascade.cjs');
 
-const theme = cssRules('theme.css');
+const theme = cssRules('content/theme.css');
 // The background the cascade gives `el` from theme.css: [the winning declaration's value, its rule's selector].
 const background = (el) => winner(theme, el, 'background(?:-color)?');
 const GROUND = /var\(--gz-ground\)|--gz-surface-2\)?\s*$/;

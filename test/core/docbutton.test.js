@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(path.join(__dirname, '../../extension/content.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../extension/content/content.js'), 'utf8');
 const part = (from, to) => { const a = source.indexOf(from), b = source.indexOf(to, a); assert.ok(a > 0 && b > a, `${from} … ${to}`); return source.slice(a, b); };
 
 test('an icon button is named by its title alone, so a screen reader says the name once', () => {

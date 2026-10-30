@@ -126,7 +126,7 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
     return job.done;
   };
 
-  // What the model takes, for the broker's checks (lib/ai/models.js shape): pictures as availability says, the window once a
+  // What the model takes, for the broker's checks (ai/models.js shape): pictures as availability says, the window once a
   // session has told it (a session is made for that only when the model is already there).
   const catalog = async (cfg, { signal } = {}) => {
     const a = await availability(false, signal);
@@ -305,7 +305,7 @@ var GZ_AI_DEVICE = globalThis.GZ_AI_DEVICE || (() => {
     }
   };
 
-  // A warm-up (lib/ai/providers.js warm): the warm session a run with these instructions will clone, made now so the model
+  // A warm-up (ai/providers.js warm): the warm session a run with these instructions will clone, made now so the model
   // is in memory before the student's first pause; one already warm stays, its time renewed. Never starts a download, and
   // asks the model nothing.
   const warmUp = async (req, cfg, { signal } = {}) => {

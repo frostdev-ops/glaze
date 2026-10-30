@@ -1,8 +1,8 @@
 // Where a framed Glaze page can't ask the browser for a host (Firefox gives an extension page framed in a web page no
-// permissions API), the ask goes to a Glaze tab of its own: Download all's Allow frame has the worker open features/allow.html
+// permissions API), the ask goes to a Glaze tab of its own: Download all's Allow frame has the worker open courses/allow.html
 // in a tab with the same one button, its click asks, and the answer goes back to that frame only; embedded Settings sends a
 // control that needs a grant (Gradescope, a Look's pasted media) to Settings' own tab. Where the API is there (Chrome) the
-// frame asks itself, as before. The real features/allow.js, lib/site.js, lib/background.js and options.js's embedded part,
+// frame asks itself, as before. The real courses/allow.js, core/site.js, background/background.js and options.js's embedded part,
 // with the browser stood in.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -14,7 +14,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 
 const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const plain = (x) => (x === undefined ? x : JSON.parse(JSON.stringify(x)));
 const ID = 'glaze', EXT = `chrome-extension://${ID}`, CDN = 'inst-fs-iad.example-cdn.net', PATTERN = `https://${CDN}/*`;
-const ALLOW = `${EXT}/features/allow.html#${CDN}`;
+const ALLOW = `${EXT}/courses/allow.html#${CDN}`;
 
 class El {
   constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), listeners: {}, attrs: {}, textContent: '', hidden: false, focused: false }); }
@@ -37,7 +37,7 @@ const allowPage = ({ hash = `#${CDN}`, top = false, permissions = true, authoriz
     parent: { postMessage: (m) => told.push(plain(m)) }, addEventListener(t, f) { if (t === 'message') heard = f; }, requestAnimationFrame: (f) => f(), chrome };
   g.globalThis = g; g.self = g; g.window = g; g.top = top ? g : { other: true };
   vm.createContext(g);
-  for (const f of ['lib/i18n.js', 'features/allow.js']) vm.runInContext(read(f), g);
+  for (const f of ['core/i18n.js', 'courses/allow.js']) vm.runInContext(read(f), g);
   // The school's page hands a framed one its reply port.
   if (!top) heard?.({ data: { gzAllow: decodeURIComponent(hash.slice(1)), ticket: 'page-ticket' }, ports: [{ postMessage: (m) => told.push(plain(m)) }] });
   const click = (isTrusted = true) => { active = true; for (const f of button.listeners.click || []) f({ isTrusted }); active = false; };
@@ -108,7 +108,7 @@ const worker = ({ held = new Set(), session = {} } = {}) => {
   const manifest = require('../../extension/manifest.json');
   const context = vm.createContext({
     URL, AbortController, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto, atob, btoa, navigator: {},
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), context, { filename: f }); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('background', f)), context, { filename: f }); },
     chrome: {
       runtime: {
         id: ID, getURL: (p = '') => `${EXT}/${p}`, getManifest: () => manifest,
@@ -128,7 +128,7 @@ const worker = ({ held = new Set(), session = {} } = {}) => {
       scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {}, executeScript: async () => [] },
     },
   });
-  vm.runInContext(read('lib/background.js'), context, { filename: 'lib/background.js' });
+  vm.runInContext(read('background/background.js'), context, { filename: 'background/background.js' });
   // A message as the browser hands it on: a promise of its reply ('ignored' once nothing has kept the channel), and
   // `replied()` to look without waiting.
   const send = (m, s) => {
@@ -156,7 +156,7 @@ const worker = ({ held = new Set(), session = {} } = {}) => {
 // The Allow frame in tab 7's school page, and the tab the worker opens (id 50).
 const frameSender = (more = {}) => ({ id: ID, url: ALLOW, origin: EXT, frameId: 3, tab: { id: 7, index: 2, url: 'https://school.instructure.com/courses/1/modules' }, ...more });
 const tabSender = (more = {}) => ({ id: ID, url: ALLOW, origin: EXT, frameId: 0, tab: { id: 50, index: 3, url: ALLOW }, ...more });
-// What Download all leaves when the worker meets a host it doesn't hold (lib/background.js asking): the worker's own ask.
+// What Download all leaves when the worker meets a host it doesn't hold (background/background.js asking): the worker's own ask.
 const askedByDownload = () => ({ [`allow ${PATTERN}`]: { until: Date.now() + 60000 } });
 const ask = { type: 'glaze:allow-tab', host: CDN };
 const answer = { type: 'glaze:allow-answer', host: CDN };
@@ -167,7 +167,7 @@ const startAsk = async (w, sender = frameSender()) => {
 };
 const initTab = (w) => w.send({ type: 'glaze:allow-init', host: CDN }, tabSender());
 
-test('worker: the frame\'s ask opens features/allow.html for that host in a tab beside the school\'s; granted there, the frame hears yes and the tab closes', async () => {
+test('worker: the frame\'s ask opens courses/allow.html for that host in a tab beside the school\'s; granted there, the frame hears yes and the tab closes', async () => {
   const w = worker({ session: askedByDownload() });
   const r = w.send(await startAsk(w), frameSender());
   await settle();
@@ -216,7 +216,7 @@ test('worker: an answer from any page but the tab it opened is refused, and the 
     frameSender(), // the frame itself
     tabSender({ frameId: 2 }), // a frame inside the tab
     tabSender({ url: `${EXT}/options.html` }), // another of Glaze's pages in it
-    tabSender({ url: `${EXT}/features/allow.html#other.example.com` }), // the page for another host
+    tabSender({ url: `${EXT}/courses/allow.html#other.example.com` }), // the page for another host
     tabSender({ id: 'other' }), // another extension
     tabSender({ origin: 'https://evil.example' }),
   ]) assert.deepEqual(await w.send(answer, forged), { ok: false, error: 'sender' }, JSON.stringify(forged));
@@ -238,7 +238,7 @@ test('worker: only Glaze\'s Allow frame, in a tab, for the host it shows and the
     [ask, frameSender({ url: `${EXT}/options.html#${CDN}` }), 'another of Glaze\'s pages'],
     [ask, frameSender({ origin: 'https://evil.example' }), 'another origin'],
     [{ ...ask, host: 'other.example.com' }, frameSender(), 'a host the frame doesn\'t show'],
-    [{ ...ask, host: 'other.example.com' }, frameSender({ url: `${EXT}/features/allow.html#other.example.com` }), 'a host the worker isn\'t waiting for'],
+    [{ ...ask, host: 'other.example.com' }, frameSender({ url: `${EXT}/courses/allow.html#other.example.com` }), 'a host the worker isn\'t waiting for'],
     [{ ...ask, host: 42 }, frameSender(), 'no host'],
   ]) assert.deepEqual(await w.send(m, s), { ok: false }, why);
   assert.deepEqual(w.created, []);
@@ -300,13 +300,13 @@ test('worker: claimed Settings can carry legacy section hashes into its own tab'
   }
 });
 
-// lib/site.js reach in a page that can't ask: the page's own way out (`elsewhere`), with the control that wanted the grant.
+// core/site.js reach in a page that can't ask: the page's own way out (`elsewhere`), with the control that wanted the grant.
 const sitePage = ({ permissions, elsewhere } = {}) => {
   const asked = [], sent = [], went = [];
   const chrome = { runtime: { getManifest: () => ({ host_permissions: [] }), sendMessage: async (m) => { sent.push(m); return { ok: true }; } } };
   if (permissions) chrome.permissions = { request: async (o) => { asked.push([...o.origins]); return true; } };
   const g = vm.createContext({ chrome, URL, Promise, console });
-  vm.runInContext(read('lib/site.js'), g);
+  vm.runInContext(read('core/site.js'), g);
   if (elsewhere) g.GZ_SITE.elsewhere = (from) => { went.push(from); };
   return { S: g.GZ_SITE, asked, sent, went };
 };
@@ -328,7 +328,7 @@ test('reach without the permissions API: where the page set a way out, the contr
 
 // options.js's embedded part, run on a stand-in page: what it sets up for a frame with and without the APIs.
 const embeddedSettings = ({ permissions, tabs }) => {
-  const src = read('options.js');
+  const src = read('settings/options.js');
   const from = src.indexOf('const embedded = window.top !== window;'), to = src.indexOf('const filter = () =>');
   assert.ok(from > 0 && to > from, 'options.js has its embedded part');
   const sent = [], created = [], posted = [];
@@ -375,13 +375,13 @@ test('embedded Settings with the APIs (Chrome, Safari): reach asks from the fram
 });
 
 test('Settings\' grant-needing controls hand reach the control, and a control sent elsewhere says nothing', () => {
-  const src = read('options.js');
+  const src = read('settings/options.js');
   const line = (needle) => { const at = src.indexOf(needle); assert.ok(at > 0, needle); return src.slice(at, src.indexOf('\n', at)); };
   assert.match(line("if (key === 'enhance.gradescope'"), /GZ_SITE\.reach\(\[GZ_GRADESCOPE\.HOST\], el\)/);
   const apply = src.slice(src.indexOf("$('#share-apply').addEventListener"), src.indexOf('// ---- gallery, favorites and history'));
   assert.match(apply, /GZ_SITE\.reach\(\[src\], \$\('#share-apply'\),/);
   assert.match(apply, /if \(held === null\) return;/);
-  const xbg = read('lib/editor-xbg.js');
+  const xbg = read('settings/editor-xbg.js');
   assert.match(xbg, /GZ_SITE\.reach\(\[url\], input,/);
   assert.match(xbg.slice(xbg.indexOf('GZ_SITE.reach([url], input,')), /^[^]*?if \(held === null\) return;/);
 });

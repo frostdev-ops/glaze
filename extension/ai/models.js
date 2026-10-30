@@ -5,7 +5,7 @@
 // context. A list is kept an hour in memory and the last good one in the worker's store, so a blink is served from cache.
 // Provenance: source 'live' | 'cache' | 'none'; a model a live list doesn't name is refused, one no list can vouch for is
 // used as typed and marked unverified; a capability no catalog states is absent, never false. A model's reasoning efforts
-// (lib/ai/request.js EFFORTS it takes) come from the catalog where it says (OpenRouter's reasoning, DeepSeek's effort,
+// (ai/request.js EFFORTS it takes) come from the catalog where it says (OpenRouter's reasoning, DeepSeek's effort,
 // xAI's capabilities), else from what a provider's docs say of a model by name (RULES); none known, none offered.
 // Classic script; node exports.
 var GZ_AI_MODELS = globalThis.GZ_AI_MODELS || (() => {
@@ -25,7 +25,7 @@ var GZ_AI_MODELS = globalThis.GZ_AI_MODELS || (() => {
   };
   const isOpenRouter = (base) => { try { return new URL(base).hostname === 'openrouter.ai'; } catch { return false; } };
   const host = (base) => { try { return new URL(base).hostname; } catch { return ''; } };
-  const EFFORTS = ['none', 'minimal', 'low', 'medium', 'high']; // lib/ai/request.js EFFORTS
+  const EFFORTS = ['none', 'minimal', 'low', 'medium', 'high']; // ai/request.js EFFORTS
   const known = (list) => EFFORTS.filter((e) => list.includes(e));
   // OpenRouter's reasoning (a model that doesn't reason has none): no supported_efforts, no efforts; null, every one; a
   // model that must reason takes no 'none' (its 400: "Reasoning is mandatory").

@@ -1,10 +1,10 @@
-// The "public host only" rule for a Look's media address (lib/lookparts.js MEDIA.url, LOOK-12): no device, no local network.
+// The "public host only" rule for a Look's media address (looks/lookparts.js MEDIA.url, LOOK-12): no device, no local network.
 // An extension cannot resolve a name before it fetches, so beyond the IP literals (which the URL parser writes in one form) the
 // rule can only name what is known to point inward: the pseudo-TLDs for private use, the wildcard-DNS services whose names
 // answer with the address written in them, and any name that has a private address written into its labels.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const X = require('../../extension/lib/lookparts.js');
+const X = require('../../extension/looks/lookparts.js');
 
 const url = X.MEDIA.url;
 

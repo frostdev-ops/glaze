@@ -9,7 +9,7 @@ const output = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'glaze-ult
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const origin = 'https://ultra.fixture.test';
 const reps = Number(process.env.PERF_REPS || 3);
-const D = require(path.join(source, 'defaults.js'));
+const D = require(path.join(source, 'content/defaults.js'));
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 
 // This runs FIRST in the extension's isolated world, never as a page script. It is added only to a temporary copy.
@@ -117,7 +117,7 @@ const listeners = async (cdp) => {
         }
         fs.writeFileSync(path.join(ext, 'perf-shim.js'), `(${instrument.toString()})();`);
         const m = JSON.parse(fs.readFileSync(path.join(ext, 'manifest.json'), 'utf8'));
-        m.content_scripts.find((c) => c.js.includes('content-ultra.js')).js.unshift('perf-shim.js');
+        m.content_scripts.find((c) => c.js.includes('content/content-ultra.js')).js.unshift('perf-shim.js');
         m.host_permissions.push('https://ultra.fixture.test/*');
         fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
       }

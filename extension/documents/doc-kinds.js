@@ -4,13 +4,13 @@
 // spreadsheet's, pdf-kind.js the PDF's, slides-kind.js the slides'; each one's importFile and create only while its
 // Settings → Writer switch is on). Only a kind registered with importFile takes files; a script that decides late what it
 // registers says so with wait(), and the page routes once settled(). A stored record or index row without a kind was
-// written before kinds and is a paper (lib/writer-papers.js). Later kinds join KINDS; a build that lacks one leaves its
+// written before kinds and is a paper (writer/writer-papers.js). Later kinds join KINDS; a build that lacks one leaves its
 // rows alone rather than guessing at them.
 // Classic script; module.exports for node.
 var GZ_DOC_KINDS = globalThis.GZ_DOC_KINDS || (() => {
   const freeze = (o) => { for (const v of Object.values(o)) if (v && typeof v === 'object') freeze(v); return Object.freeze(o); };
-  // The largest PDF or deck, in bytes: what Blackboard takes as an upload, the worker's file store keeps (lib/doc-files.js
-  // MAX), an attachment opened in Glaze reads and the submit sheet sends (lib/writer-submit.js MAX_FILE); the tests hold
+  // The largest PDF or deck, in bytes: what Blackboard takes as an upload, the worker's file store keeps (documents/doc-files.js
+  // MAX), an attachment opened in Glaze reads and the submit sheet sends (writer/writer-submit.js MAX_FILE); the tests hold
   // them equal.
   const FILE = 50e6;
   // label: the kind's name for i18n; icon: its glyph's name; accept and mime: the files it opens and the one it saves;
@@ -22,7 +22,7 @@ var GZ_DOC_KINDS = globalThis.GZ_DOC_KINDS || (() => {
     pdf: { label: 'PDF', icon: 'pdf', accept: ['.pdf'], mime: 'application/pdf', max: FILE, big: 'Choose a PDF smaller than 50 MB.', param: 'pdf' },
     slides: { label: 'Slides', icon: 'slides', accept: ['.pptx', '.ppsx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', max: FILE, big: 'Choose a PowerPoint file smaller than 50 MB.', param: 'slides' },
   });
-  // What a page says when the worker's file store (lib/doc-files.js) refuses a PDF's or deck's bytes, by its why: each a plain
+  // What a page says when the worker's file store (documents/doc-files.js) refuses a PDF's or deck's bytes, by its why: each a plain
   // reason, never a silent drop. A kind's says carries them, so Documents and Open in Glaze say them as they are.
   const SAYS = freeze({ missing: 'This file is missing.', quota: "There isn't enough room in this browser for this file.", unavailable: "This browser can't keep files larger than 3 MB right now.",
     interrupted: "The file didn't finish copying. Try again." });

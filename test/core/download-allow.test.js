@@ -1,7 +1,7 @@
-// Canvas's Download all when the file server's host isn't held (features/download.js with a stand-in port): the worker says
-// which host, the module's header shows Glaze's own frame (features/allow.html) with one button, and its answer decides:
+// Canvas's Download all when the file server's host isn't held (courses/page/download.js with a stand-in port): the worker says
+// which host, the module's header shows Glaze's own frame (courses/allow.html) with one button, and its answer decides:
 // granted, the file is asked for again and the zip goes on; refused, the download stops with its usual error. And the frame
-// itself (features/allow.js): the button names the host, its click asks the browser for exactly that host and says what came
+// itself (courses/allow.js): the button names the host, its click asks the browser for exactly that host and says what came
 // back to the page around it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -51,7 +51,7 @@ const page = () => {
   g.globalThis = g;
   vm.createContext(g);
   ctx.need = (file, ready) => { if (!ready()) vm.runInContext(read(file), g); return Promise.resolve(); };
-  vm.runInContext(read('features/download.js'), g);
+  vm.runInContext(read('courses/page/download.js'), g);
   g.GZ_DOWNLOAD.sync();
   const button = () => ids()['gz-dl-73'];
   const say = (m) => worker(m);
@@ -70,7 +70,7 @@ test('Download all: the worker\'s ask shows Glaze\'s Allow frame for that host; 
   await settle();
   const [frame] = p.header.iframes;
   assert.ok(frame, 'a frame in the module header');
-  assert.equal(frame.src, `${EXT}/features/allow.html#${CDN}`);
+  assert.equal(frame.src, `${EXT}/courses/allow.html#${CDN}`);
   assert.equal(p.header.kids.indexOf(frame), p.header.kids.indexOf(p.button()) + 1, 'beside the button');
   // Anything but the frame's own answer, for its host, changes nothing.
   p.answer({}, { gzAllow: CDN, ok: true });
@@ -157,7 +157,7 @@ const frame = ({ hash = `#${CDN}`, request = async () => true, manifest = { host
     chrome: { runtime: { getManifest: () => manifest, sendMessage: async () => ({ ok: true }) }, permissions: { request: (o) => { asked.push([[...o.origins], active]); return request(o); } } } };
   g.globalThis = g;
   vm.createContext(g);
-  for (const f of ['lib/i18n.js', 'features/allow.js']) vm.runInContext(read(f), g);
+  for (const f of ['core/i18n.js', 'courses/allow.js']) vm.runInContext(read(f), g);
   heard?.({ data: { gzAllow: decodeURIComponent(hash.slice(1)) }, ports: [{ postMessage: (m) => told.push([JSON.parse(JSON.stringify(m)), '*']) }] });
   const click = (isTrusted = true) => { active = true; for (const f of button.listeners.click || []) f({ isTrusted }); active = false; };
   return { button, asked, told, click };

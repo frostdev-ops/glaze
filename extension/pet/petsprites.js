@@ -60,7 +60,7 @@ var GZ_PET_SPRITES = globalThis.GZ_PET_SPRITES || (() => {
   const normalize = async (input, raw = {}) => {
     const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
     if (!bytes.length || bytes.length > MAX_INPUT) throw error('Pet files must be at most 20 MB.');
-    const D = globalThis.GZ_DOCTEXT || (typeof require === 'function' && require('./doctext.js'));
+    const D = globalThis.GZ_DOCTEXT || (typeof require === 'function' && require('../core/doctext.js'));
     const png = bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71;
     const webp = new TextDecoder().decode(bytes.subarray(0, 4)) === 'RIFF' && new TextDecoder().decode(bytes.subarray(8, 12)) === 'WEBP';
     const size = D?.imageSize(bytes);
@@ -112,9 +112,9 @@ var GZ_PET_SPRITES = globalThis.GZ_PET_SPRITES || (() => {
     const builtin = id && (id === 'study-buddy' || Object.hasOwn(BUILTIN, id)) ? picture(id) : null;
     return builtin && !pet?.data && builtin.path === pet?.path && builtin.reactions === pet?.reactions ? builtin.reactions : '';
   };
-  // The pets the installed mods carry (mod.json packs.pets), not blocked: [{ rec, pet }]. lib/media.js says what is a pack.
+  // The pets the installed mods carry (mod.json packs.pets), not blocked: [{ rec, pet }]. looks/media.js says what is a pack.
   const modPets = async (local) => {
-    const ids = (await local.get('mods')).mods, M = globalThis.GZ_MEDIA || require('./media.js');
+    const ids = (await local.get('mods')).mods, M = globalThis.GZ_MEDIA || require('../looks/media.js');
     const recs = Array.isArray(ids) ? await local.get(ids.filter((id) => typeof id === 'string' && /^[a-z2-7]{16}$/.test(id)).map((id) => `mod:${id}`)) : {};
     return Object.values(recs).flatMap((rec) => {
       const p = rec && typeof rec === 'object' && !rec.blocked && M.packs(rec.manifest?.packs, (f) => !!rec.files && Object.hasOwn(rec.files, f));

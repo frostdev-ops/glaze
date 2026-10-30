@@ -4,7 +4,7 @@
 // NODE_PATH=/path/to/node_modules nice -n 15 node checks/navigation/navbar-canvas-check.js [screenshots directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
-const G = require('../../extension/defaults.js'); require('../../extension/lib/coursetabs.js'); require('../../extension/lib/nav.js');
+const G = require('../../extension/content/defaults.js'); require('../../extension/navigation/coursetabs.js'); require('../../extension/navigation/nav.js');
 const src = path.resolve(__dirname, '../../extension');
 const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'glaze-navbar-canvas-evidence'));
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
@@ -95,7 +95,7 @@ const api = async (route, method = 'GET', form) => {
   fs.mkdirSync(out, { recursive: true });
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-navbar-canvas-run-'))); ext = path.join(tmp, 'extension'); fs.mkdirSync(ext);
   try {
-    for (const e of fs.readdirSync(src, { withFileTypes: true })) if (/\.(js|css|html)$/.test(e.name) || ['lib', 'features', 'i18n', '_locales', 'assets', 'fonts', 'icons', 'mods', 'sharing'].includes(e.name)) fs.cpSync(path.join(src, e.name), path.join(ext, e.name), { recursive: true });
+    for (const e of fs.readdirSync(src, { withFileTypes: true })) if (/\.(js|css|html)$/.test(e.name) || ['background', 'content', 'core', 'looks', 'navigation', 'courses', 'planner', 'writer', 'documents', 'ai', 'agents', 'sharing', 'mods', 'pet', 'settings', 'vendor', 'i18n', '_locales', 'assets', 'fonts', 'icons'].includes(e.name)) fs.cpSync(path.join(src, e.name), path.join(ext, e.name), { recursive: true });
     const m = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json')));
     m.host_permissions.push('http://localhost/*');
     m.content_scripts.find((s) => s.matches.includes('https://*.instructure.com/*')).matches.push('http://localhost/*');
@@ -131,7 +131,7 @@ const api = async (route, method = 'GET', form) => {
     await wait(() => bar((r) => !!r.querySelector('.wtop [data-w="clock"] .w-time')?.textContent && !!r.querySelector('.wbottom [data-w="timer"] .w-time')?.textContent), Boolean, 'Canvas rail widgets ready');
     ok(true, 'local Canvas renders the clock and timer in the rail');
     const model = await bar((r) => [...r.querySelectorAll('.rail .item[data-id]')].map((e) => ({ id: e.dataset.id, badge: e.querySelector('.badge')?.textContent || '' })));
-    const L = require('../../extension/lib/navlayout.js');
+    const L = require('../../extension/navigation/navlayout.js');
     ok(native.filter((a) => L.canvas(a.id)).every((a) => model.some((b) => b.id === L.canvas(a.id) && b.badge === a.badge)), 'live items and badges match Canvas');
     ok(await bar((r) => !!r.querySelector('[data-id="dashboard"][aria-current="page"]')), 'live Dashboard is active');
     await overlap('live dashboard'); await shot('live-dashboard');
@@ -282,7 +282,7 @@ const api = async (route, method = 'GET', form) => {
     ok(!layoutFailures.length, `no layout regressions (${layoutFailures.join(' | ')})`);
   } catch (e) {
     console.error(`FAIL ${e.stack}`); process.exitCode = 1;
-    if (opts && page.url().startsWith(local)) console.error('ISOLATED', JSON.stringify(await opts.evaluate(async () => { const t = (await chrome.tabs.query({})).find((t) => t.url?.startsWith('http://localhost:3000')); if (!t) return null; return chrome.scripting.executeScript({ target: { tabId: t.id }, func: async () => { const X = globalThis.GZ_CTX; return { site: X?.site, on: X?.on(), settings: X?.settings().navbar, adapter: typeof globalThis.GZ_NAVBAR_CANVAS, renderer: typeof globalThis.GZ_NAVBAR_UI, live: globalThis.GZ_NAVBAR_UI?.live(), load: X && await X.need('features/navbar-canvas.js', () => globalThis.GZ_NAVBAR_CANVAS).then(() => 'ok', (e) => String(e)) }; } }); }).catch((e) => String(e))));
+    if (opts && page.url().startsWith(local)) console.error('ISOLATED', JSON.stringify(await opts.evaluate(async () => { const t = (await chrome.tabs.query({})).find((t) => t.url?.startsWith('http://localhost:3000')); if (!t) return null; return chrome.scripting.executeScript({ target: { tabId: t.id }, func: async () => { const X = globalThis.GZ_CTX; return { site: X?.site, on: X?.on(), settings: X?.settings().navbar, adapter: typeof globalThis.GZ_NAVBAR_CANVAS, renderer: typeof globalThis.GZ_NAVBAR_UI, live: globalThis.GZ_NAVBAR_UI?.live(), load: X && await X.need('navigation/page/navbar-canvas.js', () => globalThis.GZ_NAVBAR_CANVAS).then(() => 'ok', (e) => String(e)) }; } }); }).catch((e) => String(e))));
     if (page && !page.isClosed()) { await shot('failure').catch(() => {}); console.error('PAGE', page.url()); console.error('NAV', JSON.stringify(await bar((r) => r && { words: document.documentElement.getAttribute('data-gz-navbar'), items: [...r.querySelectorAll('.rail [data-id]')].map((e) => e.dataset.id), panel: r.querySelector('.panel')?.textContent }).catch(() => null))); }
   } finally {
     if (feedbackSetting !== null) { try { rails(`Setting.set('show_feedback_link', ${JSON.stringify(feedbackSetting)})`); reloadCanvas(); feedbackSetting = null; } catch (e) { console.error('Could not restore local Help setting:', e.message); process.exitCode = 1; } }

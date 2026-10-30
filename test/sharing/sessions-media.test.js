@@ -6,12 +6,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const S = require('../../extension/lib/sessions.js');
-const N = require('../../extension/lib/notes.js');
-const T = require('../../extension/lib/todo.js');
-const X = require('../../extension/lib/lookparts.js');
-const M = require('../../extension/lib/media.js');
-const L = require('../../extension/lib/share.js');
+const S = require('../../extension/sharing/sessions.js');
+const N = require('../../extension/planner/notes.js');
+const T = require('../../extension/planner/todo.js');
+const X = require('../../extension/looks/lookparts.js');
+const M = require('../../extension/looks/media.js');
+const L = require('../../extension/sharing/share.js');
 const { relay, diskStore } = require('../../server/relay.js');
 
 const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
@@ -36,7 +36,7 @@ const start = async (t) => {
   const address = await r.listen(0, '127.0.0.1');
   return { url: `http://127.0.0.1:${address.port}`, blobs: path.join(dir, 'blobs') };
 };
-// The worker's store of files kept for Looks' backgrounds (lib/media.js), by hash.
+// The worker's store of files kept for Looks' backgrounds (looks/media.js), by hash.
 const keptFiles = () => {
   const records = new Map();
   return { records, get: async (h) => clone(records.get(h)), put: async (h, v) => { records.set(h, clone(v)); }, del: async (hs) => { for (const h of hs) records.delete(h); }, keys: async () => [...records.keys()] };
@@ -197,7 +197,7 @@ test('a Look share offered when there is no room for its file says so', async (t
 });
 
 test('a stray old-style kept file is still taken by the sticker reset\'s rule', () => {
-  const L2 = require('../../extension/lib/lookx.js');
+  const L2 = require('../../extension/looks/lookx.js');
   assert.equal(L2.RESET('lookMedia:abc'), true);
   assert.equal(L2.RESET('lookMedia'), false);
   assert.equal(L2.RESET('stkImg:abc'), true);

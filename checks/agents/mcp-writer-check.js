@@ -1,8 +1,8 @@
-// Writer's document tools for agent apps in a real Chromium (lib/mcp/writer.js, writer-mcp.js), headless, in a staged copy
+// Writer's document tools for agent apps in a real Chromium (agents/writer.js, writer-mcp.js), headless, in a staged copy
 // of the extension whose worker carries a stubbed agent link:
 // the check hands MCP lines to the worker's own connection code (mcpOpen, mcpLine) and reads what it sends back, as
-// lib/agent-link.js would carry them (the copy's worker is a new file, the checkout's is untouched). A fixture paper, made
-// by lib/writer-papers.js's own save, opens in papers.html; with agent access on, its Writer page connects. An app pairs
+// agents/agent-link.js would carry them (the copy's worker is a new file, the checkout's is untouched). A fixture paper, made
+// by writer/writer-papers.js's own save, opens in papers.html; with agent access on, its Writer page connects. An app pairs
 // in Glaze's approval window, lists the documents (opaque keys), reads the text, lists the issues Harper finds in the open
 // editor, and asks for a fix and a citation: each waits in the approval window, worded by Glaze; Don't allow changes
 // nothing, Allow changes the editor and the saved paper. Every request outside the extension is aborted.
@@ -11,9 +11,9 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
-const PA = require(path.join(root, 'lib/writer-papers.js'));
-const SRC = require(path.join(root, 'lib/writer-sources.js'));
-const SCHEMA = require(path.join(root, 'lib/writer-schema.js'));
+const PA = require(path.join(root, 'writer/writer-papers.js'));
+const SRC = require(path.join(root, 'writer/writer-sources.js'));
+const SCHEMA = require(path.join(root, 'writer/writer-schema.js'));
 
 const KEY = 'doc:6f1e2d3c-4b5a-4968-8776-655443322110';
 const PEER = { name: 'node', exe: '/usr/local/bin/claude', ppid: 4242, verified: false };
@@ -65,9 +65,9 @@ const records = async () => {
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nmcp-writer-check\n`);
     const ext = require('../../tools/dev/check-env.js').staged(root, [], scratch);
     // The staged files are hard links to the checkout: replace the worker's, never write through it.
-    const worker0 = fs.readFileSync(path.join(ext, 'lib/background.js'), 'utf8');
-    fs.rmSync(path.join(ext, 'lib/background.js'));
-    fs.writeFileSync(path.join(ext, 'lib/background.js'), worker0 + SHIM);
+    const worker0 = fs.readFileSync(path.join(ext, 'background/background.js'), 'utf8');
+    fs.rmSync(path.join(ext, 'background/background.js'));
+    fs.writeFileSync(path.join(ext, 'background/background.js'), worker0 + SHIM);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
       ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US',
@@ -77,15 +77,15 @@ const records = async () => {
     context.setDefaultTimeout(20000);
     const unexpected = [];
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:') return r.continue(); unexpected.push(u.href); return r.abort(); });
-    const worker = context.serviceWorkers().find((w) => w.url().endsWith('/lib/background.js')) || await context.waitForEvent('serviceworker');
-    const base = `chrome-extension://${new URL(worker.url()).host}`, APPROVE = `${base}/lib/mcp/approve.html`;
+    const worker = context.serviceWorkers().find((w) => w.url().endsWith('/background/background.js')) || await context.waitForEvent('serviceworker');
+    const base = `chrome-extension://${new URL(worker.url()).host}`, APPROVE = `${base}/agents/approve.html`;
     await until(() => worker.evaluate(() => typeof globalThis.writerCheck?.open === 'function'), 'the worker loads the shim');
     const errors = [];
     const watch = (p, name) => {
       p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
       p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::ERR_/.test(m.text())) errors.push(`${name} console: ${m.text()}`); });
     };
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     const settings = G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true } });
     await worker.evaluate(async ({ settings, data }) => { await chrome.storage.sync.set(settings); await chrome.storage.local.set(data); }, { settings, data: await records() });
     await worker.evaluate(() => writerCheck.on());

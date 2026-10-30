@@ -5,23 +5,23 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
+const D = require('../../extension/content/defaults.js');
 
 // As the editor has them (options.html): the cleaners a code goes through, with the parts registry loaded.
 Object.assign(globalThis, D);
-globalThis.GZ_NAV = require('../../extension/lib/nav.js');
-globalThis.GZ_NAV_ITEMS = require('../../extension/lib/nav-items.js');
-globalThis.GZ_NAV_LAYOUT = require('../../extension/lib/navlayout.js');
-globalThis.GZ_MX = require('../../extension/lib/motionx.js');
-globalThis.GZ_PARTS = require('../../extension/lib/parts.js');
-globalThis.GZ_GLSL = require('../../extension/lib/glsl.js');
-const X = globalThis.GZ_XPARTS = require('../../extension/lib/lookparts.js');
-globalThis.GZ_CARDS = require('../../extension/lib/cards.js');
-const S = require('../../extension/lib/share.js');
+globalThis.GZ_NAV = require('../../extension/navigation/nav.js');
+globalThis.GZ_NAV_ITEMS = require('../../extension/navigation/nav-items.js');
+globalThis.GZ_NAV_LAYOUT = require('../../extension/navigation/navlayout.js');
+globalThis.GZ_MX = require('../../extension/looks/motionx.js');
+globalThis.GZ_PARTS = require('../../extension/looks/parts.js');
+globalThis.GZ_GLSL = require('../../extension/looks/glsl.js');
+const X = globalThis.GZ_XPARTS = require('../../extension/looks/lookparts.js');
+globalThis.GZ_CARDS = require('../../extension/courses/cards.js');
+const S = require('../../extension/sharing/share.js');
 const L = globalThis.GZ_NAV_LAYOUT;
-const M = require('../../extension/lib/navbar.js');
-const E = require('../../extension/lib/editor-navbar.js');
-const F = require('../../extension/lib/fonts.js');
+const M = require('../../extension/navigation/navbar.js');
+const E = require('../../extension/settings/editor-navbar.js');
+const F = require('../../extension/looks/fonts.js');
 
 const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 // A sentence as the editor shows it in English: lists joined, everything else as it is.
@@ -86,7 +86,7 @@ test('every group a code can carry is described, or deliberately silent', () => 
   assert.ok(said(null, [{ id: 'abcdefghijklmnop', h: 'A'.repeat(43), name: 'Clock' }]).some((n) => /mods/.test(n.why)), 'm says nothing');
   for (const media of [{ type: 'video', src: 'https://cdn.example.com/a.webm' }, { type: 'image', src: `file:${'A'.repeat(43)}` }]) assert.ok(said({ bg: { media } }).length);
   assert.ok(said({ bg: { layers: [{ k: 'noise' }] } }).length);
-  // The student's own pointer picture is theirs, and never comes in a code (lib/share.js): nothing to say about it.
+  // The student's own pointer picture is theirs, and never comes in a code (sharing/share.js): nothing to say about it.
   assert.equal(said({ pointer: 'own' }).length, 0);
   // The nav layout, key by key.
   const nav = { place: { place: 'dock' }, groups: { groups: [{ items: ['grades'] }] }, hidden: { hidden: ['calendar'] }, links: { links: [{ id: 'abcdefghij12', n: 'Library', u: 'https://library.example/', i: 'book' }] }, icons: { icons: { grades: 'star' } } };
@@ -127,7 +127,7 @@ test('a Look from someone else may not hide signing out or the account, link wit
 
 // The editor's offer (options.js tryCode), run over the code as a gallery Look, a Look share or a pasted code reaches it.
 const offer = async (code) => {
-  const source = read('options.js');
+  const source = read('settings/options.js');
   const section = source.slice(source.indexOf('  const tryCode ='), source.indexOf("  $('#share-try').addEventListener"));
   const notes = [], paints = [], hints = [];
   const controls = {
@@ -187,7 +187,7 @@ test("a worn Look's links say which site they go to; the student's own links and
 });
 
 test("Glaze's bar draws a Look's link with its host in the tooltip and the accessible name", () => {
-  const src = read('features/navbar.js');
+  const src = read('navigation/page/navbar.js');
   const el = (tag) => ({ tag, attrs: {}, dataset: {}, kids: [], style: { setProperty() {} }, setAttribute(k, v) { this.attrs[k] = String(v); }, append(...k) { this.kids.push(...k); } });
   const ctx = vm.createContext({
     make: (tag, props = {}, ...kids) => { const e = Object.assign(el(tag), props); e.append(...kids.filter((k) => k != null)); return e; },
@@ -208,7 +208,7 @@ test("Glaze's bar draws a Look's link with its host in the tooltip and the acces
 });
 
 test("the older rail names a worn Look's link with its host, and leaves the student's own links as they are", () => {
-  const src = read('features/nav.js');
+  const src = read('navigation/page/nav.js');
   const line = src.slice(src.indexOf('  const linkName = '), src.indexOf('\n', src.indexOf('  const linkName = ')));
   const run = (layout) => vm.runInContext(`${line}\nlinkName`, vm.createContext({ layout, L, location: { origin: 'https://school.test' }, X: { t: (k, v) => k.replace('{name}', v.name) } }));
   const away = { id: 'aaaaaaaaaaaa', n: 'Grades', u: 'https://grades-portal.example/login', i: 'star' }, home = { id: 'bbbbbbbbbbbb', n: 'Calendar', u: 'https://school.test/calendar', i: 'calendar' };
@@ -229,7 +229,7 @@ test('the Navigation editor shows what the worn Look hides as hidden, and its li
   assert.equal(items({ items: { grades: { hidden: false } } }, { look }).find((i) => i.id === 'grades').hidden, false);
   assert.equal(items({}).find((i) => i.id === 'grades').hidden, false, 'no Look, nothing hidden');
   // The editor hands it the Look being worn, while Glaze is on.
-  const src = read('lib/editor-navbar.js');
+  const src = read('settings/editor-navbar.js');
   assert.match(src, /const worn = \(\) => \(settings\(\)\.enabled !== false \? settings\(\)\.parts\?\.x\?\.nav \|\| null : null\);/);
   assert.equal((src.match(/rows\(prefs, \{ legacy, look: worn\(\), names \}\)/g) || []).length, 2, 'the list and the link form');
 });

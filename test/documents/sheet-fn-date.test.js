@@ -1,4 +1,4 @@
-// Date and time functions (lib/sheet-fn-date.js). Function cases are the worked examples on Microsoft's page for each
+// Date and time functions (documents/sheets/sheet-fn-date.js). Function cases are the worked examples on Microsoft's page for each
 // function, support.microsoft.com/en-us/excel/functions/<name>-function (date, time, datevalue, timevalue, year, month,
 // day, hour, minute, second, weekday, weeknum, isoweeknum, days, days360, edate, eomonth, networkdays,
 // networkdays-intl, workday, workday-intl, yearfrac, datedif, now, today), with their data; a date the page gives as a
@@ -10,11 +10,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/sheet-model.js');
-const C = require('../../extension/lib/sheet-calc.js');
-require('../../extension/lib/sheet-fn-math.js');
-require('../../extension/lib/sheet-fn-text.js');
-require('../../extension/lib/sheet-fn-date.js');
+const M = require('../../extension/documents/sheets/sheet-model.js');
+const C = require('../../extension/documents/sheets/sheet-calc.js');
+require('../../extension/documents/sheets/sheet-fn-math.js');
+require('../../extension/documents/sheets/sheet-fn-text.js');
+require('../../extension/documents/sheets/sheet-fn-date.js');
 
 // June 15, 2011, 9:30 AM on the machine's clock: DATEVALUE("5-JUL")'s example assumes the clock says 2011.
 const CLOCK = new Date(2011, 5, 15, 9, 30, 0).getTime();
@@ -46,7 +46,7 @@ test('the date functions are registered, NOW and TODAY volatile, and nothing set
   for (const name of NAMES) assert.ok(C.fn(name), name);
   assert.ok(C.fn('NOW').volatile && C.fn('TODAY').volatile);
   assert.ok(!C.fn('DATE').volatile);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-date.js'), 'utf8')));
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/documents/sheets/sheet-fn-date.js'), 'utf8')));
 });
 
 test('DATE: years 0-1899 count from 1900, months and days roll over and back, out of range is #NUM!', () => {

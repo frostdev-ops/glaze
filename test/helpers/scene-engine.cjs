@@ -1,4 +1,4 @@
-// lib/scene.js without a browser: the module itself, run as a script in a VM with stand-ins for three.js, the page and the
+// looks/scene.js without a browser: the module itself, run as a script in a VM with stand-ins for three.js, the page and the
 // GPU. Its import is dropped and its exports made plain consts; `start` is what the VM hands back. Used by
 // test/looks/scene-lifecycle.test.js and test/looks/scene-modes.test.js. GZ_LIFECYCLE_REPO points at another checkout's scene.js
 // (a review runs the lifecycle test against the code it is judging).
@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const file = process.env.GZ_LIFECYCLE_REPO ? path.join(process.env.GZ_LIFECYCLE_REPO, 'lib/scene.js') : path.join(__dirname, '../../extension/lib/scene.js');
+const file = process.env.GZ_LIFECYCLE_REPO ? path.join(process.env.GZ_LIFECYCLE_REPO, 'looks/scene.js') : path.join(__dirname, '../../extension/looks/scene.js');
 const source = fs.readFileSync(file, 'utf8').replace(/^import \{[\s\S]*?\} from '\.\/three\.min\.js';\n/m, '')
   .replace(/^const \{[\s\S]*?\} = await [^\n]*\bimport\([^\n]+\);\n/m, '').replace(/^export const /gm, 'const ');
 

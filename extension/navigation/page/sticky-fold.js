@@ -1,7 +1,7 @@
 // Ultra's sticky bands over what is read under them: a test attempt's progress band (the bar, "N of M questions
 // remaining") and a course's top bar (its header and tools). In its place each stays as it is; once it has left its place
 // it is marked data-gz-stuck and theme.css folds it into a small pill, without moving anything under it. Off with the
-// enhance.fold setting. A page feature (features/routes.js).
+// enhance.fold setting. A page feature (content/routes.js).
 var GZ_STICKY_FOLD = globalThis.GZ_STICKY_FOLD || (() => {
   const ctx = globalThis.GZ_CTX;
   if (!ctx) return null;

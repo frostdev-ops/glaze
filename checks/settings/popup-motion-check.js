@@ -70,7 +70,7 @@ const ok = (value, label) => { assert.ok(value, label); checks++; console.log(`o
       window.seek = (p) => { for (const a of animations()) { a.pause(); a.currentTime = p * a.effect.getTiming().duration; } };
       window.finish = () => { for (const a of animations()) a.finish(); };
     });
-    for (const file of ['lib/popup.js', 'features/popup.js']) await page.addScriptTag({ path: path.join(__dirname, '../../extension', file) });
+    for (const file of ['core/popup.js', 'courses/page/popup.js']) await page.addScriptTag({ path: path.join(__dirname, '../../extension', file) });
     await page.evaluate(() => GZ_POPUP.ready);
     for (const [source, rubric] of [['above', true], ['below', false], ['middle', false]]) {
       await page.evaluate(([s, r]) => { openPopup(s, r); seek(0.01); }, [source, rubric]);

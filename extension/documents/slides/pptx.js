@@ -1,14 +1,14 @@
 // Slides of a .pptx (or .ppsx) as a plain model the slides viewer draws with DOM calls: the deck's size and theme, and each
 // slide's background, shapes and notes with what they inherit (master → layout → slide) resolved. Lengths are EMUs (914,400
 // an inch), font sizes points, angles degrees clockwise, colours CSS hex (#rrggbb, or #rrggbbaa when see-through), except
-// geometry, which stays as lib/pptx-geom.js's input straight from the XML. A picture names its media part, whose bytes
+// geometry, which stays as documents/slides/pptx-geom.js's input straight from the XML. A picture names its media part, whose bytes
 // media() reads. What the viewer can't draw is counted in
 // deck.cut, never thrown: a malformed shape degrades alone and an unreadable slide comes back empty.
-// Bounded: the archive by lib/doctext.js's unzip, then slides, shapes, group depth, table cells (each table's and the
+// Bounded: the archive by core/doctext.js's unzip, then slides, shapes, group depth, table cells (each table's and the
 // deck's), text, paragraphs, runs, custom geometry's guides and path commands, and each XML part's bytes and elements.
 // Classic script; module.exports for node.
 var GZ_PPTX = globalThis.GZ_PPTX || (() => {
-  const D = () => globalThis.GZ_DOCTEXT || require('./doctext.js');
+  const D = () => globalThis.GZ_DOCTEXT || require('../../core/doctext.js');
   const LIMITS = { slides: 2000, shapes: 50000, depth: 16, cells: 10000, text: 4 << 20, part: 8 << 20, nodes: 400000, paragraphs: 100000, runs: 400000, allCells: 50000, guides: 100000, guideWork: 1000000, commands: 300000 };
   const MAX = 1e9; // EMUs, about 1,000 inches: anything further out is junk
 
@@ -239,7 +239,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   };
 
   // ---- theme and fonts --------------------------------------------------------------------------------------------
-  // Each font with the bundled face (lib/fonts) standing in for it: the metric twins of Office's core fonts, and the
+  // Each font with the bundled face (vendor/fonts) standing in for it: the metric twins of Office's core fonts, and the
   // nearest twin for Office's other theme fonts, as Writer has them. Other fonts keep their name and a generic family
   // from their pitchFamily (its high nibble: roman, swiss, modern, script, decorative).
   const FACES = {
@@ -605,7 +605,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   const plain = (body) => (body ? body.paragraphs.map((p) => p.runs.map((r) => r.text).join('')).join(' ').replace(/\s+/g, ' ').trim() : '');
 
   // ---- geometry ---------------------------------------------------------------------------------------------------
-  // lib/pptx-geom.js's input, straight from the XML (EMUs, angles in 60000ths of a degree): a preset as { prst, avLst:
+  // documents/slides/pptx-geom.js's input, straight from the XML (EMUs, angles in 60000ths of a degree): a preset as { prst, avLst:
   // { adj: 16667 } }, custom geometry as { avLst, gdLst: [{ name, fmla }], cxnLst: [{ ang, x, y }], rect: { l, t, r, b },
   // pathLst: [{ w, h, fill, stroke, cmds: [{ cmd, pts: [{ x, y }] } | { cmd: 'arcTo', wR, hR, stAng, swAng } |
   // { cmd: 'close' }] }] }, its values as written (a number or a guide name).

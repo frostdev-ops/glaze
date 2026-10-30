@@ -1,5 +1,5 @@
 // The real unpacked extension drawing a custom shader and layered backgrounds from a Look's parts: lookX in storage, read by
-// features/lookparts.js, GZ_CTX.parts(), content.js syncScene (the checker loaded on demand through the worker), lib/scene.js
+// looks/page/lookparts.js, GZ_CTX.parts(), content.js syncScene (the checker loaded on demand through the worker), looks/scene.js
 // imported from the page, and the editor's preview frames telling their parent what the guard did. Software GL (Playwright's
 // Chromium has no GPU in headless), so this checks the wiring, not speed: checks/looks/scene-check.mjs has the timings.
 //   nice -n 10 NODE_PATH=/path/to/node_modules node checks/looks/scene-page-check.js [out-dir]
@@ -13,8 +13,8 @@ const out = process.argv[2] && path.resolve(process.argv[2]);
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const origin = 'https://ultra.fixture.test';
-const D = require(path.join(ext, 'defaults.js'));
-const P = require(path.join(ext, 'lib/lookparts.js'));
+const D = require(path.join(ext, 'content/defaults.js'));
+const P = require(path.join(ext, 'looks/lookparts.js'));
 const read = (f) => fs.readFileSync(path.join(ext, f), 'utf8');
 const AURORA = read('assets/shaders/aurora.glsl');
 const fixture = '<!doctype html><html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Ultra fixture</title></head><body><div id="site-wrap"><nav id="base_tools"><a href="/ultra/institution-page"><span>Institution Page</span></a><a href="/ultra/course">Courses</a></nav><main id="main-content"><div id="main-content-inner"><h1>Stream</h1></div></main></div></body></html>';
@@ -35,8 +35,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await context.route('**/*', (r) => {
       const u = new URL(r.request().url());
       if (u.protocol === 'chrome-extension:') {
-        if (failModule && u.pathname === '/lib/scene.js') { failModule = false; failedModules++; return r.abort(); }
-        if (failDependency && u.pathname === '/lib/three.js') { failDependency = false; failedDependencies++; return r.abort(); }
+        if (failModule && u.pathname === '/looks/scene.js') { failModule = false; failedModules++; return r.abort(); }
+        if (failDependency && u.pathname === '/vendor/three.js') { failDependency = false; failedDependencies++; return r.abort(); }
         return r.continue();
       }
       if (u.origin !== origin) { blocked.push(u.href); return r.abort(); }
@@ -50,7 +50,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const inject = chrome.scripting.executeScript.bind(chrome.scripting);
       globalThis.__gzSceneHostFailures = 0;
       chrome.scripting.executeScript = (details) => {
-        if (details.files?.includes('lib/scene-host.js') && !globalThis.__gzSceneHostFailures) {
+        if (details.files?.includes('looks/scene-host.js') && !globalThis.__gzSceneHostFailures) {
           globalThis.__gzSceneHostFailures++;
           return Promise.reject(new Error('simulated transient scene-host injection failure'));
         }

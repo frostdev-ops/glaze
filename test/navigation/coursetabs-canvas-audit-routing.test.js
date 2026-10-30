@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const L = require('../../extension/lib/coursetabs.js');
-const source = fs.readFileSync(require.resolve('../../extension/features/coursetabs.js'), 'utf8');
+const L = require('../../extension/navigation/coursetabs.js');
+const source = fs.readFileSync(require.resolve('../../extension/navigation/page/coursetabs.js'), 'utf8');
 const part = (a, b) => {
   const start = source.indexOf(a), end = source.indexOf(b, start);
   assert.ok(start >= 0 && end > start, `production section: ${a}`);

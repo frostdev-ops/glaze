@@ -1,4 +1,4 @@
-// Canvas's adapter for Glaze navigation (features/navbar.js). Native links supply names, state and badges;
+// Canvas's adapter for Glaze navigation (navigation/page/navbar.js). Native links supply names, state and badges;
 // trays are Glaze panels, populated only from this Canvas's session. No page-world ENV or off-site data requests.
 function GZ_NAVBAR_CANVAS(X) {
   const ROOT = '#menu, .ic-app-header__menu-list', PANELS = new Set(['profile', 'course', 'groups', 'history', 'help', 'admin', 'tools']);
@@ -19,7 +19,7 @@ function GZ_NAVBAR_CANVAS(X) {
     return text(s) || text(a.getAttribute('aria-label'));
   };
   const courseId = (doc = document) => /\/courses\/(\d+)(?:\/|$)/.exec(doc.location?.pathname || '')?.[1] || '';
-  // Where you are: the page in the frame Canvas's pages outside a course open in, when it shows (features/coursetabs.js).
+  // Where you are: the page in the frame Canvas's pages outside a course open in, when it shows (navigation/page/coursetabs.js).
   const framedAt = () => { const c = globalThis.GZ_CTABS; try { return (c?.showing?.() === 'page' && c.bar?.doc?.()?.location.pathname) || ''; } catch { return ''; } };
   // bar.doc() can still name a loading frame hidden under its picture, or a document a frame has left.
   const viewDoc = (doc) => {

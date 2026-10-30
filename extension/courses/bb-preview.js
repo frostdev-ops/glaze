@@ -1,4 +1,4 @@
-// Blackboard Ultra's file previews, opened in Glaze's PDF viewer (features/bbpreview.js asks; lib/background.js answers
+// Blackboard Ultra's file previews, opened in Glaze's PDF viewer (courses/page/bbpreview.js asks; background/background.js answers
 // 'glaze:bb-preview' with ask below). Ultra converts every attachment to a PDF for its own viewer (live probe, 2026-10-30):
 // the attachment's data-bbfile viewerUrl (its /bbcswebdav/ file + render=inline) redirects to basic-doc-viewer's
 // index.html with the document's hash, the tenant and the original's address; that viewer's documents API answers

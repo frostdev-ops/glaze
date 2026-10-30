@@ -2,7 +2,7 @@
 //  GlazeAgentBridge.swift
 //  Glaze Extension
 //
-//  Agent access in Safari, the DMG build's extension side (the contract is in the header of lib/agent-link.js). The worker
+//  Agent access in Safari, the DMG build's extension side (the contract is in the header of agents/agent-link.js). The worker
 //  sends batches { type: 'agent.frames', i, s, seq, frames } through browser.runtime.sendNativeMessage; each is checked,
 //  handed whole to the Glaze app (safari/dmg/GlazeAgentHost.swift) over the app group's socket, and answered with the app's
 //  { ok: true } or { ok: false, error }. When the app isn't running, a batch that starts a session (its hello) opens it,
@@ -10,7 +10,7 @@
 //  to the worker through dispatchMessage, never through here.
 //  The group channel: a connection per batch, one message each way, framed as native messaging is (a 32-bit little-endian
 //  length, then UTF-8 JSON) and at most `GlazeAgentBridge.cap` bytes; each end refuses another user's process.
-//  GlazeAgentFrames is lib/agent-frames.js's shapes and sizes, shared with the app (test/safari/agent-bridge-native.test.js runs
+//  GlazeAgentFrames is agents/agent-frames.js's shapes and sizes, shared with the app (test/safari/agent-bridge-native.test.js runs
 //  both on test/fixtures/agent-frames.json).
 //  Only tools/build/stage-safari-dmg.py adds this file to a build (the Mac extension and the app), and only with GLAZE_DMG: the
 //  App Store build has none of it, so agent.* gets the handler's echo, which the worker reads as not installed.
@@ -20,7 +20,7 @@ import Foundation
 import Darwin
 import Security
 
-/// lib/agent-frames.js: the exact shapes each side may send, a line cut into pieces, and a frame's size as JSON.stringify
+/// agents/agent-frames.js: the exact shapes each side may send, a line cut into pieces, and a frame's size as JSON.stringify
 /// writes it. Values are as JSONSerialization or Safari give them: NSNumber, NSString, arrays and dictionaries.
 nonisolated enum GlazeAgentFrames {
     static let piece = 160_000, frame = 1_000_000, line = 64 << 20, string = 4096

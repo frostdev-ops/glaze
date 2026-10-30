@@ -1,4 +1,4 @@
-// Assignments and rubrics for agent apps (lib/mcp/tools-assign.js, lib/mcp/tab.js assignment): the graded work on an account's
+// Assignments and rubrics for agent apps (agents/tools-assign.js, agents/tab.js assignment): the graded work on an account's
 // planner, and one assignment read in its own tab from the LMS's own shapes (test/fixtures: Canvas's assignment API, Ultra's
 // content item, gradebook rows and rubric column, a row never opened with no userId), its definition only, never the
 // student's scores; kept with its time for when no tab is open, the 100 used last; fitted to an answer; and through the worker.
@@ -7,17 +7,17 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const C = require('../helpers/mcp-caches.cjs');
 const H = require('../helpers/mcp-tabs.cjs');
-const T = require('../../extension/lib/ai/tools.js');
-const TABS = require('../../extension/lib/mcp/tabs.js');
-const AS = require('../../extension/lib/mcp/tools-assign.js');
+const T = require('../../extension/ai/tools.js');
+const TABS = require('../../extension/agents/tabs.js');
+const AS = require('../../extension/agents/tools-assign.js');
 
 const A = `${C.CANVAS}/5`, UL = `${C.ULTRA}/${C.ULTRA_UID}`;
 const CANVAS_A = C.load('canvas-assignment-api.json');
 const ULTRA_ROWS = C.load('ultra-writer-gradebook.json'), ULTRA_ITEM = C.load('ultra-writer-content.json'), ULTRA_RUBRIC = C.load('ultra-rubric-numeric.json');
 const COLUMN = { ...ULTRA_RUBRIC.column, id: '_810_1', contentId: '_7_1', rubricAssociations: ULTRA_RUBRIC.column.rubricAssociations.map((a) => ({ ...a, entityId: '_810_1' })) };
-// Ultra's planner as lib/ultra.js planner() makes it, To Do joined with each course's gradebook rows, kept as the list keeps it.
+// Ultra's planner as courses/ultra.js planner() makes it, To Do joined with each course's gradebook rows, kept as the list keeps it.
 const ultraPlan = async () => {
-  const U = require('../../extension/lib/ultra.js'), L = require('../../extension/lib/todo.js');
+  const U = require('../../extension/courses/ultra.js'), L = require('../../extension/planner/todo.js');
   const rows = { _101_1: C.ultraRows('grades'), _102_1: C.ultraRows('grades-status') };
   const at = C.NOW - 60e3, key = `todo:${UL}`, data = {};
   const cache = { key, at, start: new Date(at - 8 * 864e5).toISOString(), end: new Date(at + 30 * 864e5).toISOString(), teach: true, progress: true,
@@ -62,7 +62,7 @@ test('assignments_list: graded work on the planner, with the id assignment_read 
   assert.equal(r.account, A);
   assert.ok(r.at && r.covers.complete === true);
   assert.deepEqual((await t.run({ course: '26' }, ctx(A))).items.map((i) => i.assignment), ['512', '513']);
-  // Ultra's: by the content item of the gradebook column each To Do item names (lib/ultra.js due, as its planner joins them).
+  // Ultra's: by the content item of the gradebook column each To Do item names (courses/ultra.js due, as its planner joins them).
   const u = store({ todoCache: await ultraPlan() });
   const ul = await t.run({}, u.ctx(UL));
   assert.deepEqual(ul.items.map((i) => [i.assignment, i.courseId]).sort(), [['_703_1', '_101_1'], ['_706_1', '_101_1'], ['_713_1', '_102_1']]);
@@ -255,11 +255,11 @@ test('a read begun during a rubric purge cannot recreate the cleared index', asy
 });
 
 test('rubric numbers come back as the site means them, not with float noise (live Ultra, 2026-10-30: 0.7000000000000001)', () => {
-  const r = require('../../extension/lib/mcp/tools-assign.js').clean({ title: 'T', points: 5.000000000000001,
+  const r = require('../../extension/agents/tools-assign.js').clean({ title: 'T', points: 5.000000000000001,
     rubric: { title: 'R', total: 5, levels: [{ id: 'a', label: 'Proficient' }], criteria: [{ id: 'c', label: 'Create the first table', points: 0.14 * 5, weight: 14.000000000000002,
       cells: [{ level: 'a', detail: '', value: 0.1 + 0.2 }] }] } });
   assert.equal(r.points, 5);
   assert.deepEqual([r.rubric.criteria[0].points, r.rubric.criteria[0].weight, r.rubric.criteria[0].cells[0].value], [0.7, 14, 0.3]);
   // Only the float noise goes: a value the site really has, like 20.2 / 20.1, keeps its digits for the app to round as Glaze does.
-  assert.equal(require('../../extension/lib/mcp/tools-assign.js').clean({ rubric: { criteria: [{ points: 20.2 / 20.1 }] } }).rubric.criteria[0].points, 1.00497512438);
+  assert.equal(require('../../extension/agents/tools-assign.js').clean({ rubric: { criteria: [{ points: 20.2 / 20.1 }] } }).rubric.criteria[0].points, 1.00497512438);
 });

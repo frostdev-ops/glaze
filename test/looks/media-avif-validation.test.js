@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../../extension/lib/media.js');
+const M = require('../../extension/looks/media.js');
 
 test('animated AVIF measures track samples as well as the primary image before decoding', () => {
   const bytes = fs.readFileSync(path.join(__dirname, '../fixtures/media/anim.avif'));

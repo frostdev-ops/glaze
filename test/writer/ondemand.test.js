@@ -5,9 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/content/content.js'), 'utf8');
 // Ultra's own part (content-ultra.js): what only Ultra does, which content.js hands its live state (I).
-const ultraPart = fs.readFileSync(require.resolve('../../extension/content-ultra.js'), 'utf8');
+const ultraPart = fs.readFileSync(require.resolve('../../extension/content/content-ultra.js'), 'utf8');
 const block = (from, to, src = source) => {
   const a = src.indexOf(from), b = src.indexOf(to, a);
   assert.ok(a > 0 && b > a, `markers ${from} … ${to}`);
@@ -29,7 +29,7 @@ const loader = ({ lang = 'de' } = {}) => {
   const ctx = vm.createContext({ solo: false, tabFrame: '',
     isPreview: false, observer: {}, timer: 0, wordsArrived: 0, flush() {},
     locale: () => lang,
-    GZ_I18N: require('../../extension/lib/i18n.js'),
+    GZ_I18N: require('../../extension/core/i18n.js'),
     chrome: { runtime: { id: 'glaze', sendMessage: (m) => { const r = later(); replies.push({ m, r }); return r; } } },
     setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, Promise, crypto: require('node:crypto').webcrypto,
   });
@@ -86,16 +86,16 @@ const dom = () => {
   return doc;
 };
 
-// features/keys.js on Canvas, as content.js hands it keys, with the stand-in DOM.
+// navigation/page/keys.js on Canvas, as content.js hands it keys, with the stand-in DOM.
 const keys = (words = { de: false }, site = 'canvas', typing = () => false) => {
   const document = dom();
   const wordsIn = new Set();
   const ctx = vm.createContext({ solo: false, tabFrame: '',
-    document, location: { pathname: '/' }, navigator: { platform: 'MacIntel' }, Date, GZ_PAGE: require('../../extension/lib/page.js'),
+    document, location: { pathname: '/' }, navigator: { platform: 'MacIntel' }, Date, GZ_PAGE: require('../../extension/core/page.js'),
     GZ_CTX: { site, settings: () => ({ enhance: { keys: true, palette: true } }), on: () => true, typing, keyOn: () => true, wordsIn,
       t: (k) => (words.de && k === 'Keyboard shortcuts' ? 'Tastenkürzel' : k) },
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/keys.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/navigation/page/keys.js'), 'utf8'), ctx);
   const press = (key) => ctx.GZ_KEYS.key({ key, target: document.body, preventDefault() {}, stopImmediatePropagation() {} });
   const shown = () => document.body.children.filter((c) => c.isConnected);
   return { document, wordsIn, press, shown };
@@ -177,7 +177,7 @@ test('the command palette opened from Glaze\'s bar gives focus back to the bar\'
   doc.createElement = (tag) => new El(tag, doc);
   const ctx = vm.createContext({ document: doc, location: { origin: 'https://bb.school.test', pathname: '/ultra/stream' },
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ({ enhance: {} }), need: () => new Promise(() => {}), courseId: () => '' } });
-  const cmd = vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/palette.js'), 'utf8'), ctx);
+  const cmd = vm.runInContext(fs.readFileSync(require.resolve('../../extension/navigation/page/palette.js'), 'utf8'), ctx);
   const bar = inBar();
   doc.activeElement = bar.host;
   cmd.open();
@@ -186,7 +186,7 @@ test('the command palette opened from Glaze\'s bar gives focus back to the bar\'
   assert.equal(bar.was.at, bar.item);
 });
 
-// The draft backup on Ultra, while lib/drafts.js and features/drafts.js are on their way: the editor still there when
+// The draft backup on Ultra, while writer/drafts.js and writer/page/drafts.js are on their way: the editor still there when
 // they arrive, or gone by then (the reply closed, the page changed), when what was read as it was written is kept.
 // Or Ultra put the same editor and wrapper to another post (post_12_3/ed1 → post_99_1/ed2), off the page or still on it:
 // the paste stays under the post it was written for.
@@ -228,20 +228,20 @@ for (const gone of Object.keys(AFTER)) {
     ctx.api.watchDrafts();
     t.run();
     assert.deepEqual(saved, [], 'nothing kept before the module is in');
-    assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js']);
+    assert.deepEqual(loads.map((l) => l.file), ['writer/drafts.js']);
     if (gone.startsWith('reused')) {
       Object.assign(editor, { id: 'ed2', textContent: '', innerHTML: '' });
       editor.parentElement.attributes[0].value = 'post_99_1';
       if (gone === 'reused') ctx.api.watchDrafts(); // a pass while the files load
     }
     if (gone === 'gone' || gone === 'reused, gone') { editor.isConnected = false; ctx.document.querySelector = () => null; ctx.location.pathname = '/ultra/stream'; }
-    ctx.GZ_DRAFTS = require('../../extension/lib/drafts.js');
+    ctx.GZ_DRAFTS = require('../../extension/writer/drafts.js');
     loads[0].p.resolve();
     await settle();
-    assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js', 'features/drafts.js'], 'then the backup itself');
+    assert.deepEqual(loads.map((l) => l.file), ['writer/drafts.js', 'writer/page/drafts.js'], 'then the backup itself');
     ctx.GZ_CTX = { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local,
       draftEditor: '.ql-editor[contenteditable="true"]', draftAt: ctx.api.draftAt, account: () => Promise.resolve('_7_1') };
-    vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/drafts.js'), 'utf8'), ctx);
+    vm.runInContext(fs.readFileSync(require.resolve('../../extension/writer/page/drafts.js'), 'utf8'), ctx);
     loads[1].p.resolve();
     await settle();
     t.run();
@@ -259,7 +259,7 @@ const hooks = (from, to, extra = {}) => {
   const loads = [];
   class Element {}
   const ctx = vm.createContext({ solo: true, tabFrame: '',
-    Element, Date, Promise, GZ_PAGE: require('../../extension/lib/page.js'), isPreview: false, ultra: false, moodle: false, observer: {},
+    Element, Date, Promise, GZ_PAGE: require('../../extension/core/page.js'), isPreview: false, ultra: false, moodle: false, observer: {},
     chrome: { runtime: { id: 'glaze' } },
     settings: { enhance: { keys: true, palette: true, coursemenu: true, download: true, previews: true } },
     document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => ({}) },
@@ -278,20 +278,20 @@ const key = (k, more = {}) => ({ key: k, target: {}, metaKey: false, ctrlKey: fa
   prevented: 0, stopped: 0, preventDefault() { this.prevented++; }, stopPropagation() { this.stopped++; }, stopImmediatePropagation() { this.stopped++; }, ...more });
 
 for (const [site, ultra, to] of [['canvas', false, '/courses'], ['ultra', true, '/ultra/course']]) {
-  test(`keys pressed while features/keys.js loads are handed over in order: g then c still goes to Courses (${site})`, async () => {
+  test(`keys pressed while navigation/page/keys.js loads are handed over in order: g then c still goes to Courses (${site})`, async () => {
     const h = hooks('  // ---- keyboard shortcuts (Extras)', '  // ---- command palette', { ultra, api: 'keyOn, typing' });
     h.fire('keydown', key('g'));
     h.fire('keydown', key('c'));
-    assert.deepEqual(h.loads.map((l) => l.file), ['features/keys.js'], 'asked for once');
+    assert.deepEqual(h.loads.map((l) => l.file), ['navigation/page/keys.js'], 'asked for once');
     h.ctx.GZ_CTX = { site, t: (k) => k, settings: () => h.ctx.settings, on: () => true, wordsIn: new Set(), typing: h.ctx.api.typing, keyOn: h.ctx.api.keyOn };
-    vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/keys.js'), 'utf8'), h.ctx);
+    vm.runInContext(fs.readFileSync(require.resolve('../../extension/navigation/page/keys.js'), 'utf8'), h.ctx);
     h.loads[0].p.resolve();
     await settle();
     assert.deepEqual(h.ctx.went, [`https://school.test${to}`]);
   });
 }
 
-test('on Canvas, g then ? while features/keys.js loads keeps Canvas\'s own help shut, and opens Glaze\'s', async () => {
+test('on Canvas, g then ? while navigation/page/keys.js loads keeps Canvas\'s own help shut, and opens Glaze\'s', async () => {
   const h = hooks('  // ---- keyboard shortcuts (Extras)', '  // ---- command palette', { api: 'keyOn' });
   h.fire('keydown', key('g'));
   h.fire('keydown', key('Shift'));
@@ -307,11 +307,11 @@ test('on Canvas, g then ? while features/keys.js loads keeps Canvas\'s own help 
   assert.deepEqual([q2.prevented, q2.stopped], [0, 0]);
 });
 
-test('Ctrl+K twice while features/palette.js loads leaves it closed; once opens it, once', async () => {
+test('Ctrl+K twice while navigation/page/palette.js loads leaves it closed; once opens it, once', async () => {
   for (const [presses, opened] of [[2, 0], [1, 1], [3, 1]]) {
     const h = hooks('  // ---- keyboard shortcuts (Extras)', '  // ---- footer');
     for (let i = 0; i < presses; i++) h.fire('keydown', key('k', { ctrlKey: true }));
-    assert.equal(h.loads.filter((l) => l.file === 'features/palette.js').length, 1, 'asked for once');
+    assert.equal(h.loads.filter((l) => l.file === 'navigation/page/palette.js').length, 1, 'asked for once');
     let n = 0;
     h.ctx.GZ_CMD = { open: () => n++, isOpen: () => false, close() {} };
     h.loads[0].p.resolve();
@@ -330,7 +330,7 @@ test('a course menu pressed while its file loads opens only if the menu and its 
     let toggled = 0;
     h.ctx.GZ_COURSE_MENU = { toggle: () => toggled++ };
     change(h, b);
-    h.loads.find((l) => l.file === 'features/coursemenu.js').p.resolve();
+    h.loads.find((l) => l.file === 'navigation/page/coursemenu.js').p.resolve();
     await settle();
     assert.equal(toggled, opens ? 1 : 0, why);
   }
@@ -353,14 +353,14 @@ test('Download all\'s buttons aren\'t drawn by a file that arrives after Glaze, 
 // ---- W0d: the draft backup, Ultra's what-if calculator, the document buttons and your place load where they're used ----
 test("Ultra's grades load where they're used: the what-if on a course's Grades, the GPA on Grades, syllabus import on the outline, Insights' button on Courses", async () => {
   for (const [why, path, on, hook, file, name, want] of [
-    ['the what-if', '/ultra/courses/_1_1/grades', 'calc', 'renderCalc', 'features/grades.js', 'GZ_GRADES_UI', 'render'],
-    ['the GPA', '/ultra/grades', 'gpa', 'renderCalc', 'features/grades.js', 'GZ_GRADES_UI', 'render'],
+    ['the what-if', '/ultra/courses/_1_1/grades', 'calc', 'renderCalc', 'planner/page/grades.js', 'GZ_GRADES_UI', 'render'],
+    ['the GPA', '/ultra/grades', 'gpa', 'renderCalc', 'planner/page/grades.js', 'GZ_GRADES_UI', 'render'],
     ['the what-if, switched off', '/ultra/courses/_1_1/grades', '', 'renderCalc', null],
     ['the GPA, on a course', '/ultra/courses/_1_1/grades', 'gpa', 'renderCalc', null],
     ['the what-if, on the outline', '/ultra/courses/_1_1/outline', 'calc', 'renderCalc', null],
-    ['syllabus import', '/ultra/courses/_1_1/outline', 'syllabus', 'syncSyl', 'features/syllabus.js', 'GZ_SYL_UI', 'sync'],
+    ['syllabus import', '/ultra/courses/_1_1/outline', 'syllabus', 'syncSyl', 'planner/page/syllabus.js', 'GZ_SYL_UI', 'sync'],
     ['syllabus import, on Grades', '/ultra/courses/_1_1/grades', 'syllabus', 'syncSyl', null],
-    ['Insights', '/ultra/course', 'insights', 'syncInsights', 'features/insights.js', 'GZ_INSIGHTS_UI', 'sync'],
+    ['Insights', '/ultra/course', 'insights', 'syncInsights', 'planner/page/insights.js', 'GZ_INSIGHTS_UI', 'sync'],
     ['Insights, on a course', '/ultra/courses/_1_1/outline', 'insights', 'syncInsights', null],
     ['Glaze off', '/ultra/grades', 'gpa', 'renderCalc', null, 'off']]) {
     const h = hooks('  // ---- grades (Extras)', '  // ---- page changes', { src: ultraPart, ultra: true, location: { pathname: path }, api: 'renderCalc, syncSyl, syncInsights' });
@@ -383,7 +383,7 @@ test('the document buttons load on a course document or a file preview, with the
   for (const [why, ultra, toggles, has, loads, previews = false] of [['a document', false, true, ['doc'], 1], ['switched off', false, false, ['doc'], 0],
     ['a Canvas file preview', false, true, ['preview'], 1], ['nothing there', false, true, [], 0],
     ['an Ultra preview, switched off (its images are turned back)', true, false, ['preview'], 1],
-    // Open in Glaze (features/canvasopen.js, through docs.js): a Canvas file link or preview with Previews in Glaze on, whatever the buttons' switch.
+    // Open in Glaze (courses/page/canvasopen.js, through docs.js): a Canvas file link or preview with Previews in Glaze on, whatever the buttons' switch.
     ['a Canvas file link, buttons off, Previews in Glaze on', false, false, ['link'], 1, true],
     ['a Canvas API file link without a class, buttons off', false, false, ['apiLink'], 1, true], ['a Canvas file link, Previews in Glaze off', false, false, ['link'], 0, false],
     ['an Ultra file link is not Canvas\'s', true, false, ['link'], 0, true]]) {
@@ -411,7 +411,7 @@ test('your place loads on a course\'s Modules or an item opened from it (Canvas)
 });
 
 // ---- W0d review: what happens while those files are on their way ----
-// Ultra: an outline whose kept place has a folder to unfold, and features/place.js arriving after the hook asked for it.
+// Ultra: an outline whose kept place has a folder to unfold, and navigation/page/place.js arriving after the hook asked for it.
 const ultraPlace = async (touch) => {
   const listeners = {};
   const loads = [];
@@ -421,7 +421,7 @@ const ultraPlace = async (touch) => {
   const toggle = { getAttribute: () => 'false', click: () => clicks++ };
   const row = { dataset: { contentId: '_9_1' } };
   const ctx = vm.createContext({ solo: true, tabFrame: '',
-    Element, Date, Promise, URLSearchParams, GZ_PAGE: require('../../extension/lib/page.js'), ultra: true, observer: {}, settings: { enhance: { place: true } },
+    Element, Date, Promise, URLSearchParams, GZ_PAGE: require('../../extension/core/page.js'), ultra: true, observer: {}, settings: { enhance: { place: true } },
     document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => row, querySelectorAll: () => [row], scrollingElement: { scrollTop: 0 }, body: {} },
     location: { pathname: '/ultra/courses/_1_1/outline', search: '' }, courseId: () => '_1_1', canvasCourseKey: () => null,
     need: (file) => { const p = later(); loads.push({ file, p }); return p; },
@@ -438,7 +438,7 @@ const ultraPlace = async (touch) => {
   if (touch) for (const f of listeners.wheel) f({ isTrusted: true });
   ctx.GZ_CTX = { site: 'ultra', settings: () => ctx.settings, on: () => true, local: (fn) => fn(ctx.chrome.storage.local), courseId: ctx.courseId, canvasCourseKey: ctx.canvasCourseKey,
     toggleOf: () => toggle, ROWS: '.content-list-item[data-content-id]', holding: () => false, tapped: ctx.api.tapped, acted: ctx.api.acted, placeAsked: ctx.api.placeAsked, solo: true };
-  vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/place.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/navigation/page/place.js'), 'utf8'), ctx);
   ctx.GZ_PLACE.sync();
   await settle();
   for (let i = 0; i < 5 && t.due.length; i++) t.due.shift().f(); // a few of the restore's 200 ms steps
@@ -482,13 +482,13 @@ for (const gone of ['never', 'before the files arrive', 'while the account is as
       globalThis.api = { local, draftAt: typeof draftAt === 'undefined' ? undefined : draftAt };`, ctx);
     for (const f of listeners.input) f({ type: 'input', target: editor });
     if (gone === 'before the files arrive') close();
-    ctx.GZ_DRAFTS = require('../../extension/lib/drafts.js');
+    ctx.GZ_DRAFTS = require('../../extension/writer/drafts.js');
     loads[0].p.resolve();
     await settle();
     ctx.GZ_CTX = { site: 'canvas', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local, draftEditor: SEL,
       draftAt: ctx.api.draftAt, profile: () => (account ||= later()), canvasCourses: () => Promise.resolve([{ id: 5, name: 'BIO 1100' }]),
       capi: () => Promise.reject(new Error('offline')) };
-    vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/drafts.js'), 'utf8'), ctx);
+    vm.runInContext(fs.readFileSync(require.resolve('../../extension/writer/page/drafts.js'), 'utf8'), ctx);
     loads[1].p.resolve();
     await settle();
     t.run();

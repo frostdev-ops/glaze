@@ -20,11 +20,11 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     assert.equal(m.default_locale, 'en');
     for (const lang of ['en', 'de', 'es', 'fr', 'nl', 'pt_BR']) assert.ok(files.has(`_locales/${lang}/messages.json`));
     assert.equal(m.background.service_worker, undefined);
-    assert.deepEqual(m.background.scripts.slice(0, 1), ['lib/firefox-background.js']);
-    assert.equal(m.background.scripts.at(-1), 'lib/background.js');
+    assert.deepEqual(m.background.scripts.slice(0, 1), ['background/firefox-background.js']);
+    assert.equal(m.background.scripts.at(-1), 'background/background.js');
     for (const f of m.background.scripts) assert.ok(files.has(f), `${f} is a background script but isn't packaged`);
-    for (const f of ['lib/relay.js', 'lib/sessions.js', 'defaults.js', 'lib/sidebar.js', 'lib/gcal-auth.js']) assert.ok(m.background.scripts.includes(f), f);
-    for (const f of ['features/sidebar.js', 'features/sidebar.css', 'features/docreview.js', 'features/docreview.css']) assert.ok(files.has(f), f);
+    for (const f of ['sharing/relay.js', 'sharing/sessions.js', 'content/defaults.js', 'navigation/sidebar.js', 'planner/gcal-auth.js']) assert.ok(m.background.scripts.includes(f), f);
+    for (const f of ['navigation/page/sidebar.js', 'navigation/page/sidebar.css', 'courses/page/docreview.js', 'courses/page/docreview.css']) assert.ok(files.has(f), f);
     // Nothing without consent; agent access sends the student's course data to an app on this computer, outside the browser.
     assert.deepEqual(m.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'], optional: ['websiteContent'] });
     assert.equal(m.oauth2, undefined);
@@ -34,18 +34,18 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     assert.equal(m.sandbox, undefined);
     assert.deepEqual(m.content_security_policy, { extension_pages: require('../../extension/manifest.json').content_security_policy.extension_pages });
     assert.ok(m.web_accessible_resources.every((e) => e.resources.length && e.resources.every((r) => !r.startsWith('mods/'))));
-    assert.ok(![...files].some((f) => f.startsWith('mods/') || f === 'features/mods.js'), 'no mods host, bootstrap or sandbox page side');
-    assert.ok(files.has('lib/modbroker.js') && m.background.scripts.includes('lib/modbroker.js'), 'the worker imports the broker, so it ships');
+    assert.ok(![...files].some((f) => ['mods/boot.js', 'mods/host.html', 'mods/host.js', 'mods/page/mods.js'].includes(f)), 'no mods host, bootstrap or sandbox page side');
+    assert.ok(files.has('mods/modbroker.js') && m.background.scripts.includes('mods/modbroker.js'), 'the worker imports the broker, so it ships');
     // Agent access: the link and every MCP file are background scripts, the frames before the link, which reads them as it loads.
-    for (const f of ['lib/agent-frames.js', 'lib/agent-link.js', 'lib/modtools.js', 'lib/ai/failure.js', 'lib/ai/loop.js', 'lib/mcp/grants.js', 'lib/mcp/registry.js',
-      'lib/mcp/tools-study.js', 'lib/mcp/tools-grades.js', 'lib/mcp/wire.js', 'lib/mcp/approve.js', 'lib/mcp/calls.js']) assert.ok(m.background.scripts.includes(f), f);
-    assert.ok(m.background.scripts.indexOf('lib/agent-frames.js') < m.background.scripts.indexOf('lib/agent-link.js'));
-    for (const f of ['lib/mcp/approve.html', 'lib/mcp/approve-page.js', 'lib/mcp/approve.css']) assert.ok(files.has(f), f);
+    for (const f of ['agents/agent-frames.js', 'agents/agent-link.js', 'mods/modtools.js', 'ai/failure.js', 'ai/loop.js', 'agents/grants.js', 'agents/registry.js',
+      'agents/tools-study.js', 'agents/tools-grades.js', 'agents/wire.js', 'agents/approve.js', 'agents/calls.js']) assert.ok(m.background.scripts.includes(f), f);
+    assert.ok(m.background.scripts.indexOf('agents/agent-frames.js') < m.background.scripts.indexOf('agents/agent-link.js'));
+    for (const f of ['agents/approve.html', 'agents/approve-page.js', 'agents/approve.css']) assert.ok(files.has(f), f);
     // Declarative widgets are not code: their page side, its renderer and the checks they run through ship, and nothing of theirs
     // reaches for the sandbox.
-    for (const f of ['features/modwidgets.js', 'features/modui.js', 'lib/modwidget.js']) assert.ok(files.has(f), f);
-    assert.ok(m.background.scripts.includes('lib/modwidget.js') && m.background.scripts.includes('lib/modapi.js'), 'the worker imports what checks a widget');
-    for (const f of ['features/modwidgets.js', 'features/modui.js', 'lib/modwidget.js']) {
+    for (const f of ['mods/page/modwidgets.js', 'mods/page/modui.js', 'mods/modwidget.js']) assert.ok(files.has(f), f);
+    assert.ok(m.background.scripts.includes('mods/modwidget.js') && m.background.scripts.includes('mods/modapi.js'), 'the worker imports what checks a widget');
+    for (const f of ['mods/page/modwidgets.js', 'mods/page/modui.js', 'mods/modwidget.js']) {
       const src = execFileSync('unzip', ['-p', zip, f], { encoding: 'utf8' });
       assert.ok(!/mods\/(host|boot)|GZ_MODS\b|sandbox/.test(src.replace(/\/\/.*$/gm, '')), `${f} needs nothing the package drops`);
     }
@@ -70,7 +70,7 @@ test('package-firefox.sh: no declarativeContent or addHostAccessRequest, the but
     assert.deepEqual(m.host_permissions, chrome.host_permissions);
     assert.deepEqual(m.optional_host_permissions, chrome.optional_host_permissions);
     assert.ok(m.optional_host_permissions.includes('https://*/*'));
-    const popup = execFileSync('unzip', ['-p', zip, 'popup.js'], { encoding: 'utf8' });
+    const popup = execFileSync('unzip', ['-p', zip, 'settings/popup.js'], { encoding: 'utf8' });
     assert.ok(!popup.includes('addHostAccessRequest'), "the Firefox popup doesn't name Chrome's extensions-menu request");
     assert.ok(popup.includes('chrome.permissions.request({ origins: [site.pattern] })'), 'the popup still asks for the site');
   } finally {

@@ -1,8 +1,8 @@
 // Glaze Writer's Ultra adapter: which of Ultra's Quill boxes Glaze's editor stands in for, as what, and what goes with
-// each one (its send button, what it answers). Pure: elements in, values out; features/writer.js does the rest. Shapes
+// each one (its send button, what it answers). Pure: elements in, values out; writer/page/writer.js does the rest. Shapes
 // from the owner's Ultra (4001.2.0, probed 2026-10-27 and 2026-10-28, read-only); a box whose shape wasn't seen there stays
 // Ultra's own.
-// Classic script, loaded on demand (features/writer.js); module.exports for node.
+// Classic script, loaded on demand (writer/page/writer.js); module.exports for node.
 var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   const EDITOR = '.ql-editor[contenteditable="true"]';
   // A box's whole editor (toolbar, text, word count): what Glaze's editor takes the place of. Its Post or Send stays.
@@ -11,7 +11,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   // An attempt page's course and content ids, or null.
   const attemptAt = (path) => { const m = ATTEMPT.exec(path || ''); return m ? { course: m[1], content: m[2] } : null; };
   // An attempt's kind from the course's gradebook rows (content-ultra.js bookFor): 'test', 'assignment', or '' while
-  // unknown. assessmentSubtype is the field lib/ultra.js reads for tests (not yet seen live).
+  // unknown. assessmentSubtype is the field courses/ultra.js reads for tests (not yet seen live).
   const attemptKind = (rows, content) => {
     const cols = (Array.isArray(rows) ? rows : []).filter((r) => r?.column?.contentId === content).map((r) => r.column);
     return cols.some((c) => c.assessmentSubtype === 'Test') ? 'test' : cols.length && cols.every((c) => c.assessmentSubtype === 'Assignment') ? 'assignment' : '';
@@ -50,7 +50,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   const MODE = { assignment: 'paper' };
   // A quick look before a frame opens: a box with Ultra's embeds or extra formats stays native. It passes everything
   // compose itself writes (Quill's indent and alignment classes, its code blocks and cursor), so a box Writer has synced
-  // stays Writer's; the frame's own check (lib/writer-schema.js loses) has the last word.
+  // stays Writer's; the frame's own check (writer/writer-schema.js loses) has the last word.
   const TAGS = new Set('P BR STRONG B EM I U S STRIKE DEL SUP SUB A H3 H4 OL UL LI PRE CODE SPAN'.split(' '));
   const CLASS = { P: /^(ql-indent-[1-8]|ql-align-(center|right|justify))$/, H3: null, H4: null, LI: null, PRE: /^ql-syntax$/, SPAN: /^ql-cursor$/ };
   CLASS.H3 = CLASS.H4 = CLASS.LI = CLASS.P;
@@ -105,7 +105,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
     if (skip(editor)) return null;
     const kind = kindOf(editor, at), container = editor.closest('.ql-container');
     // A new Post is Writer's once Ultra's click has activated it: its toolbar drawn and its controls shown (a toolbar
-    // alone can appear first). Empty, it would collapse when the frame takes focus; features/writer.js keeps that blur
+    // alone can appear first). Empty, it would collapse when the frame takes focus; writer/page/writer.js keeps that blur
     // from Ultra. Replies arrive activated already.
     if (kind === 'post') {
       const controls = editor.closest('form').querySelector('.panel-editor-controls');

@@ -1,14 +1,14 @@
-// Class schedule import (lib/classes.js): the meeting-time reader, whole registrar documents in the formats students copy
+// Class schedule import (planner/classes.js): the meeting-time reader, whole registrar documents in the formats students copy
 // or save (Banner, PeopleSoft, Workday, plain lists, timetables in Glaze's other languages), .ics calendars, matching to
 // Canvas courses, what's kept and the worker's writes, and the classes on a day, as reminders and as an export.
 // Every sample here was written for this test in the shape of a real system's output; none is a real student's.
 process.env.TZ = 'UTC'; // a few calls leave the zone to the machine's: these dates fall on the same day only in zones near UTC
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../../extension/lib/classes.js');
-const T = require('../../extension/lib/todo.js');
-const I = require('../../extension/lib/ics.js');
-const D = require('../../extension/lib/doctext.js');
+const C = require('../../extension/planner/classes.js');
+const T = require('../../extension/planner/todo.js');
+const I = require('../../extension/planner/ics.js');
+const D = require('../../extension/core/doctext.js');
 
 const NOW = Date.UTC(2026, 9, 15, 15); // Thu 15 Oct 2026
 const m = (line, opts) => C.meetings(line, opts).map((x) => [x.days.join(''), C.hhmm(x.start), C.hhmm(x.end), ...(x.unsure.length ? [x.unsure.join()] : [])]);
@@ -254,7 +254,7 @@ test('dates: years taken from the other end of a range, or nearest today', () =>
   assert.equal(C.fromText('Classes begin: September 8, 2026\nClasses end: December 18, 2026\nMWF 9-9:50am Chem 1', { now: NOW }).term.to, '2026-12-18');
 });
 
-test('HTML and Word files go through lib/doctext.js to the same reader', async () => {
+test('HTML and Word files go through core/doctext.js to the same reader', async () => {
   const html = `<html><head><title>Schedule</title><style>td{}</style></head><body><nav>Home</nav>
 <h2>BIO 1100 - Biology</h2><table><tr><th>Days</th><th>Time</th><th>Location</th></tr>
 <tr><td>TR</td><td>1:30 pm - 2:45 pm</td><td>Life Sciences 120</td></tr></table>
@@ -265,7 +265,7 @@ test('HTML and Word files go through lib/doctext.js to the same reader', async (
     ['ENG 1100', 'Writing', [['135', '10:00', '10:50', 'Humanities 210', '', '']]],
   ]);
   // A minimal Word document: one table, as Word writes rows and cells.
-  const Z = require('../../extension/lib/zip.js');
+  const Z = require('../../extension/core/zip.js');
   const cell = (s) => `<w:tc><w:p><w:r><w:t>${s}</w:t></w:r></w:p></w:tc>`;
   const row = (...cs) => `<w:tr>${cs.map(cell).join('')}</w:tr>`;
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
@@ -582,10 +582,10 @@ test('a save over the limits (20 times a class, 60 classes) is refused whole, an
 });
 
 test('the worker allows a page its own site\'s schedules only', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/background.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/background/background.js'), 'utf8');
   assert.match(src, /classes: \{\s*allow: async \(m, s\) => typeof m\.key === 'string' && GZ_CLASSES\.STORE_KEY\.test\(m\.key\) && m\.key\.startsWith\(`classes:\$\{\(await fromCanvas\(s\)\) \|\| \(await fromUltra\(s\)\)\}\/`\)/);
-  assert.match(src, /importScripts\([^)]*'classes\.js'/);
-  for (const f of ['lib/classes.js', 'features/classes.js', 'lib/ics.js', 'lib/doctext.js']) assert.ok(src.includes(`'${f}'`), `LOADABLE: ${f}`);
+  assert.match(src, /importScripts\([^)]*'\.\.\/planner\/classes\.js'/);
+  for (const f of ['planner/classes.js', 'planner/page/classes.js', 'planner/ics.js', 'core/doctext.js']) assert.ok(src.includes(`'${f}'`), `LOADABLE: ${f}`);
 });
 
 // ---- using it ---------------------------------------------------------------------------------------------------------
@@ -603,8 +603,8 @@ test('the classes on a day: in term, on its weekdays, not on a skipped date', ()
   assert.equal(C.weekday(C.dayNum('2026-10-15')), 4);
 });
 
-test('class-start reminders: lead minutes before, in the student\'s zone, in lib/remind.js\'s shape', () => {
-  const R = require('../../extension/lib/remind.js');
+test('class-start reminders: lead minutes before, in the student\'s zone, in planner/remind.js\'s shape', () => {
+  const R = require('../../extension/planner/remind.js');
   const tz = 'America/New_York';
   const now = Date.UTC(2026, 9, 15, 12); // 8:00 in New York
   const evs = C.events(STORE, { now, tz, lead: 15 });
@@ -614,7 +614,7 @@ test('class-start reminders: lead minutes before, in the student\'s zone, in lib
   assert.equal(bio.url, '/courses/11');
   assert.equal(bio.course, 'Life Sciences 120');
   assert.equal(evs.find((e) => e.key === 'class:o-choir.0').url, '');
-  // They pass through lib/remind.js as its own categories do, and its store accepts their ids.
+  // They pass through planner/remind.js as its own categories do, and its store accepts their ids.
   const shown = R.events({ rows: [], cats: {}, o: {}, tz, extra: evs });
   assert.ok(shown.some((e) => e.cat === 'class' && e.key === 'class:11.0'));
   assert.ok(R.clean({ mute: { 'class:o-choir.0': now }, seen: { [`class:11.0@${bio.at}`]: now } }, now).mute['class:o-choir.0']);
@@ -623,7 +623,7 @@ test('class-start reminders: lead minutes before, in the student\'s zone, in lib
 
 // A period may run to midnight (end 1440): one that starts at 23:59 is still a class, reminded and exported, until midnight.
 test('a class in the day\'s last minute runs to midnight: reminded, exported, and found across midnight', () => {
-  const T = require('../../extension/lib/todo.js');
+  const T = require('../../extension/planner/todo.js');
   const NY = 'America/New_York';
   const late = { courses: [{ id: '11', name: 'Late lab', periods: [{ days: [4], start: 1439, end: 1440, loc: '', from: '', to: '', skip: [] }] }] };
   const thu = T.typed('2026-10-15', '23:59', NY), fri = T.midnight(C.dayNum('2026-10-16'), NY);
@@ -662,7 +662,7 @@ test('midnight class ends follow local dates on 23 and 25 hour DST days', () => 
 
 // Codex W14 review: an export holds exact instants (UTC), as every other timed event in W13's file, worked out in the
 // zone the schedule was saved in: floating times would move with the calendar app's zone.
-test('the export hook: one event per meeting, at its instant in the schedule\'s own zone, written by lib/ics.js', async () => {
+test('the export hook: one event per meeting, at its instant in the schedule\'s own zone, written by planner/ics.js', async () => {
   const evs = C.icsEvents(STORE, { site: 'canvas.test', from: '2026-10-12', to: '2026-10-18', tz: 'America/New_York' });
   const iso = (ms) => new Date(ms).toISOString().slice(0, 16);
   assert.deepEqual(evs.map((e) => [iso(e.start), iso(e.end), e.summary]), [
@@ -687,7 +687,7 @@ test('the export hook: one event per meeting, at its instant in the schedule\'s 
 // Codex W14 review: a day of the student's Canvas zone isn't a day of the schedule's zone. A Thursday 23:00 class kept in
 // Phoenix is Friday 02:00 in New York: it belongs to Friday's agenda and to an export of Friday, not Thursday's.
 test('classes in a window are chosen by instant across zones; the export range is the student\'s days', () => {
-  const T = require('../../extension/lib/todo.js');
+  const T = require('../../extension/planner/todo.js');
   const NY = 'America/New_York';
   const night = (tz) => ({ tz, courses: [{ id: 'o-lab', name: 'Night lab', periods: [{ days: [4], start: 1380, end: 1430, loc: '', from: '', to: '', skip: [] }] }] });
   const day = (k) => [T.midnight(C.dayNum(k), NY), T.midnight(C.dayNum(k) + 1, NY)];

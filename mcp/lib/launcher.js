@@ -3,7 +3,7 @@
 // It runs the first of node (the one setup ran with or chose) and also (the other nodes nodes.js found safe and new
 // enough, in its order) that is still there, so a node upgraded or removed since doesn't break it. With none, or
 // no node at all (node: null; Claude Desktop's bundle found none, nodes.js), it writes one native message,
-// {t:'error',why:'no-node'}, which the worker shows as no-node (lib/agent-link.js), and exits 1. It still names the script
+// {t:'error',why:'no-node'}, which the worker shows as no-node (agents/agent-link.js), and exits 1. It still names the script
 // it would run, so setup, uninstall and doctor know it as theirs.
 'use strict';
 const fs = require('node:fs');

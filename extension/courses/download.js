@@ -7,9 +7,9 @@ const GZ_DOWNLOAD = (() => {
       return !u.username && !u.password && (u.protocol === 'https:' || (devOrigin && u.origin === devOrigin)) && !/^\/login(?:\/|$)/.test(u.pathname) ? u.href : null;
     } catch { return null; }
   };
-  // A course page's top frame, or a frame of it on the page's own site: Glaze's course tabs (features/coursetabs.js) run a
+  // A course page's top frame, or a frame of it on the page's own site: Glaze's course tabs (navigation/page/coursetabs.js) run a
   // course's pages in frames, and Download all is drawn there. Either way the frame's own address passes the path check:
-  // the course's home and Modules (Download all), or a page that shows or links a file (Open in Glaze, features/canvasopen.js).
+  // the course's home and Modules (Download all), or a page that shows or links a file (Open in Glaze, courses/page/canvasopen.js).
   const PAGES = /^\/courses\/\d+(?:\/(?:modules(?:\/items\/\d+)?|files(?:\/\d+|\/folder\/[^/]+(?:\/[^/]+)*)?|pages\/[^/]+|wiki|assignments\/(?:\d+|syllabus)|discussion_topics\/\d+|announcements))?\/?$/;
   const sender = (s, id) => {
     try {

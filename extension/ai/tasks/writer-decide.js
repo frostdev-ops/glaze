@@ -4,7 +4,7 @@
 // choice only from the candidates, and apply only with one.
 // input: { sentence, from, to (UTF-16 offsets of the flagged words in it), suggestions: [string], context? }.
 // output: { verdict: 'apply' | 'suggest' | 'keep', choice: string | null }.
-// Classic script for the worker (lib/background.js aiFiles); module.exports for node.
+// Classic script for the worker (background/background.js aiFiles); module.exports for node.
 var GZ_AI_TASK_WRITER_DECIDE = globalThis.GZ_AI_TASK_WRITER_DECIDE || (() => {
   const S = typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js');
   const T = typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('../task.js');

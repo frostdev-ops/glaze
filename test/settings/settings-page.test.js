@@ -1,4 +1,4 @@
-// Settings as a page of an LMS tab (features/settingspage.js): the worker's one-use tickets decide which frames may show it.
+// Settings as a page of an LMS tab (settings/page/settingspage.js): the worker's one-use tickets decide which frames may show it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -11,11 +11,11 @@ const worker = () => {
   const area = { get: async () => ({}), set: async () => {}, remove: async () => {} };
   const ctx = vm.createContext({ URL, TextEncoder, TextDecoder, structuredClone, console, crypto, atob, btoa, setTimeout, clearTimeout, Date, navigator: {},
     GZ_SESSIONS: { make: () => ({ handle: async () => ({ ok: true }), connect: () => () => {}, stop() {}, changed() {} }) },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onConnect: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} } },
       tabs: { onRemoved: { addListener() {} } }, storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
-  vm.runInContext(read('lib/background.js'), ctx);
+  vm.runInContext(read('background/background.js'), ctx);
   return (m, s) => new Promise((resolve) => { for (const f of listeners) if (f(m, s, (r) => resolve(structuredClone(r))) === true) return; resolve(null); });
 };
 
@@ -38,7 +38,7 @@ test("Settings shows in a school page's frame only with a ticket Glaze's navigat
 });
 
 test('the page opens Settings with its ticket in a closed shadow root, and Settings hides until it claims it', () => {
-  const page = read('features/settingspage.js'), options = read('options.js'), html = read('options.html');
+  const page = read('settings/page/settingspage.js'), options = read('settings/options.js'), html = read('options.html');
   assert.match(page, /attachShadow\(\{ mode: 'closed' \}\)/);
   assert.match(page, /\$\{chrome\.runtime\.getURL\(PAGES\.settings\)\}\?t=\$\{pass\}\$\{hash\}/);
   assert.match(page, /const PAGES = \{ settings: 'options\.html', papers: 'papers\.html' \};/);
@@ -64,7 +64,7 @@ test("Settings over the page leaves only it and Glaze's bar in reach, and gives 
   doc.activeElement = bar; shadow.activeElement = shadow.children[1];
   Object.assign(doc, { documentElement: html, body, createElement: (tag) => new El(tag, doc), getElementById: (id) => (id === 'gz-navbar' ? bar : null) });
   const on = {};
-  const page = vm.runInContext(read('features/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String },
+  const page = vm.runInContext(read('settings/page/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String },
     history: { state: null, pushState(s) { this.state = s; }, back() {} }, addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
     chrome: { runtime: { id: 'glaze', getURL: (f) => `chrome-extension://glaze/${f}`, sendMessage: (m, reply) => reply({ ok: true, ticket: 'a'.repeat(32) }) } },
     GZ_NAVBAR_UI: { sync: draw } }));
@@ -109,7 +109,7 @@ test("Documents opens beside the bar as Settings does: a pass for each document 
   const on = {}, sent = [], ports = [];
   let synced = 0;
   const history = tabHistory(on);
-  const page = vm.runInContext(read('features/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, crypto, MessageChannel, history,
+  const page = vm.runInContext(read('settings/page/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, crypto, MessageChannel, history,
     addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, sendMessage: (m, reply) => {
       sent.push(m);
@@ -273,7 +273,7 @@ test("a pass the worker refuses opens nothing in the page, so the bar and Ctrl+K
   const html = new El('html', doc), body = new El('body', doc);
   doc.root = html; html.append(body);
   Object.assign(doc, { documentElement: html, body, createElement: (tag) => new El(tag, doc), getElementById: () => null });
-  const page = vm.runInContext(read('features/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, crypto, MessageChannel,
+  const page = vm.runInContext(read('settings/page/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, crypto, MessageChannel,
     history: tabHistory({}), addEventListener() {}, removeEventListener() {},
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, sendMessage: async () => ({ ok: false }) } } }));
   assert.equal(await page.open('', 'papers'), false);
@@ -290,7 +290,7 @@ test('Documents closes each retired private channel and ignores its late message
   class Channel {
     constructor() { this.port1 = { close() { this.closed = true; }, postMessage() {} }; this.port2 = {}; channels.push(this); }
   }
-  const page = vm.runInContext(read('features/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, crypto, MessageChannel: Channel,
+  const page = vm.runInContext(read('settings/page/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: true }), CSS: { escape: String }, crypto, MessageChannel: Channel,
     history: tabHistory(on), addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, sendMessage: async () => ({ ok: true }) } } }));
   await page.open('', 'papers');
@@ -323,7 +323,7 @@ test('the page host follows the measured phone bar and disconnects every layout 
     observe(e) { this.observed.push(e); }
     disconnect() { this.disconnected = true; }
   }
-  const page = vm.runInContext(read('features/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: false }), innerHeight: 860,
+  const page = vm.runInContext(read('settings/page/settingspage.js'), vm.createContext({ document: doc, matchMedia: () => ({ matches: false }), innerHeight: 860,
     MutationObserver: Observer, ResizeObserver: Observer, CSS: { escape: String }, crypto, history: tabHistory(on),
     addEventListener: (type, f) => { on[type] = f; }, removeEventListener: (type) => { delete on[type]; },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, sendMessage: (m, reply) => reply({ ok: true, ticket: 'a'.repeat(32) }) } } }));

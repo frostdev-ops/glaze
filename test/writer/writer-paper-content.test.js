@@ -1,4 +1,4 @@
-// Glaze Writer's content side with an assignment's paper (features/writer.js, paper mode). Full (Settings → Writer → Full
+// Glaze Writer's content side with an assignment's paper (writer/page/writer.js, paper mode). Full (Settings → Writer → Full
 // writer): the frame is a page of its own, nothing it says is written into Ultra's editor or draft backup, Focus fills the
 // window, and the assignment's context builder is asked once the frame is up. Compact (the default): the frame grows with
 // its box, the paper's projection goes into Ultra's editor (never the draft backup), a switch resizes it and keeps the

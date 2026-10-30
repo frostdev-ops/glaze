@@ -8,7 +8,7 @@
 // its index row) with its versions; Undo or Restore takes it out, and 30 days on it goes for good (purge). A spreadsheet
 // (sheet-data.js) keeps its cells in parts beside its record (writerSheet:<key>:<sheet>:<band>), each written in the record's
 // own set() and stamped with its revision, and its versions packed (gz) by the page, up to CAP.packed bytes of them.
-// A PDF's or deck's bytes are the worker's file store's (lib/doc-files.js): its record and versions point at them as file
+// A PDF's or deck's bytes are the worker's file store's (documents/doc-files.js): its record and versions point at them as file
 // { hash, size, type }, the store told which hashes each document holds (o.files own) before a write points at one and
 // after one lets one go, and versions keep at most CAP.files bytes of files. A record from before the store holds its bytes
 // as base64 in file until migrate moves them.
@@ -22,7 +22,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   // The card's text a spreadsheet's index row carries (sheet-data.js glance): 4 rows of 6 short strings.
   const glance = (g) => Array.isArray(g) && g.length === 4 && g.every((row) => Array.isArray(row) && row.length === 6 && row.every((x) => typeof x === 'string' && x.length <= 40));
   const FILE_FIELDS = ['file', 'size', 'pages', 'thumb', 'ext', 'slides', 'text'];
-  // A file in the store (lib/doc-files.js ref), the same file, and the hashes records and version lists point at.
+  // A file in the store (documents/doc-files.js ref), the same file, and the hashes records and version lists point at.
   const isRef = (f) => !!f && typeof f === 'object' && /^[0-9a-f]{64}$/.test(f.hash) && Number.isSafeInteger(f.size) && f.size > 0;
   const sameFile = (a, b) => a === b || (isRef(a) && isRef(b) && a.hash === b.hash && a.size === b.size);
   const refs = (...values) => new Set(values.flatMap((v) => (Array.isArray(v) ? v : [v])).filter((v) => isRef(v?.file)).map((v) => v.file.hash));
@@ -259,7 +259,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       seen.set(k, paper.revision);
       return { paper, version };
     });
-    // The 'sending' version a submit was built from, once Ultra's Submit is clicked (lib/background.js, at the dispatch):
+    // The 'sending' version a submit was built from, once Ultra's Submit is clicked (background/background.js, at the dispatch):
     // 'submit' from then, the paper submitted. The document is unchanged, so its revision is too.
     const submitted = (k, id) => serial(k, async () => {
       const list = await versionsOf(k), v = list.find((x) => x.id === id && x.reason === 'sending'), paper = await get(PAPER + k);
@@ -359,7 +359,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     // The store told again what paper k holds (after a restore committed its records).
     const reown = (k) => serial(k, () => owned(k, null, null));
 
-    // A student's presets (lib/writer-styles.js custom), kept valid.
+    // A student's presets (writer/writer-styles.js custom), kept valid.
     const presets = async (scope) => ((scope && (await get(PRESETS + scope))) || []).filter((x) => globalThis.GZ_WRITER_STYLES?.custom ? GZ_WRITER_STYLES.custom(x) : true);
     const savePreset = async (scope, preset) => {
       if (!scope) throw new Error('no student');
@@ -370,7 +370,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
 
     // Backup replay runs inside the worker's staged storage transaction. A newer live paper stays;
     // the other document remains a version, and neither device's version history is discarded.
-    // A backup's records (lib/backup.js): a spreadsheet's carries the bands it names as $parts, written with it.
+    // A backup's records (background/backup.js): a spreadsheet's carries the bands it names as $parts, written with it.
     const merge = async (records) => {
       // A replayed record has no version id of its own. Compare its restorable payload before giving it a fresh id;
       // otherwise each restore of the same older backup consumes another slot and can evict a distinct version.

@@ -1,27 +1,27 @@
 // Settings → AI (docs/ai-harness.md): the switch, Simple or Advanced, the providers (a model on this device: Apple
 // Intelligence where the Mac has it, else the browser's; the providers Glaze knows by name, each with only a key; in
 // Advanced, endpoints the student adds), the overall model and each feature's own (provider, model and the effort a model
-// takes), Advanced's tuning, and the record of recent calls. storage.local `ai` (lib/ai/settings.js) holds the switches and
-// the models; the connections and keys stay in the worker (lib/ai/broker.js 'glaze:ai-config': get, set, remove, test,
+// takes), Advanced's tuning, and the record of recent calls. storage.local `ai` (ai/settings.js) holds the switches and
+// the models; the connections and keys stay in the worker (ai/broker.js 'glaze:ai-config': get, set, remove, test,
 // models, and the device provider's prepare), and a key comes back only masked. Connect, Save and Test ask the browser for
-// exactly the address's host (lib/site.js reach) from their click, before anything is awaited. The record (storage.local
-// aiCalls, lib/ai/failure.js) is metadata only and never leaves this device. Every word reaches the page as textContent.
+// exactly the address's host (core/site.js reach) from their click, before anything is awaited. The record (storage.local
+// aiCalls, ai/failure.js) is metadata only and never leaves this device. Every word reaches the page as textContent.
 // Extension options page only (mount); the pure helpers are for node tests.
 var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
-  const A = () => (typeof GZ_AI_SETTINGS !== 'undefined' ? GZ_AI_SETTINGS : require('./ai/settings.js'));
-  const E = () => (typeof GZ_AI_ENDPOINT !== 'undefined' ? GZ_AI_ENDPOINT : require('./ai/endpoint.js'));
-  const D = () => (typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('./ai/failure.js'));
+  const A = () => (typeof GZ_AI_SETTINGS !== 'undefined' ? GZ_AI_SETTINGS : require('../ai/settings.js'));
+  const E = () => (typeof GZ_AI_ENDPOINT !== 'undefined' ? GZ_AI_ENDPOINT : require('../ai/endpoint.js'));
+  const D = () => (typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('../ai/failure.js'));
   const TYPE = 'glaze:ai-config', CALLS = 'aiCalls';
-  // On this device (DEVICE) is the worker's to resolve: Apple Intelligence or the browser's model (lib/ai/broker.js onDevice).
+  // On this device (DEVICE) is the worker's to resolve: Apple Intelligence or the browser's model (ai/broker.js onDevice).
   const DEVICE = 'device', APPLE = 'apple';
-  // A model request's failure categories (lib/ai/failure.js CATEGORIES).
+  // A model request's failure categories (ai/failure.js CATEGORIES).
   const CATEGORIES = ['cancelled', 'timeout', 'provider-unavailable', 'request-rejected', 'invalid-response', 'connection-lost'];
   // The providers' cards, in this order: the name, the mark, what a key starts with.
   const CARDS = { openai: ['OpenAI', 'O', 'sk-proj-…'], anthropic: ['Anthropic', 'A', 'sk-ant-…'], gemini: ['Google Gemini', 'G', 'AIza…'], openrouter: ['OpenRouter', 'OR', 'sk-or-…'],
     xai: ['xAI', 'x', 'xai-…'], mistral: ['Mistral', 'M', ''], groq: ['Groq', 'Gq', 'gsk_…'], deepseek: ['DeepSeek', 'DS', 'sk-…'] };
   // Advanced's quick fill for a server on this computer.
   const LOCAL = [['Ollama', 'http://localhost:11434/v1'], ['LM Studio', 'http://localhost:1234/v1']];
-  // Tuning's stops (lib/ai/settings.js TUNE): a slider moves through these.
+  // Tuning's stops (ai/settings.js TUNE): a slider moves through these.
   const STOPS = { temperature: Array.from({ length: 21 }, (_, i) => i / 10), maxTokens: [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768],
     context: [2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000, 1000000], timeoutMs: [2000, 4000, 8000, 15000, 30000, 60000, 120000, 300000], pause: Array.from({ length: 39 }, (_, i) => 100 + i * 50) };
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
@@ -44,7 +44,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     : st.state === 'downloading' ? (typeof st.progress === 'number' ? pct(st.progress) : t('Downloading…'))
       : st.reason === 'browser' ? t('Not available in this browser') : st.reason === 'device' ? reason(st.reason, t)
         : t('Not available: {reason}', { reason: reason(st.reason, t) }));
-  // The Apple provider's status (lib/ai/providers/apple.js): { state, reason? }.
+  // The Apple provider's status (ai/providers/apple.js): { state, reason? }.
   const appleText = (st, t) => (st.state === 'ready' ? t('Ready') : st.reason === 'off' ? t('Apple Intelligence is off')
     : ['os', 'device'].includes(st.reason) ? t('Not available on this device') : st.state === 'downloading' ? t('Downloading…')
       : t('Not available: {reason}', { reason: reason(st.reason, t) }));
@@ -53,7 +53,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     const n = typeof m?.progress === 'number' ? m.progress : typeof m?.loaded === 'number' ? (m.total > 0 ? m.loaded / m.total : m.loaded) : NaN;
     return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : null;
   };
-  // The call record's rows, newest first, as far as they are what lib/ai/failure.js writes; nothing else of a row is kept.
+  // The call record's rows, newest first, as far as they are what ai/failure.js writes; nothing else of a row is kept.
   const rows = (calls) => (Array.isArray(calls) ? calls : []).filter((r) => isObj(r) && Number.isFinite(r.startedAt)).map((r) => ({
     at: r.startedAt, ...(typeof r.task === 'string' && /^[a-z.-]{1,64}$/.test(r.task) && { task: r.task }), feature: typeof r.feature === 'string' ? r.feature : '', provider: typeof r.provider === 'string' ? r.provider : '',
     ...(typeof r.model === 'string' && r.model && { model: r.model.slice(0, 200) }),
@@ -101,7 +101,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     // ---- the switches (storage.local ai) -------------------------------------------------------------------------------
     // Read again before each write, so a change elsewhere (another Settings tab) isn't written over; one at a time, so a
     // quick second change isn't written over by the first still saving. A Web Lock shares that turn across Settings tabs
-    // and the worker's write-back of an older store (lib/ai/broker.js upgrade). Each change takes its control's state when made.
+    // and the worker's write-back of an older store (ai/broker.js upgrade). Each change takes its control's state when made.
     let writing = Promise.resolve();
     const write = (patch) => {
       const save = async () => {
@@ -262,7 +262,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         await load();
         if (!await asked) { tested[id] = { state: 'unavailable', reason: 'permission' }; return say(t('Glaze isn’t allowed to reach {host}.', { host: iso(hostOf(S.PRESETS[id].base)) }), true); }
         await check(id);
-        // The models lib/ai/settings.js suggests for a key that works, where nothing better is chosen.
+        // The models ai/settings.js suggests for a key that works, where nothing better is chosen.
         const ids = tested[id]?.state === 'ready' ? (catalogs[id]?.models || []).map((m) => m.id) : [];
         if (S.suggest(s, id, ids)) await write((cur) => S.suggest(cur, id, ids) || {});
       })().catch(() => say(t('Could not save. Try again.'), true)).finally(() => { busy = false; });

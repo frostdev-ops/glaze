@@ -1,19 +1,19 @@
 // Glaze Writer's rich paste (writer.html, after writer-paper.js): HTML from Word, Google Docs and web pages normalised to
-// what a paper holds before the paper schema reads it (lib/writer-editor.js transformPastedHTML calls before()). Word's
+// what a paper holds before the paper schema reads it (writer/writer-editor.js transformPastedHTML calls before()). Word's
 // clipboard document is read with its <style> block's Mso classes, mso- properties (highlight, exact line heights,
 // pagination) and its list paragraphs (mso-list, their marker spans) as real lists; Docs' guid wrapper, its 1.38 / 1.2
 // line heights (its 1.15 and single) and aria-level lists; a web page's marks, colours and paper fonts, not its layout.
 // Fonts, sizes, colours, highlight, caps, spacing and indents become the paper's marks and paragraph settings, what equals
-// the paper's own left unmarked. A colour stays only where it is legible on the paper (lib/writer-color.js: on its
+// the paper's own left unmarked. A colour stays only where it is legible on the paper (writer/writer-color.js: on its
 // highlight, else the white page; Word's mso-themecolor text and page colours are the paper's ink); block shading drops. After a paste with formatting a toast asks once per paper: Keep formatting (the default,
 // also when it goes unanswered) or Match the paper; the answer is the paper's doc attribute `paste`, and storage.sync
 // writer.pasteAsk false keeps formatting without asking. ⌘⇧V pastes plain text (ProseMirror's shift paste).
 // The normaliser, strip() and tidy() are plain functions for node tests; then the frame.
 var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
-  const S = () => globalThis.GZ_WRITER_SCHEMA || require('./lib/writer-schema.js');
+  const S = () => globalThis.GZ_WRITER_SCHEMA || require('../writer-schema.js');
   const limit = () => { throw Object.assign(new RangeError('writer-paste: input exceeds safe limits'), { code: 'WRITER_INPUT_LIMIT' }); };
-  const ST = () => globalThis.GZ_WRITER_STYLES || require('./lib/writer-styles.js');
-  const LEGIBLE = () => globalThis.GZ_WRITER_COLOR || require('./lib/writer-color.js');
+  const ST = () => globalThis.GZ_WRITER_STYLES || require('../writer-styles.js');
+  const LEGIBLE = () => globalThis.GZ_WRITER_COLOR || require('../writer-color.js');
 
   // ---- a small tree of the clipboard HTML (the schema's tokenizer; nothing reaches a live document)
   const VOID = new Set(['br', 'hr', 'img', 'wbr', 'input', 'meta', 'link', 'area', 'base', 'col', 'embed', 'param', 'source', 'track']);
@@ -417,9 +417,9 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   const PM = globalThis.GZ_PM;
   const paper = () => (F.mode() === 'paper' ? globalThis.GZ_WRITER_PAPER?.current?.() || null : null);
   let ask = true, pending = null;
-  // Settings → Writer (lib/writer-settings.js): writer.pasteAsk.
+  // Settings → Writer (writer/writer-settings.js): writer.pasteAsk.
   globalThis.GZ_WRITER_SETTINGS?.follow((w) => { ask = w?.pasteAsk !== false; });
-  // lib/writer-editor.js's transformPastedHTML: the clipboard's HTML in Writer's vocabulary.
+  // writer/writer-editor.js's transformPastedHTML: the clipboard's HTML in Writer's vocabulary.
   api.before = (html, schema) => {
     pending = null;
     try {

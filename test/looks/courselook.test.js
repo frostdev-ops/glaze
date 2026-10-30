@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../../extension/defaults.js');
+const G = require('../../extension/content/defaults.js');
 
 test('a course wears its own look on its pages, and the student theme everywhere else', () => {
   const s = G.GZ_SANITIZE({ preset: 'Ember', colors: G.GZ_PRESET('Ember'), look: { tooltips: false }, courses: { looks: { _1_1: 'Library', _2_1: 'Nope', x: 'Library', '3': 'Terminal' } } });

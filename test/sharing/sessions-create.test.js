@@ -27,7 +27,7 @@ const page = async (sources, options = {}) => {
   node('#panel-backup').hidden = true;
   node('#ss-kind').value = 'notes';
   const state = { ok: true, on: false, sessions: options.sessions || [], sources, accounts: [], relay: 'https://share.frostdev.io', defaultRelay: 'https://share.frostdev.io', hosts: [] };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/lib/sessions-ui.js'), 'utf8'), {
+  vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/sharing/sessions-ui.js'), 'utf8'), {
     URL, URLSearchParams, location: { search: '' }, navigator: { userActivation: { isActive: true } }, addEventListener() {},
     GZ_I18N: { t: (k) => k, ui: () => 'en' }, GZ_NOTES: { KEY: /^notesIdx:/ }, GZ_RELAY: { normalize: (s) => s },
     document: { querySelector: node, createElement: (tag) => new Element(tag) },
@@ -103,7 +103,7 @@ test('nothing of the kind on this device: the hint stays, and the Look is offere
 });
 
 test('Create stays off at the broker limits and while an action is in flight', async () => {
-  const limits = require('../../extension/lib/sessions.js').LIMIT;
+  const limits = require('../../extension/sharing/sessions.js').LIMIT;
   assert.equal(limits.sessions, 20); assert.equal(limits.items, 200);
   const full = await page([], { sessions: Array.from({ length: limits.sessions }, () => ({ items: [], members: [], kind: 'look' })) });
   await full.kind('look'); await full.title('My Look');

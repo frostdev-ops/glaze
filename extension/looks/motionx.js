@@ -1,8 +1,8 @@
 // Look parts that move: the parts that don't touch the page, so node can test
 // them. x.anim becomes CSS text (a @keyframes per moment, and values for the knobs motion.css reads); x.fx, x.cursor and
-// x.type become the particles features/motionx.js draws, and x.pointer names the pointer set features/lookx.js shows. Everything arrives already cleaned (lib/lookparts.js), and is clamped
+// x.type become the particles looks/page/motionx.js draws, and x.pointer names the pointer set looks/page/lookx.js shows. Everything arrives already cleaned (looks/lookparts.js), and is clamped
 // again here anyway: the CSS is built from numbers and names looked up in the tables below, never from a string of the
-// input. Classic script; module.exports for node. Loaded on demand (features/motionx.js asks for it): a second injection
+// input. Classic script; module.exports for node. Loaded on demand (looks/page/motionx.js asks for it): a second injection
 // keeps the first.
 var GZ_MX = globalThis.GZ_MX || (() => {
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
@@ -110,19 +110,19 @@ var GZ_MX = globalThis.GZ_MX || (() => {
   const KINDS = ['burst', 'confetti', 'rain', 'ring', 'sprite', 'contour'];
   const SHAPES = ['dot', 'star', 'snow', 'heart', 'leaf', 'spark'];
   // Marks: shapes only the canvas draws (event effects, the pointer's and typing's), never a background layer's particles,
-  // which lib/scene.js draws on the GPU from SHAPES alone.
+  // which looks/scene.js draws on the GPU from SHAPES alone.
   const MARKS = ['bat', 'petal', 'pixel', 'drop', 'bubble', 'ghost', 'pumpkin', 'flake', 'shard'];
   const DRAWN = [...SHAPES, ...MARKS];
   // The pointer's animation, drawn around the system pointer (never in its place): a trail, sparkles, ripples, a glow that
   // follows, a glow that flickers like a candle, marks that orbit it, scanlines that shimmer over it, marks that drift down,
   // contour rings let go behind it.
   const CURSORS = ['trail', 'sparkle', 'ripple', 'glow', 'flicker', 'orbit', 'scan', 'drift', 'contour'];
-  // The pointer sets (x.pointer): assets/art/cursors/<set>/, their hotspots in lib/lookx.js. 'own' is the student's own
-  // picture, which stays on their device: a theme code never carries it (lib/share.js).
+  // The pointer sets (x.pointer): assets/art/cursors/<set>/, their hotspots in looks/lookx.js. 'own' is the student's own
+  // picture, which stays on their device: a theme code never carries it (sharing/share.js).
   const POINTERS = ['aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'frostdev', 'own'];
   // Typing effects (x.type): what rises from the caret as the student types.
   const TYPES = ['embers', 'ink', 'sparks', 'pixels', 'petals', 'snow', 'bubbles', 'wisps', 'contour'];
-  // A palette token (--gz-<name> on <html>) or #rrggbb; features/motionx.js turns a name into the colour the page wears.
+  // A palette token (--gz-<name> on <html>) or #rrggbb; looks/page/motionx.js turns a name into the colour the page wears.
   const COLOR = /^(?:#[0-9a-f]{6}|[a-z][a-z0-9-]{0,24})$/i;
   const colors = (c, fallback) => {
     const list = (Array.isArray(c) ? c : []).filter((v) => typeof v === 'string' && COLOR.test(v)).slice(0, 6).map((v) => v.toLowerCase());

@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 
 // Exercise the viewer's capture listener with a viewer target and a sibling control.
-const source = fs.readFileSync(path.join(__dirname, '../../extension/slides-kind.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../extension/documents/slides/slides-kind.js'), 'utf8');
 const start = source.indexOf("    addEventListener('keydown', (e) => {\n      if (e.defaultPrevented || presenting || menu || !deck) return;");
 assert.ok(start >= 0);
 const end = source.indexOf('}, { capture: true, signal });', start) + '}, { capture: true, signal });'.length;

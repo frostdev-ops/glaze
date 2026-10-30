@@ -1,4 +1,4 @@
-// Glaze Writer's objects in a .docx, as two passes lib/writer-docx.js makes around its own work, so that file stays as it
+// Glaze Writer's objects in a .docx, as two passes writer/writer-docx.js makes around its own work, so that file stays as it
 // is: exportParts(doc, parts, { format }) after it has written the parts and before it zips them, and
 // importHTML(html, { numbering, styles }) on the HTML it read, with the trees it parsed (its xml() shape:
 // { local, a, kids }); writer-docx marks each list item it read with its w:numId (data-w-num). Both take the document
@@ -10,7 +10,7 @@
 //   pictures: one set as a block aligns its paragraph (w:jc, no first-line indent), its caption follows in Word's Caption
 //     style, kept with it; a picture alone in its paragraph comes back as a block, the Caption paragraph after it
 //     (writer-docx marks it data-w-style="caption") as its caption;
-//   horizontal lines are written and read by lib/writer-docx.js alongside its other blocks.
+//   horizontal lines are written and read by writer/writer-docx.js alongside its other blocks.
 // Classic script; module.exports for node.
 var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
   const S = () => (typeof GZ_WRITER_SCHEMA !== 'undefined' ? GZ_WRITER_SCHEMA : require('./writer-schema.js'));

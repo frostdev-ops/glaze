@@ -44,8 +44,8 @@ test('the docs show every call as glaze.<name>', () => {
 
 test('the events: the type file, the docs and the code that sends them agree', () => {
   const typed = new Set(keys('GlazeEvents'));
-  const page = read('features/mods.js'), host = read('mods/host.js');
-  // The names sent in features/mods.js: emit(id, 'x'), emitAll('x'), tell('x'), send('x') and { event: 'x' }; a data event is
+  const page = read('mods/page/mods.js'), host = read('mods/host.js');
+  // The names sent in mods/page/mods.js: emit(id, 'x'), emitAll('x'), tell('x'), send('x') and { event: 'x' }; a data event is
   // told by the permission it needs (NEEDS). 'palette.run' is the palette's own call back into the mod, not a mod's event.
   const sent = new Set([...page.matchAll(/(?:emit\([^,]+, |emitAll\(|tell\(|send\(|event: )'([\w.]+)'/g)].map((m) => m[1]));
   for (const k of page.match(/const NEEDS = \{([^}]*)\}/)[1].matchAll(/(\w+):/g)) sent.add(k[1]);
@@ -57,7 +57,7 @@ test('the events: the type file, the docs and the code that sends them agree', (
 });
 
 test('the palette tokens, effect kinds and shapes are Glaze\'s own', () => {
-  const D = require('../../extension/defaults.js'), MX = require('../../extension/lib/motionx.js');
+  const D = require('../../extension/content/defaults.js'), MX = require('../../extension/looks/motionx.js');
   assert.deepEqual(sorted(literals('GlazeColor')), sorted(D.GZ_COLORS.map(([v]) => v.slice(5))));
   assert.deepEqual(sorted(literals('GlazeEffectKind')), sorted(MX.KINDS));
   assert.deepEqual(sorted(literals('GlazeShape')), sorted(MX.SHAPES));
@@ -66,7 +66,7 @@ test('the palette tokens, effect kinds and shapes are Glaze\'s own', () => {
 });
 
 test('the components: the type file, the docs and the drawing code have the same twelve', () => {
-  const drawn = new Set([...read('features/modui.js').matchAll(/case '(\w+)'/g)].map((m) => m[1]));
+  const drawn = new Set([...read('mods/page/modui.js').matchAll(/case '(\w+)'/g)].map((m) => m[1]));
   const typed = new Set([...dts.matchAll(/^ {2}type: '(\w+)';/gm)].map((m) => m[1]));
   assert.equal(drawn.size, 12);
   assert.deepEqual(sorted(typed), sorted(drawn));
@@ -83,7 +83,7 @@ test('every example is listed in the docs', () => {
 
 
 test('Look overrides expose every supported background kind in the SDK', () => {
-  const XP = require('../../extension/lib/lookparts.js');
+  const XP = require('../../extension/looks/lookparts.js');
   assert.ok(XP.clean({ bg: { media: { type: 'video', src: 'https://media.example/loop.webm', fit: 'cover', dim: 40, loop: true } } }));
   const bg = body('GlazeLookParts');
   for (const key of ['shader', 'layers', 'media']) assert.match(bg, new RegExp(`\\b${key}\\?:`), key);
@@ -94,7 +94,7 @@ test('Look overrides expose every supported background kind in the SDK', () => {
 });
 
 test('mod.json tools: the type file has each source\'s fields and each kind of tool\'s keys, and the docs name them', () => {
-  const T = require('../../extension/lib/modtools.js');
+  const T = require('../../extension/mods/modtools.js');
   assert.deepEqual(sorted(literals('GlazeTodoField')), sorted(Object.keys(T.FIELDS.todo)));
   assert.deepEqual(Object.keys(T.FIELDS.schedule), Object.keys(T.FIELDS.todo));
   assert.deepEqual(sorted(literals('GlazeCourseField')), sorted(Object.keys(T.FIELDS.courses)));

@@ -47,8 +47,8 @@ test('no page a site can frame reaches tabs or windows itself', () => {
     assert.ok(r.files.size, `${page} loads scripts`);
     found.push(...r.found);
   }
-  assert.ok(reached('writer.html').files.has('lib/writer-docx.js'), 'libraries Writer loads later are scanned too');
-  assert.ok(reached('reader.html').files.has('lib/pdfjs/pdf.mjs'), 'and modules');
+  assert.ok(reached('writer.html').files.has('writer/writer-docx.js'), 'libraries Writer loads later are scanned too');
+  assert.ok(reached('reader.html').files.has('vendor/pdfjs/pdf.mjs'), 'and modules');
   assert.deepEqual(found, []);
 });
 
@@ -58,7 +58,7 @@ test('the scan sees each way of writing the call, and each way of naming a scrip
     'chrome/* comment */.tabs.create({});', "chrome['tabs' /* comment */].create({});", 'chrome // c\n  .tabs.create({})']) {
     assert.equal([...code.matchAll(REACH)].length, 1, code);
   }
-  assert.deepEqual(named('lib/writer-papers.js', "['./writer-docx.js?v=1', 'lib/pdfjs/pdf.mjs#x', 'nowhere.js']"), ['lib/writer-docx.js', 'lib/pdfjs/pdf.mjs']);
+  assert.deepEqual(named('writer/writer-papers.js', "['./writer-docx.js?v=1', 'vendor/pdfjs/pdf.mjs#x', 'nowhere.js']"), ['writer/writer-docx.js', 'vendor/pdfjs/pdf.mjs']);
 });
 
 test('the Notes share panel\'s Settings button asks the worker for Settings at its sessions', () => {

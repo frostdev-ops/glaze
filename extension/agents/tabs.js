@@ -1,7 +1,7 @@
-// Agent apps' reads through an open LMS tab (lib/mcp/calls.js refresh, and the tools that need a tab): the account's own tab,
+// Agent apps' reads through an open LMS tab (agents/calls.js refresh, and the tools that need a tab): the account's own tab,
 // found by its school's origin and the account Glaze's own content script there reads (GZ_CTX.account, in the top frame, as
-// lib/background.js modAccount asks it), never a quiz's, a test's or a tool's page (quiet: lib/background.js modQuiet) nor a
-// discarded or frozen tab (spike S5: a discarded tab "answers" from an empty document). Then lib/mcp/tab.js goes into the
+// background/background.js modAccount asks it), never a quiz's, a test's or a tool's page (quiet: background/background.js modQuiet) nor a
+// discarded or frozen tab (spike S5: a discarded tab "answers" from an empty document). Then agents/tab.js goes into the
 // document that answered, and reads there through the page's own paths. The active tab first, then the one used last.
 // create({ tabs (chrome.tabs: query), scripting (chrome.scripting: executeScript), quiet(path) → whether Glaze stays out of
 //   that page, limit? ({ probe, read } ms, for tests) }) → {
@@ -9,11 +9,11 @@
 //   run(account, op, args, { signal }) → the tab side's answer ({ ok, … }), or null with no tab; past limit.read,
 //     { ok: false, error: 'timeout' }; a cancelled signal rejects,
 //   refresh(account, group, { signal, tool }) → { ok, source: 'tab' } | null (no tab, or a group no tab refreshes) }.
-// An account is '<origin>/<uid>' (lib/mcp/tools-study.js parse). Classic script for the worker; module.exports for node.
+// An account is '<origin>/<uid>' (agents/tools-study.js parse). Classic script for the worker; module.exports for node.
 var GZ_MCP_TABS = globalThis.GZ_MCP_TABS || (() => {
-  const FILE = 'lib/mcp/tab.js';
-  // probe: how long a tab may take to say whose it is (lib/background.js modAccount's); read: the most a tab's read takes
-  // (lib/mcp/calls.js LIMIT.refresh); tabs: how many of a school's tabs are asked.
+  const FILE = 'agents/tab.js';
+  // probe: how long a tab may take to say whose it is (background/background.js modAccount's); read: the most a tab's read takes
+  // (agents/calls.js LIMIT.refresh); tabs: how many of a school's tabs are asked.
   const LIMIT = { probe: 1500, read: 8e3, tabs: 8 };
   const UID = /^(\d{1,20}|_\d{1,20}_\d{1,20})$/;
   // What each group's caches are read with in the tab: courses and assignments_list read the planner; grades, Insights.

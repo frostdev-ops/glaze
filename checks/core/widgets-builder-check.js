@@ -2,7 +2,7 @@
 // editor (blocks, data pickers, a live preview from the student's own data), saved, exported as a signed .glazemod and copied
 // as a code; then it is drawn on a local Ultra-shaped page under a strict and a permissive page policy, its button goes to the
 // next to-do, revoking its grant takes the data away at once, and turning it off removes it. The page side then runs again
-// from the Safari-staged package (no sandbox page, no mods/ folder, no features/mods.js), the build Firefox and Safari get.
+// from the Safari-staged package (no sandbox page, no mods/ folder, no mods/page/mods.js), the build Firefox and Safari get.
 // Loopback HTTPS only (macOS sandbox-exec denies everything else). NODE_PATH must name an existing Playwright installation.
 //   NODE_PATH=/path/to/node_modules nice -n 10 node checks/core/widgets-builder-check.js
 // One headless browser at a time across agents: it waits while another runs. Its profiles, staging and server go when it is done.
@@ -13,8 +13,8 @@ const { createHash, X509Certificate } = require('node:crypto');
 // The local LMS (https://127.0.0.1) stands in the staged copy's host_permissions: the student's grant on the narrow manifest.
 const ext = require('../../tools/dev/check-env.js').staged(path.resolve(process.env.EXT || path.join(__dirname, '../../extension')), ['https://127.0.0.1/*']);
 const chrome = require('../../tools/dev/check-env.js').chromePath() || chromium.executablePath();
-const M = require(path.join(ext, 'lib/modbundle.js'));
-const W = require(path.join(ext, 'lib/widgets.js'));
+const M = require(path.join(ext, 'mods/modbundle.js'));
+const W = require(path.join(ext, 'core/widgets.js'));
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 12000) => {
   const end = Date.now() + ms;
@@ -349,11 +349,11 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
     // ========= the package Firefox and Safari get: no sandbox, no code mods' files =========
     const dist = path.join(tmp, 'dist'), stage = path.join(tmp, 'stage');
     fs.mkdirSync(dist);
-    execFileSync('sh', ['../tools/build/package.sh'], { cwd: ext, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    execFileSync('sh', [path.join(__dirname, '../../tools/build/package.sh')], { cwd: ext, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
     execFileSync('unzip', ['-q', path.join(dist, fs.readdirSync(dist).find((f) => f.endsWith('.zip'))), '-d', stage]);
     execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(stage, 'manifest.json')]);
-    ok(!fs.existsSync(path.join(stage, 'mods')) && !fs.existsSync(path.join(stage, 'features/mods.js')) && fs.existsSync(path.join(stage, 'features/modwidgets.js')) && fs.existsSync(path.join(stage, 'features/modui.js'))
-      && JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json'), 'utf8')).sandbox === undefined, 'the staged package has no sandbox page, no mods/ folder and no features/mods.js, and keeps the widget side and its renderer');
+    ok(!fs.existsSync(path.join(stage, 'mods/host.html')) && !fs.existsSync(path.join(stage, 'mods/boot.js')) && !fs.existsSync(path.join(stage, 'mods/page/mods.js')) && fs.existsSync(path.join(stage, 'mods/page/modwidgets.js')) && fs.existsSync(path.join(stage, 'mods/page/modui.js'))
+      && JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json'), 'utf8')).sandbox === undefined, 'the staged package has no sandbox page, no mods host or bootstrap and no mods/page/mods.js, and keeps the widget side and its renderer');
     const second = await launch(stage, path.join(tmp, 'profile-b'));
     await seed(second.sw, { widgetLayout: layout, mods: [mid], [`mod:${mid}`]: record, [`modTrust:${mid}`]: trust });
     ok(await second.sw.evaluate(() => !chrome.runtime.getManifest().sandbox), 'this browser has no manifest sandbox, so code mods could not run here');

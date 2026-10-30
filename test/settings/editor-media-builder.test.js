@@ -1,4 +1,4 @@
-// The editor's "Video or animation" builder (lib/editor-xbg.js) run for real against an inert page: what the Kind picker, the link
+// The editor's "Video or animation" builder (settings/editor-xbg.js) run for real against an inert page: what the Kind picker, the link
 // box and the file picker do to the background a Look already has (LOOK-8), and what the preview's report of a file past the limits
 // says (LOOK-6). Nothing here touches a browser: the page is a handful of stand-in elements, the worker a function.
 const test = require('node:test');
@@ -6,9 +6,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const XP = require('../../extension/lib/lookparts.js');
-const MEDIA = require('../../extension/lib/media.js');
+const D = require('../../extension/content/defaults.js');
+const XP = require('../../extension/looks/lookparts.js');
+const MEDIA = require('../../extension/looks/media.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const HASH = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ';
@@ -33,7 +33,7 @@ class El {
   focus() {}
 }
 
-// The builder with the real editor-x.js and lib/editor-xbg.js, a recording worker, and the parts the Look has.
+// The builder with the real editor-x.js and settings/editor-xbg.js, a recording worker, and the parts the Look has.
 const rig = ({ parts = null, reply = (m) => (m.op === 'list' ? { ok: true, files: [] } : { ok: true }), answer = () => true, permissions = true } = {}) => {
   const doc = { body: null, elements: {} };
   doc.createElement = (tag) => new El(tag, doc);
@@ -50,9 +50,9 @@ const rig = ({ parts = null, reply = (m) => (m.op === 'list' ? { ok: true, files
     chrome: { runtime: { lastError: null, getManifest: () => ({ host_permissions: ['https://frostdev.io/*'] }), sendMessage: (m, cb) => { sent.push(m); const r = Promise.resolve(reply(m)); if (cb) r.then(cb); return r; } },
       ...(permissions && { permissions: { request: (o) => { asked.push([...o.origins]); return Promise.resolve(answer(o.origins)); } } }) },
     location: { origin: 'chrome-extension://glaze' }, addEventListener: (t, f) => { (listeners[t] ||= []).push(f); },
-    GZ_XPARTS: XP, GZ_MEDIA: MEDIA, GZ_SPEC: D.GZ_SPEC, GZ_COLORS: D.GZ_COLORS, GZ_MX: require('../../extension/lib/motionx.js'),
+    GZ_XPARTS: XP, GZ_MEDIA: MEDIA, GZ_SPEC: D.GZ_SPEC, GZ_COLORS: D.GZ_COLORS, GZ_MX: require('../../extension/looks/motionx.js'),
   });
-  vm.runInContext(`${read('lib/site.js')}\n${read('lib/editor-x.js')}\n${read('lib/editor-xbg.js')}\nglobalThis.X = GZ_EDITOR_X; globalThis.BG = GZ_EDITOR_XBG;`, ctx);
+  vm.runInContext(`${read('core/site.js')}\n${read('settings/editor-x.js')}\n${read('settings/editor-xbg.js')}\nglobalThis.X = GZ_EDITOR_X; globalThis.BG = GZ_EDITOR_XBG;`, ctx);
   const s = { parts: structuredClone(parts), bg: { kind: 'media' }, motion: { level: 'full' } }, writes = [];
   const frame = { contentWindow: {} };
   ctx.X.mount({ s, t: (str, v) => str.replace(/\{(\w+)\}/g, (_, k) => v?.[k]), save: (keys, soon, only) => writes.push({ keys, only, media: structuredClone(s.parts?.x?.bg?.media ?? null) }), preview() {}, frame });
@@ -132,7 +132,7 @@ test('a link replaces a kept file only when it is a good link', async () => {
   assert.deepEqual(r.media(), { type: 'video', src: LINK, dim: 60 }, 'the link, with the dim the Look had');
 });
 
-// The worker fetches a link's file (lib/media.js remote), and a host Glaze lacks is refused there: the link's host is asked
+// The worker fetches a link's file (looks/media.js remote), and a host Glaze lacks is refused there: the link's host is asked
 // for in the change that takes it (a paste and Enter, or leaving the box), before anything is awaited.
 test('a link asks the browser for its host as it is taken; refused, the background stays as it was and the box says so', async () => {
   const r = rig({ parts: withFile });
@@ -158,7 +158,7 @@ test('a link asks the browser for its host as it is taken; refused, the backgrou
   assert.deepEqual(bad.asked, []);
 });
 
-// Embedded Settings on Firefox has no permissions API: the link's box goes to Settings' own tab (lib/site.js elsewhere), and
+// Embedded Settings on Firefox has no permissions API: the link's box goes to Settings' own tab (core/site.js elsewhere), and
 // the builder neither keeps the link nor says it couldn't.
 test('without the permissions API, a link goes where the page sends it, with its box; nothing is asked, kept or said', async () => {
   const r = rig({ parts: withFile, permissions: false });

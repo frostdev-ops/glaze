@@ -1,4 +1,4 @@
-/* Glaze's first screen (features/welcome.html): frostdev.io's splash under the one question it asks. The --gz-* colours are
+/* Glaze's first screen (settings/welcome.html): frostdev.io's splash under the one question it asks. The --gz-* colours are
    the Frostdev Look's, set on <html> by welcome.js from defaults.js; the values here are the same, for the first paint. */
 @font-face { font-family: 'Inter'; src: url('../fonts/inter.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
 :root {
@@ -8,7 +8,7 @@
   --gz-line: #2b465d; --gz-line-strong: #4d6f8a; --gz-ok: #78dfc0; --gz-err: #ffa7b2;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --bar: 64px;
-  /* The Frostdev pointers (assets/art/cursors/frostdev, hotspots from lib/lookx.js); text keeps the system's I-beam. */
+  /* The Frostdev pointers (assets/art/cursors/frostdev, hotspots from looks/lookx.js); text keeps the system's I-beam. */
   --arrow: url('../assets/art/cursors/frostdev/default.svg') 3 2, image-set(url('../assets/art/cursors/frostdev/default.png') 1x, url('../assets/art/cursors/frostdev/default@2x.png') 2x) 3 2, default;
   --hand: url('../assets/art/cursors/frostdev/pointer.svg') 11 2, image-set(url('../assets/art/cursors/frostdev/pointer.png') 1x, url('../assets/art/cursors/frostdev/pointer@2x.png') 2x) 11 2, pointer;
 }

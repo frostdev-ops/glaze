@@ -1,7 +1,7 @@
 // The student's pointer, under Look › Pointer: whether Glaze draws one at all, which they see with every Look, and whether
 // its animation plays (settings extras.pointerOn, extras.pointer and extras.pointerAnim, defaults.js). It is theirs, not the
 // Look's: never written into a Look's parts or a theme code, and it stays when they change Looks. A picture of their own is
-// kept on this computer (storage.local cursorImg, lib/lookx.js). The page wears it through features/lookx.js
+// kept on this computer (storage.local cursorImg, looks/lookx.js). The page wears it through looks/page/lookx.js
 // (GZ_LX.pointerOf), the editor's preview too. The switch is a data-key control options.js fills and saves; switched off,
 // the cards and the animation switch are hidden, and the choice is kept for when it is back on.
 // One card per pointer in a radio group, as the editor's other pickers are: each shows its arrow and hand on a stage half
@@ -11,8 +11,8 @@
 // tile list and what each tile shows have module.exports for node.
 var GZ_EDITOR_POINTER = globalThis.GZ_EDITOR_POINTER || (() => {
   const X = typeof GZ_EDITOR_X !== 'undefined' ? GZ_EDITOR_X : require('./editor-x.js');
-  const LX = () => (typeof GZ_LX !== 'undefined' ? GZ_LX : require('./lookx.js'));
-  const MX = () => (typeof GZ_MX !== 'undefined' ? GZ_MX : require('./motionx.js'));
+  const LX = () => (typeof GZ_LX !== 'undefined' ? GZ_LX : require('../looks/lookx.js'));
+  const MX = () => (typeof GZ_MX !== 'undefined' ? GZ_MX : require('../looks/motionx.js'));
   const XM = () => (typeof GZ_EDITOR_XMOTION !== 'undefined' ? GZ_EDITOR_XMOTION : require('./editor-xmotion.js'));
   // The cards, in order: the Look's, every bundled set, the student's own picture. The same list as the
   // setting takes (defaults.js GZ_SPEC.extras.pointer).

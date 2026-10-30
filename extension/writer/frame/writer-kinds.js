@@ -1,5 +1,5 @@
 // Glaze Writer's other document kinds in an assignment's frame (writer.html). An attempt whose record is a PDF or a slide
-// deck (lib/doc-kinds.js) shows that kind's viewer in the paper's place, as a page of its own (pdf-kind.js: its pages, its
+// deck (documents/doc-kinds.js) shows that kind's viewer in the paper's place, as a page of its own (pdf-kind.js: its pages, its
 // form filled and saved; slides-kind.js: the deck to view), the paper parked (writer-paper.js hand). Open in Glaze, the
 // import card's choice for a brought file whose kind's Settings → Writer switch is on (writer.pdf, writer.slides), saves
 // the paper, then makes the attempt's record that kind with the file's bytes (the kind's into, whose 'import' save keeps
@@ -13,12 +13,12 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
   if (!frame) return null;
   const P = () => globalThis.GZ_WRITER_PAPER, L = () => globalThis.GZ_WRITER_SUBMIT_LIB;
   const t = (k, v) => frame.t(k, v);
-  // What each kind loads in the frame (its switch: lib/writer-submit.js SWITCH).
+  // What each kind loads in the frame (its switch: writer/writer-submit.js SWITCH).
   const FRAME = Object.freeze({
-    pdf: Object.freeze({ scripts: ['lib/doc-kinds.js', 'lib/pdf-doc.js', 'pdf-kind.js'], css: 'pdf-kind.css' }),
-    slides: Object.freeze({ scripts: ['lib/doc-kinds.js', 'slides-kind.js'], css: 'slides-kind.css' }),
+    pdf: Object.freeze({ scripts: ['documents/doc-kinds.js', 'documents/pdf/pdf-doc.js', 'documents/pdf/pdf-kind.js'], css: 'documents/pdf/pdf-kind.css' }),
+    slides: Object.freeze({ scripts: ['documents/doc-kinds.js', 'documents/slides/slides-kind.js'], css: 'documents/slides/slides-kind.css' }),
     // The grid (sheet-kind.js loads its engine and sheet-grid.js itself) and the .xlsx codecs, so it reads and writes .xlsx.
-    sheet: Object.freeze({ scripts: ['lib/doc-kinds.js', 'lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js', 'sheet-kind.js'], css: 'sheet.css' }),
+    sheet: Object.freeze({ scripts: ['documents/doc-kinds.js', 'core/doctext.js', 'core/zip.js', 'documents/sheets/sheet-xlsx.js', 'documents/sheets/sheet-kind.js'], css: 'documents/sheets/sheet.css' }),
   });
   const prefs = () => globalThis.GZ_WRITER_SETTINGS?.now() || {};
   // The kinds a brought file may open as here: in this frame, and switched on.
@@ -116,7 +116,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       if (shown) { if (!await (shown.id === 'sheet' ? shown.surface.version('import') : shown.surface.save())) throw new Error('not saved'); }
       else if (!await paper.save()) throw new Error('paper could not be saved');
       paper.hold();
-      // The file arriving, stage by stage (lib/doc-kinds.js progress): in the paper's status bar, or the viewer's line,
+      // The file arriving, stage by stage (documents/doc-kinds.js progress): in the paper's status bar, or the viewer's line,
       // until its viewer shows (finally, below).
       const steps = id === 'sheet' ? ['read', 'prepare', 'save'] : ['read', 'prepare', 'copy', 'save'];
       let stage = null;
@@ -204,14 +204,14 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     (async () => {
       for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100));
       // The registry says whether this build has the spreadsheet kind (offers).
-      if (Object.hasOwn(FRAME, 'sheet')) await P().need(['lib/doc-kinds.js']);
+      if (Object.hasOwn(FRAME, 'sheet')) await P().need(['documents/doc-kinds.js']);
       readyPaper = P()?.current();
       refreshChoices();
     })().catch((e) => console.error(e));
   });
 
-  // ---- a file shown from elsewhere (writer.js view mode; features/bbpreview.js: Blackboard's preview of an attachment,
-  // converted to a PDF, which the page read; features/canvasopen.js: a Canvas file the page read on a click): init { kind:
+  // ---- a file shown from elsewhere (writer.js view mode; courses/page/bbpreview.js: Blackboard's preview of an attachment,
+  // converted to a PDF, which the page read; courses/page/canvasopen.js: a Canvas file the page read on a click): init { kind:
   // 'pdf', 'slides' or 'sheet', view: { bytes (an ArrayBuffer, transferred), name, href } } → the kind's show, nothing kept unless the
   // student saves it to Documents. The page hears view:shown once page 1 is
   // drawn, view:failed (with a reason) for anything else, so it keeps Blackboard's frame, and view:esc for an Esc the

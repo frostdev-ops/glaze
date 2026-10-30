@@ -1,10 +1,10 @@
-// Insights' loading (features/insights.js) on a small stand-in for the page: what it asks Canvas for, and when it stops.
+// Insights' loading (planner/page/insights.js) on a small stand-in for the page: what it asks Canvas for, and when it stops.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../../extension/features/insights.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/planner/page/insights.js'), 'utf8');
 const settle = async (n = 8) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const later = () => { let resolve, reject; const p = new Promise((y, n) => { resolve = y; reject = n; }); return Object.assign(p, { resolve, reject }); };
 const ORIGIN = 'https://school.instructure.com';
@@ -46,7 +46,7 @@ const page = ({ kept = {} } = {}) => {
   const context = vm.createContext({
     GZ_CTX: { t: (k) => k, locale: () => 'en', on: () => true, settings: () => S, need: () => Promise.resolve(),
       profile: async () => ({ id: '3', time_zone: 'America/New_York' }), canvasCourses: async () => [course] },
-    GZ_TODO: require('../../extension/lib/todo.js'), GZ_GRADECALC: require('../../extension/lib/gradecalc.js'), GZ_INSIGHTS: require('../../extension/lib/insights.js'), GZ_I18N: require('../../extension/lib/i18n.js'),
+    GZ_TODO: require('../../extension/planner/todo.js'), GZ_GRADECALC: require('../../extension/planner/gradecalc.js'), GZ_INSIGHTS: require('../../extension/planner/insights.js'), GZ_I18N: require('../../extension/core/i18n.js'),
     chrome: { runtime: { sendMessage: async (m) => { sent.push(m); return { ok: true }; } }, storage: { local: { get: (k, cb) => cb(kept) } } },
     document: doc, location: { origin: ORIGIN, pathname: '/' }, window: {}, navigator: {}, URL, Date, Promise, JSON, setTimeout,
     getComputedStyle: () => ({ getPropertyValue: () => '', fontFamily: '' }),
@@ -136,7 +136,7 @@ test('the saved picture of a summary that left work out says so, as the dialog d
   }
 });
 
-// ---- Blackboard Ultra (B4): the same view, from Ultra through lib/ultra.js ----
+// ---- Blackboard Ultra (B4): the same view, from Ultra through courses/ultra.js ----
 const UO = 'https://lms.example.edu';
 const ufix = (n) => JSON.parse(fs.readFileSync(require.resolve(`../fixtures/ultra-${n}.json`), 'utf8'));
 const U_NOW = Date.parse('2026-10-15T12:00:00Z'); // in the fixtures' Fall 2026 term
@@ -144,7 +144,7 @@ class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_N
 const ultraPage = ({ partial = false } = {}) => {
   const S = { enabled: true, enhance: { insights: true, streak: false } };
   const asked = [], sent = [];
-  // Ultra's header tools, and B5's panel bar (features/widgets.js) with its What Glaze can do.
+  // Ultra's header tools, and B5's panel bar (core/page/widgets.js) with its What Glaze can do.
   const tools = new El('div'), bar = new El('div');
   bar.append(Object.assign(new El('button'), { textContent: 'What Glaze can do' }));
   const doc = { body: new El('body'), activeElement: null, createElement: (t) => new El(t), createElementNS: (ns, t) => new El(t),
@@ -153,8 +153,8 @@ const ultraPage = ({ partial = false } = {}) => {
   if (partial) books._101_1.paging = { nextPage: '?offset=200' };
   const context = vm.createContext({
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', on: () => true, settings: () => S, need: () => Promise.resolve(), myCourses: async () => ufix('memberships').results },
-    GZ_TODO: require('../../extension/lib/todo.js'), GZ_GRADECALC: require('../../extension/lib/gradecalc.js'), GZ_INSIGHTS: require('../../extension/lib/insights.js'), GZ_I18N: require('../../extension/lib/i18n.js'),
-    GZ_PAGE: require('../../extension/lib/page.js'), GZ_COURSES: require('../../extension/defaults.js').GZ_COURSES,
+    GZ_TODO: require('../../extension/planner/todo.js'), GZ_GRADECALC: require('../../extension/planner/gradecalc.js'), GZ_INSIGHTS: require('../../extension/planner/insights.js'), GZ_I18N: require('../../extension/core/i18n.js'),
+    GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES,
     chrome: { runtime: { sendMessage: async (m) => { sent.push(m); return { ok: true }; } }, storage: { local: { get: (k, cb) => cb({}) } } },
     document: doc, location: { origin: UO, pathname: '/ultra/course' }, window: {}, navigator: {}, URL, Date: FixedDate, Promise, JSON, setTimeout, Intl,
     getComputedStyle: () => ({ getPropertyValue: () => '', fontFamily: '' }),
@@ -166,7 +166,7 @@ const ultraPage = ({ partial = false } = {}) => {
     },
   });
   context.window.top = context.window;
-  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/ultra.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/courses/ultra.js'), 'utf8'), context);
   const ui = vm.runInContext(source, context);
   return { ui, asked, sent, tools, bar, S, doc };
 };

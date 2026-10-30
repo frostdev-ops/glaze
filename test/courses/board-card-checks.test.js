@@ -38,7 +38,7 @@ test('Moodle title restoration ignores a resweep of unrelated course menu button
 });
 
 test('the widget fixture keeps its floating mod through worker layout normalization', () => {
-  const W = require('../../extension/lib/widgets.js');
+  const W = require('../../extension/core/widgets.js');
   const source = fs.readFileSync(path.join(__dirname, '../../checks/core/widgets-builder-check.js'), 'utf8');
   const code = source.slice(source.indexOf('    const layout ='), source.indexOf('    await sw.evaluate((l)'));
   const mid = 'abcdefghijklmnop';

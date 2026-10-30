@@ -1,5 +1,5 @@
-/* LMS rules (features/rules.js adds this sheet while a Look's rules are worn): what the attributes and variables it puts
-   on a part's elements mean. Values only ever arrive as --gz-r-* variables, cleaned by lib/parts.js. The three :not(#…)
+/* LMS rules (looks/page/rules.js adds this sheet while a Look's rules are worn): what the attributes and variables it puts
+   on a part's elements mean. Values only ever arrive as --gz-r-* variables, cleaned by looks/parts.js. The three :not(#…)
    lift each rule over the LMS's and Glaze's own id selectors (#site-wrap, #application, #page), !important against theirs. */
 [data-gz-r-hide]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { display: none !important; }
 [data-gz-r-st~="bg"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { background: var(--gz-r-bg) !important; }

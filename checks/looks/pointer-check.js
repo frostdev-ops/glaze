@@ -1,4 +1,4 @@
-// The student's pointer (Look › Pointer, lib/editor-pointer.js), headless, in the real unpacked extension's options page:
+// The student's pointer (Look › Pointer, settings/editor-pointer.js), headless, in the real unpacked extension's options page:
 // the custom pointer switch in the heading; a card for every choice, chosen with the arrow keys and the pointer and saved as
 // the student's setting (sync extras), never into the Look; the preview wearing what is chosen; a picture of their own asked
 // for from its card, worn and removed; the choice staying through a change of Look; the animation switch stopping the Look's
@@ -19,7 +19,7 @@ const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, 
 const out = process.argv[2] && path.resolve(process.argv[2]);
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const lock = require('../../tools/dev/check-env.js').lockPath();
-const G = require(path.join(ext, 'defaults.js'));
+const G = require(path.join(ext, 'content/defaults.js'));
 const PAGE = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-courses.html'), 'utf8');
 const SITE = 'https://bb.school.test';
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -248,7 +248,7 @@ const animates = async (frame, at, bound = 20000) => {
     // ---- part 2: a course page ------------------------------------------------------------------------------------------------
     console.log('\n-- an Ultra page --');
     await page.evaluate((origin) => chrome.storage.local.set({ ultra: [origin] }), SITE);
-    // Settings and the Look's parts as the editor saves them (lib/background.js glaze:look); extras alone as any switch does.
+    // Settings and the Look's parts as the editor saves them (background/background.js glaze:look); extras alone as any switch does.
     const look = (parts, patch = {}) => page.evaluate(({ parts, patch }) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:look', parts, patch: { version: 2, ...patch } }, res)), { parts, patch });
     const extras = (x) => page.evaluate((x) => chrome.storage.sync.get('extras').then((r) => chrome.storage.sync.set({ extras: { ...r.extras, ...x } })), x);
     check('a Look without parts is saved', (await look(null, { motion: { ...G.GZ_DEFAULTS.motion, level: 'expressive', followSystem: false } }))?.ok);

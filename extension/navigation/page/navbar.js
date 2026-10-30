@@ -1,18 +1,18 @@
-// Glaze's own navigation (owner decision 2026-10-19), drawn from one model (lib/navbar.js) on every site, in a shadow root
+// Glaze's own navigation (owner decision 2026-10-19), drawn from one model (navigation/navbar.js) on every site, in a shadow root
 // of its own so the school's CSS can't reach it. The site's own nav stays in the page, hidden (theme.css), so its links,
 // badges and menus keep working through it and turning the bar off shows it again. Wide windows: a side rail (open, or
 // icons with a peek on hover) or a top bar, floating over the page or set into it; inside a course it can change (icons,
 // a top bar, or none). Glaze's course tabs show in it too. A site's own menus (Canvas's trays: Courses, Account, Help…)
 // open as Glaze's panels beside the bar, and a course's own menu (Canvas's course navigation, Moodle's) is a part of
 // the bar inside a course. Below 900px: a bottom bar and a More sheet. Looks and mods style it by part (::part(item));
-// mods add items and listen through the API at the end (features/mods.js carries their calls here). Glaze's widgets (the
-// clock, the next thing due, the focus timer, the pet: features/navbar-widgets.js) sit in the rail, compact in the icons
+// mods add items and listen through the API at the end (mods/page/mods.js carries their calls here). Glaze's widgets (the
+// clock, the next thing due, the focus timer, the pet: navigation/page/navbar-widgets.js) sit in the rail, compact in the icons
 // rail and the top bar, and in a phone's sheet; mods' navigation widgets sit in the rail's dock, which never moves (a frame
 // moved loads again): with a top bar or on a phone, the rail stands invisible and the dock opens over the page from a
 // Widgets button.
 //
-// A site's adapter (GZ_NAVBAR_<SITE>(X), below for Ultra, features/navbar-<site>.js for the others):
-//   read() -> [{ id, label, href, active, badge, panel }]   the site's own items (lib/navlayout.js's vocabulary)
+// A site's adapter (GZ_NAVBAR_<SITE>(X), below for Ultra, navigation/page/navbar-<site>.js for the others):
+//   read() -> [{ id, label, href, active, badge, panel }]   the site's own items (navigation/navlayout.js's vocabulary)
 //                              or, for what that has no name for, id 'link:<12 of a-z0-9>' (the same address, the same id), with
 //                              icon, panel (a menu, opened through panel(id)) or checked (a boolean: a switch, driven through go(id))
 //   go(id) -> bool             open one through the site's own link     brand() -> { src, name }    avatar() -> url
@@ -59,7 +59,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   let host = null, root, el = {}, sizes = null, model = null, rows = [], sig = '', prefs = M.clean(), legacy = null, read = false, lay = null, words = '';
   let rail = null, applied = null, peek = false, shown = false, sheetOpen = false, menu = '', enter = 0, leave = 0, queued = 0, placed = false, frame = 0, sleeping = false, measured = '';
   let cmenu = null, panel = '', panelFrom = null, panelFromId = '', panelTurn = 0; // panelFromId: the item it came from by id, for when the bar is drawn again
-  let wx = null, docked = false; // Glaze's widgets (features/navbar-widgets.js), once any is on; the dock open over the page
+  let wx = null, docked = false; // Glaze's widgets (navigation/page/navbar-widgets.js), once any is on; the dock open over the page
   const skipMain = new Set(); // Elements given a temporary focus target by Skip to content.
   const mainAt = () => { try { return site.main(tabsApi()?.doc?.() || document); } catch { return site.main(); } };
   const panels = new Map(); // id -> { at, data }: a panel's rows, kept a minute
@@ -87,7 +87,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     return items.length ? { name: String(m.name || '').replace(/\s+/g, ' ').trim().slice(0, 80), color: /^#[0-9a-f]{3,8}$/i.test(m.color || '') ? m.color : '', items } : null;
   };
 
-  // A mod's layout the bar wears (features/mods.js): said quietly beside Customize navigation, with the way back.
+  // A mod's layout the bar wears (mods/page/mods.js): said quietly beside Customize navigation, with the way back.
   const arranged = () => globalThis.GZ_MODS?.arranger?.() || null;
   const arrangedRow = (role) => {
     const a = arranged();
@@ -103,7 +103,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const mount = () => {
     host = make('div', { id: 'gz-navbar', hidden: true });
     root = host.attachShadow({ mode: 'open' });
-    const sheet = make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('features/navbar.css') });
+    const sheet = make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('navigation/page/navbar.css') });
     // Unstyled, the bar would flash as a list: it shows once its sheet is in.
     const mounted = host;
     sheet.addEventListener('load', () => { if (host === mounted && on()) { host.hidden = false; placed = false; layout(); } }, { once: true });
@@ -591,7 +591,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   };
   const outside = (e) => { if (!e.composedPath().includes(host)) menuTo('', false); };
   // Mods' widgets with a top bar or on a phone: the rail's dock, open over the page under its button or over the phone's
-  // bar. The rail stands invisible around it (features/navbar.css), so the widgets' frames stay where they were.
+  // bar. The rail stands invisible around it (navigation/page/navbar.css), so the widgets' frames stay where they were.
   const dockTo = (open, focus = true) => {
     if (!host || docked === open || open && (!el.dock.childElementCount || lay.place === 'rail' && wide())) return;
     docked = open;
@@ -725,23 +725,23 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const glaze = (what, e) => {
     // "Use my own": this mod's layouts stay off until the student lets it arrange again (Settings → Navigation).
     if (what === 'nav-own') { const id = e?.target?.closest?.('[data-mod]')?.dataset.mod || arranged()?.id; if (id && /^[a-z2-7]{16}$/.test(id)) try { chrome.storage.local.set({ [`modNavLayout:${id}`]: false }); } catch { /* reloaded */ } return; }
-    // Settings opens as a page of the site, beside the bar (features/settingspage.js); the editor's preview keeps a tab.
+    // Settings opens as a page of the site, beside the bar (settings/page/settingspage.js); the editor's preview keeps a tab.
     if (what === 'settings' || what === 'customize') {
       const tab = () => send(what === 'customize' ? { type: 'glaze:sessions-open', section: 'navigation/bar' } : 'options');
       if (isPreview) { tab(); return; }
-      X.need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE?.open(what === 'customize' ? 'navigation/bar' : '')).then((opened) => { if (!opened) tab(); }, tab);
+      X.need('settings/page/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE?.open(what === 'customize' ? 'navigation/bar' : '')).then((opened) => { if (!opened) tab(); }, tab);
       return;
     }
-    // Over a course tab's frame, the palette is that frame's (features/coursetabs.js).
-    if (what === 'search') { if (!globalThis.GZ_CTABS?.palette?.(true)) X.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); return; }
-    if (what === 'notes') { X.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ event: e }), () => {}); return; }
+    // Over a course tab's frame, the palette is that frame's (navigation/page/coursetabs.js).
+    if (what === 'search') { if (!globalThis.GZ_CTABS?.palette?.(true)) X.need('navigation/page/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); return; }
+    if (what === 'notes') { X.need('planner/page/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ event: e }), () => {}); return; }
     // Writer's Documents (papers.html), for the student's own click: as a page of the site like Settings, else (the editor's
     // preview, a page Glaze can't open it in) a tab of its own, which the worker opens.
     if (what === 'documents') {
       if (!e?.isTrusted) return;
       const tab = () => send('papers');
       if (isPreview) { tab(); return; }
-      X.need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE?.open('', 'papers')).then((opened) => { if (!opened) tab(); }, tab);
+      X.need('settings/page/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE?.open('', 'papers')).then((opened) => { if (!opened) tab(); }, tab);
       return;
     }
     // To Do lives on the site's home (the Glaze Dashboard on Ultra, the Canvas dashboard): go there.
@@ -903,7 +903,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (rail && rail === settings().rail) rail = null;
     if (host && !host.isConnected) stop();
     if (!host) mount();
-    // A mod's nav stands in for the bar (features/mods.js): the bar hides, and still keeps the page's room.
+    // A mod's nav stands in for the bar (mods/page/mods.js): the bar hides, and still keeps the page's room.
     const stands = !!globalThis.GZ_MODS?.navStands?.();
     if (stands !== host.hasAttribute('data-replaced')) {
       host.toggleAttribute('data-replaced', stands);
@@ -948,7 +948,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const wants = model.widgets.map((w) => w.id);
     if (wants.length && !wx) {
       if (globalThis.GZ_NAVBAR_WIDGETS) wx = GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview });
-      else X.need('features/navbar-widgets.js', () => globalThis.GZ_NAVBAR_WIDGETS).then(() => { sig = ''; queue(); }, () => {});
+      else X.need('navigation/page/navbar-widgets.js', () => globalThis.GZ_NAVBAR_WIDGETS).then(() => { sig = ''; queue(); }, () => {});
     }
     wx?.set(wants);
     const docks = [...(globalThis.GZ_MODS?.rail() || []), ...(globalThis.GZ_MODWIDGETS?.rail() || [])];
@@ -971,7 +971,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   // itself, and follows the editor's edits there.
   if (isPreview) { addEventListener('message', (e) => { if (e.origin === location.origin && e.data?.gzPreview) setTimeout(sync); }); setTimeout(sync); }
 
-  // ---- the API (mods: features/mods.js; Looks style the parts) --------------------------------------------------------
+  // ---- the API (mods: mods/page/mods.js; Looks style the parts) --------------------------------------------------------
   // What a reader sees: the items, groups and state, never the elements.
   const strip = (i) => ({ id: i.id, label: i.label, icon: i.icon, href: i.href || '', active: !!i.active, badge: i.badge || '', hidden: !!i.hidden, ...(i.owner && { owner: i.owner }) });
   const view = () => (model ? { groups: model.groups.map((g) => ({ id: g.id, label: g.label, items: g.items.map((i) => i.id) })), items: model.items.map(strip),
@@ -979,9 +979,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     place: lay?.place || 'none', style: lay?.style || 'float', course: inCourse(), menu: cmenu ? { name: cmenu.name, items: cmenu.items.map(strip) } : null, panel } : null);
   const OWNER = /^[a-z0-9][a-z0-9_-]{0,47}$/, ID = /^[a-z][a-z0-9-]{0,31}$/;
   const SLOTS = ['top', 'bottom'];
-  // A mod's item, checked: a name, one of the bar's icons, an address of this site only (lib/navlayout.js onSite), a short
+  // A mod's item, checked: a name, one of the bar's icons, an address of this site only (navigation/navlayout.js onSite), a short
   // badge, and a group of the bar or a slot. It never passes for one of Glaze's own items: not their icons, nor their names
-  // (in any of Glaze's languages, or as this page and the student name them; lib/navlayout.js reserved). Anything else
+  // (in any of Glaze's languages, or as this page and the student name them; navigation/navlayout.js reserved). Anything else
   // refuses (null).
   const check = (owner, raw) => {
     if (!OWNER.test(owner) || !raw || typeof raw !== 'object' || !ID.test(raw.id) || typeof raw.label !== 'string') return null;

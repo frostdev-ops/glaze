@@ -127,7 +127,7 @@ Registers Glaze's packaged content scripts on the sites the user allowed, so lat
 
 ### Web-accessible resources
 
-The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, features/apps.css, features/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. lib/scene.js and the bundled lib/three.js draw animated backgrounds, and lib/scene-media.js with the bundled Lottie player (lib/lottie/) plays a video or animation behind the page. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
+The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, core/page/apps.css, looks/page/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. looks/scene.js and the bundled vendor/three.js draw animated backgrounds, and looks/scene-media.js with the bundled Lottie player (vendor/lottie/) plays a video or animation behind the page. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
 
 ### nativeMessaging
 

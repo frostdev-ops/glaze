@@ -1,13 +1,13 @@
 // Stickers and Look rotation's storage flows (W12), in VMs with stand-in storage and a small stand-in DOM: the worker's
-// sticker writes (lib/background.js 'glaze:stickers': one change at a time on fresh storage, Reset's watermark, the
-// picture cap), and the page module (features/lookx.js) when its reads answer late. Painting and keys are checked in a
+// sticker writes (background/background.js 'glaze:stickers': one change at a time on fresh storage, Reset's watermark, the
+// picture cap), and the page module (looks/page/lookx.js) when its reads answer late. Painting and keys are checked in a
 // browser, not here.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const L = require('../../extension/lib/lookx.js');
+const L = require('../../extension/looks/lookx.js');
 
 const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -28,7 +28,7 @@ const worker = (local = {}, syncStore = {}) => {
   const listeners = [];
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`background/${f}`), context); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
@@ -37,7 +37,7 @@ const worker = (local = {}, syncStore = {}) => {
       storage: { local: area(local), sync: area(syncStore), onChanged: { addListener() {} } },
     },
   });
-  vm.runInContext(read('lib/background.js'), context);
+  vm.runInContext(read('background/background.js'), context);
   const send = (msg, sender = { id: 'glaze', tab: {}, url: `${SITE}/courses/1` }) => new Promise((res) => {
     let kept = false;
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
@@ -115,8 +115,8 @@ test('Reset everything saves: settings a library adds after defaults.js (todo, w
 });
 
 test('rotation: a favorite still decoding when the student turns rotation off or changes the theme is not worn', { timeout: 10000 }, async () => {
-  const G = require('../../extension/defaults.js');
-  const H = require('../../extension/lib/history.js');
+  const G = require('../../extension/content/defaults.js');
+  const H = require('../../extension/looks/history.js');
   const start = () => {
     const s = G.GZ_SANITIZE({ ...G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, G.GZ_LOOKS.find((l) => l.name === 'Library')), extras: { rotate: '6h' } });
     const w = worker({ rotateLooks: ['glaze1:fav'], lookFavorites: [{ code: 'glaze1:fav', name: 'Fav' }], rotateState: { mode: '6h 08:00', at: 1, i: -1 } }, structuredClone(s));
@@ -158,8 +158,8 @@ test('rotation: a favorite still decoding when the student turns rotation off or
 });
 
 test('rotation: a favorite brings its parts with it, a built-in Look its own, and parts changed meanwhile drop the turn', { timeout: 10000 }, async () => {
-  const G = require('../../extension/defaults.js');
-  const X = require('../../extension/lib/lookparts.js');
+  const G = require('../../extension/content/defaults.js');
+  const X = require('../../extension/looks/lookparts.js');
   const parts = { x: { cursor: { kind: 'glow' } } };
   const mine = { x: { cursor: { kind: 'ripple' } } };
   const settings = async () => ({ ...structuredClone(G.GZ_SANITIZE({ extras: { rotate: '6h' } })), lookX: await X.pack(mine) });
@@ -192,12 +192,12 @@ test('rotation: a favorite brings its parts with it, a built-in Look its own, an
   assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
   assert.equal(w.sync.bg.kind, 'scene');
   const worn = await X.unpack(w.sync.lookX);
-  assert.ok(require('../../extension/defaults.js').GZ_LOOKS.some((L) => X.same(worn, require('../../extension/lib/lookset.js')(L))), JSON.stringify(worn)?.slice(0, 200));
+  assert.ok(require('../../extension/content/defaults.js').GZ_LOOKS.some((L) => X.same(worn, require('../../extension/looks/lookset.js')(L))), JSON.stringify(worn)?.slice(0, 200));
 });
 
 // ---- the page -------------------------------------------------------------------------------------------------------
 test('rotation refuses legacy outside favorites that hide critical controls without restricting own Look storage', async () => {
-  const G = require('../../extension/defaults.js'), X = require('../../extension/lib/lookparts.js'), S = require('../../extension/lib/share.js');
+  const G = require('../../extension/content/defaults.js'), X = require('../../extension/looks/lookparts.js'), S = require('../../extension/sharing/share.js');
   const parts = { x: { nav: { hidden: ['logout'] } } };
   const code = await S.encode(G.GZ_SANITIZE({}), {}, parts);
   const packed = await X.pack(parts);
@@ -209,7 +209,7 @@ test('rotation refuses legacy outside favorites that hide critical controls with
 });
 
 test('rotation: a favorite brings its navigation bar, sidebar look and sidebar colours too, and leaves what is the student\u2019s', async () => {
-  const G = require('../../extension/defaults.js'), S = require('../../extension/lib/share.js');
+  const G = require('../../extension/content/defaults.js'), S = require('../../extension/sharing/share.js');
   const code = await S.encode(G.GZ_SANITIZE({ navbar: { place: 'top', badges: false }, sidebar: { surface: 'solid' }, nav: { k: 'solid', c: '#224466' } }), {}, null);
   const w = worker({ rotateLooks: [code], lookFavorites: [{ code, name: 'Bar' }], rotateState: { mode: '6h 08:00', at: 1, i: -1 } },
     G.GZ_SANITIZE({ extras: { rotate: '6h' }, navbar: { on: false, rail: 'icons' }, sidebar: { open: 'drawer' } }));
@@ -275,18 +275,18 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
     },
     GZ_MATCH_PRESET: () => null,
     CSS: { supports: () => true },
-    GZ_CTX: { t: (k) => k, need: (file) => { if (file === 'lib/lookset.js') assert.equal(vm.runInContext(read(file), context)?.ready, true, 'the worker requires a serializable completion value'); return Promise.resolve(); }, settings: () => settings, parts: () => parts, partsOn: (pointer) => on && (pointer || partsOn), courseLook: () => courseLook, on: () => on, solo: true },
+    GZ_CTX: { t: (k) => k, need: (file) => { if (file === 'looks/lookset.js') assert.equal(vm.runInContext(read(file), context)?.ready, true, 'the worker requires a serializable completion value'); return Promise.resolve(); }, settings: () => settings, parts: () => parts, partsOn: (pointer) => on && (pointer || partsOn), courseLook: () => courseLook, on: () => on, solo: true },
   });
   context.window = context;
   context.top = context;
   context.globalThis = context;
-  vm.runInContext(read('lib/lookx.js'), context);
-  vm.runInContext(read('features/lookx.js'), context);
+  vm.runInContext(read('looks/lookx.js'), context);
+  vm.runInContext(read('looks/page/lookx.js'), context);
   // Runs the timers due now (the 300 ms save; not rotation's ten-minute one).
   const runTimers = () => { for (const [id, f] of [...fns]) if (timers.get(id) <= 1000) { timers.delete(id); fns.delete(id); f(); } };
   const fire = (type, e = {}) => { for (const f of win[type] || []) f(e); };
   return { lx: context.GZ_LOOKX, location: context.location, runTimers, fire, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; }, wear: (x) => { parts = x; },
-    setOn: (v) => { on = v; }, setPartsOn: (v) => { partsOn = v; }, setCourseLook: (v) => { courseLook = v; parts = v ? require('../../extension/lib/lookset.js')({ name: v }).x : null; }, emit: (t) => { for (const f of docOn[t] || []) f({ type: t }); }, stored: (c) => { for (const f of changed) f(c, 'local'); }, local, synced };
+    setOn: (v) => { on = v; }, setPartsOn: (v) => { partsOn = v; }, setCourseLook: (v) => { courseLook = v; parts = v ? require('../../extension/looks/lookset.js')({ name: v }).x : null; }, emit: (t) => { for (const f of docOn[t] || []) f({ type: t }); }, stored: (c) => { for (const f of changed) f(c, 'local'); }, local, synced };
 };
 
 test('page: a picture read that answers after Hide doesn\'t draw the stickers back', async () => {
@@ -425,7 +425,7 @@ test('page: the student\'s pointer stays through a change of Look; the Look\'s f
   await p.lx.sync();
   await settle();
   assert.equal(shown(p), 'lava');
-  // Another Look is worn (features/lookparts.js fires glaze:parts): the choice stays.
+  // Another Look is worn (looks/page/lookparts.js fires glaze:parts): the choice stays.
   p.wear({ pointer: 'ghost' });
   p.emit('glaze:parts');
   await settle();
@@ -556,7 +556,7 @@ test('page: a stale own-picture read cannot undo removal or survive a pagehide a
 });
 
 test('palette: a Pointer: entry for every choice the setting takes, the current one marked, and the animation switch', async () => {
-  const G = require('../../extension/defaults.js');
+  const G = require('../../extension/content/defaults.js');
   const p = page({});
   p.settings.extras = { ...G.GZ_DEFAULTS.extras, pointer: 'lava' };
   await p.lx.ready();
@@ -583,7 +583,7 @@ test('palette: a Pointer: entry for every choice the setting takes, the current 
 });
 
 test('palette: one switch for the custom pointer comes first; its styles and animation are listed only while it is on', async () => {
-  const G = require('../../extension/defaults.js');
+  const G = require('../../extension/content/defaults.js');
   const p = page({});
   p.settings.extras = { ...G.GZ_DEFAULTS.extras, pointer: 'lava' };
   await p.lx.ready();
@@ -605,7 +605,7 @@ test('palette: one switch for the custom pointer comes first; its styles and ani
 });
 
 test('palette: a pointer command preserves settings changed since the palette opened', () => {
-  const G = require('../../extension/defaults.js'), p = page({});
+  const G = require('../../extension/content/defaults.js'), p = page({});
   p.settings.extras = { ...G.GZ_DEFAULTS.extras };
   const command = p.lx.cmds().filter((c) => c.label === 'Pointer: {name}')[1]; // Aqua
   p.settings.extras = { ...p.settings.extras, pointerAnim: false, stickers: false, rotate: 'daily', at: '10:30' };
@@ -613,7 +613,7 @@ test('palette: a pointer command preserves settings changed since the palette op
   assert.deepEqual(p.synced.at(-1).extras, { ...p.settings.extras, pointer: 'aqua' });
 });
 
-// A tab on a computer whose worker is the real one (lib/background.js), in sticker mode on `path`.
+// A tab on a computer whose worker is the real one (background/background.js), in sticker mode on `path`.
 const key = (e, k) => { for (const f of e.on?.keydown || []) f({ key: k, shiftKey: false, preventDefault() {}, stopPropagation() {} }); };
 const stickersOf = (p) => p.body.find('gz-stickers').children;
 const settle = async () => { for (let i = 0; i < 30; i++) await tick(); };
@@ -694,13 +694,13 @@ const ui = (w) => {
   }
   c.runtime.sendMessage = (m, cb) => { const p = w.send(m, w.editor); if (cb) p.then(cb); return p; };
   w.context.GZ_I18N = { t: (s) => s, ui: () => 'en' };
-  vm.runInContext(read('ui.js') + ';globalThis.UI = GZ_UI;', w.context);
+  vm.runInContext(read('core/ui.js') + ';globalThis.UI = GZ_UI;', w.context);
   return { save: (s, keys) => { const p = new Promise((resolve) => w.context.UI.save(s, keys, resolve)); pending.push(p); return p; }, done: () => Promise.all(pending) };
 };
 
 test('overlapping editor Looks share the worker queue, so the last Look and its parts win together', async () => {
-  const G = require('../../extension/defaults.js');
-  const X = require('../../extension/lib/lookparts.js');
+  const G = require('../../extension/content/defaults.js');
+  const X = require('../../extension/looks/lookparts.js');
   const w = worker(), u = ui(w);
   let release, begun;
   const held = new Promise((r) => { release = r; });
@@ -725,7 +725,7 @@ test('overlapping editor Looks share the worker queue, so the last Look and its 
 });
 
 test('backup restore stores or clears parts in the same sync write as its Look, and rejects malformed parts', async () => {
-  const X = require('../../extension/lib/lookparts.js');
+  const X = require('../../extension/looks/lookparts.js');
   const old = await X.pack({ x: { cursor: { kind: 'glow' } } });
   const w = worker({ lookX: old }, { lookX: { h: X.hash(old) }, bg: { kind: 'solid' } });
   const writes = [], set = w.context.chrome.storage.sync.set;
@@ -743,19 +743,19 @@ test('backup restore stores or clears parts in the same sync write as its Look, 
 });
 
 test('picking a palette in the popup or the editor keeps the Look’s parts; picking a whole Look replaces them', () => {
-  const G = require('../../extension/defaults.js');
+  const G = require('../../extension/content/defaults.js');
   const w = worker(), u = ui(w);
   const s = { ...structuredClone(G.GZ_DEFAULTS), parts: { x: { cursor: { kind: 'glow' } } } };
   const keys = w.context.UI.pickPreset(s, 'Frost', G.GZ_PRESET('Frost'));
   assert.deepEqual(s.parts, { x: { cursor: { kind: 'glow' } } }, 'a palette is not a Look: a typed colour keeps the extras, and so does a swatch');
   assert.ok(!keys.includes('parts'), 'and they are not rewritten');
   const looked = w.context.UI.pickLook(s, G.GZ_LOOKS[0]);
-  assert.deepEqual(JSON.parse(JSON.stringify(s.parts)), require('../../extension/lib/lookset.js')(G.GZ_LOOKS[0]), 'a whole Look brings its own extras');
+  assert.deepEqual(JSON.parse(JSON.stringify(s.parts)), require('../../extension/looks/lookset.js')(G.GZ_LOOKS[0]), 'a whole Look brings its own extras');
   assert.ok(looked.includes('parts'));
 });
 
 test('the student\'s pointer and its animation switch stay through every way of changing Look; only the Look\'s parts change', () => {
-  const G = require('../../extension/defaults.js');
+  const G = require('../../extension/content/defaults.js');
   const w = worker(), u = ui(w);
   const s = { ...structuredClone(G.GZ_SANITIZE({ extras: { pointer: 'lava', pointerAnim: false } })), parts: { x: { pointer: 'ghost' } } };
   const keys = [...w.context.UI.pickLook(s, G.GZ_LOOKS.find((L) => L.name === 'Pumpkin Patch')), ...w.context.UI.pickPreset(s, 'Frost', G.GZ_PRESET('Frost'))];
@@ -766,7 +766,7 @@ test('the student\'s pointer and its animation switch stay through every way of 
 
 
 test('an editor Look sends its nav and captured parts in one queued request', async () => {
-  const G = require('../../extension/defaults.js');
+  const G = require('../../extension/content/defaults.js');
   const w = worker(), u = ui(w), sent = [];
   const send = w.context.chrome.runtime.sendMessage;
   w.context.chrome.runtime.sendMessage = (m, cb) => { sent.push(structuredClone(m)); return send(m, cb); };
@@ -778,12 +778,12 @@ test('an editor Look sends its nav and captured parts in one queued request', as
   assert.equal(sent.length, 1);
   assert.equal(sent[0].type, 'glaze:look');
   assert.deepEqual(sent[0].patch.nav, s.nav);
-  assert.deepEqual(await require('../../extension/lib/lookparts.js').unpack(w.sync.lookX), first);
+  assert.deepEqual(await require('../../extension/looks/lookparts.js').unpack(w.sync.lookX), first);
 });
 
 test('a refused Look write preserves the native nav and its local pictures', async () => {
-  const G = require('../../extension/defaults.js'), X = require('../../extension/lib/lookparts.js');
-  require('../../extension/lib/nav.js');
+  const G = require('../../extension/content/defaults.js'), X = require('../../extension/looks/lookparts.js');
+  require('../../extension/navigation/nav.js');
   const nav = G.GZ_SANITIZE({ nav: { k: 'image', i: 'abcdefghijkl', brand: 'custom', li: 'mnopqrstuvwx' } }).nav;
   const before = { nav, lookX: await X.pack({ x: { cursor: { kind: 'glow' } } }), bg: { kind: 'solid' } };
   const pictures = { 'navLogo:mnopqrstuvwx': 'logo bytes', 'cardImg:abcdefghijkl': 'picture bytes' };
@@ -811,8 +811,8 @@ test('a refused Look write preserves the native nav and its local pictures', asy
 });
 
 test('a partial Look nav patch preserves personal pictures through the parts quota fallback', async () => {
-  const G = require('../../extension/defaults.js'), X = require('../../extension/lib/lookparts.js');
-  require('../../extension/lib/nav.js');
+  const G = require('../../extension/content/defaults.js'), X = require('../../extension/looks/lookparts.js');
+  require('../../extension/navigation/nav.js');
   const nav = G.GZ_SANITIZE({ nav: { k: 'image', i: 'abcdefghijkl', brand: 'custom', li: 'mnopqrstuvwx' } }).nav;
   const pictures = { 'navLogo:mnopqrstuvwx': 'logo bytes', 'cardImg:abcdefghijkl': 'picture bytes' };
   const w = worker(structuredClone(pictures), { nav });
@@ -833,7 +833,7 @@ test('a partial Look nav patch preserves personal pictures through the parts quo
 
 
 test('the queued Look writer limits page callers to theme changes and refuses arbitrary storage keys', async () => {
-  const w = worker({ moodle: ['https://moodle.example.edu/*'] }); // a Moodle the student approved (lib/background.js approved)
+  const w = worker({ moodle: ['https://moodle.example.edu/*'] }); // a Moodle the student approved (background/background.js approved)
   const message = { type: 'glaze:look', parts: null, patch: { colors: { '--gz-accent': '#123456' } } };
   const denied = { ok: false, error: 'sender' };
   assert.deepEqual(await w.send(message, { id: 'other', tab: {}, url: `${SITE}/courses/1` }), denied);
@@ -842,7 +842,7 @@ test('the queued Look writer limits page callers to theme changes and refuses ar
   assert.deepEqual(await w.send({ ...message, patch: JSON.parse('{"__proto__":{}}') }, w.editor), denied);
   assert.deepEqual(w.sync, {});
   const moodle = { id: 'glaze', tab: {}, url: 'https://moodle.example.edu/my/' };
-  assert.deepEqual(await w.send(message, { ...moodle, url: 'https://shop.example/' }), denied, 'not from a tab where only lib/detect.js runs (WP-C2)');
+  assert.deepEqual(await w.send(message, { ...moodle, url: 'https://shop.example/' }), denied, 'not from a tab where only content/detect.js runs (WP-C2)');
   assert.deepEqual(w.sync, {});
   assert.deepEqual(await w.send(message, moodle), { ok: true });
   assert.equal(w.sync.lookX, '');
@@ -852,10 +852,10 @@ test('the queued Look writer limits page callers to theme changes and refuses ar
 
 
 test('a command palette palette choice preserves the previous Look parts like popup and editor swatches', async () => {
-  const X = require('../../extension/lib/lookparts.js');
+  const X = require('../../extension/looks/lookparts.js');
   const w = worker({}, { lookX: await X.pack({ x: { cursor: { kind: 'glow' } } }) });
   ui(w);
-  const source = read('features/palette.js');
+  const source = read('navigation/page/palette.js');
   const store = source.slice(source.indexOf('  const store ='), source.indexOf('  const paletteItems ='));
   const palettes = source.split('\n').find((line) => line.includes('...GZ_ALL_PRESETS(s.presets).map')).trim().slice(3, -1);
   vm.runInContext(`(() => { const s = GZ_DEFAULTS, t = (s) => s; ${store}; (${palettes})[0].run(); })()`, w.context);
@@ -872,7 +872,7 @@ test('rotation does not announce a favorite that could not be decoded or worn', 
 });
 
 test('queued builder edits merge only their named parts into the latest Look', async () => {
-  const X = require('../../extension/lib/lookparts.js');
+  const X = require('../../extension/looks/lookparts.js');
   const original = { x: { cursor: { kind: 'glow' }, nav: { place: 'left' } } };
   const latest = { x: { cursor: { kind: 'trail' }, nav: { place: 'left' }, bg: { shader: { src: 'vec4 scene(vec2 uv) { return vec4(uC1, 1.0); }' }, layers: [{ k: 'noise' }] },
     anim: { 'card.enter': { s: [{ at: 0, o: 0 }, { at: 1, o: 1 }] } }, fx: { complete: { kind: 'ring' } } },
@@ -891,7 +891,7 @@ test('queued builder edits merge only their named parts into the latest Look', a
 });
 
 test('a background or motion builder edit merges only its own part, keeping the nav builder\'s', async () => {
-  const X = require('../../extension/lib/lookparts.js');
+  const X = require('../../extension/looks/lookparts.js');
   const stored = { x: { nav: { place: 'dock' }, cursor: { kind: 'glow' } } };
   const w = worker({}, { lookX: await X.pack(stored) });
   // A stale page copy without the nav: only the cursor is written.
@@ -912,7 +912,7 @@ test('builder merges refuse malformed part names and unavailable device parts wi
 });
 
 test('the shared editor save forwards builder part keys through the queued writer', async () => {
-  const X = require('../../extension/lib/lookparts.js'), G = require('../../extension/defaults.js');
+  const X = require('../../extension/looks/lookparts.js'), G = require('../../extension/content/defaults.js');
   const w = worker({}, { lookX: await X.pack({ x: { cursor: { kind: 'trail' } } }) });
   ui(w);
   const result = await new Promise((done) => w.context.UI.save({ ...G.GZ_DEFAULTS, parts: { x: { nav: { place: 'top' } } } }, ['parts'], done, undefined, ['nav']));

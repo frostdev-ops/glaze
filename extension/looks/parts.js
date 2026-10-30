@@ -4,16 +4,16 @@
 // be moved beside must share it), whether it may be hidden, whether its text may be relabelled, and which style keys
 // apply. The selectors start from what Glaze already targets (theme.css, canvas.css, moodle.css, extras.css,
 // content-ultra.js, content-canvas.js) and the saved pages in test/fixtures.
-// Classic script (features/rules.js loads it on demand; the editor and lib/lookparts.js call has/list/clean);
+// Classic script (looks/page/rules.js loads it on demand; the editor and looks/lookparts.js call has/list/clean);
 // module.exports for node.
 var GZ_PARTS = globalThis.GZ_PARTS || (() => {
-  const D = typeof GZ_COLORS !== 'undefined' ? { GZ_COLORS } : require('../defaults.js');
+  const D = typeof GZ_COLORS !== 'undefined' ? { GZ_COLORS } : require('../content/defaults.js');
   const F = typeof GZ_FONTS !== 'undefined' ? GZ_FONTS : require('./fonts.js');
 
   // Style keys. A box takes all of them; a piece of text takes colour, font and opacity.
   const BOX = ['bg', 'fg', 'bc', 'bw', 'r', 'p', 'g', 'sh', 'o', 'f'];
   const TEXT = ['fg', 'bg', 'f', 'o'];
-  // The boards' course cards (features/coursecards.js): Glaze's own, drawn from the LMS's card, in a board tile's body. A
+  // The boards' course cards (courses/page/coursecards.js): Glaze's own, drawn from the LMS's card, in a board tile's body. A
   // course-card part names its piece there too (b), so a Look's card rules reach them; board: false where there is none.
   const BOARD = { ultra: '.gz-w-body > article.gz-course-card', canvas: '.gz-w-body > .ic-DashboardCard[data-gz-tile-card]' };
   // [name, selector, label, { in: container selector, hide: false, text: relabelled, st: style keys, b: board piece }]
@@ -145,13 +145,13 @@ var GZ_PARTS = globalThis.GZ_PARTS || (() => {
     }
     return Object.keys(st).length ? { ...out, st } : null;
   };
-  // A list as x.rules holds it: at most 64, each cleaned; what doesn't clean is dropped (lib/lookparts.js compares
+  // A list as x.rules holds it: at most 64, each cleaned; what doesn't clean is dropped (looks/lookparts.js compares
   // lengths to refuse a code that loses any).
   const rules = (list) => (Array.isArray(list) ? list.slice(0, MAX).map(clean).filter(Boolean) : []);
 
   // ---- what the page wears -----------------------------------------------------------------------
   // The rules for one LMS, folded in order into each part's end state: a later rule wins (show undoes an earlier hide,
-  // style keys merge, the last label and move stand). Pure, so features/rules.js only touches the DOM.
+  // style keys merge, the last label and move stand). Pure, so looks/page/rules.js only touches the DOM.
   const STEPS = [0, 2, 4, 8, 12, 16, 24];
   const SHADOWS = ['none', '0 1px 3px', '0 4px 14px', '0 12px 32px'];
   const value = (k, v) => {
@@ -174,7 +174,7 @@ var GZ_PARTS = globalThis.GZ_PARTS || (() => {
       else if (r.do === 'label') s.t = r.t;
       else s.move = { to: r.to, at: r.at };
     }
-    // Each part's style as the CSS variables features/rules.css reads, and the fonts to load.
+    // Each part's style as the CSS variables looks/page/rules.css reads, and the fonts to load.
     for (const s of out.values()) {
       s.vars = Object.fromEntries(Object.entries(s.st).map(([k, v]) => [`--gz-r-${k}`, value(k, v)]));
       s.fonts = s.st.f ? [s.st.f] : [];

@@ -29,12 +29,12 @@ test('GZ-05: freshness validation rejects changed, missing and obsolete generate
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-stale-safari-'));
   try {
     fs.cpSync(resources, dir, { recursive: true });
-    fs.appendFileSync(path.join(dir, 'content-ultra.js'), '\n// stale generated script\n');
-    fs.rmSync(path.join(dir, 'lib/nav.js'));
+    fs.appendFileSync(path.join(dir, 'content/content-ultra.js'), '\n// stale generated script\n');
+    fs.rmSync(path.join(dir, 'navigation/nav.js'));
     fs.writeFileSync(path.join(dir, 'obsolete.js'), '// no longer shipped\n');
     const result = spawnSync('bash', ['../tools/build/sync-safari-resources.sh', '--check', dir], { cwd: root, encoding: 'utf8' });
     assert.equal(result.status, 1, result.stderr);
-    for (const file of ['content-ultra.js', 'lib/nav.js', 'obsolete.js']) assert.ok(result.stderr.includes(file), file);
+    for (const file of ['content/content-ultra.js', 'navigation/nav.js', 'obsolete.js']) assert.ok(result.stderr.includes(file), file);
     assert.match(result.stderr, /resources are stale.*--refresh/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

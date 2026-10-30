@@ -4,7 +4,7 @@
 // The editor reads now() directly when its input rules run.
 // Classic script; module.exports for node.
 var GZ_WRITER_SETTINGS = globalThis.GZ_WRITER_SETTINGS || (() => {
-  const G = typeof GZ_SANITIZE !== 'undefined' ? { GZ_SANITIZE } : typeof require === 'function' ? require('../defaults.js') : null;
+  const G = typeof GZ_SANITIZE !== 'undefined' ? { GZ_SANITIZE } : typeof require === 'function' ? require('../content/defaults.js') : null;
   const clean = (raw) => (G ? G.GZ_SANITIZE({ writer: raw }).writer : null);
   let now = clean(undefined), read = null;
   const fns = [];

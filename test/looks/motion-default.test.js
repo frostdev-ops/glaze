@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const D = require('../../extension/defaults.js');
-const source = fs.readFileSync(require.resolve('../../extension/lib/background.js'), 'utf8');
+const D = require('../../extension/content/defaults.js');
+const source = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
 
 // The real migration and install listener; unrelated worker services do nothing in this fixture.
 const worker = (stored = {}, faults = {}) => {

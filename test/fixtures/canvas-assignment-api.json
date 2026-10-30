@@ -1,5 +1,5 @@
 {
-  "_note": "Glaze test fixture: Canvas /api/v1/courses/25/assignments/171, synthetic values. Keys as lib/rubric.js parse.canvas reads them (test/rubric-data.test.js, scripts/rubric-check.js) and as features/rubric.js asks for them. The description's file links are in the shape Canvas's API writes (canvas-lms spec/apis/user_content_spec.rb: absolute href on the school's host, data-api-endpoint, data-api-returntype File; spec/controllers/assignments_controller_spec.rb: class instructure_file_link, a title that may be just 'Link'); not seen live, as the owner has no Canvas account. Glaze keys on the href's path only.",
+  "_note": "Glaze test fixture: Canvas /api/v1/courses/25/assignments/171, synthetic values. Keys as courses/rubric.js parse.canvas reads them (test/rubric-data.test.js, scripts/rubric-check.js) and as courses/page/rubric.js asks for them. The description's file links are in the shape Canvas's API writes (canvas-lms spec/apis/user_content_spec.rb: absolute href on the school's host, data-api-endpoint, data-api-returntype File; spec/controllers/assignments_controller_spec.rb: class instructure_file_link, a title that may be just 'Link'); not seen live, as the owner has no Canvas account. Glaze keys on the href's path only.",
   "id": 171,
   "course_id": 25,
   "name": "Lab report 2: Enzyme activity",

@@ -7,9 +7,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const PA = require('../../extension/lib/writer-papers.js');
-const L = require('../../extension/lib/writer-submit.js');
-globalThis.GZ_WRITER_STYLES = require('../../extension/lib/writer-styles.js');
+const PA = require('../../extension/writer/writer-papers.js');
+const L = require('../../extension/writer/writer-submit.js');
+globalThis.GZ_WRITER_STYLES = require('../../extension/writer/writer-styles.js');
 
 const store = () => {
   const data = {};
@@ -103,7 +103,7 @@ const kinds = (w = {}) => {
     GZ_WRITER_FRAME: { t: (k) => k, on: () => {}, mode: () => 'paper', kind: () => 'assignment', item: () => null, say: () => {} },
     GZ_WRITER_SETTINGS: { now: () => w }, GZ_WRITER_SUBMIT_LIB: L });
   ctx.globalThis = ctx;
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer-kinds.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/frame/writer-kinds.js'), 'utf8'), ctx);
   return ctx.GZ_WRITER_KINDS;
 };
 
@@ -114,7 +114,7 @@ test('a brought file opens as its kind only while that kind is switched on and h
   assert.deepEqual([...kinds({ pdf: true, slides: true, sheets: true }).opens()], ['pdf', 'slides', 'sheet'], 'the grid is in the frame');
   assert.deepEqual([...kinds({ sheets: true }).opens()], ['sheet']);
   assert.deepEqual(Object.keys(kinds().FRAME), ['pdf', 'slides', 'sheet']);
-  assert.deepEqual([...kinds().FRAME.sheet.scripts], ['lib/doc-kinds.js', 'lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js', 'sheet-kind.js'], 'the .xlsx codecs with the grid, on demand');
+  assert.deepEqual([...kinds().FRAME.sheet.scripts], ['documents/doc-kinds.js', 'core/doctext.js', 'core/zip.js', 'documents/sheets/sheet-xlsx.js', 'documents/sheets/sheet-kind.js'], 'the .xlsx codecs with the grid, on demand');
   assert.ok(Object.isFrozen(kinds().FRAME));
   const K = kinds(), { sheet: _, ...noGrid } = K.FRAME;
   assert.deepEqual([...K.opens({ sheets: true }, noGrid)], [], 'a build without the grid offers no spreadsheet');
@@ -132,7 +132,7 @@ test('Document or Spreadsheet: offered only with the spreadsheet kind here and w
 test('a frame without Writer\'s host makes no kinds module', () => {
   const ctx = vm.createContext({ console });
   ctx.globalThis = ctx;
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer-kinds.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/frame/writer-kinds.js'), 'utf8'), ctx);
   assert.equal(ctx.GZ_WRITER_KINDS, null);
 });
 
@@ -153,12 +153,12 @@ const viewer = async (id = 'pdf') => {
       progress?.({ stage: 'save' });
       return (await P.save(KEY, { kind: 'pdf', file: 'TkVX', size: 3 }, { reason: 'import' })).paper;
     } };
-  const DK = require('../../extension/lib/doc-kinds.js');
+  const DK = require('../../extension/documents/doc-kinds.js');
   const ctx = vm.createContext({ console: { error() {} }, document, GZ_WRITER_PAPERS: { open: () => P },
     GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, progress: DK.progress, said: DK.said, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], ...implementation }) },
     GZ_WRITER_FRAME: { t: (s) => s, say: (m) => calls.frame.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ pdf: true }) },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer-kinds.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/frame/writer-kinds.js'), 'utf8'), ctx);
   const K = ctx.GZ_WRITER_KINDS, surface = await K.mount(id, KEY, paper);
   return { K, P, surface, paper, calls };
 };
@@ -212,7 +212,7 @@ test('the grid uses its kind\'s packed version for submit and before a file repl
   assert.deepEqual(calls.versions, [[KEY, 'sending'], [KEY, 'import']]);
 });
 
-// The page sizes the frame from what it hears (features/writer.js view, height): a compact frame follows the paper's
+// The page sizes the frame from what it hears (writer/page/writer.js view, height): a compact frame follows the paper's
 // height reports (writer.js), never under 40 px. Hiding the paper for a viewer (:root[data-doc], writer-paper.css) makes
 // its next report the 40 px floor, so the page hears the full view before the paper is hidden, not once the viewer is
 // built: else the frame folds to 40 px while the grid draws (writer-kinds-check: the grid's rows gone after it showed).
@@ -225,12 +225,12 @@ test('the page hears the full view before the paper is hidden for a viewer', asy
   const document = { documentElement: root, body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: el };
   const P = PA.open(store(), () => Date.now());
   await P.save(KEY, { kind: 'sheet', doc: null });
-  const DK = require('../../extension/lib/doc-kinds.js');
+  const DK = require('../../extension/documents/doc-kinds.js');
   const ctx = vm.createContext({ console: { error() {} }, document, GZ_WRITER_PAPERS: { open: () => P },
     GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], view: () => new Promise((ok) => { built = ok; }) }) },
     GZ_WRITER_FRAME: { t: (s) => s, say: (m) => said.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ sheets: true }) },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer-kinds.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/frame/writer-kinds.js'), 'utf8'), ctx);
   const paper = { key: () => KEY, context: () => ({}), paper: () => ({}) };
   const mounting = ctx.GZ_WRITER_KINDS.mount('sheet', KEY, paper);
   for (let i = 0; i < 50 && !built; i++) await new Promise((r) => setImmediate(r));
@@ -247,12 +247,12 @@ test('a viewer that fails gives the page back the compact view it had', async ()
   root.dataset.view = 'compact';
   const P = PA.open(store(), () => Date.now());
   await P.save(KEY, { kind: 'sheet', doc: null });
-  const DK = require('../../extension/lib/doc-kinds.js');
+  const DK = require('../../extension/documents/doc-kinds.js');
   const ctx = vm.createContext({ console: { error() {} }, document: { documentElement: root, body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: el },
     GZ_WRITER_PAPERS: { open: () => P }, GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], view: async () => { throw new Error('no grid'); } }) },
     GZ_WRITER_FRAME: { t: (s) => s, say: (m) => said.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ sheets: true }) },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer-kinds.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/frame/writer-kinds.js'), 'utf8'), ctx);
   assert.equal(await ctx.GZ_WRITER_KINDS.mount('sheet', KEY, { key: () => KEY, context: () => ({}), paper: () => ({}) }), null);
   assert.deepEqual(said.map((m) => `${m.type}:${m.full}`), ['view:true', 'view:false']);
   assert.deepEqual({ ...root.dataset }, { view: 'compact' }, 'the paper shown again, compact');
@@ -265,13 +265,13 @@ for (const [id, next] of [['pdf', 'slides'], ['slides', 'sheet'], ['sheet', 'pap
     let built, disposed = 0, removed = 0;
     const P = PA.open(store(), () => Date.now());
     await P.save(KEY, { kind: id, doc: null });
-    const DK = require('../../extension/lib/doc-kinds.js');
+    const DK = require('../../extension/documents/doc-kinds.js');
     const ctx = vm.createContext({ console: { error() {} },
       document: { documentElement: root, body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: () => ({ ...el(), remove: () => { removed++; } }) },
       GZ_WRITER_PAPERS: { open: () => P }, GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], view: () => new Promise((ok) => { built = ok; }) }) },
       GZ_WRITER_FRAME: { t: (s) => s, say: (m) => said.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({}) },
       GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
-    vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer-kinds.js'), 'utf8'), ctx);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/writer/frame/writer-kinds.js'), 'utf8'), ctx);
     const K = ctx.GZ_WRITER_KINDS, mounting = K.mount(id, KEY, { context: () => ({}), paper: () => ({}) });
     for (let i = 0; i < 50 && !built; i++) await new Promise((r) => setImmediate(r));
     assert.equal(typeof built, 'function');

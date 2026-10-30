@@ -6,8 +6,8 @@ const vm = require('node:vm');
 // Moodle's front page is `/`, like Canvas's Dashboard: Canvas-only hooks keyed on that path must stay off there, or they
 // load Canvas code and (cardsHere) stop the page-start due fetch Moodle's own due list relies on. They are Canvas's part
 // (content-canvas.js), which a Moodle page doesn't load: content.js's own stand-ins (X) do nothing in their place.
-const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
-const canvas = fs.readFileSync(require.resolve('../../extension/content-canvas.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/content/content.js'), 'utf8');
+const canvas = fs.readFileSync(require.resolve('../../extension/content/content-canvas.js'), 'utf8');
 const hook = (name) => canvas.match(new RegExp(`^  const ${name} = \\(\\) => [^\\n]*;$`, 'm'))[0];
 
 test('Canvas-only hooks on `/` stay off on a Moodle site', () => {
@@ -20,10 +20,10 @@ test('Canvas-only hooks on `/` stay off on a Moodle site', () => {
     assert.ok(on, `${name} runs on Canvas's Dashboard`);
     assert.ok(!source.includes(`const ${name} =`), `${name} isn't in the script Moodle runs`);
   }
-  // Moodle's first script, as lib/background.js registers it: Canvas's without the Canvas part.
+  // Moodle's first script, as background/background.js registers it: Canvas's without the Canvas part.
   const m = require('../../extension/manifest.json');
   const moodleScript = m.content_scripts.find((c) => c.matches.includes('https://*.moodlecloud.com/*')).js;
-  assert.ok(!moodleScript.includes('content-canvas.js') && moodleScript.at(-1) === 'content.js');
+  assert.ok(!moodleScript.includes('content/content-canvas.js') && moodleScript.at(-1) === 'content/content.js');
   // What stands in for Canvas's hooks on Moodle: nothing runs, and the planner check says no, so the page start asks for
   // Moodle's due list (startSweep: `if (window.top === window && !X.planner()) dueWeek()`).
   const X = vm.runInNewContext(`${source.match(/^ {2}const no = .*\n {2}const X = \{[\s\S]*?\};$/m)[0]} X`, {});
@@ -51,11 +51,11 @@ test('what Canvas\'s part keys on is nowhere on Moodle\'s pages', () => {
 
 // The shared palette has Canvas and Ultra adapters; Moodle content search stays off.
 test('search in your courses is Canvas and Ultra only', () => {
-  const palette = fs.readFileSync(require.resolve('../../extension/features/palette.js'), 'utf8');
+  const palette = fs.readFileSync(require.resolve('../../extension/navigation/page/palette.js'), 'utf8');
   const line = palette.match(/^ {2}const searchHere = \(\) => [^\n]*;$/m)?.[0];
-  assert.ok(line, 'features/palette.js has searchHere');
-  assert.match(palette, /^ {4}if \(searchHere\(\)\) need\('features\/search\.js'/m, 'and the search loads only through it');
-  assert.equal(palette.match(/need\('features\/search\.js'/g).length, 1);
+  assert.ok(line, 'navigation/page/palette.js has searchHere');
+  assert.match(palette, /^ {4}if \(searchHere\(\)\) need\('navigation\/page\/search\.js'/m, 'and the search loads only through it');
+  assert.equal(palette.match(/need\('navigation\/page\/search\.js'/g).length, 1);
   const on = (site) => vm.runInNewContext(`${line} searchHere()`, { ultra: site === 'ultra', moodle: site === 'moodle', ctx: { settings: () => ({ enhance: { search: true } }) } });
   assert.ok(on('canvas'));
   assert.ok(!on('moodle'));

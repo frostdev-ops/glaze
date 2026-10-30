@@ -1,5 +1,5 @@
 // Glaze restarted under an open page (an update, Safari re-registering it): the browser runs Glaze's content scripts again
-// in that page, in a world of their own, beside the old copy's. The whole of features/coursetabs.js twice over one stand-in
+// in that page, in a world of their own, beside the old copy's. The whole of navigation/page/coursetabs.js twice over one stand-in
 // page: the fresh copy takes the page over, as after a reload, and the old one lets go.
 const test = require('node:test');
 const assert = require('node:assert/strict');

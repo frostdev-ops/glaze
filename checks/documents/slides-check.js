@@ -1,6 +1,6 @@
 // Slide decks on the Documents page (papers.html, slides-kind.js) in the real unpacked extension: with Settings → Writer →
 // Slides set off (writer.slides: false; it defaults on) a .pptx is refused as before; on, the fixture deck (test/fixtures/pptx/deck, zipped
-// with lib/zip.js) imports as a card showing slide 1, opens in the viewer (the rail, slide 1, arrows and Page keys, zoom,
+// with core/zip.js) imports as a card showing slide 1, opens in the viewer (the rail, slide 1, arrows and Page keys, zoom,
 // find in the slides' text, the notes), presents in a dialog whose keys are Rimeward's and which skips the hidden slide,
 // exports the bytes it was given, and Esc and Back behave as a paper's. The chrome wears a dark Look while the slide stays
 // as authored, prints a page per shown slide at the deck's size (notes optionally below), and nothing errors, in the page or at the worker's sender check. Screenshots at 1280 and 640 px. The browser
@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
-const Z = require(path.join(root, 'lib/zip.js'));
+const Z = require(path.join(root, 'core/zip.js'));
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-slides-check');
 const checks = [], errors = [], requests = [], shots = [];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -49,7 +49,7 @@ const fixture = (extra = []) => {
     const first = env.noFirstRun(context); context.setDefaultTimeout(15000);
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:' || u.protocol === 'blob:' || u.protocol === 'data:') return r.continue(); requests.push(u.href); return r.abort(); });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
-    const G = require(path.join(root, 'defaults.js'));
+    const G = require(path.join(root, 'content/defaults.js'));
     // Frost: a dark Look, so the chrome is dark while the slide keeps its own white.
     const settings = (slides) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, sheets: false, pdf: false, slides } });
     const HOME = `chrome-extension://${id}/papers.html`;
@@ -67,7 +67,7 @@ const fixture = (extra = []) => {
     await first.catch(() => {});
     await worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings(false));
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
-    // A record's file bytes: from the worker's file store (lib/doc-files.js), or a record's base64 from before it.
+    // A record's file bytes: from the worker's file store (documents/doc-files.js), or a record's base64 from before it.
     const bytesOf = async (rec) => Buffer.from(await worker.evaluate(async (f) => { if (typeof f === 'string') return f; let s = ''; await openDocFiles().read(f.hash, (c) => { s += GZ_DOC_FILES.b64(c); }); return s; }, rec.file), 'base64');
     const shot = async (name) => { await pause(250); const f = path.join(out, name); await page.screenshot({ path: f }); shots.push(f); };
     const openHome = async () => { await page.goto(HOME); await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'home'); };
@@ -409,7 +409,7 @@ const fixture = (extra = []) => {
     check((await at()).n === '1 / 10', 'off: existing slides still open for viewing');
 
     // ---- past the old 3 MB: an ~8 MB deck (the same slides with 8 MB of media beside them) is kept in the worker's file
-    // store (lib/doc-files.js), its record pointing at it, and opens.
+    // store (documents/doc-files.js), its record pointing at it, and opens.
     const sha = (b) => require('node:crypto').createHash('sha256').update(b).digest('hex');
     const bigDeck = fixture([{ name: 'ppt/media/media9.bin', data: new Uint8Array(require('node:crypto').randomBytes(7.9e6)), date: new Date(2026, 9, 29, 12) }]), bigPath = path.join(tmp, 'Lecture 4 recording.pptx');
     fs.writeFileSync(bigPath, bigDeck);

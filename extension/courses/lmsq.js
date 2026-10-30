@@ -4,7 +4,7 @@
 // the site's queue for its Retry-After, else for 2 s, doubling with each one until something else answers (ten minutes
 // at most); a 401 (signed out) refuses the site's requests here, without asking, until the page's address changes.
 // Nothing is retried on its own: callers decide when to ask again. fetch(url, init, prio) stands in for fetch
-// (lib/ultra.js read()'s f); run(task, prio) queues anything else that asks the site (a task rejecting with an HTTP
+// (courses/ultra.js read()'s f); run(task, prio) queues anything else that asks the site (a task rejecting with an HTTP
 // status, as content.js's capi does).
 // Classic script, loaded on demand (content.js need()): a second injection keeps the first; module.exports for node.
 var GZ_LMSQ = globalThis.GZ_LMSQ || (() => {

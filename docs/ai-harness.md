@@ -6,24 +6,24 @@ until the student has turned AI on, chosen a model for that feature and allowed 
 
 | File | Role |
 | --- | --- |
-| `lib/ai/request.js` | The one request and result shape; cleaners return `null` and never truncate. Error codes. |
-| `lib/ai/schema.js` | The JSON Schema subset tasks and tools use; `validate`, `strict`, `parse` (askJson-style), `obj/str/num/bool`. |
-| `lib/ai/text.js` | Data fences and the trust rule, grounding, `anchor` (a quote's offsets), `estimateTokens`, `chunks`, `paginateText`, `searchPages`. |
-| `lib/ai/stream.js` | `sseParser`, `readSse`, `thinkingCounter`. |
-| `lib/ai/failure.js` | Failure categories with a reference, the call record (last 40, metadata only), `bounded`, signals. |
-| `lib/ai/endpoint.js` | Endpoint addresses (https, or http to localhost/127.0.0.1), `normalize`, `mask`, connection ids and generations. |
-| `lib/ai/models.js` | Catalogs (a server's `/models`, OpenRouter's public list) with provenance, and `select`. |
-| `lib/ai/providers.js` | The provider registry and `run`, the one way to call a model. |
-| `lib/ai/providers/openai.js` | Any Chat Completions server. A request's `effort` goes as OpenRouter's `reasoning.effort` there and as `reasoning_effort` elsewhere; a model that refuses it gets the next level up (none, minimal, low), then none at all, remembered an hour for that model. `mock.js` is for tests and evals only; the worker never loads it. |
-| `lib/ai/providers/device.js` | Chrome's Prompt API (Chrome 138+), in the worker itself. Chrome chooses its built-in model; Glaze retains `gemini-nano` as its compatibility id. Unavailable elsewhere. |
-| `lib/ai/providers/apple.js` | Safari only: Apple's Foundation Models on this device, through the extension's native handler, `GlazeAI.swift`. One reply per request; no tools, no streaming. |
-| `lib/ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
-| `lib/ai/loop.js` | The agent loop: rounds, batch triage, approvals, receipts, repair. |
-| `lib/ai/task.js` | Task definitions and `run`. Tasks live in `lib/ai/tasks/<id>.js`. |
-| `lib/ai/tasks/syllabus-read.js` | `syllabus.read`: a syllabus's values as written, each with its quote; `lib/syllabus-ai.js` reads them with `lib/syllabus.js` and merges them into the import dialog's review. |
-| `lib/ai/tasks/writer-*.js` | Glaze Writer's tasks (below); `writer-context.js` cleans the page's context and writes it as the request's reusable context. |
-| `lib/ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls). |
-| `lib/ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
+| `ai/request.js` | The one request and result shape; cleaners return `null` and never truncate. Error codes. |
+| `ai/schema.js` | The JSON Schema subset tasks and tools use; `validate`, `strict`, `parse` (askJson-style), `obj/str/num/bool`. |
+| `ai/text.js` | Data fences and the trust rule, grounding, `anchor` (a quote's offsets), `estimateTokens`, `chunks`, `paginateText`, `searchPages`. |
+| `ai/stream.js` | `sseParser`, `readSse`, `thinkingCounter`. |
+| `ai/failure.js` | Failure categories with a reference, the call record (last 40, metadata only), `bounded`, signals. |
+| `ai/endpoint.js` | Endpoint addresses (https, or http to localhost/127.0.0.1), `normalize`, `mask`, connection ids and generations. |
+| `ai/models.js` | Catalogs (a server's `/models`, OpenRouter's public list) with provenance, and `select`. |
+| `ai/providers.js` | The provider registry and `run`, the one way to call a model. |
+| `ai/providers/openai.js` | Any Chat Completions server. A request's `effort` goes as OpenRouter's `reasoning.effort` there and as `reasoning_effort` elsewhere; a model that refuses it gets the next level up (none, minimal, low), then none at all, remembered an hour for that model. `mock.js` is for tests and evals only; the worker never loads it. |
+| `ai/providers/device.js` | Chrome's Prompt API (Chrome 138+), in the worker itself. Chrome chooses its built-in model; Glaze retains `gemini-nano` as its compatibility id. Unavailable elsewhere. |
+| `ai/providers/apple.js` | Safari only: Apple's Foundation Models on this device, through the extension's native handler, `GlazeAI.swift`. One reply per request; no tools, no streaming. |
+| `ai/tools.js` | Tool definitions, `aiTools` (adds the required `reason`), `invokeReadTool`. |
+| `ai/loop.js` | The agent loop: rounds, batch triage, approvals, receipts, repair. |
+| `ai/task.js` | Task definitions and `run`. Tasks live in `ai/tasks/<id>.js`. |
+| `ai/tasks/syllabus-read.js` | `syllabus.read`: a syllabus's values as written, each with its quote; `planner/syllabus-ai.js` reads them with `planner/syllabus.js` and merges them into the import dialog's review. |
+| `ai/tasks/writer-*.js` | Glaze Writer's tasks (below); `writer-context.js` cleans the page's context and writes it as the request's reusable context. |
+| `ai/settings.js` | storage.local `ai`: `{ on, outline, sources, mode, model, models, tune, features }` (below), the providers Settings names (`PRESETS`), and `migrate` for an older store. Features: `syllabus`, `completion` (the writer's ghost text), `writing` (its review, feedback, requirements, citations and autocorrect calls). |
+| `ai/broker.js` | The worker's broker: the port, admission, connections (IndexedDB), Settings' config messages. |
 
 ## Chrome's built-in model
 
@@ -35,7 +35,7 @@ The [Chrome 156 flag](https://chromium.googlesource.com/chromium/src/+/156.0.807
 
 ## Settings → AI
 
-storage.local `ai` (`lib/ai/settings.js`) is `{ on, outline, sources, mode, model, models, tune, features }`. `model` is the overall model,
+storage.local `ai` (`ai/settings.js`) is `{ on, outline, sources, mode, model, models, tune, features }`. `model` is the overall model,
 `{ use, model, effort? }`: `use` a connection's id (a provider's: `openai`, `anthropic`, `gemini`, `openrouter`, `xai`,
 `mistral`, `groq`, `deepseek`; `device`, the model on this device; or `custom-1` and on, an endpoint the student added),
 `model` its id at that provider (`''` on this device), `effort` the student's. `models` holds a feature's own model in that
@@ -48,17 +48,17 @@ Each provider Settings names is an OpenAI-compatible Chat Completions server at 
 with only a key; Anthropic's is asked with its browser header (`anthropic-dangerous-direct-browser-access`), Google Gemini's
 at `/v1beta/openai`. Any other id but `device` is an endpoint of the student's own (Advanced), with its name, address and
 an optional key. Connect asks the browser for the provider's host from its click, keeps the key, then checks it (`test`)
-and reads the catalog (`models`). A key that works fills in what the student hasn't chosen (`lib/ai/settings.js` `suggest`,
+and reads the catalog (`models`). A key that works fills in what the student hasn't chosen (`ai/settings.js` `suggest`,
 `SUGGEST`): the provider's newest main model as the overall one when none is chosen, and as Feedback's own when Feedback
 would run on this device; its fast model for Tab completion when the overall model is now its main. No feature turns on.
 
 A model's efforts come from its catalog where the catalog says (OpenRouter's `reasoning.supported_efforts`, DeepSeek's
 `effort.supported_levels`, xAI's `capabilities.reasoning_effort`), else from what its provider's docs say of it by name
-(`lib/ai/models.js` `RULES`: OpenAI's GPT-5 and o-series, Gemini 2.5 and later, Grok 4.5 to 4.7, Groq's gpt-oss). None
+(`ai/models.js` `RULES`: OpenAI's GPT-5 and o-series, Gemini 2.5 and later, Grok 4.5 to 4.7, Groq's gpt-oss). None
 known is none offered, and Settings hides the slider; Anthropic's and Mistral's compatible endpoints offer none, and neither
 does a model on this device. The effort thumb shows the student's choice, else completion's `none` or the catalog's stated default; where no default is stated, it shows a separate Default stop without guessing a level. Opening Settings never saves an effort. A run takes the student's effort when its model lists it, else its task's own
 (`writer.complete` asks `none`). Reasoning counts against a request's output, so an effort above the task's own adds the
-room it thinks in (1,024 tokens for minimal to 8,192 for high, `lib/ai/task.js` `mine`) unless the student set Max output. In Advanced a feature's temperature, max output and timeout replace its tasks' own, and its
+room it thinks in (1,024 tokens for minimal to 8,192 for high, `ai/task.js` `mine`) unless the student set Max output. In Advanced a feature's temperature, max output and timeout replace its tasks' own, and its
 context is the window Glaze plans for.
 
 An older Settings kept `{ on, use, features }` and one `endpoint` connection `{ provider: 'openai', base, model, key }`.
@@ -75,18 +75,18 @@ features on any attempt not known to be an assignment (`attempt`). Any connected
 whole thread with no extra step (owner, 2026-10-26).
 
 A document opened from Writer's Documents page (`papers.html?paper=<key>`, in its own tab or as a page of an LMS tab)
-loads the same `writer-ai.js`, proofing (`lib/writer-proof.js`, `writer-proof.js`, Harper) and Cite, on a stand-in frame
+loads the same `writer-ai.js`, proofing (`writer/writer-proof.js`, `writer-proof.js`, Harper) and Cite, on a stand-in frame
 in `papers.js` with one context object: school and user `local`, the course `papers` (an assignment paper's course name
 and title from its stored record), never Ultra's instructions, rubric or attached files, which are read only on Ultra. Its
 Feedback therefore shows "No instructions or rubric to check against."; completion, Check with AI, AI outline and
 proofing rulings run as in an assignment's frame. Citation lookups serve `papers.html` as they do `writer.html`
-(`lib/writer-lookup.js` `pages`).
+(`writer/writer-lookup.js` `pages`).
 
 | Task | Feature | Sends | Gets back, checked |
 | --- | --- | --- | --- |
 | `writer.complete` (text, streamed; 60 a minute, supersede) | completion | the course name, citation style, discussion or journal prompt, assignment title, instructions and rubric, the thread (posts with their authors, 24,000 characters at most) and the post being answered; then the document so far: the whole text before the sentence being typed as a rolling window, all of it that the model's input window holds after the rest of the request (90% of its catalog or Advanced context, or of the run's 60,000 tokens, the smaller, at four JSON-escaped UTF-8 bytes a token; up to 60,000 bytes of earlier text when no window is known), the earliest paragraphs left out first; then up to 4,000 characters after the caret, to a paragraph's end; the suggestions already shown in this box (the newest 40, as the sentences they would have made, within 5% of the window); and the sentence being typed last. The system, page context and document form a separate text part ending at an explicit cache breakpoint on OpenRouter Anthropic routes; after-caret text, suggestions and the caret sentence stay in a second, unmarked part. Reuse requires an identical prefix and the provider's minimum cache length; actual cache hits are not guaranteed. A model on this computer or with a window under 32,000 tokens gets the sentence, the newest 1,500 bytes of the document so far, the newest three suggestions, the prompt, instructions and post being answered cut to 600 characters, and no rubric, thread or text after the caret. Every model is asked, after a space, for the next words; mid-word, for that word in full and then the next words, so the join is exact; and to reason not at all (`effort: 'none'`) | the rest of the current sentence: mid-word begun with the caret's word, after a space not with a form of it; a reply that repeats the sentence's last words joins only with matching punctuation on the same line; cut at the first sentence end, refused if it is only the sentence's own words again, starts a new sentence or paragraph, repeats the text after or just before the caret, repeats a sentence of the document or a suggestion already shown (six copied words in a row anywhere in the finish, except a reused defined term or capitalized name in document text; or the sentence ending with one whole earlier sentence of at least four words), quotes, cites or links, or runs past 25 words |
 | `writer.review` | writing | the draft (in parts when long), the course name, style, prompt and assignment; no thread | at most 40 issues, each anchored to its words in the draft (`text.anchor`), suggestions that replace only those words |
-| `writer.feedback` | writing | the draft, the assignment's title, description, instructions and rubric (`lib/rubric.js`'s shape as text); the files its instructions and description attach (Ultra's `data-bbtype="attachment"` links), read by the page for Feedback or quiet image preparation (`lib/writer-context-assignment.js` attachments: at most 6 files, 40 MB, a document's text through `features/import.js`): each document's text as an `attached file: <name>` block (up to 200,000 characters of assignment material in total), and up to 4 pictures read separately through `writer.image` when supported, with only checked descriptions and requirements passed to assessment; unread pictures remain explicit limitations; for a paper, how Writer hands it in (a .docx in the paper's font, size, spacing, margins and header), so file and layout requirements are judged by that and not by the plain text | per rubric criterion (or requirement copied from the instructions, description or an attached document): met, partly or missing, a comment, up to two anchored passages, and the rubric level it reaches (only a level that criterion has, with that cell's points); a comment quoting words in neither the draft nor the assignment is dropped; comments assess and never supply wording (an example sentence, a quoted suggestion, "try writing…", or quoted words the draft and assignment don't hold drops the comment) |
+| `writer.feedback` | writing | the draft, the assignment's title, description, instructions and rubric (`courses/rubric.js`'s shape as text); the files its instructions and description attach (Ultra's `data-bbtype="attachment"` links), read by the page for Feedback or quiet image preparation (`writer/writer-context-assignment.js` attachments: at most 6 files, 40 MB, a document's text through `planner/page/import.js`): each document's text as an `attached file: <name>` block (up to 200,000 characters of assignment material in total), and up to 4 pictures read separately through `writer.image` when supported, with only checked descriptions and requirements passed to assessment; unread pictures remain explicit limitations; for a paper, how Writer hands it in (a .docx in the paper's font, size, spacing, margins and header), so file and layout requirements are judged by that and not by the plain text | per rubric criterion (or requirement copied from the instructions, description or an attached document): met, partly or missing, a comment, up to two anchored passages, and the rubric level it reaches (only a level that criterion has, with that cell's points); a comment quoting words in neither the draft nor the assignment is dropped; comments assess and never supply wording (an example sentence, a quoted suggestion, "try writing…", or quoted words the draft and assignment don't hold drops the comment) |
 | `writer.outline` (4 a minute, supersede) | writing, with its own `ai.outline` switch | up to 600 existing body blocks / 120,000 characters, identified by snapshot ids, plus interface language; no heading block or bibliography | descriptive headings and levels over contiguous block-id ranges; every block covered once, no invented positions, no swallowed authored headings; stale replies discarded and labels never inserted into the draft |
 | `writer.requirements` | writing | the prompt | `{ minWords, maxWords, sources, replies }`, each number only if the prompt states it in digits or words |
 | `writer.cite` | writing | the first 30,000 characters of the page the student asked to cite, and its address | the source (CSL-JSON subset), every value found in that text; a date only from a quote holding its year; no title, no answer |
@@ -105,7 +105,7 @@ moves the same editor and retains them. A warm request still uses only its short
 
 `writer.outline` sends one natural section at a time, asking for an at-most-eight-word title and an introduction/body/conclusion/custom role. Authored headings stay exact. Code computes all anchors; the model never supplies ranges. A heading-only entry needs no call. The run is bounded to 32 sections / 64 requests, with at most one repair of a known invalid answer per section; oversized sections keep the local outline with a specific reason.
 
-`writer.sources` reuses the grounded citation reader for individual bibliography entries, with Feedback’s model and tuning. `lib/writer-bibliography.js` first imports common MLA/APA/Chicago entries locally; unparsed entries retain the original text for review. The Sources view enriches only detected citation text while visible, never rewrites the paper, and protects manual edits/removals and stale replies. Documents (`papers.html`) gets the local importer too.
+`writer.sources` reuses the grounded citation reader for individual bibliography entries, with Feedback’s model and tuning. `writer/writer-bibliography.js` first imports common MLA/APA/Chicago entries locally; unparsed entries retain the original text for review. The Sources view enriches only detected citation text while visible, never rewrites the paper, and protects manual edits/removals and stale replies. Documents (`papers.html`) gets the local importer too.
 
 Feedback uses a bounded orchestration hook for local models, small context windows and oversized inputs. It gathers exact evidence from every supplied material chunk as needed, assesses each rubric criterion separately, then synthesizes the checked findings. Local assessment separates a flat decision (status, evidence IDs, level, points and completeness) from a short explanation using only the selected verified passages and rubric facts. Decision, comment and summary requests have trusted 256-token requested ceilings; evidence scans request 640. Prompts specify exact fields, concise prose and compact JSON. Local comments and summaries aim for one complete sentence of about 30 words, bounded at 240 characters; unfinished prose receives bounded repair. A format preset is descriptive metadata, never proof of imported citation conformance. A selected citation preset is omitted when the hand-in metadata already describes it, or explicitly labeled descriptive; it is never presented as an assignment requirement. A known contradictory explanation can reopen one criterion decision and explanation pair from the original evidence, using two of the existing four repair calls with nested repair disabled. Explicit rubric alternatives and legitimate preset comparisons remain valid. For an unambiguous APA criterion, the existing citation parser can supply exact author-page citation spans and a standalone Works Cited heading as counterevidence; multiple such citations with no author-year or mixed-style signals exclude a fully met status, without forcing a rating or score. Those witnesses reach both the decision and explanation, independently of selected-fact limits. Possessive apostrophes do not delimit quotations; actual quoted wording still requires source grounding. A required citation-style edition must be supported by the supplied rubric or assignment material; descriptive preset metadata cannot establish that requirement. If a complete, validated APA decision with actual rubric points and exact citation counterevidence exhausts its explanation repair on a known validation or response-length failure, a checked local sentence explains that mismatch and preserves the rating. This adds no model call; transport failures, cancellation and invalid or incomplete decisions never qualify. Fallback summaries retain whole checked comments instead of slicing a sentence. Fitting cloud requests retain the single-call path. All child requests share the provider, cancellation, deadline and call budget (64 requests / five minutes); uncertain transport failures never replay. At most four repairs are reserved before assessment; one confirmed application output cutoff may regenerate from the original evidence with shorter-output instructions, consuming that same repair reserve. Completeness describes source coverage, not whether the student met a requirement. A fully read mismatch or missing requirement receives the applicable rubric assessment; verified counterevidence remains available privately for its explanation even when missing requirements show no public draft quote. Input completeness markers survive extraction and attachment transport; genuinely unread or excluded material prevents an overall score. Progress is shown and Cancel stops attachment loading or the active model run.
 
@@ -117,7 +117,7 @@ Feedback errors distinguish criteria, attachment, material and planned-request l
 
 Assignment pictures first pass through `writer.image` (Feedback's route), one image at a time, with a 512-token requested ceiling and a separately validated 512-estimated-token JSON bound. A confirmed output-size cutoff or a completed response contradicting its own completeness flag permits one regeneration from the same image/context, counted against the task's two-call budget or Feedback's shared budget. A complete reading must have an empty limitation reason; a repeated contradiction remains incomplete. Transport failures and native truncation do not trigger this retry. The pass preserves visible requirements, scales, tables and diagram relationships and classifies relevance against compact assignment context. Descriptions can be shorter; omitted facts must still mark the reading incomplete. All subsequent Feedback calls are text only, including the fitting cloud path. Visual formatting requirements receive the same uncertainty checks as textual requirements.
 
-`writer-ai.js` prefetches these readings for visible, verified paper assignments only when Feedback is enabled, ready and vision capable. Foreground Feedback joins matching preparation. `lib/ai/visual-cache.js` persists complete readings for 30 days, at most 128, keyed by SHA-256 over the verified school/account/assignment, full task-context fingerprint, image bytes/MIME and reader version. The worker refreshes `/learn/api/v1/users/me` and rechecks the host route before binding cache authority; a stale paper identity cannot read that cache. Raw pictures, account identifiers and assignment context are not persisted by this cache. Incomplete readings have only a bounded memory guard against immediate automatic replay; active task leases preserve it across slow batches. Settings/context changes, hiding the tab, cancellation and teardown stop pending work.
+`writer-ai.js` prefetches these readings for visible, verified paper assignments only when Feedback is enabled, ready and vision capable. Foreground Feedback joins matching preparation. `ai/visual-cache.js` persists complete readings for 30 days, at most 128, keyed by SHA-256 over the verified school/account/assignment, full task-context fingerprint, image bytes/MIME and reader version. The worker refreshes `/learn/api/v1/users/me` and rechecks the host route before binding cache authority; a stale paper identity cannot read that cache. Raw pictures, account identifiers and assignment context are not persisted by this cache. Incomplete readings have only a bounded memory guard against immediate automatic replay; active task leases preserve it across slow batches. Settings/context changes, hiding the tab, cancellation and teardown stop pending work.
 
 Orchestration's trusted `imageCache` hook receives this worker-bound adapter; page payloads cannot supply cached readings or cache keys. A trusted subrequest can set `maxTokensCap` in both `fits` and `ask`, limiting a larger Advanced output override without affecting later review calls. `writer.image` has its own supersede/rate slot (30 per minute), and Activity identifies image preparation separately.
 
@@ -128,12 +128,12 @@ dismisses it, typing it consumes it, any other key, a click or an IME compositio
 AI (⌘⇧K, the chip's menu and ⋯) sets `GZ_WRITER_ISSUES.set('ai', …)` with positions mapped through every edit since the run
 began; `GZ_WRITER_AI.feedbackView(container)` is the Feedback panel; `GZ_WRITER_PROOF.decide` answers `{ verdict: 'apply'|'suggest'|'keep', choice }`, the
 choice an index into the candidates (-1 with keep). `GZ_WRITER_AI.requirements(prompt)` and `cite({ text, url })` give the other parts of the
-writer those tasks' outputs, or null. `lib/writer-tools.js` declares editor tools (read: document, issues, sources,
-assignment; confirm: insert a citation, apply a fix). `lib/mcp/writer.js` exposes them to apps allowed in **Settings → AI → Agents**. Stored-document reads use opaque session keys; reading issues and making changes require an open Writer page, and each change waits for approval in Glaze.
+writer those tasks' outputs, or null. `writer/writer-tools.js` declares editor tools (read: document, issues, sources,
+assignment; confirm: insert a citation, apply a fix). `agents/writer.js` exposes them to apps allowed in **Settings → AI → Agents**. Stored-document reads use opaque session keys; reading issues and making changes require an open Writer page, and each change waits for approval in Glaze.
 
 ## Add a provider
 
-One file, `lib/ai/providers/<id>.js`, that calls `GZ_AI_PROVIDERS.add({ … })`:
+One file, `ai/providers/<id>.js`, that calls `GZ_AI_PROVIDERS.add({ … })`:
 
 ```js
 { id, config(raw) → cfg | null, caps(cfg) → { text, images, json, tools, stream, local, context },
@@ -146,12 +146,12 @@ One file, `lib/ai/providers/<id>.js`, that calls `GZ_AI_PROVIDERS.add({ … })`:
 ```
 
 A capability that isn't known is left out, never `false`. Name the file in the worker's `importScripts` call
-(`lib/background.js` `aiFiles`; Firefox loads only the files named there) and in `lib/ai/settings.js` `PROVIDERS`.
+(`background/background.js` `aiFiles`; Firefox loads only the files named there) and in `ai/settings.js` `PROVIDERS`.
 Throw errors with a `status` or a `category`; `providers.run` turns them into a failure category with a reference.
 
 ## Add a task
 
-`lib/ai/tasks/<id>.js` calls `GZ_AI_TASKS.add({ … })` and is named in `aiFiles`:
+`ai/tasks/<id>.js` calls `GZ_AI_TASKS.add({ … })` and is named in `aiFiles`:
 
 ```js
 { id: 'syllabus.read', version: 1, caps: { images?, tools? },
@@ -252,7 +252,7 @@ Settings' top frame (`options.html`) manages connections with `chrome.runtime.se
 address; `name` is an endpoint's; a model is the settings', never a connection's), `remove { id }`, `test { id }`, `models { id }`
 (each model with the `efforts` it takes). `get` also returns `providers`, the shipped providers registered in this browser.
 Request the host from a click first with `chrome.permissions.request({ origins: [origin] })`.
-Settings → AI (`lib/editor-ai.js`) keeps a connection per provider the student connects, `custom-1` and on for endpoints,
+Settings → AI (`settings/editor-ai.js`) keeps a connection per provider the student connects, `custom-1` and on for endpoints,
 and `device` (On this device, `test { id: 'device' }` → `{ ok, state, reason?, provider }`, the resolved provider naming
 its card: Apple Intelligence or Gemini Nano), and asks for the host with `GZ_SITE.reach` from the Connect, Save or Test click.
 The model on this computer: `test { provider: 'device' }` → `{ ok, state, reason? }`, and from a click `prepare { provider:
@@ -304,7 +304,7 @@ Schema instructions are explicit compact JSON in the actual measured user messag
 - Senders: Glaze's own top-level pages, or Glaze in a same-origin LMS frame whose full ancestor chain is safe; never quiz, assessment or LTI pages. Every message rechecks the live document, including SPA navigation.
 - Glaze's writer frame (`writer.html`, an extension page inside an LMS tab) is judged by the frame it sits in, which the
   writer's claim of its one-use pass names (`aiFrameHost(writer frame's sender, the sender that asked for the pass)` in
-  `lib/background.js`); a writer frame no claim named may not ask. On every message the worker reads that frame's address
+  `background/background.js`); a writer frame no claim named may not ask. On every message the worker reads that frame's address
   and every address above it in its own document, and the tab's page with `tabs.get`: one LMS site Glaze runs on, never a
   quiet route. The one exception is the tab's own Ultra attempt page (`/ultra/courses/_x_/assessment/_y_/attempt/create`
   or `/_z_`), where only `completion` and `writing` may ask, and only once Glaze's content script in that tab's top frame
@@ -313,7 +313,7 @@ Schema instructions are explicit compact JSON in the actual measured user messag
   kept per tab (storage.session too); the word goes when the tab goes to another page, both when it closes. Mods, stickers
   and every other feature stay quiet there.
 - Documents in its own tab is a top-level Glaze page. Documents as a page of an LMS tab (`papers.html` in
-  `features/settingspage.js`'s frame, `AI_FRAMES`) is judged as the writer frame is: each document it loads claims a
+  `settings/page/settingspage.js`'s frame, `AI_FRAMES`) is judged as the writer frame is: each document it loads claims a
   one-use `glaze:papers` pass that the tab's top frame asked for, and that claim seats it with the broker
   (`aiFrameHost`); on every message the worker also checks it is still the tab's claimed Documents frame
   (`trustedFrame(s, 'papers')`).
@@ -345,10 +345,10 @@ An `apple` connection uses `model: 'on-device'`, Apple Intelligence on this devi
 registered only on Safari, and needs macOS 27 or iOS 27; older systems return `unavailable` with reason `os`.
 
 Settings offers one **On this device** choice (connection id `device`), and the broker resolves it at each status, test and
-run (`lib/ai/broker.js` `onDevice`): Apple Intelligence where Safari registers `apple`, unless its status is `unavailable`
+run (`ai/broker.js` `onDevice`): Apple Intelligence where Safari registers `apple`, unless its status is `unavailable`
 for `off`, `os` or `device` and the browser's own model (`device`) can run; otherwise the browser's model. Status, test and
 the call record name the provider it resolved to, and a status for an unavailable provider carries its `reason` (Writer
-says "Apple Intelligence is off" for `off`). A saved `apple` (an older `use`, or a model's) reads as `device` (`lib/ai/settings.js` `clean`).
+says "Apple Intelligence is off" for `off`). A saved `apple` (an older `use`, or a model's) reads as `device` (`ai/settings.js` `clean`).
 
 `ai.run` is one native request and reply. Refusals stay `refusal`; a reply reaching `maximumResponseTokens` is marked
 `length`, and structured output is refused even if guided generation closed the JSON. Rate and quota limits carry 429.

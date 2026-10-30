@@ -1,5 +1,5 @@
 // Media a Look or a mod brings: a looping video, an animated picture or a Lottie animation behind the page (bg.kind
-// "media", cleaned in lib/lookparts.js, drawn by lib/scene-media.js), and the stickers a mod carries. Everything here is
+// "media", cleaned in looks/lookparts.js, drawn by looks/scene-media.js), and the stickers a mod carries. Everything here is
 // someone else's bytes, so nothing is trusted until it has been read within hard limits: the container is walked (never
 // decoded), its size, frames and pixels are capped, and a file Glaze keeps is the cleaned one (a WebP rebuilt from the
 // chunks that draw, a Lottie file rewritten from what it may hold, a video or AVIF picture with the details a phone or an editor
@@ -691,7 +691,7 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
   };
 
   // ---- Lottie ---------------------------------------------------------------------------------------------------
-  // A Lottie file is data for lib/lottie's light player (no expressions, so nothing in it is ever run), but it is also a
+  // A Lottie file is data for vendor/lottie's light player (no expressions, so nothing in it is ever run), but it is also a
   // tree a hostile file can make enormous. It is rewritten from the keys that draw it and refused for anything that could
   // reach out or run away: expressions, text and audio layers, fonts, pictures that are not embedded, a precomp that
   // contains itself, a repeater past 100 copies, too many nodes or levels or frames. → { json, bytes, w, h, frames, fr }.
@@ -877,8 +877,8 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
 
   // ---- packs a mod carries --------------------------------------------------------------------------------------
   // mod.json's `packs`: stickers (a picture, an animated WebP or AVIF, or a Lottie file) and pets (a sprite sheet in the pet
-  // layout, which lib/petsprites.js decodes, checks and re-encodes when the student adds it). Each is { id, name, file }, the
-  // file one of the bundle's (has(file)). Cleaned the way lib/modbundle.js checks a manifest: every key known, every value as
+  // layout, which pet/petsprites.js decodes, checks and re-encodes when the student adds it). Each is { id, name, file }, the
+  // file one of the bundle's (has(file)). Cleaned the way mods/modbundle.js checks a manifest: every key known, every value as
   // written, or null. The bytes of a sticker are read when it is asked for (check), whatever the manifest says of them.
   const PACK_ID = /^[a-z][a-z0-9-]{0,31}$/;
   const PACK_FILE = { stickers: /\.(png|webp|avif|json)$/i, pets: /\.(png|webp)$/i };
@@ -968,7 +968,7 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
   // The file a `file:<hash>` address names.
   const fileOf = (src) => (typeof src === 'string' && src.startsWith('file:') && HASH.test(src.slice(5)) ? src.slice(5) : null);
   // The files the Looks on this computer name: `now`, the Look worn (its parts, wherever they are kept), and `saved`, history's
-  // and favorites' Looks. decode: lib/share.js decode, for a favorite's code.
+  // and favorites' Looks. decode: sharing/share.js decode, for a favorite's code.
   const uses = async ({ sync, local }, decode) => {
     const now = new Set(), saved = new Set();
     const add = (set, parts) => { const h = fileOf(parts?.x?.bg?.media?.src); if (h) set.add(h); };
@@ -1085,7 +1085,7 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
   // [{ h, t, size, pending?, saved? }] }; drop { h, pending? }; keep { h } (an offer's file, now used); reset; file { h } →
   // { ok, mime, b64 } (as kept, for a page); lottie { src } → { ok, json }; remote { src, kind } → { ok, type, mime, b64 } (a video
   // or picture at an address, fetched and cleaned). area: { local, sync, files }.
-  // env: { fetch, allow(src) → whether this page may have that address fetched } for lottie and remote; decode (lib/share.js) for
+  // env: { fetch, allow(src) → whether this page may have that address fetched } for lottie and remote; decode (sharing/share.js) for
   // list's `saved`; queue for moving a file an older Glaze kept.
   const change = async (m, area, env = {}) => {
     const { local, files } = area;

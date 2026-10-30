@@ -1,9 +1,9 @@
 // Shared by the content script, the popup, the options page and the tests: the one place a default
-// lives. Classic script (the extension loads it after lib/color.js); node loads it via module.exports.
-const GZC = typeof GZ_COLOR !== 'undefined' ? GZ_COLOR : require('./lib/color.js');
-const GZS = typeof GZ_SURFACES !== 'undefined' ? GZ_SURFACES : require('./lib/surfaces.js');
+// lives. Classic script (the extension loads it after core/color.js); node loads it via module.exports.
+const GZC = typeof GZ_COLOR !== 'undefined' ? GZ_COLOR : require('../core/color.js');
+const GZS = typeof GZ_SURFACES !== 'undefined' ? GZ_SURFACES : require('../looks/surfaces.js');
 const GZ_SURFACE_VARS = GZS.vars;
-const GZF = typeof GZ_FONTS !== 'undefined' ? GZ_FONTS : require('./lib/fonts.js');
+const GZF = typeof GZ_FONTS !== 'undefined' ? GZ_FONTS : require('../looks/fonts.js');
 
 // One row per colour token: CSS variable, label, default value (the "Frost" preset).
 const GZ_COLORS = [
@@ -27,7 +27,7 @@ const GZ_COLORS = [
 // doesn't depend on the language Ultra is shown in).
 const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], ['engagement', 'Discussions'], ['grades', 'Gradebook'], ['messages', 'Messages'], ['groups', 'Groups'], ['achievements', 'Achievements']];
 
-// The kinds of page the sidebar can be turned off on (sidebar.off), by the page family features/sidebar.js reads:
+// The kinds of page the sidebar can be turned off on (sidebar.off), by the page family navigation/page/sidebar.js reads:
 // Canvas's Dashboard and Ultra's Courses page are both 'dashboard', a Canvas course home and an Ultra outline 'course'.
 const GZ_SIDEBAR_KINDS = [['dashboard', 'Dashboard'], ['course', 'Course home'], ['discussion', 'Discussions'], ['assignment', 'Assignments'], ['grades', 'Grades'], ['calendar', 'Calendar and syllabus'], ['quiz', 'Quizzes'], ['other', 'Other pages']];
 
@@ -39,7 +39,7 @@ const GZ_GROUP = (spec) => [Object.fromEntries(Object.entries(spec).map(([k, [d]
 
 // Everything else, as [default, rule]. A rule is an enum (array of choices), a [min, max] number
 // range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
-// 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
+// 'hexes' (three #rrggbb colors, or none), 'font' (a looks/fonts.js id or a typed family name) or
 // 'font-auto' (the same, or 'auto') or 'time' (local "HH:MM") or a group's own spec (GZ_GROUP). GZ_SANITIZE walks this.
 const GZ_SPEC = {
   auto: { on: [false, 'bool'], mode: ['device', ['device', 'schedule']], from: ['20:00', 'time'], to: ['08:00', 'time'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
@@ -55,7 +55,7 @@ const GZ_SPEC = {
   },
   // colors: the three the gradient, aurora and scenes are painted with; none = the palette's.
   // scene: the three.js background drawn when kind is 'scene'; intensity is its one knob (dim and
-  // blur are for the other kinds). 'shader', 'layers' and 'media': the Look's parts (lib/lookparts.js).
+  // blur are for the other kinds). 'shader', 'layers' and 'media': the Look's parts (looks/lookparts.js).
   bg: {
     kind: ['solid', ['solid', 'gradient', 'image', 'aurora', 'scene', 'shader', 'layers', 'media']], image: ['', 'url'], dim: [60, [0, 90]], blur: [0, [0, 20]],
     colors: [[], 'hexes'], grain: [true, 'bool'],
@@ -69,8 +69,8 @@ const GZ_SPEC = {
     u: ['', 'url'], i: ['', 'picture'], o: [75, [0, 100]], f: ['none', ['none', 'vivid', 'mono', 'noir', 'warm', 'cool', 'faded', 'dreamy']], ink: ['#ffffff', 'hex'],
     logo: [true, 'bool'], labels: ['normal', ['normal', 'small', 'icons']], size: ['medium', ['small', 'medium', 'large']], collapsed: [false, 'bool'],
   },
-  // The sidebar's look and behaviour for every account (features/sidebar.js has what each value means); where widgets
-  // sit, the width dragged and folds are each account's (lib/sidebar.js). The switch is enhance.sidebar.
+  // The sidebar's look and behaviour for every account (navigation/page/sidebar.js has what each value means); where widgets
+  // sit, the width dragged and folds are each account's (navigation/sidebar.js). The switch is enhance.sidebar.
   sidebar: {
     title: ['', 'label'], style: ['float', ['float', 'embed', 'auto']], open: ['auto', ['auto', 'expanded', 'collapsed', 'drawer']],
     width: [352, [288, 480]], order: ['page', ['page', 'widgets']], page: ['shown', ['shown', 'folded', 'hidden']], heading: [true, 'bool'], jump: [true, 'bool'],
@@ -78,7 +78,7 @@ const GZ_SPEC = {
     radius: ['auto', ['auto', 'none', 'small', 'medium', 'large']], density: ['auto', ['auto', 'compact', 'cozy', 'comfortable']],
     min: [720, [480, 1200]], grades: [900, [600, 1400]], canvas: [true, 'bool'], ultra: [true, 'bool'], off: [[], 'kinds'], todo: ['follow', ['follow', 'all']], absorb: [true, 'bool'],
   },
-  // Glaze's own navigation in place of the site's (lib/navbar.js has what each value means).
+  // Glaze's own navigation in place of the site's (navigation/navbar.js has what each value means).
   navbar: { on: [true, 'bool'], place: ['rail', ['rail', 'top']], style: ['float', ['float', 'embed']], rail: ['auto', ['auto', 'open', 'icons']],
     course: ['same', ['same', 'icons', 'top', 'hide']], cmenu: [true, 'bool'], tabs: [true, 'bool'], peek: [true, 'bool'], badges: [true, 'bool'], brand: ['glaze', ['glaze', 'school', 'custom', 'none']] },
   motion: {
@@ -94,10 +94,10 @@ const GZ_SPEC = {
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [true, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
     notes: [false, 'bool'], widgets: [true, 'bool'], pet: [false, 'bool'], dashboard: [true, 'bool'], writer: [true, 'bool'], writerUploads: [true, 'bool'], bbPreviews: [true, 'bool'],
-    // sidebar: the page's sidebar, widgets docked under it (lib/sidebar.js).
+    // sidebar: the page's sidebar, widgets docked under it (navigation/sidebar.js).
     sidebar: [true, 'bool'],
     // place: remember Canvas Modules position. Ultra retains live course pages. coursemenu: each course card's button for its color,
-    // tint and look. tabs: Ultra's course tabs (lib/coursetabs.js).
+    // tint and look. tabs: Ultra's course tabs (navigation/coursetabs.js).
     place: [true, 'bool'], coursemenu: [true, 'bool'], tabs: [true, 'bool'],
     // docPages: previews in a dark palette, plain, dimmed or inverted (the floating button too); toggles: the floating
     // document buttons. Canvas's document viewer: docTheme its palette, docInk the pen.
@@ -105,25 +105,25 @@ const GZ_SPEC = {
     quizLight: [false, 'bool'],
     // Card grades on hover only; Canvas's GPA, its scale and place (per-course choices: sync item gpaCourses).
     gradeHover: [false, 'bool'], gpa: [false, 'bool'], gpaPlus: [false, 'bool'], gpaWeighted: [false, 'bool'], gpaAfter: [false, 'bool'], insights: [false, 'bool'],
-    // Reminders and the streak, each opt-in (lib/remind.js has the rest).
+    // Reminders and the streak, each opt-in (planner/remind.js has the rest).
     remind: [false, 'bool'], remindExam: [false, 'bool'], remindPlan: [false, 'bool'], remindClass: [false, 'bool'], streak: [false, 'bool'],
-    // Syllabus import on a course's home and Syllabus page (features/syllabus.js).
+    // Syllabus import on a course's home and Syllabus page (planner/page/syllabus.js).
     syllabus: [false, 'bool'],
     fold: [true, 'bool'], titleScroll: [true, 'bool'],
   },
   docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },
   stream: { dates: ['smart', ['smart', 'posted', 'both']], relative: [false, 'bool'], compact: [false, 'bool'], encouragement: [true, 'bool'] },
-  // features/lookx.js. pointer: the student's over every Look's (x.pointer): 'look' the Look's, 'own' their picture (on
+  // looks/page/lookx.js. pointer: the student's over every Look's (x.pointer): 'look' the Look's, 'own' their picture (on
   // this device); pointerOn off: the system's. pointerAnim: the Look's pointer animation (x.cursor). Never in a Look's code.
   extras: { pointer: ['look', ['look', 'aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'frostdev', 'own']], pointerOn: [true, 'bool'], pointerAnim: [true, 'bool'], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
-  // lib/blocklist.js
+  // mods/blocklist.js
   mods: { blocklist: [true, 'bool'] },
-  // Announcements and pop-ups (features/announce.js).
+  // Announcements and pop-ups (courses/page/announce.js).
   announce: { open: ['popup', ['popup', 'site']], ...Object.fromEntries(['glaze', 'ultra', 'canvas', 'moodle'].flatMap((k) => [[k, ['default', ['default', 'popup', 'site']]], [k + 'Preview', [true, 'bool']]])), preview: [true, 'bool'], delay: [600, [200, 2000]], lines: [3, [1, 8]] },
   popup: { anim: ['genie', ['genie', 'fade', 'none']] },
   rubric: { show: ['auto', ['auto', 'popup', 'site']], inline: [true, 'bool'] },
-  // Glaze Writer's (lib/writer-settings.js). zoom: 'fit' or a percent; full: assignments paged, not compact; sheets, pdf,
+  // Glaze Writer's (writer/writer-settings.js). zoom: 'fit' or a percent; full: assignments paged, not compact; sheets, pdf,
   // slides: Documents takes spreadsheets, PDFs, slide decks (sheet-kind.js, pdf-kind.js, slides-kind.js); submit.text: the
   // submit sheet's paste switch as left.
   writer: {
@@ -146,7 +146,7 @@ const GZ_DEFAULTS = {
   // looks: a built-in Look's name by course id, worn on that course's pages instead of the student's theme.
   // names: a nickname by course id, shown in place of the course's name (the course menu, Ultra only).
   courses: { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60, looks: {}, names: {} },
-  // A saved or gallery Look's id (lib/looks.js) by course id: 3.x keeps only built-in names in courses.looks, never this.
+  // A saved or gallery Look's id (looks/looks.js) by course id: 3.x keeps only built-in names in courses.looks, never this.
   courseLooks: {},
   footer: true,
   presets: [],

@@ -35,7 +35,7 @@ const parts = (sel) => {
   }
   return [...out, sel.slice(from).trim()];
 };
-const theme = cssRules('theme.css');
+const theme = cssRules('content/theme.css');
 // A selector's specificity as one comparable number (ids, classes, types; 1000 of each is plenty): :is(), :not() and
 // :has() count their most specific argument, :where() nothing.
 const specificity = (sel) => {
@@ -105,7 +105,7 @@ test('a disabled button looks disabled, on the page and in dialogs: its colours 
   for (const j of [rule('.MuiButton-contained {', FILL), rule('#site-wrap a.button, #site-wrap button.button {', FILL),
     rule('#site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]) {', FILL), rule('#site-wrap :is([class*="resultsButtonWrapper"]', FILL)]) assert.ok(beats(fill, j), `disabled fill beats ${theme[j][0].slice(0, 80)}`);
   // MUI's disabled colours, in the palette.
-  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/theme.css'), 'utf8'), /--palette-action-disabled: var\(--gz-ink-faint\) !important;\s*--palette-action-disabledBackground: var\(--gz-line\) !important;/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../../extension/content/theme.css'), 'utf8'), /--palette-action-disabled: var\(--gz-ink-faint\) !important;\s*--palette-action-disabledBackground: var\(--gz-line\) !important;/);
 });
 
 test('a field that refused its input shows it: error edge, label and hint, hovered or focused, and a group keeps its asterisk', () => {

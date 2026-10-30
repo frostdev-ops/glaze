@@ -1,4 +1,4 @@
-// The Looks catalogue in headless Chrome with the real unpacked extension, its worker, Settings and the popup (lib/looks.js):
+// The Looks catalogue in headless Chrome with the real unpacked extension, its worker, Settings and the popup (looks/looks.js):
 // a saved Look and a gallery Look kept in storage show in Settings' Look picker, grouped, with their swatches; picking each
 // wears it (the page's own colours) and the popup's tile names it; a gallery Look used from its offer joins the gallery's; a
 // Look saved from Settings shows at once, pressed, here and in a second Settings tab without a reload; a course wears it;
@@ -10,9 +10,9 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const root = path.join(__dirname, '../../extension');
-const G = require('../../extension/defaults.js');
-const S = require('../../extension/lib/share.js');
-const C = require('../../extension/lib/looks.js');
+const G = require('../../extension/content/defaults.js');
+const S = require('../../extension/sharing/share.js');
+const C = require('../../extension/looks/looks.js');
 const site = 'https://bb.school.test';
 const ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
 const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
@@ -34,7 +34,7 @@ const look = (name) => G.GZ_LOOKS.find((L) => L.name === name);
 const old = (() => {
   const module = { exports: {} };
   require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname, '../../test/fixtures/defaults-3.4.6.js.txt'), 'utf8'), {
-    module, TextEncoder, console, GZ_COLOR: require('../../extension/lib/color.js'), GZ_SURFACES: require('../../extension/lib/surfaces.js'), GZ_FONTS: require('../../extension/lib/fonts.js') });
+    module, TextEncoder, console, GZ_COLOR: require('../../extension/core/color.js'), GZ_SURFACES: require('../../extension/looks/surfaces.js'), GZ_FONTS: require('../../extension/looks/fonts.js') });
   return module.exports;
 })();
 // A course's saved or gallery Look, as Settings stores it (defaults.js courseLooks); and what this course wears by id.

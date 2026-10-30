@@ -14,19 +14,19 @@ const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const m = require('../../extension/manifest.json');
 // The paths package.sh zips (as test/release/package.test.js reads them), and every file under them.
 const roots = read('../tools/build/package.sh').match(/^zip -q -r -X "\$OUT" ([\s\S]*?)-x /m)[1].replace(/\\\n/g, ' ').trim().split(/\s+/);
-// Code mods' sandbox files (mods/) are Chrome's alone: tools/build/safari-manifest.sh drops them from the staged copy, as Safari
+// Code mods' sandbox files (mods/host.*, mods/boot.js, mods/page/mods.js) are Chrome's alone: tools/build/safari-manifest.sh drops them from the staged copy, as Safari
 // has no manifest sandbox.
-const shipped = roots.flatMap((r) => (fs.statSync(path.join(root, r)).isDirectory() ? S.walk(path.join(root, r), `${r}/`) : [r])).filter((f) => !f.startsWith('mods/') && f !== 'features/mods.js');
+const shipped = roots.flatMap((r) => (fs.statSync(path.join(root, r)).isDirectory() ? S.walk(path.join(root, r), `${r}/`) : [r])).filter((f) => !['mods/boot.js', 'mods/host.html', 'mods/host.js', 'mods/page/mods.js'].includes(f));
 
 test('the parser reads both extension targets, and what each leaves out', () => {
   const sets = S.bundled();
   assert.deepEqual(Object.keys(sets).sort(), [...S.TARGETS].sort());
-  for (const t of S.TARGETS) assert.ok(sets[t].has('manifest.json') && sets[t].has('lib/'), t);
-  assert.deepEqual(S.missing(['lib/zip.js', 'nowhere.js']), S.TARGETS.map((t) => [t, 'nowhere.js']), 'a folder covers its files; nothing else does');
+  for (const t of S.TARGETS) assert.ok(sets[t].has('manifest.json') && sets[t].has('background/'), t);
+  assert.deepEqual(S.missing(['core/zip.js', 'nowhere.js']), S.TARGETS.map((t) => [t, 'nowhere.js']), 'a folder covers its files; nothing else does');
 });
 
 test('both Safari extension targets bundle every file the package ships', () => {
-  assert.ok(shipped.length > 100 && shipped.includes('content-ultra.js') && shipped.includes('features/palette.js'));
+  assert.ok(shipped.length > 100 && shipped.includes('content/content-ultra.js') && shipped.includes('navigation/page/palette.js'));
   assert.deepEqual(S.missing(shipped), []);
 });
 
@@ -36,12 +36,12 @@ test('and everything the manifest, the loader, the stylesheets and the preview n
     m.background.service_worker, m.action.default_popup, m.options_ui.page, ...Object.values(m.icons),
     // Web-accessible patterns: the files they match.
     ...m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => !r.startsWith('mods/')).flatMap((r) => shipped.filter((f) => new RegExp(`^${r.replace(/[.]/g, '\\.').replace(/\*/g, '[^/]*')}$`).test(f))),
-    // On demand (lib/background.js LOADABLE), and each site's stylesheets (content.js SHEETS: theme, motion, extras; `${site}.css`).
-    ...JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"')).filter((f) => f !== 'features/mods.js'),
-    'theme.css', 'motion.css', 'extras.css', 'canvas.css', 'moodle.css',
+    // On demand (background/background.js LOADABLE), and each site's stylesheets (content.js SHEETS: theme, motion, extras; `${site}.css`).
+    ...JSON.parse(read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"')).filter((f) => f !== 'mods/page/mods.js'),
+    'content/theme.css', 'content/motion.css', 'content/extras.css', 'content/canvas.css', 'content/moodle.css',
     ...[...read('preview.html').matchAll(/<script src="([^"]+)"/g)].map((x) => x[1]),
   ];
-  assert.ok(named.includes('content-canvas.js') && named.includes('assets/art/pets/cat/sprites.webp') && named.includes('features/lookx.css'));
+  assert.ok(named.includes('content/content-canvas.js') && named.includes('assets/art/pets/cat/sprites.webp') && named.includes('looks/page/lookx.css'));
   for (const f of named) assert.ok(shipped.includes(f), `${f} is named but not packaged`);
   assert.deepEqual(S.missing([...new Set(named)]), []);
 });
@@ -68,9 +68,9 @@ test('the Safari staging drops code mods\' sandbox and keeps everything else bun
     execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(stage, 'manifest.json')]);
     const staged = S.walk(stage);
     const sm = JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json'), 'utf8'));
-    assert.ok(!staged.some((f) => f.startsWith('mods/') || f === 'features/mods.js'), 'no host, bootstrap or sandbox content runtime');
+    assert.ok(!staged.some((f) => ['mods/boot.js', 'mods/host.html', 'mods/host.js', 'mods/page/mods.js'].includes(f)), 'no host, bootstrap or sandbox content runtime');
     // Declarative widgets are not code: their page side, the renderer they share and the cleaner stay.
-    for (const f of ['features/modwidgets.js', 'features/modui.js', 'lib/modwidget.js']) assert.ok(staged.includes(f), `${f} stays`);
+    for (const f of ['mods/page/modwidgets.js', 'mods/page/modui.js', 'mods/modwidget.js']) assert.ok(staged.includes(f), `${f} stays`);
     assert.equal(sm.sandbox, undefined);
     assert.equal(sm.content_security_policy.sandbox, undefined);
     assert.ok(sm.web_accessible_resources.every((e) => e.resources.length && e.resources.every((r) => !r.startsWith('mods/'))));

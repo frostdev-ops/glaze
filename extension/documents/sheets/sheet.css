@@ -66,7 +66,7 @@
 .gx-ref { border: 2px solid var(--ref); background: color-mix(in srgb, var(--ref) 10%, transparent); }
 .gx-marquee { border: 2px dashed var(--gz-accent); }
 
-/* Charts: a layer over each pane's cells (lib/sheet-chart.js); the data in the chart's colours, its words, axes and ground in the Look's */
+/* Charts: a layer over each pane's cells (documents/sheets/sheet-chart.js); the data in the chart's colours, its words, axes and ground in the Look's */
 .gx-charts { position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; }
 .gx-chart { position: absolute; }
 .gx-chart > svg { display: block; overflow: hidden; font-family: var(--gz-font); }

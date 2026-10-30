@@ -123,15 +123,15 @@ test('school-host readiness waits for Ultra registration, with static entries an
   const vm = require('node:vm');
   let matches = ['https://*.blackboard.com/ultra', 'https://*.blackboard.com/ultra/*'], registered = [];
   const context = vm.createContext({ URL, chrome: {
-    runtime: { getManifest: () => ({ content_scripts: [{ js: ['content-ultra.js'], matches }] }) },
+    runtime: { getManifest: () => ({ content_scripts: [{ js: ['content/content-ultra.js'], matches }] }) },
     storage: { local: { get: async () => ({ ultra: ['https://bb.school.test:8443'] }) } },
     scripting: { getRegisteredContentScripts: async () => registered },
   } });
   const ready = () => vm.runInContext(`(${predicate.toString()})()`, context);
   assert.equal(await ready(), false, 'the local write is visible before the worker registers it');
-  registered = [{ js: ['content-canvas.js'], matches: ['https://bb.school.test/*'] }];
+  registered = [{ js: ['content/content-canvas.js'], matches: ['https://bb.school.test/*'] }];
   assert.equal(await ready(), false, 'another LMS bundle does not make Ultra ready');
-  registered.push({ js: ['content-ultra.js'], matches: ['https://bb.school.test/ultra', 'https://bb.school.test/ultra/*'] });
+  registered.push({ js: ['content/content-ultra.js'], matches: ['https://bb.school.test/ultra', 'https://bb.school.test/ultra/*'] });
   assert.equal(await ready(), true, 'the portless registration covers the approved port');
   registered = []; matches = ['https://*/ultra', 'https://*/ultra/*'];
   assert.equal(await ready(), true, 'Safari has its static entry already');
@@ -150,7 +150,7 @@ test('the first-load glass and background checks wait for their listed Ultra fix
 
 test('a check that wants only its own tabs closes Glaze\'s first screen, open already or opening later', async () => {
   const { noFirstRun } = require('../../tools/dev/check-env.js');
-  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
+  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/settings/welcome.html';
   const tab = (url, later) => {
     const p = { at: url, closed: false, url: () => p.at, close: async () => { p.closed = true; } };
     p.waitForURL = async (re) => { await later; if (!re.test(p.at)) throw Error('timeout'); };
@@ -174,7 +174,7 @@ test('a check that wants only its own tabs closes Glaze\'s first screen, open al
 
 test('noFirstRun says when it has closed Glaze\'s first screen, so a check can start after the install\'s tab', async () => {
   const { noFirstRun } = require('../../tools/dev/check-env.js');
-  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
+  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/settings/welcome.html';
   let onPage, closed = false, land;
   const closing = noFirstRun({ pages: () => [], on: (e, f) => { if (e === 'page') onPage = f; } });
   assert.equal(typeof closing?.then, 'function', 'a promise of the first screen closed');
@@ -190,7 +190,7 @@ test('noFirstRun says when it has closed Glaze\'s first screen, so a check can s
 
 test('noFirstRun never reports a failed tab close as a closed first screen', async () => {
   const { noFirstRun } = require('../../tools/dev/check-env.js');
-  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
+  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/settings/welcome.html';
   let onPage, closed = false;
   const bad = { url: () => welcome, close: async () => { throw new Error('close failed'); }, waitForURL: async () => {} };
   const first = noFirstRun({ pages: () => [bad], on: (e, f) => { onPage = f; } });
@@ -210,7 +210,7 @@ test('noFirstRun still closes a first screen that navigates after ten seconds un
     at: 'about:blank', url: () => tab.at, close: async () => { gone = true; },
     waitForURL: (re, { timeout }) => new Promise((resolve, reject) => {
       if (timeout) setTimeout(() => reject(new Error('navigation timeout')), timeout);
-      navigate = () => { tab.at = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html'; assert.ok(re.test(tab.at)); resolve(); };
+      navigate = () => { tab.at = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/settings/welcome.html'; assert.ok(re.test(tab.at)); resolve(); };
     }),
   };
   noFirstRun({ pages: () => [tab], on() {} });

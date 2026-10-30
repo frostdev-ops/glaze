@@ -1,10 +1,10 @@
 // The PDF viewer's pages panel (pdf-kind.js): the pages as tiles to move (drag, or Move up and Move down), turn, delete,
-// a blank page and another PDF's pages to add; Done applies them all at once (lib/pdf-doc.js bake: pdf.js's
+// a blank page and another PDF's pages to add; Done applies them all at once (documents/pdf/pdf-doc.js bake: pdf.js's
 // extractPages with the rotations patch) as one step a single Undo takes back. The reducer is pure: what the student
 // does (reduce) → the state's tiles → one list of bake's page operations (toOps).
 // Classic script; module.exports for node (start, reduce, toOps, changed).
 var GZ_PDF_PAGES = globalThis.GZ_PDF_PAGES || (() => {
-  const PAGES = 500, BYTES = 50e6; // lib/pdf-doc.js LIMITS.pages and .merged
+  const PAGES = 500, BYTES = 50e6; // documents/pdf/pdf-doc.js LIMITS.pages and .merged
   const fail = (name, message) => Object.assign(new Error(message), { name });
 
   // ---- the reducer. A tile: { id, source (0 the document, k the k-th merged file, 'blank'), page, turn (0 to 270, on top

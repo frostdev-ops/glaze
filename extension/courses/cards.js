@@ -1,9 +1,9 @@
 // Canvas course cards: what a card's own style and its bookmarks look like in storage, and what a style paints.
-// Pure. Used by features/cards.js on the dashboard, by the editor (options.js) and by theme codes (lib/share.js).
+// Pure. Used by courses/page/cards.js on the dashboard, by the editor (options.js) and by theme codes (sharing/share.js).
 // Classic script, loaded on demand on the dashboard (a second load keeps the first); module.exports for node.
 //
 // Three sync items, apart from GZ_SANITIZE's settings (so none of this weighs on the first content script):
-// - `card`: the dashboard's card settings, SPEC below. The editor shows them with the rest; features/cards.js
+// - `card`: the dashboard's card settings, SPEC below. The editor shows them with the rest; courses/page/cards.js
 //   paints them as --gz-card-* variables and data-gz-card-* attributes on <html> (canvas.css).
 // - `cards`: { 'canvas:<origin>/<id>': style, '*': [style, ...] }. '*' is a theme's set (a theme code or a Look),
 //   worn in turn by the cards that have no style of their own.
@@ -14,7 +14,7 @@
 // is Canvas's own color, as Canvas draws it.
 var GZ_CARDS = globalThis.GZ_CARDS || (() => {
   // Colour math only for contrast(): looked up when it runs (the page has it; node requires it).
-  const C = () => (typeof GZ_COLOR !== 'undefined' ? GZ_COLOR : require('./color.js'));
+  const C = () => (typeof GZ_COLOR !== 'undefined' ? GZ_COLOR : require('../core/color.js'));
   const HEX = /^#[0-9a-f]{6}$/i;
   const KEY = /^(?:canvas:https?:\/\/[a-z\d.-]+(?::\d+)?\/\d+|ultra:https:\/\/[a-z\d.-]+(?::\d+)?\/_\d+_\d+)$/i;
   const LOCAL = /^[a-z0-9]{12}$/;
@@ -226,7 +226,7 @@ var GZ_CARDS = globalThis.GZ_CARDS || (() => {
   };
 
   // ---- writing: one change at a time, applied to what storage holds when its turn comes ----
-  // Every write of `cards`, `links` and the pictures goes through change(), run by lib/background.js in queue() order:
+  // Every write of `cards`, `links` and the pictures goes through change(), run by background/background.js in queue() order:
   // the worker is one for the whole extension, so tabs on any school's site and the editor page wait for each other.
   // The picture cap is checked, the picture written, the style saved and orphans deleted in one turn.
   // `area` is { sync, local }, each { get(keys) → object, set(patch) → bool, remove(keys) → bool }.
@@ -239,7 +239,7 @@ var GZ_CARDS = globalThis.GZ_CARDS || (() => {
     return (fn) => { const run = last.then(fn); last = run.catch(() => {}); return run; };
   };
   const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
-  const navSettings = (raw) => (typeof GZ_SANITIZE === 'function' ? GZ_SANITIZE : require('../defaults.js').GZ_SANITIZE)({ nav: raw }).nav;
+  const navSettings = (raw) => (typeof GZ_SANITIZE === 'function' ? GZ_SANITIZE : require('../content/defaults.js').GZ_SANITIZE)({ nav: raw }).nav;
   const change = async (op, area) => {
     const pics = async () => kept(await area.local.get(null));
     const r = await area.sync.get(['cards', 'links', 'nav']);
@@ -323,5 +323,5 @@ var GZ_CARDS = globalThis.GZ_CARDS || (() => {
   return { SPEC, LOOK, settings, page, KEY, ITEM_MAX, SET_MAX, LINKS_MAX, IMG_MAX, IMG_TOTAL, DATA, FILTERS, ICONS, bytes, style, styles, link, links, pick, paint, over, contrast, fit, picture, average, kept, room, orphans, queue, change, ultraChange };
 })();
 
-// Node takes the module; a page that loaded this on demand gets it as the script's last value (lib/background.js).
+// Node takes the module; a page that loaded this on demand gets it as the script's last value (background/background.js).
 if (typeof module !== 'undefined') module.exports = GZ_CARDS; else GZ_CARDS;

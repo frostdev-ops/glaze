@@ -1,5 +1,5 @@
 // Do other PDF readers see what Glaze writes? Builds the fixture corpus (tools/fidelity/pdf-fixtures.js), saves and bakes each
-// file with lib/pdf-doc.js as the editor and the pages panel do, then reads every output in pdf.js, in Poppler (pdfinfo,
+// file with documents/pdf/pdf-doc.js as the editor and the pages panel do, then reads every output in pdf.js, in Poppler (pdfinfo,
 // pdftotext, pdftoppm, pdfsig) and in PDFKit, Preview's engine (a small Swift program compiled in a temporary folder),
 // and compares page count, page order (each page's text), rotation and field values with what was asked. Prints a
 // table, writes fidelity.json and the outputs to the folder, exits 1 on any difference. macOS; a heavy job, so it runs
@@ -12,7 +12,7 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const F = require('./pdf-fixtures.js');
-const D = require('../../extension/lib/pdf-doc.js');
+const D = require('../../extension/documents/pdf/pdf-doc.js');
 
 const squash = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 
@@ -113,7 +113,7 @@ const run = (cmd, args, opts = {}) => {
 
 const readers = async (tmp) => {
   const root = path.join(__dirname, '../../extension');
-  const url = (f) => pathToFileURL(path.join(root, 'lib/pdfjs', f)).href;
+  const url = (f) => pathToFileURL(path.join(root, 'vendor/pdfjs', f)).href;
   const [log, warn] = [console.log, console.warn];
   console.log = console.warn = () => {}; // pdf.js warns at import that node has no canvas
   let pdfjs;
@@ -305,7 +305,7 @@ const main = async () => {
       }
       if (c.refuse === 'PdfXfaError') {
         differs = true;
-        rows.push({ file: label, output: 'source', reader: 'lib/pdf-doc.js', pages: `opened, expected ${c.refuse}` });
+        rows.push({ file: label, output: 'source', reader: 'documents/pdf/pdf-doc.js', pages: `opened, expected ${c.refuse}` });
       }
       let base = source, baseFacts = facts;
       try {
@@ -328,14 +328,14 @@ const main = async () => {
       const started = Date.now();
       let baked;
       try { baked = await pdf.bake(base, ops, { password: c.password }); } catch (e) {
-        rows.push({ file: label, output: 'baked', reader: 'lib/pdf-doc.js', pages: `refused: ${e.name}`, notes: e.message });
+        rows.push({ file: label, output: 'baked', reader: 'documents/pdf/pdf-doc.js', pages: `refused: ${e.name}`, notes: e.message });
         if (e.name !== c.refuse) differs = true;
         continue;
       }
       const took = Date.now() - started;
       if (c.refuse) {
         differs = true;
-        rows.push({ file: label, output: 'baked', reader: 'lib/pdf-doc.js', pages: `wrote, expected ${c.refuse}` });
+        rows.push({ file: label, output: 'baked', reader: 'documents/pdf/pdf-doc.js', pages: `wrote, expected ${c.refuse}` });
       }
       const sources = [baseFacts, ...await Promise.all(merged.map((b, i) => factsOf(`${label}-merge${i}`, b)))];
       const slots = D.layout(baseFacts.pages.length, ops, merged.map((_, i) => sources[i + 1].pages.length));
