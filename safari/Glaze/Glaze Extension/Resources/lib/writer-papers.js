@@ -5,11 +5,18 @@
 // ('sending', the paper as its .docx is built, marked 'submit' once Ultra's Submit is clicked: submitted()), before an
 // import or a restore, before a big edit, and every 10 minutes of writing; versions are capped by count and size,
 // keeping the last submitted one. The Documents home's Delete puts a paper in Trash (trashed: when, in ms, on the record and
-// its index row) with its versions; Undo or Restore takes it out, and 30 days on it goes for good (purge).
+// its index row) with its versions; Undo or Restore takes it out, and 30 days on it goes for good (purge). A spreadsheet
+// (sheet-data.js) keeps its cells in parts beside its record (writerSheet:<key>:<sheet>:<band>), each written in the record's
+// own set() and stamped with its revision, and its versions packed (gz) by the page, up to CAP.packed bytes of them.
 // Classic script; module.exports for node.
 var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
-  const INDEX = 'writerPapers', PAPER = 'writerPaper:', VERSIONS = 'writerVersions:', PRESETS = 'writerPresets:';
-  const CAP = { versions: 40, bytes: 4e6, every: 10 * 60e3, words: 100, share: 0.15, presets: 20, trash: 30 * 864e5 };
+  const INDEX = 'writerPapers', PAPER = 'writerPaper:', VERSIONS = 'writerVersions:', PRESETS = 'writerPresets:', PART = 'writerSheet:';
+  const CAP = { versions: 40, bytes: 4e6, packed: 16e6, every: 10 * 60e3, words: 100, share: 0.15, presets: 20, trash: 30 * 864e5 };
+  // A part's name: a sheet's id and a band of its rows; a part's key is under its record's.
+  const PART_NAME = /^\d{1,9}:\d{1,5}$/;
+  const partsOf = (k, paper) => Object.keys(paper?.parts && typeof paper.parts === 'object' ? paper.parts : {}).filter((n) => PART_NAME.test(n)).map((n) => `${PART}${k}:${n}`);
+  // The card's text a spreadsheet's index row carries (sheet-data.js glance): 4 rows of 6 short strings.
+  const glance = (g) => Array.isArray(g) && g.length === 4 && g.every((row) => Array.isArray(row) && row.length === 6 && row.every((x) => typeof x === 'string' && x.length <= 40));
   const ID = /^_\d+_\d+$/, HOST = /^[a-z0-9.-]{1,253}(:\d{1,5})?$/i;
   // A paper's key, or null unless every part is real: the school's host, and Ultra's ids for the student, course and
   // assignment.
@@ -100,12 +107,13 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
 
     const versionsOf = async (k) => (Array.isArray(await get(VERSIONS + k)) ? await get(VERSIONS + k) : []);
     // Newest first, within the caps; the newest submitted version always stays.
-    const cap = async (list) => {
+    // limit: the bytes a record's versions may hold (a spreadsheet's packed ones, CAP.packed).
+    const cap = async (list, limit = CAP.bytes) => {
       const most = await (o.versions || keptVersions)();
       const keep = [...list].sort((a, b) => b.at - a.at);
       const submitted = keep.find((v) => v.reason === 'submit');
       let total = keep.reduce((n, v) => n + v.bytes, 0);
-      for (let i = keep.length - 1; i >= 0 && (keep.length > most || total > CAP.bytes); i--) {
+      for (let i = keep.length - 1; i >= 0 && (keep.length > most || total > limit); i--) {
         if (keep[i] === submitted || i === 0) continue;
         total -= keep[i].bytes;
         keep.splice(i, 1);
@@ -120,7 +128,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     const index = async (paper) => {
       const list = (await get(INDEX)) || [];
       const row = { key: paper.key, kind: paper.kind || 'paper', named: paper.named === true, title: paper.title || '', course: paper.courseName || '', url: paper.url || '', words: paper.words || 0, format: paper.format, updated: paper.updated, submitted: paper.submitted || null,
-        ...(trashed(paper) && { trashed: paper.trashed }) };
+        ...(trashed(paper) && { trashed: paper.trashed }), ...(glance(paper.grid) && { grid: paper.grid }) };
       return [row, ...list.filter((r) => r.key !== paper.key)].slice(0, 2000);
     };
 
@@ -128,8 +136,13 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     // the assignment's until the student names it (named). reason: 'auto' (the default: autosave), 'sending' or
     // 'submit' (the paper itself kept), 'import' or 'restore' (the doc before it is kept), 'format', 'view' (the paper as
     // the full writer left it, before the compact box writes it into Blackboard's). → { paper, version }.
-    const save = (k, patch = {}, { reason = 'auto', base = seen.get(k), rename = false } = {}) => serial(k, async () => {
+    // A spreadsheet's save (sheet-data.js plan) also carries parts (name → { rows }) written in the same set() under the new
+    // revision, drop (names of parts it no longer has, removed after), changed (whether it changed what it holds: the paper's
+    // JSON compare stands for every other record) and version ({ reason, gz, cells }: its packed copy to keep).
+    const save = (k, patch = {}, { reason = 'auto', base = seen.get(k), rename = false, parts = null, drop = null, changed: own, version: packed = null } = {}) => serial(k, async () => {
       if (typeof k !== 'string' || !k) throw new Error('no paper key');
+      const written = Object.keys(parts || {}), dropped = [...(drop || [])];
+      if ([...written, ...dropped].some((n) => typeof n !== 'string' || !PART_NAME.test(n)) || (packed && typeof packed.gz !== 'string')) throw new Error('no such part');
       const prev = (await get(PAPER + k)) || null, t = now();
       const paper = { ...(prev || { key: k, created: t }), ...patch, key: k, updated: t, revision: (prev?.revision || 0) + 1 };
       // An autosave carries the name it last read. Only an explicit title edit can replace a later rename.
@@ -143,13 +156,19 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       if (patch.doc) paper.words = patch.words ?? measure(patch.doc).words;
       // edited: the revision that last changed the document, its format or import choice. A save typed on an older
       // revision is a conflict only when one of those changed since: a rename (the Documents home's) in between is none.
-      const changed = JSON.stringify(paper.doc) !== JSON.stringify(prev?.doc) || JSON.stringify(paper.format) !== JSON.stringify(prev?.format) || (paper.keep === true) !== (prev?.keep === true);
+      const changed = typeof own === 'boolean' ? own : JSON.stringify(paper.doc) !== JSON.stringify(prev?.doc) || JSON.stringify(paper.format) !== JSON.stringify(prev?.format) || (paper.keep === true) !== (prev?.keep === true);
+      if (written.length || dropped.length) {
+        paper.parts = { ...(prev?.parts || {}) };
+        for (const n of dropped) delete paper.parts[n];
+        for (const n of written) paper.parts[n] = paper.revision;
+      }
+      const limit = paper.parts ? CAP.packed : CAP.bytes;
       paper.edited = changed ? paper.revision : prev?.edited ?? prev?.revision ?? 0;
       // Typing in a document in Trash (an editor still open on it, an assignment's Writer), or submitting it, takes it out:
       // what is written is never purged with it. A record that says it is in Trash (a backup's) says so itself.
       if ((changed || reason === 'sending' || reason === 'submit') && !('trashed' in patch)) delete paper.trashed;
       let version = null, history = null;
-      const retain = async (v) => { history = await cap([v, ...(history || await versionsOf(k))]); return v; };
+      const retain = async (v) => { history = await cap([v, ...(history || await versionsOf(k))], limit); return v; };
       const last = paper.lastVersion || 0, whole = reason === 'submit' || reason === 'sending';
       const conflict = prev?.doc && changed && base != null && base < (prev.edited ?? (prev.revision || 0));
       if (whole && conflict) await retain(snapshot(prev, 'conflict', t));
@@ -163,10 +182,15 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
         else if (t - last >= CAP.every && JSON.stringify(prev.doc) !== JSON.stringify(patch.doc)) version = await retain(snapshot(paper, 'auto', t));
       }
       if (!prev && patch.doc) version = await retain(snapshot(paper, 'start', t));
+      if (packed) version = await retain({ id: `${t.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at: t, reason: String(packed.reason || 'auto'), kind: paper.kind,
+        cells: Number.isSafeInteger(packed.cells) ? packed.cells : 0, bytes: packed.gz.length, gz: packed.gz });
       if (version) paper.lastVersion = t;
       // One storage write publishes the document, history and index together. A quota refusal cannot evict
       // a submitted version or expose a half-saved paper. The worker serializes this read/compute/write.
-      await store.set({ [PAPER + k]: paper, [INDEX]: await index(paper), ...(history ? { [VERSIONS + k]: history } : {}) });
+      await store.set({ [PAPER + k]: paper, [INDEX]: await index(paper), ...(history ? { [VERSIONS + k]: history } : {}),
+        ...Object.fromEntries(written.map((n) => [`${PART}${k}:${n}`, { ...parts[n], rev: paper.revision }])) });
+      const stale = dropped.filter((n) => !written.includes(n) && prev?.parts?.[n] !== undefined).map((n) => `${PART}${k}:${n}`);
+      if (stale.length) await store.remove(stale);
       seen.set(k, paper.revision);
       return { paper, version };
     });
@@ -182,7 +206,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       const { doc, ...meta } = v;
       return meta;
     });
-    const versions = async (k) => (await versionsOf(k)).map(({ doc, ...v }) => v);
+    const versions = async (k) => (await versionsOf(k)).map(({ doc, gz, ...v }) => v);
     const version = async (k, id) => (await versionsOf(k)).find((v) => v.id === id) || null;
     // The version back as the paper, with what it replaces kept as a version.
     const restore = async (k, id) => {
@@ -198,7 +222,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       const paper = await get(PAPER + k), history = await get(VERSIONS + k), list = (await get(INDEX)) || [];
       // Publish the smaller index before deleting data: a refused index write must leave the recovery records intact.
       await store.set({ [INDEX]: list.filter((r) => r.key !== k) });
-      try { await store.remove([PAPER + k, VERSIONS + k]); }
+      try { await store.remove([PAPER + k, VERSIONS + k, ...partsOf(k, paper)]); }
       catch (e) { await store.set({ [INDEX]: list }); throw e; }
       return { ...(paper ? { [PAPER + k]: paper } : {}), ...(Array.isArray(history) ? { [VERSIONS + k]: history } : {}) };
     });
@@ -219,14 +243,14 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     // What has been in Trash longer than CAP.trash goes for good with its versions, the smaller index published first as in
     // remove. The record decides: a row whose record is out of Trash stays, and one whose record is gone goes. → the keys.
     const purge = () => serial('', async () => {
-      const t = now(), list = (await get(INDEX)) || [], keys = [];
+      const t = now(), list = (await get(INDEX)) || [], keys = [], extra = [];
       // A malformed timestamp or clock is never evidence of 30 elapsed days. A future flag survives clock rollback.
       const old = (r) => Number.isSafeInteger(t) && Number.isSafeInteger(r?.trashed) && r.trashed >= 0 && t - r.trashed > CAP.trash;
-      for (const r of list) if (r && typeof r.key === 'string' && old(r)) { const paper = await get(PAPER + r.key); if ((!paper || old(paper)) && !await o.busy?.(r.key)) keys.push(r.key); }
+      for (const r of list) if (r && typeof r.key === 'string' && old(r)) { const paper = await get(PAPER + r.key); if ((!paper || old(paper)) && !await o.busy?.(r.key)) { keys.push(r.key); extra.push(...partsOf(r.key, paper)); } }
       if (!keys.length) return keys;
       const gone = new Set(keys);
       await store.set({ [INDEX]: list.filter((r) => !gone.has(r?.key)) });
-      try { await store.remove(keys.flatMap((k) => [PAPER + k, VERSIONS + k])); }
+      try { await store.remove([...keys.flatMap((k) => [PAPER + k, VERSIONS + k]), ...extra]); }
       catch (e) { await store.set({ [INDEX]: list }); throw e; }
       return keys;
     });
@@ -276,7 +300,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     return api;
   };
 
-  return { open, keyOf, scopeOf, measure, LOCAL, local, newKey, valid, copyOf, fromDocument, renamed, trashed, CAP, KEYS: { INDEX, PAPER, VERSIONS, PRESETS } };
+  return { open, keyOf, scopeOf, measure, LOCAL, local, newKey, valid, copyOf, fromDocument, renamed, trashed, CAP, KEYS: { INDEX, PAPER, VERSIONS, PRESETS, PART } };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_PAPERS; else GZ_WRITER_PAPERS;
