@@ -137,7 +137,9 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     if (!f) throw new Error('no file');
     const href = URL.createObjectURL(new Blob([f.bytes], { type: f.mime })), a = h('a', { href, download: f.name });
     document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(href), 30000);
+    const revoke = () => { clearTimeout(revokeTimer); URL.revokeObjectURL(href); removeEventListener('pagehide', revoke); };
+    const revokeTimer = setTimeout(revoke, 60000);
+    addEventListener('pagehide', revoke, { once: true });
   };
   // No text of its own yet: search finds a PDF by its title (the text layer's words feed search in a later step).
   const text = () => '';
