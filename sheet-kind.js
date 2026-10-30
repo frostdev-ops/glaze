@@ -187,9 +187,10 @@
   };
   const view = (key, host) => edit(key, { host });
   // A workbook's bytes from elsewhere (src { bytes, name, href }: a Canvas file the page read, writer-kinds.js), in the grid
-  // from memory (sheet-grid.js memory): edits stay on the screen and nothing is kept unless the student saves it. Open
-  // original (href) and Save to Documents (the file as it came, through importFile while Settings → Writer → Spreadsheets
-  // takes files) before ⋯. host: { mount, t, title, shown(), failed(reason), esc() }. → the grid's surface, or null.
+  // from memory (sheet-grid.js memory): read-only, nothing kept unless the student saves it. Open original (href) and Save
+  // to Documents (the file as it came, through importFile while Settings → Writer → Spreadsheets takes files; once saved,
+  // Open in Documents, the copy to edit) before ⋯. host: { mount, t, title, shown(), failed(reason), esc() }. → the grid's
+  // surface, or null.
   const show = async (src, host) => {
     const tt = host?.t || t, name = String(src?.name || '').slice(0, 200), bytes = src?.bytes?.length ? src.bytes : null;
     const wb = bytes ? await workbookOf(new File([bytes], name || 'Spreadsheet.xlsx')).catch((e) => { console.warn(e); return null; }) : null;
@@ -209,9 +210,14 @@
         const take = DK.get('sheet')?.importFile;
         if (typeof take !== 'function') throw new Error('off');
         await need(['lib/writer-papers.js']);
-        await take(new File([bytes], name || 'Spreadsheet.xlsx'), { progress });
+        const got = await take(new File([bytes], name || 'Spreadsheet.xlsx'), { progress }), key = typeof got === 'string' ? got : got?.key;
         progress.end();
         v.say(tt('Saved to Documents'));
+        if (key) {
+          const openA = h('a', { class: 'gp-submit', 'data-act': 'open', href: `papers.html?${DK.KINDS.sheet.param}=${encodeURIComponent(key)}`, target: '_blank', rel: 'noopener', text: tt('Open in Documents') });
+          saveB.replaceWith(openA);
+          openA.focus();
+        }
       } catch (e) {
         const big = e instanceof RangeError && e.message === SAYS.size;
         if (!big) console.error(e);

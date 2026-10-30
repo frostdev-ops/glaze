@@ -96,9 +96,10 @@ test('a workbook from memory refuses every edit path; the workbook stays as it c
   // Paste, cut (and its paste), Delete and Backspace.
   const clip = (text) => ({ clipboardData: { getData: (k) => (k === 'text/plain' ? text : ''), setData() { throw new Error('a cut in memory puts nothing on the clipboard'); } } });
   f.fire(f.grid, 'paste', clip('1\t2\n3\t4')); refused('paste');
+  f.fire(f.grid, 'paste', clip('50%\t$3.00')); refused('a paste of formatted numbers');
   f.fire(f.grid, 'cut', clip('')); refused('cut');
+  assert.equal(f.el('gx-name').value, 'B2', 'on B2, a number');
   for (const k of ['Delete', 'Backspace']) { f.key(k); refused(k); }
-  f.key('ArrowDown'); f.key('ArrowRight'); f.key('Delete'); refused('Delete on B2');
   f.key('ArrowUp'); f.key('ArrowLeft');
 
   // The fill handle (drag and double-click), Ctrl+D and Ctrl+R.
@@ -110,7 +111,7 @@ test('a workbook from memory refuses every edit path; the workbook stays as it c
   f.grid.focus();
   f.key('ArrowDown', { shiftKey: true }); f.key('ArrowDown', { shiftKey: true });
   f.key('d', { ctrlKey: true }); refused('Ctrl+D');
-  f.key('r', { ctrlKey: true }); refused('Ctrl+R');
+  f.key('ArrowRight', { shiftKey: true }); f.key('r', { ctrlKey: true }); refused('Ctrl+R');
 
   // Column and row sizes: dragging an edge, double-clicking one.
   const edge = { clientX: 46 + 64, clientY: 10 };

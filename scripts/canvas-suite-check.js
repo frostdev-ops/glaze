@@ -3,7 +3,8 @@
 // check; all else aborts and DNS resolves nowhere. A file page's PDF preview gets Open in Glaze with the document buttons:
 // the click (and only it) reads the file through the worker's byte port, Glaze's PDF viewer takes the preview's place, and the
 // button again puts Canvas's back. A module's .pptx row and a page's file link open the slides viewer below them, Esc there
-// returns to the button, and Save to Documents keeps the deck. Settings → Writer → Slides off: no button by the deck (the PDF
+// returns to the button, and Save to Documents keeps the deck. The .csv row's grid is read-only; Save to Documents keeps it
+// and Open in Documents opens that copy to edit. Settings → Writer → Slides off: no button by the deck (the PDF
 // keeps its own); Previews in Glaze off: none at all. A file the server refuses, or one locked, keeps Canvas's preview and the
 // button says so. Screenshots at 1280 px.
 //   NODE_PATH=<playwright> nice node scripts/canvas-suite-check.js [evidence directory]

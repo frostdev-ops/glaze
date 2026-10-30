@@ -3504,6 +3504,8 @@
   "Save to Documents": "Enregistrer dans Documents",
   "Open original": "Ouvrir l’original",
   "Saved to Documents": "Enregistré dans Documents",
+  "Open in Documents": "Ouvrir dans Documents",
+  "Save to Documents to edit.": "Enregistre dans Documents pour modifier.",
   "This PDF is too big to save.": "Ce PDF est trop volumineux pour être enregistré.",
   "Preparing pages…": "Préparation des pages…",
   "Preparing slides…": "Préparation des diapositives…",

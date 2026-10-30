@@ -3504,6 +3504,8 @@
   "Save to Documents": "Guardar en Documentos",
   "Open original": "Abrir original",
   "Saved to Documents": "Guardado en Documentos",
+  "Open in Documents": "Abrir en Documentos",
+  "Save to Documents to edit.": "Guarda en Documentos para editar.",
   "This PDF is too big to save.": "Este PDF es demasiado grande para guardarlo.",
   "Preparing pages…": "Preparando páginas…",
   "Preparing slides…": "Preparando diapositivas…",

@@ -3504,6 +3504,8 @@
   "Save to Documents": "Opslaan in Documenten",
   "Open original": "Origineel openen",
   "Saved to Documents": "Opgeslagen in Documenten",
+  "Open in Documents": "Openen in Documenten",
+  "Save to Documents to edit.": "Sla op in Documenten om te bewerken.",
   "This PDF is too big to save.": "Deze pdf is te groot om op te slaan.",
   "Preparing pages…": "Pagina's voorbereiden…",
   "Preparing slides…": "Dia's voorbereiden…",
