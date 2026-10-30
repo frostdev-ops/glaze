@@ -303,11 +303,26 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
       raw.destroy();
     });
 
-    await t.test('bye closes every connection and takes the socket and run file away', async () => {
+    await t.test('bye closes every connection once the worker\'s last lines have gone, and takes the socket and run file away', async () => {
       const G = start();
       G.write(`${PING(7)}\n`);
       await frame((x) => x.f.t === 'line' && x.f.d === PING(7), 'the last agent\'s line');
-      assert.deepEqual(await send(B(5, ++seq, [{ t: 'bye' }])), OK);
+      // An agent slow to read still gets the line the worker sent just before its bye (agent access off).
+      const late = R.connect(rec.path);
+      late.on('error', () => {});
+      await HS.offer(late, rec.token, { name: 'reads late', verified: false });
+      late.pause();
+      const cH = (await frame((x) => x.f.t === 'open', 'the late reader')).c;
+      const last = 'w'.repeat(150000);
+      assert.deepEqual(await send(B(5, ++seq, [{ t: 'line', c: cH, d: last }, { t: 'bye' }])), OK);
+      let got = '';
+      late.setEncoding('utf8');
+      late.on('data', (c) => { got += c; });
+      const gone = new Promise((r) => late.on('close', r));
+      late.resume();
+      await gone;
+      assert.equal(got.length, last.length + 1);
+      assert.equal(got, `${last}\n`);
       assert.equal(await G.exit, 1);
       assert.deepEqual(R.list(RUN, { platform: 'darwin' }), []);
       assert.equal(fs.existsSync(rec.path), false);
