@@ -444,6 +444,51 @@ test('start leaves a newer helper set up by npx alone, and a failed setup still 
   assert.equal(failed.env.GLAZE_MCP_BROWSER, 'chrome');
 });
 
+test('a bundle with no discoverable node reuses a safe installed node without breaking the browser launchers', { skip: posixOnly('POSIX scratch nodes and modes') }, async (t) => {
+  const h = macHome(t);
+  await I.setup({ platform: 'darwin', env: { HOME: h.home }, node: h.node, run: runner().run });
+  const file = path.join(h.hosts, 'chrome'), before = fs.readFileSync(file, 'utf8');
+  const claude = { execPath: '/Applications/Claude.app/Contents/MacOS/Claude', versions: { electron: '38.1.0' }, list: [] };
+  const reused = await startAt(h, {}, claude);
+  assert.equal(fs.readFileSync(file, 'utf8'), before, 'a working npx setup must not become a no-node launcher');
+  assert.equal(reused.node, h.node);
+  assert.equal(reused.setup.changed, false);
+  assert.ok(!reused.log.includes(MISSING), reused.log);
+  // A saved path is a candidate, never an exemption from the safety checks.
+  fs.chmodSync(path.dirname(h.node), 0o777);
+  const calls = [], run = async (f, a) => { calls.push(f); return { stdout: 'v22.11.0' }; };
+  const unsafe = await startAt(h, {}, { ...claude, run });
+  assert.equal(unsafe.node, null);
+  assert.equal(L.parse(fs.readFileSync(file, 'utf8')).node, null);
+  assert.deepEqual(calls, [], 'an unsafe saved node is never run');
+});
+
+test('keepNewer compares prereleases as semver before replacing an installed helper', async (t) => {
+  const pkg = (version) => {
+    const dir = scratch(t);
+    for (const f of ['bin', 'lib']) fs.cpSync(path.join(PKG, f), path.join(dir, f), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ ...json(path.join(PKG, 'package.json')), version }));
+    return dir;
+  };
+  for (const [installed, bundle, keep] of [
+    ['90.0.0', '90.0.0-rc.1', true],
+    ['90.0.0-beta.10', '90.0.0-beta.2', true],
+    ['90.0.0-rc.1', '90.0.0-beta.10', true],
+    ['90.0.0-rc.1', '90.0.0', false],
+    ['90.0.0-beta.2', '90.0.0-beta.10', false],
+  ]) await t.test(`${installed} then ${bundle}`, async (t) => {
+    const h = macHome(t), ctx = { platform: 'darwin', env: { HOME: h.home }, node: h.node, run: runner().run };
+    await I.setup({ ...ctx, src: pkg(installed) });
+    const file = path.join(h.hosts, 'chrome'), before = fs.readFileSync(file, 'utf8');
+    const r = await I.ensure({ ...ctx, src: pkg(bundle), ifNeeded: true, keepNewer: true });
+    assert.equal(r.newer, keep ? installed : undefined, 'a bundle cannot downgrade an installed release or prerelease');
+    if (keep) {
+      assert.equal(fs.readFileSync(file, 'utf8'), before);
+      assert.equal(fs.existsSync(path.join(h.root, bundle)), false);
+    } else assert.equal(L.parse(fs.readFileSync(file, 'utf8')).script, path.join(h.root, bundle, 'bin', 'glaze-mcp.js'));
+  });
+});
+
 test('the command: --from=mcpb sets up, then runs agent mode; any other --from is refused', { skip: posixOnly('a real setup on Windows writes HKCU keys; the in-process tests cover it') }, (t) => {
   const home = scratch(t);
   const B0 = B.table(process.platform, { HOME: home })[0];
