@@ -1271,7 +1271,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       openMenu([
         { act: 'rename', label: t('Rename'), run: () => renameTab(i) },
         { act: 'duplicate', label: t('Duplicate'), run: () => duplicate(i) },
-        { act: 'delete', label: t('Delete'), disabled: wb.sheets.length < 2, run: () => apply({ op: 'removeSheet', sheet: s.id }, { big: true }) },
+        { act: 'delete', label: t('Delete'), disabled: shown.length < 2, run: () => apply({ op: 'removeSheet', sheet: s.id }, { big: true }) },
         { act: 'hide', label: t('Hide'), disabled: shown.length < 2, run: () => apply({ op: 'gx-hide', sheet: s.id, hidden: true }) },
         ...hidden.map((x) => ({ act: 'unhide', label: t('Unhide {name}', { name: x.name }), run: () => apply({ op: 'gx-hide', sheet: x.id, hidden: false }) })), '-',
         { act: 'move-left', label: t('Move left'), disabled: i === 0, run: () => apply({ op: 'moveSheet', sheet: s.id, to: i - 1 }) },
