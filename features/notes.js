@@ -514,14 +514,17 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     // A note that can't be read stays closed: never an empty note that a save could write over the real one.
     if (!r?.ok) { el.body.textContent = t(r?.error === 'missing' ? "This note's text couldn't be found on this device." : "Couldn't open this note. Try again in a moment."); cur.saved = null; cur.ro = true; return; }
     cur.rev = r.rev;
-    // Build from the sanitizer's allowlisted tree, without interpreting another HTML string.
+    // Build from the sanitizer's allowlisted tree, without interpreting another HTML string. Children go in batches: a
+    // spread of tens of thousands (a paragraph of line breaks) overflows the stack.
+    const fill = (e, kids) => { for (let i = 0; i < kids.length; i += 1024) e.append(...kids.slice(i, i + 1024).filter((k) => k !== '')); return e; };
     const node = (n) => {
       if (typeof n === 'string') return n;
-      const e = attr(make(n.tag, {}, ...n.kids.map(node)), n.attrs);
+      const e = attr(fill(make(n.tag), n.kids.map(node)), n.attrs);
       if (n.tag === 'a' && n.attrs.href) attr(e, { rel: 'noopener noreferrer', target: '_blank' });
       return e;
     };
-    el.body.replaceChildren(...N.parse(r.html).kids.map(node));
+    el.body.replaceChildren();
+    fill(el.body, N.parse(r.html).kids.map(node));
     cur.saved = serialize();
     el.body.setAttribute('contenteditable', String(!cur.ro));
     if (keep?.sel) el.body.focus();
