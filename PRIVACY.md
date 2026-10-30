@@ -729,10 +729,16 @@ you import) are bundled. It makes requests in these cases:
     host, after the browser asks you for access to that one host. The answer is read as untrusted text; only the
     source's fields are kept, and only if you save it.
   - **AI**, only for the features you turned on in Settings → AI, to the model you chose for each (see AI reading
-    above; a model on this device sends nothing anywhere). **Tab completion** sends, as you pause, up to 4,000
-    characters before the caret and 1,000 after, the course name, citation style, the discussion's prompt or the
-    assignment's title, instructions and rubric, and, in a discussion, the thread: your classmates' posts with their
-    names (24,000 characters at most) and the post you are answering. **Feedback** sends your draft with the
+    above; a model on this device sends nothing anywhere). **Tab completion** sends the whole document before the caret on each pause,
+    within a rolling window bounded by the model's context and a 60,000-token estimated run cap; earliest paragraphs
+    are dropped first. It also sends up to 4,000 characters after the caret, the course name, citation style, the
+    discussion's prompt or the assignment's title, instructions and rubric, and, in a discussion, the thread: your
+    classmates' posts with their names (24,000 characters at most) and the post you are answering. The newest 40
+    suggestions shown in that editor may accompany the request to avoid repeating them. They stay in frame memory only,
+    are cleared when another paper opens or the document is replaced, and are never saved. Device and small-window
+    models receive a brief context, up to the newest 1,500 bytes of earlier document text and three suggestions, within
+    the available window. Completion is limited to 60 requests per minute per tab. OpenRouter Anthropic requests mark
+    the stable document prefix for the provider's temporary prompt cache; actual cache use depends on the provider. **Feedback** sends your draft with the
     course name, style, prompt and assignment (no thread) for Check with AI; the draft with the assignment's
     instructions and rubric for Feedback, with the text of the documents the assignment attaches (up to 200,000 characters
     of assignment material in total) and its pictures (4 at most, only to a model that takes pictures); the prompt, to read its word, source and reply targets; the sentence around a

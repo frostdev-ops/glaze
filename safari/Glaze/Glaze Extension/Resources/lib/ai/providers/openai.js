@@ -46,9 +46,9 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
   // ---- wire ------------------------------------------------------------------------------------------------------------
   const words = (m) => m.content.filter((p) => p.type === 'text').map((p) => p.text).join('\n\n');
   // A neutral message (lib/ai/request.js) → Chat Completions'.
-  const toWire = (m) => {
-    if (m.role === 'user' && m.content.some((p) => p.type === 'image')) {
-      return { role: 'user', content: m.content.map((p) => (p.type === 'text' ? { type: 'text', text: p.text } : { type: 'image_url', image_url: { url: `data:${p.mime};base64,${p.data}` } })) };
+  const toWire = (m, cache = false) => {
+    if (m.role === 'user' && m.content.some((p) => p.type === 'image' || (cache && p.cache))) {
+      return { role: 'user', content: m.content.map((p) => (p.type === 'text' ? { type: 'text', text: p.text, ...(cache && p.cache && { cache_control: { type: 'ephemeral' } }) } : { type: 'image_url', image_url: { url: `data:${p.mime};base64,${p.data}` } })) };
     }
     if (m.role === 'assistant' && m.toolCalls) {
       return { role: 'assistant', content: words(m), tool_calls: m.toolCalls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: typeof c.args === 'string' ? c.args : JSON.stringify(c.args ?? {}) } })) };
@@ -126,7 +126,10 @@ var GZ_AI_OPENAI = globalThis.GZ_AI_OPENAI || (() => {
   // ---- the request -----------------------------------------------------------------------------------------------------
   const SAY_JSON = (schema) => `Answer with one JSON object and nothing else. It must match this JSON Schema:\n${JSON.stringify(schema)}`;
   const body = (req, cfg, mode, stream) => {
-    const messages = req.messages.map(toWire);
+    // OpenRouter documents per-block cache_control for Chat Completions. Anthropic's compatible endpoint does not
+    // support caching; there is no native Messages provider here. Other compatible servers keep ordinary text.
+    const cache = openrouter(cfg) && /^anthropic\//.test(cfg.model);
+    const messages = req.messages.map((m) => toWire(m, cache));
     // Without json_schema, the schema is said in words (and json_object wants the word JSON in a message).
     if (req.schema && mode.format !== 'schema') {
       const sys = messages.find((m) => m.role === 'system');

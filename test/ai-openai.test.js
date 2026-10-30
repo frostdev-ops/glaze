@@ -367,3 +367,26 @@ test('status of a connection with no model yet: ready once its catalog answers; 
   assert.deepEqual({ ...refused, reference: typeof refused.reference }, { state: 'unavailable', reason: 'request-rejected', status: 401, reference: 'string' });
   assert.equal(bad.calls.length, 1, 'no catalog once the key is refused');
 });
+
+
+test('OpenRouter Anthropic routes emit an explicit stable-block cache marker; other endpoints omit it', async () => {
+  const X = require('../lib/ai/text.js');
+  const C = require('../lib/ai/tasks/writer-complete.js');
+  const req = C.task.build(C.task.input({ before: 'Earlier the river carried the town history.\nOur group now studies ' }), { text: X, caps: { context: 128000 } });
+  for (const config of [cfg({ base: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4.5' }), cfg({ base: 'https://api.anthropic.com/v1' }), cfg()]) {
+    const s = server(done('the river.'));
+    await P.run('openai', req, config, { fetch: s.fetch });
+    const content = s.calls[0].body.messages[1].content;
+    if (config.base.includes('openrouter.ai')) {
+      assert.equal(content.length, 2);
+      assert.deepEqual(content[0].cache_control, { type: 'ephemeral' });
+      assert.match(content[0].text, /Earlier the river/);
+      assert.doesNotMatch(content[0].text, /the sentence the student is typing/);
+      assert.equal(content[1].cache_control, undefined);
+      assert.match(content[1].text, /Our group now studies/);
+    } else {
+      assert.equal(typeof content, 'string');
+      assert.ok(!s.calls[0].init.body.includes('cache_control'));
+    }
+  }
+});

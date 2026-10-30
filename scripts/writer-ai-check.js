@@ -346,13 +346,58 @@ const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)
       await until(() => p.evaluate((n) => __ai.runs.filter((r) => r.task === 'writer.complete').length > n && __ai.ends.at(-1)?.id === __ai.runs.at(-1).id, n), 'asked again', 3000);
       const said = `${LAST} it arrives uninvited and rearranges the present.`;
       assert.deepEqual(await p.evaluate(() => __ai.runs.at(-1).input.past), [said], 'the frame sends what it showed');
-      assert.match((await p.evaluate(() => __ai.seen.at(-1))).messages[1].content[0].text, /\[suggestions already shown[^\n]*\n<<<DATA-[0-9a-f]+\nWhen Sethe returns/, 'the model is told');
+      assert.match((await p.evaluate(() => __ai.seen.at(-1))).messages[1].content.map((p) => p.text).join('\n\n'), /\[suggestions already shown[^\n]*\n<<<DATA-[0-9a-f]+\nWhen Sethe returns/, 'the model is told');
       assert.equal((await p.evaluate(() => __ai.ends.at(-1))).error, 'check', 'the same suggestion is refused');
       await pause(300);
       assert.equal(await ghost(p), null);
       await next(p, 'writer.complete', { text: 'it arrives late and leaves early.' });
       await p.keyboard.type('x'); await p.keyboard.press('Backspace');
       assert.equal(await until(() => ghost(p), 'a new suggestion', 3000), ' arrives late and leaves early.');
+      await p.keyboard.press('Escape');
+    });
+    await check('completion memory clears on whole replacements and fresh editor states, but survives a view switch', async () => {
+      const q = await frame({ mode: 'paper', kind: 'assignment', html: `<p>${LAST}</p>`, ctx: { kind: 'assignment' } });
+      try {
+        await until(() => q.evaluate(() => !!GZ_WRITER_PAPER.current()), 'paper');
+        const askOnce = async () => {
+          await end(q); await next(q, 'writer.complete', GHOST);
+          await q.keyboard.type(' it'); await until(() => ghost(q), 'memory suggestion');
+          await q.keyboard.press('Escape');
+        };
+        await reset(q); await askOnce();
+        const full = q.locator('.gp-full:visible').first();
+        await full.click(); await end(q);
+        await next(q, 'writer.complete', { text: 'it arrives late and leaves early.' });
+        await q.keyboard.type('x'); await q.keyboard.press('Backspace');
+        await until(() => ghost(q), 'suggestion after view switch');
+        assert.equal((await q.evaluate(() => __ai.runs.at(-1).input.past)).length, 1, 'same paper across compact/full');
+        await q.keyboard.press('Escape');
+        for (const fresh of [false, true]) {
+          await q.evaluate((fresh) => {
+            const v = GZ_WRITER_FRAME.editor().view;
+            const doc = GZ_WRITER_SCHEMA.paper.nodeFromJSON({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'When Sethe returns to the clearing, the memory is not something she owns;' }] }] });
+            if (fresh) v.updateState(GZ_PM.state.EditorState.create({ doc, plugins: v.state.plugins }));
+            else v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, doc.content));
+          }, fresh);
+          await askOnce();
+          assert.deepEqual(await q.evaluate(() => __ai.runs.at(-1).input.past), [], fresh ? 'another paper / Documents open: init' : 'restore / native text: whole replacement');
+        }
+      } finally { await q.close(); }
+    });
+    await check('completion sends text after the caret far enough to clip at a paragraph boundary', async () => {
+      const paras = PARAS(2, 3000);
+      await p.evaluate((html) => __page.port.postMessage({ type: 'html', html }), `<p>${LAST}</p>` + paras.map((t) => `<p>${t}</p>`).join(''));
+      await until(() => p.evaluate(() => GZ_WRITER_FRAME.editor().view.state.doc.childCount === 3), 'three paragraphs');
+      await p.evaluate(() => {
+        const v = GZ_WRITER_FRAME.editor().view;
+        v.focus(); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, v.state.doc.firstChild.nodeSize - 1)));
+      });
+      await next(p, 'writer.complete', GHOST); await p.keyboard.type(' it');
+      await until(() => ghost(p), 'suggestion before later paragraphs');
+      const req = await p.evaluate(() => __ai.seen.at(-1));
+      const text = req.messages[1].content.map((p) => p.text).join('\n\n');
+      const after = /\[the text after the caret[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)\n>>>\1/.exec(text)?.[2];
+      assert.equal(after, '\n' + paras[0]);
       await p.keyboard.press('Escape');
     });
     await check('nothing with completion off: no run, no gray text; the chip stays for writing', async () => {

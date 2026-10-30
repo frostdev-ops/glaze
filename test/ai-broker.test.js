@@ -968,3 +968,28 @@ test('a provider is kept at its own address with only a key; an endpoint of the 
   assert.deepEqual(list.models.find((m) => m.id === 'openai/gpt-5.1').efforts, ['none', 'low', 'medium', 'high']);
   assert.deepEqual(list.models.find((m) => m.id === 'meta-llama/llama-3.3-70b-instruct').efforts, []);
 });
+
+
+test('real completion bounds a 50-page request and stops the sixty-first pause in one minute', async () => {
+  const C = require('../lib/ai/tasks/writer-complete.js');
+  const X = require('../lib/ai/text.js');
+  const seen = [];
+  const paper = 'A paragraph about the river and the town history. '.repeat(2000) + '\nOur group studies ';
+  assert.ok(paper.length > 95000);
+  const e = writer({ now: () => 1000, task: async (id) => id === C.task.id ? C.task : null,
+    fetch: async (url, init) => {
+      if (url.endsWith('/models')) return models();
+      seen.push(JSON.parse(init.body));
+      return json({ choices: [{ message: { content: 'the river.' }, finish_reason: 'stop' }] });
+    } });
+  const p = open(e);
+  try {
+    for (let id = 1; id <= 61; id++) {
+      p.say({ id, op: 'run', feature: 'completion', task: C.task.id, input: { before: paper } });
+      await flush();
+    }
+    assert.equal(seen.length, 60);
+    assert.deepEqual(p.posted.filter((m) => m.type === 'error'), [{ id: 61, type: 'error', error: 'often' }]);
+    for (const req of seen) assert.ok(X.estimateTokens(req) + req.max_tokens < 60000);
+  } finally { p.close(); }
+});
