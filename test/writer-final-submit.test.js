@@ -392,7 +392,7 @@ test('D4: an empty text box shows no Keep switch', async () => {
   assert.equal(s.doc.querySelector('#gs-keep'), null);
 });
 
-test('D8: while a paper\'s frame reopens, Ultra\'s Submit still waits for Writer, and the new frame opens the sheet', () => {
+test('D8: while a paper\'s frame reopens, Ultra\'s Submit still waits for Writer, and the new frame opens the sheet', async () => {
   const p = page();
   // features/writer.js reopen(): the old frame and port gone, a new pass asked for.
   p.box.reopening = true; p.box.ready = false; p.box.frame.remove(); p.box.frame = null; const port = p.box.port; p.box.port = null;
@@ -403,7 +403,11 @@ test('D8: while a paper\'s frame reopens, Ultra\'s Submit still waits for Writer
   p.box.reopening = false; p.box.frame = new (require('./stand-in-dom.js').El)('iframe', p.doc); p.doc.body.append(p.box.frame); p.box.port = port; p.sent.length = 0;
   const after = p.fire(p.button(), 'click');
   assert.ok(after.stopped);
-  assert.deepEqual(p.sent.map((m) => m.type), ['submit:open'], 'the new frame opens the submit sheet once it is up');
+  await p.tick(100);
+  assert.deepEqual(p.sent, [], 'nothing asked of a frame not up yet (its port may yet be dropped)');
+  p.box.ready = true;
+  await p.tick(100);
+  assert.deepEqual(p.sent.map((m) => m.type), ['submit:open'], 'the new frame opens the submit sheet once it is up, once for both presses');
 });
 
 test('D2: a page opened after a Writer submit went out is free, however late the worker gets to recording it', async () => {
