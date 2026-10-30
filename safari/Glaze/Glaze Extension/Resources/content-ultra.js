@@ -447,7 +447,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       const link = e.target instanceof Element && e.target.closest(PAGE_LINKS);
       // Native fragment actions and Sign Out must keep their trusted click for later listeners (course tabs included).
       if (!link || link.matches('[aria-current="page"], .active') || /^#|^$|(?:^|\/)logout(?:[/?#]|$)|[?&](?:action|event)=logout(?:[&#]|$)/i.test((link.getAttribute('href') || '').trim())) return;
-      // Only with the page world's guard (lib/background.js transitionGuard), where Chrome also rejects an aborted one.
+      // The page-world guard handles ready too (lib/background.js).
       if ('activeViewTransition' in document && dispatchEvent(new Event('glaze:transition', { cancelable: true }))) return;
       // Ultra gets the click inside the transition, once the old page has been captured.
       e.preventDefault();
@@ -464,7 +464,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       });
       // A resize can abort it: handled, here and in the page's world.
       for (const p of [vt.ready, vt.finished]) p.catch(() => {});
-      if ('activeViewTransition' in document) dispatchEvent(new Event('glaze:transition'));
+      if ('activeViewTransition' in document) dispatchEvent(new (globalThis.PageRevealEvent || Event)('glaze:transition', { viewTransition: vt }));
     }, true);
   }
 

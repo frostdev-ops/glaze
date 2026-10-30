@@ -178,7 +178,9 @@ var GZ_MOTION = globalThis.GZ_MOTION || (() => {
       return !dispatchEvent(new Event('glaze:transition', { cancelable: true }));
     } catch { return false; }
   };
-  const handOver = () => { try { if (typeof dispatchEvent === 'function') dispatchEvent(new Event('glaze:transition')); } catch { /* no page world to tell */ } };
+  // A native ViewTransition slot gives the receiving world its own wrapper, even if a page listener has already aborted
+  // this transition. CustomEvent.detail retains the isolated wrapper; activeViewTransition may already name another one.
+  const handOver = (t) => { try { if (typeof dispatchEvent === 'function') dispatchEvent(new (globalThis.PageRevealEvent || Event)('glaze:transition', { viewTransition: t })); } catch { /* no page world to tell */ } };
   const swap = (update) => {
     // A native transition takes its old snapshot before calling us. Flush a queued predecessor before a second
     // change, or the older callback could overwrite it; the eventual native callback then has nothing left to do.
@@ -197,7 +199,7 @@ var GZ_MOTION = globalThis.GZ_MOTION || (() => {
       html.setAttribute('data-gz-swap', '');
       t = document.startViewTransition(run);
     } catch { html.removeAttribute('data-gz-swap'); run(); return done; }
-    handOver();
+    handOver(t);
     swapping = turn;
     t.ready?.catch(() => {});
     const finish = () => { try { run(); } finally { if (swapping === turn) { swapping = null; html.removeAttribute('data-gz-swap'); } } };

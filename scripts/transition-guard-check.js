@@ -27,7 +27,7 @@ const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.l
         { matches: ['https://vt.test/*'], js: ['isolated.js'], run_at: 'document_start', all_frames: true },
       ] }));
     fs.writeFileSync(path.join(ext, 'main.js'), `
-      // A school listener installed before the guard. The handoff must reach the guard first.
+      // A school capture listener installed before the guard replaces the active transition during the handoff.
       addEventListener('glaze:transition', (e) => {
         if (location.search === '?nested' && !e.cancelable) {
           const vt = document.startViewTransition(() => {});
@@ -49,6 +49,7 @@ const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.l
         if (!before) return;
         const vt = document.startViewTransition(mode === 'timeout' || mode === 'fallback' ? () => new Promise(() => {}) : () => {});
         for (const p of [vt.ready, vt.finished, vt.updateCallbackDone]) p.catch(() => {});
+        vt.ready.then(() => document.documentElement.setAttribute('data-ready', 'resolved'), (e) => document.documentElement.setAttribute('data-ready', e.name));
         handOver(vt);
         if (mode === 'fallback') setTimeout(() => vt.skipTransition(), 100);
         else if (mode !== 'timeout' && mode !== 'nested') vt.skipTransition();
@@ -65,9 +66,11 @@ const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.l
       await open(mode);
       check(`${mode}: one guard listener per document`, await page.evaluate(() => guardListeners === 1), await page.evaluate(() => guardListeners));
       await page.evaluate((mode) => dispatchEvent(new CustomEvent('vt-probe', { detail: mode })), mode);
-      await page.waitForTimeout(mode === 'timeout' ? 5000 : 300);
+      await page.waitForFunction(() => document.documentElement.hasAttribute('data-ready'), null, { timeout: 10000 });
+      await page.waitForTimeout(200);
       const acknowledged = await page.evaluate(() => document.documentElement.getAttribute('data-guard'));
-      check(`${mode}: isolated transition handled in MAIN`, acknowledged === 'true' && !errors.length, { acknowledged, errors: [...errors] });
+      const ready = await page.evaluate(() => document.documentElement.getAttribute('data-ready'));
+      check(`${mode}: isolated transition handled in MAIN`, acknowledged === 'true' && ready === (mode === 'timeout' ? 'TimeoutError' : 'AbortError') && !errors.length, { acknowledged, ready, errors: [...errors] });
     }
     await open('school');
     await page.evaluate(() => {

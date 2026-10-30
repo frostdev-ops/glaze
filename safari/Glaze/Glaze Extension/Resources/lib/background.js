@@ -1846,9 +1846,9 @@ const transitionGuard = () => {
       // A hidden document skips before assigning activeViewTransition: there would be nothing to hand over.
       // A presence probe must leave any transition the school already owns alone.
       if (e.cancelable) { if (!document.hidden) e.preventDefault(); }
-      else document.activeViewTransition?.ready.then(undefined, () => {});
+      else (e.viewTransition || document.activeViewTransition)?.ready.then(undefined, () => {});
     } catch { /* page code can replace these properties; never throw into its error tracker */ }
-  }, true); // before page bubble listeners can start a newer transition during the handoff
+  }, true);
   globalThis.__gzTransitionGuard = true; // repeated messages, worker restarts and bfcache keep one listener per document
 };
 chrome.runtime.onMessage.addListener((m, s) => {
