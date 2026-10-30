@@ -100,9 +100,10 @@ test('Documents paper identity is stripped from AI context', async () => {
   assert.doesNotMatch(JSON.stringify(input.context), /bb\.school|_900_1|_101_1|_7_1|"paper"/);
 });
 
-test('test and message boxes still have no source key', async () => {
-  // These kinds leave contextOf before touching the editor (lib/writer-ultra.js).
-  for (const kind of ['test', 'message']) {
+test('test boxes still have no source key', async () => {
+  // A test leaves contextOf before touching the editor (lib/writer-ultra.js); a message's key comes with its context
+  // (test/writer-discussion-sources.test.js).
+  for (const kind of ['test']) {
     const context = U.contextOf(null, kind);
     assert.equal(S.keyOf(context), null);
     let writes = 0;
