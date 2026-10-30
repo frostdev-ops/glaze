@@ -331,3 +331,39 @@ test('compact: a footer returning just after a flush times out can retry before 
   assert.equal(c.clicks[0], fresh);
   assert.equal(fresh.hasAttribute('aria-busy'), false);
 });
+
+for (const first of ['reply', 'retry']) test(`compact: an expired flush ${first} cannot beat its throttled deadline timer`, async () => {
+  const { c, press } = await attempt(false);
+  let now = 1e6; c.ctx.__now = () => now;
+  vm.runInContext('Date.now = () => globalThis.__now()', c.ctx);
+  c.emit({ type: 'view', full: false }); press(SUBMIT);
+  const request = flushes(c.ports[0])[0].request;
+  now += 61000; // neither the 60 s timer nor the 100 ms poll has run
+  if (first === 'reply') {
+    c.emit({ type: 'compact:flushed', request, ...ok });
+    assert.equal(c.clicks.length, 0, 'an expired save never presses Ultra');
+    assert.equal(c.ports[0].sent.at(-1).reason, 'save');
+  }
+  press(SUBMIT);
+  assert.equal(flushes(c.ports[0]).length, 2, 'the first explicit retry starts a new save');
+  const retry = flushes(c.ports[0])[1].request;
+  c.emit({ type: 'compact:flushed', request, ...ok });
+  assert.equal(c.clicks.length, 0);
+  c.emit({ type: 'compact:flushed', request: retry, ...ok });
+  c.tick(100);
+  assert.equal(c.clicks.length, 1);
+  assert.equal(c.doc.querySelector(SUBMIT).hasAttribute('aria-busy'), false);
+});
+
+test('full: the first explicit retry expires an old save even when its poll was throttled', () => {
+  const p = page(), save = L.footer(p.box.editor).save;
+  p.fire(save, 'click');
+  const request = asks(p.sent)[0].request;
+  p.ctx.Date.now = () => p.now() + 51000;
+  p.fire(save, 'click');
+  assert.equal(asks(p.sent).length, 2);
+  p.hear({ type: 'submit:saved', request, ok: true });
+  assert.equal(p.clicks.length, 0);
+  p.hear({ type: 'submit:saved', request: asks(p.sent)[1].request, ok: true });
+  assert.equal(p.clicks.length, 1);
+});
