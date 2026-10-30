@@ -770,3 +770,16 @@ test('Back up restores discussion, journal and new-message sources under each st
     for (const key of keys) assert.deepEqual(b.store[key], local[key]);
   } finally { a.stop(); b.stop(); }
 });
+
+
+test('backup export omits slide decks and their versions until the blob store owns them', () => {
+  const deck = `doc:${id(91)}`, paper = `doc:${id(92)}`;
+  const entries = B.pack({ settings: SETTINGS, tasks: {}, local: {
+    [`writerPaper:${deck}`]: { key: deck, kind: 'slides', file: 'UEsDBA==', updated: NOW },
+    [`writerVersions:${deck}`]: [],
+    [`writerPaper:${paper}`]: { key: paper, kind: 'paper', doc: {}, updated: NOW },
+  } });
+  const manifest = JSON.parse(new TextDecoder().decode(entries.find((e) => e.name === 'glaze-backup.json').data));
+  assert.deepEqual(manifest.papers.map((r) => r.key), [`writerPaper:${paper}`]);
+  assert.equal(entries.filter((e) => e.name.startsWith('papers/')).length, 1);
+});
