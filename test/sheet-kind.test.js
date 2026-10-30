@@ -741,3 +741,58 @@ test('starting an empty spreadsheet clears charts left by a prior spreadsheet ki
   await P.save(KEY, { kind: 'sheet', doc: null, ...DK.get('sheet').empty() }, { reason: 'import' });
   assert.deepEqual((await P.get(KEY)).charts, []);
 });
+
+const cardKind = async (overrides = {}) => {
+  const { El } = require('./stand-in-dom.js');
+  const document = { createElement: (tag) => new El(tag, document), createElementNS: (ns, tag) => new El(tag, document) };
+  const { DK } = load({ sheets: true }, { document, GZ_SHEET_XLSX: {}, ...overrides });
+  await DK.settled();
+  return DK.get('sheet');
+};
+const badgeCount = (box) => Number(box.children.find((e) => e.className === 'gx-th-more')?.children.at(-1).textContent || 0);
+
+test('legacy chart counting accepts XML quotes and ignores commented graphic frames', async (t) => {
+  const X = require('../lib/sheet-xlsx.js'), FX = require('./fixtures/sheets/charts.js');
+  const wb = await X.read(FX.workbook({ kinds: ['column'] })), k = await cardKind();
+  const rec = { book: JSON.parse(JSON.stringify(SD.split(wb).book)) }, part = rec.book.keep.parts['xl/drawings/drawing1.xml'];
+  const xml = new TextDecoder().decode(SD.dec(part.data));
+  part.data = xml.replaceAll('"', "'");
+  await t.test('single quotes are valid XML', () => assert.equal(badgeCount(k.thumb(rec)), 1));
+  part.data = xml.replace('</xdr:wsDr>', `<!--${xml.slice(xml.indexOf('<xdr:twoCellAnchor'), xml.indexOf('</xdr:wsDr>'))}--></xdr:wsDr>`);
+  await t.test('a comment does not add another chart', () => assert.equal(badgeCount(k.thumb(rec)), 1));
+  part.data = xml.replaceAll('a:', 'draw-ml:').replace('xmlns:a=', 'xmlns:draw-ml=');
+  await t.test('an XML prefix may contain a hyphen', () => assert.equal(badgeCount(k.thumb(rec)), 1));
+});
+
+test('legacy counting follows drawing ownership and counts one frame per anchor', async (t) => {
+  const X = require('../lib/sheet-xlsx.js'), CX = require('../lib/sheet-chart-xml.js'), FX = require('./fixtures/sheets/charts.js');
+  const wb = await X.read(FX.workbook({ kinds: ['column'] })), k = await cardKind();
+  const rec = () => ({ book: JSON.parse(JSON.stringify(SD.split(wb).book)) });
+  const part = wb.keep.parts['xl/drawings/drawing1.xml'], xml = new TextDecoder().decode(part.data);
+  const frame = /<xdr:graphicFrame\b[\s\S]*?<\/xdr:graphicFrame>/.exec(xml)[0];
+  part.data = xml.replace(frame, `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="c">${frame}</mc:Choice><mc:Fallback>${frame}</mc:Fallback></mc:AlternateContent>`);
+  assert.equal(CX.charts(wb, wb.sheets[0]).length, 1);
+  await t.test('Choice and Fallback are the same chart', () => assert.equal(badgeCount(k.thumb(rec())), 1));
+  for (const uri of ['http://schemas.openxmlformats.org/drawingml/2006/table', 'http://schemas.openxmlformats.org/drawingml/2006/diagram', 'http://schemas.openxmlformats.org/drawingml/2006/picture']) {
+    part.data = xml.replace('uri="http://schemas.openxmlformats.org/drawingml/2006/chart"', `uri="${uri}"`).replace(/<c:chart\b[^>]*\/>/, '<a:tbl/>');
+    assert.equal(badgeCount(k.thumb(rec())), 0, uri);
+  }
+  part.data = xml;
+  M.apply(wb, { op: 'addSheet', sheet: { ...structuredClone(wb.sheets[0]), id: 2, name: 'Data (2)' }, at: 1, active: 1 });
+  wb.active = 1;
+  assert.equal(CX.charts(wb, wb.sheets[1]).length, 0, 'the duplicate does not own the shared drawing');
+  assert.equal(badgeCount(k.thumb(rec())), 0, 'fallback agrees with the loaded reader');
+});
+
+test('legacy counting decodes an unchanged part only once and invalidates a replaced part', async () => {
+  const X = require('../lib/sheet-xlsx.js'), FX = require('./fixtures/sheets/charts.js');
+  const wb = await X.read(FX.workbook({ kinds: ['column'] }));
+  let decoded = 0;
+  const k = await cardKind({ atob: (s) => { decoded++; return atob(s); } });
+  const rec = { book: JSON.parse(JSON.stringify(SD.split(wb).book)) };
+  for (let i = 0; i < 5; i++) assert.equal(badgeCount(k.thumb(rec)), 1);
+  assert.equal(decoded, 1);
+  rec.book.keep.parts['xl/drawings/drawing1.xml'].data = { $b64: btoa('<xdr:wsDr/>') };
+  assert.equal(badgeCount(k.thumb(rec)), 0);
+  assert.equal(decoded, 2);
+});
