@@ -93,3 +93,20 @@ test('a remote note compares after an earlier queued rename before replacing or 
     assert.equal((await notes.get(key))[key].note.title, 'Local rename');
   }
 });
+
+test('a daily snapshot whose files are past one upload is no snapshot, its files never read into the worker', async () => {
+  const { context, records, local } = worker();
+  Object.assign(context, {
+    GZ_BACKUP: require('../../extension/background/backup.js'), GZ_TODO: require('../../extension/planner/todo.js'), GZ_PET: require('../../extension/pet/pet.js'),
+    GZ_SANITIZE: require('../../extension/content/defaults.js').GZ_SANITIZE, GZ_HISTORY: require('../../extension/looks/history.js'), GZ_ZIP: require('../../extension/core/zip.js'),
+    GZ_DOC_KINDS: require('../../extension/documents/doc-kinds.js'), Blob,
+  });
+  context.chrome.runtime.getManifest = () => ({ version: '4.0.1' });
+  let read = 0;
+  context.openDocFiles = () => ({ read: async (hash, each) => { read++; each(new Uint8Array(8)); } });
+  // Two PDFs of 120 MB: one backup could hold them (background/backup.js LIMIT.zip), one upload can't (documents/drive.js put).
+  const pdf = (n) => ({ key: `doc:00000000-0000-4000-8000-00000000000${n}`, kind: 'pdf', title: `Reader ${n}`, file: { hash: String(n).repeat(64), size: 120e6, type: 'application/pdf' }, revision: 1 });
+  await local.set({ [`writerPaper:${pdf(1).key}`]: pdf(1), [`writerPaper:${pdf(2).key}`]: pdf(2) });
+  assert.equal(await records.snapshot(), null);
+  assert.ok(read <= 1, `read ${read} of the files`);
+});
