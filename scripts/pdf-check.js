@@ -211,8 +211,10 @@ const photo = () => {
     const input = page.locator('.page[data-page-number="1"] .annotationLayer input').first();
     await input.waitFor();
     await input.fill('Ada Lovelace');
-    await input.press('Tab');
+    // Autosave must also run while the student is still in the field, without a blur/change event.
     await until(() => page.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent === 'Saved'), 'saved after filling');
+    check(await input.evaluate((el) => document.activeElement === el), 'the form autosaves without leaving its field');
+    await input.press('Tab');
     const saved = await local(`writerPaper:${key}`);
     check(saved.revision > rec.revision && Buffer.from(saved.file, 'base64').length > Buffer.from(rec.file, 'base64').length, `the filled file is saved (${rec.size} → ${saved.size} bytes)`);
     // Saving (and drawing page 1 again for the card) leaves the page on screen as it was: drawn, the field filled.
@@ -336,8 +338,19 @@ const photo = () => {
     await until(() => pdfWorkers() === 0, 'no PDF worker on the home');
     await page.evaluate(async (key) => { document.getElementById('list').hidden = true; globalThis.pdfCheckView = await GZ_DOC_KINDS.get('pdf').edit(key); }, key);
     const open = await until(() => pdfWorkers() || null, 'the viewer\'s worker');
+    await page.locator('.page[data-page-number="1"] .annotationLayer input').first().fill('Last frame edit');
+    // The same event papers.js's embedded Close dispatches, before the parent removes the frame.
+    const leaving = await page.evaluate(async () => {
+      const waits = [];
+      dispatchEvent(new CustomEvent('glaze:papers:beforeleave', { detail: { wait: (p) => waits.push(p) } }));
+      return { count: waits.length, saved: await Promise.all(waits) };
+    });
+    check(leaving.count === 1 && leaving.saved.every(Boolean), `the frame's leave event waits for its final field edit (${JSON.stringify(leaving)})`);
     await page.evaluate(async () => { await globalThis.pdfCheckView.dispose(); delete globalThis.pdfCheckView; });
     check(open === 1 && await until(() => pdfWorkers() === 0, 'the viewer\'s worker ended', 5000), `closing the viewer ends its pdf.js worker (${open} → ${pdfWorkers()})`);
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(key)}`);
+    const lastFrame = await until(() => page.evaluate(() => document.querySelector('.annotationLayer input')?.value || null), 'the last frame edit reopened');
+    check(lastFrame === 'Last frame edit', `the frame's final field edit is kept (${lastFrame})`);
 
     // A scan's card shows its page sharp: drawn at the card's size on a 2× screen, not a postage stamp scaled up.
     await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(true));
