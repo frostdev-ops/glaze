@@ -171,6 +171,23 @@ const HARNESS = `(() => {
       return;
     }
     check(await fr.evaluate(() => document.documentElement.dataset.mode === 'paper' && document.documentElement.dataset.kind === 'assignment'), 'the assignment attempt mounts in paper mode');
+    // Harper proofs the paper, so the browser's own spellcheck stays off on it and on the header while it is edited (no
+    // second underline, none Add to dictionary can't clear); Settings → Writer → Proofing off gives the browser's back.
+    const spelling = () => fr.evaluate(() => {
+      GZ_WRITER_PAPER.current().editPart('header');
+      const hf = document.querySelector('.gp-hf'), r = { paper: document.querySelector('.gp-flow .ProseMirror').getAttribute('spellcheck'), header: hf ? hf.getAttribute('spellcheck') : 'none' };
+      hf?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return JSON.stringify(r);
+    });
+    const proofing = (on) => worker.evaluate(async (on) => { const w = (await chrome.storage.sync.get('writer')).writer || {}; await chrome.storage.sync.set({ writer: { ...w, proofing: on } }); }, on);
+    await until(async () => (await spelling()) === JSON.stringify({ paper: 'false', header: 'false' }), 'spellcheck off with proofing on');
+    check(true, 'proofing on: spellcheck="false" on the paper and its header');
+    await proofing(false);
+    await until(async () => (await spelling()) === JSON.stringify({ paper: null, header: null }), 'spellcheck back with proofing off');
+    check(true, 'proofing off: the browser\'s spellcheck back on both (no spellcheck attribute)');
+    await proofing(true);
+    await until(async () => (await spelling()) === JSON.stringify({ paper: 'false', header: 'false' }), 'spellcheck off again');
+    check(true, 'proofing on again: spellcheck="false" again');
     check(await fr.evaluate(() => ['.gp-top h1', '.gp-pill', '.gp-box', '[data-run="bold"]', '[data-run="italic"]', '[data-run="underline"]', '[data-run="bulletList"]', '[data-run="orderedList"]', '.gp-submit', '.gp-tabs', '.gp-status'].every((s) => document.querySelector(s))
       && [...document.querySelectorAll('.gp-tbtn')].map((b) => b.textContent.trim()).filter(Boolean).join('|') === 'Cite|Footnote|Page break'
       && [...document.querySelectorAll('.gp-tab')].map((b) => b.firstChild.textContent).join('|') === 'Checks|Sources|Feedback|Outline'), 'paper chrome: toolbar, tabs, status bar');

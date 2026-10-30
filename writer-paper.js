@@ -1060,6 +1060,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // PAGE and NUMPAGES fields; the first page's own when the setup has a different first page. A paper's format header
     // ("Surname N") becomes the setup's own once edited.
     let editing = null;
+    // Settings → Writer → Proofing: while on, the browser's own spellcheck stays off in the header and footer, as in the
+    // paper (writer-proof.js); off, it comes back.
+    const proofing = () => SET?.now()?.proofing !== false;
+    SET?.follow(() => { const box = editing?.box; if (box) { if (proofing()) box.setAttribute('spellcheck', 'false'); else box.removeAttribute('spellcheck'); } });
     const PART_MARKS = ['b', 'i', 'u', 's', 'sup', 'sub', 'font', 'size', 'color'];
     const partDOM = (parts, n, total) => parts.map((x) => {
       const line = h('div', { class: 'gp-hf-line' });
@@ -1113,7 +1117,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (!sheet) return;
       const variant = n === 1 && base.title ? 'first' : 'default', group = base[`${kind}s`];
       const orig = group[variant] ?? (kind === 'header' && variant === 'default' && (!cur || cur.own) ? ST.formatHeader(format, surname()) : [{ align: null, line: 1, after: 0, runs: [] }]);
-      const box = h('div', { class: `gp-hf gp-hf-${kind}`, contenteditable: 'true', role: 'textbox', 'aria-multiline': 'true', 'aria-label': t(kind === 'header' ? 'Header' : 'Footer'), spellcheck: 'false' }, partDOM(orig, n, total));
+      const box = h('div', { class: `gp-hf gp-hf-${kind}`, contenteditable: 'true', role: 'textbox', 'aria-multiline': 'true', 'aria-label': t(kind === 'header' ? 'Header' : 'Footer'), spellcheck: proofing() ? 'false' : null }, partDOM(orig, n, total));
       box.style.cssText = `left:${geo.left}px;right:${geo.right}px;${kind === 'header' ? `top:${geo.header}px` : `bottom:${geo.footer ?? geo.header}px`};font:${L.size}pt/${ST.lineHeight(L, { line: 1 })}px ${ST.stack(L.font)}`;
       sheet.append(box);
       sheet.classList.add(`gp-editing-${kind}`);

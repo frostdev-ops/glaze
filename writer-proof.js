@@ -5,8 +5,9 @@
 // The student's dictionary is chrome.storage.local 'writerWords' (a list of words, the newest last), shared by every box;
 // each box adds its context's words (course, prompt, names in the thread) to its own.
 // Settings → Writer (lib/writer-settings.js): proofing on or off, the dialect Harper reads and the autocorrect classes
-// (writer.autocorrect), each followed at once. Smart quotes and dashes and compose's Markdown shortcuts are
-// lib/writer-editor.js's input rules, which read their settings themselves (ruleOff).
+// (writer.autocorrect), each followed at once; while it proofs, the browser's own spellcheck is off. Smart quotes and
+// dashes and compose's Markdown shortcuts are lib/writer-editor.js's input rules, which read their settings themselves
+// (ruleOff).
 (() => {
   const F = globalThis.GZ_WRITER_FRAME, P = GZ_WRITER_PROOF, I = GZ_WRITER_ISSUES;
   if (!F) return;
@@ -18,6 +19,7 @@
   const allow = (cls) => pref()?.autocorrect?.[cls] !== false;
   const allowRule = (rule) => !P.CLASS?.[rule] || allow(P.CLASS[rule]);
   let view = null, port = null, started = false, ids = 0, seen = 0, dirty = [], blockTimer = 0, docTimer = 0;
+  const respell = () => view?.setProps?.({}); // the editor's attributes (spellcheck, below) read again
   let context = [], dict = new Set();
   const pending = new Map(), asked = new Set(), stats = new Map();
 
@@ -37,6 +39,7 @@
       broken = true; pending.clear();
       for (const resolve of stats.values()) resolve(null);
       stats.clear();
+      respell();
     };
     try {
       if (!sharedFailed && typeof SharedWorker === 'function') {
@@ -406,6 +409,9 @@
 
   // ---- wiring ---------------------------------------------------------------------------------------------------------
   F.plugin(P.plugin({ onFix: (_v, f) => showFix(f), onUpdate, allow }));
+  // While Harper reads the text the browser's own spellcheck stays off, so its underline never sits beside Harper's and a
+  // word in the student's dictionary stays clear; proofing off (or Harper unable to start here) gives it back.
+  F.plugin(new GZ_PM.state.Plugin({ props: { attributes: () => (proofOn() && !broken ? { spellcheck: 'false' } : {}) } }));
 
   // Proofing switched off: nothing more is asked and what was found goes; on again, the whole document is read.
   W?.follow((w, was) => {
@@ -413,6 +419,7 @@
     if (w.proofing !== was.proofing) {
       if (!w.proofing) { clearTimeout(blockTimer); clearTimeout(docTimer); blockTimer = docTimer = 0; dirty = []; pending.clear(); I.clear('harper'); closeCard(); }
       else if (started) { connect(); lintDoc(); } else if (view?.hasFocus()) start();
+      respell();
     }
     if (w.dialect !== was.dialect) {
       pending.clear(); asked.clear(); I.clear('harper'); closeCard();

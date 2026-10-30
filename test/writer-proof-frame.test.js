@@ -201,6 +201,16 @@ test('Alt+Enter reaches the visible autocorrect Undo with the keyboard', async (
   assert.ok(!pop.hidden);
 });
 
+test('while Harper proofs, the browser\'s own spellcheck is off on the editor; proofing off gives it back', () => {
+  const f = frame();
+  const spell = () => Object.assign({}, ...f.view.state.plugins.map((p) => (typeof p.props.attributes === 'function' ? p.props.attributes(f.view.state) : p.props.attributes) || {})).spellcheck;
+  assert.equal(spell(), 'false');
+  f.configure({ proofing: false });
+  assert.equal(spell(), undefined);
+  f.configure({ proofing: true });
+  assert.equal(spell(), 'false');
+});
+
 test('a document replaced whole (a fresh editor state, its versions from 0 again) drops the lints asked of the one before', async () => {
   const f = frame({ html: `<p>${'A long paragraph of text. '.repeat(20)}</p><p>${'More of it here. '.repeat(20)}</p><p>teh end</p>` }); await flush();
   f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [] });
