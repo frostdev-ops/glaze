@@ -431,7 +431,8 @@ test('array members count toward the cell cap before the engine allocates them',
 });
 
 test('broadcast and materialized array values are bounded before allocation', () => {
-  assert.equal(out(C.lib.map([Array.from({ length: 501 }, () => [1]), [Array(501).fill(2)]], (a, b) => a + b)), '#NUM!');
+  const result = C.lib.map([Array.from({ length: 501 }, () => [1]), [Array(501).fill(2)]], (a, b) => a + b);
+  assert.ok(C.isErr(result) && result.code === '#NUM!');
   const wb = M.workbook(), sh = wb.sheets[0];
   sh.rows.set(0, new Map([[0, { t: 'n', v: 0, f: 'SUM(B1:ZZ1000*2)', a: 'A1' }]]));
   const e = C.engine(wb);
