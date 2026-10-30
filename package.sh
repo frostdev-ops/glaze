@@ -17,21 +17,14 @@ chmod -R a+rX manifest.json content.js content-ultra.js content-canvas.js defaul
 zip -q -r -X "$OUT" manifest.json content.js content-ultra.js content-canvas.js defaults.js lib i18n _locales theme.css motion.css extras.css canvas.css moodle.css features \
   popup.html popup.js options.html options.js preview.html reader.html reader.js writer.html writer.js writer.css writer-ai.js writer-ai.css writer-mcp.js writer-compose.js writer-compose.css writer-proof.js writer-proof.css writer-cite.js writer-cite.css writer-paper.js writer-paper.css writer-submit.js writer-submit.css writer-import.js writer-import.css writer-kinds.js writer-objects.js writer-objects.css writer-find.js writer-print.js writer-counts.js writer-edit.css writer-paste.js writer-ruler.js writer-ruler.css papers.html papers.js papers.css papers-motion.js sheet-kind.js sheet-grid.js sheet-data.js sheet.css pdf-kind.js pdf-kind.css slides-kind.js slides-kind.css sharing mods ui.js ui.css fonts icons assets/logo.svg assets/logo-dark.svg assets/art/pets assets/art/stickers assets/art/cursors assets/shaders -x '*.DS_Store'
 
-# Google Calendar sync waits behind its build-time switch (lib/gcal.js ON) until Google verifies the app. While it's
-# off, the packaged manifest carries neither its oauth2 client nor the optional identity permission it would ask for.
-if [ "$(node -p 'require("./lib/gcal.js").ON')" != true ]; then
-  stage="$(mktemp -d)"
-  trap 'rm -rf "$stage"' EXIT
-  node -e '
-    const m = require("./manifest.json");
-    delete m.oauth2;
-    m.optional_permissions = (m.optional_permissions || []).filter((p) => p !== "identity");
-    if (!m.optional_permissions.length) delete m.optional_permissions;
-    process.stdout.write(JSON.stringify(m, null, 2) + "\n");
-  ' > "$stage/manifest.json"
-  chmod a+r "$stage/manifest.json"
-  zip_abs="$(cd "$dist" && pwd)/glaze-v$version.zip"
-  (cd "$stage" && zip -q -X "$zip_abs" manifest.json)
-fi
+# Google: the oauth2 key and the optional identity permission go in only for what uses them (scripts/oauth-manifest.js):
+# Calendar sync behind its build-time switch (lib/gcal.js ON, off until Google verifies the app), Drive once its clients
+# in lib/google-config.js are real. Without either, the packaged manifest carries neither.
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+node scripts/oauth-manifest.js chrome manifest.json > "$stage/manifest.json"
+chmod a+r "$stage/manifest.json"
+zip_abs="$(cd "$dist" && pwd)/glaze-v$version.zip"
+(cd "$stage" && zip -q -X "$zip_abs" manifest.json)
 
 echo "packaged Glaze v$version -> $OUT ($(du -h "$OUT" | cut -f1))"

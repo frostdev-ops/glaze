@@ -1157,6 +1157,45 @@ GZ_UI.load().then((s) => {
     chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.gcal) gcalRender(changes.gcal.newValue); });
   }
 
+  // ---- Google Drive (lib/google.js, through the worker: 'glaze:google'): Connect, the account, Disconnect ----
+  // Hidden until Google's clients are set up for this browser (the worker says why: 'setup' or 'browser').
+  {
+    const gdOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:google', op }, (r) => res(chrome.runtime.lastError ? { ok: false, why: 'network' } : r || { ok: false })));
+    const gdRender = (s) => {
+      $('#gdrive').hidden = !s?.ok;
+      $('#gdrive-who').textContent = s?.email || '';
+      $('#gdrive-connect').hidden = !!s?.email;
+      $('#gdrive-disconnect').hidden = !s?.email;
+    };
+    const gdLoad = () => gdOp('status').then(gdRender);
+    gdLoad();
+    let gdBusy = false;
+    // Inside the student's click: the browser's identity permission first (optional; nothing is asked before this), then
+    // Google's own screen, from the worker.
+    $('#gdrive-connect').addEventListener('click', async (e) => {
+      if (!e.isTrusted || gdBusy) return;
+      gdBusy = true;
+      try {
+        const asked = chrome.permissions.request({ permissions: ['identity'] });
+        if (!await Promise.resolve(asked).catch(() => false)) return hint(t("Glaze needs the browser's sign-in permission to connect."), true);
+        const r = await gdOp('connect');
+        if (r.ok) { await gdLoad(); $('#gdrive-disconnect').focus(); return hint(t('Connected.')); }
+        hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
+      } finally { gdBusy = false; }
+    });
+    $('#gdrive-disconnect').addEventListener('click', async (e) => {
+      if (!e.isTrusted || gdBusy) return;
+      gdBusy = true;
+      try {
+        const r = await gdOp('disconnect');
+        await gdLoad();
+        $('#gdrive-connect').focus();
+        hint(r.had && !r.revoked ? t("Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.") : t('Disconnected.'), !!r.had && !r.revoked);
+      } finally { gdBusy = false; }
+    });
+    chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.google) gdLoad(); });
+  }
+
   // Another surface changed something: read after our queued saves, and never apply a read older than an edit.
   const syncSettings = () => {
     if (pending.size || saving) return;

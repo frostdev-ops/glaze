@@ -270,6 +270,8 @@
   .wr-rows > .wr-row:first-child { border-block-start: 0; padding-block-start: .1rem; }
   .wr-name { display: flex; align-items: center; gap: .5rem; min-width: 0; font-size: calc(14px * var(--gz-scale, 1)); }
   .wr-row > select { min-inline-size: 11rem; }
+  .wr-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .6rem; min-width: 0; }
+  .wr-acts .desc { overflow-wrap: anywhere; }
   .wr-sub { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; padding-block-start: .9rem; border-block-start: 1px solid var(--gz-border-line, var(--gz-line)); }
   .wr-sub h3 { margin: 0; font-size: calc(13px * var(--gz-scale, 1)); }
   .wr-sub .desc { margin-inline-end: auto; }
@@ -1527,6 +1529,7 @@
 <div class="wr-row"><span class="wr-name" id="writer-slides-name">Slides</span><input type="checkbox" data-key="writer.slides" aria-labelledby="writer-slides-name"></div>
 <div class="wr-row has-info"><span class="wr-name"><span id="info-writer-versions-name">Versions kept</span><button type="button" class="info" popovertarget="info-writer-versions" aria-labelledby="info-more info-writer-versions-name" aria-describedby="info-writer-versions"></button></span><select data-key="writer.versions" data-number aria-labelledby="info-writer-versions-name" aria-describedby="info-writer-versions"></select>
 <div class="info-pop" id="info-writer-versions" popover><span class="desc">How many earlier versions each paper keeps on this device, the oldest going first. The last version you submitted always stays.</span></div></div>
+<div class="wr-row" id="gdrive" hidden><span class="wr-name" id="gdrive-name">Google Drive</span><span class="wr-acts"><span class="desc" id="gdrive-who" translate="no"></span><button type="button" id="gdrive-connect" aria-labelledby="gdrive-connect gdrive-name">Connect</button><button type="button" id="gdrive-disconnect" aria-labelledby="gdrive-disconnect gdrive-name" hidden>Disconnect</button></span></div>
 </div>
 <div class="wr-sub"><h3 id="writer-papers-head">Saved papers</h3><span class="desc" id="writer-papers-count"></span><a class="button" id="writer-documents" href="papers.html" target="_blank" rel="noopener">Documents</a><button type="button" class="wr-danger" id="writer-clear-all" disabled>Clear all papers and documents</button></div>
 <ul class="wr-courses" id="writer-paper-list" aria-labelledby="writer-papers-head"></ul>
