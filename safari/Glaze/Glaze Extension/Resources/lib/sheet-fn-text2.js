@@ -234,7 +234,7 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
       const point = s.indexOf(dec);
       const plain = (point >= 0 ? s.slice(0, point).split(group).join('') + '.' + s.slice(point + 1) : s.split(group).join(''));
       if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(plain)) throw ERR.VALUE;
-      const n = Number(plain) / 100 ** pct;
+      const n = Number(Number(plain).toPrecision(15)) / 100 ** pct;
       if (!Number.isFinite(n) || Math.abs(n) > 9.99999999999999e307) throw ERR.VALUE;
       return Math.abs(n) < 2.2250738585072014e-308 ? 0 : n;
     } },
