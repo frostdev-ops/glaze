@@ -234,12 +234,13 @@ const read = async (bytes, opts = {}) => {
   const z = unzip(bytes, opts);
   const wb = await z.text('xl/workbook.xml');
   if (!wb) throw new Error('not an Excel workbook');
-  let date1904 = false;
+  let date1904 = false, seenPr = false;
   const list = [];
   for (const tk of tokens(wb)) {
     if (!tk.name || tk.close) continue;
     const n = local(tk.name);
-    if (n === 'workbookPr') date1904 = /^(1|true)$/.test(attr(tk.attrs, 'date1904') || '');
+    // The workbook's own workbookPr comes first; Excel adds an x15:workbookPr inside extLst at the end.
+    if (n === 'workbookPr' && !seenPr) { seenPr = true; date1904 = /^(1|true)$/.test(attr(tk.attrs, 'date1904') || ''); }
     else if (n === 'sheet') {
       list.push({ name: attr(tk.attrs, 'name'), id: attr(tk.attrs, '*:id') });
       if (list.length > L.sheets) fail('too many sheets');
