@@ -69,3 +69,12 @@ test('beforeunload protects uncommitted cell text with the browser prompt and sa
   assert.equal(got.wb.sheets[0].rows.get(0).get(0).v, 'draft');
   assert.equal(f.unload().prevented, false);
 });
+
+test('Escape then Tab or Shift+Tab releases the grid to native keyboard focus navigation', () => {
+  const f = frame();
+  assert.equal(f.key('Tab').defaultPrevented, true, 'ordinary Tab still moves between cells');
+  f.key('Escape');
+  assert.ok(!f.key('Tab').defaultPrevented, 'Tab can reach the sheet tabs');
+  f.key('Escape');
+  assert.ok(!f.key('Tab', { shiftKey: true }).defaultPrevented, 'Shift+Tab can reach the formula bar and toolbar');
+});
