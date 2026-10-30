@@ -3546,6 +3546,7 @@
   "A workbook holds 100 sheets.": "Een werkmap bevat hoogstens 100 bladen.",
   "A workbook keeps one sheet.": "Een werkmap houdt minstens één blad.",
   "You can’t change part of an array.": "Je kunt geen deel van een matrix wijzigen.",
+  "Rows and columns can’t be added or removed on this sheet.": "Op dit blad kunnen geen rijen en kolommen worden ingevoegd of verwijderd.",
   "Too long for Ultra’s text box. Use Full writer.": "Te lang voor het tekstvak van Ultra. Gebruik Volledige Writer.",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "De liniaal boven de pagina, met de inspringingen en tabstops van de alinea, die je kunt verslepen. Uit begint de pagina direct onder de werkbalk.",
   "Versions kept": "Bewaarde versies",

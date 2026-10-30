@@ -3546,6 +3546,7 @@
   "A workbook holds 100 sheets.": "Un classeur contient au plus 100 feuilles.",
   "A workbook keeps one sheet.": "Un classeur garde au moins une feuille.",
   "You can’t change part of an array.": "Impossible de modifier une partie d’une matrice.",
+  "Rows and columns can’t be added or removed on this sheet.": "Impossible d’ajouter ou de supprimer des lignes et des colonnes sur cette feuille.",
   "Too long for Ultra’s text box. Use Full writer.": "Trop long pour la zone de texte d’Ultra. Utilisez Writer complet.",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "La règle au-dessus de la page, avec les retraits et tabulations du paragraphe, que vous pouvez faire glisser. Désactivée, la page commence juste sous la barre d’outils.",
   "Versions kept": "Versions conservées",

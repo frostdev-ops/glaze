@@ -3546,6 +3546,7 @@
   "A workbook holds 100 sheets.": "Uma pasta de trabalho comporta 100 planilhas.",
   "A workbook keeps one sheet.": "Uma pasta de trabalho mantém pelo menos uma planilha.",
   "You can’t change part of an array.": "Não é possível alterar parte de uma matriz.",
+  "Rows and columns can’t be added or removed on this sheet.": "Não é possível inserir ou excluir linhas e colunas nesta planilha.",
   "Too long for Ultra’s text box. Use Full writer.": "Longo demais para a caixa de texto do Ultra. Use o Writer completo.",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "A régua acima da página, com os recuos e tabulações do parágrafo, que você pode arrastar. Desligada, a página começa logo abaixo da barra de ferramentas.",
   "Versions kept": "Versões mantidas",

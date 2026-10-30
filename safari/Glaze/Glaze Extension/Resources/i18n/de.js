@@ -3546,6 +3546,7 @@
   "A workbook holds 100 sheets.": "Eine Arbeitsmappe fasst 100 Blätter.",
   "A workbook keeps one sheet.": "Eine Arbeitsmappe behält mindestens ein Blatt.",
   "You can’t change part of an array.": "Ein Teil einer Matrix kann nicht geändert werden.",
+  "Rows and columns can’t be added or removed on this sheet.": "Auf diesem Tabellenblatt können keine Zeilen und Spalten eingefügt oder gelöscht werden.",
   "Too long for Ultra’s text box. Use Full writer.": "Zu lang für das Textfeld von Ultra. Nutzen Sie den vollen Writer.",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "Das Lineal über der Seite mit den Einzügen und Tabstopps des Absatzes, die Sie ziehen können. Aus beginnt die Seite direkt unter der Symbolleiste.",
   "Versions kept": "Behaltene Versionen",

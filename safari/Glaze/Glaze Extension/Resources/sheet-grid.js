@@ -630,6 +630,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       schedule();
     };
     // A grid-level operation the model has no op for: a sheet hidden (kept in its keep, as a file's state="hidden").
+    // A workbook from an .xlsx keeps parts that refer to its cells: the codec, where loaded (lib/sheet-xlsx.js), refuses a
+    // structural operation they'd point wrongly after (locked) and is told of every operation applied, do, undo or redo
+    // (track), so it moves their references when it writes the file.
+    const X = () => globalThis.GZ_SHEET_XLSX || null;
     const run = (op) => {
       if (op.op === 'gx-hide') {
         const sh = M.getSheet(wb, op.sheet), prev = sh.keep?.hidden === true;
@@ -637,9 +641,12 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         if (!op.hidden) delete sh.keep.hidden;
         return { inverse: { op: 'gx-hide', sheet: op.sheet, hidden: prev }, changed: [], rebuild: true };
       }
-      return eng.apply(op);
+      if (X()?.locked(wb, op)) throw Object.assign(new Error('locked'), { code: 'locked' });
+      const res = eng.apply(op);
+      X()?.track(wb, op);
+      return res;
     };
-    const WHY = { 'cap-cells': 'A workbook holds 250,000 cells.', 'cap-sheets': 'A workbook holds 100 sheets.', 'last-sheet': 'A workbook keeps one sheet.', 'array-part': 'You can’t change part of an array.', name: 'Use a different sheet name.', bounds: 'That would move cells off the sheet.' };
+    const WHY = { locked: 'Rows and columns can’t be added or removed on this sheet.', 'cap-cells': 'A workbook holds 250,000 cells.', 'cap-sheets': 'A workbook holds 100 sheets.', 'last-sheet': 'A workbook keeps one sheet.', 'array-part': 'You can’t change part of an array.', name: 'Use a different sheet name.', bounds: 'That would move cells off the sheet.' };
     const refused = (e) => { if (!WHY[e?.code]) console.error(e); say(t(WHY[e?.code] || 'Not saved. Try again in a moment.')); };
     // big: keep a version of the workbook as it was before (sort, a sheet deleted, a large paste).
     const apply = (op, { big = false, after = null } = {}) => {
@@ -789,6 +796,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       let res;
       try { res = eng.edit(x.sheet, x.r, x.c, text); } catch (e) { refused(e); return false; }
       if (res.error) { say(t('There’s a problem with this formula.')); x.surface.focus(); return false; }
+      X()?.track(wb, { op: 'set', sheet: x.sheet, r: x.r, c: x.c });
       pushUndo({ op: res.inverse, sheet: x.sheet, sel, bytes: weigh(res.inverse) });
       redos.length = 0;
       reach(x.r, x.c);
