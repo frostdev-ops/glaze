@@ -692,3 +692,16 @@ test('a second device joining keeps its own Gradescope placings and answers besi
   assert.ok((await a.run()).ok);
   assert.deepEqual(Object.keys((await a.local.get('gradescope')).gradescope.map).sort(), ['111', '222']);
 });
+
+test('a snapshot cut short by a note saved while it was read is tried again on the next run, not tomorrow', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, local = device(drive, { clock }).local;
+  let made = 0;
+  const store = ST.create({ area: () => local, store: local, hash: async (s) => sha(s), now: () => clock.t,
+    snapshot: async () => { if (++made === 1) throw Object.assign(new Error('changed'), { why: 'changed' }); return { name: 'glaze-backup-2026-10-30.zip', bytes: new TextEncoder().encode('PK') }; } });
+  const client = D.create({ fetch: drive.fetch, token: async () => 'tok-1', interactive: false });
+  const folder = drive.seed({ name: 'Glaze', mimeType: drive.FOLDER, appProperties: { glaze: 'root' } }).meta.id;
+  const ctx = { D: (fn) => fn(client), folder, state: async (p) => { await local.set({ driveSync: { ...(await local.get('driveSync')).driveSync, ...p } }); } };
+  await store.snapshot(ctx); await store.snapshot(ctx);
+  assert.equal(made, 2);
+  assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot').length, 1);
+});

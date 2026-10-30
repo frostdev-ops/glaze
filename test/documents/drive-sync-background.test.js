@@ -99,7 +99,7 @@ test('a daily snapshot whose files are past one upload is no snapshot, its files
   Object.assign(context, {
     GZ_BACKUP: require('../../extension/background/backup.js'), GZ_TODO: require('../../extension/planner/todo.js'), GZ_PET: require('../../extension/pet/pet.js'),
     GZ_SANITIZE: require('../../extension/content/defaults.js').GZ_SANITIZE, GZ_HISTORY: require('../../extension/looks/history.js'), GZ_ZIP: require('../../extension/core/zip.js'),
-    GZ_DOC_KINDS: require('../../extension/documents/doc-kinds.js'), Blob,
+    GZ_DOC_KINDS: require('../../extension/documents/doc-kinds.js'), GZ_FOLDERS: require('../../extension/courses/folders.js'), Blob,
   });
   context.chrome.runtime.getManifest = () => ({ version: '4.0.1' });
   let read = 0;
