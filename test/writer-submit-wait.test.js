@@ -346,6 +346,28 @@ test('compact: a held Submit that Ultra turns on just after the text lands goes 
   }
 });
 
+for (const [label, beforeSave, afterSave, reason] of [['enable deadline', 0, 15001, 'submit'], ['flush deadline', 59000, 1001, 'save']]) {
+  test(`compact: an enabled Submit cannot beat its throttled ${label}`, async () => {
+    const { c, press } = await attempt(false), b = c.doc.querySelector(SUBMIT);
+    let now = Date.now();
+    c.ctx.__now = () => now;
+    vm.runInContext('Date.now = () => globalThis.__now()', c.ctx);
+    c.emit({ type: 'view', full: false });
+    press(SUBMIT);
+    const request = flushes(c.ports[0])[0].request;
+    b.disabled = true; b.setAttribute('disabled', '');
+    now += beforeSave;
+    c.emit({ type: 'compact:flushed', request, ...ok });
+    b.disabled = false; b.removeAttribute('disabled');
+    now += afterSave;
+    c.tick(100); // the 60 s deadline timer did not run in a throttled tab
+    assert.equal(c.clicks.length, 0, 'an expired press never reaches Ultra');
+    assert.equal(c.ports[0].sent.find((m) => m.type === 'compact:resume')?.reason, reason);
+    c.tick(100);
+    assert.equal(b.hasAttribute('aria-busy'), false);
+  });
+}
+
 test('compact: a footer returning just after a flush times out can retry before the next poll', async () => {
   const { c, press } = await attempt(false);
   c.emit({ type: 'view', full: false });
