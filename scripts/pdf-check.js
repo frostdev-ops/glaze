@@ -234,6 +234,39 @@ const fixture = () => {
     await page.click(`.gd-card[data-key="${key}"] .gd-title`);
     check(await until(() => page.evaluate(() => document.querySelector('.annotationLayer input')?.value === 'Grace Hopper'), 'the retried value'), 'retry persists the edited form before leaving');
 
+    // Hold the worker's first save after its byte snapshot, while annotationStorage is still marked modified.
+    await openHome();
+    await page.evaluate(async (key) => {
+      const V = await import(chrome.runtime.getURL('lib/pdfjs/pdf_viewer.mjs'));
+      const setDocument = V.PDFViewer.prototype.setDocument;
+      V.PDFViewer.prototype.setDocument = function (doc) { globalThis.pdfCheckDoc = doc; return setDocument.call(this, doc); };
+      try {
+        document.getElementById('list').hidden = true;
+        history.replaceState(null, '', `papers.html?pdf=${encodeURIComponent(key)}`);
+        await GZ_DOC_KINDS.get('pdf').edit(key);
+      } finally { V.PDFViewer.prototype.setDocument = setDocument; }
+      const handler = globalThis.pdfCheckDoc._transport.messageHandler, send = handler.sendWithPromise.bind(handler);
+      handler.sendWithPromise = async (action, ...args) => {
+        const result = await send(action, ...args);
+        if (action === 'SaveDocument' && !globalThis.pdfCheckPaused) {
+          globalThis.pdfCheckPaused = true;
+          await new Promise((r) => { globalThis.pdfCheckRelease = r; });
+        }
+        return result;
+      };
+    }, key);
+    const racing = page.locator('.page[data-page-number="1"] .annotationLayer input').first();
+    await racing.fill('First edit');
+    await racing.press('Tab');
+    await until(() => page.evaluate(() => globalThis.pdfCheckPaused), 'the first save snapshot');
+    await racing.fill('Second edit');
+    await page.click('.gp-top a[href="papers.html"]');
+    await page.evaluate(() => globalThis.pdfCheckRelease());
+    await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'home after overlapping edits');
+    await page.click(`.gd-card[data-key="${key}"] .gd-title`);
+    const afterRace = await until(() => page.evaluate(() => document.querySelector('.annotationLayer input')?.value || null), 'overlapping edits reopened');
+    check(afterRace === 'Second edit', `an edit made during a save is persisted before leaving (${afterRace})`);
+
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(!errors.some((e) => /fake worker/i.test(e)), 'pdf.js never fell back to a fake worker');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);
