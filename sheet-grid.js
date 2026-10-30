@@ -1336,8 +1336,11 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const swap = (text) => { const q = findQ.value; return q ? text.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), () => repQ.value) : text; };
     const replaceOne = () => {
       if (hitAt < 0) return;
-      const [r, c] = hits[hitAt], next = swap(editText(r, c));
-      const res = eng.edit(S().id, r, c, next);
+      const [r, c] = hits[hitAt], was = editText(r, c), next = swap(was);
+      // A match in the shown text alone (a format's $ or %) has nothing to replace: the next match is the one.
+      if (next === was) { step(1); return; }
+      let res;
+      try { res = eng.edit(S().id, r, c, next); } catch (e) { refused(e); return; }
       if (res.error) { say(t('There’s a problem with this formula.')); return; }
       pushUndo({ op: res.inverse, sheet: S().id, sel, bytes: weigh(res.inverse) }); redos.length = 0;
       mark(res, { op: 'set' }); changed(res, { op: 'set' });

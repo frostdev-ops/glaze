@@ -304,3 +304,18 @@ test('pasting a picture, a file or an empty clipboard leaves the cell as it was'
   f.key('z', { ctrlKey: true });
   assert.equal(f.wb.sheets[0].rows.get(0)?.get(0), undefined, 'no empty paste took an undo step');
 });
+
+test('Replace says why a cell in an array stays, and passes over a match in the shown text alone', () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  sh.rows.set(0, new Map([[0, { t: 'n', v: 2, f: '1+1', a: 'A1:A2' }], [1, { t: 'n', v: 5, s: M.internStyle(wb, { fmt: '$#,##0.00' }) }]]));
+  sh.rows.set(1, new Map([[0, { t: 'n', v: 2 }]]));
+  const f = frame({ wb }), said = () => f.doc.querySelector('.gx-said').textContent;
+  f.key('f', { ctrlKey: true });
+  const find = (q, rep) => { f.el('gx-find-q').value = q; f.fire(f.el('gx-find-q'), 'input'); f.el('gx-rep-q').value = rep; f.fire(f.el('gx-rep-one'), 'click'); };
+  find('1+1', '2+2');
+  assert.equal(said(), 'You can’t change part of an array.');
+  assert.equal(sh.rows.get(0).get(0).f, '1+1');
+  find('$', '€');
+  assert.equal(sh.rows.get(0).get(1).v, 5);
+  assert.equal(f.el('gx-undo').disabled, true, 'no undo step for a replace that changed nothing');
+});
