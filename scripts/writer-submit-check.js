@@ -588,9 +588,21 @@ const HARNESS = `(() => {
     // A press as Writer reopens the frame (it reloaded) or as the reloaded page's frame goes in: held until the frame is up
     // (Ultra hears nothing of it), then the sheet opens, or the paper is saved and Ultra's Save and Close goes once.
     const watchPress = (p) => p.evaluate(() => { window.__press = []; addEventListener('click', (e) => { const b = e.target.closest?.('footer button'), f = document.querySelector('iframe.gz-writer'); if (b && e.isTrusted) window.__press.push({ id: b.getAttribute('data-analytics-id'), up: !!f && !f.style.opacity }); }, true); });
+    // Hold the next Writer's pass claim until the native press. A fast frame can otherwise be ready between two Node
+    // calls, however quickly the check clicks; an elapsed-time assertion cannot establish this scenario.
+    const holdBoot = (p) => p.addInitScript(() => {
+      if (location.pathname !== '/writer.html') return;
+      const send = chrome.runtime.sendMessage;
+      const gate = new Promise((resolve) => { globalThis.__gzWriterBoot = resolve; });
+      chrome.runtime.sendMessage = function (m, ...args) {
+        const run = () => send.call(this, m, ...args);
+        return m?.type === 'glaze:writer' && m.op === 'claim' ? gate.then(run) : run();
+      };
+    });
     const pressReopening = async (sel) => {
       const o = await openAttempt();
       await watchPress(o.p);
+      await holdBoot(o.p);
       const old = o.el;
       await o.fr.evaluate(() => setTimeout(() => location.reload(), 0));
       await until(() => old.evaluate((f) => !f.isConnected), 'the frame reopening');
@@ -599,20 +611,23 @@ const HARNESS = `(() => {
       const after = Date.now() - t;
       o.el = await until(() => o.p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'), 'the new frame');
       o.fr = await until(() => o.el.contentFrame(), 'its document');
+      await until(() => o.fr.evaluate(() => typeof globalThis.__gzWriterBoot === 'function'), 'the reopened Writer document at its boot gate', 30000);
+      await o.fr.evaluate(() => globalThis.__gzWriterBoot());
       return { ...o, after };
     };
     let r = await pressReopening(SUBMIT);
     await sheetOpen(r.fr);
     let press = await r.p.evaluate(() => window.__press);
-    check(r.after < 200 && press.length === 1 && press[0].up === false && await r.p.evaluate(() => !__clicks.length), `Ultra's Submit pressed ${r.after} ms into the frame reopening, before it was up: the sheet opens once it is, Ultra never hearing the press (${JSON.stringify({ press, clicks: await r.p.evaluate(() => __clicks) })})`);
+    check(press.length === 1 && press[0].up === false && await r.p.evaluate(() => !__clicks.length), `Ultra's Submit pressed ${r.after} ms into the frame reopening, before it was up: the sheet opens once it is, Ultra never hearing the press (${JSON.stringify({ press, clicks: await r.p.evaluate(() => __clicks) })})`);
     await r.p.close();
     r = await pressReopening(SAVE);
     await until(() => r.p.evaluate((id) => __clicks.includes(id), SAVED_CLOSE), 'Save and Close once the new frame saved', 30000);
     await quiet(() => r.p.evaluate(() => __clicks.length > 1), 'a second Save and Close', 800);
     press = await r.p.evaluate(() => window.__press);
-    check(r.after < 200 && press[0]?.up === false && await r.p.evaluate((id) => __clicks.join() === id, SAVED_CLOSE), `Save and Close pressed ${r.after} ms into the frame reopening: once the new frame has saved the paper, Ultra's own goes, once (${JSON.stringify({ press, clicks: await r.p.evaluate(() => __clicks) })})`);
+    check(press.length === 1 && press[0].up === false && await r.p.evaluate((id) => __clicks.join() === id, SAVED_CLOSE), `Save and Close pressed ${r.after} ms into the frame reopening: once the new frame has saved the paper, Ultra's own goes, once (${JSON.stringify({ press, clicks: await r.p.evaluate(() => __clicks) })})`);
     await r.p.close();
     ({ p, el, fr } = await openAttempt());
+    await holdBoot(p);
     await p.reload();
     await watchPress(p);
     await p.waitForSelector('iframe.gz-writer[data-gz-writer-frame="assignment"]', { state: 'attached', timeout: 30000 });
@@ -622,9 +637,11 @@ const HARNESS = `(() => {
     spent = Date.now() - t0;
     el = await until(() => p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'), 'the reloaded page\'s frame');
     fr = await until(() => el.contentFrame(), 'its document');
+    await until(() => fr.evaluate(() => typeof globalThis.__gzWriterBoot === 'function'), 'the reloaded Writer document at its boot gate', 30000);
+    await fr.evaluate(() => globalThis.__gzWriterBoot());
     await sheetOpen(fr);
     press = await p.evaluate(() => window.__press);
-    check(spent < 200 && press.length === 1 && press[0].up === false && await p.evaluate(() => !__clicks.length && !document.getElementById('ultra-confirm')), `the attempt reloaded, Ultra's Submit (on, its box holding text) pressed ${spent} ms after the paper's frame went in, before it was up: held, then the sheet; Ultra submitted nothing (${JSON.stringify({ press, clicks: await p.evaluate(() => __clicks) })})`);
+    check(press.length === 1 && press[0].up === false && await p.evaluate(() => !__clicks.length && !document.getElementById('ultra-confirm')), `the attempt reloaded, Ultra's Submit (on, its box holding text) pressed ${spent} ms after the paper's frame went in, before it was up: held, then the sheet; Ultra submitted nothing (${JSON.stringify({ press, clicks: await p.evaluate(() => __clicks) })})`);
     await p.keyboard.press('Escape');
     await p.close();
 
