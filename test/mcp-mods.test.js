@@ -68,7 +68,7 @@ test('the school\'s tabs are asked in turn, the one shown first, then the latest
   const tabs = tabsOf([TAB(1, { lastAccessed: 10 }), TAB(2, { active: true }), TAB(3, { lastAccessed: 50 }), TAB(4, { lastAccessed: 90, frozen: true })], (id, m) => {
     if (m.op === 'call') return id === 1 ? { ok: true } : fail(id === 2 ? 'account' : 'mod');
     // The page waits for the mod's answer, which reaches the worker through the broker first.
-    assert.equal(route.settle(from(1), MOD, m.call, { value: { said: 'hi' } }), true);
+    assert.equal(route.settle(from(1), MOD, m.call, { value: { said: 'hi' } }, '5'), true);
     return { ok: true };
   });
   route = R.create({ tabs, browser: 'chrome', id: () => 'call-1' });
@@ -91,20 +91,20 @@ test('an answer is taken only for the call waiting for it: from that mod, that t
     const no = [[from(7), OTHER, id, { value: 1 }], [from(8), MOD, id, { value: 1 }], [from(7, { frameId: 1 }), MOD, id, { value: 1 }],
       [from(7, { url: 'https://other.instructure.com/courses/1', origin: 'https://other.instructure.com' }), MOD, id, { value: 1 }],
       [from(7), MOD, 'nope', { value: 1 }], [from(7), MOD, id, null], [{}, MOD, id, { value: 1 }], [undefined, MOD, id, { value: 1 }], [from(7), MOD, undefined, { value: 1 }]];
-    for (const a of no) assert.equal(route.settle(...a), false, JSON.stringify(a));
-    assert.equal(route.settle(from(7), MOD, id, { value: [1, 2] }), true);
-    assert.equal(route.settle(from(7), MOD, id, { value: 3 }), false, 'once');
+    for (const a of no) assert.equal(route.settle(...a, '5'), false, JSON.stringify(a));
+    assert.equal(route.settle(from(7), MOD, id, { value: [1, 2] }, '5'), true);
+    assert.equal(route.settle(from(7), MOD, id, { value: 3 }, '5'), false, 'once');
     return { ok: true };
   });
   route = R.create({ tabs, browser: 'chrome' });
   assert.deepEqual(await route.code(MOD, 'echo', {}, CTX), [1, 2]);
-  assert.equal(route.settle(from(7), MOD, id, { value: 3 }), false, 'nor after');
+  assert.equal(route.settle(from(7), MOD, id, { value: 3 }, '5'), false, 'nor after');
 });
 
 test('the mod\'s error is the call\'s failure, in its words after Glaze\'s; no value is null', async () => {
   const run = (out) => {
     let route;
-    const tabs = tabsOf([TAB(7)], (t, m) => { if (m.op === 'wait') route.settle(from(7), MOD, m.call, out); return { ok: true }; });
+    const tabs = tabsOf([TAB(7)], (t, m) => { if (m.op === 'wait') route.settle(from(7), MOD, m.call, out, '5'); return { ok: true }; });
     route = R.create({ tabs, browser: 'chrome' });
     return route.code(MOD, 'echo', {}, CTX);
   };
@@ -134,9 +134,9 @@ test('15 seconds from the call, it ends; an answer after that is not taken', asy
   assert.deepEqual(timers.map((t) => t.ms), [15000]);
   timers[0].f();
   assert.deepEqual(await pending, fail(TEXT.timeout));
-  assert.equal(route.settle(from(7), MOD, id, { value: 1 }), false);
+  assert.equal(route.settle(from(7), MOD, id, { value: 1 }, '5'), false);
   // An answer in time clears it.
-  const fast = R.create({ tabs: tabsOf([TAB(7)], (t, m) => { if (m.op === 'wait') fast.settle(from(7), MOD, m.call, { value: 2 }); return { ok: true }; }), browser: 'chrome', timers: fake });
+  const fast = R.create({ tabs: tabsOf([TAB(7)], (t, m) => { if (m.op === 'wait') fast.settle(from(7), MOD, m.call, { value: 2 }, '5'); return { ok: true }; }), browser: 'chrome', timers: fake });
   assert.equal(await fast.code(MOD, 'echo', {}, CTX), 2);
   assert.equal(timers[1].cleared, true);
 });

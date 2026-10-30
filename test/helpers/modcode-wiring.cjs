@@ -6,7 +6,7 @@ const WIRING = [
   ['const mcpCode = async (mod, name, args, ctx) => ({ ok: false, error: "This mod\'s agent tools are not available yet." });',
     'let mcpRoute = null;\nconst mcpCode = (mod, name, args, ctx) => (mcpRoute ||= GZ_MCP_MODROUTE.create({ tabs: chrome.tabs, browser: MCP_BROWSER, quiet: modQuiet })).code(mod, name, args, ctx);'],
   ["'mcp/approve.js', 'mcp/calls.js');", "'mcp/approve.js', 'mcp/calls.js', 'mcp/modroute.js');"],
-  ["blocklist: () => modRead('modsBlocklist') };", "blocklist: () => modRead('modsBlocklist'), tool: (call, out) => !!mcpRoute && mcpRoute.settle(s, m.mod, call, out) };"],
+  ["blocklist: () => modRead('modsBlocklist') };", "blocklist: () => modRead('modsBlocklist'), tool: (call, out, uid) => !!mcpRoute && mcpRoute.settle(s, m.mod, call, out, uid) };"],
 ];
 const wired = (src) => WIRING.reduce((s, [stub, line]) => {
   if (s.includes(line)) return s;
