@@ -19,6 +19,8 @@ test('route: a .docx always asks; a kind\'s file asks only while that kind opens
   assert.equal(L.route('Budget.xlsx', { kinds: [] }), 'submit');
   assert.equal(L.route('Budget.xlsx', { kinds: ['sheet'] }), 'choose');
   assert.equal(L.route('data.csv', { kinds: ['sheet'] }), 'choose');
+  assert.equal(L.route('data.TSV', { kinds: ['sheet'] }), 'choose');
+  assert.equal(L.mimeOf('data.tsv'), 'text/tab-separated-values');
   // The registry's forFile decides where it is given.
   assert.equal(L.route('Rivera.pdf', { kinds: ['pdf'], forFile: () => null }), 'submit');
   assert.equal(L.kindOf('Rivera.PDF'), 'pdf');

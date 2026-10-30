@@ -606,3 +606,29 @@ test('the New spreadsheet tile leaves codecs unloaded until an actual workbook i
   await new Promise(setImmediate);
   assert.equal(loads, 1, 'a saved spreadsheet starts the shared load');
 });
+
+test('CSV and TSV imports use the codec byte reader and replace the prior tracking log', async () => {
+  const X = require('../lib/sheet-xlsx.js'), s = store(), P = PA.open(s), old = book();
+  old.keep.log = [{ op: 'shift', sheet: 1, name: 'Sheet1', axis: 'row', at: 0, n: 1 }];
+  await SD.write(P, KEY, old, new Map());
+  const reads = [];
+  const { DK, ctx } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P },
+    GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: require('../sheet-grid.js'),
+    GZ_SHEET_CALC: require('../lib/sheet-calc.js'), GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'),
+    CompressionStream, DecompressionStream, Response, Blob });
+  ctx.GZ_WRITER_PAPER = { need: async (files) => { if (files.includes('lib/sheet-xlsx.js')) ctx.GZ_SHEET_XLSX = {
+    ...X, readDelimited: (bytes, opts) => { reads.push(opts.name); return X.readDelimited(bytes, opts); }
+  }; } };
+  await DK.settled();
+  const file = (name, bytes) => ({ name, size: bytes.length, arrayBuffer: async () => Uint8Array.from(bytes).buffer });
+  await DK.get('sheet').into(KEY, file('scores.csv', Buffer.from('\ufeffName,Score\r\nAda,91\r\nGrace,=B2-3\r\n', 'utf16le')));
+  let got = await SD.read((ks) => s.get(ks), KEY);
+  assert.equal(got.wb.sheets[0].rows.get(0).get(0).v, 'Name', 'UTF-16 BOM is decoded by the lane');
+  assert.equal(got.wb.sheets[0].rows.get(2).get(1).v, 88);
+  assert.deepEqual(got.wb.keep.log, [], 'the replaced workbook has no prior edits');
+  await DK.get('sheet').into(KEY, file('notes.tsv', Buffer.from('Name\tValue\n"tab\tinside"\t42\n')));
+  got = await SD.read((ks) => s.get(ks), KEY);
+  assert.equal(got.wb.sheets[0].rows.get(1).get(0).v, 'tab\tinside');
+  assert.equal(got.wb.sheets[0].rows.get(1).get(1).v, 42);
+  assert.deepEqual(reads, ['scores.csv', 'notes.tsv']);
+});
