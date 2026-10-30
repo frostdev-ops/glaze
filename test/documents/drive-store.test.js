@@ -516,3 +516,91 @@ test('Notes keeps a local timestamp when an edit follows a remote apply before i
   assert.ok((await b.run()).ok);
   assert.equal((await b.local.get(ST.STAMPS))[ST.STAMPS][`notes:${ACCT}|${id}`], clock.t, 'bookkeeping must preserve the later local time');
 });
+
+// ---- the store's own limits, overlapping first syncs, first meetings
+
+test('a daily snapshot that can\'t be made or is refused is passed over for the day; the run still succeeds', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, local = device(drive, { clock }).local;
+  let made = 0, maker = async () => { made++; return null; }; // too big for one backup (background/backup.js pack 'big')
+  const store = ST.create({ area: () => local, store: local, hash: async (s) => sha(s), now: () => clock.t, snapshot: () => maker() });
+  const client = D.create({ fetch: drive.fetch, token: async () => 'tok-1', interactive: false });
+  const folder = drive.seed({ name: 'Glaze', mimeType: drive.FOLDER, appProperties: { glaze: 'root' } }).meta.id;
+  const ctx = { D: (fn) => fn(client), folder, state: async (p) => { await local.set({ driveSync: { ...(await local.get('driveSync')).driveSync, ...p } }); } };
+  await store.snapshot(ctx); await store.snapshot(ctx);
+  assert.equal(made, 1, 'a snapshot too big for one file is tried once a day, not on every run');
+  // One the maker can't build (a spreadsheet missing a band: pack 'bad'), or one Drive refuses: no failed runs.
+  clock.t += ST.SNAP.every + 1;
+  maker = async () => { made++; throw Object.assign(new Error('bad'), { why: 'bad' }); };
+  await store.snapshot(ctx);
+  clock.t += ST.SNAP.every + 1;
+  maker = async () => { made++; return { name: 'glaze-backup-2026-11-01.zip', bytes: new TextEncoder().encode('PK') }; };
+  drive.fail(400, { error: { errors: [{ reason: 'badRequest' }], code: 400 } }, (x) => x.path.startsWith('/upload/'));
+  await store.snapshot(ctx); await store.snapshot(ctx);
+  assert.equal(made, 3);
+  assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot').length, 0);
+});
+
+test('Notes another device has that won\'t fit here are passed over; the rest still syncs', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const picture = nid(500);
+  await a.notesOp({ key: ACCT, op: 'file', id: picture, kind: 'image', name: 'cell.png', data: PNG.toString('base64'), note: nid(1) });
+  await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: 0, sid: 'a1', html: `<p>Cells</p><img data-gz-file="${picture}">` });
+  await a.local.set({ [TODO]: todo('FromA') });
+  assert.ok((await a.on()).ok);
+  // B's disk is all but full: Notes refuses the picture ('full'), as it would past its own 200 MB of files.
+  b.db.estimate = async () => ({ quota: 10, usage: 0 });
+  assert.deepEqual(await b.on(), { ok: true });
+  assert.deepEqual((await b.local.get(TODO))[TODO], todo('FromA'));
+  assert.match(await noteOf(b, nid(1)), /Cells/);
+  assert.ok((await b.run()).ok, 'and the next run too');
+});
+
+test('a first meeting Restore can\'t join (more class schedules than one device keeps) is passed over, not a stuck sync', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const courses = (from) => Array.from({ length: 40 }, (_, i) => ({ id: String(from + i), name: `C${from + i}`, at: 5, periods: [{ days: [1], start: 540, end: 600 }] }));
+  await a.local.set({ [CLASSES]: C.clean({ courses: courses(100) }), writerWords: ['Alpha'] });
+  await b.local.set({ [CLASSES]: C.clean({ courses: courses(500) }) });
+  assert.ok((await a.on()).ok);
+  assert.deepEqual(await b.on(), { ok: true });
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Alpha']);
+  assert.equal((await b.local.get(CLASSES))[CLASSES].courses.length, 40, 'B keeps its own');
+});
+
+test('two devices whose first syncs overlap keep one record file and see each other\'s later edits', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  // A's record uploads wait until B has listed Data: both find no file for writerWords, and each makes one.
+  let listed;
+  const held = new Promise((r) => { listed = r; });
+  const text = (b) => (typeof b === 'string' ? b : Buffer.from(b || []).toString('latin1'));
+  const gateA = { ...drive, fetch: async (u, i = {}) => { if (u.includes('/upload/') && i.method === 'POST' && text(i.body).includes('"glaze":"rec"')) await held; return drive.fetch(u, i); } };
+  const gateB = { ...drive, fetch: async (u, i) => { const r = await drive.fetch(u, i); if (u.includes('/drive/v3/files?') && decodeURIComponent(u).includes("value='rec'")) listed(); return r; } };
+  const a = device(gateA, { clock }), b = device(gateB, { clock });
+  await a.local.set({ writerWords: ['Alpha'] });
+  await b.local.set({ writerWords: ['Beta'] });
+  const first = a.on();
+  await new Promise((r) => setTimeout(r, 50));
+  await Promise.all([first, b.on()]);
+  for (let i = 0; i < 2; i++) { assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); }
+  assert.deepEqual((await a.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta']);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta']);
+  clock.t += 5000; await a.local.set({ writerWords: ['Alpha', 'Beta', 'Later'] });
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await b.run()).ok);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Alpha', 'Beta', 'Later'], 'A\'s later edit reaches B');
+  clock.t += 5000; await b.local.set({ writerWords: ['Beta', 'Later'] });
+  assert.ok((await b.run({ push: true })).ok); assert.ok((await a.run()).ok);
+  assert.deepEqual((await a.local.get('writerWords')).writerWords, ['Beta', 'Later'], 'and B\'s reaches A');
+  noDeletes(drive);
+});
+
+test('a second device joining keeps its own Better To Do tasks for the same account beside the folder\'s', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await a.local.set({ [TODO]: todo('Reading') });
+  assert.ok((await a.on()).ok);
+  await b.local.set({ [TODO]: T.clean({ tasks: [{ id: 'tLab', title: 'Lab report', done: false, at: 2000 }], items: { 'task:tLab': { subs: [{ id: 's1', title: 'Graphs', done: true }] } } }) });
+  assert.ok((await b.on()).ok);
+  const titles = async (d) => (await d.local.get(TODO))[TODO].tasks.map((x) => x.title).sort();
+  assert.deepEqual(await titles(b), ['Lab report', 'Reading'], 'nothing of B\'s wiped');
+  assert.deepEqual((await b.local.get(TODO))[TODO].items['task:tLab'].subs[0].title, 'Graphs', 'with its steps');
+  assert.ok((await a.run()).ok);
+  assert.deepEqual(await titles(a), ['Lab report', 'Reading'], 'and A gets B\'s');
+});
