@@ -213,6 +213,12 @@ test('a request stops if Drive was connected to another account, or disconnected
   assert.deepEqual(await run(['a@school.edu', 'b@school.edu']), { r: 'connect', log: [] });
   assert.deepEqual(await run(['a@school.edu', null]), { r: 'connect', log: [] });
   assert.deepEqual(await run([null]), { r: 'connect', log: [] });
+  // Disconnected while the token was on its way: nothing sent.
+  let gone = 'a@school.edu';
+  const sent = [];
+  const late = D.create({ fetch: async (url) => { sent.push(url); return json(200, FILES.docx); }, token: async () => { gone = null; return 'tok'; }, account: async () => gone });
+  assert.equal(await late.meta(FILES.docx.id).then(() => 'ok', (e) => e.why), 'connect');
+  assert.deepEqual(sent, []);
   // Mid-upload: the save's update finds another account and sends nothing.
   let who = 'a@school.edu';
   const log = [];
