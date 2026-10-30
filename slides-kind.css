@@ -17,6 +17,7 @@
 .gs-go { background: var(--gz-accent); color: var(--gz-accent-ink); }
 .gs-go:hover:not(:disabled) { background: var(--gz-accent-hi, var(--gz-accent)); color: var(--gz-accent-ink); }
 .gs-ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gs-more .gs-ico { stroke-width: 3.2; }
 .gs-at { min-width: 64px; text-align: center; font-size: 13px; color: var(--gz-ink-muted); font-variant-numeric: tabular-nums; }
 .gs-zoom { min-width: 56px; font-variant-numeric: tabular-nums; }
 .gs-find { display: flex; align-items: center; gap: 2px; flex: 0 1 300px; min-width: 150px; }
