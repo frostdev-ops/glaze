@@ -194,3 +194,23 @@ test('VALUETOTEXT and ARRAYTOTEXT with Microsoft\'s data', () => {
     ['ARRAYTOTEXT(A2:B4,2)', '#VALUE!'],
   ]);
 });
+
+// Current Excel compatibility version 2 counts surrogate pairs once; B functions retain UTF-16/SBCS positions.
+test('FIND, SEARCH and REPLACE preserve Unicode characters and distinguish byte functions', () => {
+  cases(book(), [
+    ['FIND("a","😀a")', 2], ['SEARCH("a","😀a")', 2], ['FINDB("a","😀a")', 3], ['SEARCHB("a","😀a")', 3],
+    ['REPLACE("😀a",2,1,"x")', '😀x'], ['REPLACE("😀a",1,1,"x")', 'xa'], ['SEARCH("?a","😀a")', 1],
+  ]);
+});
+test('FIND accepts an empty target through the position after the last character', () => {
+  cases(book(), [['FIND("","")', 1], ['FIND("","abc",4)', 4], ['FIND("","abc",5)', '#VALUE!'], ['SEARCH("","")', '#VALUE!']]);
+});
+test('TEXTBEFORE validates instance zero even with empty input; case folding preserves offsets', () => {
+  cases(book(), [['TEXTBEFORE("","x",0)', '#VALUE!'], ['TEXTAFTER("İabXcd","x",1,1)', 'cd']]);
+});
+test('TEXTSPLIT distinguishes invalid text from an empty result', () => {
+  cases(book(), [['TEXTSPLIT("",",")', '#VALUE!'], ['TEXTSPLIT(",,",",",,TRUE)', '#CALC!']]);
+});
+test('DOLLAR preserves a negative sign when rounded to zero; NUMBERVALUE overflow is VALUE', () => {
+  cases(book(), [['DOLLAR(-0.001)', '($0.00)'], ['FIXED(-0.001)', '0.00'], ['NUMBERVALUE("1e309")', '#VALUE!']]);
+});
