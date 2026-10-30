@@ -10,6 +10,7 @@ const B = require('./browsers.js');
 const IDS = require('./ids.js');
 const L = require('./launcher.js');
 const I = require('./install.js');
+const N = require('./nodes.js');
 
 const MIN_NODE = 18;
 const FIX = 'Run: npx glaze-mcp setup';
@@ -20,46 +21,11 @@ const run = async (o = {}) => {
   const rows = [];
   const add = (level, what, detail) => rows.push({ level, what, detail });
   const done = () => ({ ok: !rows.some((r) => r.level === 'fail'), rows });
-  const modes = ctx.platform !== 'win32' && process.platform !== 'win32';
+  // Anyone who can write a launcher runs code as this user when the browser starts it.
+  const { modes, loose, path: trustedPath } = N.trust(ctx.platform, FIX, { fs, process });
   const version = I.versionOf(ctx.src);
   add('info', 'glaze-mcp', `${version} on Node ${process.version}`);
 
-  // Anyone who can write a launcher runs code as this user when the browser starts it.
-  const loose = (f, st) => {
-    if (!modes) return null;
-    if (st.uid !== 0 && st.uid !== process.getuid()) return `${f} belongs to another user`;
-    // Homebrew uses user-owned 0775 folders with macOS's admin group. Only directories may share that write bit.
-    const group = st.gid === process.getgid() || ctx.platform === 'darwin' && st.gid === 80;
-    if ((st.mode & 0o002) || (st.mode & 0o020) && !(st.isDirectory() && group)) {
-      return `${f} can be changed by other users (mode ${(st.mode & 0o777).toString(8)}); chmod go-w it`;
-    }
-    return null;
-  };
-  // Check every ancestor of an execution path, including both sides of symlinks (e.g. a stable Node launcher).
-  // Root-owned sticky temp directories protect each checked child's name; an ordinary writable ancestor does not.
-  const trustedPath = (file, links = 0) => {
-    if (!modes) return null;
-    if (!path.isAbsolute(file)) return `${file} must be absolute`;
-    if (links > 40) return `${file} has too many symlinks`;
-    const root = path.parse(file).root, names = file.slice(root.length).split(path.sep).filter(Boolean);
-    let part = root;
-    for (let i = -1; i < names.length; i++) {
-      if (i >= 0) part = path.join(part, names[i]);
-      let st;
-      try { st = fs.lstatSync(part); } catch { return `${part} is missing. ${FIX}`; }
-      if (st.uid !== 0 && st.uid !== process.getuid()) return `${part} belongs to another user`;
-      if (st.isSymbolicLink()) {
-        const link = fs.readlinkSync(part), target = path.isAbsolute(link) ? link : `${path.dirname(part)}${path.sep}${link}`;
-        // Resolve links before '..', as the OS does; lexical normalization could check a different executable.
-        return trustedPath([target, ...names.slice(i + 1)].join(path.sep), links + 1);
-      }
-      const sticky = i < names.length - 1 && st.isDirectory() && st.uid === 0 && (st.mode & 0o1000);
-      const bad = sticky ? null : loose(part, st);
-      if (bad) return bad;
-      if (i < names.length - 1 && !st.isDirectory()) return `${part} is not a folder`;
-    }
-    return null;
-  };
   for (const [what, dir] of [['Folder', ctx.root], ['Launchers', ctx.hosts]]) {
     let st;
     try { I.safePath(dir); } catch (e) { add('fail', what, e.message); return done(); }
@@ -123,6 +89,8 @@ const run = async (o = {}) => {
     const lLoose = loose(launcher, lst);
     if (lLoose) out.push(lLoose);
     if (modes && !(lst.mode & 0o100)) out.push(`${launcher} is not executable. ${FIX}`);
+    // Written by Claude Desktop's bundle when it found no Node.js; it reopens with one, or setup runs with this one.
+    if (l.node === null) return [...out, `${N.MISSING}, then reopen Claude or run: npx glaze-mcp setup`];
     const nodeBad = trustedPath(l.node);
     if (nodeBad) return [...out, nodeBad];
     let nst;

@@ -24,7 +24,8 @@ const CLIENT = { name: 'claude-ai', version: '1.0.0' };
 const ID = 'abcdefghijklmnop';
 const ROW = ['at', 'app', 'tool', 'group', 'kind', 'outcome', 'ms'];
 const tick = () => new Promise((res) => setImmediate(res));
-const until = async (f, what = 'condition') => { for (let i = 0; i < 200; i++) { if (f()) return; await tick(); } assert.fail(`timed out waiting for ${what}`); };
+// By the clock, not a count of turns: the app id's SHA-256 runs on libuv's threadpool, which a busy machine answers late.
+const until = async (f, what = 'condition') => { for (const end = Date.now() + 5000; Date.now() < end;) { if (f()) return; await tick(); } assert.fail(`timed out waiting for ${what}`); };
 const queue = () => { let last = Promise.resolve(); return (fn) => { const run = last.then(fn); last = run.catch(() => {}); return run; }; };
 const text = (r) => r.content[0].text;
 

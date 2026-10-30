@@ -18,14 +18,15 @@ const slice = (file, from, to) => {
 
 // The attempt's frame: its init context (features/writer.js mount's paper, swap's recovery) and the one it has once
 // Ultra's context arrives (lib/writer-context-assignment.js send: { ...box.context, ...build() }).
-const frame = async () => {
+const frame = async (host = HOST) => {
+  const origin = `https://${host}`;
   const later = (fn, ms, ...a) => { const t = setTimeout(fn, ms, ...a); t.unref(); return t; };
   const paperOf = vm.runInNewContext(`${slice('features/writer.js', '  const paperOf = async', '  let seq = 0;')}; paperOf`,
-    { U: () => U, X: { account: async () => '_900_1' }, location: { host: HOST, origin: ORIGIN, pathname: ATTEMPT }, setTimeout: later });
+    { U: () => U, X: { account: async () => '_900_1' }, location: { host, origin, pathname: ATTEMPT }, setTimeout: later });
   const paper = await paperOf();
-  const init = { prompt: 'Essay 2 Write 1,200 words on memory in Beloved.', ...(paper && { paper }), recovery: ORIGIN + ATTEMPT };
+  const init = { prompt: 'Essay 2 Write 1,200 words on memory in Beloved.', ...(paper && { paper }), recovery: origin + ATTEMPT };
   const column = (u) => { throw new Error(`unexpected ${u}`); };
-  const built = await A.build({ school: HOST, path: ATTEMPT, url: ORIGIN + ATTEMPT, origin: ORIGIN, uid: async () => '_900_1',
+  const built = await A.build({ school: host, path: ATTEMPT, url: origin + ATTEMPT, origin, uid: async () => '_900_1',
     me: async () => ({ id: '_900_1', userName: 'synthetic', givenName: 'Alex', familyName: 'Rivera' }), courses: async () => members.results, rows: async () => grades.results,
     get: async (u) => (u === '/learn/api/v1/courses/_101_1/contents/_7_1' ? item : column(u)), instructions: async () => 'Essay 2\nWrite 1,200 words on memory in Beloved.', R });
   return { init, full: { ...init, ...built } };
@@ -68,4 +69,59 @@ test('keyOf: a whole paper names the store; a partial one leaves the context\'s 
   assert.equal(S.keyOf({ ...own, paper: { school: HOST, user: '_900_1', course: '_101_1', content: '_7_1' } }), 'writer:sources:bb.school.test|_900_1|_101_1|_7_1');
   assert.equal(S.keyOf({ ...own, paper: { school: HOST, user: '_900_1', course: '_101_1' } }), 'writer:sources:local|local|papers|x');
   assert.equal(S.keyOf({ paper: null, kind: 'assignment', course: { id: '_101_1' } }), null, 'without the student nothing is saved under a guess');
+});
+
+
+test('an assignment saved with a port reopens the encoded host key from Documents', async () => {
+  const { init, full } = await frame('bb.school.test:8443'), key = PA.keyOf(full.paper), data = {};
+  const store = PA.open({ get: async (k) => ({ [k]: data[k] }), set: async (v) => Object.assign(data, v) });
+  await store.save(key, recordOf(key, full));
+  const ctx = await standalone(key, { [key]: await store.get(key) });
+  assert.equal(S.keyOf(init), 'writer:sources:bb.school.test%3A8443|_900_1|_101_1|_7_1');
+  assert.equal(S.keyOf(ctx), S.keyOf(init));
+  assert.ok(ctx.paper, 'a current saved assignment never falls through to the local key');
+});
+
+test('source key parts encode separators and unicode once without collisions', () => {
+  const parts = { school: 'https://bb.school.test:8443', user: 'a|b', course: '%2F', item: 'é?#' };
+  const key = S.key(parts);
+  assert.deepEqual(key.slice(S.PREFIX.length).split('|').map(decodeURIComponent), Object.values(parts));
+  assert.notEqual(S.key({ ...parts, user: 'a', course: 'b|%2F' }), key);
+});
+
+test('Documents paper identity is stripped from AI context', async () => {
+  const W = require('../lib/ai/tasks/writer-context.js');
+  const C = require('../lib/ai/tasks/writer-complete.js');
+  const { full } = await frame(), key = PA.keyOf(full.paper), ctx = await standalone(key, { [key]: recordOf(key, full) });
+  const { paper, ...without } = ctx;
+  assert.deepEqual(W.clean(ctx), W.clean(without));
+  const input = C.task.input({ before: 'When memory returns it', mode: 'paper', kind: 'paper', context: ctx });
+  assert.ok(input);
+  assert.doesNotMatch(JSON.stringify(input.context), /bb\.school|_900_1|_101_1|_7_1|"paper"/);
+});
+
+test('test boxes still have no source key', async () => {
+  // A test leaves contextOf before touching the editor (lib/writer-ultra.js); a message's key comes with its context
+  // (test/writer-discussion-sources.test.js).
+  for (const kind of ['test']) {
+    const context = U.contextOf(null, kind);
+    assert.equal(S.keyOf(context), null);
+    let writes = 0;
+    assert.equal(await S.save(S.keyOf(context), [{ type: 'book', title: 'A source' }], { set: async () => writes++, remove: async () => writes++ }), false);
+    assert.equal(writes, 0);
+  }
+});
+
+test('source saves enforce MAX and leave stored sources intact when quota refuses', async () => {
+  const k = S.keyOf((await frame()).init), data = {}; let fail = false;
+  const area = { get: async (key) => ({ [key]: structuredClone(data[key]) }),
+    set: async (v) => { if (fail) throw new Error('QUOTA_BYTES'); Object.assign(data, structuredClone(v)); },
+    remove: async (key) => { if (fail) throw new Error('QUOTA_BYTES'); delete data[key]; } };
+  assert.equal(await S.save(k, Array.from({ length: S.MAX.sources + 1 }, (_, n) => ({ id: `source-${n}`, title: `Book ${n}` })), area), true);
+  assert.equal((await S.load(k, area)).length, S.MAX.sources);
+  const before = structuredClone(data);
+  fail = true;
+  assert.equal(await S.save(k, [{ title: 'Replacement' }], area), false);
+  assert.equal(await S.save(k, [], area), false);
+  assert.deepEqual(data, before);
 });

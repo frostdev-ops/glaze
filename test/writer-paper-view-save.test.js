@@ -21,22 +21,35 @@ test('full → compact refuses to project when the paper or its view version can
   }
 });
 
-test('compact flush saves before acknowledging and holds editing through the native click; a timeout ignores late saves', async () => {
-  for (const timeout of [false, true]) {
-    const messages = [], doc = {}, view = { props: { editable: () => true }, state: { doc }, setProps(o) { Object.assign(this.props, o); } };
+// The compact bar's line and the hold, as writer-paper.js has them (from the line's element to setView), over stand-ins.
+const flushCtx = ({ save, project }) => {
+  const messages = [], doc = {}, view = { props: { editable: () => true }, state: { doc }, setProps(o) { Object.assign(this.props, o); } };
+  const el = (cls = '') => ({ inert: false, textContent: '', title: '', dataset: {}, children: [], classList: { contains: (c) => cls.split(' ').includes(c) }, toggleAttribute(n, on) { this[n] = on; }, focus() { this.focused = (this.focused || 0) + 1; }, getClientRects: () => [1] });
+  const bar = el('gw-bar'), body = el(), full = el('gp-full');
+  const ctx = vm.createContext({ view, compact: true, loaded: true, holding: false, switching: null, flushing: null, projecting: false,
+    root: { inert: false }, boxEl: { children: [body, bar] }, host: { say: (m) => messages.push(m) }, save, project, setView() {}, queueMicrotask,
+    h: () => el(), t: (k) => k, switches: [full] });
+  vm.runInContext(`${source.slice(source.indexOf('    const said = boxEl ?'), start)}\nglobalThis.begin = flush; globalThis.end = resume; globalThis.line = () => said; globalThis.soon = projectSoon;`, ctx);
+  bar.children = [ctx.line(), full];
+  return { ctx, messages, view, body, bar, full, line: ctx.line() };
+};
+const PROJECTED = { html: '<p>Last edit.</p>', text: 'Last edit.', delta: [{ insert: 'Last edit.\n' }] };
+
+test('compact flush: the save first, however long; the box held and the bar saying Saving… until the page answers', async () => {
+  for (const early of [false, true]) {
     let release;
     const saved = new Promise((r) => { release = r; });
-    const ctx = vm.createContext({ view, compact: true, loaded: true, holding: false, switching: null, flushing: null,
-      root: { inert: false }, boxEl: { inert: false }, host: { say: (m) => messages.push(m) }, save: () => saved,
-      project: () => ({ html: '<p>Last edit.</p>', text: 'Last edit.', delta: [{ insert: 'Last edit.\n' }] }), setView() {} });
-    vm.runInContext(source.slice(source.indexOf('    const resume = (request)'), start) + '\nglobalThis.begin = flush; globalThis.end = resume;', ctx);
-    const pending = ctx.begin('request');
+    const { ctx, messages, view, body, full, line } = flushCtx({ save: () => saved, project: () => PROJECTED });
+    const pending = ctx.begin('request', 'submit');
     assert.equal(view.props.editable(), false);
     assert.equal(ctx.root.inert, true);
+    assert.equal(body.inert && full.inert, true, 'the box and the bar\'s controls take no input');
+    assert.equal(line.inert, false, 'the bar\'s line stays out of the hold, so it is read out');
+    assert.equal(line.textContent, 'Saving…');
     assert.equal(messages.length, 0, 'no acknowledgement before the save');
-    if (timeout) ctx.end('request');
+    if (early) ctx.end('request'); // the page let go first (its frame went, or the view changed)
     release({}); await pending;
-    if (timeout) assert.equal(messages.length, 0, 'timed-out saves cannot trigger a native click');
+    if (early) assert.equal(messages.length, 0, 'a save the page no longer waits on never sends Ultra\'s button');
     else {
       assert.equal(messages[0].ok, true);
       assert.equal(view.props.editable(), false, 'editing remains held until the parent dispatches the click');
@@ -44,8 +57,43 @@ test('compact flush saves before acknowledging and holds editing through the nat
     }
     assert.equal(view.props.editable(), true);
     assert.equal(ctx.root.inert, false);
-    assert.equal(ctx.boxEl.inert, false);
+    assert.equal(body.inert || full.inert, false);
+    assert.equal(line.textContent, '', 'Saving… goes once Ultra\'s button has gone');
   }
+});
+
+test('compact flush: why Ultra\'s button didn\'t go stays in the bar — not saved, too long (Full writer offered and focused), or the page\'s reason', async () => {
+  const notSaved = flushCtx({ save: async () => null, project: () => PROJECTED });
+  await notSaved.ctx.begin('a', 'submit');
+  assert.deepEqual({ ...notSaved.messages[0] }, { type: 'compact:flushed', request: 'a', ok: false, reason: 'save' });
+  assert.equal(notSaved.line.textContent, 'The paper could not be saved. Nothing was submitted.');
+  assert.equal(notSaved.view.props.editable(), true, 'the box is the student\'s again at once');
+  const close = flushCtx({ save: async () => null, project: () => PROJECTED });
+  await close.ctx.begin('b', 'save');
+  assert.equal(close.line.textContent, 'Not saved. Try again in a moment.', 'Save and Close says it in its own words');
+  const long = flushCtx({ save: async () => ({}), project: () => null });
+  await long.ctx.begin('c', 'submit');
+  assert.deepEqual({ ...long.messages[0] }, { type: 'compact:flushed', request: 'c', ok: false, reason: 'long' });
+  assert.equal(long.line.textContent, 'Too long for Ultra’s text box. Use Full writer.');
+  assert.equal(long.full['data-offer'], true);
+  assert.equal(long.full.focused, 1);
+  const page = flushCtx({ save: async () => ({}), project: () => PROJECTED });
+  await page.ctx.begin('d', 'submit');
+  page.ctx.end('d', 'text');
+  assert.equal(page.line.textContent, 'The text didn’t go into Ultra’s text box. Nothing was submitted.');
+  // The next edit that fits clears it; a paper past the limit says so as it is typed, and nothing goes to Ultra's box.
+  let fits = true;
+  const typing = flushCtx({ save: async () => ({}), project: () => (fits ? PROJECTED : null) });
+  typing.ctx.soon(); await new Promise(setImmediate);
+  assert.equal(typing.messages.at(-1).type, 'change');
+  fits = false;
+  typing.ctx.soon(); await new Promise(setImmediate);
+  assert.equal(typing.line.textContent, 'Too long for Ultra’s text box. Use Full writer.');
+  assert.equal(typing.messages.length, 1, 'no change goes to Ultra past the limit');
+  fits = true;
+  typing.ctx.soon(); await new Promise(setImmediate);
+  assert.equal(typing.line.textContent, '');
+  assert.equal(typing.full['data-offer'], false);
 });
 
 test('a view preference already stored by another frame does not leave an unmatched own-change marker', async () => {
