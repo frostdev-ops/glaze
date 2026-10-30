@@ -328,3 +328,29 @@ test('Excel checks negative combinatorial arguments before truncating', () => {
     ['COMBIN(-0.5,0)', '#NUM!'], ['COMBIN(3,-0.5)', '#NUM!'], ['COMBIN(0.5,0.9)', 1],
   ]);
 });
+
+// Excel 16.114.1: LARGE rounds k up, SMALL truncates it; both reject k below 1 before rounding.
+test('Excel order-statistic and quartile fractional boundaries', () => {
+  cases(book(), [
+    ['LARGE({1,2,3},1.5)', 2], ['SMALL({1,2,3},1.5)', 1],
+    ['LARGE({1,2,3},0.5)', '#NUM!'], ['SMALL({1,2,3},0.5)', '#NUM!'],
+    ['QUARTILE.INC({1,2,3,4},-0.5)', '#NUM!'], ['QUARTILE.INC({1,2,3,4},4.7)', 4],
+    ['QUARTILE.EXC({1,2,3,4},3.7)', 3.75],
+  ]);
+});
+
+test('statistical extrema and order statistics accept the 250000-cell limit', () => {
+  const xs = Array.from({ length: M.CAP.cells }, (_, i) => [(i * 137) % M.CAP.cells]);
+  const call = (name, args) => C.fn(name).fn(args, {});
+  assert.equal(call('MAXA', [xs]), M.CAP.cells - 1);
+  assert.equal(call('MINA', [xs]), 0);
+  for (const k of [1, 2, 12345, 125000, M.CAP.cells]) {
+    assert.equal(call('LARGE', [xs, k]), M.CAP.cells - k);
+    assert.equal(call('SMALL', [xs, k]), k - 1);
+  }
+  const ctx = { read: (sheet, r, c) => sheet.rows.get(r).get(c).v };
+  const sheet = { rows: new Map(xs.map(([v], r) => [r, new Map([[0, { v }]])])) };
+  const range = new C.lib.Ref(sheet, 0, 0, xs.length - 1, 0);
+  assert.equal(C.fn('MAXIFS').fn([range, range, '>=0'], ctx), M.CAP.cells - 1);
+  assert.equal(C.fn('MINIFS').fn([range, range, '>=0'], ctx), 0);
+});
