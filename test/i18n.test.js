@@ -64,7 +64,7 @@ const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
 const JS = ['sharing/quick.js', 'features/welcome.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-pointer.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/editor-navbar.js', 'lib/editor-ai.js', 'lib/editor-writer.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 // Glaze Writer's frame (writer.html, papers.html) and the libraries whose words it shows. lib/writer-docx.js's t() reads
 // a run's marks, so only its warnings and refusals are words (below).
-const WRITER = ['writer.js', 'papers.js', ...fs.readdirSync(root).filter((f) => /^writer-.+\.js$/.test(f)), ...fs.readdirSync(path.join(root, 'lib')).filter((f) => /^writer-.+\.js$/.test(f) && f !== 'writer-docx.js').map((f) => `lib/${f}`)];
+const WRITER = ['writer.js', 'papers.js', 'slides-kind.js', ...fs.readdirSync(root).filter((f) => /^writer-.+\.js$/.test(f)), ...fs.readdirSync(path.join(root, 'lib')).filter((f) => /^writer-.+\.js$/.test(f) && f !== 'writer-docx.js').map((f) => `lib/${f}`)];
 JS.push(...WRITER);
 // The capitalised strings of a `const NAME = …;` table (its labels and messages, not its ids, CSS or numbers).
 const tableOf = (f, ...names) => {
