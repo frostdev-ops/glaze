@@ -175,15 +175,15 @@ test('frames: a chartex chart, 3-D, a second value axis, a missing part', async 
     + '<xdr:oneCellAnchor><xdr:from><xdr:col>7</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="4572000" cy="2743200"/><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="3" name="Chart 2"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId2"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor>'
     + '<xdr:absoluteAnchor><xdr:pos x="952500" y="95250"/><xdr:ext cx="952500" cy="476250"/><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="4" name="Chart 3"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId9"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:absoluteAnchor>'
     + '<xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>20</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>24</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="5" name="Picture"/></xdr:nvPicPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>';
-  const bar3d = FX.CHARTS.column.replace(/barChart>/g, 'bar3DChart>');
+  const line3d = FX.CHARTS.line.replace(/lineChart>/g, 'line3DChart>');
   const { wb } = await open({ kinds: ['column', 'line'], over: {
     'xl/drawings/drawing1.xml': drawing,
     'xl/drawings/_rels/drawing1.xml.rels': FX.rels([['rId1', 'http://schemas.microsoft.com/office/2014/relationships/chartEx', '../charts/chartEx1.xml'], ['rId2', 'chart', '../charts/chart1.xml']]),
-    'xl/charts/chartEx1.xml': ex, 'xl/charts/chart1.xml': bar3d,
+    'xl/charts/chartEx1.xml': ex, 'xl/charts/chart1.xml': line3d,
   } });
   const list = drawn(wb);
   assert.equal(list.length, 3, 'the picture is not a chart');
-  assert.deepEqual(list.map((c) => [c.data.kind, c.data.type, c.data.title]), [['frame', 'Waterfall chart', 'Cash flow'], ['frame', '3-D chart', 'Sales by month'], ['frame', 'Chart', null]]);
+  assert.deepEqual(list.map((c) => [c.data.kind, c.data.type, c.data.title]), [['frame', 'Waterfall chart', 'Cash flow'], ['frame', '3-D line chart', 'Trend'], ['frame', 'Chart', null]]);
   assert.deepEqual(list[0].anchor.from, { col: 1, colOff: 1, row: 1, rowOff: 0 }, '9525 EMU is a pixel');
   assert.deepEqual([list[1].anchor.kind, list[1].anchor.ext], ['oneCellAnchor', { w: 480, h: 288 }]);
   assert.deepEqual([list[2].anchor.pos, list[2].anchor.ext], [{ x: 100, y: 10 }, { w: 100, h: 50 }]);
