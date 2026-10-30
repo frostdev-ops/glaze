@@ -49,3 +49,42 @@ test('keep: newest first, at most five, only the outline and its name (no pictur
   assert.deepEqual(Object.keys(list[0]).sort(), ['at', 'data', 'id', 'kind', 'name']);
   assert.deepEqual(S.keep(list, { id: 's4', at: 9, name: 'again', kind: 'name', data: 'BBBB' }).map((x) => x.id), ['s4', 's6', 's5', 's3', 's2'], 'the same one again moves to the front');
 });
+
+const UI = require('./helpers/pdf-ui.cjs');
+const signUI = (t) => {
+  const document = UI.install(t);
+  const originalChrome = global.chrome;
+  global.chrome = { storage: { local: { get: async () => ({}), set: async () => {} } } };
+  t.after(() => { if (originalChrome === undefined) delete global.chrome; else global.chrome = originalChrome; });
+  let removed = 0, inserted = 0, ended = 0;
+  const editor = { remove: () => removed++, getFromImage: () => ({ newCurves: drawn.outlines, ...drawn }), addSignature: () => inserted++ };
+  const manager = S.manager({ P: {}, t: (s) => s, h: UI.h, btn: UI.btn, done: () => ended++ });
+  manager.getSignature({ editor });
+  return { manager, dialog: document.body.children[0], counts: () => ({ removed, inserted, ended }) };
+};
+test('cancelling a signature clears busy and removes the empty editor before a leave flush', async (t) => {
+  const { manager, dialog, counts } = signUI(t);
+  // Native HTMLDialogElement queues its close event; navigation must not depend on that later event.
+  dialog.close = () => { dialog.open = false; setImmediate(() => dialog.dispatchEvent(new Event('close'))); };
+  manager.cancel();
+  assert.equal(manager.busy(), false, 'the leave flush must be allowed immediately');
+  assert.deepEqual(counts(), { removed: 1, inserted: 0, ended: 1 });
+  await UI.tick();
+  assert.deepEqual(counts(), { removed: 1, inserted: 0, ended: 1 }, 'the queued close is idempotent');
+});
+test('closing a signature releases the picture, including a decode delivered after closing', async (t) => {
+  for (const late of [false, true]) {
+    const { manager, dialog } = signUI(t), decoded = UI.deferred(); let closed = 0;
+    const previous = global.createImageBitmap;
+    global.createImageBitmap = () => decoded.promise;
+    t.after(() => { if (previous === undefined) delete global.createImageBitmap; else global.createImageBitmap = previous; });
+    const file = dialog.querySelector('.gq-sign-file');
+    file.files = [{}]; file.value = 'signature.png';
+    file.dispatchEvent(new Event('change'));
+    if (!late) { decoded.resolve({ close: () => closed++ }); await UI.tick(); }
+    manager.cancel();
+    if (late) { decoded.resolve({ close: () => closed++ }); await UI.tick(); }
+    assert.equal(closed, 1, `bitmap released (late=${late})`);
+    assert.equal(file.value, '', 'no selected picture remains');
+  }
+});
