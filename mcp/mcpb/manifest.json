@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "glaze-mcp",
   "display_name": "Glaze",
-  "version": "0.1.0",
+  "version": "4.0.0",
   "description": "Lets Claude use Glaze in your browser: your courses, to-dos, grades, assignments and Writer documents.",
   "author": {
     "name": "FrostDev",

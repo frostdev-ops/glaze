@@ -10,7 +10,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { appleApp, appleBuild, amo, chromeStatus, submitChrome, submitFirefox, submitApple, syncFirefoxListing, previewAppleListing } from './store-api.mjs';
 import { readListings, writeChromeKit, describeChanges } from './store-listings.mjs';
-import { publicPreflight, preparePublic, publishPublic, withIsolatedEnv, artifactPath } from './public-release.mjs';
+import { publicPreflight, preparePublic, publishPublic, withIsolatedEnv, artifactPath, publicStores } from './public-release.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // The one place the Firefox linter's version is chosen. npx runs it (and whatever npm resolves for its dependencies) with
@@ -176,6 +176,21 @@ export async function run(command, args, cwd, env, log) {
     });
   } finally { if (fd !== null) fs.closeSync(fd); }
 }
+// The helper and its Claude Desktop bundle carry Glaze's version: the bundle is glaze-mcp-<version>.mcpb on the release.
+export function helperVersions(read, version) {
+  for (const file of ['mcp/package.json', 'mcp/mcpb/manifest.json']) {
+    const found = JSON.parse(read(file)).version;
+    if (found !== version) throw new Error(`${file} is ${found}; manifest.json is ${version}.`);
+  }
+}
+// pack-mcpb.js validates, packs and unpacks the bundle in the clone. It runs the MCPB CLI through npx, so it gets the
+// isolated environment; a failed validate exits nonzero and stops the build.
+export async function buildMcpb(source, out, env, version) {
+  await withIsolatedEnv(env, isolated => run('node', ['mcp/scripts/pack-mcpb.js'], source, isolated, path.join(out, 'logs/mcpb-pack.log')));
+  const dest = path.join(out, `glaze-mcp-${version}.mcpb`);
+  fs.copyFileSync(path.join(source, 'dist', path.basename(dest)), dest);
+  return dest;
+}
 function notes(source) {
   const version = json(path.join(source, 'manifest.json')).version;
   const text = fs.readFileSync(path.join(source, 'CHANGELOG.md'), 'utf8');
@@ -203,6 +218,7 @@ async function build(opt, env, manifest, save, out) {
       const dest = path.join(out, `glaze-v${manifest.version}.zip`);
       fs.copyFileSync(path.join(dist, path.basename(dest)), dest); artifact('chrome', dest);
     }
+    if (publicStores(opt.stores)) artifact('mcpb', await buildMcpb(source, out, env, manifest.version));
     if (opt.stores.includes('firefox')) {
       const firefox = path.join(temp, 'firefox');
       await run('git', ['clone', '--quiet', '--shared', '--no-checkout', root, firefox], root, env);
@@ -243,6 +259,7 @@ async function build(opt, env, manifest, save, out) {
 export function verify(manifest, out) {
   if (!manifest.ready) throw new Error('Packages are incomplete. Run build or release first.');
   const required = manifest.stores.flatMap(store => store === 'chrome' ? ['chrome'] : store === 'firefox' ? ['firefox', 'firefoxSource'] : manifest.applePlatforms);
+  if (publicStores(manifest.stores)) required.push('mcpb');
   for (const key of required) {
     const file = requireValue(manifest.files[key], `Artifact ${key}`);
     if (digest(artifactPath(out, file.path)) !== file.sha256) throw new Error(`Checksum changed for ${file.path}; refusing upload.`);
@@ -308,13 +325,14 @@ export async function main(args = process.argv.slice(2)) {
   const show = file => { try { return git(['show', `${commit}:${file}`]); } catch { throw new Error(`${file} is missing from ${commit.slice(0, 12)}.`); } };
   const listings = ['release', 'build', 'submit', 'plan', 'listings'].includes(opt.command) ? readListings(show, version, opt.stores) : null;
   if (opt.command === 'listings') { await previewListings(opt, env, listings, version); return; }
+  if (['release', 'build', 'plan'].includes(opt.command) && publicStores(opt.stores)) helperVersions(show, version);
   // Only a run that is about to build needs the current branch; one resuming saved packages keeps the base they were built on.
   const saved = path.join(out, 'release.json');
   const building = ['release', 'build'].includes(opt.command) && !(fs.existsSync(saved) && json(saved).ready);
   const firefoxBase = opt.stores.includes('firefox') ? resolveFirefoxBase(opt.firefoxRef, { fetch: building }) : null;
   console.log(`Glaze ${version}, committed source ${commit}\nStores: ${opt.stores.join(', ')}\nApple platforms: ${opt.applePlatforms.join(', ')}\nFirefox compatibility base: ${firefoxBase || '(not selected)'}\nOutput: ${out}`);
   if (opt.command === 'plan') {
-    console.log(`Full release: verify prerequisites; build/store checks; universal notarized DMG; signed feed; store submissions; push main and immutable v${version}; wait Package CI; publish verified GitHub assets; prepare/test/push frostdev.io; wait Website CI; deploy and verify live pages/feed.\nWebsite checkout: ${redact(env.FROSTDEV_SITE_DIR)}\nNo builds, network calls, uploads, or branch changes performed.`); return;
+    console.log(`Full release: verify prerequisites; build/store checks; Claude Desktop bundle; universal notarized DMG; signed feed; store submissions; push main and immutable v${version}; wait Package CI; publish verified GitHub assets; prepare/test/push frostdev.io; wait Website CI; deploy and verify live pages/feed.\nWebsite checkout: ${redact(env.FROSTDEV_SITE_DIR)}\nNo builds, network calls, uploads, or branch changes performed.`); return;
   }
   if (['release', 'publish', 'doctor'].includes(opt.command)) publicPreflight(opt, env, root, { version, sourceCommit: commit });
   if (opt.command === 'doctor') { if (!await doctor(opt, env)) process.exitCode = 1; return; }
