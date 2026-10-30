@@ -123,6 +123,23 @@ test('HTML paste retains number formats on Google Sheets numeric values and form
   assert.equal(row.get(1).f, 'A1*2');
 });
 
+test('plain text and HTML formula paste use dynamic evaluation and keep dependencies through undo and redo', () => {
+  for (const html of ['', '<table><tr><td data-sheets-formula="=SUM((R1C1:R5C1&gt;2)*R1C2:R5C2)">0</td></tr></table>']) {
+    const wb = M.workbook(), sh = wb.sheets[0];
+    for (let r = 0; r < 5; r++) sh.rows.set(r, new Map([[0, { t: 'n', v: r + 1 }], [1, { t: 'n', v: 10 }]]));
+    const f = frame({ wb });
+    f.key('Tab'); f.key('Tab');
+    f.fire(f.el('gx-grid'), 'paste', { clipboardData: { getData: (kind) => kind === 'text/html' ? html : '=SUM((A1:A5>2)*B1:B5)' } });
+    assert.deepEqual(sh.rows.get(0).get(2), { t: 'n', v: 30, f: html ? 'SUM(($A$1:$A$5>2)*$B$1:$B$5)' : 'SUM((A1:A5>2)*B1:B5)', a: 'C1', cm: '1' });
+    f.key('z', { ctrlKey: true }); assert.equal(sh.rows.get(0).get(2), undefined);
+    f.key('y', { ctrlKey: true }); assert.equal(sh.rows.get(0).get(2).v, 30);
+    f.key('ArrowLeft'); f.key('ArrowDown'); f.key('ArrowDown'); f.type('20'); f.key('Enter');
+    assert.equal(sh.rows.get(0).get(2).v, 40, 'a precedent outside the formula row recalculates it');
+    f.key('z', { ctrlKey: true }); assert.equal(sh.rows.get(0).get(2).v, 30);
+    f.key('y', { ctrlKey: true }); assert.equal(sh.rows.get(0).get(2).v, 40);
+  }
+});
+
 test('the last shown sheet cannot be deleted while every other sheet is hidden', () => {
   const wb = M.workbook(), hidden = M.sheet('Hidden', 2); hidden.keep.hidden = true; wb.sheets.push(hidden);
   const f = frame({ wb }), tab = f.el('gx-tab-1');

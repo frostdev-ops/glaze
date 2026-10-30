@@ -1359,12 +1359,17 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     document.addEventListener('cut', (e) => copyOut(e, true));
     const cellOf = (x, r, c) => {
       const formatted = (cell) => { if (x.fmt && cell.t === 'n') cell.s = M.internStyle(wb, { fmt: x.fmt }); return cell; };
-      if (x.formula) return formatted({ t: 'n', v: 0, f: F.normalize(fromR1C1(x.formula, r, c)) });
+      const formulaCell = (f) => {
+        const cell = { t: 'n', v: 0, f: F.normalize(f) };
+        try { if (eng.dynamic(F.parse(f, r, c), S(), r, c)) Object.assign(cell, { a: M.cellName(r, c), cm: '1' }); } catch { /* keep invalid pasted formulas as errors */ }
+        return cell;
+      };
+      if (x.formula) return formatted(formulaCell(fromR1C1(x.formula, r, c)));
       if (x.value !== undefined) return formatted(typeof x.value === 'number' ? { t: 'n', v: x.value } : typeof x.value === 'boolean' ? { t: 'b', v: x.value } : { t: 's', v: x.value });
       if (x.fmt === '@') return x.text ? { t: 's', v: x.text, s: M.internStyle(wb, { fmt: '@' }) } : null;
       const p = M.parseInput(x.text, { date1904: wb.date1904 });
       if (!p) return null;
-      const out = p.f !== undefined ? { t: 'n', v: 0, f: F.normalize(p.f) } : { t: p.t, v: p.v };
+      const out = p.f !== undefined ? formulaCell(p.f) : { t: p.t, v: p.v };
       const fmt = x.fmt && x.fmt !== 'General' ? x.fmt : p.fmt;
       if (fmt && out.t === 'n') out.s = M.internStyle(wb, { fmt });
       return out;
