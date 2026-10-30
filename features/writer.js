@@ -387,7 +387,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const hold = (box, b, type = 'click') => {
     if (box.flushing || (box.held && !box.held.request)) return;
     const id = b.getAttribute('data-analytics-id'), action = /submit$/.test(id) ? 'submit' : 'save';
-    const busy = (x, on) => { if (on) { x.setAttribute('aria-busy', 'true'); x.style.setProperty('cursor', 'progress'); } else { x.removeAttribute('aria-busy'); x.style.removeProperty('cursor'); } };
+    const busy = (x, on) => { if (!x) return; if (on) { x.setAttribute('aria-busy', 'true'); x.style.setProperty('cursor', 'progress'); } else { x.removeAttribute('aria-busy'); x.style.removeProperty('cursor'); } };
     if (box.held) busy(box.held.button, false);
     const p = box.held = { button: b, request: null, port: null, up: null, at: Date.now() };
     const button = () => [...box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || []].find((x) => x.getAttribute('data-analytics-id') === id);
