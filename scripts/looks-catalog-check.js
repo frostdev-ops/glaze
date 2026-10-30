@@ -269,8 +269,19 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     await lms.evaluate((src) => { const f = document.createElement('iframe'); f.name = 'gz-ctab:_101_1'; f.id = 'course-video-frame'; f.src = src; document.body.append(f); }, `${site}/ultra/courses/_101_1/outline`);
     const framed = await until(async () => lms.frames().find((f) => f.name() === 'gz-ctab:_101_1'));
     check(!!framed && await until(() => playing(framed)), 'a live course frame plays its own video while the parent wears the theme');
+    const permissions = await a.evaluate(async ({ url, h }) => {
+      const [tab] = await chrome.tabs.query({ url });
+      return chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, args: [h],
+        func: (h) => chrome.runtime.sendMessage({ type: 'glaze:keptFile', h }).then((r) => ({ ok: r.ok, path: location.pathname })) });
+    }, { url: `${site}/ultra/courses/_202_1/outline`, h: put.h });
+    check(permissions.find((r) => r.frameId === 0)?.result.ok === false && permissions.some((r) => r.frameId > 0 && r.result.ok === true), 'the worker gives the file only to the video course frame, after SPA navigation', JSON.stringify(permissions));
     check((await painted()).bg === 'scene' && (await painted()).pointer === 'ghost', 'the frame leaves the parent theme unchanged');
     await lms.evaluate(() => { document.getElementById('course-video-frame').remove(); delete window.__oldScene; delete window.__oldGL; delete window.__oldVideo; });
+    const workerControl = await ctx.newCDPSession(a);
+    try { await workerControl.send('ServiceWorker.enable'); await workerControl.send('ServiceWorker.stopAllWorkers'); }
+    finally { await workerControl.detach(); }
+    await go('_101_1');
+    check(await until(() => playing(lms)), 'a course parts request wakes the stopped worker and restores its video');
     check(!errors.length, 'no page errors', errors.join(' | '));
   } catch (e) {
     console.error(e);

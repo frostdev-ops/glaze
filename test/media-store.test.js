@@ -271,6 +271,7 @@ const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = tru
     ...(keyListing && { getKeys: async () => Object.keys(store) }),
   });
   const { indexedDB, IDBKeyRange } = fakeIDB();
+  const senders = new Map();
   const context = vm.createContext({
     URL, console, TextEncoder, TextDecoder, Blob, Response, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto, AbortSignal, fetch,
     indexedDB, IDBKeyRange, setTimeout: (f) => { timers.push(f); return timers.length; }, clearTimeout: () => {}, navigator: {},
@@ -285,8 +286,8 @@ const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = tru
       storage: { local: area(local), sync: area(sync), onChanged: { addListener: (f) => on.changed.push(f) } },
       scripting: { unregisterContentScripts: async () => {}, registerContentScripts: async () => {}, getRegisteredContentScripts: async () => [],
         executeScript: async ({ target, func }) => {
-          const f = frames[target.documentIds?.[0] ?? target.frameIds?.[0]];
-          if (!f) throw Error('document gone');
+          const f = frames[target.documentIds?.[0] ?? target.frameIds?.[0]] || senders.get(target.tabId);
+          if (!f || f.url === 'about:blank') throw Error('document gone');
           const result = vm.runInNewContext(`(${func.toString()})()`, { location: new URL(f.url), document: {
             body: { className: f.body || '' }, querySelector: () => f.styles ? { href: f.styles } : null,
           } });
@@ -296,7 +297,7 @@ const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = tru
     },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), context);
-  const ask = (m, s) => new Promise((res) => { for (const f of on.message) if (f(m, s, (r) => res(clone(r))) === true) return; res('ignored'); });
+  const ask = (m, s) => new Promise((res) => { senders.set(s.tab?.id, { url: s.url }); for (const f of on.message) if (f(m, s, (r) => res(clone(r))) === true) return; res('ignored'); });
   const send = (m, s) => on.message.forEach((f) => f(m, s));
   const until = async (ok) => { for (let i = 0; i < 2000 && !ok(); i++) await new Promise((r) => setTimeout(r, 2)); assert.ok(ok(), 'waited too long'); };
   const kept = async () => (await new Promise((res) => {
@@ -412,6 +413,19 @@ test('worker: course video files work in Canvas and Moodle frames and survive a 
   assert.equal((await restored.ask(request, page)).ok, true);
   restored.sync.courses.looks[`canvas:${page.origin}/1`] = 'Terminal';
   assert.equal((await restored.ask(request, page)).ok, false, 'a different Look cannot keep the course file permission');
+});
+
+test('worker: a sender URL from before SPA navigation cannot grant the previous course video', async () => {
+  const frames = { 0: { url: `${page.origin}/courses/2` } };
+  const w = worker({ frames });
+  const put = await w.ask({ type: 'glaze:media', op: 'put', kind: 'video', b64: M.std(fx('clip.webm')) }, editor);
+  const code = await codeWith(put.h, 'video');
+  w.local.lookFavorites = [{ code, name: 'Video' }];
+  w.sync.courses = { looks: { [`canvas:${page.origin}/1`]: require('../lib/looks.js').idOf(code) } };
+  const request = { type: 'glaze:keptFile', h: put.h };
+  assert.equal((await w.ask(request, page)).ok, false, 'current course 2 cannot borrow the initial course 1 URL');
+  frames[0].url = page.url;
+  assert.equal((await w.ask(request, { ...page, url: `${page.origin}/courses/2` })).ok, true, 'current course 1 may read despite its old sender URL');
 });
 
 test('worker: a course Look authorizes its remote video and Lottie, with the same file boundary', async () => {
