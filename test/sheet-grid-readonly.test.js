@@ -212,3 +212,18 @@ test('repeated read-only attempts leave the current status announcement and its 
   f.key('x');
   assert.equal(f.said(), REFUSED, 'an attempt after expiry can explain the refusal again');
 });
+
+test('read-only keyboard fills refuse before expanding the selection into shifted formulas', () => {
+  for (const [range, key] of [['C2:C10001', 'd'], ['C2:ZZ2', 'r']]) {
+    const f = frame(), before = f.snap(), name = f.el('gx-name');
+    name.value = range; f.fire(name, 'keydown', { key: 'Enter' });
+    const cell = f.wb.sheets[0].rows.get(1).get(2), formula = cell.f;
+    let reads = 0;
+    Object.defineProperty(cell, 'f', { enumerable: true, get() { reads++; return formula; } });
+    f.key(key, { ctrlKey: true });
+    assert.equal(reads, 0, `${range}: Ctrl+${key.toUpperCase()} must refuse before copying formulas`);
+    assert.equal(f.said(), REFUSED);
+    assert.equal(f.snap(), before);
+    assert.deepEqual(f.writes, []);
+  }
+});
