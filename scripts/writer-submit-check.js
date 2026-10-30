@@ -867,7 +867,8 @@ const HARNESS = `(() => {
     const slowDoc = JSON.stringify((await worker.evaluate((k) => chrome.storage.local.get(`writerPaper:${k}`), slowKey))[`writerPaper:${slowKey}`]?.doc || '');
     check(got.clicks.join() === 'assignment.attempt.authoring.footer.submit' && got.text === 'Sent after a slow save. Last words.\n' && slowDoc.includes('Last words.') && (await bar(fr)).text === '' && await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.editable), 'then it goes once, with the last words saved and in Ultra\'s box; the bar clears and the box takes typing again');
     await p.close();
-    // A paper past what Ultra's text box takes (compose's 50k-tag input limit: every other word bold over 2,600 paragraphs):
+    // A paper past what Ultra's text box takes (compose's 50k-tag input limit: 260 paragraphs of 100 bold digits, 52,520 tags,
+    // some 20 pages, so Full writer can lay it out in a moment):
     // the bar says so on one line and offers Full writer; Ultra's Submit sends nothing, says why and focuses the switch,
     // whose .docx has no such limit.
     await blankPaper();
@@ -878,11 +879,11 @@ const HARNESS = `(() => {
     await until(async () => (await p.evaluate(() => __text())) === 'Short start.\n', 'the short start in Ultra\'s box');
     const over = await fr.evaluate(() => {
       const v = GZ_WRITER_PAPER.current().editor.view, S = GZ_WRITER_SCHEMA.paper, bold = S.marks.bold.create();
-      const paras = Array.from({ length: 2600 }, (_, i) => S.node('paragraph', null, Array.from({ length: 20 }, (_, j) => S.text(j % 2 ? ` bold ${j} ` : `plain ${i}.${j}`, j % 2 ? [bold] : []))));
+      const paras = Array.from({ length: 260 }, (_, i) => S.node('paragraph', null, Array.from({ length: 200 }, (_, j) => (j % 2 ? S.text(' ') : S.text(String((j / 2 + 1) % 10), [bold])))));
       v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, paras));
       return GZ_WRITER_PAPER.project(v.state.doc) === null;
     });
-    check(over, 'a 2,600-paragraph paper, every other word bold, is past what compose takes');
+    check(over, 'a paper of 260 paragraphs of 100 bold digits (52,520 tags) is past what compose takes');
     await until(async () => (await bar(fr))?.text === 'Too long for Ultra’s text box. Use Full writer.', 'the reason in the compact bar');
     const b1 = await bar(fr);
     check(b1.lines === 1 && b1.nowrap && b1.offer && (await p.evaluate(() => __text())) === 'Short start.\n', 'the compact bar says "Too long for Ultra’s text box. Use Full writer." on one line, the Full writer switch marked; Ultra\'s box keeps what last fit');
@@ -892,9 +893,8 @@ const HARNESS = `(() => {
     await quiet(() => p.evaluate(() => __clicks.length > 0), 'Ultra\'s Submit sent a partial text');
     check((await bar(fr)).text === 'Too long for Ultra’s text box. Use Full writer.' && await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.editable) && (await p.evaluate(() => __text())) === 'Short start.\n', 'Ultra\'s Submit on it sends nothing, the bar still says why, Full writer has the focus, the box is the student\'s again');
     await p.keyboard.press('Space');
-    // The frame then lays out ~150 pages (seconds on end): the switch is heard where it is kept, in the worker.
-    await until(async () => (await fullSet()) === true, 'Full writer from the switch', 30000);
-    check(true, 'Space on it turns Full writer on (writer.full saved), the paper going to its pages and their .docx');
+    await until(async () => (await fullSet()) === true && await fr.evaluate(() => document.documentElement.dataset.view === 'full' && document.querySelectorAll('.gp-sheet').length > 1), 'Full writer from the switch', 60000);
+    check(true, 'Space on it turns Full writer on (writer.full saved): the paper in its pages, for a .docx');
     await p.close();
     await setFull(false);
     await blankPaper();
