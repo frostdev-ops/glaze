@@ -93,7 +93,7 @@ final class GlazeAgentHost {
 
     // MARK: The group channel
 
-    /// Listens for the bridge; false when the group socket can't be had (another app has it, or its path is too long).
+    /// Listens for the bridge; false when the group socket can't be had (another app has it, or the group is unavailable).
     @discardableResult func start() -> Bool {
         guard listener == nil else { return true }
         last = Date()
@@ -138,11 +138,13 @@ final class GlazeAgentHost {
             if other >= 0 { Darwin.close(other); return nil }
             unlink(path)
         }
-        guard var addr = GlazeAgentBridge.address(path) else { return nil }
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return nil }
         let mask = umask(0o177)
-        let bound = withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) } }
+        let bound = GlazeAgentBridge.addressed(path) { addr in
+            var addr = addr
+            return withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) } }
+        }
         umask(mask)
         guard bound == 0, Darwin.listen(fd, 16) == 0, lstat(path, &st) == 0 else { Darwin.close(fd); return nil }
         return (fd, UInt64(st.st_ino))
@@ -594,13 +596,9 @@ final class GlazeAgentHost {
         }
         /// f with the working folder the pinned one, checked to be it, then back. Only on the main thread, briefly.
         static func inside(_ dir: Int32, _ f: () throws -> Void) throws {
-            let was = Darwin.open(".", O_RDONLY | O_DIRECTORY)
-            defer { if was >= 0 { _ = fchdir(was); Darwin.close(was) } }
-            var a = stat(), b = stat()
-            guard was >= 0, fstat(dir, &a) == 0, fchdir(dir) == 0, stat(".", &b) == 0, a.st_dev == b.st_dev, a.st_ino == b.st_ino else {
+            guard try GlazeAgentBridge.inside(dir, { try f(); return true }) == true else {
                 throw Refused("the run folder changed while entering it")
             }
-            try f()
         }
         static func locked(_ dir: Int32, _ f: () throws -> Void) throws {
             var fd: Int32 = -1

@@ -269,16 +269,42 @@ nonisolated enum GlazeAgentBridge {
 
     /// A connection to the unix socket at path, owned by this user, with timeouts both ways; -1 when there is none.
     static func connect(_ path: String, timeout: TimeInterval = timeout) -> Int32 {
-        guard var addr = address(path) else { return -1 }
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return -1 }
         options(fd, timeout: timeout)
-        let done = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        let done = addressed(path) { addr in
+            var addr = addr
+            return withUnsafePointer(to: &addr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+            }
         }
         var uid: uid_t = 0, gid: gid_t = 0
         guard done == 0, getpeereid(fd, &uid, &gid) == 0, uid == getuid() else { Darwin.close(fd); return -1 }
         return fd
+    }
+    /// Long group-container paths are reached by name inside a pinned directory, as rendezvous.js does for run sockets.
+    /// All our temporary working-directory changes share this lock and finish before any asynchronous work or I/O wait.
+    private static let paths = NSLock()
+    static func inside<T>(_ dir: Int32, _ body: () throws -> T) rethrows -> T? {
+        paths.lock()
+        defer { paths.unlock() }
+        let was = Darwin.open(".", O_RDONLY | O_DIRECTORY)
+        guard was >= 0 else { return nil }
+        defer { _ = fchdir(was); Darwin.close(was) }
+        var a = stat(), b = stat()
+        guard fstat(dir, &a) == 0, fchdir(dir) == 0, stat(".", &b) == 0, a.st_dev == b.st_dev, a.st_ino == b.st_ino else { return nil }
+        return try body()
+    }
+    static func addressed<T>(_ path: String, _ use: (sockaddr_un) -> T) -> T? {
+        if let addr = address(path) { return use(addr) }
+        let url = URL(fileURLWithPath: path)
+        guard let addr = address(url.lastPathComponent) else { return nil }
+        let dir = Darwin.open(url.deletingLastPathComponent().path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+        guard dir >= 0 else { return nil }
+        defer { Darwin.close(dir) }
+        var st = stat()
+        guard fstat(dir, &st) == 0, st.st_uid == getuid() else { return nil }
+        return inside(dir) { use(addr) }
     }
     /// A socket address for path; nil when it doesn't fit sun_path with its NUL.
     static func address(_ path: String) -> sockaddr_un? {
