@@ -107,6 +107,8 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
   const noTab = (who) => `Open ${host(who)} in this browser, signed in as this account, to sync it. ${NOTHING}`;
   // storage.local as lib/todo.js change writes it: set says whether it worked.
   const area = (local) => ({ local: { get: (k) => local.get(k), set: (v) => Promise.resolve(local.set(v)).then(() => true, () => false) } });
+  const approved = new WeakMap();
+  const fingerprint = (m) => JSON.stringify([m.who.account, m.key, m.say, m.site, m.item.aid || '', m.item.ov?.id || '']);
   const tools = (deps) => [
     {
       name: 'accounts_list', kind: 'read', group: 'courses', title: 'School accounts',
@@ -190,12 +192,14 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
         const m = await marking(args, ctx, deps);
         if (m.error) throw new Error(m.error);
         if (m.site && !(await deps.tabs.find(m.who.account))) throw new Error(noTab(m.who));
+        approved.set(ctx, fingerprint(m));
         return m.say;
       },
       // In the broker's turn (lib/mcp/calls.js), with the same edit or the same planner write Glaze's list makes for a tick.
       run: async (args, ctx) => {
         const m = await marking(args, ctx, deps);
         if (m.error) return fail(m.error);
+        if (approved.has(ctx) && approved.get(ctx) !== fingerprint(m)) return fail(`That item or its sync settings changed. Ask again to approve the current mark. ${NOTHING}`);
         const { who, item, key, store, title } = m, at = clock(ctx);
         if (!m.site) {
           // A mark that agrees with the LMS is no mark: the item follows the LMS again.
@@ -205,8 +209,8 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
         }
         const r = await deps.tabs.run(who.account, 'mark', { type: item.type, id: item.id, aid: typeof item.aid === 'string' ? item.aid : '', ov: item.ov?.id || '' }, {});
         if (r === null) return fail(noTab(who));
-        const ov = r.ok === true && isObj(r.ov) && /^\d{1,20}$/.test(r.ov.id) ? { id: r.ov.id, done: r.ov.done === true, dismissed: r.ov.dismissed === true } : null;
-        if (!ov) return fail(r.error === 'timeout' ? "Canvas didn't answer in time, so the mark may or may not be in its planner; todo_list shows it once Glaze reads the planner again."
+        const ov = r.ok === true && isObj(r.ov) && r.ov.done === true && /^\d{1,20}$/.test(r.ov.id) ? { id: r.ov.id, done: true, dismissed: r.ov.dismissed === true } : null;
+        if (!ov) return fail(r.error === 'timeout' || r.uncertain === true ? "Canvas didn't confirm the mark, so it may or may not be in its planner; todo_list shows it once Glaze reads the planner again."
           : `Canvas didn't confirm the mark. ${NOTHING}`);
         // The kept planner takes Canvas's override, as the list keeps it after a tick (features/todo.js mark).
         const c = plan(who, await ctx.local.get('todoCache')), it = c?.items.find((i) => isObj(i) && `${i.type}:${i.id}` === key);

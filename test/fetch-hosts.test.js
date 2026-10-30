@@ -132,7 +132,7 @@ const SITES = {
   'features/syllabus.js': [{ at: 'await fetch(f.url,', kind: 'page' }],
   'features/todo.js': [{ at: 'await fetch(url,', kind: 'page' }, { at: 'fetch(`${location.origin}/api/v1/planner/overrides', kind: 'page' }],
   // Agent apps' reads in the account's own LMS tab (lib/mcp/tabs.js injects it there): the page's own site only.
-  'lib/mcp/tab.js': [{ at: 'await fetch(location.origin + path,', kind: 'page' }],
+  'lib/mcp/tab.js': [{ at: 'await fetch(go.origin + path,', kind: 'page' }],
 };
 const KINDS = ['required', 'extension', 'asked', 'page', 'via', 'open'];
 

@@ -4,7 +4,8 @@
 // points, instructions, the names of the files they attach, and the rubric's definition (lib/writer-context-assignment.js
 // rubricOf over lib/rubric.js's model), never the student's scores or feedback, which are the grades group's. Each read is
 // kept, fitted to what an answer carries, in storage.local mcpRubric:<origin>/<uid>/<course>/<assignment> with its time; the
-// 100 used last stay (mcpRubrics: their keys, the latest first). With no tab open, the kept read answers, dated.
+// 100 used last stay (mcpRubrics: their keys, the latest first). With no tab open, the kept read answers, dated. clear(ctx,
+// scope?) purges the cache for the worker's agent-off / forget / site-removal controls; scope is an origin or account.
 // Accounts, run and ctx as lib/mcp/tools-study.js's; register(registry, { tabs (lib/mcp/tabs.js create's) }).
 // Classic script for the worker, after lib/mcp/tools-study.js and lib/mcp/tabs.js; module.exports for node.
 var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
@@ -42,14 +43,30 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
 
   // ---- a read, fitted and kept ----
   // What the tab answered, as data of the right kinds: the rubric is rubricOf's shape.
+  const number = (v) => Number.isFinite(v) && v >= 0 ? v : null;
+  const percent = (v) => number(v) !== null && v <= 100;
+  const rubric = (r) => {
+    if (!isObj(r) || !Array.isArray(r.criteria)) return null;
+    const levels = arr(r.levels).filter(isObj).slice(0, 12), criteria = r.criteria.filter(isObj).slice(0, 50);
+    return { title: str(r.title, 300), ...(typeof r.detail === 'string' && { detail: str(r.detail, LIMIT.text) }), total: number(r.total),
+      ...(typeof r.kind === 'string' && { kind: str(r.kind, 40) }),
+      levels: levels.map((l) => ({ id: str(l.id, 80), label: str(l.label, 300) })),
+      criteria: criteria.map((c) => ({ id: str(c.id, 80), label: str(c.label, 300), detail: str(c.detail, LIMIT.text), points: number(c.points), weight: number(c.weight), unscored: c.unscored === true,
+        cells: arr(c.cells).filter(isObj).slice(0, 12).map((v) => ({ level: str(v.level, 80), detail: str(v.detail, LIMIT.text), value: number(v.value),
+          ...(percent(v.percentage) && { percentage: v.percentage }),
+          ...(isObj(v.percentageRange) && percent(v.percentageRange.lo) && percent(v.percentageRange.hi) && v.percentageRange.lo <= v.percentageRange.hi && typeof v.percentageRange.loExclusive === 'boolean'
+            && { percentageRange: { lo: v.percentageRange.lo, hi: v.percentageRange.hi, loExclusive: v.percentageRange.loExclusive } }) })) })),
+      ...((r.incomplete === true || r.levels?.length > 12 || r.criteria.length > 50 || criteria.some((c) => arr(c.cells).length > 12)) && { incomplete: true }),
+    };
+  };
   const clean = (r) => ({
     title: str(r.title, 300), due: when(r.due) || null, points: Number.isFinite(r.points) && r.points >= 0 ? r.points : null,
     instructions: str(r.instructions, LIMIT.text), description: str(r.description, LIMIT.text),
     files: [...new Set(arr(r.files).filter((f) => typeof f === 'string' && f))].slice(0, LIMIT.files).map((f) => f.slice(0, 200)),
-    rubric: isObj(r.rubric) && Array.isArray(r.rubric.criteria) ? r.rubric : null, ...(r.incomplete === true && { incomplete: true }),
+    rubric: rubric(r.rubric), ...(r.incomplete === true && { incomplete: true }),
   });
   // Longer than an answer carries: the texts cut, the instructions last, until it fits (cut: true); at the end the levels'
-  // own texts go. A read still too long is left to the call core's receipt.
+  // own texts go. Many labels leave an explicitly partial definition that fits.
   const fit = (rec) => {
     for (const n of [Infinity, 6000, 3000, 1500, 800, 400, 200, 100]) {
       let cutAny = false;
@@ -65,21 +82,48 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
         if (JSON.stringify(bare).length <= LIMIT.answer) return bare;
       }
     }
-    return rec;
+    // Many short labels can still exceed the envelope. Keep a dated, explicitly partial definition that fits.
+    const out = { ...rec, instructions: cut(rec.instructions, 100), description: cut(rec.description, 100), cut: true,
+      rubric: rec.rubric && { ...rec.rubric, detail: cut(rec.rubric.detail || '', 100), criteria: [], incomplete: true } };
+    while (out.rubric?.levels.length && JSON.stringify(out).length > LIMIT.answer) out.rubric.levels.pop();
+    for (const c of rec.rubric?.criteria || []) {
+      const one = { ...c, detail: cut(c.detail, 25), cells: c.cells.map((v) => ({ ...v, detail: cut(v.detail, 25) })) };
+      out.rubric.criteria.push(one);
+      if (JSON.stringify(out).length > LIMIT.answer) { out.rubric.criteria.pop(); break; }
+    }
+    return out;
   };
   const keys = async (ctx) => { const k = typeof ctx.keys === 'function' ? await ctx.keys() : Object.keys(await ctx.local.get(null)); return Array.isArray(k) ? k : []; };
   // The index's writes, one at a time.
-  let turn = Promise.resolve();
+  let turn = Promise.resolve(), generation = 0;
   const serial = (f) => (turn = turn.then(f, f));
+  // Worker-owned lifecycle hook: agent off / Forget all apps clear everything; site or account removal passes its scope.
+  // Advancing before the queue also prevents an in-flight tab read from recreating a removed record.
+  const clear = (ctx, scope) => {
+    generation++;
+    return serial(async () => {
+      const all = await keys(ctx), match = (k) => typeof k === 'string' && k.startsWith(PREFIX) && (!scope || k.startsWith(`${PREFIX}${scope}/`));
+      const gone = all.filter(match);
+      if (!scope) gone.push(INDEX);
+      else {
+        const index = arr((await ctx.local.get(INDEX))[INDEX]).filter((k) => typeof k === 'string' && k.startsWith(PREFIX) && !match(k));
+        await ctx.local.set({ [INDEX]: index });
+      }
+      if (gone.length) await ctx.local.remove(gone);
+    });
+  };
   // Kept (rec) or used again (none), the latest first; past LIMIT.keep, the ones used longest ago go, and any kept read the
   // index lost is the first to go.
-  const remember = (ctx, key, rec) => serial(async () => {
+  const remember = (ctx, key, rec, gen) => serial(async () => {
+    const live = () => gen === generation && !ctx.signal?.aborted;
     try {
+      if (!live()) return;
       const was = arr((await ctx.local.get(INDEX))[INDEX]).filter((k) => typeof k === 'string' && k.startsWith(PREFIX) && k !== key);
       const stray = (await keys(ctx)).filter((k) => k.startsWith(PREFIX) && k !== key && !was.includes(k));
       const order = [key, ...was, ...stray], gone = order.slice(LIMIT.keep);
+      if (!live()) return;
       await ctx.local.set({ ...(rec && { [key]: rec }), [INDEX]: order.slice(0, LIMIT.keep) });
-      if (gone.length) await ctx.local.remove(gone);
+      if (live() && gone.length) await ctx.local.remove(gone);
     } catch { /* a cache that can't be kept leaves the answer as it is */ }
   });
 
@@ -111,18 +155,22 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
         const course = isObj(args) ? args.course : '', item = isObj(args) ? args.assignment : '';
         if (!ID[who.lms].test(course) || !ID[who.lms].test(item)) return fail('course and assignment are ids from assignments_list.');
         const key = `${PREFIX}${who.account}/${course}/${item}`, head = { account: who.account, course, assignment: item };
+        const gen = generation;
+        ctx.signal?.throwIfAborted();
         const r = deps?.tabs ? await deps.tabs.run(who.account, 'assignment', { course, assignment: item }, { signal: ctx.signal }) : null;
+        ctx.signal?.throwIfAborted();
+        if (gen !== generation) return fail('The assignment cache was cleared during this read. Try again.');
         if (r?.ok === true) {
           const at = clock(ctx), rec = fit(clean(r));
-          await remember(ctx, key, { at, ...rec });
+          await remember(ctx, key, { at, ...rec }, gen);
           return { ...head, source: 'tab', at, ...rec };
         }
         if (r?.error === 'none') return fail(`${new URL(who.origin).host} has no such assignment for this account; assignments_list names them.`);
         const kept = (await ctx.local.get(key))[key];
         if (isObj(kept) && when(kept.at)) {
-          await remember(ctx, key, null);
+          await remember(ctx, key, null, gen);
           const { at, ...rest } = kept;
-          return { ...head, source: 'cache', at, ...clean(rest), ...(rest.cut === true && { cut: true }) };
+          return { ...head, source: 'cache', at, ...fit(clean(rest)), ...(rest.cut === true && { cut: true }) };
         }
         const host = new URL(who.origin).host;
         return fail(r === null ? `Open ${host} in this browser, signed in as this account, so Glaze can read this assignment there.` : `Glaze couldn't read this assignment from ${host} just now; try again in a moment.`);
@@ -131,6 +179,6 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
   ];
   // Adds them to a lib/ai/tools.js registry (its define checks each) → the tools as added.
   const register = (registry, deps) => tools(deps).map((t) => registry.add(t));
-  return { LIMIT, PREFIX, INDEX, tools, register };
+  return { LIMIT, PREFIX, INDEX, tools, register, clear };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_MCP_ASSIGN; else GZ_MCP_ASSIGN;

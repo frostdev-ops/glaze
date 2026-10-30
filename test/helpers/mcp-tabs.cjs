@@ -32,6 +32,8 @@ const tab = ({ id, url, active = false, lastAccessed = 0, discarded = false, fro
     const url = new URL(u, loc.origin);
     asked.push({ url: url.href, method: init.method || 'GET', headers: init.headers || {}, body: init.body, credentials: init.credentials, redirect: init.redirect });
     if (url.origin !== loc.origin) throw new TypeError('Failed to fetch');
+    if (url.pathname === '/api/v1/users/self/profile') return json({ id: uid, time_zone: tz });
+    if (url.pathname === '/learn/api/v1/users/me') return json({ id: uid });
     const key = Object.keys(routes).find((k) => (k.startsWith('^') ? new RegExp(k).test(url.pathname + url.search) : url.pathname === k));
     if (!key) return json({ errors: [{ message: 'not found' }] }, 404);
     const r = routes[key];
@@ -106,6 +108,14 @@ const WIRING = [
     'let mcpTabsMade = null;\nconst mcpTabs = () => (mcpTabsMade ||= GZ_MCP_TABS.create({ tabs: chrome.tabs, scripting: chrome.scripting, quiet: modQuiet }));\nconst mcpRefresh = (account, group, o) => mcpTabs().refresh(account, group, o);'],
   ["if (!GZ_AI_TOOLS.get('accounts_list')) { GZ_MCP_STUDY.register(GZ_AI_TOOLS); GZ_MCP_GRADES.register(GZ_AI_TOOLS); }",
     "if (!GZ_AI_TOOLS.get('accounts_list')) { const deps = { sync: chrome.storage.sync, tabs: mcpTabs() }; GZ_MCP_STUDY.register(GZ_AI_TOOLS, deps); GZ_MCP_GRADES.register(GZ_AI_TOOLS); GZ_MCP_ASSIGN.register(GZ_AI_TOOLS, deps); }"],
+  ['await local.set({ mcp: { on: m.on } });',
+    'await local.set({ mcp: { on: m.on } });\n    if (!m.on) { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); }'],
+  ["return { ok: await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget()) };",
+    "const ok = await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget());\n  if (ok && m.op === 'forget') { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); }\n  return { ok };"],
+  ['const forget = async (origin) => {',
+    'const forget = async (origin) => {\n  mcpFiles(); await GZ_MCP_ASSIGN.clear({ local: chrome.storage.local }, origin);'],
+  ['const forgetAll = async () => {',
+    'const forgetAll = async () => {\n  mcpFiles(); await GZ_MCP_ASSIGN.clear({ local: chrome.storage.local });'],
 ];
 const wired = (src = read('lib/background.js')) => WIRING.reduce((s, [stub, line]) => {
   if (s.includes(line)) return s;

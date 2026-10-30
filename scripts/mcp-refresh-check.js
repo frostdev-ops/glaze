@@ -21,6 +21,11 @@ const fixture = (n) => JSON.parse(fs.readFileSync(path.join(root, 'test/fixtures
 const SHIM = `
 globalThis.refreshCheck = (account, group) => { if (typeof GZ_MCP_TABS === 'undefined') mcpFiles(); return mcpRefresh(account, group, {}); };
 globalThis.tabRun = (account, op, args) => { if (typeof GZ_MCP_TABS === 'undefined') mcpFiles(); return mcpTabs().run(account, op, args, {}); };
+globalThis.cancelRefreshCheck = async (account) => {
+  const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 50);
+  try { await mcpTabs().refresh(account, 'courses', { signal: ac.signal }); return false; }
+  catch { return ac.signal.aborted; } finally { clearTimeout(timer); }
+};
 globalThis.glazeIn = async (url) => {
   const [t] = (await chrome.tabs.query({})).filter((x) => x.url === url);
   if (!t) return { on: false, why: 'no tab', tabs: (await chrome.tabs.query({})).map((x) => x.url) };
@@ -87,7 +92,7 @@ const check = async (name, test) => {
     env.noFirstRun(context);
     context.setDefaultTimeout(15000);
     const asked = [], marks = [];
-    let uid = '5';
+    let uid = '5', slowPlanner = false;
     const CSRF = 'check+token/=';
     await context.addCookies([{ name: '_csrf_token', value: encodeURIComponent(CSRF), domain: 'school.instructure.com', path: '/', secure: true }]);
     await context.route('**/*', (r) => {
@@ -103,7 +108,7 @@ const check = async (name, test) => {
       if (u.origin === ULTRA) return u.pathname.startsWith('/learn/api/') ? json(ultraApi(u)) : r.fulfill({ contentType: 'text/html', body: ULTRA_PAGE });
       if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return json({ id: uid, time_zone: 'UTC' });
       if (u.pathname === '/api/v1/courses') return json(COURSES);
-      if (u.pathname === '/api/v1/planner/items') return json(PLANNER);
+      if (u.pathname === '/api/v1/planner/items') return slowPlanner ? pause(200).then(() => json(PLANNER)) : json(PLANNER);
       if (u.pathname === '/api/v1/courses/25/assignments/171') return json(fixture('canvas-assignment-api.json'));
       const groups = /^\/api\/v1\/courses\/(\d+)\/assignment_groups$/.exec(u.pathname);
       if (groups) return json(GRADES.find((x) => String(x.course.id) === groups[1])?.groups || []);
@@ -168,7 +173,7 @@ const check = async (name, test) => {
       assert.deepEqual(r.files, ['Lab manual.pdf', 'Data sheet.xlsx']);
       assert.deepEqual(r.rubric.criteria.map((c) => c.label), ['Method', 'Analysis']);
       const mine = asked.slice(n).filter((x) => x.startsWith('canvas /api/'));
-      assert.deepEqual(mine, ['canvas /api/v1/courses/25/assignments/171']);
+      assert.deepEqual(mine, ['canvas /api/v1/users/self/profile', 'canvas /api/v1/courses/25/assignments/171']);
       return { title: r.title, files: r.files, criteria: r.rubric.criteria.length, loaded: asked.slice(n).filter((x) => !x.startsWith('canvas /api/')) };
     });
     await check('Canvas: the planner mark goes through the tab with the page\'s CSRF token', async () => {
@@ -179,6 +184,24 @@ const check = async (name, test) => {
       assert.equal(marks[0].headers['x-csrf-token'], CSRF);
       assert.equal(marks[0].headers['x-requested-with'], 'XMLHttpRequest');
       return { answer: r, body: marks[0].body };
+    });
+    await check('Canvas: a stale document account cannot write after the session changes in another tab', async () => {
+      const n = marks.length;
+      uid = '6';
+      try {
+        const r = await worker.evaluate(([a]) => tabRun(a, 'mark', { type: 'assignment', id: '1' }), [A]);
+        assert.equal(r?.ok, false);
+        assert.equal(marks.length, n);
+      } finally { uid = '5'; }
+    });
+    await check('Canvas: cancellation leaves no late planner publish', async () => {
+      const before = await local('todoCache');
+      slowPlanner = true;
+      try {
+        assert.equal(await worker.evaluate((a) => cancelRefreshCheck(a), A), true);
+        await pause(300);
+        assert.deepEqual(await local('todoCache'), before);
+      } finally { slowPlanner = false; }
     });
     await check('another account\'s tab, or a quiz page, is no tab', async () => {
       uid = '6';

@@ -6,8 +6,8 @@
 // one assignment's title, due date, points, instructions, the names of the files they attach and its rubric's definition:
 // Ultra's as Writer reads it (lib/writer-context-assignment.js build), Canvas's from its assignment through lib/rubric.js;
 // never a submission or an attempt, so never the student's scores or feedback. mark is Canvas's planner mark for an item,
-// with the page's CSRF token (lib/mcp/tools-study.js todo_mark_done, once the student allowed it). Past args.ms (at
-// most LIMIT.ms) nothing more is asked of the site and nothing is kept; a read that didn't finish whole keeps nothing.
+// with the page's CSRF token (lib/mcp/tools-study.js todo_mark_done, once the student allowed it). The worker binds each
+// call to its document, origin, uid and deadline (at most LIMIT.ms), and cancels it by id; no late requests or publishes.
 // Content side, in Glaze's own world (GZ_CTX); a second injection keeps the first. run(op, args) → { ok: true, … } or
 // { ok: false, error }.
 var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
@@ -23,20 +23,22 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
   // on this site) }.
   const req = async (path, go, init = {}) => {
     if (!go()) throw new Error('late');
-    const r = await fetch(location.origin + path, { credentials: 'same-origin', redirect: 'error', ...init, headers: { accept: ACCEPT, ...init.headers } });
+    const r = await fetch(go.origin + path, { credentials: 'same-origin', redirect: 'error', ...init, signal: go.signal, headers: { accept: ACCEPT, ...init.headers } });
+    if (!go()) throw new Error('late');
     if (!r.ok) throw new Error(String(r.status));
     const j = JSON.parse((await r.text()).replace(/^while\(1\);/, ''));
+    if (!go()) throw new Error('late');
     const link = r.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
     let next = null;
-    try { const u = link && new URL(link, location.origin); next = u && u.origin === location.origin ? u.pathname + u.search : null; } catch { /* not an address */ }
-    return { j, next };
+    try { const u = link && new URL(link, go.origin); next = u && u.origin === go.origin && u.pathname === path.split('?')[0] ? u.pathname + u.search : null; } catch { /* not an address */ }
+    return { j, next, more: !!link };
   };
   // Every page of a list Canvas pages with Link headers, up to max; more: it had more.
   const pages = async (path, go, max) => {
     const out = [];
-    let p = path;
-    for (let i = 0; p && i < max; i++) { const { j, next } = await req(p, go); if (Array.isArray(j)) out.push(...j); p = next; }
-    out.more = !!p;
+    let p = path, more = false;
+    for (let i = 0; p && i < max; i++) { const r = await req(p, go); if (!Array.isArray(r.j)) throw new Error('not a list'); out.push(...r.j); p = r.next; more = r.more; }
+    out.more = more;
     return out;
   };
   const libs = (...files) => Promise.all(files.map(([f, g]) => X().need(f, () => globalThis[g])));
@@ -47,18 +49,19 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     const x = X(), ultra = x.site === 'ultra';
     await libs(['lib/todo.js', 'GZ_TODO']);
     const L = GZ_TODO, [p, o] = await Promise.all([x.profile(), prefs()]);
-    if (!L.ID.test(String(p?.id))) return no('profile');
+    if (!L.ID.test(String(p?.id)) || String(p.id) !== go.uid) return no('profile');
     const key = L.storeKey(location.origin, String(p.id)), now = Date.now(), { start, end } = L.fetchRange(o, now, L.zone(p.time_zone));
     let cache, due;
     if (ultra) {
       await libs(['lib/ultra.js', 'GZ_ULTRA']);
-      const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
-      cache = { key, at: now, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
+      const reader = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go });
+      const r = await GZ_ULTRA.planner({ ...reader, me: async () => go.uid }, { from: Date.parse(start), to: Date.parse(end), now });
+      cache = { key, at: now, start, end, teach: o.teacher, progress: o.progress, items: r.items.map((i) => ({ ...i, url: go.origin + i.url })), complete: r.complete, grading: [], sums: {} };
     } else {
       const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`, go, 10), x.canvasCourses()]);
       // A teacher's list also wants the grading: teach null, so the list asks for that alone (features/todo.js load).
       const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
-      cache = { key, at: now, start, end, teach: o.teacher && teaches ? null : o.teacher, progress: o.progress, items: raw.map(L.slim), grading: [], sums: {} };
+      cache = { key, at: now, start, end, teach: o.teacher && teaches ? null : o.teacher, progress: o.progress, items: raw.map(L.slim), complete: !raw.more, grading: [], sums: {} };
       due = GZ_CANVAS_DUE_WEEK(raw, now);
     }
     if (!go()) return no('late');
@@ -86,14 +89,14 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
       term = I.term(list, now);
       tz = L.zone(p?.time_zone);
     }
-    if (!(ultra ? BB : ID).test(uid)) return no('profile');
+    if (!(ultra ? BB : ID).test(uid) || uid !== go.uid) return no('profile');
     const key = I.storeKey(location.origin, uid), rec = I.clean((await get(key))?.[key]);
     if (!rec?.courses.length) return no('none');
     if (!term.courses.length) return no('term');
     const at = Date.now();
     const one = async (c) => {
       if (ultra) {
-        const r = GZ_ULTRA.read({ origin: location.origin, live: go });
+        const r = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go });
         const rows = await r.grades(c.id, uid);
         const excepted = await GZ_ULTRA.excepts(r, c.m, c.id, rows, at);
         return { id: c.id, name: c.name, q: false, more: rows.complete === false, items: GZ_ULTRA.work(rows, at, excepted), trend: rows.complete === false ? [] : GZ_ULTRA.trend(rows, tz), gp: '' };
@@ -160,7 +163,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     if (ultra) {
       // Writer's own read of an assignment (build), from the course's content item, gradebook row and rubric column; the
       // rubric as it shows before an attempt, so no evaluation is asked for.
-      const reader = GZ_ULTRA.read({ origin: location.origin, live: go, maxPages: 3, maxRequests: 8 });
+      const reader = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go, maxPages: 3, maxRequests: 8 });
       let rows = null;
       const c = await W.build({ school: location.host, path: `/ultra/courses/${a.course}/assessment/${a.assignment}/attempt`, url: '', origin: location.origin,
         uid: async () => uid, me: async () => null, courses: () => x.myCourses(), rows: async () => (rows = await reader.grades(a.course, uid)), get: (u) => reader.get(u), R, instructions: async () => '' });
@@ -188,23 +191,47 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     const x = X();
     if (x.site !== 'canvas' || !ID.test(a.id || '') || !/^[a-z_]{1,40}$/.test(a.type || '') || (a.aid && !ID.test(a.aid)) || (a.ov && !ID.test(a.ov))) return no('args');
     const uid = String(await x.account());
-    if (!ID.test(uid)) return no('profile');
+    if (!ID.test(uid) || uid !== go.uid) return no('profile');
     const body = { plannable_id: a.aid || a.id, plannable_type: a.aid ? 'assignment' : a.type, user_id: uid, marked_complete: true };
-    const { j } = await req(`/api/v1/planner/overrides${a.ov ? `/${a.ov}` : ''}`, go, {
-      method: a.ov ? 'PUT' : 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': csrf(), 'x-requested-with': 'XMLHttpRequest' },
-      body: JSON.stringify(a.ov ? { id: a.ov, ...body } : body),
-    });
-    return ID.test(String(j?.id)) ? { ok: true, ov: { id: String(j.id), done: !!j.marked_complete, dismissed: !!j.dismissed } } : no('no override');
+    if (!go()) return no('late');
+    try {
+      const { j } = await req(`/api/v1/planner/overrides${a.ov ? `/${a.ov}` : ''}`, go, {
+        method: a.ov ? 'PUT' : 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': csrf(), 'x-requested-with': 'XMLHttpRequest' },
+        body: JSON.stringify(a.ov ? { id: a.ov, ...body } : body),
+      });
+      return ID.test(String(j?.id)) && j.marked_complete === true ? { ok: true, ov: { id: String(j.id), done: true, dismissed: !!j.dismissed } } : no('no override');
+    } catch (e) { return { ...no('not confirmed'), uncertain: !/^4\d\d$/.test(e.message) }; }
   };
 
   const OPS = { todo, insights, assignment, mark };
+  const jobs = new Map();
+  const cancel = (id) => {
+    if (jobs.has(id)) jobs.get(id)?.abort();
+    else { jobs.set(id, null); if (jobs.size > 128) jobs.delete(jobs.keys().next().value); }
+  };
   const run = async (op, args) => {
     const x = X(), a = args && typeof args === 'object' ? args : {};
-    if (!x?.on() || !Object.hasOwn(OPS, op)) return no('here');
-    const end = Date.now() + Math.min(Number.isFinite(a.ms) && a.ms > 0 ? a.ms : LIMIT.ms, LIMIT.ms);
-    const go = () => Date.now() < end && X() === x && x.on();
-    try { return await OPS[op](go, a); } catch { return no(go() ? 'failed' : 'late'); }
+    if (!x?.on() || !Object.hasOwn(OPS, op) || location.origin !== a.origin || location.href !== a.href || (a.doc !== null && globalThis.__gzDoc !== a.doc)) return no('here');
+    if (op === 'insights' && (x.settings().enabled === false || !x.settings().enhance?.insights)) return no('off');
+    const id = a.call;
+    if (typeof id !== 'string' || jobs.has(id)) { jobs.delete(id); return no('cancelled'); }
+    const ac = new AbortController(), end = Math.min(a.end, Date.now() + LIMIT.ms);
+    if (!Number.isFinite(end) || end <= Date.now()) return no('late');
+    jobs.set(id, ac);
+    const go = () => !ac.signal.aborted && Date.now() < end && X() === x && x.on() && location.origin === a.origin && location.href === a.href;
+    Object.assign(go, { origin: a.origin, uid: a.uid, signal: ac.signal });
+    const timer = setTimeout(() => ac.abort(), end - Date.now());
+    const stopped = new Promise((res) => ac.signal.addEventListener('abort', () => res(no('timeout')), { once: true }));
+    const work = async () => {
+      if (String(await x.account()) !== a.uid || !go()) return no('profile');
+      // GZ_CTX caches identity for a document. Cookies can change in another tab without replacing this document.
+      const { j: me } = await req(x.site === 'ultra' ? '/learn/api/v1/users/me' : '/api/v1/users/self/profile', go);
+      if (String(me?.id) !== a.uid || !go()) return no('profile');
+      return OPS[op](go, a);
+    };
+    try { return await Promise.race([work(), stopped]); } catch { return no(go() ? 'failed' : 'late'); }
+    finally { clearTimeout(timer); ac.abort(); jobs.delete(id); }
   };
-  return { LIMIT, run };
+  return { LIMIT, run, cancel };
 })();
 GZ_MCP_TAB;
