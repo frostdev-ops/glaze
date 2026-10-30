@@ -1,0 +1,26 @@
+/* A PDF on the Documents page (pdf-kind.js): the card's first page, and the viewer's chrome around pdf.js's pages
+   (lib/pdfjs/pdf_viewer.css draws the pages, their text layer and form fields). The chrome is the paper's (writer-paper.css
+   .gp-top, .gp-tool, .gp-menu) in the student's Look; the pages are print, white whatever the Look. */
+.gd-pic .gq-thumb { width: 204px; height: auto; align-self: flex-start; zoom: var(--gd-thumb); background: #fff; border-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+:root:not([data-dark]) .gd-pic .gq-thumb { box-shadow: 0 1px 3px rgba(15,23,42,.16), 0 0 0 1px rgba(15,23,42,.06); }
+@media (max-width: 640px) { .gd-pic .gq-thumb { zoom: calc(.72 * var(--gd-thumb)); } }
+
+:root[data-mode="pdf"] body { padding: 0; overflow: hidden; background: transparent; }
+:root[data-mode="pdf"] .gp-page { overflow: hidden; }
+.gq .gp-tool .gp-box { gap: 6px; min-width: 112px; justify-content: space-between; }
+.gq-ib { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: var(--gz-ink); flex: none; }
+.gq-ib:hover, .gq-ib[aria-expanded="true"] { background: var(--gz-line); }
+.gq-find { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--edge); background: var(--panel); }
+.gq-find[hidden] { display: none; }
+.gq-find input { flex: 0 1 280px; min-width: 0; height: 32px; padding: 0 12px; border: 1px solid var(--gz-line-strong); border-radius: 8px; background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; font-size: 13px; }
+.gq-find input:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+.gq-find-n { min-width: 64px; font-size: 13px; color: var(--gz-ink-muted); white-space: nowrap; }
+.gq-work { flex: 1; position: relative; min-height: 0; }
+/* pdf.js's container: absolutely placed (PDFViewer asks it), the Look's ground around light-scheme pages. */
+.gq-scroll { position: absolute; inset: 0; overflow: auto; background: var(--ground); }
+.gp .gq-scroll:focus-visible { outline-offset: -2px; }
+.gq-scroll .pdfViewer { color-scheme: light; padding: 16px 0 32px; }
+.gq-scroll .pdfViewer .page { box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.18); border: 0; margin: 0 auto 16px; }
+.gq-said { position: absolute; inset: 24px 24px auto; margin: 0; font-size: 14px; color: var(--gz-err); text-align: center; }
+.gq-said[hidden] { display: none; }
+.gq-menu { position: fixed; z-index: 30; }

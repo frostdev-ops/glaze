@@ -28,8 +28,10 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   const valid = (k) => local(k) || (typeof k === 'string' && STORED.test(k));
   // A copy as a standalone document: the document and its look only, never the assignment it came from. title: the
   // caller's, in the student's language.
+  // A PDF (pdf-kind.js) is its file: its bytes, their size and page count, and its first page's picture.
   const copyOf = (rec, title, t = Date.now()) => ({ key: newKey(), kind: rec.kind || 'paper', ...(rec.doc !== undefined && { doc: structuredClone(rec.doc) }),
-    ...(rec.format !== undefined && { format: rec.format }), keep: rec.keep === true, title, named: true, created: t, updated: t, revision: 0 });
+    ...(rec.format !== undefined && { format: rec.format }), ...Object.fromEntries(['file', 'size', 'pages', 'thumb'].filter((f) => rec[f] !== undefined).map((f) => [f, rec[f]])),
+    keep: rec.keep === true, title, named: true, created: t, updated: t, revision: 0 });
   // A standalone document brought into an assignment's paper (Writer's Open from Documents): what that paper's 'import'
   // save takes from it, its document, format and import choice, never its title (the assignment's stays Ultra's), and an
   // AI outline it holds, bound to the paper. target: the paper's key. → null without a document.

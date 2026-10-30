@@ -4,9 +4,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const DK = require('../lib/doc-kinds.js');
 
-test('paper and slides are the kinds, frozen', () => {
-  assert.deepEqual(Object.keys(DK.KINDS), ['paper', 'slides']);
+test('paper, pdf and slides are the kinds, frozen', () => {
+  assert.deepEqual(Object.keys(DK.KINDS), ['paper', 'pdf', 'slides']);
   assert.deepEqual(DK.KINDS.paper, { label: 'Document', icon: 'paper', accept: ['.docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', max: 15e6, param: 'paper' });
+  assert.deepEqual(DK.KINDS.pdf, { label: 'PDF', icon: 'pdf', accept: ['.pdf'], mime: 'application/pdf', max: 50e6, param: 'pdf' });
   assert.deepEqual(DK.KINDS.slides, { label: 'Slides', icon: 'slides', accept: ['.pptx', '.ppsx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', max: 50e6, param: 'slides' });
   for (const k of Object.values(DK.KINDS)) assert.ok(Object.isFrozen(k) && Object.isFrozen(k.accept));
   assert.ok(Object.isFrozen(DK.KINDS));
@@ -25,9 +26,10 @@ test('a file\'s kind is its extension\'s, any case', () => {
   assert.equal(DK.forFile('Essay.docx'), 'paper');
   assert.equal(DK.forFile('ESSAY.DOCX'), 'paper');
   assert.equal(DK.forFile('my.essay.Docx'), 'paper');
+  assert.equal(DK.forFile('Worksheet.PDF'), 'pdf');
   assert.equal(DK.forFile('Week 3.PPTX'), 'slides');
   assert.equal(DK.forFile('show.ppsx'), 'slides');
-  for (const name of ['essay.doc', 'essay.pdf', 'docx', 'essay', '', null, undefined, 'essay.docx.zip', 'deck.ppt', 'deck.pptx.zip', 'deck.odp']) assert.equal(DK.forFile(name), null, String(name));
+  for (const name of ['essay.doc', 'docx', 'essay', '', null, undefined, 'essay.docx.zip', 'essay.pdf.zip', 'deck.ppt', 'deck.pptx.zip', 'deck.odp']) assert.equal(DK.forFile(name), null, String(name));
 });
 
 test('a kind\'s page code registers onto its facts', () => {
@@ -43,40 +45,54 @@ test('a kind\'s page code registers onto its facts', () => {
   assert.equal(DK.get('toString'), null);
 });
 
-// What the page opens is what its scripts registered: a kind with no importFile (writer.slides off: slides-kind.js registers
-// nothing) takes no file, and its extensions leave the file chooser's accept.
+// What the page opens is what its scripts registered: a kind with no importFile (writer.pdf or writer.slides off: its script
+// registers nothing) takes no file, and its extensions leave the file chooser's accept.
 test('only a registered kind with importFile opens files', async () => {
   const fresh = () => { delete require.cache[require.resolve('../lib/doc-kinds.js')]; delete globalThis.GZ_DOC_KINDS; return require('../lib/doc-kinds.js'); };
   const K = fresh();
   assert.equal(K.opens('Essay.docx'), null, 'nothing registered: nothing opens');
   assert.equal(K.accept(), '');
+  assert.deepEqual(K.taking(), []);
   K.register('paper', { importFile: () => 'key', thumb: () => null });
   assert.equal(K.opens('Essay.docx'), 'paper');
+  assert.equal(K.opens('Worksheet.pdf'), null, 'pdf not registered');
   assert.equal(K.opens('Week 3.pptx'), null, 'slides not registered');
   assert.equal(K.accept(), '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  K.register('pdf', { thumb: () => null });
   K.register('slides', { thumb: () => null });
+  assert.equal(K.opens('Worksheet.pdf'), null, 'a kind without importFile opens no file');
   assert.equal(K.opens('Week 3.pptx'), null, 'a kind without importFile opens no file');
+  assert.deepEqual(K.taking(), ['paper']);
+  K.register('pdf', { importFile: () => 'key', thumb: () => null });
+  assert.equal(K.opens('Worksheet.pdf'), 'pdf');
+  assert.equal(K.accept(), '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf');
   K.register('slides', { importFile: () => 'key', thumb: () => null });
   assert.equal(K.opens('Week 3.pptx'), 'slides');
   assert.equal(K.opens('Week 3.ppsx'), 'slides');
-  assert.equal(K.accept(), '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pptx,.ppsx,application/vnd.openxmlformats-officedocument.presentationml.presentation');
+  assert.deepEqual(K.taking(), ['paper', 'pdf', 'slides']);
+  assert.equal(K.accept(), '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf,.pptx,.ppsx,application/vnd.openxmlformats-officedocument.presentationml.presentation');
   fresh();
 });
 
-// A kind's script may decide late whether it registers (slides-kind.js reads writer.slides first); the page waits for every
-// such decision before it routes or draws, and a script that fails doesn't hold the page.
+// A kind's script may decide late whether it registers (pdf-kind.js reads writer.pdf, slides-kind.js writer.slides first);
+// the page waits for every such decision before it routes or draws, and a script that fails doesn't hold the page.
 test('settled waits for every kind script, failed ones included', async () => {
   const fresh = () => { delete require.cache[require.resolve('../lib/doc-kinds.js')]; delete globalThis.GZ_DOC_KINDS; return require('../lib/doc-kinds.js'); };
   const K = fresh();
-  let late;
-  K.wait(new Promise((ok) => { late = ok; }).then(() => K.register('slides', { importFile: () => 'k' })));
+  let late, later;
+  K.wait(new Promise((ok) => { late = ok; }).then(() => K.register('pdf', { importFile: () => 'k' })));
+  K.wait(new Promise((ok) => { later = ok; }).then(() => K.register('slides', { importFile: () => 'k' })));
   K.wait(Promise.reject(new Error('a kind script failed')));
   let done = false;
   const all = K.settled().then(() => { done = true; });
   await new Promise((r) => setImmediate(r));
-  assert.equal(done, false, 'still waiting for the late kind');
+  assert.equal(done, false, 'still waiting for the late kinds');
   late();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(done, false, 'still waiting for the later kind');
+  later();
   await all;
+  assert.equal(K.opens('a.pdf'), 'pdf');
   assert.equal(K.opens('a.pptx'), 'slides');
   await K.settled();
   fresh();

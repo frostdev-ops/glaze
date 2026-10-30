@@ -14,7 +14,7 @@
   // parts as options.js feeds #backdrop; there only while Glaze is on and the Look has one). Follows storage live. The home
   // is an address with no document's key (a kind's param, lib/doc-kinds.js), so its first paint is already the whole Look; a
   // stale link that falls back home paints again (home below). The Look's surfaces (features/surfaces.css) are the home's.
-  const look = { whole: !/[?&](?:paper|slides)=/.test(location.search), paint: () => {}, surfaces: null,
+  const look = { whole: !/[?&](?:paper|pdf|slides)=/.test(location.search), paint: () => {}, surfaces: null,
     sheet: () => { look.surfaces ||= new Promise((ok) => { const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'features/surfaces.css', onload: ok, onerror: ok }); document.head.append(l); }); } };
   const theme = async () => {
     const root = document.documentElement, scheme = matchMedia('(prefers-color-scheme: dark)'), calm = matchMedia('(prefers-reduced-motion: reduce)');
@@ -205,10 +205,11 @@
     const sortSel = h('select', { id: 'gd-sort', 'aria-label': t('Sort') }, h('option', { value: 'updated', text: t('Last edited') }), h('option', { value: 'title', text: t('Title') }));
     const gridB = btn({ id: 'gd-grid', 'aria-label': t('Grid'), title: t('Grid') }, icon('grid')), listB = btn({ id: 'gd-list', 'aria-label': t('List'), title: t('List') }, icon('list'));
     const binB = btn({ id: 'gd-trash', 'aria-label': t('Trash'), title: t('Trash'), 'aria-pressed': 'false' }, icon('trash')), binBox = h('div', { class: 'gd-views gd-bin', hidden: true }, binB);
-    // What the kinds registered to import take (lib/doc-kinds.js accept): Word files alone unless a switched-on kind adds its own.
-    const accept = DK.accept(), importLabel = Object.keys(DK.KINDS).filter((id) => DK.opens(`x${DK.KINDS[id].accept[0]}`)).length > 1 ? t('Import…') : t('Import .docx…');
-    const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept, hidden: true, tabindex: '-1', 'aria-label': importLabel });
-    const importB = btn({ id: 'gd-import', class: 'gd-btn' }, importLabel);
+    // Word files only, unless another kind takes files too (lib/doc-kinds.js taking: a switched-on kind, pdf-kind.js or
+    // slides-kind.js).
+    const many = DK.taking().length > 1, importWord = t(many ? 'Import…' : 'Import .docx…');
+    const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept: DK.accept(), hidden: true, tabindex: '-1', 'aria-label': importWord });
+    const importB = btn({ id: 'gd-import', class: 'gd-btn' }, importWord);
     // Items the page's own scripts and mods add (GZ_DOCUMENTS.item 'toolbar'), before Import.
     const extra = h('div', { class: 'gd-extra', hidden: true });
     const said = h('p', { id: 'gd-said', class: 'gd-said', role: 'status' });
@@ -464,7 +465,7 @@
       if (!c) return;
       if (menu?.k === k) { closeMenu(true); return; }
       closeMenu();
-      const items = bin ? [['restore', 'Restore'], ['forever', 'Delete forever']] : [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', DK.get(DK.kindOf(c.row))?.exportLabel || 'Export .docx'], ['delete', 'Delete']].filter(Boolean);
+      const items = bin ? [['restore', 'Restore'], ['forever', 'Delete forever']] : [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', DK.get(DK.kindOf(c.row))?.exportLabel || (DK.kindOf(c.row) === 'pdf' ? 'Export .pdf' : 'Export .docx')], ['delete', 'Delete']].filter(Boolean);
       const added = bin ? [] : [...slots.card.values()];
       const el = h('div', { class: 'pop gp-menu gd-menu', role: 'menu', 'aria-labelledby': c.link.id },
         items.map(([act, label]) => btn({ role: 'menuitem', tabindex: '-1', 'data-act': act, onclick: () => { closeMenu(act !== 'rename'); run(act, k); } }, t(label))),
@@ -500,7 +501,7 @@
       if (act === 'rename') rename(k);
       else if (act === 'copy') copy(k).catch((e) => { console.error(e); say(t('Not saved. Try again in a moment.')); });
       // A paper Word can't take (a picture kept in a form Word has no place for) is said on the page, not logged.
-      else if (act === 'export') DK.get(DK.kindOf(cards.get(k)?.row)).exportFile(k).catch(() => say(t('The .docx could not be made.')));
+      else if (act === 'export') { const id = DK.kindOf(cards.get(k)?.row); DK.get(id).exportFile(k).catch(() => say(t(id === 'paper' ? 'The .docx could not be made.' : 'That file could not be read.'))); }
       else if (act === 'delete') del(k);
       else if (act === 'restore') out(k);
       else if (act === 'forever') forever(k);
@@ -624,17 +625,21 @@
     });
 
     // ---- files dropped anywhere on the page or chosen with Import .docx…: one new document each, at most 20
-    const REFUSALS = new Set(['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.']);
-    // A kind other than the paper says its own refusals (its says: { size, read }); a file no kind opens gets the Word one.
+    // A kind other than the paper says its own refusals (its says: { size, read }, slides-kind.js's; pdf-kind.js's here: the
+    // PDF size the record holds for now, and a file that is no PDF or a form only XFA can show); a file no kind takes gets
+    // the Word one, or the plain one while another kind takes files too.
+    const REFUSALS = new Set(['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.', 'Choose a PDF smaller than 3 MB.', 'That file could not be read.']);
     const PAPER_SAYS = { size: 'Choose a Word file smaller than 15 MB.', read: 'That file could not be read as a Word document.' };
-    const saysOf = (id) => (id && id !== 'paper' && DK.get(id)?.says) || PAPER_SAYS;
+    const KIND_SAYS = { pdf: { size: 'Choose a PDF smaller than 3 MB.', read: 'That file could not be read.' } };
+    const saysOf = (id) => (id && id !== 'paper' && (DK.get(id)?.says || KIND_SAYS[id])) || PAPER_SAYS;
+    const unread = many ? 'That file could not be read.' : PAPER_SAYS.read;
     const bring = async (list) => {
       dismiss();
       say('');
       const { take, refused } = DH.route(list, DK.opens, DK.KINDS, 20);
       const first = refused.find((x) => x.why !== 'count');
       const limitText = refused.some((x) => x.why === 'count') ? t('Choose up to 20 files at a time.') : '';
-      let why = first ? (first.why === 'size' ? saysOf(DK.opens(first.file?.name)).size : PAPER_SAYS.read) : '';
+      let why = first ? (first.why === 'size' ? saysOf(DK.forFile(first.file?.name)).size : unread) : '';
       for (const { file: f, kind: id } of take) {
         const says = saysOf(id);
         try { await DK.get(id).importFile(f); }
@@ -780,10 +785,10 @@
 
   catalogue().then(async () => {
     document.title = t('Documents');
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/doc-kinds.js']);
+    await GZ_WRITER_PAPER.need(['lib/writer-papers.js']);
     GZ_DOC_KINDS.register('paper', { edit, thumb, file, exportFile, text, importFile, measure: GZ_WRITER_PAPERS.measure });
-    // The kinds' scripts after this one (slides-kind.js) have run once the document is parsed; each may still be reading its
-    // switch.
+    // The other kinds' scripts (pdf-kind.js, slides-kind.js, after this one in papers.html) have run once the document is
+    // parsed; each may still be reading its switch.
     if (document.readyState === 'loading') await new Promise((ok) => document.addEventListener('DOMContentLoaded', ok, { once: true }));
     await GZ_DOC_KINDS.settled();
     // ?<a kind's param>=<key> opens that document; else the home.
@@ -831,6 +836,7 @@ if (window.top !== window) (() => {
   };
   const place = () => {
     if (close.isConnected) return true;
+    // A document of any kind (data-mode: 'paper', 'pdf', 'slides') has the paper chrome's top bar.
     const paper = !!root.dataset.mode, at = paper ? document.querySelector('.gp-top') : $('list');
     if (!at || at.hidden) return false;
     close.textContent = GZ_I18N.t('Close', {}, locale);

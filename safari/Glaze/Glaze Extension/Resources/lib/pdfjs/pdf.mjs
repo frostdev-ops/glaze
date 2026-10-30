@@ -22004,11 +22004,11 @@ class PDFDocumentProxy {
   getData() {
     return this._transport.getData();
   }
-  saveDocument(printToPDF) {
-    return this._transport.saveDocument(printToPDF);
+  saveDocument(printToPDF, maxBytes = null) {
+    return this._transport.saveDocument(printToPDF, maxBytes);
   }
-  extractPages(pageInfos, copyLevels = null) {
-    return this._transport.extractPages(pageInfos, copyLevels);
+  extractPages(pageInfos, copyLevels = null, maxBytes = null) {
+    return this._transport.extractPages(pageInfos, copyLevels, maxBytes);
   }
   getDownloadInfo() {
     return this._transport.downloadInfoCapability.promise;
@@ -23041,7 +23041,7 @@ class WorkerTransport {
   getData() {
     return this.messageHandler.sendWithPromise("GetData", null);
   }
-  saveDocument(printToPDF = null) {
+  saveDocument(printToPDF = null, maxBytes = null) {
     if (this.annotationStorage.size <= 0) {
       warn("saveDocument called while `annotationStorage` is empty, " + "please use the getData-method instead.");
     }
@@ -23053,6 +23053,7 @@ class WorkerTransport {
       isPureXfa: !!this._htmlForXfa,
       numPages: this._numPages,
       annotationStorage: map,
+      maxBytes,
       supportsPrintToPDF: this.#printToPDF !== null,
       filename: this.#fullReader?.filename ?? null
     }, transfer).finally(() => {
@@ -23060,9 +23061,10 @@ class WorkerTransport {
       this.annotationStorage.resetModified();
     });
   }
-  extractPages(pageInfos, copyLevels = null) {
+  extractPages(pageInfos, copyLevels = null, maxBytes = null) {
     const params = {
-      pageInfos
+      pageInfos,
+      maxBytes
     };
     let transfer;
     const ImageBitmapCtor = globalThis.ImageBitmap;
