@@ -2,7 +2,7 @@
 // Run on the browser runner: node scripts/transition-guard-check.js /out
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const { chromeLaunch, lockPath } = require('./check-env.js');
+const chromeLaunch = require('./check-env.js').chromeLaunch();
 const out = process.argv[2];
 const source = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
 const start = source.indexOf('const transitionGuard = ');
@@ -15,7 +15,7 @@ const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.l
 
 (async () => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-transition-guard-'));
-  const lock = lockPath();
+  const lock = require('./check-env.js').lockPath();
   let context, held = false;
   try {
     fs.mkdirSync(lock); held = true;
@@ -55,7 +55,8 @@ const check = (name, ok, detail) => { rows.push({ name, ok, detail }); console.l
         else if (mode !== 'timeout' && mode !== 'nested') vt.skipTransition();
       });
     `);
-    context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), { ...chromeLaunch(), headless: true,
+    await require('./wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), { ...chromeLaunch, headless: true,
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking'] });
     await context.route('https://vt.test/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Transition guard</title><h1>Page</h1>' }));
     const page = context.pages()[0];
