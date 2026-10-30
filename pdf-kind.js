@@ -190,7 +190,6 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     const bytes = STORE.get(rec);
     let task = null, doc = null;
     try { if (!bytes) throw new RangeError(UNREAD); ({ task, doc } = await read(bytes)); } catch { refuse(); }
-    addEventListener('pagehide', () => { task?.destroy().catch(() => {}); });
     const inited = new Promise((ok) => bus.on('pagesinit', ok, { once: true }));
     if (doc) {
       bus.on('pagesinit', () => { viewer.currentScaleValue = 'page-width'; });
@@ -204,7 +203,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     zoomIn.addEventListener('click', () => viewer.increaseScale());
     zoomOut.addEventListener('click', () => viewer.decreaseScale());
     // A fit follows the room it fits (the window, the find bar), as pdf.js's own app re-applies it.
-    new ResizeObserver(() => { const v = viewer.currentScaleValue; if (doc && PRESETS.some(([p]) => p === v)) viewer.currentScaleValue = v; }).observe(scroll);
+    const sizing = new ResizeObserver(() => { const v = viewer.currentScaleValue; if (doc && PRESETS.some(([p]) => p === v)) viewer.currentScaleValue = v; });
+    sizing.observe(scroll);
 
     // ---- menus (the paper's .pop .gp-menu): arrows move, Esc and Tab close, focus back on the opener
     let menu = null;
@@ -299,7 +299,16 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       e.preventDefault();
       flush().then((ok) => { if (ok) location[window.top === window ? 'assign' : 'replace'](back.href); });
     });
-    addEventListener('pagehide', () => { if (dirty) flush(); });
+    // The embedded frame's Close, Escape and history routes await the same storage acknowledgement as Documents.
+    addEventListener('glaze:papers:beforeleave', (e) => { if (dirty || saving) e.detail.wait(flush()); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) flush(); });
+    // Native tab navigation cannot await a promise. Protect unsaved work until the write acknowledges it.
+    addEventListener('beforeunload', (e) => { if (dirty || saving) { flush(); e.preventDefault(); e.returnValue = ''; } });
+    addEventListener('pagehide', () => {
+      clearTimeout(timer); sizing.disconnect(); l10n.destroy();
+      flush().finally(() => task?.destroy().catch(() => {}));
+    });
+    addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
 
     // ---- the title: a standalone document's to type, saved on Enter or leaving the field; Esc puts it back
     if (titleIn) {
