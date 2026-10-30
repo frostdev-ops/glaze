@@ -283,7 +283,7 @@ nonisolated enum GlazeAgentBridge {
         return fd
     }
     /// Long group-container paths are reached by name inside a pinned directory, as rendezvous.js does for run sockets.
-    /// All our temporary working-directory changes share this lock and finish before any asynchronous work or I/O wait.
+    /// All our temporary working-directory changes share this lock; no asynchronous work runs in this scope.
     private static let paths = NSLock()
     static func inside<T>(_ dir: Int32, _ body: () throws -> T) rethrows -> T? {
         paths.lock()

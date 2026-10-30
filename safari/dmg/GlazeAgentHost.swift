@@ -490,8 +490,9 @@ final class GlazeAgentHost {
         if !more { k.toAgent = 0 }
         if !k.requests.isEmpty {
             if k.reply.count + bytes.count <= 1 << 20 { k.reply += bytes } else { k.updateBlocked = true; k.reply = [] }
-            if !more { response(k); k.reply = [] }
+            if !more { response(k) }
         }
+        if !more { k.reply = [] }
         if !bytes.isEmpty || !more { put(k, more ? bytes : bytes + [10]) }
         if k.queued > limits.queue { drop(k, "overflow") }
     }
@@ -581,8 +582,11 @@ final class GlazeAgentHost {
         return nil
     }
     private func request(_ k: Conn, _ text: String) {
-        guard text.utf8.count <= 1 << 20, let m = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any],
-              let method = m["method"] as? String else { return }
+        guard text.utf8.count <= 1 << 20 else { return }
+        // JSON.parse accepts strings (for example a lone surrogate id) that Foundation rejects. They may still run in
+        // wire.js; never infer that this connection is idle from our inability to inspect it.
+        guard let m = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else { k.updateBlocked = true; return }
+        guard let method = m["method"] as? String else { return }
         if m["jsonrpc"] as? String == "2.0", m["id"] == nil, method == "notifications/cancelled",
            let p = m["params"] as? [String: Any], let id = Self.rpcID(p["requestId"]) {
             k.requests[id] = nil
