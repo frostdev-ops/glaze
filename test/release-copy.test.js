@@ -85,6 +85,9 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
 test('4.0.0 versions agree and the exact pure notes transform fits Apple', () => {
   assert.equal(JSON.parse(read('manifest.json')).version, '4.0.0');
   assert.equal(JSON.parse(read('safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.0');
+  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.0.mcpb on the GitHub release, carry Glaze's version.
+  assert.equal(JSON.parse(read('mcp/package.json')).version, '4.0.0');
+  assert.equal(JSON.parse(read('mcp/mcpb/manifest.json')).version, '4.0.0');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('scripts/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
