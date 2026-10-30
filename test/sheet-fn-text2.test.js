@@ -226,3 +226,6 @@ test('empty TEXTBEFORE and TEXTAFTER require an empty delimiter', () => {
 test('NUMBERVALUE uses Excel numeric limits', () => {
   cases(book(), [['NUMBERVALUE("1e308")', '#VALUE!'], ['NUMBERVALUE("1e-309")', 0]]);
 });
+test('NUMBERVALUE rounds input to Excel precision before flushing subnormal values', () => {
+  cases(book(), [['NUMBERVALUE("2.2250738585072014e-308")', 0], ['NUMBERVALUE("2.3e-308")>0', true]]);
+});
