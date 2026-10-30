@@ -303,7 +303,7 @@ test('a new install writes storage.local only what scripts/check-env.js installe
   await assert.rejects(done(), /install/);
   w.installed[0]({ reason: 'install' }); await settle();
   await done();
-  assert.deepEqual(Object.keys(w.store.local).filter((k) => !had.includes(k)).sort(), ['channelKeysMoved', 'freshDefaults', 'migrated', 'starterTouched', 'widgetLayout'],
+  assert.deepEqual(Object.keys(w.store.local).filter((k) => !had.includes(k)).sort(), ['channelKeysMoved', 'freshDefaults', 'lookCatalog', 'migrated', 'starterTouched', 'widgetLayout'],
     'a new install write needs its task\'s last write in installed(), or checks that compare storage see it land late');
 });
 
