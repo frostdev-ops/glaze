@@ -107,3 +107,22 @@ test('a view preference already stored by another frame does not leave an unmatc
   assert.equal(patches, 0);
   assert.equal(ctx.mine.length, 0);
 });
+
+test('compact: an expired or rejected save releases editing with a visible failure and never acknowledges a late save', async () => {
+  for (const action of ['save', 'submit']) {
+    let resolve;
+    const f = flushCtx({ save: () => new Promise((r) => { resolve = r; }), project: () => PROJECTED });
+    const pending = f.ctx.begin('lost', action);
+    f.ctx.end('lost', 'save');
+    assert.equal(f.line.textContent, action === 'save' ? 'Not saved. Try again in a moment.' : 'The paper could not be saved. Nothing was submitted.');
+    assert.equal(f.view.props.editable(), true);
+    assert.equal(f.body.inert || f.full.inert || f.ctx.root.inert, false);
+    resolve({}); await pending;
+    assert.equal(f.messages.length, 0);
+    const rejected = flushCtx({ save: async () => { throw Error('worker gone'); }, project: () => PROJECTED });
+    await rejected.ctx.begin('rejected', action);
+    assert.equal(rejected.view.props.editable(), true);
+    assert.equal(rejected.messages[0].ok, false);
+    assert.notEqual(rejected.line.textContent, 'Saving…');
+  }
+});

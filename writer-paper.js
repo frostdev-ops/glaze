@@ -1748,8 +1748,9 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     // reason (the page's, features/writer.js): Ultra's button didn't go after a save.
     const resume = (request, reason) => {
       if (!flushing || flushing.request !== request) return;
+      const action = flushing.action;
       release(flushing);
-      const why = { text: () => t('The text didn’t go into Ultra’s text box. Nothing was submitted.'), submit: () => t('Ultra’s Submit didn’t turn on. Nothing was submitted.'), page: () => t('The attempt page changed. Nothing was submitted.') }[reason];
+      const why = { save: () => action === 'save' ? t('Not saved. Try again in a moment.') : t('The paper could not be saved. Nothing was submitted.'), text: () => t('The text didn’t go into Ultra’s text box. Nothing was submitted.'), submit: () => t('Ultra’s Submit didn’t turn on. Nothing was submitted.'), page: () => t('The attempt page changed. Nothing was submitted.') }[reason];
       if (why) tell('error', why()); else if (saying === 'saving') tell('');
     };
     // action: 'submit' or 'save' (Ultra's Save and Close).
@@ -1757,11 +1758,12 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (typeof request !== 'string' || flushing || switching || !compact || !loaded || holding || view.composing) {
         host.say?.({ type: 'compact:flushed', request, ok: false }); return;
       }
-      const f = flushing = { request, editable: view.props.editable, root: root.inert, held: held().map((x) => [x, x.inert]) }, doc = view.state.doc;
+      const f = flushing = { request, action, editable: view.props.editable, root: root.inert, held: held().map((x) => [x, x.inert]) }, doc = view.state.doc;
       view.setProps({ editable: () => false }); root.inert = true;
       for (const [x] of f.held) x.inert = true;
       tell('saving', t('Saving…'));
-      const saved = await save();
+      let saved;
+      try { saved = await save(); } catch { saved = null; }
       if (flushing !== f) return; // closed or replaced
       const same = doc === view.state.doc, p = saved && same && project(doc);
       if (!p) {

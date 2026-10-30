@@ -347,7 +347,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
           return false;
         },
       },
-      view: () => ({ update: (view, prev) => o.onUpdate?.(view, prev) }),
+      view: (view) => { o.onView?.(view); return { update: (view, prev) => o.onUpdate?.(view, prev) }; },
     });
   };
   // The maps of every change after version ver, or null when they've left the log.
