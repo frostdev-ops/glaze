@@ -89,15 +89,65 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         <div class="first bb-offcanvas-panel bb-offcanvas-right peek active" style="position:absolute;top:0;bottom:0;right:0;width:420px;z-index:1011;background:#fff;display:flex;flex-direction:column;pointer-events:auto">
           <h1 id="peek-title" style="margin:24px 30px">Notification Settings</h1><div style="flex:1"></div>
           <footer style="padding:16px 30px;display:flex;gap:8px;justify-content:flex-end"><button type="button">Cancel</button><button type="button" id="peek-save">Save</button></footer></div></main>`);
+      GZ_SIDEBAR_UI.sync(true);
     });
     await page.waitForSelector('#gz-sidebar');
     const over = (sel) => page.evaluate((s) => { const e = document.querySelector(s), r = e.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!hit?.closest('.peek'); }, sel);
     check(await page.evaluate(() => getComputedStyle(document.getElementById('main-content')).isolation === 'isolate'), 'a drawn background isolates #main-content');
     check(await over('#gz-sidebar') && await over('#peek-save'), 'an open Ultra side panel is over Glaze\'s column, its Save in reach');
     await shot('peek-over-column');
+    const settlePeek = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const reachable = (sel) => page.evaluate((s) => {
+      const e = document.querySelector(s), r = e.getBoundingClientRect();
+      return e.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+    }, sel);
+    // Ultra can keep closed panels mounted. Removing the entire node is not the only close path.
+    for (const state of ['closed', 'hidden', 'display', 'visibility', 'offscreen', 'left', 'outside']) {
+      await page.evaluate((state) => {
+        const main = document.getElementById('main-content'), panel = document.querySelector('.peek'), overlay = main.querySelector('.bb-offcanvas-overlay');
+        main.append(panel); main.classList.add('bb-offcanvas-open'); panel.classList.add('active');
+        main.hidden = false; panel.hidden = false; panel.removeAttribute('aria-hidden');
+        panel.style.cssText = 'position:absolute;top:0;bottom:0;right:0;width:420px;z-index:1011;background:#fff;display:flex;flex-direction:column;pointer-events:auto';
+        overlay.style.display = 'none';
+        if (state === 'closed') { main.classList.remove('bb-offcanvas-open'); panel.classList.remove('active'); panel.style.transform = 'translateX(100%)'; }
+        if (state === 'hidden') main.hidden = true;
+        if (state === 'display') panel.style.display = 'none';
+        if (state === 'visibility') panel.style.visibility = 'hidden';
+        if (state === 'offscreen') panel.style.transform = 'translateX(100%)';
+        if (state === 'left' || state === 'outside') { panel.style.right = 'auto'; panel.style.left = '0'; }
+        if (state === 'outside') document.body.append(panel);
+      }, state);
+      await settlePeek();
+      check(await reachable('#gz-sidebar .gz-sb-toggle'), `${state} peek leaves the exposed column clickable`);
+    }
+    await page.evaluate(() => {
+      const main = document.getElementById('main-content'), panel = document.querySelector('.peek');
+      main.append(panel); panel.style.left = 'auto'; panel.style.right = '0';
+      main.querySelector('.bb-offcanvas-overlay').style.display = '';
+    });
+    await settlePeek();
+    await page.evaluate(() => document.documentElement.setAttribute('data-gz-sidebar', 'collapsed'));
+    check(await over('#gz-sidebar'), 'an open Ultra peek covers the collapsed fixed column too');
+    await page.evaluate(() => document.documentElement.setAttribute('data-gz-sidebar', 'expanded'));
     await page.setViewportSize({ width: 700, height: 900 });
     await page.waitForFunction(() => document.documentElement.dataset.gzSidebar === 'drawer' && !document.getElementById('gz-sb-launch').hidden);
     check(await over('#gz-sb-launch'), 'an open Ultra side panel is over the sidebar\'s launcher');
+    await page.evaluate(() => { document.querySelector('.peek').style.bottom = '650px'; document.querySelector('.bb-offcanvas-overlay').style.display = 'none'; });
+    await settlePeek();
+    check(await reachable('#gz-sb-launch'), 'a peek above the launcher leaves that exposed button clickable');
+    if (await reachable('#gz-sb-launch')) {
+      await page.locator('#gz-sb-launch').click();
+      check(await page.locator('[data-gz-sidebar-host]').evaluate((e) => e.matches(':popover-open')), 'an exposed launcher still opens the sidebar drawer');
+      await page.keyboard.press('Escape');
+    } else check(false, 'an exposed launcher still opens the sidebar drawer');
+    await page.evaluate(() => { document.querySelector('.peek').style.bottom = '0'; document.querySelector('.bb-offcanvas-overlay').style.display = ''; });
+    await settlePeek();
+    check(await over('#gz-sb-launch'), 'the launcher returns below a peek that covers it again');
+    for (const site of ['canvas', 'moodle']) {
+      await page.evaluate((site) => { document.documentElement.removeAttribute('data-gz-sb-ultra'); document.documentElement.dataset.gzSite = site; }, site);
+      check(await page.locator('#gz-sb-launch').evaluate((e) => getComputedStyle(e).zIndex !== '-1'), `${site}: Ultra peek markup does not lower the launcher`);
+    }
+    await page.evaluate(() => { document.documentElement.setAttribute('data-gz-sb-ultra', ''); document.documentElement.removeAttribute('data-gz-site'); });
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.evaluate(() => document.getElementById('main-content').remove());
     await page.waitForFunction(() => document.documentElement.dataset.gzSidebar === 'expanded');
