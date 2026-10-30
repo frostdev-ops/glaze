@@ -558,6 +558,12 @@ const photo = () => {
     check(glyph.font <= 16 && glyph.h <= 40, `pdf.js's bar on a selected mark keeps its buttons small (${JSON.stringify(glyph)})`);
     await shot('tools-1280.png');
     await page.setViewportSize({ width: 640, height: 900 });
+    const narrowZoom = await page.evaluate(() => {
+      const zoom = document.getElementById('gq-zoom'), label = zoom.firstElementChild, page = document.getElementById('gq-page');
+      const z = zoom.getBoundingClientRect(), l = label.getBoundingClientRect(), p = page.getBoundingClientRect();
+      return { label: l.right, zoom: z.right, page: p.left, fits: l.right <= z.right && z.right <= p.left };
+    });
+    check(narrowZoom.fits, `the narrow toolbar keeps Zoom and the page box separate (${JSON.stringify(narrowZoom)})`);
     await shot('tools-640.png');
     await page.setViewportSize({ width: 1280, height: 900 });
     // Undo takes the arrow back; Redo puts it again.
