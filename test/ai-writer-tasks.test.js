@@ -31,7 +31,7 @@ const go = async (task, input, replies) => {
   return { ...out, req: cfg.seen[0], events };
 };
 const fails = async (task, input, replies, code) => assert.rejects(go(task, input, replies), (e) => e.code === code);
-const parts = (req) => ({ system: req.messages[0].content[0].text, data: req.messages[1].content[0].text });
+const parts = (req) => ({ system: req.messages[0].content[0].text, data: req.messages[1].content.map((p) => p.text).join('\n\n') });
 const fenced = (data, needle) => {
   const tag = /<<<(DATA-[0-9a-f]+)\n/.exec(data)[1], at = data.indexOf(needle);
   return at > -1 && data.lastIndexOf(`<<<${tag}`, at) > -1 && data.indexOf(`>>>${tag}`, at) > at;
