@@ -213,14 +213,16 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       return t;
     };
 
-    // → { ok: true, flow, email (null until connected) } or { ok: false, why: 'setup' (placeholders) | 'browser' (Safari, for now) }
+    // → { ok: true, flow, email (null until connected), picker (pick() can open Google's Picker here: not Safari's app flow, which
+    // has none yet, nor without the Picker's key; Save to Drive and Sync need none) } or { ok: false, why: 'setup'
+    // (placeholders) | 'browser' (Safari, for now) }
     const status = async () => {
       if (!on) return { ok: false, why: 'off' };
       const flow = flowNow();
       if (flow === 'native' && c().native !== true) return { ok: false, why: 'browser' };
       if (!usable(flow)) return { ok: false, why: 'setup' };
       if (flow === 'native' && (await native({ type: 'google.status' }))?.ok !== true) return { ok: false, why: 'setup' }; // no app group
-      return { ok: true, flow, email: (await saved())?.email || null };
+      return { ok: true, flow, email: (await saved())?.email || null, picker: flow !== 'native' && pickable(c()) };
     };
     // From Settings' click, once the page holds the identity permission. → { ok, email } or { ok: false, why }
     const connect = () => turn(fails(async () => {

@@ -143,14 +143,14 @@ test('Chrome: connect needs the identity permission, then signs in with getAuthT
   assert.deepEqual(await no.g.connect(), { ok: false, why: 'permission' });
   assert.deepEqual(no.local, {});
   const h = harness();
-  assert.deepEqual(await h.g.status(), { ok: true, flow: 'chrome', email: null });
+  assert.deepEqual(await h.g.status(), { ok: true, flow: 'chrome', email: null, picker: true });
   assert.deepEqual(await h.g.connect(), { ok: true, email: 'student@school.edu' });
   assert.deepEqual(h.log.auth, [{ interactive: true, scopes: C.scopes }]);
   assert.equal(h.log.fetch[0].url, G.USERINFO);
   assert.equal(h.log.fetch[0].init.headers.authorization, 'Bearer chrome-tok-1');
   assert.deepEqual(h.local.google, { email: 'student@school.edu', sub: '1', flow: 'chrome', at: 1_000_000 });
   assert.equal(await h.g.account(), 'student@school.edu');
-  assert.deepEqual(await h.g.status(), { ok: true, flow: 'chrome', email: 'student@school.edu' });
+  assert.deepEqual(await h.g.status(), { ok: true, flow: 'chrome', email: 'student@school.edu', picker: true });
   // Later, the worker's token never prompts.
   assert.equal(await h.g.token(), 'chrome-tok-2');
   assert.deepEqual(h.log.auth[1], { interactive: false, scopes: C.scopes });
@@ -169,7 +169,7 @@ test('Chrome: Drive unticked on Google\'s screen is no connection, and Chrome fo
 test('Chrome with another manifest client (a dev copy) uses the web flow; a browser without getAuthToken support falls back to it', async () => {
   const dev = harness({ client: '999-other.apps.googleusercontent.com' });
   dev.identity.answer = harness().identity.answer;
-  assert.deepEqual(await dev.g.status(), { ok: true, flow: 'web', email: null });
+  assert.deepEqual(await dev.g.status(), { ok: true, flow: 'web', email: null, picker: true });
   assert.equal((await dev.g.connect()).ok, true);
   assert.deepEqual([dev.log.auth.length, dev.log.launch.length, dev.local.google.flow], [0, 1, 'web']);
   const edge = harness();
@@ -233,7 +233,7 @@ test('Firefox: the loopback redirect Google accepts, in the url only, and only t
 test('without the Picker key, signing in, the token and Disconnect work, and only Pick says setup', async () => {
   for (const flow of ['chrome', 'web']) {
     const h = harness({ flow, config: { ...REAL, apiKey: 'PLACEHOLDER' } });
-    assert.deepEqual(await h.g.status(), { ok: true, flow, email: null }, `${flow}: Settings offers Connect`);
+    assert.deepEqual(await h.g.status(), { ok: true, flow, email: null, picker: false }, `${flow}: Settings offers Connect`);
     assert.deepEqual(await h.g.connect(), { ok: true, email: 'student@school.edu' });
     assert.equal(typeof await h.g.token(), 'string');
     assert.equal(await h.g.account(), 'student@school.edu');
