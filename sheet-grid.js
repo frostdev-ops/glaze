@@ -617,6 +617,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (Array.isArray(v)) { let n = 16; for (const x of v) n += weigh(x, depth + 1); return n; }
       let n = 16; for (const k in v) n += k.length * 2 + weigh(v[k], depth + 1); return n;
     };
+    const pushUndo = (entry) => {
+      undos.push(entry); undoBytes += entry.bytes;
+      while (undos.length > UNDO.steps || (undoBytes > UNDO.bytes && undos.length > 1)) undoBytes -= undos.shift().bytes;
+    };
     const dirty = new Set();
     let dirtyAll = false, nextVersion = null, nextPatch = {};
     // Cell writes mark the bands their changed cells are in; anything that moves cells or rewrites formulas, every band.
@@ -643,9 +647,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       const before = { sheet: S().id, sel };
       let res;
       try { res = run(op); } catch (e) { refused(e); return null; }
-      undos.push({ op: res.inverse, ...before, bytes: weigh(res.inverse) });
-      undoBytes += undos[undos.length - 1].bytes;
-      while (undos.length > UNDO.steps || (undoBytes > UNDO.bytes && undos.length > 1)) undoBytes -= undos.shift().bytes;
+      pushUndo({ op: res.inverse, ...before, bytes: weigh(res.inverse) });
       redos.length = 0;
       mark(res, op);
       changed(res, op);
@@ -667,8 +669,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       let res;
       try { res = run(x.op); } catch (e) { refused(e); return; }
       const back = { op: res.inverse, sheet: x.sheet, sel, bytes: weigh(res.inverse) };
-      to.push(back);
-      if (redo) undoBytes += back.bytes;
+      if (redo) pushUndo(back); else to.push(back);
       mark(res, x.op);
       sel = x.sel;
       changed(res, x.op);
@@ -788,9 +789,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       let res;
       try { res = eng.edit(x.sheet, x.r, x.c, text); } catch (e) { refused(e); return false; }
       if (res.error) { say(t('There’s a problem with this formula.')); x.surface.focus(); return false; }
-      undos.push({ op: res.inverse, sheet: x.sheet, sel, bytes: weigh(res.inverse) });
-      undoBytes += undos[undos.length - 1].bytes;
-      while (undos.length > UNDO.steps) undoBytes -= undos.shift().bytes;
+      pushUndo({ op: res.inverse, sheet: x.sheet, sel, bytes: weigh(res.inverse) });
       redos.length = 0;
       reach(x.r, x.c);
       marquee = null;
@@ -1308,7 +1307,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       const [r, c] = hits[hitAt], next = swap(editText(r, c));
       const res = eng.edit(S().id, r, c, next);
       if (res.error) { say(t('There’s a problem with this formula.')); return; }
-      undos.push({ op: res.inverse, sheet: S().id, sel, bytes: weigh(res.inverse) }); redos.length = 0;
+      pushUndo({ op: res.inverse, sheet: S().id, sel, bytes: weigh(res.inverse) }); redos.length = 0;
       mark(res, { op: 'set' }); changed(res, { op: 'set' });
       search();
     };
