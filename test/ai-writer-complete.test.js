@@ -216,8 +216,10 @@ test('defined terms and names can recur, while six copied words inside a new fin
   assert.equal(C.finish('attention residue.', C.task.input({ before: 'Attention residue persists after a switch. Our next intervention reduces ' })), 'attention residue.');
   const term = 'Cognitive load during sustained task switching refers to the effort of changing focus.';
   assert.equal(C.finish('cognitive load during sustained task switching.', at(term, 'Our experiment measures ')), 'cognitive load during sustained task switching.');
+  assert.equal(C.finish('the effects of cognitive load during sustained task switching.', at(term, 'Our experiment measures ')), 'the effects of cognitive load during sustained task switching.');
   const name = 'The United States Department of Veterans Affairs supports this program.';
   assert.equal(C.finish('the United States Department of Veterans Affairs.', at(name, 'Our partner works with ')), 'the United States Department of Veterans Affairs.');
+  assert.equal(C.finish('help from the United States Department of Veterans Affairs.', at(name, 'Our partner receives ')), 'help from the United States Department of Veterans Affairs.');
   const copied = 'The team returns to the clearing in every chapter, and each return costs something.';
   assert.equal(C.finish('to the clearing in every chapter for inspiration.', at(copied, 'Morrison also returns ')), null);
   assert.equal(C.finish('returns to the clearing in every chapter.', at(copied, 'The team ')), null);
