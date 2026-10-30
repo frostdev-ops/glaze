@@ -45,7 +45,7 @@ GLAZE WRITER AND DOCUMENTS
 
 AGENTS
 
-• Agents is off by default in Settings › Agents. Connect AI apps on your computer through the glaze-mcp helper. Approve each app and each data group separately: courses, to-dos and schedule; grades; assignments and rubrics; Writer documents; mod tools. Every change, including a to-do tick, Writer fix or citation, waits for your OK. Agents cannot submit work.
+• Agents is off by default in Settings › Agents. Connect AI apps on your computer through the glaze-mcp helper. Approve each app and each data group separately: courses, to-dos and schedule; grades; assignments and rubrics; Writer documents. Every change, including a to-do tick, Writer fix or citation, waits for your OK. Agents cannot submit work.
 
 CANVAS
 
@@ -87,7 +87,7 @@ NEW IN 4.0.0
 • Documents wears your Look. Writer's pages follow a dark Look, and Light page keeps them white.
 • Spelling, grammar and autocorrect run on your device. Cite looks up a DOI, ISBN or web address only when you click, and sources stay with each assignment, journal, discussion or course's new messages. Tests get proofing only, with no AI or completion.
 • Settings › AI connects named providers with their keys, or a model on this device, with one model for everything or one per feature. AI stays off until you set it up. Tab completion only finishes the current sentence, and Feedback assesses your work against the rubric and instructions and explains estimated grades or why no score is available. Glaze never drafts.
-• Firefox: Agents connects AI apps on your computer to data you allow. It is off by default in Settings › Agents. Approve each app and data group separately; every change needs your OK. Agents cannot submit work.
+• Firefox: Agents connects AI apps on your computer to your courses, to-dos and grades. Every app and every change needs your OK.
 • Back up… and Restore… include papers, documents, versions, your dictionary and saved sources.
 • Blackboard: the rubric shows on a saved draft's attempt page, due chips stay right across a clock change, search follows Blackboard's own links, and turning Remember your place off cancels a pending restore.
 • Look › Motion starts at Expressive. Updating moves Subtle to Expressive once; Off stays Off.

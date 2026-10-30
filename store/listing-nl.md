@@ -37,7 +37,7 @@ GLAZE WRITER EN DOCUMENTEN
 
 AGENTS
 
-• Agents staat standaard uit in Instellingen › Agents. Koppel AI-apps op je computer via het hulpprogramma glaze-mcp. Geef per app en per gegevensgroep toestemming: cursussen, taken en rooster; cijfers; opdrachten en beoordelingsschema’s; Writer-documenten; modtools. Elke wijziging, zoals een taak afvinken, een Writer-correctie of een bronverwijzing toevoegen, wacht op jouw toestemming. Via Agents kun je geen werk inleveren.
+• Agents staat standaard uit in Instellingen › Agents. Koppel AI-apps op je computer via het hulpprogramma glaze-mcp. Geef per app en per gegevensgroep toestemming: cursussen, taken en rooster; cijfers; opdrachten en beoordelingsschema’s; Writer-documenten. Elke wijziging, zoals een taak afvinken, een Writer-correctie of een bronverwijzing toevoegen, wacht op jouw toestemming. Via Agents kun je geen werk inleveren.
 
 CANVAS
 
@@ -79,7 +79,7 @@ NIEUW IN 4.0.0
 • Documenten krijgt je stijl. De pagina’s van Writer volgen een donkere stijl, en Lichte pagina houdt ze wit.
 • Spelling, grammatica en autocorrectie werken op je apparaat. Citeren zoekt een DOI, ISBN of webadres alleen op als je klikt, en bronnen blijven bij elke opdracht, elk dagboek, elke discussie of de nieuwe berichten van een cursus. Toetsen krijgen alleen tekstcontrole, zonder AI of aanvulling.
 • Instellingen › AI verbindt genoemde aanbieders met hun sleutel of een model op dit apparaat, met één model voor alles of één per functie. AI blijft uit tot je het instelt. Aanvullen met Tab maakt alleen de huidige zin af, en Feedback toetst je werk aan het beoordelingsschema en de instructies en verklaart geschatte cijfers of waarom er geen score is. Glaze schrijft nooit een tekst voor je.
-• Firefox: Agents koppelt AI-apps op je computer aan gegevens die je toestaat. Het staat standaard uit in Instellingen › Agents. Geef per app en gegevensgroep toestemming; elke wijziging wacht op jouw toestemming. Via Agents kun je geen werk inleveren.
+• Firefox: met Agents koppel je AI-apps op je computer aan je cursussen, taken en cijfers. Elke app en elke wijziging heeft jouw toestemming nodig.
 • “Back-up maken…” en “Herstellen…” bevatten werkstukken, documenten, versies, je woordenboek en opgeslagen bronnen.
 • Blackboard: het beoordelingsschema verschijnt op de pagina van een opgeslagen concept, deadlinelabels kloppen ook na het verzetten van de klok, zoeken volgt de eigen links van Blackboard en het uitzetten van Onthoud waar je was annuleert een wachtend herstel van je positie.
 • Uiterlijk › Beweging begint bij Expressief. De update zet Subtiel eenmalig op Expressief; Uit blijft Uit.

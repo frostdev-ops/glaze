@@ -37,7 +37,7 @@ GLAZE WRITER E DOCUMENTOS
 
 AGENTES
 
-• Agentes fica desligado por padrão em Configurações › Agentes. Conecte apps de IA do seu computador pelo auxiliar glaze-mcp. Autorize cada app e grupo de dados separadamente: cursos, pendências e agenda; notas; tarefas e rubricas; documentos do Writer; ferramentas de mods. Cada alteração, como marcar uma pendência, corrigir no Writer ou adicionar uma citação, espera sua autorização. Agentes não permite entregar trabalhos.
+• Agentes fica desligado por padrão em Configurações › Agentes. Conecte apps de IA do seu computador pelo auxiliar glaze-mcp. Autorize cada app e grupo de dados separadamente: cursos, pendências e agenda; notas; tarefas e rubricas; documentos do Writer. Cada alteração, como marcar uma pendência, corrigir no Writer ou adicionar uma citação, espera sua autorização. Agentes não permite entregar trabalhos.
 
 CANVAS
 
@@ -79,7 +79,7 @@ NOVO NA 4.0.0
 • Documentos usa o seu estilo. As páginas do Writer seguem um estilo escuro, e Página clara as mantém brancas.
 • Ortografia, gramática e correção automática funcionam no seu dispositivo. Citar busca um DOI, um ISBN ou um endereço da web só quando você clica, e as fontes ficam com cada trabalho, diário ou discussão, ou com as mensagens novas de cada curso. As provas têm apenas revisão, sem IA nem preenchimento de texto.
 • Configurações › IA conecta provedores pelo nome com suas chaves ou um modelo neste dispositivo, com um modelo para tudo ou um por recurso. A IA fica desligada até você configurá-la. Completar com Tab só termina a frase atual, e o painel Comentários avalia seu trabalho pela rubrica e pelas instruções e explica as notas estimadas ou por que não há pontuação. O Glaze nunca redige por você.
-• Firefox: Agentes conecta apps de IA do seu computador aos dados que você permitir. Fica desligado por padrão em Configurações › Agentes. Autorize cada app e grupo de dados separadamente; cada alteração espera sua autorização. Agentes não permite entregar trabalhos.
+• Firefox: com Agentes, conecte apps de IA do seu computador aos seus cursos, pendências e notas. Cada app e cada alteração precisam da sua autorização.
 • “Fazer backup…” e “Restaurar…” incluem trabalhos, documentos, versões, seu dicionário e fontes salvas.
 • Blackboard: a rubrica aparece na página da tentativa de um rascunho salvo, os avisos de prazo ficam certos na mudança de horário, a busca segue os links do próprio Blackboard e desligar Lembrar onde você parou cancela uma restauração pendente.
 • Aparência › Movimento começa em Expressivo. A atualização muda Sutil para Expressivo uma vez; Desligado continua desligado.

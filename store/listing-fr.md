@@ -37,7 +37,7 @@ GLAZE WRITER ET DOCUMENTS
 
 AGENTS
 
-• Agents est désactivé par défaut dans Réglages › Agents. Connectez des apps d’IA de votre ordinateur via l’utilitaire glaze-mcp. Autorisez chaque app et chaque groupe de données séparément : cours, tâches et emploi du temps ; notes ; devoirs et grilles d’évaluation ; documents Writer ; outils de mods. Chaque modification, comme cocher une tâche, corriger dans Writer ou ajouter une citation, attend votre accord. Agents ne permet pas de remettre un travail.
+• Agents est désactivé par défaut dans Réglages › Agents. Connectez des apps d’IA de votre ordinateur via l’utilitaire glaze-mcp. Autorisez chaque app et chaque groupe de données séparément : cours, tâches et emploi du temps ; notes ; devoirs et grilles d’évaluation ; documents Writer. Chaque modification, comme cocher une tâche, corriger dans Writer ou ajouter une citation, attend votre accord. Agents ne permet pas de remettre un travail.
 
 CANVAS
 
@@ -79,7 +79,7 @@ NOUVEAUTÉS DE LA VERSION 4.0.0
 • Documents adopte votre style. Les pages de Writer suivent un style sombre, et Page claire les garde blanches.
 • Orthographe, grammaire et correction automatique fonctionnent sur votre appareil. Citer recherche un DOI, un ISBN ou une adresse web seulement quand vous cliquez, et les sources restent avec chaque devoir, journal ou discussion, ou avec les nouveaux messages d’un cours. Les tests n’ont que la correction, sans IA ni complétion.
 • Réglages › IA connecte des fournisseurs par leur nom avec leur clé ou un modèle sur cet appareil, avec un modèle pour tout ou un par fonction. L’IA reste désactivée tant que vous ne la configurez pas. La complétion avec Tab termine seulement la phrase en cours, et le panneau Commentaires évalue votre travail selon la grille et les consignes et explique les notes estimées ou l’absence de score. Glaze ne rédige jamais à votre place.
-• Firefox : Agents connecte des apps d’IA de votre ordinateur aux données que vous autorisez. Il est désactivé par défaut dans Réglages › Agents. Autorisez chaque app et groupe de données séparément ; chaque modification attend votre accord. Agents ne permet pas de remettre un travail.
+• Firefox : avec Agents, connectez des apps d’IA de votre ordinateur à vos cours, tâches et notes. Chaque app et chaque modification demandent votre accord.
 • « Sauvegarder… » et « Restaurer… » incluent travaux, documents, versions, dictionnaire et sources enregistrées.
 • Blackboard : la grille s’affiche sur la page de tentative d’un brouillon enregistré, les indicateurs d’échéance restent justes au changement d’heure, la recherche suit les liens de Blackboard et désactiver Retrouver où vous en étiez annule une restauration en attente.
 • Apparence › Animations commence à Expressives. La mise à jour passe une fois Subtiles à Expressives ; Aucune reste Aucune.

@@ -18,7 +18,7 @@ canvas,blackboard,moodle,student,grades,deadlines,study,school,college,homework,
 
 ## Description (4,000 character maximum)
 
-Glaze is a Safari extension for customizing the colors, fonts and backgrounds of Blackboard Ultra, Canvas and Moodle.
+Make Blackboard Ultra, Canvas and Moodle feel like your own study space. Glaze is a Safari extension that brings your colors, fonts and backgrounds to your school's website, with planning and study tools beside your coursework.
 
 YOUR LOOK
 Pick a Look or set your palette, fonts, spacing, corners and surfaces. Add a gradient, picture or animated background. Preview in the settings editor, pair light and dark palettes, and share a theme code. Motion follows your reduced-motion setting.

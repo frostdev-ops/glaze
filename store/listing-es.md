@@ -37,7 +37,7 @@ GLAZE WRITER Y DOCUMENTOS
 
 AGENTES
 
-• Agentes está desactivado por defecto en Ajustes › Agentes. Conecta apps de IA de tu ordenador mediante el programa auxiliar glaze-mcp. Autoriza cada app y cada grupo de datos por separado: cursos, pendientes y horario; calificaciones; tareas y rúbricas; documentos de Writer; herramientas de mods. Cada cambio, como marcar un pendiente, corregir en Writer o añadir una cita, espera tu aprobación. Agentes no permite entregar trabajos.
+• Agentes está desactivado por defecto en Ajustes › Agentes. Conecta apps de IA de tu ordenador mediante el programa auxiliar glaze-mcp. Autoriza cada app y cada grupo de datos por separado: cursos, pendientes y horario; calificaciones; tareas y rúbricas; documentos de Writer. Cada cambio, como marcar un pendiente, corregir en Writer o añadir una cita, espera tu aprobación. Agentes no permite entregar trabajos.
 
 CANVAS
 
@@ -79,7 +79,7 @@ NOVEDADES DE 4.0.0
 • La página Documentos usa tu estilo. Las páginas de Writer siguen un estilo oscuro, y Página clara las mantiene blancas.
 • La ortografía, la gramática y la autocorrección se ejecutan en tu dispositivo. Citar busca un DOI, un ISBN o una dirección web solo cuando haces clic, y las fuentes se guardan con cada tarea, diario o debate, o con los mensajes nuevos de cada curso. Los exámenes solo tienen corrección, sin IA ni autocompletado.
 • Ajustes › IA conecta proveedores por nombre con sus claves o un modelo en este dispositivo, con un modelo para todo o uno por función. La IA permanece desactivada hasta que la configures. Completar con Tab solo termina la frase actual, y el panel Comentarios evalúa tu trabajo según la rúbrica y las instrucciones y explica las notas estimadas o por qué no hay puntuación. Glaze nunca redacta por ti.
-• Firefox: Agentes conecta apps de IA de tu ordenador a los datos que permitas. Está desactivado por defecto en Ajustes › Agentes. Autoriza cada app y grupo de datos por separado; cada cambio necesita tu aprobación. Agentes no permite entregar trabajos.
+• Firefox: con Agentes, conecta apps de IA de tu ordenador a tus cursos, pendientes y calificaciones. Cada app y cada cambio necesitan tu aprobación.
 • «Hacer una copia…» y «Restaurar…» incluyen trabajos, documentos, versiones, tu diccionario y las fuentes guardadas.
 • Blackboard: la rúbrica aparece en la página del intento de un borrador guardado, los avisos de entrega siguen siendo correctos con el cambio de hora, la búsqueda sigue los enlaces propios de Blackboard y desactivar Recordar dónde estabas cancela una restauración pendiente.
 • Aspecto › Movimiento empieza en Expresivo. La actualización cambia Sutil a Expresivo una vez; si elegiste No, sigue en No.

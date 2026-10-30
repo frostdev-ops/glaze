@@ -37,7 +37,7 @@ GLAZE WRITER UND DOKUMENTE
 
 AGENTEN
 
-• Agenten ist unter Einstellungen › Agenten standardmäßig aus. Verbinde KI-Apps auf deinem Computer über das Hilfsprogramm glaze-mcp. Erlaube jede App und jede Datengruppe einzeln: Kurse, To-dos und Termine; Noten; Aufgaben und Bewertungsraster; Writer-Dokumente; Mod-Werkzeuge. Jede Änderung, auch ein To-do-Haken, eine Writer-Korrektur oder ein Zitat, wartet auf deine Zustimmung. Über Agenten lassen sich keine Arbeiten abgeben.
+• Agenten ist unter Einstellungen › Agenten standardmäßig aus. Verbinde KI-Apps auf deinem Computer über das Hilfsprogramm glaze-mcp. Erlaube jede App und jede Datengruppe einzeln: Kurse, To-dos und Termine; Noten; Aufgaben und Bewertungsraster; Writer-Dokumente. Jede Änderung, auch ein To-do-Haken, eine Writer-Korrektur oder ein Zitat, wartet auf deine Zustimmung. Über Agenten lassen sich keine Arbeiten abgeben.
 
 CANVAS
 
@@ -79,7 +79,7 @@ NEU IN 4.0.0
 • Die Seite Dokumente übernimmt dein Design. Die Seiten von Writer folgen einem dunklen Design; Helle Seite lässt sie weiß.
 • Rechtschreibung, Grammatik und Autokorrektur laufen auf deinem Gerät. „Zitieren“ sucht eine DOI, ISBN oder Webadresse nur, wenn du klickst, und Quellen bleiben bei der jeweiligen Aufgabe, dem Journal, der Diskussion oder den neuen Nachrichten eines Kurses. Tests erhalten nur Korrekturhilfen, ohne KI oder Textvervollständigung.
 • Einstellungen › KI verbindet benannte Anbieter mit ihrem Schlüssel oder ein Modell auf diesem Gerät, mit einem Modell für alles oder einem pro Funktion. KI bleibt aus, bis du sie einrichtest. Die Tab-Vervollständigung beendet nur den aktuellen Satz, und Feedback bewertet deine Arbeit anhand von Bewertungsraster und Anweisungen und erklärt geschätzte Noten oder warum keine Punktzahl möglich ist. Glaze verfasst keine Entwürfe.
-• Firefox: Agenten verbindet KI-Apps auf deinem Computer mit Daten, die du erlaubst. Die Funktion ist unter Einstellungen › Agenten standardmäßig aus. Erlaube jede App und Datengruppe einzeln; jede Änderung braucht deine Zustimmung. Über Agenten lassen sich keine Arbeiten abgeben.
+• Firefox: Mit Agenten verbindest du KI-Apps auf deinem Computer mit deinen Kursen, To-dos und Noten. Jede App und jede Änderung braucht deine Zustimmung.
 • „Sichern…“ und „Wiederherstellen…“ enthalten Arbeiten, Dokumente, Versionen, dein Wörterbuch und gespeicherte Quellen.
 • Blackboard: Das Bewertungsraster erscheint auf der Abgabeseite eines gespeicherten Entwurfs, Fälligkeitshinweise stimmen auch nach einer Zeitumstellung, die Suche folgt Blackboards eigenen Links, und das Ausschalten von „Deine Stelle merken“ bricht eine ausstehende Wiederherstellung ab.
 • Aussehen › Bewegung beginnt bei Lebhaft. Das Update stellt Dezent einmalig auf Lebhaft um; Aus bleibt Aus.
