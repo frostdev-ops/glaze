@@ -206,6 +206,8 @@
   .ai-drawer .line { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto auto; gap: .6rem; align-items: center; }
   .ai-drawer .line > b { font-weight: 600; }
   .ai-drawer #ai-local-tier { justify-self: start; }
+  /* Narrow: Glaze's own model's state and size go under its name, beside nothing, so the name keeps its line. */
+  @media (max-width: 640px) { .ai-drawer .line.own { grid-template-columns: 30px minmax(0, 1fr) auto; } .ai-drawer .line.own > .note { grid-row: 2; grid-column: 2 / -1; } }
   .ai-drawer .note { color: var(--gz-ink-muted); font-size: calc(12px * var(--gz-scale, 1)); justify-self: end; }
   .ai-drawer a { color: var(--gz-accent); font-size: calc(12px * var(--gz-scale, 1)); text-decoration: none; white-space: nowrap; }
   .ai-drawer .key { display: flex; align-items: center; gap: .6rem; min-width: 0; }
