@@ -27,7 +27,8 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     // Nothing without consent; agent access sends the student's course data to an app on this computer, outside the browser.
     assert.deepEqual(m.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'], optional: ['websiteContent'] });
     assert.equal(m.oauth2, undefined);
-    assert.deepEqual(m.optional_permissions, ['nativeMessaging'], 'no identity; agent access asks for native messaging');
+    // identity for Drive's web sign-in (scripts/oauth-manifest.js), once its Web client is real; agent access asks for native messaging.
+    assert.deepEqual(m.optional_permissions, require('../lib/google.js').ready(require('../lib/google-config.js'), 'web') ? ['identity', 'nativeMessaging'] : ['nativeMessaging']);
     assert.ok(m.web_accessible_resources.every((e) => !('use_dynamic_url' in e)));
     // Code mods need Chrome: no sandbox page, CSP or files, so content.js never starts them.
     assert.equal(m.sandbox, undefined);

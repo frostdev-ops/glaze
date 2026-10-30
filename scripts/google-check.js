@@ -16,7 +16,8 @@ const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const env = require('./check-env.js');
 
-const CHROME_CLIENT = '111-chrome.apps.googleusercontent.com';
+const SHIPPED = require('../lib/google-config.js');
+const CHROME_CLIENT = SHIPPED.chrome;
 const ext = env.staged(process.env.EXT || path.join(__dirname, '..'), []);
 {
   const file = path.join(ext, 'manifest.json'), m = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -27,7 +28,8 @@ const ext = env.staged(process.env.EXT || path.join(__dirname, '..'), []);
 }
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const REDIRECT = `https://${id}.chromiumapp.org/`;
-const REAL = { chrome: CHROME_CLIENT, web: '222-web.apps.googleusercontent.com', apiKey: 'AIzaCheckKey0123456789', appId: '123456789012' };
+const REAL = { chrome: SHIPPED.chrome, web: SHIPPED.web, ios: SHIPPED.ios, apiKey: SHIPPED.apiKey, appId: SHIPPED.appId };
+const BLANK = { chrome: 'PLACEHOLDER-chrome.apps.googleusercontent.com', web: 'PLACEHOLDER-web.apps.googleusercontent.com', ios: 'PLACEHOLDER-ios.apps.googleusercontent.com', apiKey: 'PLACEHOLDER', appId: 'PLACEHOLDER' };
 const PICKER = require('../lib/google-config.js').picker;
 const DRIVE = 'https://www.googleapis.com/auth/drive.file';
 const TOKEN = 'ya29.check-web-token';
@@ -135,10 +137,16 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
       });
     };
 
-    // Placeholders: the shipped config. No row, nothing asked of Google.
+    // The shipped config: Glaze's clients. The row offers Connect, and nothing reaches Google before a click.
     await open();
     ok(await until(() => sw.evaluate(() => typeof GZ_GOOGLE_CONFIG === 'object' && typeof google === 'object' && google !== null), 'Settings asked the worker'), 'Settings asks the worker for Drive\'s status');
-    ok(await sw.evaluate(() => GZ_GOOGLE_CONFIG.chrome.includes('PLACEHOLDER')), 'the shipped config is placeholders');
+    await until(() => row.isVisible(), 'the row, shipped config');
+    ok(await page.locator('#gdrive-connect').isVisible() && (await page.locator('#gdrive-who').textContent()) === '', 'the shipped config: Settings offers Connect for Google Drive');
+    ok(await page.evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:google', op: 'status' })).then((s) => s.ok && s.flow === 'chrome'), 'Chromium with the store client signs in with getAuthToken');
+
+    // Placeholders: no row.
+    await sw.evaluate((c) => Object.assign(GZ_GOOGLE_CONFIG, c), BLANK);
+    await open();
     await pause(300);
     ok(await row.isHidden(), 'placeholders: Settings shows no Google Drive row');
     ok(await page.evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:google', op: 'status' })).then((s) => s.why === 'setup'), 'and the worker says why: setup');
@@ -173,6 +181,12 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
     ok(JSON.stringify(Object.keys(saved).sort()) === '["at","email","flow"]' && saved.flow === 'web', 'storage.local google: the account, the flow and when');
     await noToken('connected');
     await page.screenshot({ path: path.join(out, 'google-2-connected.png') });
+
+    // No Picker key: Pick alone says setup, and no picker page is asked.
+    await sw.evaluate(() => { GZ_GOOGLE_CONFIG.apiKey = 'PLACEHOLDER'; });
+    ok(await page.evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:google', op: 'pick' })).then((x) => x.ok === false && x.why === 'setup'), 'without the Picker key, Pick says setup');
+    ok(log.picker.length === 0 && !await row.isHidden(), 'and nothing is probed; the account stays connected');
+    await sw.evaluate((k) => { GZ_GOOGLE_CONFIG.apiKey = k; }, REAL.apiKey);
 
     // Pick, frostdev.io down: its copy on GitHub Pages.
     const pick = () => page.evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:google', op: 'pick' }));

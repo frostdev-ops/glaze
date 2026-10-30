@@ -12,6 +12,8 @@ const { oauth } = require('../scripts/oauth-manifest.js');
 
 const REDIRECT = 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/';
 const DRIVE = 'https://www.googleapis.com/auth/drive.file';
+// Every id unset, as before the owner made Glaze's clients.
+const BLANK = { ...C, chrome: 'PLACEHOLDER-chrome.apps.googleusercontent.com', web: 'PLACEHOLDER-web.apps.googleusercontent.com', ios: 'PLACEHOLDER-ios.apps.googleusercontent.com', apiKey: 'PLACEHOLDER', appId: 'PLACEHOLDER' };
 const REAL = { ...C, chrome: '111-chrome.apps.googleusercontent.com', web: '222-web.apps.googleusercontent.com', ios: '333-ios.apps.googleusercontent.com', apiKey: 'AIzaTestKey', appId: '123456789012' };
 
 // A worker: flow, config, what Google answers (google(details) → the redirect URL; userinfo), which picker pages load.
@@ -86,12 +88,19 @@ const careful = (h) => {
   for (const { init } of h.log.fetch) assert.deepEqual([init.credentials, init.redirect, init.cache], ['omit', 'error', 'no-store']);
 };
 
-test('the config: three scopes, the two picker pages in order, placeholders that report setup', () => {
+test('the config: Glaze\'s clients in project 1071735898350, three scopes, the two picker pages in order, no secret', () => {
   assert.deepEqual(C.scopes, [DRIVE, 'openid', 'email']);
   assert.deepEqual(C.picker, ['https://frostdev.io/glaze/drive-picker/', 'https://frostdev-ops.github.io/glaze-drive-picker/']);
-  for (const k of ['chrome', 'web', 'ios', 'apiKey', 'appId']) assert.match(C[k], /PLACEHOLDER/, `${k} is marked as a placeholder`);
+  assert.equal(C.chrome, require('../manifest.json').oauth2.client_id, 'Chrome signs in with the store item\'s client, Calendar\'s');
+  for (const k of ['chrome', 'web', 'ios']) assert.match(C[k], /^1071735898350-[a-z0-9]{32}\.apps\.googleusercontent\.com$/, k);
+  assert.equal(new Set([C.chrome, C.web, C.ios]).size, 3);
+  assert.equal(C.appId, '1071735898350');
+  assert.match(C.apiKey, /^AIza[\w-]{35}$/);
+  assert.doesNotMatch(JSON.stringify(C) + fs.readFileSync(path.join(__dirname, '../lib/google-config.js'), 'utf8'), /GOCSPX|client_secret|secret/i, 'client ids and a browser key only, never a secret');
   assert.equal(C.native, false, 'Safari waits for the app');
-  for (const f of ['chrome', 'web', 'native']) assert.equal(G.ready(C, f), false, f);
+  assert.deepEqual(['chrome', 'web', 'native'].map((f) => G.ready(C, f)), [true, true, false]);
+  assert.equal(G.pickable(C), true);
+  for (const f of ['chrome', 'web', 'native']) assert.equal(G.ready(BLANK, f), false, f);
   assert.equal(G.ready(REAL, 'chrome'), true);
   assert.equal(G.ready(REAL, 'web'), true);
   assert.equal(G.ready(REAL, 'native'), false, 'native also needs config.native');
@@ -104,7 +113,7 @@ test('the config: three scopes, the two picker pages in order, placeholders that
 
 test('placeholders: status says setup on every browser, and connect does nothing', async () => {
   for (const flow of ['chrome', 'web']) {
-    const h = harness({ flow, config: C });
+    const h = harness({ flow, config: BLANK });
     assert.deepEqual(await h.g.status(), { ok: false, why: 'setup' });
     assert.deepEqual(await h.g.connect(), { ok: false, why: 'setup' });
     assert.deepEqual([h.log.auth, h.log.launch, h.log.fetch], [[], [], []]);
@@ -355,11 +364,11 @@ test('the worker answers glaze:google from Settings only (pick from Glaze\'s own
 
 // ---- packaging: what each package's manifest carries for Google ----
 const repo = require('../manifest.json');
-test('packages: placeholders leave Drive out, so a released build asks for no identity and carries no oauth2', () => {
-  const chrome = oauth(repo, { target: 'chrome', calendar: false, config: C });
+test('packages: placeholders leave Drive out, so a build asks for no identity and carries no oauth2', () => {
+  const chrome = oauth(repo, { target: 'chrome', calendar: false, config: BLANK });
   assert.equal(chrome.oauth2, undefined);
   assert.ok(!(chrome.optional_permissions || []).includes('identity'));
-  const firefox = oauth(repo, { target: 'firefox', calendar: false, config: C });
+  const firefox = oauth(repo, { target: 'firefox', calendar: false, config: BLANK });
   assert.equal(firefox.oauth2, undefined);
   assert.ok(!(firefox.optional_permissions || []).includes('identity'));
   const { oauth2, optional_permissions: optional, ...rest } = repo;
@@ -373,12 +382,21 @@ test('packages: real ids give Chrome the Drive client and its three scopes, with
   assert.ok(!chrome.permissions.includes('identity'));
   const both = oauth(repo, { target: 'chrome', calendar: true, config: REAL });
   assert.deepEqual(both.oauth2.scopes, ['https://www.googleapis.com/auth/calendar.app.created', ...C.scopes]);
-  const cal = oauth(repo, { target: 'chrome', calendar: true, config: C });
+  const cal = oauth(repo, { target: 'chrome', calendar: true, config: BLANK });
   assert.deepEqual(cal.oauth2, repo.oauth2, 'Calendar alone: the manifest as it is');
-  const web = oauth(repo, { target: 'chrome', calendar: false, config: { ...REAL, chrome: C.chrome } });
+  const web = oauth(repo, { target: 'chrome', calendar: false, config: { ...REAL, chrome: BLANK.chrome } });
   assert.equal(web.oauth2, undefined, 'only the Web client: Edge and Brave sign in, Chrome waits');
   assert.ok(web.optional_permissions.includes('identity'));
   const firefox = oauth(repo, { target: 'firefox', calendar: false, config: REAL });
   assert.equal(firefox.oauth2, undefined);
   assert.ok(firefox.optional_permissions.includes('identity'), 'Firefox signs in with the Web client');
+});
+
+test('packages: the shipped config gives Chrome Calendar\'s client with Drive\'s three scopes, and Firefox identity', () => {
+  const chrome = oauth(repo, { target: 'chrome', calendar: false, config: C });
+  assert.deepEqual(chrome.oauth2, { client_id: repo.oauth2.client_id, scopes: C.scopes });
+  assert.deepEqual(chrome.optional_permissions, repo.optional_permissions);
+  const firefox = oauth(repo, { target: 'firefox', calendar: false, config: C });
+  assert.equal(firefox.oauth2, undefined);
+  assert.deepEqual(firefox.optional_permissions, repo.optional_permissions);
 });

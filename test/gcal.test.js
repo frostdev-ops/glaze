@@ -437,8 +437,10 @@ test('the store package leaves Google sync out while the switch is off; scripts/
     const repo = require('../manifest.json');
     const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
     const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
-    const { oauth2, optional_permissions: optional, ...rest } = repo, store = optional.filter((p) => p !== 'identity');
-    assert.deepEqual(packed, store.length ? { ...rest, optional_permissions: store } : rest, 'the store manifest: the same, without oauth2 and the optional identity permission');
+    const { oauth2 } = repo;
+    // Calendar's scope stays out while its switch is off; what Drive needs (scripts/oauth-manifest.js) goes in.
+    assert.deepEqual(packed, require('../scripts/oauth-manifest.js').oauth(repo, { target: 'chrome', calendar: false, config: require('../lib/google-config.js') }), 'the store manifest: the repo\'s, with only what Drive needs from Google');
+    assert.ok(!(packed.oauth2?.scopes || []).includes(G.SCOPE), 'no Calendar scope while the switch is off');
     assert.match(execFileSync('unzip', ['-p', zip, 'lib/gcal.js']).toString(), /\n {2}const ON = false;\n/);
     const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
     assert.deepEqual([dev.oauth2, dev.optional_permissions, dev.key], [oauth2, repo.optional_permissions, fs.readFileSync(keyFile, 'utf8')]);

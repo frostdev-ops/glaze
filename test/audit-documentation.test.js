@@ -93,18 +93,22 @@ test('BLD-5: the permission text matches the manifest and the packaging scripts'
   assert.ok(!/doesn't ask for unlimited/i.test(policy));
   assert.match(policy, /Glaze asks the browser for\s+`unlimitedStorage`/);
   assert.equal(G.ON, false, 'Google Calendar sync is built off, so released builds omit identity');
-  // Drive's Google clients are placeholders until the owner creates them: once one is real, the package asks for identity,
-  // and PRIVACY.md must name Drive's sign-in before this changes.
-  const drive = require('../lib/google-config.js'), { oauth } = require('../scripts/oauth-manifest.js');
-  assert.ok(!['chrome', 'web'].some((f) => require('../lib/google.js').ready(drive, f)), 'Drive sign-in is not set up, so released builds omit identity');
+  // Drive (lib/google-config.js): once its clients are real, the packages ask for identity, and the policy must say Drive is
+  // offered, not unavailable.
+  const drive = require('../lib/google-config.js'), { oauth } = require('../scripts/oauth-manifest.js'), { ready } = require('../lib/google.js');
   assert.match(code('package.sh'), /node scripts\/oauth-manifest\.js chrome manifest\.json > "\$stage\/manifest\.json"/);
   assert.match(code('scripts/package-firefox.sh'), /oauth-manifest\.js'\)\)\.oauth\(m, \{ target: 'firefox'/);
+  const offered = { chrome: ready(drive, 'chrome') || ready(drive, 'web'), firefox: ready(drive, 'web') };
   for (const target of ['chrome', 'firefox']) {
     const packed = oauth(manifest, { target, calendar: G.ON, config: drive });
-    assert.ok(!packed.oauth2 && !(packed.optional_permissions || []).includes('identity'), `${target}: no oauth2, no identity`);
+    assert.equal((packed.optional_permissions || []).includes('identity'), offered[target], `${target}: identity exactly while Drive is offered`);
+  }
+  if (offered.chrome || offered.firefox) {
+    assert.doesNotMatch(policy, /`identity` \(Chrome only, optional\) — not requested by released builds/, 'Drive asks for identity in released builds');
+    assert.doesNotMatch(policy, /Google Drive[^.]*unavailable in (?:this|the current) build/, 'a build that offers Drive must not call it unavailable');
   }
   assert.match(code('scripts/safari-manifest.sh'), /p != 'identity'/);
-  assert.match(policy, /`identity` \(Chrome only, optional\) — not requested by released builds/);
+  if (!ready(drive, 'chrome') && !ready(drive, 'web')) assert.match(policy, /`identity` \(Chrome only, optional\) — not requested by released builds/);
   assert.match(policy, /Chrome sync \(or Firefox Sync\)/);
   assert.match(policy, /\*\*Music widget\*\* \(Canvas and Blackboard Ultra/);
   assert.ok(/music/.test(code('lib/widgets.js').match(/const TILES = \[[^\]]*\]/)[0]), 'the music tile is a widget on both sites');
