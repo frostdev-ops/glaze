@@ -236,3 +236,8 @@ test('the golden cases, at the golden file\'s 1e-12', () => {
     ['CSC(1)', 1.1883951057781212], ['SEC(1)', 1.8508157176809255], ['ACOT(1)', 0.7853981633974483], ['MULTINOMIAL(2,3,4)', 1259.999999999999]], 1e-12);
   cases(e, [['ACOSH(1)', 0], ['ACOSH(0.5)', '#NUM!'], ['COT(0)', '#DIV/0!'], ['COMBINA(4,3)', 20], ['PERMUTATIONA(3,2)', 9], ['MDETERM({1,2;3,4})', -2], ['MDETERM({1,2;2,4})', 0]]);
 });
+
+test('COMBINA and PERMUTATIONA reject negative inputs before truncation', () => {
+  cases(book(), [['COMBINA(-0.5,1)', '#NUM!'], ['COMBINA(2,-0.5)', '#NUM!'],
+    ['PERMUTATIONA(-0.5,2)', '#NUM!'], ['PERMUTATIONA(2,-0.5)', '#NUM!']]);
+});
