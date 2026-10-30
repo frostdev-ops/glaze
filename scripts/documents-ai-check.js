@@ -4,7 +4,9 @@
 // (LanguageModel) put into the worker; Harper runs in its SharedWorker; Cite's DOI lookup goes through the worker to
 // doi.org's saved synthetic answer (test/fixtures/writer-cite-doi.json). Per document: the AI port admitted (completion
 // and writing allowed and ready), the gray text taken with Tab, Feedback's one line without assignment material, Check
-// with AI's anchored issue, the AI outline's labels, Harper's spelling mark in the text and in Checks, and the lookup.
+// with AI's anchored issue, the AI outline's labels, Harper's spelling mark in the text and in Checks, and the lookup; and
+// Sources: the assignment's paper has what its attempt saved (lib/writer-sources.js keys it by the paper, as the attempt's
+// frame does), so Checks finds its citation's entry, and adds and removes there; the standalone document keeps its own.
 // Every step is reported, passed or failed, so a run before a fix shows each missing part. No other network.
 // NODE_PATH=<playwright> nice -n 10 node scripts/documents-ai-check.js [evidence directory]
 const { chromium } = require('playwright');
@@ -35,13 +37,19 @@ const MISSPELT = 'I agree that the river works as a kind of archive, but I think
 const LAST = 'When Sethe returns to the clearing, the memory is not something she owns;';
 const GHOST = ' arrives uninvited and rearranges the present.';
 const NOTES = `doc:${crypto.randomUUID()}`, ESSAY = 'bb.school.test|_900_1|_101_1|_7_1';
+// The sources the essay's attempt saved, under the key its frame keeps them by (test/papers-sources.test.js), and a
+// citation of one in the essay.
+const SR = require(path.join(root, 'lib/writer-sources.js'));
+const ATTEMPT_SOURCES = 'writer:sources:bb.school.test|_900_1|_101_1|_7_1', LOCAL_SOURCES = (key) => `writer:sources:local|local|papers|${encodeURIComponent(key)}`;
+const SAVED = SR.normalize({ type: 'book', title: 'Beloved', author: [{ family: 'Morrison', given: 'Toni' }], publisher: 'Knopf', issued: { 'date-parts': [[1987]] } });
+const CITED = 'Paul D says the house holds what Sethe will not name (Morrison 35).';
 const NOW = Date.now(), HOUR = 3600e3;
 const DOCS = [
   { key: NOTES, label: 'standalone document', title: 'Reading notes', named: true, format: 'plain', updated: NOW - HOUR,
     doc: { type: 'doc', content: [p(OPEN), p(MISSPELT), p(LAST)] } },
   { key: ESSAY, label: 'assignment paper', title: 'Essay 2: Memory in Beloved', courseName: 'ENGL 2110', format: 'mla9', updated: NOW - 2 * HOUR, due: '2026-11-02T04:59:00.000Z',
     url: 'https://bb.school.test/ultra/courses/_101_1/outline', school: 'bb.school.test', user: '_900_1', course: '_101_1', content: '_7_1',
-    doc: { type: 'doc', content: [p('Alex Rivera', { first: 0 }), p('Dr. Okafor', { first: 0 }), p('ENGL 2110', { first: 0 }), p('12 October 2026', { first: 0 }), p('Memory in Beloved', { align: 'center' }), p(OPEN), p(MISSPELT), p(LAST)] } },
+    doc: { type: 'doc', content: [p('Alex Rivera', { first: 0 }), p('Dr. Okafor', { first: 0 }), p('ENGL 2110', { first: 0 }), p('12 October 2026', { first: 0 }), p('Memory in Beloved', { align: 'center' }), p(OPEN), p(CITED), p(MISSPELT), p(LAST)] } },
 ];
 const words = (doc) => JSON.stringify(doc).match(/"text":"([^"]*)"/g).map((m) => m.slice(8, -1)).join(' ').split(/\s+/).filter(Boolean).length;
 const records = () => {
@@ -52,6 +60,7 @@ const records = () => {
     index.push({ key: d.key, kind: 'paper', named: d.named === true, title: d.title, course: d.courseName || '', url: d.url || '', words: words(d.doc), format: d.format, updated: d.updated, submitted: null });
   }
   all.writerPapers = index;
+  all[ATTEMPT_SOURCES] = { sources: [SAVED], at: NOW };
   // Settings → AI: on, the model on this computer for every feature, completion and Feedback on (the outline's own switch
   // defaults on).
   all.ai = { on: true, model: { use: 'device' }, features: { completion: true, writing: true } };
@@ -263,6 +272,38 @@ const TAP = () => {
         await pg.screenshot({ path: path.join(out, `${d.format}-cite.png`) });
         await pg.keyboard.press('Escape');
       });
+      const stored = (k) => pg.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
+      if (d.content) {
+        await step(`${tag}: Sources has what its attempt saved, and Checks finds its citation's entry`, async () => {
+          await pg.click('#gp-tab-sources');
+          await until(() => pg.evaluate(() => [...document.querySelectorAll('#gp-sources .gzc-card .gzc-entry')].some((e) => e.textContent.startsWith('Morrison, Toni. Beloved.'))), 'the attempt\'s source in Sources');
+          await until(() => pg.evaluate(() => GZ_WRITER_CITE.count().cited === 1), 'the citation matched to it');
+          await pause(800); // past the cite checks' quiet moment (writer-cite.js recheck)
+          await pg.click('#gp-tab-checks');
+          const missing = await pg.evaluate(() => [...GZ_WRITER_ISSUES.list().filter((i) => /has no entry/.test(i.message)).map((i) => i.message),
+            ...[...document.querySelectorAll('#gp-checks .gp-issue')].map((e) => e.textContent).filter((x) => /has no entry/.test(x))]);
+          assert.deepEqual(missing, []);
+          await pg.screenshot({ path: path.join(out, `${d.format}-sources-checks.png`) });
+        });
+        await step(`${tag}: a source added or removed in Sources is its attempt's`, async () => {
+          await pg.click('#gp-tab-sources');
+          await pg.locator('#gp-sources .gzc-head button', { hasText: 'Add source' }).click();
+          await pg.locator('#gp-sources .gzc-adder button', { hasText: 'Add manually' }).click();
+          await pg.fill('#gp-sources .gzc-adder .gzc-form [data-field="author"]', 'Okafor, Ana');
+          await pg.fill('#gp-sources .gzc-adder .gzc-form [data-field="title"]', 'Rememory and the River');
+          await pg.click('#gp-sources .gzc-adder .gzc-form button[type="submit"]');
+          const added = await until(async () => { const s = await stored(ATTEMPT_SOURCES); return s?.sources?.length === 2 && s.sources.find((x) => x.title === 'Rememory and the River'); }, 'the added source in the attempt\'s store');
+          assert.equal(await stored(LOCAL_SOURCES(d.key)), null, 'nothing under a key of Documents\' own');
+          await pg.screenshot({ path: path.join(out, `${d.format}-sources.png`) });
+          await pg.locator(`#gp-sources .gzc-card[data-id="${added.id}"] button`, { hasText: 'Edit' }).click();
+          await pg.click('#gp-sources .gzc-form [data-do="remove"]');
+          await until(async () => { const s = await stored(ATTEMPT_SOURCES); return s?.sources?.length === 1 && s.sources[0].id === SAVED.id; }, 'removed from the attempt\'s store');
+        });
+      } else {
+        await step(`${tag}: Sources stay its own`, async () => {
+          assert.deepEqual(await pg.evaluate(() => [GZ_WRITER_SOURCES.keyOf(GZ_WRITER_FRAME.context()), GZ_WRITER_CITE.sources().length]), [LOCAL_SOURCES(d.key), 0]);
+        });
+      }
       lookups.length = 0;
     }
     await step('two Documents tabs share one Harper, reconnect after idle close, and keep proofing', async () => {

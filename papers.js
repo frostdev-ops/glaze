@@ -146,10 +146,13 @@
     const emit = (event, ...a) => { for (const fn of hooks[event]) try { fn(...a); } catch (e) { console.error(e); } };
     let editor = null;
     // One context object, as writer.js keeps its init's (proofing drops an AI ruling once it changes); Sources stay under
-    // this local key. An assignment's paper adds what its record keeps; its instructions and rubric are read only on Ultra.
+    // this local key. An assignment's paper adds what its record keeps, and its paper's parts when they make its key, so
+    // Sources open the store its attempt's frame keeps (lib/writer-sources.js keyOf); its instructions and rubric are read
+    // only on Ultra.
     const rec = GZ_WRITER_PAPERS.local(key) ? null : await papers().get(key).catch(() => null);
+    const paper = rec && GZ_WRITER_PAPERS.keyOf(rec) === key ? { school: rec.school.toLowerCase(), user: rec.user, course: rec.course, content: rec.content } : null;
     const context = { school: 'local', user: { id: 'local' }, course: { id: 'papers', ...(rec?.courseName && { name: rec.courseName }) }, item: { id: key },
-      ...(rec && { kind: 'assignment', assignment: { title: rec.title || '', due: rec.due || null } }) };
+      ...(rec && { kind: 'assignment', assignment: { title: rec.title || '', due: rec.due || null } }), ...(paper && { paper }) };
     // The same editor modules as an assignment frame, with a local host and no page messaging or submission. ⋯ entries
     // (item) stay off the page, as the paper hides writer.html's bar.
     globalThis.GZ_WRITER_FRAME = {
