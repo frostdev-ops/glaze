@@ -24,7 +24,11 @@ const layoutState = ({ remember, route, focused = false } = {}) => {
     .filter((el) => !el.closest('.editor-nav') && visible(el));
   if (remember) (window.layoutWant ??= new Map()).set(remember, controls);
   const active = document.activeElement;
-  const wanted = focused ? (active && active !== document.body ? [active] : []) : [...new Set([...controls, ...window.layoutWant?.get(route) || []])];
+  // Preview-ready messages can redraw the Look builders between widths. Follow the same control's data-f key; a
+  // missing or newly hidden replacement still fails, but an old detached node is not a hidden live control.
+  const remembered = (window.layoutWant?.get(route) || []).map((el) => !el.isConnected && el.dataset.f
+    ? document.querySelector(`[data-f="${CSS.escape(el.dataset.f)}"]`) || el : el);
+  const wanted = focused ? (active && active !== document.body ? [active] : []) : [...new Set([...controls, ...remembered])];
   const off = [];
   for (const el of wanted) {
     const name = el.dataset.key || el.id || el.name || el.textContent.trim().slice(0, 30) || el.tagName;
@@ -447,6 +451,22 @@ const check = async (name, test) => {
     });
     await check('translated-large-layout', async () => {
       const problems = [];
+      // The worker files a Look into History once it has rested 4 s (lib/background.js), and Settings then redraws History,
+      // replacing the rows the pages measure. Wear the seed Look once and let its entry land before any page measures: each
+      // page's own seed then changes nothing in sync, so nothing more is filed.
+      const prep = await context.newPage();
+      try {
+        await prep.goto(`${base}/options.html#look/palette`);
+        await prep.waitForFunction(() => document.querySelector('#looks button'));
+        const since = await prep.evaluate(async () => {
+          const s = GZ_SANITIZE(), at = Date.now();
+          await chrome.storage.sync.remove(GZ_HISTORY.KEYS);
+          await chrome.storage.sync.set({ ...s, colors: GZ_PRESET('Paper'), preset: 'Paper', look: { ...s.look, scale: 1.25 } });
+          return at;
+        });
+        const filed = () => prep.evaluate(async (at) => GZ_HISTORY.entries((await chrome.storage.local.get('lookHistory')).lookHistory)[0]?.at >= at, since);
+        for (const end = Date.now() + 30000; !await filed(); await pause(100)) if (Date.now() > end) throw new Error('the seed Look never reached History');
+      } finally { await prep.close(); }
       for (const lang of ['en', 'de', 'fr', 'es', 'nl', 'pt-BR']) {
         const host = await context.newPage();
         try {

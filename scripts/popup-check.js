@@ -10,6 +10,7 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const BB = 'https://bb.school.edu', CANVAS = 'https://canvas.school.edu', MOODLE = 'https://moodle.school.edu', WWW = 'https://www.school.edu';
+const env = require('./check-env.js');
 const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), [`${CANVAS}/*`, `${MOODLE}/*`, `${WWW}/*`]);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
@@ -71,7 +72,7 @@ const stub = (notHeld) => {
       ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1', '--remote-debugging-port=0'],
     });
-    require('./check-env.js').noFirstRun(ctx);
+    const welcomed = env.noFirstRun(ctx);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
@@ -86,6 +87,12 @@ const stub = (notHeld) => {
     });
     const sw = ctx.serviceWorkers().find((w) => w.url().startsWith(`chrome-extension://${id}/`)) || await ctx.waitForEvent('serviceworker', { predicate: (w) => w.url().startsWith(`chrome-extension://${id}/`) });
     cdp = await devtools(profile);
+    // The install's work first: its storage writes, and its first screen, which opens as the active tab whenever it comes.
+    await env.installed(sw);
+    let welcomeTimer;
+    try {
+      await Promise.race([welcomed, new Promise((_, no) => { welcomeTimer = setTimeout(() => no(new Error('the install never closed its first screen')), 45000); })]);
+    } finally { clearTimeout(welcomeTimer); }
     const sheets = (p) => p.evaluate(() => [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href).filter((h) => h.startsWith('chrome-extension://')).map((h) => new URL(h).pathname.slice(1)));
 
     // The tab, in front; the popup over it, opened by the worker; its target attached, the stub in, and reloaded so the
@@ -96,7 +103,12 @@ const stub = (notHeld) => {
       await tab.goto(url);
       await tab.waitForLoadState('load');
       await tab.bringToFront();
-      await pause(500);
+      // openPopup opens over the focused window's active tab: this one, the newest (every tab reads visible headless).
+      const front = () => sw.evaluate(async () => {
+        const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        return active?.id === Math.max(...(await chrome.tabs.query({})).map((t) => t.id));
+      });
+      if (!await until(front)) throw new Error(`${url} never became the active tab`);
       const opened = await sw.evaluate(() => chrome.action.openPopup().then(() => 'ok', (e) => `rejected: ${e.message}`));
       const target = await until(async () => (await cdp.send('Target.getTargets')).targetInfos.find((t) => t.url.startsWith(POPUP)));
       if (!target) throw new Error(`no popup target (openPopup: ${opened})`);
@@ -117,7 +129,7 @@ const stub = (notHeld) => {
       await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `(${stub})(${JSON.stringify(notHeld)})` }, sessionId);
       await cdp.send('Page.reload', {}, sessionId);
       await until(() => run(`document.readyState === 'complete' && !!globalThis.__gz`));
-      await pause(1200);
+      if (!await until(() => run(`document.querySelector('#here').hasAttribute('data-settled')`))) throw new Error(`the popup over ${url} never settled its site row`);
       const state = () => run(`({ shown: !document.querySelector('#here').hidden, text: document.querySelector('#here').textContent, busy: document.querySelector('#here').getAttribute('aria-disabled'), calls: __gz.calls })`);
       const click = async () => {
         const r = await run(`(() => { const b = document.querySelector('#here').getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
@@ -143,7 +155,7 @@ const stub = (notHeld) => {
       await p.shot('popup-1-row-bb');
       const n = s.calls.length;
       await p.click();
-      await pause(600);
+      await until(async () => (await p.state()).calls.slice(n).some(([k]) => k === 'request'));
       s = await p.state();
       const after = s.calls.slice(n).filter(([k]) => k === 'send' || k === 'request');
       check(JSON.stringify(after.map(([k]) => k)) === '["send","request"]', `the click tells the worker, then asks the browser (${JSON.stringify(after)})`);

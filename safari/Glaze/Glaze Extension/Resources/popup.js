@@ -112,7 +112,7 @@ GZ_UI.load().then((s) => {
     b.hidden = done || !on;
     if (b.hidden || held || menu || !hostAccess) return;
     menu = true;
-    Promise.resolve().then(() => hostAccess(tab.id)).catch(() => {});
+    return Promise.resolve().then(() => hostAccess(tab.id)).catch(() => {});
   };
   const ready = () => { busy = false; b.removeAttribute('aria-disabled'); };
   chrome.storage.onChanged.addListener((c, area) => {
@@ -132,8 +132,8 @@ GZ_UI.load().then((s) => {
       if (listed(r) && await chrome.permissions.contains({ origins: [site.pattern] })) { done = true; show(); }
     }).catch(ready);
   });
-  show();
-})().catch(() => {});
+  await show();
+})().catch(() => {}).finally(() => $('#here').setAttribute('data-settled', '')); // The row's decision is final, shown or not.
 
 // Due this week, as Blackboard, Canvas or Moodle last told the content script (the popup can't ask them): the count and
 // the next three, to read. Each site keeps its own list (content.js dueWeek, `dueWeek:<origin>`): the one of the site in this
