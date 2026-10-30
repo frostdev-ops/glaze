@@ -1381,7 +1381,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         const x = cellAt(r, c), p = M.parseInput(swap(editText(r, c)), { date1904: wb.date1904 }), keep = x.s !== undefined ? { s: x.s } : {};
         cells.push([r, c, !p ? (x.s !== undefined ? { t: 'z', s: x.s } : null) : p.f !== undefined ? { t: 'n', v: 0, f: F.normalize(p.f), ...keep } : { t: p.t, v: p.v, ...keep }]);
       }
-      apply({ op: 'cells', sheet: S().id, cells }, { big: cells.length >= 100 });
+      if (!apply({ op: 'cells', sheet: S().id, cells }, { big: cells.length >= 100 })) return;
       say(t('{n} replaced', { n: cells.length }));
       search();
     };
