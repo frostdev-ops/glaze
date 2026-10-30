@@ -7,9 +7,9 @@
 # and one cut: the optional Web Worker, which lottie builds from its own function's text, never runs in Glaze (nothing
 # turns it on, and Glaze hands the player animation data, never a path to load). The tarball is checked against the
 # SHA-256 pinned here, then the file against its own. Run it to upgrade lottie-web (new version, new hashes); the output
-# is checked in, so the extension itself still has no build step. Usage: scripts/vendor-lottie.sh
+# is checked in, so the extension itself still has no build step. Usage: tools/vendor/vendor-lottie.sh
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../extension"
 
 version=5.13.0
 tarball_sha256=00f306a9b5669abf9622c418b549681d1b858e0b7fa7ea6adc0772ca57c3fd4f

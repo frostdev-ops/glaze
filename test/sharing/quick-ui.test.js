@@ -6,14 +6,14 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
-const S = require('../lib/sessions.js');
-const N = require('../lib/notes.js');
-const T = require('../lib/todo.js');
-const R = require('../lib/relay.js');
-const G = require('../defaults.js');
-const { relay, diskStore } = require('../server/relay.js');
-const { El } = require('./stand-in-dom.js');
-const SOURCE = fs.readFileSync(path.join(__dirname, '../sharing/quick.js'), 'utf8');
+const S = require('../../extension/lib/sessions.js');
+const N = require('../../extension/lib/notes.js');
+const T = require('../../extension/lib/todo.js');
+const R = require('../../extension/lib/relay.js');
+const G = require('../../extension/defaults.js');
+const { relay, diskStore } = require('../../server/relay.js');
+const { El } = require('../stand-in-dom.js');
+const SOURCE = fs.readFileSync(path.join(__dirname, '../../extension/sharing/quick.js'), 'utf8');
 const NK = 'notesIdx:https://school.instructure.com/5';
 const clone = (v) => v === undefined ? v : structuredClone(v);
 const settle = async () => { for (let i = 0; i < 15; i++) await new Promise(setImmediate); };
@@ -93,7 +93,7 @@ const page = async (d, { note = '', relay: selected, observer = 'v2', permission
     location: { search: '?t=ticket' },
     navigator: { userActivation: { isActive: true }, clipboard: { writeText: async (v) => { copied.push(v); } } },
     GZ_I18N: { page() {}, ui() {}, t: (k, vars) => k.replace(/\{(\w+)\}/g, (_, key) => vars?.[key] ?? '') }, GZ_RELAY: R,
-    ...G, GZ_COLOR: require('../lib/color.js'), GZ_FONTS: require('../lib/fonts.js'),
+    ...G, GZ_COLOR: require('../../extension/lib/color.js'), GZ_FONTS: require('../../extension/lib/fonts.js'),
     matchMedia: () => ({ matches: false, addEventListener() {} }), addEventListener: (name, f) => events.set(name, f),
     chrome: { storage: { sync, onChanged: { addListener(f) { changes.push(f); } } }, ...(permissions && { permissions: { contains: async () => true, request: async () => true } }), tabs: { create: async (tab) => { created.push(tab); } },
       runtime: { id: 'glaze', getURL: (f) => `chrome-extension://glaze/${f}`, connect: () => ({ onMessage: { addListener: (f) => messages.push(f) }, onDisconnect: { addListener: (f) => disconnects.push(f) }, disconnect() {},

@@ -1,8 +1,8 @@
 // Native stream markup, redraws, settings and teardown. No LMS requests.
-// NODE_PATH=<playwright node_modules> node scripts/stream-check.js [evidence-directory]
+// NODE_PATH=<playwright node_modules> node checks/courses/stream-check.js [evidence-directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path');
-const root = path.join(__dirname, '..'), out = process.argv[2], lock = require('./check-env.js').lockPath();
+const root = path.join(__dirname, '../../extension'), out = process.argv[2], lock = require('../../tools/dev/check-env.js').lockPath();
 const row = (id, type, due = true) => `<li id="${id}" class="stream-item-container"><div class="stream-item"><div class="element-card"><div class="element-details" analytics-context='${JSON.stringify({ streamType: type, ...(type === 'bb_tel:stu_grade' && { notificationType: 'GradeIncreased' }) })}'>
 <div class="timestamp"><div><div class="js-split-datetime"><span class="date">Sep 16, 2026</span><span class="time">9:30 AM</span></div></div></div>
 <div class="name"><a href="#assignment">${id}</a></div>${due ? '<div class="content"><span class="due-date"><bb-translate translate-values=\'{"datetime":"10/25/26, 11:59 PM","timezone":"EDT"}\'>Due Date: <bdi>10/25/26, 11:59 PM</bdi> (<bdi>EDT</bdi>)</bb-translate></span></div>' : ''}</div></div></div></li>`;
@@ -12,8 +12,8 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
   let browser, held = false;
   try {
     fs.mkdirSync(lock); held = true;
-    await require('./wait-for-browser.js')();
-    browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch(), args: ['--host-resolver-rules=MAP * ~NOTFOUND'] });
+    await require('../../tools/dev/wait-for-browser.js')();
+    browser = await chromium.launch({ headless: true, ...require('../../tools/dev/check-env.js').chromeLaunch(), args: ['--host-resolver-rules=MAP * ~NOTFOUND'] });
     const page = await browser.newPage({ viewport: { width: 1300, height: 1000 } });
     await page.route('**/*', (r) => r.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }));
     await page.goto('https://bb.school.test/ultra/stream');

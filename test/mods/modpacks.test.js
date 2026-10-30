@@ -8,14 +8,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const M = require('../lib/media.js');
-const B = require('../lib/modbroker.js');
-const BUNDLE = require('../lib/modbundle.js');
-const PETS = require('../lib/petsprites.js');
-const L = require('../lib/lookx.js');
+const M = require('../../extension/lib/media.js');
+const B = require('../../extension/lib/modbroker.js');
+const BUNDLE = require('../../extension/lib/modbundle.js');
+const PETS = require('../../extension/lib/petsprites.js');
+const L = require('../../extension/lib/lookx.js');
 
-const root = path.join(__dirname, '..');
-const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures/media', f)));
+const root = path.join(__dirname, '../../extension');
+const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
 const b64 = (bytes) => Buffer.from(bytes).toString('base64');
 const flush = () => new Promise(setImmediate);
 const ID = 'abcdefghijklmnop', OTHER = 'qrstuvwxyz234567', SITE = 'https://school.instructure.com';
@@ -225,7 +225,7 @@ test('pets: a mod\'s pets are asked for by the editor only', () => {
   const setup = source.slice(source.indexOf('const fromEditor'), source.indexOf('// The notes app'));
   const chrome = { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, getManifest: () => ({ host_permissions: ['<all_urls>'] }) },
     storage: { local: { get: async () => ({ ultra: ['https://school.test'] }) }, sync: { get: async () => ({ enhance: { pet: true } }) } } };
-  const allow = vm.runInNewContext(`${setup} BROKER.petSprites.allow`, { chrome, URL, GZ_PET: require('../lib/pet.js'), GZ_SANITIZE: require('../defaults.js').GZ_SANITIZE });
+  const allow = vm.runInNewContext(`${setup} BROKER.petSprites.allow`, { chrome, URL, GZ_PET: require('../../extension/lib/pet.js'), GZ_SANITIZE: require('../../extension/defaults.js').GZ_SANITIZE });
   const site = { id: 'glaze', tab: {}, frameId: 0, url: 'https://school.test/ultra/courses' }, key = 'pet:https://school.test/_3_1';
   return Promise.all([allow({ op: 'mods', key }, site), allow({ op: 'fromMod', key }, site)]).then(([a, b]) => assert.deepEqual([a, b], [false, false]));
 });
@@ -451,7 +451,7 @@ test('page: sticker mode offers a mod\'s pack, lists its stickers, and places on
 });
 
 test('the manifest reference documents packs and a complete entry that the importer accepts', () => {
-  const doc = fs.readFileSync(path.join(root, 'docs/mods-api.md'), 'utf8');
+  const doc = fs.readFileSync(path.join(__dirname, '../../docs/mods-api.md'), 'utf8');
   const section = doc.match(/### `packs`\n([\s\S]*?)(?=\n### )/);
   assert.ok(section, 'packs belongs in the manifest reference');
   const example = JSON.parse(section[1].match(/```json\n([\s\S]*?)\n```/)[1]);

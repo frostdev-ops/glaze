@@ -4,9 +4,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const I = require('../lib/i18n.js');
+const I = require('../../extension/lib/i18n.js');
 const NARROW = ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*'];
 const tick = async (n = 8) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 
@@ -38,7 +38,7 @@ const sites = ({ lists = {}, hosts = NARROW, held = [], granted = true, found = 
     },
   };
   const ctx = vm.createContext({ URL, Object, Array, Set, Map, Promise, AbortSignal, document: { createElement: mk }, $: (s) => nodes[s], chrome,
-    t: (k, v) => I.t(k, v, 'en'), GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN });
+    t: (k, v) => I.t(k, v, 'en'), GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN });
   vm.runInContext(read('lib/site.js'), ctx);
   Object.assign(ctx.GZ_SITE, { probe: async () => found, nearby: async () => near });
   const src = read('options.js');

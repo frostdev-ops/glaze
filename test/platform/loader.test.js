@@ -7,9 +7,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const manifest = require('../manifest.json');
+const manifest = require('../../extension/manifest.json');
 const settle = () => new Promise(setImmediate);
 const ID = 'glaze-test-id';
 
@@ -20,7 +20,7 @@ const worker = (execute = (o) => Promise.resolve([{ result: /typeof GZ_I18N|wind
   const none = { addListener() {} };
   const area = { get: (k) => Promise.resolve(Object.fromEntries([].concat(k ?? []).filter((x) => x in local).map((x) => [x, local[x]]))), set: () => Promise.resolve() };
   const context = vm.createContext({
-    URL, console, setTimeout, clearTimeout, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../defaults.js').GZ_LOCAL_DEV, GZ_GCAL: { ON: false },
+    URL, console, setTimeout, clearTimeout, GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../../extension/defaults.js').GZ_LOCAL_DEV, GZ_GCAL: { ON: false },
     importScripts: (file) => vm.runInContext(read(path.join('lib', file)), context),
     chrome: {
       runtime: {

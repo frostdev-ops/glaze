@@ -16,22 +16,22 @@
 //     after its wait on Starting… (lib/editor-agents.js WAIT), which starts the worker that connects.
 // Evidence in the folder given: results.json, log.txt, each agent's lines, the bare browsers' logs, the probe's reports,
 // the approval window and the prompt.
-//   glaze-remote -o <evidence dir> -- node scripts/agent-link-check.js /out
+//   glaze-remote -o <evidence dir> -- node checks/agents/agent-link-check.js /out
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), net = require('node:net'), zlib = require('node:zlib');
 const { isDeepStrictEqual: same } = require('node:util');
 const { spawn, execFileSync } = require('node:child_process');
-const C = require('../test/helpers/mcp-caches.cjs');
-const ST = require('../lib/mcp/tools-study.js');
-const IDS = require('../mcp/lib/ids.js'), BR = require('../mcp/lib/browsers.js'), L = require('../mcp/lib/launcher.js'), RV = require('../mcp/lib/rendezvous.js');
+const C = require('../../test/helpers/mcp-caches.cjs');
+const ST = require('../../extension/lib/mcp/tools-study.js');
+const IDS = require('../../mcp/lib/ids.js'), BR = require('../../mcp/lib/browsers.js'), L = require('../../mcp/lib/launcher.js'), RV = require('../../mcp/lib/rendezvous.js');
 
-const src = fs.realpathSync(path.join(__dirname, '..'));
-const BIN = path.join(src, 'mcp', 'bin', 'glaze-mcp.js');
-const VERSION = require('../mcp/package.json').version;
+const src = fs.realpathSync(path.join(__dirname, '../../extension'));
+const BIN = path.join(__dirname, '../../mcp/bin/glaze-mcp.js');
+const VERSION = require('../../mcp/package.json').version;
 const OUT = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'agent-link-out-')));
 const IDLE = process.env.SLOW ? 360e3 : 70e3;
 const WAIT = IDLE + 15e3; // the probe page's wait: the idle, plus the agent's first call after the page opens
-const ASK = require('../lib/editor-agents.js').WAIT; // Settings' wait on Starting…, then its one ask
+const ASK = require('../../extension/lib/editor-agents.js').WAIT; // Settings' wait on Starting…, then its one ask
 const PROBE = 'io.frostdev.glaze_t9_probe';
 const NODE = fs.realpathSync(process.execPath);
 const CLIENT = { name: 'Glaze T9 check', version: '1.0.0' };
@@ -153,11 +153,11 @@ const extArgs = (ext) => [`--disable-extensions-except=${ext.dir}`, `--load-exte
 async function open(prof, ext, home, display) {
   if (interrupted) throw Error(interrupted);
   const env = { ...envFor(home), ...(display && { DISPLAY: `:${display}` }) };
-  await require('./wait-for-browser.js')();
-  const context = await chromium.launchPersistentContext(prof, { ...require('./check-env.js').chromeLaunch(), headless: !display, viewport: { width: 1000, height: 700 }, env, args: extArgs(ext) });
+  await require('../../tools/dev/wait-for-browser.js')();
+  const context = await chromium.launchPersistentContext(prof, { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: !display, viewport: { width: 1000, height: 700 }, env, args: extArgs(ext) });
   owned.contexts.add(context);
   context.setDefaultTimeout(15000);
-  require('./check-env.js').noFirstRun(context);
+  require('../../tools/dev/check-env.js').noFirstRun(context);
   await context.route('**/*', (r) => (new URL(r.request().url()).protocol === 'chrome-extension:' ? r.continue() : r.abort()));
   // Everything goes through the options page, whose messages start the worker: Playwright's serviceworker event was
   // once missed in a headed launch.
@@ -183,7 +183,7 @@ function bare(label, prof, ext, home, display, debug = false) {
   const args = bareArgs(prof, ext).filter((a) => !display || a !== '--headless');
   if (debug) args.unshift('--remote-debugging-port=0');
   let proc;
-  try { proc = spawn(require('./check-env.js').chromePath() || chromium.executablePath(), args, { detached: true, stdio: ['ignore', out, out], env: { ...envFor(home), ...(display && { DISPLAY: `:${display}` }) } }); }
+  try { proc = spawn(require('../../tools/dev/check-env.js').chromePath() || chromium.executablePath(), args, { detached: true, stdio: ['ignore', out, out], env: { ...envFor(home), ...(display && { DISPLAY: `:${display}` }) } }); }
   finally { fs.closeSync(out); }
   track(proc);
   return { proc, log, at: Date.now() };
@@ -574,7 +574,7 @@ async function restart() {
     nmh(prof, { name: BR.HOST, description: 'glaze-mcp (T9)', path: launcher, type: 'stdio', allowed_origins: [IDS.origin(ext.id)] });
     ph.manifest = { permissions: ext.permissions, optional: ext.optional };
     probeFor(prof, 'restart', ext);
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     const raw = bare('restart', prof, ext, home, X.n, true);
     const active = path.join(prof, 'DevToolsActivePort');
     const port = await until(() => fs.existsSync(active) && +fs.readFileSync(active, 'utf8').split('\n')[0]);
@@ -583,7 +583,7 @@ async function restart() {
     owned.attachments.add(browser);
     const context = browser.contexts()[0];
     context.setDefaultTimeout(15000);
-    require('./check-env.js').noFirstRun(context);
+    require('../../tools/dev/check-env.js').noFirstRun(context);
     const opt = await context.newPage();
     await opt.goto(`chrome-extension://${ext.id}/options.html`);
     await opt.bringToFront();
@@ -690,7 +690,7 @@ async function restart() {
 
 const guard = async (name, fn) => { if (interrupted) return; await fn().catch((e) => { say(`ERROR in ${name}:`, e.stack || String(e)); R.errors = { ...R.errors, [name]: String(e.stack || e) }; }); };
 
-const lock = require('./check-env.js').lockPath();
+const lock = require('../../tools/dev/check-env.js').lockPath();
 let held = false, cleaning;
 const cleanup = () => cleaning ||= Promise.resolve().then(async () => {
   const all = scratch ? processes() : [], captured = new Map();
@@ -743,7 +743,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nagent-link-check\n`);
     scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-t9-')));
     put(path.join(scratch, 'probe', 'host.js'), `(${probeHost})();\n`);
-    try { R.chrome = execFileSync(require('./check-env.js').chromePath() || chromium.executablePath(), ['--version'], { encoding: 'utf8' }).trim(); } catch (e) { R.chrome = String(e); }
+    try { R.chrome = execFileSync(require('../../tools/dev/check-env.js').chromePath() || chromium.executablePath(), ['--version'], { encoding: 'utf8' }).trim(); } catch (e) { R.chrome = String(e); }
     R.platform = `${os.platform()} ${os.release()}`;
     say('chrome', R.chrome, 'idle', IDLE);
     STORE = { todoCache: await C.canvasPlan('5', PLAN), seenCourses: await C.canvasSeen(SEEN) };

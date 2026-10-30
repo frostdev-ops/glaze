@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const KEY = 'notesIdx:https://school.instructure.com/5';
 const tick = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
 const worker = () => {
@@ -16,7 +16,7 @@ const worker = () => {
     GZ_SESSIONS: { make: () => ({ handle: async (m) => { handled.push(structuredClone(m)); return { ok: true, scope: m.scope }; },
       connect: () => { clients++; return () => { clients--; }; }, stop() {}, changed() {} }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onConnect: { addListener: (f) => connects.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} } },
       tabs: { create: async (o) => { opened.push(structuredClone(o)); return { id: 50 }; }, update: async () => {}, onRemoved: { addListener: (f) => removed.push(f) } }, storage: { local: area, sync: area, session: { ...area, set: async (o) => { opened.push(structuredClone(o)); } }, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);

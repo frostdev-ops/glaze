@@ -4,12 +4,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
-const Z = require('../lib/zip.js');
-const M = require('../lib/sheet-model.js');
-const X = require('../lib/sheet-xlsx.js');
-const { cases, families } = require('./fixtures/sheets/cases.js');
+const Z = require('../../extension/lib/zip.js');
+const M = require('../../extension/lib/sheet-model.js');
+const X = require('../../extension/lib/sheet-xlsx.js');
+const { cases, families } = require('../fixtures/sheets/cases.js');
 
-const DIR = path.join(__dirname, 'fixtures/sheets');
+const DIR = path.join(__dirname, '../fixtures/sheets');
 const golden = JSON.parse(fs.readFileSync(path.join(DIR, 'golden.json'), 'utf8'));
 const at = (wb, sheet, a) => { const sh = M.getSheet(wb, sheet); const [r, c] = M.cellPosition(a); return M.cell(sh, r, c); };
 const input = (v) => (typeof v === 'number' ? { t: 'n', v } : typeof v === 'string' ? { t: 's', v } : typeof v === 'boolean' ? { t: 'b', v } : v.e ? { t: 'e', v: v.e } : null);
@@ -396,10 +396,10 @@ test('caps: 100 sheets and 250,000 cells; the rest are listed, not read', async 
 });
 
 // ── Writing ───────────────────────────────────────────────────────────────────────────────────────────────────────────
-const C = require('../lib/sheet-calc.js');
-const F = require('../lib/sheet-formula.js');
-for (const f of fs.readdirSync(path.join(__dirname, '../lib')).filter((n) => /^sheet-fn-.*\.js$/.test(n)).sort()) require(`../lib/${f}`);
-const D = require('../lib/doctext.js');
+const C = require('../../extension/lib/sheet-calc.js');
+const F = require('../../extension/lib/sheet-formula.js');
+for (const f of fs.readdirSync(path.join(__dirname, '../../extension/lib')).filter((n) => /^sheet-fn-.*\.js$/.test(n)).sort()) require(`../../extension/lib/${f}`);
+const D = require('../../extension/lib/doctext.js');
 const DATE = new Date(2026, 0, 1);
 const parts = async (bytes) => { const z = D.unzip(bytes); const out = {}; for (const n of z.names) out[n] = await z.text(n); return out; };
 // What Excel can store of an error: the seven, #GETTING_DATA, and #VALUE! for the newer ones.
@@ -418,7 +418,7 @@ const fields = (wb) => ({
 });
 const keptBytes = (wb) => Object.fromEntries(Object.entries(wb.keep.parts).map(([p, x]) => [p, Buffer.from(x.data).toString('base64')]));
 const same = (want, got) => want.t === got.t && (want.t === 'n' ? Math.abs(want.v - got.v) <= 1e-12 * Math.max(Math.abs(want.v), Math.abs(got.v)) : want.v === got.v);
-// The engine answers these otherwise than Excel (test/sheet-golden.test.js TODO).
+// The engine answers these otherwise than Excel (test/documents/sheet-golden.test.js TODO).
 const ENGINE_TODO = new Set(['financial.rate.2', 'financial.xirr.1', 'financial.xirr.2']);
 
 for (const [family, list] of byFamily) {
@@ -925,14 +925,14 @@ test('review csv: formula caches refresh and sparse rectangles are bounded', () 
 test('review dependencies: a failed early lookup can retry after the engine loads', () => {
   const vm = require('node:vm');
   const ctx = { GZ_SHEET_MODEL: M, module: { exports: {} }, require: () => { throw Error('late dependency'); } };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../lib/sheet-xlsx.js'), 'utf8'), ctx);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-xlsx.js'), 'utf8'), ctx);
   assert.throws(() => ctx.module.exports.tinted('#000000', 0), /late dependency/);
-  Object.assign(ctx, { GZ_SHEET_FORMULA: require('../lib/sheet-formula.js'), GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'), GZ_DOCTEXT: D });
+  Object.assign(ctx, { GZ_SHEET_FORMULA: require('../../extension/lib/sheet-formula.js'), GZ_SHEET_NUMFMT: require('../../extension/lib/sheet-numfmt.js'), GZ_DOCTEXT: D });
   assert.equal(M.cell(ctx.module.exports.readDelimited('1').sheets[0], 0, 0)?.v, 1);
 });
 
 test('review page: Documents defers spreadsheet and document file codecs', () => {
-  const html = fs.readFileSync(path.join(__dirname, '../papers.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../../extension/papers.html'), 'utf8');
   assert.doesNotMatch(html, /<script src="lib\/(?:sheet-xlsx|doctext|zip)\.js"/);
 });
 

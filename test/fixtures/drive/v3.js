@@ -1,8 +1,8 @@
-// Google Drive v3 shapes for test/drive.test.js and scripts/drive-files-check.js, copied from Google's own documents, never
+// Google Drive v3 shapes for test/documents/drive.test.js and checks/documents/drive-files-check.js, copied from Google's own documents, never
 // guessed: the File resource from the discovery document (schemas.File, revision 20261028) and the error bodies from Drive's
 // "Resolve errors" guide, both fetched 2026-10-30 and kept in glaze-plans/release-4.0.1/e3/ (drive-v3-discovery-2026-10-30.json,
 // drive-handle-errors-2026-10-30.html). The guide's own examples have JSON slips (trailing commas, a stray `s`): fixed here,
-// nothing else changed. live: false on each until the owner records Drive's answers from a dev build (scripts/dev-drive.sh).
+// nothing else changed. live: false on each until the owner records Drive's answers from a dev build (tools/dev/dev-drive.sh).
 // What the discovery document says that Glaze relies on:
 //   File.size is a string (int64), "Size in bytes of blobs and Google Workspace editor files", absent for shortcuts and
 //   folders: a Google Doc's size is its own, not its export's.

@@ -6,12 +6,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const G = require('../lib/sharing.js');
-const S = require('../lib/sessions.js');
-const N = require('../lib/notes.js');
-const T = require('../lib/todo.js');
-const K = require('../lib/cards.js');
-const { relay, diskStore, LIMIT } = require('../server/relay.js');
+const G = require('../../extension/lib/sharing.js');
+const S = require('../../extension/lib/sessions.js');
+const N = require('../../extension/lib/notes.js');
+const T = require('../../extension/lib/todo.js');
+const K = require('../../extension/lib/cards.js');
+const { relay, diskStore, LIMIT } = require('../../server/relay.js');
 
 const NK = 'notesIdx:https://school.instructure.com/5', TK = 'todo:https://school.instructure.com/5';
 const clone = (x) => (x === undefined ? x : structuredClone(x));
@@ -119,12 +119,12 @@ test('a change another member made, applied here, starts no further sync of any 
 
 test('the worker names what changed: a Notes or To Do key, or the Look; nothing for other keys', async () => {
   const vm = require('node:vm');
-  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
   const changed = [], changes = [], connections = [], area = localArea();
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     GZ_SESSIONS: { make: () => ({ connect: () => () => {}, changed: (keys) => changed.push(keys) }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (fn) => connections.push(fn) } },
       storage: { local: area, sync: area, onChanged: { addListener: (fn) => changes.push(fn) } } } });
   vm.runInContext(read('lib/background.js'), ctx);

@@ -20,9 +20,9 @@
 // first), the setting kept across a reload and followed live from Settings, a slow save (the worker's writes held 6 s)
 // holding Ultra's Submit with Saving… in the bar until it lands, a paper past compose's input limit saying so in the bar and
 // offering Full writer, a PDF on Ultra's file area left to Ultra and a .docx's card (Open in Writer opens the pages);
-// screenshots compact-*.png at 1280 and 640. Clicks in the frame go through tap() (scripts/frame-tap.js); waits are for a condition, and
+// screenshots compact-*.png at 1280 and 640. Clicks in the frame go through tap() (checks/mocks/frame-tap.js); waits are for a condition, and
 // what must not happen is watched for a moment (quiet). GETs only, synthetic.
-// NODE_PATH=<playwright> nice -n 10 node scripts/writer-submit-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/writer/writer-submit-check.js [evidence directory]
 // SUBMIT_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-submit); IMPORT_SHOTS, the
 // import's (default ~/Projects/glaze-plans/writer/mockups/settings-ai/build-import); COMPACT_SHOTS, the compact box's
 // (default ~/Projects/glaze-plans/writer/mockups/build-documents).
@@ -30,12 +30,12 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
-const FX = require('../test/fixtures/writer-paper-fixtures.js');
-const DT = require('../lib/doctext.js');
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
+const FX = require('../../test/fixtures/writer-paper-fixtures.js');
+const DT = require('../../extension/lib/doctext.js');
 const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const ATTEMPT = '/ultra/courses/_101_1/assessment/_7_1/attempt/create', TEST = '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1';
 const MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const SUBMIT = '[data-analytics-id="assignment.attempt.authoring.footer.submit"]', SAVE = '[data-analytics-id="course.content.assessment.footer.buttons.saveAndClose"]';
@@ -62,15 +62,15 @@ const still = async (target) => { await until(() => target.evaluate(STILL), 'at 
 // A page and every frame in it at rest, as a screenshot wants them.
 const stillAll = async (p) => { for (const f of p.frames()) await until(() => f.evaluate(STILL).catch(() => true), 'frames at rest'); await drawn(p); };
 
-const { tap, taps } = require('./frame-tap.js');
+const { tap, taps } = require('../mocks/frame-tap.js');
 
-// The page's world: a real Quill on each writable box (as scripts/writer-paper-check.js), and on an assignment attempt
+// The page's world: a real Quill on each writable box (as checks/writer/writer-paper-check.js), and on an assignment attempt
 // the stand-in for Ultra's React file area and footer.
-const HARNESS = require('./ultra-attempt-harness.js');
+const HARNESS = require('../mocks/ultra-attempt-harness.js');
 
 (async () => {
   let context, held = false, tmp, ext;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nwriter-submit-check\n`); break; }
@@ -81,11 +81,11 @@ const HARNESS = require('./ultra-attempt-harness.js');
     const quill = Buffer.from(await (await fetch(QUILL.url)).arrayBuffer());
     if (crypto.createHash('sha256').update(quill).digest('hex') !== QUILL.sha256) throw Error('Quill 1.3.7 hash mismatch');
 
-    ext = require('./check-env.js').staged(root, [`${site}/*`]);
+    ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
     // Pinned Linux Chromium can route 2x frame clicks at half their CSS coordinates (1083,623 → 541,311). Use 1x there;
     // the Mac retains Retina coverage. tap still fails on every misroute except a confirmed hit on the page's iframe.
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: process.platform === 'linux' ? 1 : 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, deviceScaleFactor: process.platform === 'linux' ? 1 : 2, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(15000);
     const grades = JSON.parse(fixture('ultra-writer-gradebook.json'));
     const members = JSON.parse(fixture('ultra-memberships.json'));
@@ -977,13 +977,13 @@ const HARNESS = require('./ultra-attempt-harness.js');
     // added twice and removed, one over 50 MB refused; Ultra's upload sees each with its name, type and size, the note
     // names them, and the submitted version keeps them.
     {
-      const L = require('../lib/writer-submit.js'), XL = require('../lib/sheet-xlsx.js'), SM = require('../lib/sheet-model.js');
+      const L = require('../../extension/lib/writer-submit.js'), XL = require('../../extension/lib/sheet-xlsx.js'), SM = require('../../extension/lib/sheet-model.js');
       const setKinds = () => worker.evaluate(async () => { const w = (await chrome.storage.sync.get('writer')).writer || {}; await chrome.storage.sync.set({ writer: { ...w, sheets: true, pdf: true } }); });
       await setKinds();
       const book = SM.workbook();
       book.sheets[0].rows.set(0, new Map([[0, { t: 's', v: 'Trial' }], [1, { t: 's', v: 'Distance' }]]));
       book.sheets[0].rows.set(1, new Map([[0, { t: 'n', v: 1 }], [1, { t: 'n', v: 4.25 }]]));
-      const xlsx = Buffer.from(await XL.write(book)), syllabus = fs.readFileSync(path.join(root, 'test/fixtures/import/syllabus.pdf'));
+      const xlsx = Buffer.from(await XL.write(book)), syllabus = fs.readFileSync(path.join(__dirname, '../../test/fixtures/import/syllabus.pdf'));
       const docs = path.join(out, 'documents');
       fs.mkdirSync(docs, { recursive: true });
       fs.writeFileSync(path.join(docs, 'Lab notes.docx'), essay); fs.writeFileSync(path.join(docs, 'Trial data.xlsx'), xlsx); fs.writeFileSync(path.join(docs, 'Field trip.pdf'), syllabus);

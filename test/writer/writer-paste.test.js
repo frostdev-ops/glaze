@@ -2,10 +2,10 @@
 // read by the paper schema as paste reads it (S.slice); what "Match the paper" takes away; what is left as the format's.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/writer-schema.js');
-const ST = require('../lib/writer-styles.js');
-const P = require('../writer-paste.js');
-const FX = require('./fixtures/writer-paste-html.js');
+const S = require('../../extension/lib/writer-schema.js');
+const ST = require('../../extension/lib/writer-styles.js');
+const P = require('../../extension/writer-paste.js');
+const FX = require('../fixtures/writer-paste-html.js');
 
 const read = (html, schema = S.paper) => schema.topNodeType.create(null, S.slice(schema, html).content);
 const blocks = (doc) => { const out = []; doc.descendants((n, pos, parent) => { if (n.isTextblock) { out.push({ n, parent }); return false; } return true; }); return out; };
@@ -233,7 +233,7 @@ test('Writer copy and paste retains explicit black, pale and tinted colours exac
 
 
 test('automatic or rejected paste ink remains legible on every retained highlighter', () => {
-  const C = require('../lib/color.js');
+  const C = require('../../extension/lib/color.js');
   for (const [name, on] of Object.entries(S.HIGHLIGHT)) {
     for (const color of ['windowtext', 'transparent', 'black', 'white', on]) {
       const marks = runOf(`<p><span style="background:${on};color:${color}">band</span></p>`, 'band');

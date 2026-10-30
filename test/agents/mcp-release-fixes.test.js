@@ -6,13 +6,13 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 const vm = require('node:vm');
-const B = require('../mcp/lib/browsers.js');
-const I = require('../mcp/lib/install.js');
-const L = require('../mcp/lib/launcher.js');
-const R = require('../mcp/lib/rendezvous.js');
-const CLI = require('../mcp/bin/glaze-mcp.js');
-const M = require('../mcp/lib/mcpb.js');
-const VERSION = require('../mcp/package.json').version;
+const B = require('../../mcp/lib/browsers.js');
+const I = require('../../mcp/lib/install.js');
+const L = require('../../mcp/lib/launcher.js');
+const R = require('../../mcp/lib/rendezvous.js');
+const CLI = require('../../mcp/bin/glaze-mcp.js');
+const M = require('../../mcp/lib/mcpb.js');
+const VERSION = require('../../mcp/package.json').version;
 const POSIX = process.platform !== 'win32';
 const FRAME = Buffer.from('1d0000007b2274223a226572726f72222c22776879223a226e6f2d6e6f6465227d', 'hex');
 const scratch = (t) => {
@@ -121,7 +121,7 @@ test('uninstall preserves foreign-owned installation files and run records', { s
       fstatSync: (fd, ...a) => foreign(fs.fstatSync(fd, ...a), opened.get(fd) || ''),
     };
     const load = (name, overrides = {}) => {
-      const file = require.resolve(`../mcp/lib/${name}.js`), req = createRequire(file), module = { exports: {} };
+      const file = require.resolve(`../../mcp/lib/${name}.js`), req = createRequire(file), module = { exports: {} };
       vm.runInNewContext(fs.readFileSync(file, 'utf8'), { module, exports: module.exports, __dirname: path.dirname(file), process, Buffer,
         require: (n) => n === 'node:fs' ? shim : overrides[n] || req(n) }, { filename: file });
       return module.exports;

@@ -5,8 +5,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const root = path.join(__dirname, '..');
-const nativeFile = path.join(root, 'safari/Glaze/Glaze Extension/GlazeAI.swift');
+const root = path.join(__dirname, '../../extension');
+const nativeFile = path.join(__dirname, '../../safari/Glaze/Glaze Extension/GlazeAI.swift');
 const flags = ['-swift-version', '5', '-enable-upcoming-feature', 'MemberImportVisibility', '-enable-upcoming-feature', 'NonisolatedNonsendingByDefault', '-enable-upcoming-feature', 'InferIsolatedConformances', '-strict-concurrency=complete'];
 const supported = process.platform === 'darwin'
   && Number(spawnSync('sw_vers', ['-productVersion'], { encoding: 'utf8' }).stdout?.split('.')[0]) >= 27
@@ -107,7 +107,7 @@ test('native tasks pass complete sendability checking', { skip: !supported }, ()
   assert.doesNotMatch(diagnostics, /warning:|error:/);
 });
 test('the native handler never logs native message bodies, including malformed AI messages', () => {
-  const source = fs.readFileSync(path.join(root, 'safari/Glaze/Glaze Extension/SafariWebExtensionHandler.swift'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../safari/Glaze/Glaze Extension/SafariWebExtensionHandler.swift'), 'utf8');
   assert.doesNotMatch(source, /String\(describing: message\)/);
 });
 
@@ -116,7 +116,7 @@ test('the native handler never logs native message bodies, including malformed A
 test('native release cannot be undone by a spare session prewarming concurrently', { skip: process.platform !== 'darwin' }, () => {
   const source = fs.readFileSync(nativeFile, 'utf8');
   const cache = source.slice(source.indexOf('    private static let lock = NSLock()'), source.indexOf('    static func cancel('));
-  const dir = fs.mkdtempSync(path.join(root, '.native-cache-'));
+  const dir = fs.mkdtempSync(path.join(__dirname, '../../.native-cache-'));
   try {
     const file = path.join(dir, 'Cache.swift');
     fs.writeFileSync(file, `import Foundation
@@ -149,7 +149,7 @@ print(Native.warmCount())
 test('native spares stay bounded and never reuse a prompted transcript, including concurrent takes', { skip: process.platform !== 'darwin' }, () => {
   const source = fs.readFileSync(nativeFile, 'utf8');
   const cache = source.slice(source.indexOf('    private static let lock = NSLock()'), source.indexOf('    static func cancel('));
-  const dir = fs.mkdtempSync(path.join(root, '.native-cache-'));
+  const dir = fs.mkdtempSync(path.join(__dirname, '../../.native-cache-'));
   try {
     const file = path.join(dir, 'Cache.swift');
     fs.writeFileSync(file, `import Foundation

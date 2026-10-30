@@ -3,8 +3,8 @@
 // emptied" turns off the starter widgets only: never other widgets, never course cards.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const worker = require('./helpers/worker-env.cjs');
-const W = require('../lib/widgets.js');
+const worker = require('../helpers/worker-env.cjs');
+const W = require('../../extension/lib/widgets.js');
 
 const CANVAS = 'https://school.instructure.com', ULTRA = 'https://bb.example.edu', EXT = 'chrome-extension://x';
 const CP = { id: 'glaze', url: `${CANVAS}/`, frameId: 0, tab: { id: 1, url: `${CANVAS}/` } };

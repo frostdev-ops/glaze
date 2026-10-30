@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const shipped = execFileSync('git', ['ls-files', '-z', '--', '*.js', '*.mjs'], { cwd: root, encoding: 'utf8' })
   .split('\0').filter((f) => /(?:^|\/)(?:writer|papers)[-.]|^lib\/pm\.js$/.test(f) && !/^(test|scripts|safari)\//.test(f));
 const SINK = /\.(?:inner|outer)HTML\s*=(?!=)|\binsertAdjacentHTML\s*\(|\bdocument\.write(?:ln)?\s*\(/;

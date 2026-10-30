@@ -3,10 +3,10 @@
 // a clean paper has none.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/writer-schema.js');
-const ST = require('../lib/writer-styles.js');
-const F = require('../lib/writer-format.js');
-const FX = require('./fixtures/writer-paper-fixtures.js');
+const S = require('../../extension/lib/writer-schema.js');
+const ST = require('../../extension/lib/writer-styles.js');
+const F = require('../../extension/lib/writer-format.js');
+const FX = require('../fixtures/writer-paper-fixtures.js');
 
 const node = (j) => S.paper.nodeFromJSON(j);
 const ctx = { name: FX.context.name, course: FX.context.course };
@@ -243,7 +243,7 @@ test('Blank has no opening, header, list page or checks', () => {
   const messy = node({ type: 'doc', content: [para('"A Title"', { align: 'center' }), para(`She says "${'word '.repeat(120)}" (Morrison, 42).`, { line: 1 })] });
   assert.ok(F.check(messy, ST.FORMATS.mla9, ctx).issues.length > 3);
   assert.deepEqual(F.check(messy, f, ctx), { issues: [], rows: [] });
-  const X = require('../lib/writer-docx.js'), o = X.exportDocx(messy.toJSON(), { format: 'plain', surname: 'Rivera' });
+  const X = require('../../extension/lib/writer-docx.js'), o = X.exportDocx(messy.toJSON(), { format: 'plain', surname: 'Rivera' });
   assert.ok(!Object.keys(o.parts).some((k) => /header\d\.xml$/.test(k)), 'the .docx has no header');
   assert.doesNotMatch(o.parts['word/document.xml'], /headerReference|titlePg/);
 });

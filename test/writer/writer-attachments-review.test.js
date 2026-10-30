@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const sheet = require('./helpers/writer-submit-sheet.cjs');
-const page = require('./helpers/writer-submit-page.cjs');
+const sheet = require('../helpers/writer-submit-sheet.cjs');
+const page = require('../helpers/writer-submit-page.cjs');
 
 const setup = () => {
   const s = sheet(), records = new Map(), kept = new Map(), exports = [], reads = [];

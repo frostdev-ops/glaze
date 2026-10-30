@@ -4,10 +4,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const PA = require('../lib/writer-papers.js');
-const F = require('../lib/doc-files.js');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
-globalThis.GZ_WRITER_STYLES = require('../lib/writer-styles.js');
+const PA = require('../../extension/lib/writer-papers.js');
+const F = require('../../extension/lib/doc-files.js');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
+globalThis.GZ_WRITER_STYLES = require('../../extension/lib/writer-styles.js');
 
 const local = () => {
   const data = {};

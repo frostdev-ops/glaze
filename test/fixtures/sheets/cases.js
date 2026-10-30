@@ -1,6 +1,6 @@
-// Formula cases for Glaze Sheets' engine, with Microsoft Excel as the oracle: scripts/sheet-excel-golden.js writes each
+// Formula cases for Glaze Sheets' engine, with Microsoft Excel as the oracle: tools/fidelity/sheet-excel-golden.js writes each
 // family into its own workbook (test/fixtures/sheets/<family>.xlsx), Excel calculates and saves it, and golden.json keeps
-// what Excel cached; test/sheet-golden.test.js holds the engine to it.
+// what Excel cached; test/documents/sheet-golden.test.js holds the engine to it.
 // A case: { id, family, sheet, cell, formula, inputs, note }. inputs maps 'Sheet!A1' to what the cell holds first: a
 // number, a string (always text, even "5" or "1/2"), a boolean, null (left blank on purpose), { e: '#N/A' } (an error
 // typed in) or { f: '=…' } (a formula). fill: the range one formula was filled over, which Excel saves as a shared

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
 
 test('the Submit check presses a reopening frame before readiness even when its boot is immediate', async () => {
-  const source = fs.readFileSync(require.resolve('../scripts/writer-submit-check.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../checks/writer/writer-submit-check.js'), 'utf8');
   const start = source.indexOf('    const watchPress = '), end = source.indexOf('    let r = await pressReopening(', start);
   assert.ok(start >= 0 && end > start);
   let ready = false;

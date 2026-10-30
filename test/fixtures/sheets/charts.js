@@ -1,8 +1,8 @@
 // A workbook with charts as Excel writes them (its element order, namespaces, caches and two-cell anchors), built with
-// lib/zip.js for test/sheet-chart*.test.js and scripts/sheets-check.js: sheet Data's months, sales, costs and an x/y
+// lib/zip.js for test/documents/sheet-chart*.test.js and checks/documents/sheets-check.js: sheet Data's months, sales, costs and an x/y
 // pair; a clustered column, a line, a pie and a scatter chart, and a radar chart Glaze draws as a frame; a 3-D pie (its
 // second slice exploded, percent labels) and a 3-D clustered column chart (walls, value labels) for workbooks that ask.
-const Z = require('../../../lib/zip.js');
+const Z = require('../../../extension/lib/zip.js');
 const enc = new TextEncoder();
 const RT = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
@@ -80,7 +80,7 @@ const workbook = ({ kinds = ['column', 'line', 'pie', 'scatter', 'radar'], over 
 };
 
 // A DOM just big enough for lib/sheet-chart.js's layer (its holders and SVG) in node, and a layer on a workbook's sheet with
-// the grid's default sizes: for inserting charts as the grid does (test/sheet-chart-insert.test.js, the Excel fidelity
+// the grid's default sizes: for inserting charts as the grid does (test/documents/sheet-chart-insert.test.js, the Excel fidelity
 // script).
 const fakeDom = () => {
   const el = () => {
@@ -98,7 +98,7 @@ const fakeDom = () => {
 };
 const layerOn = (wb, sh = wb.sheets[0]) => {
   const el = fakeDom();
-  const G = require('../../../sheet-grid.js'), CH = require('../../../lib/sheet-chart.js');
+  const G = require('../../../extension/sheet-grid.js'), CH = require('../../../extension/lib/sheet-chart.js');
   const geo = { R: new G.Sizes(2000, 20), C: new G.Sizes(200, 64), FR: 0, FC: 0, FW: 0, FH: 0 };
   return CH.layer({ panes: { br: { el: { hidden: false }, inner: el(), fr: false, fc: false } }, wb: () => wb, sheet: () => sh, geo: () => geo, t: (s) => s });
 };

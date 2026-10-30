@@ -1,6 +1,6 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
-const read = (file) => fs.readFileSync(process.env.GZ_LIFECYCLE_REPO ? path.join(process.env.GZ_LIFECYCLE_REPO, file) : require.resolve(`../${file}`), 'utf8');
+const read = (file) => fs.readFileSync(process.env.GZ_LIFECYCLE_REPO ? path.join(process.env.GZ_LIFECYCLE_REPO, file) : require.resolve(`../../extension/${file}`), 'utf8');
 const settle = () => new Promise(setImmediate);
 
 test('Google sync permanently stops before storage access after reload', async () => {

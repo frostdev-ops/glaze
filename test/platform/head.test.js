@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
 // Exercise the production head gate without a browser or the unrelated page enhancements.
 const gate = source.slice(0, source.indexOf('  const C = GZ_COLOR;')) + 'window.started = site; })();';
 const bodyGate = source.slice(0, source.indexOf('  // ---- long tail')) + 'window.started = site; })();';
@@ -28,7 +28,7 @@ const page = ({ protocol = 'https:', pathname = '/ultra', body = null, marker = 
   // Blackboard's own host: Ultra there needs no yes first (WP-C2), so the head gate is all these pages decide.
   const location = { protocol, pathname, hostname: 'school.blackboard.com', origin: `${protocol}//school.blackboard.com` };
   const done = vm.runInNewContext(full === true ? source : full === 'body' ? bodyGate : gate, {
-    window, document, location, GZ_COLOR: {}, GZ_DEFAULTS: {}, GZ_BUILT_IN: require('../defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../defaults.js').GZ_LOCAL_DEV,
+    window, document, location, GZ_COLOR: {}, GZ_DEFAULTS: {}, GZ_BUILT_IN: require('../../extension/defaults.js').GZ_BUILT_IN, GZ_LOCAL_DEV: require('../../extension/defaults.js').GZ_LOCAL_DEV,
     chrome: { storage: { local: { get: (key, cb) => cb({ [key]: ['https://school.blackboard.com/*', 'https://school.blackboard.com'] }) } } },
     matchMedia: () => ({}), CSS: { supports: () => false },
     MutationObserver: class {
@@ -133,7 +133,7 @@ test('Canvas application frames can start after body validation; the top page st
 
 
 test('the Ultra boot fixture navigates on its own origin despite the CDN base', () => {
-  const fixture = fs.readFileSync(require.resolve('./fixtures/ultra-boot.html'), 'utf8');
+  const fixture = fs.readFileSync(require.resolve('../fixtures/ultra-boot.html'), 'utf8');
   const script = fixture.match(/<script>([\s\S]*?)<\/script>/)[1];
   let moved;
   vm.runInNewContext(script, {

@@ -5,13 +5,13 @@
 // and deleted, an imported one moved after rows were inserted.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../lib/sheet-model.js');
-const X = require('../lib/sheet-xlsx.js');
-const C = require('../lib/sheet-calc.js');
-const D = require('../lib/doctext.js');
-const CX = require('../lib/sheet-chart-xml.js');
-const CH = require('../lib/sheet-chart.js');
-const FX = require('./fixtures/sheets/charts.js');
+const M = require('../../extension/lib/sheet-model.js');
+const X = require('../../extension/lib/sheet-xlsx.js');
+const C = require('../../extension/lib/sheet-calc.js');
+const D = require('../../extension/lib/doctext.js');
+const CX = require('../../extension/lib/sheet-chart-xml.js');
+const CH = require('../../extension/lib/sheet-chart.js');
+const FX = require('../fixtures/sheets/charts.js');
 
 const mount = (wb, sh = wb.sheets[0]) => FX.layerOn(wb, sh);
 const parts = async (bytes) => { const z = D.unzip(bytes); const out = {}; for (const n of z.names) out[n] = await z.text(n); return out; };
@@ -248,7 +248,7 @@ test('a duplicated sheet: its charts stay its original\'s, and a chart inserted 
 });
 
 test('chart room: imported anchors and an inserted chart extend beyond the initial grid columns', async () => {
-  const G = require('../sheet-grid.js'), el = FX.fakeDom();
+  const G = require('../../extension/sheet-grid.js'), el = FX.fakeDom();
   const mounted = (wb) => {
     const geo = { R: new G.Sizes(1000, 20), C: new G.Sizes(26, 64), FR: 0, FC: 0, FW: 0, FH: 0 };
     const L = CH.layer({ panes: { br: { el: { hidden: false }, inner: el(), fr: false, fc: false } }, wb: () => wb,

@@ -1,7 +1,7 @@
-// Checks Chromium and FFmpeg in PLAYWRIGHT_BROWSERS_PATH against ci/*.pins before either runs.
-//   NODE_PATH=<node_modules holding the pinned playwright> PLAYWRIGHT_BROWSERS_PATH=<dir> node scripts/ci-chromium.js [--print]
+// Checks Chromium and FFmpeg in PLAYWRIGHT_BROWSERS_PATH against .github/pins/*.pins before either runs.
+//   NODE_PATH=<node_modules holding the pinned playwright> PLAYWRIGHT_BROWSERS_PATH=<dir> node tools/dev/ci-chromium.js [--print]
 // Playwright checks a download's size, not its bytes, and its Chromium build is fixed by playwright-core's browsers.json
-// (ci/playwright.pins pins that package). A pin is "<name>-<revision> <version or -> <platform>-<arch> <sha256>",
+// (.github/pins/playwright.pins pins that package). A pin is "<name>-<revision> <version or -> <platform>-<arch> <sha256>",
 // over every extracted file's path and bytes (a link's target), sorted; the marker files Playwright writes are left out.
 // --print gives the line for this machine: to upgrade, bump the pinned Playwright, install, and record the new lines.
 const crypto = require('node:crypto');
@@ -63,7 +63,7 @@ function check(line, pinText) {
 function verify(env = process.env) {
   const lines = ['chromium', 'ffmpeg'].map((name) => {
     const { line } = installed(env, undefined, name);
-    check(line, fs.readFileSync(path.join(__dirname, `../ci/${name}.pins`), 'utf8'));
+    check(line, fs.readFileSync(path.join(__dirname, `../../.github/pins/${name}.pins`), 'utf8'));
     return line;
   });
   for (const line of lines) console.log(`ci-chromium: ${line.split(' ').slice(0, 3).join(' ')} matches its pin`);

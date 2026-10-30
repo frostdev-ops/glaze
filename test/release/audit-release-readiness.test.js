@@ -4,12 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { spawnSync, execFileSync } = require('node:child_process');
-const S = require('../scripts/safari-resources.js');
+const S = require('../../tools/build/safari-resources.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const manifest = JSON.parse(read('manifest.json'));
-const resources = path.join(root, 'safari/Glaze/Glaze Extension/Resources');
+const resources = path.join(__dirname, '../../safari/Glaze/Glaze Extension/Resources');
 
 // This checks the direct-development project. Release staging has separate passing coverage.
 test('GZ-05: a direct Xcode resource bundle has the canonical extension version', () => {
@@ -56,7 +56,7 @@ const runs = (body) => {
 };
 
 test('GZ-06: tag packaging is gated on the existing suite before attaching its artifact', () => {
-  const workflow = jobs(read('.github/workflows/package.yml'));
+  const workflow = jobs(read('../.github/workflows/package.yml'));
   const packaging = [...workflow].find(([, body]) => /package\.sh/.test(runs(body)));
   assert.ok(packaging, 'locate the job that actually builds the artifact');
   const [, body] = packaging, commands = runs(body);
@@ -67,8 +67,8 @@ test('GZ-06: tag packaging is gated on the existing suite before attaching its a
 });
 
 test('GZ-06: the packaging job pins the runtime used by the validation workflow', () => {
-  const validationVersion = read('.github/workflows/test.yml').match(/node-version:\s*([^\n#]+)/)?.[1].trim();
-  const workflow = jobs(read('.github/workflows/package.yml'));
+  const validationVersion = read('../.github/workflows/test.yml').match(/node-version:\s*([^\n#]+)/)?.[1].trim();
+  const workflow = jobs(read('../.github/workflows/package.yml'));
   const [, body] = [...workflow].find(([, b]) => /package\.sh/.test(runs(b)));
   assert.match(body, /uses:\s*actions\/setup-node@/, 'the packaging runtime must be selected explicitly');
   assert.equal(body.match(/node-version:\s*([^\n#]+)/)?.[1].trim(), validationVersion);
@@ -77,24 +77,26 @@ test('GZ-06: the packaging job pins the runtime used by the validation workflow'
 const firefoxFixture = (branch, check) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-audit-firefox-'));
   try {
-    const seed = path.join(dir, 'seed'), scripts = path.join(dir, 'scripts');
-    fs.mkdirSync(path.join(seed, 'lib'), { recursive: true }); fs.mkdirSync(scripts);
+    const seed = path.join(dir, 'seed'), scripts = path.join(dir, 'tools/build');
+    fs.mkdirSync(path.join(seed, 'lib'), { recursive: true }); fs.mkdirSync(scripts, { recursive: true }); fs.mkdirSync(path.join(dir, 'extension'));
     fs.writeFileSync(path.join(seed, 'manifest.json'), JSON.stringify(manifest));
     fs.writeFileSync(path.join(seed, 'lib/background.js'), '// offline fixture\n');
-    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
-    fs.copyFileSync(path.join(root, 'scripts/package-firefox.sh'), path.join(scripts, 'package-firefox.sh'));
-    // What its Google step reads (scripts/oauth-manifest.js and the Drive config it judges).
-    fs.mkdirSync(path.join(dir, 'lib'));
-    for (const f of ['scripts/oauth-manifest.js', 'lib/google.js', 'lib/google-config.js', 'lib/oauth.js']) fs.copyFileSync(path.join(root, f), path.join(dir, f));
+    fs.writeFileSync(path.join(dir, 'extension/manifest.json'), JSON.stringify(manifest));
+    fs.copyFileSync(path.join(__dirname, '../../tools/build/package-firefox.sh'), path.join(scripts, 'package-firefox.sh'));
+    // What its Google step reads (tools/build/oauth-manifest.js and the Drive config it judges).
+    for (const f of ['../tools/build/oauth-manifest.js', 'lib/google.js', 'lib/google-config.js', 'lib/oauth.js']) {
+      const to = path.join(dir, f.startsWith('../') ? f.slice(3) : `extension/${f}`);
+      fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(path.join(root, f), to);
+    }
     const zip = path.join(dir, 'input.zip'), marker = path.join(dir, 'packager-called');
     execFileSync('zip', ['-qr', zip, '.'], { cwd: seed });
-    fs.writeFileSync(path.join(dir, 'package.sh'), '#!/bin/sh\nset -eu\nmkdir -p "$DIST"\nprintf called > "$GZ_AUDIT_PACKAGER_MARKER"\ncp "$GZ_AUDIT_CHROME_ZIP" "$DIST/glaze-v' + manifest.version + '.zip"\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(dir, 'tools/build/package.sh'), '#!/bin/sh\nset -eu\nmkdir -p "$DIST"\nprintf called > "$GZ_AUDIT_PACKAGER_MARKER"\ncp "$GZ_AUDIT_CHROME_ZIP" "$DIST/glaze-v' + manifest.version + '.zip"\n', { mode: 0o755 });
     const git = (...args) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, stdio: 'pipe' });
     git('init', '--initial-branch=' + branch);
-    git('add', 'manifest.json', 'package.sh', 'scripts/package-firefox.sh', 'scripts/oauth-manifest.js', 'lib');
+    git('add', 'extension', 'tools/build');
     git('-c', 'user.name=Glaze fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Create offline packaging fixture');
     const dist = path.join(dir, 'dist');
-    const result = spawnSync('sh', ['scripts/package-firefox.sh'], { cwd: dir, encoding: 'utf8',
+    const result = spawnSync('sh', ['tools/build/package-firefox.sh'], { cwd: dir, encoding: 'utf8',
       env: { ...process.env, DIST: dist, GZ_AUDIT_CHROME_ZIP: zip, GZ_AUDIT_PACKAGER_MARKER: marker } });
     check({ result, called: fs.existsSync(marker), artifact: path.join(dist, `glaze-v${manifest.version}-firefox.zip`) });
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }

@@ -12,7 +12,7 @@ import { appleApp, appleBuild, amo, chromeStatus, submitChrome, submitFirefox, s
 import { readListings, writeChromeKit, describeChanges } from './store-listings.mjs';
 import { publicPreflight, preparePublic, publishPublic, withIsolatedEnv, artifactPath, publicStores } from './public-release.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 // The one place the Firefox linter's version is chosen. npx runs it (and whatever npm resolves for its dependencies) with
 // no credentials and a temporary HOME: see isolatedEnv in public-release.mjs.
 export const WEB_EXT = 'web-ext@10.8.0';
@@ -22,7 +22,7 @@ const defaults = {
   CWS_SERVICE_ACCOUNT: 'cws-publisher@frostdev-507119.iam.gserviceaccount.com',
   AMO_ADDON_ID: 'glaze@frostdev.io', ASC_BUNDLE_ID: 'io.frostdev.Glaze', SAFARI_TEAM_ID: '22AAZFMTV8',
 };
-const usage = `Usage: node scripts/store-release.mjs [release|doctor|plan|build|submit|publish|listings] [options]
+const usage = `Usage: node tools/release/store-release.mjs [release|doctor|plan|build|submit|publish|listings] [options]
 
   release              Build, submit stores, tag/push GitHub, deploy website/feed (default).
   doctor               Read-only store and public-release prerequisite checks.
@@ -192,7 +192,7 @@ export async function buildMcpb(source, out, env, version) {
   return dest;
 }
 function notes(source) {
-  const version = json(path.join(source, 'manifest.json')).version;
+  const version = json(path.join(source, 'extension/manifest.json')).version;
   const text = fs.readFileSync(path.join(source, 'CHANGELOG.md'), 'utf8');
   const heading = `## [${version}]`;
   const start = text.indexOf(heading);
@@ -212,7 +212,7 @@ async function build(opt, env, manifest, save, out) {
     if (!manifest.notes) throw new Error('Release notes must be nonempty.');
     await run('nice', ['-n', '15', 'node', '--test'], source, env, path.join(out, 'logs/tests-main.log'));
     const dist = path.join(temp, 'dist'); fs.mkdirSync(dist);
-    if (opt.stores.includes('chrome') || opt.stores.includes('apple')) await run('bash', ['package.sh'], source, { ...env, DIST: dist });
+    if (opt.stores.includes('chrome') || opt.stores.includes('apple')) await run('bash', ['tools/build/package.sh'], source, { ...env, DIST: dist });
     const artifact = (key, file) => { manifest.files[key] = { path: path.relative(out, file), sha256: digest(file) }; };
     if (opt.stores.includes('chrome')) {
       const dest = path.join(out, `glaze-v${manifest.version}.zip`);
@@ -226,13 +226,13 @@ async function build(opt, env, manifest, save, out) {
       // Merge only in this disposable clone. The permanent compatibility branch and its worktree are untouched.
       await run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'user.name=Glaze release', '-c', 'user.email=release@frostdev.io', 'merge', '--no-edit', '--no-gpg-sign', manifest.sourceCommit], firefox, env, path.join(out, 'logs/firefox-merge.log'));
       manifest.firefoxCommit = git(['rev-parse', 'HEAD'], firefox);
-      if (json(path.join(firefox, 'manifest.json')).version !== manifest.version) throw new Error('Firefox integration has a different version. Resolve the release/compatibility branches first.');
+      if (json(path.join(firefox, 'extension/manifest.json')).version !== manifest.version) throw new Error('Firefox integration has a different version. Resolve the release/compatibility branches first.');
       await run('nice', ['-n', '15', 'node', '--test'], firefox, env, path.join(out, 'logs/tests-firefox.log'));
-      await run('sh', ['scripts/package-firefox.sh'], firefox, { ...env, DIST: dist });
+      await run('sh', ['tools/build/package-firefox.sh'], firefox, { ...env, DIST: dist });
       const upload = path.join(out, `glaze-v${manifest.version}-firefox.zip`);
       fs.copyFileSync(path.join(dist, path.basename(upload)), upload);
       const review = path.join(out, `glaze-v${manifest.version}-source.zip`);
-      await run('python3', [path.join(root, 'scripts/store-firefox-source.py'), 'create', firefox, upload, review], root, env);
+      await run('python3', [path.join(root, 'tools/release/store-firefox-source.py'), 'create', firefox, upload, review], root, env);
       const extracted = path.join(temp, 'firefox-package'); fs.mkdirSync(extracted);
       await run('unzip', ['-q', upload, '-d', extracted], root, env);
       await withIsolatedEnv(env, isolated => run('npx', ['--yes', WEB_EXT, 'lint', '--no-config-discovery', '--warnings-as-errors', '--source-dir', extracted, '--output', 'json'], root, isolated, path.join(out, 'logs/firefox-lint.json')));
@@ -245,7 +245,7 @@ async function build(opt, env, manifest, save, out) {
       for (const platform of opt.applePlatforms) {
         const script = platform === 'MAC_OS' ? 'appstore-safari.sh' : 'appstore-ios.sh';
         // Both scripts export signed packages here. Uploads are a separate, resumable phase.
-        await run('sh', [`scripts/${script}`], source, { ...env, DIST: '', BUILD_NUMBER: manifest.buildNumber, APPSTORE_EXPORT_ONLY: '1', APPSTORE_UPLOAD: '' }, path.join(out, `logs/apple-${platform}-export.log`));
+        await run('sh', [`tools/build/${script}`], source, { ...env, DIST: '', BUILD_NUMBER: manifest.buildNumber, APPSTORE_EXPORT_ONLY: '1', APPSTORE_UPLOAD: '' }, path.join(out, `logs/apple-${platform}-export.log`));
         const name = `glaze-${manifest.version}-${platform === 'MAC_OS' ? 'appstore.pkg' : 'ios.ipa'}`;
         const dest = path.join(out, name);
         fs.copyFileSync(path.join(source, 'release', manifest.version, 'app-store', name), dest);
@@ -319,7 +319,7 @@ export async function main(args = process.argv.slice(2)) {
   if (Number(process.versions.node.split('.')[0]) < 26) throw new Error('Node.js 26 or newer is required, matching CI and the release validation suite.');
   const env = environment(opt);
   const commit = git(['rev-parse', '--verify', `${opt.sourceRef}^{commit}`]);
-  const version = JSON.parse(git(['show', `${commit}:manifest.json`])).version;
+  const version = JSON.parse(git(['show', `${commit}:extension/manifest.json`])).version;
   const out = opt.out || path.join(root, 'release', version, 'stores', commit.slice(0, 12));
   // The selected stores' listing text in every language, from the committed source: a gap stops here, before any build.
   const show = file => { try { return git(['show', `${commit}:${file}`]); } catch { throw new Error(`${file} is missing from ${commit.slice(0, 12)}.`); } };

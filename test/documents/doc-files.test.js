@@ -3,12 +3,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const F = require('../lib/doc-files.js');
-const DK = require('../lib/doc-kinds.js');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
+const F = require('../../extension/lib/doc-files.js');
+const DK = require('../../extension/lib/doc-kinds.js');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
 
 test('a restarted worker loads the file store before answering its first port', async () => {
-  const w = require('./helpers/worker-env.cjs')({ globals: fakeIDB() });
+  const w = require('../helpers/worker-env.cjs')({ globals: fakeIDB() });
   const { port, say, close } = w.connect(F.PORT, { id: 'glaze', frameId: 0, url: 'chrome-extension://x/papers.html', origin: 'chrome-extension://x', tab: { id: 7 } });
   try {
     say({ op: 'stat', hash: 'a'.repeat(64) });
@@ -52,7 +52,7 @@ test('the largest file is the kinds\' and the submit sheet\'s one number', () =>
   assert.equal(DK.KINDS.pdf.max, F.MAX);
   assert.equal(DK.KINDS.slides.max, F.MAX);
   assert.equal(DK.FILE, F.MAX);
-  assert.equal(require('../lib/writer-submit.js').MAX_FILE, F.MAX);
+  assert.equal(require('../../extension/lib/writer-submit.js').MAX_FILE, F.MAX);
   assert.ok(4 * Math.ceil(F.CHUNK / 3) <= 512 << 10, 'a chunk is at most 512 KB on the wire');
 });
 

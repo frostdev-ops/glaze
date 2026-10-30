@@ -1,15 +1,15 @@
-// Headless EditorView regressions: node scripts/writer-core-check.js [name pattern].
+// Headless EditorView regressions: node checks/writer/writer-core-check.js [name pattern].
 // Run under the shared heavy-browser lock; NODE_PATH may supply Playwright and CHROME may select Chromium.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] || '.');
+const root = path.resolve(__dirname, '../../extension'), filter = new RegExp(process.argv[2] || '.');
 
 (async () => {
-  await require('./wait-for-browser.js')();
-  const browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch() });
+  await require('../../tools/dev/wait-for-browser.js')();
+  const browser = await chromium.launch({ headless: true, ...require('../../tools/dev/check-env.js').chromeLaunch() });
   let failures = 0, checks = 0;
   try {
     const page = await browser.newPage(), errors = [];
@@ -145,7 +145,7 @@ const root = path.resolve(__dirname, '..'), filter = new RegExp(process.argv[2] 
         const bad = gaps.filter((q) => !starts.has(q));
         ed.destroy(); document.adoptedStyleSheets = [];
         return { count: gaps.length, bad, staleAfterEdit };
-      }, require('../test/fixtures/writer-docx-import.js').text(2500, 37));
+      }, require('../../test/fixtures/writer-docx-import.js').text(2500, 37));
       assert.ok(result.count > 1);
       assert.equal(result.staleAfterEdit, 0, 'editing drops stale inline gaps before remeasurement');
       assert.deepEqual(result.bad, []);

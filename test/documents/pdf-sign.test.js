@@ -1,8 +1,8 @@
 // A signature kept for next time (lib/pdf-sign.js): its outlines only, quantized and deflated (encode, decode), at most
-// KEEP of them, newest first (keep). Signing a page is scripts/pdf-check.js.
+// KEEP of them, newest first (keep). Signing a page is checks/documents/pdf-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/pdf-sign.js');
+const S = require('../../extension/lib/pdf-sign.js');
 
 const drawn = { outlines: [[10.5, 20.25, 30, 40.125, 55.5, 41], [100, 100, 101.75, 99.5]], areContours: false, thickness: 3, width: 400, height: 150 };
 
@@ -50,7 +50,7 @@ test('keep: newest first, at most five, only the outline and its name (no pictur
   assert.deepEqual(S.keep(list, { id: 's4', at: 9, name: 'again', kind: 'name', data: 'BBBB' }).map((x) => x.id), ['s4', 's6', 's5', 's3', 's2'], 'the same one again moves to the front');
 });
 
-const UI = require('./helpers/pdf-ui.cjs');
+const UI = require('../helpers/pdf-ui.cjs');
 const signUI = (t) => {
   const document = UI.install(t);
   const originalChrome = global.chrome;

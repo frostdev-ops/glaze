@@ -10,9 +10,9 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
-root = Path(__file__).resolve().parent.parent
+root = Path(__file__).resolve().parents[2]
 if len(sys.argv) != 2:
-    sys.exit('usage: python3 scripts/stage-safari-dmg.py <stage-directory>')
+    sys.exit('usage: python3 tools/build/stage-safari-dmg.py <stage-directory>')
 public_key = os.environ.get('SAFARI_UPDATE_PUBLIC_KEY', 'REPLACE_WITH_SPARKLE_EDDSA_PUBLIC_KEY')
 if public_key != 'REPLACE_WITH_SPARKLE_EDDSA_PUBLIC_KEY':
     try:
@@ -30,7 +30,7 @@ if project.exists():
     shutil.rmtree(project)
 stage.mkdir(parents=True, exist_ok=True)
 marker.write_text(str(root))
-version = json.loads((root / 'manifest.json').read_text())['version']
+version = json.loads((root / 'extension/manifest.json').read_text())['version']
 shutil.copytree(root / 'safari/Glaze', project, symlinks=True)
 path = project / 'Glaze.xcodeproj/project.pbxproj'
 p = json.loads(subprocess.check_output(['plutil', '-convert', 'json', '-o', '-', str(path)]))
@@ -154,7 +154,7 @@ resolved.write_text(json.dumps({'pins': [{'identity': 'sparkle', 'kind': 'remote
 resources = project / 'Glaze Extension/Resources'
 shutil.rmtree(resources)
 resources.mkdir()
-version = json.loads((root / 'manifest.json').read_text())['version']
+version = json.loads((root / 'extension/manifest.json').read_text())['version']
 subprocess.run(['unzip', '-q', str(root / f'dist/glaze-v{version}.zip'), '-d', str(resources)], check=True)
-subprocess.run(['sh', str(root / 'scripts/safari-manifest.sh'), str(resources / 'manifest.json')], check=True)
+subprocess.run(['sh', str(root / 'tools/build/safari-manifest.sh'), str(resources / 'manifest.json')], check=True)
 print(project)

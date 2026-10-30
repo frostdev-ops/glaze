@@ -4,11 +4,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const source = read('features/coursetabs.js');
 const L = require(path.join(root, 'lib/coursetabs.js'));
-const { El } = require('./stand-in-dom.js');
+const { El } = require('../stand-in-dom.js');
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const origin = 'https://bb.school.test';
 

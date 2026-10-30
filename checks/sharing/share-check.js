@@ -1,12 +1,12 @@
 // Real Notes/Settings sharing in headless Chrome, with an Ultra fixture and the local relay only.
-// NODE_PATH=/path/to/node_modules nice -n 15 node scripts/share-check.js [evidence directory]
+// NODE_PATH=/path/to/node_modules nice -n 15 node checks/sharing/share-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const { relay, diskStore } = require('../server/relay.js');
-const G = require('../defaults.js');
-// A copy holding the school's host and the local relay, as the student's grants do (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(path.join(__dirname, '..'), ['https://bb.school.test/*', 'http://127.0.0.1/*']);
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const { relay, diskStore } = require('../../server/relay.js');
+const G = require('../../extension/defaults.js');
+// A copy holding the school's host and the local relay, as the student's grants do (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, '../../extension'), ['https://bb.school.test/*', 'http://127.0.0.1/*']);
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const site = 'https://bb.school.test';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, ms = 10000) => {
@@ -39,13 +39,13 @@ const click = async (page, locator, dwell = 750) => {
     server = relay({ db: path.join(tmp, 'relay.db'), store: diskStore(path.join(tmp, 'blobs')) });
     const address = await server.listen(0, '127.0.0.1');
     const relayURL = `http://127.0.0.1:${address.port}`;
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
       ...chromeLaunch, headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--no-proxy-server', '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'],
     });
     ctx.setDefaultTimeout(10000);
-    const html = fs.readFileSync(path.join(ext, 'test/fixtures/ultra-course.html'), 'utf8');
+    const html = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:' || u.origin === relayURL) return route.continue();

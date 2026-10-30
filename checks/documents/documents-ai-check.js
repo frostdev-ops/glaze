@@ -8,15 +8,15 @@
 // Sources: the assignment's paper has what its attempt saved (lib/writer-sources.js keys it by the paper, as the attempt's
 // frame does), so Checks finds its citation's entry, and adds and removes there; the standalone document keeps its own.
 // Every step is reported, passed or failed, so a run before a fix shows each missing part. No other network.
-// NODE_PATH=<playwright> nice -n 10 node scripts/documents-ai-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/documents/documents-ai-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-documents-ai-check');
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const results = [], errors = [], unexpected = [], lookups = [], visuals = [];
 let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,7 +37,7 @@ const MISSPELT = 'I agree that the river works as a kind of archive, but I think
 const LAST = 'When Sethe returns to the clearing, the memory is not something she owns;';
 const GHOST = ' arrives uninvited and rearranges the present.';
 const NOTES = `doc:${crypto.randomUUID()}`, ESSAY = 'bb.school.test|_900_1|_101_1|_7_1';
-// The sources the essay's attempt saved, under the key its frame keeps them by (test/papers-sources.test.js), and a
+// The sources the essay's attempt saved, under the key its frame keeps them by (test/documents/papers-sources.test.js), and a
 // citation of one in the essay.
 const SR = require(path.join(root, 'lib/writer-sources.js'));
 const ATTEMPT_SOURCES = 'writer:sources:bb.school.test|_900_1|_101_1|_7_1', LOCAL_SOURCES = (key) => `writer:sources:local|local|papers|${encodeURIComponent(key)}`;
@@ -130,7 +130,7 @@ const TAP = () => {
 
 (async () => {
   let context, held = false, tmp, ext;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\ndocuments-ai-check\n`); break; }
@@ -138,12 +138,12 @@ const TAP = () => {
     }
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-documents-ai-'));
     fs.mkdirSync(out, { recursive: true });
-    ext = require('./check-env.js').staged(root, []);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, locale: 'en-US',
+    ext = require('../../tools/dev/check-env.js').staged(root, []);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(12000);
-    // doi.org's answer after its redirect, as scripts/writer-cite-check.js serves it; anything else is refused and listed.
+    // doi.org's answer after its redirect, as checks/writer/writer-cite-check.js serves it; anything else is refused and listed.
     const ANSWERS = {
       'https://doi.org/10.5555/gz.2026.001': { status: 302, headers: { location: 'https://api.crossref.org/v1/works/10.5555%2Fgz.2026.001/transform' } },
       'https://api.crossref.org/v1/works/10.5555%2Fgz.2026.001/transform': { contentType: 'application/vnd.citationstyles.csl+json', body: fixture('writer-cite-doi.json') },

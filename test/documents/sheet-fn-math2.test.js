@@ -21,10 +21,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const M = require('../lib/sheet-model.js');
-const C = require('../lib/sheet-calc.js');
-require('../lib/sheet-fn-math.js');
-require('../lib/sheet-fn-math2.js');
+const M = require('../../extension/lib/sheet-model.js');
+const C = require('../../extension/lib/sheet-calc.js');
+require('../../extension/lib/sheet-fn-math.js');
+require('../../extension/lib/sheet-fn-math2.js');
 
 const book = (cells = {}, { sheets = ['Sheet1'], opts, hide = [], filter } = {}) => {
   const wb = M.workbook();
@@ -63,7 +63,7 @@ test('the math functions are registered, volatile where Excel\'s are', () => {
   for (const name of NAMES) assert.ok(C.fn(name), name);
   assert.ok(C.fn('RAND').volatile && C.fn('RANDBETWEEN').volatile);
   assert.ok(!C.fn('PI').volatile);
-  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-math2.js'), 'utf8')), 'no timers');
+  assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '../../extension/lib/sheet-fn-math2.js'), 'utf8')), 'no timers');
 });
 
 test('SUMPRODUCT with the page\'s four tables; non-numbers are 0; sizes must match', () => {

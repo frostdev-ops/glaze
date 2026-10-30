@@ -4,15 +4,15 @@
 # the Chrome Web Store item's ID, which Chrome gives an unpacked copy only when its manifest carries the store's public key
 # ("key"). So: the store package (package.sh), unzipped into a folder, with Drive's build-time switch turned on
 # (lib/google.js ON), the manifest's oauth2 client with Drive's scopes and the optional identity permission
-# (scripts/oauth-manifest.js), and the key added, in that copy only. Never in the repo or the package (test/google.test.js).
+# (tools/build/oauth-manifest.js), and the key added, in that copy only. Never in the repo or the package (test/platform/google.test.js).
 #
-#   scripts/dev-drive.sh <file holding the store's public key, one base64 line> [folder, default dist/glaze-dev-drive]
+#   tools/dev/dev-drive.sh <file holding the store's public key, one base64 line> [folder, default dist/glaze-dev-drive]
 #
 # Then chrome://extensions → Developer mode → Load unpacked → that folder. Remove the store's Glaze from that Chrome
 # profile first: two copies can't share one ID.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-key_file="${1:?usage: scripts/dev-drive.sh <public-key file> [folder]}"
+key_file="${1:?usage: tools/dev/dev-drive.sh <public-key file> [folder]}"
 out="${2:-dist/glaze-dev-drive}"
 
 ./package.sh >/dev/null
@@ -29,7 +29,7 @@ if (!der.length || der.toString('base64') !== key) throw new Error(`${keyFile}: 
 const file = path.join(out, 'lib/google.js'), src = fs.readFileSync(file, 'utf8');
 if (!src.includes('\n  const ON = false;\n')) throw new Error('lib/google.js: no ON switch');
 fs.writeFileSync(file, src.replace('\n  const ON = false;\n', '\n  const ON = true;\n'));
-const { oauth } = require(path.resolve('scripts/oauth-manifest.js'));
+const { oauth } = require(path.resolve('tools/build/oauth-manifest.js'));
 const at = path.join(out, 'manifest.json');
 const manifest = oauth(JSON.parse(fs.readFileSync(at, 'utf8')), {
   target: 'chrome', calendar: require(path.resolve('lib/gcal.js')).ON === true, drive: true, config: require(path.resolve('lib/google-config.js')),

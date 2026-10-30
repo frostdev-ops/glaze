@@ -7,17 +7,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const A = require('../lib/announce.js');
-const { El } = require('./stand-in-dom.js');
-const { parse } = require('./fixture-dom.js');
+const D = require('../../extension/defaults.js');
+const A = require('../../extension/lib/announce.js');
+const { El } = require('../stand-in-dom.js');
+const { parse } = require('../fixture-dom.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async (n = 8) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // (The stand-in parser keeps attributes as written: &amp; is decoded here, as a browser does.)
 const page = (html) => { const doc = { activeElement: null }; doc.createElement = (t) => new El(t, doc); doc.root = new El('#document', doc); doc.body = parse(html.replaceAll('&amp;', '&'), doc); return doc; };
-const fixture = (f) => page(read(`test/fixtures/${f}`));
+const fixture = (f) => page(read(`../test/fixtures/${f}`));
 const UB = 'https://bb.school.test', CV = 'https://ann.school.instructure.com', MD = 'https://moodle.school.test';
 const pick = (h) => h && { ...h.ref };
 
@@ -57,7 +57,7 @@ test('Ultra: an Activity Stream announcement and a course tab\'s link to announc
   }
   for (const a of doc.body.querySelectorAll('[analytics-id="stream.entry.course"]')) assert.equal(A.find('ultra', a, UB, '/ultra/stream'), null);
   // test/fixtures/ultra-course.html's Announcements tool, as a course tab's frame shows it.
-  const tool = read('test/fixtures/ultra-course.html').match(/<announcement-list>.*?<\/announcement-list>/)[0].replaceAll('${c.id}', '_102_1');
+  const tool = read('../test/fixtures/ultra-course.html').match(/<announcement-list>.*?<\/announcement-list>/)[0].replaceAll('${c.id}', '_102_1');
   const tab = page(`<body>${tool}</body>`);
   const t = A.find('ultra', tab.body.querySelector('a'), UB, '/ultra/courses/_102_1/announcements');
   assert.equal(t.ref.courseId, '_102_1');
@@ -102,7 +102,7 @@ test('Canvas: Recent Activity\'s announcements and the dashboard widget\'s; disc
 });
 
 test('Moodle: the news forum\'s discussion list and the Latest announcements block, with what the page shows (no fetch for a preview)', () => {
-  const html = read('test/fixtures/announce-moodle-lists.html');
+  const html = read('../test/fixtures/announce-moodle-lists.html');
   const doc = page(html);
   const row = doc.body.querySelector('[data-region="discussion-list-item"] th.topic a');
   assert.deepEqual(pick(A.find('moodle', row, MD, '/mod/forum/view.php')), { site: 'moodle', entry: 'moodle', courseId: '16', id: '12', url: `${MD}/mod/forum/discuss.php?d=12`,
@@ -153,7 +153,7 @@ const hooked = ({ site = 'canvas', origin = CV, pathname = '/', html, announce =
     GZ_CTX: { site, on: () => on, t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', settings: () => settings,
       need: (f) => { needed.push(f); return f === 'lib/popup.js' || f === 'lib/announce.js' ? Promise.resolve() : gate; }, courseList: () => ({}),
       moodleIn: async () => ({ session: () => ({ root: origin, sesskey: 'sk' }) }) },
-    GZ_I18N: require('../lib/i18n.js'), GZ_POPUP_LIB: require('../lib/popup.js'), GZ_ANNOUNCE_LIB: A, GZ_NOTES: require('../lib/notes.js'), GZ_DOCTEXT: require('../lib/doctext.js'),
+    GZ_I18N: require('../../extension/lib/i18n.js'), GZ_POPUP_LIB: require('../../extension/lib/popup.js'), GZ_ANNOUNCE_LIB: A, GZ_NOTES: require('../../extension/lib/notes.js'), GZ_DOCTEXT: require('../../extension/lib/doctext.js'),
     GZ_LMSQ: { fetch: (url, init = {}) => { asked.push(`${init.method || 'GET'} ${url}`); return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ title: 'Lab moved', message: '<p>Room 2.</p>', read_state: 'read' }) }); } },
     getSelection: () => selection, document: doc, location: { origin, pathname, href: `${origin}${pathname}`, assign: (u) => assigned.push(u) },
     matchMedia: () => ({ matches: true }), innerWidth: 1440, innerHeight: 900,
@@ -175,7 +175,7 @@ const hooked = ({ site = 'canvas', origin = CV, pathname = '/', html, announce =
   const tip = () => doc.body.children.find((c) => c.id === 'gz-ann-tip')?.shadowForTest.querySelector('.tip') || null;
   return { doc, ctx, A: ctx.GZ_ANNOUNCE, asked, assigned, win, needed, fire, popup, tip, release };
 };
-const canvasPage = (o) => hooked({ html: read('test/fixtures/announce-canvas-lists.html'), ...o });
+const canvasPage = (o) => hooked({ html: read('../test/fixtures/announce-canvas-lists.html'), ...o });
 
 test('hooks: a plain click opens the pop-up before the site hears it; modifiers, a middle click and untrusted clicks stay the site\'s', async () => {
   const p = canvasPage();
@@ -235,17 +235,17 @@ test('hooks: hover attaches the preview (its delay, then one GET); a Moodle prev
   p.A.sync(); await settle();
   const a = p.doc.body.querySelector('.stream-announcement a.content_summary');
   a.box = { left: 100, top: 40, width: 160, height: 20 };
-  a.matches = (s) => s === ':hover' || require('./stand-in-dom.js').matches(a, s);
+  a.matches = (s) => s === ':hover' || require('../stand-in-dom.js').matches(a, s);
   p.fire('pointerover', a, { pointerType: 'mouse' }); await settle();
   assert.deepEqual(p.asked, []);
   await wait(30); await settle();
   assert.equal(p.tip()?.hidden, false, 'shown after the delay');
   assert.deepEqual(p.asked, [`GET ${CV}/api/v1/courses/25/discussion_topics/7`]);
-  const m = hooked({ site: 'moodle', origin: MD, pathname: '/mod/forum/view.php', html: read('test/fixtures/announce-moodle-lists.html') });
+  const m = hooked({ site: 'moodle', origin: MD, pathname: '/mod/forum/view.php', html: read('../test/fixtures/announce-moodle-lists.html') });
   m.A.sync(); await settle();
   const link = m.doc.body.querySelector('th.topic a');
   link.box = { left: 100, top: 40, width: 160, height: 20 };
-  link.matches = (s) => s === ':hover' || require('./stand-in-dom.js').matches(link, s);
+  link.matches = (s) => s === ':hover' || require('../stand-in-dom.js').matches(link, s);
   m.fire('pointerover', link, { pointerType: 'mouse' });
   await wait(30); await settle();
   const tip = m.tip();
@@ -258,7 +258,7 @@ test('hooks: hover attaches the preview (its delay, then one GET); a Moodle prev
   quiet.A.sync(); await settle();
   const b = quiet.doc.body.querySelector('.stream-announcement a.content_summary');
   b.box = { left: 100, top: 40, width: 160, height: 20 };
-  b.matches = (s) => s === ':hover' || require('./stand-in-dom.js').matches(b, s);
+  b.matches = (s) => s === ':hover' || require('../stand-in-dom.js').matches(b, s);
   quiet.fire('pointerover', b, { pointerType: 'mouse' });
   await wait(30); await settle();
   assert.equal(quiet.tip(), null);
@@ -270,7 +270,7 @@ test('hooks: a link the site redraws for another announcement previews that one'
   p.A.sync(); await settle();
   const a = p.doc.body.querySelector('.stream-announcement a.content_summary');
   a.box = { left: 100, top: 40, width: 160, height: 20 };
-  a.matches = (s) => s === ':hover' || require('./stand-in-dom.js').matches(a, s);
+  a.matches = (s) => s === ':hover' || require('../stand-in-dom.js').matches(a, s);
   p.fire('pointerover', a, { pointerType: 'mouse' });
   await wait(30); await settle();
   a.setAttribute('href', '/courses/25/announcements/10');
@@ -331,7 +331,7 @@ test('Ultra: a course title id does not turn a discussion, content or grade dest
 });
 
 test('Ultra hooks: observed stream title and course links keep their native click', async () => {
-  const p = hooked({ site: 'ultra', origin: UB, pathname: '/ultra/stream', html: read('test/fixtures/announce-ultra-lists.html') });
+  const p = hooked({ site: 'ultra', origin: UB, pathname: '/ultra/stream', html: read('../test/fixtures/announce-ultra-lists.html') });
   p.A.sync(); await p.A.ready;
   for (const id of ['stream-discussion', 'stream-content', 'stream-grade']) {
     const a = p.doc.body.querySelector(`#${id} a.js-title-link`);
@@ -348,7 +348,7 @@ test('Ultra hooks: observed stream title and course links keep their native clic
 
 test('Ultra hooks: the observed href="#" title captures Enter safely, including before the pop-up loads', async () => {
   for (const slow of [false, true]) {
-    const p = hooked({ site: 'ultra', origin: UB, pathname: '/ultra/courses/_101_1/announcements', html: read('test/fixtures/announce-ultra-lists.html'), slow });
+    const p = hooked({ site: 'ultra', origin: UB, pathname: '/ultra/courses/_101_1/announcements', html: read('../test/fixtures/announce-ultra-lists.html'), slow });
     p.ctx.GZ_ULTRA = { read: () => ({ get: async () => ({ title: 'Lab moved to room 2', body: '<p>Room 2.</p>' }) }) };
     p.A.sync(); await settle();
     if (!slow) await p.A.ready;

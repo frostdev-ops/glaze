@@ -7,11 +7,11 @@
 // and Open in Documents opens that copy to edit. Settings → Writer → Slides off: no button by the deck (the PDF
 // keeps its own); Previews in Glaze off: none at all. A file the server refuses, or one locked, keeps Canvas's preview and the
 // button says so. Screenshots at 1280 px.
-//   NODE_PATH=<playwright> nice node scripts/canvas-suite-check.js [evidence directory]
+//   NODE_PATH=<playwright> nice node checks/courses/canvas-suite-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const G = require(path.join(root, 'defaults.js')), Z = require(path.join(root, 'lib/zip.js'));
 const O = 'https://school.instructure.com', HOST = 'files.cdn-a.test';
 const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'gz-canvas-suite-check'));
@@ -23,7 +23,7 @@ const until = async (fn, label, ms = 30000) => {
   throw Error(`${typeof label === 'function' ? await label() : label} timed out${last ? `: ${last.message}` : ''}`);
 };
 const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
-const fixture = (f) => fs.readFileSync(path.join(root, 'test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 
 // A two-page Letter PDF whose pages say "This is page n".
 const pdf = () => {
@@ -45,7 +45,7 @@ const pdf = () => {
 };
 // The slides fixture deck (test/fixtures/pptx/deck), zipped as slides-check does.
 const deck = () => {
-  const dir = path.join(root, 'test/fixtures/pptx/deck');
+  const dir = path.join(__dirname, '../../test/fixtures/pptx/deck');
   const walk = (d, base = '') => fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
     .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), `${base}${e.name}/`) : [[`${base}${e.name}`, fs.readFileSync(path.join(d, e.name))]]));
   return Buffer.concat(Z.zip(walk(dir).sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, data]) => ({ name, data: new Uint8Array(data), date: new Date(2026, 9, 29, 12) }))));
@@ -87,7 +87,7 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
 
 (async () => {
   let ctx, held = false, tmp, passed = false;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\ncanvas-suite-check\n`); break; }
@@ -98,8 +98,8 @@ const WIKI = strip(fixture('canvas-wiki-page.html')).replace(/(<div class="show-
     check(/show-content/.test(WIKI) && WIKI.includes('data-api-returntype="File"') && (MODULES.match(/class="context_module_item [^"]*attachment/g) || []).length >= 6 && FILE_PAGE(21).includes('canvas-own'), 'the saved pages carry the preview, the five File rows and the file link');
     const ext = env.staged(root, [`https://${HOST}/*`]);
     const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US', reducedMotion: 'reduce',
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(ctx);
     await ctx.route('**/*', (r) => {

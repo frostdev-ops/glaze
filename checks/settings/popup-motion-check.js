@@ -1,13 +1,13 @@
 // Synthetic shared-popup motion: real browser geometry, curved text/table strips, interruption, focus, reduced motion
 // and cleanup. No LMS, account, server, extension profile or network. Screenshots stay outside the repository.
-// NODE_PATH=/path/to/node_modules nice -n 10 node scripts/popup-motion-check.js [/tmp/glaze-genie]
+// NODE_PATH=/path/to/node_modules nice -n 10 node checks/settings/popup-motion-check.js [/tmp/glaze-genie]
 // POPUP_ENGINE=webkit checks WebKit too; POPUP_FRAMES=/tmp/genie-frames captures an opening/closing sequence at 60 fps.
 const { chromium, webkit } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
-const env = require('./check-env.js');
+const env = require('../../tools/dev/check-env.js');
 const out = path.resolve(process.argv[2] || '/tmp/glaze-genie');
-const lock = require('./check-env.js').lockPath();
+const lock = require('../../tools/dev/check-env.js').lockPath();
 let browser, held = false, checks = 0;
 const ok = (value, label) => { assert.ok(value, label); checks++; console.log(`ok ${label}`); };
 
@@ -18,7 +18,7 @@ const ok = (value, label) => { assert.ok(value, label); checks++; console.log(`o
     }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\npopup-motion-check\n${new Date().toISOString()}\n`);
     fs.mkdirSync(out, { recursive: true });
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     const engine = process.env.POPUP_ENGINE === 'webkit' ? webkit : chromium;
     browser = await engine.launch({ ...(engine === chromium ? env.chromeLaunch() : {}), headless: true });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'no-preference' });
@@ -70,7 +70,7 @@ const ok = (value, label) => { assert.ok(value, label); checks++; console.log(`o
       window.seek = (p) => { for (const a of animations()) { a.pause(); a.currentTime = p * a.effect.getTiming().duration; } };
       window.finish = () => { for (const a of animations()) a.finish(); };
     });
-    for (const file of ['lib/popup.js', 'features/popup.js']) await page.addScriptTag({ path: path.join(__dirname, '..', file) });
+    for (const file of ['lib/popup.js', 'features/popup.js']) await page.addScriptTag({ path: path.join(__dirname, '../../extension', file) });
     await page.evaluate(() => GZ_POPUP.ready);
     for (const [source, rubric] of [['above', true], ['below', false], ['middle', false]]) {
       await page.evaluate(([s, r]) => { openPopup(s, r); seek(0.01); }, [source, rubric]);

@@ -4,9 +4,9 @@
 process.env.TZ = 'Asia/Tokyo';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../lib/todo.js');
-const R = require('../lib/remind.js');
-const D = require('../defaults.js');
+const T = require('../../extension/lib/todo.js');
+const R = require('../../extension/lib/remind.js');
+const D = require('../../extension/defaults.js');
 
 const NY = 'America/New_York';
 const at = (iso) => Date.parse(iso);

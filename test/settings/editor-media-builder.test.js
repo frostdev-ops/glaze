@@ -6,11 +6,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const XP = require('../lib/lookparts.js');
-const MEDIA = require('../lib/media.js');
+const D = require('../../extension/defaults.js');
+const XP = require('../../extension/lib/lookparts.js');
+const MEDIA = require('../../extension/lib/media.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const HASH = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ';
 const LINK = 'https://cdn.example.com/loops/rain.webm';
 
@@ -50,7 +50,7 @@ const rig = ({ parts = null, reply = (m) => (m.op === 'list' ? { ok: true, files
     chrome: { runtime: { lastError: null, getManifest: () => ({ host_permissions: ['https://frostdev.io/*'] }), sendMessage: (m, cb) => { sent.push(m); const r = Promise.resolve(reply(m)); if (cb) r.then(cb); return r; } },
       ...(permissions && { permissions: { request: (o) => { asked.push([...o.origins]); return Promise.resolve(answer(o.origins)); } } }) },
     location: { origin: 'chrome-extension://glaze' }, addEventListener: (t, f) => { (listeners[t] ||= []).push(f); },
-    GZ_XPARTS: XP, GZ_MEDIA: MEDIA, GZ_SPEC: D.GZ_SPEC, GZ_COLORS: D.GZ_COLORS, GZ_MX: require('../lib/motionx.js'),
+    GZ_XPARTS: XP, GZ_MEDIA: MEDIA, GZ_SPEC: D.GZ_SPEC, GZ_COLORS: D.GZ_COLORS, GZ_MX: require('../../extension/lib/motionx.js'),
   });
   vm.runInContext(`${read('lib/site.js')}\n${read('lib/editor-x.js')}\n${read('lib/editor-xbg.js')}\nglobalThis.X = GZ_EDITOR_X; globalThis.BG = GZ_EDITOR_XBG;`, ctx);
   const s = { parts: structuredClone(parts), bg: { kind: 'media' }, motion: { level: 'full' } }, writes = [];

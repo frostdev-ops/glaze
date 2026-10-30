@@ -2,11 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const Z = require('../lib/zip.js');
-const P = require('../lib/pptx.js');
+const Z = require('../../extension/lib/zip.js');
+const P = require('../../extension/lib/pptx.js');
 
 // The deck under test/fixtures/pptx/deck, laid out as its package: zipped here as it stands, or with parts swapped.
-const DIR = path.join(__dirname, 'fixtures/pptx/deck');
+const DIR = path.join(__dirname, '../fixtures/pptx/deck');
 const walk = (dir, base = '') => fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
   .flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name), `${base}${e.name}/`) : [[`${base}${e.name}`, fs.readFileSync(path.join(dir, e.name))]]));
 const FILES = new Map(walk(DIR));
@@ -518,7 +518,7 @@ test('relationship targets stay within the package while root paths and parent p
   const escaped = rels.replace('Target="slides/slide1.xml"', 'Target="../../ppt/slides/slide1.xml"');
   const d = await P.read(pack({ 'ppt/_rels/presentation.xml.rels': escaped }));
   assert.equal(d.slides[0].missing, true);
-  const D = require('../lib/doctext.js');
+  const D = require('../../extension/lib/doctext.js');
   assert.equal((await D.rels(D.unzip(pack({ 'ppt/_rels/presentation.xml.rels': escaped })), 'ppt/presentation.xml')).get('rId2').path, 'ppt/slides/slide1.xml');
 });
 
@@ -545,7 +545,7 @@ test('a layout\'s colour-map override reaches its slides that keep the master ma
 });
 
 test('shared master chart titles are parsed once per part', async () => {
-  const D = require('../lib/doctext.js'), original = D.tokens;
+  const D = require('../../extension/lib/doctext.js'), original = D.tokens;
   let parsed = 0;
   D.tokens = function* (src, ...args) {
     if (src.includes('shared-chart-probe')) parsed++;

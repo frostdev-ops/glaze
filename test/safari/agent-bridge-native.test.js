@@ -7,13 +7,13 @@ const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
-const F = require('../lib/agent-frames.js');
-const N = require('../mcp/lib/native.js');
-const V = require('./fixtures/agent-frames.json');
-const S = require('./helpers/swift-native.cjs');
+const F = require('../../extension/lib/agent-frames.js');
+const N = require('../../mcp/lib/native.js');
+const V = require('../fixtures/agent-frames.json');
+const S = require('../helpers/swift-native.cjs');
 
-const root = path.join(__dirname, '..');
-const ext = path.join(root, 'safari/Glaze/Glaze Extension');
+const root = path.join(__dirname, '../../extension');
+const ext = path.join(__dirname, '../../safari/Glaze/Glaze Extension');
 const bridgeFile = path.join(ext, 'GlazeAgentBridge.swift');
 const build = (recipe) => recipe.map(([unit, n]) => unit.repeat(n)).join('');
 const units = (s) => Array.from({ length: s.length }, (_, i) => s.charCodeAt(i));
@@ -230,6 +230,6 @@ test('the bridge is all DMG-only, never logs, and the checked-in project never c
   assert.equal(lines.at(-1), '#endif');
   assert.equal(code(src).split('#endif').length, 2, 'one block, the whole file');
   assert.doesNotMatch(code(src), /\bos_log\(|\bNSLog\(|\bprint\(|Logger\(/);
-  assert.ok(!fs.readFileSync(path.join(root, 'safari/Glaze/Glaze.xcodeproj/project.pbxproj'), 'utf8').includes('GlazeAgentBridge'),
+  assert.ok(!fs.readFileSync(path.join(__dirname, '../../safari/Glaze/Glaze.xcodeproj/project.pbxproj'), 'utf8').includes('GlazeAgentBridge'),
     'only scripts/stage-safari-dmg.py adds it');
 });

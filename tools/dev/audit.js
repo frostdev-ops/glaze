@@ -1,10 +1,10 @@
-// The audit behind scripts/canvas-shots.js --audit, run inside each frame with page.evaluate (so it has to stand alone).
-// Plain node module, so test/canvas-fixtures.test.js can run it against a stand-in window.
+// The audit behind tools/dev/canvas-shots.js --audit, run inside each frame with page.evaluate (so it has to stand alone).
+// Plain node module, so test/courses/canvas-fixtures.test.js can run it against a stand-in window.
 
 // Elements painted wrong for the palette, in this frame: a light patch in a dark palette (or a dark one in a
 // light palette), and text under 4.5:1 (3:1 when large) against what is painted behind it. Biggest area first.
 const auditFrame = (w = window) => {
-  // A frame's window: the real one in the page (page.evaluate), a stand-in in test/canvas-fixtures.test.js.
+  // A frame's window: the real one in the page (page.evaluate), a stand-in in test/courses/canvas-fixtures.test.js.
   const { document, innerWidth, innerHeight } = w;
   const getComputedStyle = (e) => w.getComputedStyle(e);
   const ctx = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });

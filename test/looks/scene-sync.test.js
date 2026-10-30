@@ -1,12 +1,12 @@
 // What content.js does with a scene, a shader or layers: syncScene, sliced out and run in a VM with stand-ins, as
-// test/ondemand.test.js does for the loader. The parts (GZ_CTX.parts()) are the Look's x, which package A fills in after first
+// test/writer/ondemand.test.js does for the loader. The parts (GZ_CTX.parts()) are the Look's x, which package A fills in after first
 // paint and announces with glaze:parts; lib/scene.js is replaced by a recorder.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
 const a = source.indexOf('  // ---- animated background');
 const b = source.indexOf('  // ---- course colors and tint', a);
 assert.ok(a > 0 && b > a, 'markers');

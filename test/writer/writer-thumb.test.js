@@ -6,10 +6,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const T = require('../lib/writer-thumb.js');
-const S = require('../lib/writer-schema.js');
-const ST = require('../lib/writer-styles.js');
-const F = require('../lib/writer-format.js');
+const T = require('../../extension/lib/writer-thumb.js');
+const S = require('../../extension/lib/writer-schema.js');
+const ST = require('../../extension/lib/writer-styles.js');
+const F = require('../../extension/lib/writer-format.js');
 
 const p = (text, attrs) => ({ type: 'paragraph', ...(attrs ? { attrs } : {}), ...(text ? { content: [{ type: 'text', text }] } : {}) });
 const doc = (...content) => ({ type: 'doc', content });
@@ -220,6 +220,6 @@ test('tile draws each format\'s new paper, its lines empty or filled', () => {
 });
 
 test('writer-thumb reads no layout, sets no timers and writes no HTML strings', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'writer-thumb.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/lib/writer-thumb.js'), 'utf8');
   for (const bad of ['getBoundingClientRect', 'getComputedStyle', 'offsetWidth', 'offsetHeight', 'clientWidth', 'scrollHeight', 'setTimeout', 'setInterval', 'requestAnimationFrame', 'innerHTML', 'insertAdjacentHTML', '<canvas', 'getContext']) assert.ok(!src.includes(bad), bad);
 });

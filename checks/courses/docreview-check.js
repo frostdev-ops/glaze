@@ -1,12 +1,12 @@
 // Headless document review geometry and local Canvas survey. Holds the shared lock for the browser's whole lifetime.
-// NODE_PATH=/path/to/node_modules nice -n 15 node scripts/docreview-check.js [evidence directory]
+// NODE_PATH=/path/to/node_modules nice -n 15 node checks/courses/docreview-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
-const G = require('../defaults.js');
-const root = path.resolve(__dirname, '..'), lock = require('./check-env.js').lockPath();
+const G = require('../../extension/defaults.js');
+const root = path.resolve(__dirname, '../../extension'), lock = require('../../tools/dev/check-env.js').lockPath();
 const out = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docreview-evidence-')));
 const origin = 'https://review.blackboard.com', route = '/ultra/courses/_1_1/assessment/_2_1/overview/student-submission-view';
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 let css, js;
 let fixture;
 let held = false, ctx, tmp, checks = 0;
@@ -34,10 +34,10 @@ const reachable = (f, selector) => f.locator(selector).evaluateAll((es) => es.le
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\ndocreview-check\n${new Date().toISOString()}\n`); break; }
       catch (e) { if (e.code !== 'EEXIST') throw e; if (n % 6 === 0) console.log('Waiting for the shared browser lock'); await pause(10000); }
     }
-    fixture = fs.readFileSync(path.join(root, 'test/fixtures/ultra-docreview.html'), 'utf8');
+    fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-docreview.html'), 'utf8');
     css = fs.readFileSync(path.join(root, 'features/docreview.css'), 'utf8'); js = fs.readFileSync(path.join(root, 'features/docreview.js'), 'utf8');
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docreview-profile-'));
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(tmp, { ...chromeLaunch, headless: true, bypassCSP: true, viewport: { width: 1800, height: 987 }, reducedMotion: 'reduce' });
     await ctx.route(origin + '/**', (r) => {
       const u = new URL(r.request().url());
@@ -51,7 +51,7 @@ const reachable = (f, selector) => f.locator(selector).evaluateAll((es) => es.le
       return ['GET', 'HEAD'].includes(req.method()) || req.method() === 'POST' && u.pathname === '/login/canvas' ? r.continue() : r.abort();
     });
     const layers = await ctx.newPage();
-    try { await require('./ultra-offcanvas-fixture.js')({ page: layers, root, check: ok, shot: (name) => layers.screenshot({ path: path.join(out, `${name}.png`) }) }); }
+    try { await require('../mocks/ultra-offcanvas-fixture.js')({ page: layers, root, check: ok, shot: (name) => layers.screenshot({ path: path.join(out, `${name}.png`) }) }); }
     finally { await layers.close(); }
     const page = await ctx.newPage(); await page.goto(origin + '/fixture');
     const f = page.frames().find((f) => f.url() === origin + route); await f.waitForSelector('iframe');

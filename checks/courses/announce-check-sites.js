@@ -1,13 +1,13 @@
-// The LMSs' own announcement lists in Glaze's pop-up, for scripts/announce-check.js (same browser, same lock): synthetic
+// The LMSs' own announcement lists in Glaze's pop-up, for checks/courses/announce-check.js (same browser, same lock): synthetic
 // Ultra (a course's Announcements in Ultra's own markup, the Activity Stream, a course tab's frame), Canvas (a course's
 // Announcements as the local Canvas rendered it, Recent Activity, the widget dashboard) and Moodle (the news forum's list,
 // the Latest announcements block) on invented hosts, every answer synthetic. For each: the preview, a plain click opening
 // the pop-up with the page left where it was and its own handlers never hearing it, a modifier click passing through, and
 // an unreadable announcement opening the site's page. Screenshots of each list with the pop-up open.
 const fs = require('node:fs'), path = require('node:path');
-const G = require('../defaults.js');
+const G = require('../../extension/defaults.js');
 const UB = 'https://bb.school.test', MD = 'https://moodle.school.test';
-const fixture = (name) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', name), 'utf8');
+const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8');
 const day = (n) => new Date(Date.now() + n * 864e5).toISOString();
 const BODY = '<p>This week\'s lab is in <strong>room 2</strong> of the Science Building. Bring your lab coat and goggles.</p><ul><li>Read chapter 4 first.</li></ul>';
 const SITE_PAGE = '<!doctype html><title>The site\'s page</title><h1>The site\'s page</h1>';
@@ -169,7 +169,7 @@ module.exports = async ({ ctx, opts, O, ok, out }) => {
       ok(await page.evaluate(() => window.__native?.trusted && !window.__native.prevented && !document.getElementById('gz-popup')), `ultra-stream: ${kind} link reaches its native handler`);
     }
 
-    // A course tab's frame: the course's Announcements tool, as scripts/ctab-panel-close-check.js opens it.
+    // A course tab's frame: the course's Announcements tool, as checks/navigation/ctab-panel-close-check.js opens it.
     ultraShell = 'course';
     const key = `ctabs:${UB}:_42_1`;
     await store(settings({ enhance: { tabs: true, place: true }, tabs: G.GZ_SANITIZE({}).tabs }), { ultra: [UB], moodle: [`${MD}/*`], freshDefaults: { fresh: false },

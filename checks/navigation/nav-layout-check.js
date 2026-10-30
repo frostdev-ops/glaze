@@ -7,23 +7,23 @@
 // that the visual order is the focus order and aria-current stays; and that taking the Look off, or turning Glaze off,
 // puts each native nav back exactly as it was. Canvas and Moodle also mount a declarative mod's rail widget, with and
 // without a Look layout, then restore their native nav when the mod is disabled or removed.
-//   NODE_PATH=/path/to/node_modules nice node scripts/nav-layout-check.js [screenshots directory]   (needs playwright)
+//   NODE_PATH=/path/to/node_modules nice node checks/navigation/nav-layout-check.js [screenshots directory]   (needs playwright)
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const G = require('../defaults.js');
+const G = require('../../extension/defaults.js');
 
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const src = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://moodle.school.test/*']); // the id is made from the real path
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const src = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://moodle.school.test/*']); // the id is made from the real path
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-nav-layout-'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const CANVAS = 'https://nav.school.instructure.com', MOODLE = 'https://moodle.school.test';
 const A = 'library0000a';
 const LINK = { id: A, n: 'Library', u: 'https://library.example.edu/', i: 'book' };
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const fixture = (name) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', name), 'utf8');
+const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8');
 const strip = (html, css) => html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '').replace('</head>', `<style>${css}</style></head>`);
 // Stand-ins for each LMS's own frame CSS (not fetched): Canvas's fixed rail beside #wrapper, Moodle's fixed navbar.
 const CANVAS_PAGE = strip(fixture('canvas-dashboard-cards.html'), `body { margin: 0; font: 14px/1.4 system-ui, sans-serif; }
@@ -46,7 +46,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
   const ext = src;
   let ctx;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await ctx.route('**/*', (route) => {
@@ -62,7 +62,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
     await opts.evaluate(async () => { await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'] }); });
-    // The site's own nav: Glaze's bar (on by default, features/navbar.js) wears a layout in its place (test/navbar.test.js, navbar-check.js).
+    // The site's own nav: Glaze's bar (on by default, features/navbar.js) wears a layout in its place (test/navigation/navbar.test.js, navbar-check.js).
     const settings = G.GZ_SANITIZE({ preset: 'Paper', colors: G.GZ_PRESET('Paper'), motion: { level: 'off' }, navbar: { on: false } });
     // Settings only: the Look's parts are saved by wear(), and a write here must not take them away.
     const store = (s) => opts.evaluate(async (s) => { await chrome.storage.sync.set(s); }, s);

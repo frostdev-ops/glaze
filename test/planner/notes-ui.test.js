@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 test("the worker takes a page's notes changes for its own site's index only", async () => {
   const listeners = [];
@@ -18,7 +18,7 @@ test("the worker takes a page's notes changes for its own site's index only", as
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     navigator: {}, // no IndexedDB here: a change that gets past the sender check fails on the database, closed
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
     },
@@ -80,14 +80,14 @@ test('the Canvas link picker: read-only GETs on this site, redirects refused, st
 });
 
 // ---- the whole view on a stand-in page -----------------------------------------------------------------------------
-const N = require('../lib/notes.js');
+const N = require('../../extension/lib/notes.js');
 const SOURCE = read('features/notes.js');
 const settle = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const later = () => { let resolve; const p = new Promise((r) => { resolve = r; }); return Object.assign(p, { resolve }); };
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
-const { El } = require('./stand-in-dom.js');
+const { El } = require('../stand-in-dom.js');
 
 // A Canvas course home with Glaze and Notes on; the worker is lib/notes.js run over memory, its answers and storage's
 // change events arriving later, as in a browser. env.activation: navigator.userActivation.isActive; env.hold(m): a
@@ -97,11 +97,11 @@ const { El } = require('./stand-in-dom.js');
 // env.syncHold: a promise a storage.sync read answers after (with what was stored when it was asked);
 // env.changeSync(patch): those items changed in storage.sync, reported as storage reports them (only what changed).
 // env.syncFail: a storage.sync read throws (the extension reloaded, or storage failed).
-const D = require('../defaults.js');
+const D = require('../../extension/defaults.js');
 // ultra: an Ultra course outline instead (its right column, the student's _N_N id, Ultra's course list and the
 // course's content items as content-ultra.js hands them over).
 const ULTRA = 'https://school.blackboard.test';
-const U = require('../lib/ultra.js');
+const U = require('../../extension/lib/ultra.js');
 const page = ({ on = true, stored = on, live = true, enabled = true, ultra = false, items = [] } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => {
@@ -163,7 +163,7 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
     // The view's minute-long timers (revoking a download's address) mustn't keep the test process waiting.
     setTimeout: (f, ms) => { const h = setTimeout(f, ms); if (ms >= 1000) h.unref(); return h; },
     addEventListener() {}, URL: URLs, Blob, Date, clearTimeout, crypto: globalThis.crypto, Promise, JSON, structuredClone, AbortController,
-    GZ_NOTES: N, GZ_DOCTEXT: require('../lib/doctext.js'), GZ_ZIP: require('../lib/zip.js'), GZ_I18N: require('../lib/i18n.js'), GZ_PAGE: require('../lib/page.js'),
+    GZ_NOTES: N, GZ_DOCTEXT: require('../../extension/lib/doctext.js'), GZ_ZIP: require('../../extension/lib/zip.js'), GZ_I18N: require('../../extension/lib/i18n.js'), GZ_PAGE: require('../../extension/lib/page.js'),
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_LOOKS: D.GZ_LOOKS, GZ_ALL_PRESETS: D.GZ_ALL_PRESETS, GZ_LOOK_ON: D.GZ_LOOK_ON, GZ_LOOK_APPLY: D.GZ_LOOK_APPLY,
     GZ_CTX: {
       solo: true,
@@ -324,7 +324,7 @@ test('turning Notes on puts the Course notes hook into course homes already open
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa, navigator: {},
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       permissions: { contains: async () => true }, // the student granted every host (Chrome)
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener: (f) => changed.push(f) } },
@@ -357,7 +357,7 @@ test('turning Notes on puts the Course notes hook into course homes already open
   injected.length = 0;
   for (const f of listeners) f({ type: 'glaze:consent', op: 'yes', kind: 'canvas' }, found, () => {});
   await wait(20);
-  const canvasFirst = require('../manifest.json').content_scripts.find((c) => c.js.includes('content-canvas.js')).js; // Canvas's first script (B0b)
+  const canvasFirst = require('../../extension/manifest.json').content_scripts.find((c) => c.js.includes('content-canvas.js')).js; // Canvas's first script (B0b)
   assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, canvasFirst.filter((f) => f !== 'lib/i18n.js').join()], [8, 'features/notes-home.js']], 'lib/i18n.js came with the question');
   assert.ok(registered.find((s) => s.id === 'gz-notes-home').matches.includes('https://canvas.new.edu/courses/*'));
 });
@@ -611,7 +611,7 @@ test('the Course notes button costs the first script nothing: the worker registe
     URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa, navigator: {},
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener() {} },
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener() {} },
         onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       permissions: { contains: async () => true }, // the student granted every host (Chrome)
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener: (f) => changed.push(f) } },

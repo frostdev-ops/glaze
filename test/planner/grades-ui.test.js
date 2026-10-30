@@ -5,10 +5,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const I = require('../lib/i18n.js');
-const live = require('./fixtures/canvas-grades.json');
+const I = require('../../extension/lib/i18n.js');
+const live = require('../fixtures/canvas-grades.json');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 
@@ -111,7 +111,7 @@ const serviceWorker = (store) => {
     URL, console, setTimeout, clearTimeout, TextEncoder,
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), ctx); },
     chrome: {
-      runtime: { id: WORKER_ID, getURL: (p = '') => `chrome-extension://${WORKER_ID}/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
+      runtime: { id: WORKER_ID, getURL: (p = '') => `chrome-extension://${WORKER_ID}/${p}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
       storage: { local: store.worker, sync: empty, onChanged: none },
       scripting: { executeScript: () => Promise.resolve([]) },
     },
@@ -709,7 +709,7 @@ const dashboard = () => {
   card.append(el(doc, 'div', { className: 'ic-DashboardCard__header' }, link));
   doc.body.append(card);
   const list = [{ id: '27', enrollments: [{ type: 'student', computed_current_score: 83.5 }] }];
-  const ctx = vm.createContext({ document: doc, I: { observer: {} }, GZ_PAGE: require('../lib/page.js'), locale: () => 'en', t: (k, v) => I.t(k, v, 'en'), canvasCourses: () => Promise.resolve(list) });
+  const ctx = vm.createContext({ document: doc, I: { observer: {} }, GZ_PAGE: require('../../extension/lib/page.js'), locale: () => 'en', t: (k, v) => I.t(k, v, 'en'), canvasCourses: () => Promise.resolve(list) });
   vm.runInContext(`${block('  const tagCanvasCards = () => {', '  // Canvas: its course colors come inline')}; globalThis.tag = tagCanvasCards;`, ctx);
   return { doc, card, list, tag: ctx.tag };
 };
@@ -737,7 +737,7 @@ test('a card’s grade is also a link to the course’s grades, for the keyboard
 // ---- Blackboard Ultra (B4): the same what-if and GPA, from Ultra's gradebook through lib/ultra.js ----
 const UO = 'https://lms.example.edu';
 const UKEY = `whatIf:${UO}:_900_1`; // the student of test/fixtures/ultra-memberships.json
-const ufix = (n) => JSON.parse(read(`test/fixtures/ultra-${n}.json`));
+const ufix = (n) => JSON.parse(read(`../test/fixtures/ultra-${n}.json`));
 const U_NOW = Date.parse('2026-10-15T12:00:00Z'); // in the fixtures' Fall 2026 term
 class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_NOW])); } static now() { return U_NOW; } }
 // features/grades.js on an Ultra page, with B4's anchors: a course's overall grade header, or the Grades page's terms.
@@ -785,7 +785,7 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
     document: doc, location: loc, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome, TextEncoder, fetch, Date: FixedDate, File: class File {}, AbortController,
     MutationObserver: class { observe() {} disconnect() {} },
-    GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES, setTimeout: (f, ms) => { const timer = [f, ms]; state.timers.push(timer); return timer; },
+    GZ_PAGE: require('../../extension/lib/page.js'), GZ_COURSES: require('../../extension/defaults.js').GZ_COURSES, setTimeout: (f, ms) => { const timer = [f, ms]; state.timers.push(timer); return timer; },
     clearTimeout: (timer) => { const i = state.timers.indexOf(timer); if (i >= 0) state.timers.splice(i, 1); },
     GZ_CTX: {
       site: 'ultra', t: (k, v) => I.t(k, v, lang), locale: () => lang, need, settings: () => state.settings, on: () => true,
@@ -844,7 +844,7 @@ test("Ultra what-if: Ultra's own categories, titled with its language key, read 
   };
   assert.deepEqual(await legends('en'), ['Assignment · 40%', 'Test · 40%', 'Discussion · 20%']);
   for (const lang of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
-    require(`../i18n/${lang}.js`);
+    require(`../../extension/i18n/${lang}.js`);
     assert.equal((await legends(lang))[2], `${I.t('Discussion', {}, lang)} · ${I.pct(20, lang)}`);
   }
 });
@@ -1672,7 +1672,7 @@ test('review: category endpoint preserves teacher names and localizes system met
     cats.push({ ...c, title: c.title === 'Discussion' ? 'DISCUSSION.NAME' : c.title, isUserDefined: c.title === 'Discussion' });
     delete r.column.gradebookCategory;
   }
-  require('../i18n/de.js');
+  require('../../extension/i18n/de.js');
   const p = ultraPage({ books: { _101_1: rows }, lang: 'de', answers: { '/gradebook/categories': { results: cats } } });
   p.UI.render(); await settle(10); await open(p); await settle(10);
   const names = p.box().all((e) => e.tagName === 'LEGEND').map((e) => e.children[0].textContent);

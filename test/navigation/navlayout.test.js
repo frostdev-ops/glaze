@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const L = require('../lib/navlayout.js');
+const L = require('../../extension/lib/navlayout.js');
 
 const link = (id, extra = {}) => ({ id, n: `Link ${id}`, u: `https://example.com/${id}`, i: 'book', ...extra });
 const A = 'aaaaaaaaaaaa', B = 'bbbbbbbbbbbb';

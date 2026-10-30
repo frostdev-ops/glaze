@@ -3,8 +3,8 @@
 // fetched as the student; rebuild it when the seed changes).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../lib/gradecalc.js');
-const live = require('./fixtures/canvas-grades.json');
+const G = require('../../extension/lib/gradecalc.js');
+const live = require('../fixtures/canvas-grades.json');
 
 // The API's shapes: an assignment with the student's submission, a group of them.
 let n = 100;

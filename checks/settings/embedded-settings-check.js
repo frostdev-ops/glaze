@@ -4,21 +4,21 @@
 // over its frame's whole area nothing else may draw or take the pointer: not Glaze's own overlays (the pet, the sidebar's
 // buttons, floating tiles), nor an overlay the page adds later, in <body> or beside it in <html>, however high its z-index.
 // Closing puts the page back as it was. All other requests abort; no LMS needed.
-//   NODE_PATH=/path/to/node_modules nice -n 15 node scripts/embedded-settings-check.js [out dir for screenshots]
+//   NODE_PATH=/path/to/node_modules nice -n 15 node checks/settings/embedded-settings-check.js [out dir for screenshots]
 // Hold $GLAZE_LOCK (default glaze-heavy.lock in the OS temp directory) while it runs.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const G = require('../defaults.js');
-require('../lib/widgets.js'); // its settings in GZ_SPEC
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://moodle.school.test/*', 'https://bb.school.test/*']);
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const G = require('../../extension/defaults.js');
+require('../../extension/lib/widgets.js'); // its settings in GZ_SPEC
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://moodle.school.test/*', 'https://bb.school.test/*']);
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-embedded-settings-'));
 const CANVAS = 'https://emb.school.instructure.com', MOODLE = 'https://moodle.school.test', ULTRA = 'https://bb.school.test';
-const fixture = (name) => fs.readFileSync(path.join(ext, 'test/fixtures', name), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
+const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
 const PAGES = { [`${CANVAS}/`]: 'canvas-dashboard-cards.html', [`${MOODLE}/my/`]: 'moodle-dashboard.html', [`${ULTRA}/ultra/course`]: 'ultra-courses.html' };
 const SITES = [['ultra', `${ULTRA}/ultra/course`], ['canvas', `${CANVAS}/`], ['moodle', `${MOODLE}/my/`]];
 const settings = G.GZ_SANITIZE({ enabled: true, navbar: { ...G.GZ_DEFAULTS.navbar, on: true }, motion: { level: 'off' },
@@ -32,10 +32,10 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
   let ctx;
   const errors = [];
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1000, height: 800 }, reducedMotion: 'reduce', locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-webgl', '--host-resolver-rules=MAP * ~NOTFOUND'] });
-    require('./check-env.js').noFirstRun(ctx);
+    require('../../tools/dev/check-env.js').noFirstRun(ctx);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
@@ -50,7 +50,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
       await chrome.storage.sync.set({ ...s, navbarItems: { glaze: ['settings'] } });
       await chrome.storage.local.set({ moodle: ['https://moodle.school.test/*'], ultra: ['https://bb.school.test'] }); // the student's yes to these sites
     }, settings);
-    await require('./check-env.js').ultraReady(opts);
+    await require('../../tools/dev/check-env.js').ultraReady(opts);
     const until = async (page, fn, arg, label) => { const end = Date.now() + 30000; while (Date.now() < end) { const v = await page.evaluate(fn, arg).catch(() => false); if (v) return v; await page.waitForTimeout(80); } throw new Error(label); };
 
     for (const [site, url] of SITES) {

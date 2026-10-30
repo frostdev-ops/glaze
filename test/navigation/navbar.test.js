@@ -3,12 +3,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const G = require('../defaults.js');
-const L = require('../lib/navlayout.js');
-const NI = require('../lib/nav-items.js');
-const M = require('../lib/navbar.js');
+const G = require('../../extension/defaults.js');
+const L = require('../../extension/lib/navlayout.js');
+const NI = require('../../extension/lib/nav-items.js');
+const M = require('../../extension/lib/navbar.js');
 
-const read = (f) => fs.readFileSync(require.resolve(`../${f}`), 'utf8');
+const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 const ULTRA = ['profile', 'institution-page', 'stream', 'course', 'organization', 'calendar', 'messages', 'grades', 'tools', 'logout', 'glaze']
   .map((id) => ({ id, label: id === 'profile' ? 'Alex Example' : id[0].toUpperCase() + id.slice(1), href: `https://school.test/ultra/${id}`, active: id === 'course', badge: id === 'messages' ? '3' : '' }));
 const ids = (list) => list.map((i) => i.id);
@@ -70,7 +70,7 @@ test("the student's own groups, tabs and Glaze items", () => {
 });
 
 test("Glaze's Documents item: opt-in, drawn when on, and its click opens Documents beside the bar (its own tab in Settings' preview)", async () => {
-  const E = require('../lib/editor-navbar.js');
+  const E = require('../../extension/lib/editor-navbar.js');
   // Off until the student turns it on, a fresh device too (its one item is Glaze settings).
   assert.deepEqual(M.clean({}).glaze, []);
   assert.deepEqual(M.initial(undefined, undefined, true).glaze, ['settings']);
@@ -170,7 +170,7 @@ test('on by default: a floating rail, open on wide windows; Look codes carry how
   assert.deepEqual(G.GZ_SANITIZE({ navbar: { on: 1, place: 'side', style: 'glass', rail: 'wide', course: 'gone', brand: 'school' } }).navbar, { ...DEF, brand: 'school' });
   for (const icon of M.PICKS) assert.match(M.ICONS[icon], /^[Mm][\d.\s,a-zA-Z-]+$/, icon);
   assert.ok(NI.ICONS.every((i) => M.PICKS.includes(i)), "every link icon a Look may give is one of the bar's");
-  const S = require('../lib/share.js');
+  const S = require('../../extension/lib/share.js');
   const s = G.GZ_SANITIZE({ navbar: { on: false, place: 'top', style: 'embed', course: 'icons', tabs: false } });
   const got = await S.decode(await S.encode(s, {}, null));
   assert.deepEqual(got.navbar, { place: 'top', style: 'embed', course: 'icons', tabs: false }, 'only what differs from the default, never on');
@@ -293,7 +293,7 @@ test('the editor may change navbar fields; Ultra and Moodle top frames may only 
   await h.run({ patch: { badges: false } }, { sync });
   assert.deepEqual(store.navbar, { ...DEF, rail: 'icons', badges: false, brand: 'school' });
   assert.match(source, /'features\/navbar\.js'\) \? \['lib\/nav\.js', 'lib\/nav-items\.js', 'lib\/navlayout\.js', 'lib\/navbar\.js'\]/, 'the model loads with the bar');
-  assert.ok(require('../manifest.json').web_accessible_resources.some((w) => w.resources.includes('features/navbar.css')), 'the shadow root can load its sheet');
+  assert.ok(require('../../extension/manifest.json').web_accessible_resources.some((w) => w.resources.includes('features/navbar.css')), 'the shadow root can load its sheet');
 });
 
 test("Ultra's part marks first paint from the setting and loads the bar only when it is on; the old rail steps aside", () => {
@@ -306,7 +306,7 @@ test("Ultra's part marks first paint from the setting and loads the bar only whe
 // The renderer's API: mods add, change and remove only their own items, and nothing unsafe gets through.
 test("a mod's items are checked: name, icon, address, badge, place; one owner can't touch another's", () => {
   const noop = () => {};
-  const ctx = vm.createContext({ GZ_NAV_LAYOUT: L, GZ_NAV_ITEMS: NI, GZ_NAVBAR: M, GZ_NAV: require('../lib/nav.js'), URL,
+  const ctx = vm.createContext({ GZ_NAV_LAYOUT: L, GZ_NAV_ITEMS: NI, GZ_NAVBAR: M, GZ_NAV: require('../../extension/lib/nav.js'), URL,
     location: { href: 'https://school.test/ultra/course', origin: 'https://school.test' }, addEventListener: noop, document: { addEventListener: noop }, requestAnimationFrame: noop,
     chrome: { runtime: { id: 'x' }, storage: { onChanged: { addListener: noop } } },
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', on: () => false, settings: () => ({ enabled: true, navbar: { on: false } }), parts: () => null, setVar: noop } });
@@ -356,7 +356,7 @@ test('a navbar edit batched with Look parts merges in the worker queue too', asy
 });
 
 test("the editor lists every item where the bar puts it, hidden ones too, with the phone's tabs", () => {
-  const E = require('../lib/editor-navbar.js');
+  const E = require('../../extension/lib/editor-navbar.js');
   const ids = (gs) => gs.map((g) => g.items.map((i) => i.id));
   // Every LMS's items (WP-N2, NAV-4): Ultra's, Canvas's and Moodle's, in the default groups' order.
   assert.deepEqual(ids(E.rows({})), [['institution-page', 'dashboard', 'home', 'stream', 'course', 'organization', 'groups', 'calendar', 'messages', 'notifications', 'grades'], ['tools', 'history', 'help', 'admin']]);
@@ -376,7 +376,7 @@ test("the editor lists every item where the bar puts it, hidden ones too, with t
 
 test('course tabs show in the bar when it holds them, and at "only in the navigation" their strip steps aside', () => {
   const src = read('features/coursetabs.js');
-  assert.deepEqual(require('../lib/coursetabs.js') && require('../defaults.js').GZ_SPEC.tabs.at, ['auto', ['auto', 'above', 'between', 'below', 'nav']]);
+  assert.deepEqual(require('../../extension/lib/coursetabs.js') && require('../../extension/defaults.js').GZ_SPEC.tabs.at, ['auto', ['auto', 'above', 'between', 'below', 'nav']]);
   assert.match(src, /\(framed \? parent\.document : document\)\.documentElement\.getAttribute\('data-gz-navbar'\)/, "a tab's frame asks the page around it");
   assert.match(src, /P\(\)\.at !== 'nav' \? P\(\)\.at : navHolds\(\) \? 'nav' : 'above'\);/, "'nav' is the strip's 'above' where no bar holds the tabs");
   assert.match(src, /const hosted = \(\) => at\(\) === 'nav';/);

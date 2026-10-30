@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const C = require('../lib/writer-context-discussion.js');
-const source = fs.readFileSync(require.resolve('../lib/writer-context-discussion.js'), 'utf8');
+const C = require('../../extension/lib/writer-context-discussion.js');
+const source = fs.readFileSync(require.resolve('../../extension/lib/writer-context-discussion.js'), 'utf8');
 
 const harness = () => {
   let enabled = true, now = 100000, signature = '_201_1', observe;

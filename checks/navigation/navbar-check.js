@@ -4,18 +4,18 @@
 // and badges; that an item opens through Ultra's own link; the rail's icons state, tooltips, hover peek, keyboard and
 // Escape; right-to-left; the phone bar and its More sheet; Glaze's widgets and mods' dock in each place; and that turning
 // it off puts Ultra's drawer back.
-//   NODE_PATH=/path/to/node_modules nice node scripts/navbar-check.js [screenshots directory]   (needs playwright)
+//   NODE_PATH=/path/to/node_modules nice node checks/navigation/navbar-check.js [screenshots directory]   (needs playwright)
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const G = require('../defaults.js');
-require('../lib/coursetabs.js'); require('../lib/nav.js'); // their settings, so GZ_SANITIZE keeps them
+const G = require('../../extension/defaults.js');
+require('../../extension/lib/coursetabs.js'); require('../../extension/lib/nav.js'); // their settings, so GZ_SANITIZE keeps them
 
-const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
+const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-navbar-'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 
 let checks = 0, fails = 0;
@@ -27,7 +27,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
   let ctx;
   const errors = [];
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1440, height: 900 }, locale: 'en-US',
       args: [`--disable-extensions-except=${src}`, `--load-extension=${src}`, '--host-resolver-rules=MAP * ~NOTFOUND'] });
     const page = await ctx.newPage();

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const R = require('../lib/grades.js');
-const C = require('../lib/gradecalc.js'); // the what-if calculator, loaded on demand
+const R = require('../../extension/lib/grades.js');
+const C = require('../../extension/lib/gradecalc.js'); // the what-if calculator, loaded on demand
 
 // A gradebook record as Ultra returns it with expand=column.
 let n = 0;

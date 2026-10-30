@@ -7,9 +7,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
+const D = require('../../extension/defaults.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const between = (src, a, b) => { const i = src.indexOf(a); assert.ok(i >= 0, a); const j = src.indexOf(b, i); assert.ok(j > i, b); return src.slice(i, j); };
 const plain = (x) => JSON.parse(JSON.stringify(x));
@@ -117,8 +117,8 @@ const moodlePaint = ({ settings, list, cards }) => {
   const ORIGIN = 'http://localhost:8081';
   const ctx = vm.createContext({ solo: false, tabFrame: '', URL, Promise, JSON, Date, location: { origin: ORIGIN }, matchMedia: () => ({ matches: true }),
     document: { querySelector: () => null, querySelectorAll: (sel) => (sel.includes('course-content') ? els : []) },
-    GZ_COURSE_COLOR: D.GZ_COURSE_COLOR, GZ_SURFACE_VARS: D.GZ_SURFACE_VARS, GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../lib/color.js'),
-    GZ_MOODLE: require('../lib/moodle.js'), GZ_PAGE: require('../lib/page.js'),
+    GZ_COURSE_COLOR: D.GZ_COURSE_COLOR, GZ_SURFACE_VARS: D.GZ_SURFACE_VARS, GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../../extension/lib/color.js'),
+    GZ_MOODLE: require('../../extension/lib/moodle.js'), GZ_PAGE: require('../../extension/lib/page.js'),
     GZ_CTX: { t: (k) => k, settings: () => settings, local: () => {}, canvasCourseKey: (id) => (id ? `moodle:${ORIGIN}/${id}` : null), courseList: () => list, on: () => true } });
   ctx.globalThis = ctx;
   const api = vm.runInContext(read('features/moodle.js'), ctx);

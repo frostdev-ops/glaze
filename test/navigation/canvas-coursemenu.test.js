@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const { El } = require('./stand-in-dom.js');
-const read = (f) => fs.readFileSync(require.resolve(`../${f}`), 'utf8');
+const D = require('../../extension/defaults.js');
+const { El } = require('../stand-in-dom.js');
+const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'utf8');
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 
 // Run the real decoration hook and popover with controlled Canvas responses and timers.
@@ -42,13 +42,13 @@ const page = ({ motion = false } = {}) => {
   const all = doc.querySelectorAll;
   doc.querySelectorAll = (s) => s === '.ic-DashboardCard:not([data-gz-tile-card])' ? cards.filter((c) => c.isConnected && !c.hasAttribute('data-gz-tile-card')) : all(s);
   const courses = { [cid]: { name: 'Biology', canvas: true, color: '#123456' } }, settings = D.GZ_SANITIZE({});
-  const c = vm.createContext({ ...D, GZ_COLOR: require('../lib/color.js'), GZ_WIDGETS: require('../lib/widgets.js'), GZ_CARD_UI: { paint() {} }, URL, structuredClone,
+  const c = vm.createContext({ ...D, GZ_COLOR: require('../../extension/lib/color.js'), GZ_WIDGETS: require('../../extension/lib/widgets.js'), GZ_CARD_UI: { paint() {} }, URL, structuredClone,
     GZ_MOTION: motion ? { exit: (el) => { el.inert = true; return new Promise(() => {}); } } : undefined,
     document: doc, Element: El, Node: El, location: { origin }, innerWidth: 1200, innerHeight: 900,
     setTimeout: (f) => { timers.set(++timerId, f); return timerId; }, clearTimeout: (id) => timers.delete(id),
     addEventListener() {}, matchMedia: () => ({ matches: false }), requestAnimationFrame: () => 0,
     getComputedStyle: (el) => ({ direction: el.closest('[dir]')?.getAttribute('dir') || doc.root.style.direction || 'ltr' }),
-    GZ_CATALOG: require('../lib/looks.js'), chrome: { runtime: { id: 'glaze' }, storage: { local: { get: async () => ({ lookCatalog: catalog }) }, sync: { set() {} }, onChanged: { addListener: (f) => changed.push(f) } } },
+    GZ_CATALOG: require('../../extension/lib/looks.js'), chrome: { runtime: { id: 'glaze' }, storage: { local: { get: async () => ({ lookCatalog: catalog }) }, sync: { set() {} }, onChanged: { addListener: (f) => changed.push(f) } } },
     fetch: (url, init) => new Promise((resolve, reject) => requests.push({ url, init, ok: () => resolve({ ok: true, json: async () => ({}) }), fail: () => reject(Error('unavailable')) })),
     ultra: false, moodle: false, menuOn: () => true, courseList: courses, settings,
     canvasCourseKey: (id) => `canvas:${origin}/${id}`, X: { nickOf: () => '' }, t: (s) => s,
@@ -217,7 +217,7 @@ test('course-menu arrow direction follows computed CSS direction without a dir a
 
 test('an open course Look selector follows catalogue additions and removals without losing a nickname draft', async () => {
   const p = page(); await p.open();
-  const C = require('../lib/looks.js'), G = D.GZ_LOOKS[0];
+  const C = require('../../extension/lib/looks.js'), G = D.GZ_LOOKS[0];
   const kept = { id: C.idOf('code'), name: 'Study', kind: 'saved', colors: G.colors, look: G.look, bg: G.bg };
   const nick = p.doc.getElementById('gz-cm-nick');
   nick.value = 'Draft'; p.doc.fire(nick, 'input');

@@ -6,10 +6,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const swift = require('./helpers/swift-native.cjs');
+const swift = require('../helpers/swift-native.cjs');
 
-const root = path.join(__dirname, '..');
-const safari = path.join(root, 'safari/Glaze');
+const root = path.join(__dirname, '../../extension');
+const safari = path.join(__dirname, '../../safari/Glaze');
 const nativeFile = path.join(safari, 'Glaze Extension/GlazeGoogle.swift');
 const read = (f) => fs.readFileSync(path.join(safari, f), 'utf8');
 const plist = (file) => JSON.parse(spawnSync('plutil', ['-convert', 'json', '-o', '-', file], { encoding: 'utf8' }).stdout);

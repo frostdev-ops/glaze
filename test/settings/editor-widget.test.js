@@ -1,17 +1,17 @@
 // The editor's widget builder (lib/editor-widget.js): the form's blocks as the cleaner takes them, the manifest it makes (asking
 // for exactly the permissions its blocks use, with reasons), versions that go up, and the prompt's words for a widget with no
-// code (lib/editor-mods.js). The page itself, with real clicks, is scripts/widgets-builder-check.js.
+// code (lib/editor-mods.js). The page itself, with real clicks, is checks/core/widgets-builder-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const WE = require('../lib/editor-widget.js');
-const E = require('../lib/editor-mods.js');
-const W = require('../lib/modwidget.js');
-const M = require('../lib/modbundle.js');
+const WE = require('../../extension/lib/editor-widget.js');
+const E = require('../../extension/lib/editor-mods.js');
+const W = require('../../extension/lib/modwidget.js');
+const M = require('../../extension/lib/modbundle.js');
 
 const t = (k, vars = {}) => k.replace(/\{(\w+)\}/g, (s, n) => (n in vars ? String(vars[n]) : s));
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const state = (over = {}) => ({ name: 'Due Soon', author: 'Kai', tile: true, size: 'm', rail: false, why: {}, version: '1.0.0', blocks: [WE.blank('text', t), WE.blank('countdown', t)], ...over });
 

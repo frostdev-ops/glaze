@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { El, matches } = require('./stand-in-dom.js');
+const { El, matches } = require('../stand-in-dom.js');
 
-const root = path.join(__dirname, '..');
-const fixture = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, `fixtures/${name}.json`), 'utf8'));
+const root = path.join(__dirname, '../../extension');
+const fixture = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, `../fixtures/${name}.json`), 'utf8'));
 const real = () => fixture('ultra-rubric-graded'), numeric = () => fixture('ultra-rubric-numeric');
 const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const ORIGIN = 'https://bb.school.test', PATH = '/ultra/courses/_101_1/assessment/_8120_1/overview';
@@ -79,8 +79,8 @@ const page = (data, width = 706, kind = 'overview') => {
   const c = vm.createContext(globals);
   c.globalThis = c;
   const files = {
-    'lib/rubric.js': () => { c.GZ_RUBRIC_LIB = require('../lib/rubric.js'); },
-    'lib/ultra.js': () => { c.GZ_ULTRA = require('../lib/ultra.js'); },
+    'lib/rubric.js': () => { c.GZ_RUBRIC_LIB = require('../../extension/lib/rubric.js'); },
+    'lib/ultra.js': () => { c.GZ_ULTRA = require('../../extension/lib/ultra.js'); },
     'lib/lmsq.js': () => { c.GZ_LMSQ = { fetch: (url) => fetch(url) }; },
     'features/popup.js': () => { c.GZ_POPUP = { ready: Promise.resolve(), safe: (text) => [text], open: (o) => { popups.push(o); return { close() {}, isOpen: () => false }; } }; },
   };

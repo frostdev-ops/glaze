@@ -5,10 +5,10 @@
 process.env.TZ = 'UTC'; // a few calls leave the zone to the machine's: these dates fall on the same day only in zones near UTC
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../lib/classes.js');
-const T = require('../lib/todo.js');
-const I = require('../lib/ics.js');
-const D = require('../lib/doctext.js');
+const C = require('../../extension/lib/classes.js');
+const T = require('../../extension/lib/todo.js');
+const I = require('../../extension/lib/ics.js');
+const D = require('../../extension/lib/doctext.js');
 
 const NOW = Date.UTC(2026, 9, 15, 15); // Thu 15 Oct 2026
 const m = (line, opts) => C.meetings(line, opts).map((x) => [x.days.join(''), C.hhmm(x.start), C.hhmm(x.end), ...(x.unsure.length ? [x.unsure.join()] : [])]);
@@ -265,7 +265,7 @@ test('HTML and Word files go through lib/doctext.js to the same reader', async (
     ['ENG 1100', 'Writing', [['135', '10:00', '10:50', 'Humanities 210', '', '']]],
   ]);
   // A minimal Word document: one table, as Word writes rows and cells.
-  const Z = require('../lib/zip.js');
+  const Z = require('../../extension/lib/zip.js');
   const cell = (s) => `<w:tc><w:p><w:r><w:t>${s}</w:t></w:r></w:p></w:tc>`;
   const row = (...cs) => `<w:tr>${cs.map(cell).join('')}</w:tr>`;
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
@@ -367,7 +367,7 @@ test('.ics: open-ended rules never claim a meeting the calendar lacks (another z
 });
 
 test('.ics: the real Canvas feed fixture holds deadlines and one-off events, not classes', () => {
-  const feed = require('node:fs').readFileSync(require('node:path').join(__dirname, 'fixtures/ics/canvas-feed.ics'));
+  const feed = require('node:fs').readFileSync(require('node:path').join(__dirname, '../fixtures/ics/canvas-feed.ics'));
   const r = C.fromIcs(feed, { now: Date.UTC(2026, 9, 15), tz: 'America/Denver' });
   assert.ok(Array.isArray(r.entries));
   for (const e of r.entries) for (const p of e.periods) assert.ok(p.end > p.start);
@@ -582,7 +582,7 @@ test('a save over the limits (20 times a class, 60 classes) is refused whole, an
 });
 
 test('the worker allows a page its own site\'s schedules only', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/background.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/lib/background.js'), 'utf8');
   assert.match(src, /classes: \{\s*allow: async \(m, s\) => typeof m\.key === 'string' && GZ_CLASSES\.STORE_KEY\.test\(m\.key\) && m\.key\.startsWith\(`classes:\$\{\(await fromCanvas\(s\)\) \|\| \(await fromUltra\(s\)\)\}\/`\)/);
   assert.match(src, /importScripts\([^)]*'classes\.js'/);
   for (const f of ['lib/classes.js', 'features/classes.js', 'lib/ics.js', 'lib/doctext.js']) assert.ok(src.includes(`'${f}'`), `LOADABLE: ${f}`);
@@ -604,7 +604,7 @@ test('the classes on a day: in term, on its weekdays, not on a skipped date', ()
 });
 
 test('class-start reminders: lead minutes before, in the student\'s zone, in lib/remind.js\'s shape', () => {
-  const R = require('../lib/remind.js');
+  const R = require('../../extension/lib/remind.js');
   const tz = 'America/New_York';
   const now = Date.UTC(2026, 9, 15, 12); // 8:00 in New York
   const evs = C.events(STORE, { now, tz, lead: 15 });
@@ -623,7 +623,7 @@ test('class-start reminders: lead minutes before, in the student\'s zone, in lib
 
 // A period may run to midnight (end 1440): one that starts at 23:59 is still a class, reminded and exported, until midnight.
 test('a class in the day\'s last minute runs to midnight: reminded, exported, and found across midnight', () => {
-  const T = require('../lib/todo.js');
+  const T = require('../../extension/lib/todo.js');
   const NY = 'America/New_York';
   const late = { courses: [{ id: '11', name: 'Late lab', periods: [{ days: [4], start: 1439, end: 1440, loc: '', from: '', to: '', skip: [] }] }] };
   const thu = T.typed('2026-10-15', '23:59', NY), fri = T.midnight(C.dayNum('2026-10-16'), NY);
@@ -687,7 +687,7 @@ test('the export hook: one event per meeting, at its instant in the schedule\'s 
 // Codex W14 review: a day of the student's Canvas zone isn't a day of the schedule's zone. A Thursday 23:00 class kept in
 // Phoenix is Friday 02:00 in New York: it belongs to Friday's agenda and to an export of Friday, not Thursday's.
 test('classes in a window are chosen by instant across zones; the export range is the student\'s days', () => {
-  const T = require('../lib/todo.js');
+  const T = require('../../extension/lib/todo.js');
   const NY = 'America/New_York';
   const night = (tz) => ({ tz, courses: [{ id: 'o-lab', name: 'Night lab', periods: [{ days: [4], start: 1380, end: 1430, loc: '', from: '', to: '', skip: [] }] }] });
   const day = (k) => [T.midnight(C.dayNum(k), NY), T.midnight(C.dayNum(k) + 1, NY)];

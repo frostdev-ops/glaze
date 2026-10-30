@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const N = require('../lib/news.js');
-const { version } = require('../manifest.json');
+const N = require('../../extension/lib/news.js');
+const { version } = require('../../extension/manifest.json');
 
 test('versions compare number by number', () => {
   assert.equal(N.cmp('2.1', '2.1.0'), 0);

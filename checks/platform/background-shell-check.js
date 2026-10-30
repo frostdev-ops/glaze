@@ -1,18 +1,18 @@
 // Render the shared CSS and content.js scene placement against native shell geometry.
-// NODE_PATH=<playwright> nice -n 15 node scripts/background-shell-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 15 node checks/platform/background-shell-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), assert = require('node:assert/strict');
-const root = process.env.EXT || path.resolve(__dirname, '..'), out = process.argv[2];
+const root = process.env.EXT || path.resolve(__dirname, '../../extension'), out = process.argv[2];
 const source = fs.readFileSync(path.join(root, 'content.js'), 'utf8');
 const start = source.indexOf('  const placeScene = '), end = source.indexOf('  const stopScene = ', start);
 const placement = source.slice(start, end);
-const lock = require('./check-env.js').lockPath();
+const lock = require('../../tools/dev/check-env.js').lockPath();
 const failures = [], results = []; let browser, held = false;
 (async () => {
   try {
     fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nbackground-shell-check\n`);
-    await require('./wait-for-browser.js')();
-    browser = await chromium.launch({ headless: true, ...require('./check-env.js').chromeLaunch() });
+    await require('../../tools/dev/wait-for-browser.js')();
+    browser = await chromium.launch({ headless: true, ...require('../../tools/dev/check-env.js').chromeLaunch() });
     const page = await browser.newPage(), decoder = await browser.newPage();
     await page.route('**/*', r => r.abort());
     const families = ['dashboard', 'courses', 'activity', 'global-calendar', 'global-grades', 'global-messages', 'profile', 'outline', 'calendar', 'announcements', 'discussions', 'gradebook', 'messages', 'groups', 'achievements', 'document', 'assignment', 'test', 'submission', 'discussion', 'announcement', 'standalone-item', 'retained-course', 'canvas', 'moodle'];
@@ -52,7 +52,7 @@ const failures = [], results = []; let browser, held = false;
         const ctx = sceneCanvas.getContext('2d'); ctx.fillStyle = '#184080'; ctx.fillRect(0,0,16,16);
         const scene = { draw() {} }, modBg = null;
         const LAYERS = ':is(.panel-wrap,.bb-offcanvas-panel):not(.peek,:is(.peek,.peek-panel__content-wrapper,.ms-Panel-main) *)';
-        // The page itself, not a course tab's frame (scripts/ctab-background-check.js has those).
+        // The page itself, not a course tab's frame (checks/navigation/ctab-background-check.js has those).
         const tabFrame = '';
         const place = new Function('sceneCanvas','modBg','scene','ultra','LAYERS','tabFrame', placement + ';return placeScene;')(sceneCanvas, modBg, scene, ultra, LAYERS, tabFrame);
         place(); window.placeBackground = place;

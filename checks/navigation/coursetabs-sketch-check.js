@@ -1,17 +1,17 @@
 // Sketch cost on Ultra's real layout, scaled from 40 to 5,000 course items. Headless, under nice, one browser at a time.
-// NODE_PATH=/path/to/node_modules nice -n 15 node scripts/coursetabs-sketch-check.js [metrics.json]
+// NODE_PATH=/path/to/node_modules nice -n 15 node checks/navigation/coursetabs-sketch-check.js [metrics.json]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), assert = require('node:assert/strict');
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const source = fs.readFileSync(process.env.GZ_SKETCH_SOURCE || path.join(root, 'lib/coursetabs.js'), 'utf8');
-const fixture = fs.readFileSync(path.join(root, 'test/fixtures/ultra-course.html'), 'utf8');
+const fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-course.html'), 'utf8');
 (async () => {
   let ctx, tmp;
   const results = [];
   try {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sketch-cost-'));
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(tmp, { ...require('./check-env.js').chromeLaunch(), headless: true,
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(tmp, { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true,
       viewport: { width: 1280, height: 860 }, args: ['--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND'] });
     await ctx.route('**/*', (r) => r.request().url().startsWith('https://bb.school.test/ultra/')
       ? r.fulfill({ contentType: 'text/html', body: fixture }) : r.abort());

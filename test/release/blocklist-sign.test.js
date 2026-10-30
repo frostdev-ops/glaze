@@ -1,4 +1,4 @@
-// The owner's signing tool (scripts/blocklist-sign.mjs): the key stays private and outside the repo, a list is signed with a
+// The owner's signing tool (tools/release/blocklist-sign.mjs): the key stays private and outside the repo, a list is signed with a
 // rising seq and 30 days of life, and what it signs is what the extension accepts.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -7,10 +7,10 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const B = require('../lib/blocklist.js');
+const B = require('../../extension/lib/blocklist.js');
 
-const root = path.resolve(__dirname, '..');
-const tool = path.join(root, 'scripts/blocklist-sign.mjs');
+const root = path.resolve(__dirname, '../../extension');
+const tool = path.join(__dirname, '../../tools/release/blocklist-sign.mjs');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-blocklist-sign-'));
 test.after(() => fs.rmSync(dir, { recursive: true, force: true }));
 const load = () => import(tool);
@@ -34,11 +34,11 @@ test('keygen writes a private key only its owner can read, prints the public hal
 
 test('keygen refuses a place inside the repo, even through a link', async () => {
   const { keygen } = await load();
-  const inside = path.join(root, 'test', 'never-written.key');
+  const inside = path.join(__dirname, '../never-written.key');
   assert.throws(() => keygen(inside), /outside the repo/);
   assert.equal(fs.existsSync(inside), false);
   const link = path.join(dir, 'into-the-repo');
-  fs.symlinkSync(path.join(root, 'test'), link);
+  fs.symlinkSync(path.join(root, '../test'), link);
   assert.throws(() => keygen(path.join(link, 'never-written.key')), /outside the repo/);
   assert.equal(fs.existsSync(inside), false);
 });

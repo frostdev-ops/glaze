@@ -5,12 +5,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const G = require('../lib/gradecalc.js');
-const GZ_PAGE = require('../lib/page.js');
-const GZ_GRADES = require('../lib/grades.js');
-const { GZ_COURSES, GZ_DUE_WEEK } = require('../defaults.js');
+const G = require('../../extension/lib/gradecalc.js');
+const GZ_PAGE = require('../../extension/lib/page.js');
+const GZ_GRADES = require('../../extension/lib/grades.js');
+const { GZ_COURSES, GZ_DUE_WEEK } = require('../../extension/defaults.js');
 
-const dir = path.join(__dirname, 'fixtures');
+const dir = path.join(__dirname, '../fixtures');
 const load = (n) => JSON.parse(fs.readFileSync(path.join(dir, `ultra-${n}.json`), 'utf8'));
 const files = fs.readdirSync(dir).filter((f) => /^ultra-.*\.json$/.test(f));
 

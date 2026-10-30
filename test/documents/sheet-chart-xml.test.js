@@ -1,9 +1,9 @@
 // Card summaries use the same DrawingML parts as the spreadsheet chart reader.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const X = require('../lib/sheet-xlsx.js');
-const CX = require('../lib/sheet-chart-xml.js');
-const FX = require('./fixtures/sheets/charts.js');
+const X = require('../../extension/lib/sheet-xlsx.js');
+const CX = require('../../extension/lib/sheet-chart-xml.js');
+const FX = require('../fixtures/sheets/charts.js');
 const marker = (tag, col, row, colOff = 0, rowOff = 0) => `<xdr:${tag}><xdr:col>${col}</xdr:col><xdr:colOff>${colOff * CX.EMU}</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>${rowOff * CX.EMU}</xdr:rowOff></xdr:${tag}>`;
 const frame = '<xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame>';
 const anchor = (kind, pos) => `<xdr:${kind}>${pos}${frame}<xdr:clientData/></xdr:${kind}>`;

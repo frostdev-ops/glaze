@@ -1,21 +1,21 @@
-// Practise with Glaze Writer on a synthetic Blackboard Ultra (scripts/ultra-mock.js): a Chromium window with this checkout's
+// Practise with Glaze Writer on a synthetic Blackboard Ultra (checks/mocks/ultra-mock.js): a Chromium window with this checkout's
 // extension, or --ext's, on a discussion to post and reply in and an assignment to submit, so each goes through Writer as
 // it would on a real course; what the mock Blackboard receives is shown on the page and kept in <practice>/received.
-//   NODE_PATH=/Users/jame/Projects/gemino/node_modules node scripts/writer-practice.js [--ext <checkout>] [--fresh] [--ai mock]
+//   NODE_PATH=/Users/jame/Projects/gemino/node_modules node tools/dev/writer-practice.js [--ext <extension folder>] [--fresh] [--ai mock]
 // The profile (Settings, Looks, AI, papers) stays in <practice>/profile between runs; --fresh starts it over. The window is
-// offline but for the AI connection set up in its Settings → AI (scripts/practice-ai.js); --ai mock sets up a stand-in model
+// offline but for the AI connection set up in its Settings → AI (tools/dev/practice-ai.js); --ai mock sets up a stand-in model
 // on this computer instead, so every AI feature answers with synthetic words for free.
 // <practice> is GLAZE_PRACTICE, else ~/Projects/glaze-plans/writer/practice.
 // --smoke: headless and scripted, with a profile of its own: a reply, a post, and a submission through Writer's sheet,
 // checked, with Feedback from the stand-in model. Run it under the shared heavy-check lock; screenshots go to <practice>/shots.
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto'), fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), M = require('./ultra-mock.js'), NET = require('./practice-ai.js');
-const DT = require('../lib/doctext.js');
+const env = require('./check-env.js'), M = require('../../checks/mocks/ultra-mock.js'), NET = require('./practice-ai.js');
+const DT = require('../../extension/lib/doctext.js');
 
-const usage = 'NODE_PATH=/Users/jame/Projects/gemino/node_modules node scripts/writer-practice.js [--ext <checkout>] [--fresh] [--ai mock] [--smoke]';
+const usage = 'NODE_PATH=/Users/jame/Projects/gemino/node_modules node tools/dev/writer-practice.js [--ext <extension folder>] [--fresh] [--ai mock] [--smoke]';
 const options = (args) => {
-  const opt = { smoke: false, fresh: false, help: false, ai: '', root: path.join(__dirname, '..') };
+  const opt = { smoke: false, fresh: false, help: false, ai: '', root: path.join(__dirname, '../../extension') };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--smoke') opt.smoke = true;
     else if (args[i] === '--fresh') opt.fresh = true;
@@ -26,7 +26,7 @@ const options = (args) => {
   }
   return opt;
 };
-// Every request goes to the proxy (a dead one at port 0, else scripts/practice-ai.js, which lets through only the AI
+// Every request goes to the proxy (a dead one at port 0, else tools/dev/practice-ai.js, which lets through only the AI
 // connection): literal IPs, localhost and the service-worker traffic Playwright cannot route included. DNS denial covers the
 // rest of the browser's own work, all but the proxy's address. Extension resources stay local; mock requests are fulfilled
 // before network access.
@@ -47,7 +47,7 @@ const until = async (fn, label, ms = 15000) => {
 const squash = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 const text = (html) => squash(String(html).replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&'));
 
-// The extension with the school's host in its manifest, as scripts/check-env.js stages it (the student's grant, on a real
+// The extension with the school's host in its manifest, as tools/dev/check-env.js stages it (the student's grant, on a real
 // site), but at a fixed path: Chrome derives an unpacked extension's id from it, and the profile keeps Glaze's data by id.
 const stage = (src, to, hosts = []) => {
   fs.rmSync(to, { recursive: true, force: true });
@@ -144,7 +144,7 @@ const paper = async (p) => {
 
 // ---- the scripted run: what the owner does by hand, checked
 const run = async ({ context, mock, shots, errors, ai }) => {
-  const FX = require('../test/fixtures/writer-paper-fixtures.js');
+  const FX = require('../../test/fixtures/writer-paper-fixtures.js');
   const checks = [], saved = {};
   const check = (v, label) => { assert.ok(v, label); checks.push(label); console.log(`ok ${label}`); };
   const shot = async (p, name, full = false) => { fs.mkdirSync(shots, { recursive: true }); await pause(250); const f = path.join(shots, name); await p.screenshot({ path: f, fullPage: full }); saved[name] = f; };

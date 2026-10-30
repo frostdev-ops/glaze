@@ -6,15 +6,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const U = require('../lib/ultra.js');
-const T = require('../lib/todo.js');
-const R = require('../lib/remind.js');
-const CL = require('../lib/classes.js');
-const X = require('../lib/calexport.js');
-const G = require('../lib/gradescope.js');
+const U = require('../../extension/lib/ultra.js');
+const T = require('../../extension/lib/todo.js');
+const R = require('../../extension/lib/remind.js');
+const CL = require('../../extension/lib/classes.js');
+const X = require('../../extension/lib/calexport.js');
+const G = require('../../extension/lib/gradescope.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const load = (n) => JSON.parse(read(`test/fixtures/ultra-${n}.json`));
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
+const load = (n) => JSON.parse(read(`../test/fixtures/ultra-${n}.json`));
 const o = 'https://bb.example.edu';
 const NOW = Date.parse('2026-10-15T12:00:00Z');
 const LATER = Date.parse('2026-10-24T12:00:00Z');
@@ -129,7 +129,7 @@ test('Gradescope courses can be placed with Ultra courses, and show for that Ult
 
 // The background worker (lib/background.js), with its storage in memory: who may write.
 const worker = ({ sessionFail = null } = {}) => {
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   const store = { sync: { version: 2, enabled: true, enhance: { gradescope: true } }, local: {}, session: {} };
   const removed = [];
   const area = (s) => ({
@@ -162,7 +162,7 @@ const worker = ({ sessionFail = null } = {}) => {
 };
 
 test('a fresh install keeps its starter layout on later updates, while an older install keeps its defaults', async () => {
-  const W = require('../lib/widgets.js');
+  const W = require('../../extension/lib/widgets.js');
   const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
   const fresh = worker();
   fresh.installed[0]({ reason: 'install' }); await settle();

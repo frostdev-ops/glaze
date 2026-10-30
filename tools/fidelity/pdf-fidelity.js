@@ -1,18 +1,18 @@
-// Do other PDF readers see what Glaze writes? Builds the fixture corpus (scripts/pdf-fixtures.js), saves and bakes each
+// Do other PDF readers see what Glaze writes? Builds the fixture corpus (tools/fidelity/pdf-fixtures.js), saves and bakes each
 // file with lib/pdf-doc.js as the editor and the pages panel do, then reads every output in pdf.js, in Poppler (pdfinfo,
 // pdftotext, pdftoppm, pdfsig) and in PDFKit, Preview's engine (a small Swift program compiled in a temporary folder),
 // and compares page count, page order (each page's text), rotation and field values with what was asked. Prints a
 // table, writes fidelity.json and the outputs to the folder, exits 1 on any difference. macOS; a heavy job, so it runs
 // under the machine's heavy-job lock, niced. With --annotated, only that file: a PDF the viewer's tools marked
-// (scripts/pdf-check.js writes annotated.pdf to its evidence), each annotation pdf.js finds there read back by PDFKit (its
+// (checks/documents/pdf-check.js writes annotated.pdf to its evidence), each annotation pdf.js finds there read back by PDFKit (its
 // type, on its page) and drawn by Poppler (pdftoppm with and without annotations differ inside its box).
-// node scripts/pdf-fidelity.js [folder] [--small] [--annotated file.pdf]   (default folder: a new temporary one; --small:
+// node tools/fidelity/pdf-fidelity.js [folder] [--small] [--annotated file.pdf]   (default folder: a new temporary one; --small:
 // not the 300-page file)
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const F = require('./pdf-fixtures.js');
-const D = require('../lib/pdf-doc.js');
+const D = require('../../extension/lib/pdf-doc.js');
 
 const squash = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 
@@ -112,7 +112,7 @@ const run = (cmd, args, opts = {}) => {
 };
 
 const readers = async (tmp) => {
-  const root = path.join(__dirname, '..');
+  const root = path.join(__dirname, '../../extension');
   const url = (f) => pathToFileURL(path.join(root, 'lib/pdfjs', f)).href;
   const [log, warn] = [console.log, console.warn];
   console.log = console.warn = () => {}; // pdf.js warns at import that node has no canvas

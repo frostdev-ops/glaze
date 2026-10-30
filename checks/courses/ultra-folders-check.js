@@ -2,19 +2,19 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const assert = require('node:assert/strict');
-const D = require('../defaults.js');
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
-const out = process.argv[2] || path.join(ext, 'scratch/b9/shots');
-const fixture = fs.readFileSync(path.join(__dirname, '../test/fixtures/ultra-folders.html'), 'utf8');
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const D = require('../../extension/defaults.js');
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
+const out = process.argv[2] || path.join(__dirname, '../../scratch/b9/shots');
+const fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-folders.html'), 'utf8');
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-b9-'));
   let context;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(temp, 'profile'), { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', hasTouch: true, isMobile: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1'] });
     context.setDefaultTimeout(8000);
     let requests = 0;

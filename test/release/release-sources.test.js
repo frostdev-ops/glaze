@@ -9,9 +9,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const helper = path.join(root, 'scripts/clean-source.sh');
+const helper = path.join(__dirname, '../../tools/release/clean-source.sh');
 const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
 for (const key of Object.keys(env)) if (/^GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR)$/.test(key)) delete env[key];
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', '-c', 'protocol.file.allow=always', ...args],
@@ -79,30 +79,30 @@ test('a checkout of HEAD carries the committed files only, and leaves the source
 });
 
 const code = (file) => read(file).split('\n').filter((line) => !/^\s*#/.test(line));
-for (const file of ['scripts/publish-chrome.sh', 'scripts/release.sh']) {
+for (const file of ['tools/release/publish-chrome.sh', 'tools/release/release.sh']) {
   test(`${file} refuses a dirty tree and packages from a checkout of HEAD`, () => {
-    const lines = code(file);
+    const lines = code(`../${file}`);
     const first = (re) => lines.findIndex((line) => re.test(line));
-    assert.ok(first(/^\s*\. "\$root\/scripts\/clean-source\.sh"/) >= 0, 'sources the helper');
+    assert.ok(first(/^\s*\. "\$root\/tools\/release\/clean-source\.sh"/) >= 0, 'sources the helper');
     const gate = first(/\bglaze_require_clean\b/), checkout = first(/\bglaze_checkout_head\b/);
     assert.ok(gate >= 0 && checkout > gate, 'refuse first, then check out');
     const packaging = lines.map((line, i) => [line, i]).filter(([line]) => /\bpackage\.sh\b/.test(line));
     assert.ok(packaging.length >= 1);
     for (const [line, i] of packaging) {
       assert.ok(i > checkout, `package.sh runs before the checkout exists: ${line.trim()}`);
-      assert.match(line, /\(cd "\$src" && DIST="[^"]+" \.\/package\.sh\)/, `packages the working tree: ${line.trim()}`);
+      assert.match(line, /\(cd "\$src" && DIST="[^"]+" tools\/build\/package\.sh\)/, `packages the working tree: ${line.trim()}`);
     }
   });
 }
 
 test('release.sh runs the suite on the checkout too, so the tested bytes are the packaged bytes', () => {
-  const lines = code('scripts/release.sh');
+  const lines = code('../tools/release/release.sh');
   assert.ok(lines.some((line) => /\(cd "\$src" && node --test\)/.test(line)));
   assert.ok(!lines.some((line) => /^\s*node --test\b/.test(line)), 'a bare node --test tests the working tree');
 });
 
 test('publish-chrome.sh only builds when no zip is given, so a given zip is uploaded as is', () => {
-  assert.match(read('scripts/publish-chrome.sh'), /if \[ -z "\$zip" \]; then[\s\S]*glaze_require_clean[\s\S]*package\.sh[\s\S]*\nfi/);
+  assert.match(read('../tools/release/publish-chrome.sh'), /if \[ -z "\$zip" \]; then[\s\S]*glaze_require_clean[\s\S]*package\.sh[\s\S]*\nfi/);
 });
 
 // ---- BLD-8: the Firefox compatibility branch is fetched before the release uses it ----
@@ -122,7 +122,7 @@ const origin = () => {
   return { base, bare, seed, work };
 };
 const advance = (fixture, text) => { git(fixture.seed, 'checkout', '-q', 'dev/firefox'); const sha = commit(fixture.seed, 'firefox.txt', text); git(fixture.seed, 'push', '-q', 'origin', 'dev/firefox'); return sha; };
-const resolver = async () => (await import('../scripts/store-release.mjs')).resolveFirefoxBase;
+const resolver = async () => (await import('../../tools/release/store-release.mjs')).resolveFirefoxBase;
 
 test('with no local dev/firefox branch the release builds on origin\'s', async () => {
   const resolveFirefoxBase = await resolver(), fx = origin();
@@ -189,7 +189,7 @@ test('without fetching, nothing touches origin (plan and resumed runs stay offli
 });
 
 test('the release command resolves the Firefox base through the fetching helper, and plan stays offline', () => {
-  const source = read('scripts/store-release.mjs');
+  const source = read('../tools/release/store-release.mjs');
   assert.doesNotMatch(source, /rev-parse', '--verify', `\$\{opt\.firefoxRef\}\^\{commit\}`/, 'the unfetched lookup is gone');
   assert.match(source, /resolveFirefoxBase\(opt\.firefoxRef, \{ fetch: /);
   assert.match(source, /building = \['release', 'build'\]\.includes\(opt\.command\)/, 'only commands that build fetch');

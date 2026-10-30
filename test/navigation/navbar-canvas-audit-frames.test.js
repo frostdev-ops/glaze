@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const L = require('../lib/coursetabs.js'), M = require('../lib/navbar.js');
-const G = require('../defaults.js');
-const source = fs.readFileSync(require.resolve('../features/coursetabs.js'), 'utf8');
+const L = require('../../extension/lib/coursetabs.js'), M = require('../../extension/lib/navbar.js');
+const G = require('../../extension/defaults.js');
+const source = fs.readFileSync(require.resolve('../../extension/features/coursetabs.js'), 'utf8');
 const origin = 'https://school.instructure.com';
 const part = (a, b) => {
   const start = source.indexOf(a), end = source.indexOf(b, start);

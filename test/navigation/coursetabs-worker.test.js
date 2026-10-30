@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const root = process.env.GZ_B8_REPO || path.join(__dirname, '..');
+const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
 const L = require(path.join(root, 'lib/coursetabs.js'));
 const site = 'https://bb.school.test';
 const uid = '_42_1', cid = '_1_1';
@@ -35,7 +35,7 @@ function worker({ keys = false, canvas = false } = {}) {
   };
   let on = true;
   const context = vm.createContext({
-    GZ_CTABS_LIB: L, GZ_CARDS: require('../lib/cards.js'), Map, Date, URL, JSON,
+    GZ_CTABS_LIB: L, GZ_CARDS: require('../../extension/lib/cards.js'), Map, Date, URL, JSON,
     fromCanvas: async (s) => canvas && s.id === 'extension' && s.url.startsWith(host + '/') ? host : null,
     fromUltra: async (s) => !canvas && s.id === 'extension' && s.tab && s.url.startsWith(site + '/ultra/') ? site : null,
     switchOn: async () => on,

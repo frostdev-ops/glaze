@@ -4,10 +4,10 @@
 // section), and from Word's own default styles for what that paper doesn't use (Title, Heading 1-2, List Paragraph, Quote,
 // No Spacing, Strong, Emphasis, the 2013 Office theme). The words are generated: no real paper's text is here.
 // Each file exercises structure the importer must keep: spacing, line rules, indents, tabs, page breaks, keep options,
-// the header and footer, page size and margins, fonts through the theme. scripts/writer-import-fidelity.js writes them out
+// the header and footer, page size and margins, fonts through the theme. tools/fidelity/writer-import-fidelity.js writes them out
 // and lays them out in Word and in Writer.
 // → { files: { id: { parts } }, bytes(id) → Buffer, text(n, seed) }
-const Z = require('../../lib/zip.js');
+const Z = require('../../extension/lib/zip.js');
 
 // ---- words: a fixed stream of plain English, so every run of the file is the same text
 const WORDS = ('the a of to and in that is for it as with on by this be are from at or an was which can their have more not but '

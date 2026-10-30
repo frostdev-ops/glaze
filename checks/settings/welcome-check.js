@@ -3,12 +3,12 @@
 // what is held and answers each request when the check says. The schools are the check's too: bb.school.edu answers as
 // Blackboard does, www.school.edu is a school's main website linking to it, and nothing else exists. Screenshots of every
 // state, wide and narrow, go to the evidence directory.
-// NODE_PATH=<installed playwright> node scripts/welcome-check.js [evidence directory]
+// NODE_PATH=<installed playwright> node checks/settings/welcome-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 // The schools the check allows stand in the staged copy's host_permissions: the page's own requests to them need the real grant.
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.edu/*', 'https://www.school.edu/*', 'https://bb.nowhere.edu/*']);
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.edu/*', 'https://www.school.edu/*', 'https://bb.nowhere.edu/*']);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-welcome-'));
 const out = process.argv[2] || path.join(tmp, 'shots');
@@ -44,13 +44,13 @@ const stub = (required) => {
 (async () => {
   let ctx;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(),
+      ...require('../../tools/dev/check-env.js').chromeLaunch(),
       headless: true, viewport: { width: 1440, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
-    await ctx.addInitScript(stub, require('../manifest.json').host_permissions);
+    await ctx.addInitScript(stub, require('../../extension/manifest.json').host_permissions);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();

@@ -7,11 +7,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const G = require('../defaults.js');
-const L = require('../lib/lookx.js');
-const P = require('../lib/editor-pointer.js');
+const G = require('../../extension/defaults.js');
+const L = require('../../extension/lib/lookx.js');
+const P = require('../../extension/lib/editor-pointer.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const tick = () => new Promise((r) => setTimeout(r));
 
 class El {
@@ -45,7 +45,7 @@ const editor = (s, local = {}) => {
     console, JSON, Object, Array, String, Promise, setTimeout, Option, CSS: { escape: (x) => x },
     ...Object.fromEntries(['GZ_COLORS', 'GZ_SPEC', 'GZ_SYNC_BYTES', 'GZ_SYNC_ITEM_MAX'].map((k) => [k, G[k]])),
     // What the libraries load in node when the page's globals are not there (defaults.js, lib/lookparts.js).
-    require: (f) => require(path.resolve(__dirname, '../lib', f)),
+    require: (f) => require(path.resolve(__dirname, '../../extension/lib', f)),
     document: {
       createElement: (tag) => (tag === 'canvas' ? Object.assign(new El('canvas'), { getContext: () => ({ drawImage() {} }), toDataURL: () => 'data:image/png;base64,cGljdHVyZQ==' }) : new El(tag)),
       createElementNS: (ns, tag) => Object.assign(new El(tag), { namespaceURI: ns }),
@@ -113,7 +113,7 @@ test('each card shows its pointer: a set\'s arrow and hand, the system\'s drawn,
   for (const set of Object.keys(L.CURSORS)) {
     const ext = L.CURSORS[set].svg ? 'svg' : 'png';
     assert.deepEqual(e.shows(set), [`assets/art/cursors/${set}/default.${ext}`, `assets/art/cursors/${set}/pointer.${ext}`], set);
-    for (const f of e.shows(set)) assert.ok(fs.existsSync(path.join(__dirname, '..', f)), f);
+    for (const f of e.shows(set)) assert.ok(fs.existsSync(path.join(__dirname, '../../extension', f)), f);
     assert.match(e.card(set).style.cursor, new RegExp(`^url\\("assets/art/cursors/${set}/pointer\\.${ext}"\\) \\d+ \\d+.*, pointer$`), `${set}: hovering wears its hand`);
   }
   assert.deepEqual(e.shows('look'), e.shows('pumpkin'), 'the Look\'s card: the Look\'s set');

@@ -4,7 +4,7 @@
 // answer with the address written in them, and any name that has a private address written into its labels.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const X = require('../lib/lookparts.js');
+const X = require('../../extension/lib/lookparts.js');
 
 const url = X.MEDIA.url;
 

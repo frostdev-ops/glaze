@@ -7,17 +7,17 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const F = require('../lib/agent-frames.js');
-const R = require('../mcp/lib/rendezvous.js');
-const HS = require('../mcp/lib/handshake.js');
-const S = require('./helpers/swift-native.cjs');
+const F = require('../../extension/lib/agent-frames.js');
+const R = require('../../mcp/lib/rendezvous.js');
+const HS = require('../../mcp/lib/handshake.js');
+const S = require('../helpers/swift-native.cjs');
 
-const root = path.join(__dirname, '..');
-const bridgeFile = path.join(root, 'safari/Glaze/Glaze Extension/GlazeAgentBridge.swift');
-const hostFile = path.join(root, 'safari/dmg/GlazeAgentHost.swift');
-const appFile = path.join(root, 'safari/dmg/AppDelegate.swift');
+const root = path.join(__dirname, '../../extension');
+const bridgeFile = path.join(__dirname, '../../safari/Glaze/Glaze Extension/GlazeAgentBridge.swift');
+const hostFile = path.join(__dirname, '../../safari/dmg/GlazeAgentHost.swift');
+const appFile = path.join(__dirname, '../../safari/dmg/AppDelegate.swift');
 // The DMG app compiles Drive's sign-in too (GlazeGoogleSignIn.swift and the shared GlazeGoogle.swift).
-const googleFiles = ['safari/Glaze/Glaze Extension/GlazeGoogle.swift', 'safari/Glaze/Glaze/GlazeGoogleSignIn.swift'].map((f) => path.join(root, f));
+const googleFiles = ['../safari/Glaze/Glaze Extension/GlazeGoogle.swift', '../safari/Glaze/Glaze/GlazeGoogleSignIn.swift'].map((f) => path.join(root, f));
 const code = (src) => src.split(/\r?\n/).filter((l) => !/^\s*\/\//.test(l)).join('\n');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const IDLE = 5, LINE = 1 << 20, QUEUE = 2 << 20;
@@ -87,7 +87,7 @@ dispatchMain()
 
 // glaze-mcp agent, started as an agent app starts it, with this test's HOME.
 const agent = (HOME, npx = false) => {
-  const bin = path.join(root, 'mcp/bin/glaze-mcp.js'), quote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
+  const bin = path.join(__dirname, '../../mcp/bin/glaze-mcp.js'), quote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
   const args = npx ? ['--offline', '--no', '--call', `${quote(process.execPath)} ${quote(bin)} agent --browser safari`] : [bin, 'agent', '--browser', 'safari'];
   const child = spawn(npx ? 'npx' : process.execPath, args, { env: { ...process.env, HOME, ...(npx && { __CFBundleIdentifier: 'io.test.untrusted-self-report' }) }, detached: npx, stdio: ['pipe', 'pipe', 'pipe'] });
   const out = [];
@@ -222,7 +222,7 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
     });
 
     await t.test('a probe is answered and never reaches the worker; a wrong token is closed with nothing said', async () => {
-      const rows = await require('../mcp/lib/agent.js').doctor({ platform: 'darwin', env: { HOME } });
+      const rows = await require('../../mcp/lib/agent.js').doctor({ platform: 'darwin', env: { HOME } });
       assert.ok(rows.some((r) => r.level === 'ok' && r.what === `Live safari (${I})`), JSON.stringify(rows));
       const s = R.connect(rec.path);
       s.on('error', () => {});
@@ -371,7 +371,7 @@ test('the host compiles for macOS 12 in the app with complete concurrency checki
 test('the DMG app\'s sources compile together as its target builds them, against a stand-in for Sparkle\'s API', { skip: !S.supported }, () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sparkle-'));
   try {
-    const files = S.sparkleSources([appFile, path.join(root, 'safari/Glaze/Glaze/ViewController.swift'), hostFile, bridgeFile, ...googleFiles], temp);
+    const files = S.sparkleSources([appFile, path.join(__dirname, '../../safari/Glaze/Glaze/ViewController.swift'), hostFile, bridgeFile, ...googleFiles], temp);
     const r = S.typecheck(files, ['-parse-as-library', '-module-name', 'Glaze', '-D', 'GLAZE_DMG', '-default-isolation', 'MainActor']);
     assert.equal(r.status, 0, r.stderr);
     assert.doesNotMatch(r.stderr, /warning:|error:/);
@@ -451,7 +451,7 @@ test('a prepared update waits for a long call and its split reply, then quits th
   const group = path.join(temp, 'group');
   fs.mkdirSync(group, { mode: 0o700 });
   const HOME = path.join(temp, 'home'), file = path.join(temp, 'Update.swift');
-  const app = fs.readFileSync(path.join(__dirname, 'fixtures/sparkle-stand-in.swift'), 'utf8') + fs.readFileSync(appFile, 'utf8').replace(/^import Sparkle$/m, '').replace(/^@main$/m, '');
+  const app = fs.readFileSync(path.join(__dirname, '../fixtures/sparkle-stand-in.swift'), 'utf8') + fs.readFileSync(appFile, 'utf8').replace(/^import Sparkle$/m, '').replace(/^@main$/m, '');
   fs.writeFileSync(file, fs.readFileSync(bridgeFile, 'utf8') + fs.readFileSync(hostFile, 'utf8') + googleFiles.map((f) => fs.readFileSync(f, 'utf8')).join('') + app + HARNESS.slice(0, HARNESS.indexOf('let harness =')) + UPDATE_BOOT);
   const swift = S.run(file, [R.dir({ platform: 'darwin', env: { HOME } }), group, '60', String(LINE), String(QUEUE)], { flags: ['-D', 'GLAZE_DMG', '-default-isolation', 'MainActor'] });
   const events = [];

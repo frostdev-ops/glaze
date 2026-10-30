@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const D = require('../lib/download.js');
+const D = require('../../extension/lib/download.js');
 
 test('download URLs permit HTTPS and only the exact scratch development origin', () => {
   assert.equal(D.url('https://files.example/file?token=a%2Fb'), 'https://files.example/file?token=a%2Fb');

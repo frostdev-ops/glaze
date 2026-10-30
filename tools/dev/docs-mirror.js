@@ -1,5 +1,5 @@
 // Mirrors Glaze's docs into the GitHub wiki and frostdev.io's guides, so docs/ stays the one place to edit them.
-//   node scripts/docs-mirror.js <glaze.wiki checkout> <frostdev.io checkout>
+//   node tools/dev/docs-mirror.js <glaze.wiki checkout> <frostdev.io checkout>
 // Every page below becomes a wiki page that links to its frostdev.io guide, and a Markdown file in the site's
 // src/content/glaze-docs/, which its src/pages/guides/glaze-[doc].astro renders at /guides/glaze-<doc>. Relative links
 // are pointed at the same page in each copy, or at the file on GitHub. Commit and push both checkouts afterwards.
@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.join(__dirname, '../..');
 const REPO = 'https://github.com/frostdev-ops/glaze';
 const SITE = 'https://frostdev.io';
 // Source → wiki page, guide slug (null: the guides hub's Glaze list) and the guide's description.
@@ -27,7 +27,7 @@ const guide = (slug) => (slug ? `/guides/glaze-${slug}` : '/guides#glaze-docs');
 
 const [wiki, site] = process.argv.slice(2);
 if (!wiki || !site) {
-  console.error('Usage: node scripts/docs-mirror.js <glaze.wiki checkout> <frostdev.io checkout>');
+  console.error('Usage: node tools/dev/docs-mirror.js <glaze.wiki checkout> <frostdev.io checkout>');
   process.exit(1);
 }
 
@@ -54,6 +54,6 @@ for (const [from, [name, slug, description]] of Object.entries(PAGES)) {
   if (!slug) continue;
   const updated = execFileSync('git', ['log', '-1', '--format=%cs', '--', from], { cwd: ROOT, encoding: 'utf8' }).trim();
   const front = `---\ntitle: ${JSON.stringify(title)}\ndescription: ${JSON.stringify(description)}\nupdated: ${JSON.stringify(updated)}\nwiki: ${JSON.stringify(`${REPO}/wiki/${name}`)}\n---\n`;
-  fs.writeFileSync(path.join(out, `${slug}.md`), `${front}<!-- Mirrored from Glaze's ${from} by its scripts/docs-mirror.js: edit it there. -->\n\n${relink(body, from, 'site')}`);
+  fs.writeFileSync(path.join(out, `${slug}.md`), `${front}<!-- Mirrored from Glaze's ${from} by its tools/dev/docs-mirror.js: edit it there. -->\n\n${relink(body, from, 'site')}`);
 }
 console.log(`Wrote ${Object.keys(PAGES).length} wiki pages to ${wiki} and ${Object.keys(PAGES).length - 1} guides to ${out}.`);

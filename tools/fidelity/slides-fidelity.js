@@ -13,22 +13,22 @@
 // close, each slide's `save as picture`. Without PowerPoint:
 //   --render-only writes the Glaze PNGs alone; --reference <folder> compares with PNGs already made (Slide1.png, … or any
 //   names numbered consecutively from 1, including hidden slides) instead of exporting. Incomplete references are refused.
-// NODE_PATH=<playwright> node scripts/slides-fidelity.js <deck.pptx | unzipped deck folder> [out folder] [--reference <folder>]
+// NODE_PATH=<playwright> node tools/fidelity/slides-fidelity.js <deck.pptx | unzipped deck folder> [out folder] [--reference <folder>]
 //   [--render-only] [--tolerance 96] [--max 0.02] [--force]
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 
 const args = process.argv.slice(2), flag = (name) => { const i = args.indexOf(name); return i < 0 ? null : args.splice(i, 2)[1]; }, has = (name) => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 const reference = flag('--reference'), tolerance = Number(flag('--tolerance') ?? 96), max = Number(flag('--max') ?? 0.02), renderOnly = has('--render-only'), force = has('--force');
 const [input, outArg] = args;
-if (!input) { console.error('usage: node scripts/slides-fidelity.js <deck.pptx | deck folder> [out folder] [--reference <folder>] [--render-only] [--tolerance n] [--max f] [--force]'); process.exit(2); }
+if (!input) { console.error('usage: node tools/fidelity/slides-fidelity.js <deck.pptx | deck folder> [out folder] [--reference <folder>] [--render-only] [--tolerance n] [--max f] [--force]'); process.exit(2); }
 const out = path.resolve(outArg || path.join(os.tmpdir(), 'gz-slides-fidelity'));
 const POWERPOINT = '/Applications/Microsoft PowerPoint.app';
 const osa = (script) => execFileSync('osascript', ['-e', script], { encoding: 'utf8', timeout: 300000 }).trim();
 const running = () => { try { execFileSync('pgrep', ['-x', 'Microsoft PowerPoint']); return true; } catch { return false; } };
 
-// The deck's bytes: the file, or a package folder zipped as test/pptx.test.js zips the fixture.
+// The deck's bytes: the file, or a package folder zipped as test/documents/pptx.test.js zips the fixture.
 const deckBytes = () => {
   const p = path.resolve(input);
   if (fs.statSync(p).isFile()) return fs.readFileSync(p);
@@ -92,7 +92,7 @@ const stagePage = () => {
     fs.mkdirSync(out, { recursive: true });
     const ppt = renderOnly ? [] : reference ? numbered(path.resolve(reference)).map((f) => fs.readFileSync(f)) : exportWithPowerPoint(bytes);
     const { chromium } = require('playwright');
-    browser = await chromium.launch({ ...require('./check-env.js').chromeLaunch(), headless: true });
+    browser = await chromium.launch({ ...require('../dev/check-env.js').chromeLaunch(), headless: true });
     page = await browser.newPage({ deviceScaleFactor: 1 });
     dir = stagePage();
     await page.goto(`file://${dir}/index.html`);

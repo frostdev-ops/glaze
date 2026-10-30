@@ -1,19 +1,19 @@
 // A discussion's, a journal's and a new message's Cite sources are kept (lib/writer-sources.js keyOf) under what their
 // frame's context names, as lib/writer-ultra.js finds the boxes on the probed pages (test/fixtures/ultra-writer-*) and
 // lib/writer-context-discussion.js composes their context: one store a discussion, shared by its post and every reply;
-// one a journal; one a course's new message; none for a test. The page is scripts/writer-compose-check.js.
+// one a journal; one a course's new message; none for a test. The page is checks/writer/writer-compose-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const S = require('../lib/writer-sources.js'), U = require('../lib/writer-ultra.js');
-const W = require('../lib/ai/tasks/writer-context.js'), CO = require('../lib/ai/tasks/writer-complete.js');
-const { El } = require('./stand-in-dom.js');
-const { parse } = require('./fixture-dom.js');
-const source = fs.readFileSync(require.resolve('../lib/writer-context-discussion.js'), 'utf8');
+const S = require('../../extension/lib/writer-sources.js'), U = require('../../extension/lib/writer-ultra.js');
+const W = require('../../extension/lib/ai/tasks/writer-context.js'), CO = require('../../extension/lib/ai/tasks/writer-complete.js');
+const { El } = require('../stand-in-dom.js');
+const { parse } = require('../fixture-dom.js');
+const source = fs.readFileSync(require.resolve('../../extension/lib/writer-context-discussion.js'), 'utf8');
 
 const DISCUSSION = '/ultra/courses/_101_1/discussion/_9_1', JOURNAL = '/ultra/courses/_101_1/journal/_12_1', MESSAGES = '/ultra/messages/create';
 const TEST = '/ultra/courses/_101_1/assessment/_8_1/attempt/_31_1';
-const fixture = (f) => { const doc = { activeElement: null }; doc.root = new El('html', doc); doc.body = parse(fs.readFileSync(path.join(__dirname, 'fixtures', f), 'utf8'), doc); return doc.body; };
+const fixture = (f) => { const doc = { activeElement: null }; doc.root = new El('html', doc); doc.body = parse(fs.readFileSync(path.join(__dirname, '../fixtures', f), 'utf8'), doc); return doc.body; };
 const flush = async () => { for (let i = 0; i < 100; i++) await Promise.resolve(); };
 
 // One tab at host + pathname + search, its users/me answering me(): lib/writer-context-discussion.js loaded as content.js
@@ -97,7 +97,7 @@ test('the store\'s parts never reach the AI', async () => {
 test('a journal prompt reaches the AI review context from its native box', async () => {
   const [journal] = tab({ pathname: JOURNAL }).boxes('ultra-writer-journal.html');
   await flush();
-  const review = require('../lib/ai/tasks/writer-review.js');
+  const review = require('../../extension/lib/ai/tasks/writer-review.js');
   const input = review.task.input({ text: 'The river image stayed with me.', mode: 'compose', kind: 'journal', context: journal.context() });
   assert.equal(input.context.prompt, journal.context().prompt);
   const request = review.task.build(input, { text: { request: (r) => r } });

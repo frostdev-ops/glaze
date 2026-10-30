@@ -1,6 +1,6 @@
 // Glaze test fixture: Glaze Writer papers as paper-schema JSON, synthetic text. Six-page MLA 9, APA 7 and Chicago 17
 // papers (headings, a block quote, footnotes, a list page), and a copy of each with one seeded error per format check.
-// Used by test/writer-paper*.test.js, scripts/writer-paper-check.js and scripts/writer-word-fidelity.js.
+// Used by test/writer/writer-paper*.test.js, checks/writer/writer-paper-check.js and tools/fidelity/writer-word-fidelity.js.
 const SENTENCES = [
   'Toni Morrison\'s Beloved treats memory less as a record than as a debt that every character inherits whether or not they consent to it.',
   'The river and the clearing, the novel\'s two great gathering places, are where that debt comes due.',

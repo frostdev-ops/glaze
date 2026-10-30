@@ -4,15 +4,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 test('public privacy descriptions disclose user-installed mod code and granted data/network access', () => {
-  for (const file of ['docs/features.md', 'PRIVACY.md', 'store/listing.md']) {
-    const text = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+  for (const file of ['../docs/features.md', '../PRIVACY.md', '../store/listing.md']) {
+    const text = fs.readFileSync(path.join(__dirname, '../../extension', file), 'utf8');
     assert.match(text, /user-installed mods/i, file);
     assert.match(text, /sandbox/i, file);
     assert.match(text, /declared and granted/i, file);
     assert.match(text, /frame UI/i, file);
     assert.doesNotMatch(text, /None\. All executable code ships in the package/, file);
   }
-  const privacy = fs.readFileSync(path.join(__dirname, '../PRIVACY.md'), 'utf8');
+  const privacy = fs.readFileSync(path.join(__dirname, '../../PRIVACY.md'), 'utf8');
   // Remove takes a mod's stored data with it unless the student keeps it (WP-M1), so the policy says that, not that it remains.
   assert.match(privacy, /by default, the data it stored, its\s+private-data classification/i);
   assert.match(privacy, /untick \*\*Remove its stored\s+data too\*\* to keep those on this device/i);
@@ -20,7 +20,7 @@ test('public privacy descriptions disclose user-installed mod code and granted d
 });
 
 test('gallery privacy discloses the media request without promising network anonymity', () => {
-  const privacy = fs.readFileSync(path.join(__dirname, '../PRIVACY.md'), 'utf8').split('## The Looks gallery')[1].split('\n## ')[0];
+  const privacy = fs.readFileSync(path.join(__dirname, '../../PRIVACY.md'), 'utf8').split('## The Looks gallery')[1].split('\n## ')[0];
   assert.doesNotMatch(privacy, /nothing is sent anywhere|no cookies, referrer or anything about you/i);
   assert.match(privacy, /no cookies or referrer/i);
   assert.match(privacy, /network address and normal browser headers/i);

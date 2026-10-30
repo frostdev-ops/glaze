@@ -1,16 +1,16 @@
 // Look parts on the page: content.js asks for features/lookparts.js only when a Look has parts, and that module keeps them
 // for GZ_CTX.parts() and fires `glaze:parts` when they change. Real scripts in a VM with stand-in storage and document;
-// the browser side is scripts/lookparts-check.js.
+// the browser side is checks/looks/lookparts-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const tick = (n = 6) => new Promise((r) => { let i = 0; const go = () => (++i >= n ? r() : setImmediate(go)); go(); });
-const X = require('../lib/lookparts.js');
+const X = require('../../extension/lib/lookparts.js');
 
 // ---- content.js: when the module is asked for ------------------------------------------------------------------------
 const content = read('content.js');
@@ -289,14 +289,14 @@ test('changing the mock page announces parts so rules, scenes and nav follow the
 
 
 test('a course Look preview receives its own pointer without the global Look parts', () => {
-  const G = require('../defaults.js');
+  const G = require('../../extension/defaults.js');
   const base = { ...G.GZ_SANITIZE({ courses: { looks: { _1_1: 'Terminal' } } }), parts: GLOW };
   const settings = G.GZ_COURSE_LOOK(base, '_1_1'), sent = [];
   assert.notEqual(settings, base);
   const lines = read('options.js').split('\n');
   const message = lines.find((line) => line.includes('frame.contentWindow?.postMessage({ gzPreview:') && line.includes('gzPreviewParts:'));
   const pointer = lines.find((line) => line.includes('const coursePointer =')) || '';
-  vm.runInNewContext(`${pointer}\n${message}`, { GZ_LOOK_PARTS: require('../lib/lookset.js'), GZ_COURSE_LOOK_ID: G.GZ_COURSE_LOOK_ID, catalog: [], id: '_1_1', frame: { contentWindow: { postMessage: (m) => sent.push(m) } }, base, settings, shown: settings, nav: settings.nav, colors: null, location: { origin: 'chrome-extension://x' } });
+  vm.runInNewContext(`${pointer}\n${message}`, { GZ_LOOK_PARTS: require('../../extension/lib/lookset.js'), GZ_COURSE_LOOK_ID: G.GZ_COURSE_LOOK_ID, catalog: [], id: '_1_1', frame: { contentWindow: { postMessage: (m) => sent.push(m) } }, base, settings, shown: settings, nav: settings.nav, colors: null, location: { origin: 'chrome-extension://x' } });
   assert.deepEqual(JSON.parse(JSON.stringify(sent[0].gzPreviewParts)), { x: { pointer: 'terminal' } });
 });
 

@@ -24,7 +24,7 @@ const page = async () => {
   const node = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
   node('#panel-sharing').hidden = node('#panel-backup').hidden = true;
   const state = { ok: true, on: false, sessions: [], sources: [], accounts: [], relay: 'https://share.frostdev.io' };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../lib/sessions-ui.js'), 'utf8'), {
+  vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/lib/sessions-ui.js'), 'utf8'), {
     URL, URLSearchParams, location: { search: '' }, navigator: {}, addEventListener() {},
     GZ_I18N: { t: (k) => k, ui: () => 'en' }, GZ_NOTES: { KEY: /^notesIdx:/ },
     document: { querySelector: node, createElement: (tag) => new Element(tag) },

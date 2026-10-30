@@ -3,7 +3,7 @@
 // back two animation frames later): once it shows drawn, and once its page has moved, then a second later. Nothing at rest.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { page, glaze, settle, origin, L } = require('./helpers/coursetabs-page.cjs');
+const { page, glaze, settle, origin, L } = require('../helpers/coursetabs-page.cjs');
 
 const A = '_53708_1', B = '_2_1';
 const frameOf = (p, cid) => p.doc.querySelectorAll('iframe').find((e) => e.name === `gz-ctab:${cid}`);

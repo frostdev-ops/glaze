@@ -5,11 +5,11 @@
 // exports the bytes it was given, and Esc and Back behave as a paper's. The chrome wears a dark Look while the slide stays
 // as authored, prints a page per shown slide at the deck's size (notes optionally below), and nothing errors, in the page or at the worker's sender check. Screenshots at 1280 and 640 px. The browser
 // reaches no network.
-// NODE_PATH=<playwright> nice -n 10 node scripts/slides-check.js [evidence directory]
+// NODE_PATH=<playwright> nice -n 10 node checks/documents/slides-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
 const Z = require(path.join(root, 'lib/zip.js'));
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-slides-check');
 const checks = [], errors = [], requests = [], shots = [];
@@ -23,7 +23,7 @@ const check = (v, label) => { assert.ok(v, label); checks.push(label); console.l
 
 // The fixture deck as its package: every part under test/fixtures/pptx/deck, stored, and any extra parts.
 const fixture = (extra = []) => {
-  const dir = path.join(root, 'test/fixtures/pptx/deck');
+  const dir = path.join(__dirname, '../../test/fixtures/pptx/deck');
   const walk = (d, base = '') => fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.name !== '.DS_Store')
     .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), `${base}${e.name}/`) : [[`${base}${e.name}`, fs.readFileSync(path.join(d, e.name))]]));
   const files = walk(dir).sort(([a], [b]) => (a < b ? -1 : 1)).map(([name, data]) => ({ name, data: new Uint8Array(name === 'ppt/slides/slide2.xml' ? Buffer.from(data.toString().replace('Passive transport</a:t></a:r>', 'Passive trans</a:t></a:r><a:r><a:rPr b="1"/><a:t>port</a:t></a:r>')) : data), date: new Date(2026, 9, 29, 12) }));
@@ -32,7 +32,7 @@ const fixture = (extra = []) => {
 
 (async () => {
   let context, held = false, tmp, passed = false;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nslides-check\n`); break; }
@@ -43,8 +43,8 @@ const fixture = (extra = []) => {
     const deckBytes = fixture(), file = path.join(tmp, 'Cell Biology week 3.pptx');
     fs.writeFileSync(file, deckBytes);
     const ext = env.staged(root, []);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US',
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, locale: 'en-US',
       reducedMotion: 'reduce', acceptDownloads: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     const first = env.noFirstRun(context); context.setDefaultTimeout(15000);
     await context.route('**/*', (r) => { const u = new URL(r.request().url()); if (u.protocol === 'chrome-extension:' || u.protocol === 'blob:' || u.protocol === 'data:') return r.continue(); requests.push(u.href); return r.abort(); });

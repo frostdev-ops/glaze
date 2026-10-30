@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const B = require('../lib/writer-bibliography.js'), S = require('../lib/writer-sources.js'), C = require('../lib/writer-cite.js');
+const B = require('../../extension/lib/writer-bibliography.js'), S = require('../../extension/lib/writer-sources.js'), C = require('../../extension/lib/writer-cite.js');
 const mla = 'Rivera, Alex, and Sam Patel. “Learning in School Gardens.” Journal of Garden Studies, vol. 7, no. 2, May 2024, pp. 12–19, doi.org/10.1234/gardens.2024.5.';
 const apa = 'Rivera, A., & Patel, S. (2024). Learning in school gardens. Journal of Garden Studies, 7(2), 12–19. https://doi.org/10.1234/gardens.2024.5';
 const para = (text) => ({ type: 'paragraph', content: [{ type: 'text', text }] });

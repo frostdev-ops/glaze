@@ -1,22 +1,22 @@
 // Google Drive's files (lib/drive.js) on the Documents home, headless, in the real extension (a staged copy, Drive's switch on
-// as scripts/dev-drive.sh turns it on) with its real worker. A stand-in answers for Drive v3 (www.googleapis.com, its shapes
+// as tools/dev/dev-drive.sh turns it on) with its real worker. A stand-in answers for Drive v3 (www.googleapis.com, its shapes
 // test/fixtures/drive/v3.js's) and Google's userinfo and revoke, through Playwright's route() and, for what route() can't
 // see, a local HTTPS server those hosts resolve to; every other host is refused. Sign-in is Chrome's getAuthToken (the check's
 // stand-in for Chrome's account) and the Picker the worker's pick, stood in for with the files it would hand back
-// (scripts/google-check.js covers both for real).
+// (checks/platform/google-check.js covers both for real).
 //   Before Drive is connected: no From Google Drive. Connected: it shows beside Import, without a reload.
 //   Open: a Word file (alt=media) and a Google Doc (exported as .docx) become documents; a file Drive no longer has says so.
 //   Save: a new Word file in My Drive, the same file updated next time, a Google Doc, and a new Doc once the remembered one
 //   is gone; each request's address, method, token and body checked; no cookie and no token in storage at any point.
 //   The paper's ⋯ menu offers From Google Drive; Disconnect takes the entries away.
-//   NODE_PATH=<installed playwright> nice node scripts/drive-files-check.js [evidence directory]
+//   NODE_PATH=<installed playwright> nice node checks/documents/drive-files-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const env = require('./check-env.js');
-const { MIME, FILES, SAVED, ERRORS } = require('../test/fixtures/drive/v3.js');
+const env = require('../../tools/dev/check-env.js');
+const { MIME, FILES, SAVED, ERRORS } = require('../../test/fixtures/drive/v3.js');
 
-const CONFIG = require('../lib/google-config.js');
-const ext = env.staged(process.env.EXT || path.join(__dirname, '..'), []);
+const CONFIG = require('../../extension/lib/google-config.js');
+const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'), []);
 {
   const file = path.join(ext, 'manifest.json'), m = JSON.parse(fs.readFileSync(file, 'utf8'));
   m.permissions = [...m.permissions, 'identity'];
@@ -115,8 +115,8 @@ const HOSTS = ['www.googleapis.com', 'openidconnect.googleapis.com', 'oauth2.goo
     });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     const rules = [...HOSTS.map((h) => `MAP ${h} 127.0.0.1:${server.address().port}`), 'MAP * ~NOTFOUND'].join(', ');
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, `--host-resolver-rules=${rules}`, '--ignore-certificate-errors', '--disable-background-networking', '--renderer-process-limit=1'] });
     env.noFirstRun(ctx);
     await ctx.route('**/*', async (route) => {

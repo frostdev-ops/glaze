@@ -1,9 +1,9 @@
 // Tiles fit their room (features/apps.css): every tile body is a size container, and each widget lays out by its real width and
-// dragged height, not by its size name. The browser check (scripts/widgets-sizes-check.js) measures the result at every size; these
+// dragged height, not by its size name. The browser check (checks/core/widgets-sizes-check.js) measures the result at every size; these
 // keep the rules it depends on from going missing.
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
-const css = fs.readFileSync(path.join(__dirname, '../features/apps.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-const W = require('../lib/widgets.js');
+const css = fs.readFileSync(path.join(__dirname, '../../extension/features/apps.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const W = require('../../extension/lib/widgets.js');
 // Each rule as [selector, body], and each @container block as [query, its rules].
 const rules = (text) => [...text.matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim(), m[2]]);
 const blocks = [...css.matchAll(/@container\s+([^{]+)\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)].map((m) => [m[1].trim(), rules(m[2])]);

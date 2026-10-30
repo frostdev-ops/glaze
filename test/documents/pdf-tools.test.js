@@ -1,9 +1,9 @@
 // The PDF tools' shapes (lib/pdf-tools.js shape): a rectangle, an ellipse, a line and an arrow as pdf.js's Ink JSON, the
 // strokes in the page's PDF space with each corner given twice, so pdf.js's smoothing keeps them sharp. The tools on a
-// page are scripts/pdf-check.js.
+// page are checks/documents/pdf-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../lib/pdf-tools.js');
+const T = require('../../extension/lib/pdf-tools.js');
 
 const pairs = (a) => Array.from({ length: a.length / 2 }, (_, i) => [a[2 * i], a[2 * i + 1]]);
 // pdf.js's smoothing (Outline.createBezierPoints): a stroke runs through the midpoints of its points, from the first to
@@ -54,7 +54,7 @@ test('no other shapes; the highlight colours are pdf.js\'s option string', () =>
   assert.match(T.HIGHLIGHTS, /^yellow=#FFFF98,green=#53FFBC,blue=#80EBFF,pink=#FFCBE6,red=#FF4F5F$/);
 });
 
-const UI = require('./helpers/pdf-ui.cjs');
+const UI = require('../helpers/pdf-ui.cjs');
 test('deferred accessibility placement cannot move a FreeText editor while typing', (t) => {
   const document = UI.install(t), listeners = new Map(), previous = global.addEventListener;
   document.addEventListener = () => {};

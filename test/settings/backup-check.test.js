@@ -4,7 +4,7 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 
 // Exercise the check's real launch sequence without running the download/restore scenario. The extension page can be
 // usable, and its worker installed, while Settings' news or preview write is still in flight.
-const source = fs.readFileSync(path.join(__dirname, '../scripts/backup-check.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../checks/settings/backup-check.js'), 'utf8');
 const origin = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop', version = '4.0.0';
 const navKey = `navbarSeen:${origin}`;
 const ready = () => ({ freshDefaults: { fresh: true, pending: false }, migrated: ['tabs-auto'], channelKeysMoved: true,
@@ -20,8 +20,8 @@ const harness = (local, expired = false) => {
     newPage: async () => page, pages: () => [], on() {} };
   let clock = 0;
   const sandbox = vm.createContext({ require: (name) => name === 'playwright' ? { chromium: { launchPersistentContext: async () => context } }
-    : name === './wait-for-browser.js' ? async () => {} : name === './check-env.js' ? require('../scripts/check-env.js') : require(name),
-    __dirname: path.join(__dirname, '../scripts'), process: { argv: [], env: {} }, URL, setTimeout,
+    : name === '../../tools/dev/wait-for-browser.js' ? async () => {} : name === '../../tools/dev/check-env.js' ? require('../../tools/dev/check-env.js') : require(name),
+    __dirname: path.join(__dirname, '../../checks/settings'), process: { argv: [], env: {} }, URL, setTimeout,
     Date: expired ? { now: () => clock++ ? 10001 : 0 } : Date });
   vm.runInContext(source.slice(0, source.indexOf('\n(async () => {')) + '\nglobalThis.launch = launch;', sandbox);
   return sandbox.launch;

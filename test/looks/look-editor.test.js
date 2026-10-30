@@ -6,19 +6,19 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const D = require('../defaults.js');
-const C = require('../lib/color.js');
-const F = require('../lib/fonts.js');
-const S = require('../lib/share.js');
-const LC = require('../lib/looks.js');
-const X = require('../lib/lookparts.js');
-const K = require('../lib/cards.js');
-const P = require('../lib/parts.js');
-const H = require('../lib/history.js');
-const LX = require('../lib/lookx.js');
-const XE = require('../lib/editor-xparts.js');
+const D = require('../../extension/defaults.js');
+const C = require('../../extension/lib/color.js');
+const F = require('../../extension/lib/fonts.js');
+const S = require('../../extension/lib/share.js');
+const LC = require('../../extension/lib/looks.js');
+const X = require('../../extension/lib/lookparts.js');
+const K = require('../../extension/lib/cards.js');
+const P = require('../../extension/lib/parts.js');
+const H = require('../../extension/lib/history.js');
+const LX = require('../../extension/lib/lookx.js');
+const XE = require('../../extension/lib/editor-xparts.js');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const between = (source, from, to) => {
   const a = source.indexOf(from), b = source.indexOf(to, a + from.length);
@@ -32,14 +32,14 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 
 // ui.js as the popup and the editor load it, over stand-in storage.
 const loadUi = (extra = {}) => {
-  const context = vm.createContext({ ...D, GZ_COLOR: C, GZ_CARDS: K, GZ_XPARTS: X, GZ_LOOK_PARTS: require('../lib/lookset.js'), GZ_I18N: { t: say, ui: () => 'en' }, chrome: { storage: { sync: {}, local: {} } }, structuredClone, ...extra });
+  const context = vm.createContext({ ...D, GZ_COLOR: C, GZ_CARDS: K, GZ_XPARTS: X, GZ_LOOK_PARTS: require('../../extension/lib/lookset.js'), GZ_I18N: { t: say, ui: () => 'en' }, chrome: { storage: { sync: {}, local: {} } }, structuredClone, ...extra });
   vm.runInContext(`${read('ui.js')};globalThis.UI = GZ_UI;`, context);
   return context.UI;
 };
 const UI = loadUi();
 
 test('course-tab navigation warning follows placement changes without repainting navigation', () => {
-  require('../lib/coursetabs.js');
+  require('../../extension/lib/coursetabs.js');
   const s = D.GZ_SANITIZE({ navbar: { on: false, tabs: false } }), controls = new Map();
   const $ = (key) => {
     if (!controls.has(key)) controls.set(key, { hidden: false, dataset: {}, style: {}, textContent: '', classList: { remove() {} } });
@@ -180,7 +180,7 @@ test('LOOK-3: a whole Look replaces the extras, with the Look left already in Hi
   const run = refreshed(s, { undo: () => { undone++; } });
   const aurora = D.GZ_LOOKS[0];
   run.picks.look(LC.find(LC.list(), aurora.name));
-  assert.deepEqual(s.parts, require('../lib/lookset.js')(aurora), 'a Look is a whole choice: its own extras replace the ones before');
+  assert.deepEqual(s.parts, require('../../extension/lib/lookset.js')(aurora), 'a Look is a whole choice: its own extras replace the ones before');
   assert.deepEqual(run.log.slice(0, 2), ['leaving', 'save'], 'the Look being left is kept before anything changes');
   assert.equal(run.hints.length, 1);
   assert.match(run.hints[0][0], new RegExp(`${aurora.name} replaced this Look’s extras`));
@@ -244,7 +244,7 @@ test('LOOK-3: leaving a Look with extras records it in History at once, and its 
   assert.deepEqual(run.writes[0].theme.parts, was.parts, 'the shader typed a moment ago goes to the history queue');
   // The Look picked next.
   UI.pickLook(s, D.GZ_LOOKS[0]);
-  assert.deepEqual(s.parts, require('../lib/lookset.js')(D.GZ_LOOKS[0]));
+  assert.deepEqual(s.parts, require('../../extension/lib/lookset.js')(D.GZ_LOOKS[0]));
   run.undo();
   assert.deepEqual(s.parts, was.parts);
   assert.deepEqual(s.colors, was.colors);

@@ -10,9 +10,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const manifest = require('../manifest.json');
+const manifest = require('../../extension/manifest.json');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const ID = 'glaze';
@@ -24,14 +24,14 @@ const SAFARI = (() => {
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-allow-safari-'));
   try {
     fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
-    require('node:child_process').execFileSync('sh', [path.join(root, 'scripts/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
+    require('node:child_process').execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(dir, 'manifest.json')]);
     return JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 })();
 
-// What each LMS answers (lib/site.js, test/site.test.js): anything else is a 404 page.
+// What each LMS answers (lib/site.js, test/core/site.test.js): anything else is a 404 page.
 const BB = { status: 200, body: '{"learn":{"major":4001,"minor":2,"patch":0}}' };
 const CANVAS = { status: 401, body: '{"status":"unauthenticated","errors":[{"message":"user authorization required"}]}' };
 const MOODLE = { status: 200, body: '{"exception":"core\\\\exception\\\\moodle_exception","errorcode":"invalidtoken"}' };

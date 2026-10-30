@@ -1,10 +1,10 @@
 // Does Microsoft Word lay out Glaze Writer's .docx as the editor's pages show it? Opens each fixture paper that
-// scripts/writer-paper-check.js wrote (paper-<format>.docx, with the editor's pages in editor-pages.json) in Word on this
+// checks/writer/writer-paper-check.js wrote (paper-<format>.docx, with the editor's pages in editor-pages.json) in Word on this
 // Mac through AppleScript, saves it as PDF, and compares the page count and each page's first line with the editor's.
 // A page may start one line earlier or later (the owner's accepted tolerance); more fails. Word must not open the file in
 // Compatibility Mode. Word runs without dialogs; each document is closed; Word quits only if this script started it.
 // Files go in a temporary folder inside Word's own container, so the sandboxed app reads and writes them without asking.
-// node scripts/writer-word-fidelity.js [folder with the check's output] (default: $TMPDIR/gz-paper-check)
+// node tools/fidelity/writer-word-fidelity.js [folder with the check's output] (default: $TMPDIR/gz-paper-check)
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 

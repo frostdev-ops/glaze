@@ -5,13 +5,13 @@
 // its chart and drawing parts byte for byte, drawn or not.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const M = require('../lib/sheet-model.js');
-const X = require('../lib/sheet-xlsx.js');
-const C = require('../lib/sheet-calc.js');
-const D = require('../lib/doctext.js');
-const CX = require('../lib/sheet-chart-xml.js');
-const CH = require('../lib/sheet-chart.js');
-const FX = require('./fixtures/sheets/charts.js');
+const M = require('../../extension/lib/sheet-model.js');
+const X = require('../../extension/lib/sheet-xlsx.js');
+const C = require('../../extension/lib/sheet-calc.js');
+const D = require('../../extension/lib/doctext.js');
+const CX = require('../../extension/lib/sheet-chart-xml.js');
+const CH = require('../../extension/lib/sheet-chart.js');
+const FX = require('../fixtures/sheets/charts.js');
 
 const open = async (o) => { const wb = await X.read(FX.workbook(o)); const e = C.engine(wb); e.recalc(); return { wb, e }; };
 const drawn = (wb, sh = wb.sheets[0]) => CX.charts(wb, sh).map((c) => ({ ...c, data: CX.resolve(c.chart, CX.lookup(wb)) }));

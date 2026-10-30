@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const source = fs.readFileSync(path.join(process.env.EXT || path.join(__dirname, '..'), 'scripts/background-pages-check.js'), 'utf8');
+const source = fs.readFileSync(path.join(process.env.EXT || path.join(__dirname, '../../extension'), '../checks/platform/background-pages-check.js'), 'utf8');
 const start = source.indexOf("    await until(()=>frame.locator('#gz-scene')");
 const end = source.indexOf("    check(await page.locator", start);
 

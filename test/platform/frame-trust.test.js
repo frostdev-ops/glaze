@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const worker = require('./helpers/worker-env.cjs');
+const worker = require('../helpers/worker-env.cjs');
 
 const CANVAS = 'https://school.instructure.com', OTHER = 'https://other.instructure.com', EXT = 'chrome-extension://x';
 
@@ -184,7 +184,7 @@ test('a claimed Settings frame is trusted for those three writes only, never for
 });
 
 test('a nickname the worker refuses for its sender says to open Settings in its own tab, not that there is too much to sync', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'options.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/options.js'), 'utf8');
   const start = source.indexOf("nickname.addEventListener('change', ");
   const handler = source.slice(start + "nickname.addEventListener('change', ".length, source.indexOf('\n        });', start) + '\n        }'.length);
   const run = async (reply) => {

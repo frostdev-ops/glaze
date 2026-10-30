@@ -1,13 +1,13 @@
 // lib/glsl.js: the custom-shader checker and wrapper. Pure JS; the half that needs a
-// WebGL2 context (compile, the loop rules ANGLE enforces) is exercised by scripts/scene-check.mjs in a headless browser.
+// WebGL2 context (compile, the loop rules ANGLE enforces) is exercised by checks/looks/scene-check.mjs in a headless browser.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const G = require('../lib/glsl.js');
-const I = require('../lib/i18n.js');
+const G = require('../../extension/lib/glsl.js');
+const I = require('../../extension/lib/i18n.js');
 
-const shader = (name) => fs.readFileSync(path.join(__dirname, '../assets/shaders', `${name}.glsl`), 'utf8');
+const shader = (name) => fs.readFileSync(path.join(__dirname, '../../extension/assets/shaders', `${name}.glsl`), 'utf8');
 const EXAMPLES = ['aurora', 'starfield', 'liquid'];
 const MIN = 'vec4 scene(vec2 uv) { return vec4(uv, 0., 1.); }';
 const ok = (name, src) => assert.deepEqual(G.check(src).errors, [], `${name} should pass`);
@@ -227,7 +227,7 @@ test('wrap: the shared prelude, then #line 1 and the author\'s source, then main
 });
 
 test('the prelude\'s helpers are the built-in scenes\' own, word for word', () => {
-  const scene = fs.readFileSync(path.join(__dirname, '../lib/scene.js'), 'utf8').replace(/\s+/g, '');
+  const scene = fs.readFileSync(path.join(__dirname, '../../extension/lib/scene.js'), 'utf8').replace(/\s+/g, '');
   const lines = G.PRELUDE.split('\n').filter((l) => /^(float|mat2) (hash|noise|fbm|amt|rot)\(/.test(l));
   assert.equal(lines.length, 5);
   for (const l of lines) assert.ok(scene.includes(l.replace(/\s+/g, '')), `lib/scene.js has no ${l.slice(0, 30)}…`);

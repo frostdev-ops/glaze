@@ -6,9 +6,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const B = require('../lib/modbroker.js');
+const B = require('../../extension/lib/modbroker.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const SITE = 'https://school.instructure.com';
 const ID = 'abcdefghijklmnop';
 const A = '5', BEE = '6'; // A used this school here first; B is signed in now
@@ -121,7 +121,7 @@ const worker = ({ eventPage = false, scheme = 'chrome-extension' } = {}) => {
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
       runtime: {
-        id: 'glaze', getURL: (f = '') => `${scheme}://x/${f}`, getManifest: () => require('../manifest.json'),
+        id: 'glaze', getURL: (f = '') => `${scheme}://x/${f}`, getManifest: () => require('../../extension/manifest.json'),
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
       tabs: { onRemoved: { addListener() {} } },

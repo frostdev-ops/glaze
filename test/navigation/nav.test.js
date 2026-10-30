@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { deflateRawSync } = require('node:zlib');
-const G = require('../defaults.js');
-const K = require('../lib/cards.js');
-const S = require('../lib/share.js');
+const G = require('../../extension/defaults.js');
+const K = require('../../extension/lib/cards.js');
+const S = require('../../extension/lib/share.js');
 
 test('nav imports keep bounded styles and https links, never executable values', () => {
   const d = G.GZ_DEFAULTS.nav;
@@ -44,7 +44,7 @@ test('local nav picture callbacks cannot repaint after disable or a later select
     Blob, Uint8Array, atob, URL: { createObjectURL: () => 'blob:http://localhost/local-picture', revokeObjectURL: (u) => revoked.push(u) },
     chrome: { storage: { onChanged: { addListener() {} } } },
   });
-  const ui = vm.runInContext(fs.readFileSync(require.resolve('../features/nav.js'), 'utf8'), context);
+  const ui = vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/nav.js'), 'utf8'), context);
   ui.sync();
   assert.equal(attrs.get('aria-label'), 'Expand global navigation');
   nav = { ...nav, i: 'bbbbbbbbbbbb' };
@@ -72,7 +72,7 @@ test('the shared image contrast reader measures pixels with the selected filter'
     Image: class { set src(v) { this.onload(); } },
     document: { createElement: () => ({ getContext: () => ({ set filter(v) { filter = v; }, drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(Array(64).fill([128, 128, 128, 255]).flat()) }) }) }) },
   });
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/cards.js']) vm.runInContext(fs.readFileSync(require.resolve('../' + f), 'utf8'), context);
+  for (const f of ['lib/color.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/cards.js']) vm.runInContext(fs.readFileSync(require.resolve('../../extension/' + f), 'utf8'), context);
   assert.equal(await vm.runInContext('GZ_CARDS.average("data:image/png;base64,AAAA", "mono")', context), '#808080');
   assert.equal(filter, 'grayscale(1)');
 });
@@ -82,7 +82,7 @@ test('a debounced sidebar color edit sends only its field, never an old picture 
   const context = vm.createContext({
     chrome: { runtime: { sendMessage: (m, cb) => { sent.push(structuredClone(m)); cb({ ok: true }); } }, storage: { sync: { set: (p, cb) => { writes.push(p); cb(); } } } },
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../ui.js'), 'utf8') + '\nglobalThis.UI = GZ_UI;', context);
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/ui.js'), 'utf8') + '\nglobalThis.UI = GZ_UI;', context);
   const old = G.GZ_SANITIZE({ nav: { k: 'gradient', i: 'aaaaaaaaaaaa' } });
   context.UI.save(old, ['nav'], () => {}, { c: '#123456' });
   assert.deepEqual(sent[0], { type: 'glaze:nav', nav: { c: '#123456' } });
@@ -100,15 +100,15 @@ test('appearance-only theme patches keep a recipient’s local picture', () => {
 });
 
 test('Canvas keeps ownership of native collapsed-label overflow and rail positioning', () => {
-  const css = fs.readFileSync(require.resolve('../canvas.css'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../../extension/canvas.css'), 'utf8');
   assert.doesNotMatch(css, /html\[data-gz-nav-size\][^{]*#header\s*\{[^}]*overflow/);
   assert.doesNotMatch(css, /html\[data-gz-nav-size\][^{]*\.ic-app-header__(main|secondary)-navigation\s*\{/);
 });
 
 test('native collapsed labels use text on accent, even on a custom rail', () => {
-  const css = fs.readFileSync(require.resolve('../canvas.css'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../../extension/canvas.css'), 'utf8');
   assert.match(css, /body:not\(\.primary-nav-expanded\) #header \.ic-app-header__menu-list-link \.menu-item__text\s*\{\s*color:\s*var\(--gz-accent-ink\) !important;/);
-  const C = require('../lib/color.js');
+  const C = require('../../extension/lib/color.js');
   for (const name of ['Frost', 'Paper']) {
     const colors = G.GZ_PRESET(name);
     assert.ok(C.contrast(colors['--gz-accent-ink'], colors['--gz-accent']) >= 4.5, name);
@@ -116,7 +116,7 @@ test('native collapsed labels use text on accent, even on a custom rail', () => 
 });
 
 test('CSS sidebar filters stay equal to the shared on-demand image filters', () => {
-  const css = fs.readFileSync(require.resolve('../canvas.css'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../../extension/canvas.css'), 'utf8');
   for (const [key, value] of Object.entries(K.FILTERS)) if (key !== 'none') {
     const body = css.match(new RegExp(`html\\[data-gz-nav-f="${key}"\\] #header::before \\{([^}]+)\\}`))?.[1];
     assert.ok(body, key);
@@ -125,7 +125,7 @@ test('CSS sidebar filters stay equal to the shared on-demand image filters', () 
 });
 
 test('late words start the sidebar once; ordinary mutation passes do not repeat it', () => {
-  const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../../extension/content.js'), 'utf8');
   const chunk = source.slice(source.indexOf('  const flush = () => {'), source.indexOf('  // Throttle, not debounce:'));
   let ready = false, calls = 0;
   const ctx = { timer: 1, dirty: new Set(), full: false, wordsLate: true, ultra: true, hid: () => false, document: { body: {} }, tip: null, tinted: null, looked: null, words: () => ready, outermost: () => [], tintKey: () => null, lookHere: () => null, surfaceCourse: () => '', html: { style: { getPropertyValue: () => '' } }, X: { gate() {}, syncNav: () => calls++ } };
@@ -154,7 +154,7 @@ test('Ultra replacement drawer labels are hidden and titled, and owned changes c
     document: { getElementById: () => null, querySelectorAll: () => anchors.map((x) => x.a), addEventListener() {} },
     chrome: { storage: { onChanged: { addListener() {} } } },
   });
-  const ui = vm.runInContext(fs.readFileSync(require.resolve('../features/nav.js'), 'utf8'), ctx);
+  const ui = vm.runInContext(fs.readFileSync(require.resolve('../../extension/features/nav.js'), 'utf8'), ctx);
   const first = anchor('Courses'); anchors = [first]; ui.sync();
   assert.ok(first.classes.has('gz-nav-label')); assert.equal(first.a.title, 'Courses');
   const second = anchor('Calendar'); first.a.isConnected = first.label.isConnected = false; anchors = [second]; ui.sync();

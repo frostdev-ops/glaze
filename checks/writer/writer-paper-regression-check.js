@@ -2,8 +2,8 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js');
-const root = path.resolve(__dirname, '..'), selected = process.argv[2] || 'all';
+const env = require('../../tools/dev/check-env.js');
+const root = path.resolve(__dirname, '../../extension'), selected = process.argv[2] || 'all';
 // The printed PDFs: in PAPER_EVIDENCE when named, else the run's temporary folder (never the source tree).
 const evidence = () => { const d = process.env.PAPER_EVIDENCE || tmp; fs.mkdirSync(d, { recursive: true }); return d; };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -13,8 +13,8 @@ const run = async (name, fn) => { if (selected !== 'all' && selected !== name) r
   try {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-paper-regression-'));
     ext = env.staged(root, []);
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(ctx);
     const worker = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
     const id = new URL(worker.url()).host;

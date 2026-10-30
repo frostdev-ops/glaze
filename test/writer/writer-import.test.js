@@ -1,22 +1,22 @@
 // Glaze Writer's import flow (owner, 2026-10-27): a file the student brings to an assignment's paper is routed (a .docx
 // asks Open in Writer or Submit as is; anything else goes straight to the submit sheet as is), Ultra's own file area hands
 // one file to the frame before Ultra hears it unless enhance.writerUploads is off, a file submitted as is reaches Ultra's
-// upload byte for byte, and an import's Undo brings back the version it kept. In a browser: scripts/writer-submit-check.js.
+// upload byte for byte, and an import's Undo brings back the version it kept. In a browser: checks/writer/writer-submit-check.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const zlib = require('node:zlib');
-const { El, parser } = require('./stand-in-dom.js');
-const I = require('../lib/i18n.js');
-const L = require('../lib/writer-submit.js');
-const page = require('./helpers/writer-submit-page.cjs');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const { El, parser } = require('../stand-in-dom.js');
+const I = require('../../extension/lib/i18n.js');
+const L = require('../../extension/lib/writer-submit.js');
+const page = require('../helpers/writer-submit-page.cjs');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const KEY = 'school.blackboard.com|_900_1|_101_1|_7_1';
 
-// A zip of deflated entries, as Word writes them (test/writer-attach.test.js zipOf).
+// A zip of deflated entries, as Word writes them (test/writer/writer-attach.test.js zipOf).
 const zipOf = (files) => {
   const parts = [], central = [];
   let offset = 0;
@@ -141,7 +141,7 @@ const frame = ({ blank = true, busy = false } = {}) => {
   const sheet = { open: (a, f) => { opened.push(f); }, close: () => {}, busy: () => busy };
   const ctx = vm.createContext({ document: doc, DOMParser: parser(doc), console, Intl, File, TextDecoder, Uint8Array, ArrayBuffer, DecompressionStream, Response, Blob,
     GZ_WRITER_FRAME: { t: (k, v) => I.t(k, v, 'en'), mode: () => 'paper', kind: () => 'assignment', handle: (k, f) => { handles[k] = f; } },
-    GZ_WRITER_PAPER: { current: () => api, need: async () => { ctx.GZ_DOCTEXT ||= require('../lib/doctext.js'); } },
+    GZ_WRITER_PAPER: { current: () => api, need: async () => { ctx.GZ_DOCTEXT ||= require('../../extension/lib/doctext.js'); } },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_SUBMIT_SHEET: sheet });
   vm.runInContext(process.env.WRITER_IMPORT_SOURCE ? fs.readFileSync(process.env.WRITER_IMPORT_SOURCE, 'utf8') : read('writer-import.js'), ctx);
   // Settle the microtasks, or wait (2 s at most) for what a thread pool answers late under load: the .docx's page count
@@ -227,7 +227,7 @@ const importer = ({ key = 'k' } = {}) => {
   const fn = vm.runInNewContext(`${source.slice(start, end)} importFile`, {
     RangeError, ArrayBuffer, Uint8Array, console, current: null, api: null, view: { state: { doc: {} }, props: {}, setProps() {}, focus() {} }, need: async () => {}, DOCX: [], format: {}, key, root: { isConnected: true },
     GZ_WRITER_DOCX: { importDocx: async () => ({ doc: { type: 'doc' }, html: '<p>Essay</p>', warnings: [] }) }, S: { paper: { nodeFromJSON: (json) => ({ toJSON: () => json }) } }, ownFormatting: () => false,
-    save: async () => true, keepPictures: async () => {}, record: () => ({}), setDoc: () => {}, paper: null, PA: require('../lib/writer-papers.js'),
+    save: async () => true, keepPictures: async () => {}, record: () => ({}), setDoc: () => {}, paper: null, PA: require('../../extension/lib/writer-papers.js'),
     store: { save: async (k, p, o) => { saved.push(o.reason); return { paper: {}, version: { id: 'before-import' } }; } },
     t: (k) => I.t(k, {}, 'en'), toast: (text, act) => toasts.push({ text, act }), restore: (id) => restored.push(id),
   });
@@ -250,7 +250,7 @@ test('Open in Writer: the paper before is kept as a version, the toast names the
 });
 
 test('Settings → Writer has the uploads switch, on by default, beside Glaze Writer', () => {
-  const D = require('../defaults.js');
+  const D = require('../../extension/defaults.js');
   assert.equal(D.GZ_DEFAULTS.enhance.writerUploads, true);
   const html = read('options.html');
   const at = html.indexOf('data-key="enhance.writer"'), up = html.indexOf('data-key="enhance.writerUploads"');

@@ -1,13 +1,13 @@
 // Course tabs on Ultra (B8): lib/coursetabs.js, the part without the page. The page itself is checked headless by
-// scripts/ultra-tabs-check.js on a synthetic Ultra (test/fixtures/ultra-course.html).
+// checks/navigation/ultra-tabs-check.js on a synthetic Ultra (test/fixtures/ultra-course.html).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const D = require(path.join(process.env.GZ_B8_REPO || path.join(__dirname, '..'), 'defaults.js'));
-const L = require(path.join(process.env.GZ_B8_REPO || path.join(__dirname, '..'), 'lib/coursetabs.js'));
+const D = require(path.join(process.env.GZ_B8_REPO || path.join(__dirname, '../../extension'), 'defaults.js'));
+const L = require(path.join(process.env.GZ_B8_REPO || path.join(__dirname, '../../extension'), 'lib/coursetabs.js'));
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const C = '/ultra/courses/_1_1';
 
 test('on by default; its settings join GZ_SPEC from here, so the first content script carries only the switch', () => {

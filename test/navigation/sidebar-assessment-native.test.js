@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { page, record, natives, unmoved } = require('./sidebar-ultra-page.js');
+const { page, record, natives, unmoved } = require('../sidebar-ultra-page.js');
 
 // The current Ultra overview has a table of contents and an inline-size query container.
 // Its Grades / Attempts column should own the sidebar rather than project across two scrollers.

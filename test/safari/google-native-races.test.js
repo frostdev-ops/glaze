@@ -5,10 +5,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const S = require('./helpers/swift-native.cjs');
-const root = path.join(__dirname, '..');
-const google = fs.readFileSync(path.join(root, 'safari/Glaze/Glaze Extension/GlazeGoogle.swift'), 'utf8');
-const signIn = fs.readFileSync(path.join(root, 'safari/Glaze/Glaze/GlazeGoogleSignIn.swift'), 'utf8');
+const S = require('../helpers/swift-native.cjs');
+const root = path.join(__dirname, '../../extension');
+const google = fs.readFileSync(path.join(root, '../safari/Glaze/Glaze Extension/GlazeGoogle.swift'), 'utf8');
+const signIn = fs.readFileSync(path.join(root, '../safari/Glaze/Glaze/GlazeGoogleSignIn.swift'), 'utf8');
 const skip = !S.supported;
 const fixtures = String.raw`
 final class Memory: GlazeGoogle.Vault, @unchecked Sendable {

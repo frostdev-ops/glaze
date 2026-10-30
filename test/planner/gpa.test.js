@@ -1,8 +1,8 @@
 // Past terms, trends, goals and transcript reading (lib/gpa.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../lib/gpa.js');
-const D = require('../lib/doctext.js');
+const G = require('../../extension/lib/gpa.js');
+const D = require('../../extension/lib/doctext.js');
 
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} vs ${b}`);
 const term = (n, c, p) => ({ id: 'a', n, c, ...(p === 0 ? { p } : {}) });
@@ -43,7 +43,7 @@ test('XF, FN, IF and FA are failing grades: 0 points, credits counted', () => {
   // A letter that only looks like them still doesn't count.
   for (const g of ['XA', 'FNX', 'IFF', 'FB', 'I', 'IFN']) assert.notEqual(G.kind(g), 'gpa', g);
   // The 3 credits of 0 points pull the term GPA down, as the school's own figure does.
-  const C = require('../lib/gradecalc.js');
+  const C = require('../../extension/lib/gradecalc.js');
   const t = term('Fall 2024', [{ n: 'Calc', cr: 4, g: 'A' }, { n: 'Hist', cr: 3, g: 'XF' }]);
   close(C.gpa(G.rowsOf(t)).gpa, 16 / 7, 'term GPA');
   assert.equal(C.gpa(G.rowsOf(t)).credits, 7);
@@ -96,7 +96,7 @@ test('a goal route starts failing variants at F, with a known baseline', () => {
 
 test('a term GPA over credits, with plus/minus or whole letters, leaving out what does not count', () => {
   const rows = [{ n: 'Bio', cr: 4, g: 'A-' }, { n: 'Eng', cr: 3, g: 'B+' }, { n: 'Art', cr: 2, g: 'P' }, { n: 'Chem', cr: 4, g: 'W' }, { n: 'Lab', cr: 1, g: 'A', x: 1 }];
-  const of = (t, w) => require('../lib/gradecalc.js').gpa(G.rowsOf(t, w));
+  const of = (t, w) => require('../../extension/lib/gradecalc.js').gpa(G.rowsOf(t, w));
   const pm = of(term('Fall 2024', rows));
   close(pm.gpa, (4 * 3.7 + 3 * 3.3) / 7, 'plus/minus');
   assert.equal(pm.credits, 7);
@@ -149,7 +149,7 @@ test('a goal: what this term needs, rounded up, and when it is out of reach or a
 });
 
 test('a route: the cheapest steps up from the grades now', () => {
-  const S = require('../lib/gradecalc.js').SCHEME;
+  const S = require('../../extension/lib/gradecalc.js').SCHEME;
   const courses = [
     { credits: 4, letter: 'B+', score: 89.5, scale: S }, // half a point from A-
     { credits: 3, letter: 'B', score: 84, scale: S },
@@ -176,7 +176,7 @@ test('a route: the cheapest steps up from the grades now', () => {
   for (const [max, need, want] of [[89.996, 3.7, 'A-'], [89.995, 3.7, 'A-'], [89.994, 3.7, null], [90, 3.7, 'A-'], [93.995, 4, 'A'], [93.994, 4, null], [86.995, 3.3, 'B+'], [86.99, 3.3, null]]) {
     const r = G.route([{ credits: 3, letter: 'B', score: 84, scale: S, max }], need, true);
     assert.equal(r && r[0].letter, want, `best ${max}, need ${need}`);
-    assert.equal(want, require('../lib/gradecalc.js').points(require('../lib/gradecalc.js').letter(max), true) >= need ? want : null, 'the same letter Canvas would give');
+    assert.equal(want, require('../../extension/lib/gradecalc.js').points(require('../../extension/lib/gradecalc.js').letter(max), true) >= need ? want : null, 'the same letter Canvas would give');
   }
   // The floor of a letter on a scale with fewer steps.
   assert.equal(G.floor([['A', 90], ['B', 80], ['C', 70], ['F', 0]], 'B+', true), 90);
@@ -189,7 +189,7 @@ test('a route: the cheapest steps up from the grades now', () => {
 });
 
 test('a route offers only letters a course can still give: by its scale, and by its work left as Canvas rounds', () => {
-  const S = require('../lib/gradecalc.js').SCHEME;
+  const S = require('../../extension/lib/gradecalc.js').SCHEME;
   const B_TOP = [['B', 80], ['C', 60], ['F', 0]];
   const c = { credits: 3, letter: 'B', score: 90, scale: B_TOP };
   assert.equal(G.topOf(c, true), G.LADDER.true.indexOf('B'));
@@ -204,7 +204,7 @@ test('a route offers only letters a course can still give: by its scale, and by 
   assert.deepEqual(G.route([{ credits: 3, letter: 'E' }], 1, true), [{ letter: 'D', min: null, up: 2 }]);
   assert.deepEqual(G.route([{ credits: 3, letter: null }], 3.5, true), [{ letter: 'A-', min: null, up: null }]);
   // The lowest raw percent that reaches a bound, bounds off the hundredths too (a scale may say 90.004).
-  const C = require('../lib/gradecalc.js');
+  const C = require('../../extension/lib/gradecalc.js');
   for (const [min, from] of [[90, 89.995], [90.004, 90.005], [90.01, 90.005], [87.5, 87.495], [60, 59.995], [93.333, 93.335]]) {
     assert.ok(Math.abs(C.reachFrom(min) - from) < 1e-9, `reachFrom(${min})`);
     assert.ok(C.reaches(C.reachFrom(min), min) && !C.reaches(C.reachFrom(min) - 0.0001, min), `${min} is reached from ${from}, not below`);

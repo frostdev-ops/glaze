@@ -1,15 +1,15 @@
 // Ultra's what-if calculator loads on a course's Gradebook, on the page and in a course tab's frame, with Ultra's system
 // category keys shown as names. Real unpacked extension, headless Chrome, synthetic Ultra fixture.
-// NODE_PATH=<installed playwright> nice node scripts/whatif-ultra-check.js
-// EXT=<another checkout> runs it against that code (the code before a fix).
+// NODE_PATH=<installed playwright> nice node checks/planner/whatif-ultra-check.js
+// EXT=<another checkout>/extension runs it against that code (the code before a fix).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-// A copy holding the school's host, as the student's grant does (scripts/check-env.js staged).
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+// A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', user = '_900_1';
 const G = require(path.join(ext, 'defaults.js'));
-const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
+const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const html = fixture('ultra-course.html');
 // The fixture course's gradebook, its Discussion category titled with Ultra's language key as a real course's is.
 const grades = JSON.parse(fixture('ultra-grades.json'));
@@ -40,9 +40,9 @@ const calc = async (where) => {
 (async () => {
   let ctx, failBooks = false, bookReads = 0;
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...require('./check-env.js').chromeLaunch(),
+      ...require('../../tools/dev/check-env.js').chromeLaunch(),
       headless: true, viewport: { width: 1280, height: 800 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });

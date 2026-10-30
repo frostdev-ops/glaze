@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const source = fs.readFileSync(path.join(__dirname, '../scripts/media-cost-check.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../../checks/looks/media-cost-check.js'), 'utf8');
 const start = source.indexOf('    const opts =');
 const end = source.indexOf('    // CPU seconds', start);
 

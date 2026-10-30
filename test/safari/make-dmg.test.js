@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const script = path.join(__dirname, '..', 'scripts', 'make-dmg.sh');
+const script = path.join(__dirname, '../../tools/build/make-dmg.sh');
 const src = fs.readFileSync(script, 'utf8');
 const code = src.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
 

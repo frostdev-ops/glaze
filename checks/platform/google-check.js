@@ -11,21 +11,21 @@
 //     files back; with frostdev.io up it goes there; Disconnect revokes, gives identity back, the row returns to Connect.
 //   chrome flow: getAuthToken (the check's stand-in for Chrome's account) with the three scopes.
 //   No token in storage.local, sync or session at any point.
-//   NODE_PATH=<installed playwright> nice node scripts/google-check.js [evidence directory]
+//   NODE_PATH=<installed playwright> nice node checks/platform/google-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const env = require('./check-env.js');
+const env = require('../../tools/dev/check-env.js');
 
-const SHIPPED = require('../lib/google-config.js');
+const SHIPPED = require('../../extension/lib/google-config.js');
 const CHROME_CLIENT = SHIPPED.chrome;
-const ext = env.staged(process.env.EXT || path.join(__dirname, '..'), []);
+const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'), []);
 {
   const file = path.join(ext, 'manifest.json'), m = JSON.parse(fs.readFileSync(file, 'utf8'));
   m.permissions = [...m.permissions, 'identity'];
   m.optional_permissions = m.optional_permissions.filter((p) => p !== 'identity');
-  m.oauth2 = { client_id: CHROME_CLIENT, scopes: require('../lib/google-config.js').scopes };
+  m.oauth2 = { client_id: CHROME_CLIENT, scopes: require('../../extension/lib/google-config.js').scopes };
   fs.writeFileSync(file, JSON.stringify(m, null, 2));
-  // Drive's build-time switch on in this copy only, as scripts/dev-drive.sh does (the staged file is a link: replaced, not edited).
+  // Drive's build-time switch on in this copy only, as tools/dev/dev-drive.sh does (the staged file is a link: replaced, not edited).
   const g = path.join(ext, 'lib/google.js'), src = fs.readFileSync(g, 'utf8');
   if (!src.includes('\n  const ON = false;\n')) throw new Error('lib/google.js: no ON switch');
   fs.rmSync(g);
@@ -35,7 +35,7 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
 const REDIRECT = `https://${id}.chromiumapp.org/`;
 const REAL = { chrome: SHIPPED.chrome, web: SHIPPED.web, ios: SHIPPED.ios, apiKey: SHIPPED.apiKey, appId: SHIPPED.appId };
 const BLANK = { chrome: 'PLACEHOLDER-chrome.apps.googleusercontent.com', web: 'PLACEHOLDER-web.apps.googleusercontent.com', ios: 'PLACEHOLDER-ios.apps.googleusercontent.com', apiKey: 'PLACEHOLDER', appId: 'PLACEHOLDER' };
-const PICKER = require('../lib/google-config.js').picker;
+const PICKER = require('../../extension/lib/google-config.js').picker;
 const DRIVE = 'https://www.googleapis.com/auth/drive.file';
 const TOKEN = 'ya29.check-web-token';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-google-'));
@@ -111,8 +111,8 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     const port = server.address().port;
     const rules = [...HOSTS.map((h) => `MAP ${h} 127.0.0.1:${port}`), 'MAP * ~NOTFOUND'].join(', ');
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, `--host-resolver-rules=${rules}`, '--ignore-certificate-errors', '--disable-background-networking', '--renderer-process-limit=1'] });
     env.noFirstRun(ctx);
     await ctx.route('**/*', async (route) => {

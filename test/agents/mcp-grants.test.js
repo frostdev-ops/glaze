@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const G = require('../lib/mcp/grants.js');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
+const G = require('../../extension/lib/mcp/grants.js');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
 
 const CLAUDE = { exe: '/Applications/Claude.app/Contents/MacOS/Claude', verified: true, ppid: 41 };
 const CODE = { exe: '/usr/local/bin/code', verified: false };
@@ -240,9 +240,9 @@ test('display caps preserve whole surrogate pairs and never truncate the hashed 
 
 test('classic-script dependencies are resolved on use, after grants loads', async () => {
   const context = vm.createContext({ module: { exports: {} } });
-  vm.runInContext(fs.readFileSync(require.resolve('../lib/mcp/grants.js'), 'utf8'), context);
-  context.GZ_AI_TOOLS = require('../lib/ai/tools.js');
-  context.GZ_AI_REQUEST = require('../lib/ai/request.js');
+  vm.runInContext(fs.readFileSync(require.resolve('../../extension/lib/mcp/grants.js'), 'utf8'), context);
+  context.GZ_AI_TOOLS = require('../../extension/lib/ai/tools.js');
+  context.GZ_AI_REQUEST = require('../../extension/lib/ai/request.js');
   const local = area();
   await context.module.exports.record(local, { tool: 'todo_list', group: 'courses', kind: 'read', outcome: 'ok' });
   assert.deepEqual(JSON.parse(JSON.stringify(local.data.mcpCalls)), [{ tool: 'todo_list', group: 'courses', kind: 'read', outcome: 'ok' }]);

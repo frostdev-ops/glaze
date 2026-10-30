@@ -60,13 +60,13 @@ extension bytes, and checks every entry and the full upload SHA-256. It requires
 credentials, browser profile, npm install or network access. Python/zlib differences
 may change compressed bytes; per-entry hashes are checked before the whole ZIP hash.
 
-Bundled libraries and licenses are under source/lib/. To independently regenerate
+Bundled libraries and licenses are under source/extension/lib/. To independently regenerate
 vendored libraries in a separate fresh extraction, run the pinned scripts in source/:
 
-    bash scripts/vendor-pdfjs.sh
-    bash scripts/vendor-three.sh
-    bash scripts/vendor-lottie.sh
-    bash scripts/vendor-tesseract.sh
+    bash tools/vendor/vendor-pdfjs.sh
+    bash tools/vendor/vendor-three.sh
+    bash tools/vendor/vendor-lottie.sh
+    bash tools/vendor/vendor-tesseract.sh
 
 Vendor regeneration needs npm/curl and network access. Those scripts document the
 local PDF imports, Firefox compatibility shims, custom three.js build, official
@@ -104,7 +104,7 @@ def verify():
     (repo / '.git/shallow').write_text(commit + '\n')
     git(repo, 'update-ref', 'refs/heads/dev/firefox', commit)
     git(repo, 'diff', '--quiet', 'HEAD', '--')
-    subprocess.run(['sh', 'scripts/package-firefox.sh'], cwd=repo, check=True)
+    subprocess.run(['sh', 'tools/build/package-firefox.sh'], cwd=repo, check=True)
     upload = repo / 'dist' / p['upload_filename']
     normalize(upload)
     with zipfile.ZipFile(upload) as z:

@@ -1,6 +1,6 @@
 # Pet reaction art provenance
 
-Original new reaction art generated with built-in OpenAI image_gen on 2026-10-17, using only Glaze's own existing characters as references. Native alpha is preserved; delivery processing crops, resizes, places and encodes generated pixels. There are ten 512×768 atlases, each with24 frames: climbing, sleeping, playing, peeking, XP and level-up (four frames per state). Exact prompts, source masters and art-only validation follow. Runtime contract: [pet-animation-api.md](../../docs/pet-animation-api.md).
+Original new reaction art generated with built-in OpenAI image_gen on 2026-10-17, using only Glaze's own existing characters as references. Native alpha is preserved; delivery processing crops, resizes, places and encodes generated pixels. There are ten 512×768 atlases, each with24 frames: climbing, sleeping, playing, peeking, XP and level-up (four frames per state). Exact prompts, source masters and art-only validation follow. Runtime contract: [pet-animation-api.md](../../../docs/pet-animation-api.md).
 
 ## Glaze forest pet reaction atlas provenance
 

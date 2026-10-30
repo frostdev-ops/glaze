@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const root = process.env.GZ_B8_REPO || path.join(__dirname, '..');
+const root = process.env.GZ_B8_REPO || path.join(__dirname, '../../extension');
 const source = fs.readFileSync(path.join(root, 'content-ultra.js'), 'utf8');
 
 test('automatic native new-content callbacks wait while a tab\'s frame covers the page; live and explicit reads remain', async () => {

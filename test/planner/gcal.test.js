@@ -1,10 +1,10 @@
-// Google Calendar sync (lib/gcal.js) against a local mock of Google's API (scripts/gcal-mock.js, 127.0.0.1 only): connect,
+// Google Calendar sync (lib/gcal.js) against a local mock of Google's API (checks/mocks/gcal-mock.js, 127.0.0.1 only): connect,
 // create, incremental update, delete, the conflict rule, 401 token refresh, 429 backoff, link another device, disconnect.
 // Nothing here reaches Google: every request is checked to go to the mock.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const G = require('../lib/gcal.js');
-const M = require('../scripts/gcal-mock.js');
+const G = require('../../extension/lib/gcal.js');
+const M = require('../../checks/mocks/gcal-mock.js');
 
 const SRC = 'https://canvas.test/3';
 const DAY = 864e5;
@@ -352,7 +352,7 @@ test('Google only: the addresses, the one scope, and the manifest\'s client aski
   assert.equal(G.API, 'https://www.googleapis.com/calendar/v3');
   assert.equal(G.REVOKE, 'https://oauth2.googleapis.com/revoke');
   assert.equal(G.SCOPE, 'https://www.googleapis.com/auth/calendar.app.created');
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   assert.deepEqual(m.oauth2.scopes, [G.SCOPE]);
   assert.match(m.oauth2.client_id, /^\d+-\w+\.apps\.googleusercontent\.com$/);
   assert.ok(m.optional_permissions.includes('identity'));
@@ -364,7 +364,7 @@ test('Google only: the addresses, the one scope, and the manifest\'s client aski
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 // on: the build-time switch (lib/gcal.js ON) as the worker's copy has it; off is a build that leaves Google sync out.
 const SWITCH = /\n {2}const ON = (?:true|false);\n/;
 const switched = (src, on) => { assert.match(src, SWITCH); return src.replace(SWITCH, `\n  const ON = ${on};\n`); };
@@ -415,7 +415,7 @@ const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: 
     },
     importScripts: (...files) => { for (const f of files) vm.runInContext(f === 'gcal.js' ? switched(read(`lib/${f}`), on) : f === 'google.js' ? switched(read(`lib/${f}`), drive) : read(`lib/${f}`), context); },
     chrome: {
-      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../../extension/manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener: (f) => (listeners.installed ||= []).push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area('local', store.local), sync: area('sync', store.sync), onChanged: { addListener: (f) => heard.push(f) } },
       identity,
@@ -435,9 +435,9 @@ const worker = (mock, { on = true, drive = false, local = {}, sync = { enabled: 
   return { store, identity, permissions, asked, send, hooks, change, registered: () => registered, install: () => { for (const f of listeners.installed) f(); } };
 };
 // What the page sends with its batch (lib/calexport.js consent), worked out from the worker's storage as it is now.
-const D = require('../defaults.js');
-const T = require('../lib/todo.js');
-const X = require('../lib/calexport.js');
+const D = require('../../extension/defaults.js');
+const T = require('../../extension/lib/todo.js');
+const X = require('../../extension/lib/calexport.js');
 const consentOf = (w, who = SITE_SRC) => { const z = D.GZ_SANITIZE(w.store.sync); return X.consent(z, z.todo, w.store.local.gradescope, who); };
 const EDITOR = { id: 'glaze', url: 'chrome-extension://x/options.html#gcal' };
 const PAGE = { id: 'glaze', tab: { id: 4 }, frameId: 0, url: 'https://school.instructure.com/courses/7' };
@@ -608,8 +608,8 @@ test('the Chrome package carries Google sync; scripts/dev-gcal.sh adds only the 
     const keyFile = path.join(dir, 'key.txt');
     fs.writeFileSync(keyFile, require('node:crypto').randomBytes(294).toString('base64'));
     const env = { ...process.env, DIST: path.join(dir, 'dist') };
-    execFileSync(path.join(__dirname, '../scripts/dev-gcal.sh'), [keyFile, path.join(dir, 'dev')], { env, stdio: 'pipe' });
-    const repo = require('../manifest.json');
+    execFileSync(path.join(__dirname, '../../tools/dev/dev-gcal.sh'), [keyFile, path.join(dir, 'dev')], { env, stdio: 'pipe' });
+    const repo = require('../../extension/manifest.json');
     const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
     const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
     assert.deepEqual(packed, repo, 'the store manifest is the repo\'s, oauth2 client and optional identity permission included');

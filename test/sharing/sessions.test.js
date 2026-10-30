@@ -5,14 +5,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const vm = require('node:vm');
-const G = require('../lib/sharing.js');
-const S = require('../lib/sessions.js');
-const R = require('../lib/relay.js');
-const N = require('../lib/notes.js');
-const T = require('../lib/todo.js');
-const K = require('../lib/cards.js');
-const { relay, diskStore } = require('../server/relay.js');
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const G = require('../../extension/lib/sharing.js');
+const S = require('../../extension/lib/sessions.js');
+const R = require('../../extension/lib/relay.js');
+const N = require('../../extension/lib/notes.js');
+const T = require('../../extension/lib/todo.js');
+const K = require('../../extension/lib/cards.js');
+const { relay, diskStore } = require('../../server/relay.js');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const NK = 'notesIdx:https://school.instructure.com/5', TK = 'todo:https://school.instructure.com/5';
 // Entity ids are the ones Glaze makes (lib/sessions.js ENTITY): a note's UUID, and a To Do task's 13 characters of one.
 const SHARED = '6c1d2f4e-8a3b-4c5d-9e6f-0a1b2c3d4e5f';
@@ -362,7 +362,7 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   const page = read('options.html');
   assert.match(page, /Includes all share keys and creator delete tokens/);
   // Only the Notes share panel is framed into LMS pages; Settings never is.
-  assert.deepEqual(require('../manifest.json').web_accessible_resources.flatMap((e) => e.resources.filter((p) => p.startsWith('sharing/'))), ['sharing/quick.html']);
+  assert.deepEqual(require('../../extension/manifest.json').web_accessible_resources.flatMap((e) => e.resources.filter((p) => p.startsWith('sharing/'))), ['sharing/quick.html']);
   const ui = read('lib/sessions-ui.js');
   assert.match(ui, /const human = \(e\) => e\.isTrusted/);
   assert.match(ui, /if \(!human\(e\) \|\| busy \|\| !state\) return;/);
@@ -373,7 +373,7 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   assert.doesNotMatch(quick, /\bconfirm\(|parent\.|top\./, 'a framed panel asks inline and posts nothing to the page');
   assert.doesNotMatch(notes, /type: 'glaze:sessions'|op: 'link'/, 'the LMS world only frames the panel; it never asks the worker for a link');
   // The default relay is held from the start; another https relay or a local one is asked for when it's set (lib/sessions-ui.js).
-  const m = require('../manifest.json');
+  const m = require('../../extension/manifest.json');
   assert.ok(m.host_permissions.includes('https://share.frostdev.io/*'));
   for (const p of ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*']) assert.ok(m.optional_host_permissions.includes(p), p);
 });
@@ -383,7 +383,7 @@ test('session worker accepts only exact extension pages; an LMS or another exten
   const area = localArea();
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa,
     importScripts: (...files) => { for (const f of files) { imported.push(f); vm.runInContext(read(`lib/${f}`), ctx); } }, navigator: {},
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
@@ -409,7 +409,7 @@ test('E1 Settings is the session caller in its exact top frame; the Notes panel 
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     GZ_SESSIONS: { make: () => ({ handle: async (m) => { handled.push(m.op); scopes.push(m.scope); return { ok: true }; } }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
@@ -450,7 +450,7 @@ test('E1 synced relay changes refresh an open Sharing tab without scheduling net
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     GZ_SESSIONS: { make: () => ({ connect: () => () => {}, changed: () => network++ }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (fn) => connections.push(fn) } },
       storage: { local: area, sync: area, onChanged: { addListener: (fn) => changes.push(fn) } } } });
   vm.runInContext(read('lib/background.js'), ctx);
@@ -462,10 +462,10 @@ test('E1 synced relay changes refresh an open Sharing tab without scheduling net
 });
 
 test('E1 editor nickname writes sanitize one course against current stored preferences', async () => {
-  const listeners = [], area = localArea({ courses: { ...require('../defaults.js').GZ_SANITIZE().courses, colors: { '_2_1': '#123456' }, names: { '_2_1': 'Keep me' } } });
+  const listeners = [], area = localArea({ courses: { ...require('../../extension/defaults.js').GZ_SANITIZE().courses, colors: { '_2_1': '#123456' }, names: { '_2_1': 'Keep me' } } });
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
@@ -489,7 +489,7 @@ test('Pause interrupts a running sync before waiting in the sessions\' queue', a
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa,
     GZ_SESSIONS: { make: () => ({ handle: async (m) => { if (m.op === 'sync') { syncs++; entered(); await gate; } return { ok: true }; }, stop: () => { stopped++; release(); } }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); }, navigator: {},
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
@@ -512,7 +512,7 @@ test('a session operation waiting on the relay never holds up the storage broker
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     GZ_SESSIONS: { make: () => ({ handle: async (m) => { if (m.op === 'sync') { entered(); await gate; } return { ok: true }; }, stop() {} }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
-    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../../extension/manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
@@ -617,7 +617,7 @@ test('disk relay: custom tasks carry only cleaned task/plan fields; joined Looks
 test('a Look session shares the Look with its parts as a glaze2 code, and plain Looks stay glaze1', async (t) => {
   const { url } = await start(t), a = device(url), b = device(url);
   t.after(() => { a.worker.stop(); b.worker.stop(); });
-  const X = require('../lib/lookparts.js'), L = require('../lib/share.js');
+  const X = require('../../extension/lib/lookparts.js'), L = require('../../extension/lib/share.js');
   const parts = { x: { cursor: { kind: 'glow', size: 14 } } };
   Object.assign(a.settings.data, { bg: { kind: 'layers' }, lookX: await X.pack(parts) });
   const look = await a.send('create', { kind: 'look', title: 'Glowing' });

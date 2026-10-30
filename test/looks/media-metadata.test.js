@@ -10,9 +10,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const M = require('../lib/media.js');
+const M = require('../../extension/lib/media.js');
 
-const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures/media', f)));
+const fx = (f) => new Uint8Array(fs.readFileSync(path.join(__dirname, '../fixtures/media', f)));
 const text = (b) => Buffer.from(b).toString('latin1');
 const four = (b, i) => text(b.subarray(i, i + 4));
 const u32 = (b, i) => Buffer.from(b).readUInt32BE(i);
@@ -168,7 +168,7 @@ test('fixed-size timed metadata samples cannot make a tiny file run billions of 
   b.set(put32(1), sz.at + 4);
   b.set(put32(0xffffffff), sz.at + 8);
   b.set(put32(0xffffffff), sc.at + 12);
-  const script = `const M = require(${JSON.stringify(require.resolve('../lib/media.js'))}); process.stdout.write(String(M.check(new Uint8Array(Buffer.from(process.argv[1], 'base64')), 'bg')));`;
+  const script = `const M = require(${JSON.stringify(require.resolve('../../extension/lib/media.js'))}); process.stdout.write(String(M.check(new Uint8Array(Buffer.from(process.argv[1], 'base64')), 'bg')));`;
   const r = spawnSync(process.execPath, ['-e', script, Buffer.from(b).toString('base64')], { timeout: 750, encoding: 'utf8' });
   assert.equal(r.signal, null, 'the parser must finish without an attacker-controlled sample loop');
   assert.equal(r.status, 0, r.stderr);

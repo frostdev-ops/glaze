@@ -1,14 +1,14 @@
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
-const { El } = require('./stand-in-dom.js');
-const S = require('../lib/petsprites.js');
+const { El } = require('../stand-in-dom.js');
+const S = require('../../extension/lib/petsprites.js');
 const library = ({ visibleGate = false, pets = [], modPets = [] } = {}) => {
   const doc = {}, sent = [], messages = [], events = {}; let observe, disconnects = 0, mounted = 0, fail = '';
   doc.createElement = (tag) => new El(tag, doc); doc.root = doc.createElement('div');
   const c = { document: doc, window: { addEventListener: (key, fn) => { events[key] = fn; } }, Uint8Array, TextDecoder,
-    GZ_PET_SPRITES: S, GZ_PET_PLAYER: { mount: () => { mounted++; return { stop() {}, set() {} }; } }, GZ_DOCTEXT: require('../lib/doctext.js'),
+    GZ_PET_SPRITES: S, GZ_PET_PLAYER: { mount: () => { mounted++; return { stop() {}, set() {} }; } }, GZ_DOCTEXT: require('../../extension/lib/doctext.js'),
     chrome: { runtime: { sendMessage: async (m) => { sent.push(m.op); messages.push(m); return m.op === 'get' ? { ok: true, pet: { name: 'Pet', spriteVersionNumber: 2 } } : m.op === 'mods' ? { ok: true, pets: modPets } : m.op === 'fromMod' ? { ok: modPets.length > 0 && !fail, ...(fail && { error: fail }) } : { ok: true, pets }; } } } };
   if (visibleGate) c.IntersectionObserver = class { constructor(fn) { observe = fn; } observe() {} disconnect() { disconnects++; } };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../lib/petlibrary.js'), 'utf8') + ';GZ_PET_LIBRARY.mount(document.root, (s) => s);', c);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../../extension/lib/petlibrary.js'), 'utf8') + ';GZ_PET_LIBRARY.mount(document.root, (s) => s);', c);
   const [input, status] = doc.root.children;
   return { input, status, sent, messages, root: doc.root, failWith: (v) => { fail = v; }, show: () => observe([{ isIntersecting: true }]), close: () => events.pagehide(), mounted: () => mounted, disconnects: () => disconnects, import: async (files) => { input.files = files; await input.listeners.find((e) => e.type === 'change').f({ isTrusted: true }); } };
 };

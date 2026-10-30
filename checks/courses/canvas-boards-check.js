@@ -1,6 +1,6 @@
 // Canvas's board, headless: the real extension on the saved Dashboard DOM under an invented school origin. The page's
 // frame CSS and API answers are synthetic; all other requests abort and DNS resolves nowhere. No server or LMS needed.
-//   NODE_PATH=/path/to/node_modules nice node scripts/canvas-boards-check.js [screenshots directory]
+//   NODE_PATH=/path/to/node_modules nice node checks/courses/canvas-boards-check.js [screenshots directory]
 // CANVAS_LOCAL=1 uses the seeded Canvas at localhost:3000 with a temporary extension/profile instead.
 const { chromium } = require('playwright');
 const { isDeepStrictEqual } = require('node:util');
@@ -8,15 +8,15 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const G = require('../defaults.js');
-const W = require('../lib/widgets.js');
-let ext = process.env.EXT || path.join(__dirname, '..');
+const G = require('../../extension/defaults.js');
+const W = require('../../extension/lib/widgets.js');
+let ext = process.env.EXT || path.join(__dirname, '../../extension');
 const local = process.env.CANVAS_LOCAL === '1';
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-canvas-boards-'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
 const O = local ? 'http://localhost:3000' : 'https://board.school.instructure.com';
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const fixture = (name) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', name), 'utf8');
+const fixture = (name) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', name), 'utf8');
 const frame = `<style>
   body { margin: 0; font: 14px/1.4 system-ui, sans-serif; }
   #header, #mobile-header, #breadcrumbs, #footer, #right-side, .ic-Layout-watermark { display: none; }
@@ -63,7 +63,7 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
       fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(manifest));
       ext = fs.realpathSync(ext);
     }
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, ...(!local ? ['--host-resolver-rules=MAP * ~NOTFOUND'] : [])],
     });

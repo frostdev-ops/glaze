@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const worker = require('./helpers/worker-env.cjs');
+const worker = require('../helpers/worker-env.cjs');
 const vm = require('node:vm');
 
 const CANVAS = 'https://school.instructure.com', EXT = 'chrome-extension://x';

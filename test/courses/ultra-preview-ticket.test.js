@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const ORIGIN = 'https://school.example.edu';
 const VIEWER = 'https://annotate-us.foundations.blackboard.com/ui/pdf-viewer/0.0.113-22829e9/index.html';
 const jwt = (claims) => `h.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.s`;

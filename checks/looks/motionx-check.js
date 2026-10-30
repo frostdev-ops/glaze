@@ -1,6 +1,6 @@
 // Look parts that move, headless: the real extension, a synthetic Ultra page, no account and no outside network (every
 // other request is aborted, DNS goes nowhere).
-//   NODE_PATH=<installed playwright> nice node scripts/motionx-check.js [out dir for screenshots]
+//   NODE_PATH=<installed playwright> nice node checks/looks/motionx-check.js [out dir for screenshots]
 //
 // Part 1, the page: a Look with animations, an effect and a pointer effect on an Ultra page served with a strict
 // Content-Security-Policy (`style-src 'self'`, which refuses inline styles: the page's own <style> proves it is on). The
@@ -19,15 +19,15 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const G = require(path.join(root, 'defaults.js'));
 const M = require(path.join(root, 'lib/motionx.js'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-motionx-'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
-const PAGE = fs.readFileSync(path.join(root, 'test/fixtures/ultra-courses.html'), 'utf8');
+const chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch();
+const PAGE = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-courses.html'), 'utf8');
 const SITE = 'https://bb.school.test';
 const CANVAS = 'https://motion.school.instructure.com';
-const CANVAS_PAGE = fs.readFileSync(path.join(root, 'test/fixtures/canvas-dashboard-cards.html'), 'utf8')
+const CANVAS_PAGE = fs.readFileSync(path.join(__dirname, '../../test/fixtures/canvas-dashboard-cards.html'), 'utf8')
   .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
   .replaceAll('http://localhost:3000', CANVAS).replace(/https?:\/\/canvas\.instructure\.com/g, CANVAS);
 const POLICY = "default-src 'self'; style-src 'self'; script-src 'self' 'unsafe-inline'; img-src * data: blob:";
@@ -59,10 +59,10 @@ const ULTRA_SETTINGS = (motion = {}) => ({ ...G.GZ_DEFAULTS, enhance: { ...G.GZ_
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'motionx-'));
-  const ext = require('./check-env.js').staged(root, [`${SITE}/*`]); // the school's host, as the student's grant holds it; the id comes from its real path
+  const ext = require('../../tools/dev/check-env.js').staged(root, [`${SITE}/*`]); // the school's host, as the student's grant holds it; the id comes from its real path
   const id = extensionId(ext);
   const external = [], errors = [];
-  await require('./wait-for-browser.js')();
+  await require('../../tools/dev/wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
     ...chromeLaunch, headless: true, viewport: { width: 1280, height: 900 },
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],

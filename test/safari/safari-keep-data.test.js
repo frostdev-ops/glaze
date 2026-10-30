@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(__dirname, '../../extension');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const shell = (body, options = {}) => spawnSync('/bin/sh', ['-eu', '-c', body], { encoding: 'utf8', ...options });
 
@@ -18,7 +18,7 @@ test('the release signature scan checks Mach-O libraries without an execute bit'
     header.writeUInt32LE(0x0100000c, 4);
     header.writeUInt32LE(6, 12);
     fs.writeFileSync(binary, header, { mode: 0o644 });
-    const scan = read('scripts/build-safari.sh').match(/^find "\$app"[^\n]*\n[\s\S]*?^done$/m)?.[0];
+    const scan = read('../tools/build/build-safari.sh').match(/^find "\$app"[^\n]*\n[\s\S]*?^done$/m)?.[0];
     assert.ok(scan);
     const log = path.join(temp, 'signatures.log');
     const body = `codesign() { printf '%s\\n' "$2" >> "$signature_log"; printf 'Authority=%s\\n' "$signature_authority"; }\n${scan}`;
@@ -35,9 +35,9 @@ test('the release signature scan checks Mach-O libraries without an execute bit'
 test('a legacy release app stops the build before packaging or deleting anything', () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-legacy-test-'));
   try {
-    const build = read('scripts/build-safari.sh');
+    const build = read('../tools/build/build-safari.sh');
     const start = build.indexOf('\n', build.indexOf('version=$(node'));
-    const preflight = build.slice(start, build.indexOf('./package.sh', start));
+    const preflight = build.slice(start, build.indexOf('tools/build/package.sh', start));
     const folder = path.join(temp, 'release/0/build');
     fs.mkdirSync(folder, { recursive: true });
     const marker = path.join(temp, 'plain-text-marker');

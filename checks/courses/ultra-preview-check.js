@@ -1,5 +1,5 @@
 // Ultra's file previews in Glaze's PDF viewer (features/bbpreview.js, lib/bb-preview.js, pdf-kind.js show), in the real
-// unpacked extension on the synthetic Ultra Document page and viewer chain of scripts/ultra-mock.js PREVIEW (the live probe's
+// unpacked extension on the synthetic Ultra Document page and viewer chain of checks/mocks/ultra-mock.js PREVIEW (the live probe's
 // shapes: two data-bbfile attachments, viewerUrl → 302 → basic-doc-viewer's index.html → its documents API → a presigned S3
 // converted.pdf, readable with CORS from other origins). An expanded preview: Blackboard's frame until Glaze's viewer has
 // drawn page 1, then Glaze's in its place with page 1's text, its bytes read from S3 by Glaze in the page (the page's
@@ -10,13 +10,13 @@
 // Open original: the file in a new tab; dark documents inverts Blackboard's frame, never Glaze's; the keyboard
 // reaches the frame and Esc returns to the Preview button; at 640 px it fits. The browser's following of viewerUrl's 302 in
 // the worker is stood in for (ultra-mock.js WHERE: Playwright doesn't follow a routed redirect there); the real one is the
-// owner's live check. GETs only, synthetic. NODE_PATH=<playwright> node scripts/ultra-preview-check.js [dir]
+// owner's live check. GETs only, synthetic. NODE_PATH=<playwright> node checks/courses/ultra-preview-check.js [dir]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('./check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '..'));
-const PDF = require('./pdf-fixtures.js');
-const { PREVIEW: P, SITE: site, ME } = require('./ultra-mock.js');
+const env = require('../../tools/dev/check-env.js'), root = path.resolve(process.env.EXT || path.join(__dirname, '../../extension'));
+const PDF = require('../../tools/fidelity/pdf-fixtures.js');
+const { PREVIEW: P, SITE: site, ME } = require('../mocks/ultra-mock.js');
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-ultra-preview-check');
 const [SLIDES, LAB] = P.FILES;
 const checks = [], errors = [];
@@ -33,7 +33,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
 
 (async () => {
   let context, held = false, tmp;
-  const lock = require('./check-env.js').lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     for (let i = 0; ; i++) {
       try { fs.mkdirSync(lock); held = true; fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nultra-preview-check\n`); break; }
@@ -47,9 +47,9 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     const plan = {}; // a file's hash → its scenario (ultra-mock.js previews)
     const mock = P.previews({ site, pdf: (f) => f && pdfs[f.hash], scenario: (f) => plan[f?.hash] || {} });
     const originals = [];
-    const ext = require('./check-env.js').staged(root, [`${site}/*`]);
-    await require('./wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    const ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`]);
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
     await context.addCookies([{ name: 'preview-check-cookie', value: 'synthetic', domain: new URL(P.BUCKET).hostname, path: '/', secure: true, sameSite: 'None' }]);
     await context.route('**/*', async (r) => {

@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const plain = (x) => (x === undefined ? x : JSON.parse(JSON.stringify(x)));
 const ID = 'glaze', EXT = `chrome-extension://${ID}`, CDN = 'inst-fs-iad.example-cdn.net', PATTERN = `https://${CDN}/*`;
@@ -105,7 +105,7 @@ const worker = ({ held = new Set(), session = {} } = {}) => {
     set: async (v) => { Object.assign(store[name], structuredClone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) delete store[name][x]; },
   });
-  const manifest = require('../manifest.json');
+  const manifest = require('../../extension/manifest.json');
   const context = vm.createContext({
     URL, AbortController, console, setTimeout, clearTimeout, TextEncoder, TextDecoder, structuredClone, crypto: globalThis.crypto, atob, btoa, navigator: {},
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), context, { filename: f }); },

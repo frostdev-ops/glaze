@@ -6,9 +6,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { page, record, natives, unmoved } = require('./sidebar-ultra-page.js');
+const { page, record, natives, unmoved } = require('../sidebar-ultra-page.js');
 
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 const testAttempt = (width = 1800) => {
   const p = page({ at: 'stream', width, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });

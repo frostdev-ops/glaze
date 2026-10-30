@@ -4,17 +4,17 @@
 // habitat and its main action, the clock and Start, ...) show without scrolling, the pet and its furniture stay inside the
 // habitat, also after the tile is resized under them, and every pet action stays reachable. Nothing leaves the machine: Ultra's
 // API is answered from test/fixtures, every other request is aborted and DNS is mapped to nowhere.
-//   NODE_PATH=/path/to/node_modules nice -n 10 node scripts/widgets-sizes-check.js [out dir for screenshots]   (needs playwright)
+//   NODE_PATH=/path/to/node_modules nice -n 10 node checks/core/widgets-sizes-check.js [out dir for screenshots]   (needs playwright)
 // ONLY=<config name substring> runs part of it. One headless browser at a time across agents: it waits while another runs.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
-const G = require('../defaults.js');
-const W = require('../lib/widgets.js');
+const G = require('../../extension/defaults.js');
+const W = require('../../extension/lib/widgets.js');
 
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-widgets-sizes-'));
 const O = 'https://bb.school.test', UID = '_900_1';
-const fx = (n) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', `ultra-${n}.json`), 'utf8');
+const fx = (n) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', `ultra-${n}.json`), 'utf8');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0, checks = 0;
 const ok = (c, m, detail = '') => { checks++; console.log(`${c ? 'ok  ' : 'FAIL'} ${m}${c || !detail ? '' : `  ${String(detail).slice(0, 600)}`}`); if (!c) fails++; };
@@ -77,7 +77,7 @@ const CANVAS_FRAME = `<style>body { margin: 0; font: 14px/1.4 system-ui, sans-se
   .screenreader-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .ic-DashboardCard__box__container { display: flex; flex-wrap: wrap; gap: 16px; } .ic-DashboardCard { width: 260px; } .ic-DashboardCard__header_image { height: 120px; }
   @media (max-width: 600px) { #content { padding: 12px; } }</style>`;
-const CANVAS_DASH = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/canvas-dashboard-cards.html'), 'utf8')
+const CANVAS_DASH = fs.readFileSync(path.join(__dirname, '../../test/fixtures/canvas-dashboard-cards.html'), 'utf8')
   .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '').replace('</head>', `${CANVAS_FRAME}</head>`);
 const canvasApi = (u) => {
   if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return { id: CUID, time_zone: 'America/New_York' };
@@ -213,9 +213,9 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
   let ctx;
   const errors = [];
   try {
-    await require('./wait-for-browser.js')();
+    await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
-      ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1600, height: 1000 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1600, height: 1000 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
     });
     let dir = 'ltr';
@@ -247,7 +247,7 @@ const MEASURE = ({ PRIMARY, PET_ACTIONS, COURSES, MODTILE }) => {
       }, [s, local]);
       // A fresh install also resets registration. Drain the worker's registration queue before testing the next page.
       await worker.evaluate(() => queue);
-      await require('./check-env.js').ultraReady(opts);
+      await require('../../tools/dev/check-env.js').ultraReady(opts);
     };
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(e.stack || String(e)));

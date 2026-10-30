@@ -1,6 +1,6 @@
 // The stand-in DOM's elements as a failed assertion prints them.
 const test = require('node:test'), assert = require('node:assert/strict');
-const { El } = require('./stand-in-dom.js');
+const { El } = require('../stand-in-dom.js');
 
 // node:assert prints a failed value at depth 1000: an element that reaches the document from every node prints the page
 // again at each one (a grid test's failed assert.equal(menu, null) took the runner past 6 GB).

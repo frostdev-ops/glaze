@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const html = read('options.html');
 const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
@@ -124,8 +124,8 @@ test('site badges: only where something does not work on all three sites, and tr
 });
 
 test('course tabs offer every place lib/coursetabs.js knows, Automatic first', () => {
-  require('../defaults.js');
-  const CT = require('../lib/coursetabs.js');
+  require('../../extension/defaults.js');
+  const CT = require('../../extension/lib/coursetabs.js');
   const values = [...main.matchAll(/<input type="radio" name="tabs\.at" value="([^"]+)">([^<]+)<\/label>/g)];
   assert.deepEqual(values.map((m) => m[1]).sort(), [...CT.SPEC.at[1]].sort());
   assert.deepEqual([values[0][1], values[0][2]], ['auto', 'Automatic']);

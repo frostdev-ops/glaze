@@ -1,12 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const T = require('../lib/ai/task.js');
-const F = require('../lib/ai/tasks/writer-feedback.js');
-const X = require('../lib/ai/text.js');
-const I = require('../lib/ai/tasks/writer-image.js');
-const V = require('../lib/ai/visual-cache.js');
+const T = require('../../extension/lib/ai/task.js');
+const F = require('../../extension/lib/ai/tasks/writer-feedback.js');
+const X = require('../../extension/lib/ai/text.js');
+const I = require('../../extension/lib/ai/tasks/writer-image.js');
+const V = require('../../extension/lib/ai/visual-cache.js');
 const { webcrypto } = require('node:crypto');
-require('../lib/ai/providers/mock.js');
+require('../../extension/lib/ai/providers/mock.js');
 
 const picture = (name = 'Prompt.png') => ({ name, image: { mime: 'image/png', data: 'iVBORw0KGgo=' } });
 const raw = () => ({ text: 'School gardens help students learn together. Students measure growth and share their harvest.', grade: true, context: {

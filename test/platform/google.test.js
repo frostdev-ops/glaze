@@ -1,14 +1,14 @@
 // Google sign-in for Drive (lib/google.js, lib/google-config.js) and the Picker hand-off, with chrome.identity, permissions,
 // storage and fetch stubbed: connect on each flow, silent renewal, a state that isn't ours refused, Disconnect revoking, no
 // token ever in storage, the picker's fragment and the picker page's fallback order. The packaging side
-// (scripts/oauth-manifest.js) is at the end.
+// (tools/build/oauth-manifest.js) is at the end.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const G = require('../lib/google.js');
-const C = require('../lib/google-config.js');
-const { oauth } = require('../scripts/oauth-manifest.js');
+const G = require('../../extension/lib/google.js');
+const C = require('../../extension/lib/google-config.js');
+const { oauth } = require('../../tools/build/oauth-manifest.js');
 
 const REDIRECT = 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/';
 const DRIVE = 'https://www.googleapis.com/auth/drive.file';
@@ -96,12 +96,12 @@ const careful = (h) => {
 test('the config: Glaze\'s clients in project 1071735898350, three scopes, the two picker pages in order, no secret', () => {
   assert.deepEqual(C.scopes, [DRIVE, 'openid', 'email']);
   assert.deepEqual(C.picker, ['https://frostdev.io/glaze/drive-picker/', 'https://frostdev-ops.github.io/glaze-drive-picker/']);
-  assert.equal(C.chrome, require('../manifest.json').oauth2.client_id, 'Chrome signs in with the store item\'s client, Calendar\'s');
+  assert.equal(C.chrome, require('../../extension/manifest.json').oauth2.client_id, 'Chrome signs in with the store item\'s client, Calendar\'s');
   for (const k of ['chrome', 'web', 'ios']) assert.match(C[k], /^1071735898350-[a-z0-9]{32}\.apps\.googleusercontent\.com$/, k);
   assert.equal(new Set([C.chrome, C.web, C.ios]).size, 3);
   assert.equal(C.appId, '1071735898350');
   assert.match(C.apiKey, /^AIza[\w-]{35}$/);
-  assert.doesNotMatch(JSON.stringify(C) + fs.readFileSync(path.join(__dirname, '../lib/google-config.js'), 'utf8'), /GOCSPX|client_secret|secret/i, 'client ids and a browser key only, never a secret');
+  assert.doesNotMatch(JSON.stringify(C) + fs.readFileSync(path.join(__dirname, '../../extension/lib/google-config.js'), 'utf8'), /GOCSPX|client_secret|secret/i, 'client ids and a browser key only, never a secret');
   assert.equal(C.native, false, 'Safari waits for the app');
   assert.deepEqual(['chrome', 'web', 'native'].map((f) => G.ready(C, f)), [true, true, false]);
   assert.equal(G.pickable(C), true);
@@ -563,25 +563,25 @@ test('pick: frostdev.io first, its GitHub Pages copy when it doesn\'t load, the 
 });
 
 test('the worker gives lib/google.js a way to open the sign-in tab the student taps (iOS), from the worker', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const env = src.slice(src.indexOf('google = GZ_GOOGLE.create({'), src.indexOf('});', src.indexOf('google = GZ_GOOGLE.create({')));
   assert.match(env, /open: \(url\) => chrome\.tabs\.create\(\{ url \}\)/);
 });
 
 test('the worker answers glaze:google from Settings only (pick from Glaze\'s own pages), loading lib/google.js on first use', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   assert.match(src, /globalThis\.addEventListener\?\.\('install', \(\) => importScripts\('oauth\.js', 'google-config\.js', 'google\.js'\)\)/);
   const at = src.indexOf("m?.type !== 'glaze:google'");
   assert.ok(at > 0);
   const body = src.slice(at, src.indexOf('return true;', at));
   assert.match(body, /m\.op === 'pick' \? googlePage\(s\) : fromEditor\(s\)/);
   // Nothing about Google in any site's first script.
-  const m = require('../manifest.json');
-  for (const c of m.content_scripts) for (const f of c.js) assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), /GZ_GOOGLE|glaze:google|GZ_OAUTH|google-config/, f);
+  const m = require('../../extension/manifest.json');
+  for (const c of m.content_scripts) for (const f of c.js) assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), /GZ_GOOGLE|glaze:google|GZ_OAUTH|google-config/, f);
 });
 
 // ---- packaging: what each package's manifest carries for Google ----
-const repo = require('../manifest.json');
+const repo = require('../../extension/manifest.json');
 test('packages: placeholders leave Drive out, so a build asks for no identity and carries no oauth2', () => {
   const chrome = oauth(repo, { target: 'chrome', calendar: false, drive: true, config: BLANK });
   assert.equal(chrome.oauth2, undefined);
@@ -633,7 +633,7 @@ test('Drive is switched off: the worker refuses, Settings has no row, and the pa
     assert.equal(m.oauth2, undefined, target);
     assert.ok(!(m.optional_permissions || []).includes('identity'), target);
   }
-  const src = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/lib/background.js'), 'utf8');
   const at = src.indexOf("m?.type !== 'glaze:google'");
   assert.match(src.slice(at, src.indexOf('return true;', at)), /if \(!GZ_GOOGLE\.ON\) \{ reply\(\{ ok: false, why: 'off' \}\); return; \}/, 'the worker refuses every operation');
 });
@@ -645,12 +645,12 @@ test('scripts/dev-drive.sh: a dev copy with Drive on, Glaze\'s client and scopes
   try {
     const keyFile = path.join(dir, 'key.txt');
     fs.writeFileSync(keyFile, require('node:crypto').randomBytes(294).toString('base64'));
-    const out = execFileSync(path.join(__dirname, '../scripts/dev-drive.sh'), [keyFile, path.join(dir, 'dev')], { env: { ...process.env, DIST: path.join(dir, 'dist') }, encoding: 'utf8', stdio: 'pipe' });
+    const out = execFileSync(path.join(__dirname, '../../tools/dev/dev-drive.sh'), [keyFile, path.join(dir, 'dev')], { env: { ...process.env, DIST: path.join(dir, 'dist') }, encoding: 'utf8', stdio: 'pipe' });
     assert.match(out, /extension ID [a-p]{32}/);
     const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
     const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
     // The store package: Calendar's scope alone (lib/gcal.js ON), nothing of Drive's.
-    const CAL = 'https://www.googleapis.com/auth/calendar.app.created', calendar = require('../lib/gcal.js').ON === true;
+    const CAL = 'https://www.googleapis.com/auth/calendar.app.created', calendar = require('../../extension/lib/gcal.js').ON === true;
     assert.deepEqual(packed.oauth2?.scopes, calendar ? [CAL] : undefined, 'the store package: no Drive scope');
     assert.equal((packed.optional_permissions || []).includes('identity'), calendar);
     assert.match(execFileSync('unzip', ['-p', zip, 'lib/google.js']).toString(), /\n {2}const ON = false;\n/);

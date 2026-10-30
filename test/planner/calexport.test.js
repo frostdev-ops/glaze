@@ -4,9 +4,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const X = require('../lib/calexport.js');
-const T = require('../lib/todo.js');
-const ICS = require('../lib/ics.js');
+const X = require('../../extension/lib/calexport.js');
+const T = require('../../extension/lib/todo.js');
+const ICS = require('../../extension/lib/ics.js');
 
 const TZ = 'America/New_York';
 const NOW = Date.parse('2026-10-15T14:00:00Z'); // Thursday, 10:00 in New York
@@ -111,7 +111,7 @@ test('the same items give the same UIDs on every export, and the file reads back
 });
 
 test('the on-demand files end on their module and keep the first when loaded twice', () => {
-  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
   for (const [file, name] of [['lib/ics.js', 'GZ_ICS'], ['lib/calexport.js', 'GZ_CALEXPORT'], ['features/calexport.js', 'GZ_CAL_UI']]) {
     const ctx = vm.createContext({ TextEncoder, GZ_CTX: { t: (k) => k } });
     vm.runInContext('globalThis.globalThis = this;', ctx);
@@ -135,7 +135,7 @@ test('review: overdue work planned for later keeps its plan; its past deadline s
 // features/calexport.js run() in a page of its own: Canvas's answers can be held, and storage changed meanwhile.
 // failKey: a read that names this key fails, as a failed read does; need(file): what loading a file on demand does.
 const page = ({ failKey = null, need = async () => {}, next = () => null } = {}) => {
-  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
   const UID = '3', ORIGIN = 'https://canvas.test', ACCT = 'a'.repeat(24);
   const store = {
     sync: { version: 2, enabled: true, enhance: { gradescope: true } },

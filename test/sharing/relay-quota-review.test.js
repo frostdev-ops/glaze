@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { relay, RATE } = require('../server/relay.js');
+const { relay, RATE } = require('../../server/relay.js');
 const DAY = 864e5;
 const today = () => Math.floor(Date.now() / DAY);
 const id = () => crypto.randomBytes(16).toString('base64url');

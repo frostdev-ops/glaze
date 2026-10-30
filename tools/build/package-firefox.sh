@@ -3,16 +3,16 @@
 # Firefox has no extension service worker: the background runs as an event page from every script the worker
 # imports, listed in order, and importScripts becomes a no-op. Google Calendar sync needs Chrome's identity API,
 # so its oauth2 key goes, as in Safari; identity stays only for Drive's web sign-in, once its client is real
-# (scripts/oauth-manifest.js). DIST: the folder the zips go in (default dist).
+# (tools/build/oauth-manifest.js). DIST: the folder the zips go in (default dist).
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 cd "$root"
 development=false
 case "${1:-}" in
   '') ;;
   --development) development=true ;;
-  *) echo 'usage: sh scripts/package-firefox.sh [--development]' >&2; exit 2 ;;
+  *) echo 'usage: sh tools/build/package-firefox.sh [--development]' >&2; exit 2 ;;
 esac
 branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
 commit=$(git rev-parse --verify HEAD 2>/dev/null || printf unknown)
@@ -27,8 +27,8 @@ else
   echo 'Building a Firefox development package; do not upload it to a store.' >&2
 fi
 dist=${DIST:-dist}
-version=$(node -p 'require("./manifest.json").version')
-DIST=$dist ./package.sh >/dev/null
+version=$(node -p 'require("./extension/manifest.json").version')
+DIST=$dist tools/build/package.sh >/dev/null
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
@@ -57,9 +57,9 @@ const imports = [...fs.readFileSync(background, 'utf8').matchAll(/importScripts\
   .flatMap(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.join('lib', f)));
 m.background = { scripts: ['lib/firefox-background.js', ...new Set(imports), 'lib/background.js'] };
 delete m.minimum_chrome_version;
-// Google (scripts/oauth-manifest.js): no oauth2 key, which is getAuthToken's; identity only for Drive, switched on (lib/google.js ON)
+// Google (tools/build/oauth-manifest.js): no oauth2 key, which is getAuthToken's; identity only for Drive, switched on (lib/google.js ON)
 // with its Web client real.
-const google = require(path.join(process.cwd(), 'scripts/oauth-manifest.js')).oauth(m, { target: 'firefox', calendar: false, drive: require(path.join(process.cwd(), 'lib/google.js')).ON === true, config: require(path.join(process.cwd(), 'lib/google-config.js')) });
+const google = require(path.join(process.cwd(), 'tools/build/oauth-manifest.js')).oauth(m, { target: 'firefox', calendar: false, drive: require(path.join(process.cwd(), 'extension/lib/google.js')).ON === true, config: require(path.join(process.cwd(), 'extension/lib/google-config.js')) });
 for (const k of ['oauth2', 'optional_permissions']) if (k in google) m[k] = google[k]; else delete m[k];
 for (const entry of m.web_accessible_resources || []) delete entry.use_dynamic_url;
 // Firefox has no declarativeContent (Chrome's lit button) and no addHostAccessRequest; AMO's linter flags both, the second

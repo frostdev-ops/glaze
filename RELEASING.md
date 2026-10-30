@@ -15,9 +15,9 @@ Everything a release builds goes in `release/<version>/` (gitignored), one folde
 
 ## Complete automated release
 
-1. Bump `manifest.json`, add the `CHANGELOG.md` entry, refresh the checked-in Safari resources, and commit the release source.
-2. Configure the credentials below, then run `node scripts/store-release.mjs doctor`.
-3. Run `node scripts/store-release.mjs plan`, then `node scripts/store-release.mjs release`.
+1. Bump `extension/manifest.json`, add the `CHANGELOG.md` entry, refresh the checked-in Safari resources, and commit the release source.
+2. Configure the credentials below, then run `node tools/release/store-release.mjs doctor`.
+3. Run `node tools/release/store-release.mjs plan`, then `node tools/release/store-release.mjs release`.
 
 `release` builds and submits the stores **and** completes GitHub and frostdev.io publication. It does
 not report success until the pushed tag, GitHub assets, public website and signed update feed are verified.
@@ -25,17 +25,17 @@ It never moves a published tag or replaces a published asset with different byte
 
 ### Individual build/publication tools (recovery only)
 
-1. Bump `version` in `manifest.json`, add the `CHANGELOG.md` entry, commit.
-2. `sh scripts/release.sh` runs the tests and builds the Chrome zip, both in a fresh checkout of the committed
+1. Bump `version` in `extension/manifest.json`, add the `CHANGELOG.md` entry, commit.
+2. `sh tools/release/release.sh` runs the tests and builds the Chrome zip, both in a fresh checkout of the committed
    `HEAD` (as CI builds a tag), and refuses a working tree with uncommitted or untracked files. With `MAC=1` and
    notarization credentials (`NOTARY_PROFILE`, or `ASC_KEY_PATH`/`ASC_KEY_ID`/`ASC_ISSUER_ID`) it also builds the
    notarized Mac app and DMG.
-3. `sh scripts/safari-appcast.sh release/<v>/github/glaze-<v>-safari-macos.dmg /path/to/Sparkle/bin` signs the
+3. `sh tools/release/safari-appcast.sh release/<v>/github/glaze-<v>-safari-macos.dmg /path/to/Sparkle/bin` signs the
    update entry into `release/appcast.xml`.
 4. Tag `v<v>` and push it. CI (`.github/workflows/package.yml`) builds the Chrome zip into a draft GitHub release.
    Merge the same main release commit into the permanent `dev/firefox` branch, retaining its compatibility fixes,
    and require its tests and zero-warning Firefox lint to pass. Build the Firefox upload and reviewer source ZIPs
-   from that exact Firefox commit (`sh scripts/package-firefox.sh`, then `git archive --format=zip -o <source.zip> HEAD`).
+   from that exact Firefox commit (`sh tools/build/package-firefox.sh`, then `git archive --format=zip -o <source.zip> HEAD`).
    Copy its Firefox package into `release/<v>/github/` and `release/<v>/firefox/`, with the source ZIP in `firefox/`.
    Upload the exact local Chrome ZIP used for the store over the CI Chrome asset while the release is still a draft,
    together with the Firefox package, notarized DMG, Mac zip and matching checksums, then publish the completed draft.
@@ -44,15 +44,15 @@ It never moves a published tag or replaces a published asset with different byte
    Never publish a Firefox package built from main alone. Do not rebase, force-push or delete `dev/firefox`.
 5. Publish the appcast on frostdev.io at `/projects/glaze/appcast.xml`, only after the DMG is on GitHub.
 6. Stores, each from its folder:
-   - Chrome Web Store: `sh scripts/publish-chrome.sh release/<v>/chrome-web-store/glaze-v<v>.zip`, or upload it in the dashboard.
+   - Chrome Web Store: `sh tools/release/publish-chrome.sh release/<v>/chrome-web-store/glaze-v<v>.zip`, or upload it in the dashboard.
      Given no zip, the script packages a fresh checkout of the committed `HEAD` and refuses a dirty working tree.
    - Firefox Add-ons: upload `release/<v>/firefox/glaze-v<v>-firefox.zip` at addons.mozilla.org. When it asks for source
      code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js is the readable legacy build with a compatibility
-     shim and core-js's old-IE fallback cut, three.js is a custom build, lottie-web's player is the official light canvas build with one comment line on top, ProseMirror (`lib/pm.js`) is an unminified esbuild bundle of its published packages, and harper.js (`lib/harper/`) is the published modules and slim wasm with two unused paths cut. Reviewers rebuild them with `scripts/vendor-pdfjs.sh`, `scripts/vendor-three.sh`, `scripts/vendor-lottie.sh`, `scripts/vendor-prosemirror.sh` and `scripts/vendor-harper.sh`.
+     shim and core-js's old-IE fallback cut, three.js is a custom build, lottie-web's player is the official light canvas build with one comment line on top, ProseMirror (`lib/pm.js`) is an unminified esbuild bundle of its published packages, and harper.js (`lib/harper/`) is the published modules and slim wasm with two unused paths cut. Reviewers rebuild them with `tools/vendor/vendor-pdfjs.sh`, `tools/vendor/vendor-three.sh`, `tools/vendor/vendor-lottie.sh`, `tools/vendor/vendor-prosemirror.sh` and `tools/vendor/vendor-harper.sh`.
      `vendor-three.sh` and `vendor-prosemirror.sh` install exact versions with install scripts off, check every installed
      package against a pinned SHA-512 integrity before running anything, and compare the result with the recorded hash of
      `lib/three.js` or `lib/pm.js` and `lib/pm.css`; `vendor-harper.sh` checks the npm tarball and its wasm against pinned SHA-256s.
-   - App Store: `sh scripts/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh scripts/appstore-ios.sh`.
+   - App Store: `sh tools/build/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh tools/build/appstore-ios.sh`.
 
 ### CI
 
@@ -60,7 +60,7 @@ It never moves a published tag or replaces a published asset with different byte
 attaches the zip to the draft release without checking anything out. Every action is pinned by full commit SHA, with the
 tag it was resolved from in a comment, and checkout keeps no token. To move to a newer action, resolve its tag to a commit
 (`git ls-remote https://github.com/<owner>/<repo>.git refs/tags/<tag> 'refs/tags/<tag>^{}'`, and take the `^{}` line for an
-annotated tag), replace the SHA and the comment together, and let `test/workflows.test.js` confirm the pin.
+annotated tag), replace the SHA and the comment together, and let `test/release/workflows.test.js` confirm the pin.
 
 ## The mod blocklist
 
@@ -69,7 +69,7 @@ key lives on the owner's own computer: never in the repo, on a server, or in a b
 
 Once, before the first release that includes mods:
 
-1. `node scripts/blocklist-sign.mjs keygen ~/glaze-blocklist.key` (any path outside the repo). The file is made mode 600; an
+1. `node tools/release/blocklist-sign.mjs keygen ~/glaze-blocklist.key` (any path outside the repo). The file is made mode 600; an
    existing file is never overwritten and a path inside the repo is refused. Back it up offline: with the key lost, only a
    new release with a new key can block anything again.
 2. Paste the public key it prints over `PENDING_OWNER_KEY` in `lib/blocklist.js` (`OWNER_KEY`) and release that. Until
@@ -84,7 +84,7 @@ To block something, and to renew (a list expires 30 days after it is signed):
    A mod's id, bundle hash and author key are in its `mod:<id>` record and the gallery listing. A reason is shown to the
    student next to the stopped mod (at most 200 characters, one line, and only for something listed). Taking an entry out
    unblocks that mod; it stays off until the student turns it on.
-2. `node scripts/blocklist-sign.mjs sign ~/glaze-blocklist.key ~/blocklist.json` writes `~/blocklist.signed.json` with
+2. `node tools/release/blocklist-sign.mjs sign ~/glaze-blocklist.key ~/blocklist.json` writes `~/blocklist.signed.json` with
    `seq` one higher than the working file's (and records it there), `issued` now and `expires` 30 days later. It refuses
    a key other than the pinned one, a list the extension would reject, and a key file others can read.
 3. Publish it: copy the signed file into the glaze-gallery volume on loothing-vps and run
@@ -98,7 +98,7 @@ To block something, and to renew (a list expires 30 days after it is signed):
 After updating the manifest/changelog and committing the release source, run:
 
 ```sh
-node scripts/store-release.mjs release
+node tools/release/store-release.mjs release
 ```
 
 This runs the Node suites, builds Chrome and Firefox packages, Mac and iPhone/iPad App Store packages,
@@ -142,10 +142,10 @@ for store approval. The command does not install an app or change permanent `dev
 
 ```sh
 mkdir -p ~/.config/glaze
-cp scripts/store-release.env.example ~/.config/glaze/stores.env
+cp tools/release/store-release.env.example ~/.config/glaze/stores.env
 chmod 600 ~/.config/glaze/stores.env
 # Fill in the empty values locally, then check access without uploading:
-node scripts/store-release.mjs doctor
+node tools/release/store-release.mjs doctor
 ```
 
 Keep this file and Apple's private key outside the repository. The config is parsed as data (shell
@@ -191,7 +191,7 @@ info are being prepared, never in review; a new language shows the English scree
 Apple has no What's New field for a platform's first release.
 Apple keywords are limited to 100 UTF-8 bytes; promotional text may be omitted from a source.
 
-`node scripts/store-release.mjs listings` reads the stores and prints, per store and language, what a release would
+`node tools/release/store-release.mjs listings` reads the stores and prints, per store and language, what a release would
 change. It writes nothing.
 Submission stops on an unknown or noneditable Apple version state, or if required languages cannot be added because
 app info is not editable. An existing editable review draft receives the same listing sync before submission; a retry
@@ -223,13 +223,13 @@ source/Firefox commit IDs, build number, notes and submission receipts are recor
 ### Preview, build only, and recovery
 
 ```sh
-node scripts/store-release.mjs plan                 # no network, builds or uploads
-node scripts/store-release.mjs build                # store packages only; no public build or uploads
-node scripts/store-release.mjs build --stores chrome,firefox  # no Apple credentials needed
-node scripts/store-release.mjs submit               # resume stores only
-node scripts/store-release.mjs publish              # resume saved GitHub/website publication only
-node scripts/store-release.mjs listings             # what each store's listing would change; writes nothing
-node scripts/store-release.mjs release --apple-platforms MAC_OS  # omit iPhone/iPad
+node tools/release/store-release.mjs plan                 # no network, builds or uploads
+node tools/release/store-release.mjs build                # store packages only; no public build or uploads
+node tools/release/store-release.mjs build --stores chrome,firefox  # no Apple credentials needed
+node tools/release/store-release.mjs submit               # resume stores only
+node tools/release/store-release.mjs publish              # resume saved GitHub/website publication only
+node tools/release/store-release.mjs listings             # what each store's listing would change; writes nothing
+node tools/release/store-release.mjs release --apple-platforms MAC_OS  # omit iPhone/iPad
 ```
 
 All selected store and public-release prerequisites are checked before `release` builds or uploads anything.

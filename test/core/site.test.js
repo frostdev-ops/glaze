@@ -2,7 +2,7 @@
 // sites near one that isn't.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/site.js');
+const S = require('../../extension/lib/site.js');
 
 test('any address a student would paste or type becomes its host, asked for as https', () => {
   const bb = { host: 'bb.school.edu', origin: 'https://bb.school.edu', pattern: 'https://bb.school.edu/*', url: 'https://bb.school.edu/' };

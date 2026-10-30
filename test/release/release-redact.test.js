@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const load = () => import('../scripts/store-release.mjs');
+const load = () => import('../../tools/release/store-release.mjs');
 const SECRET = { ASC_KEY_ID: 'KEYXYZ7788', ASC_ISSUER_ID: 'issuer-5c1e-4b7a', AMO_JWT_ISSUER: 'user:999:42', SPARKLE_BIN: '/opt/sparkle-private/bin', SAFARI_TEAM_ID: 'TEAMQ12345' };
 
 const capture = async (fn) => {
@@ -66,7 +66,7 @@ for (const logging of [false, true]) test(`child stdout and stderr redact split 
     const child = `process.stdout.write('normal stdout: ' + process.env.AMO_JWT_SECRET.slice(0, 8));
       setTimeout(() => { process.stdout.write(process.env.AMO_JWT_SECRET.slice(8));
         process.stderr.write('normal stderr: ' + process.argv[2]); }, 20);`;
-    const harness = `import { environment, options, run } from ${JSON.stringify(require('node:url').pathToFileURL(path.join(__dirname, '../scripts/store-release.mjs')).href)};
+    const harness = `import { environment, options, run } from ${JSON.stringify(require('node:url').pathToFileURL(path.join(__dirname, '../../tools/release/store-release.mjs')).href)};
       const env = environment(options(['plan', '--config', ${JSON.stringify(config)}]));
       await run(process.execPath, ['-e', ${JSON.stringify(child)}, '--', '--token', 'synthetic-flag-secret'], ${JSON.stringify(dir)}, env, ${logging ? JSON.stringify(log) : 'undefined'});`;
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], { encoding: 'utf8', env: { ...process.env, AMO_JWT_SECRET: 'synthetic-child-secret' } });

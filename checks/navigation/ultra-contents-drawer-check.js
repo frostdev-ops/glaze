@@ -2,17 +2,17 @@
 // links and close button reachable (its nav's class shares a prefix with Ultra's own navigation's, which Glaze's bar folds
 // away); closed, its open button is a pill you can see, on the Look's surface. Glaze's rail and its top bar; three window
 // sizes; a dark and a light Look.
-// EXT=<checkout> NODE_PATH=<playwright> nice node scripts/ultra-contents-drawer-check.js <out dir> [--looks=a,b]
+// EXT=<checkout>/extension NODE_PATH=<playwright> nice node checks/navigation/ultra-contents-drawer-check.js <out dir> [--looks=a,b]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const ext = require('./check-env.js').staged(process.env.EXT || path.join(__dirname, '..'), ['https://bb.school.test/*']);
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const G = require(path.join(ext, 'defaults.js'));
 const site = 'https://bb.school.test', uid = '_42_1';
 const out = path.resolve(process.argv[2] || 'ultra-contents-drawer-evidence');
 const lookArg = process.argv.find((a) => a.startsWith('--looks='));
 const LOOKS = lookArg ? lookArg.slice(8).split(',') : ['Frostdev', 'Library'];
 const SIZES = [[1800, 987], [1280, 800], [1024, 768]];
-const fixture = fs.readFileSync(path.join(ext, 'test/fixtures/ultra-test-attempt.html'), 'utf8');
+const fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-test-attempt.html'), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const DOC = '/ultra/courses/_101_1/document/_8130_1?courseId=_101_1';
 const results = [];
@@ -42,8 +42,8 @@ const measure = () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-contents-drawer-'));
   fs.mkdirSync(out, { recursive: true });
   try {
-    await require('./wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('./check-env.js').chromeLaunch(), headless: true,
+    await require('../../tools/dev/wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true,
       viewport: { width: 1800, height: 987 }, reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
     await ctx.route('**/*', (route) => {
@@ -64,7 +64,7 @@ const measure = () => {
         await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.session.clear();
         await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] });
       }, { settings, site });
-      await require('./check-env.js').ultraReady(opts);
+      await require('../../tools/dev/check-env.js').ultraReady(opts);
     };
     const shot = (name) => page.screenshot({ path: path.join(out, name + '.png') });
     for (const look of LOOKS) for (const place of ['rail', 'top']) {

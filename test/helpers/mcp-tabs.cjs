@@ -7,10 +7,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const T = require('../../lib/todo.js');
-const I = require('../../lib/insights.js');
+const T = require('../../extension/lib/todo.js');
+const I = require('../../extension/lib/insights.js');
 
-const root = path.join(__dirname, '..', '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const writerArea = (store) => ({
@@ -95,17 +95,17 @@ const browser = (tabs) => {
   return { tabs: { query: async () => tabs.map((t) => structuredClone(t.info)) }, scripting: { executeScript }, calls, byId };
 };
 // lib/background.js modQuiet: Glaze stays out of these pages.
-const LX = require('../../lib/lookx.js');
+const LX = require('../../extension/lib/lookx.js');
 const quiet = (p) => LX.quiet(p) || /\/(quizzes|external_tools|assessment|attempt|lti)(\/|$)|\/mod\/(quiz|lti)(\/|$)/.test(p);
 
 // The real worker (test/helpers/worker-env.cjs), its tabs the fake browser's, agent access on and one app
-// paired with every group, as test/mcp-worker.test.js boots it. A tab's publish reaches this worker's broker as Chrome routes
+// paired with every group, as test/agents/mcp-worker.test.js boots it. A tab's publish reaches this worker's broker as Chrome routes
 // a content script's message (route). → { w, store, b, windows }.
 const PEER = { name: 'node', exe: '/Applications/Claude.app/Contents/MacOS/Claude', ppid: 4242, verified: false };
 const boot = async ({ local = {}, sync = {}, tabs = [] } = {}) => {
   const worker = require('./worker-env.cjs');
   const { fakeIDB } = require('./fake-idb.cjs');
-  const G = require('../../lib/mcp/grants.js');
+  const G = require('../../extension/lib/mcp/grants.js');
   const idb = fakeIDB().indexedDB;
   idb.dbs.set('glaze-mcp-settings', new Map([['settings', new Map([['on', true]])]]));
   await G.open(idb).pair(PEER, 'Claude', ['courses', 'grades', 'assignments']);

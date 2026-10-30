@@ -12,8 +12,8 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const scratch = () => fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-verify-'));
 const sha = (data) => crypto.createHash('sha256').update(data).digest('hex');
 const write = (dir, file, data) => { fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true }); fs.writeFileSync(path.join(dir, file), data); return { path: file, sha256: sha(data) }; };
-const store = () => import('../scripts/store-release.mjs');
-const pub = () => import('../scripts/public-release.mjs');
+const store = () => import('../../tools/release/store-release.mjs');
+const pub = () => import('../../tools/release/public-release.mjs');
 
 // ---- store-release verify: what must be true of the saved packages before any upload ----
 
@@ -171,13 +171,13 @@ test('the GitHub release carries both store ZIPs and Claude Desktop\'s bundle, u
   assert.deepEqual(storeAssets({ files }), [files.chrome, files.firefox, files.mcpb], 'the reviewer source and App Store packages stay off GitHub');
   delete files.mcpb;
   assert.throws(() => storeAssets({ files }), /Artifact mcpb is required/);
-  const source = fs.readFileSync(path.join(__dirname, '../scripts/public-release.mjs'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../tools/release/public-release.mjs'), 'utf8');
   assert.match(source, /const assets = \[\.\.\.Object\.values\(state\.files\), \.\.\.storeAssets\(manifest\)\];/);
   assert.equal(source.match(/for \(const item of assets\)/g).length, 3, 'each is uploaded, checked by digest, then fetched from its public URL');
 });
 
 test('publishing uploads with --clobber only when the draft action says replace', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../scripts/public-release.mjs'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../tools/release/public-release.mjs'), 'utf8');
   assert.match(source, /assetAction\(release, path\.basename\(file\), existing, [^\n]*\)/);
   assert.match(source, /\.\.\.\(action === 'replace' \? \['--clobber'\] : \[\]\)/);
   assert.doesNotMatch(source, /existing \? \['--clobber'\]/, 'clobbering must go through the draft check');
@@ -352,7 +352,7 @@ test('preparePublic writes SHA256SUMS for every GitHub asset: the Mac files, the
   const { preparePublic } = await pub(), base = scratch();
   try {
     const root = path.join(base, 'root'), out = path.join(base, 'out'), bin = path.join(base, 'bin');
-    write(root, 'scripts/safari-appcast.sh', 'exit 1\n');
+    write(root, 'tools/release/safari-appcast.sh', 'exit 1\n');
     gitIn(base, 'init', '-q', root); gitIn(root, 'add', '.'); gitIn(root, 'commit', '-qm', 'source');
     const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
     const key = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64');
@@ -365,8 +365,8 @@ test('preparePublic writes SHA256SUMS for every GitHub asset: the Mac files, the
     // Stand-ins for the clone, build-safari.sh and safari-appcast.sh, the stages that build and sign on a release Mac.
     const run = async (command, args, cwd, stepEnv) => {
       if (command === 'git') return void gitIn(cwd, ...args);
-      if (args[0] === 'scripts/build-safari.sh') { for (const suffix of MAC) write(cwd, `release/${VERSION}/github/${NAME}${suffix}`, `${suffix} bytes`); return; }
-      if (args[0] === 'scripts/safari-appcast.sh') {
+      if (args[0] === 'tools/build/build-safari.sh') { for (const suffix of MAC) write(cwd, `release/${VERSION}/github/${NAME}${suffix}`, `${suffix} bytes`); return; }
+      if (args[0] === 'tools/release/safari-appcast.sh') {
         const dmg = fs.readFileSync(args[1]);
         const entry = { version: VERSION, url: `https://github.com/frostdev-ops/glaze/releases/download/v${VERSION}/${NAME}.dmg`, length: dmg.length, signature: crypto.sign(null, dmg, privateKey).toString('base64') };
         fs.writeFileSync(stepEnv.SAFARI_APPCAST_OUT, feed([entry, old]));

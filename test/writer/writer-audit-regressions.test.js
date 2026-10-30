@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const I = require('../lib/i18n.js');
-const read = (file) => fs.readFileSync(path.join(process.env.GZ_WRITER_AUDIT_SOURCE || path.join(__dirname, '..'), file), 'utf8');
+const I = require('../../extension/lib/i18n.js');
+const read = (file) => fs.readFileSync(path.join(process.env.GZ_WRITER_AUDIT_SOURCE || path.join(__dirname, '../../extension'), file), 'utf8');
 
 // Run the real import handler through its refusal path, without replacing any paper.
 const refusedImport = async (error, lang) => {
@@ -65,8 +65,8 @@ test('the command palette offers Documents on Ultra and Canvas while Writer is o
 });
 
 test("Moodle's command palette offers Documents too, and its row opens the page for the student's own click", async () => {
-  const { El } = require('./stand-in-dom.js');
-  const D = require('../defaults.js');
+  const { El } = require('../stand-in-dom.js');
+  const D = require('../../extension/defaults.js');
   for (const [writer, shown] of [[true, true], [false, false]]) {
     const doc = { activeElement: null };
     doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
@@ -74,7 +74,7 @@ test("Moodle's command palette offers Documents too, and its row opens the page 
     doc.createElement = (tag) => Object.assign(new El(tag, doc), { insertBefore(x, at) { if (at) at.before(x); else this.append(x); } });
     const sent = [];
     const settings = D.GZ_SANITIZE({ enhance: { writer } });
-    const ctx = vm.createContext({ document: doc, location: { origin: 'https://moodle.school.test', pathname: '/my/' }, URL, GZ_PAGE: require('../lib/page.js'), GZ_I18N: I,
+    const ctx = vm.createContext({ document: doc, location: { origin: 'https://moodle.school.test', pathname: '/my/' }, URL, GZ_PAGE: require('../../extension/lib/page.js'), GZ_I18N: I,
       GZ_LOOKS: D.GZ_LOOKS, GZ_LOOK_ON: D.GZ_LOOK_ON, GZ_LOOK_APPLY: D.GZ_LOOK_APPLY, GZ_ALL_PRESETS: D.GZ_ALL_PRESETS,
       chrome: { runtime: { sendMessage: async (m) => sent.push(m) }, storage: { sync: { set() {} } } },
       GZ_CTX: { site: 'moodle', t: (k) => k, locale: () => 'en', settings: () => settings, need: () => Promise.reject(new Error('not here')),
@@ -128,7 +128,7 @@ test('Documents opens only from Glaze on an approved LMS page (Ultra, Canvas, Mo
   const context = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa,
     navigator: {}, importScripts: (...files) => { for (const file of files) vm.runInContext(read(`lib/${file}`), context); },
     chrome: {
-      runtime: { id: 'glaze', getURL: (file = '') => `chrome-extension://glaze/${file}`, getManifest: () => require('../manifest.json'),
+      runtime: { id: 'glaze', getURL: (file = '') => `chrome-extension://glaze/${file}`, getManifest: () => require('../../extension/manifest.json'),
         onMessage: { addListener: (fn) => listeners.push(fn) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(local), sync: area({}), onChanged: { addListener() {} } },
       tabs: { create: async (opts) => opened.push(opts.url) },

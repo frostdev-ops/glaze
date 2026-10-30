@@ -3,10 +3,10 @@
 // to the data path, and no mod tool in a Glaze tool's name.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const V = require('../lib/mcp/registry.js');
-const TL = require('../lib/ai/tools.js');
-const S = require('../lib/ai/schema.js');
-const W = require('../lib/mcp/wire.js');
+const V = require('../../extension/lib/mcp/registry.js');
+const TL = require('../../extension/lib/ai/tools.js');
+const S = require('../../extension/lib/ai/schema.js');
+const W = require('../../extension/lib/mcp/wire.js');
 
 const ID = 'abcdefghijklmnop', OTHER = 'zyxwvutsrqponm23';
 const NS = 'io.frostdev.glaze/';

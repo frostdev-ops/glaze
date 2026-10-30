@@ -3,8 +3,8 @@
 // submits is named Lastname_Title with that kind's extension and type; the steps build the file, whatever the kind.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const L = require('../lib/writer-submit.js');
-const DK = require('../lib/doc-kinds.js');
+const L = require('../../extension/lib/writer-submit.js');
+const DK = require('../../extension/lib/doc-kinds.js');
 
 test('route: a .docx always asks; a kind\'s file asks only while that kind opens here; anything else goes as is', () => {
   for (const n of ['Essay.docx', 'Rivera.pdf', 'Week 3.pptx', 'show.ppsx', 'notes.txt']) assert.equal(L.route(n), n.endsWith('.docx') ? 'choose' : 'submit', `no kinds: ${n}`);

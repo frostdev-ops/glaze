@@ -5,9 +5,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const { GZ_BUILT_IN } = require('../defaults.js');
+const { GZ_BUILT_IN } = require('../../extension/defaults.js');
 const NARROW = ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*'];
 // Objects made in the popup's context, as plain data.
 const plain = (x) => JSON.parse(JSON.stringify(x));

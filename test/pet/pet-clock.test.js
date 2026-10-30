@@ -3,7 +3,7 @@ process.env.TZ = 'UTC';
 // reading the record must not rewrite it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const P = require('../lib/pet.js'), T = require('../lib/todo.js');
+const P = require('../../extension/lib/pet.js'), T = require('../../extension/lib/todo.js');
 const D = 864e5, now = Date.parse('2026-10-15T16:00:00Z'), today = T.dayOf(now, 'UTC');
 const key = 'pet:https://x.test/1', sync = { get: async () => ({}) };
 const store = (record, onSet = () => {}) => {
@@ -19,7 +19,7 @@ test('WID-3: streak days survive a write made while the clock is days behind', a
   const s = store(rec);
   at(now - 30 * D);
   assert.equal(P.clean(rec, now - 30 * D).days.length, 10, 'clean() keeps every stored day');
-  const r = await P.change({ key, op: 'observe', action: 'rest', context: require('../lib/petbrain.js').vector({ needs: {} }), tz: 'UTC' }, { local: s.local, sync });
+  const r = await P.change({ key, op: 'observe', action: 'rest', context: require('../../extension/lib/petbrain.js').vector({ needs: {} }), tz: 'UTC' }, { local: s.local, sync });
   assert.equal(r.ok, true);
   assert.equal(s.data[key].days.length, 10, 'the observe commit saved all ten days');
   at(now + 3600e3);

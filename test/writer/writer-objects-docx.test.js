@@ -4,9 +4,9 @@
 // read (the same, back). Each pass is checked on its own and through a full export → import round trip.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/writer-schema.js');
-const X = require('../lib/writer-docx.js');
-const OD = require('../lib/writer-objects-docx.js');
+const S = require('../../extension/lib/writer-schema.js');
+const X = require('../../extension/lib/writer-docx.js');
+const OD = require('../../extension/lib/writer-objects-docx.js');
 
 const P = S.paper;
 const date = new Date('2026-10-27T12:00:00Z');
@@ -16,8 +16,8 @@ const doc = (html) => S.parse(P, html);
 const exported = (d) => { const o = X.exportDocx(d, { format: 'mla9', date }); OD.exportParts(d, o.parts, { format: 'mla9' }); return Object.defineProperty(o.parts, 'zip', { value: o.bytes }); };
 // The import call site: writer-docx's HTML and the parts it parsed.
 const imported = async (parts) => {
-  const Z = require('../lib/zip.js'), enc = new TextEncoder();
-  const z = require('../lib/doctext.js').unzip(parts.zip), media = z.names.filter((n) => n.startsWith('word/media/'));
+  const Z = require('../../extension/lib/zip.js'), enc = new TextEncoder();
+  const z = require('../../extension/lib/doctext.js').unzip(parts.zip), media = z.names.filter((n) => n.startsWith('word/media/'));
   const files = [...Object.entries(parts).map(([name, text]) => ({ name, data: enc.encode(text), date })), ...await Promise.all(media.map(async (name) => ({ name, data: await z.bytes(name), date })))];
   const chunks = Z.zip(files);
   const r = await X.importDocx(Buffer.concat(chunks.map((c) => Buffer.from(c))), { format: 'mla9' });

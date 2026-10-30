@@ -2,7 +2,7 @@
 // Uses its isolated real extension, synthetic attempt, network fence and finally cleanup.
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
-const { fixtures } = require('../test/fixtures/writer-hostile.js');
+const { fixtures } = require('../../test/fixtures/writer-hostile.js');
 const { execFileSync } = require('node:child_process');
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 module.exports = async ({ p, el, fr, openAttempt, context, worker, id, check, until, settle, out, tmp, errors }) => {
@@ -62,7 +62,7 @@ module.exports = async ({ p, el, fr, openAttempt, context, worker, id, check, un
   check(true, 'a frame reload before autosave recovers unsaved paper text');
 
   // Use the six-page paper with real Harper. Only the completion port is mocked; no provider or credentials.
-  const fx = require('../test/fixtures/writer-paper-fixtures.js');
+  const fx = require('../../test/fixtures/writer-paper-fixtures.js');
   await fr.evaluate(async (doc) => {
     const api = GZ_WRITER_PAPER.current(), v = api.editor.view;
     const d = GZ_WRITER_SCHEMA.paper.nodeFromJSON(doc);
@@ -123,7 +123,7 @@ module.exports = async ({ p, el, fr, openAttempt, context, worker, id, check, un
   await pause(700);
   const wake = await context.newPage();
   await wake.goto(`chrome-extension://${id}/popup.html`);
-  await require('./check-env.js').ultraReady(wake);
+  await require('../../tools/dev/check-env.js').ultraReady(wake);
   await wake.close();
   await p.reload();
   const recovered = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.contentFrame(); }, 'frame after extension reload');

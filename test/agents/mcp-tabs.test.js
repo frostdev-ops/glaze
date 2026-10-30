@@ -6,9 +6,9 @@ process.env.TZ = 'UTC';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const C = require('./helpers/mcp-caches.cjs');
-const H = require('./helpers/mcp-tabs.cjs');
-const TABS = require('../lib/mcp/tabs.js');
+const C = require('../helpers/mcp-caches.cjs');
+const H = require('../helpers/mcp-tabs.cjs');
+const TABS = require('../../extension/lib/mcp/tabs.js');
 
 const A = `${C.CANVAS}/5`, UL = `${C.ULTRA}/${C.ULTRA_UID}`;
 const RAW = [

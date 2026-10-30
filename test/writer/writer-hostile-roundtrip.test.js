@@ -1,11 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const S = require('../lib/writer-schema.js');
-const E = require('../lib/writer-editor.js');
-const X = require('../lib/writer-docx.js');
-const PA = require('../lib/writer-papers.js');
-const { fixtures } = require('./fixtures/writer-hostile.js');
-globalThis.GZ_WRITER_OBJECTS_DOCX = require('../lib/writer-objects-docx.js');
+const S = require('../../extension/lib/writer-schema.js');
+const E = require('../../extension/lib/writer-editor.js');
+const X = require('../../extension/lib/writer-docx.js');
+const PA = require('../../extension/lib/writer-papers.js');
+const { fixtures } = require('../fixtures/writer-hostile.js');
+globalThis.GZ_WRITER_OBJECTS_DOCX = require('../../extension/lib/writer-objects-docx.js');
 const storage = () => {
   const data = {};
   return { get: async (k) => ({ [k]: structuredClone(data[k]) }), set: async (p) => Object.assign(data, structuredClone(p)), remove: async () => {} };
@@ -48,7 +48,7 @@ test('zero-byte and truncated Word files are refused', async () => {
 });
 
 test('explicit Word paragraph and run direction survive HTML and Word round trips', async () => {
-  const { pack, p, r } = require('./fixtures/writer-hostile.js');
+  const { pack, p, r } = require('../fixtures/writer-hostile.js');
   const bytes = pack(p('فقرة', '<w:bidi/>') + `<w:p>${r('A ')}<w:r><w:rPr><w:rtl/></w:rPr><w:t>123 مرحبا</w:t></w:r><w:r><w:rPr><w:rtl w:val="0"/></w:rPr><w:t> B</w:t></w:r></w:p>`);
   const doc = S.paper.nodeFromJSON((await X.importDocx(bytes)).doc);
   assert.equal(doc.firstChild.attrs.dir, 'rtl');

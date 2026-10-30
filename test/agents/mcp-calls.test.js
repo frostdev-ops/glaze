@@ -5,17 +5,17 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const K = require('../lib/mcp/calls.js');
-const G = require('../lib/mcp/grants.js');
-const V = require('../lib/mcp/registry.js');
-const W = require('../lib/mcp/wire.js');
-const TL = require('../lib/ai/tools.js');
-const S = require('../lib/ai/schema.js');
-const LOOP = require('../lib/ai/loop.js');
-const ST = require('../lib/mcp/tools-study.js');
-const GR = require('../lib/mcp/tools-grades.js');
-const C = require('./helpers/mcp-caches.cjs');
-const { fakeIDB } = require('./helpers/fake-idb.cjs');
+const K = require('../../extension/lib/mcp/calls.js');
+const G = require('../../extension/lib/mcp/grants.js');
+const V = require('../../extension/lib/mcp/registry.js');
+const W = require('../../extension/lib/mcp/wire.js');
+const TL = require('../../extension/lib/ai/tools.js');
+const S = require('../../extension/lib/ai/schema.js');
+const LOOP = require('../../extension/lib/ai/loop.js');
+const ST = require('../../extension/lib/mcp/tools-study.js');
+const GR = require('../../extension/lib/mcp/tools-grades.js');
+const C = require('../helpers/mcp-caches.cjs');
+const { fakeIDB } = require('../helpers/fake-idb.cjs');
 
 const NOW = 1_800_000_000_000;
 const A = 'https://school.instructure.com/5', B = 'https://lms.example.edu/_900_1';
@@ -489,7 +489,7 @@ test('a definition swapped between the approval and the run never runs, nor does
   assert.equal(io2.runs.length, 0);
 });
 
-// A mod with a declarative tool and a code tool, as lib/background.js modRead keeps it (test/mcp-registry.test.js's shape).
+// A mod with a declarative tool and a code tool, as lib/background.js modRead keeps it (test/agents/mcp-registry.test.js's shape).
 const P = (...ids) => ids.map((id) => ({ id, why: 'Answers the app.' }));
 const DUE = { name: 'due_soon', title: 'Due soon', description: 'Open to-dos.', from: 'todo', where: [{ field: 'done', eq: false }], sort: { field: 'due', order: 'asc' }, input: { course: true } };
 const ASK = { name: 'ask', title: 'Ask', description: 'What the Worker says.', code: true,
@@ -800,9 +800,9 @@ test('create checks what it is given', () => {
 });
 
 test('the call core is pure: a classic script with no extension APIs, network or imports of its own', () => {
-  const src = fs.readFileSync(require.resolve('../lib/mcp/calls.js'), 'utf8');
+  const src = fs.readFileSync(require.resolve('../../extension/lib/mcp/calls.js'), 'utf8');
   for (const word of [/\bchrome\./, /\bbrowser\./, /\bimportScripts\b/, /\bfetch\(/, /\bindexedDB\b/, /(^|[^.\w])setTimeout\(/m, /(^|[^.\w])setInterval\(/m]) assert.equal(word.test(src), false, String(word));
-  const context = vm.createContext({ GZ_AI_SCHEMA: S, GZ_AI_TOOLS: TL, GZ_AI_LOOP: LOOP, GZ_AI_FAILURE: require('../lib/ai/failure.js'), GZ_MCP_GRANTS: G, AbortController, structuredClone });
+  const context = vm.createContext({ GZ_AI_SCHEMA: S, GZ_AI_TOOLS: TL, GZ_AI_LOOP: LOOP, GZ_AI_FAILURE: require('../../extension/lib/ai/failure.js'), GZ_MCP_GRANTS: G, AbortController, structuredClone });
   vm.runInContext(src, context);
   const calls = vm.runInContext('GZ_MCP_CALLS', context);
   assert.equal(typeof calls.create, 'function');

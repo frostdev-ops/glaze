@@ -1,11 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const C = require('../lib/ai/tasks/writer-complete.js');
-const RV = require('../lib/ai/tasks/writer-review.js');
-const FB = require('../lib/ai/tasks/writer-feedback.js');
-const CT = require('../lib/ai/tasks/writer-cite.js');
-const RQ = require('../lib/ai/tasks/writer-requirements.js');
-const WT = require('../lib/writer-tools.js');
+const C = require('../../extension/lib/ai/tasks/writer-complete.js');
+const RV = require('../../extension/lib/ai/tasks/writer-review.js');
+const FB = require('../../extension/lib/ai/tasks/writer-feedback.js');
+const CT = require('../../extension/lib/ai/tasks/writer-cite.js');
+const RQ = require('../../extension/lib/ai/tasks/writer-requirements.js');
+const WT = require('../../extension/lib/writer-tools.js');
 
 const before = 'The river carries what it';
 test('completion stops at adjacent and Unicode sentence endings', () => {
@@ -70,7 +70,7 @@ test('editor read tools bound a single long paragraph', () => {
 });
 
 test('feedback accepts only rubric criteria actually sent within the bounded context', () => {
-  const W = require('../lib/ai/tasks/writer-context.js');
+  const W = require('../../extension/lib/ai/tasks/writer-context.js');
   const criteria = Array.from({ length: 50 }, (_, i) => ({ id: `row${i}`, label: `Criterion ${i}`, detail: 'x'.repeat(600),
     cells: Array.from({ length: 12 }, (_, j) => ({ level: `l${j}`, detail: 'y'.repeat(600) })) }));
   const r = W.rubric({ title: 'Rubric', criteria });

@@ -1,8 +1,8 @@
 // Code mods' API v1 cleaners (lib/modapi.js) and the broker's calls built on them (lib/modbroker.js): every refusal.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const A = require('../lib/modapi.js');
-const B = require('../lib/modbroker.js');
+const A = require('../../extension/lib/modapi.js');
+const B = require('../../extension/lib/modbroker.js');
 
 const T = (x) => ({ type: 'text', text: x });
 const stack = (children, more = {}) => ({ type: 'stack', children, ...more });
@@ -118,7 +118,7 @@ test('the broker cleans what a mod hands Glaze to show, and refuses the rest', a
   assert.deepEqual(await call(e, 'look.override', [{ cursor: { kind: 'trail' } }]), { ok: true, value: { cursor: { kind: 'trail' } } });
   assert.deepEqual(await call(e, 'look.override', [null]), { ok: true, value: null });
   for (const bad of [{ cursor: { kind: 'laser' } }, { css: 'body{}' }, {}]) assert.deepEqual(await call(e, 'look.override', [bad]), { ok: false, error: 'args' }, JSON.stringify(bad));
-  // A layout from code needs nav.layout, which this mod lacks (test/mod-nav.test.js has the rest); withdrawing needs none.
+  // A layout from code needs nav.layout, which this mod lacks (test/mods/mod-nav.test.js has the rest); withdrawing needs none.
   assert.deepEqual(await call(e, 'nav.set', [{ hidden: ['calendar'] }]), { ok: false, error: 'permission' });
   assert.deepEqual(await call(e, 'nav.set', [null]), { ok: true, value: null });
   const arranges = rec({ grants: { courses: true, 'nav.layout': true }, manifest: { ...rec().manifest, permissions: [{ id: 'courses', why: 'w' }, { id: 'nav.layout', why: 'w' }] } });

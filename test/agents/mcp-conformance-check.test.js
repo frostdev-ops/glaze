@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), vm = require('node:vm');
 const { createRequire } = require('node:module');
 
-const file = path.resolve(__dirname, '../scripts/mcp-conformance-check.js');
+const file = path.resolve(__dirname, '../../checks/agents/mcp-conformance-check.js');
 const source = fs.readFileSync(file, 'utf8').split("(async () => {\n  fs.mkdirSync(OUT")[0];
 const realRequire = createRequire(file);
 function harness(t, overrides = {}) {
@@ -16,7 +16,7 @@ function harness(t, overrides = {}) {
     process: proc, __dirname: path.dirname(file), ...overrides.globals, require: (name) => {
       if (overrides.require) { const got = overrides.require(name, calls); if (got !== undefined) return got; }
       if (name === 'playwright') return { chromium: {} };
-      if (name === '../mcp/lib/rendezvous.js') return { dir: () => tmp, list: () => [], alive: () => false };
+      if (name === '../../mcp/lib/rendezvous.js') return { dir: () => tmp, list: () => [], alive: () => false };
       return realRequire(name);
     } });
   vm.runInContext(source, context, { filename: file });

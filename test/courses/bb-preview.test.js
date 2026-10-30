@@ -1,8 +1,8 @@
-// lib/bb-preview.js: the worker's reading of Ultra's preview chain, over the probed shapes (scripts/ultra-mock.js PREVIEW).
+// lib/bb-preview.js: the worker's reading of Ultra's preview chain, over the probed shapes (checks/mocks/ultra-mock.js PREVIEW).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const B = require('../lib/bb-preview.js');
-const { PREVIEW: P, SITE } = require('../scripts/ultra-mock.js');
+const B = require('../../extension/lib/bb-preview.js');
+const { PREVIEW: P, SITE } = require('../../checks/mocks/ultra-mock.js');
 
 const [slides, lab] = P.FILES;
 const AT = Date.UTC(2026, 9, 30, 14, 20, 0);

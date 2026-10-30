@@ -160,7 +160,7 @@ export async function preparePublic({ manifest, save, out, root, env, run }) {
     curl(`${siteURL}${feedRoute}`, base, root, env);
     // Never rebuild/replace an already published same-version candidate without its saved receipts.
     refuseStaleCandidate(entries(base, root, env), manifest.version);
-    await run('sh', ['scripts/build-safari.sh'], source, { ...env, DIST: '' }, path.join(out, 'logs/universal-mac-build.log'));
+    await run('sh', ['tools/build/build-safari.sh'], source, { ...env, DIST: '' }, path.join(out, 'logs/universal-mac-build.log'));
     const name = `glaze-${manifest.version}-safari-macos`;
     const files = {};
     for (const [key, suffix] of Object.entries({ dmg: '.dmg', macZip: '.zip', dmgChecksum: '.dmg.sha256', macChecksum: '.sha256' })) {
@@ -170,8 +170,8 @@ export async function preparePublic({ manifest, save, out, root, env, run }) {
     }
     const appcast = path.join(dir, 'appcast.xml');
     // Use the current helper with the frozen release's manifest/project, without changing its sources.
-    fs.copyFileSync(path.join(root, 'scripts/safari-appcast.sh'), path.join(source, 'scripts/safari-appcast.sh'));
-    await run('sh', ['scripts/safari-appcast.sh', path.join(out, files.dmg.path), env.SPARKLE_BIN], source,
+    fs.copyFileSync(path.join(root, 'tools/release/safari-appcast.sh'), path.join(source, 'tools/release/safari-appcast.sh'));
+    await run('sh', ['tools/release/safari-appcast.sh', path.join(out, files.dmg.path), env.SPARKLE_BIN], source,
       { ...env, SAFARI_REQUIRE_UNIVERSAL: '1', SAFARI_APPCAST_BASE: base, SAFARI_APPCAST_OUT: appcast }, path.join(out, 'logs/appcast-signing.log'));
     preservesFeed(entries(base, root, env), entries(appcast, root, env));
     files.appcast = { path: path.relative(out, appcast), sha256: sha(appcast) };
