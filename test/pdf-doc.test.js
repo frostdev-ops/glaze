@@ -477,6 +477,37 @@ test('text reads a page in order, bounded; thumbnail says why it drew nothing wh
 const LABELS3 = () => F.LABELS.map((label) => ({ label }));
 
 // ---- scripts/pdf-fidelity.js: how it reads the other readers, and what it calls a difference --------------------------
+test('fidelity fails on unexpected open refusals and keeps Swift caches in its temporary directory', () => {
+  const fs = require('node:fs'), os = require('node:os'), { spawnSync } = require('node:child_process');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gz-fidelity-test-'));
+  try {
+    const preload = path.join(tmp, 'tools.cjs'), compiler = path.join(tmp, 'compiler.json');
+    fs.writeFileSync(preload, `const fs = require('node:fs');
+      require('node:child_process').spawnSync = (cmd, args, opts) => {
+        if (cmd === 'xcrun') fs.writeFileSync(${JSON.stringify(compiler)}, JSON.stringify({ args, env: opts.env }));
+        return ['which', 'xcrun'].includes(cmd) ? { status: 0, stdout: '', stderr: '' } : { status: 1, stdout: '', stderr: 'fixture reader unavailable' };
+      };
+      require(${JSON.stringify(path.join(root, 'lib/pdf-doc.js'))}).use = () => ({ open: async () => { const e = Error('unexpected refusal'); e.name = 'PdfInvalidError'; throw e; } });`);
+    const r = spawnSync(process.execPath, ['--require', preload, path.join(root, 'scripts/pdf-fidelity.js'), path.join(tmp, 'outputs'), '--small'],
+      { encoding: 'utf8', env: { ...process.env, TMPDIR: tmp }, timeout: 60000 });
+    assert.equal(r.status, 1, 'an unexpected editor refusal must fail the fidelity run');
+    assert.match(r.stdout, /open refused: PdfInvalidError/);
+    const { args, env } = JSON.parse(fs.readFileSync(compiler, 'utf8'));
+    const cache = args[args.indexOf('-module-cache-path') + 1];
+    assert.ok(args.includes('-module-cache-path'), 'Swift gets an explicit module cache');
+    assert.ok(cache.startsWith(tmp + path.sep));
+    assert.equal(env.CLANG_MODULE_CACHE_PATH, cache);
+    assert.equal(env.SWIFT_MODULE_CACHE_PATH, cache);
+    assert.deepEqual(fs.readdirSync(tmp).filter((f) => f.startsWith('gz-pdfkit-')), [], 'compiler, cache and PDFKit artifacts removed');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('fidelity checks zero annotations and signatures as well as positive counts', () => {
+  const V = require('../scripts/pdf-fidelity.js');
+  assert.deepEqual(V.notesOf({ notes: 0, signatures: 0, encrypted: true, printing: false },
+    { notes: 1, signatures: 1, encrypted: false, printing: true }), ['encrypted false, not true', 'printing allowed again', '1 FreeText, not 0', '1 signatures, not 0']);
+});
+
 test('the fidelity script reads pdfinfo and pdftotext, and marks what a reader shows differently from what was asked', () => {
   const V = require('../scripts/pdf-fidelity.js');
   assert.deepEqual(V.parseInfo('Pages:           2\nEncrypted:       yes (print:no copy:yes change:yes addNotes:yes algorithm:RC4)\nPage    1 size:  300 x 200 pts\nPage    1 rot:   90\nPage    2 size:  300 x 200 pts\nPage    2 rot:   0\n'),
