@@ -444,7 +444,8 @@ not those unknown legacy copies or unrelated stickers.
   course's new messages. The documents you start or import on Writer's Documents page are kept
   the same way, each under a random key (`doc:<uuid>`) with its text, title, format and versions; Glaze keeps no copy on
   a server. Delete there moves a paper or document to Trash, which keeps it and its versions on this device; 30 days later
-  it is deleted for good the next time the browser starts or Documents opens, unless you restore it first. A paper's edits
+  it is deleted for good, with its versions and saved sources, the next time the browser starts or Documents opens, unless
+  you restore it first; Delete forever and Settings' Clear delete them at once. A paper's edits
   not yet saved wait in the writer frame's own
   `sessionStorage` until they are. What you type in a discussion, reply, message or test box goes to Back up what you
   type (when it is on), as Blackboard's own editor's does; Writer keeps no copy of its own. **Back up…** includes papers,
