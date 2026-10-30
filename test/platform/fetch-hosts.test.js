@@ -105,6 +105,8 @@ const SITES = {
   // A deck's card picture carries the bundled faces its slide 1 uses (vendor/fonts), read from the extension itself.
   'documents/slides/slides-kind.js': [{ at: 'fetch(chrome.runtime.getURL(`vendor/fonts/', kind: 'extension' }],
   'planner/ocr.js': [{ at: 'fetch(here(', kind: 'extension' }],
+  // The local engine's kernels, read from the package (ai/local/kernels), or from the base its checks name.
+  'ai/local/engine.js': [{ at: 'const r = await fetch(url);', kind: 'extension' }],
   'courses/lmsq.js': [{ at: 'return fetch(url, init)', kind: 'page' }],
   'courses/ultra.js': [{ at: 'f = (...a) => fetch(...a)', kind: 'page' }],
   'content/content.js': [{ at: 'fetch(`${location.origin}${base}${path}`', kind: 'page' }],

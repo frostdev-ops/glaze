@@ -156,7 +156,7 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   const bg = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const named = new Set([...bg.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.normalize(`background/${f}`))));
   // The local engine's files before its provider step names them (4.0.1): the worker doesn't load them yet.
-  const unwired = ['local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/store.js'];
+  const unwired = ['local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/store.js', 'local/engine.js'];
   const shipped = fs.readdirSync(path.join(__dirname, '../../extension/ai'), { recursive: true }).filter((f) => f.endsWith('.js') && f !== 'providers/mock.js' && !unwired.includes(f)).map((f) => `ai/${f}`);
   assert.ok(shipped.length >= 14);
   for (const f of shipped) assert.ok(named.has(f), `${f} is named in an importScripts call`);
