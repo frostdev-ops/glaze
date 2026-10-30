@@ -53,6 +53,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const act = (box, b, e) => {
     e.preventDefault();
     e.stopImmediatePropagation();
+    if (box.saved && Date.now() - box.saved.at >= SAVE_LOST) box.saved(false);
     if (running || box.opening || box.saved) return;
     let marked = b;
     const mark = () => {
