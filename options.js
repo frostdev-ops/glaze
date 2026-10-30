@@ -1188,6 +1188,7 @@ GZ_UI.load().then((s) => {
       gdBusy = true;
       try {
         const r = await gdOp('disconnect');
+        if (!r.ok) return hint(t("Couldn't disconnect. Try again in a moment."), true);
         await gdLoad();
         $('#gdrive-connect').focus();
         hint(r.had && !r.revoked ? t("Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.") : t('Disconnected.'), !!r.had && !r.revoked);
