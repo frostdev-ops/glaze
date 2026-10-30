@@ -339,3 +339,30 @@ test('two editors refuse a stale spreadsheet save before any bands or history ch
   assert.equal(JSON.stringify(s.data), before, 'refusal cannot publish a mixture of the two workbooks');
   same((await SD.read((ks) => s.get(ks), KEY)).wb, a.wb);
 });
+
+test('band cleanup survives an interrupted removal, retry, revival and Delete forever or purge', async () => {
+  for (const purge of [false, true]) {
+    let t = 1;
+    const s = store(), remove = s.remove, P = PA.open(s, () => t), wb = book();
+    const first = await SD.write(P, KEY, wb, new Map());
+    wb.sheets[0].rows.delete(2500);
+    s.remove = async () => { throw new Error('interrupted cleanup'); };
+    const gone = await SD.write(P, KEY, wb, first.sigs);
+    assert.ok(s.data[`writerSheet:${KEY}:1:2`], 'the interrupted cleanup left an orphan');
+    same((await SD.read((ks) => s.get(ks), KEY)).wb, wb, 'the published parts map excludes the orphan');
+    s.remove = remove;
+    // A later write may revive the same band; cleanup must never remove a named part.
+    put(wb.sheets[0], 2500, 4, { t: 's', v: 'revived' });
+    const revived = await SD.write(P, KEY, wb, gone.sigs);
+    same((await SD.read((ks) => s.get(ks), KEY)).wb, wb);
+    wb.sheets[0].rows.delete(2500);
+    s.remove = async () => { throw new Error('interrupted again'); };
+    await SD.write(P, KEY, wb, revived.sigs);
+    s.remove = remove;
+    // A restarted worker knows the orphan even though parts no longer names it.
+    const restarted = PA.open(s, () => t);
+    if (purge) { await restarted.trash(KEY); t += 31 * 864e5; await restarted.purge(); }
+    else await restarted.remove(KEY);
+    assert.deepEqual(Object.keys(s.data).filter((k) => k.includes(KEY)), []);
+  }
+});
