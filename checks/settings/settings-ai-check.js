@@ -230,7 +230,7 @@ async function pass(scheme) {
     await check('glaze', async () => {
       const card = page.locator('#ai-providers .ai-prov', { hasText: 'Glaze on-device AI' });
       const note = page.locator('#ai-drawer .line.own:not(#ai-local-pictures) .note');
-      const pics = page.locator('#ai-local-pictures'), picNote = pics.locator('.note');
+      const pics = page.locator('#ai-local-pictures'), picNote = page.locator('#ai-local-pictures .note');
       // The store's files for models.json's entries `pick` chooses, written sparse as a finished download leaves them.
       const place = (pick) => page.evaluate(async (pick) => {
         const all = (await (await fetch('/ai/local/models.json')).json()).models.filter((x) => (pick === 'pictures' ? !!x.role : x.tier === 1));
