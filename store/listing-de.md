@@ -10,7 +10,7 @@ Gestalte Canvas, Blackboard Ultra und Moodle mit eigenen Designs und Dunkelmodus
 
 DEIN AUSSEHEN
 
-• Wende eines von elf Designs an oder hol dir kostenlose unter frostdev.io/glaze/looks.
+• Wende eines von elf Designs an oder hol dir kostenlose unter frostdev.io/glaze/looks; gespeicherte und aus der Galerie genutzte Designs stehen überall zur Wahl, wo du ein Design auswählst, auch für einen einzelnen Kurs.
 • Dunkelmodus: Verknüpfe eine helle und eine dunkle Palette mit dem Erscheinungsbild deines Systems oder einem Zeitplan.
 • Eigene Farben und Schriften: Bearbeite alle vierzehn Farben, gib jedem Kurs seine Farbe und wähle Lexend, OpenDyslexic oder jede Google-Schrift.
 • Hintergründe: ein Verlauf, dein eigenes Bild oder eine von elf animierten Szenen.
@@ -82,4 +82,5 @@ NEU IN 4.0.0
 • Firefox: Mit Agenten verbindest du KI-Apps auf deinem Computer mit deinen Kursen, To-dos und Noten. Jede App und jede Änderung braucht deine Zustimmung.
 • „Sichern…“ und „Wiederherstellen…“ enthalten Arbeiten, Dokumente, Versionen, dein Wörterbuch und gespeicherte Quellen.
 • Blackboard: Das Bewertungsraster erscheint auf der Abgabeseite eines gespeicherten Entwurfs, Fälligkeitshinweise stimmen auch nach einer Zeitumstellung, die Suche folgt Blackboards eigenen Links, und das Ausschalten von „Deine Stelle merken“ bricht eine ausstehende Wiederherstellung ab.
+• Gespeicherte Designs und solche, die du in der Galerie mit „Dieses Design verwenden“ nutzt, stehen jetzt überall zur Wahl, wo du ein Design auswählst, auch für einen einzelnen Kurs. Die Einstellungen gruppieren sie nach Eingebaut, Gespeichert und Galerie.
 • Aussehen › Bewegung beginnt bei Lebhaft. Das Update stellt Dezent einmalig auf Lebhaft um; Aus bleibt Aus.

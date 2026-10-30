@@ -10,7 +10,7 @@ Personnalisez Canvas, Blackboard Ultra et Moodle avec des thèmes et un mode som
 
 VOTRE APPARENCE
 
-• Appliquez l’un des onze styles ou trouvez-en d’autres, gratuits, sur frostdev.io/glaze/looks.
+• Appliquez l’un des onze styles ou trouvez-en d’autres, gratuits, sur frostdev.io/glaze/looks ; ceux que vous enregistrez ou utilisez depuis la galerie apparaissent partout où vous choisissez un style, même pour un seul cours.
 • Mode sombre : associez une palette claire et une palette sombre au mode de votre système ou à un horaire.
 • Couleurs et polices : modifiez les quatorze couleurs, donnez sa couleur à chaque cours et choisissez Lexend, OpenDyslexic ou toute police Google.
 • Arrière-plans : un dégradé, votre image ou l’une des onze scènes animées.
@@ -82,4 +82,5 @@ NOUVEAUTÉS DE LA VERSION 4.0.0
 • Firefox : avec Agents, connectez des apps d’IA de votre ordinateur à vos cours, tâches et notes. Chaque app et chaque modification demandent votre accord.
 • « Sauvegarder… » et « Restaurer… » incluent travaux, documents, versions, dictionnaire et sources enregistrées.
 • Blackboard : la grille s’affiche sur la page de tentative d’un brouillon enregistré, les indicateurs d’échéance restent justes au changement d’heure, la recherche suit les liens de Blackboard et désactiver Retrouver où vous en étiez annule une restauration en attente.
+• Les styles que vous enregistrez ou utilisez depuis la galerie avec « Utiliser ce thème » apparaissent désormais partout où vous choisissez un style, y compris celui d’un cours. Réglages les regroupe en Intégrées, Enregistré et Galerie.
 • Apparence › Animations commence à Expressives. La mise à jour passe une fois Subtiles à Expressives ; Aucune reste Aucune.
