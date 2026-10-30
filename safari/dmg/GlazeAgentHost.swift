@@ -28,7 +28,7 @@ final class GlazeAgentHost {
     /// agent the worker closed has to read what it was sent; line, queue: lines.js's LINE and QUEUE; high: the frames
     /// waiting for Safari past which agents' reads wait.
     nonisolated struct Limits: Sendable {
-        var idle: TimeInterval = 600, hello: TimeInterval = 5, drain: TimeInterval = 10
+        var idle: TimeInterval = 600, hello: TimeInterval = 5, drain: TimeInterval = 10, updateQuiet: TimeInterval = 5
         var line = GlazeAgentFrames.line, queue = 32 << 20, high = 4 * GlazeAgentFrames.frame
     }
     static let helloMax = 64 * 1024
@@ -40,6 +40,8 @@ final class GlazeAgentHost {
     private var timer: DispatchSourceTimer?
     private var instances: [String: Instance] = [:]
     private var last = Date()
+    private var activity = Date()
+    private var updateIdle: (() -> Void)?
     // Connection numbers start at the launch time in ms, so a relaunched app never repeats one a worker kept.
     private var next = Int(Date().timeIntervalSince1970 * 1000)
     private var chunk = [UInt8](repeating: 0, count: 65536)
@@ -74,7 +76,7 @@ final class GlazeAgentHost {
         let id: String
         var session: String?, seq = 0, gen = 0, ended: (s: String, why: String)?
         var token = "", key: [UInt8] = [], ino: UInt64 = 0, listener: DispatchSourceRead?
-        var conns: [Int: Conn] = [:], joining: [ObjectIdentifier: Conn] = [:]
+        var conns: [Int: Conn] = [:], joining: [ObjectIdentifier: Conn] = [:], ending: [ObjectIdentifier: Conn] = [:]
         // Frames for Safari with their sizes, from head; waiting: their bytes.
         var out: [([String: Any], Int)] = [], head = 0, waiting = 0, flying = false
         init(_ id: String) { self.id = id }
@@ -87,6 +89,8 @@ final class GlazeAgentHost {
         var hello: [UInt8] = [], parts: [UInt8] = [], toAgent = 0
         var read: DispatchSourceRead?, write: DispatchSourceWrite?, paused = false, sources = 0
         var buffer: [UInt8] = [], at = 0, deadline = 0
+        // Only RPC ids, never call arguments. Untrackable traffic postpones an update until this connection closes.
+        var requests: [String: Int] = [:], requestBytes = 0, reply: [UInt8] = [], updateBlocked = false
         init(fd: Int32, pid: pid_t, inst: Instance) { self.fd = fd; self.pid = pid; self.inst = inst }
         var queued: Int { buffer.count - at }
     }
@@ -103,10 +107,12 @@ final class GlazeAgentHost {
             guard let self else { Darwin.close(client); return }
             self.batch(client)
         }, ino)
-        let every = min(max(limits.idle / 10, 0.05), 30), t = DispatchSource.makeTimerSource(queue: .main)
+        let every = min(max(min(limits.idle, limits.updateQuiet) / 10, 0.05), 1), t = DispatchSource.makeTimerSource(queue: .main)
         t.schedule(deadline: .now() + every, repeating: every)
         t.setEventHandler { [weak self] in
-            guard let self, Date().timeIntervalSince(self.last) >= self.limits.idle else { return }
+            guard let self else { return }
+            if self.canInstallUpdate { self.updateIdle?() }
+            guard Date().timeIntervalSince(self.last) >= self.limits.idle else { return }
             self.timer?.cancel()
             self.timer = nil
             self.onIdle?()
@@ -116,11 +122,28 @@ final class GlazeAgentHost {
         return true
     }
 
+    /// Sparkle's prepared update may quit a hidden app once calls and buffered traffic have finished. Keep-alives are
+    /// 20 seconds apart; five quiet seconds gives an idle connected agent a chance to restart with the updated app.
+    func prepareUpdate(_ done: @escaping () -> Void) {
+        activity = Date()
+        updateIdle = done
+    }
+    var canInstallUpdate: Bool {
+        guard updateIdle != nil, Date().timeIntervalSince(activity) >= limits.updateQuiet else { return false }
+        return instances.values.allSatisfy { x in
+            x.joining.isEmpty && x.waiting == 0 && !x.flying && x.ending.values.allSatisfy { $0.queued == 0 } &&
+            x.conns.values.allSatisfy { k in
+                k.requests.isEmpty && !k.updateBlocked && k.parts.isEmpty && k.toAgent == 0 && k.queued == 0
+            }
+        }
+    }
+
     /// Everything ends: every worker's connections, sockets and run files, and the group socket.
     func stop() {
         for x in Array(instances.values) { stop(x) }
         timer?.cancel()
         timer = nil
+        updateIdle = nil
         guard let (source, ino) = listener else { return }
         listener = nil
         source.cancel()
@@ -202,6 +225,7 @@ final class GlazeAgentHost {
         guard let b = GlazeAgentBridge.batch(m), let i = b["i"] as? String, let s = b["s"] as? String, let seq = b["seq"] as? Int,
               let frames = b["frames"] as? [[String: Any]] else { return GlazeAgentBridge.refused("bad-batch") }
         last = Date()
+        activity = last
         if seq == 1, frames.first?["t"] as? String == "hello" {
             guard frames[0]["instance"] as? String == i else { return GlazeAgentBridge.refused("bad-batch") }
             let x = instances[i] ?? Instance(i)
@@ -266,7 +290,7 @@ final class GlazeAgentHost {
         instances[x.id] = nil
         x.session = nil
         x.gen += 1
-        for k in Array(x.conns.values) + Array(x.joining.values) { shut(k) }
+        for k in Array(x.conns.values) + Array(x.joining.values) + Array(x.ending.values) { shut(k) }
         x.conns = [:]
         x.listener?.cancel()
         x.listener = nil
@@ -399,6 +423,7 @@ final class GlazeAgentHost {
         let n = chunk.withUnsafeMutableBytes { Darwin.read(k.fd, $0.baseAddress, $0.count) }
         if n < 0, errno == EAGAIN || errno == EINTR { return }
         guard n > 0 else { return k.state == .open ? drop(k, n == 0 ? "eof" : "error") : shut(k) }
+        activity = Date()
         switch k.state {
         case .hello: heard(k, chunk[0..<n])
         case .open: lines(k, chunk[0..<n])
@@ -422,6 +447,7 @@ final class GlazeAgentHost {
         put(k, Array("{\"ok\":1,\"p\":\"\(Self.mac(x.key, "h", n))\"}\n".utf8))
         if GlazeAgentFrames.whole(m["probe"]) == 1 {
             k.state = .ending
+            x.ending[ObjectIdentifier(k)] = k
             if k.queued == 0 { shutdown(k.fd, SHUT_WR) }
             return after(limits.drain, k) { [weak self] in self?.shut(k) }
         }
@@ -441,6 +467,7 @@ final class GlazeAgentHost {
             let text = String(decoding: k.parts + rest[..<i], as: UTF8.self)
             k.parts = []
             rest = rest[(i + 1)...]
+            request(k, text)
             for f in GlazeAgentFrames.split(k.c, Array(text.utf16)) { send(x, f) }
         }
         k.parts += rest
@@ -455,6 +482,10 @@ final class GlazeAgentHost {
         k.toAgent += bytes.count
         if k.toAgent > limits.line { return drop(k, "too-long") }
         if !more { k.toAgent = 0 }
+        if !k.requests.isEmpty {
+            if k.reply.count + bytes.count <= 1 << 20 { k.reply += bytes } else { k.updateBlocked = true; k.reply = [] }
+            if !more { response(k); k.reply = [] }
+        }
         if !bytes.isEmpty || !more { put(k, more ? bytes : bytes + [10]) }
         if k.queued > limits.queue { drop(k, "overflow") }
     }
@@ -462,6 +493,7 @@ final class GlazeAgentHost {
     private func closed(_ x: Instance, _ c: Int) {
         guard let k = x.conns.removeValue(forKey: c) else { return }
         k.state = .ending
+        x.ending[ObjectIdentifier(k)] = k
         resume(k)
         if k.queued == 0 { shutdown(k.fd, SHUT_WR) }
         after(limits.drain, k) { [weak self] in self?.shut(k) }
@@ -479,6 +511,7 @@ final class GlazeAgentHost {
         guard k.state != .dead else { return }
         k.state = .dead
         k.inst.joining[ObjectIdentifier(k)] = nil
+        k.inst.ending[ObjectIdentifier(k)] = nil
         k.deadline += 1
         if k.paused { k.read?.resume(); k.paused = false }
         k.read?.cancel()
@@ -514,6 +547,7 @@ final class GlazeAgentHost {
             if n < 0, errno == EAGAIN { break }
             guard n > 0 else { return k.state == .open ? drop(k, "error") : shut(k) }
             k.at += n
+            activity = Date()
         }
         if k.queued == 0 {
             k.buffer = []
@@ -530,6 +564,33 @@ final class GlazeAgentHost {
             k.write = source
             source.resume()
         }
+    }
+
+    // The worker's wire.js serves requests, never sends them. Subscription streams aren't calls. Cancellation ends a
+    // call without a response; progress does not. Bound tracking independently of the transport's 64 MiB line limit.
+    private static func rpcID(_ value: Any?) -> String? {
+        if let s = value as? String { return "s" + s }
+        if let n = value as? NSNumber, GlazeAgentFrames.bool(n) == nil, n.doubleValue.isFinite,
+           n.doubleValue.rounded(.towardZero) == n.doubleValue { return "n" + String(n.doubleValue) }
+        return nil
+    }
+    private func request(_ k: Conn, _ text: String) {
+        guard text.utf8.count <= 1 << 20, let m = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any],
+              let method = m["method"] as? String else { return }
+        if m["jsonrpc"] as? String == "2.0", m["id"] == nil, method == "notifications/cancelled",
+           let p = m["params"] as? [String: Any], let id = Self.rpcID(p["requestId"]) {
+            k.requests[id] = nil
+            k.requestBytes = k.requests.keys.reduce(0) { $0 + $1.utf8.count }
+        } else if method != "subscriptions/listen", let id = Self.rpcID(m["id"]) {
+            guard k.requests.count < 1024, k.requestBytes + id.utf8.count <= 1 << 20 else { k.updateBlocked = true; return }
+            if k.requests[id] == nil { k.requestBytes += id.utf8.count }
+            k.requests[id, default: 0] += 1
+        }
+    }
+    private func response(_ k: Conn) {
+        guard let m = (try? JSONSerialization.jsonObject(with: Data(k.reply))) as? [String: Any], m["method"] == nil,
+              m["result"] != nil || m["error"] != nil, let id = Self.rpcID(m["id"]), let n = k.requests[id] else { return }
+        if n > 1 { k.requests[id] = n - 1 } else { k.requests[id] = nil; k.requestBytes -= id.utf8.count }
     }
 
     // MARK: Handshake and peers (handshake.js)

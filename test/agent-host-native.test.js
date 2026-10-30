@@ -345,7 +345,7 @@ test('the host is DMG-only, starts no process and opens no network socket; the a
   }
   const app = code(fs.readFileSync(appFile, 'utf8'));
   assert.match(app, /if urls\.contains\(where: \{ \$0\.absoluteString == GlazeAgentBridge\.start \}\) \{ startAgents\(\) \}/);
-  assert.match(app, /guard !userSession, force \|\| agents == nil else \{ return \}/, 'a hidden launch stays up while agents run');
+  assert.match(app, /guard !userSession, force \|\| agents == nil \|\| forUpdate && agents\?\.canInstallUpdate == true else \{ return \}/, 'a hidden launch stays up until its calls and traffic are quiet');
   assert.match(app, /finishHidden\("unexpected interactive extraction", force: true\)/, 'Sparkle\'s safety stop still ends it');
   assert.match(app, /func applicationWillTerminate\(_ notification: Notification\) \{ agents\?\.stop\(\) \}/);
   assert.match(app, /host\.onIdle = \{[^]*self\.agents\?\.stop\(\)[^]*finishHidden\("agents idle"\)/);

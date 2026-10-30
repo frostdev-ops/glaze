@@ -40,7 +40,13 @@ const run = (file, args = [], { flags = [], env } = {}) => {
       waiting.push(w);
     }));
   const send = (m) => child.stdin.write(`${JSON.stringify(m)}\n`);
-  const stop = () => { if (!ended) child.kill('SIGKILL'); return done; };
+  const stop = async () => {
+    const wait = (ms) => new Promise((resolve) => { const timer = setTimeout(resolve, ms); timer.unref(); done.then(() => { clearTimeout(timer); resolve(); }); });
+    if (!ended) { child.stdin.end(); await wait(1000); }
+    if (!ended) { child.kill('SIGTERM'); await wait(1000); }
+    if (!ended && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    return done;
+  };
   return { child, next, send, done, stop, stderr: () => stderr };
 };
 

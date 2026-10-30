@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
     private var updaterObservations: [NSKeyValueObservation] = []
     private var updateStatus = ""
     private var agents: GlazeAgentHost?
+    private var preparedUpdate = false
 
     func application(_ application: NSApplication, open urls: [URL]) {
         // URL parameters never select a feed, file, action or installation target.
@@ -65,6 +66,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
             if self.updater?.sessionInProgress != true { self.finishHidden("agents idle") }
         }
         agents = host
+        waitForAgentUpdate()
+    }
+
+    private func waitForAgentUpdate() {
+        guard preparedUpdate else { return }
+        agents?.prepareUpdate { [weak self] in self?.finishHidden("prepared; agents quiet", forUpdate: true) }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -183,12 +190,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
     }
 
     /// force: even while agents keep the app up.
-    private func finishHidden(_ reason: String, force: Bool = false) {
+    private func finishHidden(_ reason: String, force: Bool = false, forUpdate: Bool = false) {
         NSLog("Glaze update: %@, user=%d", reason, userSession)
-        guard !userSession, force || agents == nil else { return }
+        guard !userSession, force || agents == nil || forUpdate && agents?.canInstallUpdate == true else { return }
         DispatchQueue.main.async { [weak self] in
             // A normal launch can open the guide before this queued termination runs.
-            guard let self, !self.userSession, force || self.agents == nil else { return }
+            guard let self, !self.userSession, force || self.agents == nil || forUpdate && self.agents?.canInstallUpdate == true else { return }
             NSApp.terminate(nil)
         }
     }
@@ -206,6 +213,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
     func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
                  immediateInstallationBlock: @escaping () -> Void) -> Bool {
         // Never invoke the immediate block: it installs AND relaunches.
+        preparedUpdate = true
+        waitForAgentUpdate()
         finishHidden("prepared; installing on normal termination")
         return true
     }
