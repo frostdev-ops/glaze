@@ -307,6 +307,16 @@ test('a numbered latest attempt retains its released selections, but a foreign c
   }
 });
 
+// No live capture shows an attempt's own columnId (the read is already scoped by ?columnId=): its absence never hides grading.
+test('an attempt that names no column still shows its released selections', async () => {
+  const d = real(); delete d.attempt.columnId;
+  const p = await show(d);
+  assert.equal(p.selected.length, 2);
+  const q = await show(d, 1400, 'draft');
+  assert.ok(press(q).prevented);
+  assert.equal(marks(q.popups[0].body.shadowForTest).length, 2);
+});
+
 test('until Glaze has the rubric, the discussion and attempt links still open Ultra\'s own', async () => {
   for (const kind of ['discussion', 'attempt']) {
     const d = real(); d.grade = null;
