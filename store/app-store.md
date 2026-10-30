@@ -10,7 +10,7 @@ Dark mode, GPA, notes & to-do
 
 ## Promotional text (170 character maximum)
 
-Make Blackboard Ultra, Canvas and Moodle yours in Safari, with themes, a flexible sidebar, course tabs, notes, Better To Do and study companions.
+Make Blackboard Ultra, Canvas and Moodle yours in Safari, with themes, Glaze Writer, Documents, a flexible sidebar, course tabs, notes and Better To Do.
 
 ## Keywords (100 byte maximum)
 
@@ -27,23 +27,23 @@ YOUR WORKSPACE
 On Blackboard Ultra and Canvas, arrange course cards and widgets on a Glaze Dashboard. Keep Better To Do and compatible widgets in a sidebar that becomes a drawer on narrow screens. Open courses in tabs, customize navigation, and find courses, pages and settings with the command palette.
 
 PLAN AND STUDY
-Better To Do brings due work together with your own tasks, steps and plans. Keep notes with folders, pictures and attachments, use a focus timer, and choose a study companion. Import a class schedule or syllabus for review on your device, then export your plans as a calendar file.
+Better To Do brings due work together with your own tasks, steps and plans. Keep notes with folders, pictures and attachments, use a focus timer, and choose an animated study companion that reacts to your focus sessions and finished tasks. Import a class schedule or syllabus for review on your device, then export your plans as a calendar file.
 
-See due-date status, course progress, new-content and grade badges, and grade percentages where supported. Try hypothetical scores in the what-if calculator without changing real grades. Focus and dark-document options help with reading; supported editors can keep a local typing backup. Available helpers depend on the learning platform and what your school shares.
+See due-date status, course progress, new-content and grade badges, and try what-if scores without changing real grades. Helpers depend on the platform and what your school shares.
 
-Announcements open in a Glaze pop-up from Better To Do or Ctrl+K on Canvas and Blackboard Ultra, and from the sites' own lists, including Moodle. Hover to preview in Better To Do and those lists. Assignment rubrics show your published scores and feedback: inline on Blackboard Ultra when there's room, otherwise in the pop-up; Canvas's folded rubric opens in the pop-up.
+Announcements open in a Glaze pop-up from Better To Do, Ctrl+K or the sites' own lists, with hover previews. Assignment rubrics show your published scores and feedback, in the page on Blackboard Ultra when there's room, otherwise in the pop-up.
 
 Moodle Boost gets the same Looks, course totals when available, a due list from Timeline and keyboard shortcuts.
 
-YOUR COMPANION
-Choose an animated pet for your study space. Pets react to focus sessions and completed tasks, pause while hidden and respect reduced motion. Their progress stays with your school's account on your device.
+GLAZE WRITER AND DOCUMENTS
+On Blackboard Ultra, Glaze Writer takes the place of the editor in discussions, messages, assignments and tests, and checks spelling and grammar on your device. Full writer gives assignments real pages in MLA, APA, Chicago or your own format, with citations, footnotes, versions and .docx files. Documents keeps every paper and document in one place, with a 30-day Trash. AI is optional and off until you set it up; Glaze never drafts.
 
 PRIVACY AND CONTROL
-Glaze is free, with no ads, analytics or Glaze account. Safari settings, notes, tasks and coursework records stay on your device. Optional share sessions encrypt selected content before sending it through your chosen relay. Sharing starts only when you create, join or resume a session. Chosen fonts, media and external players can make network requests; the privacy policy explains these services and their connection data. Glaze does not collect or sell your data.
+Glaze is free, with no ads, analytics or Glaze account. Safari settings, notes, tasks, coursework records, papers and documents stay on your device. Optional share sessions start only when you create, join or resume one, and encrypt content before it goes through your chosen relay. Fonts, media, external players and AI providers you choose, and citation lookups you click, can make network requests, as the privacy policy explains. Glaze does not collect or sell your data.
 
-Glaze does not submit coursework, send school messages or change grades; rubrics are read-only. Optional Canvas planner ticks, course colors and nicknames are saved to your school account. Opening marks unread Canvas announcements read; Moodle marks posts read when forum tracking is automatic. Previews and Blackboard mark nothing read. Safari supports declarative mod content and does not run downloaded mod JavaScript.
+Glaze never changes grades, and rubrics are read-only. Writer sends what you write only through Blackboard's own buttons, when you press them. Optional Canvas planner ticks, course colors and nicknames are saved to your school account. Opening marks unread Canvas announcements read; Moodle marks posts read when forum tracking is automatic. Safari supports declarative mod content and does not run downloaded mod JavaScript.
 
 GET STARTED
-Open Glaze for the Safari setup guide, enable the extension, and allow it on your school's website. Use your school site in Safari; Glaze works on school domains as well as hosted Blackboard Ultra, Canvas and Moodle sites. Features are provided by the Safari extension; the app guides you through setup.
+Open Glaze for the setup guide, turn on the extension in Safari and allow it on your school's website. It works on school domains and on hosted Blackboard Ultra, Canvas and Moodle sites.
 
-Glaze is independent and is not affiliated with or endorsed by Anthology, Instructure, Moodle or any school. Blackboard, Canvas and Moodle are trademarks of their respective owners. Open source under the MIT License. iPhone and iPad require iOS or iPadOS 18 or newer. Mac requires macOS 12 and Safari 17.2 or newer; frosted-glass blur requires Safari 18. App Store builds update through the App Store.
+Glaze is independent and is not affiliated with or endorsed by Anthology, Instructure, Moodle or any school. Blackboard, Canvas and Moodle are trademarks of their respective owners. Open source under the MIT License. iPhone and iPad require iOS or iPadOS 18 or newer. Mac requires macOS 12 and Safari 17.2 or newer; frosted-glass blur requires Safari 18.
