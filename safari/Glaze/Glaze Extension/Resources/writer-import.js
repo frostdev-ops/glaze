@@ -6,7 +6,8 @@
 // paper, what it held kept as a version first (writer-paper.js importFile, whose toast has Undo); Open in Glaze shows the
 // file in its kind's viewer in the paper's place, the paper kept as a version first. The close button, Escape and the dim
 // change nothing.
-// page → frame: import:file { name, mime, bytes, open } (open: an attachment's Open in Glaze, no card), import:failed.
+// page → frame: import:file { name, mime, bytes, open } (open: an attachment's Open in Glaze, no card), import:failed
+// { name, why } (why 'size': past what the kind opens, said in the kind's words: lib/doc-kinds.js big).
 // Classic script after writer-submit.js.
 var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
   const frame = globalThis.GZ_WRITER_FRAME;
@@ -111,17 +112,24 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
   // The page takes Ultra's file area from the frame's ready, a moment before the paper mounts: a file waits for the paper.
   const paper = async () => { for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100)); return P()?.current() || null; };
   frame.handle('import:file', async (m) => {
-    if (frame.mode() !== 'paper' || frame.kind() !== 'assignment' || !(m.bytes instanceof ArrayBuffer) || !m.bytes.byteLength || m.bytes.byteLength > 50e6) return;
+    if (frame.mode() !== 'paper' || frame.kind() !== 'assignment' || !(m.bytes instanceof ArrayBuffer) || !m.bytes.byteLength) return;
     const request = ++requests;
     const api = P()?.current() || await paper();
     if (!api || request !== requests) return;
     await P().need(['lib/writer-submit.js']);
-    if (request !== requests || P()?.current() !== api || L().fileError({ name: m.name, size: m.bytes.byteLength, type: m.mime ?? '' })) return;
+    if (m.bytes.byteLength > L().MAX_FILE || request !== requests || P()?.current() !== api || L().fileError({ name: m.name, size: m.bytes.byteLength, type: m.mime ?? '' })) return;
     const file = new File([m.bytes], m.name, { type: typeof m.mime === 'string' ? m.mime : '' });
     // An attachment's Open in Glaze (lib/writer-context-assignment.js open): straight to its kind, no card, while it is on.
     if (m.open === true) { if (K()?.opens().includes(L().kindOf(m.name)) && !api.importing?.() && !SHEET()?.busy()) { close(); K().open(api, file); } return; }
     bring(api, file);
   });
-  frame.handle('import:failed', () => { P()?.current()?.notify?.('That file could not be read.'); });
+  frame.handle('import:failed', async (m) => {
+    let says = 'That file could not be read.';
+    if (m?.why === 'size') {
+      await P().need(['lib/writer-submit.js', 'lib/doc-kinds.js']).catch(() => {});
+      says = globalThis.GZ_DOC_KINDS?.KINDS[L()?.kindOf(m.name)]?.big || 'That file is too large.';
+    }
+    P()?.current()?.notify?.(says);
+  });
   return { bring, about, close, opened: () => !!card };
 })();
