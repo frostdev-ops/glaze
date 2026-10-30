@@ -39,7 +39,7 @@ const frame = (options = {}) => {
     return e;
   };
   doc.fire = fire;
-  const ctx = vm.createContext({ console: { error() {} }, document: doc, Map, Set, Uint8Array, structuredClone, performance, Intl,
+  const ctx = vm.createContext({ ...(options.ctx || {}), console: { error() {} }, document: doc, Map, Set, Uint8Array, structuredClone, performance, Intl,
     innerWidth: 640, innerHeight: 900, GZ_SHEET_MODEL: M, GZ_SHEET_FORMULA: require('../lib/sheet-formula.js'),
     GZ_SHEET_CALC: CALC, GZ_SHEET_NUMFMT: NF, GZ_SHEET_DATA: options.SD || SD,
     chrome: { storage: { local: store, onChanged: { addListener() {} } } },
@@ -160,4 +160,21 @@ test('sheet operations undo and redo through autosave with matching books bands 
   assert.equal(got.wb.sheets[1].rows.get(0).get(0).f, 'Sheet1!A1');
   assert.equal(got.wb.sheets[1].rows.get(0).get(0).v, 'original');
   assert.equal(f.data[`writerSheet:${KEY}:2:0`].rev, got.rec.parts['2:0']);
+});
+
+// A workbook read from an .xlsx keeps what Glaze doesn't model, with cell references in it: the grid tells the codec of
+// every operation it applies (do, undo, redo: lib/sheet-xlsx.js track) and asks it before a structural one (locked), which
+// it refuses when kept parts would point at the wrong cells.
+test('the grid tracks each applied operation with the codec and refuses a structural edit it locks', async () => {
+  const calls = [];
+  const X = { track: (wb, op) => calls.push(['track', op.op]), locked: (wb, op) => (op.op === 'insert' ? 'a pivot table uses this sheet' : null) };
+  const f = frame({ ctx: { GZ_SHEET_XLSX: X } });
+  f.type('12'); f.key('Enter');
+  assert.deepEqual(calls.filter(([k]) => k === 'track').map(([, op]) => op), ['set'], 'the typed value');
+  f.key('z', { ctrlKey: true }); f.key('y', { ctrlKey: true });
+  assert.equal(calls.filter(([k]) => k === 'track').length, 3, 'undo and redo too');
+  const before = calls.length;
+  f.key('+', { ctrlKey: true });
+  assert.equal(calls.length, before, 'a locked insert is not applied or tracked');
+  await settle();
 });

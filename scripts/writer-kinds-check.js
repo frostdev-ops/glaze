@@ -9,7 +9,7 @@
 // Spreadsheets off nothing offers a spreadsheet; on, an empty attempt offers Document or Spreadsheet (and ⋯ New
 // spreadsheet): Spreadsheet keeps the paper as a version and shows the grid, values typed are saved, and Submit sends the
 // sheet's file once (.xlsx where lib/sheet-xlsx.js is in the build, else .csv); a .csv on Ultra's file area opens in the
-// grid by Open in Glaze.
+// grid by Open in Glaze, as does an .xlsx (lib/sheet-xlsx.js, loaded with the grid), which edited is submitted as .xlsx.
 // An attached PDF (the assignment's content item, test/fixtures/ultra-writer-attach-content.json, with a PDF entry in its
 // .docx entry's shape; on the page a link to the file in the instructions, a stand-in: how Ultra draws an attachment on
 // the attempt page wasn't probed) gets Open in Glaze beside its link, PDFs on, and that alone: the file comes by the page's
@@ -26,6 +26,8 @@ const HARNESS = require('./ultra-attempt-harness.js');
 const { tap } = require('./frame-tap.js');
 const PDF = require('./pdf-fixtures.js');
 const Z = require('../lib/zip.js');
+const XL = require('../lib/sheet-xlsx.js'), SM = require('../lib/sheet-model.js');
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const site = 'https://bb.school.test';
 const QUILL = { url: 'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', sha256: 'c675f57388d3598637c4e0f9fe154bd61dfb1c2086271f944a0bb2b9b059b074' };
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../test/fixtures', f), 'utf8');
@@ -273,7 +275,8 @@ const holds = (bytes, value) => {
     await quiet(() => p.evaluate(() => __uploads.length > 1), 'a second upload');
     const sup = await p.evaluate(() => __uploads.map((u) => ({ name: u.name, type: u.type, bytes: u.bytes })));
     const body = Buffer.from(sup[0]?.bytes || []);
-    check(sup.length === 1 && sup[0].name === `Rivera_Essay2${sx}` && sup[0].type === (sx === '.csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') && (sx !== '.csv' || /Trial[\s\S]*42[\s\S]*58/.test(body.toString('utf8'))),
+    const typed = sx === '.xlsx' ? await XL.read(new Uint8Array(body)).then((wb) => [0, 1, 2].map((r) => wb.sheets[0].rows.get(r)?.get(0)?.v).join(), () => 'unreadable') : body.toString('utf8');
+    check(sx === '.xlsx' && sup.length === 1 && sup[0].name === `Rivera_Essay2${sx}` && sup[0].type === XLSX && typed === 'Trial,42,58',
       `the spreadsheet's file attached once, Ultra's Submit once (${sup.map((u) => `${u.name} ${u.type} ${u.bytes.length}`).join('; ')})`);
     vs = await versions();
     const submittedBook = vs.find((v) => v.kind === 'sheet' && v.reason === 'submit' && v.gz);
@@ -291,6 +294,39 @@ const holds = (bytes, value) => {
     await until(async () => (await cellOf(1, 1)) === '20.5', 'the .csv in the grid', 40000);
     rec = await record();
     check(rec.kind === 'sheet' && [await cellOf(0, 0), await cellOf(0, 1), await cellOf(2, 1)].join() === 'Time,Temp,21', 'Open in Glaze puts the .csv in the grid, the record a spreadsheet');
+    await p.close();
+
+    // ---- an .xlsx on Ultra's file area: Open in Glaze → the grid reads it; a cell changed; Submit attaches the .xlsx once
+    const budget = SM.workbook();
+    for (const [r, row] of [['Item', 'Cost'], ['Paper', 12], ['Ink', 30]].entries()) budget.sheets[0].rows.set(r, new Map(row.map((v, c) => [c, typeof v === 'number' ? { t: 'n', v } : { t: 's', v }])));
+    budget.sheets[0].rows.get(0).set(2, { t: 'n', v: 42, f: 'SUM(B2:B3)' });
+    const budgetBytes = Buffer.from(await XL.write(budget));
+    await reset({ sheets: true });
+    ({ p, el, fr } = await open());
+    await give(p, 'Budget.xlsx', XLSX, budgetBytes);
+    await until(() => cardOf(fr), 'the .xlsx card');
+    check((await cardOf(fr)).tiles.join('|') === 'Open in Glaze|Submit as is', 'an .xlsx asks Open in Glaze or Submit as is');
+    await tap(fr, '.gi-default');
+    await until(async () => (await cellOf(2, 1)) === '30', 'the .xlsx in the grid', 40000);
+    check([await cellOf(0, 0), await cellOf(1, 0), await cellOf(0, 2)].join() === 'Item,Paper,42' && (await record()).kind === 'sheet', 'Open in Glaze reads the .xlsx into the grid, its formula calculated');
+    await tap(fr, '.gk #gx-name');
+    await fr.fill('.gk #gx-name', 'B3');
+    await p.keyboard.press('Enter');
+    await until(() => fr.evaluate(() => document.querySelector('.gk #gx-name')?.value === 'B3' && document.activeElement?.id === 'gx-grid'), 'B3 active');
+    await p.keyboard.type('50'); await p.keyboard.press('Enter');
+    await until(async () => (await cellOf(0, 2)) === '62', 'the sum recalculated');
+    await until(async () => !(await fr.evaluate(() => document.querySelector('.gk .gp-state')?.textContent)), 'saved');
+    await tap(fr, '.gk .gp-submit');
+    await until(() => sheetOf(fr), 'the .xlsx sheet');
+    check((await sheetOf(fr)).name === 'Rivera_Essay2.xlsx', `the sheet names it Rivera_Essay2.xlsx (${(await sheetOf(fr)).name})`);
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => __clicks.filter((c) => /footer\.submit/.test(c)).length === 1), 'Ultra\'s Submit clicked for the .xlsx', 40000);
+    await quiet(() => p.evaluate(() => __uploads.length > 1), 'a second upload');
+    const xup = await p.evaluate(() => __uploads.map((u) => ({ name: u.name, type: u.type, bytes: u.bytes })));
+    const xwb = await XL.read(new Uint8Array(xup[0]?.bytes || [])).catch(() => null);
+    const xr = (r, c) => xwb?.sheets[0].rows.get(r)?.get(c);
+    check(xup.length === 1 && xup[0].name === 'Rivera_Essay2.xlsx' && xup[0].type === XLSX && xr(2, 1)?.v === 50 && xr(0, 2)?.f === 'SUM(B2:B3)' && xr(0, 2)?.v === 62,
+      `the edited .xlsx attached once, its formula kept and its value recalculated (${xup.map((u) => `${u.name} ${u.type} ${u.bytes.length}`).join('; ')})`);
     await p.close();
 
     // ---- an attached PDF: Open in Glaze beside its link, straight to the viewer

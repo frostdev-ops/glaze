@@ -481,3 +481,59 @@ test('equal band hashes never discard different cell text', async () => {
   await SD.write(P, KEY, wb, first.sigs, { dirty: new Set(['1:0']) });
   same((await SD.read((ks) => s.get(ks), KEY)).wb, wb);
 });
+
+// The .xlsx codecs (lib/sheet-xlsx.js, lib/zip.js, lib/doctext.js) load on demand: asked for before a file is read or
+// written, never with the page. A workbook whose parts couldn't all be read is kept, said once (an existing line).
+test('the codecs load on demand: an .xlsx read into the record, the file written as .xlsx, a left-out part said', async () => {
+  const X = require('../lib/sheet-xlsx.js');
+  const src = M.workbook();
+  put(src.sheets[0], 0, 0, { t: 's', v: 'Name' }); put(src.sheets[0], 0, 1, { t: 'n', v: 91 });
+  const bytes = await X.write(src);
+  const s = store(), P = PA.open(s, () => 1000, { versions: async () => 40 }), K = 'bb.school.test|_900_1|_101_1|_7_1';
+  await P.save(K, { kind: 'paper', doc: { type: 'doc', content: [] }, title: 'Lab 3' });
+  const asked = [];
+  const G = require('../sheet-grid.js');
+  for (const f of ['date', 'math', 'info']) require(`../lib/sheet-fn-${f}.js`);
+  const ctx0 = { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_GRID: G, GZ_SHEET_CALC: require('../lib/sheet-calc.js'),
+    GZ_SHEET_NUMFMT: require('../lib/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob };
+  const { DK, ctx } = load({ sheets: true }, ctx0);
+  ctx.GZ_WRITER_PAPER = { need: async (files) => { asked.push(...files); if (files.includes('lib/sheet-xlsx.js')) ctx.GZ_SHEET_XLSX = X; } };
+  await DK.settled();
+  const k = DK.get('sheet');
+  assert.ok(!asked.includes('lib/sheet-xlsx.js'), 'nothing loaded with the page');
+  const file = (name, b) => ({ name, size: b.length, arrayBuffer: async () => b.buffer.slice(b.byteOffset, b.byteOffset + b.length) });
+  const rec = await k.into(K, file('grades.xlsx', bytes));
+  for (const f of ['lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js']) assert.ok(asked.includes(f), `${f} asked for before the read`);
+  assert.equal(rec.kind, 'sheet');
+  const got = await SD.read((ks) => s.get(ks), K);
+  assert.deepEqual([got.wb.sheets[0].rows.get(0).get(0).v, got.wb.sheets[0].rows.get(0).get(1).v], ['Name', 91]);
+  assert.equal(rec.notice, undefined, 'a whole workbook says nothing');
+  const out = await k.file(K);
+  assert.equal(out.mime, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.ok(out.name.endsWith('.xlsx'));
+  assert.equal((await X.read(out.bytes)).sheets[0].rows.get(0).get(1).v, 91, 'what is written reads back');
+  assert.equal(DK.get('sheet').exportLabel, 'Export .xlsx', 'asked afresh, as a card\'s menu does, once the writer is here');
+  // A workbook with parts left out still opens, and says so once with a line Glaze already has.
+  const realRead = X.read;
+  ctx.GZ_SHEET_XLSX = { ...X, read: async (b) => { const wb = await realRead(b); wb.keep.problems.push({ code: 'part', message: 'xl/drawings/drawing1.xml could not be read' }); return wb; } };
+  const again = await k.into(K, file('grades.xlsx', bytes));
+  assert.equal(again.notice, 'Some pictures, objects or equations were left out.');
+  ctx.GZ_SHEET_XLSX = { ...X, read: async (b) => { const wb = await realRead(b); wb.keep.problems.push({ code: 'cap-cells', message: 'past 250,000 cells' }); return wb; } };
+  assert.equal((await k.into(K, file('grades.xlsx', bytes))).notice, 'A workbook holds 250,000 cells.');
+  const key = await k.importFile(file('grades.xlsx', bytes));
+  assert.equal(key.notice, 'A workbook holds 250,000 cells.', 'Documents\' import says it too');
+  assert.ok(PA.local(key.key));
+});
+
+test('a cell\'s dynamic-array and data-table fields (cm, vm, dt) survive a save', () => {
+  const wb = M.workbook();
+  put(wb.sheets[0], 0, 0, { t: 'n', v: 1, f: 'SEQUENCE(3)', cm: 1 });
+  put(wb.sheets[0], 1, 0, { t: 'n', v: 2, vm: 3 });
+  put(wb.sheets[0], 2, 0, { t: 'n', v: 7, dt: { r1: 'A1', dt2D: false } });
+  put(wb.sheets[0], 3, 0, { t: 's', v: 'plain' });
+  const { book: bk, parts } = SD.split(wb);
+  const back = SD.join(JSON.parse(JSON.stringify(bk)), new Map(JSON.parse(JSON.stringify([...parts]))));
+  const row = (r) => back.sheets[0].rows.get(r).get(0);
+  assert.deepEqual([row(0).cm, row(1).vm, row(2).dt], [1, 3, { r1: 'A1', dt2D: false }]);
+  assert.deepEqual(parts.get('1:0')[3], [3, [[0, 's', 'plain']]], 'a cell without them is stored as before');
+});

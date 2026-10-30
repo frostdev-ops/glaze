@@ -114,7 +114,7 @@ test('a brought file opens as its kind only while that kind is switched on and h
   assert.deepEqual([...kinds({ pdf: true, slides: true, sheets: true }).opens()], ['pdf', 'slides', 'sheet'], 'the grid is in the frame');
   assert.deepEqual([...kinds({ sheets: true }).opens()], ['sheet']);
   assert.deepEqual(Object.keys(kinds().FRAME), ['pdf', 'slides', 'sheet']);
-  assert.deepEqual([...kinds().FRAME.sheet.scripts], ['lib/doc-kinds.js', 'sheet-kind.js']);
+  assert.deepEqual([...kinds().FRAME.sheet.scripts], ['lib/doc-kinds.js', 'lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js', 'sheet-kind.js'], 'the .xlsx codecs with the grid, on demand');
   assert.ok(Object.isFrozen(kinds().FRAME));
   const K = kinds(), { sheet: _, ...noGrid } = K.FRAME;
   assert.deepEqual([...K.opens({ sheets: true }, noGrid)], [], 'a build without the grid offers no spreadsheet');

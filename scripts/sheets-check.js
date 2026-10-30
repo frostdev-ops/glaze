@@ -299,6 +299,7 @@ const seeded = (key, wb = M.workbook()) => {
     const body = fs.readFileSync(file, 'utf8');
     check(/\.(csv|xlsx)$/.test(download.suggestedFilename()) && (/\.xlsx$/.test(file) || /Item 1/.test(body)), `Export writes the spreadsheet (${download.suggestedFilename()})`);
 
+
     // ---- 640 px
     await page.setViewportSize({ width: 640, height: 900 });
     await painted();
@@ -382,6 +383,49 @@ const seeded = (key, wb = M.workbook()) => {
     await page.evaluate(() => { const s = document.querySelector('.gx-scroll'); s.scrollTop = 10000; });
     await until(() => page.evaluate(() => document.querySelector('#gx-grid .gx-c[data-r="500"]')), 'large workbook scrolled');
     check(await page.evaluate(() => window.gzPool.some((el) => el.isConnected) && document.querySelectorAll('#gx-grid .gx-c').length < 2500), '250,000 cells: scrolling reuses pooled elements');
+
+    // ---- an .xlsx through Glaze: a golden workbook (Excel's own, test/fixtures/sheets/info.xlsx) imported, one cell typed,
+    // exported, and the export read back by the codec equal to it but for that cell, the parts Glaze keeps still there; the
+    // export imported again holds as many cells
+    const XL = require('../lib/sheet-xlsx.js'), golden = path.join(root, 'test/fixtures/sheets/info.xlsx');
+    const original = await XL.read(new Uint8Array(fs.readFileSync(golden)));
+    const count = (wb) => wb.sheets.reduce((n, sh) => n + [...sh.rows.values()].reduce((m, row) => m + row.size, 0), 0);
+    await openHome();
+    const cardsBefore = await page.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    await page.setInputFiles('#gd-file', golden);
+    const gold = await until(() => page.evaluate((was) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).find((k) => !was.includes(k)), cardsBefore), 'the .xlsx card');
+    const grec = await until(() => local(`writerPaper:${gold}`), 'the .xlsx record');
+    check(grec.kind === 'sheet' && grec.title === 'info' && grec.cells === count(original) && grec.sheets === original.sheets.length, `the .xlsx imports: its sheets and cells (${JSON.stringify({ title: grec.title, cells: grec.cells, sheets: grec.sheets })})`);
+    await page.click(`.gd-card[data-key="${gold}"] .gd-title`);
+    await grid();
+    const active = await page.evaluate(() => document.querySelector('.gx-tab[aria-selected="true"]')?.textContent);
+    await go('Z1');
+    await type('gz edit');
+    await saved(gold);
+    await page.click('#gx-more');
+    check(await page.evaluate(() => document.querySelector('.gx-menu [data-act="export"]')?.textContent) === 'Export .xlsx', 'the menu says Export .xlsx');
+    const [xdl] = await Promise.all([page.waitForEvent('download'), page.click('.gx-menu [data-act="export"]')]);
+    const xfile = path.join(tmp, xdl.suggestedFilename());
+    await xdl.saveAs(xfile);
+    const back = await XL.read(new Uint8Array(fs.readFileSync(xfile)));
+    const diff = [];
+    for (const sh of original.sheets) {
+      const other = back.sheets.find((x) => x.name === sh.name);
+      if (!other) { diff.push(`${sh.name} missing`); continue; }
+      for (const [r, row] of sh.rows) for (const [c, x] of row) {
+        const y = other.rows.get(r)?.get(c);
+        if (!y || (x.f !== undefined ? y.f !== x.f : y.t !== x.t || y.v !== x.v)) diff.push(`${sh.name}!${r},${c}: ${JSON.stringify(x)} → ${JSON.stringify(y)}`);
+      }
+    }
+    const added = back.sheets.find((x) => x.name === active)?.rows.get(0)?.get(25);
+    check(/\.xlsx$/.test(xdl.suggestedFilename()) && !diff.length && added?.v === 'gz edit' && count(back) === count(original) + 1 && Object.keys(back.keep.parts).length === Object.keys(original.keep.parts).length,
+      `exported .xlsx equals the golden workbook but for the cell typed, its kept parts too (${xdl.suggestedFilename()}; ${diff.slice(0, 3).join('; ') || 'no differences'})`);
+    await openHome();
+    const cardsNow = await page.evaluate(() => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key));
+    await page.setInputFiles('#gd-file', xfile);
+    const again = await until(() => page.evaluate((was) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).find((k) => !was.includes(k)), cardsNow), 'the export imported again');
+    const arec = await until(() => local(`writerPaper:${again}`), 'its record');
+    check(arec.kind === 'sheet' && arec.cells === count(original) + 1, `the export imports again with every cell (${arec.cells})`);
 
     const intervals = await page.evaluate(() => globalThis.gzIntervals || []);
     check(intervals.every((ms) => ms >= 60000), `no interval under a minute (${JSON.stringify(intervals)})`);
