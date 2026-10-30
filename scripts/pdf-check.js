@@ -73,7 +73,7 @@ const fixture = () => {
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
     page = await context.newPage();
     page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
-    page.on('console', (m) => { const x = m.text(); logs.push(`${m.type()}: ${x}`); if (m.type() === 'error' && !/Failed to load resource/.test(x)) errors.push(`console: ${x}`); if (/fake worker/i.test(x)) errors.push(`fake worker: ${x}`); });
+    page.on('console', (m) => { const x = m.text(); logs.push(`${m.type()}: ${x}`); if (m.type() === 'error' && !/Failed to load resource|pdf-check quota refusal/.test(x)) errors.push(`console: ${x}`); if (/fake worker/i.test(x)) errors.push(`fake worker: ${x}`); });
     page.on('worker', (w) => workers.push(w.url()));
     page.on('framenavigated', (f) => { if (f === page.mainFrame()) logs.push(`navigated: ${f.url()}`); });
     const shot = async (name) => { await pause(250); const f = path.join(out, name); await page.screenshot({ path: f }); shots.push(f); };
@@ -210,6 +210,29 @@ const fixture = () => {
     await page.click(`.gd-card[data-key="${key}"] .gd-title`);
     const keptOff = await until(() => page.evaluate(() => document.querySelector('.page[data-page-number="1"] .annotationLayer input')?.value || null), 'the kept PDF opens with the switch off');
     check(keptOff === 'Ada Lovelace', `off again: the kept PDF opens, filled (${keptOff})`);
+
+    // Refusing a write must keep both the last good file and the student's unsaved field on screen.
+    const good = await local(`writerPaper:${key}`);
+    await worker.evaluate(() => {
+      globalThis.pdfCheckSet = chrome.storage.local.set.bind(chrome.storage.local);
+      chrome.storage.local.set = async (items) => {
+        if (Object.keys(items).some((k) => k.startsWith('writerPaper:'))) throw new Error('pdf-check quota refusal');
+        return globalThis.pdfCheckSet(items);
+      };
+    });
+    try {
+      await page.locator('.page[data-page-number="1"] .annotationLayer input').first().fill('Grace Hopper');
+      await page.click('.gp-top a[href="papers.html"]');
+      await until(() => page.evaluate(() => !location.search || document.querySelector('.gp-state')?.textContent === 'Not saved. Try again in a moment.'), 'quota refusal or navigation');
+      check(page.url().includes('?pdf=') && await page.evaluate(() => document.querySelector('.annotationLayer input')?.value === 'Grace Hopper'), 'quota refusal keeps the unsaved form open');
+      check((await local(`writerPaper:${key}`)).file === good.file, 'quota refusal keeps the last good bytes');
+    } finally {
+      await worker.evaluate(() => { chrome.storage.local.set = globalThis.pdfCheckSet; delete globalThis.pdfCheckSet; });
+    }
+    await page.click('.gp-top a[href="papers.html"]');
+    await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'retry saved before returning home');
+    await page.click(`.gd-card[data-key="${key}"] .gd-title`);
+    check(await until(() => page.evaluate(() => document.querySelector('.annotationLayer input')?.value === 'Grace Hopper'), 'the retried value'), 'retry persists the edited form before leaving');
 
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(!errors.some((e) => /fake worker/i.test(e)), 'pdf.js never fell back to a fake worker');
