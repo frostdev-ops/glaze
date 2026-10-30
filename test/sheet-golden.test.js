@@ -392,7 +392,6 @@ const TODO = {
   'financial.rate.2': 'the root is 0, where Excel stops at -1.96e-10 and the engine at 1.1e-12: no relative test holds',
   'financial.xirr.1': 'Excel\'s XIRR stops 6e-9 short of the root (its residual -1.7e-6) that the engine finds',
   'financial.xirr.2': 'Excel\'s XIRR stops 6e-9 short of the root (its residual -1.7e-6) that the engine finds',
-  'format.text.69': 'under a [$-409] tag Excel writes A/P as AM or PM (live probe: "hh:mm A/P" alone gives P); numfmt writes P',
 };
 
 test('every todo names a case', () => {

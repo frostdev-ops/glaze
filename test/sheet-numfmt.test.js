@@ -206,3 +206,11 @@ test('the 1904 system shows negative dates and times', () => {
     ['yyyy-mm-dd;"neg"', -1, 'neg', o], ['yyyy-mm-dd', -1, null],
   ]);
 });
+
+// Excel 16.114.1 (TEXT): under an en-US tag, [$-409], A/P and a/p write AM or PM; without one, A or P as typed.
+test('A/P under an en-US locale tag', () => {
+  table([
+    ['[$-409]hh:mm A/P', 45351.7, '04:48 PM'], ['[$-409]hh:mm a/p', 45351.7, '04:48 PM'], ['[$-409]hh:mm A/P', 45351.2, '04:48 AM'],
+    ['[$-409]h A/P', 45351.7, '4 PM'], ['[$-409]AM/PM', 45351.7, 'PM'], ['hh:mm A/P', 45351.7, '04:48 P'], ['hh:mm a/p', 45351.2, '04:48 a'],
+  ]);
+});
