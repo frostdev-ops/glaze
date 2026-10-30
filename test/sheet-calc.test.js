@@ -455,3 +455,24 @@ test('reverse range queries skip disjoint row intervals', () => {
   assert.equal(found.length, 1);
   assert.ok(visited <= 21, `visited ${visited} disjoint intervals`);
 });
+
+test('creating an array through apply undoes its generated cells as well as its head', () => {
+  const e = book({ D1: 9 }), id = e.wb.sheets[0].id;
+  const before = structuredClone(e.wb);
+  const { inverse } = e.apply({ op: 'set', sheet: id, r: 0, c: 0, cell: { t: 'n', v: 0, f: '{1;2;3}', a: 'A1:A3' } });
+  assert.equal(val(e, 'A3'), 3);
+  e.apply(inverse);
+  assert.deepEqual(e.wb, before);
+  assert.equal(e.members.size, 0);
+});
+
+test('applying an oversized array fails atomically before materializing its cells', () => {
+  const e = book({ D1: 9 }), sh = e.wb.sheets[0];
+  const before = structuredClone(e.wb);
+  const original = sh.rows.set;
+  sh.rows.set = () => { throw new Error('allocated before checking cap'); };
+  assert.throws(() => e.apply({ op: 'set', sheet: sh.id, r: 0, c: 0, cell: { t: 'n', v: 0, f: '1', a: 'A1:A250001' } }), (x) => x.code === 'cap-cells');
+  delete sh.rows.set;
+  assert.equal(sh.rows.set, original);
+  assert.deepEqual(e.wb, before);
+});
