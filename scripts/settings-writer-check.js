@@ -135,6 +135,7 @@ async function pass(scheme) {
       await page.getByRole('button', { name: 'Clear PSY 100 · Introduction to Psychology’s papers' }).click();
       await page.locator('#writer-clear').waitFor({ state: 'visible' });
       assert.equal(await page.locator('#writer-clear-title').textContent(), 'Clear PSY 100 · Introduction to Psychology’s papers?');
+      assert.equal(await page.locator('#writer-clear-ok').textContent(), 'Clear papers');
       if (shots) await page.locator('#writer-clear').screenshot({ path: path.join(shots, `settings-writer-confirm-${scheme}.png`) });
       // Cancel changes nothing.
       await page.locator('#writer-clear-cancel').click();
@@ -142,6 +143,7 @@ async function pass(scheme) {
       assert.equal((await page.evaluate(() => chrome.storage.local.get('writerPapers'))).writerPapers.length, 6);
       await page.getByRole('button', { name: 'Clear PSY 100 · Introduction to Psychology’s papers' }).click();
       await page.locator('#writer-clear-ok').click();
+      await until(async () => (await page.locator('#hint').textContent()) === 'Papers cleared.', 'the course hint');
       await until(async () => (await page.evaluate(() => chrome.storage.local.get('writerPapers'))).writerPapers.length === 4, 'two papers cleared');
       const left = await page.evaluate(() => chrome.storage.local.get(null));
       assert.ok(!Object.keys(left).some((k) => k.includes('|_303_1|')), 'their papers and versions are gone');
@@ -187,7 +189,9 @@ async function pass(scheme) {
       await page.locator('#writer-clear').waitFor({ state: 'visible' });
       assert.equal(await page.locator('#writer-clear-title').textContent(), 'Clear all papers and documents?');
       assert.match(await page.locator('#writer-clear-note').textContent(), /^6 papers and documents\. /, 'Trash counted');
+      assert.equal(await page.locator('#writer-clear-ok').textContent(), 'Clear all');
       await page.locator('#writer-clear-ok').click();
+      await until(async () => (await page.locator('#hint').textContent()) === 'Papers and documents cleared.', 'the Clear all hint');
       await until(async () => !Object.keys(await page.evaluate(() => chrome.storage.local.get(null))).some((k) => /^writer(Paper|Versions):/.test(k)), 'every paper and its versions gone');
       assert.deepEqual((await page.evaluate(() => chrome.storage.local.get('writerPapers'))).writerPapers, []);
       assert.deepEqual(errors, []);

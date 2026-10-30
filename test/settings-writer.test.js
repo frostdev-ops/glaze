@@ -310,5 +310,6 @@ test('Clear all stays enabled with only Trash and confirms every paper it remove
   assert.equal($('writer-papers-count').textContent, '', 'the list count skips Trash');
   assert.equal($('writer-clear-all').disabled, false, 'Clear all can still remove Trash');
   assert.equal($('writer-clear-title').textContent, 'Clear all papers and documents?');
+  assert.equal($('writer-clear-ok').textContent, 'Clear all');
   assert.match($('writer-clear-note').textContent, /^1 papers and documents\./, 'the confirmation counts what it deletes');
 });
