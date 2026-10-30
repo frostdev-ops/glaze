@@ -105,3 +105,35 @@ test('Done applies deletions before additions at the 500-page limit', () => {
   s = R.reduce(s, { type: 'merge', pages: 499, bytes: new Uint8Array(1) });
   assert.deepEqual(at(run(s)), want(s), 'deleted pages from an earlier merge do not occupy capacity');
 });
+
+const UI = require('./helpers/pdf-ui.cjs');
+const panel = (P = {}, apply = async () => {}) => R.panel({ P, doc: { numPages: 2 }, t: (s) => s, h: UI.h, btn: UI.btn, mount: UI.h('main'), bytes: 100, allows: { add: true }, apply });
+test('a merge finishing after Cancel destroys its loading task and leaves the panel closed', async (t) => {
+  UI.install(t);
+  const read = UI.deferred(); let destroyed = 0;
+  const task = { promise: read.promise, destroy: async () => { destroyed++; } };
+  const p = panel({ getDocument: () => task });
+  const pick = p.el.querySelector('input');
+  pick.files = [{ size: 1, arrayBuffer: async () => new ArrayBuffer(1) }];
+  pick.dispatchEvent(new Event('change')); await UI.tick();
+  p.close();
+  read.resolve({ numPages: 1, loadingTask: task }); await UI.tick();
+  assert.equal(destroyed, 1, 'the pending merge is owned and destroyed');
+  assert.equal(p.state().tiles.length, 2, 'late delivery cannot add pages');
+});
+test('Done waits for a pending merge and locks the panel while applying its snapshot', async (t) => {
+  UI.install(t);
+  const read = UI.deferred(), applied = UI.deferred(); let calls = 0;
+  const task = { promise: read.promise, destroy: async () => {} };
+  const p = panel({ getDocument: () => task }, () => { calls++; return applied.promise; });
+  p.el.querySelector('[data-act="blank"]').click();
+  const pick = p.el.querySelector('input');
+  pick.files = [{ size: 1, arrayBuffer: async () => new ArrayBuffer(1) }];
+  pick.dispatchEvent(new Event('change')); await UI.tick();
+  assert.equal(p.el.querySelector('[data-act="done"]').disabled, true, 'Done cannot drop an in-flight merge');
+  read.resolve({ numPages: 1, loadingTask: task }); await UI.tick();
+  p.el.querySelector('[data-act="done"]').click(); await UI.tick();
+  assert.equal(calls, 1);
+  assert.equal(p.el.inert, true, 'the pending Done has one immutable interaction boundary');
+  applied.resolve(); await UI.tick();
+});
