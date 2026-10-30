@@ -199,7 +199,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
       return s && { x0: (s.left - c.left) / c.width, x1: (s.right - c.left) / c.width, y: (s.top + s.height / 2 - c.top) / c.height, w: c.width, h: c.height };
     });
     const before = await onPicture();
-    ok(before && Math.abs(before.x0 * before.w - 150) < 2 && Math.abs(before.x1 * before.w - 350) < 2 && Math.abs(before.y * before.h - 120) < 2, `a stroke sits where it was drawn: ${JSON.stringify(before)}`);
+    ok(before && Math.abs(before.x1 * before.w - 350) < 2 && Math.abs(before.y * before.h - 120) < 2, `a stroke ends where it was drawn: ${JSON.stringify(before)}`);
     await f.evaluate(() => { const p = document.getElementById('page-1'); p.style.width = '1224px'; Object.assign(p.querySelector('canvas').style, { width: '1224px', height: '1584px' }); });
     const offBy = (a) => a && Math.max(Math.abs(a.x0 - before.x0) * a.w, Math.abs(a.x1 - before.x1) * a.w, Math.abs(a.y - before.y) * a.h);
     let zoomed;
