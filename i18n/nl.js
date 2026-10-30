@@ -3756,5 +3756,14 @@
   "Ellipse": "Ellips",
   "Arrow": "Pijl",
   "The owner of this PDF doesn't allow adding to it.": "De eigenaar van deze pdf staat geen toevoegingen toe.",
-  "Draw": "Tekenen"
+  "Draw": "Tekenen",
+  "Rotate left": "Linksom draaien",
+  "Rotate right": "Rechtsom draaien",
+  "Blank page": "Lege pagina",
+  "Add PDF…": "Pdf toevoegen…",
+  "Page {n}": "Pagina {n}",
+  "A PDF can have at most 500 pages.": "Een pdf kan maximaal 500 pagina's hebben.",
+  "This PDF is digitally signed: changing its pages would break the signature.": "Deze pdf is digitaal ondertekend: de pagina's wijzigen zou de handtekening ongeldig maken.",
+  "The owner of this PDF does not allow changing its pages.": "De eigenaar van deze pdf staat niet toe dat de pagina's worden gewijzigd.",
+  "Pages cannot be added to a password-protected PDF, or taken from one.": "Aan een met een wachtwoord beveiligde pdf kunnen geen pagina's worden toegevoegd of eruit worden gehaald."
 };

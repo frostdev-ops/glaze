@@ -64,7 +64,7 @@ const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
 const JS = ['sharing/quick.js', 'lib/mcp/approve-page.js', 'features/welcome.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-pointer.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/editor-navbar.js', 'lib/editor-ai.js', 'lib/editor-writer.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 // Glaze Writer's frame (writer.html, papers.html) and the libraries whose words it shows. lib/writer-docx.js's t() reads
 // a run's marks, so only its warnings and refusals are words (below).
-const WRITER = ['writer.js', 'papers.js', 'sheet-kind.js', 'sheet-grid.js', 'lib/sheet-chart.js', 'pdf-kind.js', 'lib/pdf-tools.js', 'lib/pdf-sign.js', 'slides-kind.js', ...fs.readdirSync(root).filter((f) => /^writer-.+\.js$/.test(f)), ...fs.readdirSync(path.join(root, 'lib')).filter((f) => /^writer-.+\.js$/.test(f) && f !== 'writer-docx.js').map((f) => `lib/${f}`)];
+const WRITER = ['writer.js', 'papers.js', 'sheet-kind.js', 'sheet-grid.js', 'lib/sheet-chart.js', 'pdf-kind.js', 'lib/pdf-tools.js', 'lib/pdf-sign.js', 'lib/pdf-pages.js', 'slides-kind.js', ...fs.readdirSync(root).filter((f) => /^writer-.+\.js$/.test(f)), ...fs.readdirSync(path.join(root, 'lib')).filter((f) => /^writer-.+\.js$/.test(f) && f !== 'writer-docx.js').map((f) => `lib/${f}`)];
 JS.push(...WRITER);
 // The capitalised strings of a `const NAME = …;` table (its labels and messages, not its ids, CSS or numbers).
 const tableOf = (f, ...names) => {
@@ -88,7 +88,7 @@ const writerWords = [
   ...tableOf('writer.js', 'LABELS'), ...tableOf('writer-cite.js', 'TYPES', 'FIELDS'), ...tableOf('writer-ai.js', 'STATUS'),
   ...tableOf('writer-submit.js', 'SAYS'), ...tableOf('writer-proof.js', 'LABEL'),
   // The PDF tools' names, colours and the reason a file refuses them (lib/pdf-tools.js).
-  ...tableOf('lib/pdf-tools.js', 'SHAPES', 'INKS', 'MARKS', 'TOOLS', 'NO_TOOLS'),
+  ...tableOf('lib/pdf-tools.js', 'SHAPES', 'INKS', 'MARKS', 'TOOLS', 'NO_TOOLS'), ...tableOf('pdf-kind.js', 'SIGNED', 'PROTECTED', 'PAGE_SAYS'),
   ...tableOf('writer-paper.js', 'SPACING', 'KIND', 'STYLES', 'REASONS'), ...tableOf('lib/writer-format.js', 'ROWS', 'names'),
   ...tableOf('lib/ai/tasks/writer-feedback.js', 'GRADE_REASONS'), ...tableOf('lib/ai/failure.js', 'REASONS', 'ERRORS'),
   // Labels handed to the paper chrome's helpers, which translate them.

@@ -669,6 +669,73 @@ const photo = () => {
     await openHome();
 
 
+    // ---- the pages panel (lib/pdf-pages.js): a drag, a keyboard move, a turn, a delete, a blank page and another PDF's
+    // pages, all applied by one Done, the import's stages said as it goes; Undo takes the whole step back; a signed file
+    // keeps its pages.
+    const pagesPdf = path.join(tmp, 'Reordered.pdf');
+    fs.writeFileSync(pagesPdf, fixture());
+    await openHome();
+    await page.setInputFiles('#gd-file', pagesPdf);
+    const pKey = await until(() => page.evaluate(() => [...document.querySelectorAll('.gd-card')].find((c) => c.querySelector('.gd-title')?.textContent === 'Reordered')?.dataset.key), 'the Reordered card');
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(pKey)}`);
+    await until(() => page.evaluate(() => document.querySelector('[data-act="pages"]')?.disabled === false), 'Pages on');
+    const pBefore = await local(`writerPaper:${pKey}`);
+    await page.click('[data-act="pages"]');
+    const tiles = () => page.evaluate(() => [...document.querySelectorAll('.gq-pagepanel .gq-tile')].map((x) => `${x.dataset.id}${x.dataset.turn !== '0' ? `@${x.dataset.turn}` : ''}`));
+    await until(async () => (await tiles()).length === 3 && page.evaluate(() => document.querySelectorAll('.gq-pagepanel canvas[width]').length === 3), 'three tiles drawn');
+    await shot('pages-1280.png');
+    await page.locator('.gq-pagepanel .gq-tile >> nth=2').dragTo(page.locator('.gq-pagepanel .gq-tile >> nth=0'), { targetPosition: { x: 4, y: 60 } });
+    await until(async () => (await tiles()).join() === '0:2,0:0,0:1', 'the drag');
+    await page.locator('.gq-pagepanel .gq-tile >> nth=1').focus();
+    await page.keyboard.press('Alt+ArrowRight');
+    await until(async () => (await tiles()).join() === '0:2,0:1,0:0', 'the keyboard move');
+    await page.click('.gq-pagepanel .gq-tile >> nth=0'); await page.click('.gq-pagepanel [data-act="rotate-right"]');
+    await page.click('.gq-pagepanel .gq-tile >> nth=1'); await page.click('.gq-pagepanel [data-act="delete"]');
+    await page.click('.gq-pagepanel .gq-tile >> nth=0'); await page.click('.gq-pagepanel [data-act="blank"]');
+    const other = path.join(tmp, 'Other.pdf');
+    fs.writeFileSync(other, Buffer.from(require('./pdf-fixtures.js').FIXTURES.three()));
+    await page.click('.gq-pagepanel .gq-tile >> nth=0');
+    const otherChooser = page.waitForEvent('filechooser');
+    await page.click('.gq-pagepanel [data-act="merge"]');
+    await (await otherChooser).setFiles(other);
+    const laid = await until(async () => { const x = await tiles(); return x.length === 6 ? x : null; }, 'the merged pages');
+    check(laid.join() === '0:2@90,1:0,1:1,1:2,b0,0:0', `the panel: drag, Alt+→, turn, delete, blank and another PDF's pages (${laid.join(' ')})`);
+    await page.evaluate(() => { const s = document.querySelector('.gp-top .gp-state'); new MutationObserver(() => { const l = JSON.parse(sessionStorage.getItem('pdfcheck-says') || '[]'); l.push(s.textContent); sessionStorage.setItem('pdfcheck-says', JSON.stringify(l)); }).observe(s, { childList: true, characterData: true, subtree: true }); });
+    await page.click('.gq-pagepanel [data-act="done"]');
+    const pAfter = await until(async () => { const r = await local(`writerPaper:${pKey}`); return r.pages === 6 && r.file.hash !== pBefore.file.hash ? r : null; }, 'Done saved', 30000);
+    await until(() => page.evaluate(() => document.querySelectorAll('.pdfViewer .page').length === 6 && !document.querySelector('.gq-pagepanel')), 'the viewer on the new pages');
+    // What the saved file is, read back by pdf.js: each page's turn and words.
+    const readBack = (rec) => page.evaluate(async (f) => {
+      const P = await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs'));
+      await GZ_WRITER_PAPER.need(['lib/doc-files.js']);
+      const task = P.getDocument({ data: await GZ_DOC_FILES.client().get(f), isEvalSupported: false, verbosity: 0 }), d = await task.promise, out = [];
+      try { for (let i = 1; i <= d.numPages; i++) { const pg = await d.getPage(i); out.push(`${(await pg.getTextContent()).items.map((x) => x.str).join('').trim() || '∅'}${pg.rotate ? `@${pg.rotate}` : ''}`); } } finally { await task.destroy(); }
+      return out;
+    }, rec.file);
+    const baked = await readBack(pAfter), said = await page.evaluate(() => JSON.parse(sessionStorage.getItem('pdfcheck-says') || '[]'));
+    check(baked.join('|') === 'This is page 3@90|Alpha page one|Bravo page two|Charlie page three|∅|This is page 1' && said.includes('Preparing pages…') && said.some((x) => /^Copying/.test(x)) && said.includes('Saving…'),
+      `one Done applies them all: ${baked.join(' | ')}; said ${JSON.stringify([...new Set(said)])}`);
+    const pVersions = await local(`writerVersions:${pKey}`);
+    check(pVersions.some((v) => v.reason === 'edit' && v.file.hash === pBefore.file.hash && v.pages === 3), 'the file before Done is kept as a version');
+    // Undo: the one step back.
+    await until(() => page.evaluate(() => document.querySelector('[data-act="undo"]')?.disabled === false), 'Undo on after Done');
+    await page.click('[data-act="undo"]');
+    const pUndone = await until(async () => { const r = await local(`writerPaper:${pKey}`); return r.file.hash === pBefore.file.hash ? r : null; }, 'the undo', 30000);
+    await until(() => page.evaluate(() => document.querySelectorAll('.pdfViewer .page').length === 3), 'the viewer on the pages before');
+    check(pUndone.pages === 3 && (await readBack(pUndone)).join('|') === 'This is page 1|This is page 2|This is page 3', 'Undo takes the whole Done back to the file before it');
+
+    // ---- a signed file: Pages off, saying why.
+    const signedPdf = path.join(tmp, 'Signed form.pdf');
+    fs.writeFileSync(signedPdf, Buffer.from(require('./pdf-fixtures.js').FIXTURES.signed()));
+    await openHome();
+    await page.setInputFiles('#gd-file', signedPdf);
+    const sKey = await until(() => page.evaluate(() => [...document.querySelectorAll('.gd-card')].find((c) => c.querySelector('.gd-title')?.textContent === 'Signed form')?.dataset.key), 'the Signed form card');
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(sKey)}`);
+    await until(() => page.evaluate(() => !!document.querySelector('.pdfViewer .page canvas')), 'the signed file drawn');
+    const signedPages = await until(() => page.evaluate(() => { const b = document.querySelector('[data-act="pages"]'); return b?.title !== 'Pages' ? { off: b.disabled, why: b.title } : null; }), 'Pages decided');
+    check(signedPages.off && signedPages.why === 'This PDF is digitally signed: changing its pages would break the signature.', `a digitally signed file keeps its pages: Pages off, with the reason (${JSON.stringify(signedPages)})`);
+    await openHome();
+
     // A PDF whose first page can't be read (its page tree points at nothing) is refused at import; one already kept says
     // so in the viewer instead of an empty viewer waiting for pages that never come.
     const broken = Buffer.from(fixture().toString('latin1').replace(/\/Kids \[(\d+) 0 R/, '/Kids [99 0 R'), 'latin1');

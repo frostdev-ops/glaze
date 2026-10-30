@@ -178,3 +178,19 @@ test('a page\'s papers proxy asks the worker to migrate', async () => {
     assert.equal(P.reown, undefined, 'owners are the worker\'s');
   } finally { delete globalThis.chrome; }
 });
+
+test('a PDF saved with reason edit (the pages panel\'s Done, a viewer\'s first save) keeps the file before it; restore takes it back', async () => {
+  const { P, files, store, clock } = make(), k = key();
+  const f1 = await files.put(bytes(500, 61), 'application/pdf');
+  await P.save(k, { kind: 'pdf', file: f1, size: f1.size, pages: 3 }, { reason: 'import' });
+  const f2 = await files.put(bytes(400, 62), 'application/pdf');
+  clock.t += 1000;
+  const { paper, version } = await P.save(k, { file: f2, size: f2.size, pages: 2 }, { reason: 'edit', expectedKind: 'pdf' });
+  assert.equal(paper.file.hash, f2.hash);
+  assert.ok(version && version.reason === 'edit' && version.file.hash === f1.hash && version.pages === 3, 'the file before, with its page count');
+  clock.t += 1000;
+  const back = await P.restore(k, version.id);
+  assert.equal(back.paper.file.hash, f1.hash);
+  assert.equal(back.paper.pages, 3);
+  assert.ok(store.data[`writerVersions:${k}`].some((v) => v.reason === 'restore' && v.file.hash === f2.hash), 'what the restore replaced is a version too');
+});

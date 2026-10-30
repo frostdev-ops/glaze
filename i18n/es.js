@@ -3756,5 +3756,14 @@
   "Ellipse": "Elipse",
   "Arrow": "Flecha",
   "The owner of this PDF doesn't allow adding to it.": "El propietario de este PDF no permite añadirle nada.",
-  "Draw": "Dibujar"
+  "Draw": "Dibujar",
+  "Rotate left": "Girar a la izquierda",
+  "Rotate right": "Girar a la derecha",
+  "Blank page": "Página en blanco",
+  "Add PDF…": "Añadir PDF…",
+  "Page {n}": "Página {n}",
+  "A PDF can have at most 500 pages.": "Un PDF puede tener como máximo 500 páginas.",
+  "This PDF is digitally signed: changing its pages would break the signature.": "Este PDF tiene una firma digital: cambiar sus páginas invalidaría la firma.",
+  "The owner of this PDF does not allow changing its pages.": "El propietario de este PDF no permite cambiar sus páginas.",
+  "Pages cannot be added to a password-protected PDF, or taken from one.": "No se pueden añadir páginas a un PDF protegido con contraseña ni sacarlas de él."
 };
