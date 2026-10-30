@@ -120,6 +120,12 @@ const SITES = {
   'features/classes.js': [{ at: 'await fetch(u.href,', kind: 'page' }],
   'features/coursemenu.js': [{ at: 'fetch(`${location.origin}/api/v1/users/self/', kind: 'page' }],
   'features/docs.js': [{ at: 'await fetch(url,', kind: 'page' }],
+  // A Blackboard preview (the worker's lib/bb-preview.js answers with the address): its converted PDF, read from the Ultra
+  // page's own origin.
+  'features/bbpreview.js': [{ at: "await fetch(url, { mode: 'cors', credentials: 'omit'", kind: 'open', host: 'https://annotate-doc-viewer-prod-filesbucket.s3-fips.us-east-1.amazonaws.com',
+    why: "a presigned S3 converted.pdf, without cookies: the bucket's CORS lets the Ultra page's origin read it (live probe, 2026-10-30)" }],
+  // The worker: the preview's own address on the asking Ultra page's site, then basic-doc-viewer under *.blackboard.com.
+  'lib/bb-preview.js': [{ at: '{ fetch: get = fetch, now = Date.now', kind: 'asked', flow: 'an Ultra site Glaze runs on (its built-in or granted host), from that site\'s page only; Blackboard\'s document viewer is a required host', in: 'lib/background.js', guard: /const origin = ultraPage\(s\) \? await fromUltra\(s\) : null;/ }],
   'features/download.js': [{ at: 'await fetch(f.url,', kind: 'page' }],
   'features/grades.js': [{ at: 'await fetch(url,', kind: 'page' }],
   'features/gradescope.js': [{ at: "fetch('/account/edit'", kind: 'page' }, { at: 'fetch(`/courses/${gid}`', kind: 'page' }],

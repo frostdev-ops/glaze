@@ -337,8 +337,12 @@ html:not([data-gz-enhance-newgrades]) .gz-new[data-kind="grades"], html:not([dat
 /* Documents in a dark palette (enhance.docPages): the preview frame dimmed, or inverted with hues turned back. 0.9 so
    white paper lands near the surface rather than on pure black. */
 #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { transition: filter var(--gz-t-slow) var(--gz-ease); }
-html[data-gz-dark-theme][data-gz-enhance-docPages="dim"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { filter: brightness(0.8); }
-html[data-gz-dark-theme][data-gz-enhance-docPages="dark"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { filter: invert(0.9) hue-rotate(180deg); }
+html[data-gz-dark-theme][data-gz-enhance-docPages="dim"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv) { filter: brightness(0.8); }
+html[data-gz-dark-theme][data-gz-enhance-docPages="dark"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv) { filter: invert(0.9) hue-rotate(180deg); }
+/* A preview in Glaze's PDF viewer (features/bbpreview.js): Blackboard's frame hidden while Glaze's shows in its place, and
+   the box around them as tall as Glaze's frame. Dark documents leaves Glaze's frame alone (its pages stay print white). */
+#site-wrap iframe[data-gz-pv-hidden] { display: none !important; }
+#site-wrap [data-gz-pv-box] { height: auto !important; max-height: none !important; }
 
 /* Document buttons: a column of round buttons in the bottom-right gutter. Where the window is too
    narrow for a gutter, the document makes room for one instead of sitting under them. */
