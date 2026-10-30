@@ -30,7 +30,7 @@ test('offsets: a Fenwick tree of sizes, hidden ones zero, found back from a pixe
   assert.equal(s.total(), 4e6 + 10);
   const t = new G.Sizes(1e5, 20, new Map([[3, 50], [5, 0]]));
   for (const i of [0, 4, 6, 999, 99999]) assert.equal(t.offset(i), new G.Sizes(1e5, 20, new Map([[3, 50], [5, 0]])).offset(i));
-  assert.equal(t.offset(6), 150);
+  assert.equal(t.offset(6), 130);
   // A million rows: every query is a few steps, and the whole stays a number of pixels.
   const big = new G.Sizes(1048576, 20);
   const t0 = performance.now();
