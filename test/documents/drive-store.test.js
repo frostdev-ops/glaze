@@ -33,14 +33,33 @@ const area = (name, heard) => {
   };
   return api;
 };
+const N = require('../../extension/planner/notes.js');
+const notesDb = () => {
+  const stores = { bodies: new Map(), files: new Map(), blobs: new Map() };
+  const pick = (s, prefix) => [...stores[s]].filter(([k]) => !prefix || k.startsWith(prefix));
+  return {
+    stores,
+    get: async (s, k) => structuredClone(stores[s].get(k)), put: async (s, k, v) => { stores[s].set(k, structuredClone(v)); },
+    del: async (s, keys) => { for (const k of keys) stores[s].delete(k); },
+    scan: async (s, prefix) => pick(s, prefix).map(([k, v]) => [k, structuredClone(v)]), keys: async (s, prefix) => pick(s, prefix).map(([k]) => k),
+    estimate: async () => ({ quota: 1e12, usage: 0 }),
+  };
+};
 const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse('2026-10-30T12:00:00Z') }, snapshots = false } = {}) => {
   const heard = [], local = area('local', heard), sync = area('sync', heard), now = () => clock.t, who = { account };
   const papers = P.open(local, now, { versions: () => 40, files: { own: async () => ({ missing: [] }) } });
   let dropped = 0;
   const log = { sleep: [], drop: [] };
   let snaps = 0;
+  // The worker's Notes database in memory, and Notes' own run over it, one change at a time as the worker's queue runs them.
+  const db = notesDb();
+  let q = Promise.resolve();
+  // As the worker's broker area: a write says whether it worked.
+  const brokered = { get: (k) => local.get(k), set: async (o) => { await local.set(o); return true; } };
+  const run = (m) => { const p = q.then(() => N.run(m, { local: brokered }, db, now())); q = p.catch(() => {}); return p; };
+  const notes = ST.notesArea({ local, db, run });
   const store = ST.create({
-    area: (n) => (n === 'sync' ? sync : local), store: local, hash: async (s) => sha(s), now,
+    area: (n) => (n === 'sync' ? sync : n === 'notes' ? notes : local), store: local, hash: async (s) => sha(s), now,
     snapshot: snapshots ? async () => ({ name: `glaze-backup-2026-10-${String(30 + snaps).padStart(2, '0')}-${++snaps}.zip`, bytes: new TextEncoder().encode(`PK snapshot ${snaps}`) }) : null,
   });
   heard.push((c, a) => (who.on ? store.stamp(c, a) : null));
@@ -57,7 +76,8 @@ const device = (drive, { account = 'student@school.edu', clock = { t: Date.parse
   const on = async () => { who.on = true; await settle(); const r = await sync2.set(true); await settle(); return r; };
   // The test's own writes, each heard (stamped) before the clock moves on.
   const heardAfter = (x) => ({ ...x, set: async (o) => { await x.set(o); await settle(); }, remove: async (k) => { await x.remove(k); await settle(); } });
-  return { local: heardAfter(local), settings: heardAfter(sync), papers, sync: sync2, store, who, log, clock, on, run: async (o) => { await settle(); const r = await sync2.run(o); await settle(); return r; } };
+  const notesOp = async (m) => { const r = await run(m); await settle(); return r; };
+  return { db, notesOp, local: heardAfter(local), settings: heardAfter(sync), papers, sync: sync2, store, who, log, clock, on, run: async (o) => { await settle(); const r = await sync2.run(o); await settle(); return r; } };
 };
 const TODO = 'todo:https://school.instructure.com/42', NOTE = 'notes:https://school.instructure.com/42', CLASSES = 'classes:https://school.instructure.com/42';
 const T = require('../../extension/planner/todo.js');
@@ -131,7 +151,7 @@ test('every category Back up… covers goes up, one file a record, in Glaze/Data
     [CLASSES]: C.clean({ courses: [{ id: '100', name: 'Art', at: 5, periods: [{ days: [3], start: 60, end: 120 }] }] }), 'gpaTerms:https://school.instructure.com:42': { t: [] }, widgetLayout: { tiles: [] }, lookFavorites: [{ code: 'abc', name: 'Dusk' }],
     lookHistory: [{ theme: { colors: {} }, at: 3 }], writerWords: ['Glaze'], 'writer:sources:school|_1_1|_2_1|_3_1': { sources: [{ id: 's1' }], at: 4 },
     // never
-    ai: { keys: 'secret' }, aiConnections: { x: 1 }, agentLink: { pair: 'p' }, gradescope: { a: 1 }, canvas: { cache: 1 }, google: { email: 'x' },
+    ai: { keys: 'secret' }, aiConnections: { x: 1 }, agentLink: { pair: 'p' }, canvas: { cache: 1 }, google: { email: 'x' },
   };
   await a.local.set(keys);
   await a.settings.set({ colors: accent('#ff0000'), look: lookOf('compact') });
@@ -145,7 +165,8 @@ test('every category Back up… covers goes up, one file a record, in Glaze/Data
     assert.deepEqual(body(f).value, keys[k], `${k} as stored`);
   }
   assert.deepEqual(body(recFile(drive, 'sync', 'colors')).value, accent('#ff0000'), 'a Settings key');
-  for (const k of ['ai', 'aiConnections', 'agentLink', 'gradescope', 'canvas', 'google', 'driveSync']) assert.equal(recFile(drive, 'local', k), undefined, `${k} never leaves`);
+  for (const k of ['ai', 'aiConnections', 'agentLink', 'canvas', 'google', 'driveSync']) assert.equal(recFile(drive, 'local', k), undefined, `${k} never leaves`);
+  assert.ok(!ST.CATS.some((c) => !['local', 'sync', 'notes'].includes(c.area) || /share/i.test(c.cat)), 'share keys have no category: they stay in the worker\'s sharing database');
   noDeletes(drive);
 });
 
@@ -292,4 +313,101 @@ test('a daily snapshot of Back up…\'s zip in Glaze/Backups, the newest five ke
   assert.equal(snaps().filter((f) => !f.meta.explicitlyTrashed).length, 5, 'five kept');
   assert.deepEqual(snaps().filter((f) => f.meta.explicitlyTrashed).map((f) => f.meta.name).sort(), snaps().map((f) => f.meta.name).sort().slice(0, 2), 'the oldest two in Drive\'s trash');
   noDeletes(drive);
+});
+
+// ---- Gradescope and Notes
+const GS = require('../../extension/planner/gradescope.js');
+const ACCT = 'notesIdx:https://school.instructure.com/42';
+const nid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
+const noteOf = async (d, id) => { const r = await d.notesOp({ key: ACCT, op: 'load', id }); return r.ok ? r.html : null; };
+const idxOf = async (d) => N.clean((await d.local.get(ACCT))[ACCT]);
+
+test('Gradescope: the student\'s placings and answers sync; what was read from Gradescope stays on its device', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const acct = { id: 'a'.repeat(24), name: 'Sam' };
+  const gs = (to, rows) => GS.clean({ acct, map: { 111: { to, name: 'Bio 101' } }, courses: { 111: { at: 5, bad: 0, rows } }, hide: false, bind: {} });
+  await a.local.set({ gradescope: gs('canvas:https://school.instructure.com/7', [{ id: '9', title: 'Lab 1' }]) });
+  await a.on();
+  const f = recFile(drive, 'local', 'gradescope');
+  assert.ok(f && body(f).value.map['111'].to === 'canvas:https://school.instructure.com/7', 'the placing goes up');
+  assert.equal(body(f).value.courses, undefined, 'what was read does not');
+  await b.local.set({ gradescope: gs('', [{ id: '8', title: 'B read this' }]) });
+  await b.on();
+  // First meeting with no join rule: B keeps its own and sends it up; A then takes it, keeping A's own reading.
+  clock.t += 1000; await b.local.set({ gradescope: { ...(await b.local.get('gradescope')).gradescope, hide: true } });
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  const here = (await a.local.get('gradescope')).gradescope;
+  assert.equal(here.hide, true, 'B\'s answer reached A');
+  // A reads Gradescope again: no upload, since nothing the student chose changed.
+  const n = drive.log.filter((x) => x.upload).length;
+  clock.t += 1000; await a.local.set({ gradescope: { ...here, courses: { 111: { at: 9, bad: 0, rows: [{ id: '10', title: 'Lab 2' }] } } } });
+  assert.ok((await a.run()).ok);
+  assert.equal(drive.log.filter((x) => x.upload).length, n, 'a fresh reading sends nothing');
+});
+
+test('Notes: folders, notes and their pictures reach another device; edits interleave; the later edit wins; deletes and Trash follow', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const folder = nid(900);
+  await a.notesOp({ key: ACCT, op: 'folder', id: folder, name: 'Biology' });
+  assert.ok((await a.notesOp({ key: ACCT, op: 'file', id: nid(500), kind: 'image', name: 'cell.png', data: PNG.toString('base64'), note: nid(1) })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: 0, sid: 's1', html: `<p>Cells</p><img data-gz-file="${nid(500)}">`, title: 'Cells', folder })).ok);
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(2), base: 0, sid: 's2', html: '<p>Second</p>', title: 'Second' })).ok);
+  assert.ok((await a.on()).ok);
+  assert.ok((await b.on()).ok);
+  assert.match(await noteOf(b, nid(1)), /Cells/, 'B has the note\'s text');
+  assert.equal((await idxOf(b)).notes[nid(1)].folder, folder, 'in its folder');
+  assert.equal((await idxOf(b)).folders[folder].name, 'Biology');
+  assert.deepEqual(Buffer.from(b.db.stores.blobs.get(`https://school.instructure.com/42/${nid(500)}`)), PNG, 'and its picture');
+  // Interleaved: A edits one note, B the other.
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: (await idxOf(a)).notes[nid(1)].rev, sid: 's3', html: '<p>Cells, by A</p>' });
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'save', id: nid(2), base: (await idxOf(b)).notes[nid(2)].rev, sid: 's4', html: '<p>Second, by B</p>' });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  assert.match(await noteOf(b, nid(1)), /by A/); assert.match(await noteOf(a, nid(2)), /by B/);
+  const stampOf = async (d, k) => (await d.local.get(ST.STAMPS))[ST.STAMPS][`notes:${ACCT}|${k}`];
+  assert.equal(await stampOf(b, nid(1)), body(recFile(drive, 'notes', `${ACCT}|${nid(1)}`)).at, 'B keeps A\'s time for A\'s edit, not when B took it');
+  // A picture added in a later edit goes up with the note.
+  clock.t += 1000;
+  const GIF = Buffer.from('474946383961010001000000002c00000000010001000002', 'hex');
+  assert.ok((await a.notesOp({ key: ACCT, op: 'file', id: nid(501), kind: 'image', name: 'dot.gif', data: GIF.toString('base64'), note: nid(1) })).ok);
+  await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: (await idxOf(a)).notes[nid(1)].rev, sid: 's3b', html: `<p>Cells, by A</p><img data-gz-file="${nid(501)}">` });
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await b.run()).ok);
+  assert.deepEqual(Buffer.from(b.db.stores.blobs.get(`https://school.instructure.com/42/${nid(501)}`)), GIF, 'the later picture reached B');
+  // Both edit one note: the later edit wins on both.
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'save', id: nid(2), base: (await idxOf(a)).notes[nid(2)].rev, sid: 's5', html: '<p>A early</p>' });
+  assert.ok((await a.run()).ok);
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'save', id: nid(2), base: (await idxOf(b)).notes[nid(2)].rev, sid: 's6', html: '<p>B later</p>' });
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  assert.match(await noteOf(a, nid(2)), /B later/); assert.match(await noteOf(b, nid(2)), /B later/);
+  // Trash on A: in Trash on B. Deleted for good on B: gone on A, a tombstone in Drive.
+  clock.t += 1000; await a.notesOp({ key: ACCT, op: 'trash', ids: [nid(2)] });
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  assert.ok((await idxOf(b)).notes[nid(2)].del, 'in B\'s Trash');
+  clock.t += 1000; await b.notesOp({ key: ACCT, op: 'purge', ids: [nid(2)] });
+  assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
+  assert.equal((await idxOf(a)).notes[nid(2)], undefined, 'gone on A');
+  assert.ok((await idxOf(a)).gone[nid(2)], 'with Notes\' own tombstone');
+  assert.equal(body(recFile(drive, 'notes', `${ACCT}|${nid(2)}`)).deleted, true, 'Drive keeps a tombstone file');
+  // Settled: nothing more goes up.
+  const n = drive.log.filter((x) => x.upload).length;
+  await a.run(); await b.run();
+  assert.equal(drive.log.filter((x) => x.upload).length, n, 'no echo of Notes\' own writes');
+  noDeletes(drive);
+});
+
+test('Notes on a fresh device: its own notes stay; the folder\'s come in; one on both keeps the newer text', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), c = device(drive, { clock });
+  await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: 0, sid: 'a1', html: '<p>From A</p>', title: 'A' });
+  await a.notesOp({ key: ACCT, op: 'save', id: nid(3), base: 0, sid: 'a3', html: '<p>Shared, old</p>', title: 'Shared' });
+  await a.on();
+  clock.t += 5000;
+  await c.notesOp({ key: ACCT, op: 'save', id: nid(2), base: 0, sid: 'c2', html: '<p>Mine</p>', title: 'C' });
+  await c.notesOp({ key: ACCT, op: 'save', id: nid(3), base: 0, sid: 'c3', html: '<p>Shared, newer</p>', title: 'Shared' });
+  assert.ok((await c.on()).ok);
+  assert.match(await noteOf(c, nid(1)), /From A/);
+  assert.match(await noteOf(c, nid(2)), /Mine/, 'its own kept');
+  assert.match(await noteOf(c, nid(3)), /newer/, 'the newer of the two');
+  assert.ok((await a.run()).ok);
+  assert.match(await noteOf(a, nid(2)), /Mine/);
+  assert.match(await noteOf(a, nid(3)), /newer/);
 });

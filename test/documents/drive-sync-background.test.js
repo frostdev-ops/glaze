@@ -23,6 +23,7 @@ const worker = () => {
     GZ_CARDS: { queue: () => { let tail = Promise.resolve(); return (fn) => { const p = tail.then(fn); tail = p.catch(() => {}); return p; }; } },
     GZ_DRIVE_SYNC: { create: (env) => { documents = env; return {}; } }, brokerTurn: null,
     driveLib: () => {}, googleLib: () => ({ ON: true }),
+    NOTES_DB: {}, brokerArea: () => ({}), GZ_NOTES: require('../../extension/planner/notes.js'),
     brokerIn: (name) => { assert.equal(name, 'backup'); context.GZ_CLASSES = C; context.GZ_GPA = G; },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../../extension/background/drive-store.js'), 'utf8'), context);

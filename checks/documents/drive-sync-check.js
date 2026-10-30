@@ -127,6 +127,8 @@ const fileOf = (key, role) => [...drive.files.values()].find((f) => f.meta.appPr
       JSON.stringify({ glaze: 'record', v: 1, cat: 'writerWords', at: 1000, ...words }));
     const seeded = drive.log.length;
     await sw.evaluate(() => chrome.storage.local.set({ writerWords: ['Local'], 'todo:https://school.instructure.com/42': { tasks: [], items: {} } }));
+    const NOTES = 'notesIdx:https://school.instructure.com/42', NOTE = '00000000-0000-4000-8000-00000000e001';
+    ok((await sw.evaluate(({ key, id }) => GZ_NOTES.run({ key, op: 'save', id, base: 0, sid: 'check', html: '<p>Mitochondria make energy.</p>', title: 'Bio' }, { local: brokerArea('local') }, NOTES_DB), { key: NOTES, id: NOTE }))?.ok, 'a note in Notes');
     ok(await settings.evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:google', op: 'connect' })).then((r) => r.ok), 'Drive connects');
     await until(() => row.isVisible(), 'Sync to Google Drive shows once Drive is connected');
     ok(drive.log.length >= seeded, 'connected');
@@ -139,6 +141,7 @@ const fileOf = (key, role) => [...drive.files.values()].find((f) => f.meta.appPr
     ok(JSON.stringify(((await local('writerWords')) || []).slice().sort()) === '["Local","Zephyr"]', 'the other device\'s dictionary joined with this one\'s');
     ok(JSON.stringify(JSON.parse(rec('local', 'writerWords').bytes.toString('utf8')).value.slice().sort()) === '["Local","Zephyr"]', 'and the joined one goes up');
     ok(rec('local', 'todo:https://school.instructure.com/42')?.meta.parents[0] === data.meta.id, 'tasks: a record in Glaze/Data');
+    ok(/Mitochondria/.test(JSON.parse(rec('notes', `${NOTES}|${NOTE}`)?.bytes.toString('utf8') || '{}').value?.html || '') && !!rec('notes', `${NOTES}|folders`), 'Notes: the note with its text, and the account\'s folders');
     const syncKeys = await settings.evaluate(async () => Object.keys(await chrome.storage.sync.get(null)));
     ok(syncKeys.length > 0 && syncKeys.every((k) => rec('sync', k)), `Settings, key by key (${syncKeys.filter((k) => !rec('sync', k)).join(', ') || syncKeys.length})`);
     ok(!rec('local', 'google') && !rec('local', 'driveSync'), 'Drive\'s own sign-in record and sync state stay here');

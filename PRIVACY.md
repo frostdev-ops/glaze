@@ -817,14 +817,19 @@ you import) are bundled. It makes requests in these cases:
       other copy becomes one of its versions, and a PDF's becomes a document of its own named "(Drive copy)". A file you
       edit in Drive with another app is never overwritten: Glaze writes a new file beside it (a PDF's or deck's new bytes
       come into Glaze instead).
-    - in Glaze/Data, one JSON file per setting and per record of what **Back up…** covers: every Settings value, Better To
-      Do's tasks and plans and the pet, dashboard notes, class schedules, GPA past terms, widgets, Looks history and
-      favorites, the personal dictionary and saved sources, each with when it last changed. When both sides changed one,
-      the later change is kept; when a second device connects, its own records are joined with the folder's as Restore
-      joins a backup's, never replaced. Notes and share keys aren't synced yet; **Back up…** still has them.
-    - in Glaze/Backups, once a day, a **Back up…** zip of the above (without Notes and share keys), the newest five kept.
-    - Never in Drive: AI keys and connections, Agents pairing, Drive's and Google Calendar's sign-in records, what Glaze
-      read from your school (caches, course names, card pictures) and anything else **Back up…** leaves out.
+    - in Glaze/Data, one JSON file per setting and per record: every Settings value, Better To Do's tasks and plans and
+      the pet, dashboard notes, class schedules, GPA past terms, widgets, Looks history and favorites, the personal
+      dictionary and saved sources, Gradescope's course placings and your answers about it (not the assignments read from
+      Gradescope, which stay on the device that read them), and Notes: each account's folders, each note (its title,
+      folder, course, times, whether it is in Trash, and its text) and each picture or attachment. Each carries when it last
+      changed. When both sides changed one, the later change is kept; when a second device connects, its own records are
+      joined with the folder's as Restore joins a backup's (a note keeps the newer text), never replaced.
+    - in Glaze/Backups, once a day, a **Back up…** zip of Settings, tasks, records and documents (Notes are in Glaze/Data),
+      the newest five kept.
+    - Never in Drive: share keys (each share's end-to-end keys and your delete tokens: anyone who could read your Drive
+      folder could otherwise read or delete your shares; **Back up…** still has them), AI keys and connections, Agents
+      pairing, Drive's and Google Calendar's sign-in records, what Glaze read from your school (caches, course names, card
+      pictures) and anything else **Back up…** leaves out.
     - Deleting follows Glaze's Trash: a document moved to Trash in Glaze moves its Drive files to Drive's trash, and one
       trashed or deleted in Drive moves the document to Glaze's Trash; a setting or record deleted on one device is
       deleted on the others, its file kept in Drive saying so. Glaze never deletes a Drive file for good: an older
