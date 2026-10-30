@@ -40,13 +40,13 @@ nonisolated func json(_ o: Any) -> String { String(data: try! JSONSerialization.
             DispatchQueue.main.async { done(ok) }
         }
         host.onIdle = { emit(["ev": "idle"]); host.stop(); exit(0) }
-        host.start()
+        let started = host.start()
         self.host = host
         let group = URL(fileURLWithPath: a[2]), c = DispatchSource.makeReadSource(fileDescriptor: 0, queue: .main)
         c.setEventHandler { [unowned self] in self.command(group) }
         c.resume()
         commands = c
-        emit(["ev": "ready", "pid": Int(getpid())])
+        emit(["ev": "ready", "pid": Int(getpid()), "started": started])
     }
     func command(_ group: URL) {
         var chunk = [UInt8](repeating: 0, count: 1 << 20)
@@ -324,11 +324,8 @@ test('the host compiles for macOS 12 in the app with complete concurrency checki
 test('the DMG app\'s sources compile together as its target builds them, against a stand-in for Sparkle\'s API', { skip: !S.supported }, () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sparkle-'));
   try {
-    const made = require('node:child_process').spawnSync('xcrun', ['swiftc', '-emit-module', '-parse-as-library', '-module-name', 'Sparkle', '-target', S.TARGET,
-      '-emit-module-path', path.join(temp, 'Sparkle.swiftmodule'), path.join(__dirname, 'fixtures/sparkle-stand-in.swift')], { encoding: 'utf8', timeout: 180000 });
-    assert.equal(made.status, 0, made.stderr);
-    const r = S.typecheck([appFile, path.join(root, 'safari/Glaze/Glaze/ViewController.swift'), hostFile, bridgeFile],
-      ['-parse-as-library', '-module-name', 'Glaze', '-I', temp, '-D', 'GLAZE_DMG', '-default-isolation', 'MainActor']);
+    const files = S.sparkleSources([appFile, path.join(root, 'safari/Glaze/Glaze/ViewController.swift'), hostFile, bridgeFile], temp);
+    const r = S.typecheck(files, ['-parse-as-library', '-module-name', 'Glaze', '-D', 'GLAZE_DMG', '-default-isolation', 'MainActor']);
     assert.equal(r.status, 0, r.stderr);
     assert.doesNotMatch(r.stderr, /warning:|error:/);
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
@@ -348,4 +345,33 @@ test('the host is DMG-only, starts no process and opens no network socket; the a
   assert.match(app, /finishHidden\("unexpected interactive extraction", force: true\)/, 'Sparkle\'s safety stop still ends it');
   assert.match(app, /func applicationWillTerminate\(_ notification: Notification\) \{ agents\?\.stop\(\) \}/);
   assert.match(app, /host\.onIdle = \{[^]*self\.agents\?\.stop\(\)[^]*finishHidden\("agents idle"\)/);
+});
+
+
+test('the bridge reaches the host in a group container whose path exceeds sun_path, without relaunching it', { skip: !S.supported }, async () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-agent-long-'));
+  const group = path.join(temp, 'a'.repeat(100), 'Library/Group Containers/22AAZFMTV8.io.frostdev.Glaze');
+  fs.mkdirSync(group, { recursive: true, mode: 0o700 });
+  assert.ok(Buffer.byteLength(path.join(group, 'agent.sock')) > 104);
+  const file = path.join(temp, 'Long.swift');
+  fs.writeFileSync(file, fs.readFileSync(bridgeFile, 'utf8') + fs.readFileSync(hostFile, 'utf8') + HARNESS);
+  const swift = S.run(file, [path.join(temp, 'run'), group, '30', String(LINE), String(QUEUE)], { flags: ['-D', 'GLAZE_DMG', '-default-isolation', 'MainActor'] });
+  try {
+    const ready = await swift.next();
+    assert.equal(ready.started, true, 'the host must bind agent.sock by name inside the group');
+    swift.send({ cmd: 'batch', id: 1, batch: B(1, 1, [HELLO]) });
+    let reply, hello;
+    while (!reply || !hello) {
+      const m = await swift.next();
+      if (m.ev === 'reply') reply = m.reply;
+      if (m.ev === 'dispatch') hello = m.info;
+    }
+    assert.deepEqual(reply, { ok: true }, 'the extension bridge connects to the long group path');
+    assert.deepEqual(hello, { i: I, s: nonce(1), frames: [FROM_HOST] });
+  } finally {
+    swift.send({ cmd: 'stop' });
+    await swift.done;
+    assert.equal(fs.existsSync(path.join(group, 'agent.sock')), false, 'owned socket removed');
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
 });

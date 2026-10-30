@@ -44,4 +44,13 @@ const run = (file, args = [], { flags = [], env } = {}) => {
   return { child, next, send, done, stop, stderr: () => stderr };
 };
 
-module.exports = { supported, FEATURES, TARGET, typecheck, run };
+// Typecheck Sparkle callers with its stand-in in the same source unit; never emit a module or build an app.
+const sparkleSources = (files, temp) => files.map((file) => {
+  const fs = require('node:fs'), path = require('node:path'), src = fs.readFileSync(file, 'utf8');
+  if (!/^import Sparkle$/m.test(src)) return file;
+  const out = path.join(temp, path.basename(file));
+  fs.writeFileSync(out, fs.readFileSync(path.join(__dirname, '../fixtures/sparkle-stand-in.swift'), 'utf8') + src.replace(/^import Sparkle$/m, ''));
+  return out;
+});
+
+module.exports = { supported, FEATURES, TARGET, typecheck, run, sparkleSources };

@@ -69,13 +69,9 @@ test('DMG staging is repeatable and isolates Sparkle from the checked-in Mac/iOS
       });
       const setting = (name, key) => p.objects[objects.find((o) => o.isa === 'PBXNativeTarget' && o.name === name).buildConfigurationList]
         .buildConfigurations.map((k) => p.objects[k]).find((c) => c.name === 'Release').buildSettings[key];
-      const sparkle = path.join(temp, 'sparkle');
-      const made = run('xcrun', ['swiftc', '-emit-module', '-parse-as-library', '-module-name', 'Sparkle', '-target', swift.TARGET,
-        '-emit-module-path', path.join(sparkle, 'Sparkle.swiftmodule'), path.join(__dirname, 'fixtures/sparkle-stand-in.swift')]);
-      assert.equal(made.status, 0, made.stderr);
-      for (const [name, flags] of [['Glaze Extension', []], ['Glaze', ['-parse-as-library', '-module-name', 'Glaze', '-I', sparkle]]]) {
+      for (const [name, flags] of [['Glaze Extension', []], ['Glaze', ['-parse-as-library', '-module-name', 'Glaze']]]) {
         assert.equal(setting(name, 'SWIFT_ACTIVE_COMPILATION_CONDITIONS'), '$(inherited) GLAZE_DMG');
-        const r = swift.typecheck(sources(name), [...flags, '-D', 'GLAZE_DMG', '-default-isolation', setting(name, 'SWIFT_DEFAULT_ACTOR_ISOLATION') || 'nonisolated']);
+        const r = swift.typecheck(swift.sparkleSources(sources(name), temp), [...flags, '-D', 'GLAZE_DMG', '-default-isolation', setting(name, 'SWIFT_DEFAULT_ACTOR_ISOLATION') || 'nonisolated']);
         assert.equal(r.status, 0, `${name}: ${r.stderr}`);
         assert.doesNotMatch(r.stderr, /warning:|error:/, name);
       }
