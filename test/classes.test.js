@@ -635,6 +635,31 @@ test('a class in the day\'s last minute runs to midnight: reminded, exported, an
   assert.deepEqual(C.icsEvents(late, { site: 'x', from: '2026-10-15', to: '2026-10-15', tz: NY }).map((e) => [iso(e.start), iso(e.end)]), [[iso(thu), iso(fri)]]);
 });
 
+test('midnight class exports import again across the next weekday and DST changes', () => {
+  const tz = 'America/New_York';
+  for (const [from, to] of [['2026-03-01', '2026-03-15'], ['2026-10-25', '2026-11-08']]) {
+    const store = { tz, courses: [{ id: '11', name: 'Night lab', periods: [{ days: [0], start: 1380, end: 1440, loc: 'Lab', from, to, skip: [] }] }] };
+    const events = C.icsEvents(store, { site: 'x', from, to, tz });
+    assert.equal(events.length, 3);
+    for (const event of events) {
+      assert.equal(T.inputs(event.end, tz).time, '00:00');
+      assert.equal(C.dayNum(T.inputs(event.end, tz).date), C.dayNum(T.inputs(event.start, tz).date) + 1);
+    }
+    const imported = C.fromIcs(I.write({ name: 'Classes', events }, { now: NOW }), { now: Date.parse(from), tz });
+    assert.equal(imported.entries.length, 1, 'the exported midnight meetings survive import');
+    assert.deepEqual(imported.entries[0].periods.map((p) => [p.days, p.start, p.end]), [[[0], 1380, 1440]]);
+  }
+});
+
+test('midnight class ends follow local dates on 23 and 25 hour DST days', () => {
+  const tz = 'America/New_York';
+  for (const [day, hours] of [['2026-03-08', 23], ['2026-11-01', 25]]) {
+    const store = { courses: [{ id: '11', name: 'All day lab', periods: [{ days: [0], start: 0, end: 1440, loc: '', from: day, to: day, skip: [] }] }] };
+    const [event] = C.icsEvents(store, { site: 'x', from: day, to: day, tz });
+    assert.equal((event.end - event.start) / 36e5, hours);
+  }
+});
+
 // Codex W14 review: an export holds exact instants (UTC), as every other timed event in W13's file, worked out in the
 // zone the schedule was saved in: floating times would move with the calendar app's zone.
 test('the export hook: one event per meeting, at its instant in the schedule\'s own zone, written by lib/ics.js', async () => {

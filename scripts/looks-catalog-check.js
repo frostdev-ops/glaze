@@ -4,7 +4,8 @@
 // Look saved from Settings shows at once, pressed, here and in a second Settings tab without a reload; a course wears it;
 // removing it takes it from every list and the course goes back to the student's theme. On a course page (a synthetic Ultra
 // shell): a course wears its saved Look, one this device doesn't keep falls back to the theme, and Ctrl+K lists and wears the
-// kept Looks. Screenshots at 1280 and 640 wide, in a light and a dark Look.
+// kept Looks. A gallery Look picked for a course in Settings stays worn after a Glaze 3.x device on the same sync account writes
+// the courses back. Screenshots at 1280 and 640 wide, in a light and a dark Look.
 // NODE_PATH=<installed playwright> nice node scripts/looks-catalog-check.js [evidence directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
@@ -29,6 +30,16 @@ const check = (ok, name, detail = '') => {
   if (!ok) failures.push(name);
 };
 const look = (name) => G.GZ_LOOKS.find((L) => L.name === name);
+// Glaze 3.4.6's defaults.js as released (git show v3.4.6:defaults.js), for its sanitize of the courses it writes back.
+const old = (() => {
+  const module = { exports: {} };
+  require('node:vm').runInNewContext(fs.readFileSync(path.join(root, 'test/fixtures/defaults-3.4.6.js.txt'), 'utf8'), {
+    module, TextEncoder, console, GZ_COLOR: require('../lib/color.js'), GZ_SURFACES: require('../lib/surfaces.js'), GZ_FONTS: require('../lib/fonts.js') });
+  return module.exports;
+})();
+// A course's saved or gallery Look, as Settings stores it (defaults.js courseLooks); and what this course wears by id.
+const wearOn = (p, id) => p.evaluate((id) => chrome.storage.sync.set({ courseLooks: { _101_1: id } }), id);
+const courseLook = (p) => p.evaluate(async () => { const r = await chrome.storage.sync.get(['courses', 'courseLooks']); return [r.courses?.looks?._101_1, r.courseLooks?._101_1]; });
 const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, look(name)) });
 
 (async () => {
@@ -217,15 +228,12 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     const optgroups = await select.locator('optgroup').evaluateAll((g) => g.map((x) => x.label));
     check(optgroups.join() === 'Built in,Saved,Gallery', 'grouped there too', optgroups.join());
     await select.selectOption(ids.field);
-    check(await until(async () => (await a.evaluate(async () => (await chrome.storage.sync.get('courses')).courses?.looks?._101_1)) === ids.field), 'the course wears it, by id');
-    await a.evaluate(async () => {
-      const { courses } = await chrome.storage.sync.get('courses');
-      await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: 'c:00000000000000' } } });
-    });
+    check(await until(async () => JSON.stringify(await courseLook(a)) === JSON.stringify([undefined, ids.field])), 'the course wears it, by id, in courseLooks', JSON.stringify(await courseLook(a)));
+    await wearOn(a, 'c:00000000000000');
     await until(async () => await select.inputValue() === '');
     check(await select.evaluate((s) => s.selectedOptions[0]?.textContent === 'Your theme'), 'a missing kept Look visibly selects Your theme');
     await select.selectOption(ids.field);
-    await until(async () => (await a.evaluate(async () => (await chrome.storage.sync.get('courses')).courses?.looks?._101_1)) === ids.field);
+    await until(async () => (await courseLook(a))[1] === ids.field);
     await a.goto(`${base}/options.html#look/palette`);
     await a.locator('#looks button').first().waitFor();
     await more();
@@ -234,7 +242,7 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     check(await until(async () => (await card(a, ids.field).count()) === 0), 'removed: gone from the picker');
     check(await until(async () => (await card(b, ids.field).count()) === 0), 'and from the other tab\'s');
     check(await until(async () => !(await catalog()).looks.some((E) => E.id === ids.field)), 'and from the catalogue');
-    check(await until(async () => (await a.evaluate(async () => (await chrome.storage.sync.get('courses')).courses?.looks?._101_1)) === undefined), 'the course that wore it is unmapped');
+    check(await until(async () => (await courseLook(a)).every((v) => v === undefined)), 'the course that wore it is unmapped');
     await b.goto(`${base}/options.html#courses/list`);
     const sel2 = b.locator('#course-list select').first();
     await sel2.waitFor();
@@ -248,8 +256,7 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     // ---- on a course page: its saved Look, the theme where this device doesn't keep it, and Ctrl+K ----
     await a.evaluate(async ({ site, id }) => {
       await chrome.storage.local.set({ ultra: [site] });
-      const { courses } = await chrome.storage.sync.get('courses');
-      await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: id } } });
+      await chrome.storage.sync.set({ courseLooks: { _101_1: id } });
     }, { site, id: ids.seminar });
     await a.evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:look', parts: { x: { pointer: 'quill', cursor: { kind: 'sparkle' } } }, patch: { version: 2 } }));
     await require('./check-env.js').ultraReady(a);
@@ -258,7 +265,7 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     await lms.goto(`${site}/ultra/courses/_101_1/outline`);
     await lms.waitForFunction(() => document.documentElement.hasAttribute('data-gz-bg'));
     check(await until(async () => (await ink(lms)) === seminar.colors['--gz-ink']), 'the course wears its saved Look on its page', await ink(lms));
-    await a.evaluate(async () => { const { courses } = await chrome.storage.sync.get('courses'); await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: 'c:00000000000000' } } }); });
+    await wearOn(a, 'c:00000000000000');
     check(await until(async () => (await ink(lms)) === field.colors['--gz-ink']), 'a Look this device doesn\'t keep: the student\'s theme', await ink(lms));
     check(await until(() => sw.evaluate(async (url) => {
       const [tab] = await chrome.tabs.query({ url });
@@ -276,13 +283,29 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     const shaderLook = C.make(codes.shader, 'Shader night', 'mira', 'gallery');
     await a.evaluate(async ({ f }) => { const { lookFavorites } = await chrome.storage.local.get('lookFavorites'); await chrome.storage.local.set({ lookFavorites: [f, ...lookFavorites] }); }, { f: shaderLook });
     check(await until(async () => (await catalog()).looks.some((E) => E.id === shaderLook.id && E.kind === 'background')), 'a gallery shader Look is in the catalogue');
-    await a.evaluate(async ({ id }) => { const { courses } = await chrome.storage.sync.get('courses'); await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: id } } }); }, { id: shaderLook.id });
+    await a.goto(`${base}/options.html#courses/list`);
+    const pick = a.locator('#course-list select').first();
+    check(await until(async () => (await pick.locator(`option[value="${shaderLook.id}"]`).count()) === 1), 'the course\'s Look select has the gallery shader Look');
+    await pick.selectOption(shaderLook.id);
+    check(await until(async () => JSON.stringify(await courseLook(a)) === JSON.stringify([undefined, shaderLook.id])), 'picked in Settings, it goes in courseLooks', JSON.stringify(await courseLook(a)));
     const painted = () => lms.evaluate(() => ({ bg: document.documentElement.getAttribute('data-gz-bg'), scene: !!document.getElementById('gz-scene'), pointer: (document.documentElement.style.getPropertyValue('--gz-cursor').match(/cursors\/(\w+)\//) || [])[1] || '' }));
-    await lms.goto(`${site}/ultra/courses/_101_1/outline`);
-    await lms.waitForFunction(() => document.documentElement.hasAttribute('data-gz-bg'));
-    const course = await until(async () => { const p = await painted(); return p.bg === 'shader' && p.scene && p.pointer === 'lava' && p; });
-    check(!!course, 'a course wearing a gallery shader Look shows the shader (not the gradient) and its pointer', JSON.stringify(await painted()));
-    check(await until(async () => (await ink(lms)) === G.GZ_PRESET('Midnight')['--gz-ink']), '  and its palette');
+    const shaderWorn = async (when) => {
+      await lms.goto(`${site}/ultra/courses/_101_1/outline`);
+      await lms.waitForFunction(() => document.documentElement.hasAttribute('data-gz-bg'));
+      const course = await until(async () => { const p = await painted(); return p.bg === 'shader' && p.scene && p.pointer === 'lava' && p; });
+      check(!!course, `a course wearing a gallery shader Look shows the shader (not the gradient) and its pointer${when}`, JSON.stringify(await painted()));
+      check(await until(async () => (await ink(lms)) === G.GZ_PRESET('Midnight')['--gz-ink']), `  and its palette${when}`);
+    };
+    await shaderWorn('');
+    // A 3.x device edits another course: its sanitize keeps built-in names only in courses.looks, and it writes courses back.
+    const synced = await a.evaluate(() => chrome.storage.sync.get(null));
+    const c3 = old.GZ_SANITIZE(synced).courses;
+    old.GZ_COURSE_EDIT.look(c3, '_303_1', 'Library');
+    old.GZ_COURSE_EDIT.color(c3, '_303_1', '#ff0000');
+    check(Object.values(c3.looks).every((v) => old.GZ_LOOKS.some((L) => L.name === v)), 'a 3.x device writes courses.looks with built-in names only', JSON.stringify(c3.looks));
+    await a.evaluate((courses) => chrome.storage.sync.set({ version: 2, courses }), structuredClone(c3));
+    check(await until(async () => (await a.evaluate(async () => (await chrome.storage.sync.get('courses')).courses?.looks?._303_1)) === 'Library'), 'its write is in sync storage');
+    await shaderWorn(', after a 3.x device wrote the courses back');
     await lms.evaluate(() => { history.pushState({}, '', '/ultra/courses/_202_1/outline'); dispatchEvent(new PopStateEvent('popstate')); document.body.append(document.createElement('div')); });
     const theme = await until(async () => { const p = await painted(); return p.bg === 'scene' && p.scene && p.pointer === 'ghost' && p; });
     check(!!theme, 'switching to a course without its own Look: the theme\'s background and pointer again', JSON.stringify(await painted()));
@@ -295,7 +318,7 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     const videoLook = C.make(videoCode, 'Course video', '', 'saved');
     await a.evaluate(async (f) => { const { lookFavorites } = await chrome.storage.local.get('lookFavorites'); await chrome.storage.local.set({ lookFavorites: [f, ...lookFavorites] }); }, videoLook);
     check(await until(async () => (await catalog()).looks.some((e) => e.id === videoLook.id)), 'the video Look reaches the catalogue');
-    await a.evaluate(async (id) => { const { courses } = await chrome.storage.sync.get('courses'); await chrome.storage.sync.set({ courses: { ...courses, looks: { _101_1: id } } }); }, videoLook.id);
+    await wearOn(a, videoLook.id);
     const go = (id) => lms.evaluate((id) => { history.pushState({}, '', `${location.origin}/ultra/courses/${id}/outline`); dispatchEvent(new PopStateEvent('popstate')); document.body.append(document.createElement('div')); }, id);
     const playing = (p) => p.evaluate(() => { const v = document.querySelector('#gz-scene video'); return !!v && v.readyState >= 2 && v.muted && v.loop && v.currentSrc.startsWith('blob:'); });
     for (let i = 0; i < 3; i++) {

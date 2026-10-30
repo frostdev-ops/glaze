@@ -80,10 +80,17 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
     const k = T().storeKey(who.origin, who.uid), d = T().clean((await ctx.local.get(k))[k]);
     return new Map(Object.entries(d.items).filter(([, v]) => typeof v.done === 'boolean').map(([key, v]) => [key, v.done]));
   };
-  const marked = (items, m) => items.map((i) => ({ ...i, marked: m?.get(`${i.type}:${i.id}`) ?? null }));
+  // Glaze's own mark beside each item, and complete: done as Glaze's list shows it (lib/todo.js isDone over the cached item).
+  const marked = (items, m, c, o) => {
+    const raw = new Map(c.items.filter(isObj).map((i) => [`${i.type}:${i.id}`, i]));
+    return items.map((i) => {
+      const key = `${i.type}:${i.id}`, own = m?.get(key), r = raw.get(key);
+      return { ...i, marked: own ?? null, complete: r ? T().isDone(r, o.done, own) : i.done === true };
+    });
+  };
   const course = { type: 'string', minLength: 1, maxLength: LIMIT.course, description: "Only this course's items, by its id (courses_list)." };
   const day = (which) => ({ type: 'string', pattern: ISO.source, description: `The ${which} day (2026-10-29: the student's own day) or moment (2026-10-29T17:00:00Z), ISO 8601.` });
-  const ITEM = "id, type, courseId, course, title, due (ms since 1970, or null), url, whether it is done (the LMS's own mark), submitted, graded, late or missing, and marked (Glaze's own mark on this device: true done, false not done, null none; Glaze's list shows an item done when marked is true, or when done and marked is not false)";
+  const ITEM = "id, type, courseId, course, title, due (ms since 1970, or null), url, whether it is done (the LMS's own mark), submitted, graded, late or missing, marked (Glaze's own mark on this device: true done, false not done, null none), and complete (whether Glaze's to-do list shows it done: by marked, else by the LMS's mark, else by a submission, excuse or grade not awaiting a resubmission, unless the student marks items by hand)";
   const NOTHING = 'Nothing was done.';
   const DATE = { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
   // The planner item a mark is for, as Glaze last read it, and what marking it does. → { who, item, o, site, store, key, say }
@@ -162,7 +169,8 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
         const now = clock(ctx), { course: id, days } = isObj(args) ? args : {};
         const items = (await B().CALLS.todo.run([], env(who, got)))
           .filter((i) => (!id || i.courseId === id) && (!days || (i.due !== null && i.due >= now && i.due <= now + days * DAY)));
-        return { account: who.account, at: when(c.at) || null, covers: covers(c), items: marked(items, await marks(who, ctx, await prefs(deps))) };
+        const o = await prefs(deps);
+        return { account: who.account, at: when(c.at) || null, covers: covers(c), items: marked(items, await marks(who, ctx, o), c, o) };
       },
     },
     {
@@ -177,7 +185,8 @@ var GZ_MCP_STUDY = globalThis.GZ_MCP_STUDY || (() => {
         if (to < from || to - from > LIMIT.days * DAY) return fail(`to is after from, and at most ${LIMIT.days} days after it.`);
         const got = await ctx.local.get('todoCache'), c = plan(who, got);
         if (!c) return none(who, 'to-do list');
-        return { account: who.account, at: when(c.at) || null, covers: covers(c), items: marked(await B().CALLS.schedule.run([from, to], env(who, got)), await marks(who, ctx, await prefs(deps))) };
+        const o = await prefs(deps);
+        return { account: who.account, at: when(c.at) || null, covers: covers(c), items: marked(await B().CALLS.schedule.run([from, to], env(who, got)), await marks(who, ctx, o), c, o) };
       },
     },
     ...(deps?.tabs && deps?.sync ? [{

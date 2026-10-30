@@ -51,12 +51,15 @@ const table = (platform, env) => {
   const config = abs(env.CHROME_CONFIG_HOME) || abs(env.XDG_CONFIG_HOME) || path.join(home, '.config');
   return [
     ...CHROMIUM.filter((b) => b[3]).map(([id, name, , l]) => ({ id, name, family: 'chromium', data: path.join(config, l), dir: path.join(config, l, NMH) })),
-    { id: 'firefox', name: 'Firefox', family: 'firefox', data: path.join(home, '.mozilla', 'firefox'), dir: path.join(home, '.mozilla', 'native-messaging-hosts') },
+    // Profiles moved to XDG; native manifests still use MDN's ~/.mozilla location (Mozilla bug 2005167).
+    { id: 'firefox', name: 'Firefox', family: 'firefox', data: path.join(home, '.mozilla', 'firefox'),
+      otherData: [path.join(abs(env.XDG_CONFIG_HOME) || path.join(home, '.config'), 'mozilla', 'firefox')],
+      dir: path.join(home, '.mozilla', 'native-messaging-hosts') },
   ];
 };
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
-const present = (list) => list.filter((b) => isDir(b.data));
+const present = (list) => list.filter((b) => [b.data, ...(b.otherData || [])].some(isDir));
 
 // glaze-mcp's own folder: the versioned copies, and `hosts` with the launchers (and, on Windows, the manifests).
 const folder = (platform, env) => {

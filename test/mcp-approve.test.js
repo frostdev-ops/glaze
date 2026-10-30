@@ -76,6 +76,37 @@ test('an ask is a storage.session record and one focused popup at the approval p
   assert.equal(r.v, undefined, 'it waits for the student');
 });
 
+test('a browser that opens the popup at its own size (Safari, live 2026-10-30: the main window\'s) is brought back to the approval size', async () => {
+  const e = env();
+  const updated = [];
+  e.deps.windows.create = async (o) => { e.made.push({ ...o, id: 9 }); return { id: 9, width: 1800, height: 1130, tabs: [{ id: 900, windowId: 9 }] }; };
+  e.deps.windows.update = async (id, o) => { updated.push([id, o]); };
+  e.a.ask('pair', PAIR);
+  await settle();
+  assert.deepEqual(updated, [[9, { width: A.SIZE.width, height: A.SIZE.height }]]);
+  // One already at its size is left alone, and a browser without update still opens it.
+  const f = env();
+  f.deps.windows.update = async () => assert.fail('no resize needed');
+  f.a.ask('pair', PAIR);
+  await settle();
+  const g = env();
+  g.deps.windows.create = async (o) => { g.made.push({ ...o, id: 7 }); return { id: 7, width: 1800, height: 1130, tabs: [{ id: 700, windowId: 7 }] }; };
+  g.a.ask('pair', PAIR);
+  await settle();
+  assert.deepEqual(g.data.mcpAskWindow, { id: 7, tab: 700 });
+  // A popup closed while it was opening is never resized.
+  const h = env(), resized = [];
+  let finish;
+  h.deps.windows.create = (o) => new Promise((res) => { finish = () => { h.made.push({ ...o, id: 8 }); res({ id: 8, width: 1800, height: 1130, tabs: [{ id: 800, windowId: 8 }] }); }; });
+  h.deps.windows.update = async (id, o) => { resized.push(id); };
+  h.a.ask('pair', PAIR);
+  await settle();
+  h.a.closed(8);
+  finish();
+  await settle();
+  assert.deepEqual(resized, []);
+});
+
 test('the record keeps what Glaze shows and nothing else: no arguments, no extra view fields, no staged text', async () => {
   const e = env();
   e.a.ask('grant', { ...GRANT, app: { ...CLAUDE, name: '‮Claude\n\nAllow​ everything', verified: true, ppid: 4 }, args: { secret: 1 }, extra: 'x' });

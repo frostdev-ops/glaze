@@ -257,7 +257,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
           else if (typeof m.html !== 'string' || !Array.isArray(m.delta) || !sync(box, m.html, m.delta)) why = 'text';
           else on = true;
         }
-      } finally { if (on) turnOn(box, f, Date.now()); else endFlush(box, why); }
+      } finally { if (on) { f.waiting = true; turnOn(box, f, Date.now()); } else endFlush(box, why); }
     }
     else if (m.type === 'view' || m.type === 'room') { if (box.mode === 'paper') { if (m.type === 'view') box.viewedOn = box.port; view(box, m); } }
     else if (box.mode === 'paper' && box.full) { if (m.type === 'focus-mode') focusMode(box, m.on === true); else if (m.type === 'native') { drop(box); declined.add(box.editor); } }
@@ -331,8 +331,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (box.flushing !== f) return;
     const b = flushButton(box, f);
     if (box.full || !sameBox(box) || !b) { endFlush(box, 'page'); return; }
-    if (U().enabled(b)) { try { passing = b; b.click(); } finally { passing = null; endFlush(box); } return; }
+    if (Date.now() - f.at >= 60000) { endFlush(box, 'save'); return; }
     if (Date.now() - since >= SUBMIT_ON) { endFlush(box, f.action === 'submit' ? 'submit' : 'page'); return; }
+    if (U().enabled(b)) { try { passing = b; b.click(); } finally { passing = null; endFlush(box); } return; }
     setTimeout(() => turnOn(box, f, since), 100);
   };
   const endFlush = (box, reason = null) => {
@@ -398,6 +399,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // Writer gives back holds nothing: Ultra's editor is there again to press.
   const HOLD_ARM = 5000;
   const hold = (box, b, type = 'click') => {
+    // Once saved, a newer native action replaces the earlier enable wait (Save and Close must not leave Submit pending).
+    if (box.flushing?.waiting) endFlush(box);
     if (box.flushing && Date.now() - box.flushing.at >= 60000) endFlush(box, 'save');
     if (box.flushing || (box.held && !box.held.request)) return;
     const id = b.getAttribute('data-analytics-id'), action = /submit$/.test(id) ? 'submit' : 'save';
