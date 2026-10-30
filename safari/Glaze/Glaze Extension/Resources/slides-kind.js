@@ -234,7 +234,8 @@
 
   // host: an assignment's frame (writer-kinds.js view): { mount, t, title, tools }, the viewer in mount with the
   // assignment's title and the frame's tools (Submit…) before ⋯, no way back to Documents; → its surface.
-  const edit = async (key, host = null) => {
+  // o: papers.js's { fresh } (a kind that opens a new document empty), or view's { host }.
+  const edit = async (key, { host = null } = {}) => {
     const root = document.documentElement;
     const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'slides';
@@ -514,6 +515,6 @@
 
   // Viewing stays registered; only import follows the switch. The page waits before it routes or draws.
   const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.slides === true, () => false);
-  DK.wait(on.then((yes) => DK.register('slides', { edit, view: edit, into, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
+  DK.wait(on.then((yes) => DK.register('slides', { edit, view: (key, host) => edit(key, { host }), into, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
   globalThis.GZ_SLIDES_KIND = Object.freeze({ STORE });
 })();

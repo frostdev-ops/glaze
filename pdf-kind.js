@@ -149,7 +149,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
   // ---- the viewer. host: an assignment's frame (writer-kinds.js view): { mount, t, title, tools }, the viewer in mount with
   // the assignment's title and the frame's tools (Submit…) before ⋯, no way back to Documents; → its surface.
-  const edit = async (key, host = null) => {
+  // o: papers.js's { fresh } (a kind that opens a new document empty), or view's { host }.
+  const edit = async (key, { host = null } = {}) => {
     const root = document.documentElement;
     const life = new AbortController(), signal = life.signal;
     if (host) words = host.t || null; else root.dataset.mode = 'pdf';
@@ -354,7 +355,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   // ---- registration: a PDF already kept lists and opens either way; only Settings → Writer → PDFs on (writer.pdf) lets
   // Documents import new ones (its Import, file chooser and drops: GZ_DOC_KINDS.opens). The page routes once this has answered.
   const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.pdf === true, () => false);
-  GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: edit, into, says: { size: TOO_BIG, read: UNREAD }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
+  GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: (key, host) => edit(key, { host }), into, says: { size: TOO_BIG, read: UNREAD }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
 
   return { STORE, pureXfa };
 })();
