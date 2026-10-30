@@ -37,6 +37,14 @@ cat > "$stage/lib/firefox-background.js" <<'JS'
 // Firefox runs the background as an event page: the manifest already loads every script the worker would import.
 globalThis.importScripts = () => {};
 JS
+cat > "$stage/lib/gcal-auth.js" <<'JS'
+// Firefox has no Chrome Google sign-in API; calendar-file export remains available.
+var GZ_GCAL_AUTH = {
+  token: async () => { throw new Error('Google Calendar sign-in requires Chrome.'); },
+  drop: async () => {},
+  clear: async () => {},
+};
+JS
 node - "$stage/manifest.json" "$stage/lib/background.js" "$stage/popup.js" "$development" "$branch" "$commit" "$dirty" <<'JS'
 const fs = require('fs');
 const path = require('path');
@@ -74,7 +82,10 @@ m.web_accessible_resources = (m.web_accessible_resources || []).map((e) => ({ ..
 // 140 (ESR) reads data_collection_permissions; 127+ grants host permissions at install. Glaze sends nothing anywhere
 // on its own: shared sessions and the Looks gallery go out only when the user starts them. Agent access gives course data to
 // an app on this computer, outside the browser, so it asks for website content when it is turned on (lib/editor-agents.js).
-m.browser_specific_settings = { gecko: { id: 'glaze@frostdev.io', strict_min_version: '140.0', data_collection_permissions: { required: ['none'], optional: ['websiteContent'] } } };
+m.browser_specific_settings = {
+  gecko: { id: 'glaze@frostdev.io', strict_min_version: '140.0', data_collection_permissions: { required: ['none'], optional: ['websiteContent'] } },
+  gecko_android: { strict_min_version: '142.0' },
+};
 fs.writeFileSync(file, JSON.stringify(m, null, 2) + '\n');
 JS
 rm -rf "$stage/mods" "$stage/features/mods.js"

@@ -649,10 +649,13 @@ test('scripts/dev-drive.sh: a dev copy with Drive on, Glaze\'s client and scopes
     assert.match(out, /extension ID [a-p]{32}/);
     const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
     const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
-    assert.ok(!packed.oauth2 && !(packed.optional_permissions || []).includes('identity'), 'the store package: off');
+    // The store package: Calendar's scope alone (lib/gcal.js ON), nothing of Drive's.
+    const CAL = 'https://www.googleapis.com/auth/calendar.app.created', calendar = require('../lib/gcal.js').ON === true;
+    assert.deepEqual(packed.oauth2?.scopes, calendar ? [CAL] : undefined, 'the store package: no Drive scope');
+    assert.equal((packed.optional_permissions || []).includes('identity'), calendar);
     assert.match(execFileSync('unzip', ['-p', zip, 'lib/google.js']).toString(), /\n {2}const ON = false;\n/);
     const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
-    assert.deepEqual(dev.oauth2, { client_id: C.chrome, scopes: C.scopes });
+    assert.deepEqual(dev.oauth2, { client_id: C.chrome, scopes: [...(calendar ? [CAL] : []), ...C.scopes] }, 'the dev copy: Calendar\'s scope while it is on, and Drive\'s');
     assert.deepEqual(dev.optional_permissions, repo.optional_permissions);
     assert.equal(dev.key, fs.readFileSync(keyFile, 'utf8'));
     assert.match(fs.readFileSync(path.join(dir, 'dev/lib/google.js'), 'utf8'), /\n {2}const ON = true;\n/);

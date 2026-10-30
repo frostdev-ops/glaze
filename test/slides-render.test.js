@@ -342,3 +342,22 @@ test('find work stays bounded for text fragmented into many formatted runs', asy
   assert.equal(all(el).filter(tag('mark')).length, 256);
   assert.ok(work < 256 * 12, `${work} range-bound operations for 256 runs and matches`);
 });
+
+// ---- print: each slide on a page of its own size, or the deck's notes page with the slide across its top
+test('a printed slide fills a page of the slide\'s own size; with notes, the notes page holds it inside a half inch', async () => {
+  const d = await deck();
+  const plain = R.printPage(d);
+  assert.deepEqual(plain, { w: 1280, h: 720, scale: 1, margin: 0, notes: false }, 'a 16:9 deck prints on 1280 × 720 px (13.333 × 7.5 in) pages');
+  const noted = R.printPage(d, { notes: true });
+  // The fixture's notesSz is 7.5 × 10 in: 720 × 960 px, the slide fitted in 624 px across and the top half less its margin.
+  assert.deepEqual(noted, { w: 720, h: 960, scale: 0.4875, margin: 48, notes: true });
+  assert.ok(1280 * noted.scale <= noted.w - 2 * noted.margin && 720 * noted.scale <= noted.h / 2 - noted.margin, 'the slide fits its half');
+  // A 4:3 deck and a portrait one; a deck without a notes size uses PowerPoint's 7.5 × 10 in.
+  assert.deepEqual(R.printPage({ size: { w: 9144000, h: 6858000 } }), { w: 960, h: 720, scale: 1, margin: 0, notes: false });
+  assert.deepEqual(R.printPage({ size: { w: 6858000, h: 9144000 } }, { notes: true }), { w: 720, h: 960, scale: 0.45, margin: 48, notes: true });
+  // An odd size in EMU stays in whole hundredths, never larger than the slide (a page past it would print a blank one).
+  const odd = R.printPage({ size: { w: 12192001, h: 6858007 } });
+  assert.ok(odd.w <= 12192001 / 9525 && odd.h <= 6858007 / 9525 && odd.w === Math.floor(odd.w * 100) / 100, JSON.stringify(odd));
+  assert.equal(R.printPage({ size: { w: 0, h: 5 } }), null);
+  assert.equal(R.printPage(null), null);
+});

@@ -44,25 +44,29 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
   const mount = async (id, key, paper) => {
     const k = await kind(id).catch((e) => { console.error(e); return null; });
     if (typeof k?.view !== 'function' || !key) return null;
-    const root = document.documentElement, el = document.createElement('div');
+    const rec = await store().get(key).catch(() => null);
+    if (GZ_DOC_KINDS.kindOf(rec) !== id) return null;
+    const root = document.documentElement, el = document.createElement('div'), was = root.dataset.view;
     el.className = 'gk';
     document.body.append(el);
+    // The page first: the hidden paper's next height report would fold a compact frame to 40 px while the viewer builds.
+    frame.say({ type: 'view', full: true });
     root.dataset.doc = id;
     root.dataset.view = 'full';
     let v = null;
-    const rec = await store().get(key).catch(() => null), ext = rec?.ext && GZ_DOC_KINDS.KINDS[id]?.accept.includes(rec.ext) ? rec.ext : GZ_DOC_KINDS.KINDS[id]?.accept[0] || '';
+    const ext = rec?.ext && GZ_DOC_KINDS.KINDS[id]?.accept.includes(rec.ext) ? rec.ext : GZ_DOC_KINDS.KINDS[id]?.accept[0] || '';
     const submitB = document.createElement('button');
     submitB.type = 'button'; submitB.className = 'gp-submit'; submitB.textContent = t('Submit…');
     submitB.disabled = typeof P().submit !== 'function';
     const owns = async () => GZ_DOC_KINDS.kindOf(await store().get(key)) === id;
     const surface = {
-      // A spreadsheet's file always waits for the .xlsx writer (sheet-kind.js fileOf).
-      kind: () => id, key: () => key, ext: () => (id === 'sheet' ? '.xlsx' : ext), context: () => paper.context(), paper: () => paper.paper(), compact: () => false, blank: () => false, importing: () => busy,
+      // A spreadsheet's file always waits for the .xlsx writer (sheet-kind.js fileOf): .xlsm when its record says so.
+      kind: () => id, key: () => key, ext: () => (id === 'sheet' ? (ext === '.xlsm' ? '.xlsm' : '.xlsx') : ext), context: () => paper.context(), paper: () => paper.paper(), compact: () => false, blank: () => false, importing: () => busy,
       pages: () => v?.pages?.() || null, notify: (m) => v?.say?.(t(m)), focused: () => {}, resume: () => {}, look: () => null,
-      version: async (reason = 'submit') => {
+      version: async (reason = 'submit', { attached = null } = {}) => {
         if (!await surface.save()) return null;
-        if (typeof k.version === 'function') return k.version(key, reason).catch((e) => { console.error(e); return null; });
-        return store().save(key, {}, { reason, expectedKind: id }).catch((e) => { console.error(e); return null; });
+        if (typeof k.version === 'function') return k.version(key, reason, { attached }).catch((e) => { console.error(e); return null; });
+        return store().save(key, {}, { reason, expectedKind: id, ...(attached && { attached }) }).catch((e) => { console.error(e); return null; });
       },
       save: async () => !!v && await owns() && await v.save() && await owns(),
       file: async () => { if (!await owns()) throw new Error('document kind changed'); const out = await v.file(); if (!await owns()) throw new Error('document kind changed'); return out; },
@@ -73,10 +77,16 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     submitB.addEventListener('click', () => P().submit?.(surface));
     try {
       v = await k.view(key, { mount: el, t, title: () => paper.context()?.assignment?.title || '', tools: [submitB] });
-    } catch (e) { console.error(e); el.remove(); delete root.dataset.doc; return null; }
+      if (!await owns()) throw new Error('document kind changed');
+    } catch (e) {
+      console.error(e);
+      try { await v?.dispose?.(); } catch (e) { console.error(e); }
+      el.remove(); delete root.dataset.doc;
+      if (was !== 'full') { if (was) root.dataset.view = was; else delete root.dataset.view; frame.say({ type: 'view', full: false }); }
+      return null;
+    }
     if (typeof P().submit === 'function') submitB.disabled = false;
     shown = { id, key, el, surface, paper, viewer: v };
-    frame.say({ type: 'view', full: true });
     return surface;
   };
   const unmount = async () => {
@@ -121,7 +131,7 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
       arriving = paper;
       const rec = await k.into(key, f, { progress });
       progress.end();
-      if (shown) { await unmount(); const s = await mount(id, key, paper); if (!s) throw new Error('no viewer'); paper.take(s); }
+      if (shown) { await unmount(); const s = await mount(id, key, paper); if (!s) { frame.say({ type: 'native', reason: 'kind' }); throw new Error('no viewer'); } paper.take(s); }
       else if (!await paper.hand(rec)) throw new Error('no viewer');
       if (rec?.notice) shown?.surface.notify(rec.notice);
     } catch (e) {
@@ -201,20 +211,22 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
   });
 
   // ---- a file shown from elsewhere (writer.js view mode; features/bbpreview.js: Blackboard's preview of an attachment,
-  // converted to a PDF, which the page read): init { kind: 'pdf', view: { bytes (an ArrayBuffer, transferred), name, href } }
-  // → the kind's show, nothing kept unless the student saves it to Documents. The page hears view:shown once page 1 is
+  // converted to a PDF, which the page read; features/canvasopen.js: a Canvas file the page read on a click): init { kind:
+  // 'pdf', 'slides' or 'sheet', view: { bytes (an ArrayBuffer, transferred), name, href } } → the kind's show, nothing kept unless the
+  // student saves it to Documents. The page hears view:shown once page 1 is
   // drawn, view:failed (with a reason) for anything else, so it keeps Blackboard's frame, and view:esc for an Esc the
   // viewer didn't take.
+  const SHOWN = ['pdf', 'slides', 'sheet'];
   frame.on('view', async (m) => {
     const v = m.view, failed = (reason) => frame.say({ type: 'view:failed', reason: String(reason || 'error') });
     const bytes = v?.bytes instanceof ArrayBuffer && v.bytes.byteLength ? new Uint8Array(v.bytes) : null;
-    if (m.kind !== 'pdf' || !bytes) { failed('init'); return; }
-    const k = await kind('pdf').catch((e) => { console.error(e); return null; });
+    if (!SHOWN.includes(m.kind) || !bytes) { failed('init'); return; }
+    const k = await kind(m.kind).catch((e) => { console.error(e); return null; });
     if (typeof k?.show !== 'function') { failed('kind'); return; }
     const root = document.documentElement, el = document.createElement('div');
     el.className = 'gk';
     document.body.append(el);
-    root.dataset.doc = 'pdf';
+    root.dataset.doc = m.kind;
     root.dataset.view = 'full';
     const name = typeof v.name === 'string' ? v.name.slice(0, 200) : '', href = typeof v.href === 'string' && /^https?:/.test(v.href) ? v.href : '';
     try {
@@ -223,5 +235,5 @@ var GZ_WRITER_KINDS = globalThis.GZ_WRITER_KINDS || (() => {
     } catch (e) { console.error(e); failed('error'); }
   });
 
-  return { FRAME, opens, offers, mount, open, start, shown: () => shown?.id || null };
+  return { FRAME, opens, offers, kind, mount, open, start, shown: () => shown?.id || null };
 })();

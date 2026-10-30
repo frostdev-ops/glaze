@@ -36,7 +36,7 @@ const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async 
   let now = Date.UTC(2026, 9, 19), serial = 0;
   const listen = (map, type, fn) => { if (!map.has(type)) map.set(type, new Set()); map.get(type).add(fn); };
   const fire = (map, type, extra = {}) => { for (const fn of [...map.get(type) || []]) fn({ type, ...extra }); };
-  Object.assign(doc, { documentElement: doc.root, activeElement: doc.body, hidden: false, visibilityState: 'visible', createElement: (tag) => make(tag),
+  Object.assign(doc, { documentElement: doc.root, activeElement: doc.body, hidden: false, visibilityState: 'visible', createElement: (tag) => make(tag), createElementNS: (_, tag) => make(tag),
     querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), getElementById: (id) => doc.root.all().find((e) => e.id === id) || null,
     addEventListener: (type, fn) => listen(documentEvents, type, fn), removeEventListener: (type, fn) => documentEvents.get(type)?.delete(fn) });
   const local = { get: (keys, cb) => {

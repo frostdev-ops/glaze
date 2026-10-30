@@ -97,6 +97,13 @@ for (const file of process.argv.slice(2)) {
     cut(/^    filename = unescape\(filename\);\n/gm, `    filename = filename${percent};\n`);
     cut(/^        part = unescape\(part\);\n/gm, `        part = part${percent};\n`);
   }
+  // Firefox: AMO's linter refuses an import it can't read, so the fake worker and the image decoders' no-wasm fallbacks
+  // import fixed local files.
+  if (file.endsWith('/pdf.mjs')) cut(/this\.workerSrc\);\n      return worker\.WorkerMessageHandler;/g, '"./pdf.worker.mjs");\n      return worker.WorkerMessageHandler;');
+  if (file.endsWith('/pdf.worker.mjs')) {
+    cut(/const mod = await import\(/g, 'const mod = await (');
+    cut(/`\$\{WasmImage\.#wasmUrl\}\$\{this\._noWasmFilename\}`\);/g, 'this._noWasmFilename === "jbig2_nowasm_fallback.js" ? import("./jbig2_nowasm_fallback.js")\n        : this._noWasmFilename === "openjpeg_nowasm_fallback.js" ? import("./openjpeg_nowasm_fallback.js")\n        : Promise.reject(new Error("Unknown PDF image decoder")));');
+  }
   if (file.endsWith('/pdf_viewer.mjs')) {
     // Firefox Add-ons flags Fluent's innerHTML sink even though its overlay sanitizes the result. Parse in an inert
     // document instead, with an explicit body to retain leading whitespace and head-like elements, then keep the same
@@ -154,7 +161,7 @@ cp "$tmp/brotli-dictionary.bin" "$tmp/LICENSE_BROTLI" "$tmp/LICENSE_MPL" "$tmp/L
 node scripts/vendor-pdfjs-limits.js lib/pdfjs
 node scripts/vendor-pdfjs-brotli.js lib/pdfjs/pdf.worker.mjs lib/pdfjs/brotli-dictionary.bin
 cp "$src/LICENSE" lib/pdfjs/LICENSE
-for f in jbig2.wasm openjpeg.wasm LICENSE_JBIG2 LICENSE_PDFJS_JBIG2 LICENSE_OPENJPEG LICENSE_PDFJS_OPENJPEG; do cp "$src/wasm/$f" lib/pdfjs/; done
+for f in jbig2.wasm openjpeg.wasm jbig2_nowasm_fallback.js openjpeg_nowasm_fallback.js LICENSE_JBIG2 LICENSE_PDFJS_JBIG2 LICENSE_OPENJPEG LICENSE_PDFJS_OPENJPEG; do cp "$src/wasm/$f" lib/pdfjs/; done
 { echo "/* pdf.js $version legacy viewer styles (Apache-2.0, lib/pdfjs/LICENSE). Built by scripts/vendor-pdfjs.sh. */"
   sed '/^\/\*# sourceMappingURL=/d' "$src/legacy/web/pdf_viewer.css"; } > lib/pdfjs/pdf_viewer.css
 for image in $(grep -oE 'url\("?images/[A-Za-z0-9_-]+\.(svg|gif)' lib/pdfjs/pdf_viewer.css | sed -E 's/^url\("?//' | sort -u); do

@@ -29,6 +29,16 @@ test('the file is Lastname_Title.docx, the title before its subtitle, letters an
   assert.equal(S.kb(20), 1);
 });
 
+test('a workbook kept with its macros goes as .xlsm, Excel\'s macro-enabled type; every other one as .xlsx', () => {
+  assert.equal(S.fileName({ surname: 'Rivera', title: 'Budget', ext: '.xlsm' }), 'Rivera_Budget.xlsm');
+  assert.equal(S.fileName({ surname: 'Rivera', title: 'Budget', ext: '.xlsx' }), 'Rivera_Budget.xlsx');
+  assert.equal(S.mimeOf('Rivera_Budget.xlsm'), 'application/vnd.ms-excel.sheet.macroEnabled.12');
+  assert.equal(S.mimeOf('Rivera_Budget.xlsx'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.equal(S.kindOf('Budget.XLSM'), 'sheet');
+  assert.ok(S.safeName('Rivera_Budget.xlsm', 'sheet'));
+  assert.equal(S.route('Budget.xlsm', { kinds: ['sheet'] }), 'choose', 'brought to an assignment, it opens in Glaze or submits as is');
+});
+
 test('the probed attempt: the file area\'s own input, the drop zone, and the footer\'s Submit and Save and Close', () => {
   const body = page(), ed = editorOf(body), area = S.areaOf(ed);
   assert.match(area.className, /makeStylessubmission-/);
@@ -129,4 +139,70 @@ test('review: listing requires an exact name, including a full title on visually
   assert.equal(S.listed(area, 'Rivera_Essay2.docx'), 0, 'a prefix is not the requested file');
   row.textContent = 'Rivera_Ess…'; row.setAttribute('title', 'Rivera_Essay2.docx');
   assert.equal(S.listed(area, 'Rivera_Essay2.docx'), 1, 'the full title proves a truncated listing');
+});
+
+// The hand-in (features/writer-submit.js handIn): a file from any source, { name, mime, bytes }, bounded by Blackboard's
+// 50 MB per file; Documents' attachments named Lastname_Title as the attempt's own file is, never twice.
+test('the hand-in takes { name, mime, bytes } up to 50 MB, from an ArrayBuffer or its view', () => {
+  const ok = { name: 'Rivera_Notes.docx', mime: S.MIME, bytes: new ArrayBuffer(10) };
+  assert.equal(S.MAX_FILE, 50e6);
+  assert.equal(S.handInError(ok), null);
+  assert.equal(S.handInError({ ...ok, bytes: new Uint8Array(3) }), null);
+  assert.equal(S.handInError({ ...ok, bytes: { byteLength: 50e6 } }), 'file', 'not bytes at all');
+  const big = { byteLength: 50e6 + 1 };
+  Object.setPrototypeOf(big, ArrayBuffer.prototype);
+  assert.equal(S.handInError({ ...ok, bytes: big }), 'large', 'past 50 MB');
+  for (const bad of [{ ...ok, bytes: new ArrayBuffer(0) }, { ...ok, name: '../x.docx' }, { ...ok, name: '' }, { ...ok, mime: null }, { ...ok, mime: 'x'.repeat(201) }, null, {}]) assert.equal(S.handInError(bad), 'file', JSON.stringify(bad));
+  assert.equal(S.MAX_ATTACH, 10);
+});
+
+test('an attached document is Lastname_Title with its kind\'s extension, de-duplicated against the names taken', () => {
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Lab notes', name: 'Lab notes.docx' }), 'Rivera_LabNotes.docx');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Grades: term 1', name: 'Grades term 1.xlsx' }), 'Rivera_Grades.xlsx', 'the title before its subtitle');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Budget', name: 'Budget.xlsm' }), 'Rivera_Budget.xlsm');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Field trip', name: 'Field trip.pdf' }), 'Rivera_FieldTrip.pdf');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Week 3', name: 'Week 3.pptx' }), 'Rivera_Week3.pptx');
+  assert.equal(S.attachName({ title: '', name: 'x.docx', fallback: 'Document' }), 'Document.docx');
+  const taken = ['Rivera_Essay2.docx'];
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Essay 2', name: 'a.docx', taken }), 'Rivera_Essay2_2.docx', 'beside the attempt\'s own file');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Essay 2', name: 'a.docx', taken: ['rivera_essay2.DOCX', 'Rivera_Essay2_2.docx'] }), 'Rivera_Essay2_3.docx', 'any case');
+  assert.equal(S.attachName({ surname: 'Rivera', title: 'Essay 2', name: 'a.pdf', taken }), 'Rivera_Essay2.pdf', 'another extension is another name');
+  const long = S.attachName({ surname: 'x'.repeat(200), title: 'y'.repeat(200), name: 'a.docx', taken: [S.attachName({ surname: 'x'.repeat(200), title: 'y'.repeat(200), name: 'a.docx' })] });
+  assert.ok(long.endsWith('_2.docx') && S.safeName(long, 'paper'), `still a built file's name (${long.length})`);
+  assert.equal(S.attachName({ name: 'Photo of lab.png', taken: ['photo of lab.png'] }), 'Photo of lab_2.png', 'a type no kind has keeps its own name');
+});
+
+test('the note names the attached files on a line after it', () => {
+  assert.equal(S.noteWith('Here is my essay.', ['Rivera_Notes.docx', 'Rivera_Data.xlsx']), 'Here is my essay.\n\nAttached: Rivera_Notes.docx, Rivera_Data.xlsx');
+  assert.equal(S.noteWith('', ['a.pdf'], 'Angehängt: {names}'), 'Angehängt: a.pdf');
+  assert.equal(S.noteWith('Hi  \n', []), 'Hi');
+  assert.ok(S.MAX_NOTE >= 4000 + 10 * 255);
+});
+
+test('Unicode and long attachment names remain valid filenames, including collision suffixes', () => {
+  for (const title of ['e\u0301tude', '!!!', '𐐀'.repeat(61), '漢'.repeat(200)]) {
+    const first = S.attachName({ surname: '漢'.repeat(40), title, name: 'a.docx' });
+    const next = S.attachName({ surname: '漢'.repeat(40), title, name: 'a.docx', taken: [first.toUpperCase()] });
+    for (const n of [first, next]) {
+      assert.ok(S.safeName(n), n);
+      assert.ok(Buffer.byteLength(n, 'utf8') <= 255, 'fits a filesystem component');
+      assert.equal(n, n.normalize('NFC'));
+    }
+    assert.notEqual(first, next);
+  }
+  assert.equal(S.fileName({ title: 'e\u0301tude' }), 'Étude.docx');
+  const raw = `${'a'.repeat(250)}.bin`;
+  assert.ok(S.asIsName(S.attachName({ name: raw, taken: [raw] })), 'a collision suffix also fits an arbitrary file name');
+});
+
+test('an explicit extension disambiguates listings with the same workbook stem', () => {
+  const body = page(), area = S.areaOf(editorOf(body)), row = new El('span', body.doc);
+  row.textContent = 'Budget'; row.setAttribute('title', 'Budget.xlsx'); area.append(row);
+  assert.equal(S.listed(area, 'Budget.xlsm'), 0);
+  assert.equal(S.listed(area, 'Budget.xlsx'), 1);
+});
+
+test('attachment notes keep template and replacement characters in filenames literally', () => {
+  const names = ['$&.bin', '{names}.bin', "quote$`$'.bin"];
+  assert.equal(S.noteWith('Hi', names), `Hi\n\nAttached: ${names.join(', ')}`);
 });

@@ -139,12 +139,12 @@ test('a frame without Writer\'s host makes no kinds module', () => {
 const viewer = async (id = 'pdf') => {
   const P = PA.open(store(), () => Date.now());
   await P.save(KEY, { kind: id, doc: null, file: 'JVBERi0=', size: 5 });
-  const calls = { save: 0, dispose: 0, versions: [], said: [] }, paper = { key: () => KEY, context: () => ({}), paper: () => ({}),
+  const calls = { save: 0, dispose: 0, versions: [], said: [], frame: [], fail: false }, paper = { key: () => KEY, context: () => ({}), paper: () => ({}),
     hold() {}, unpark() {}, take() {}, release() {}, notify() {}, importFile: async () => null };
   const el = () => ({ dataset: {}, append() {}, remove() {}, addEventListener() {} });
   const document = { documentElement: el(), body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: el };
   const implementation = { ...(id === 'sheet' && { version: async (key, reason) => { calls.versions.push([key, reason]); return { version: { id: 'packed', gz: 'workbook' } }; } }),
-    view: async () => ({ say: (text) => calls.said.push(text), save: async () => { calls.save++; return true; }, file: async () => ({ bytes: new Uint8Array([1]) }), dispose: () => { calls.dispose++; } }),
+    view: async () => { if (calls.fail) throw new Error('viewer build failed'); return { say: (text) => calls.said.push(text), save: async () => { calls.save++; return true; }, file: async () => ({ bytes: new Uint8Array([1]) }), dispose: () => { calls.dispose++; } }; },
     into: async (key, f, { progress } = {}) => {
       progress?.({ stage: 'read' });
       progress?.({ stage: 'read', done: 2e6, total: 2e6 });
@@ -156,7 +156,7 @@ const viewer = async (id = 'pdf') => {
   const DK = require('../lib/doc-kinds.js');
   const ctx = vm.createContext({ console: { error() {} }, document, GZ_WRITER_PAPERS: { open: () => P },
     GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, progress: DK.progress, said: DK.said, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], ...implementation }) },
-    GZ_WRITER_FRAME: { t: (s) => s, say() {}, on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ pdf: true }) },
+    GZ_WRITER_FRAME: { t: (s) => s, say: (m) => calls.frame.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ pdf: true }) },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'writer-kinds.js'), 'utf8'), ctx);
   const K = ctx.GZ_WRITER_KINDS, surface = await K.mount(id, KEY, paper);
@@ -189,6 +189,16 @@ test('replacing a viewer disposes the previous viewer', async () => {
   assert.equal(calls.dispose, 1);
 });
 
+test('a failed replacement viewer gives the empty full frame back to Blackboard', async () => {
+  const { K, P, surface, calls } = await viewer();
+  calls.fail = true;
+  await surface.importFile({ name: 'new.pdf' });
+  assert.equal(calls.dispose, 1, 'the old viewer was disposed');
+  assert.equal(K.shown(), null, 'no viewer remains');
+  assert.equal((await P.get(KEY)).file, 'TkVX', 'the imported file stays saved');
+  assert.deepEqual(calls.frame.filter((m) => m.type === 'native').map((m) => m.reason), ['kind'], 'the page must retire the empty full frame');
+});
+
 test('an import over a viewer announces each stage once without chunk counts', async () => {
   const { surface, calls } = await viewer();
   await surface.importFile({ name: 'new.pdf' });
@@ -201,3 +211,78 @@ test('the grid uses its kind\'s packed version for submit and before a file repl
   await surface.importFile({ name: 'new.pdf' });
   assert.deepEqual(calls.versions, [[KEY, 'sending'], [KEY, 'import']]);
 });
+
+// The page sizes the frame from what it hears (features/writer.js view, height): a compact frame follows the paper's
+// height reports (writer.js), never under 40 px. Hiding the paper for a viewer (:root[data-doc], writer-paper.css) makes
+// its next report the 40 px floor, so the page hears the full view before the paper is hidden, not once the viewer is
+// built: else the frame folds to 40 px while the grid draws (writer-kinds-check: the grid's rows gone after it showed).
+test('the page hears the full view before the paper is hidden for a viewer', async () => {
+  const said = [];
+  let built, hiddenSaid = null;
+  const el = () => ({ dataset: {}, append() {}, remove() {}, addEventListener() {} });
+  const root = el();
+  root.dataset = new Proxy({ view: 'compact' }, { set: (o, k, v) => { if (k === 'doc' && hiddenSaid === null) hiddenSaid = said.map((m) => `${m.type}:${m.full}`); o[k] = v; return true; } });
+  const document = { documentElement: root, body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: el };
+  const P = PA.open(store(), () => Date.now());
+  await P.save(KEY, { kind: 'sheet', doc: null });
+  const DK = require('../lib/doc-kinds.js');
+  const ctx = vm.createContext({ console: { error() {} }, document, GZ_WRITER_PAPERS: { open: () => P },
+    GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], view: () => new Promise((ok) => { built = ok; }) }) },
+    GZ_WRITER_FRAME: { t: (s) => s, say: (m) => said.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ sheets: true }) },
+    GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'writer-kinds.js'), 'utf8'), ctx);
+  const paper = { key: () => KEY, context: () => ({}), paper: () => ({}) };
+  const mounting = ctx.GZ_WRITER_KINDS.mount('sheet', KEY, paper);
+  for (let i = 0; i < 50 && !built; i++) await new Promise((r) => setImmediate(r));
+  assert.equal(typeof built, 'function', 'the viewer is being built');
+  assert.equal(root.dataset.doc, 'sheet', 'the paper is hidden while the viewer is built');
+  assert.deepEqual(hiddenSaid, ['view:true'], 'the page was told the frame is full before the paper was hidden');
+  built({ save: async () => true, file: async () => null, dispose() {} });
+  assert.ok(await mounting, 'the viewer mounts');
+  assert.deepEqual(said.filter((m) => m.type === 'view').map((m) => m.full), [true], 'one full view, said once');
+});
+
+test('a viewer that fails gives the page back the compact view it had', async () => {
+  const said = [], el = () => ({ dataset: {}, append() {}, remove() {}, addEventListener() {} }), root = el();
+  root.dataset.view = 'compact';
+  const P = PA.open(store(), () => Date.now());
+  await P.save(KEY, { kind: 'sheet', doc: null });
+  const DK = require('../lib/doc-kinds.js');
+  const ctx = vm.createContext({ console: { error() {} }, document: { documentElement: root, body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: el },
+    GZ_WRITER_PAPERS: { open: () => P }, GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], view: async () => { throw new Error('no grid'); } }) },
+    GZ_WRITER_FRAME: { t: (s) => s, say: (m) => said.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ sheets: true }) },
+    GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'writer-kinds.js'), 'utf8'), ctx);
+  assert.equal(await ctx.GZ_WRITER_KINDS.mount('sheet', KEY, { key: () => KEY, context: () => ({}), paper: () => ({}) }), null);
+  assert.deepEqual(said.map((m) => `${m.type}:${m.full}`), ['view:true', 'view:false']);
+  assert.deepEqual({ ...root.dataset }, { view: 'compact' }, 'the paper shown again, compact');
+});
+
+for (const [id, next] of [['pdf', 'slides'], ['slides', 'sheet'], ['sheet', 'paper']]) {
+  test(`a ${id} build that finishes after the record becomes ${next} is disposed and restores the compact view`, async () => {
+    const said = [], el = () => ({ dataset: {}, append() {}, remove() {}, addEventListener() {} }), root = el();
+    root.dataset.view = 'compact';
+    let built, disposed = 0, removed = 0;
+    const P = PA.open(store(), () => Date.now());
+    await P.save(KEY, { kind: id, doc: null });
+    const DK = require('../lib/doc-kinds.js');
+    const ctx = vm.createContext({ console: { error() {} },
+      document: { documentElement: root, body: el(), head: { append: (l) => queueMicrotask(() => l.onload()) }, createElement: () => ({ ...el(), remove: () => { removed++; } }) },
+      GZ_WRITER_PAPERS: { open: () => P }, GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], view: () => new Promise((ok) => { built = ok; }) }) },
+      GZ_WRITER_FRAME: { t: (s) => s, say: (m) => said.push(m), on() {} }, GZ_WRITER_SETTINGS: { now: () => ({}) },
+      GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'writer-kinds.js'), 'utf8'), ctx);
+    const K = ctx.GZ_WRITER_KINDS, mounting = K.mount(id, KEY, { context: () => ({}), paper: () => ({}) });
+    for (let i = 0; i < 50 && !built; i++) await new Promise((r) => setImmediate(r));
+    assert.equal(typeof built, 'function');
+    await P.save(KEY, { kind: next, doc: null }, { reason: 'import' });
+    built({ dispose: async () => { disposed++; } });
+    assert.equal(await mounting, null, 'a stale build cannot become the current surface');
+    assert.equal(disposed, 1, 'its listeners and observers are disposed');
+    assert.equal(removed, 1, 'its mount is removed');
+    assert.equal(K.shown(), null);
+    assert.equal((await P.get(KEY)).kind, next);
+    assert.deepEqual({ ...root.dataset }, { view: 'compact' });
+    assert.deepEqual(said.map((m) => `${m.type}:${m.full}`), ['view:true', 'view:false']);
+  });
+}

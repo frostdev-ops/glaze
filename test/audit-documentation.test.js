@@ -31,10 +31,14 @@ for (const [name, subject, facts, anchor] of topics) {
 }
 
 const unavailable = /unavailable|not (?:yet )?available|not enabled|disabled|coming soon|future|not shipped|pending (?:verification|approval)|off until Google|when (?:available|supported)|where available/i;
-for (const file of ['README.md', 'docs/privacy.md']) {
-  test(`GZ-04: ${file} does not advertise disabled Google Calendar sync as connectable`, () => {
-    if (G.ON) return;
+for (const file of ['README.md', 'docs/privacy.md', 'PRIVACY.md', 'docs/features.md', 'docs/development.md']) {
+  test(`GZ-04: ${file} describes Google Calendar sync as the build has it`, () => {
     const claims = sentences(read(file)).filter((s) => /Google Calendar sync/i.test(s));
+    if (G.ON) {
+      assert.deepEqual(claims.filter((s) => unavailable.test(s)), [],
+        'Google Calendar sync is on in this build (Chrome, off until you connect); no sentence may call it unavailable or pending');
+      return;
+    }
     const unqualified = claims.filter((s) => !unavailable.test(s));
     assert.deepEqual(unqualified, [],
       'Google Calendar sync is disabled at build time; current feature claims must disclose that or be removed');
@@ -92,25 +96,27 @@ test('BLD-5: the permission text matches the manifest and the packaging scripts'
   assert.ok(manifest.permissions.includes('unlimitedStorage'));
   assert.ok(!/doesn't ask for unlimited/i.test(policy));
   assert.match(policy, /Glaze asks the browser for\s+`unlimitedStorage`/);
-  assert.equal(G.ON, false, 'Google Calendar sync is built off, so released builds omit identity');
-  // Drive (lib/google-config.js): once its clients are real, the packages ask for identity, and the policy must say Drive is
-  // offered, not unavailable.
+  assert.equal(G.ON, true, 'Google Calendar sync is built on, so the Chrome package keeps identity and the OAuth client');
+  assert.deepEqual(manifest.oauth2.scopes, [G.SCOPE]);
+  assert.ok(manifest.optional_permissions.includes('identity'));
+  // Drive (lib/google.js ON, lib/google-config.js): built off, so the packages carry nothing more for it; once it's on with
+  // real clients, the policy must say Drive is offered, not unavailable.
   const drive = require('../lib/google-config.js'), { oauth } = require('../scripts/oauth-manifest.js'), { ready } = require('../lib/google.js');
   assert.match(code('package.sh'), /node scripts\/oauth-manifest\.js chrome manifest\.json > "\$stage\/manifest\.json"/);
-  assert.match(code('scripts/package-firefox.sh'), /oauth-manifest\.js'\)\)\.oauth\(m, \{ target: 'firefox'/);
+  assert.match(code('scripts/package-firefox.sh'), /oauth-manifest\.js'\)\)\.oauth\(m, \{ target: 'firefox', calendar: false,/, 'Firefox always leaves Calendar\'s out');
   const ON = require('../lib/google.js').ON;
-  assert.equal(ON, false, 'Google Drive is built off, so released builds omit its oauth2 and identity');
+  assert.equal(ON, false, 'Google Drive is built off, so released builds carry no Drive scopes');
   const offered = { chrome: ON && (ready(drive, 'chrome') || ready(drive, 'web')), firefox: ON && ready(drive, 'web') };
-  for (const target of ['chrome', 'firefox']) {
-    const packed = oauth(manifest, { target, calendar: G.ON, drive: ON, config: drive });
-    assert.equal((packed.optional_permissions || []).includes('identity'), offered[target], `${target}: identity exactly while Drive is offered`);
-  }
-  if (offered.chrome || offered.firefox) {
-    assert.doesNotMatch(policy, /`identity` \(Chrome only, optional\) — not requested by released builds/, 'Drive asks for identity in released builds');
-    assert.doesNotMatch(policy, /Google Drive[^.]*unavailable in (?:this|the current) build/, 'a build that offers Drive must not call it unavailable');
-  }
-  assert.match(code('scripts/safari-manifest.sh'), /p != 'identity'/);
-  if (!offered.chrome && !offered.firefox) assert.match(policy, /`identity` \(Chrome only, optional\) — not requested by released builds/);
+  const chrome = oauth(manifest, { target: 'chrome', calendar: G.ON, drive: ON, config: drive });
+  assert.deepEqual(chrome.oauth2, { client_id: manifest.oauth2.client_id, scopes: [G.SCOPE, ...(offered.chrome ? drive.scopes : [])] }, 'Chrome: Calendar\'s scope, Drive\'s only while it is on');
+  assert.ok(chrome.optional_permissions.includes('identity'));
+  const firefox = oauth(manifest, { target: 'firefox', calendar: false, drive: ON, config: drive });
+  assert.equal(firefox.oauth2, undefined);
+  assert.equal((firefox.optional_permissions || []).includes('identity'), offered.firefox, 'Firefox: identity only while Drive is offered');
+  if (offered.chrome || offered.firefox) assert.doesNotMatch(policy, /Google Drive[^.]*unavailable in (?:this|the current) build/, 'a build that offers Drive must not call it unavailable');
+  assert.match(code('scripts/safari-manifest.sh'), /manifest\.pop\('oauth2', None\)\noptional = \[p for p in manifest\.get\('optional_permissions', \[\]\) if p != 'identity'/, 'Safari always leaves them out');
+  assert.match(policy, /`identity` \(Chrome only, optional\) — asked for only when you press Connect/);
+  assert.ok(!/not requested by released builds/.test(policy));
   assert.match(policy, /Chrome sync \(or Firefox Sync\)/);
   assert.match(policy, /\*\*Music widget\*\* \(Canvas and Blackboard Ultra/);
   assert.ok(/music/.test(code('lib/widgets.js').match(/const TILES = \[[^\]]*\]/)[0]), 'the music tile is a widget on both sites');

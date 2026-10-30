@@ -488,7 +488,7 @@
       if (!c) return;
       if (menu?.k === k) { closeMenu(true); return; }
       closeMenu();
-      const items = bin ? [['restore', 'Restore'], ['forever', 'Delete forever']] : [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', DK.get(DK.kindOf(c.row))?.exportLabel || (DK.kindOf(c.row) === 'pdf' ? 'Export .pdf' : 'Export .docx')], ['delete', 'Delete']].filter(Boolean);
+      const items = bin ? [['restore', 'Restore'], ['forever', 'Delete forever']] : [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', DK.get(DK.kindOf(c.row))?.exportLabelOf?.(c.row) || DK.get(DK.kindOf(c.row))?.exportLabel || (DK.kindOf(c.row) === 'pdf' ? 'Export .pdf' : 'Export .docx')], ['delete', 'Delete']].filter(Boolean);
       const added = bin ? [] : [...slots.card.values()];
       const el = h('div', { class: 'pop gp-menu gd-menu', role: 'menu', 'aria-labelledby': c.link.id },
         items.map(([act, label]) => btn({ role: 'menuitem', tabindex: '-1', 'data-act': act, onclick: () => { closeMenu(act !== 'rename'); run(act, k); } }, t(label))),

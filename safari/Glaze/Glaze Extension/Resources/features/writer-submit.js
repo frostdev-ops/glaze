@@ -15,6 +15,9 @@
 // and the dispatch recorded in the click's own turn, with the paper's version marked Submitted; the sheet's Blackboard
 // editor clears an uncertain upload's (review).
 // A file the student submits as is (writer-import.js) takes the same steps from 1, its own name, type and bytes unchanged.
+// The documents attached from Documents (the sheet's Attach from Documents) go in 1 too, each through handIn after the
+// attempt's own file, Submit waiting until Ultra lists every one; the compact box's sheet sends them alone, Ultra's text
+// box kept as the paper left it and the note added after it.
 // Ultra's own file area (enhance.writerUploads, on by default): one file dropped on it or chosen through its input goes to
 // the paper's frame instead, before Ultra hears it (in the capture phase), which asks what to do with it; Ultra
 // never starts that upload, so nothing of it needs undoing. More than one file, a file over 50 MB, Glaze's own attach and
@@ -27,7 +30,8 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const armed = new Map(); // box → whether it's still features/writer.js's
   const submitted = new WeakSet();
   const runs = new WeakMap(), cancelled = new WeakMap(), tokens = new WeakMap();
-  const attached = new WeakMap(); // box → exact bytes and the row produced by this upload
+  const attached = new WeakMap(); // box → each file's name → its byte digest and the row its upload produced
+  const appended = new WeakMap(); // the exact note and complete native text after an append, for a safe retry
   const written = new WeakSet(); // boxes a run has written into
   const imports = new WeakMap();
   let passing = null, running = false, active = null, down = null, giving = false, X = null;
@@ -160,9 +164,13 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const attach = async (box, file, bytes, here) => {
     const area = L().areaOf(box.editor), panel = L().panelOf(box.editor);
     if (!area || !panel) return 'page';
-    const old = attached.get(box), data = new Uint8Array(bytes);
+    if (!here()) return 'page';
+    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))].map((n) => n.toString(16).padStart(2, '0')).join('');
+    if (!here()) return 'page';
+    const old = attached.get(box)?.get(file.name);
     if (old) {
-      if (old.name !== file.name || old.bytes.length !== data.length || !old.bytes.every((b, i) => b === data[i])) return 'review';
+      if (old.name !== file.name || old.size !== data.byteLength || old.hash !== hash || old.mime !== file.type) return 'review';
       // Reuse only the same bytes and the very row the completed upload produced.
       const rows = L().listings(area, file.name, visible);
       return rows.length === 1 && rows[0] === old.row ? null : 'review';
@@ -173,17 +181,34 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const zone = !input && L().dropZone(area);
     if (!input && !zone) return 'upload';
     const before = new Set(L().listings(area, file.name, visible));
-    attached.set(box, { name: file.name, bytes: data.slice(), before }); // before dispatch: an exception can still leave an upload running
-    if (input) { if (!give(input, file)) return 'review'; }
-    else drop(zone, file);
+    if (!attached.has(box)) attached.set(box, new Map());
+    const entry = { name: file.name, size: data.byteLength, mime: file.type, hash, before };
+    attached.get(box).set(file.name, entry); // before dispatch: an exception can still leave an upload running
+    try {
+      if (input) { if (!give(input, file)) return 'review'; }
+      else drop(zone, file);
+    } catch { return 'review'; }
     const shown = await until(() => {
       // The probed dialog belongs to the editor's own upload, not this React area. Never save an unrelated modal.
       if (document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'dialog';
       const rows = L().listings(area, file.name, visible);
       return rows.length === 1 && !before.has(rows[0]) && 'listed';
     }, 30000, 150, here);
-    if (shown === 'listed') attached.get(box).row = L().listings(area, file.name, visible)[0];
+    if (shown === 'listed') entry.row = L().listings(area, file.name, visible)[0];
     return !here() ? 'page' : shown === 'listed' ? null : shown === 'dialog' ? 'review' : 'attach';
+  };
+  // One file from any source; byte views use only their byteOffset/byteLength. Never reject the promise for bad input.
+  // → null, large, file, page (here revoked), upload, attach, or review (an upload may already be in Ultra).
+  const handIn = async (box, f, here = () => true) => {
+    let data, file;
+    try {
+      const why = L().handInError(f);
+      if (why) return why;
+      if (typeof here !== 'function' || !here()) return 'page';
+      data = f.bytes instanceof ArrayBuffer ? new Uint8Array(f.bytes) : new Uint8Array(f.bytes.buffer, f.bytes.byteOffset, f.bytes.byteLength);
+      file = new File([data], f.name, { type: f.mime, lastModified: Date.now() });
+    } catch { return 'file'; }
+    try { return await attach(box, file, data, here); } catch { return 'page'; }
   };
   const sameText = (box, d) => {
     const want = d.map((o) => o.insert).join('').split('\n').slice(0, -1).map(squash).join('\n');
@@ -193,20 +218,42 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   // What Ultra's own text box holds, line by line (a list's items each on its own), as the sheet shows it.
   const heldOf = (box) => L().lines([...box.editor.children].flatMap((c) => (/^(OL|UL)$/.test(c.tagName) ? [...c.children] : [c]).map((x) => x.textContent)).join('\n')).join('\n');
   const flat = (t) => L().lines(t).map(squash).join('\n');
+  // The compact box's sheet: the note after what Ultra's box holds, the box otherwise as the paper left it.
+  const add = (box, note) => {
+    const old = appended.get(box);
+    if (old) return old.note === note && old.after != null && flat(heldOf(box)) === flat(old.after) ? null : 'review';
+    const entry = { note, after: null }, held = heldOf(box);
+    appended.set(box, entry);
+    const said = main('append', { id: box.id, text: L().lines(note).join('\n') });
+    const after = heldOf(box), want = L().lines([held, note].filter(Boolean).join('\n\n')).join('\n');
+    if (!said.some((r) => r?.ok) || flat(after) !== flat(want)) return 'text';
+    entry.after = after;
+    return null;
+  };
   const write = (box, d) => {
     const said = main('set', { id: box.id, delta: d });
     return said.some((r) => r?.ok) && sameText(box, d) ? null : 'text';
   };
   const go = async (box, m, ok) => {
-    const fail = (error) => { say(box, { type: 'submit:done', run: m.run, ok: false, error }); return false; };
+    let file = null;
+    const fail = (error) => { say(box, { type: 'submit:done', run: m.run, ok: false, error, file, retained: [...(attached.get(box)?.keys() || [])] }); return false; };
     if (running || box.saved || submitted.has(box) || !Number.isSafeInteger(m.run) || m.run <= Math.max(runs.get(box) || 0, cancelled.get(box) || 0)) return fail('busy');
     runs.set(box, m.run);
     // kind: what the frame built (a paper's .docx, a PDF as saved, a deck as brought: writer-kinds.js), named for it.
-    const name = m.name, bytes = m.bytes, key = m.key, asis = m.asis === true, kind = typeof m.kind === 'string' ? m.kind : 'paper';
-    if (!key || key !== L().paperKey(box.context?.paper) || !(asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name, kind)) || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 50e6 || typeof m.note !== 'string' || m.note.length > 4000 ||
+    const name = m.name, key = m.key, asis = m.asis === true, kind = typeof m.kind === 'string' ? m.kind : 'paper';
+    // files: a manifest ({ name, mime, size }, stream) requested one at a time, or legacy byte payloads; names unique.
+    // alone (no name, no bytes) only
+    // from the compact box's sheet, which adds the note after Ultra's text (append).
+    let bytes = m.bytes;
+    const files = Array.isArray(m.files) ? m.files : [], stream = m.stream === true, alone = name == null && bytes == null, append = alone && m.append === true;
+    const fileError = (f) => stream ? (!f || !L().asIsName(f.name) || typeof f.mime !== 'string' || f.mime.length > 200 || !Number.isSafeInteger(f.size) || f.size <= 0 ? 'file' : f.size > L().MAX_FILE ? 'large' : null) : L().handInError(f) || (!(f.bytes instanceof ArrayBuffer) ? 'file' : null);
+    const names = [...(alone ? [] : [name]), ...files.map((f) => f?.name)].map((n) => String(n).toLowerCase());
+    if (files.length > L().MAX_ATTACH || files.some(fileError) || new Set(names).size !== names.length || (alone && (!files.length || !append))) return fail(files.some((f) => fileError(f) === 'large') ? 'large' : 'page');
+    if (!key || key !== L().paperKey(box.context?.paper) || !(alone || ((asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name, kind)) && bytes instanceof ArrayBuffer && bytes.byteLength && bytes.byteLength <= 50e6)) || typeof m.note !== 'string' || m.note.length > L().MAX_NOTE ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || (m.held != null && (typeof m.held !== 'string' || m.held.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
-    const user = box.context.paper.user, end = Math.min(m.until, Date.now() + 80e3);
+    // Each attached file has a minute more for its upload to be listed.
+    const user = box.context.paper.user, end = Math.min(m.until, Date.now() + 80e3 + 60e3 * files.length);
     const transaction = active = { box, run: m.run, cancelled: false, frame: box.frame, port: box.port };
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
@@ -217,34 +264,65 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       // Ultra's text box goes as the sheet says: kept as it showed it (Keep), the note and text after it; else replaced by
       // them, or emptied. A run's own earlier write the sheet didn't show needs review.
       const held = heldOf(box), shown = flat(m.held ?? '') === flat(held), keep = m.keep === true && !!held, extra = L().delta({ note: m.note, text: m.text || '' });
-      if (keep && !shown) return fail('page');
-      if (!extra && !keep && written.has(box) && !shown) return fail('review');
-      const d = keep && !extra ? null : L().delta({ kept: keep ? held : '', note: m.note, text: m.text || '' }) || (held ? [{ insert: '\n' }] : null);
-      let s = L().start({ text: !!d, asis });
+      if (!append && keep && !shown) return fail('page');
+      if (!append && !extra && !keep && written.has(box) && !shown) return fail('review');
+      const d = append ? null : keep && !extra ? null : L().delta({ kept: keep ? held : '', note: m.note, text: m.text || '' }) || (held ? [{ insert: '\n' }] : null);
+      const note = append && L().lines(m.note).length ? m.note : '';
+      let s = L().start({ text: !!d || !!note, asis });
       if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'build' });
       const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < end;
       if (!here()) return fail('page');
       if (!await permit('claim')) return fail('claimed');
       claimed = true;
       if (!here()) return fail('page');
+      // A file an earlier run left in Ultra that this one doesn't send is the student's to review.
+      if ([...(attached.get(box)?.keys() || [])].some((n) => !names.includes(n.toLowerCase()))) return fail('review');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
-      const file = new File([bytes], name, { type: asis ? m.mime : L().mimeOf(name), lastModified: Date.now() });
-      const a = await attach(box, file, bytes, here);
-      if (a) return fail(a);
+      const request = async (index) => {
+        const pending = transaction.pending = { index, reply: null };
+        say(box, { type: 'submit:file', run: m.run, index });
+        const reply = await until(() => pending.reply, 30000, 100, here);
+        transaction.pending = null;
+        return reply || { ok: false, error: 'page' };
+      };
+      if (!alone) {
+        file = name;
+        const a = await handIn(box, { name, mime: asis ? m.mime : L().mimeOf(name), bytes }, here);
+        bytes = null; m.bytes = null;
+        if (a) return fail(a);
+      }
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i]; file = f.name;
+        let reply = stream ? await request(i) : { ok: true, bytes: f.bytes };
+        if (!reply.ok) return fail(reply.error === 'changed' ? 'changed' : 'file');
+        if (stream && (!(reply.bytes instanceof ArrayBuffer) || reply.bytes.byteLength !== f.size)) return fail('file');
+        const a = await handIn(box, { name: f.name, mime: f.mime, bytes: reply.bytes }, here);
+        reply = null;
+        if (!stream) f.bytes = null;
+        if (a) return fail(a);
+      }
+      file = null;
       s = L().advance(s, { step: 'attach' });
       if (!here()) return fail('page');
-      if (d) {
+      if (d || note) {
         say(box, { type: 'submit:step', run: m.run, step: 'text' });
         written.add(box);
-        const w = write(box, d);
+        const w = note ? add(box, note) : write(box, d);
         if (w) return fail(w);
         s = L().advance(s, { step: 'text' });
       }
       say(box, { type: 'submit:step', run: m.run, step: 'submit' });
       const b = await until(() => { const x = L().footer(box.editor).submit; return x && L().enabled(x) && x; }, 15000, 100, here);
       if (!b) return fail('submit');
-      if (!here() || !L().may(s, 'submit') || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected || L().listed(L().areaOf(box.editor), name, visible) !== 1) return fail('page');
-      if (d ? !sameText(box, d) : flat(heldOf(box)) !== flat(held)) return fail('text');
+      if (stream) {
+        const r = await request(files.length);
+        if (!r.ok) { file = r.file || null; return fail(r.error === 'changed' ? 'changed' : 'page'); }
+      }
+      const area = L().areaOf(box.editor);
+      file = [...(alone ? [] : [name]), ...files.map((f) => f.name)].find((n) => { const rows = L().listings(area, n, visible); return rows.length !== 1 || rows[0] !== attached.get(box)?.get(n)?.row; }) || null;
+      if (file) return fail('review');
+      if (!here() || !L().may(s, 'submit') || !L().enabled(b) || b !== L().footer(box.editor).submit || !b.isConnected) return fail('page');
+      if (note ? flat(heldOf(box)) !== flat(appended.get(box)?.after) : d ? !sameText(box, d) : flat(heldOf(box)) !== flat(held)) return fail('text');
       // The worker records the dispatch in the click's own turn: nothing can fail between them, and a page Ultra's
       // navigation tears down after the click has already sent it.
       claimed = false;
@@ -304,6 +382,11 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (active?.box === box && active.run <= m.run) active.cancelled = true;
       return;
     }
+    if (m.type === 'submit:file') {
+      const p = active?.box === box && active.run === m.run && active.pending;
+      if (p && p.index === m.index && !p.reply) p.reply = m;
+      return;
+    }
     if (!assignment(box)) return;
     if (m.type === 'submit:arm') armed.set(box, ok);
     else if (m.type === 'submit:saved') m.request === box.saveRequest && box.saved?.(m.ok === true);
@@ -313,7 +396,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   };
   // armed(box): this step has the box's Ultra buttons (features/writer.js holds a press until it does).
   const press = (box, b, type = 'click') => { if (live().has(box) && box.full && ownerOf(b) === box) act(box, b, { type, preventDefault() {}, stopImmediatePropagation() {} }); };
-  return { hear, press, passing: (button) => button === passing, armed: (box) => live().has(box) };
+  return { hear, press, handIn, passing: (button) => button === passing, armed: (box) => live().has(box) };
 })();
 
 GZ_WRITER_SUBMIT;

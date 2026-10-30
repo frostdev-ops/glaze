@@ -6,6 +6,10 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Chrome: **Google Calendar sync** in Settings → Sharing → Google Calendar sync. Connect keeps a calendar named Glaze in your Google account in step with Export calendar (.ics), and touches nothing else there; Disconnect revokes access and can delete the calendar. Off until you connect; Firefox, Edge, Brave and Safari keep the export.
+
 ## [4.0.0] — 2026-10-30
 
 ### Added

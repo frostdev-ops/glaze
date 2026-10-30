@@ -376,16 +376,17 @@ not those unknown legacy copies or unrelated stickers.
   your "do on" days and focus sessions and your Gradescope work, with **course and assignment names**, links to them on
   your Canvas site and your tasks' notes, and the Canvas site's address in each event's identifier. Once saved, it is
   an ordinary file on your device; what happens to it after you import it is up to you and your calendar provider.
-- **Google Calendar sync** (Chrome, off until you connect), in `chrome.storage.local`, on this device only: the ID of
+- **Google Calendar sync** (Chrome, off until you connect), in `chrome.storage.local` (`gcal` and `gcalSync`), on this device only: the ID of
   the calendar named Glaze that Glaze made in your Google account (or that you linked with a code from another device),
   the Google account Google names as that calendar's owner (its email address, shown as "Connected to …"), when you
   connected, when each Canvas site and account last synced and how the last sync ended. For each event Glaze wrote: an
   event ID (a SHA-256 hash of the Canvas site, your Canvas user id and the event's identifier), which Canvas account
   and, for a "do on" day or focus session, which Better To Do item it belongs to, that plan's date or time, when the
   event ends, a hash of what was written and Google's version tag for it; Google's sync cursor; and the IDs of deadline
-  events you deleted in Google Calendar, so Glaze doesn't put them back. No sign-in token: Chrome keeps that itself.
+  events you deleted in Google Calendar, so Glaze doesn't put them back, including deleted event IDs not yet matched
+  to an export, and markers for events Glaze removed while unselected. No sign-in token: Chrome keeps that itself.
   **Disconnect** deletes all of it.
-- **Google Drive** (off until you connect), unavailable in this build while Google verification is pending. In a future
+- **Google Drive** (off until you connect), unavailable in this build. In a future
   build that enables it, `chrome.storage.local` holds one record, `google`, on this device only: the email address of
   the Google account you connected (shown as the connected account), its Google account id (`sub`, used to keep access
   bound to that account), which sign-in flow Glaze used and when you connected (`{ email, sub, flow, at }`). No access
@@ -532,8 +533,7 @@ not those unknown legacy copies or unrelated stickers.
   file's hash, size, page or slide count and first page's picture; where that store isn't available, a file up to 3 MB
   stays in the record itself. A file goes when no document or version points at it. An assignment attempt you open as one
   of these is kept the same way under the assignment's key. Glaze reads and draws these files on this device, from the
-  extension's own files, and sends them nowhere. Google Drive (below) is unavailable in this build while Google
-  verification is pending. In a future build that enables it, a document goes to your own Google Drive only when you
+  extension's own files, and sends them nowhere. Google Drive (below) is unavailable in this build. In a future build that enables it, a document goes to your own Google Drive only when you
   connect Drive and choose Save to Drive or turn on Sync Documents. Delete there moves a paper or document to Trash, which keeps it and its versions on this device; 30 days later
   it is deleted for good, with its versions and saved sources, the next time the browser starts or Documents opens, unless
   you restore it first; Delete forever and Settings' Clear delete them at once. A paper's edits
@@ -760,8 +760,7 @@ you import) are bundled. It makes requests in these cases:
   isn't kept. If Glaze, the Gradescope switch or your Gradescope answer changes, or the dialog closes, while Canvas
   answers, no file is saved. With Gradescope in
   To Do on, the Gradescope work comes from what's already kept on this device; nothing is asked of Gradescope.
-- **Google Calendar sync** (Chrome, off until you connect; not in released builds until Google verifies Glaze, and
-  those builds can't make any of these requests). The only destinations are Google's Calendar API at
+- **Google Calendar sync** (Chrome, off until you connect). The only destinations are Google's Calendar API at
   `https://www.googleapis.com` and Google's token revocation at `https://oauth2.googleapis.com`; requests carry the
   access token Chrome gives Glaze, never cookies, and never follow a redirect. There is no Glaze server.
   - **Connect** (your click in Glaze's settings): Chrome asks for the `identity` permission and shows Google's own
@@ -784,8 +783,7 @@ you import) are bundled. It makes requests in these cases:
   - Uninstalling Glaze deletes what it stored on the device but doesn't revoke Google's access by itself:
     disconnect first, or remove it at https://myaccount.google.com/connections.
   - Edge, Brave, Safari and Firefox don't offer it; Export calendar (.ics) works everywhere.
-- **Google Drive** (off until you connect). Unavailable in this build while Google verification is pending, and this
-  build can't make any of these requests. In a future build that enables it, the requests go directly between your
+- **Google Drive** (off until you connect). Unavailable in this build, and this build can't make any of these requests. In a future build that enables it, the requests go directly between your
   browser and Google: `https://accounts.google.com` to sign in, `https://openidconnect.googleapis.com` for your
   account's email address, `https://www.googleapis.com` for Drive and `https://oauth2.googleapis.com` to revoke access.
   To pick a file, Glaze also opens a static picker page (below). There is no Glaze server, and nothing goes to Frostdev.
@@ -1111,13 +1109,10 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
   never in the LMS page. The reader page is web-accessible so an import can open it in a frame; it reads a file only
   with a one-use pass that Glaze's import gets from its own background worker, so a site that framed it itself can't
   make it read anything.
-- `identity` (Chrome only, optional) — not requested by released builds while Google Calendar sync is switched off
-  at build time (`ON` in `lib/gcal.js`): the Chrome, Firefox and Safari packaging scripts remove it, with the OAuth
-  client, from the manifest they ship. In a build that enables the sync it is asked for only when you press Connect in
-  Google Calendar sync, and removed on Disconnect. It lets Chrome sign Glaze in to Google Calendar with the Google
+- `identity` (Chrome only, optional) — asked for only when you press Connect in Google Calendar sync, and removed on
+  Disconnect. The Firefox and Safari packages leave it out, with the OAuth client. It lets Chrome sign Glaze in to Google Calendar with the Google
   account in your browser; Chrome shows no warning for it. Glaze never asks for `identity.email` and never sees your
-  password. Google Drive uses it too, on Chrome, Edge, Brave and Firefox: unavailable in this build while Google
-  verification is pending. In a future build that enables it, it is asked for when you press Connect for Google Drive
+  password. Google Drive uses it too, on Chrome, Edge, Brave and Firefox: unavailable in this build. Once a build includes Drive, it is asked for when you press Connect for Google Drive
   and removed on Disconnect, unless Google Calendar sync still uses it. Chrome signs in with the Google account in your
   browser; Edge, Brave and Firefox open Google's own sign-in page.
 - `unlimitedStorage` — requested at install, so the browser doesn't clear your notes, pictures, attachments and the
@@ -1175,12 +1170,15 @@ press it (see Glaze Writer above). Glaze never changes grades.
 
 ## Google user data
 
-Google Calendar sync and Google Drive are unavailable in the current build while Google verification is pending. The following describes their use of Google data in a future build that enables these optional features; calendar file export does not require them.
+Google Calendar sync (Chrome, off until you connect) is the only part of Glaze that uses Google APIs. It asks for one
+scope, `https://www.googleapis.com/auth/calendar.app.created`, and talks only to `www.googleapis.com` and
+`oauth2.googleapis.com`, as described above; Export calendar (.ics) needs no Google account. Google Drive is unavailable in this build; the following also describes its use of Google data in a
+future build that enables it.
 
 Glaze's use and transfer of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including
 the Limited Use requirements. Glaze uses Google Calendar access only to keep the Glaze calendar in step with your
-Canvas work, as described above. It uses Google Drive access (`drive.file`, `openid` and `email`) only to open the
+Canvas or Blackboard work, as described above. It uses Google Drive access (`drive.file`, `openid` and `email`) only to open the
 files you pick, save and sync your documents to your own Drive, attach a Drive file you pick to an assignment you hand
 in, and show which account is connected, as described above. It doesn't sell, share or use this data for advertising or to train AI models, no
 person reads it, and none of it goes to frostdev or anyone else.

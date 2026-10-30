@@ -44,6 +44,13 @@ html[data-gz-hide-banner] .ic-DashboardCard__header_image { background-image: no
 #gz-doc-tools button[aria-pressed="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); }
 #gz-doc-tools [hidden] { display: none; }
 #gz-doc-tools svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Open in Glaze (features/canvasopen.js): beside a file link; Canvas's preview out of view while Glaze's viewer shows the file. */
+[data-gz-co-hidden] { display: none !important; }
+.gz-co { margin-inline-start: 0.5rem; padding: 0.125rem 0.625rem; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; background: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); font: inherit; font-size: 0.8125rem; line-height: 1.5; cursor: pointer; }
+.gz-co:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
+.gz-co[aria-expanded="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+.gz-co[aria-busy="true"] { cursor: progress; opacity: 0.7; }
+.gz-co:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 .gz-doc-time { font-size: 11px; color: var(--gz-ink-muted); }
 /* Documents in a dark palette (enhance.docPages): a preview frame dimmed or inverted whole. Canvas's own viewer (its
    frame opens /api/v1/canvadoc_session) does this to its pages alone, from inside (features/docviewer.js). */

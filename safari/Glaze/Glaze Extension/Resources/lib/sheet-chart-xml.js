@@ -9,10 +9,11 @@
 // to the cache. Colours are '#RRGGBB' from the theme (wb.keep.theme), the series' own, or Excel's automatic order.
 // Classic script; doctext, the model and the formula module are looked up when a function runs. module.exports for node.
 var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
-  const dep = (name, file) => (typeof globalThis[name] !== 'undefined' ? globalThis[name] : typeof module !== 'undefined' ? require(file) : null);
-  const D = () => dep('GZ_DOCTEXT', './doctext.js');
-  const M = () => dep('GZ_SHEET_MODEL', './sheet-model.js');
-  const F = () => dep('GZ_SHEET_FORMULA', './sheet-formula.js');
+  // Firefox's linter refuses require() of a variable, so each caller passes a require of its own file.
+  const dep = (name, load) => (typeof globalThis[name] !== 'undefined' ? globalThis[name] : typeof module !== 'undefined' ? load() : null);
+  const D = () => dep('GZ_DOCTEXT', () => require('./doctext.js'));
+  const M = () => dep('GZ_SHEET_MODEL', () => require('./sheet-model.js'));
+  const F = () => dep('GZ_SHEET_FORMULA', () => require('./sheet-formula.js'));
   const EMU = 9525; // per CSS pixel
   const MAX_POINTS = 10000; // one chart's resolved data and SVG must stay bounded
 
@@ -448,6 +449,50 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
     return { kind: 'plot', title: title || null, legend: c.legend, groups, axes: c.axes, blanks: c.blanks, view3D: c.view3D ?? null, walls: c.walls ?? null };
   };
 
+  // Pixel coordinates and cells use the grid's sizes, including hidden rows/columns. Prefix deltas keep a distant
+  // anchor cheap: no walk through a million default rows, and these tables are shared by every chart in the summary.
+  const glanceAxis = (values, hidden, base, limit, px) => {
+    const sizes = new Map([...values].filter(([i]) => Number.isInteger(i) && i >= 0 && i < limit).map(([i, v]) => [i, px(v)]));
+    for (const i of hidden) if (Number.isInteger(i) && i >= 0 && i < limit) sizes.set(i, 0);
+    let delta = 0;
+    const changes = [...sizes].sort((a, b) => a[0] - b[0]).map(([i, size]) => ({ i, delta: (delta += size - base) }));
+    const position = (i, off = 0) => {
+      let lo = 0, hi = changes.length;
+      while (lo < hi) { const mid = (lo + hi) >>> 1; if (changes[mid].i < i) lo = mid + 1; else hi = mid; }
+      return i * base + (lo ? changes[lo - 1].delta : 0) + off;
+    };
+    const cell = (p, end = false) => {
+      if (p < 0) return end ? Math.ceil(p / base) - 1 : Math.floor(p / base);
+      let lo = 0, hi = limit;
+      while (lo < hi) { const mid = (lo + hi) >>> 1; if (end ? position(mid) < p : position(mid) <= p) lo = mid + 1; else hi = mid; }
+      return end ? lo - 1 : Math.max(0, lo - 1);
+    };
+    return { position, cell };
+  };
+  // The card's view: kind, inclusive cells [r0, c0, r1, c1], and up to five hex colours. Empty or reversed boxes have
+  // an empty range, so the card counts them without painting a phantom cell.
+  const glance = (wb, sh) => {
+    const theme = Array.isArray(wb?.keep?.theme) && wb.keep.theme.length >= 10 ? wb.keep.theme : DEFAULT_THEME;
+    const C = glanceAxis(sh.colW, sh.hidden.cols, 64, MAXC, (w) => Number.isFinite(w) ? Math.max(0, Math.trunc(((256 * w + 18) / 256) * 7)) : 64);
+    const R = glanceAxis(sh.rowH, sh.hidden.rows, 20, MAXR, (h) => Number.isFinite(h) ? Math.max(0, Math.round(h * 4 / 3)) : 20);
+    return charts(wb, sh).map(({ anchor: a, chart: c }) => {
+      const x0 = a.from ? C.position(a.from.col, a.from.colOff) : a.pos?.x ?? 0;
+      const y0 = a.from ? R.position(a.from.row, a.from.rowOff) : a.pos?.y ?? 0;
+      const x1 = a.to ? C.position(a.to.col, a.to.colOff) : x0 + (a.ext?.w ?? 0);
+      const y1 = a.to ? R.position(a.to.row, a.to.rowOff) : y0 + (a.ext?.h ?? 0);
+      const covered = [x0, y0, x1, y1].every(Number.isFinite) && x1 > x0 && y1 > y0
+        ? [R.cell(y0), C.cell(x0), R.cell(y1, true), C.cell(x1, true)] : [0, 0, -1, -1];
+      const g = c?.kind === 'plot' ? c.groups?.[0] : null;
+      if (!g) return { kind: 'chart', anchor: covered, colours: [] };
+      const kind = g.type === 'bar' ? (g.dir === 'bar' ? 'bar' : 'column') : g.type === 'bar3D' ? (g.dir === 'bar' ? 'bar3D' : 'column3D') : g.type;
+      const s0 = g.series[0];
+      const round = /^(pie|doughnut|pie3D)$/.test(g.type) || (g.vary && g.series.length === 1);
+      const colours = round && s0 ? Array.from({ length: Math.min(5, Math.max(1, s0.val?.cache?.pts?.length ?? 0)) }, (_, i) => s0.points?.get(i) ?? autoColor(i, theme))
+        : g.series.slice(0, 5).map((s) => { const x = g.type === 'line' || g.type === 'scatter' ? s.line : s.fill; return x && x !== 'none' ? x : s.color; });
+      return { kind, anchor: covered, colours: colours.filter((x) => /^#[0-9a-f]{6}$/i.test(x || '')) };
+    });
+  };
+
   // ── Writing a chart (Insert): the parts in Excel's element order ───────────────────────────────────────────────────
   const xesc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   const HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
@@ -568,7 +613,7 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
   const plan = (wb, sh, g, kind, show) => {
     if ((g.r1 - g.r0 + 1) * (g.c1 - g.c0 + 1) > MAX_POINTS) return null;
     const cell = (r, c) => sh.rows.get(r)?.get(c) ?? null;
-    const NFm = dep('GZ_SHEET_NUMFMT', './sheet-numfmt.js');
+    const NFm = dep('GZ_SHEET_NUMFMT', () => require('./sheet-numfmt.js'));
     const fmtOf = (x) => { const f = wb.styles?.[x?.s ?? 0]?.fmt; return f === undefined || f === null ? 'General' : NFm.code(f); };
     const isNum = (x) => x?.t === 'n', isText = (x) => x?.t === 's' && x.v !== '', blank = (x) => !x || x.t === 'z' || (x.t === 's' && x.v === '');
     const isDate = (x) => isNum(x) && NFm.isDate(fmtOf(x));
@@ -612,7 +657,7 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
   // Every word a frame can show, for the catalogues.
   const WORDS = [...new Set(['Chart', 'Combo chart', ...Object.values(OTHER), '3-D pie chart', '3-D column chart', '3-D bar chart', ...Object.values(EX)])];
 
-  return { EMU, MAX_POINTS, DEFAULT_THEME, WORDS, logFor, owner, TYPE_CHART, TYPE_RELS, build, plan, spans, addAnchor, setAnchor, relsXml, relList, tree, anchors, chart, chartEx, charts, lookup, resolve, autoColor, transform, moveFormula, moveAnchor, relsOf, partText };
+  return { EMU, MAX_POINTS, DEFAULT_THEME, WORDS, logFor, owner, TYPE_CHART, TYPE_RELS, build, plan, spans, addAnchor, setAnchor, relsXml, relList, tree, anchors, chart, chartEx, charts, glance, lookup, resolve, autoColor, transform, moveFormula, moveAnchor, relsOf, partText };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_SHEET_CHART_XML; else GZ_SHEET_CHART_XML;

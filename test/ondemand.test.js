@@ -380,12 +380,17 @@ test("Ultra's grades load where they're used: the what-if on a course's Grades, 
 });
 
 test('the document buttons load on a course document or a file preview, with the switch on', () => {
-  for (const [why, ultra, toggles, has, loads] of [['a document', false, true, ['doc'], 1], ['switched off', false, false, ['doc'], 0],
+  for (const [why, ultra, toggles, has, loads, previews = false] of [['a document', false, true, ['doc'], 1], ['switched off', false, false, ['doc'], 0],
     ['a Canvas file preview', false, true, ['preview'], 1], ['nothing there', false, true, [], 0],
-    ['an Ultra preview, switched off (its images are turned back)', true, false, ['preview'], 1]]) {
+    ['an Ultra preview, switched off (its images are turned back)', true, false, ['preview'], 1],
+    // Open in Glaze (features/canvasopen.js, through docs.js): a Canvas file link or preview with Previews in Glaze on, whatever the buttons' switch.
+    ['a Canvas file link, buttons off, Previews in Glaze on', false, false, ['link'], 1, true],
+    ['a Canvas API file link without a class, buttons off', false, false, ['apiLink'], 1, true], ['a Canvas file link, Previews in Glaze off', false, false, ['link'], 0, false],
+    ['an Ultra file link is not Canvas\'s', true, false, ['link'], 0, true]]) {
     const h = hooks('  // ---- document buttons (Extras)', '  // ---- keyboard shortcuts (Extras)', { ultra, addEventListener() {}, api: 'syncDocTools' });
     h.ctx.settings.enhance.toggles = toggles;
-    h.ctx.document.querySelector = (sel) => (has.some((k) => (k === 'doc' ? /document-content-root|show-content/ : /iframe/).test(sel)) ? {} : null);
+    h.ctx.settings.enhance.bbPreviews = previews;
+    h.ctx.document.querySelector = (sel) => (has.some((k) => ({ doc: /document-content-root|show-content/, preview: /iframe/, link: /instructure_file_link/, apiLink: /data-api-returntype/ })[k].test(sel)) ? {} : null);
     h.ctx.api.syncDocTools();
     assert.equal(h.loads.length, loads, why);
   }

@@ -139,6 +139,9 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       }
       return keep;
     };
+    // What a submit attached beside the paper, as its version keeps it: at most 10 names, sizes and types.
+    const attachedOf = (list) => list.slice(0, 10).filter((a) => typeof a?.name === 'string' && a.name && Number.isSafeInteger(a.size) && a.size > 0)
+      .map((a) => ({ name: a.name.slice(0, 255), size: a.size, mime: typeof a.mime === 'string' ? a.mime.slice(0, 200) : '' }));
     const snapshot = (paper, reason, at) => {
       const doc = paper.doc, m = measure(doc);
       const file = paper.kind && paper.kind !== 'paper' ? Object.fromEntries(FILE_FIELDS.filter((f) => paper[f] !== undefined).map((f) => [f, paper[f]])) : {};
@@ -163,21 +166,24 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
     const index = async (paper) => {
       const list = (await get(INDEX)) || [];
       const row = { key: paper.key, kind: paper.kind || 'paper', named: paper.named === true, title: paper.title || '', course: paper.courseName || '', url: paper.url || '', words: paper.words || 0, format: paper.format, updated: paper.updated, submitted: paper.submitted || null,
-        ...(trashed(paper) && { trashed: paper.trashed }), ...(glance(paper.grid) && { grid: paper.grid }) };
+        ...(trashed(paper) && { trashed: paper.trashed }), ...(glance(paper.grid) && { grid: paper.grid }), ...(paper.kind === 'sheet' && paper.ext === '.xlsm' && { ext: '.xlsm' }) };
       return [row, ...list.filter((r) => r.key !== paper.key)].slice(0, 2000);
     };
 
     // Saves the paper under k, merging patch into what's stored; a record written before kinds is a paper, and its title
     // the assignment's until the student names it (named). reason: 'auto' (the default: autosave), 'sending' or
     // 'submit' (the paper itself kept), 'import' or 'restore' (the doc before it is kept), 'format', 'view' (the paper as
-    // the full writer left it, before the compact box writes it into Blackboard's). → { paper, version }.
-    // touch: false keeps Last edited (updated): a field recorded about the document, not a change to it (lib/drive.js drive).
-    const save = (k, patch = {}, { reason = 'auto', base = seen.get(k), rename = false, expectedKind, parts = null, drop = null, changed: own, version: packed = null, touch = true } = {}) => serial(k, async () => {
+    // the full writer left it, before the compact box writes it into Blackboard's), 'edit' (a PDF's or deck's file before
+    // the one this save brings). attached: on a 'sending' save, the files the submit attaches beside it ({ name, size,
+    // mime }), kept on its version. touch: false keeps Last edited (updated): a field recorded about the document, not a
+    // change to it (lib/drive.js drive). → { paper, version }.
+    const save = (k, patch = {}, { reason = 'auto', base = seen.get(k), rename = false, expectedKind, expectedFile, parts = null, drop = null, changed: own, version: packed = null, attached = null, touch = true } = {}) => serial(k, async () => {
       if (typeof k !== 'string' || !k) throw new Error('no paper key');
       const written = Object.keys(parts || {}), dropped = [...(drop || [])];
       if ([...written, ...dropped].some((n) => typeof n !== 'string' || !PART_NAME.test(n)) || (packed && typeof packed.gz !== 'string')) throw new Error('no such part');
       const prev = (await get(PAPER + k)) || null, t = now();
       if (expectedKind && (prev?.kind || 'paper') !== expectedKind) throw new Error('document kind changed');
+      if (expectedFile !== undefined && !sameFile(prev?.file, expectedFile)) throw new Error('document changed in another tab');
       // A save queued in another editor may arrive after Open in Glaze. Only an explicit import or restore can change
       // the kind; the editor's session copy still holds its unsaved document or workbook.
       if (prev && patch.kind && patch.kind !== (prev.kind || 'paper') && !['import', 'restore'].includes(reason)) throw new Error('document kind changed');
@@ -228,6 +234,8 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       if (whole) { version = await retain(snapshot(paper, reason, t)); if (reason === 'submit') paper.submitted = t; }
       else if (conflict) version = await retain(snapshot(prev, 'conflict', t));
       else if ((reason === 'import' || reason === 'restore' || reason === 'format' || reason === 'view') && (prev?.doc || prev?.file)) version = await retain(snapshot(prev, reason, t));
+      // A file's own edit kept (a PDF's pages changed, a viewer's first save): the file before it.
+      else if (reason === 'edit' && prev?.file && !sameFile(prev.file, paper.file)) version = await retain(snapshot(prev, reason, t));
       else if (prev?.doc && patch.doc) {
         const a = measure(prev.doc), b = measure(patch.doc);
         const big = Math.abs(a.words - b.words) >= CAP.words || Math.abs(a.chars - b.chars) >= CAP.share * Math.max(a.chars, b.chars, 500);
@@ -238,6 +246,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       if (packed) version = await retain({ id: `${t.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at: t, reason: String(packed.reason || 'auto'), kind: paper.kind,
         cells: Number.isSafeInteger(packed.cells) ? packed.cells : 0, bytes: packed.gz.length, gz: packed.gz });
       if (version) paper.lastVersion = t;
+      if (version && (reason === 'sending' || packed?.reason === 'sending') && Array.isArray(attached)) version.attached = attachedOf(attached);
       await claim(k, [paper, ...(history || [])], [patch]);
       // One storage write publishes the document, history and index together. A quota refusal cannot evict
       // a submitted version or expose a half-saved paper. The worker serializes this read/compute/write.

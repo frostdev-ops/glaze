@@ -5,8 +5,9 @@ const { parse } = require('../fixture-dom.js');
 const L = require('../../lib/writer-submit.js');
 // settings: what the module reads through GZ_CTX (enhance.writerUploads catches Ultra's own file area). full: the paper's
 // view (features/writer.js box.full); false, its compact box.
-module.exports = ({ listed = true, enabled = true, worker, settings = null, full = true } = {}) => {
-  const doc = { activeElement: null }, sent = [], uploads = [], clicks = [], timers = new Map();
+module.exports = ({ listed = true, enabled = true, worker, settings = null, full = true, hash = (...args) => crypto.subtle.digest(...args) } = {}) => {
+  const doc = { activeElement: null }, sent = [], uploads = [], clicks = [], timers = new Map(), hashes = new Set();
+  const digest = (...args) => { const p = hash(...args); hashes.add(p); p.finally(() => hashes.delete(p)); return p; };
   doc.root = new El('html', doc); doc.documentElement = doc.root;
   doc.body = parse(fs.readFileSync(path.join(__dirname, '../fixtures/ultra-writer-attempt.html'), 'utf8'), doc);
   for (const n of ['querySelector', 'querySelectorAll', 'addEventListener', 'removeEventListener', 'dispatchEvent']) doc[n] = El.prototype[n].bind(doc.root);
@@ -28,7 +29,7 @@ module.exports = ({ listed = true, enabled = true, worker, settings = null, full
   setEnabled(enabled);
   const addRow = (name) => { const row = new El('span', doc); row.textContent = name; row.getClientRects = () => [{}]; L.areaOf(editor).append(row); return row; };
   L.uploadInput(L.areaOf(editor)).addEventListener('change', (e) => { const file = e.target.files[0]; uploads.push(file); if (listed) addRow(file.name); });
-  const ctx = vm.createContext({ document: doc, location, console, ArrayBuffer, Uint8Array, File, Event, CustomEvent, crypto,
+  const ctx = vm.createContext({ document: doc, location, console, ArrayBuffer, Uint8Array, File, Event, CustomEvent, crypto: { randomUUID: () => crypto.randomUUID(), subtle: { digest } },
     Date: class extends Date { static now() { return clock; } },
     setTimeout: (fn, ms) => { timers.set(++id, { fn, ms }); return id; }, clearTimeout: (n) => timers.delete(n),
     DataTransfer: class { constructor() { this.files = []; this.items = { add: (f) => this.files.push(f) }; } },
@@ -45,7 +46,7 @@ module.exports = ({ listed = true, enabled = true, worker, settings = null, full
   const ok = () => owned;
   const hear = (m) => ctx.GZ_WRITER_SUBMIT.hear(box, m, settings ? { settings: () => settings } : {}, ok);
   hear({ type: 'submit:arm' });
-  const flush = async () => { for (let i = 0; i < 15; i++) await new Promise(setImmediate); };
+  const flush = async () => { for (let i = 0; i < 15; i++) { await Promise.all([...hashes]); await new Promise(setImmediate); } };
   const tick = async (ms = 1000) => { clock += ms; for (const [n, t] of [...timers]) { timers.delete(n); t.fn(); } await flush(); };
   const go = async (extra = {}) => { hear({ type: 'submit:go', run: 1, key: 'school.blackboard.com|_900_1|_101_1|_7_1', name: 'Rivera_Essay2.docx', bytes: new Uint8Array([1, 2, 3]).buffer, note: '', text: null, until: clock + 80000, ...extra }); await flush(); };
   return { doc, ctx, box, sent, uploads, clicks, fire, hear, go, flush, tick, addRow, button, setEnabled, setText, input, timers, own: (v) => { owned = v; }, now: () => clock };

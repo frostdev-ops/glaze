@@ -1,7 +1,7 @@
 // A local stand-in for the parts of Google's Calendar API and token revocation that Glaze uses (lib/gcal.js), for the
 // node tests (test/gcal.test.js) and headless runs of the extension. It listens on 127.0.0.1 only and reaches nothing.
 // Modeled on Google's documented behavior: client-chosen event ids (base32hex, 5–1024 characters, 409 when taken, even by
-// a deleted event), etags, syncToken listing that includes deletions (410 once a token has expired), 404 for an unknown
+// a deleted event), etags, syncToken listing that includes deletions (a full one only with showDeleted; 410 once a token has expired), 404 for an unknown
 // calendar, 403 for one the app didn't make (the calendar.app.created scope), and the revoke endpoint. Not shipped.
 //
 //   const mock = await require('./scripts/gcal-mock.js').start();   // { api, revoke, port, ... }; mock.stop() when done
@@ -75,7 +75,8 @@ const start = (port = 0) => new Promise((resolve) => {
         const st = url.searchParams.get('syncToken');
         const since = st === null ? null : Number(/^s(\d+)$/.exec(st)?.[1]);
         if (since !== null && !(since >= mock.oldest)) return error(res, 410, 'fullSyncRequired');
-        const all = [...c.events.values()].filter((e) => (since === null ? e.status !== 'cancelled' : e.seq > since)).sort((a, b) => a.seq - b.seq);
+        const shown = url.searchParams.get('showDeleted') === 'true';
+        const all = [...c.events.values()].filter((e) => (since === null ? shown || e.status !== 'cancelled' : e.seq > since)).sort((a, b) => a.seq - b.seq);
         const from = Number(url.searchParams.get('pageToken') || 0), max = Math.min(Number(url.searchParams.get('maxResults') || 250), 2500);
         const items = all.slice(from, from + max).map(out);
         const more = from + max < all.length;

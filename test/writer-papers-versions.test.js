@@ -116,12 +116,15 @@ test('a restore the store refuses, or of a version gone meanwhile, says so and l
 test('Open from Documents lists no document in Trash', async () => {
   const fs = require('node:fs'), vm = require('node:vm');
   const source = fs.readFileSync(require('node:path').join(__dirname, '../writer-paper.js'), 'utf8');
-  const head = '    const fromDocsSheet = async () => {', from = source.indexOf(head), to = source.indexOf('      const layer = ', from);
+  const head = '    const fromDocsSheet = async ({ attach = false, back = null } = {}) => {', from = source.indexOf(head), to = source.indexOf('      const layer = ', from);
   assert.ok(from > 0 && to > from);
   const live = PA.newKey(), binned = PA.newKey(), older = PA.newKey();
   const rows = [{ key: live, kind: 'paper', updated: 2 }, { key: binned, kind: 'paper', updated: 3, trashed: 4 }, { key: older, kind: 'paper', updated: 1 }, { key: K, kind: 'paper', updated: 5 }];
-  const listed = await vm.runInNewContext(`(async () => {${source.slice(from + head.length, to)}\nreturn docs.map((r) => r.key); })()`, {
-    closeDocs() {}, docsTurn: 0, store: { list: async () => rows }, PA, root: { isConnected: true }, current: 1, api: 1, importing: false,
+  const sheet = PA.newKey(), pdf = PA.newKey(), pdfBinned = PA.newKey();
+  rows.push({ key: sheet, kind: 'sheet', updated: 1.5 }, { key: pdf, kind: 'pdf', updated: 0.5 }, { key: pdfBinned, kind: 'pdf', updated: 6, trashed: 7 });
+  const list = (attach) => vm.runInNewContext(`(async ({ attach = false, back = null } = {}) => {${source.slice(from + head.length, to)}\nreturn docs.map((r) => r.key); })({ attach: ${attach} })`, {
+    closeDocs() {}, docsTurn: 0, store: { list: async () => rows }, PA, root: { isConnected: true }, current: 1, api: 1, importing: false, KINDS: { paper: 'Document', sheet: 'Spreadsheet', pdf: 'PDF', slides: 'Slides' }, Promise, Object,
     Intl, document: { documentElement: { lang: 'en' } }, btn: () => ({}), h: () => ({}), icon: () => ({}), t: (k) => k, labelOf: () => '', ST: GZ_WRITER_STYLES, nf: String, toast() {}, console });
-  assert.deepEqual(listed, [live, older]);
+  assert.deepEqual(await list(false), [live, older], 'Open from Documents: papers only');
+  assert.deepEqual(await list(true), [live, sheet, older, pdf], 'Attach from Documents: every kind, none in Trash');
 });

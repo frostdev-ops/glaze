@@ -89,8 +89,8 @@ const SITES = {
     { at: 'WebSocket: W = globalThis.WebSocket', kind: 'via', to: 'lib/sessions.js' },
   ],
   'lib/gcal.js': [
-    { at: 'env.fetch(`${env.api || API}', kind: 'open', host: 'https://www.googleapis.com', why: 'Google Calendar API, CORS for any origin; behind GZ_GCAL.ON (off)' },
-    { at: 'env.fetch(env.revoke || REVOKE', kind: 'open', host: 'https://oauth2.googleapis.com', why: 'token revocation, CORS for any origin; behind GZ_GCAL.ON (off)' },
+    { at: 'env.fetch(`${env.api || API}', kind: 'open', host: 'https://www.googleapis.com', why: 'Google Calendar API, CORS for any origin; behind GZ_GCAL.ON (on; Chrome only)' },
+    { at: 'env.fetch(env.revoke || REVOKE', kind: 'open', host: 'https://oauth2.googleapis.com', why: 'token revocation, CORS for any origin; behind GZ_GCAL.ON (on; Chrome only)' },
   ],
   // Drive's sign-in (behind lib/google-config.js's placeholders until its clients are real): Google's userinfo and revoke,
   // and the HEAD that finds the picker page that loads.

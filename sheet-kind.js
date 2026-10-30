@@ -1,5 +1,5 @@
 // Spreadsheets on the Documents page (papers.html): the sheet kind's page code (lib/doc-kinds.js). Settings → Writer →
-// Spreadsheets (writer.sheets, defaults.js) adds the New band's Spreadsheet tile (create) and takes .xlsx, .csv and .tsv files
+// Spreadsheets (writer.sheets, defaults.js) adds the New band's Spreadsheet tile (create) and takes .xlsx, .xlsm, .csv and .tsv files
 // (importFile); existing spreadsheets always open, copy and export. A card shows the record's 6×4 text (sheet-data.js
 // glance). Opening one mounts the grid (sheet-grid.js) on the calc engine (lib/sheet-*.js). .xlsx files are read and written
 // by GZ_SHEET_XLSX (lib/sheet-xlsx.js), loaded on demand before a file or the grid opens. Storage is sheet-data.js's alone.
@@ -16,6 +16,11 @@
   const ENGINE = ['lib/sheet-model.js', 'lib/sheet-numfmt.js', 'lib/sheet-formula.js', 'lib/sheet-calc.js', ...FNS.map((f) => `lib/sheet-fn-${f}.js`), 'sheet-data.js'];
   const SAYS = { size: 'Choose a spreadsheet smaller than 15 MB.', read: 'That file could not be read.' };
   const xlsx = () => globalThis.GZ_SHEET_XLSX ?? null;
+  // A workbook that keeps a macro project (lib/sheet-xlsx.js extension) is written, named and labelled .xlsm, its record
+  // and index row saying ext '.xlsm' (a card's ⋯ menu reads the row); every other one .xlsx.
+  const XLSM = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+  const extOf = (wb) => (typeof xlsx()?.extension === 'function' && xlsx().extension(wb) === 'xlsm' ? '.xlsm' : '.xlsx');
+  const labelOf = (ext) => (ext === '.xlsm' ? 'Export .xlsm' : 'Export .xlsx');
   // The .xlsx reader and writer and what they stand on, loaded the first time a spreadsheet is listed, opened, imported or
   // written (never with the page). One shared load; a failure rejects the operation and allows a later retry.
   const CODECS = ['lib/doctext.js', 'lib/zip.js', 'lib/sheet-xlsx.js'];
@@ -65,6 +70,95 @@
     const largest = Math.max(...ws);
     return ws.some((w) => w !== ws[0]) && largest > 0 ? ws.map((w) => w / largest) : null;
   };
+  // ---- the card's charts: the record's summary (sheet-data.js charts) as a small picture of each kind over the cells it
+  // covers in A1:F4, the undrawn charts counted in the corner; a record kept before the summary counts its drawing's charts.
+  const NS = 'http://www.w3.org/2000/svg';
+  const svgEl = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v)); return e; };
+  const HEX = /^#[0-9a-f]{6}$/i;
+  // In a 24×16 box: 4–5 shapes in the chart's colours.
+  const wedge = (cx, cy, rx, ry, a0, a1) => { const p = (a) => `${(cx + rx * Math.sin(a)).toFixed(2)} ${(cy - ry * Math.cos(a)).toFixed(2)}`; return `M${cx} ${cy}L${p(a0)}A${rx} ${ry} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${p(a1)}Z`; };
+  const glyph = (kind, colours) => {
+    const cs = colours.length ? colours : ['#156082', '#E97132', '#196B24', '#0F9ED5'], col = (i) => cs[i % cs.length];
+    const H = [0.5, 0.8, 0.6, 1];
+    if (kind === 'column' || kind === 'column3D') return H.map((v, i) => svgEl('rect', { x: 2 + i * 5.5, y: 15 - v * 13, width: 4, height: v * 13, fill: col(i) }));
+    if (kind === 'bar' || kind === 'bar3D') return H.map((v, i) => svgEl('rect', { x: 1, y: 1 + i * 3.8, width: v * 22, height: 2.8, fill: col(i) }));
+    if (kind === 'line') return [svgEl('path', { d: 'M2 13L8 8L14 10L22 3', fill: 'none', stroke: col(0), 'stroke-width': 1.6, 'stroke-linejoin': 'round' }), ...(cs.length > 1 ? [svgEl('path', { d: 'M2 15L8 12L14 13L22 9', fill: 'none', stroke: col(1), 'stroke-width': 1.6, 'stroke-linejoin': 'round' })] : [])];
+    if (kind === 'area') return [svgEl('path', { d: 'M1 15L1 10L8 6L15 9L23 3L23 15Z', fill: col(0) })];
+    if (kind === 'scatter') return [[4, 12], [9, 7], [15, 10], [20, 4]].map(([x, y], i) => svgEl('circle', { cx: x, cy: y, r: 1.8, fill: col(cs.length > 1 ? i : 0) }));
+    if (kind === 'pie' || kind === 'doughnut' || kind === 'pie3D') {
+      const n = Math.min(5, cs.length), flat = kind === 'pie3D', ry = flat ? 5 : 7, cy = flat ? 7 : 8, out = [];
+      if (flat) out.push(svgEl('ellipse', { cx: 12, cy: cy + 3, rx: 10, ry, fill: col(0), class: 'gx-th-side' }));
+      for (let i = 0; i < n; i++) out.push(n === 1 ? svgEl('ellipse', { cx: 12, cy, rx: flat ? 10 : 7, ry, fill: col(0) }) : svgEl('path', { d: wedge(12, cy, flat ? 10 : 7, ry, (i / n) * 2 * Math.PI, ((i + 1) / n) * 2 * Math.PI), fill: col(i) }));
+      if (kind === 'doughnut') out.push(svgEl('circle', { cx: 12, cy, r: 3, class: 'gx-th-hole' }));
+      return out;
+    }
+    return [svgEl('path', { d: 'M3 15h18M6 15v-5M11 15V3M16 15V8', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 })];
+  };
+  const svgOf = (kind, colours) => { const g = svgEl('svg', { viewBox: '0 0 24 16', preserveAspectRatio: 'xMidYMid meet' }); g.append(...glyph(kind, colours)); return g; };
+  // Legacy records: scan only the active sheet's owned drawing, once per unchanged part. Recognize chart children
+  // of the first graphic frame in each anchor, just as the chart reader does (Choice/Fallback is one object).
+  const counts = new WeakMap();
+  const countXml = (xml) => {
+    const stack = [];
+    let anchor = null, n = 0;
+    const local = (name) => name.slice(name.lastIndexOf(':') + 1);
+    const leave = (name) => {
+      const i = stack.lastIndexOf(name);
+      if (i < 0) return;
+      stack.length = i;
+      if (anchor && stack.length < anchor.depth) anchor = null;
+      if (anchor?.frame && stack.length < anchor.frame) anchor.frame = 0;
+      if (anchor?.data && stack.length < anchor.data) anchor.data = 0;
+    };
+    // Quoted attributes may contain >; comments and CDATA never contribute tags. No DOM or chart models per card.
+    for (const m of xml.matchAll(/<(?:!--[\s\S]*?--|!\[CDATA\[[\s\S]*?\]\]|[!?][^>]*|\/?[\w:.-]+(?:[^"'<>]|"[^"]*"|'[^']*')*)>/g)) {
+      const tag = /^<(\/?)([\w:.-]+)/.exec(m[0]);
+      if (!tag) continue;
+      const [, close, name] = tag, k = local(name);
+      if (close) { leave(name); continue; }
+      if (stack.length === 1 && local(stack[0]) === 'wsDr' && /^(twoCellAnchor|oneCellAnchor|absoluteAnchor)$/.test(k)) anchor = { depth: stack.length + 1, frame: 0, data: 0, frameSeen: false, dataSeen: false, found: false };
+      if (anchor) {
+        if (k === 'graphicFrame' && !anchor.frameSeen) { anchor.frame = stack.length + 1; anchor.frameSeen = true; }
+        else if (k === 'graphicData' && anchor.frame && !anchor.dataSeen) { anchor.data = stack.length + 1; anchor.dataSeen = true; }
+        else if (k === 'chart' && anchor.data && stack.length === anchor.data && !anchor.found) { anchor.found = true; n++; }
+      }
+      stack.push(name);
+      if (/\/\s*>$/.test(m[0])) leave(name);
+    }
+    return n;
+  };
+  const counted = (book) => {
+    const sh = book?.sheets?.[book.active] || book?.sheets?.[0], path = sh?.keep?.drawing?.path, parts = book?.keep?.parts;
+    if (!path || !parts) return 0;
+    const owners = book.sheets.filter((s) => s.keep?.drawing?.path === path);
+    if ((owners.find((s) => s.keep.sourceId === s.id) || owners[0]) !== sh) return 0;
+    const part = parts[path] ?? parts[Object.keys(parts).find((k) => k.toLowerCase() === String(path).toLowerCase())];
+    if (!part || typeof part !== 'object') return 0;
+    const data = part.data?.$b64 ?? part.data, cached = counts.get(part);
+    if (cached?.data === data) return cached.n;
+    let xml = data;
+    if (typeof part.data?.$b64 === 'string') { try { xml = atob(data); } catch { xml = ''; } }
+    const n = typeof xml === 'string' ? countXml(xml) : 0;
+    counts.set(part, { data, n });
+    return n;
+  };
+  const chartsOn = (box, rec) => {
+    const list = Array.isArray(rec?.charts) ? rec.charts.slice(-32).filter((x) => x && Array.isArray(x.anchor) && x.anchor.length === 4 && x.anchor.every(Number.isSafeInteger)) : null;
+    const kept = Array.isArray(rec?.charts) ? rec.charts.length : 0;
+    const total = Number.isSafeInteger(rec?.chartCount) && rec.chartCount >= 0 ? rec.chartCount : kept === 32 ? Math.max(kept, counted(rec?.book)) : kept;
+    let away = list ? Math.max(0, total - list.length) : counted(rec?.book);
+    for (const x of list || []) {
+      const [r0, c0, r1, c1] = x.anchor;
+      if (r0 > 3 || c0 > 5 || r1 < 0 || c1 < 0 || r1 < r0 || c1 < c0) { away++; continue; }
+      const kind = typeof x.kind === 'string' ? x.kind : 'chart', colours = Array.isArray(x.colours) ? x.colours.slice(0, 5).filter((c) => typeof c === 'string' && HEX.test(c)) : [];
+      const m = h('i', { class: 'gx-th-chart', 'data-kind': kind });
+      m.style.gridRow = `${Math.max(0, r0) + 2} / ${Math.min(3, r1) + 3}`;
+      m.style.gridColumn = `${Math.max(0, c0) + 2} / ${Math.min(5, c1) + 3}`;
+      m.append(svgOf(kind, colours));
+      box.append(m);
+    }
+    if (away) box.append(h('i', { class: 'gx-th-more', 'data-count': String(away) }, svgOf('chart', []), h('b', { text: String(away) })));
+  };
   const thumb = (rec) => {
     if (rec) codecs().catch((e) => console.error(e));
     const g = Array.isArray(rec?.grid) ? rec.grid : [];
@@ -75,6 +169,7 @@
       box.append(h('span', { class: 'gx-th-h', text: String(r + 1) }));
       for (let c = 0; c < 6; c++) { const s = typeof g[r]?.[c] === 'string' ? g[r][c] : ''; box.append(h('span', { class: /^[-+$€£(]?[\d.,]+%?\)?$/.test(s) ? 'gx-th-c gx-th-n' : 'gx-th-c', text: s })); }
     }
+    if (rec) chartsOn(box, rec);
     return box;
   };
   const text = (rec) => (typeof rec?.text === 'string' ? rec.text : '');
@@ -92,7 +187,7 @@
     const got = rec?.key ? await GZ_SHEET_DATA.read(get, rec.key) : null;
     if (!got) return {};
     const { book, parts } = GZ_SHEET_DATA.split(got.wb);
-    return { book, grid: got.rec.grid, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
+    return { book, grid: got.rec.grid, charts: got.rec.charts, chartCount: got.rec.chartCount, text: got.rec.text, cells: got.rec.cells, sheets: got.rec.sheets, ...(got.rec.ext === '.xlsm' && { ext: '.xlsm' }), parts: Object.fromEntries([...parts].map(([n, rows]) => [n, { rows }])) };
   };
 
   // ---- files: .xlsx, .csv and .tsv through GZ_SHEET_XLSX
@@ -109,6 +204,7 @@
     p({ stage: 'read', done: raw.byteLength, total: raw.byteLength });
     p({ stage: 'prepare' });
     const X = await codecs(), bytes = new Uint8Array(raw);
+    await need(CHARTS).catch((e) => console.error(e));
     const wb = /\.(csv|tsv)$/i.test(file.name) ? X.readDelimited(bytes, { name: file.name }) : await X.read(bytes).catch(() => null);
     if (!wb?.sheets?.length) throw new RangeError(SAYS.read);
     GZ_SHEET_CALC.engine(wb).recalc();
@@ -118,18 +214,19 @@
     const wb = await workbookOf(file, progress);
     progress?.({ stage: 'save' });
     const key = GZ_WRITER_PAPERS.newKey(), title = stem(file.name);
-    await saveAll(key, wb, { named: !!title, title }, 'start');
+    await saveAll(key, wb, { named: !!title, title, ...(extOf(wb) === '.xlsm' && { ext: '.xlsm' }) }, 'start');
     const notice = noticeOf(wb);
     return notice ? { key, notice } : key;
   };
   const safe = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
-  // A spreadsheet as .xlsx, waiting for the writer. → { name, mime, bytes }.
+  // A spreadsheet as .xlsx (.xlsm with its macros), waiting for the writer. → { name, mime, bytes }.
   const fileOf = async (wb, title) => {
     const name = safe(title) || t('Spreadsheet');
-    const X = await codecs(), bytes = await X.write(wb);
-    return { name: `${name}.xlsx`, mime: DK.KINDS.sheet.mime, bytes };
+    const X = await codecs(), bytes = await X.write(wb), ext = extOf(wb);
+    return { name: `${name}${ext}`, mime: ext === '.xlsm' ? XLSM : DK.KINDS.sheet.mime, bytes };
   };
-  const file = async (key) => {
+  const file = async (key, { progress = null } = {}) => {
+    progress?.({ stage: 'prepare' });
     await need([...ENGINE, 'sheet-grid.js']);
     const got = await GZ_SHEET_DATA.read(get, key);
     return got ? fileOf(got.wb, got.rec.title) : null;
@@ -145,12 +242,12 @@
   const exportFile = async (key) => { const f = await file(key); if (f) download(f); };
 
   // The frame's submit and kind-change checkpoints keep the complete workbook, as the grid's own Versions do.
-  const version = async (key, reason) => {
+  const version = async (key, reason, { attached = null } = {}) => {
     await need(ENGINE);
     const got = await GZ_SHEET_DATA.read(get, key);
     if (got?.rec.kind !== 'sheet') throw new Error('document kind changed');
     const gz = await GZ_SHEET_DATA.pack(got.wb);
-    return papers().save(key, {}, { expectedKind: 'sheet', base: got.rec.revision, version: { reason, gz, cells: GZ_SHEET_DATA.measure(got.wb).cells } });
+    return papers().save(key, {}, { expectedKind: 'sheet', base: got.rec.revision, version: { reason, gz, cells: GZ_SHEET_DATA.measure(got.wb).cells }, ...(attached && { attached }) });
   };
 
   // ---- the grid
@@ -164,12 +261,12 @@
     if (prior) had = prior.rec;
     const sigs = new Map(Object.keys(had?.parts || {}).map((n) => [n, 'stale']));
     const checkpoint = prior?.wb || wb, gz = await SD.pack(checkpoint);
-    const paper = (await SD.write(papers(), key, wb, sigs, { base: had?.revision || 0, patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: prior ? 'import' : 'start', gz, cells: SD.measure(checkpoint).cells } })).saved.paper;
+    const paper = (await SD.write(papers(), key, wb, sigs, { base: had?.revision || 0, patch: { doc: null, words: 0, ext: extOf(wb) === '.xlsm' ? '.xlsm' : null }, reason: 'import', show: shower(wb), version: { reason: prior ? 'import' : 'start', gz, cells: SD.measure(checkpoint).cells } })).saved.paper;
     const notice = noticeOf(wb);
     return notice ? { ...paper, notice } : paper;
   };
   // An empty attempt started as a spreadsheet (writer-kinds.js): what its record takes; the grid opens a blank workbook.
-  const empty = () => ({ grid: Array.from({ length: 4 }, () => Array(6).fill('')), text: '', cells: 0, sheets: 1 });
+  const empty = () => ({ charts: [], chartCount: 0, grid: Array.from({ length: 4 }, () => Array(6).fill('')), text: '', cells: 0, sheets: 1 });
   const create = () => `papers.html?sheet=${encodeURIComponent(GZ_WRITER_PAPERS.newKey())}&new`;
   // host: an assignment's frame (view below): { mount, t, title, tools }. → the grid's surface (sheet-grid.js mount).
   const edit = async (key, { fresh = false, host = null } = {}) => {
@@ -181,11 +278,57 @@
     await need(CHARTS).catch((e) => console.error(e));
     if (!host) document.documentElement.dataset.mode = 'sheet';
     const v = GZ_SHEET_GRID.mount({ key, wb, rec: got?.rec || null, sigs: got?.sigs || new Map(), fresh: !got, t: host?.t || t, locale, papers: papers(), show: shower,
-      local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: () => 'Export .xlsx', host });
+      local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: (book) => labelOf(book ? extOf(book) : null), host });
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
     return v;
   };
   const view = (key, host) => edit(key, { host });
+  // A workbook's bytes from elsewhere (src { bytes, name, href }: a Canvas file the page read, writer-kinds.js), in the grid
+  // from memory (sheet-grid.js memory): read-only, nothing kept unless the student saves it. Open original (href) and Save
+  // to Documents (the file as it came, through importFile while Settings → Writer → Spreadsheets takes files; once saved,
+  // Open in Documents, the copy to edit) before ⋯. host: { mount, t, title, shown(), failed(reason), esc() }. → the grid's
+  // surface, or null.
+  const show = async (src, host) => {
+    const tt = host?.t || t, name = String(src?.name || '').slice(0, 200), bytes = src?.bytes?.length ? src.bytes : null;
+    const wb = bytes ? await workbookOf(new File([bytes], name || 'Spreadsheet.xlsx')).catch((e) => { console.warn(e); return null; }) : null;
+    if (!wb) { host?.failed?.(bytes ? 'read' : 'init'); return null; }
+    await need(CHARTS).catch((e) => console.error(e));
+    const button = (act, label, cls) => h('button', { type: 'button', class: cls, 'data-act': act, text: label });
+    const origB = /^https?:/.test(src.href || '') ? button('original', tt('Open original'), 'gp-tbtn') : null, saveB = button('save', tt('Save to Documents'), 'gp-submit');
+    const v = GZ_SHEET_GRID.mount({ key: null, wb, rec: null, sigs: new Map(), fresh: false, memory: true, t: tt, locale, papers: null, show: shower, local: false, fileOf, download,
+      exportLabel: () => 'Export .xlsx', host: { ...host, title: () => name, tools: [origB, saveB].filter(Boolean) } });
+    origB?.addEventListener('click', () => { window.open(src.href, '_blank', 'noopener,noreferrer'); });
+    saveB.addEventListener('click', async () => {
+      if (saveB.disabled) return;
+      saveB.disabled = true;
+      v.say(tt('Saving…'));
+      const progress = DK.progress((p) => { if (!p.end && !p.failed) v.say(tt('Saving… {n}%', { n: Math.floor(p.fraction * 10) * 10 })); });
+      try {
+        const take = DK.get('sheet')?.importFile;
+        if (typeof take !== 'function') throw new Error('off');
+        await need(['lib/writer-papers.js']);
+        const got = await take(new File([bytes], name || 'Spreadsheet.xlsx'), { progress }), key = typeof got === 'string' ? got : got?.key;
+        progress.end();
+        v.say(tt('Saved to Documents'));
+        if (key) {
+          const openA = h('a', { class: 'gp-submit', 'data-act': 'open', href: `papers.html?${DK.KINDS.sheet.param}=${encodeURIComponent(key)}`, target: '_blank', rel: 'noopener', text: tt('Open in Documents') });
+          saveB.replaceWith(openA);
+          openA.focus();
+        }
+      } catch (e) {
+        const big = e instanceof RangeError && e.message === SAYS.size;
+        if (!big) console.error(e);
+        progress.fail(e);
+        v.say(tt(big ? SAYS.size : 'Not saved. Try again in a moment.'));
+        saveB.disabled = false;
+      }
+    });
+    // Esc the grid didn't take (a cell, a menu or a field takes its own): back to the page that opened it.
+    document.addEventListener('keydown', (e) => { if (!e.defaultPrevented && e.key === 'Escape' && !e.target?.closest?.('input, textarea, select, [role="menu"]')) host?.esc?.(); });
+    globalThis.GZ_PAPERS_MOTION?.shown('paper');
+    host?.shown?.();
+    return v;
+  };
 
   // Opening, copying and exporting stay registered; creating and importing follow the switch, read as Settings shows it
   // (defaults.js: its default where none is stored). papers.html loads defaults.js on demand; writer.html has it already,
@@ -193,7 +336,7 @@
   const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
   const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'undefined' ? need(DEFAULTS) : null)).then(() => chrome.storage.sync.get('writer'))
     .then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.sheets === true, () => false);
-  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, exportLabel: 'Export .xlsx',
+  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, show, into, empty, thumb, file, exportFile, version, text, measure, copy, says: SAYS, exportLabel: 'Export .xlsx', exportLabelOf: (row) => labelOf(row?.ext),
     ...(yes && { importFile, create }) })));
   globalThis.GZ_SHEET_KIND = Object.freeze({ shower, fileOf });
 })();

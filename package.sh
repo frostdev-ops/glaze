@@ -18,8 +18,8 @@ zip -q -r -X "$OUT" manifest.json content.js content-ultra.js content-canvas.js 
   popup.html popup.js options.html options.js preview.html reader.html reader.js writer.html writer.js writer.css writer-ai.js writer-ai.css writer-mcp.js writer-compose.js writer-compose.css writer-proof.js writer-proof.css writer-cite.js writer-cite.css writer-paper.js writer-paper.css writer-submit.js writer-submit.css writer-import.js writer-import.css writer-kinds.js writer-objects.js writer-objects.css writer-find.js writer-print.js writer-counts.js writer-edit.css writer-paste.js writer-ruler.js writer-ruler.css papers.html papers.js papers.css papers-motion.js sheet-kind.js sheet-grid.js sheet-data.js sheet.css pdf-kind.js pdf-kind.css slides-kind.js slides-kind.css sharing mods ui.js ui.css fonts icons assets/logo.svg assets/logo-dark.svg assets/art/pets assets/art/stickers assets/art/cursors assets/shaders -x '*.DS_Store'
 
 # Google: the oauth2 key and the optional identity permission go in only for what uses them (scripts/oauth-manifest.js):
-# Calendar sync behind its build-time switch (lib/gcal.js ON, off until Google verifies the app), Drive once its clients
-# in lib/google-config.js are real. Without either, the packaged manifest carries neither.
+# Calendar sync behind its build-time switch (lib/gcal.js ON, on since 4.0.1: its scope alone), Drive behind its own
+# (lib/google.js ON) once its clients in lib/google-config.js are real. Without either, the manifest carries neither.
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 node scripts/oauth-manifest.js chrome manifest.json > "$stage/manifest.json"

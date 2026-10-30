@@ -1,4 +1,5 @@
-// The browser gate: verified Chromium, settings, popup, site permissions and the student's pointer, one check at a time.
+// The browser gate: verified Chromium, settings, popup, site permissions, the student's pointer and the agents' native
+// host link, one check at a time.
 //   NODE_PATH=<pinned playwright> PLAYWRIGHT_BROWSERS_PATH=<dir> nice -n 10 node scripts/ci-browser-checks.js <out dir>
 // Holds the shared lock throughout cleanup. Each check gets its own lock and temporary directory.
 const { spawn, execFileSync } = require('node:child_process');
@@ -12,6 +13,8 @@ const CHECKS = [
   { name: 'sites', script: 'sites-check.js', args: (dir) => [dir] },
   { name: 'pointer', script: 'pointer-check.js', args: (dir) => [dir] },
   { name: 'register-update', script: 'register-update-check.js', limit: 60 * 1000, args: (dir) => [dir] },
+  // Its headed step needs Xvfb, which the gate's Chromium install (--with-deps) brings.
+  { name: 'agent-link', script: 'agent-link-check.js', limit: 5 * 60 * 1000, args: (dir) => [dir] },
 ];
 const LIMIT = 2 * 60 * 1000, BUDGET = 11 * 60 * 1000;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));

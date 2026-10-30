@@ -19,23 +19,49 @@ test('section-like digits and contents leaders stay bounded at the input limit',
   assert.equal(probe.status, 0, probe.stderr);
 });
 
+// Compare CPU costs on this machine: linear work doubles, quadratic quadruples. Each size is sampled twice, interleaved,
+// and its cheaper sample kept, so compilation in the first can't hide quadratic growth and one slow sample on a busy
+// machine can't fake it (a lone whole sample against the cheaper half failed 2 of 3 suite runs at 3.06x, 2026-10-30).
+// Each whole extraction has a 5 s CPU cap; the child has a wall-clock watchdog too, because an assertion after a stuck
+// synchronous extractor would never run.
+// make(k) builds the input at k of its full size; separate builders vary row count and line width.
+const onePass = (make, o, { fraction = 0.5, growth = 3 } = {}) => {
+  const { spawnSync } = require('node:child_process');
+  const probe = spawnSync(process.execPath, ['-e', `
+    const S = require(${JSON.stringify(require.resolve('../lib/syllabus.js'))});
+    const { warm, half, whole, o } = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+    const cpu = () => { const { user, system } = process.cpuUsage(); return (user + system) / 1000; };
+    const cost = (text) => { const t0 = cpu(); S.extract(text, o); return cpu() - t0; };
+    cost(warm);
+    const h1 = cost(half), w1 = cost(whole), h2 = cost(half), w2 = cost(whole);
+    console.log(JSON.stringify({ half: Math.min(h1, h2), whole: Math.min(w1, w2) }));
+  `], { input: JSON.stringify({ warm: make(0.05), half: make(fraction), whole: make(1), o }), timeout: 20000, encoding: 'utf8' });
+  assert.equal(probe.error, undefined, 'one-pass probe must finish within 20 s wall time');
+  assert.equal(probe.status, 0, probe.stderr);
+  const { half, whole } = JSON.parse(probe.stdout);
+  assert.ok(whole < 5000 && whole < growth * Math.max(half, 50), `${Math.round(whole)} ms for ${JSON.stringify(make(1).slice(0, 20))}…, ${Math.round(half)} ms at ${fraction} size (limit ${growth}x)`);
+};
+
 test('unmatched parentheses at the input limit are read in one pass', () => {
-  const cpu = () => { const { user, system } = process.cpuUsage(); return (user + system) / 1000; };
-  for (const text of ['('.repeat(S.MAX), '(word '.repeat(S.MAX / 6), `Homework (${'1 '.repeat(S.MAX / 2 - 10)}%`, `${'(Quiz 10% '.repeat(S.MAX / 10)}`]) {
-    const t0 = cpu();
-    S.extract(text, { start: Date.UTC(2026, 7, 31) });
-    assert.ok(cpu() - t0 < 1500, `${Math.round(cpu() - t0)} ms for ${JSON.stringify(text.slice(0, 12))}…`);
+  const n = (x, k) => Math.round(x * k);
+  for (const make of [(k) => '('.repeat(n(S.MAX, k)), (k) => '(word '.repeat(n(S.MAX / 6, k)), (k) => `Homework (${'1 '.repeat(n(S.MAX / 2 - 10, k))}%`,
+    (k) => '(Quiz 10% '.repeat(n(S.MAX / 10, k))]) {
+    onePass(make, { start: Date.UTC(2026, 7, 31) });
   }
 });
 
 test('dense schedules at the input limit are read in one pass', () => {
-  const cpu = () => { const { user, system } = process.cpuUsage(); return (user + system) / 1000; };
-  const lines = (l) => `${l.repeat(Math.ceil(2000 / l.length)).slice(0, 1999)}\n`.repeat(100);
-  for (const text of [lines('Exam Oct 5-7 '), lines('Quiz 10/5 '), lines('opens Oct 5 and by Oct 7 Exam '), 'Mon\nSep 4\nTopic\tProblem Set 1\ndue\n'.repeat(5000),
-    'Quizzes are due every Monday. Final exam: Dec 11\n'.repeat(4000), 'Exam 1 (Thu\n'.repeat(16000)]) {
-    const t0 = cpu();
-    S.extract(text, { start: Date.UTC(2026, 7, 31), week1: Date.UTC(2026, 7, 31), md: true });
-    assert.ok(cpu() - t0 < 1500, `${Math.round(cpu() - t0)} ms for ${JSON.stringify(text.slice(0, 20))}…`);
+  const lines = (l) => (k) => `${l.repeat(Math.ceil(2000 / l.length)).slice(0, 1999)}\n`.repeat(Math.round(100 * k));
+  // Halving only the row count makes a quadratic scan within each fixed-width row look linear.
+  const widths = (l) => (k) => `${l.repeat(Math.ceil(2000 / l.length)).slice(0, Math.round(2000 * k) - 1)}\n`.repeat(100);
+  const rows = (l, count) => (k) => l.repeat(Math.round(count * k));
+  for (const make of [lines('Exam Oct 5-7 '), lines('Quiz 10/5 '), lines('opens Oct 5 and by Oct 7 Exam '), rows('Mon\nSep 4\nTopic\tProblem Set 1\ndue\n', 5000),
+    rows('Quizzes are due every Monday. Final exam: Dec 11\n', 4000), rows('Exam 1 (Thu\n', 16000)]) {
+    onePass(make, { start: Date.UTC(2026, 7, 31), week1: Date.UTC(2026, 7, 31), md: true });
+  }
+  // A wider size separation gives the bounded per-row work more headroom: 4x linear versus 16x quadratic.
+  for (const l of ['Exam Oct 5-7 ', 'Quiz 10/5 ', 'opens Oct 5 and by Oct 7 Exam ']) {
+    onePass(widths(l), { start: Date.UTC(2026, 7, 31), week1: Date.UTC(2026, 7, 31), md: true }, { fraction: 0.25, growth: 8 });
   }
 });
 

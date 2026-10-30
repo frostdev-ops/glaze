@@ -127,6 +127,12 @@ const holds = (bytes, value) => {
       const t0 = Date.now();
       await p.goto(`${site}${ATTEMPT}?mode=empty`);
       const tGoto = Date.now() - t0;
+      // Glaze's content scripts on the page first (Glaze's own globals in its isolated world): a page they never reached
+      // fails here, by name, rather than as a Writer frame that never came.
+      await until(() => worker.evaluate(async (u) => {
+        const tabs = await chrome.tabs.query({ url: `${u}/*` }), on = async (t) => (await chrome.scripting.executeScript({ target: { tabId: t.id, frameIds: [0] }, func: () => Object.keys(globalThis).some((k) => k.startsWith('GZ_')) }))[0]?.result === true;
+        return tabs.length > 0 && (await Promise.all(tabs.map(on))).every(Boolean);
+      }, site), `open ${n}: Glaze's content scripts on the page`, 10000);
       let sawFrame = false;
       // Read only page state at the deadline. Recovery removes the frame and Writer markers, leaving Ultra's editor visible.
       const state = async () => {
@@ -426,6 +432,25 @@ const holds = (bytes, value) => {
     check(attachment.gets === gets + 1 && rec.kind === 'pdf' && sha((await bytesOf(rec))) === sha(pdfBytes) && vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper') && await fr.evaluate(() => !document.querySelector('.gi-layer')) && await p.evaluate(() => __uploads.length === 0),
       `the attachment fetched once, opened with no card: the record its PDF, the paper a version first, nothing uploaded (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);
     await shot(p, 'kinds-attachment-1440.png');
+    await p.close();
+
+    // ---- a macro workbook: the sheet, upload name/type and retained VBA project agree.
+    await reset({ sheets: true });
+    ({ p, el, fr } = await open());
+    const XM = require('../test/fixtures/sheet-xlsm.js'), DT = require('../lib/doctext.js');
+    await give(p, 'Budget.xlsm', XM.MIME, XM.xlsm());
+    await until(() => cardOf(fr), 'the .xlsm card');
+    await tap(fr, '.gi-default');
+    await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'sheet' && !!document.querySelector('.gk #gx-grid')), 'the .xlsm grid', 40000);
+    await tap(fr, '.gk .gp-submit');
+    await until(() => sheetOf(fr), 'the .xlsm submit sheet');
+    check((await sheetOf(fr)).name === 'Rivera_Essay2.xlsm', 'the submit sheet names the macro workbook Rivera_Essay2.xlsm');
+    await shot(p, 'kinds-xlsm-submit.png');
+    await tap(fr, '.gs-primary');
+    await until(() => p.evaluate(() => __clicks.length === 1), 'the .xlsm submitted once', 40000);
+    const macroUploads = await p.evaluate(() => __uploads.map((u) => ({ name: u.name, type: u.type, bytes: u.bytes })));
+    const macroZip = DT.unzip(new Uint8Array(macroUploads[0]?.bytes || []));
+    check(macroUploads.length === 1 && macroUploads[0].name === 'Rivera_Essay2.xlsm' && macroUploads[0].type === XM.MIME.toLowerCase() && Buffer.from(await macroZip.bytes('xl/vbaProject.bin')).equals(Buffer.from(XM.VBA)), 'the macro workbook submits once with its .xlsm name, MIME type and byte-for-byte VBA project');
     await p.close();
 
     // ---- an attached .csv: Open in Glaze beside its link with Spreadsheets on, straight to the grid
