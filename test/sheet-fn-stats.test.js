@@ -354,3 +354,23 @@ test('statistical extrema and order statistics accept the 250000-cell limit', ()
   assert.equal(C.fn('MAXIFS').fn([range, range, '>=0'], ctx), M.CAP.cells - 1);
   assert.equal(C.fn('MINIFS').fn([range, range, '>=0'], ctx), 0);
 });
+
+// Excel 16.114.1: representable results must survive intermediate products near the double limit.
+test('correlation and combinations avoid intermediate overflow', () => {
+  const e = book();
+  close(e, [
+    ['CORREL({1e150,2e150,3e150},{1e150,2e150,3e150})', 1],
+    ['PEARSON({1e150,2e150,3e150},{3e150,2e150,1e150})', -1],
+    ['RSQ({1e150,2e150,3e150},{1e150,2e150,3e150})', 1],
+    ['COMBIN(1029,514)', 1.429820686498904e308],
+  ]);
+  cases(e, [['COMBIN(1030,515)', '#NUM!']]);
+});
+
+test('normal density rejects an overflowing squared standardized value', () => {
+  cases(book(), [
+    ['NORM.S.DIST(1e200,FALSE)', '#NUM!'], ['NORM.DIST(1,0,1e-200,FALSE)', '#NUM!'],
+    ['NORM.DIST(1,0,1e-150,FALSE)', 0], ['NORM.DIST(1,0,1e-300,TRUE)', 1],
+  ]);
+  close(book(), [['NORM.DIST(0,0,1e-300,FALSE)', 3.989422804014327e299]]);
+});
