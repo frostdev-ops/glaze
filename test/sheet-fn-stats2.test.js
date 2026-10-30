@@ -315,3 +315,13 @@ test('discrete distributions reject negative counts before truncation', () => {
     'POISSON.DIST(-0.5,2,FALSE)', 'NEGBINOM.DIST(-0.5,2,0.5,FALSE)', 'NEGBINOMDIST(-0.5,2,0.5)',
     'HYPGEOM.DIST(-0.5,2,2,5,FALSE)', 'BINOM.DIST.RANGE(5,0.5,-0.5)'].map((f) => [f, '#NUM!']));
 });
+
+test('incomplete beta preserves the small tail with a tiny shape', () => {
+  const S = require('../lib/sheet-fn-stats2.js');
+  // mpmath at 60 digits, using the exact doubles supplied below.
+  for (const [a, b, x, index, want] of [[1e-10, 0.1, 0.1, 1, 1.20545519894815e-9], [1e-10, 1000, 0.0001, 1, 1.8233312140731544e-10],
+    [100, 1e-10, 0.999, 0, 1.827003617274029e-10], [0.001, 3, 0.1, 1, 0.0009975335256324026]]) {
+    const got = S.incbeta(a, b, x, 1 - x)[index];
+    assert.ok(Math.abs(got - want) <= 1e-12 * Math.abs(want), `${a}, ${b}, ${x}: ${got}; want ${want}`);
+  }
+});
