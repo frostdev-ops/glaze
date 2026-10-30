@@ -5,6 +5,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
+const fs = require('node:fs');
+const path = require('node:path');
 const worker = require('./helpers/worker-env.cjs');
 const { fakeIDB } = require('./helpers/fake-idb.cjs');
 const C = require('./helpers/mcp-caches.cjs');
@@ -118,8 +120,9 @@ const agent = (link, c, { peer = PEER, open = true } = {}) => {
 };
 
 const store0 = ({ on = true, local = {} } = {}) => ({ sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ...(on && { mcp: { on: true } }), ...local }, session: {} });
-const boot = ({ store = store0(), idb = fakeIDB().indexedDB, base, safari = false } = {}) => {
-  const w = worker({ store, base, globals: { indexedDB: idb, ...(safari && { setInterval: () => 1, clearInterval: () => {} }) } });
+const boot = ({ store = store0(), idb = fakeIDB().indexedDB, base, safari = false, trustedOn = store.local.mcp?.on === true, globals = {} } = {}) => {
+  if (trustedOn && !idb.dbs.has('glaze-mcp-settings')) idb.dbs.set('glaze-mcp-settings', new Map([['settings', new Map([['on', true]])]]));
+  const w = worker({ store, base, globals: { ...globals, indexedDB: idb, ...(safari && { setInterval: () => 1, clearInterval: () => {} }) } });
   const windows = fakeWindows();
   w.context.chrome.windows = windows;
   return { w, store, idb, windows };
@@ -154,7 +157,7 @@ test('MCP loads only while it is on: the link at worker start, the rest with the
   assert.equal(inWorker(off.w, 'typeof GZ_AGENT_LINK'), 'undefined');
   assert.equal(inWorker(off.w, 'typeof GZ_MCP_CALLS'), 'undefined');
   assert.equal(host.ports.length, 0);
-  await off.w.context.chrome.storage.local.set({ mcp: { on: true } });
+  await config(off, { op: 'set', on: true });
   await connected(off);
   assert.equal(host.ports[0].name, 'io.frostdev.glaze_mcp');
   assert.equal(inWorker(off.w, 'typeof GZ_AGENT_LINK'), 'object');
@@ -279,7 +282,7 @@ test('off closes every connection and declines what waits, keeps the grants, and
   assert.equal(apps[0].declined?.grades, undefined, 'switching off is no remembered decline');
 
   // On again: the same app is still paired.
-  await env.w.context.chrome.storage.local.set({ mcp: { on: true } });
+  await config(env, { op: 'set', on: true });
   await until(() => host.ports.length === 2 && env.store.session.mcpLink.state === 'connected', 'a new port');
   const b = agent(host.link(), 1);
   await b.ask(INIT(0));
@@ -453,4 +456,85 @@ test('glaze:mcp-config: only the editor\'s own top frame, and each op', async ()
   assert.equal(off.ok, true);
   assert.deepEqual(env.store.local.mcp, { on: false });
   await until(() => env.store.session.mcpLink.state === 'off', 'the link off');
+});
+
+
+test('a content-script-writable setting cannot enable agent access, including after an owner off and a restart', async () => {
+  const env = boot({ store: store0(), trustedOn: false });
+  const host = nodeHost(env.w);
+  await env.w.settle();
+  assert.equal(host.ports.length, 0, 'storage.local alone cannot start a helper');
+  assert.equal(inWorker(env.w, 'typeof GZ_MCP_CALLS'), 'undefined');
+  assert.equal((await config(env, { op: 'state' })).on, false);
+  await config(env, { op: 'set', on: true });
+  await connected(env);
+  await config(env, { op: 'set', on: false });
+  await env.w.context.chrome.storage.local.set({ mcp: { on: true } });
+  await env.w.settle();
+  assert.equal(host.ports.length, 1, 'a content-script write cannot undo the owner off');
+  const next = boot({ store: env.store, idb: env.idb, trustedOn: false });
+  const h2 = nodeHost(next.w);
+  await next.w.settle();
+  assert.equal(h2.ports.length, 0, 'private consent survives a worker restart');
+  assert.equal(inWorker(next.w, 'typeof GZ_MCP_CALLS'), 'undefined');
+});
+
+test('Glaze disabled at worker start loads no MCP core or link, and enabling it starts the link', async () => {
+  const store = store0(); store.sync.enabled = false;
+  const env = boot({ store }), host = nodeHost(env.w);
+  await env.w.settle();
+  assert.equal(inWorker(env.w, 'typeof GZ_MCP_CALLS'), 'undefined');
+  assert.equal(inWorker(env.w, 'typeof GZ_AGENT_LINK'), 'undefined');
+  assert.equal(host.ports.length, 0);
+  await env.w.context.chrome.storage.sync.set({ enabled: true });
+  await connected(env);
+  await config(env, { op: 'set', on: false });
+});
+
+test('an unused Safari snapshot cannot survive off and give a new connection the previous client identity', async () => {
+  const base = 'safari-web-extension://x/', app = safariApp(), env = boot({ base, safari: true });
+  env.store.local.safariUpdateCheckAt = Date.now();
+  env.store.session['mcpConn:7'] = { peer: PEER, snap: { v: 1, era: 'legacy', version: '2025-11-25', client: CLIENT, ready: true, hash: '', subs: [] } };
+  app.attach(env.w);
+  await connected(env);
+  await config(env, { op: 'set', on: false }, { ...EDITOR, url: base + 'options.html', origin: base.slice(0, -1) });
+  await config(env, { op: 'set', on: true }, { ...EDITOR, url: base + 'options.html', origin: base.slice(0, -1) });
+  await connected(env);
+  const a = agent({ say: app.say, sent: () => app.frames }, 7);
+  assert.equal((await a.ask({ jsonrpc: '2.0', id: 4, method: 'tools/list' })).error?.code, -32602, 'new connections must establish their own identity');
+  await config(env, { op: 'set', on: false }, { ...EDITOR, url: base + 'options.html', origin: base.slice(0, -1) });
+});
+
+test('Firefox loads MCP scripts on demand in order and sends frames through the packaged event-page path', async () => {
+  const loaded = [];
+  let env;
+  const document = {
+    createElement: () => ({ remove() {} }),
+    head: { appendChild: (el) => setImmediate(() => {
+      try {
+        const file = new URL(el.src).pathname.slice(1);
+        loaded.push(file);
+        inWorker(env.w, fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
+        el.onload();
+      } catch (e) { el.onerror(e); }
+    }) },
+  };
+  env = boot({ store: store0({ on: false }), base: 'moz-extension://x/', globals: { document } });
+  // package-firefox.sh replaces importScripts with a no-op; only script elements can load the omitted files.
+  inWorker(env.w, 'globalThis.importScripts = () => {}');
+  const host = nodeHost(env.w);
+  await env.w.settle();
+  assert.deepEqual(loaded, []);
+  const editor = { ...EDITOR, url: 'moz-extension://x/options.html', origin: 'moz-extension://x' };
+  await config(env, { op: 'set', on: true }, editor);
+  await connected(env);
+  const a = agent(host.link(), 1);
+  assert.equal((await a.ask(INIT(0))).result.serverInfo.name, 'glaze');
+  const before = loaded.length;
+  assert.ok(loaded.indexOf('lib/agent-frames.js') < loaded.indexOf('lib/agent-link.js'));
+  assert.ok(loaded.indexOf('lib/ai/tools.js') < loaded.indexOf('lib/mcp/calls.js'));
+  const b = agent(host.link(), 2);
+  assert.equal((await b.ask(INIT(0))).result.serverInfo.name, 'glaze');
+  assert.equal(loaded.length, before, 'each script is loaded once');
+  await config(env, { op: 'set', on: false }, editor);
 });
