@@ -11,7 +11,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 // The names stream F's files read (writer-paper.js, writer-ruler.js, writer-paste.js) and the defaults the brief fixes.
 test('the writer key: every name, its default, and what it takes', () => {
   assert.deepEqual(D.GZ_DEFAULTS.writer, {
-    format: 'mla9', zoom: 'fit', ruler: true, lightPage: false, full: false, pasteAsk: true, versions: 40, proofing: true, dialect: 'en-US',
+    format: 'mla9', zoom: 'fit', ruler: true, lightPage: false, full: false, sheets: false, pasteAsk: true, versions: 40, proofing: true, dialect: 'en-US',
     autocorrect: { typos: true, capitalI: true, doubles: true, smart: true },
     compose: { markdown: true, target: true, quote: true },
     submit: { rememberText: true, text: false },
@@ -28,16 +28,17 @@ test('the writer key: every name, its default, and what it takes', () => {
 });
 
 test('the writer key sanitises part by part: junk back to its default, the rest kept, idempotent', () => {
-  const raw = { writer: { format: 'apa7', zoom: 125, ruler: false, full: 'yes', pasteAsk: 'no', versions: 33, proofing: false, dialect: 'en-NZ',
+  const raw = { writer: { format: 'apa7', zoom: 125, ruler: false, full: 'yes', sheets: 1, pasteAsk: 'no', versions: 33, proofing: false, dialect: 'en-NZ',
     autocorrect: { typos: false, smart: 1, extra: true }, compose: 'off', submit: { rememberText: false, text: true } } };
   const w = D.GZ_SANITIZE(raw).writer;
-  assert.deepEqual(w, { format: 'apa7', zoom: 125, ruler: false, lightPage: false, full: false, pasteAsk: true, versions: 40, proofing: false, dialect: 'en-US',
+  assert.deepEqual(w, { format: 'apa7', zoom: 125, ruler: false, lightPage: false, full: false, sheets: false, pasteAsk: true, versions: 40, proofing: false, dialect: 'en-US',
     autocorrect: { typos: false, capitalI: true, doubles: true, smart: true }, compose: { markdown: true, target: true, quote: true },
     submit: { rememberText: false, text: true } });
   assert.deepEqual(D.GZ_SANITIZE(D.GZ_SANITIZE(raw)).writer, w);
   assert.equal(D.GZ_SANITIZE({ writer: { zoom: '100' } }).writer.zoom, 'fit', 'a percent is a number');
   for (const n of D.GZ_SPEC.writer.versions[1]) assert.equal(D.GZ_SANITIZE({ writer: { versions: n } }).writer.versions, n, `${n} versions kept`);
   assert.equal(D.GZ_SANITIZE({ writer: { full: true } }).writer.full, true, 'Full writer kept');
+  assert.equal(D.GZ_SANITIZE({ writer: { sheets: true } }).writer.sheets, true, 'Spreadsheets kept');
   // A fresh object each time: editing one never edits the defaults.
   const a = D.GZ_SANITIZE({}).writer;
   a.autocorrect.typos = false;
@@ -185,12 +186,15 @@ test('Settings → Writer: its own tab and six sections, the two switches first,
   assert.deepEqual(keys.slice(0, 2), ['enhance.writer', 'enhance.writerUploads'], 'the two existing switches come first');
   assert.equal((html.match(/data-key="enhance\.writer"/g) || []).length, 1, 'and only here');
   for (const k of leaves(D.GZ_DEFAULTS.writer, 'writer').filter((k) => k !== 'writer.submit.text')) assert.ok(keys.includes(k), k);
-  // Existing switches keep their info popovers; Light page and Full writer are self-explanatory.
-  for (const k of keys.filter((k) => k !== 'writer.lightPage' && k !== 'writer.full')) assert.match(panel, new RegExp(`data-key="${k.replace(/\./g, '\\.')}"[^>]*aria-describedby="info-${k.replace(/\./g, '-')}"`), `${k} has its info popover`);
+  // Existing switches keep their info popovers; Light page, Full writer and Spreadsheets are self-explanatory.
+  for (const k of keys.filter((k) => !['writer.lightPage', 'writer.full', 'writer.sheets'].includes(k))) assert.match(panel, new RegExp(`data-key="${k.replace(/\./g, '\\.')}"[^>]*aria-describedby="info-${k.replace(/\./g, '-')}"`), `${k} has its info popover`);
   assert.match(panel, /data-key="writer\.lightPage" aria-labelledby="writer-lightPage-name"/);
   assert.doesNotMatch(panel, /id="info-writer-lightPage"/);
   // Full writer (writer.full): the compact box's off switch, in Papers after Light page, its label the switch's own.
   assert.match(panel, /data-key="writer\.lightPage"[^\n]*\n<div class="wr-row"><span class="wr-name" id="writer-full-name">Full writer<\/span><input type="checkbox" data-key="writer\.full" aria-labelledby="writer-full-name"><\/div>/);
+  // Spreadsheets (writer.sheets): Documents creates and imports spreadsheets (sheet-kind.js), after Full writer, its label the
+  // switch's own.
+  assert.match(panel, /data-key="writer\.full"[^\n]*\n<div class="wr-row"><span class="wr-name" id="writer-sheets-name">Spreadsheets<\/span><input type="checkbox" data-key="writer\.sheets" aria-labelledby="writer-sheets-name"><\/div>/);
   for (const id of ['writer-paper-list', 'writer-clear-all', 'writer-words', 'writer-words-clear']) assert.match(panel, new RegExp(`id="${id}"`), id);
   assert.match(html, /<dialog id="writer-clear"/);
   assert.match(html, /<script src="lib\/editor-writer\.js"><\/script>/);
@@ -210,7 +214,7 @@ test('every word lib/editor-writer.js shows is in the five catalogues', () => {
 test('docs/features.md lists each Writer setting in one line', () => {
   const doc = read('docs/features.md');
   const section = /Settings → Writer[^]*?(?=\n## |\n### |$)/.exec(doc)?.[0] || '';
-  for (const label of ['Format for new papers', 'Zoom', 'Ruler', 'Full writer', 'Versions kept', 'Clear papers', 'Fix typos', 'Capital I and sentence starts', 'Doubled words and spaces',
+  for (const label of ['Format for new papers', 'Zoom', 'Ruler', 'Full writer', 'Spreadsheets', 'Versions kept', 'Clear papers', 'Fix typos', 'Capital I and sentence starts', 'Doubled words and spaces',
     'Smart quotes and dashes', 'Ask how to paste formatting', 'Spelling and grammar', 'Dialect', 'Personal dictionary', 'Markdown shortcuts', 'Word target',
     'Quote while replying', 'Remember']) assert.ok(section.includes(label), label);
 });
