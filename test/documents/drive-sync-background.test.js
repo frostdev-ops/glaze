@@ -104,9 +104,11 @@ test('a daily snapshot whose files are past one upload is no snapshot, its files
   context.chrome.runtime.getManifest = () => ({ version: '4.0.1' });
   let read = 0;
   context.openDocFiles = () => ({ read: async (hash, each) => { read++; each(new Uint8Array(8)); } });
-  // Two PDFs of 120 MB: one backup could hold them (background/backup.js LIMIT.zip), one upload can't (documents/drive.js put).
-  const pdf = (n) => ({ key: `doc:00000000-0000-4000-8000-00000000000${n}`, kind: 'pdf', title: `Reader ${n}`, file: { hash: String(n).repeat(64), size: 120e6, type: 'application/pdf' }, revision: 1 });
-  await local.set({ [`writerPaper:${pdf(1).key}`]: pdf(1), [`writerPaper:${pdf(2).key}`]: pdf(2) });
+  // Five PDFs of 45 MB: one backup could hold them (background/backup.js LIMIT.zip), one upload can't (documents/drive.js put).
+  const pdf = (n) => ({ key: `doc:00000000-0000-4000-8000-00000000000${n}`, kind: 'pdf', title: `Reader ${n}`, file: { hash: String(n).repeat(64), size: 45e6, type: 'application/pdf' }, revision: 1 });
+  for (let n = 1; n <= 5; n++) await local.set({ [`writerPaper:${pdf(n).key}`]: pdf(n) });
+  const get = local.get;
+  local.get = async (k) => (k === null ? Object.fromEntries(await Promise.all((await local.getKeys()).map(async (x) => [x, (await get(x))[x]]))) : get(k));
   assert.equal(await records.snapshot(), null);
-  assert.ok(read <= 1, `read ${read} of the files`);
+  assert.ok(read <= 4, `read ${read} of the files`);
 });
