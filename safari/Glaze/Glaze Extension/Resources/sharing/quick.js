@@ -203,11 +203,12 @@
       else say('Joined, but the relay could not be reached yet. Add it to Notes from All sharing settings once it connects.', undefined, true);
     });
   });
-  // Navigation grants no session authority. Keep recovery available even when this embedded surface cannot be trusted.
+  // Navigation grants no session authority. Keep recovery available even when this embedded surface cannot be trusted. The
+  // worker opens the tab: Safari kills the page whose extension frame calls tabs itself.
   $('#settings').addEventListener('click', (e) => {
     if (dead || !e.isTrusted || !navigator.userActivation?.isActive) return;
-    if (ownTab) { if (started) request({ op: 'settings' }).catch(() => {}); }
-    else chrome.tabs.create({ url: chrome.runtime.getURL('options.html#sharing/sessions') }).catch(() => {});
+    const plain = () => { Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:settings-at', hash: '#sharing/sessions' })).catch(() => {}); };
+    if (started) request({ op: 'settings' }).then((r) => { if (!r?.ok) plain(); }, plain); else plain();
   });
 
   const startTimer = setTimeout(expire, 10000);

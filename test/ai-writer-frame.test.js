@@ -331,7 +331,7 @@ test('Feedback says why AI can\'t give it, with Settings → AI one click away w
     assert.equal(!!go, button, `a Settings button: ${text}`);
     if (go) {
       go.listeners.click();
-      assert.deepEqual(f.messages, [{ type: 'glaze:settings-at', hash: '#ai/setup' }], 'the worker opens Settings → AI');
+      assert.deepEqual(JSON.parse(JSON.stringify(f.messages)), [{ type: 'glaze:settings-at', hash: '#ai/setup' }], 'the worker opens Settings → AI');
       assert.deepEqual(f.opened, [], 'never from the frame: Safari kills the page when it calls tabs');
     }
   }

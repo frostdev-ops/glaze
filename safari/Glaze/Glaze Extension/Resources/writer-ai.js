@@ -550,12 +550,9 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     v.focus();
     return true;
   };
-  // Settings → AI, in a tab of its own; where this frame has no tabs API (Firefox), Settings as the worker opens it.
+  // Settings → AI, in a tab the worker opens: Firefox gives this frame no tabs API, and Safari kills the page when it calls one.
   const settings = () => {
-    try {
-      if (chrome.tabs?.create) chrome.tabs.create({ url: chrome.runtime.getURL('options.html#ai/setup') }).catch(() => {});
-      else Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {});
-    } catch { /* gone */ }
+    try { Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:settings-at', hash: '#ai/setup' })).catch(() => {}); } catch { /* gone */ }
   };
   const draw = (box) => {
     box.textContent = '';
