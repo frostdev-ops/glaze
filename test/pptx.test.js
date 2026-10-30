@@ -506,11 +506,17 @@ test('preset colours include standard long names and abbreviated aliases', async
   }
 });
 
-test('a slide masterClrMapping bypasses the layout colour-map override', async () => {
-  const layout = fixture('ppt/slideLayouts/slideLayout1.xml').replace('<a:masterClrMapping/>', '<a:overrideClrMapping bg1="dk1" tx1="lt1"/>');
+test('a layout\'s colour-map override reaches its slides that keep the master mapping; a slide\'s own override wins', async () => {
+  const MAP = 'bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"';
+  const layout = fixture('ppt/slideLayouts/slideLayout1.xml').replace('<a:masterClrMapping/>', `<a:overrideClrMapping ${MAP}/>`);
+  assert.ok(fixture('ppt/slides/slide1.xml').includes('<a:masterClrMapping/>'));
   const d = await P.read(pack({ 'ppt/slideLayouts/slideLayout1.xml': layout }));
-  assert.deepEqual(d.slides[0].background, { type: 'solid', color: '#ffffff' });
-  assert.equal(named(d.slides[0], 'Title 1').text.paragraphs[0].runs[0].color, '#000000');
+  assert.deepEqual(d.slides[0].background, { type: 'solid', color: '#000000' });
+  assert.equal(named(d.slides[0], 'Title 1').text.paragraphs[0].runs[0].color, '#ffffff');
+  const light = fixture('ppt/slides/slide1.xml').replace('<a:masterClrMapping/>', `<a:overrideClrMapping ${MAP.replace('bg1="dk1" tx1="lt1"', 'bg1="lt1" tx1="dk1"')}/>`);
+  const own = await P.read(pack({ 'ppt/slideLayouts/slideLayout1.xml': layout, 'ppt/slides/slide1.xml': light }));
+  assert.deepEqual(own.slides[0].background, { type: 'solid', color: '#ffffff' });
+  assert.equal(named(own.slides[0], 'Title 1').text.paragraphs[0].runs[0].color, '#000000');
 });
 
 test('shared master chart titles are parsed once per part', async () => {

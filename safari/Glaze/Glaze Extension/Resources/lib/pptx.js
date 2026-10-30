@@ -1010,9 +1010,10 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
       const tree = await xml(path);
       if (!tree || tree.n !== 'sld') { slide[path && names.has(path) ? 'broken' : 'missing'] = true; count('parts'); continue; }
       const rels = await relsOf(path), layout = await layoutOf(typed(rels, 'slideLayout')), master = layout?.master || null, theme = master?.theme || DEFAULT_THEME;
-      const masterMap = master?.map || MAP, override = kid(tree, 'clrMapOvr');
-      const layoutMap = mapOf(kid(layout?.tree, 'clrMapOvr', 'overrideClrMapping'), masterMap);
-      const map = kid(override, 'masterClrMapping') ? masterMap : mapOf(kid(override, 'overrideClrMapping'), layoutMap);
+      // A slide's <a:masterClrMapping/> (PowerPoint writes it on every slide) keeps what its layout maps: Office's own themes
+      // darken a Section Header layout by overriding the map there, for the slides made from it.
+      const layoutMap = mapOf(kid(layout?.tree, 'clrMapOvr', 'overrideClrMapping'), master?.map || MAP);
+      const map = mapOf(kid(tree, 'clrMapOvr', 'overrideClrMapping'), layoutMap);
       const colors = { scheme: theme.scheme, map, ph: null };
       const S = {
         L, count, take, budget, media, names, number: slide.number, theme, colors, ink: schemeHex('tx1', colors), defaults, master, layout, tableStyle,
