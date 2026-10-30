@@ -94,8 +94,8 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
   const COLS = 2048; // u32 words a bench row: 8 KiB
   const kernel = async (source) => {
     if (source) return source;
-    const url = typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL('ai/local/kernels/bench.wgsl') : fail('no bench source');
-    const r = await fetch(url);
+    if (typeof chrome === 'undefined' || !chrome.runtime?.getURL) fail('no bench source');
+    const r = await fetch(chrome.runtime.getURL('ai/local/kernels/bench.wgsl'));
     if (!r.ok) fail(`bench.wgsl: ${r.status}`);
     return r.text();
   };
