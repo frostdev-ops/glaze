@@ -690,3 +690,97 @@ test('a fresh device can import a PDF replaced in Drive before it connected', as
   assert.equal(dec(await b.files.read(got.file.hash)), '%PDF annotated elsewhere');
   assert.equal(sidecarJson(drive, key).record.file.hash, got.file.hash);
 });
+
+test('a second device joining with an older copy of a document: the later edited stays current on both, the other a version', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  const a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'school.blackboard.com|_1_1|_2_1|_3_1'; // one assignment's paper, written on both before either synced
+  await b.papers.save(key, { doc: doc('Thesis, first draft'), title: 'Essay', named: true });
+  clock.t += 3600e3;
+  await a.papers.save(key, { doc: doc('Thesis, final draft'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  clock.t += 60e3;
+  assert.ok((await b.sync.set(true)).ok);
+  assert.ok((await a.sync.run()).ok);
+  assert.equal(textOf((await a.papers.get(key)).doc), 'Thesis, final draft', 'A\'s later edit stays current on A');
+  assert.equal(textOf((await b.papers.get(key)).doc), 'Thesis, final draft', 'and becomes current on B');
+  const kept = (await b.papers.versions(key)).filter((v) => v.reason === 'conflict');
+  assert.equal(kept.length, 1);
+  assert.equal(textOf((await b.papers.version(key, kept[0].id)).doc), 'Thesis, first draft', 'B\'s older copy kept as a version on B');
+  noDeletes(drive);
+});
+
+test('two devices whose first syncs overlap on one document keep one copy and see each other\'s later edits', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  // A's document uploads wait until B has listed the folder: both find no copy, and each makes one.
+  let listed;
+  const held = new Promise((r) => { listed = r; });
+  const text = (x) => (typeof x === 'string' ? x : Buffer.from(x || []).toString('latin1'));
+  const gateA = { ...drive, fetch: async (u, i = {}) => { if (u.includes('/upload/') && i.method === 'POST' && /"glaze":"(doc|file)"/.test(text(i.body))) await held; return drive.fetch(u, i); } };
+  const gateB = { ...drive, fetch: async (u, i) => { const r = await drive.fetch(u, i); if (u.includes('/drive/v3/files?') && decodeURIComponent(u).includes("value='doc'")) listed(); return r; } };
+  const a = device(gateA, { clock }), b = device(gateB, { clock });
+  const key = 'school.blackboard.com|_1_1|_2_1|_3_1';
+  await a.papers.save(key, { doc: doc('From A'), title: 'Essay', named: true });
+  clock.t += 1000;
+  await b.papers.save(key, { doc: doc('From B'), title: 'Essay', named: true });
+  // A starts first and makes the Glaze folder, so both work in the one folder.
+  const first = a.sync.set(true);
+  await new Promise((r) => setTimeout(r, 20));
+  await Promise.all([first, b.sync.set(true)]);
+  for (let i = 0; i < 2; i++) { assert.ok((await a.sync.run()).ok); assert.ok((await b.sync.run()).ok); }
+  assert.equal(textOf((await a.papers.get(key)).doc), textOf((await b.papers.get(key)).doc), 'one document on both');
+  clock.t += 60e3;
+  await a.papers.save(key, { doc: doc('A, later') });
+  await a.sync.touched(key); await a.fire();
+  assert.ok((await b.sync.run()).ok);
+  assert.equal(textOf((await b.papers.get(key)).doc), 'A, later', 'A\'s later edit reaches B');
+  clock.t += 60e3;
+  await b.papers.save(key, { doc: doc('B, later') });
+  await b.sync.touched(key); await b.fire();
+  assert.ok((await a.sync.run()).ok);
+  assert.equal(textOf((await a.papers.get(key)).doc), 'B, later', 'and B\'s reaches A');
+  noDeletes(drive);
+});
+
+test('a conflict on a paper too big for a version keeps Drive\'s side as a document of its own', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  const a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-0000000000bb', big = (who) => doc(`${who} ${'x'.repeat(4.2e6)}`);
+  await a.papers.save(key, { doc: doc('Small start'), title: 'Photo essay', named: true });
+  await a.sync.set(true); await b.sync.set(true);
+  clock.t += 60e3;
+  await a.papers.save(key, { doc: big('A') });
+  await a.sync.touched(key); await a.fire();
+  await b.papers.save(key, { doc: big('B') });
+  await b.sync.touched(key);
+  assert.ok((await b.sync.run()).ok);
+  assert.ok(textOf((await b.papers.get(key)).doc).startsWith('B '), 'B\'s stays current on B');
+  const copy = (await b.papers.list()).find((r) => r.title === 'Photo essay (Drive copy)');
+  assert.ok(copy, 'Drive\'s side kept, as a document of its own');
+  assert.ok(textOf((await b.papers.get(copy.key)).doc).startsWith('A '));
+  assert.ok(textOf(sidecarJson(drive, key).record.doc).startsWith('B '), 'and Drive moves on to B\'s');
+  assert.ok((await a.sync.run()).ok);
+  assert.ok(textOf((await a.papers.get(key)).doc).startsWith('B '));
+  assert.ok((await a.papers.list()).some((r) => r.title === 'Photo essay (Drive copy)'), 'the copy reaches A too');
+  noDeletes(drive);
+});
+
+test('back online after a long time offline, the next start, online event or Documents open syncs at once', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  const key = 'doc:00000000-0000-4000-8000-0000000000f2';
+  await a.papers.save(key, { doc: doc('Before'), title: 'Trip', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  // Offline for an afternoon: each pause in typing tries, fails at once, and waits longer, up to an hour.
+  for (let i = 0; i < 8; i++) {
+    clock.t = Math.max(clock.t, (await state(a)).wait || 0) + 1;
+    drive.offline();
+    await a.papers.save(key, { doc: doc(`Offline edit ${i}`) });
+    await a.sync.touched(key);
+    assert.deepEqual(await a.sync.run({ push: true }), { ok: false, why: 'network' });
+  }
+  assert.ok((await state(a)).wait - clock.t >= 30 * 60e3, 'a long wait');
+  clock.t += 60e3;
+  assert.ok((await a.sync.poke())?.ok, 'online again: synced now, not at the end of the wait');
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'Offline edit 7');
+  noDeletes(drive);
+});

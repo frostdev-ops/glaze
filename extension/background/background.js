@@ -3178,6 +3178,8 @@ const gcalTurn = (f) => { const p = gcalQueue.then(f); gcalQueue = p.catch(() =>
 // sees whether the other still holds the grant, and the last one revokes it and gives identity back.
 let grantQueue = Promise.resolve();
 const grantTurn = (f) => { const p = grantQueue.then(f); grantQueue = p.catch(() => {}); return p; };
+// The one permission the worker ever gives back: Google's identity API, once neither Calendar nor Drive holds it.
+const releaseIdentity = () => chrome.permissions.remove({ permissions: ['identity'] });
 const gcalState = async () => (await chrome.storage.local.get('gcal')).gcal;
 const gcalOps = {
   connect: async (m) => {
@@ -3195,12 +3197,15 @@ const gcalOps = {
   },
   // drop: also delete the Glaze calendar; if that fails, nothing changes. Then the grant is revoked, Chrome forgets its
   // tokens and Glaze its state. → revoked: whether Google confirmed (false with no token to revoke: had). While Google Drive
-  // is connected (background/google.js) it holds the same grant, and a revocation would end its access too: only Calendar's state
-  // goes, and shared tells Settings to keep the identity permission.
+  // is connected (background/google.js) through Chrome's own client it holds the same grant, and a revocation would end its
+  // access too: only Calendar's state goes, and shared says so. Connected through the web client (Chrome's rare fallback),
+  // Drive's grant is its own: Calendar's is revoked, and identity stays for Drive. A build with Drive off has no Drive.
   disconnect: async (m) => {
     const g = await gcalState();
     if (m.drop === true && g?.cal) await GZ_GCAL.remove(gcalEnv, g.cal);
-    if (typeof (await chrome.storage.local.get('google')).google?.email === 'string') {
+    const drive = (await chrome.storage.local.get('google')).google;
+    const driveOn = typeof drive?.email === 'string' && googleLib().ON;
+    if (driveOn && drive.flow === 'chrome') {
       await chrome.storage.local.remove(['gcal', 'gcalSync']);
       serial(ensure);
       return { ok: true, revoked: false, had: false, shared: true };
@@ -3209,7 +3214,7 @@ const gcalOps = {
     const revoked = !!token && await GZ_GCAL.revoke(gcalEnv, token);
     await Promise.resolve().then(() => GZ_GCAL_AUTH.clear()).catch(() => {});
     // Release inside grantTurn, before another Connect can acquire identity. A delayed Settings reply owns no grant.
-    await Promise.resolve().then(() => chrome.permissions.remove({ permissions: ['identity'] })).catch(() => {});
+    if (!driveOn) await Promise.resolve().then(releaseIdentity).catch(() => {});
     await chrome.storage.local.remove(['gcal', 'gcalSync']);
     serial(ensure);
     return { ok: true, revoked, had: !!token };
@@ -3300,6 +3305,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // pages. Loaded the first time one asks; nothing runs for someone who never connects. The token stays here.
 globalThis.addEventListener?.('install', () => importScripts('oauth.js', 'google-config.js', 'google.js'));
 let google = null;
+const calendarOn = async () => GZ_GCAL.ON && !!(await chrome.storage.local.get('gcal')).gcal?.cal;
 const googleLib = () => { if (!globalThis.GZ_GOOGLE) importScripts('oauth.js', 'google-config.js', 'google.js'); return GZ_GOOGLE; };
 const openGoogle = () => {
   if (!google) {
@@ -3307,13 +3313,16 @@ const openGoogle = () => {
     const protocol = new URL(chrome.runtime.getURL('')).protocol;
     google = GZ_GOOGLE.create({
       config: GZ_GOOGLE_CONFIG, flow: GZ_GOOGLE.flowOf({ protocol, brands: navigator.userAgentData?.brands }), firefox: protocol === 'moz-extension:',
-      identity: () => chrome.identity, permissions: chrome.permissions, manifest: () => chrome.runtime.getManifest(), storage: chrome.storage.local,
+      // While Calendar sync is connected it signs in with identity too: Drive's Disconnect leaves the permission to it.
+      identity: () => chrome.identity, manifest: () => chrome.runtime.getManifest(), storage: chrome.storage.local,
+      permissions: { contains: (p) => chrome.permissions.contains(p), remove: async () => (await calendarOn() ? false : releaseIdentity()) },
       fetch: (u, init) => fetch(u, init),
       native: (message) => chrome.runtime.sendNativeMessage(GZ_GOOGLE.APP, message),
       // iOS: the sign-in tab the student taps (the worker opens it, never a framed page).
       open: (url) => chrome.tabs.create({ url }),
-      // Calendar sync signs in with the same permission and Chrome's same cache: while it's connected, Disconnect leaves both.
-      keep: async () => GZ_GCAL.ON && !!(await chrome.storage.local.get('gcal')).gcal?.cal,
+      // Calendar sync signs in with Chrome's own client: a Drive connection through it shares Calendar's grant and Chrome's
+      // cache, and while Calendar is connected Disconnect leaves both. One through the web client lets its own grant go.
+      keep: async () => await calendarOn() && (await chrome.storage.local.get('google')).google?.flow === 'chrome',
     });
   }
   return google;
@@ -3343,9 +3352,10 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:drive' || m.op !== 'status') return;
   drivePage(s).then(async (ok) => {
     if (!ok) return { ok: false, why: 'sender' };
-    if (!googleLib().ON) return { ok: true, connected: false };
+    if (!googleLib().ON) return { ok: true, connected: false, picker: false };
     const g = await openGoogle().status();
-    return { ok: true, connected: g.ok === true && !!g.email };
+    // picker: From Google Drive works here (background/google.js status); Save to Drive needs only the connection.
+    return { ok: true, connected: g.ok === true && !!g.email, picker: g.ok === true && !!g.email && g.picker === true };
   }).then(reply, () => reply({ ok: false, why: 'network' }));
   return true;
 });
@@ -3425,8 +3435,13 @@ const openDriveSync = () => {
       const settings = { ...s0, nav: { ...s0.nav, i: '', li: '' }, navbar: { ...s0.navbar, ...(s0.navbar?.brand === 'custom' && { brand: 'glaze' }) },
         ...Object.fromEntries(['cards', 'links', 'ucards', 'ulinks', 'navItems', 'navbarItems'].filter((k) => raw[k] !== undefined).map((k) => [k, raw[k]])),
         favorites: GZ_HISTORY.favorites(all.lookFavorites) };
+      // Files past one upload (documents/drive.js put: GZ_DOC_KINDS.FILE * 4 bytes) make no snapshot, and are never read for one.
+      let total = 0;
       try {
-        const files = await GZ_BACKUP.filesOf(all, (ref) => fileBytes(ref).then((b) => { if (!b) throw Object.assign(new Error('missing'), { why: 'missing' }); return b; }));
+        const files = await GZ_BACKUP.filesOf(all, (ref) => {
+          if ((total += ref.size) > GZ_DOC_KINDS.FILE * 4) throw Object.assign(new Error('big'), { why: 'big' });
+          return fileBytes(ref).then((b) => { if (!b) throw Object.assign(new Error('missing'), { why: 'missing' }); return b; });
+        });
         const entries = GZ_BACKUP.pack({ settings, tasks: { tasks, pets }, local: all, version: chrome.runtime.getManifest().version, files });
         return { name: GZ_BACKUP.fileName(), bytes: new Uint8Array(await new Blob(GZ_ZIP.zip(entries)).arrayBuffer()) };
       } catch (e) { if (e?.why === 'big') return null; throw e; }
@@ -3520,12 +3535,15 @@ chrome.storage.onChanged.addListener((c, area) => {
   const keys = area === 'local' ? Object.keys(c).filter((k) => k.startsWith('writerPaper:')) : [];
   const other = Object.keys(c).some((k) => !k.startsWith('writerPaper:') && !k.startsWith('writerSheet:') && !k.startsWith('writerVersions:') && !k.startsWith('driveSync'));
   if (!keys.length && !other) return;
-  driveSyncOn().then(async (on) => {
-    if (!on) return;
+  // Off but still bound to its account, each record's time of change is kept too: turned on again, a change made meanwhile
+  // is weighed by when it was made, not lost to an earlier one from another device.
+  chrome.storage.local.get('driveSync').then(async ({ driveSync: st }) => {
+    const on = st?.on === true;
+    if (!(on || typeof st?.account === 'string') || !googleLib().ON) return; // nothing loads for someone never connected
     const sync = openDriveSync();
-    for (const k of keys) await sync.touched(k.slice(12));
+    if (on) for (const k of keys) await sync.touched(k.slice(12));
     // Everything else: each key's time of change, and a push once saving pauses.
-    if (other && Object.keys(c).some((k) => driveStore.watches(area, k))) { await driveStore.stamp(c, area); await sync.nudge(); }
+    if (other && Object.keys(c).some((k) => driveStore.watches(area, k))) { await driveStore.stamp(c, area); if (on) await sync.nudge(); }
   }).catch((e) => console.warn('Sync to Google Drive:', e));
 });
 // Connecting Drive turns Sync on, unless the student turned it off: it makes the Glaze folder and fills it, or restores

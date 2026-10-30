@@ -1,5 +1,5 @@
 // Sync to Google Drive, beyond Documents: Glaze's own data kept in the Glaze folder's Data folder, one file a record, and a
-// daily snapshot (the Back up… zip) in its Backups folder, the newest 5 kept. Run by documents/drive-sync.js (its more hooks:
+// daily snapshot (the Back up… zip) in its Backups folder, one a day, the newest 5 kept. Run by documents/drive-sync.js (its more hooks:
 // the same runs, page token, account, locks and backoff) in the worker. A record is one stored key of what Back up… covers
 // (background/backup.js): every Settings key (storage.sync), and on this device (storage.local) Better To Do's tasks and the
 // pet, dashboard notes, class schedules, GPA past terms, widgets, Looks history and favorites, the personal dictionary and
@@ -13,13 +13,14 @@
 // the file stays). appProperties { glaze: 'rec', cat, key: h (32 hex of the SHA-256 of area and key), sum, at }. sum: the
 // SHA-256 of { area, key, value | deleted }, as with documents: each side's change is told by content, Glaze's own uploads
 // come back as no news. at: when it changed on the device that wrote it (this device's stamps: storage.local
-// driveSyncStamps, set by the worker as each key changes).
+// driveSyncStamps, set by the worker as each key changes, on or off while bound to an account, and let go once synced).
 // The rules: changed on one side, that side's goes to the other. Changed on both: the later change wins (last writer, by
 // at), per key, Settings key by key. First meeting (a second device connecting, or Sync turned on again): a key on one side
 // only is taken by the other; on both, the same is linked, Settings take the later change, and every other record is
 // joined by Restore's own rules (background/backup.js apply: newer dashboard note, each class and term by its time, words
-// and favorites together…), so a device's own data is never wiped by connecting. A deleted key is a tombstone that deletes
-// it on the other side; a tombstone never deletes a record met for the first time.
+// and favorites together, every task either Better To Do list has…), so a device's own data is never wiped by connecting.
+// Two files for one record (first syncs that overlapped): every device keeps the lowest id, met as a first meeting. A
+// deleted key is a tombstone that deletes it on the other side; a tombstone never deletes a record met for the first time.
 // State: driveSyncRec:<h> { area, key, cat, id, lsum, rsum, at, seen } and driveSyncFile:<id> 'r:<h>'; the folders and the
 // last snapshot on driveSync (data, backups, snap).
 // Classic script for the worker; module.exports for node.
@@ -129,6 +130,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       return;
     }
     if (cat === 'noteFiles' || cat === 'gradescope') return;
+    // A Better To Do list on both: every task either side has (this device's where both do), never one side's list whole.
+    if (cat === 'tasks' && key.startsWith('todo:')) {
+      const T = L.todo(), here = T.clean((await local.get(key))[key]), ids = new Set(here.tasks.map((t) => t.id));
+      value = T.clean({ tasks: [...here.tasks, ...value.tasks.filter((t) => !ids.has(t.id))], items: { ...value.items, ...here.items } });
+    }
     const r = cat === 'tasks' ? { tasks: key.startsWith('todo:') ? { tasks: { [key]: value } } : { tasks: {}, pets: { [key]: value } } }
       : ['dashNotes', 'classes', 'gpa'].includes(cat) ? { [cat]: { [key]: value } } : cat === 'widgets' ? { widgets: value }
         : key === 'lookFavorites' ? { favorites: value } : cat === 'writerWords' ? { writerWords: value } : null;
@@ -140,7 +146,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     }
     if (!r) return;
     const out = await L.backup().apply(r, { local: { get: (k) => local.get(k), set: async (o) => { await local.set(o); return true; } } });
-    if (!out?.ok) throw new Fail('stale');
+    // Refused as it stands (more than this device keeps): passed over, each device keeping its own; a failed write is tried again.
+    if (!out?.ok) throw new Fail(out?.error === 'write' ? 'stale' : 'bad');
   };
 
   // Notes as an area of records (keys above): local (storage.local), db (the worker's Notes database, background/background.js
@@ -150,7 +157,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   const notesArea = ({ local, db, run, turn = (f) => f() }) => {
     const N = L.notes();
     const scope = (acct) => acct.slice('notesIdx:'.length);
-    const ok = (r) => { if (!r?.ok) throw new Fail(r?.error === 'big' || r?.error === 'bad' || r?.error === 'type' ? 'bad' : 'stale'); return r; };
+    // Notes' refusals of what came (too big, not one, more than it keeps, no room here) pass the record over; the rest are tried again.
+    const ok = (r) => { if (!r?.ok) throw new Fail(['big', 'bad', 'type', 'many', 'full'].includes(r?.error) ? 'bad' : 'stale'); return r; };
     const read = async (key) => {
       const m = NREC.exec(key);
       if (!m) return undefined;
@@ -212,6 +220,16 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         const here = await stamps();
         const next = expected ? Object.fromEntries(Object.entries(patch).filter(([id]) => here[id] === expected[id])) : patch;
         if (Object.keys(next).length) await S.set({ [STAMPS]: { ...here, ...next } });
+      });
+      turn = p.catch(() => {}); return p;
+    };
+    // Stamps the sync has settled, let go (each only if no change stamped it again since): a sweep reads what changed since.
+    const unstamp = (expected) => {
+      const p = turn.then(async () => {
+        const here = await stamps(), gone = Object.keys(expected).filter((id) => here[id] === expected[id]);
+        if (!gone.length) return;
+        for (const id of gone) delete here[id];
+        await S.set({ [STAMPS]: here });
       });
       turn = p.catch(() => {}); return p;
     };
@@ -284,11 +302,15 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (canon(d.view(raw)) !== canon(expected)) throw new Fail('stale');
         before = raw; write = got.value === undefined ? undefined : d.merge(raw, got.value);
       }
-      applying.set(id, canon(write ?? null));
-      try {
-        const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => owned.set(id, transition(got.key, old, next)) : undefined;
-        if (!await a.replace(got.key, before, write, onChange)) throw new Fail('stale');
-      } catch (e) { applying.delete(id); owned.delete(id); throw e; }
+      // Already the value here: nothing written. Storage tells no one of an equal write, which would leave applying waiting
+      // to pass over the student's own later change back to this value.
+      if (canon(write ?? null) !== canon(before ?? null)) {
+        applying.set(id, canon(write ?? null));
+        try {
+          const onChange = got.area === 'notes' && !d?.immutable ? (old, next) => owned.set(id, transition(got.key, old, next)) : undefined;
+          if (!await a.replace(got.key, before, write, onChange)) throw new Fail('stale');
+        } catch (e) { applying.delete(id); owned.delete(id); throw e; }
+      }
       await restamp({ [id]: got.at }, { [id]: stampBefore });
       // A later local write is still dirty even if it lands before the sync bookkeeping finishes.
       await put(h, { area: got.area, key: got.key, cat: got.cat, id: R.id, lsum: await sumOf(got.area, got.key, got.value), rsum: got.sum, at: got.at, seen: got.at }, was);
@@ -306,7 +328,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
 
     // One record, both sides. key and area: when known here; R: its file's metadata (undefined: ask Drive when known).
     const one = async (ctx, h, { area, key, R }) => {
-      const was = await recOf(h);
+      let was = await recOf(h);
+      // Another device's file for the same record, made while this one made its own (first syncs that overlapped): every
+      // device keeps the lowest id, met as a first meeting, so neither side's value is lost and each hears the other's after.
+      if (was?.id && R?.id && !R.removed && R.id !== was.id) {
+        if (R.id < was.id && !R.trashed) { await S.remove([REC + h, FILE + was.id]); was = null; } else R = undefined;
+      }
       area ||= was?.area; key ||= was?.key;
       if (R === undefined) R = was?.id ? await ctx.D((c) => c.file(was.id)).catch((e) => { if (e.why === 'missing') return { removed: true }; throw e; }) : await lookup(ctx, h);
       if (R && !R.removed && R.trashed) R = { removed: true }; // a record file moved to Drive's trash: put back from here
@@ -397,7 +424,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         const h = await hk(area, key);
         seen.add(h);
         const was = await recOf(h), R = remote.get(h) || null;
-        await each(ctx, h, { area, key, R: !was?.id ? R : R?.id === was.id ? R : undefined });
+        await each(ctx, h, { area, key, R: !was?.id || (R && R.id <= was.id) ? R : undefined });
       }
       for (const [h, R] of [...remote].sort(([, a], [, b]) => (ORDER[a.appProperties?.cat] || 0) - (ORDER[b.appProperties?.cat] || 0))) if (!seen.has(h)) { seen.add(h); await each(ctx, h, { R }); }
       for (const k of (await S.keys()).filter((x) => x.startsWith(REC))) if (!seen.has(k.slice(REC.length))) await each(ctx, k.slice(REC.length), {});
@@ -416,34 +443,45 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         }
         if (f.appProperties?.glaze !== 'rec' || !HASH.test(f.appProperties.key || '') || !(f.parents || []).includes(ctx.data)) continue;
         const was = await recOf(f.appProperties.key);
-        if (was?.id && was.id !== f.id) continue;
+        if (was?.id && was.id !== f.id && (f.id > was.id || f.trashed)) continue;
         await each(ctx, f.appProperties.key, { R: f });
       }
     };
     // What changed here since it was last seen.
     const sweep = async (ctx) => {
       ctx.data = await sub(ctx, 'data', 'Data');
+      const settled = {};
       for (const [id, at] of Object.entries(await stamps())) {
         const cut = id.indexOf(':'), area = id.slice(0, cut), key = id.slice(cut + 1);
-        if (!catOf(area, key)) continue;
+        if (!catOf(area, key)) { settled[id] = at; continue; }
         const h = await hk(area, key), was = await recOf(h);
         // Times can tie, or a remote device's clock can be ahead of this one. Only unchanged content is settled.
-        if (was && (was.seen || 0) >= at && await sumOf(area, key, await valueOf(area, key)) === was.lsum) continue;
+        if (was && (was.seen || 0) >= at && await sumOf(area, key, await valueOf(area, key)) === was.lsum) { settled[id] = at; continue; }
         await each(ctx, h, { area, key });
       }
+      if (Object.keys(settled).length) await unstamp(settled);
       await snapshot(ctx);
     };
     // The daily snapshot: Back up…'s zip in Backups, the newest SNAP.keep kept, older ones moved to Drive's trash.
     const snapshot = async (ctx) => {
       const st = (await S.get(STATE))[STATE] || {};
-      if (st.snap && now() - st.snap < SNAP.every) return;
-      const made = await env.snapshot?.();
-      if (!made) return;
+      if (!env.snapshot || (st.snap && now() - st.snap < SNAP.every)) return;
+      // Tried once a day: one too big for a backup (null), one that can't be built, or one Drive refuses as it stands
+      // (larger than one upload) waits for tomorrow, never failing the run or being built again on every run.
+      const skip = async (e) => { if (e) console.warn('Sync to Google Drive: no snapshot today', e?.why || e); await ctx.state({ snap: now() }); };
+      let made;
+      try { made = await env.snapshot(); } catch (e) { return skip(e); }
+      if (!made) return skip();
       const backups = await sub(ctx, 'backups', 'Backups');
-      await ctx.D((c) => c.put({ meta: { name: made.name, mimeType: ZIP, parents: [backups], appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes }));
-      await ctx.state({ snap: now() });
       const r = await ctx.D((c) => c.find(`'${backups}' in parents and appProperties has { key='glaze' and value='snapshot' } and trashed=false`, { fields: 'id,name,trashed,appProperties,version', pageSize: 100 }));
-      const old = r.files.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : a.id < b.id ? 1 : -1)).slice(SNAP.keep);
+      // Another device's of the same day (its name is the day's) is replaced, a new revision of the one file: five kept are five days.
+      const same = r.files.filter((f) => f.name === made.name).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+      let up;
+      try { up = await ctx.D((c) => c.put({ ...(same && { id: same.id }), meta: { ...(!same && { name: made.name, mimeType: ZIP, parents: [backups] }), appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes })); }
+      catch (e) { if (e?.why === 'bad' || e?.why === 'size') return skip(e); throw e; }
+      await ctx.state({ snap: now() });
+      const all = same ? r.files : [...r.files, { id: up.id, name: made.name }];
+      const old = all.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : a.id < b.id ? 1 : -1)).slice(SNAP.keep);
       for (const f of old) await ctx.D((c) => c.patch(f.id, { trashed: true }));
     };
     const forget = async () => {

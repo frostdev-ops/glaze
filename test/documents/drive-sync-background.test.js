@@ -16,7 +16,7 @@ const worker = () => {
       remove: async (k) => { for (const x of [].concat(k)) m.delete(x); }, getKeys: async () => [...m.keys()],
     };
   };
-  const listener = { addListener() {} }, local = area(), sync = area();
+  const listener = { addListener() {} }, changed = { fns: [], addListener(f) { this.fns.push(f); } }, local = area(), sync = area();
   const stores = { bodies: new Map(), files: new Map(), blobs: new Map() };
   const db = {
     get: async (s, k) => structuredClone(stores[s].get(k)),
@@ -28,7 +28,7 @@ const worker = () => {
   let documents, records;
   const context = vm.createContext({
     console, TextEncoder, TextDecoder,
-    chrome: { storage: { local, sync, onChanged: listener }, runtime: { onMessage: listener, onStartup: listener } },
+    chrome: { storage: { local, sync, onChanged: changed }, runtime: { onMessage: listener, onStartup: listener } },
     GZ_CARDS: { queue: () => { let tail = Promise.resolve(); return (fn) => { const p = tail.then(fn); tail = p.catch(() => {}); return p; }; } },
     GZ_DRIVE_SYNC: { create: (env) => { documents = env; return {}; } }, brokerTurn: null,
     driveLib: () => {}, googleLib: () => ({ ON: true }),
@@ -42,7 +42,7 @@ const worker = () => {
   const from = source.indexOf('// Sync to Google Drive (documents/drive-sync.js');
   vm.runInContext(source.slice(from, source.indexOf('// A Download all wait owns', from)), context);
   vm.runInContext('openDriveSync()', context);
-  return { context, documents, records, local };
+  return { context, documents, records, local, changed };
 };
 
 test('a restarted worker loads validators before accepting class schedules and GPA records', () => {
@@ -92,4 +92,68 @@ test('a remote note compares after an earlier queued rename before replacing or 
     assert.equal(await pending, false, 'the queued local rename invalidates the remote compare');
     assert.equal((await notes.get(key))[key].note.title, 'Local rename');
   }
+});
+
+test('a daily snapshot whose files are past one upload is no snapshot, its files never read into the worker', async () => {
+  const { context, records, local } = worker();
+  Object.assign(context, {
+    GZ_BACKUP: require('../../extension/background/backup.js'), GZ_TODO: require('../../extension/planner/todo.js'), GZ_PET: require('../../extension/pet/pet.js'),
+    GZ_SANITIZE: require('../../extension/content/defaults.js').GZ_SANITIZE, GZ_HISTORY: require('../../extension/looks/history.js'), GZ_ZIP: require('../../extension/core/zip.js'),
+    GZ_DOC_KINDS: require('../../extension/documents/doc-kinds.js'), Blob,
+  });
+  context.chrome.runtime.getManifest = () => ({ version: '4.0.1' });
+  let read = 0;
+  context.openDocFiles = () => ({ read: async (hash, each) => { read++; each(new Uint8Array(8)); } });
+  // Five PDFs of 45 MB: one backup could hold them (background/backup.js LIMIT.zip), one upload can't (documents/drive.js put).
+  const pdf = (n) => ({ key: `doc:00000000-0000-4000-8000-00000000000${n}`, kind: 'pdf', title: `Reader ${n}`, file: { hash: String(n).repeat(64), size: 45e6, type: 'application/pdf' }, revision: 1 });
+  for (let n = 1; n <= 5; n++) await local.set({ [`writerPaper:${pdf(n).key}`]: pdf(n) });
+  const get = local.get;
+  local.get = async (k) => (k === null ? Object.fromEntries(await Promise.all((await local.getKeys()).map(async (x) => [x, (await get(x))[x]]))) : get(k));
+  assert.equal(await records.snapshot(), null);
+  assert.ok(read <= 4, `read ${read} of the files`);
+});
+
+test('while Sync is off for its account, each record\'s time of change is still kept for when it is turned on again', async () => {
+  const { context, local, changed } = worker();
+  await local.set({ driveSync: { on: false, off: true, account: 'student@school.edu', folder: 'f', token: '9' } });
+  for (const f of changed.fns) f({ writerWords: { oldValue: ['Alpha'], newValue: ['Alpha', 'Beta'] } }, 'local');
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(Number.isFinite((await local.get('driveSyncStamps')).driveSyncStamps?.['local:writerWords']), 'stamped while off');
+  // Never connected, or its account forgotten: nothing loads, nothing is kept.
+  await local.remove(['driveSyncStamps']);
+  let loaded = 0;
+  context.googleLib = () => { loaded++; return { ON: true }; };
+  for (const st of [undefined, { on: false, off: true, problem: 'account' }]) {
+    await (st ? local.set({ driveSync: st }) : local.remove(['driveSync']));
+    for (const f of changed.fns) f({ writerWords: { oldValue: ['Alpha'], newValue: ['Gamma'] } }, 'local');
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  assert.equal((await local.get('driveSyncStamps')).driveSyncStamps, undefined);
+  assert.equal(loaded, 0, 'Google\'s libraries never loaded for it');
+});
+
+// The worker's Google sign-in routes (background/background.js), Google's sign-in (background/google.js) as a stand-in.
+const googleWorker = (status) => {
+  const listeners = [];
+  const context = vm.createContext({
+    console, URL, Promise, navigator: {}, importScripts: () => {},
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, onMessage: { addListener: (f) => listeners.push(f) }, onConnect: { addListener() {} } },
+      storage: { local: { get: async () => ({}) } }, permissions: {}, identity: {}, tabs: {} },
+    GZ_GOOGLE: { ON: true, APP: 'app', flowOf: () => 'chrome', create: () => ({ status: async () => status }) }, GZ_GOOGLE_CONFIG: {}, GZ_GCAL: { ON: false },
+    fromEditor: () => false, trustedFrame: () => true, settingsFramesLoaded: Promise.resolve(), grantTurn: (f) => f(),
+  });
+  const source = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
+  const from = source.indexOf('// Google sign-in for Drive (background/google.js)');
+  vm.runInContext(source.slice(from, source.indexOf('// Sync to Google Drive (documents/drive-sync.js', from)), context);
+  const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(m, sender, res); });
+  return { send };
+};
+
+test('Drive\'s status tells Documents and Writer whether Google\'s Picker works there, as well as whether Drive is connected', async () => {
+  const page = { id: 'glaze', url: 'chrome-extension://x/papers.html', frameId: 0 };
+  const ask = async (status) => JSON.parse(JSON.stringify(await googleWorker(status).send({ type: 'glaze:drive', op: 'status' }, page)));
+  assert.deepEqual(await ask({ ok: true, flow: 'chrome', email: 'student@school.edu', picker: true }), { ok: true, connected: true, picker: true });
+  assert.deepEqual(await ask({ ok: true, flow: 'native', email: 'student@school.edu', picker: false }), { ok: true, connected: true, picker: false }, 'Safari\'s app flow: Save to Drive, no Picker');
+  assert.deepEqual(await ask({ ok: true, flow: 'chrome', email: null, picker: true }), { ok: true, connected: false, picker: false }, 'not connected');
+  assert.deepEqual(await ask({ ok: false, why: 'setup' }), { ok: true, connected: false, picker: false });
 });

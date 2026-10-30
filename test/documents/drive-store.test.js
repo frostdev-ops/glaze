@@ -22,7 +22,8 @@ const area = (name, heard) => {
   const api = {
     m,
     get: async (k) => { const ks = k == null ? [...m.keys()] : Array.isArray(k) ? k : [k]; return Object.fromEntries(ks.filter((x) => m.has(x)).map((x) => [x, structuredClone(m.get(x))])); },
-    set: async (o) => { const c = {}; for (const [k, v] of Object.entries(o)) { c[k] = { oldValue: m.get(k), newValue: structuredClone(v) }; m.set(k, structuredClone(v)); } await tell(c); },
+    // As Chrome's storage: a key written with the value it already holds is no change, and nothing hears of it.
+    set: async (o) => { const c = {}; for (const [k, v] of Object.entries(o)) { if (!m.has(k) || ST.canon(m.get(k)) !== ST.canon(v)) c[k] = { oldValue: m.get(k), newValue: structuredClone(v) }; m.set(k, structuredClone(v)); } await tell(c); },
     remove: async (k) => { const c = {}; for (const x of [].concat(k)) if (m.has(x)) { c[x] = { oldValue: m.get(x) }; m.delete(x); } await tell(c); },
     keys: async () => [...m.keys()],
   };
@@ -89,6 +90,11 @@ const lookOf = (density) => ({ ...D0.look, density });
 const todo = (...titles) => T.clean({ tasks: titles.map((t, i) => ({ id: `t${t}`, title: t, done: false, at: 1000 + i })), items: {} });
 const recFile = (drive, area, key) => [...drive.files.values()].find((f) => f.meta.appProperties.glaze === 'rec' && f.meta.appProperties.key === sha(`${area}\n${key}`).slice(0, 32));
 const body = (f) => JSON.parse(f.bytes.toString('utf8'));
+// The time a device holds for a record's last change: its stamp while one is pending, else what its record says was agreed.
+const timeOf = async (d, area, key) => {
+  const stamp = ((await d.local.get(ST.STAMPS))[ST.STAMPS] || {})[`${area}:${key}`], rec = (await d.local.get(ST.REC + sha(`${area}\n${key}`).slice(0, 32)))[ST.REC + sha(`${area}\n${key}`).slice(0, 32)];
+  return stamp ?? rec?.at;
+};
 const noDeletes = (drive) => assert.equal(drive.log.filter((x) => x.method === 'DELETE').length, 0, 'nothing deleted for good');
 
 test('a local change syncs when its timestamp equals or precedes the last agreed stamp', async () => {
@@ -203,8 +209,7 @@ test('two devices, interleaved edits in each category: each side\'s change reach
   assert.equal((await a.settings.get('look')).look.density, 'roomy', 'A\'s later change wins');
   assert.equal((await b.settings.get('look')).look.density, 'roomy');
   // A value taken from Drive keeps the time it changed on the device that wrote it.
-  const stamps = (await b.local.get(ST.STAMPS))[ST.STAMPS];
-  assert.equal(stamps['local:' + TODO], body(recFile(drive, 'local', TODO)).at, 'B\'s stamp for A\'s tasks is A\'s time, not when B took them');
+  assert.equal(await timeOf(b, 'local', TODO), body(recFile(drive, 'local', TODO)).at, 'B\'s time for A\'s tasks is A\'s, not when B took them');
   // Settled: nothing more goes up.
   const n = drive.log.filter((x) => x.upload).length;
   await a.run(); await b.run();
@@ -399,8 +404,7 @@ test('Notes: folders, notes and their pictures reach another device; edits inter
   clock.t += 1000; await b.notesOp({ key: ACCT, op: 'save', id: nid(2), base: (await idxOf(b)).notes[nid(2)].rev, sid: 's4', html: '<p>Second, by B</p>' });
   assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); assert.ok((await a.run()).ok);
   assert.match(await noteOf(b, nid(1)), /by A/); assert.match(await noteOf(a, nid(2)), /by B/);
-  const stampOf = async (d, k) => (await d.local.get(ST.STAMPS))[ST.STAMPS][`notes:${ACCT}|${k}`];
-  assert.equal(await stampOf(b, nid(1)), body(recFile(drive, 'notes', `${ACCT}|${nid(1)}`)).at, 'B keeps A\'s time for A\'s edit, not when B took it');
+  assert.equal(await timeOf(b, 'notes', `${ACCT}|${nid(1)}`), body(recFile(drive, 'notes', `${ACCT}|${nid(1)}`)).at, 'B keeps A\'s time for A\'s edit, not when B took it');
   // A picture added in a later edit goes up with the note.
   clock.t += 1000;
   const GIF = Buffer.from('474946383961010001000000002c00000000010001000002', 'hex');
@@ -515,4 +519,146 @@ test('Notes keeps a local timestamp when an edit follows a remote apply before i
   };
   assert.ok((await b.run()).ok);
   assert.equal((await b.local.get(ST.STAMPS))[ST.STAMPS][`notes:${ACCT}|${id}`], clock.t, 'bookkeeping must preserve the later local time');
+});
+
+// ---- the store's own limits, overlapping first syncs, first meetings
+
+test('a daily snapshot that can\'t be made or is refused is passed over for the day; the run still succeeds', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, local = device(drive, { clock }).local;
+  let made = 0, maker = async () => { made++; return null; }; // too big for one backup (background/backup.js pack 'big')
+  const store = ST.create({ area: () => local, store: local, hash: async (s) => sha(s), now: () => clock.t, snapshot: () => maker() });
+  const client = D.create({ fetch: drive.fetch, token: async () => 'tok-1', interactive: false });
+  const folder = drive.seed({ name: 'Glaze', mimeType: drive.FOLDER, appProperties: { glaze: 'root' } }).meta.id;
+  const ctx = { D: (fn) => fn(client), folder, state: async (p) => { await local.set({ driveSync: { ...(await local.get('driveSync')).driveSync, ...p } }); } };
+  await store.snapshot(ctx); await store.snapshot(ctx);
+  assert.equal(made, 1, 'a snapshot too big for one file is tried once a day, not on every run');
+  // One the maker can't build (a spreadsheet missing a band: pack 'bad'), or one Drive refuses: no failed runs.
+  clock.t += ST.SNAP.every + 1;
+  maker = async () => { made++; throw Object.assign(new Error('bad'), { why: 'bad' }); };
+  await store.snapshot(ctx);
+  clock.t += ST.SNAP.every + 1;
+  maker = async () => { made++; return { name: 'glaze-backup-2026-11-01.zip', bytes: new TextEncoder().encode('PK') }; };
+  drive.fail(400, { error: { errors: [{ reason: 'badRequest' }], code: 400 } }, (x) => x.path.startsWith('/upload/'));
+  await store.snapshot(ctx); await store.snapshot(ctx);
+  assert.equal(made, 3);
+  assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot').length, 0);
+});
+
+test('Notes another device has that won\'t fit here are passed over; the rest still syncs', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const picture = nid(500);
+  await a.notesOp({ key: ACCT, op: 'file', id: picture, kind: 'image', name: 'cell.png', data: PNG.toString('base64'), note: nid(1) });
+  await a.notesOp({ key: ACCT, op: 'save', id: nid(1), base: 0, sid: 'a1', html: `<p>Cells</p><img data-gz-file="${picture}">` });
+  await a.local.set({ [TODO]: todo('FromA') });
+  assert.ok((await a.on()).ok);
+  // B's disk is all but full: Notes refuses the picture ('full'), as it would past its own 200 MB of files.
+  b.db.estimate = async () => ({ quota: 10, usage: 0 });
+  assert.deepEqual(await b.on(), { ok: true });
+  assert.deepEqual((await b.local.get(TODO))[TODO], todo('FromA'));
+  assert.match(await noteOf(b, nid(1)), /Cells/);
+  assert.ok((await b.run()).ok, 'and the next run too');
+});
+
+test('a first meeting Restore can\'t join (more class schedules than one device keeps) is passed over, not a stuck sync', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const courses = (from) => Array.from({ length: 40 }, (_, i) => ({ id: String(from + i), name: `C${from + i}`, at: 5, periods: [{ days: [1], start: 540, end: 600 }] }));
+  await a.local.set({ [CLASSES]: C.clean({ courses: courses(100) }), writerWords: ['Alpha'] });
+  await b.local.set({ [CLASSES]: C.clean({ courses: courses(500) }) });
+  assert.ok((await a.on()).ok);
+  assert.deepEqual(await b.on(), { ok: true });
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Alpha']);
+  assert.equal((await b.local.get(CLASSES))[CLASSES].courses.length, 40, 'B keeps its own');
+});
+
+test('two devices whose first syncs overlap keep one record file and see each other\'s later edits', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  // A's record uploads wait until B has listed Data: both find no file for writerWords, and each makes one.
+  let listed;
+  const held = new Promise((r) => { listed = r; });
+  const text = (b) => (typeof b === 'string' ? b : Buffer.from(b || []).toString('latin1'));
+  const gateA = { ...drive, fetch: async (u, i = {}) => { if (u.includes('/upload/') && i.method === 'POST' && text(i.body).includes('"glaze":"rec"')) await held; return drive.fetch(u, i); } };
+  const gateB = { ...drive, fetch: async (u, i) => { const r = await drive.fetch(u, i); if (u.includes('/drive/v3/files?') && decodeURIComponent(u).includes("value='rec'")) listed(); return r; } };
+  const a = device(gateA, { clock }), b = device(gateB, { clock });
+  await a.local.set({ writerWords: ['Alpha'] });
+  await b.local.set({ writerWords: ['Beta'] });
+  const first = a.on();
+  await new Promise((r) => setTimeout(r, 50));
+  await Promise.all([first, b.on()]);
+  for (let i = 0; i < 2; i++) { assert.ok((await a.run()).ok); assert.ok((await b.run()).ok); }
+  assert.deepEqual((await a.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta']);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta']);
+  clock.t += 5000; await a.local.set({ writerWords: ['Alpha', 'Beta', 'Later'] });
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await b.run()).ok);
+  assert.deepEqual((await b.local.get('writerWords')).writerWords, ['Alpha', 'Beta', 'Later'], 'A\'s later edit reaches B');
+  clock.t += 5000; await b.local.set({ writerWords: ['Beta', 'Later'] });
+  assert.ok((await b.run({ push: true })).ok); assert.ok((await a.run()).ok);
+  assert.deepEqual((await a.local.get('writerWords')).writerWords, ['Beta', 'Later'], 'and B\'s reaches A');
+  noDeletes(drive);
+});
+
+test('a second device joining keeps its own Better To Do tasks for the same account beside the folder\'s', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await a.local.set({ [TODO]: todo('Reading') });
+  assert.ok((await a.on()).ok);
+  await b.local.set({ [TODO]: T.clean({ tasks: [{ id: 'tLab', title: 'Lab report', done: false, at: 2000 }], items: { 'task:tLab': { subs: [{ id: 's1', title: 'Graphs', done: true }] } } }) });
+  assert.ok((await b.on()).ok);
+  const titles = async (d) => (await d.local.get(TODO))[TODO].tasks.map((x) => x.title).sort();
+  assert.deepEqual(await titles(b), ['Lab report', 'Reading'], 'nothing of B\'s wiped');
+  assert.deepEqual((await b.local.get(TODO))[TODO].items['task:tLab'].subs[0].title, 'Graphs', 'with its steps');
+  assert.ok((await a.run()).ok);
+  assert.deepEqual(await titles(a), ['Lab report', 'Reading'], 'and A gets B\'s');
+});
+
+test('two devices\' snapshots of one day are one file, so the five kept are five days', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  const client = D.create({ fetch: drive.fetch, token: async () => 'tok-1', interactive: false });
+  const folder = drive.seed({ name: 'Glaze', mimeType: drive.FOLDER, appProperties: { glaze: 'root' } }).meta.id;
+  const day = () => new Date(clock.t).toISOString().slice(0, 10);
+  const devices = ['A', 'B'].map((who) => {
+    const local = device(drive, { clock }).local;
+    const store = ST.create({ area: () => local, store: local, hash: async (s) => sha(s), now: () => clock.t,
+      snapshot: async () => ({ name: `glaze-backup-${day()}.zip`, bytes: new TextEncoder().encode(`PK ${who} ${day()}`) }) });
+    return { store, ctx: { D: (fn) => fn(client), folder, state: async (p) => { await local.set({ driveSync: { ...(await local.get('driveSync')).driveSync, ...p } }); } } };
+  });
+  for (let i = 0; i < 7; i++) {
+    for (const d of devices) await d.store.snapshot(d.ctx);
+    clock.t += ST.SNAP.every + 1;
+  }
+  const live = [...drive.files.values()].filter((f) => f.meta.appProperties.glaze === 'snapshot' && !f.meta.explicitlyTrashed);
+  assert.deepEqual(live.map((f) => f.meta.name).sort(), ['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05'].map((d) => `glaze-backup-${d}.zip`));
+  assert.ok(live.every((f) => f.bytes.toString().startsWith('PK B')), 'the day\'s later one');
+  noDeletes(drive);
+});
+
+test('a push after one note\'s edit reads that note, not every note ever synced', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  assert.ok((await a.on()).ok);
+  for (let i = 1; i <= 30; i++) { clock.t += 1000; assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(i), base: 0, sid: `s${i}`, html: `<p>Note ${i}</p>` })).ok); }
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await a.run({ push: true })).ok);
+  let reads = 0;
+  const get = a.db.get;
+  a.db.get = async (s, k) => { if (s === 'bodies') reads++; return get(s, k); };
+  clock.t += 1000;
+  assert.ok((await a.notesOp({ key: ACCT, op: 'save', id: nid(7), base: (await idxOf(a)).notes[nid(7)].rev, sid: 's7b', html: '<p>Note 7, again</p>' })).ok);
+  reads = 0;
+  assert.ok((await a.run({ push: true })).ok);
+  assert.ok(reads <= 3, `${reads} note bodies read`);
+  assert.equal(body(recFile(drive, 'notes', `${ACCT}|${nid(7)}`)).value.html, '<p>Note 7, again</p>');
+});
+
+test('a change back to a value Drive sent unchanged still syncs', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await a.local.set({ writerWords: ['One'] });
+  await a.on(); await b.on();
+  // Both make the same change, B first: B takes A's later one, the very value B holds.
+  clock.t += 1000; await b.local.set({ writerWords: ['Two'] });
+  clock.t += 1000; await a.local.set({ writerWords: ['Two'] });
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await b.run()).ok); assert.ok((await b.run({ push: true })).ok);
+  clock.t += 1000; await b.local.set({ writerWords: ['Three'] });
+  assert.ok((await b.run({ push: true })).ok); assert.ok((await b.run({ push: true })).ok);
+  clock.t += 1000; await b.local.set({ writerWords: ['Two'] });
+  assert.ok((await b.run({ push: true })).ok);
+  assert.deepEqual(body(recFile(drive, 'local', 'writerWords')).value, ['Two'], 'B\'s change back reaches Drive');
+  assert.ok((await a.run()).ok);
+  assert.deepEqual((await a.local.get('writerWords')).writerWords, ['Two']);
 });
