@@ -372,9 +372,10 @@ const STYLE_READS = [
   ['features/sidebar.js', 'getComputedStyle(html())', 1], // the root's navigation offsets in a batched sidebar layout pass
   ['features/sidebar.js', 'getComputedStyle(x)', 1], // only the drawer's focusable controls, on Tab or a focus escape
   ['features/sidebar.js', 'getComputedStyle(node)', 1], // one exact overview or Rubric and at most 30 ancestors at projection start; Rubric overflow checks stop at 400 descendants
-  // Three bounded sites in a batched layout pass: known course tool panels, known header ancestors (hidden routes),
-  // and the native discussion host's ancestors up to its nearest scroller. No descendant or whole-page style sweep.
-  ['features/sidebar.js', 'getComputedStyle(p)', 3],
+  // Four bounded sites: known course tool panels, known header ancestors (hidden routes), the native discussion host's
+  // ancestors up to its nearest scroller, and active Ultra peeks/backdrops plus the three sidebar controls' ancestors
+  // only while a peek is visible (batched once per frame). No descendant or whole-page style sweep.
+  ['features/sidebar.js', 'getComputedStyle(p)', 4],
   ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
   ['features/sidebar.js', 'getComputedStyle(panel.grid)', 1], // one verified assessment overview grid, to identify Ultra's current native sidebar shell
   ['features/widgets.js', 'getComputedStyle(html)', 1], // the root's two room variables for Glaze's bar, when floating tiles are placed

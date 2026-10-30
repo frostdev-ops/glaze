@@ -154,9 +154,10 @@ var GZ_RUBRIC_LIB = globalThis.GZ_RUBRIC_LIB || (() => {
     if (typeof pathname !== 'string' || pathname.length > 240) return null;
     const c = site === 'canvas' && /^\/courses\/([1-9]\d{0,39})\/assignments\/([1-9]\d{0,39})\/?$/.exec(pathname);
     if (c) return { courseId: c[1], assignmentId: c[2], view: 'assignment' };
-    const u = site === 'ultra' && /^\/ultra\/courses\/(_\d+_\d+)\/(?:assessment\/(_\d+_\d+)\/(overview|attempt(?:\/create)?)|discussion\/(_\d+_\d+))\/?$/.exec(pathname);
-    const contentId = u && (u[2] || u[4]);
-    return u && bb(u[1]) && bb(contentId) ? { courseId: u[1], contentId, view: u[4] ? 'discussion' : u[3] === 'overview' ? 'overview' : 'attempt' } : null;
+    const u = site === 'ultra' && /^\/ultra\/courses\/(_\d+_\d+)\/(?:assessment\/(_\d+_\d+)\/(overview|attempt(?:\/(?:create|(_\d+_\d+)))?)|discussion\/(_\d+_\d+))\/?$/.exec(pathname);
+    const contentId = u && (u[2] || u[5]);
+    if (!u || !bb(u[1]) || !bb(contentId) || u[4] && !bb(u[4])) return null;
+    return { courseId: u[1], contentId, view: u[5] ? 'discussion' : u[3] === 'overview' ? 'overview' : 'attempt', ...(u[4] ? { attemptId: u[4] } : {}) };
   };
   return { parse: { canvas, ultra }, room, mode, route };
 })();

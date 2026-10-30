@@ -182,17 +182,18 @@ td[aria-current] { background:var(--gz-accent-soft,#e2f2ff); box-shadow:inset 0 
     const column = await reader.get(`/learn/api/v1/courses/${route.courseId}/gradebook/columns/${columnId}?expand=associatedRubrics`);
     if (column.id !== columnId || column.courseId !== route.courseId || column.contentId && column.contentId !== route.contentId) return null;
     if (!Array.isArray(column.rubricAssociations) || column.rubricAssociations.length !== 1) return null;
-    const association = column.rubricAssociations[0], attemptId = row.lastAttemptId;
+    const association = column.rubricAssociations[0], attemptId = route.attemptId || row.lastAttemptId;
     let attempt = null;
     if (attemptId) {
       if (!/^_\d+_\d+$/.test(attemptId)) return null;
       try { attempt = await reader.get(`/learn/api/v1/courses/${route.courseId}/gradebook/attempts/${attemptId}?columnId=${columnId}&expand=viewUrl,toolAttemptDetail,feedbackToUser`); }
       catch (e) { if (!live()) throw e; return null; }
-      if (attempt.id !== attemptId || attempt.courseId !== route.courseId || attempt.userId !== uid) return null;
+      if (attempt.id !== attemptId || attempt.courseId !== route.courseId || attempt.columnId && attempt.columnId !== columnId || attempt.userId !== uid) return null;
     }
     // The student's grade row releases selections; column settings and display grades cannot release a new attempt.
     const evaluation = attempt?.status === 'COMPLETED' ? attempt.rubricEvaluation : null;
-    const graded = row.status === 'GRADED' || row.submissionStatus?.status === 'GRADED';
+    // A numbered address names one attempt. The row's released grade only authorizes its latest attempt's evaluation.
+    const graded = attemptId === row.lastAttemptId && (row.status === 'GRADED' || row.submissionStatus?.status === 'GRADED');
     const unopened = !attemptId && !row.lastAttempt && !row.status && (!row.submissionStatus || typeof row.submissionStatus === 'object' && !row.submissionStatus.status);
     const state = graded ? 'graded'
       : unopened || attempt?.status === 'IN_PROGRESS' || ['UNOPENED', 'NOT_SUBMITTED'].includes(row.submissionStatus?.status) ? 'before'
