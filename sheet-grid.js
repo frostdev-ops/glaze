@@ -740,7 +740,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // that left the cells as they were (the frame's submit checkpoint, a rename) brings only its record, and undo stays.
     const theirs = async (next) => {
       const rev = next?.revision;
-      if (rev == null || rev <= (rec?.revision || 0)) return;
+      if (gone || rev == null || rev <= (rec?.revision || 0)) return;
       if (next.kind === 'sheet' && next.edited != null && rec?.edited != null && next.edited <= rec.edited) {
         rec = next; lastVersion = rec.lastVersion || lastVersion;
         if (titleIn && document.activeElement !== titleIn && rec.title) titleIn.value = rec.title;
@@ -938,8 +938,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     }
     fx.addEventListener('focus', () => { if (!editing) startEdit(editText(...sel.active), 'edit', fx); else if (editing.surface === editor) { editing.surface = fx; editor.hidden = true; } });
     // A sheet's tab pressed: show() decides.
-    editor.addEventListener('blur', () => { setTimeout(() => { if (editing?.surface === editor && document.activeElement !== editor && document.activeElement !== fx && !document.activeElement?.closest?.('.gx-menu, .gx-tabs')) commit(); }, 0); });
-    fx.addEventListener('blur', () => { setTimeout(() => { if (editing?.surface === fx && document.activeElement !== fx && document.activeElement !== gridEl && !document.activeElement?.closest?.('.gx-tabs')) commit(); }, 0); });
+    const blurTimers = new Set();
+    const afterBlur = (fn) => { const id = setTimeout(() => { blurTimers.delete(id); if (!gone) fn(); }, 0); blurTimers.add(id); };
+    editor.addEventListener('blur', () => { afterBlur(() => { if (editing?.surface === editor && document.activeElement !== editor && document.activeElement !== fx && !document.activeElement?.closest?.('.gx-menu, .gx-tabs')) commit(); }); });
+    fx.addEventListener('blur', () => { afterBlur(() => { if (editing?.surface === fx && document.activeElement !== fx && document.activeElement !== gridEl && !document.activeElement?.closest?.('.gx-tabs')) commit(); }); });
 
     // ---- the name box: a cell, a range, a sheet's or a name's; Enter goes there
     const goTo = (text) => {
@@ -1230,10 +1232,12 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (menu?.opener === versB) { closeMenu(true); return; }
       commit();
       const list = (await papers.versions(key).catch(() => [])).filter((v) => (v.kind || 'paper') === 'sheet');
+      if (gone) return;
       openMenu(list.length ? list.map((v) => ({ act: 'restore', label: when.format(v.at), run: () => restore(v.id) })) : [{ act: 'none', label: t('No versions yet'), disabled: true, run: () => {} }], below(versB), { opener: versB, label: t('Versions') });
     });
     const restore = async (id) => {
       const v = await papers.version(key, id).catch(() => null), next = v?.gz ? await SD.unpack(v.gz).catch(() => null) : null;
+      if (gone) return;
       if (!next) { say(t('That file could not be read.')); return; }
       commit();
       nextVersion = SD.pack(wb).then((gz) => ({ reason: 'restore', gz, cells: SD.measure(wb).cells }));
@@ -1528,6 +1532,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       await saving?.catch(() => {});
       life.abort(); chrome.storage.onChanged.removeListener(onStore); sizing.disconnect();
       clearTimeout(timer); timer = 0; clearTimeout(sayTimer); clearTimeout(liveTimer);
+      for (const id of blurTimers) clearTimeout(id);
+      blurTimers.clear();
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
       closeMenu();
