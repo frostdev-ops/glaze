@@ -1126,6 +1126,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       fillOut(g, 'row', r - g.r1);
     };
     const copyAlong = (axis) => {
+      if (!writable()) return;
       const g = sel.ranges[sel.ranges.length - 1], cells = [];
       if (axis === 'row') { if (g.r1 === g.r0) return; for (let c = g.c0; c <= g.c1; c++) { const x = cellAt(g.r0, c); for (let r = g.r0 + 1; r <= g.r1; r++) cells.push([r, c, x ? { ...x, ...(x.f !== undefined && { f: F.move(x.f, r - g.r0, 0) }) } : null]); } }
       else { if (g.c1 === g.c0) return; for (let r = g.r0; r <= g.r1; r++) { const x = cellAt(r, g.c0); for (let c = g.c0 + 1; c <= g.c1; c++) cells.push([r, c, x ? { ...x, ...(x.f !== undefined && { f: F.move(x.f, 0, c - g.c0) }) } : null]); } }
