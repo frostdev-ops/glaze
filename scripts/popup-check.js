@@ -72,7 +72,7 @@ const stub = (notHeld) => {
       ...require('./check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1', '--remote-debugging-port=0'],
     });
-    const welcomed = Promise.race([env.noFirstRun(ctx), new Promise((_, no) => setTimeout(() => no(new Error('the install never opened its first screen')), 20000).unref())]);
+    const welcomed = Promise.race([env.noFirstRun(ctx), new Promise((_, no) => setTimeout(() => no(new Error('the install never opened its first screen')), 45000).unref())]);
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();

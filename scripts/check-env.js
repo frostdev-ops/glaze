@@ -67,14 +67,19 @@ const ultraReady = async (page, timeout = 10000) => {
 // A new profile's install (lib/background.js onInstalled) writes storage.local after Glaze's pages can load, so a check that
 // seeds or compares storage first waits for each install task's last write: the starter widgets (freshDefaults settles
 // with widgetLayout and starterTouched), the tabs-auto migration and the channel-key move. Polled from Node, as ultraReady.
-const installDone = async () => {
-  const l = await chrome.storage.local.get(['freshDefaults', 'migrated', 'channelKeysMoved']);
+const INSTALL_KEYS = ['freshDefaults', 'migrated', 'channelKeysMoved'];
+const installDone = async (keys) => {
+  const l = await chrome.storage.local.get(keys);
   return l.freshDefaults?.pending === false && Array.isArray(l.migrated) && l.migrated.includes('tabs-auto') && l.channelKeysMoved === true;
 };
-const installed = async (page, timeout = 10000) => {
+// The limit only bounds a failure: on a loaded runner the install has taken more than 10 s.
+const installed = async (page, timeout = 30000) => {
   for (const end = Date.now() + timeout; ; await new Promise((r) => setTimeout(r, 50))) {
-    if (await page.evaluate(installDone)) return;
-    if (Date.now() > end) throw new Error('installed: the new profile\'s install never finished writing storage.local');
+    if (await page.evaluate(installDone, INSTALL_KEYS)) return;
+    if (Date.now() > end) {
+      const seen = await page.evaluate((k) => chrome.storage.local.get(k), INSTALL_KEYS).catch((e) => e.message);
+      throw new Error(`installed: the new profile's install never finished writing storage.local (${JSON.stringify(seen)})`);
+    }
   }
 };
 
