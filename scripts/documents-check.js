@@ -1525,6 +1525,26 @@ const PROBE = ({ lang }) => {
       await im.evaluate(() => __retryCopy());
       await until(() => im.evaluate(() => !document.querySelector('.gd-pending') && [...document.querySelectorAll('.gd-card')].some((c) => c.querySelector('.gd-title').textContent === 'Interrupted')), 'interrupted file retried');
       check(await im.evaluate(() => document.activeElement?.id === 'gd-q'), 'Retry preserves focus moved elsewhere while the import was running');
+
+      // All twenty accepted files get a named, readable progress card immediately, including those still in the queue.
+      await im.evaluate((bytes) => {
+        const k = GZ_DOC_KINDS.get('pdf');
+        GZ_DOC_KINDS.register('pdf', { ...k, importFile: async (f, opts) => {
+          GZ_DOC_KINDS.register('pdf', k);
+          opts.progress({ stage: 'read' });
+          await new Promise((r) => { globalThis.__batchRead = r; });
+          return k.importFile(f, opts);
+        } });
+        const dt = new DataTransfer();
+        for (let i = 1; i <= 20; i++) dt.items.add(new File([new Uint8Array(bytes)], `Batch ${i}.pdf`, { type: 'application/pdf' }));
+        document.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      }, Array.from(require('./pdf-fixtures.js').FIXTURES.three()));
+      await until(() => im.evaluate(() => typeof __batchRead === 'function'), 'batch reading');
+      const queued = await im.evaluate(() => [...document.querySelectorAll('.gd-pending')].map((el) => el.querySelector('.gd-meta').textContent));
+      check(queued.length === 20 && queued.every((s) => s === 'Reading…'), `twenty dropped files each show a stage immediately (${JSON.stringify(queued)})`);
+      await im.evaluate(() => __batchRead());
+      await until(() => im.evaluate(() => !document.querySelector('.gd-pending')), 'batch imported', 60000);
+      check(await im.evaluate(() => [...document.querySelectorAll('.gd-card .gd-title')].filter((el) => /^Batch \d+$/.test(el.textContent)).length === 20), 'all twenty queued imports become their own documents');
       await shot(im, 'import-done-1280-en.png');
       await im.close();
     }
