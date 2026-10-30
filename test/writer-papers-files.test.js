@@ -97,6 +97,21 @@ test('a record whose file went missing can still take a new one (Re-import)', as
   assert.equal(paper.file.hash, f2.hash);
 });
 
+test('two PDF editors saving from the same revision keep the overwritten file as a conflict version', async () => {
+  const { P, files, store, clock } = make(), k = key();
+  const first = await files.put(bytes(100, 41), 'application/pdf');
+  await P.save(k, { kind: 'pdf', doc: null, file: first, size: first.size, pages: 1 }, { reason: 'import' });
+  const other = PA.open(store, () => clock.t, { files });
+  await other.get(k);
+  const a = await files.put(bytes(100, 42), 'application/pdf');
+  const b = await files.put(bytes(100, 43), 'application/pdf');
+  await P.save(k, { file: a }, { expectedKind: 'pdf' });
+  clock.t++;
+  await other.save(k, { file: b }, { expectedKind: 'pdf' });
+  assert.equal(store.data[`writerPaper:${k}`].file.hash, b.hash);
+  assert.ok((await P.versions(k)).some((v) => v.reason === 'conflict' && v.file.hash === a.hash), 'the other editor did not lose its filled form');
+});
+
 test('versions keep at most CAP.files bytes of files, the submitted one and the newest always', async () => {
   const { P, files, clock, store } = make();
   assert.equal(PA.CAP.files, 200e6);
