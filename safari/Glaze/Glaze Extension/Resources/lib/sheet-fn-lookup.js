@@ -142,7 +142,11 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
   const tableLookup = (across) => ({ p: ['v', 'a', 'v', 'v'], min: 3, max: 4,
     // An array lookup value lifts, but its index is scalar even when supplied as an array. A scalar lookup value
     // still lifts over index arrays; range_lookup arrays broadcast in either case (Excel 16.114.1).
-    prepare: (args) => { if (Array.isArray(args[0]) && Array.isArray(args[2])) args[2] = args[2][0][0]; },
+    prepare: (args, ctx) => {
+      if (!Array.isArray(args[0]) || !Array.isArray(args[2])) return;
+      try { args[2] = num(args[2][0][0], ctx); }
+      catch (e) { if (isErr(e)) args[2] = ERR.REF; else throw e; }
+    },
     fn: ([x, table, index, approx], ctx) => {
     const g = grid(table, ctx), n = whole(index, ctx);
     if (n < 1) throw ERR.VALUE;
