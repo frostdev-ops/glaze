@@ -111,7 +111,7 @@ const WIRING = [
   ['await local.set({ mcp: { on: m.on } });',
     'await local.set({ mcp: { on: m.on } });\n    if (!m.on) { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); }'],
   ["return { ok: await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget()) };",
-    "const ok = await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget());\n  if (ok && m.op === 'forget') { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); }\n  return { ok };"],
+    "const ok = await (m.op === 'revoke' ? grants.revoke(m.app) : grants.forget());\n  if (ok && m.op === 'forget') { mcpFiles(); await GZ_MCP_ASSIGN.clear({ local }); await local.remove('mcpCalls'); }\n  return { ok };"],
   ['const forget = async (origin) => {',
     'const forget = async (origin) => {\n  mcpFiles(); await GZ_MCP_ASSIGN.clear({ local: chrome.storage.local }, origin);'],
   ['const forgetAll = async () => {',
