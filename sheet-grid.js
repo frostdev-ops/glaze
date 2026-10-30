@@ -1134,7 +1134,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       el.style.top = `${Math.max(4, at.y + hh > innerHeight - 4 ? at.y - hh - (at.h || 0) : at.y)}px`;
       el.addEventListener('keydown', (e) => {
         const all = [...el.querySelectorAll('[role^="menuitem"]:not([disabled])')], i = all.indexOf(document.activeElement);
-        if (e.key === 'Escape' || (e.key === 'Tab' && !e.target.matches('input'))) { e.preventDefault(); e.stopPropagation(); closeMenu(true); }
+        if (e.key === 'Tab' && !e.shiftKey && e.target.hasAttribute('role') && el.querySelector('input')) { e.preventDefault(); e.stopPropagation(); el.querySelector('input').focus(); }
+        else if (e.key === 'Escape' || (e.key === 'Tab' && !e.target.closest('.gx-fmt-row'))) { e.preventDefault(); e.stopPropagation(); closeMenu(true); }
         else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) && !e.target.matches('input')) { e.preventDefault(); all[e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (e.key === 'ArrowUp' ? all.length - 1 : 1)) % all.length]?.focus(); }
       });
       el.getBoundingClientRect();
