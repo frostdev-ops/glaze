@@ -267,10 +267,9 @@ const LOOK_CATALOG = 401 + 822 + 117;
 // worker's (lib/looks.js move). Measured against d840dd70.
 const COURSE_LOOKS_SYNC = 1342 + 9;
 // Blackboard's previews in Glaze's PDF viewer (the owner's 4.0.0 ask, 2026-10-30; a named raise under the 2026-10-19
-// approval): content.js's hook that loads features/bbpreview.js once a preview's frame is on an Ultra page, its frame kept
-// out of PREVIEWS (429), and defaults.js's enhance.bbPreviews (28), on every site. The rest loads on demand. Measured
-// against 90d6220d.
-const BB_PREVIEWS = 429 + 28;
+// approval): content.js keeps Glaze's frame out of PREVIEWS (13), and defaults.js adds enhance.bbPreviews (28), on every
+// site. The viewer's loader lives in the already-lazy features/docs.js. Measured against 90d6220d.
+const BB_PREVIEWS = 13 + 28;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what lib/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
@@ -387,7 +386,7 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 const PDF_TIMEOUTS = [
   ['pdf-kind.js', 'setTimeout(flush, 1000)', 1, /clearTimeout\(timer\)/],
   // A Blackboard preview's first page: 20 s for it to draw before the page keeps Blackboard's frame; once per viewer.
-  ['pdf-kind.js', 'setTimeout(r, 20000, false)', 1, /drawn\.then\(\(\) => true\)/],
+  ['pdf-kind.js', 'setTimeout(r, 20000, false)', 1, /clearTimeout\(drawTimer\)/],
 ];
 test('PDF timeouts under a minute are reviewed and retain their clear', () => {
   const fast = calls('setTimeout', read('pdf-kind.js')).filter((c) => {

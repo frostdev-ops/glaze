@@ -943,9 +943,6 @@
     try { chrome.storage.sync.get('enhance', (r) => chrome.runtime.lastError || save !== darkSave || chrome.storage.sync.set({ enhance: { ...r.enhance, docPages: v } })); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
-    // Ultra's previews in Glaze's PDF viewer (features/bbpreview.js; not .gz-pv, its frame, in PREVIEWS); off restores.
-    if (globalThis.GZ_BB_PREVIEW_UI) GZ_BB_PREVIEW_UI.sync();
-    else if (ultra && observer && settings.enhance.bbPreviews && settings.writer.pdf && document.querySelector(PREVIEWS)) need('features/bbpreview.js', () => globalThis.GZ_BB_PREVIEW_UI).then(() => GZ_BB_PREVIEW_UI.sync(), () => {});
     // Read-only review is independently lazy, including when the reading tools are off.
     if (observer && /\/(?:student-submission-view|submissions\/\d+)\/?$/.test(location.pathname)) need('features/docreview.js', () => globalThis.GZ_DOCREVIEW).then(() => GZ_DOCREVIEW.sync(!!observer), () => {});
     else globalThis.GZ_DOCREVIEW?.sync(false);
