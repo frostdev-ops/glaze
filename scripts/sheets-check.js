@@ -70,7 +70,8 @@ const seeded = (key) => {
     await first.catch(() => {});
     await worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings(false));
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
-    const shot = async (name) => { await pause(250); const f = path.join(out, name); await page.screenshot({ path: f }); shots.push(f); };
+    const painted = () => page.evaluate(async () => { await document.fonts.ready; await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))); });
+    const shot = async (name) => { await painted(); const f = path.join(out, name); await page.screenshot({ path: f }); shots.push(f); };
     const openHome = async () => { await page.goto(HOME); await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'home'); };
     const said = () => page.evaluate(() => document.getElementById('gd-said').textContent);
     // The grid's view of a cell: its shown text, by row and column (0-based), where it is drawn.
@@ -110,7 +111,7 @@ const seeded = (key) => {
     check(on.tile && on.name === 'Spreadsheet' && on.cells === 24 && on.tiles === 5 && /\.xlsx/.test(on.accept) && /\.csv/.test(on.accept) && on.label === 'Import…', `on: the Spreadsheet tile, a 6×4 grid, and the chooser takes spreadsheets (${JSON.stringify(on)})`);
     await shot('home-1280.png');
     await page.setViewportSize({ width: 640, height: 900 });
-    await pause(150);
+    await painted();
     const row = await page.evaluate(() => [...document.querySelectorAll('.gd-tile')].map((t) => Math.round(t.getBoundingClientRect().top)));
     check(new Set(row).size === 1 && row.length === 5, `640 px: the five New tiles share one row (${row})`);
     await shot('home-640.png');
@@ -281,7 +282,6 @@ const seeded = (key) => {
 
     // ---- close and open again: the values are kept
     await saved(key);
-    await until(async () => { const r = await local(`writerPaper:${key}`); await pause(900); const r2 = await local(`writerPaper:${key}`); return r && r2 && r.revision === r2.revision; }, 'settled saves');
     await page.click('.gp-top a[href="papers.html"]');
     await until(() => page.evaluate((k) => !document.getElementById('list').hidden && !!document.querySelector(`.gd-card[data-key="${k}"] .gx-thumb`), key), 'home with the new card');
     check(await page.evaluate((k) => /Item 1/.test(document.querySelector(`.gd-card[data-key="${k}"] .gx-thumb`).textContent), key), 'its card shows its cells');
@@ -301,7 +301,7 @@ const seeded = (key) => {
 
     // ---- 640 px
     await page.setViewportSize({ width: 640, height: 900 });
-    await pause(200);
+    await painted();
     const narrow = await page.evaluate(() => ({ over: document.documentElement.scrollWidth - innerWidth, grid: document.getElementById('gx-grid').getBoundingClientRect().width, cells: document.querySelectorAll('#gx-grid .gx-c').length }));
     check(narrow.over <= 0 && narrow.grid > 500 && narrow.cells > 50, `640 px: no page overflow, the grid fills the width (${JSON.stringify(narrow)})`);
     await shot('sheet-640.png');
@@ -326,7 +326,8 @@ const seeded = (key) => {
     await page.keyboard.type('=SU');
     const offered = await until(() => page.evaluate(() => { const l = document.getElementById('gx-complete'); return !l.hidden && [...l.querySelectorAll('[role="option"]')].map((o) => o.textContent); }), 'autocomplete');
     check(offered.includes('SUM'), `typing =SU offers SUM (${offered.slice(0, 5)})`);
-    while ((await page.evaluate(() => document.querySelector('#gx-complete [aria-selected="true"]')?.textContent)) !== 'SUM') await page.keyboard.press('ArrowDown');
+    for (let i = 0; i < offered.length && (await page.evaluate(() => document.querySelector('#gx-complete [aria-selected="true"]')?.textContent)) !== 'SUM'; i++) await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.querySelector('#gx-complete [aria-selected="true"]')?.textContent), 'SUM', 'SUM can be selected within the offered list');
     await page.keyboard.press('Tab');
     check(await page.evaluate(() => document.getElementById('gx-edit').value) === '=SUM(', 'Tab takes SUM(');
     await page.keyboard.type('A3:A4)');
