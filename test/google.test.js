@@ -26,7 +26,13 @@ const harness = ({ flow = 'chrome', config = REAL, granted = true, firefox = fal
       if (identity.fail) throw new Error(identity.fail);
       return { token: `chrome-tok-${++n}`, grantedScopes: identity.scopes || d.scopes };
     },
-    launchWebAuthFlow: async (d) => { log.launch.push(d); return identity.answer(d); },
+    // Firefox's schema (toolkit/components/extensions/schemas/identity.json) takes { url, interactive } and refuses any other
+    // key; it reads the redirect from the url's redirect_uri.
+    launchWebAuthFlow: async (d) => {
+      if (firefox) { const extra = Object.keys(d).filter((k) => k !== 'url' && k !== 'interactive'); if (extra.length) throw new Error(`Type error for parameter details (Unexpected property "${extra[0]}")`); }
+      log.launch.push(d);
+      return identity.answer(d);
+    },
     getRedirectURL: () => (firefox ? 'https://0123456789abcdef0123456789abcdef01234567.extensions.allizom.org/' : REDIRECT),
     removeCachedAuthToken: async ({ token }) => { log.removed.push(token); },
     clearAllCachedAuthTokens: async () => { log.cleared++; },
@@ -89,7 +95,11 @@ test('the config: three scopes, the two picker pages in order, placeholders that
   assert.equal(G.ready(REAL, 'chrome'), true);
   assert.equal(G.ready(REAL, 'web'), true);
   assert.equal(G.ready(REAL, 'native'), false, 'native also needs config.native');
-  assert.equal(G.ready({ ...REAL, apiKey: '' }, 'web'), false);
+  assert.equal(G.ready({ ...REAL, apiKey: '' }, 'web'), true, 'signing in needs no Picker key');
+  assert.equal(G.ready({ ...REAL, web: '' }, 'web'), false);
+  assert.equal(G.pickable(REAL), true);
+  assert.equal(G.pickable({ ...REAL, apiKey: 'PLACEHOLDER' }), false, 'the Picker needs its key');
+  assert.equal(G.pickable({ ...REAL, appId: '' }), false, 'and the project number');
 });
 
 test('placeholders: status says setup on every browser, and connect does nothing', async () => {
@@ -192,15 +202,33 @@ test('web flow: silent renewal with prompt=none and the account as login_hint, n
   noToken(h);
 });
 
-test('Firefox: the loopback redirect Google accepts, passed as redirect_uri, and no Chromium-only options', async () => {
+test('Firefox: the loopback redirect Google accepts, in the url only, and only the keys Firefox\'s schema takes', async () => {
   const h = harness({ flow: 'web', firefox: true });
-  await h.g.connect();
+  assert.deepEqual(await h.g.connect(), { ok: true, email: 'student@school.edu' });
   const d = h.log.launch[0];
-  assert.equal(d.redirect_uri, 'http://127.0.0.1/mozoauth2/0123456789abcdef0123456789abcdef01234567');
-  assert.equal(new URL(d.url).searchParams.get('redirect_uri'), d.redirect_uri);
+  assert.deepEqual(Object.keys(d).sort(), ['interactive', 'url']);
+  assert.equal(new URL(d.url).searchParams.get('redirect_uri'), 'http://127.0.0.1/mozoauth2/0123456789abcdef0123456789abcdef01234567');
   h.tick(3600 * 1000);
-  await h.g.token();
-  assert.deepEqual(Object.keys(h.log.launch[1]).sort(), ['interactive', 'redirect_uri', 'url']);
+  assert.equal(await h.g.token(), 'web-tok-2');
+  assert.deepEqual(Object.keys(h.log.launch[1]).sort(), ['interactive', 'url']);
+  assert.equal(h.log.launch[1].interactive, false);
+  assert.equal((await h.g.pick()).ok, true);
+  assert.deepEqual(Object.keys(h.log.launch.at(-1)).sort(), ['interactive', 'url'], 'the picker too');
+});
+
+test('without the Picker key, signing in, the token and Disconnect work, and only Pick says setup', async () => {
+  for (const flow of ['chrome', 'web']) {
+    const h = harness({ flow, config: { ...REAL, apiKey: 'PLACEHOLDER' } });
+    assert.deepEqual(await h.g.status(), { ok: true, flow, email: null }, `${flow}: Settings offers Connect`);
+    assert.deepEqual(await h.g.connect(), { ok: true, email: 'student@school.edu' });
+    assert.equal(typeof await h.g.token(), 'string');
+    assert.equal(await h.g.account(), 'student@school.edu');
+    const before = h.log.launch.length;
+    assert.deepEqual(await h.g.pick(), { ok: false, why: 'setup' });
+    assert.equal(h.log.launch.length, before, 'no picker opened');
+    assert.ok(!h.log.fetch.some((f) => C.picker.includes(f.url)), 'nor probed');
+    assert.deepEqual(await h.g.disconnect(), { ok: true, revoked: true, had: true });
+  }
 });
 
 test('a reply that isn\'t for our state is refused, and nothing is kept', async () => {
