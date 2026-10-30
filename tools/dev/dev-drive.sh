@@ -11,12 +11,12 @@
 # Then chrome://extensions → Developer mode → Load unpacked → that folder. Remove the store's Glaze from that Chrome
 # profile first: two copies can't share one ID.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 key_file="${1:?usage: tools/dev/dev-drive.sh <public-key file> [folder]}"
 out="${2:-dist/glaze-dev-drive}"
 
-./package.sh >/dev/null
-version="$(node -p 'require("./manifest.json").version')"
+tools/build/package.sh >/dev/null
+version="$(node -p 'require("./extension/manifest.json").version')"
 rm -rf "$out"
 mkdir -p "$out"
 unzip -q "${DIST:-dist}/glaze-v$version.zip" -d "$out"
@@ -32,7 +32,7 @@ fs.writeFileSync(file, src.replace('\n  const ON = false;\n', '\n  const ON = tr
 const { oauth } = require(path.resolve('tools/build/oauth-manifest.js'));
 const at = path.join(out, 'manifest.json');
 const manifest = oauth(JSON.parse(fs.readFileSync(at, 'utf8')), {
-  target: 'chrome', calendar: require(path.resolve('planner/gcal.js')).ON === true, drive: true, config: require(path.resolve('background/google-config.js')),
+  target: 'chrome', calendar: require(path.resolve('extension/planner/gcal.js')).ON === true, drive: true, config: require(path.resolve('extension/background/google-config.js')),
 });
 if (!manifest.oauth2) throw new Error('background/google-config.js: the Chrome client is not set');
 manifest.key = key;
