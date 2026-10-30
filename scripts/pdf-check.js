@@ -517,7 +517,7 @@ const photo = () => {
     await page.click('[data-tool="text"]');
     await page.mouse.click(b.x + 120, b.y + 380);
     await until(() => page.evaluate(() => document.activeElement?.closest?.('.freeTextEditor')), 'the text box');
-    await page.keyboard.type('Glaze note');
+    await page.keyboard.type('Glaze note', { delay: 250 });
     await page.click('[data-tool="text"]');
     await until(() => page.evaluate(() => [...document.querySelectorAll('.page[data-page-number="1"] .freeTextEditor')].some((e) => /Glaze note/.test(e.textContent))), 'the note kept');
     const h3 = await autosaved(h2, 'the note saved');
