@@ -108,7 +108,7 @@ for (const [lang, account] of Object.entries(languages)) {
 test('Calendar\'s Disconnect discloses that, while Google Drive shares the grant, it revokes nothing and keeps identity', () => {
   const bg = read('background/background.js');
   const bye = bg.slice(bg.indexOf('  disconnect: async (m) => {'), bg.indexOf('  sync: async (m, epoch) => {'));
-  assert.match(bye, /google\?\.email === 'string'\) \{\s*await chrome\.storage\.local\.remove\(\['gcal', 'gcalSync'\]\);[\s\S]*?shared: true \};/, 'the code: Drive connected, only Calendar\'s state goes');
+  assert.match(bye, /if \(driveOn && drive\.flow === 'chrome'\) \{\s*await chrome\.storage\.local\.remove\(\['gcal', 'gcalSync'\]\);[\s\S]*?shared: true \};/, 'the code: Drive connected through Chrome\'s own client, only Calendar\'s state goes');
   const network = policy.slice(policy.indexOf('## Network requests'));
   const calendar = network.slice(network.indexOf('- **Google Calendar sync**'), network.indexOf('- **Google Drive** (off until you connect)'));
   assert.match(calendar.slice(calendar.indexOf('**Disconnect**')), /Google Drive[^.]*same access[^.]*doesn't revoke/);
