@@ -213,3 +213,14 @@ test('a 40 MB PDF saved six times: versions hold at most CAP.files of files, the
   assert.equal(held.size, 5, `five files of 40 MB: ${list.map((v) => `${v.reason}:${v.file.hash.slice(0, 6)}`).join(' ')}`);
   assert.equal(store.data[`writerPaper:${k}`].file.hash, fake(6).hash);
 });
+
+test('page replacement refuses a base changed by another viewer before publishing history or Undo', async () => {
+  const { P, files, store, clock } = make(), k = key();
+  const [a, b, c] = await Promise.all([1, 2, 3].map((i) => files.put(bytes(100, i), 'application/pdf')));
+  await P.save(k, { kind: 'pdf', file: a, size: a.size, pages: 1 }, { reason: 'import' });
+  clock.t++;
+  await P.save(k, { file: b, size: b.size }, { reason: 'edit' });
+  const before = structuredClone(store.data);
+  await assert.rejects(P.save(k, { file: c, size: c.size }, { reason: 'edit', expectedKind: 'pdf', expectedFile: a }), /document changed in another tab/);
+  assert.deepEqual(store.data, before, 'neither the document nor the version used as Undo changes');
+});
