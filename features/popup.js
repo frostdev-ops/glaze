@@ -7,7 +7,7 @@
 //     label?, meta?,                            // meta: one line under the title (course · author · date)
 //     body,                                     // a Node, an array of them, a string, or an async () => any of those:
 //                                               // until it settles the pop-up says Loading… (aria-busy)
-//     actions?,                                 // Nodes for its footer (an "Open in …" link)
+//     actions?,                                 // Nodes for its footer (an "Open in …" link), then a Close button
 //     source?,                                  // the Element (or () => Element) it came from: it grows out of it, and
 //                                               // focus goes back to it when it closes
 //     wide?,                                    // a wider pop-up (tables)
@@ -20,7 +20,7 @@
 //   GZ_POPUP.current()                          // the open handle, or null; GZ_POPUP.kind() the motion it would use
 //
 // A real modal <dialog> (the rest of the page inert, focus inside it from the start), named by its title, closed by Escape,
-// its Close button or a click outside it, focus then going back where it came from at once, before the closing motion.
+// either Close button or a click outside it, focus then going back where it came from at once, before the closing motion.
 // It lives in a closed shadow root, so the school's styles and scripts can't reach in, and wears the Look's tokens (the
 // page's --gz-* custom properties), light and dark. Motion (lib/popup.js motion): the genie out of `source` on Expressive,
 // a scale and fade on Subtle, a fade or nothing as the "Pop-up animation" setting says, nothing with motion off or reduced.
@@ -76,11 +76,14 @@ h2 { margin: 0; font: 600 1.15em/1.3 var(--gz-font-head, var(--gz-font, system-u
 a { color: var(--gz-accent, #0b6bcb); text-underline-offset: 0.15em; }
 .wait { margin: 0; color: var(--gz-ink-muted, #5b6876); }
 .body .files { display: flex; flex-wrap: wrap; gap: 0.35em 0.9em; margin: 1em 0 0; padding: 0.7em 0 0; list-style: none; font-size: 0.9em; border-top: 1px solid var(--gz-line, #d5dbe1); }
-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5em; padding: 0.7em 1.1em 0.9em; border-top: 1px solid var(--gz-line, #d5dbe1); }
+footer { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 0.5em; padding: 0.7em 1.1em 0.9em; border-top: 1px solid var(--gz-line, #d5dbe1); }
 footer:empty { display: none; }
 .go { display: inline-flex; align-items: center; min-height: 2.25em; padding: 0.3em 1em; font-weight: 600; text-decoration: none; color: var(--gz-accent-ink, #fff);
   background: var(--gz-accent, #0b6bcb); border: 1px solid var(--gz-accent, #0b6bcb); border-radius: 999px; }
 .go:hover { filter: brightness(1.08); }
+.shut { min-height: 2.25em; padding: 0.3em 1em; font: inherit; font-weight: 600; color: var(--gz-ink, #1d2733); background: transparent;
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong, #9aa7b4)); border-radius: 999px; cursor: pointer; }
+.shut:hover { background: var(--gz-row-hover, rgb(0 0 0 / 0.06)); }
 :focus-visible { outline: 2px solid var(--gz-accent, #0b6bcb); outline-offset: 2px; }
 h2:focus-visible { outline-offset: 4px; }`;
 
@@ -135,7 +138,9 @@ h2:focus-visible { outline-offset: 4px; }`;
     const x = make('button', { type: 'button', className: 'x', textContent: '×', title: t('Close') });
     x.setAttribute('aria-label', t('Close'));
     const body = make('div', { className: 'body', dir: 'auto' });
-    const foot = make('footer', {}, ...nodes(o.actions));
+    const acts = nodes(o.actions);
+    const shut = acts.length ? make('button', { type: 'button', className: 'shut', textContent: t('Close') }) : null;
+    const foot = make('footer', {}, ...acts, shut);
     const box = make('dialog', { className: o.wide ? 'wide' : '' }, make('header', {}, title, meta, x), body, foot);
     if (o.label) box.setAttribute('aria-label', o.label); else box.setAttribute('aria-labelledby', 'gz-popup-title');
     root.append(veil, box);
@@ -285,6 +290,7 @@ h2:focus-visible { outline-offset: 4px; }`;
     // The browser closing it by itself (a repeated Escape it no longer lets the page refuse).
     box.addEventListener('close', () => { if (live && !box.open) close(true); });
     x.addEventListener('click', () => close());
+    shut?.addEventListener('click', () => close());
     box.addEventListener('click', (e) => {
       if (e.target !== box) return;
       const r = box.getBoundingClientRect();
