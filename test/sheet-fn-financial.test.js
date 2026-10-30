@@ -105,7 +105,7 @@ test('NPER and RATE with Microsoft\'s data; RATE iterates from its guess and giv
     ['NPER(A2/12, A3, A4, A5)', '60.0821229', 60.082122853761723],
     ['NPER(A2/12, A3, A4)', '-9.57859404', -9.5785940398131667],
   ]);
-  cases(e, [['NPER(0,-100,1000)', 10], ['NPER(0,-100,1000,-500)', 5], ['NPER(0.1,-50,1000)', '#NUM!'], ['NPER(0,0,1000)', '#NUM!']]);
+  cases(e, [['NPER(0,-100,1000)', 10], ['NPER(0,-100,1000,-500)', 5], ['NPER(0.1,-50,1000)', '#NUM!'], ['NPER(0,0,1000)', '#DIV/0!']]);
   // rate-function: A2 4, A3 -200, A4 8000; the page shows 1% and 9.24%.
   const r = book({ A2: 4, A3: -200, A4: 8000 });
   examples(r, [
@@ -169,7 +169,7 @@ test('XNPV and XIRR with Microsoft\'s data; dates truncated, out of order, misma
   assert.ok(Math.abs(calc(e, 'XNPV(XIRR(A2:A6,B2:B6),A2:A6,B2:B6)')) < 1e-6);
   cases(e, [
     ['XNPV(.09,A2:A6,H2:H6)', '#NUM!'], ['XIRR(A2:A6,H2:H6)', '#NUM!'], ['XNPV(.09,A2:A6,B2:B5)', '#NUM!'], ['XIRR(A2:A5,B2:B6)', '#NUM!'],
-    ['XIRR(A3:A6,B3:B6)', '#NUM!'], ['XNPV(.09,A2:A6,{39448,39508,39751,39859,-1})', '#VALUE!'], ['XNPV("x",A2:A6,B2:B6)', '#VALUE!'],
+    ['XIRR(A3:A6,B3:B6)', '#NUM!'], ['XNPV(.09,A2:A6,{39448,39508,39751,39859,-1})', '#NUM!'], ['XNPV("x",A2:A6,B2:B6)', '#VALUE!'],
   ]);
 });
 
@@ -250,4 +250,33 @@ test('CUMIPMT and CUMPRINC with Microsoft\'s data and their #NUM! rules', () => 
       [`${name}(A2/12,360,A4,2,1,0)`, '#NUM!'], [`${name}(A2/12,360,A4,1,1,2)`, '#NUM!'], [`${name}(A2/12,360,A4,1,361,0)`, '#NUM!'], [`${name}(A2/12,360,A4,1,1)`, '#VALUE!'],
     ]);
   }
+});
+
+// Excel 16.114.1, hidden task-owned workbook; recorded in the review's probe transcript.
+test('RATE and IRR keep iterates in the valid domain and converge on ordinary loans and negative returns', () => {
+  const e = book();
+  for (const [f, want] of [
+    ['RATE(360,-1000,100000)', 0.00968924582258192], ['RATE(48,-200,8000,0,0,0.5)', 0.00770147248844789],
+    ['IRR({-100,1})', -0.99], ['IRR({-100,1},0.5)', -0.99], ['XIRR({-100,1},{1,366})', -0.99],
+  ]) rel(calc(e, f), want, f);
+  cases(e, [['RATE(1,0,100,-110,0,-2)', '#VALUE!'], ['IRR({-100,110},-2)', '#VALUE!'], ['XIRR({-100,110},{1,366},-1)', '#VALUE!']]);
+});
+test('financial singularities and RRI domains match Excel', () => {
+  cases(book(), [['NPER(0,0,1000)', '#DIV/0!'], ['PV(-1,2,100)', '#DIV/0!'], ['RRI(1,100,-100)', '#NUM!'], ['RRI(1,-100,100)', '#NUM!']]);
+});
+test('XNPV rejects nonnumeric schedules and rates at or below -1 with NUM', () => {
+  cases(book(), [
+    ['XNPV(-2,{-100,110},{1,366})', '#NUM!'], ['XNPV(0.1,{-100,"x",110},{1,366,731})', '#NUM!'],
+    ['XNPV(0.1,{-100,110},{1,-1})', '#NUM!'], ['XNPV(0.1,{-100,110},{1,"x"})', '#NUM!'],
+    ['XIRR(A1:A2,{1,366})', '#NUM!'],
+  ]);
+});
+test('MIRR discounts actual outflows without zero divided by zero', () => {
+  const e = book();
+  for (const f of ['MIRR({-100,0,110},-1,0.1)', 'MIRR({-100,0,110},-2,-2)']) rel(calc(e, f), 0.0488088481701516, f);
+  cases(e, [['MIRR({-100,-10,110},-1,0.1)', '#DIV/0!']]);
+});
+test('DB truncates month and period after checking positive periods, and bounds its final period', () => {
+  const e = book();
+  cases(e, [['DB(1000,100,5,1,7.9)', 215.25], ['DB(1000,100,5,0.9)', 369], ['DB(1000,100,5,1,12.9)', 369], ['DB(1000,100,5,6)', '#NUM!']]);
 });
