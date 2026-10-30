@@ -91,7 +91,7 @@ const holds = (bytes, value) => {
       if (u.pathname === '/gz-check/harness.js') return r.fulfill({ contentType: 'text/javascript', body: HARNESS });
       if (req.isNavigationRequest() && u.pathname === ATTEMPT) return r.fulfill({ contentType: 'text/html', body: fixture('ultra-writer-attempt.html').replace('<head>', '<head><base href="/ultra/">').replace('</body>', '<script src="/gz-check/quill.js"></script><script src="/gz-check/harness.js"></script></body>')
         .replace('id="bb-editorassignment-attempt-authoring-instructions">', `id="bb-editorassignment-attempt-authoring-instructions"><p><a href="${FORM}" data-bbtype="attachment">Field trip form.pdf</a></p>`) });
-      if (u.pathname === FORM) { attachment.gets++; return r.fulfill({ contentType: 'application/pdf', body: attachment.bytes }); }
+      if (u.pathname === FORM) { attachment.gets++;  return r.fulfill({ status: 200, contentType: 'application/pdf', body: Buffer.from(attachment.bytes) }); }
       if (req.isNavigationRequest()) return r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Blank</title>' });
       let data = { results: [] };
       if (u.pathname.endsWith('/users/me')) data = { id: '_900_1', userName: 'synthetic', givenName: 'Alex', familyName: 'Rivera' };
@@ -231,7 +231,7 @@ const holds = (bytes, value) => {
     const gets = attachment.gets;
     await opener.click();
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'pdf' && document.querySelectorAll('.gk .pdfViewer .page').length === 3), 'the attachment in the PDF viewer', 40000,
-      () => fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, card: !!document.querySelector('.gi-layer'), said: document.querySelector('.gp-toast, .gq-said')?.textContent })));
+      async () => ({ gets: attachment.gets - gets, ...await fr.evaluate(() => ({ doc: document.documentElement.dataset.doc, card: !!document.querySelector('.gi-layer'), current: GZ_WRITER_PAPER.current()?.kind?.(), said: [...document.querySelectorAll('[role="status"], [role="alert"]')].map((x) => x.textContent).filter(Boolean).join(' | ') })) }));
     rec = await record(); vs = await versions();
     check(attachment.gets === gets + 1 && rec.kind === 'pdf' && sha(Buffer.from(rec.file, 'base64')) === sha(pdfBytes) && vs.some((v) => v.reason === 'import' && (v.kind || 'paper') === 'paper') && await fr.evaluate(() => !document.querySelector('.gi-layer')) && await p.evaluate(() => __uploads.length === 0),
       `the attachment fetched once, opened with no card: the record its PDF, the paper a version first, nothing uploaded (${vs.map((v) => `${v.reason}:${v.kind || 'paper'}`).join(', ')})`);

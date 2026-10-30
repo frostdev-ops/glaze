@@ -6,7 +6,7 @@
 // paper, what it held kept as a version first (writer-paper.js importFile, whose toast has Undo); Open in Glaze shows the
 // file in its kind's viewer in the paper's place, the paper kept as a version first. The close button, Escape and the dim
 // change nothing.
-// page → frame: import:file { name, mime, bytes }.
+// page → frame: import:file { name, mime, bytes, open } (open: an attachment's Open in Glaze, no card), import:failed.
 // Classic script after writer-submit.js.
 var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
   const frame = globalThis.GZ_WRITER_FRAME;
@@ -117,7 +117,11 @@ var GZ_WRITER_IMPORT = globalThis.GZ_WRITER_IMPORT || (() => {
     if (!api || request !== requests) return;
     await P().need(['lib/writer-submit.js']);
     if (request !== requests || P()?.current() !== api || L().fileError({ name: m.name, size: m.bytes.byteLength, type: m.mime ?? '' })) return;
-    bring(api, new File([m.bytes], m.name, { type: typeof m.mime === 'string' ? m.mime : '' }));
+    const file = new File([m.bytes], m.name, { type: typeof m.mime === 'string' ? m.mime : '' });
+    // An attachment's Open in Glaze (lib/writer-context-assignment.js open): straight to its kind, no card, while it is on.
+    if (m.open === true) { if (K()?.opens().includes(L().kindOf(m.name)) && !api.importing?.() && !SHEET()?.busy()) { close(); K().open(api, file); } return; }
+    bring(api, file);
   });
+  frame.handle('import:failed', () => { P()?.current()?.notify?.('That file could not be read.'); });
   return { bring, about, close, opened: () => !!card };
 })();
