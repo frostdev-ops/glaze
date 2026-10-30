@@ -186,6 +186,13 @@ test('frames: a chartex chart, 3-D, a second value axis, a missing part', async 
   assert.equal(fr.marks.kind, '«Waterfall chart»', 'the kind goes through the page\'s words');
 });
 
+test('frames: chartex reads its title value without text in its formatting', () => {
+  const c = CX.chartEx('<cx:chartSpace xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart><cx:title><cx:tx><cx:txData><cx:v>Cash &amp; flow</cx:v></cx:txData></cx:tx><cx:txPr><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:endParaRPr/></a:p></cx:txPr></cx:title><cx:plotArea><cx:plotAreaRegion><cx:series layoutId="waterfall"/></cx:plotAreaRegion></cx:plotArea></cx:chart></cx:chartSpace>');
+  const r = CX.resolve(c, () => null);
+  assert.deepEqual(r, { kind: 'frame', type: 'Waterfall chart', title: 'Cash & flow' });
+  assert.equal(CH.scene(r, 400, 300).marks.title, 'Cash & flow');
+});
+
 test('layout: a clustered column\'s bar widths from gapWidth and overlap, nice ticks from 0', async () => {
   const { wb } = await open();
   const [column] = drawn(wb);
