@@ -51,7 +51,7 @@ const sharedNote = async (d) => {
   const { sid } = await d.send('create', { kind: 'notes', title: 'Biology', key: NK, ids: [id] });
   return { id, sid };
 };
-const page = async (d, { note = '', relay: selected, observer = 'v2', permissions = true, prefs = G.GZ_DEFAULTS } = {}) => {
+const page = async (d, { note = '', relay: selected, observer = 'v2', permissions = true, prefs = G.GZ_DEFAULTS, dropSettings = false } = {}) => {
   const doc = { activeElement: null }, ids = new Map(), events = new Map(), calls = [], messages = [], disconnects = [], copied = [], opened = [], created = [], changes = [];
   const sync = area(prefs);
   let clock = 1000, watcher;
@@ -98,6 +98,8 @@ const page = async (d, { note = '', relay: selected, observer = 'v2', permission
     chrome: { storage: { sync, onChanged: { addListener(f) { changes.push(f); } } }, ...(permissions && { permissions: { contains: async () => true, request: async () => true } }), tabs: { create: async (tab) => { created.push(tab); } },
       runtime: { id: 'glaze', getURL: (f) => `chrome-extension://glaze/${f}`, connect: () => ({ onMessage: { addListener: (f) => messages.push(f) }, onDisconnect: { addListener: (f) => disconnects.push(f) }, disconnect() {},
         postMessage: (m) => { if (m.ticket) queueMicrotask(() => messages.forEach((f) => f({ id: m.id, ok: true })));
+          // dropSettings: the worker starts opening Settings, then the port goes before it answers.
+          else if (m.op === 'settings' && dropSettings) { handle(m); queueMicrotask(() => disconnects.forEach((f) => f())); }
           else if (m.op) handle(m).then((r) => messages.forEach((f) => f({ id: m.id, ...r }))); } }), sendMessage: handle },
     },
   });
@@ -134,6 +136,14 @@ test('quick sensitive clicks fail closed without verified IntersectionObserver v
     assert.deepEqual(p.created, [], 'the worker opens it: Safari kills the page when this frame calls tabs');
     p.disconnect();
   });
+});
+
+test('the share panel\'s Settings tries the other way only after a definite no, never twice for one click', async (t) => {
+  const server = await start(t), d = device(t, server), id = await seed(d);
+  const p = await page(d, { note: id, dropSettings: true });
+  p.click('settings'); await settle();
+  assert.deepEqual(p.opened.map((m) => m.op || m.type), ['settings'], 'a request that went unanswered may still have opened the tab');
+  assert.deepEqual(p.created, []);
 });
 
 test('quick visibility requires the whole button and resets the dwell for every question', async (t) => {

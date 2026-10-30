@@ -1,6 +1,8 @@
-// Glaze's pages a site can frame (manifest web_accessible_resources) never call tabs.* or windows.* themselves: WebKit takes
-// those only from the extension's own process, and Safari kills the page whose extension frame calls one ("This webpage was
-// reloaded because a problem occurred"). They ask the worker instead.
+// Glaze's pages a site can frame (manifest web_accessible_resources) never reach tabs or windows through chrome or browser:
+// WebKit takes those calls only from the extension's own process, and Safari kills the page whose extension frame makes one
+// ("This webpage was reloaded because a problem occurred"). They ask the worker instead. Static: each page's script tags
+// and the package scripts their code names (libraries loaded later), any such reference outside comments; an alias of
+// chrome itself would get past it.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -9,34 +11,54 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+const exists = (f) => fs.existsSync(path.join(root, f)) && fs.statSync(path.join(root, f)).isFile();
 const pages = () => JSON.parse(read('manifest.json')).web_accessible_resources
   .flatMap((w) => w.resources).filter((r) => r.endsWith('.html'));
-// The scripts a page loads, as paths from the package root.
-const scripts = (page) => [...read(page).matchAll(/<script[^>]*\bsrc="([^"]+)"/g)]
-  .map((m) => (m[1].startsWith('/') ? m[1].slice(1) : path.posix.normalize(path.posix.join(path.posix.dirname(page), m[1]))));
-const CALL = /\b(?:chrome|browser)\s*\.\s*(tabs|windows)\s*(?:\?\.|\.)\s*([a-zA-Z]+)/g;
+const from = (dir, src) => (src.startsWith('/') ? src.slice(1) : path.posix.normalize(path.posix.join(dir, src)));
+const tags = (page) => [...read(page).matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/g)].map((m) => from(path.posix.dirname(page), m[1]));
+const uncomment = (src) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+// Package scripts a file names in a string: './x.js' from its own folder, 'lib/x.js' or 'media.js' from the root or its folder.
+const named = (file, src) => [...src.matchAll(/['"`]([\w./-]+\.js)['"`]/g)]
+  .flatMap((m) => (/^\.\.?\//.test(m[1]) ? [] : [m[1]]).concat(from(path.posix.dirname(file), m[1]))).filter(exists);
+const REACH = /\b(?:chrome|browser)\s*(?:\?\.|\.)\s*(tabs|windows)\b|\b(?:chrome|browser)\s*(?:\?\.)?\s*\[\s*['"`](tabs|windows)['"`]\s*\]/g;
 
-test('no page a site can frame calls tabs or windows itself', () => {
+const reached = (page) => {
+  const seen = new Set(), found = [];
+  const walk = (f) => {
+    if (seen.has(f)) return;
+    seen.add(f);
+    assert.ok(exists(f), `${page}: ${f}`);
+    const src = uncomment(read(f));
+    for (const m of src.matchAll(REACH)) found.push(`${page} → ${f}:${src.slice(0, m.index).split('\n').length} ${m[0].replace(/\s+/g, '')}`);
+    for (const n of named(f, src)) walk(n);
+  };
+  for (const f of tags(page)) walk(f);
+  return { files: seen, found };
+};
+
+test('no page a site can frame reaches tabs or windows itself', () => {
   const list = pages();
   for (const p of ['options.html', 'writer.html', 'sharing/quick.html', 'papers.html']) assert.ok(list.includes(p), p);
   const found = [];
   for (const page of list) {
-    const files = scripts(page);
-    assert.ok(files.length, `${page} loads scripts`);
-    for (const f of files) {
-      assert.ok(fs.existsSync(path.join(root, f)), `${page}: ${f}`);
-      read(f).split('\n').forEach((line, i) => {
-        if (/^\s*\/\//.test(line)) return;
-        for (const m of line.matchAll(CALL)) found.push(`${page} → ${f}:${i + 1} ${m[1]}.${m[2]}`);
-      });
-    }
+    const r = reached(page);
+    assert.ok(r.files.size, `${page} loads scripts`);
+    found.push(...r.found);
   }
+  assert.ok(reached('writer.html').files.has('lib/writer-docx.js'), 'libraries Writer loads later are scanned too');
   assert.deepEqual(found, []);
+});
+
+test('the scan sees each way of writing the call', () => {
+  for (const code of ['chrome.tabs.create({})', 'chrome?.tabs.create({})', 'chrome.tabs?.create', 'browser.windows.getAll()', "chrome['tabs'].query({})", 'chrome\n  .tabs\n  .create({})']) {
+    assert.equal([...uncomment(code).matchAll(REACH)].length, 1, code);
+  }
+  assert.equal([...uncomment('// chrome.tabs.create\n/* browser.tabs */ x').matchAll(REACH)].length, 0, 'comments');
 });
 
 test('the Notes share panel\'s Settings button asks the worker for Settings at its sessions', () => {
   const src = read('sharing/quick.js');
   const click = src.slice(src.indexOf("$('#settings').addEventListener('click'"), src.indexOf('const startTimer'));
   assert.match(click, /request\(\{ op: 'settings' \}\)/, 'with its port once started: the note\'s account comes along');
-  assert.match(click, /type: 'glaze:settings-at', hash: '#sharing\/sessions'/, 'otherwise, and when the port fails');
+  assert.match(click, /type: 'glaze:settings-at', hash: '#sharing\/sessions'/, 'otherwise, or after a definite no');
 });
