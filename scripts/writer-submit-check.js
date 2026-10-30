@@ -58,7 +58,7 @@ const still = async (target) => { await until(() => target.evaluate(STILL), 'at 
 const stillAll = async (p) => { for (const f of p.frames()) await until(() => f.evaluate(STILL).catch(() => true), 'frames at rest'); await drawn(p); };
 
 // A student's click on something in Writer's frame, made as one: the element settled where it is (nothing animating on it or
-// its ancestors, the same box two polls running), in sight in the page, and the top thing at its centre both in the frame
+// its ancestors, the same box three polls running), in sight in the page, and the top thing at its centre both in the frame
 // (elementFromPoint there: no part of Writer covers it) and in the page (the frame itself there); then the mouse there, and
 // the click heard by that element. Headless Chromium sometimes gives a press over the frame to the page's <iframe> element
 // instead (most often just after a sheet opens, and under load): the frame hears nothing, so nothing happened, and the press
@@ -132,7 +132,9 @@ const tap = async (fr, sel, { count = 1 } = {}) => {
     }
     if (heard === 'heard') return;
     if (!heard) throw Error(`${sel}: the click reached nothing`);
+    if (heard !== 'given to the page\'s <iframe>') throw Error(`${sel}: ${heard}`);
     taps.again.push(`${sel}: ${heard} (aimed at ${Math.round(aim.x)},${Math.round(aim.y)} in the frame)`);
+    console.log(`tap retry: ${taps.again.at(-1)}`);
     if (attempt >= 5) throw Error(`${sel}: ${attempt} clicks, none heard (${taps.again.slice(-attempt).join('; ')})`);
     // What the browser routes by is stale until the page re-lays the frame out (a repaint inside it doesn't do): its width
     // a pixel less for two frames, then as it was.
@@ -609,7 +611,7 @@ const HARNESS = `(() => {
     await tap(fr, '.gp-status button:last-child');
     await until(() => fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role=menuitem]')].some((b) => b.textContent === 'Import…')), 'Import… in the menu');
     saved.menu = await ishot(p, 'import-menu-dark.png');
-    const [chooser] = await Promise.all([p.waitForEvent('filechooser'), fr.evaluate(() => [...document.querySelectorAll('.gp-menu [role=menuitem]')].find((b) => b.textContent === 'Import…').click())]);
+    const [chooser] = await Promise.all([p.waitForEvent('filechooser'), tap(fr, '.gp-menu [role=menuitem]:text-is("Import…")')]);
     await chooser.setFiles(path.join(files, 'Rivera_Essay2.docx'));
     await until(() => cardOf(fr), 'the card from Import…');
     check(true, '⋯ → Import… brings a chosen .docx to the same card');
