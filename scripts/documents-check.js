@@ -1535,7 +1535,7 @@ const PROBE = ({ lang }) => {
           return k.importFile(f, opts);
         } });
         const dt = new DataTransfer();
-        for (let i = 1; i <= 20; i++) dt.items.add(new File([new Uint8Array(bytes)], `Batch ${i}.pdf`, { type: 'application/pdf' }));
+        for (let i = 1; i <= 20; i++) dt.items.add(new File([new Uint8Array(bytes)], `Queued ${i}.pdf`, { type: 'application/pdf' }));
         document.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
       }, Array.from(require('./pdf-fixtures.js').FIXTURES.three()));
       await until(() => im.evaluate(() => typeof __batchRead === 'function'), 'batch reading');
@@ -1543,8 +1543,8 @@ const PROBE = ({ lang }) => {
       check(queued.length === 20 && queued.every((s) => s === 'Reading…'), `twenty dropped files each show a stage immediately (${JSON.stringify(queued)})`);
       await im.evaluate(() => __batchRead());
       await until(() => im.evaluate(() => !document.querySelector('.gd-pending')), 'batch imported', 60000);
-      const batch = await im.evaluate(() => ({ titles: [...document.querySelectorAll('.gd-card .gd-title')].map((el) => el.textContent).filter((title) => title.startsWith('Batch')), search: document.getElementById('gd-q').value }));
-      check(batch.titles.filter((title) => /^Batch \d+$/.test(title)).length === 20, `all twenty queued imports become their own documents (${JSON.stringify(batch)})`);
+      const batch = await im.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card .gd-title')].map((el) => el.textContent).filter((title) => /^Queued \d+$/.test(title)));
+      check(batch.length === 20, `all twenty queued imports become their own documents (${batch.length})`);
       await shot(im, 'import-done-1280-en.png');
       await im.close();
     }
