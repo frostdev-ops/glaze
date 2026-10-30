@@ -1108,6 +1108,19 @@ const HARNESS = require('./ultra-attempt-harness.js');
       const cv = await until(() => submitted(ckey), 'the compact submitted version');
       check((cv.attached || []).map((a) => a.name).join('|') === cnames.join('|'), 'compact: the submitted version keeps what was attached');
       await p.close();
+      // The external-file API can supply an arbitrary filename; the note remains plain text in real Quill.
+      await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('writerSubmit:'))); });
+      ({ p, el, fr } = await openCompact());
+      await fr.evaluate(() => GZ_WRITER_SUBMIT_SHEET.open(GZ_WRITER_PAPER.current(), null, { attach: { key: 'missing', kind: 'pdf', title: 'missing' } }));
+      await sheetOpen(fr);
+      await until(() => fr.evaluate(() => !!document.querySelector('.gs-err').textContent), 'missing document refused');
+      const inertName = '<img src=x onerror=globalThis.__filenameInjected=1>**[notes]**.bin';
+      check(await fr.evaluate((name) => GZ_WRITER_SUBMIT_SHEET.add({ name, mime: 'application/octet-stream', bytes: new Uint8Array([1, 2, 3]) }), inertName), 'external file accepted by the sheet');
+      await ready(fr, 1, 'external file staged');
+      await tap(fr, '.gs-primary');
+      await until(() => p.evaluate(() => !!document.getElementById('ultra-confirm')), 'external file submitted');
+      check(await p.evaluate((name) => __text().includes(`Attached: ${name}`) && !document.querySelector('.ql-editor img') && !globalThis.__filenameInjected, inertName), 'HTML and Markdown in filenames remain inert text in Blackboard');
+      await p.close();
       await setFull(true);
     }
 
