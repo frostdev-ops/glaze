@@ -2,6 +2,17 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const sheet = require('./helpers/writer-submit-sheet.cjs');
 
+test('a viewer rebuilds its file after saving instead of reusing preview bytes', async () => {
+  const s = sheet();
+  s.api.kind = () => 'pdf'; s.api.ext = () => '.pdf'; delete s.api.editor;
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.edit(); s.click('.gs-primary'); await s.flush();
+  assert.equal(s.builds.length, 2, 'the saved viewer file is built again');
+  s.builds[1].resolve(); await s.flush();
+  const sent = s.messages.find((m) => m.type === 'submit:go');
+  assert.equal(new Uint8Array(sent.bytes)[0], 2);
+});
+
 test('review: a paper changed during preview export cannot submit stale cached bytes', async () => {
   const s = sheet(); await s.open();
   assert.equal(s.builds.length, 1);

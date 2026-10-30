@@ -143,7 +143,7 @@ const viewer = async () => {
     into: async () => (await P.save(KEY, { kind: 'pdf', file: 'TkVX', size: 3 }, { reason: 'import' })).paper };
   const DK = require('../lib/doc-kinds.js');
   const ctx = vm.createContext({ console: { error() {} }, document, GZ_WRITER_PAPERS: { open: () => P },
-    GZ_DOC_KINDS: { KINDS: DK.KINDS, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], ...implementation }) },
+    GZ_DOC_KINDS: { KINDS: DK.KINDS, kindOf: DK.kindOf, settled: async () => {}, get: (id) => ({ ...DK.KINDS[id], ...implementation }) },
     GZ_WRITER_FRAME: { t: (s) => s, say() {}, on() {} }, GZ_WRITER_SETTINGS: { now: () => ({ pdf: true }) },
     GZ_WRITER_SUBMIT_LIB: L, GZ_WRITER_PAPER: { need: async () => {}, submit() {} } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'writer-kinds.js'), 'utf8'), ctx);
