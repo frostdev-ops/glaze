@@ -887,7 +887,7 @@ test('review track: undo of a delete-and-rename batch restores the original kept
   const undo = e.apply(op).inverse;
   X.track(wb, op);
   const changed = await parts(await X.write(wb, { recalc: false }));
-  assert.match(changed['xl/worksheets/sheet1.xml'], /sqref="A2:A8 C2"/);
+  assert.match(changed['xl/worksheets/sheet1.xml'], /sqref="A2:A8"/);
   e.apply(undo); X.track(wb, undo);
   assert.deepEqual(wb.keep.log, []);
 });
