@@ -1,5 +1,5 @@
-// Slide decks on the Documents page (papers.html), with Settings → Writer → Slides on (writer.slides, off by default; off,
-// this registers nothing and the page is as it was): .pptx and .ppsx files import as documents of the slides kind
+// Slide decks on the Documents page (papers.html). Settings → Writer → Slides (writer.slides, off by default) permits
+// importing .pptx and .ppsx files; existing decks always remain available for viewing. Documents of the slides kind
 // (lib/doc-kinds.js), each card showing slide 1, and open in a viewer: a rail of thumbnails, the slide (lib/slides-render.js
 // on lib/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, and Present (a dialog, full screen
 // where the browser allows, Rimeward's keys, hidden slides skipped). Its chrome wears the Look; the slide stays as authored.
@@ -30,7 +30,10 @@
       if (!(bytes?.length <= STORE.max)) throw new RangeError(SAYS.size);
       return { file: b64(bytes), size: bytes.length, ext: String(ext || '').toLowerCase() === '.ppsx' ? '.ppsx' : '.pptx' };
     },
-    get: (rec) => { if (typeof rec?.file !== 'string') return null; try { return unb64(rec.file); } catch { return null; } },
+    get: (rec) => {
+      if (typeof rec?.file !== 'string' || !rec.file.length || rec.file.length > 4 * Math.ceil(STORE.max / 3)) return null;
+      try { const bytes = unb64(rec.file); return bytes.length <= STORE.max ? bytes : null; } catch { return null; }
+    },
   };
   let store = null;
   const papers = () => (store ||= GZ_WRITER_PAPERS.open());
@@ -63,14 +66,14 @@
   };
   // Pictures as blob: URLs, kept until the page goes.
   const made = new Set();
-  const blobs = async (bytes, deck, paths) => {
+  const blobs = async (bytes, deck, paths, inline = false) => {
     const out = new Map();
     for (const m of deck.media) {
       if (!paths.has(m.path)) continue;
       const b = await GZ_PPTX.media(bytes, m.path).catch(() => null);
       if (!b) continue;
-      const url = URL.createObjectURL(new Blob([b], { type: m.mime }));
-      made.add(url);
+      const url = inline ? `data:${m.mime};base64,${b64(b)}` : URL.createObjectURL(new Blob([b], { type: m.mime }));
+      if (!inline) made.add(url);
       out.set(m.path, url);
     }
     return out;
@@ -144,7 +147,8 @@
       await need(LIBS);
       const bytes = STORE.get(rec), deck = bytes && await GZ_PPTX.read(bytes).catch(() => null), s = deck?.slides[0];
       if (!s) return;
-      const media = await blobs(bytes, deck, mediaOf(s));
+      // Cards can be discarded and redrawn while the page lives; their images own no blob URLs.
+      const media = await blobs(bytes, deck, mediaOf(s), true);
       box.replaceChildren(R().stage(s, deck, { document, media, labels: LABELS(), scale: THUMB / R().px(deck.size.w) }));
     })().catch((e) => console.warn(e));
     return box;
@@ -178,8 +182,9 @@
   const exportFile = async (key) => {
     const f = await file(key);
     if (!f) return;
-    if (exported) URL.revokeObjectURL(exported);
+    if (exported) { URL.revokeObjectURL(exported); made.delete(exported); }
     exported = URL.createObjectURL(new Blob([f.bytes], { type: f.mime }));
+    made.add(exported);
     const a = document.createElement('a');
     a.href = exported;
     a.download = f.name;
@@ -251,15 +256,15 @@
     const notesB = btn({ id: 'gs-notes', class: 'gs-btn gs-label', 'aria-pressed': String(notesOpen) }, t('Notes'));
     const presentB = btn({ id: 'gs-present', class: 'gs-btn gs-label gs-go' }, icon('present'), h('span', { text: t('Present') }));
     const moreB = btn({ class: 'gs-btn gs-more', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': t('More'), title: t('More') }, icon('dots'));
-    const canvasEl = h('div', { id: 'gs-canvas', class: 'gs-canvas', tabindex: '-1' });
+    const canvasEl = h('div', { id: 'gs-canvas', class: 'gs-canvas', role: 'tabpanel', tabindex: '0' });
     const notesEl = h('section', { id: 'gs-notes-pane', class: 'gs-notes', 'aria-label': t('Notes'), hidden: !notesOpen });
-    const list = h('ol', { class: 'gs-rail-list' });
+    const list = h('ol', { class: 'gs-rail-list', role: 'tablist', 'aria-label': t('Slides'), 'aria-orientation': 'vertical' });
     const railEl = h('nav', { id: 'gs-rail', class: 'gs-rail', 'aria-label': t('Slides') }, list);
     const rail = (deck?.slides || []).map((s, i) => {
       const name = t('Slide {n}', { n: i + 1 });
-      const b = btn({ class: 'gs-rail-b', 'data-slide': String(i), 'data-hidden': s.hidden, 'aria-label': s.hidden ? `${name} (${t('Hidden')})` : name, onclick: () => show(i) },
+      const b = btn({ class: 'gs-rail-b', role: 'tab', id: `gs-tab-${i}`, tabindex: '-1', 'aria-controls': 'gs-canvas', 'data-slide': String(i), 'data-hidden': s.hidden, 'aria-label': s.hidden ? `${name} (${t('Hidden')})` : name, onclick: () => show(i) },
         h('span', { class: 'gs-rail-n', text: String(i + 1) }), h('span', { class: 'gs-rail-pic' }));
-      list.append(h('li', {}, b));
+      list.append(h('li', { role: 'presentation' }, b));
       return b;
     });
     const view = h('div', { class: 'gp gp-standalone gs-view' },
@@ -295,16 +300,27 @@
       prevB.disabled = cur === 0;
       nextB.disabled = cur === n - 1;
       zoomB.textContent = zoom === 'fit' ? t('Fit') : `${Math.round(zoom * 100)}%`;
-      for (const [i, b] of rail.entries()) b.setAttribute('aria-current', String(i === cur));
+      for (const [i, b] of rail.entries()) {
+        b.setAttribute('aria-current', String(i === cur));
+        b.setAttribute('aria-selected', String(i === cur));
+        b.tabIndex = i === cur ? 0 : -1;
+      }
+      canvasEl.setAttribute('aria-labelledby', `gs-tab-${cur}`);
       rail[cur]?.scrollIntoView({ block: 'nearest' });
       findN.textContent = !term ? '' : hits.length ? t('{n} of {m}', { n: hit + 1, m: hits.length }) : t('No results');
       const x = hits[hit];
       if (x && x.slide === cur) {
-        const marks = [...canvasEl.querySelectorAll('mark.gs-hit'), ...notesEl.querySelectorAll('mark.gs-hit')], m = marks[x.nth];
-        if (m) {
-          m.classList.add('gs-hit-cur');
-          if (notesEl.contains(m) && !notesOpen) setNotes(true);
-          m.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        const groups = new Map();
+        for (const m of canvasEl.querySelectorAll('mark.gs-hit')) {
+          const id = m.getAttribute('data-gs-hit');
+          if (!groups.has(id)) groups.set(id, []);
+          groups.get(id).push(m);
+        }
+        const marks = [...groups.values(), ...[...notesEl.querySelectorAll('mark.gs-hit')].map((m) => [m])][x.nth];
+        if (marks?.length) {
+          for (const m of marks) m.classList.add('gs-hit-cur');
+          if (notesEl.contains(marks[0]) && !notesOpen) setNotes(true);
+          marks[0].scrollIntoView({ block: 'nearest', inline: 'nearest' });
         }
       }
     };
@@ -324,6 +340,15 @@
       }
     }, { root: railEl, rootMargin: '100% 0px' });
     for (const b of rail) near.observe(b);
+
+    railEl.addEventListener('keydown', (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const to = { ArrowDown: cur + 1, ArrowRight: cur + 1, ArrowUp: cur - 1, ArrowLeft: cur - 1, Home: 0, End: n - 1 }[e.key];
+      if (to === undefined) return;
+      e.preventDefault(); e.stopPropagation();
+      show(to);
+      rail[cur]?.focus({ preventScroll: true });
+    });
 
     // ---- zoom: Fit, or the next step either way from what shows
     const step = (dir) => {
@@ -392,6 +417,12 @@
       frame.addEventListener('click', () => go(1));
       dialog.addEventListener('keydown', (e) => {
         e.stopPropagation();
+        if (e.key === 'Tab') {
+          const buttons = [...dialog.querySelectorAll('button')], at = buttons.indexOf(document.activeElement);
+          if ((!e.shiftKey && at === buttons.length - 1) || (e.shiftKey && at <= 0)) {
+            e.preventDefault(); buttons[e.shiftKey ? buttons.length - 1 : 0].focus();
+          }
+        }
         if (NEXT.includes(e.key)) { e.preventDefault(); go(1); }
         if (BACK.includes(e.key)) { e.preventDefault(); go(-1); }
         if (e.key === 'Home') { e.preventDefault(); go(-seq.length); }
@@ -412,7 +443,7 @@
       presenting = dialog;
       addEventListener('resize', paint);
       document.addEventListener('fullscreenchange', left);
-      dialog.requestFullscreen?.().then(() => { full = true; }, () => {});
+      document.documentElement.requestFullscreen?.().then(() => { full = true; }, () => {});
     };
     presentB.addEventListener('click', present);
 
@@ -454,8 +485,8 @@
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
   };
 
-  // Registered only with the switch on, as it reads now; the page waits for this before it routes or draws.
+  // Viewing stays registered; only import follows the switch. The page waits before it routes or draws.
   const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.slides === true, () => false);
-  DK.wait(on.then((yes) => { if (yes) DK.register('slides', { edit, thumb, file, exportFile, text, importFile, measure, copy, says: SAYS, exportLabel: 'Export .pptx' }); }));
+  DK.wait(on.then((yes) => DK.register('slides', { edit, thumb, file, exportFile, text, ...(yes && { importFile }), measure, copy, says: SAYS, exportLabel: 'Export .pptx' })));
   globalThis.GZ_SLIDES_KIND = Object.freeze({ STORE });
 })();
