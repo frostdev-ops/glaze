@@ -3447,6 +3447,7 @@
   "Ruler": "Liniaal",
   "Light page": "Lichte pagina",
   "Full writer": "Volledige Writer",
+  "Spreadsheets": "Spreadsheets",
   "Too long for Ultra’s text box. Use Full writer.": "Te lang voor het tekstvak van Ultra. Gebruik Volledige Writer.",
   "The ruler above the page, showing the paragraph’s indents and tab stops, which you can drag. Off, the page starts right under the toolbar.": "De liniaal boven de pagina, met de inspringingen en tabstops van de alinea, die je kunt verslepen. Uit begint de pagina direct onder de werkbalk.",
   "Versions kept": "Bewaarde versies",
