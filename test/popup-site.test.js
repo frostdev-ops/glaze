@@ -166,6 +166,26 @@ test('popup: Firefox has no addHostAccessRequest, and the row works without it',
   assert.deepEqual(p.calls.map(([t]) => t), ['send', 'request']);
 });
 
+test('popup: the row says when its decision is final, after what it shows and asks the browser, on every path', async () => {
+  const cases = [
+    ['an LMS host not held', {}, { shown: true, access: 1, exec: 1 }],
+    ['a held Moodle site not on its list', { held: true, url: 'https://moodle.school.edu/my/', kind: 'moodle' }, { shown: true, access: 0, exec: 1 }],
+    ['a page that is no LMS', { kind: null, url: 'https://www.school.edu/' }, { shown: false, access: 0, exec: 1 }],
+    ['a page the detector can\'t reach', { execFails: true }, { shown: false, access: 0, exec: 1 }],
+    ['a held site on its LMS\'s list', { held: true, lists: { ultra: ['https://bb.school.edu'] } }, { shown: false, access: 0, exec: 0 }],
+    ['a browser page', { url: 'chrome://extensions/' }, { shown: false, access: 0, exec: 0 }],
+    ['Safari\'s manifest, which holds every site', { hosts: ['<all_urls>'] }, { shown: false, access: 0, exec: 0 }],
+    ['Glaze off', { enabled: false }, { shown: false, access: 0, exec: 1 }],
+  ];
+  for (const [why, o, want] of cases) {
+    const p = popup(o), row = p.el('#here'), set = row.setAttribute.bind(row);
+    let at = null;
+    row.setAttribute = (k, v) => { if (k === 'data-settled') at = { shown: !row.hidden, access: p.of('hostAccess').length, exec: p.of('exec').length }; set(k, v); };
+    await tick();
+    assert.deepEqual(at, want, why);
+  }
+});
+
 test('popup: with Glaze off the row waits, and shows once Glaze is on', async () => {
   const p = popup({ enabled: false });
   await tick();

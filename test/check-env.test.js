@@ -170,6 +170,22 @@ test('a check that wants only its own tabs closes Glaze\'s first screen, open al
   assert.deepEqual([...open, late, mine].map((p) => p.closed), [true, true, true, false]);
 });
 
+test('noFirstRun says when it has closed Glaze\'s first screen, so a check can start after the install\'s tab', async () => {
+  const { noFirstRun } = require('../scripts/check-env.js');
+  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
+  let onPage, closed = false, land;
+  const closing = noFirstRun({ pages: () => [], on: (e, f) => { if (e === 'page') onPage = f; } });
+  assert.equal(typeof closing?.then, 'function', 'a promise of the first screen closed');
+  closing.then(() => { closed = true; });
+  const tab = { at: 'about:blank', url: () => tab.at, close: async () => { tab.gone = true; }, waitForURL: async (re) => { await new Promise((r) => { land = r; }); if (!re.test(tab.at)) throw Error('timeout'); } };
+  onPage(tab);
+  await new Promise(setImmediate);
+  assert.equal(closed, false, 'not before the first screen opens');
+  tab.at = welcome; land();
+  await closing;
+  assert.equal(tab.gone, true);
+});
+
 test('ultraReady polls the page until Glaze has registered its Ultra script, and says so when it never does', async () => {
   const { ultraReady } = require('../scripts/check-env.js');
   const answers = [false, false, true];
@@ -197,4 +213,12 @@ test('installed polls a new profile until each install task has made its last wr
 
 test('the backup check lets each new profile finish installing before it seeds or compares storage', () => {
   assert.match(fs.readFileSync(path.join(scripts, 'backup-check.js'), 'utf8'), /await env\.installed\(page\)/);
+});
+
+test('the popup check starts after the install and its first screen, and reads the popup once its row has settled', () => {
+  const source = fs.readFileSync(path.join(scripts, 'popup-check.js'), 'utf8');
+  assert.match(source, /await env\.installed\(sw\)/);
+  assert.match(source, /await welcomed/);
+  assert.match(source, /hasAttribute\('data-settled'\)/);
+  assert.doesNotMatch(source, /pause\(([2-9]\d{2}|\d{4,})\)/, 'no fixed waits stand in for the browser');
 });
