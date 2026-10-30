@@ -241,6 +241,30 @@ test('a typed formula that reads a range where one value belongs is evaluated wh
   assert.deepEqual([val(e, 'C8'), at('C8').a], [20, 'C8'], 'a name for a range is a range');
 });
 
+test('dynamic typing examines untaken branches and single-element array results', () => {
+  const e = book({ A1: false, B1: 2, B2: 3, B3: 4 }), sh = e.wb.sheets[0];
+  e.edit(sh.id, 4, 2, '=SUM(IF(A1,B1:B3*2,0))');
+  assert.equal(M.cell(sh, 4, 2).a, 'C5');
+  assert.equal(e.value(sh.id, 4, 2), 0);
+  e.edit(sh.id, 0, 0, 'TRUE');
+  assert.equal(e.value(sh.id, 4, 2), 18);
+  const moved = e.apply({ op: 'insert', sheet: sh.id, axis: 'row', at: 0, n: 1 });
+  assert.equal(M.cell(sh, 5, 2).a, 'C6');
+  assert.equal(e.value(sh.id, 5, 2), 18);
+  e.apply(moved.inverse);
+  assert.equal(M.cell(sh, 4, 2).a, 'C5');
+  assert.equal(e.value(sh.id, 4, 2), 18);
+  e.edit(sh.id, 4, 3, '={7}');
+  assert.equal(M.cell(sh, 4, 3).a, 'D5', 'an array of one is still an array');
+  e.edit(sh.id, 0, 0, 'FALSE');
+  e.edit(sh.id, 4, 4, '=IF(A1,{7;8},0)');
+  assert.equal(M.cell(sh, 4, 4).a, 'E5', 'a conditional array stays dynamic before its condition changes');
+  e.edit(sh.id, 4, 5, '=LET(x,B1:B3,SUM(IF(A1,x*2,0)))');
+  assert.equal(M.cell(sh, 4, 5).a, 'F5', 'local range names work in an untaken branch too');
+  e.edit(sh.id, 0, 0, 'TRUE');
+  assert.equal(e.value(sh.id, 4, 5), 18);
+});
+
 test('legacy formula editing makes scalar references explicit without recalculating aggregate ranges', () => {
   const e = book({ B1: 3, B5: 7 }), sh = e.wb.sheets[0];
   require('../lib/sheet-fn-lookup.js');
