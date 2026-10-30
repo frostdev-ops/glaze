@@ -38,7 +38,7 @@ const popup = ({ url = 'https://bb.school.edu/ultra/stream', tabId = 7, hosts = 
     permissions: {
       contains: async ({ origins }) => { calls.push(['contains', origins]); return access; },
       request: ({ origins }) => { calls.push(['request', origins, gesture]); if (granted) access = true; return Promise.resolve(granted); },
-      ...(hostAccess ? { addHostAccessRequest: (o) => { calls.push(['hostAccess', o]); return Promise.resolve(); } } : {}),
+      ...(hostAccess ? { addHostAccessRequest: (o) => { calls.push(['hostAccess', o]); return typeof hostAccess === 'function' ? hostAccess(o) : Promise.resolve(); } } : {}),
     },
     scripting: { executeScript: (o) => { calls.push(['exec', o]); return execFails ? Promise.reject(new Error('Cannot access contents of the page')) : Promise.resolve([{ result: kind }]); } },
     storage: {
@@ -166,6 +166,26 @@ test('popup: Firefox has no addHostAccessRequest, and the row works without it',
   assert.deepEqual(p.calls.map(([t]) => t), ['send', 'request']);
 });
 
+test('popup: the row says when its decision is final, after what it shows and asks the browser, on every path', async () => {
+  const cases = [
+    ['an LMS host not held', {}, { shown: true, access: 1, exec: 1 }],
+    ['a held Moodle site not on its list', { held: true, url: 'https://moodle.school.edu/my/', kind: 'moodle' }, { shown: true, access: 0, exec: 1 }],
+    ['a page that is no LMS', { kind: null, url: 'https://www.school.edu/' }, { shown: false, access: 0, exec: 1 }],
+    ['a page the detector can\'t reach', { execFails: true }, { shown: false, access: 0, exec: 1 }],
+    ['a held site on its LMS\'s list', { held: true, lists: { ultra: ['https://bb.school.edu'] } }, { shown: false, access: 0, exec: 0 }],
+    ['a browser page', { url: 'chrome://extensions/' }, { shown: false, access: 0, exec: 0 }],
+    ['Safari\'s manifest, which holds every site', { hosts: ['<all_urls>'] }, { shown: false, access: 0, exec: 0 }],
+    ['Glaze off', { enabled: false }, { shown: false, access: 0, exec: 1 }],
+  ];
+  for (const [why, o, want] of cases) {
+    const p = popup(o), row = p.el('#here'), set = row.setAttribute.bind(row);
+    let at = null;
+    row.setAttribute = (k, v) => { if (k === 'data-settled') at = { shown: !row.hidden, access: p.of('hostAccess').length, exec: p.of('exec').length }; set(k, v); };
+    await tick();
+    assert.deepEqual(at, want, why);
+  }
+});
+
 test('popup: with Glaze off the row waits, and shows once Glaze is on', async () => {
   const p = popup({ enabled: false });
   await tick();
@@ -175,6 +195,20 @@ test('popup: with Glaze off the row waits, and shows once Glaze is on', async ()
   await tick();
   assert.equal(p.el('#here').hidden, false);
   assert.deepEqual(p.of('hostAccess').map(([, o]) => o), [{ tabId: 7 }]);
+});
+
+test('popup: the site row settles after Chrome finishes its Allow entry, including a refused entry', async () => {
+  for (const fails of [false, true]) {
+    let finish;
+    const p = popup({ hostAccess: () => new Promise((resolve, reject) => { finish = fails ? () => reject(new Error('entry refused')) : resolve; }) });
+    await tick();
+    assert.equal(p.el('#here').hidden, false);
+    assert.equal(p.of('hostAccess').length, 1);
+    assert.equal(p.el('#here').getAttribute('data-settled'), null, 'the browser has not finished the entry');
+    finish();
+    await tick();
+    assert.equal(p.el('#here').getAttribute('data-settled'), '', 'settled even when the browser refuses the entry');
+  }
 });
 
 test('popup: the detector in the popup page itself watches nothing (lib/detect.js runs its watcher on web pages only)', async () => {

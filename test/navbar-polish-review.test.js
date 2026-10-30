@@ -108,7 +108,7 @@ const backupFixture = () => {
     addEventListener() {}, removeEventListener() {}, flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true, hint() {}, t: (s) => s,
     chrome: { storage: { sync: { get: async () => ({}) }, local: { get: async () => ({}) } }, runtime: { getManifest: () => ({ version: '1' }), sendMessage: (m, cb) => { if (m.restore?.op === 'stage' && m.restore.action === 'settings') { staged = m.restore.value; writes.push(staged); } const r = { ok: true, keys: [], token: 'test' }; cb?.(r); return Promise.resolve(r); } } },
   };
-  const src = read('options.js'); vm.runInNewContext(part(src, '  // ---- backup ----', '  // Two clicks, so a stray'), c);
+  const src = read('options.js'); vm.runInNewContext(part(src, '  // ---- backup ----', '  // The defaults this device started with'), c);
   return { s, elements, writes, downloads };
 };
 

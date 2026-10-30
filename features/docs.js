@@ -186,7 +186,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
       const s = ctx.settings().enhance;
       if (ctx.on() && s.docInk) whose(); // Glaze off: the frame is told so, and Canvas isn't asked who you are
       const msg = { gz: 'docs', on: ctx.on(), dark: ctx.darkTheme(), colors: Object.fromEntries([...GZ_COLORS.map(([v]) => v), '--gz-surface-course'].map((v) => [v, html.style.getPropertyValue(v)])),
-        look: GZ_COURSE_LOOK(ctx.settings(), ultra ? ctx.courseId() : ctx.canvasCourseKey()).look, theme: s.docTheme, pages: s.docPages, ink: s.docInk, file, user: user || '', words: Object.fromEntries(asked.map((w) => [w, t(w)])) };
+        look: GZ_COURSE_LOOK(ctx.settings(), ultra ? ctx.courseId() : ctx.canvasCourseKey(), ctx.looks?.()).look, theme: s.docTheme, pages: s.docPages, ink: s.docInk, file, user: user || '', words: Object.fromEntries(asked.map((w) => [w, t(w)])) };
       const j = JSON.stringify(msg);
       if (j === said) return; // sync runs on every pass; the frame hears only changes
       said = j;

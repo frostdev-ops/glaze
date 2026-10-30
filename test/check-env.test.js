@@ -170,6 +170,55 @@ test('a check that wants only its own tabs closes Glaze\'s first screen, open al
   assert.deepEqual([...open, late, mine].map((p) => p.closed), [true, true, true, false]);
 });
 
+test('noFirstRun says when it has closed Glaze\'s first screen, so a check can start after the install\'s tab', async () => {
+  const { noFirstRun } = require('../scripts/check-env.js');
+  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
+  let onPage, closed = false, land;
+  const closing = noFirstRun({ pages: () => [], on: (e, f) => { if (e === 'page') onPage = f; } });
+  assert.equal(typeof closing?.then, 'function', 'a promise of the first screen closed');
+  closing.then(() => { closed = true; });
+  const tab = { at: 'about:blank', url: () => tab.at, close: async () => { tab.gone = true; }, waitForURL: async (re) => { await new Promise((r) => { land = r; }); if (!re.test(tab.at)) throw Error('timeout'); } };
+  onPage(tab);
+  await new Promise(setImmediate);
+  assert.equal(closed, false, 'not before the first screen opens');
+  tab.at = welcome; land();
+  await closing;
+  assert.equal(tab.gone, true);
+});
+
+test('noFirstRun never reports a failed tab close as a closed first screen', async () => {
+  const { noFirstRun } = require('../scripts/check-env.js');
+  const welcome = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html';
+  let onPage, closed = false;
+  const bad = { url: () => welcome, close: async () => { throw new Error('close failed'); }, waitForURL: async () => {} };
+  const first = noFirstRun({ pages: () => [bad], on: (e, f) => { onPage = f; } });
+  first.then(() => { closed = true; });
+  await new Promise(setImmediate);
+  assert.equal(closed, false, 'a failed close must not release the popup check');
+  onPage({ url: () => welcome, close: async () => {}, waitForURL: async () => {} });
+  await first;
+  assert.equal(closed, true);
+});
+
+test('noFirstRun still closes a first screen that navigates after ten seconds under load', async (t) => {
+  const { noFirstRun } = require('../scripts/check-env.js');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let navigate, gone = false;
+  const tab = {
+    at: 'about:blank', url: () => tab.at, close: async () => { gone = true; },
+    waitForURL: (re, { timeout }) => new Promise((resolve, reject) => {
+      if (timeout) setTimeout(() => reject(new Error('navigation timeout')), timeout);
+      navigate = () => { tab.at = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/features/welcome.html'; assert.ok(re.test(tab.at)); resolve(); };
+    }),
+  };
+  noFirstRun({ pages: () => [tab], on() {} });
+  t.mock.timers.tick(11000);
+  await new Promise(setImmediate);
+  navigate();
+  await new Promise(setImmediate);
+  assert.equal(gone, true, 'the late first screen was closed');
+});
+
 test('ultraReady polls the page until Glaze has registered its Ultra script, and says so when it never does', async () => {
   const { ultraReady } = require('../scripts/check-env.js');
   const answers = [false, false, true];
@@ -177,4 +226,47 @@ test('ultraReady polls the page until Glaze has registered its Ultra script, and
   await ultraReady(page);
   assert.deepEqual(answers, []);
   await assert.rejects(ultraReady({ evaluate: async () => false }, 250), /not registered/);
+});
+
+test('installed polls a new profile until each install task has made its last write, and says so when one never does', async () => {
+  const { installed } = require('../scripts/check-env.js');
+  const vm = require('node:vm');
+  const done = { fresh: true, pending: false };
+  const states = [{}, { freshDefaults: { fresh: true, pending: true } }, { freshDefaults: done, migrated: ['tabs-auto'] }, { freshDefaults: done, channelKeysMoved: true },
+    { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true }, { freshDefaults: done, migrated: ['tabs-auto'], channelKeysMoved: true, lookCatalog: { sig: 'e3b0c442', looks: [] } }];
+  let polls = 0;
+  const page = { evaluate: async (f) => {
+    const local = states[Math.min(polls++, states.length - 1)];
+    return vm.runInContext(`(${f})()`, vm.createContext({ chrome: { storage: { local: { get: async () => local } } } }));
+  } };
+  await installed(page);
+  assert.equal(polls, states.length, 'ready at the last write, not before');
+  await assert.rejects(installed({ evaluate: async () => false }, 250), /install/);
+});
+
+test('the backup check lets each new profile finish installing before it seeds or compares storage', () => {
+  assert.match(fs.readFileSync(path.join(scripts, 'backup-check.js'), 'utf8'), /await env\.installed\(page\)/);
+});
+
+test('the popup check starts after the install and its first screen, and reads the popup once its row has settled', () => {
+  const source = fs.readFileSync(path.join(scripts, 'popup-check.js'), 'utf8');
+  assert.match(source, /await env\.installed\(sw\)/);
+  assert.match(source, /await Promise\.race\(\[welcomed/);
+  assert.match(source, /hasAttribute\('data-settled'\)/);
+  assert.doesNotMatch(source, /pause\(([2-9]\d{2}|\d{4,})\)/, 'no fixed waits stand in for the browser');
+});
+
+test('the Sites check starts after the install and its first screen, and reads each state once it has landed', () => {
+  const source = fs.readFileSync(path.join(scripts, 'sites-check.js'), 'utf8');
+  assert.match(source, /await env\.installed\(sw\)/);
+  assert.match(source, /await Promise\.race\(\[welcomed/);
+  assert.doesNotMatch(source, /pause\(([2-9]\d{2}|\d{4,})\)/, 'no fixed waits stand in for the page');
+});
+
+test('the translated layout case lets its seed Look reach History before any page measures it', () => {
+  const source = fs.readFileSync(path.join(scripts, 'settings-ia-check.js'), 'utf8');
+  const body = source.slice(source.indexOf("check('translated-large-layout'"), source.indexOf("check('glass-parity'"));
+  const filed = body.search(/GZ_HISTORY\.entries\(.*\.lookHistory\)\[0\]\?\.at >= at/);
+  assert.ok(filed > 0, 'it waits for the worker to file the seed Look');
+  assert.ok(filed < body.indexOf("for (const lang of"), 'before the first language is measured');
 });

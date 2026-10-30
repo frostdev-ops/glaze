@@ -12,6 +12,8 @@ const AUTO = [['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On 
 
 GZ_UI.load().then((s) => {
   const save = (keys) => GZ_UI.save(s, keys, hint);
+  // The Looks catalogue (lib/looks.js), live: a Look saved, installed or removed in Settings shows here at once.
+  let catalog = GZ_CATALOG.list();
 
   const render = () => {
     GZ_UI.paint(s);
@@ -22,13 +24,13 @@ GZ_UI.load().then((s) => {
     for (const el of document.querySelectorAll('.tiles > :not(.power, .editor)')) el.inert = !s.enabled;
     // Writer's Documents, while Writer is on; the theme's switch leaves it be.
     $('#documents').hidden = s.enhance.writer === false;
-    // The look being worn, drawn as the editor's look cards are; none of the eight: the palette's own.
-    const L = GZ_LOOKS.find((x) => GZ_LOOK_ON(s, x));
-    const c = L ? L.colors : GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
-    const bg = L ? L.bg : s.bg;
+    // The Look being worn (built in, saved or from the gallery), drawn as the editor's Look cards are; none: the palette's own.
+    const E = GZ_CATALOG.worn(s, catalog);
+    const c = E ? E.colors : GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
+    const bg = E?.L ? E.L.bg : s.bg;
     const tint = bg.kind === 'solid' ? [c['--gz-surface-2']] : GZ_BG_COLORS(bg.colors || [], c);
     Object.assign($('#look-thumb').style, { color: c['--gz-ink'], borderColor: c['--gz-line-strong'], background: `linear-gradient(120deg, ${c['--gz-surface']} 40%, ${tint.join(', ')})` });
-    $('#look-name').textContent = L?.name || s.preset || t('Your theme');
+    $('#look-name').textContent = E?.name || s.preset || t('Your theme');
     GZ_UI.swatches($('#presets'), s, (name, colors) => { save(GZ_UI.pickPreset(s, name, colors)); render(); });
     $('#motion').dataset.level = s.motion.level;
     $('#motion-name').textContent = level(s.motion.level);
@@ -53,16 +55,33 @@ GZ_UI.load().then((s) => {
     save(['motion']);
     render();
   });
-  // All eight looks on a sheet over the tiles; picking one closes it.
+  // Every Look on a sheet over the tiles; picking one closes it. A kept one is put on by the worker, from its code, as Settings'
+  // "Use this theme" puts it on (lib/background.js looks), and the tiles follow once it is.
+  const pick = (E) => {
+    $('#sheet').close();
+    if (E.L) { save(GZ_UI.pickLook(s, E.L)); render(); return; }
+    chrome.runtime.sendMessage({ type: 'glaze:looks', op: 'wear', id: E.id }, (r) => {
+      if (chrome.runtime.lastError || !r?.ok) return hint(t('Not saved. Try again in a moment.'));
+      GZ_UI.load().then((next) => { Object.assign(s, next); render(); });
+    });
+  };
+  const sheet = () => GZ_UI.looks($('#looks'), s, pick, catalog);
+  chrome.storage.local.get(GZ_CATALOG.KEY, (r) => { catalog = GZ_CATALOG.list(r?.[GZ_CATALOG.KEY]); render(); });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[GZ_CATALOG.KEY]) return;
+    catalog = GZ_CATALOG.list(changes[GZ_CATALOG.KEY].newValue);
+    render();
+    if ($('#sheet').open) sheet();
+  });
   $('#look').addEventListener('click', () => {
-    GZ_UI.looks($('#looks'), s, (L) => { save(GZ_UI.pickLook(s, L)); render(); $('#sheet').close(); });
+    sheet();
     // The theme worn before this one, from the history the background keeps (lib/history.js).
     chrome.storage.local.get('lookHistory', (r) => {
       const back = GZ_HISTORY.previous(GZ_HISTORY.entries(r?.lookHistory), s);
       const b = $('#previous');
       b.hidden = !back;
       if (!back) return;
-      b.title = t('Back to {name}', { name: GZ_UI.themeName(GZ_HISTORY.theme(back.theme)) });
+      b.title = t('Back to {name}', { name: GZ_UI.themeName(GZ_HISTORY.theme(back.theme), catalog) });
       b.onclick = () => { Object.assign(s, GZ_HISTORY.wear(s, back)); save(GZ_HISTORY.KEYS); render(); $('#sheet').close(); };
     });
     $('#sheet').showModal();
@@ -112,7 +131,7 @@ GZ_UI.load().then((s) => {
     b.hidden = done || !on;
     if (b.hidden || held || menu || !hostAccess) return;
     menu = true;
-    Promise.resolve().then(() => hostAccess(tab.id)).catch(() => {});
+    return Promise.resolve().then(() => hostAccess(tab.id)).catch(() => {});
   };
   const ready = () => { busy = false; b.removeAttribute('aria-disabled'); };
   chrome.storage.onChanged.addListener((c, area) => {
@@ -132,8 +151,8 @@ GZ_UI.load().then((s) => {
       if (listed(r) && await chrome.permissions.contains({ origins: [site.pattern] })) { done = true; show(); }
     }).catch(ready);
   });
-  show();
-})().catch(() => {});
+  await show();
+})().catch(() => {}).finally(() => $('#here').setAttribute('data-settled', '')); // The row's decision is final, shown or not.
 
 // Due this week, as Blackboard, Canvas or Moodle last told the content script (the popup can't ask them): the count and
 // the next three, to read. Each site keeps its own list (content.js dueWeek, `dueWeek:<origin>`): the one of the site in this
