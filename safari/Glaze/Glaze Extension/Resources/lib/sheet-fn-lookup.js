@@ -10,7 +10,7 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
   const C = typeof GZ_SHEET_CALC !== 'undefined' ? GZ_SHEET_CALC : require('./sheet-calc.js');
   const M = typeof GZ_SHEET_MODEL !== 'undefined' ? GZ_SHEET_MODEL : require('./sheet-model.js');
   const F = typeof GZ_SHEET_FORMULA !== 'undefined' ? GZ_SHEET_FORMULA : require('./sheet-formula.js');
-  const { ERR, isErr, err, Ref, Areas, num, text, bool, compare, map, at, dims, toArray } = C.lib;
+  const { ERR, isErr, err, Ref, Areas, num, text, bool, compare, at, dims, used, toArray, wildcard } = C.lib;
   const { MAX_ROWS, MAX_COLS, CAP } = M;
 
   const given = (v) => v !== undefined && v !== null;
@@ -18,35 +18,17 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
   const kind = (v) => (typeof v === 'number' ? 0 : typeof v === 'string' ? 1 : typeof v === 'boolean' ? 2 : -1);
   const equal = (a, b) => kind(a) >= 0 && kind(a) === kind(b) && compare(a, b) === 0;
 
-  // Text with * and ? as wildcards, ~ escaping them, as a test of text values.
-  const wildcard = (t) => {
-    let re = '';
-    const escape = (ch) => ch.replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&');
-    for (let i = 0; i < t.length; i++) {
-      const ch = t[i];
-      if (ch === '~') { if (i + 1 < t.length) re += escape(t[++i]); }
-      else if (ch === '*') re += '[\\s\\S]*';
-      else if (ch === '?') re += '[\\s\\S]';
-      else re += escape(ch);
-    }
-    const rx = new RegExp(`^${re}$`, 'i');
-    return (v) => typeof v === 'string' && rx.test(v);
-  };
+  // Unlike criteria, a lookup reads ~ as an escape even in text without * or ? (Excel 16.114.1).
   const matcher = (x, wild) => (wild && typeof x === 'string' && /[*?~]/.test(x) ? wildcard(x) : (v) => equal(v, x));
 
-  // A range or array as a grid: its size, get(i, j), and `used`, how much of it is worth searching (a range of more
-  // than 4,096 rows or columns stops at the sheet's last used cell).
+  // A range or array as a grid: its size, get(i, j), and `used`, how much of it is worth searching (lib.used's
+  // extent).
   const grid = (arg, ctx) => {
     if (isErr(arg)) throw arg;
     if (arg instanceof Areas) throw ERR.VALUE;
     if (arg instanceof Ref) {
-      let rows = arg.rows, cols = arg.cols;
-      if (rows > 4096 || cols > 4096) {
-        const [mr, mc] = ctx.eng.extent(arg.sheet);
-        rows = Math.max(0, Math.min(rows, mr - arg.r0 + 1));
-        cols = Math.max(0, Math.min(cols, mc - arg.c0 + 1));
-      }
-      return { rows: arg.rows, cols: arg.cols, used: [rows, cols], get: (i, j) => ctx.read(arg.sheet, arg.r0 + i, arg.c0 + j), ref: arg };
+      const [r1, c1] = used(arg, ctx);
+      return { rows: arg.rows, cols: arg.cols, used: [r1 - arg.r0 + 1, c1 - arg.c0 + 1], get: (i, j) => ctx.read(arg.sheet, arg.r0 + i, arg.c0 + j), ref: arg };
     }
     const a = Array.isArray(arg) ? arg : [[arg]];
     return { rows: a.length, cols: a[0].length, used: [a.length, a[0].length], get: (i, j) => a[i][j], ref: null };
@@ -64,6 +46,13 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
     return g;
   };
   const transpose = (g) => g[0].map((_, j) => g.map((r) => r[j]));
+  // ROW's and COLUMN's argument: one area (several are #REF!).
+  const area = (v) => {
+    if (isErr(v)) throw v;
+    if (v instanceof Areas) throw ERR.REF;
+    if (!(v instanceof Ref)) throw ERR.VALUE;
+    return v;
+  };
 
   // A search by halves for the last (or first) position where ok(compare(value, x)) holds, ok running true then
   // false along the vector (or false then true). A probe on a value of another kind than x moves on to the next value
@@ -145,40 +134,20 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
     return best;
   };
 
-  // A reference, or a one-value array, inside an array: its value. A bigger one can't be an element: #VALUE!.
-  const single = (r, ctx) => {
-    if (r instanceof Ref) return r.rows === 1 && r.cols === 1 ? ctx.read(r.sheet, r.r0, r.c0) : ERR.VALUE;
-    if (Array.isArray(r)) return r.length === 1 && r[0].length === 1 ? r[0][0] : ERR.VALUE;
-    return r instanceof Areas ? ERR.VALUE : r;
-  };
-  // f over its arguments, element by element when any is an array, as Excel lifts these functions.
-  const lifted = (vals, f, ctx) => {
-    if (!vals.some(Array.isArray)) return f(...vals);
-    return map(vals, (...xs) => { try { return single(f(...xs), ctx); } catch (e) { if (isErr(e)) return e; throw e; } });
-  };
-  const lookupValue = (v) => {
-    if (isErr(v)) throw v;
-    return v ?? 0;
-  };
-  // XLOOKUP and XMATCH look for a blank value among blank cells.
-  const xlookupValue = (v) => {
-    if (isErr(v)) throw v;
-    return v;
-  };
-  // VLOOKUP, HLOOKUP and MATCH refuse a lookup value of more than 255 characters.
+  // VLOOKUP, HLOOKUP, MATCH and LOOKUP look for a blank value as 0 (XLOOKUP and XMATCH among blank cells); the first
+  // three refuse one of more than 255 characters.
+  const lookupValue = (v) => v ?? 0;
   const short = (v) => { if (typeof v === 'string' && v.length > 255) throw ERR.VALUE; return v; };
 
-  const tableLookup = (across) => ({ p: ['r', 'a', 'v', 'v'], min: 3, max: 4, fn: ([x, table, index, approx], ctx) => {
+  const tableLookup = (across) => ({ p: ['v', 'a', 'v', 'v'], min: 3, max: 4, fn: ([x, table, index, approx], ctx) => {
     const g = grid(table, ctx), n = whole(index, ctx);
     if (n < 1) throw ERR.VALUE;
     if (n > (across ? g.rows : g.cols)) throw ERR.REF;
     const exact = approx !== undefined && !bool(approx), vec = across ? row(g, 0) : column(g, 0);
-    return lifted([ctx.value(x)], (v) => {
-      v = short(lookupValue(v));
-      const k = exact ? scan(vec, matcher(v, true)) : lastTrue(vec, v, AT_MOST);
-      if (k < 0) return ERR.NA;
-      return across ? g.get(n - 1, k) : g.get(k, n - 1);
-    }, ctx);
+    const v = short(lookupValue(x));
+    const k = exact ? scan(vec, matcher(v, true)) : lastTrue(vec, v, AT_MOST);
+    if (k < 0) return ERR.NA;
+    return across ? g.get(n - 1, k) : g.get(k, n - 1);
   } });
 
   // INDEX: row and column count from 1, 0 takes them all; a one-row area takes a lone number as its column.
@@ -227,7 +196,7 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
   };
   const namedReference = (n, ctx) => {
     if (n?.k === 'name') {
-      const v = ctx.eng.evalName(n, ctx);
+      const v = ctx.evalName(n);
       if (v instanceof Ref || v instanceof Areas) return v;
     }
     return null;
@@ -235,7 +204,7 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
   const fromA1 = (s, ctx) => {
     const n = referenceText(s);
     if (n?.k === 'ref' && !n.sheet2) {
-      const sheet = n.sheet === null ? ctx.sheet : ctx.eng.sheetNamed(n.sheet);
+      const sheet = n.sheet === null ? ctx.sheet : ctx.sheetNamed(n.sheet);
       if (sheet) return new Ref(sheet, n.r0, n.c0, n.r1, n.c1);
     }
     const named = namedReference(n, ctx);
@@ -250,7 +219,7 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
     s = s.replace(/ +$/, '');
     let sheet = ctx.sheet, body = s;
     const named = /^(?:'((?:[^']|'')+)'|([^'!]+))!([\s\S]*)$/.exec(s);
-    if (named) { sheet = ctx.eng.sheetNamed(named[1] !== undefined ? named[1].replace(/''/g, "'") : named[2]); body = named[3]; }
+    if (named) { sheet = ctx.sheetNamed(named[1] !== undefined ? named[1].replace(/''/g, "'") : named[2]); body = named[3]; }
     const sides = body.split(':');
     if (!sheet || sides.length > 2) throw ERR.REF;
     const coord = (g, host, max) => {
@@ -297,21 +266,19 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
   const FNS = {
     VLOOKUP: tableLookup(false),
     HLOOKUP: tableLookup(true),
-    MATCH: { p: ['r', 'a', 'v'], min: 2, max: 3, fn: ([x, look, t], ctx) => {
+    MATCH: { p: ['v', 'a', 'v'], min: 2, max: 3, fn: ([x, look, t], ctx) => {
       const vec = vectorOf(grid(look, ctx)), type = t === undefined ? 1 : Math.sign(num(t, ctx));
-      return lifted([ctx.value(x)], (v) => {
-        v = short(lookupValue(v));
-        const k = vec ? position(v, vec, type) : -1;
-        return k < 0 ? ERR.NA : k + 1;
-      }, ctx);
+      const k = vec ? position(short(lookupValue(x)), vec, type) : -1;
+      return k < 0 ? ERR.NA : k + 1;
     } },
-    XMATCH: { p: ['r', 'a', 'v', 'v'], min: 2, max: 4, fn: ([x, look, mm, sm], ctx) => {
+    XMATCH: { p: ['v', 'a', 'v', 'v'], min: 2, max: 4, fn: ([x, look, mm, sm], ctx) => {
       const vec = vectorOf(grid(look, ctx)), [m, s] = modes(mm, sm, ctx);
       if (!vec) throw ERR.VALUE;
-      return lifted([ctx.value(x)], (v) => { const k = xfind(xlookupValue(v), vec, m, s); return k < 0 ? ERR.NA : k + 1; }, ctx);
+      const k = xfind(x, vec, m, s);
+      return k < 0 ? ERR.NA : k + 1;
     } },
     // The row (or column) of return_array where lookup_array, a column (or row) as long, holds the value.
-    XLOOKUP: { p: ['r', 'a', 'a', 'l', 'v', 'v'], min: 3, max: 6, fn: ([x, look, ret, missing, mm, sm], ctx) => {
+    XLOOKUP: { p: ['v', 'a', 'a', 'l', 'v', 'v'], min: 3, max: 6, fn: ([x, look, ret, missing, mm, sm], ctx) => {
       const L = grid(look, ctx), R = grid(ret, ctx), [m, s] = modes(mm, sm, ctx);
       const down = L.cols === 1 && (L.rows > 1 || R.rows === 1);
       if (down ? R.rows !== L.rows : L.rows !== 1 || R.cols !== L.cols) throw ERR.VALUE;
@@ -325,16 +292,14 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
         const a = values(ret, ctx), out = down ? [a[k]] : a.map((line) => [line[k]]);
         return out.length === 1 && out[0].length === 1 ? out[0][0] : out;
       };
-      return lifted([ctx.value(x)], (v) => {
-        const k = xfind(xlookupValue(v), vec, m, s);
-        if (k >= 0) return found(k);
-        const alt = missing ? missing() : null;
-        return alt === null ? ERR.NA : alt;
-      }, ctx);
+      const k = xfind(x, vec, m, s);
+      if (k >= 0) return found(k);
+      const alt = missing ? missing() : null;
+      return alt === null ? ERR.NA : alt;
     } },
     // Vector form: the match in lookup_vector picks from result_vector, which a reference extends past its end. Array
     // form: search the first row of an array wider than tall (else its first column), return from the last.
-    LOOKUP: { p: ['r', 'a', 'a'], min: 2, max: 3, fn: ([x, look, res], ctx) => {
+    LOOKUP: { p: ['v', 'a', 'a'], min: 2, max: 3, fn: ([x, look, res], ctx) => {
       const g = grid(look, ctx), wide = g.cols > g.rows;
       let vec = res === undefined ? null : vectorOf(g), pick;
       if (!vec) vec = wide ? row(g, 0) : column(g, 0);
@@ -349,29 +314,17 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
           return k < (across ? R.cols : R.rows) ? (across ? R.get(0, k) : R.get(k, 0)) : ERR.NA;
         };
       }
-      return lifted([ctx.value(x)], (v) => {
-        const k = lastTrue(vec, lookupValue(v), AT_MOST);
-        return k < 0 ? ERR.NA : pick(k);
-      }, ctx);
+      const k = lastTrue(vec, lookupValue(x), AT_MOST);
+      return k < 0 ? ERR.NA : pick(k);
     } },
-    INDEX: { p: ['a', 'r', 'r', 'r'], min: 2, max: 4, fn: ([src, r, c, a], ctx) => {
-      if (isErr(src)) return src;
-      const vals = [r, c, a].map((v) => (v === undefined ? undefined : ctx.value(v)));
-      return lifted(vals, (ri, ci, ai) => index(src, ri, c === undefined ? undefined : ci, ai, ctx), ctx);
-    } },
-    OFFSET: { p: ['r', 'r', 'r', 'r', 'r'], min: 3, max: 5, fn: ([ref, ...rest], ctx) => {
+    // INDEX's and OFFSET's own argument's error comes before their numbers' (errors: true).
+    INDEX: { p: ['a', 'v', 'v', 'v'], min: 2, max: 4, errors: true, fn: ([src, r, c, a], ctx) => (isErr(src) ? src : index(src, r, c, a, ctx)) },
+    OFFSET: { p: ['r', 'v', 'v', 'v', 'v'], min: 3, max: 5, errors: true, fn: ([ref, dr, dc, h, w], ctx) => {
       if (isErr(ref)) return ref;
       if (!(ref instanceof Ref)) throw ERR.VALUE;
-      return lifted(rest.map((v) => (v === undefined ? undefined : ctx.value(v))), (dr, dc, h, w) => offset(ref, dr, dc, h, w, ctx), ctx);
+      return offset(ref, dr, dc, h, w, ctx);
     } },
-    INDIRECT: { p: ['r', 'r'], min: 1, max: 2, volatile: true, fn: ([t, style], ctx) => {
-      const vals = [ctx.value(t), style === undefined ? true : ctx.value(style)];
-      return lifted(vals, (s, a1) => {
-        if (isErr(s)) throw s;
-        if (isErr(a1)) throw a1;
-        return bool(a1) ? fromA1(text(s), ctx) : fromR1C1(text(s), ctx);
-      }, ctx);
-    } },
+    INDIRECT: { p: ['v', 'v'], min: 1, max: 2, volatile: true, fn: ([t, a1], ctx) => (a1 === undefined || bool(a1) ? fromA1(text(t), ctx) : fromR1C1(text(t), ctx)) },
     // Only the value chosen is evaluated, unless the index is an array.
     CHOOSE: { p: ['r', 'l'], min: 2, fn: ([i, ...choices], ctx) => {
       const idx = ctx.value(i);
@@ -395,18 +348,17 @@ var GZ_SHEET_FN_LOOKUP = globalThis.GZ_SHEET_FN_LOOKUP || (() => {
         try { return at(chosen.get(pick(at(idx, r, c))), r, c); } catch (e) { if (isErr(e)) return e; throw e; }
       }));
     } },
+    // A range's row numbers (a column) or column numbers (a row) to lib.used's extent; one cell's alone.
     ROW: { p: ['r'], min: 0, max: 1, fn: ([ref], ctx) => {
       if (ref === undefined) return ctx.r + 1;
-      if (isErr(ref)) return ref;
-      if (!(ref instanceof Ref)) throw ERR.VALUE;
-      if (ref.rows > CAP.cells) throw ERR.NUM;
-      return ref.rows === 1 ? ref.r0 + 1 : Array.from({ length: ref.rows }, (_, i) => [ref.r0 + i + 1]);
+      const [r1] = used(area(ref), ctx), rows = r1 - ref.r0 + 1;
+      if (rows > CAP.cells) throw ERR.NUM;
+      return rows === 1 ? ref.r0 + 1 : Array.from({ length: rows }, (_, i) => [ref.r0 + i + 1]);
     } },
     COLUMN: { p: ['r'], min: 0, max: 1, fn: ([ref], ctx) => {
       if (ref === undefined) return ctx.c + 1;
-      if (isErr(ref)) return ref;
-      if (!(ref instanceof Ref)) throw ERR.VALUE;
-      return ref.cols === 1 ? ref.c0 + 1 : [Array.from({ length: ref.cols }, (_, j) => ref.c0 + j + 1)];
+      const [, c1] = used(area(ref), ctx), cols = c1 - ref.c0 + 1;
+      return cols === 1 ? ref.c0 + 1 : [Array.from({ length: cols }, (_, j) => ref.c0 + j + 1)];
     } },
     ROWS: { p: ['a'], min: 1, max: 1, fn: ([a]) => { if (isErr(a)) return a; if (a instanceof Areas) throw ERR.REF; return a instanceof Ref ? a.rows : dims(a)[0]; } },
     COLUMNS: { p: ['a'], min: 1, max: 1, fn: ([a]) => { if (isErr(a)) return a; if (a instanceof Areas) throw ERR.REF; return a instanceof Ref ? a.cols : dims(a)[1]; } },

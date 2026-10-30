@@ -6,8 +6,10 @@
 // Outside an array formula a range where one value belongs intersects the formula's row or column (Excel's implicit
 // intersection); inside one (a cell with `a`) ranges are evaluated whole and the result fills the array's range. There
 // is no spill. Functions come from the sheet-fn-*.js files through define(); their arguments are typed by p: 'v' a
-// value (intersected or lifted over arrays, errors returned first), 'r' as given (references and arrays whole), 'l' a
-// thunk evaluated on demand, 'a' evaluated as in an array formula.
+// value (intersected, or lifted over arrays: one call per element, broadcast as map does; errors returned first unless
+// the definition says errors: true), 'r' as given (references and arrays whole), 'l' a thunk evaluated on demand, 'a'
+// evaluated as in an array formula, 'u' the argument's AST unevaluated (LET's names, evaluated with lib.evaluate in a
+// ctx that ctx.bind gives names).
 // Classic script; module.exports for node.
 var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
   const M = typeof GZ_SHEET_MODEL !== 'undefined' ? GZ_SHEET_MODEL : require('./sheet-model.js');
@@ -18,7 +20,8 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
   class XErr { constructor(code) { this.code = code; } toString() { return this.code; } }
   const ERR = Object.freeze({ NULL: new XErr('#NULL!'), DIV0: new XErr('#DIV/0!'), VALUE: new XErr('#VALUE!'), REF: new XErr('#REF!'), NAME: new XErr('#NAME?'), NUM: new XErr('#NUM!'), NA: new XErr('#N/A') });
   const CODES = new Map(Object.values(ERR).map((e) => [e.code, e]));
-  // An error cached in a file under a newer name (#SPILL!, #CALC!) reads as itself; it is never produced here.
+  // Errors under newer names read as themselves: #CALC! is an empty FILTER, UNIQUE, SEQUENCE or TEXTSPLIT; #SPILL!,
+  // from a file's cache, is never produced here (there is no spill).
   const err = (code) => { let e = CODES.get(code); if (!e) CODES.set(code, (e = new XErr(code))); return e; };
   const isErr = (v) => v instanceof XErr;
 
@@ -31,7 +34,9 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
 
   const VOLATILE = new Set(['NOW', 'TODAY', 'RAND', 'RANDBETWEEN', 'OFFSET', 'INDIRECT', 'RANDARRAY', 'CELL', 'INFO']);
   const REGISTRY = new Map();
+  // One definition per name: a second is a mistake (two files claiming one function), never an override.
   const define = (name, def) => {
+    if (REGISTRY.has(name)) throw Error(`${name} is defined twice`);
     REGISTRY.set(name, { name, min: def.min ?? 0, max: def.max ?? CAP.args, p: def.p ?? ['v'], rep: def.rep ?? 1, errors: def.errors === true,
       volatile: def.volatile === true || VOLATILE.has(name), fn: def.fn });
   };
@@ -146,10 +151,16 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
     else if (Array.isArray(arg)) { for (const row of arg) for (const v of row) if (v !== null) cb(v, false); }
     else cb(arg, true);
   };
-  // A range as a grid of values. A whole row or column stops at the sheet's last used cell.
+  // A range's last row and column as the engine reads it: one of more than 4,096 rows or columns (a whole row or
+  // column) stops at the sheet's last used cell, keeping at least its first row and column.
+  const used = (ref, ctx) => {
+    if (ref.r1 - ref.r0 < 4096 && ref.c1 - ref.c0 < 4096) return [ref.r1, ref.c1];
+    const [mr, mc] = ctx.extent(ref.sheet);
+    return [Math.max(ref.r0, Math.min(ref.r1, mr)), Math.max(ref.c0, Math.min(ref.c1, mc))];
+  };
+  // A range as a grid of values, to its used extent.
   const toArray = (ref, ctx) => {
-    let { r1, c1 } = ref;
-    if (ref.r1 - ref.r0 >= 4096 || ref.c1 - ref.c0 >= 4096) { const [mr, mc] = ctx.eng.extent(ref.sheet); r1 = Math.max(ref.r0, Math.min(r1, mr)); c1 = Math.max(ref.c0, Math.min(c1, mc)); }
+    const [r1, c1] = used(ref, ctx);
     if ((r1 - ref.r0 + 1) * (c1 - ref.c0 + 1) > CAP.cells) return ERR.NUM;
     const out = [];
     for (let r = ref.r0; r <= r1; r++) { const row = new Array(c1 - ref.c0 + 1); for (let c = ref.c0; c <= c1; c++) row[c - ref.c0] = ctx.read(ref.sheet, r, c); out.push(row); }
@@ -166,24 +177,26 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
   };
   const resize = (arg, rows, cols) => (arg instanceof Ref ? new Ref(arg.sheet, arg.r0, arg.c0, Math.min(arg.r0 + rows - 1, MAX_ROWS - 1), Math.min(arg.c0 + cols - 1, MAX_COLS - 1)) : arg);
 
-  // A criteria argument (SUMIF, COUNTIFS…) as a test of one cell's value. Text criteria may start with = <> < > <= >=;
-  // what follows reads as typed input, so ">3/4/2025" compares dates. * and ? are wildcards (~ escapes them) in = and
-  // <>. A number also matches text that reads as that number; an empty criteria cell is 0; "" matches blank and empty
-  // text, "=" only blank, "<>" anything not blank.
+  // Text with * and ? as wildcards, any case, as a test of a value: ~ takes the next character as itself and a ~ at the
+  // end is dropped. Only text passes.
   const wildcard = (t) => {
-    if (!/[*?~]/.test(t)) { const low = t.toLowerCase(); return (s) => s.toLowerCase() === low; }
     let re = '';
+    const escape = (ch) => ch.replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&');
     for (let i = 0; i < t.length; i++) {
       const ch = t[i];
-      if (ch === '~' && '*?~'.includes(t[i + 1] ?? '')) re += `\\${t[++i]}`;
+      if (ch === '~') { if (i + 1 < t.length) re += escape(t[++i]); }
       else if (ch === '*') re += '[\\s\\S]*';
       else if (ch === '?') re += '[\\s\\S]';
-      else re += ch.replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&');
+      else re += escape(ch);
     }
     const rx = new RegExp(`^${re}$`, 'i');
-    return (s) => rx.test(s);
+    return (v) => typeof v === 'string' && rx.test(v);
   };
   const test = (op, c) => (op === '<' ? c < 0 : op === '<=' ? c <= 0 : op === '>' ? c > 0 : c >= 0);
+  // A criteria argument (SUMIF, COUNTIFS…) as a test of one cell's value. Text criteria may start with = <> < > <= >=;
+  // what follows reads as typed input, so ">3/4/2025" compares dates. In = and <>, text with * or ? matches as a
+  // wildcard; other text, tildes and all, as it is. A number also matches text that reads as that number; an empty
+  // criteria cell is 0; "" matches blank and empty text, "=" only blank, "<>" anything not blank.
   const criteria = (c, ctx) => {
     if (isErr(c)) return (v) => v === c;
     if (c === null || c === undefined) c = 0;
@@ -206,18 +219,31 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       return (v) => typeof v === 'boolean' && test(op, compare(v, b));
     }
     if (CODES.has(up)) { const e = err(up); return op === '<>' ? (v) => v !== e : op === '' || op === '=' ? (v) => v === e : () => false; }
-    const match = wildcard(rest);
-    if (op === '' || op === '=') return (v) => typeof v === 'string' && match(v);
-    if (op === '<>') return (v) => !(typeof v === 'string' && match(v));
+    const low = rest.toLowerCase(), match = /[*?]/.test(rest) ? wildcard(rest) : (v) => typeof v === 'string' && v.toLowerCase() === low;
+    if (op === '' || op === '=') return match;
+    if (op === '<>') return (v) => !match(v);
     return (v) => typeof v === 'string' && test(op, compare(v, rest));
   };
 
   // ── Evaluation ──────────────────────────────────────────────────────────────────────────────────────────────────────
   class Ctx {
-    constructor(eng, sheet, r, c, array, depth = 0) { this.eng = eng; this.sheet = sheet; this.r = r; this.c = c; this.array = array; this.depth = depth; this.date1904 = eng.wb.date1904; }
+    // locals: the names LET has bound (lower case → value), seen by every argument evaluated here, never by a defined
+    // name's own formula.
+    constructor(eng, sheet, r, c, array, depth = 0, locals = null) {
+      this.eng = eng; this.sheet = sheet; this.r = r; this.c = c; this.array = array; this.depth = depth; this.locals = locals; this.date1904 = eng.wb.date1904;
+    }
+    bind(name, value) { return new Ctx(this.eng, this.sheet, this.r, this.c, this.array, this.depth, new Map(this.locals).set(name.toLowerCase(), value)); }
     read(sheet, r, c) { return this.eng.read(sheet, r, c); }
     now() { return this.eng.time; }
     random() { return (this.eng.opts.random || Math.random)(); }
+    // The workbook as functions see it: sheets in tab order, a sheet by name (any case), a defined name's value (n: a
+    // name node, { name, sheet }), a sheet's last used [row, column], the formula computing a cell, a style by index.
+    get sheets() { return this.eng.wb.sheets; }
+    sheetNamed(name) { return this.eng.sheetNamed(name); }
+    evalName(n) { return this.eng.evalName(n, this); }
+    extent(sheet) { return this.eng.extent(sheet); }
+    formulaAt(sheet, r, c) { return this.eng.formulaAt(sheet, r, c); }
+    style(s) { return this.eng.wb.styles[s] ?? null; }
     // A value where one value belongs: a range intersects (or, in an array formula, becomes its grid of values).
     value(v) {
       if (v instanceof Ref) {
@@ -256,10 +282,15 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
     const r = f(a, b);
     return isErr(r) ? r : Number.isFinite(r) ? r || 0 : ERR.NUM;
   };
+  // a^b as Excel takes it: a negative a to a b whose reciprocal is an odd whole number (to 15 digits) gives the real
+  // root, (-8)^(1/3) = -2; to any other fraction, #NUM!.
   const power = (a, b) => {
     if (a === 0 && b === 0) return ERR.NUM;
     if (a === 0 && b < 0) return ERR.DIV0;
-    if (a < 0 && !Number.isInteger(b)) return ERR.NUM;
+    if (a < 0 && !Number.isInteger(b)) {
+      const k = Number((1 / b).toPrecision(15));
+      return Number.isInteger(k) && k % 2 !== 0 ? -((-a) ** b) : ERR.NUM;
+    }
     return a ** b;
   };
   // KB 78113: when a formula's last operation adds or subtracts and the result is within a rounding error of zero,
@@ -286,7 +317,10 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       case 'empty': return null;
       case 'array': return (n.value ??= n.rows.map((row) => row.map((v) => (v && typeof v === 'object' ? err(v.err) : v))));
       case 'ref': return makeRef(n, ctx);
-      case 'name': return ctx.eng.evalName(n, ctx);
+      case 'name': {
+        const low = n.sheet ? null : n.name.toLowerCase();
+        return low !== null && ctx.locals?.has(low) ? ctx.locals.get(low) : ctx.eng.evalName(n, ctx);
+      }
       case 'table': case 'ext': return ERR.REF;
       case 'fn': return call(n, ctx);
       case 'union': {
@@ -340,15 +374,23 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
     let lifted = false;
     for (let i = 0; i < argc; i++) {
       const kind = kindAt(def, i), a = n.args[i];
+      if (kind === 'u') { args[i] = a; continue; }
       if (kind === 'l') { args[i] = () => evaluate(a, ctx); continue; }
-      if (kind === 'a') { args[i] = evaluate(a, ctx.array ? ctx : new Ctx(ctx.eng, ctx.sheet, ctx.r, ctx.c, true, ctx.depth)); continue; }
+      if (kind === 'a') { args[i] = evaluate(a, ctx.array ? ctx : new Ctx(ctx.eng, ctx.sheet, ctx.r, ctx.c, true, ctx.depth, ctx.locals)); continue; }
       const v = evaluate(a, ctx);
       args[i] = kind === 'r' ? v : ctx.value(v);
       if (kind === 'v' && Array.isArray(args[i])) lifted = true;
     }
     if (!lifted) return invoke(def, args, ctx);
     const slots = args.map((v, i) => (kindAt(def, i) === 'v' ? v : null));
-    return map(slots, (...xs) => invoke(def, xs.map((x, i) => (kindAt(def, i) === 'v' ? x : args[i])), ctx));
+    return map(slots, (...xs) => element(invoke(def, xs.map((x, i) => (kindAt(def, i) === 'v' ? x : args[i])), ctx), ctx));
+  };
+  // What a lifted call gives for one element: a one-cell reference's value, an array's top-left value (Excel 16.114.1:
+  // SEQUENCE({2,3}) is {1,1}); a larger reference is #VALUE!, as no array here holds references.
+  const element = (v, ctx) => {
+    if (v instanceof Ref) return v.r0 === v.r1 && v.c0 === v.c1 ? ctx.read(v.sheet, v.r0, v.c0) : ERR.VALUE;
+    if (Array.isArray(v)) return v[0][0];
+    return v instanceof Areas ? ERR.VALUE : v;
   };
 
   // What a cell shows of a formula's result: a range intersects (or, in an array formula, gives its top-left), an
@@ -408,6 +450,10 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
     return info;
   };
 
+  // Whether an operation hides or shows rows or columns, or moves a filter: what SUBTOTAL and AGGREGATE leave out.
+  const hides = (op) => op.op === 'hide' || (op.op === 'prop' && op.key === 'filter') || (op.op === 'batch' && op.ops.some(hides))
+    || (op.op === 'restore' && (op.hidden?.length > 0 || !!op.props?.some(([, k]) => k === 'filter')));
+
   class Engine {
     constructor(wb, opts = {}) {
       this.wb = wb;
@@ -417,6 +463,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       this.dirty = new Set();
       this.volatile = new Set();
       this.members = new Map();
+      this.subtotals = new Set();
       this.circular = new Map();
       this.needs = null;
       this.changed = new Map();
@@ -458,7 +505,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
 
     build() {
       this.checkArrays();
-      this.nodes.clear(); this.index.clear(); this.volatile.clear(); this.members.clear(); this.dirty.clear(); this.circular.clear();
+      this.nodes.clear(); this.index.clear(); this.volatile.clear(); this.members.clear(); this.subtotals.clear(); this.dirty.clear(); this.circular.clear();
       this.byName = new Map(this.wb.sheets.map((s) => [s.name.toLowerCase(), s]));
       this.byId = new Map(this.wb.sheets.map((s) => [s.id, s]));
       this.extents = new Map();
@@ -563,6 +610,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
         for (const s of sheets) this.register(node, s.id, r0, c0, r1, c1);
       }
       for (const fname of info.fns) if (VOLATILE.has(fname) || REGISTRY.get(fname)?.volatile) node.volatile = true;
+      if (info.fns.has('SUBTOTAL') || info.fns.has('AGGREGATE')) node.subtotal = true;
       if (info.opaque) node.opaque = true;
       if (depth > 16) return;
       for (const n of info.names) {
@@ -574,10 +622,11 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
 
     add(sheet, r, c, cell) {
       const k = key(sheet.id, r, c);
-      const node = { key: k, sheet, r, c, cell, ast: null, error: false, volatile: false, opaque: false, entries: [], array: cell.a !== undefined, span: null, result: undefined };
+      const node = { key: k, sheet, r, c, cell, ast: null, error: false, volatile: false, subtotal: false, opaque: false, entries: [], array: cell.a !== undefined, span: null, result: undefined };
       try { node.ast = F.compile(cell.f, r, c).ast; } catch { node.error = true; }
       if (node.ast) this.depend(node, node.ast, sheet, r, c);
       if (node.volatile) this.volatile.add(k);
+      if (node.subtotal) this.subtotals.add(k);
       this.nodes.set(k, node);
       const span = node.array ? M.rangePosition(cell.a) : null;
       if (span && span.r0 === r && span.c0 === c && (span.r1 > r || span.c1 > c)) {
@@ -604,10 +653,20 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       this.unregister(node);
       this.nodes.delete(k);
       this.volatile.delete(k);
+      this.subtotals.delete(k);
       this.dirty.delete(k);
       this.circular.delete(k);
       this.members.delete(k);
       if (node.span) for (const [mk, master] of [...this.members]) if (master === k) this.remove(mk);
+    }
+
+    // The cell whose formula computes (r, c): its own, or the head of the array formula covering it; null for none.
+    // sheet: a sheet or its id.
+    formulaAt(sheet, r, c) {
+      const sh = typeof sheet === 'number' ? this.byId.get(sheet) : sheet;
+      const cell = sh?.rows.get(r)?.get(c);
+      if (!cell) return null;
+      return cell.f !== undefined ? cell : this.nodes.get(key(sh.id, r, c))?.master?.cell ?? null;
     }
 
     read(sheet, r, c) {
@@ -776,6 +835,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
           if (cell?.f !== undefined) { this.add(sheet, r, c, cell); this.dirty.add(k); }
           seeds.push([id, r, c]);
         }
+        if (hides(op)) for (const k of this.subtotals) { const n = this.nodes.get(k); this.dirty.add(k); seeds.push([n.sheet.id, n.r, n.c]); }
         this.markFrom(seeds);
       }
       this.run();
@@ -818,7 +878,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
   }
 
   const engine = (wb, opts) => new Engine(wb, opts);
-  const lib = { ERR, isErr, err, Ref, Areas, num, text, bool, compare, same, round, map, at, dims, each, eachCell, toArray, view, resize, criteria, cellValue };
+  const lib = { ERR, isErr, err, Ref, Areas, evaluate, power, num, text, bool, compare, same, round, map, at, dims, each, eachCell, used, toArray, view, resize, wildcard, criteria, cellValue };
   return { ERR, XErr, VOLATILE, isErr, err, define, fn, engine, lib };
 })();
 

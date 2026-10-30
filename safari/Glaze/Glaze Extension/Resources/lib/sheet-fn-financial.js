@@ -52,10 +52,20 @@ var GZ_SHEET_FN_FINANCIAL = globalThis.GZ_SHEET_FN_FINANCIAL || (() => {
         next = (x + next) / 2;
       }
       if (!accepted) break;
-      if (Math.abs(next - x) < tol && Math.abs(f(next)[0]) <= tol * scale) return next || 0;
+      if (Math.abs(next - x) < tol && Math.abs(f(next)[0]) <= tol * scale) return polish(f, next) || 0;
       x = next;
     }
     throw ERR.NUM;
+  };
+  // Converged: up to three more steps while each shrinks the balance, so the result is the root to its last digits, as
+  // Excel's RATE is.
+  const polish = (f, x) => {
+    for (let i = 0; i < 3; i++) {
+      const [y, dy] = f(x), next = x - y / dy;
+      if (!y || !Number.isFinite(next) || next <= -1 || !(Math.abs(f(next)[0]) < Math.abs(y))) break;
+      x = next;
+    }
+    return x;
   };
 
   // The annuity balance and its derivative. Excel 16.114.1 accepts RATE cases requiring more than the

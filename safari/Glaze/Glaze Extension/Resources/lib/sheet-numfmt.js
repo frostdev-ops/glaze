@@ -123,7 +123,11 @@ var GZ_SHEET_NUMFMT = globalThis.GZ_SHEET_NUMFMT || (() => {
         i = j + 1;
         if (/^(h+|m+|s+)$/i.test(inner)) push({ k: 'dt', s: inner[0].toLowerCase(), n: inner.length, elapsed: true });
         else if ((m = COND.exec(inner.trim()))) sec.cond = { op: m[1], v: Number(m[2]) };
-        else if (inner[0] === '$') { const text = inner.slice(1).split('-')[0]; if (text) lit(text); }
+        else if (inner[0] === '$') {
+          const [text, id] = inner.slice(1).split('-');
+          if (text) lit(text);
+          if (id !== undefined && parseInt(id, 16) === 0x409) sec.enUS = true;
+        }
         else if (Object.hasOwn(COLORS, inner.toLowerCase())) sec.color = COLORS[inner.toLowerCase()];
         else if ((m = /^color\s*(\d{1,2})$/i.exec(inner)) && m[1] >= 1 && m[1] <= 56) sec.color = PALETTE[m[1] - 1];
         else bad(`[${inner}]`);
@@ -269,11 +273,13 @@ var GZ_SHEET_NUMFMT = globalThis.GZ_SHEET_NUMFMT || (() => {
   };
   const emit = (t, out) => { if (t.k === 'lit') out.push(t.s); else if (t.k === 'fill') out.push(t); else if (t.k === '.') out.push('.'); else if (t.k === '/') out.push('/'); };
 
+  // Each renderer → whether the number it wrote shows as anything but zero.
   const renderNum = (sec, a, out, o) => {
     const x = a * 10 ** (2 * sec.pct - 3 * sec.scale);
     const [int, frac] = fixed(x, sec.fracSlots);
     fillInt(sec.int.filter((t) => t.k !== 'skip'), int, sec.group, out);
-    if (!sec.dot) return;
+    const shown = /[1-9]/.test(int + frac);
+    if (!sec.dot) return shown;
     out.push('.');
     const lastNonZero = frac.search(/0*$/) - 1;
     let i = 0;
@@ -282,6 +288,7 @@ var GZ_SHEET_NUMFMT = globalThis.GZ_SHEET_NUMFMT || (() => {
       else if (t.k === 'gen') out.push(general(a, o.width));
       else emit(t, out);
     }
+    return shown;
   };
 
   const renderExp = (sec, a, out) => {
@@ -301,10 +308,12 @@ var GZ_SHEET_NUMFMT = globalThis.GZ_SHEET_NUMFMT || (() => {
     out.push(sec.e.s + (e < 0 ? '-' : sec.e.sign === '+' ? '+' : ''));
     const width = sec.exp.filter((t) => t.ch === '0').length;
     fillInt(sec.exp, String(Math.abs(e)).padStart(width, '0'), false, out);
+    return a !== 0;
   };
 
-  // The closest fraction with a denominator up to `most`; ties go to the smaller denominator.
-  const closest = (x, most) => {
+  // The last continued-fraction convergent with a denominator up to `most`, as Excel 16.114.1 chooses: 0.7 in ?/? is
+  // 2/3, not the closer 5/7.
+  const convergent = (x, most) => {
     most = Math.min(most, Number.MAX_SAFE_INTEGER);
     if (x === Math.round(x)) return [Math.round(x), 1];
     // Continued fractions bound the work by precision, even with many denominator placeholders.
@@ -317,20 +326,17 @@ var GZ_SHEET_NUMFMT = globalThis.GZ_SHEET_NUMFMT || (() => {
       if (remainder === a) return [p1, q1];
       remainder = 1 / (remainder - a);
     }
-    const k = Math.floor((most - q0) / q1);
-    const a = [p0 + k * p1, q0 + k * q1], b = [p1, q1];
-    const ea = Math.abs(x - a[0] / a[1]), eb = Math.abs(x - b[0] / b[1]);
-    return Math.abs(ea - eb) <= 1e-12 ? (a[1] < b[1] ? a : b) : ea < eb ? a : b;
+    return [p1, q1];
   };
   const renderFrac = (sec, a, out) => {
     const slots = sec.den.slots;
     let whole = sec.hasInt ? Math.floor(a) : 0;
     const part = a - whole;
-    let [p, q] = sec.den.fixed ? [Math.round(part * sec.den.fixed), sec.den.fixed] : closest(part, 10 ** slots.filter((t) => t.k === 'd').length - 1);
+    let [p, q] = sec.den.fixed ? [Math.round(part * sec.den.fixed), sec.den.fixed] : convergent(part, 10 ** slots.filter((t) => t.k === 'd').length - 1);
     if (sec.hasInt && p >= q) { whole += Math.floor(p / q); p %= q; }
     const numWidth = sec.num.length + 1 + (sec.den.fixed ? sec.den.width : slots.length);
     fillInt(sec.int, whole ? String(whole) : sec.hasInt && !p ? '0' : '', false, out);
-    if (sec.hasInt && !p) { out.push(' '.repeat(numWidth)); for (const t of sec.tail) emit(t, out); return; }
+    if (sec.hasInt && !p) { out.push(' '.repeat(numWidth)); for (const t of sec.tail) emit(t, out); return whole !== 0; }
     fillInt(sec.num, String(p), false, out);
     out.push('/');
     if (sec.den.fixed) out.push(String(sec.den.fixed));
@@ -341,6 +347,7 @@ var GZ_SHEET_NUMFMT = globalThis.GZ_SHEET_NUMFMT || (() => {
       if (ds.length > i) out.push(ds.slice(i));
     }
     for (const t of sec.tail) emit(t, out);
+    return whole !== 0 || p !== 0;
   };
 
   const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -373,7 +380,8 @@ var GZ_SHEET_NUMFMT = globalThis.GZ_SHEET_NUMFMT || (() => {
           break;
         }
         case 'frac': out.push(`.${String(t.ms).padStart(3, '0').slice(0, x.n)}`); break;
-        case 'ampm': out.push(x.text.length === 3 ? x.text[t.H < 12 ? 0 : 2] : t.H < 12 ? 'AM' : 'PM'); break;
+        // A/P writes A or P as typed, but AM or PM under an en-US tag (Excel 16.114.1).
+        case 'ampm': out.push(x.text.length === 3 && !sec.enUS ? x.text[t.H < 12 ? 0 : 2] : t.H < 12 ? 'AM' : 'PM'); break;
       }
     }
     return true;
@@ -431,20 +439,24 @@ var GZ_SHEET_NUMFMT = globalThis.GZ_SHEET_NUMFMT || (() => {
     if (!Number.isFinite(v)) return { text: '#NUM!', color: null, fill: null };
     const sec = choose(c, v);
     if (!sec) return null;
-    // One section shows the minus sign itself; with more, the section chosen for a negative number writes its own.
+    // One section shows the minus sign itself, unless the number shows as zero (Excel 16.114.1: -0.4 as 0 is "0"); with
+    // more, the section chosen for a negative number writes its own.
     const conditional = c.numeric[0].cond || c.numeric[1]?.cond;
     const signed = conditional ? !sec.cond : c.numeric.length === 1;
     const a = Math.abs(v);
     const out = [];
+    // A negative date has no day in the 1900 system; the 1904 one shows its magnitude's with a minus (Excel 16.114.1).
     if (sec.kind === 'date') {
-      if (v < 0 || !renderDate(sec, v, out, o)) return null;
+      if ((v < 0 && !o.date1904) || !renderDate(sec, a, out, o)) return null;
+      if (signed && v < 0) out.unshift('-');
       return finish(out, sec.color);
     }
-    if (sec.kind === 'num') renderNum(sec, a, out, o);
-    else if (sec.kind === 'exp') renderExp(sec, a, out);
-    else if (sec.kind === 'frac') renderFrac(sec, a, out);
+    let shown = a !== 0;
+    if (sec.kind === 'num') shown = renderNum(sec, a, out, o);
+    else if (sec.kind === 'exp') shown = renderExp(sec, a, out);
+    else if (sec.kind === 'frac') shown = renderFrac(sec, a, out);
     else for (const t of sec.tokens) { if (t.k === 'gen') out.push(general(a, o.width)); else emit(t, out); }
-    if (signed && v < 0) out.unshift('-');
+    if (signed && v < 0 && shown) out.unshift('-');
     return finish(out, sec.color);
   };
   const format = (v, fmt, o) => render(v, fmt, o)?.text ?? null;

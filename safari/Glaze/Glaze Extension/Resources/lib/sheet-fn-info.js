@@ -1,7 +1,9 @@
 // Glaze Sheets' information functions, registered with the calc engine (sheet-calc.js define): ISBLANK ISERR ISERROR
 // ISNA ISNUMBER ISTEXT ISNONTEXT ISLOGICAL ISREF ISEVEN ISODD ISFORMULA N T TYPE ERROR.TYPE NA CELL INFO SHEET SHEETS
-// ROW ROWS COLUMN COLUMNS FORMULATEXT. The IS functions take a value as it is: "19" is text. CELL answers "address",
-// "col", "row", "contents", "type" and "format", and without a reference answers for its own cell; INFO answers nothing.
+// FORMULATEXT (ROW, ROWS, COLUMN and COLUMNS are sheet-fn-lookup.js's). The IS functions take a value as it is: "19"
+// is text. CELL answers "address", "col", "row", "contents", "type" and "format", and without a reference answers for
+// its own cell; INFO answers nothing. An address on another sheet is 'Sheet 2'!$B$2 without the [Book1] Excel puts
+// first: a Glaze workbook has no file name (its record's title is not one), and INDIRECT reads the address back.
 // Classic script; module.exports for node.
 var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
   const C = typeof GZ_SHEET_CALC !== 'undefined' ? GZ_SHEET_CALC : require('./sheet-calc.js');
@@ -10,34 +12,13 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
   const NF = typeof GZ_SHEET_NUMFMT !== 'undefined' ? GZ_SHEET_NUMFMT : require('./sheet-numfmt.js');
   const { ERR, isErr, num, text, Ref, Areas } = C.lib;
 
-  // One area of cells; a list of areas is #REF! where `areas` says so, else #VALUE!.
-  const reference = (v, areas = ERR.VALUE) => {
+  // One area of cells; a list of areas is #VALUE!.
+  const reference = (v) => {
     if (isErr(v)) throw v;
-    if (v instanceof Areas) throw areas;
+    if (v instanceof Areas) throw ERR.VALUE;
     if (!(v instanceof Ref)) throw ERR.VALUE;
     return v;
   };
-  // A range's last row and column, a whole row or column stopping at the sheet's last used cell as the engine's arrays do.
-  const corner = (ref, ctx) => {
-    let { r1, c1 } = ref;
-    if (ref.r1 - ref.r0 >= 4096 || ref.c1 - ref.c0 >= 4096) {
-      const [mr, mc] = ctx.eng.extent(ref.sheet);
-      r1 = Math.max(ref.r0, Math.min(r1, mr));
-      c1 = Math.max(ref.c0, Math.min(c1, mc));
-    }
-    return [r1, c1];
-  };
-  // The cell holding the formula at (r, c): its own, or the head of the array formula whose range covers it.
-  const formulaAt = (ctx, sheet, r, c) => {
-    const cell = sheet.rows.get(r)?.get(c);
-    if (cell?.f !== undefined) return cell;
-    if (!cell) return null;
-    // The engine already indexes every array member and links it to its master. Use its cell key directly until
-    // it exposes a formulaAt accessor, rather than walking every member for each formula inspection.
-    const key = (sheet.id * M.MAX_ROWS + r) * M.MAX_COLS + c;
-    return ctx.eng.nodes.get(key)?.master?.cell ?? null;
-  };
-
   // CELL("format"): Excel's code for a number format's first section: G, F, ",", C, P or S with its decimals, D1-D9 for
   // dates and times, "-" when negatives show in a colour, "()" when positives show in parentheses.
   const sections = (code) => {
@@ -94,12 +75,6 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
     if (typeof v === 'boolean') throw ERR.VALUE;
     return Math.abs(Math.trunc(num(v, ctx)) % 2) === (odd ? 1 : 0);
   } });
-  const shape = (v) => {
-    if (isErr(v)) throw v;
-    if (v instanceof Areas) throw ERR.REF;
-    if (v instanceof Ref) return [v.rows, v.cols];
-    return Array.isArray(v) ? [v.length, v[0].length] : [1, 1];
-  };
   const ERROR_TYPES = { '#NULL!': 1, '#DIV/0!': 2, '#VALUE!': 3, '#REF!': 4, '#NAME?': 5, '#NUM!': 6, '#N/A': 7, '#GETTING_DATA': 8 };
 
   const FNS = {
@@ -114,10 +89,10 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
     ISREF: { p: ['r'], min: 1, max: 1, fn: ([v]) => v instanceof Ref || v instanceof Areas },
     ISEVEN: parity(false),
     ISODD: parity(true),
-    ISFORMULA: { p: ['r'], min: 1, max: 1, fn: ([v], ctx) => { const ref = reference(v); return formulaAt(ctx, ref.sheet, ref.r0, ref.c0) !== null; } },
+    ISFORMULA: { p: ['r'], min: 1, max: 1, fn: ([v], ctx) => { const ref = reference(v); return ctx.formulaAt(ref.sheet, ref.r0, ref.c0) !== null; } },
     // A range or an array formula's cells show the formula bar's text: the head's formula, an array's in braces.
     FORMULATEXT: { p: ['r'], min: 1, max: 1, fn: ([v], ctx) => {
-      const ref = reference(v), cell = formulaAt(ctx, ref.sheet, ref.r0, ref.c0);
+      const ref = reference(v), cell = ctx.formulaAt(ref.sheet, ref.r0, ref.c0);
       if (!cell) throw ERR.NA;
       return cell.a !== undefined ? `{=${cell.f}}` : `=${cell.f}`;
     } },
@@ -147,45 +122,29 @@ var GZ_SHEET_FN_INFO = globalThis.GZ_SHEET_FN_INFO || (() => {
           if (!cell || cell.t === 'z') return 'b';
           return cell.t === 's' ? 'l' : 'v';
         }
-        case 'format': { const s = sheet.rows.get(r)?.get(c)?.s; return formatCode(s === undefined ? 0 : ctx.eng.wb.styles[s]?.fmt); }
+        case 'format': { const s = sheet.rows.get(r)?.get(c)?.s; return formatCode(s === undefined ? 0 : ctx.style(s)?.fmt); }
         default: throw ERR.VALUE;
       }
     } },
     INFO: { p: ['v'], min: 1, max: 1, fn: () => ERR.VALUE },
-    // Volatile: moving a sheet changes its number without touching a cell.
-    SHEET: { p: ['r'], min: 0, max: 1, volatile: true, fn: ([v], ctx) => {
-      const sheets = ctx.eng.wb.sheets;
+    SHEET: { p: ['r'], min: 0, max: 1, fn: ([v], ctx) => {
+      const sheets = ctx.sheets;
       if (v === undefined) return sheets.indexOf(ctx.sheet) + 1;
       if (isErr(v)) return v;
       if (v instanceof Areas) return sheets.indexOf(v.list[0].sheet) + 1;
       if (v instanceof Ref) return sheets.indexOf(v.sheet) + 1;
       if (Array.isArray(v)) throw ERR.VALUE;
-      const named = ctx.eng.sheetNamed(text(v));
+      const named = ctx.sheetNamed(text(v));
       if (!named) throw ERR.NA;
       return sheets.indexOf(named) + 1;
     } },
     SHEETS: { p: ['r'], min: 0, max: 1, fn: ([v], ctx) => {
-      if (v === undefined) return ctx.eng.wb.sheets.length;
+      if (v === undefined) return ctx.sheets.length;
       if (isErr(v)) return v;
       if (v instanceof Areas) return new Set(v.list.map((ref) => ref.sheet)).size;
       if (v instanceof Ref) return 1;
       throw ERR.NA;
     } },
-    // A range's rows (a column) or columns (a row) as an array; one cell's alone.
-    ROW: { p: ['r'], min: 0, max: 1, fn: ([v], ctx) => {
-      if (v === undefined) return ctx.r + 1;
-      const ref = reference(v, ERR.REF), [r1] = corner(ref, ctx);
-      if (r1 === ref.r0) return ref.r0 + 1;
-      return Array.from({ length: r1 - ref.r0 + 1 }, (_, i) => [ref.r0 + i + 1]);
-    } },
-    COLUMN: { p: ['r'], min: 0, max: 1, fn: ([v], ctx) => {
-      if (v === undefined) return ctx.c + 1;
-      const ref = reference(v, ERR.REF), [, c1] = corner(ref, ctx);
-      if (c1 === ref.c0) return ref.c0 + 1;
-      return [Array.from({ length: c1 - ref.c0 + 1 }, (_, j) => ref.c0 + j + 1)];
-    } },
-    ROWS: { p: ['r'], min: 1, max: 1, fn: ([v]) => shape(v)[0] },
-    COLUMNS: { p: ['r'], min: 1, max: 1, fn: ([v]) => shape(v)[1] },
   };
   for (const [name, def] of Object.entries(FNS)) C.define(name, def);
   return { FNS, formatCode };
