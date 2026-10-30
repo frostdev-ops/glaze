@@ -12,7 +12,8 @@
 // launch_context_win.cc, since Chromium 89). The check proves the Chromium key: Google\Chrome's is absent throughout,
 // and Windows reads no manifest from the profile. Chromium runs a .bat host as %COMSPEC% /d /s /c ""<bat>" <args>".
 // Files go to a scratch LOCALAPPDATA (HOME elsewhere), given to every process and the browser; the registry is the real
-// HKCU, which setup and uninstall change only for keys pointing into the scratch folder. --dry stops before the browser.
+// HKCU, which setup and uninstall change only for keys pointing into the scratch folder. Windows requires CI=true/1
+// or --allow-registry, even with --dry (which stops before the browser).
 //   NODE_PATH=<playwright> node scripts/mcp-windows-check.js [evidence folder] [--dry]
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -33,6 +34,9 @@ const KEYS = { chromium: `HKCU\\Software\\Chromium\\NativeMessagingHosts\\${HOST
 const LINES = ['{"jsonrpc":"2.0","id":1,"method":"ping"}', '{"jsonrpc":"2.0","id":2,"method":"echo","params":{"text":"é😀 second"}}'];
 
 const args = process.argv.slice(2), dry = args.includes('--dry');
+if (WIN && !/^(true|1)$/i.test(process.env.CI || '') && !args.includes('--allow-registry')) {
+  throw new Error('Refusing real HKCU changes: set CI=true on the runner or pass --allow-registry explicitly');
+}
 const OUT = path.resolve(args.find((a) => !a.startsWith('--')) || fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-windows-out-')));
 const log = [], results = { platform: process.platform, node: process.version, dry, id: ID, steps: [] };
 const say = (s) => { log.push(`${new Date().toISOString()} ${s}`); console.log(s); };
