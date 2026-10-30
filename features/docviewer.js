@@ -108,7 +108,8 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   };
   try {
     chrome.storage.onChanged.addListener((c, area) => {
-      if (area !== 'local' || !key || !(key in c) || c[key].newValue?.by === stamp) return;
+      // A removal while this tab holds no marks is its own clear (or changes nothing here): history stays.
+      if (area !== 'local' || !key || !(key in c) || c[key].newValue?.by === stamp || (!c[key].newValue && !Object.keys(pages).length)) return;
       pages = I.clean(c[key].newValue?.pages);
       done = []; undone = [];
       gen++;
