@@ -305,8 +305,11 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     // comes back: the discussion is reopened in a new tab once those copies are gone.
     const dropDrafts = () => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('draft:'))); });
     const keyIn = (fr) => fr.evaluate(() => GZ_WRITER_SOURCES.keyOf(GZ_WRITER_FRAME.context()));
-    const stored = (k) => worker.evaluate((k) => chrome.storage.local.get(k).then((r) => (r[k]?.sources || []).map((s) => s.title)), k);
-    const titles = (fr) => fr.evaluate(() => GZ_WRITER_CITE.sources().map((s) => s.title));
+    // A source by its DOI, else its title: what storage and a frame's Cite hold, and a wait for one of them to hold `value`.
+    const stored = (k) => worker.evaluate((k) => chrome.storage.local.get(k).then((r) => (r[k]?.sources || []).map((s) => s.DOI || s.title)), k);
+    const titles = (fr) => fr.evaluate(() => GZ_WRITER_CITE.sources().map((s) => s.DOI || s.title));
+    const holds = async (read, value, label) => { let last; try { await until(async () => (last = JSON.stringify(await read())) === value, label); } catch (e) { throw Error(`${e.message} (${last})`); } };
+    const DOI = '["10.5555/gz.2026.001"]';
     // ⋯ → Sources: the entries the popover lists, as the student sees them.
     const listed = async (fr) => {
       await until(async () => { if (await fr.evaluate(() => document.getElementById('menu').hidden)) await fr.click('#more'); return fr.evaluate(() => !document.getElementById('menu').hidden); }, 'menu open');
@@ -329,9 +332,9 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     await cp.fr.fill('.gzc-acts .gzc-page', '115');
     await cp.fr.press('.gzc-acts .gzc-page', 'Enter');
     await until(async () => (await quillHTML(p, '.ql-editor[data-placeholder="Type a post"]')).includes('Memory works like a river (Okafor and Park 115)'), 'the citation in the post and in Ultra\'s Quill');
-    await until(async () => JSON.stringify(await stored(DISCUSSION)) === '["Rememory and the River in Beloved"]', 'the source in storage');
+    await holds(() => stored(DISCUSSION), DOI, 'the source in storage');
     check(lookups[0] === 'https://doi.org/10.5555/gz.2026.001', 'a DOI cited in the post is looked up (stubbed doi.org) and saved under the discussion');
-    await until(async () => JSON.stringify(await titles(cr.fr)) === '["Rememory and the River in Beloved"]', 'the reply frame takes up the post\'s save');
+    await holds(() => titles(cr.fr), DOI, 'the reply frame takes up the post\'s save');
     check(true, 'the reply box in the same discussion sees the post\'s source without a reload');
     await p.close();
     await dropDrafts();
@@ -340,7 +343,7 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     await until(async () => (await titles(cp.fr)).length && (await titles(cr.fr)).length, 'sources after reopening');
     const entries = await listed(cp.fr);
     check(JSON.stringify(entries) === JSON.stringify([ENTRY]), `the discussion reopened, the post's ⋯ Sources lists the cited source's entry (${entries.join(' | ')})`);
-    check(JSON.stringify(await titles(cr.fr)) === '["Rememory and the River in Beloved"]', 'the discussion reopened, the reply has the same source');
+    check(JSON.stringify(await titles(cr.fr)) === DOI, 'the discussion reopened, the reply has the same source');
     await p.close();
     await dropDrafts();
     p = await open('/ultra/messages/create?courseId=_101_1');
@@ -348,12 +351,12 @@ const ESSAY = ['I agree that the river works as a kind of archive, but I think M
     await until(async () => await keyIn(cm.fr) === MESSAGE, 'the new message\'s store');
     check(JSON.stringify(await titles(cm.fr)) === '[]', `a new message has its own store, without the discussion's source: ${MESSAGE}`);
     await cm.fr.evaluate(() => GZ_WRITER_CITE.setSources([{ type: 'book', title: 'A Reading List', author: [{ family: 'Rivera', given: 'Alex' }], issued: { 'date-parts': [[2024]] } }]));
-    await until(async () => JSON.stringify(await stored(MESSAGE)) === '["A Reading List"]', 'the message\'s source in storage');
+    await holds(() => stored(MESSAGE), '["A Reading List"]', 'the message\'s source in storage');
     await p.reload();
     await p.waitForFunction(() => document.documentElement.hasAttribute('data-gz-motion'));
     cm = await box(p, 'message');
-    await until(async () => JSON.stringify(await titles(cm.fr)) === '["A Reading List"]', 'the message\'s source after a reload');
-    check(JSON.stringify(await stored(DISCUSSION)) === '["Rememory and the River in Beloved"]', 'a new message\'s source comes back after a reload, and the discussion\'s store is untouched');
+    await holds(() => titles(cm.fr), '["A Reading List"]', 'the message\'s source after a reload');
+    check(JSON.stringify(await stored(DISCUSSION)) === DOI, 'a new message\'s source comes back after a reload, and the discussion\'s store is untouched');
     await p.close();
     check(lookups.length === 2 && lookups[1].startsWith('https://api.crossref.org/'), `the only lookups are the one DOI's (${lookups.join(', ')})`);
 
