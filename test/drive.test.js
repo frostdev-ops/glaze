@@ -335,3 +335,10 @@ test('the port: a page that sends more than it said, or goes away, uploads nothi
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(h.log.fetch.length, 0);
 });
+
+test('the worker\'s Drive forgets a refused token through the sign-in\'s drop, which covers both flows', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/background.js'), 'utf8');
+  const at = src.indexOf('drive: D.create({'), call = src.slice(at, src.indexOf('}),', at));
+  assert.match(call, /drop: \(token\) => openGoogle\(\)\.drop\(token\)/);
+  assert.doesNotMatch(call, /removeCachedAuthToken/);
+});
