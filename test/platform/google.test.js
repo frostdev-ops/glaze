@@ -595,6 +595,76 @@ test('pick: frostdev.io first, its GitHub Pages copy when it doesn\'t load, the 
   assert.deepEqual(await harness().g.pick(), { ok: false, why: 'connect' });
 });
 
+// ---- Settings' Google Drive rows (settings/options.js), run in a VM with the worker and storage stubbed ----
+const settings = async ({ email = 'student@school.edu', sync = {}, connect = { ok: true, email } } = {}) => {
+  const vm = require('node:vm');
+  const src = fs.readFileSync(path.join(__dirname, '../../extension/settings/options.js'), 'utf8');
+  const block = src.slice(src.indexOf('  // ---- Google Drive (background/google.js'), src.indexOf('  // Another surface changed something'));
+  const els = {}, sent = [], heard = [], local = { driveSync: sync };
+  const el = (id, hidden = false) => {
+    const e = { id, observers: [], listeners: {}, checked: false, _hidden: hidden, _text: '', focus() {},
+      addEventListener(type, f) { (this.listeners[type] ||= []).push(f); },
+      get hidden() { return this._hidden; }, set hidden(v) { if (v !== this._hidden) { this._hidden = v; for (const f of this.observers) f(); } },
+      get textContent() { return this._text; }, set textContent(v) { if (String(v) !== this._text) { this._text = String(v); for (const f of this.observers) f(); } } };
+    els[`#${id}`] = e;
+  };
+  for (const [id, hidden] of [['gdrive', true], ['gdrive-who'], ['gdrive-connect'], ['gdrive-disconnect', true], ['gdrive-sync', true], ['gdrive-sync-said'], ['gdrive-sync-on']]) el(id, hidden);
+  const chrome = {
+    runtime: {
+      lastError: undefined,
+      sendMessage: (m, reply) => {
+        sent.push(m);
+        const r = m.type === 'glaze:google' ? (m.op === 'status' ? { ok: true, flow: 'chrome', email: local.google?.email || null } : m.op === 'connect' ? connect : { ok: true }) : { ok: true };
+        if (m.type === 'glaze:google' && m.op === 'connect' && r.ok) local.google = { email: r.email };
+        setTimeout(() => reply(r), 0);
+      },
+    },
+    permissions: { request: async () => true },
+    storage: { local: { get: async (k) => ({ [k]: structuredClone(local[k]) }) }, onChanged: { addListener: (f) => heard.push(f) } },
+  };
+  if (email) local.google = { email };
+  vm.runInNewContext(block, {
+    $: (s) => els[s], chrome, t: (s) => s, hint() {}, GZ_SITE: {}, GZ_I18N: { locale: () => 'en', ui: () => 'en' }, Intl, Date,
+    MutationObserver: class { constructor(f) { this.f = f; } observe(e) { e.observers.push(this.f); } },
+  });
+  const settle = () => new Promise((r) => setTimeout(r, 20));
+  await settle();
+  return {
+    els, sent, settle,
+    click: async (id) => { for (const f of els[id].listeners.click) await f({ isTrusted: true, currentTarget: els[id] }); await settle(); },
+    syncChange: async (next) => { local.driveSync = next; for (const f of heard) f({ driveSync: { newValue: next } }, 'local'); await settle(); },
+  };
+};
+
+test('Settings: while Sync asks to connect Google Drive again, Connect is there beside Disconnect, and connecting the same account again restarts Sync', async () => {
+  const A = 'student@school.edu';
+  for (const problem of ['auth', 'connect', 'account', 'scope', 'permission']) {
+    const s = await settings({ sync: { on: true, account: A, problem } });
+    assert.equal(s.els['#gdrive-who'].textContent, A);
+    assert.equal(s.els['#gdrive-sync-said'].textContent, 'Connect Google Drive again to keep syncing.', problem);
+    assert.deepEqual([s.els['#gdrive-connect'].hidden, s.els['#gdrive-disconnect'].hidden], [false, false], `${problem}: Connect offered, as the line says`);
+  }
+  for (const sync of [{ on: true, account: A, problem: 'network' }, { on: true, account: A, last: 1 }, { on: false, off: true, problem: 'account' }]) {
+    const s = await settings({ sync });
+    assert.deepEqual([s.els['#gdrive-connect'].hidden, s.els['#gdrive-disconnect'].hidden], [true, false], JSON.stringify(sync));
+  }
+  // The same account again: Sync turned on afresh (its problem cleared, a run now rather than after its wait).
+  const s = await settings({ sync: { on: true, account: A, problem: 'auth', wait: Date.now() + 3600e3 } });
+  await s.click('#gdrive-connect');
+  assert.deepEqual(s.sent.filter((m) => m.type === 'glaze:driveSync'), [{ type: 'glaze:driveSync', op: 'set', on: true }]);
+  await s.syncChange({ on: true, account: A, problem: null, busy: Date.now() });
+  assert.equal(s.els['#gdrive-connect'].hidden, true, 'and once it runs, only Disconnect');
+  // Another account: Sync's own binding check stops it there (background/background.js), Settings never rebinds it.
+  const b = await settings({ sync: { on: true, account: A, problem: 'account' }, connect: { ok: true, email: 'other@school.edu' } });
+  await b.click('#gdrive-connect');
+  assert.deepEqual(b.sent.filter((m) => m.type === 'glaze:driveSync'), []);
+  // Not connected: Connect alone, and nothing of Sync's.
+  const n = await settings({ email: null, sync: { on: true, account: A, problem: 'connect' } });
+  assert.deepEqual([n.els['#gdrive'].hidden, n.els['#gdrive-connect'].hidden, n.els['#gdrive-disconnect'].hidden, n.els['#gdrive-sync'].hidden], [false, false, true, true]);
+  await n.click('#gdrive-connect');
+  assert.deepEqual(n.sent.filter((m) => m.type === 'glaze:driveSync'), [], 'a first Connect: the worker turns Sync on itself');
+});
+
 test('the worker gives background/google.js a way to open the sign-in tab the student taps (iOS), from the worker', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const env = src.slice(src.indexOf('google = GZ_GOOGLE.create({'), src.indexOf('});', src.indexOf('google = GZ_GOOGLE.create({')));
