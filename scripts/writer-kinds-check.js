@@ -235,6 +235,17 @@ const holds = (bytes, value) => {
     check(await fr.evaluate(() => !document.querySelector('.gk-choose') && ![...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => b.textContent === 'New spreadsheet')), 'turning Spreadsheets off removes the live chooser and New spreadsheet');
     await worker.evaluate(async () => { const { writer } = await chrome.storage.sync.get('writer'); await chrome.storage.sync.set({ writer: { ...writer, sheets: true } }); });
     await until(() => fr.evaluate(() => !!document.querySelector('.gk-choose')), 'the choice returns with Spreadsheets on', 60000);
+    const dismissed = [];
+    for (const key of ['Escape', 'Enter']) {
+      await fr.locator('.gk-pick[data-kind="paper"]').focus();
+      await p.keyboard.press(key);
+      dismissed.push(await fr.evaluate(() => !document.querySelector('.gk-choose') && !!document.activeElement?.closest('.ProseMirror') && document.activeElement.getClientRects().length > 0));
+      await worker.evaluate(async () => { const { writer } = await chrome.storage.sync.get('writer'); await chrome.storage.sync.set({ writer: { ...writer, sheets: false } }); });
+      await until(() => fr.evaluate(() => GZ_WRITER_SETTINGS.now().sheets === false), 'Spreadsheets off received', 60000);
+      await worker.evaluate(async () => { const { writer } = await chrome.storage.sync.get('writer'); await chrome.storage.sync.set({ writer: { ...writer, sheets: true } }); });
+      await until(() => fr.evaluate(() => !!document.querySelector('.gk-choose')), 'the choice restored for the next input', 60000);
+    }
+    check(dismissed.every(Boolean), `Escape and Document by keyboard dismiss the choice and focus the editor (${dismissed.join(', ')})`);
     await tap(fr, '.gk-pick[data-kind="sheet"]');
     const A1 = '.gk #gx-grid .gx-c[data-r="0"][data-c="0"]';
     await until(() => fr.evaluate((a1) => document.documentElement.dataset.doc === 'sheet' && !!document.querySelector(a1), A1), 'the grid', 40000,
