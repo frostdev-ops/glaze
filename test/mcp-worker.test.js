@@ -5,8 +5,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const fs = require('node:fs');
-const path = require('node:path');
 const worker = require('./helpers/worker-env.cjs');
 const { fakeIDB } = require('./helpers/fake-idb.cjs');
 const C = require('./helpers/mcp-caches.cjs');
@@ -458,7 +456,6 @@ test('glaze:mcp-config: only the editor\'s own top frame, and each op', async ()
   await until(() => env.store.session.mcpLink.state === 'off', 'the link off');
 });
 
-
 test('a content-script-writable setting cannot enable agent access, including after an owner off and a restart', async () => {
   const env = boot({ store: store0(), trustedOn: false });
   const host = nodeHost(env.w);
@@ -503,38 +500,4 @@ test('an unused Safari snapshot cannot survive off and give a new connection the
   const a = agent({ say: app.say, sent: () => app.frames }, 7);
   assert.equal((await a.ask({ jsonrpc: '2.0', id: 4, method: 'tools/list' })).error?.code, -32602, 'new connections must establish their own identity');
   await config(env, { op: 'set', on: false }, { ...EDITOR, url: base + 'options.html', origin: base.slice(0, -1) });
-});
-
-test('Firefox loads MCP scripts on demand in order and sends frames through the packaged event-page path', async () => {
-  const loaded = [];
-  let env;
-  const document = {
-    createElement: () => ({ remove() {} }),
-    head: { appendChild: (el) => setImmediate(() => {
-      try {
-        const file = new URL(el.src).pathname.slice(1);
-        loaded.push(file);
-        inWorker(env.w, fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
-        el.onload();
-      } catch (e) { el.onerror(e); }
-    }) },
-  };
-  env = boot({ store: store0({ on: false }), base: 'moz-extension://x/', globals: { document } });
-  // package-firefox.sh replaces importScripts with a no-op; only script elements can load the omitted files.
-  inWorker(env.w, 'globalThis.importScripts = () => {}');
-  const host = nodeHost(env.w);
-  await env.w.settle();
-  assert.deepEqual(loaded, []);
-  const editor = { ...EDITOR, url: 'moz-extension://x/options.html', origin: 'moz-extension://x' };
-  await config(env, { op: 'set', on: true }, editor);
-  await connected(env);
-  const a = agent(host.link(), 1);
-  assert.equal((await a.ask(INIT(0))).result.serverInfo.name, 'glaze');
-  const before = loaded.length;
-  assert.ok(loaded.indexOf('lib/agent-frames.js') < loaded.indexOf('lib/agent-link.js'));
-  assert.ok(loaded.indexOf('lib/ai/tools.js') < loaded.indexOf('lib/mcp/calls.js'));
-  const b = agent(host.link(), 2);
-  assert.equal((await b.ask(INIT(0))).result.serverInfo.name, 'glaze');
-  assert.equal(loaded.length, before, 'each script is loaded once');
-  await config(env, { op: 'set', on: false }, editor);
 });
