@@ -81,6 +81,8 @@ const firefoxFixture = (branch, check) => {
     fs.mkdirSync(path.join(seed, 'background'), { recursive: true }); fs.mkdirSync(scripts, { recursive: true }); fs.mkdirSync(path.join(dir, 'extension'));
     fs.writeFileSync(path.join(seed, 'manifest.json'), JSON.stringify(manifest));
     fs.writeFileSync(path.join(seed, 'background/background.js'), '// offline fixture\n');
+    // The packager replaces Calendar's sign-in with Firefox's stand-in, as it would in a real package.
+    fs.mkdirSync(path.join(seed, 'planner')); fs.writeFileSync(path.join(seed, 'planner/gcal-auth.js'), '// offline fixture\n');
     fs.writeFileSync(path.join(dir, 'extension/manifest.json'), JSON.stringify(manifest));
     fs.copyFileSync(path.join(__dirname, '../../tools/build/package-firefox.sh'), path.join(scripts, 'package-firefox.sh'));
     const zip = path.join(dir, 'input.zip'), marker = path.join(dir, 'packager-called');
