@@ -30,7 +30,9 @@ const parseAddress = (a) => {
   return r >= 1 && r <= MAX_ROW && c >= 1 && c <= MAX_COL ? { r, c } : null;
 };
 const parseRange = (ref) => {
-  const [a, b = a] = String(ref || '').split(':');
+  const parts = String(ref || '').split(':');
+  if (parts.length > 2) return null;
+  const [a, b = a] = parts;
   const p = parseAddress(a), q = parseAddress(b);
   return p && q ? { r0: Math.min(p.r, q.r), c0: Math.min(p.c, q.c), r1: Math.max(p.r, q.r), c1: Math.max(p.c, q.c) } : null;
 };
@@ -104,8 +106,8 @@ const sharedStrings = (x, L) => {
     if (tk.name) {
       const n = local(tk.name);
       if (n === 'si') {
-        if (tk.empty) { out.push(''); continue; }
-        if (tk.close) { out.push(unescape(cur ?? '')); cur = null; } else cur = '';
+        if (tk.empty) out.push('');
+        else if (tk.close) { out.push(unescape(cur ?? '')); cur = null; } else cur = '';
         if (out.length > L.strings) fail('too many shared strings');
       } else if (n === 'rPh') { if (!tk.empty) skip += tk.close ? -1 : 1; }
       else if (n === 't' && !tk.empty) inT += tk.close ? -1 : 1;
@@ -117,6 +119,7 @@ const sharedStrings = (x, L) => {
 };
 
 const value = (t, v, inline, strings) => {
+  if (t === 'inlineStr' ? inline == null : v == null) return null;
   switch (t) {
     case 's': {
       const k = Number(v);
@@ -140,10 +143,11 @@ const value = (t, v, inline, strings) => {
 // One worksheet's cells. A cell without a cached value (a styled blank) is left out unless it holds a formula.
 const sheetCells = (x, strings, L, budget) => {
   const cells = new Map(), shared = new Map(), arrays = [];
-  let row = 0, col = 0, cur = null, field = null, inT = 0;
+  let row = 0, col = 0, cur = null, field = null, inT = 0, skip = 0;
   const finish = () => {
     const c = cur;
     cur = null;
+    if (++budget.cells > L.cells) fail('too many cells');
     if (c.f != null && c.f.length > L.formula) fail('formula too long');
     const v = value(c.t, c.v, c.inline, strings);
     if (!v && c.f == null && !c.fkind) return;
@@ -156,14 +160,19 @@ const sheetCells = (x, strings, L, budget) => {
       if (c.f) shared.set(c.si, { f: c.f, r: c.r, c: c.c });
       cell.si = c.si;
     }
-    if (c.fkind === 'array' && c.fref) arrays.push({ at: address(c.r, c.c), ...parseRange(c.fref) });
-    if (++budget.cells > L.cells) fail('too many cells');
+    if (c.fkind === 'array') {
+      const range = parseRange(c.fref);
+      if (!range || c.r < range.r0 || c.r > range.r1 || c.c < range.c0 || c.c > range.c1) throw new Error('bad array range');
+      budget.arrays += (range.r1 - range.r0 + 1) * (range.c1 - range.c0 + 1);
+      if (budget.arrays > L.cells) fail('too many array cells');
+      arrays.push({ at: address(c.r, c.c), ...range });
+    }
     cells.set(address(c.r, c.c), cell);
   };
   for (const tk of tokens(x || '')) {
     if (!tk.name) {
       if (!cur || !field) continue;
-      if (field === 'is' && !inT) continue;
+      if (field === 'is' && (!inT || skip)) continue;
       const s = tk.cdata ?? decode(tk.text);
       cur[field === 'is' ? 'inline' : field] = (cur[field === 'is' ? 'inline' : field] ?? '') + s;
       if ((cur.f?.length || 0) > L.formula) fail('formula too long');
@@ -187,8 +196,9 @@ const sheetCells = (x, strings, L, budget) => {
         cur.si = attr(tk.attrs, 'si');
         if (tk.empty) { if (!cur.fkind) cur.f = ''; } else { cur.f = cur.f ?? ''; field = 'f'; }
       } else field = null;
-    } else if (n === 'v') field = tk.close || tk.empty ? null : 'v';
-    else if (n === 'is') field = tk.close || tk.empty ? null : 'is';
+    } else if (n === 'v') { if (!tk.close && cur.t === 'str') cur.v = ''; field = tk.close || tk.empty ? null : 'v'; }
+    else if (n === 'is') { if (!tk.close) cur.inline = ''; field = tk.close || tk.empty ? null : 'is'; }
+    else if (n === 'rPh' && field === 'is' && !tk.empty) skip += tk.close ? -1 : 1;
     else if (n === 't' && field === 'is' && !tk.empty) inT += tk.close ? -1 : 1;
   }
   // Shared formulas: a cell that only names its group gets the group's formula moved from the cell that holds it.
@@ -201,6 +211,7 @@ const sheetCells = (x, strings, L, budget) => {
     if (cell.kind !== 'shared' || cell.f) continue;
     const m = shared.get(cell.si), p = parseAddress(at);
     cell.f = shift(m.f, p.r - m.r, p.c - m.c);
+    if (cell.f.length > L.formula) fail('formula too long');
   }
   // Array formulas: every other cell of the range belongs to the formula its first cell holds.
   for (const a of arrays) {
@@ -234,7 +245,7 @@ const read = async (bytes, opts = {}) => {
   const r = await rels(z, 'xl/workbook.xml');
   const ssPath = [...r.values()].find((p) => /sharedStrings\.xml$/.test(p));
   const strings = sharedStrings(ssPath ? await z.text(ssPath) : '', L);
-  const budget = { cells: 0 };
+  const budget = { cells: 0, arrays: 0 };
   const sheets = [];
   for (const s of list) {
     const path = r.get(s.id);
