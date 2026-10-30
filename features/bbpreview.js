@@ -16,7 +16,6 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
   const HEIGHT = 'max(640px, calc(100vh - 120px))'; // an assignment's paper (features/writer.js PAPER_HEIGHT)
   const ASK = 20000, SHOW = 30000, EVERY = 15000, FOR = 5 * 60e3; // EVERY and FOR: lib/bb-preview.js, Ultra's own
   const on = () => { const s = X.settings(); return X.on() && s.enabled !== false && s.enhance?.bbPreviews !== false && s.writer?.pdf !== false; };
-  const abs = (u) => { try { return new URL(u, document.baseURI).href; } catch { return ''; } };
   const views = new Map(); // Blackboard's frame → its view
   const answers = new Map(); // a frame's address → the worker's done answer, kept until two minutes before it ends
 
@@ -28,25 +27,21 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     return { tokens: Object.fromEntries(TOKENS.map((k) => [k, value(k)]).filter(([, v]) => v)), dark: html.hasAttribute('data-gz-dark-theme'), glass, motion: html.getAttribute('data-gz-motion') || 'off' };
   };
 
-  // Blackboard's frame → its attachment: the data-bbfile whose viewerUrl it shows (else the one around it), its name, and
-  // the original on this site. null: a frame that isn't an attachment's preview (it stays Blackboard's).
+  // Blackboard's frame → its attachment: the data-bbfile whose viewerUrl it shows (else the one around it), that address on
+  // this site (data, so read against the page's own address: Ultra's <base> is its CDN), its name, and the original's link
+  // here. null: a frame that isn't an attachment's preview (it stays Blackboard's).
+  const own = (u) => { try { const x = new URL(u, location.href); return x.origin === location.origin ? x : null; } catch { return null; } };
+  const same = (a, b) => !!a && !!b && a.pathname === b.pathname && a.search === b.search;
   const fileOf = (bf) => {
-    const src = bf.src;
-    let el = null, j = null;
-    for (const x of document.querySelectorAll('#site-wrap [data-bbfile]')) {
-      let d = null;
-      try { d = JSON.parse(x.getAttribute('data-bbfile')); } catch { continue; }
-      if (typeof d?.viewerUrl === 'string' && abs(d.viewerUrl) === src) { el = x; j = d; break; }
-    }
-    if (!el) {
-      el = bf.closest('[data-bbfile]');
-      try { j = el && JSON.parse(el.getAttribute('data-bbfile')); } catch { j = null; }
-      if (typeof j?.viewerUrl !== 'string' || new URL(abs(j.viewerUrl)).pathname !== new URL(src).pathname) return null;
-    }
-    if (j?.render !== 'inline' || new URL(src).origin !== location.origin) return null;
-    const a = el.querySelector('a[href*="/bbcswebdav/"]');
-    const href = a && new URL(a.href).origin === location.origin ? a.href : '';
-    return { el, name: String(j.linkName || a?.textContent || bf.title || '').replace(/\s+/g, ' ').trim().slice(0, 200), href };
+    let at = null;
+    try { at = new URL(bf.src); } catch { return null; }
+    const read = (x) => { try { return JSON.parse(x.getAttribute('data-bbfile')); } catch { return null; } };
+    let el = [...document.querySelectorAll('#site-wrap [data-bbfile]')].find((x) => same(own(read(x)?.viewerUrl), at)) || null;
+    if (!el && same(own(read(bf.closest('[data-bbfile]'))?.viewerUrl), at)) el = bf.closest('[data-bbfile]');
+    const j = el && read(el), viewer = own(j?.viewerUrl);
+    if (!viewer || j.render !== 'inline') return null;
+    const a = el.querySelector('a[href*="/bbcswebdav/"]'), href = own(a?.getAttribute('href') || '')?.href || '';
+    return { el, viewer: viewer.href, name: String(j.linkName || a?.textContent || bf.title || '').replace(/\s+/g, ' ').trim().slice(0, 200), href };
   };
 
   // The worker's answer for a frame's address (a done one kept while it lasts): { ok, status, pdf, expires } or a failure.
@@ -98,7 +93,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     else if (m.type === 'view:esc') back(v);
     else if (m.type === 'view:renew') {
       const port = v.port;
-      asked(v.src, true).then((r) => {
+      asked(v.file.viewer, true).then((r) => {
         if (v.port !== port) return;
         port.postMessage(r?.ok && r.status === 'done' ? { type: 'view:url', url: r.pdf, expires: r.expires } : { type: 'view:url', error: r?.error || 'none' });
       });
@@ -138,7 +133,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     v.bf.after(f);
   };
   const ask = async (v) => {
-    const r = await asked(v.src);
+    const r = await asked(v.file.viewer);
     if (!live(v) || v.ended) return;
     if (r?.ok && r.status === 'done') { v.answer = r; load(v); return; }
     if (r?.ok && r.status === 'converting' && Date.now() - v.since < FOR) { mark(v, 'converting'); v.timer = setTimeout(() => ask(v), EVERY); return; }
