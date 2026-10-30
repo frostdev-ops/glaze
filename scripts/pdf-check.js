@@ -237,6 +237,7 @@ const fixture = () => {
     // Hold the worker's first save after its byte snapshot, while annotationStorage is still marked modified.
     await openHome();
     await page.evaluate(async (key) => {
+      await import(chrome.runtime.getURL('lib/pdfjs/pdf.mjs'));
       const V = await import(chrome.runtime.getURL('lib/pdfjs/pdf_viewer.mjs'));
       const setDocument = V.PDFViewer.prototype.setDocument;
       V.PDFViewer.prototype.setDocument = function (doc) { globalThis.pdfCheckDoc = doc; return setDocument.call(this, doc); };
