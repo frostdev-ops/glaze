@@ -1399,6 +1399,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     let tabOut = false;
     gridEl.addEventListener('keydown', (e) => {
       if (e.target !== gridEl || editing) return;
+      if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
       if (e.key === 'Tab' && tabOut) { tabOut = false; return; }
       tabOut = e.key === 'Escape';
       const mod = e.ctrlKey || e.metaKey, k = e.key;
