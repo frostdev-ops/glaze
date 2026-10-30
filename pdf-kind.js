@@ -56,36 +56,45 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
   let docLib = null;
   const pdfdoc = () => (typeof globalThis.GZ_PDF_DOC?.use === 'function' ? (docLib ||= pdfjs().then((P) => GZ_PDF_DOC.use(P, GET))) : null);
   // bytes (a copy goes to the worker) → { task, doc }, or a RangeError(UNREAD) for a file that is no PDF, is locked, has
-  // too many pages or is pure XFA.
+  // too many pages, is pure XFA or has no first page to show (pdf.js's viewer would wait for it).
   const read = async (bytes) => {
     const lib2 = pdfdoc();
+    let task, doc;
     if (lib2) {
       const pdf = await lib2;
-      try { const { doc } = await pdf.open(bytes); return { task: doc.loadingTask, doc }; } catch { throw new RangeError(UNREAD); }
+      try { ({ doc } = await pdf.open(bytes)); task = doc.loadingTask; } catch { throw new RangeError(UNREAD); }
+    } else {
+      const P = await pdfjs();
+      task = P.getDocument({ ...GET, data: bytes.slice() });
+      try { doc = await task.promise; } catch { await task.destroy().catch(() => {}); throw new RangeError(UNREAD); }
     }
-    const P = await pdfjs();
-    const task = P.getDocument({ ...GET, data: bytes.slice() });
-    let doc;
-    try { doc = await task.promise; } catch { await task.destroy().catch(() => {}); throw new RangeError(UNREAD); }
     try {
-      const [{ info }, fields] = await Promise.all([doc.getMetadata(), doc.getFieldObjects()]);
-      if (doc.numPages > PAGES || pureXfa(info, fields)) throw new RangeError(UNREAD);
+      if (!lib2) {
+        const [{ info }, fields] = await Promise.all([doc.getMetadata(), doc.getFieldObjects()]);
+        if (doc.numPages > PAGES || pureXfa(info, fields)) throw new RangeError(UNREAD);
+      }
+      await doc.getPage(1);
     } catch (e) { await task.destroy().catch(() => {}); throw e instanceof RangeError ? e : new RangeError(UNREAD); }
     return { task, doc };
   };
-  // Page 1 as a small picture (a data URL), as filled in: what the home's card shows. lib/pdf-doc.js's PNG (24 KB at most)
-  // where that is loaded and it fits, else a JPEG drawn here.
+  // Page 1 as a small picture (a data URL), as filled in: what the home's card shows (204 px wide, 408 on a 2× screen).
+  // Try lib/pdf-doc.js's PNG (24 KB at most) once at full size, else a JPEG drawn here: a scan or a photo fits 24 KB of
+  // PNG only as a postage stamp. At most two draws, including the JPEG.
   const picture = async (doc) => {
     const lib2 = pdfdoc(), page = await doc.getPage(1);
-    if (lib2) { const { png } = await (await lib2).thumbnail(page, 528); if (png) return `data:image/png;base64,${b64(png)}`; }
+    if (lib2) { const { png } = await (await lib2).thumbnail(page, 528, { minPx: 528 }); if (png) return `data:image/png;base64,${b64(png)}`; }
     const P = await pdfjs(), one = page.getViewport({ scale: 1 });
     const viewport = page.getViewport({ scale: 408 / Math.max(1, one.width) });
     const canvas = Object.assign(document.createElement('canvas'), { width: Math.ceil(viewport.width), height: Math.min(Math.ceil(viewport.height), 1200) });
     // The page is the viewer's too (one proxy per page): the viewer cleans it up.
-    await page.render({ canvas, viewport, background: '#fff', annotationMode: P.AnnotationMode.ENABLE_STORAGE }).promise;
-    const out = canvas.toDataURL('image/jpeg', 0.78);
-    canvas.width = canvas.height = 0;
-    return out;
+    try {
+      await page.render({ canvas, viewport, background: '#fff', annotationMode: P.AnnotationMode.ENABLE_STORAGE }).promise;
+      for (const q of [0.78, 0.6, 0.45, 0.3, 0.15, 0.05]) {
+        const out = canvas.toDataURL('image/jpeg', q);
+        if (out.length <= 64e3) return out;
+      }
+      return null;
+    } finally { canvas.width = canvas.height = 0; }
   };
 
   let store = null;
@@ -262,14 +271,18 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
     nextB.addEventListener('click', () => find('again', false));
     const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
     document.addEventListener('keydown', (e) => {
-      if (e.defaultPrevented) return;
-      if (e.key === 'Escape' && !findBar.hidden) { e.preventDefault(); e.stopPropagation(); showFind(false); return; }
-      if (!(MAC ? e.metaKey : e.ctrlKey) || e.altKey) return;
-      const k = e.key.toLowerCase();
-      if (k === 'f' && doc) { e.preventDefault(); showFind(true); }
-      else if ((k === '=' || k === '+') && doc) { e.preventDefault(); viewer.increaseScale(); }
-      else if (k === '-' && doc) { e.preventDefault(); viewer.decreaseScale(); }
+      if (!e.defaultPrevented && e.key === 'Escape' && !findBar.hidden) { e.preventDefault(); e.stopPropagation(); showFind(false); }
     }, { signal });
+    // Ahead of the page's own: in an assignment's frame the parked paper's find (writer-find.js) takes Ctrl+F at the document.
+    addEventListener('keydown', (e) => {
+      if (e.defaultPrevented || !doc || !(MAC ? e.metaKey : e.ctrlKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === 'f') showFind(true);
+      else if (k === '=' || k === '+') viewer.increaseScale();
+      else if (k === '-') viewer.decreaseScale();
+      else return;
+      e.preventDefault(); e.stopPropagation();
+    }, { capture: true, signal });
 
     // ---- saving: a field filled (pdf.js's annotation storage) saves a second after the last change, and before the page
     // leaves for Documents; the bytes pdf.js writes (an incremental update) replace the record's, with page 1 drawn again.
@@ -300,8 +313,8 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       doc.annotationStorage.onSetModified = modified;
       // pdf.js only calls onSetModified once until its current save finishes. Track each input as well, so a field
       // changed during that save cannot be mistaken for the value its worker already captured.
-      ui.addEventListener('input', (e) => { if (e.target.closest?.('.annotationLayer')) modified(); });
-      ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } });
+      ui.addEventListener('input', (e) => { if (e.target.closest?.('.annotationLayer')) modified(); }, { signal });
+      ui.addEventListener('change', (e) => { if (e.target.closest?.('.annotationLayer')) { modified(); flush(); } }, { signal });
     }
     back?.addEventListener('click', (e) => {
       if (!dirty && !saving) return;
@@ -354,7 +367,12 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
   // ---- registration: a PDF already kept lists and opens either way; only Settings → Writer → PDFs on (writer.pdf) lets
   // Documents import new ones (its Import, file chooser and drops: GZ_DOC_KINDS.opens). The page routes once this has answered.
-  const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.pdf === true, () => false);
+  // The switch as Settings shows it: the stored value through defaults.js, so no stored key means the default. writer.html
+  // has defaults.js already (a second copy would redeclare its constants); papers.html loads it on demand, after the three
+  // scripts it reads as it loads, in papers.js's order (need() shares their loads).
+  const DEFAULTS = ['lib/color.js', 'lib/surfaces.js', 'lib/fonts.js', 'defaults.js'];
+  const on = Promise.resolve().then(() => (typeof GZ_SANITIZE === 'function' ? null : GZ_WRITER_PAPER.need(DEFAULTS)))
+    .then(() => chrome.storage.sync.get('writer')).then((r) => GZ_SANITIZE({ writer: r?.writer }).writer.pdf === true, () => false);
   GZ_DOC_KINDS.wait(on.then((yes) => { GZ_DOC_KINDS.register('pdf', { edit, view: (key, host) => edit(key, { host }), into, says: { size: TOO_BIG, read: UNREAD }, thumb, file, exportFile, text, measure, ...(yes && { importFile }) }); }));
 
   return { STORE, pureXfa };

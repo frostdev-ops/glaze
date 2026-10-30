@@ -1,5 +1,5 @@
-// PDFs on the Documents page (papers.html, pdf-kind.js) in the real unpacked extension: with Settings → Writer → PDFs off
-// (writer.pdf, the default) a .pdf is refused as before, while a PDF already kept still opens; on, it imports as a card with its first page drawn, opens in the
+// PDFs on the Documents page (papers.html, pdf-kind.js) in the real unpacked extension: with Settings → Writer → PDFs turned
+// off (writer.pdf, on by default; Spreadsheets and Slides off throughout) a .pdf is refused as before, while a PDF already kept still opens; on, it imports as a card with its first page drawn, opens in the
 // viewer (pdf.js's PDFViewer: three pages, zoom, the text layer's find, AcroForm fields) whose filled field is still filled
 // after closing and opening it again, Export .pdf downloads the filled file, and Esc and Back behave as a paper's. pdf.js
 // runs its own worker (never the fake one in the page), the page stays white under a dark Look while its chrome wears it,
@@ -45,6 +45,34 @@ const fixture = () => {
   pdf += `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(pdf, 'latin1');
 };
+// A scanned worksheet: one Letter page that is a 150 dpi grey picture with the paper's grain and lines of dark words, which
+// a PNG of the page cannot keep small.
+const scan = () => {
+  const F = require('./pdf-fixtures.js'), zlib = require('node:zlib');
+  const w = 1275, h = 1650, px = Buffer.alloc(w * h);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  for (let i = 0; i < px.length; i++) px[i] = 234 + Math.floor(rnd() * 12);
+  for (let y0 = 150; y0 < 1500; y0 += 34) for (let x = 120; x < 1100;) {
+    const len = 20 + Math.floor(rnd() * 90);
+    for (let y = y0; y < y0 + 16; y++) for (let xx = x; xx < Math.min(x + len, 1150); xx++) px[y * w + xx] = 30 + Math.floor(rnd() * 30);
+    x += len + 14;
+  }
+  const { objects, refs, add } = F.pagesOf([{ size: [612, 792], content: 'q 612 0 0 792 0 0 cm /Im1 Do Q', resources: ' /XObject << /Im1 %IMG% >>' }]);
+  const img = add({ dict: `<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode >>`, stream: zlib.deflateSync(px) });
+  objects[refs[0] - 1] = objects[refs[0] - 1].replace('%IMG%', `${img} 0 R`);
+  return Buffer.from(F.write(objects, { id: 'scan' }));
+};
+// A noisy colour photo needs more JPEG compression than a worksheet, even at the same card dimensions.
+const photo = () => {
+  const F = require('./pdf-fixtures.js'), zlib = require('node:zlib'), w = 408, h = 528, px = Buffer.alloc(w * h * 3);
+  let seed = 17;
+  for (let i = 0; i < px.length; i++) { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; px[i] = seed & 255; }
+  const { objects, refs, add } = F.pagesOf([{ size: [612, 792], content: 'q 612 0 0 792 0 0 cm /Im1 Do Q', resources: ' /XObject << /Im1 %IMG% >>' }]);
+  const img = add({ dict: `<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode >>`, stream: zlib.deflateSync(px) });
+  objects[refs[0] - 1] = objects[refs[0] - 1].replace('%IMG%', `${img} 0 R`);
+  return Buffer.from(F.write(objects, { id: 'photo' }));
+};
 
 (async () => {
   let context, held = false, tmp, passed = false, page = null;
@@ -67,7 +95,7 @@ const fixture = () => {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).host;
     const G = require(path.join(root, 'defaults.js'));
     // Frost: a dark Look, so the chrome is dark while the page stays paper-white.
-    const settings = (pdf) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, pdf } });
+    const settings = (pdf) => G.GZ_SANITIZE({ preset: 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, writer: true }, writer: { ...G.GZ_DEFAULTS.writer, sheets: false, slides: false, pdf } });
     await worker.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(s); }, settings(false));
     const HOME = `chrome-extension://${id}/papers.html`;
     const local = (k) => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k] ?? null, k);
@@ -78,6 +106,14 @@ const fixture = () => {
     page.on('framenavigated', (f) => { if (f === page.mainFrame()) logs.push(`navigated: ${f.url()}`); });
     const shot = async (name) => { await pause(250); const f = path.join(out, name); await page.screenshot({ path: f }); shots.push(f); };
     const openHome = async () => { await page.goto(HOME); await until(() => page.evaluate(() => !document.getElementById('list').hidden), 'home'); };
+
+    // ---- no stored switch (a new install, an update): Documents reads it as Settings shows it, defaults.js's default, the
+    // page loading defaults.js after the scripts it reads.
+    await worker.evaluate(async (s) => { await chrome.storage.sync.set({ ...s, writer: { ...s.writer } }); await chrome.storage.sync.set({ writer: Object.fromEntries(Object.entries(s.writer).filter(([k]) => k !== 'pdf')) }); }, settings(false));
+    await openHome();
+    const unset = await page.evaluate(() => ({ accept: document.getElementById('gd-file').accept, defaults: typeof GZ_DEFAULTS === 'object' }));
+    check(unset.defaults && /pdf/.test(unset.accept) === G.GZ_DEFAULTS.writer.pdf, `no stored PDFs switch: Documents follows the default, ${G.GZ_DEFAULTS.writer.pdf ? 'on' : 'off'} (${JSON.stringify(unset)})`);
+    await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(false));
 
     // ---- off: Documents is as it was
     await openHome();
@@ -118,10 +154,23 @@ const fixture = () => {
     const chrome1 = await page.evaluate(() => ({ title: document.querySelector('.gp-top h1 input')?.value ?? document.querySelector('.gp-top h1')?.textContent, back: document.querySelector('.gp-top a')?.getAttribute('href'), mode: document.documentElement.dataset.mode }));
     check(chrome1.title === 'Field trip form' && chrome1.back === 'papers.html' && chrome1.mode === 'pdf', `the top bar: Documents, the title (${JSON.stringify(chrome1)})`);
     check(await page.getByRole('region', { name: 'Field trip form', exact: true }).count() === 1, 'the scrollable PDF has a named region');
+    // Motion off (reduced motion here): a page still drawing shows no spinning picture (pdf.js's loading-icon.gif).
+    const spinner = await page.evaluate(() => {
+      const p = Object.assign(document.createElement('div'), { className: 'page loadingIcon loading' });
+      document.querySelector('.pdfViewer').append(p);
+      const s = { motion: document.documentElement.dataset.motion, bg: getComputedStyle(p, '::after').backgroundImage };
+      p.remove();
+      return s;
+    });
+    check(spinner.motion === 'off' && spinner.bg === 'none', `motion off: no spinning picture on a page still drawing (${JSON.stringify(spinner)})`);
     // The page is paper under a dark Look; the bar around it is the Look's.
     const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
     const colours = await page.evaluate(() => ({ dark: document.documentElement.hasAttribute('data-dark'), page: getComputedStyle(document.querySelector('.pdfViewer .page')).backgroundColor, bar: getComputedStyle(document.querySelector('.gp-top')).backgroundColor, ground: getComputedStyle(document.querySelector('.gq-scroll')).backgroundColor }));
     check(colours.dark && lum(colours.page) > 0.98 && lum(colours.ground) < 0.35, `dark Look: white page, dark chrome (${JSON.stringify(colours)})`);
+    // pdf.js's stylesheet leaves the page's own colour scheme as the Look's where only stylesheets set it (an assignment's
+    // frame, writer.html: writer.css), so the browser's scrollbars and controls stay dark under a dark Look.
+    const scheme = await page.evaluate(() => { const r = document.documentElement, was = r.style.colorScheme; r.style.colorScheme = ''; const s = getComputedStyle(r).colorScheme; r.style.colorScheme = was; return s; });
+    check(scheme === 'dark', `the dark Look's colour scheme holds over pdf.js's stylesheet (${scheme})`);
 
     // ---- zoom: ± and the fits
     const width = () => page.evaluate(() => document.querySelector('.pdfViewer .page[data-page-number="1"]').getBoundingClientRect().width);
@@ -139,9 +188,16 @@ const fixture = () => {
     const wide = await until(() => page.evaluate(() => { const p = document.querySelector('.pdfViewer .page[data-page-number="1"]').getBoundingClientRect(), s = document.querySelector('.gq-scroll').getBoundingClientRect(); return p.width > s.width * 0.85 && p.width <= s.width ? { p: p.width, s: s.width } : null; }), 'page width');
     check(w1 > w0 && fit && wide, `zoom: in ${Math.round(w0)}→${Math.round(w1)}, whole page ${JSON.stringify(fit)}, page width ${JSON.stringify(wide)}`);
 
-    // ---- find: "page 2" in the text layer
+    // ---- find: "page 2" in the text layer. Ctrl+F is the viewer's even where the page takes it first, as an assignment's
+    // frame does for its parked paper (writer-find.js, at the document's capture phase): a stand-in for that here.
+    await page.evaluate(() => {
+      const grab = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); globalThis.pdfCheckGrabbed = true; } };
+      document.addEventListener('keydown', grab, true);
+      globalThis.pdfCheckUngrab = () => document.removeEventListener('keydown', grab, true);
+    });
     await page.keyboard.press('Control+f');
     await until(() => page.evaluate(() => document.activeElement?.id === 'gq-find-q'), 'find opens on Ctrl+F');
+    check(await page.evaluate(() => { globalThis.pdfCheckUngrab(); return !globalThis.pdfCheckGrabbed; }), 'Ctrl+F opens the PDF\'s find ahead of a page handler that takes it at the document');
     await page.keyboard.type('page 2');
     const found = await until(() => page.evaluate(() => { const n = document.getElementById('gq-find-n').textContent, hit = document.querySelector('.page[data-page-number="2"] .textLayer .highlight'); return hit && /1/.test(n) ? { n, hit: hit.textContent } : null; }), 'find hits');
     check(found.n === '1 of 1' && /page 2|2/.test(found.hit), `find "page 2": one hit on page 2 (${JSON.stringify(found)})`);
@@ -155,8 +211,10 @@ const fixture = () => {
     const input = page.locator('.page[data-page-number="1"] .annotationLayer input').first();
     await input.waitFor();
     await input.fill('Ada Lovelace');
-    await input.press('Tab');
+    // Autosave must also run while the student is still in the field, without a blur/change event.
     await until(() => page.evaluate(() => document.querySelector('.gp-top .gp-state')?.textContent === 'Saved'), 'saved after filling');
+    check(await input.evaluate((el) => document.activeElement === el), 'the form autosaves without leaving its field');
+    await input.press('Tab');
     const saved = await local(`writerPaper:${key}`);
     check(saved.revision > rec.revision && Buffer.from(saved.file, 'base64').length > Buffer.from(rec.file, 'base64').length, `the filled file is saved (${rec.size} → ${saved.size} bytes)`);
     // Saving (and drawing page 1 again for the card) leaves the page on screen as it was: drawn, the field filled.
@@ -178,6 +236,9 @@ const fixture = () => {
     // Esc with nothing open leaves the tab where it is (as a paper's does); the ⋯ menu closes on it, focus back on ⋯.
     await page.keyboard.press('Escape');
     check(page.url().includes('?pdf='), 'Esc with nothing open stays on the document');
+    // ⋯'s dots are drawn as the paper's are (writer-paper.css .gp-more): at its stroke they read as dots, not specks.
+    const dots = await page.evaluate(() => { const w = (s) => parseFloat(getComputedStyle(document.querySelector(s)).strokeWidth); return { pdf: w('.gq-more .gp-ico'), find: w('#gq-find-b .gp-ico') }; });
+    check(dots.pdf >= 3, `⋯ shows its dots (stroke ${JSON.stringify(dots)})`);
     await page.click('.gq-more');
     await until(() => page.evaluate(() => !!document.querySelector('.gq-menu [role="menuitem"]')), 'the ⋯ menu');
     const items = await page.evaluate(() => [...document.querySelectorAll('.gq-menu [role="menuitem"]')].map((b) => b.textContent));
@@ -271,7 +332,80 @@ const fixture = () => {
     await page.click(`.gd-card[data-key="${key}"] .gd-title`);
     const afterRace = await until(() => page.evaluate(() => document.querySelector('.annotationLayer input')?.value || null), 'overlapping edits reopened');
     check(afterRace === 'Second edit', `an edit made during a save is persisted before leaving (${afterRace})`);
+    // Closing a viewer in place (an assignment's frame unmounting it) ends pdf.js's worker with it.
+    await openHome();
+    const pdfWorkers = () => page.workers().filter((w) => w.url().endsWith('/lib/pdfjs/pdf.worker.mjs')).length;
+    await until(() => pdfWorkers() === 0, 'no PDF worker on the home');
+    await page.evaluate(async (key) => { document.getElementById('list').hidden = true; globalThis.pdfCheckView = await GZ_DOC_KINDS.get('pdf').edit(key); }, key);
+    const open = await until(() => pdfWorkers() || null, 'the viewer\'s worker');
+    await page.locator('.page[data-page-number="1"] .annotationLayer input').first().fill('Last frame edit');
+    // The same event papers.js's embedded Close dispatches, before the parent removes the frame.
+    const leaving = await page.evaluate(async () => {
+      const waits = [];
+      dispatchEvent(new CustomEvent('glaze:papers:beforeleave', { detail: { wait: (p) => waits.push(p) } }));
+      return { count: waits.length, saved: await Promise.all(waits) };
+    });
+    check(leaving.count === 1 && leaving.saved.every(Boolean), `the frame's leave event waits for its final field edit (${JSON.stringify(leaving)})`);
+    await page.evaluate(async () => { await globalThis.pdfCheckView.dispose(); delete globalThis.pdfCheckView; });
+    check(open === 1 && await until(() => pdfWorkers() === 0, 'the viewer\'s worker ended', 5000), `closing the viewer ends its pdf.js worker (${open} → ${pdfWorkers()})`);
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(key)}`);
+    const lastFrame = await until(() => page.evaluate(() => document.querySelector('.annotationLayer input')?.value || null), 'the last frame edit reopened');
+    check(lastFrame === 'Last frame edit', `the frame's final field edit is kept (${lastFrame})`);
 
+    // A scan's card shows its page sharp: drawn at the card's size on a 2× screen, not a postage stamp scaled up.
+    await worker.evaluate(async (s) => { await chrome.storage.sync.set(s); }, settings(true));
+    await openHome();
+    await page.evaluate(() => {
+      const use = GZ_PDF_DOC.use, pages = new Map();
+      globalThis.pdfCheckDraws = [];
+      GZ_PDF_DOC.use = (...args) => {
+        const lib = use(...args), thumbnail = lib.thumbnail;
+        lib.thumbnail = (page, ...args) => {
+          if (!pages.has(page)) {
+            const render = page.render;
+            pages.set(page, render);
+            page.render = function (o) { globalThis.pdfCheckDraws.push([o.viewport.width, o.viewport.height]); return render.call(this, o); };
+          }
+          return thumbnail(page, ...args);
+        };
+        return lib;
+      };
+      globalThis.pdfCheckStopDraws = () => { GZ_PDF_DOC.use = use; for (const [page, render] of pages) page.render = render; };
+    });
+    const scanned = path.join(tmp, 'Scanned worksheet.pdf');
+    fs.writeFileSync(scanned, scan());
+    await page.setInputFiles('#gd-file', scanned);
+    const scanCard = await until(() => page.evaluate(() => { const c = [...document.querySelectorAll('.gd-card')].find((x) => x.querySelector('.gd-title')?.textContent === 'Scanned worksheet'), img = c?.querySelector('.gd-pic img'); return img?.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.length } : null; }), 'the scan\'s card');
+    check(scanCard.w >= 300 && scanCard.src < 96e3, `a scanned page's card picture keeps its detail (${JSON.stringify(scanCard)})`);
+    const draws = await page.evaluate(() => { globalThis.pdfCheckStopDraws(); return globalThis.pdfCheckDraws; });
+    check(draws.length <= 2 && scanCard.w === 408 && scanCard.h === 528 && scanCard.src <= 64e3, `a scanned card takes at most two draws at full size (${JSON.stringify({ draws, card: scanCard })})`);
+    const photographed = path.join(tmp, 'Colour photo.pdf');
+    fs.writeFileSync(photographed, photo());
+    await page.setInputFiles('#gd-file', photographed);
+    const photoCard = await until(() => page.evaluate(() => { const c = [...document.querySelectorAll('.gd-card')].find((x) => x.querySelector('.gd-title')?.textContent === 'Colour photo'), img = c?.querySelector('.gd-pic img'); return img?.complete && img.naturalWidth > 0 ? { w: img.naturalWidth, h: img.naturalHeight, src: img.src.length, jpeg: img.src.startsWith('data:image/jpeg;') } : null; }), 'the photo\'s card');
+    check(photoCard.jpeg && photoCard.w === 408 && photoCard.h === 528 && photoCard.src <= 64e3, `a colour photo's full-size JPEG stays within 64 KB (${JSON.stringify(photoCard)})`);
+    // A PDF whose first page can't be read (its page tree points at nothing) is refused at import; one already kept says
+    // so in the viewer instead of an empty viewer waiting for pages that never come.
+    const broken = Buffer.from(fixture().toString('latin1').replace(/\/Kids \[(\d+) 0 R/, '/Kids [99 0 R'), 'latin1');
+    const brokenFile = path.join(tmp, 'Broken form.pdf');
+    fs.writeFileSync(brokenFile, broken);
+    const before = ((await local('writerPapers')) || []).length, erred = errors.length;
+    await page.evaluate(() => { document.getElementById('gd-said').textContent = ''; });
+    await page.setInputFiles('#gd-file', brokenFile);
+    const brokenSaid = await until(() => page.evaluate(() => document.getElementById('gd-said').textContent), 'the broken PDF\'s refusal');
+    check(brokenSaid === 'That file could not be read.' && ((await local('writerPapers')) || []).length === before, `a PDF whose first page can't be read is refused at import (${brokenSaid})`);
+    const brokenKey = await page.evaluate(async (b64) => {
+      const k = GZ_WRITER_PAPERS.newKey(), bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      await GZ_WRITER_PAPERS.open().save(k, { kind: 'pdf', file: b64, size: bytes.length, pages: 1, title: 'Broken form', named: true }, { reason: 'import' });
+      return k;
+    }, broken.toString('base64'));
+    await page.goto(`${HOME}?pdf=${encodeURIComponent(brokenKey)}`);
+    const brokenView = await until(() => page.evaluate(() => { const s = document.querySelector('.gq-said'); return s && !s.hidden ? { said: s.textContent, zoom: document.getElementById('gq-zoom').disabled } : null; }), 'the kept broken PDF says it could not be read');
+    check(brokenView.said === 'That file could not be read.' && brokenView.zoom, `a kept PDF whose first page can't be read says so (${JSON.stringify(brokenView)})`);
+    // pdf.js's own reports of that page (its worker's FormatError, uncaught in pdf.js, and the refusal papers.js logs);
+    // nothing else may error.
+    const theirs = errors.splice(erred).filter((e) => !/^page: FormatError$|^console: RangeError: That file could not be read\./.test(e));
+    errors.push(...theirs);
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(!errors.some((e) => /fake worker/i.test(e)), 'pdf.js never fell back to a fake worker');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);
