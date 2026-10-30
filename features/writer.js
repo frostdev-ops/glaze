@@ -245,6 +245,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (m.type === 'compact:flushed') {
       const f = box.flushing;
       if (!f || m.request !== f.request) return;
+      if (Date.now() - f.at >= 60000) { endFlush(box, 'save'); return; }
       // Saved: Ultra's own button goes on with the text (Ultra may have drawn its footer again meanwhile), or the compact
       // bar says why not. A paper too long for Ultra's box: the frame has said so and focused Full writer itself (focusing
       // the frame from here would put its focus back on its body).
@@ -385,6 +386,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // Writer gives back holds nothing: Ultra's editor is there again to press.
   const HOLD_ARM = 5000;
   const hold = (box, b, type = 'click') => {
+    if (box.flushing && Date.now() - box.flushing.at >= 60000) endFlush(box, 'save');
     if (box.flushing || (box.held && !box.held.request)) return;
     const id = b.getAttribute('data-analytics-id'), action = /submit$/.test(id) ? 'submit' : 'save';
     const busy = (x, on) => { if (!x) return; if (on) { x.setAttribute('aria-busy', 'true'); x.style.setProperty('cursor', 'progress'); } else { x.removeAttribute('aria-busy'); x.style.removeProperty('cursor'); } };
@@ -407,7 +409,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
         else if (Date.now() - (p.up ??= Date.now()) > HOLD_ARM) { fail(); return; }
       } else if (!box.full && x && box.ready && box.port && box.viewedOn === box.port) {
         p.request = crypto.randomUUID(); p.port = box.port;
-        box.flushing = { request: p.request, button: x, id, action, timer: setTimeout(() => {
+        box.flushing = { request: p.request, button: x, id, action, at: Date.now(), timer: setTimeout(() => {
           if (box.flushing?.request === p.request) endFlush(box, 'save');
         }, 60000) };
         box.port.postMessage({ type: 'compact:flush', request: p.request, action });
