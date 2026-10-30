@@ -24,7 +24,11 @@ const matches = (el, sel) => sel.split(',').some((alt) => {
 const style = () => ({ setProperty(k, v) { this[k] = String(v); }, getPropertyValue(k) { return this[k] ?? ''; }, removeProperty(k) { delete this[k]; } });
 const camel = (k) => k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 class El {
-  constructor(tag, doc) { Object.assign(this, { tagName: tag.toUpperCase(), doc, children: [], parentNode: null, attrs: {}, dataset: {}, listeners: [], className: '', id: '', hidden: false, _html: '', style: style() }); }
+  constructor(tag, doc) {
+    Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, dataset: {}, listeners: [], className: '', id: '', hidden: false, _html: '', style: style() });
+    // Kept out of what a failed assertion prints (it walks only enumerable keys): the way back up to the page.
+    Object.defineProperties(this, { doc: { value: doc, writable: true, configurable: true }, parentNode: { value: null, writable: true, configurable: true } });
+  }
   get isConnected() { let p = this; while (p.parentNode) p = p.parentNode; return p === this.doc.root; }
   kids(list) { return list.filter((k) => k != null && k !== false).map((k) => (k instanceof El ? k : { nodeType: 3, textContent: String(k) })); }
   adopt(k) { if (k instanceof El && k.parentNode) k.parentNode.children.splice(k.parentNode.children.indexOf(k), 1); k.parentNode = this; return k; }
@@ -78,7 +82,7 @@ class El {
   get scrollHeight() { return this.layoutBox?.height ?? 0; }
   setPointerCapture() {}
   // A shadow root as a child list; tests reach a closed one through shadowForTest, as a page script cannot.
-  attachShadow({ mode }) { const r = new El('#shadow-root', this.doc); r.host = this; this.shadowForTest = r; if (mode === 'open') this.shadowRoot = r; return r; }
+  attachShadow({ mode }) { const r = new El('#shadow-root', this.doc); Object.defineProperty(r, 'host', { value: this, writable: true, configurable: true }); this.shadowForTest = r; if (mode === 'open') this.shadowRoot = r; return r; }
 }
 // DOMParser for page code run against the stand-in: the parsed body (text/html), or an SVG string's outer <svg> with its
 // attributes, holds the markup as innerHTML would.
