@@ -184,7 +184,7 @@ const HOSTS = ['accounts.google.com', 'openidconnect.googleapis.com', 'oauth2.go
     ok(log.userinfo.at(-1)[0] === `Bearer ${TOKEN}`, 'the account is read with the token');
     ok(await page.locator('#gdrive-disconnect').isVisible() && await page.locator('#gdrive-connect').isHidden(), 'connected: the account and Disconnect');
     const saved = await page.evaluate(() => chrome.storage.local.get('google').then((r) => r.google));
-    ok(JSON.stringify(Object.keys(saved).sort()) === '["at","email","flow"]' && saved.flow === 'web', 'storage.local google: the account, the flow and when');
+    ok(JSON.stringify(Object.keys(saved).sort()) === '["at","email","flow","sub"]' && saved.flow === 'web' && saved.sub === '42', 'storage.local google: the account (its email and Google id), the flow and when');
     await noToken('connected');
     await page.screenshot({ path: path.join(out, 'google-2-connected.png') });
 

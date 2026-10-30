@@ -19,6 +19,7 @@ const REAL = { ...C, chrome: '111-chrome.apps.googleusercontent.com', web: '222-
 // A worker: flow, config, what Google answers (google(details) → the redirect URL; userinfo), which picker pages load.
 const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, firefox = false, client = REAL.chrome, keep = false, up = [true, true], email = 'student@school.edu' } = {}) => {
   const local = {}, sync = {};
+  const who = { sub: '1', email }; // the account Google's userinfo names for any token: changed to model another account
   const log = { fetch: [], launch: [], auth: [], removed: [], cleared: 0, permRemoved: [], native: [] };
   let clock = 1_000_000;
   let n = 0;
@@ -57,7 +58,7 @@ const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, fi
   const fetch = async (url, init = {}) => {
     log.fetch.push({ url, init });
     if (url === G.USERINFO) {
-      return init.headers?.authorization?.startsWith('Bearer ') ? new Response(JSON.stringify({ sub: '1', email, email_verified: true }), { status: 200 }) : new Response('', { status: 401 });
+      return init.headers?.authorization?.startsWith('Bearer ') ? new Response(JSON.stringify({ ...who, email_verified: true }), { status: 200 }) : new Response('', { status: 401 });
     }
     if (url === G.REVOKE) return new Response('', { status: 200 });
     const i = config.picker.indexOf(url);
@@ -75,14 +76,14 @@ const harness = ({ on = true, flow = 'chrome', config = REAL, granted = true, fi
     keep: async () => keep,
     now: () => clock,
   });
-  return { g, local, sync, log, identity, tick: (ms) => { clock += ms; } };
+  return { g, local, sync, log, identity, who, tick: (ms) => { clock += ms; } };
 };
 // Every token that ever existed, and storage: none may be in it.
 const noToken = (h) => {
   const text = JSON.stringify(h.local) + JSON.stringify(h.sync);
   assert.ok(!/tok-\d/.test(text), `no token in storage: ${text}`);
   assert.deepEqual(Object.keys(h.local).filter((k) => k !== 'google'), [], 'storage.local holds only google');
-  if (h.local.google) assert.deepEqual(Object.keys(h.local.google).sort(), ['at', 'email', 'flow']);
+  if (h.local.google) assert.deepEqual(Object.keys(h.local.google).sort(), ['at', 'email', 'flow', 'sub']);
 };
 const careful = (h) => {
   for (const { init } of h.log.fetch) assert.deepEqual([init.credentials, init.redirect, init.cache], ['omit', 'error', 'no-store']);
@@ -143,7 +144,7 @@ test('Chrome: connect needs the identity permission, then signs in with getAuthT
   assert.deepEqual(h.log.auth, [{ interactive: true, scopes: C.scopes }]);
   assert.equal(h.log.fetch[0].url, G.USERINFO);
   assert.equal(h.log.fetch[0].init.headers.authorization, 'Bearer chrome-tok-1');
-  assert.deepEqual(h.local.google, { email: 'student@school.edu', flow: 'chrome', at: 1_000_000 });
+  assert.deepEqual(h.local.google, { email: 'student@school.edu', sub: '1', flow: 'chrome', at: 1_000_000 });
   assert.equal(await h.g.account(), 'student@school.edu');
   assert.deepEqual(await h.g.status(), { ok: true, flow: 'chrome', email: 'student@school.edu' });
   // Later, the worker's token never prompts.
@@ -289,6 +290,51 @@ test('disconnect revokes the grant, clears the cached tokens, gives identity bac
     assert.deepEqual(k.local, {});
     await assert.rejects(k.g.token(), (e) => e.why === 'connect', `${flow}: Drive's own state is gone`);
   }
+});
+
+test('a token for another Google account than the one connected is refused, dropped, never used or revoked', async () => {
+  for (const flow of ['chrome', 'web']) {
+    const h = harness({ flow });
+    await h.g.connect();
+    const asked = () => h.log.fetch.filter((f) => f.url === G.USERINFO).length;
+    // The same account: each new token is checked once, then trusted while it lives.
+    assert.equal(typeof await h.g.token(), 'string');
+    const once = asked();
+    if (flow === 'web') { await h.g.token(); assert.equal(asked(), once, `${flow}: a held token isn't checked again`); }
+    // The browser's account changes (Chrome's default account, or Google's session for the web flow).
+    h.who.sub = '2'; h.who.email = 'someone.else@gmail.com';
+    h.tick(3600 * 1000);
+    await assert.rejects(h.g.token(), (e) => e.why === 'account', `${flow}: another account's token is refused`);
+    if (flow === 'chrome') assert.ok(h.log.removed.length > 0, 'Chrome forgets that token');
+    assert.deepEqual(await h.g.pick(), { ok: false, why: 'account' });
+    assert.ok(!h.log.fetch.some((f) => C.picker.includes(f.url)), `${flow}: no picker opened with it`);
+    assert.deepEqual(h.local.google.email, 'student@school.edu', 'the connection is still the one made');
+    // Disconnect can't revoke the connected account's grant with another's token: it revokes nothing and says Google may still hold it.
+    assert.deepEqual(await h.g.disconnect(), { ok: true, revoked: false, had: true });
+    assert.ok(!h.log.fetch.some((f) => f.url === G.REVOKE), `${flow}: nothing revoked`);
+    assert.deepEqual(h.local, {});
+  }
+});
+
+test('Disconnect after a worker restart, when silent renewal fails, says Google may still hold the grant', async () => {
+  const h = harness({ flow: 'web' });
+  await h.g.connect();
+  // A new worker over the same storage: nothing in memory, and Google wants the student to sign in again.
+  const restarted = G.create({
+    on: true, config: REAL, flow: 'web', firefox: false,
+    identity: () => ({ ...h.identity, launchWebAuthFlow: async (d) => { h.log.launch.push(d); return `${REDIRECT}#${new URLSearchParams({ error: 'interaction_required', state: new URL(d.url).searchParams.get('state') })}`; } }),
+    permissions: { contains: async () => true, remove: async (p) => { h.log.permRemoved.push(p); return true; } },
+    manifest: () => ({ oauth2: { client_id: REAL.chrome } }),
+    storage: { get: async (k) => structuredClone(Object.fromEntries([].concat(k).filter((x) => x in h.local).map((x) => [x, h.local[x]]))), set: async (v) => Object.assign(h.local, v), remove: async (k) => { for (const x of [].concat(k)) delete h.local[x]; } },
+    fetch: async (url) => { h.log.fetch.push({ url, init: {} }); return new Response('', { status: 200 }); },
+    keep: async () => false, now: () => 2_000_000,
+  });
+  assert.deepEqual(await restarted.disconnect(), { ok: true, revoked: false, had: true });
+  assert.equal(h.log.launch.at(-1).interactive, false, 'never a prompt');
+  assert.ok(!h.log.fetch.some((f) => f.url === G.REVOKE));
+  assert.deepEqual([h.local, h.log.permRemoved], [{}, [{ permissions: ['identity'] }]]);
+  // Nothing was connected: nothing to warn about.
+  assert.deepEqual(await harness().g.disconnect(), { ok: true, revoked: false, had: false });
 });
 
 test('the picker\'s answer: our state, files with an id, a name and a type, or a cancel', () => {

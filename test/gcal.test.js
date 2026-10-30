@@ -288,8 +288,9 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
   const identity = {
     cleared: 0, removed: [],
     asked: 0, hold: null,
-    getAuthToken: async ({ interactive }) => {
+    getAuthToken: async ({ interactive, scopes }) => {
       assert.equal(interactive, false, 'the worker never prompts');
+      assert.deepEqual(scopes, [G.SCOPE], 'Calendar asks for its own scope only, never the manifest\'s list (Drive\'s are there too)');
       identity.asked++;
       await identity.hold;
       return { token: 'tok-1', grantedScopes: [G.SCOPE] };
@@ -407,6 +408,14 @@ withMock('worker: Calendar\'s disconnect while Drive still holds the shared gran
   assert.deepEqual([mock.revoked, w.identity.cleared, w.identity.removed], [[], 0, []]);
   assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
   assert.deepEqual(w.store.local.google, { email: 'student@school.edu', flow: 'chrome', at: NOW }, 'Drive\'s record stays');
+});
+
+test('Settings\' Calendar sign-in asks Chrome for Calendar\'s scope only', () => {
+  const src = read('options.js');
+  const sign = src.slice(src.indexOf('const gcalSignIn = async () => {'), src.indexOf('// Only a person\'s click or key, while the page has their activation'));
+  assert.match(sign, /chrome\.identity\.getAuthToken\(\{ interactive: true, scopes: \[GZ_GCAL\.SCOPE\] \}\)/);
+  assert.match(sign, /const scope = GZ_GCAL\.SCOPE;/);
+  assert.doesNotMatch(sign, /getManifest\(\)\.oauth2/);
 });
 
 test('Settings gives identity back after Calendar\'s Disconnect only when Drive doesn\'t share it', () => {
