@@ -24,11 +24,21 @@ test('every thread fixture says where its shape came from', () => {
   for (const j of [PAGE1, PAGE2, REPLIES]) assert.deepEqual(Object.keys(j.paging), ['limit', 'offset', 'count', 'previousPage', 'nextPage']);
 });
 
-test('routes: a discussion\'s course and content ids, a message composer\'s course', () => {
+test('routes: a discussion\'s course and content ids, a journal\'s, a message composer\'s course', () => {
   assert.deepEqual(C.route('/ultra/courses/_101_1/discussion/_9_1'), { course: '_101_1', content: '_9_1' });
+  assert.deepEqual(C.route('/ultra/courses/_101_1/journal/_12_1'), { course: '_101_1', journal: '_12_1' });
   assert.deepEqual(C.route('/ultra/courses/_101_1/outline/discussion/_9_1/'), { course: '_101_1', content: '_9_1' });
+  assert.deepEqual(C.route('/ultra/courses/_101_1/outline/journal/_12_1/'), { course: '_101_1', journal: '_12_1' });
   assert.deepEqual(C.route('/ultra/messages/create', '?courseId=_101_1'), { course: '_101_1' });
   for (const [p, s] of [['/ultra/messages/create', ''], ['/ultra/messages/create', '?courseId=101'], ['/ultra/courses/_101_1/outline', ''], ['/ultra/courses/_101_1/discussion/9', ''], ['/ultra/courses/_101_1/discussion/_9_1/rubric-view', '']]) assert.equal(C.route(p, s), null, p + s);
+});
+
+test('compose routes agree with rubric discussion routes and never treat new-message as a content id', () => {
+  const R = require('../lib/rubric.js');
+  const path = '/ultra/courses/_101_1/discussion/_9_1/';
+  assert.equal(C.route(path).content, R.route('ultra', path).contentId);
+  for (const kind of ['discussion', 'journal']) assert.equal(C.route(`/ultra/courses/_101_1/${kind}/new-message`), null);
+  for (const suffix of ['attempt', 'attempt/create', 'attempt/_31_1']) assert.equal(C.route(`/ultra/courses/_101_1/assessment/_8_1/${suffix}`), null);
 });
 
 test('the forum behind a route: by the gradebook column its content id has, else by a title only one discussion has', () => {
@@ -90,10 +100,11 @@ test('the post a reply answers: from the thread, its text from the page only whe
   assert.equal(C.replyToOf([], '_201_1', {}), null);
 });
 
-test('the student: as users/me names them, else as their own posts do', () => {
-  assert.deepEqual(C.userOf({ id: ME, userName: 'synthetic' }, ALL), { name: 'Sam Rivera', given: 'Sam', family: 'Rivera' });
-  assert.deepEqual(C.userOf({ id: ME, givenName: 'Samantha', familyName: 'Rivera' }, []), { name: 'Samantha Rivera', given: 'Samantha', family: 'Rivera' });
+test('the student: their id as users/me gives it, their name as users/me names them, else as their own posts do', () => {
+  assert.deepEqual(C.userOf({ id: ME, userName: 'synthetic' }, ALL), { id: ME, name: 'Sam Rivera', given: 'Sam', family: 'Rivera' });
+  assert.deepEqual(C.userOf({ id: ME, givenName: 'Samantha', familyName: 'Rivera' }, []), { id: ME, name: 'Samantha Rivera', given: 'Samantha', family: 'Rivera' });
   assert.deepEqual(C.userOf(null, ALL), { name: '', given: '', family: '' });
+  assert.deepEqual(C.userOf({ id: '42' }, []), { name: '', given: '', family: '' }, 'only an Ultra id');
 });
 
 test('the frame\'s context: a message gets its course and the student only; a reply also what it answers', () => {
@@ -106,6 +117,18 @@ test('the frame\'s context: a message gets its course and the student only; a re
   assert.equal(reply.replyTo.author, 'Jordan Lee');
   assert.ok(!('replyTo' in C.contextOf({ kind: 'post', course, user, thread: th })));
   assert.deepEqual(JSON.parse(JSON.stringify(reply)), reply, 'it crosses a MessagePort as it is');
+  const kept = { school: 'bb.school.test', item: C.itemOf('reply', C.route('/ultra/courses/_101_1/discussion/_9_1')) };
+  assert.deepEqual(Object.keys(C.contextOf({ kind: 'reply', ...kept, course, user, thread: th })), ['kind', 'school', 'item', 'course', 'user', 'prompt', 'requirements', 'thread', 'replyTo']);
+  assert.deepEqual(C.contextOf({ kind: 'message', ...kept, course, user }).item, { id: '_9_1' });
+  const own = { prompt: 'Reading Journal' };
+  assert.deepEqual(C.contextOf({ kind: 'journal', school: 'bb.school.test', item: '_12_1', course, user: { id: ME, ...user }, own, prompt: { text: 'x' }, thread: th }),
+    { prompt: 'Reading Journal', school: 'bb.school.test', item: { id: '_12_1' }, course: { id: '_101_1' }, user: { id: ME } }, 'a journal keeps its page\'s prompt and gains its sources\' parts only');
+});
+
+test('the item a box\'s sources are kept under: the discussion for its post and replies, the journal, a course\'s new message', () => {
+  const discussion = C.route('/ultra/courses/_101_1/discussion/_9_1'), journal = C.route('/ultra/courses/_101_1/journal/_12_1'), compose = C.route('/ultra/messages/create', '?courseId=_101_1');
+  assert.deepEqual([C.itemOf('post', discussion), C.itemOf('reply', discussion), C.itemOf('journal', journal), C.itemOf('message', compose)], ['_9_1', '_9_1', '_12_1', 'new-message']);
+  for (const [kind, where] of [['message', discussion], ['message', journal], ['post', journal], ['journal', discussion], ['reply', compose], ['test', discussion], ['assignment', discussion], ['post', null]]) assert.equal(C.itemOf(kind, where), '', `${kind} at ${JSON.stringify(where)}`);
 });
 
 // lib/ultra.js's reader over the fixtures, counting what it asks.

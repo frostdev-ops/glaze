@@ -494,6 +494,16 @@ const run = async () => {
     await until(() => b.value(`!!document.querySelector('.gd-card[data-key="${KEY}"] .gd-title')`, papersTab), 'the Documents card');
     await b.clickOn(papersTab, `document.querySelector('.gd-card[data-key="${KEY}"] .gd-title')`);
     await until(() => b.value(`!!globalThis.GZ_WRITER_PAPER?.current()?.key()`, papersTab), 'document editor without cross-document transitions');
+    // Harper proofs the document, so Firefox's own spellcheck stays off on the editor; Settings → Writer → Proofing off gives
+    // it back.
+    const spell = `(() => { const e = document.querySelector('.gp-flow .ProseMirror'); return e && JSON.stringify([e.getAttribute('spellcheck'), e.spellcheck]); })()`;
+    const proofing = (on) => b.value(`browser.storage.sync.get('writer').then((r) => browser.storage.sync.set({ writer: { ...r.writer, proofing: ${on} } })).then(() => 1)`, papersTab);
+    await until(async () => (await b.value(spell, papersTab)) === '["false",false]', 'spellcheck off with proofing on');
+    await proofing(false);
+    await until(async () => (await b.value(spell, papersTab)) === '[null,true]', 'spellcheck back with proofing off');
+    await proofing(true);
+    await until(async () => (await b.value(spell, papersTab)) === '["false",false]', 'spellcheck off again');
+    ok(true, 'Documents editor: spellcheck="false" while proofing is on, Firefox\'s own spellcheck back with it off');
     ok(await b.value(`!sessionStorage.getItem('gz-documents-route') && !document.documentElement.hasAttribute('data-gd-route') && !document.getAnimations().some((a) => a.effect?.pseudoElement?.startsWith('::view-transition'))`, papersTab), 'Documents: unsupported cross-document motion is instant and consumes a stale handoff');
     await b.close(papersTab);
     const docsCourse = await b.open(`${INST}/courses/25`);

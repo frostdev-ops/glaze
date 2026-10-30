@@ -16,7 +16,7 @@ const harness = () => {
   const X = { on: () => enabled, settings: () => ({ enabled, enhance: { writer: enabled } }),
     need: async (p, f) => f(), me: async () => '_42_1', myCourses: async () => [], bookFor: () => null };
   const sandbox = { URLSearchParams, AbortController, Date: class extends Date { static now() { return now; } },
-    location: { pathname: '/ultra/courses/_101_1/discussion/_9_1', search: '', origin: 'https://bb.school.test' },
+    location: { pathname: '/ultra/courses/_101_1/discussion/_9_1', search: '', origin: 'https://bb.school.test', host: 'bb.school.test' },
     GZ_ULTRA: { read: () => r }, GZ_LMSQ: {}, GZ_WRITER_TARGET: { parse: () => ({}), forKind: () => ({}) },
     setTimeout: (fn, ms) => { const id = ++seq; timers.set(id, { fn, ms }); return id; }, clearTimeout: (id) => timers.delete(id),
     MutationObserver: class { constructor(fn) { this.fn = fn; } observe() { observe = this; } disconnect() { observe = null; } },
@@ -78,4 +78,13 @@ test('authorization, throttle and server failures stop reply fanout for this rea
     await C.messages(r, '_101_1', '_1101_1');
     assert.equal(asked.length, 2, `HTTP ${status} ends the batch`);
   }
+});
+
+test('a query-only navigation starts a live context watcher for newly opened boxes', async () => {
+  const h = harness(); h.api.watch(h.box(), h.X); await h.flush();
+  const before = h.sent.length;
+  h.sandbox.location.search = '?view=discussions';
+  h.api.watch(h.box(), h.X); await h.flush();
+  assert.ok(h.sent.length > before, 'a new box must receive context on the new query');
+  assert.equal(h.sent.at(-1).context.user.id, '_42_1');
 });

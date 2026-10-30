@@ -171,6 +171,32 @@ const HARNESS = `(() => {
       return;
     }
     check(await fr.evaluate(() => document.documentElement.dataset.mode === 'paper' && document.documentElement.dataset.kind === 'assignment'), 'the assignment attempt mounts in paper mode');
+    // Harper proofs the paper, so the browser's own spellcheck stays off on it and on the header while it is edited (no
+    // second underline, none Add to dictionary can't clear); Settings → Writer → Proofing off gives the browser's back.
+    const spelling = () => fr.evaluate(() => {
+      GZ_WRITER_PAPER.current().editPart('header');
+      const hf = document.querySelector('.gp-hf'), r = { paper: document.querySelector('.gp-flow .ProseMirror').getAttribute('spellcheck'), header: hf ? hf.getAttribute('spellcheck') : 'none' };
+      hf?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return JSON.stringify(r);
+    });
+    const proofing = (on) => worker.evaluate(async (on) => { const w = (await chrome.storage.sync.get('writer')).writer || {}; await chrome.storage.sync.set({ writer: { ...w, proofing: on } }); }, on);
+    await until(async () => (await spelling()) === JSON.stringify({ paper: 'false', header: 'false' }), 'spellcheck off with proofing on');
+    check(true, 'proofing on: spellcheck="false" on the paper and its header');
+    await proofing(false);
+    await until(async () => (await spelling()) === JSON.stringify({ paper: null, header: null }), 'spellcheck back with proofing off');
+    check(true, 'proofing off: the browser\'s spellcheck back on both (no spellcheck attribute)');
+    await proofing(true);
+    await until(async () => (await spelling()) === JSON.stringify({ paper: 'false', header: 'false' }), 'spellcheck off again');
+    check(true, 'proofing on again: spellcheck="false" again');
+    for (const part of ['header', 'footer']) {
+      await fr.evaluate((part) => GZ_WRITER_PAPER.current().editPart(part), part);
+      for (const on of [false, true]) {
+        await proofing(on);
+        await until(() => fr.evaluate((on) => { const e = document.querySelector('.gp-hf'); return !!e && e.getAttribute('spellcheck') === (on ? 'false' : null); }, on), `${part} spellcheck follows proofing while open`);
+      }
+      await fr.evaluate(() => document.querySelector('.gp-hf')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    }
+    check(true, 'an open header and footer follow proofing off and on live');
     check(await fr.evaluate(() => ['.gp-top h1', '.gp-pill', '.gp-box', '[data-run="bold"]', '[data-run="italic"]', '[data-run="underline"]', '[data-run="bulletList"]', '[data-run="orderedList"]', '.gp-submit', '.gp-tabs', '.gp-status'].every((s) => document.querySelector(s))
       && [...document.querySelectorAll('.gp-tbtn')].map((b) => b.textContent.trim()).filter(Boolean).join('|') === 'Cite|Footnote|Page break'
       && [...document.querySelectorAll('.gp-tab')].map((b) => b.firstChild.textContent).join('|') === 'Checks|Sources|Feedback|Outline'), 'paper chrome: toolbar, tabs, status bar');
@@ -316,8 +342,31 @@ const HARNESS = `(() => {
     await settle(fr);
     await until(() => fr.evaluate((n) => document.querySelectorAll('.gp-sheet').length === n + 1, before), 'a page more');
     check(true, 'Page break starts a new page');
+    // The status bar counts the page at the top of the view, as Word and Docs do, not the caret's.
+    const pageSaid = () => fr.evaluate(() => document.querySelector('.gp-status > span').textContent);
+    const caretPage = () => fr.evaluate(() => { const v = GZ_WRITER_PAPER.current().editor.view, y = v.coordsAtPos(v.state.selection.head).top; return [...document.querySelectorAll('.gp-zoom .gp-sheet')].findIndex((s) => { const r = s.getBoundingClientRect(); return y >= r.top && y <= r.bottom; }) + 1; });
+    const toPage = (n) => fr.evaluate((n) => { const c = document.querySelector('.gp-canvas'), s = document.querySelectorAll('.gp-zoom .gp-sheet')[n - 1]; c.scrollTop = n === 1 ? 0 : c.scrollTop + s.getBoundingClientRect().top - c.getBoundingClientRect().top + 4; }, n);
+    const pagesNow = before + 1, onPage = await caretPage();
+    await toPage(1);
+    await until(async () => (await pageSaid()) === `Page 1 of ${pagesNow}`, `"Page 1 of ${pagesNow}" with page 1 in view`);
+    check(onPage > 1 && await caretPage() === onPage, `scrolled to page 1 with the caret on page ${onPage}: "Page 1 of ${pagesNow}"`);
+    await toPage(onPage + 1);
+    await until(async () => (await pageSaid()) === `Page ${onPage + 1} of ${pagesNow}`, `"Page ${onPage + 1} of ${pagesNow}" with it at the top`);
+    check(await caretPage() === 0 || await caretPage() === onPage, `scrolled on to page ${onPage + 1}, the caret still on ${onPage}: "Page ${onPage + 1} of ${pagesNow}"`);
+    for (const zoom of [0.75, 1.25]) {
+      await fr.evaluate((z) => GZ_WRITER_PAPER.current().zoom(z), zoom);
+      await toPage(2);
+      await until(async () => (await pageSaid()) === `Page 2 of ${pagesNow}`, 'page counter after zoom');
+      for (const [edge, expected] of [[-1, 1], [1, 2]]) {
+        await fr.evaluate((edge) => { const c = document.querySelector('.gp-canvas'), s = document.querySelector('.gp-sheet'); c.scrollTop += s.getBoundingClientRect().bottom - c.getBoundingClientRect().top + edge; }, edge);
+        await until(async () => (await pageSaid()) === `Page ${expected} of ${pagesNow}`, 'page counter across the page end');
+      }
+    }
+    check(true, 'the page counter crosses page boundaries at 75% and 125% with the caret off-screen');
     await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.run('undo'));
     await settle(fr);
+    await until(async () => (await pageSaid()).endsWith(` of ${before}`), 'page count after pagination reflow');
+    check(true, 'pagination reflow updates the page total without moving the caret');
     const input = await fr.$('input[type="file"]');
     await input.setInputFiles(path.join(out, 'paper-apa7.docx'));
     await until(() => fr.evaluate(() => !!document.querySelector('.gi-layer[data-open] .gi-default')), 'the import card');

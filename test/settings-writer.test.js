@@ -54,6 +54,18 @@ test('backup: the export (Settings, sanitised) carries writer, and a restore rea
   assert.match(read('options.js'), /const next = \{ \.\.\.GZ_SANITIZE\(raw\)/);
 });
 
+test('only two numeric endpoints declare a range; mixed choices keep their types', () => {
+  const spec = D.GZ_SPEC.writer.versions, rule = spec[1];
+  try {
+    spec[1] = [10, 'all'];
+    for (const n of spec[1]) assert.equal(D.GZ_SANITIZE({ writer: { versions: n } }).writer.versions, n);
+    assert.equal(D.GZ_SANITIZE({ writer: { versions: 25 } }).writer.versions, 40);
+    spec[1] = [10, 100];
+    assert.equal(D.GZ_SANITIZE({ writer: { versions: 55 } }).writer.versions, 55);
+    assert.equal(D.GZ_SANITIZE({ writer: { versions: '55' } }).writer.versions, 40);
+  } finally { spec[1] = rule; }
+});
+
 // ---- lib/writer-settings.js -------------------------------------------------------------------------------------------
 const reader = (stored) => {
   const listeners = [];
@@ -297,5 +309,41 @@ test('Clear all stays enabled with only Trash and confirms every paper it remove
   });
   assert.equal($('writer-papers-count').textContent, '', 'the list count skips Trash');
   assert.equal($('writer-clear-all').disabled, false, 'Clear all can still remove Trash');
-  assert.match($('writer-clear-note').textContent, /^1 papers\./, 'the confirmation counts what it deletes');
+  assert.equal($('writer-clear-title').textContent, 'Clear all papers and documents?');
+  assert.equal($('writer-clear-ok').textContent, 'Clear all');
+  assert.match($('writer-clear-note').textContent, /^1 papers and documents\./, 'the confirmation counts what it deletes');
+});
+
+test('each Clear… confirms and reports what it clears: a course’s papers, Documents, or papers and documents', async () => {
+  const vm = require('node:vm'), WE = require('../lib/editor-writer.js'), PA = require('../lib/writer-papers.js');
+  const source = read('lib/editor-writer.js'), from = source.indexOf('    const drawPapers = '), to = source.indexOf("    $('writer-clear-all').addEventListener", from);
+  const rows = [{ key: PA.newKey() }, { key: 'bb.school.test|_9_1|_101_1|_7_1', course: 'ENG 101' }];
+  // Settings' papers code with stand-ins for the page; each removal redraws, as storage.onChanged does there.
+  const panel = async (remove) => {
+    const nodes = new Map(), hints = [], $ = (id) => {
+      if (!nodes.has(id)) nodes.set(id, { textContent: '', on: {}, replaceChildren() {}, showModal() {}, focus() {}, addEventListener(type, fn) { this.on[type] = fn; } });
+      return nodes.get(id);
+    };
+    const p = await vm.runInNewContext(`(async () => { let courses, everything; ${source.slice(from, to)} await drawPapers(); return { ask, drawPapers, courses: () => courses, everything: () => everything }; })()`, {
+      $, el: () => ({ setAttribute() {}, addEventListener() {}, append() {} }),
+      papers: () => ({ list: async () => rows, remove: async (k) => { await p.drawPapers(); return remove(k); } }), byCourse: WE.byCourse, allKeys: WE.allKeys,
+      t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (s, x) => (x in v ? v[x] : s)), away: () => false, o: { hint: (m, err) => hints.push([m, err]) }, console: { error() {} },
+    });
+    return async (pick) => {
+      p.ask(pick(p));
+      const dialog = $('writer-clear');
+      dialog.returnValue = 'ok';
+      await dialog.on.close();
+      return [$('writer-clear-title').textContent, $('writer-clear-ok').textContent, ...hints.at(-1)];
+    };
+  };
+  const course = (p) => p.courses().filter((c) => c.id !== 'documents'), documents = (p) => p.courses().filter((c) => c.id === 'documents'), all = (p) => p.everything();
+  const cleared = await panel(async () => {});
+  assert.deepEqual(await cleared(course), ['Clear ENG 101’s papers?', 'Clear papers', 'Papers cleared.', false]);
+  assert.deepEqual(await cleared(documents), ['Clear documents?', 'Clear documents', 'Documents cleared.', false]);
+  assert.deepEqual(await cleared(all), ['Clear all papers and documents?', 'Clear all', 'Papers and documents cleared.', false]);
+  const refused = await panel(async () => { throw Error('busy'); });
+  assert.deepEqual(await refused(course), ['Clear ENG 101’s papers?', 'Clear papers', 'Some papers could not be cleared. Try again.', true]);
+  assert.deepEqual(await refused(documents), ['Clear documents?', 'Clear documents', 'Some documents could not be cleared. Try again.', true]);
+  assert.deepEqual(await refused(all), ['Clear all papers and documents?', 'Clear all', 'Some papers and documents could not be cleared. Try again.', true]);
 });
