@@ -13,7 +13,7 @@ function harness(t, overrides = {}) {
   const proc = { ...process, argv: [process.execPath, file, tmp], env: { ...process.env, GLAZE_LOCK: path.join(tmp, 'lock') },
     once: (s, f) => { events[s] = f; }, exit: (s) => exit.push(s), ...overrides.process };
   const context = vm.createContext({ console: { log() {} }, setTimeout, clearTimeout, AbortController, Date, Buffer,
-    process: proc, __dirname: path.dirname(file), require: (name) => {
+    process: proc, __dirname: path.dirname(file), ...overrides.globals, require: (name) => {
       if (overrides.require) { const got = overrides.require(name, calls); if (got !== undefined) return got; }
       if (name === 'playwright') return { chromium: {} };
       if (name === '../mcp/lib/rendezvous.js') return { dir: () => tmp, list: () => [], alive: () => false };
@@ -110,4 +110,61 @@ test('subscription acknowledgment must be the first message carrying its id', (t
     { dir: 'in', m: { method: 'notifications/tools/list_changed', params: { _meta: { [SUB]: 2 } } } },
     { dir: 'in', m: { method: 'notifications/subscriptions/acknowledged', params: { _meta: { [SUB]: 1 } } } },
   ] }, 1)`), true);
+});
+
+
+test('an incomplete pinned SDK install is refused before any package loads', (t) => {
+  let h, loaded = false;
+  h = harness(t, { require: (name) => {
+    if (name === 'node:child_process') return { execFileSync: (cmd, args) => {
+      const dir = args[args.indexOf('--prefix') + 1]; fs.mkdirSync(path.join(dir, 'node_modules'), { recursive: true });
+      const integrity = h.run("NPM.parsePins(PINS).get(SDK)");
+      fs.writeFileSync(path.join(dir, 'node_modules/.package-lock.json'), JSON.stringify({ packages: {
+        'node_modules/@modelcontextprotocol/client': { version: '2.4.0', integrity, resolved: 'https://registry.npmjs.org/client' },
+      } }));
+    } };
+    if (name === 'node:module') return { createRequire: () => () => { loaded = true; return {}; } };
+  } });
+  assert.throws(() => h.run(`install(${JSON.stringify(path.join(h.tmp, 'sdk'))})`), /incomplete pinned SDK install/);
+  assert.equal(loaded, false, 'NODE_PATH must not supply an unverified missing dependency');
+});
+
+test('a stalled client close cannot prevent browser and scratch cleanup', async (t) => {
+  const h = harness(t, { globals: { setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 10)) } });
+  h.run(`scratch = ${JSON.stringify(path.join(h.tmp, 'scratch'))}; HOME = path.join(scratch, 'home'); fs.mkdirSync(HOME, { recursive: true });
+    clients.add({ close: () => new Promise(() => {}) }); contexts.add({ close: async () => { R.browserClosed = true; } });`);
+  assert.notEqual(await within(h.run('cleanup()')), 'hung');
+  assert.equal(h.run('R.browserClosed'), true);
+  assert.equal(fs.existsSync(path.join(h.tmp, 'scratch')), false);
+  assert.match(h.run('JSON.stringify(R.errors)'), /close agent 0 timed out/);
+});
+
+test('cleanup reaps adopted descendants, escalates, and never signals a reused PID', async (t) => {
+  const table = new Map(), killed = [];
+  const h = harness(t, { globals: { setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 10)) },
+    process: { platform: 'linux', pid: 9000, kill: (pid, signal) => { killed.push([pid, signal]); if (signal === 'SIGKILL') table.delete(pid); } },
+    require: (name) => {
+      if (name !== 'node:fs') return;
+      return { ...fs, readdirSync: (p, ...args) => p === '/proc' ? [...table.keys()].map(String) : fs.readdirSync(p, ...args),
+        readFileSync: (p, ...args) => {
+          const m = /^\/proc\/(\d+)\/(stat|cmdline)$/.exec(p);
+          if (!m) return fs.readFileSync(p, ...args);
+          const rec = table.get(+m[1]); if (!rec) throw Error('gone');
+          if (m[2] === 'cmdline') return rec.argv.join('\0');
+          const stat = ['S', rec.parent, ...Array(17).fill(0), rec.start];
+          return `${m[1]} (node) ${stat.join(' ')}`;
+        } };
+    } });
+  const scratch = path.join(h.tmp, 'scratch');
+  table.set(11, { parent: 9000, start: 'original', argv: [path.join(scratch, 'host')] });
+  table.set(12, { parent: 11, start: 'child', argv: ['helper'] });
+  h.run(`scratch = ${JSON.stringify(scratch)}; HOME = path.join(scratch, 'home'); fs.mkdirSync(HOME, { recursive: true });`);
+  // The browser closes the parent; its helper is adopted by init and the parent's PID is reused by an unrelated app.
+  h.run('contexts.add({ close: async () => {} })');
+  const ctx = h.run('[...contexts][0]');
+  ctx.close = async () => { table.set(11, { parent: 1, start: 'reused', argv: ['unrelated'] }); table.get(12).parent = 1; };
+  await h.run('cleanup()');
+  assert.deepEqual(killed, [[12, 'SIGTERM'], [12, 'SIGKILL']]);
+  assert.equal(table.get(11).start, 'reused');
+  assert.equal(fs.existsSync(scratch), false);
 });
