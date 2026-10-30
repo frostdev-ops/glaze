@@ -115,7 +115,7 @@ const PROBE = ({ lang }) => {
     const watch = (pg, tag) => {
       pg.on('pageerror', (e) => errors.push(`${tag}: ${e.message}`));
       // The import cases' own refusals (a store with no room, a file that is no PDF) are logged as every failed import is.
-      const meant = tag === 'import' ? /^RangeError: (There isn't enough room in this browser for this file\.|That file could not be read\.)\n/ : /$^/;
+      const meant = tag === 'import' ? /^RangeError: (There isn't enough room in this browser for this file\.|That file could not be read\.|The file didn't finish copying\. Try again\.)\n/ : /$^/;
       pg.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|intentional review refusal|Error: not a zip file/.test(m.text()) && !meant.test(m.text())) errors.push(`${tag} console: ${m.text()}`); });
     };
     const openHome = async (lang = null, tag = 'home') => {
@@ -1461,6 +1461,70 @@ const PROBE = ({ lang }) => {
       const deckMetas = R.states.filter((x) => x.name === 'Cell Biology week 3.pptx').map((x) => x.meta), deckNows = R.states.filter((x) => x.name === 'Cell Biology week 3.pptx').map((x) => x.now);
       check(['Reading…', 'Preparing slides…', 'Copying…', 'Saving…'].every((w) => deckMetas.some((m) => m.startsWith(w))) && deckMetas.some((m) => /^Copying… [\d.]+ \/ 3(\.\d)? MB$/.test(m)) && deckNows.at(-1) === 100 && R.firstPending < R.firstCard['Cell Biology week 3'],
         `a deck shows the same: its card at once, Preparing slides…, its bytes copied, the bar to the end, then its own card (${[...new Set(deckMetas)].join(' | ')})`);
+
+      // Two separate drops can copy at once. Hold both at different fractions, then finish the newer one first.
+      await im.evaluate(() => {
+        const real = GZ_DOC_FILES.client;
+        globalThis.__copies = [];
+        GZ_DOC_FILES.client = (...a) => {
+          const c = real(...a);
+          return { ...c, put: async (bytes, type, sent) => {
+            const n = __copies.length;
+            if (n === 1) GZ_DOC_FILES.client = real;
+            sent(bytes.length * (n ? .75 : .25), bytes.length);
+            await new Promise((r) => __copies.push(r));
+            return c.put(bytes, type, sent);
+          } };
+        };
+      });
+      const parallel = ['Parallel A.pdf', 'Parallel B.pdf'].map((name) => { const p = path.join(tmp, name); fs.copyFileSync(heldPath, p); return p; });
+      await recordImports();
+      await im.setInputFiles('#gd-file', parallel[0]);
+      await until(() => im.evaluate(() => __copies.length === 1), 'first copy held');
+      await im.setInputFiles('#gd-file', parallel[1]);
+      await until(() => im.evaluate(() => __copies.length === 2), 'second copy held');
+      const together = await im.evaluate(() => [...document.querySelectorAll('.gd-pending')].map((el) => ({ id: el.dataset.import, name: el.querySelector('.gd-title').textContent, now: Number(el.querySelector('[role="progressbar"]').getAttribute('aria-valuenow')) })));
+      check(together.length === 2 && new Set(together.map((x) => x.id)).size === 2 && together.find((x) => x.name === 'Parallel A.pdf')?.now === 37 && together.find((x) => x.name === 'Parallel B.pdf')?.now === 76,
+        `simultaneous drops have separate cards and progress (${JSON.stringify(together)})`);
+      await im.evaluate(() => document.querySelector('.gd-pending [data-act="remove"]').click());
+      check(await im.locator('.gd-pending').count() === 2, 'Remove cannot discard an import while it is running');
+      await im.evaluate(() => __copies[1]());
+      await until(() => im.evaluate(() => [...document.querySelectorAll('.gd-card')].some((c) => c.querySelector('.gd-title').textContent === 'Parallel B') && document.querySelectorAll('.gd-pending').length === 1), 'second copy finishes first');
+      check(await im.evaluate(() => document.querySelector('.gd-pending .gd-title').textContent === 'Parallel A.pdf' && document.querySelector('.gd-pending [role="progressbar"]').getAttribute('aria-valuenow') === '37'), 'finishing one import leaves the other card and its progress intact');
+      await im.evaluate(() => __copies[0]());
+      await until(() => im.evaluate(() => !document.querySelector('.gd-pending')), 'both copies done');
+      R = await imports();
+      check(['Parallel A.pdf', 'Parallel B.pdf'].every((name) => { const n = R.states.filter((x) => x.name === name).map((x) => x.now); return n.at(-1) === 100 && n.every((v, i) => v <= 100 && (i === 0 || v >= n[i - 1])); }), 'both bars stay bounded and forward when earlier copy acknowledgements arrive after later progress');
+
+      // A mid-copy failure must settle the card. Retry reads the same File again; moving focus while it copies wins.
+      await im.evaluate(() => {
+        const real = GZ_DOC_FILES.client, read = File.prototype.arrayBuffer;
+        globalThis.__reread = [];
+        File.prototype.arrayBuffer = function () { if (this.name === 'Interrupted.pdf') __reread.push(this); return read.call(this); };
+        let tries = 0;
+        GZ_DOC_FILES.client = (...a) => {
+          const c = real(...a);
+          return { ...c, put: async (bytes, type, sent) => {
+            sent(bytes.length / 2, bytes.length);
+            if (++tries === 1) throw GZ_DOC_FILES.fail('interrupted');
+            GZ_DOC_FILES.client = real;
+            await new Promise((r) => { globalThis.__retryCopy = r; });
+            return c.put(bytes, type, sent);
+          } };
+        };
+      });
+      const interruptedPath = path.join(tmp, 'Interrupted.pdf');
+      fs.copyFileSync(heldPath, interruptedPath);
+      await im.setInputFiles('#gd-file', interruptedPath);
+      await until(() => im.evaluate(() => document.querySelector('.gd-pending[data-failed] .gd-meta')?.textContent === "The file didn't finish copying. Try again."), 'interrupted copy settles');
+      check(await im.evaluate(() => !document.querySelector('.gd-pending .gd-acts').hidden && document.querySelector('.gd-pending .gd-progress').hidden), 'a mid-copy interruption leaves a failed card with actions, rather than an endless importing card');
+      await im.click('.gd-pending [data-act="retry"]');
+      await until(() => im.evaluate(() => typeof __retryCopy === 'function'), 'retry copy held');
+      check(await im.evaluate(() => __reread.length === 2 && __reread[0] === __reread[1]), 'Retry reads the same File object a second time');
+      await im.focus('#gd-q');
+      await im.evaluate(() => __retryCopy());
+      await until(() => im.evaluate(() => !document.querySelector('.gd-pending') && [...document.querySelectorAll('.gd-card')].some((c) => c.querySelector('.gd-title').textContent === 'Interrupted')), 'interrupted file retried');
+      check(await im.evaluate(() => document.activeElement?.id === 'gd-q'), 'Retry preserves focus moved elsewhere while the import was running');
       await shot(im, 'import-done-1280-en.png');
       await im.close();
     }
