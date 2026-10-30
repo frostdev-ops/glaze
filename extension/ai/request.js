@@ -95,11 +95,12 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
     return parameters && parameters.type === 'object' ? { name: v.name, description: v.description, parameters } : null;
   };
   const EFFORTS = ['none', 'minimal', 'low', 'medium', 'high'];
+  const TASK = /^[a-z][a-z0-9-]{0,31}(\.[a-z][a-z0-9-]{0,31}){0,3}$/; // ai/task.js ID
   const OPTS = { temperature: (v) => (Number.isFinite(v) && v >= 0 && v <= 2 ? v : null), maxTokens: (v) => (Number.isSafeInteger(v) && v >= 1 && v <= LIMIT.maxTokens ? v : null),
     timeoutMs: (v) => (Number.isSafeInteger(v) && v >= LIMIT.timeout[0] && v <= LIMIT.timeout[1] ? v : null), effort: (v) => (EFFORTS.includes(v) ? v : null) };
   // → the request in its one form, or null.
   const clean = (raw) => {
-    if (!isObj(raw) || Object.keys(raw).some((k) => !['messages', 'schema', 'tools', ...Object.keys(OPTS)].includes(k))) return null;
+    if (!isObj(raw) || Object.keys(raw).some((k) => !['messages', 'schema', 'tools', 'task', 'fenced', ...Object.keys(OPTS)].includes(k))) return null;
     const messages = list(raw.messages, LIMIT.messages, message);
     if (!messages?.some((m) => m.role === 'user')) return null;
     const parts = messages.flatMap((m) => m.content);
@@ -115,6 +116,18 @@ var GZ_AI_REQUEST = globalThis.GZ_AI_REQUEST || (() => {
       if (tools.length) out.tools = tools;
     }
     for (const [k, rule] of Object.entries(OPTS)) if (raw[k] !== undefined) { const v = rule(raw[k]); if (v === null) return null; out[k] = v; }
+    // The task the request is for (ai/task.js), and how many fenced blocks are context and data (ai/text.js request): what
+    // Glaze's own model reads them by (ai/local/format.js). No provider sends either.
+    if (raw.task !== undefined) {
+      const t = raw.task;
+      if (!isObj(t) || Object.keys(t).some((k) => !['id', 'version'].includes(k)) || typeof t.id !== 'string' || !TASK.test(t.id) || !(Number.isSafeInteger(t.version) && t.version > 0)) return null;
+      out.task = { id: t.id, version: t.version };
+    }
+    if (raw.fenced !== undefined) {
+      const f = raw.fenced, n = (v) => Number.isSafeInteger(v) && v >= 0 && v <= LIMIT.parts * 64;
+      if (!isObj(f) || Object.keys(f).some((k) => !['context', 'data'].includes(k)) || !n(f.context) || !n(f.data)) return null;
+      out.fenced = { context: f.context, data: f.data };
+    }
     return out;
   };
   const images = (req) => req.messages.reduce((n, m) => n + m.content.filter((p) => p.type === 'image').length, 0);

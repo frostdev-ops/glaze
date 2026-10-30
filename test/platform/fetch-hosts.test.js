@@ -71,6 +71,8 @@ const SITES = {
     { at: "globalThis.fetch(new URL('/ai/local/models.json'", kind: 'extension' },
   ],
   'ai/local/ladder.js': [{ at: "fetch(chrome.runtime.getURL('ai/local/kernels/bench.wgsl'))", kind: 'extension' }],
+  // The engine host's Worker reads the ladder's bench kernel beside it (a Worker has no chrome.runtime).
+  'ai/local/host.js': [{ at: "fetch(new URL('kernels/bench.wgsl', location.href))", kind: 'extension' }],
   'ai/broker.js': [{ at: 'env.fetch(url, init)', kind: 'asked', flow: 'an AI connection\'s endpoint, asked for by Settings', in: 'ai/broker.js', guard: /if \(!await reaches\(env, use\)\) throw R\(\)\.error\('permission'\)/ }],
   'ai/providers/openai.js': [
     { at: 'res = await fetch(`${cfg.base}/chat/completions`', kind: 'asked', flow: 'the broker\'s fetch, pinned to the connection\'s held host', in: 'ai/broker.js', guard: /fetch: pinned\(env, use\)/ },
@@ -158,7 +160,7 @@ const KINDS = ['required', 'extension', 'asked', 'page', 'via', 'open'];
 const extensionSide = () => {
   const out = new Set(['background/background.js', 'settings/options.js', 'settings/popup.js', 'planner/reader.js', 'core/ui.js']);
   for (const m of read('background/background.js').matchAll(/importScripts\(([^)]*)\)/g)) for (const [, f] of m[1].matchAll(/'([^']+)'/g)) out.add(path.posix.normalize(`background/${f}`));
-  for (const page of ['options.html', 'popup.html', 'preview.html', 'reader.html', 'settings/welcome.html', 'sharing/quick.html', 'courses/allow.html']) {
+  for (const page of ['options.html', 'popup.html', 'preview.html', 'reader.html', 'settings/welcome.html', 'sharing/quick.html', 'courses/allow.html', 'ai/local/host.html']) {
     if (!fs.existsSync(path.join(root, page))) continue;
     for (const [, src] of read(page).matchAll(/<script[^>]+src="([^"]+)"/g)) out.add(path.posix.normalize(path.posix.join(path.posix.dirname(page), src)));
   }

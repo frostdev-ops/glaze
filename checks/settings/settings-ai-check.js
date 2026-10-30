@@ -1,5 +1,6 @@
 // Settings → AI against the unpacked extension: an older store read as its provider, Connect, a refused key, the model
-// picker and the effort a model takes, a feature's own model, Advanced's endpoint and tuning, AI off, and search; each
+// picker and the effort a model takes, a feature's own model, Advanced's endpoint and tuning, Glaze's own model's card in
+// each state (also at 320 px), AI off, and search; each
 // state shot in light and dark, each scheme in a browser of its own since Settings paints its Look when it loads. The providers' servers are stand-ins (no network; OpenRouter's list is its own, as kept in
 // test/fixtures), and the copy's manifest holds their hosts, which a headless browser couldn't grant.
 // NODE_PATH=<playwright> nice -n 10 node checks/settings/settings-ai-check.js [shots folder]
@@ -103,10 +104,11 @@ async function pass(scheme) {
       { id: 'b', task: 'writer.complete', feature: 'completion', provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017', state: 'completed', startedAt: now - 180000, ms: 900, usage: { input: 2700, output: 260 }, count: 38 },
     ];
 
+    // Every selected case uses its browser's scheme, including an isolated Glaze card check.
+    await open();
+    await page.evaluate(async () => chrome.storage.sync.set({ auto: { ...GZ_SANITIZE().auto, on: true, mode: 'device' } }));
+
     await check('migration', async () => {
-      await open();
-      // The Look follows the system's light or dark (Paper and Frost), so each state is shot in both.
-      await page.evaluate(async () => chrome.storage.sync.set({ auto: { ...GZ_SANITIZE().auto, on: true, mode: 'device' } }));
       await page.evaluate(async (calls) => chrome.storage.local.set({ ai: { on: true, use: 'endpoint', features: { syllabus: true, completion: true, writing: true } }, aiCalls: calls }), CALLS);
       await older({ endpoint: { provider: 'openai', base: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-v4.1-flash-1017', key: KEY, generation: 'g-1' } });
       await open();
@@ -219,6 +221,74 @@ async function pass(scheme) {
       await page.locator('#ai-drawer .note').filter({ hasText: /\S/ }).waitFor();
       await shoot('device');
       await page.locator('#ai-providers .ai-prov', { hasText: 'Chrome on-device AI' }).click();
+    });
+
+    // Glaze's own model's card in each state, at desktop width and at 320 px: not downloaded with its size, downloading
+    // with its progress (as the worker reports it), ready (the store's chunk files written sparse into OPFS, as a finished
+    // download leaves them; nothing is fetched), and its size to use in Advanced. Delete then removes them.
+    await check('glaze', async () => {
+      const card = page.locator('#ai-providers .ai-prov', { hasText: 'Glaze on-device AI' });
+      const note = page.locator('#ai-drawer .note');
+      const both = async (name) => {
+        await shoot(`glaze-${name}`);
+        const was = page.viewportSize();
+        await page.setViewportSize({ width: 320, height: 2400 });
+        await pause(200);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= 320), `${name}: nothing wider than 320 px`);
+        const fits = await page.locator('#ai-drawer').evaluate((d) => [...d.querySelectorAll('*')].every((e) => { const r = e.getBoundingClientRect(), o = d.getBoundingClientRect(); return !r.width || (r.left >= o.left - 0.5 && r.right <= o.right + 0.5); }));
+        assert.ok(fits, `${name}: the drawer's parts stay inside it at 320 px`);
+        const name1 = await page.locator('#ai-drawer .line b').evaluate((b) => { const r = b.getBoundingClientRect(), h = parseFloat(getComputedStyle(b).lineHeight) || 20; return r.height < h * 1.6; });
+        assert.ok(name1, `${name}: the model's name keeps one line at 320 px`);
+        await shoot(`glaze-${name}-320`);
+        await page.setViewportSize(was);
+        await pause(200);
+      };
+      await open();
+      await page.evaluate(async () => { const { ai } = await chrome.storage.local.get('ai'); await chrome.storage.local.set({ ai: { ...ai, on: true } }); });
+      await open();
+      await card.click();
+      await note.filter({ hasText: /^Needs a download · 1\.1 GB$/ }).waitFor();
+      assert.ok(await page.getByRole('button', { name: 'Download', exact: true }).isVisible());
+      assert.equal(await page.getByRole('button', { name: 'Delete', exact: true }).count(), 0);
+      await both('download');
+
+      await (context.serviceWorkers()[0] || worker).evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:ai-config', event: 'progress', provider: 'local', loaded: 0.42 }).catch(() => {}));
+      await note.filter({ hasText: /^42% · 1\.1 GB$/ }).waitFor();
+      assert.equal(await page.locator('#ai-drawer progress').evaluate((b) => b.value), 0.42);
+      assert.equal(await card.locator('.pct').innerText(), '42%');
+      await both('downloading');
+
+      const files = await page.evaluate(async () => {
+        const m = (await (await fetch('/ai/local/models.json')).json()).models.find((x) => x.tier === 1);
+        const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models', { create: true });
+        const dir = await (await top.getDirectoryHandle(m.id, { create: true })).getDirectoryHandle(`${m.total.slice(0, 16)}-${m.chunk}`, { create: true });
+        for (let i = 0; i < m.sha256.length; i++) {
+          const w = await (await dir.getFileHandle(String(i), { create: true })).createWritable();
+          await w.truncate(Math.min(m.chunk, m.size - i * m.chunk)); await w.close();
+        }
+        await dir.getFileHandle('ready', { create: true });
+        return m.sha256.length;
+      });
+      assert.ok(files > 1);
+      await open();
+      await card.click();
+      await note.filter({ hasText: /^Ready · 1\.1 GB$/ }).waitFor();
+      assert.ok(await card.locator('.st.ok').isVisible());
+      assert.ok(await page.getByRole('button', { name: 'Delete', exact: true }).isVisible());
+      await both('ready');
+
+      await page.locator('label', { hasText: 'Advanced' }).click();
+      const tier = page.locator('#ai-local-tier');
+      await tier.waitFor();
+      assert.deepEqual(await tier.locator('option').allTextContents(), ['Auto', '1.1 GB', '1.3 GB', '1.4 GB', '1.8 GB']);
+      assert.equal(await tier.getAttribute('aria-label'), 'Model size');
+      await both('tier');
+      await page.locator('label', { hasText: 'Simple' }).click();
+
+      await page.getByRole('button', { name: 'Delete', exact: true }).click();
+      await note.filter({ hasText: /^Needs a download/ }).waitFor();
+      assert.equal(await page.evaluate(async () => { try { await (await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models')).getDirectoryHandle('lfm3-1.7b-q4_k_m'); return 'kept'; } catch (e) { return e.name; } }), 'NotFoundError');
+      await card.click();
     });
 
     await check('search', async () => {

@@ -13,7 +13,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
   const D = () => (typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : require('../ai/failure.js'));
   const TYPE = 'glaze:ai-config', CALLS = 'aiCalls';
   // On this device (DEVICE) is the worker's to resolve: Apple Intelligence or the browser's model (ai/broker.js onDevice).
-  const DEVICE = 'device', APPLE = 'apple';
+  // Glaze's own model (OWN, ai/providers/local.js) is a card of its own. Both need no model id.
+  const DEVICE = 'device', APPLE = 'apple', OWN = 'local', HERE = [DEVICE, OWN];
   // A model request's failure categories (ai/failure.js CATEGORIES).
   const CATEGORIES = ['cancelled', 'timeout', 'provider-unavailable', 'request-rejected', 'invalid-response', 'connection-lost'];
   // The providers' cards, in this order: the name, the mark, what a key starts with.
@@ -30,7 +31,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
 
   const featureName = (id, t) => ({ syllabus: t('Syllabus import'), completion: t('Tab completion'), writing: t('Feedback') }[id] || id);
   // A connection's name: a provider's, an endpoint's own (names: the kept connections), the model on this device's.
-  const providerName = (id, t, names = {}) => (CARDS[id] ? CARDS[id][0] : id === DEVICE ? t('Chrome on-device AI') : id === APPLE ? t('Apple Intelligence')
+  const providerName = (id, t, names = {}) => (CARDS[id] ? CARDS[id][0] : id === DEVICE ? t('Chrome on-device AI') : id === APPLE ? t('Apple Intelligence') : id === OWN ? t('Glaze on-device AI')
     : typeof names[id]?.name === 'string' ? names[id].name : t('Endpoint'));
   const effortName = (e, t) => ({ none: t('Off'), minimal: t('Minimal'), low: t('Low'), medium: t('Medium'), high: t('High') }[e] || e);
   // A call's or a test's end, in a word or two: its state, else its failure category.
@@ -48,6 +49,13 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
   const appleText = (st, t) => (st.state === 'ready' ? t('Ready') : st.reason === 'off' ? t('Apple Intelligence is off')
     : ['os', 'device'].includes(st.reason) ? t('Not available on this device') : st.state === 'downloading' ? t('Downloading…')
       : t('Not available: {reason}', { reason: reason(st.reason, t) }));
+  // Glaze's own model's status (ai/providers/local.js): { state, reason?, size?, tier?, tiers?, progress? }. A download that
+  // stopped keeps Download and says why.
+  const localText = (st, t, pct) => (st.state === 'ready' ? t('Ready') : st.state === 'downloading' ? (typeof st.progress === 'number' ? pct(st.progress) : t('Downloading…'))
+    : st.state === 'download' ? (st.reason ? reason(st.reason, t) : t('Needs a download'))
+      : st.reason === 'browser' ? t('Not available in this browser') : reason(st.reason, t));
+  // A model's size, in GB to one place.
+  const gb = (bytes, t) => t('{n} GB', { n: (Math.round(bytes / 1e8) / 10).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
   // A download's progress message: { progress } or { loaded, total? } (Chrome's downloadprogress gives a fraction) → 0 to 1, or null.
   const progress = (m) => {
     const n = typeof m?.progress === 'number' ? m.progress : typeof m?.loaded === 'number' ? (m.total > 0 ? m.loaded / m.total : m.loaded) : NaN;
@@ -88,15 +96,18 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     // a feature), on: the connection it lists, query: its search; catalogs: each connection's models from the worker;
     // tested: the last Connect or Test of each this session; said: the drawer's last word; unsaved: the last write failed;
     // drafts: an endpoint's fields as typed, kept across a redraw (never a key once submitted).
-    let s = S.clean(), conns = {}, calls = [], device = null, open = null, picking = null, on = null, query = '', said = null, unsaved = false;
+    let s = S.clean(), conns = {}, calls = [], device = null, ours = null, open = null, picking = null, on = null, query = '', said = null, unsaved = false;
     const catalogs = {}, tested = {}, drafts = {};
     const offered = () => providers.includes(DEVICE) || providers.includes(APPLE);
+    const offers = () => providers.includes(OWN);
     const apple = () => device?.provider === APPLE || (!device && providers.includes(APPLE));
     const deviceName = () => providerName(apple() ? APPLE : DEVICE, t);
-    const kind = (id) => (id === DEVICE ? DEVICE : CARDS[id] ? 'preset' : 'custom');
-    const connected = (id) => (id === DEVICE ? offered() : !!conns[id] && (kind(id) === 'custom' || !!conns[id].key));
+    const kind = (id) => (HERE.includes(id) ? id : CARDS[id] ? 'preset' : 'custom');
+    const connected = (id) => (id === DEVICE ? offered() : id === OWN ? offers() : !!conns[id] && (kind(id) === 'custom' || !!conns[id].key));
     const bad = (id) => connected(id) && (tested[id] ? tested[id].state !== 'ready' && tested[id].reason === 'request-rejected' : refused(calls, id));
     const label = (id) => (id === DEVICE ? deviceName() : providerName(id, t, conns));
+    // The cards of the models on this computer, first: On this device, then Glaze's own.
+    const here = () => [...(offered() ? [DEVICE] : []), ...(offers() ? [OWN] : [])];
 
     // ---- the switches (storage.local ai) -------------------------------------------------------------------------------
     // Read again before each write, so a change elsewhere (another Settings tab) isn't written over; one at a time, so a
@@ -131,7 +142,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     };
     const cards = $('ai-providers');
     const renderProviders = () => {
-      const ids = [...(offered() ? [DEVICE] : []), ...Object.keys(CARDS), ...(s.mode === 'advanced' ? Object.keys(conns).filter((id) => kind(id) === 'custom') : [])];
+      const ids = [...here(), ...Object.keys(CARDS), ...(s.mode === 'advanced' ? Object.keys(conns).filter((id) => kind(id) === 'custom') : [])];
       const list = ids.map((id) => {
         const b = button(`ai-prov${open === id ? ' sel' : ''}`, '', () => toggle(id));
         b.id = `ai-prov-${id}`;
@@ -139,14 +150,15 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         b.setAttribute('aria-controls', 'ai-drawer');
         const name = el('b', '', label(id)), tail = el('span', 'st');
         b.append(mark(id), name, tail);
-        const loading = id === DEVICE && device?.state === 'downloading' && typeof device.progress === 'number';
+        const st = id === DEVICE ? device : id === OWN ? ours : null;
+        const loading = st?.state === 'downloading' && typeof st.progress === 'number';
         if (loading) {
-          tail.className = 'pct'; tail.textContent = pct(device.progress);
+          tail.className = 'pct'; tail.textContent = pct(st.progress);
           const bar = el('span', 'bar'), fill = el('i');
-          fill.style?.setProperty?.('inline-size', pct(device.progress));
+          fill.style?.setProperty?.('inline-size', pct(st.progress));
           bar.append(fill); b.append(bar);
         } else if (bad(id)) { tail.className = 'st bad'; tail.textContent = t('Key refused'); }
-        else if (id === DEVICE ? device?.state === 'ready' : connected(id) && (!tested[id] || tested[id].state === 'ready')) { tail.className = 'st ok'; tail.textContent = t('Connected'); }
+        else if (st || HERE.includes(id) ? st?.state === 'ready' : connected(id) && (!tested[id] || tested[id].state === 'ready')) { tail.className = 'st ok'; tail.textContent = t('Connected'); }
         return b;
       });
       if (s.mode === 'advanced') {
@@ -163,6 +175,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       open = open === id ? null : id;
       said = null;
       if (open === DEVICE) deviceStatus();
+      if (open === OWN) localStatus();
       render();
       if (open) $('ai-drawer').querySelector?.('input, button.primary')?.focus();
     };
@@ -204,7 +217,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
           bar.setAttribute('aria-label', deviceName());
           parts.push(bar);
         }
-      } else if (kind(id) === 'preset') {
+      } else if (id === OWN) parts.push(...glaze());
+      else if (kind(id) === 'preset') {
         if (connected(id) && !bad(id) && !said?.replace) {
           const line = el('div', 'line'), who = el('div', 'key');
           const masked = el('span', 'mono', conns[id].key);
@@ -216,6 +230,34 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       } else parts.push(...endpoint(id));
       if (said?.text) { const p = el('p', said.err ? 'err-t' : 'ok-t', said.text); p.setAttribute('role', said.err ? 'alert' : 'status'); parts.push(p); }
       box.replaceChildren(...parts);
+    };
+    // Glaze's own model: its state, its size, Download, the download's progress, Delete; in Advanced, its size to use (the
+    // tier: Auto lets the ladder pick for this computer at Download).
+    const glaze = () => {
+      const words = ours ? [localText(ours, t, pct), ...(ours.size && ours.state !== 'unavailable' ? [gb(ours.size, t)] : [])].join(' · ') : '';
+      const line = el('div', 'line own'), state = el('span', 'note', words);
+      state.setAttribute('role', 'status');
+      line.append(mark(OWN), el('b', '', label(OWN)), state);
+      if (ours?.state === 'download') line.append(button('primary', t('Download'), fetchModel));
+      if (ours && (ours.state === 'downloading' || (ours.state === 'ready'))) line.append(button('', t('Delete'), deleteModel));
+      const parts = [line];
+      if (ours?.state === 'downloading' && typeof ours.progress === 'number') {
+        const bar = el('progress');
+        Object.assign(bar, { max: 1, value: ours.progress });
+        bar.setAttribute('aria-label', label(OWN));
+        parts.push(bar);
+      }
+      if (s.mode === 'advanced' && ours?.tiers?.length && ours.state !== 'unavailable') {
+        const pick = el('select');
+        pick.id = 'ai-local-tier';
+        pick.setAttribute('aria-label', t('Model size'));
+        const opt = (value, text) => { const o = el('option', '', text); o.value = value; o.selected = String(conns[OWN]?.tier || '') === value; return o; };
+        pick.append(opt('', t('Auto')), ...ours.tiers.map((x) => opt(String(x.tier), gb(x.size, t))));
+        pick.disabled = ours.state === 'downloading';
+        pick.addEventListener('change', () => setTier(Number(pick.value) || 0));
+        parts.push(pick);
+      }
+      return parts;
     };
     // An endpoint of the student's own (Advanced): its name, address and key, Ollama's and LM Studio's addresses a click away.
     const endpoint = (id) => {
@@ -313,7 +355,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
 
     // ---- the models ----------------------------------------------------------------------------------------------------
     const models = async (id) => {
-      if (id === DEVICE) { catalogs[id] = { models: [{ id: '', name: deviceName(), efforts: [] }] }; return catalogs[id]; }
+      if (HERE.includes(id)) { catalogs[id] = { models: [{ id: '', name: label(id), efforts: [] }] }; return catalogs[id]; }
       if (catalogs[id]?.models || catalogs[id]?.loading) return catalogs[id]?.loading || catalogs[id];
       const loading = send({ op: 'models', id }).then((r) => {
         // Save or Remove may have replaced this connection while its old catalog was still arriving.
@@ -328,8 +370,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     };
     const entry = (sel) => catalogs[sel.use]?.models?.find((m) => m.id === sel.model);
     // The efforts a chosen model takes, once its catalog is known: [] hides the slider.
-    const efforts = (sel) => (sel?.use === DEVICE ? [] : entry(sel)?.efforts || []);
-    const pickText = (sel) => (sel.use === DEVICE ? deviceName() : entry(sel)?.name || sel.model);
+    const efforts = (sel) => (HERE.includes(sel?.use) ? [] : entry(sel)?.efforts || []);
+    const pickText = (sel) => (HERE.includes(sel.use) ? label(sel.use) : entry(sel)?.name || sel.model);
     const chev = () => { const v = el('span', 'chev'); v.setAttribute('aria-hidden', 'true'); return v; };
     // The mockup's order: the gray text, Feedback, then the rest.
     const ROWS = () => ['model', ...['completion', 'writing'].filter((f) => S.FEATURES.includes(f)), ...S.FEATURES.filter((f) => !['completion', 'writing'].includes(f))];
@@ -337,7 +379,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       const pop = el('div', 'ai-picker'), side = el('div', 'side'), main = el('div', 'main');
       pop.setAttribute('role', 'dialog');
       pop.setAttribute('aria-label', row === 'model' ? t('Default') : featureName(row, t));
-      const ids = [...(offered() ? [DEVICE] : []), ...Object.keys(CARDS).filter(connected), ...Object.keys(conns).filter((id) => kind(id) === 'custom')];
+      const ids = [...here(), ...Object.keys(CARDS).filter(connected), ...Object.keys(conns).filter((id) => kind(id) === 'custom')];
       if (!on || !ids.includes(on)) on = ids.includes(selOf(row)?.use) ? selOf(row).use : ids[0] || null;
       if (row !== 'model') {
         const same = button(`same${!selOf(row) ? ' on' : ''}`, t('Same as default'), () => { close(true); choose(row, null); });
@@ -356,18 +398,18 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       const fill = () => {
         list.replaceChildren();
         list.setAttribute('aria-label', on ? label(on) : t('Model'));
-        const cat = on === DEVICE ? { models: [{ id: '', name: deviceName(), efforts: [] }] } : on && catalogs[on]?.models ? catalogs[on] : null;
+        const cat = HERE.includes(on) ? { models: [{ id: '', name: label(on), efforts: [] }] } : on && catalogs[on]?.models ? catalogs[on] : null;
         const q = query.trim().toLowerCase(), cur = selOf(row);
         shownModels = (cat?.models || []).filter((m) => !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)).slice(0, 300);
         for (const m of shownModels) {
-          const chosen = cur?.use === on && (on === DEVICE || cur.model === m.id);
+          const chosen = cur?.use === on && (HERE.includes(on) || cur.model === m.id);
           const li = el('li', chosen ? 'on' : '', '');
           li.setAttribute('role', 'option');
           li.setAttribute('aria-selected', String(chosen));
           li.id = `ai-opt-${shownModels.indexOf(m)}`;
           const name = el('span', 'grow', m.name);
           li.append(name);
-          if (m.name !== m.id && on !== DEVICE) { const id = el('small', 'mono', m.id); id.setAttribute('dir', 'ltr'); li.append(id); }
+          if (m.name !== m.id && !HERE.includes(on)) { const id = el('small', 'mono', m.id); id.setAttribute('dir', 'ltr'); li.append(id); }
           li.addEventListener('click', () => take(row, on, m));
           list.append(li);
         }
@@ -379,14 +421,14 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         const b = button(id === on ? 'on' : '', '', () => {
           on = id; query = ''; active = null; search.value = '';
           for (const x of side.children) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }
-          if (on !== DEVICE && !catalogs[on]) models(on);
+          if (!HERE.includes(on) && !catalogs[on]) models(on);
           fill(); search.focus?.();
         });
         b.setAttribute('aria-pressed', String(id === on));
         b.append(mark(id), el('span', '', label(id)));
         side.append(b);
       }
-      if (on && on !== DEVICE && !catalogs[on]) models(on);
+      if (on && !HERE.includes(on) && !catalogs[on]) models(on);
       fill();
       search.addEventListener('input', () => { query = search.value; active = null; fill(); });
       search.addEventListener('keydown', (e) => {
@@ -430,8 +472,9 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     let active = null;
     const focusSearch = () => $('ai-pick-search')?.focus?.();
     const take = (row, id, m) => {
-      const was = selOf(row), sel = { use: id, model: id === DEVICE ? '' : m.id, ...(was?.use === id && was.model === m.id && was.effort && { effort: was.effort }) };
+      const was = selOf(row), sel = { use: id, model: HERE.includes(id) ? '' : m.id, ...(was?.use === id && was.model === m.id && was.effort && { effort: was.effort }) };
       if (id === DEVICE) deviceStatus();
+      if (id === OWN) localStatus();
       close(true);
       choose(row, sel);
     };
@@ -500,7 +543,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       return box;
     };
     const renderFeatures = () => {
-      const any = offered() || Object.keys(conns).some(connected);
+      const any = offered() || offers() || Object.keys(conns).some(connected);
       $('ai-feature-list').replaceChildren(...ROWS().map((row) => {
         const sel = selOf(row), wrap = el('div', `ai-feat${row !== 'model' && s.features[row] !== true ? ' off' : ''}`), line = el('div', 'row');
         const name = el('label', 'name');
@@ -518,10 +561,10 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         pick.setAttribute('aria-expanded', String(picking === row));
         pick.disabled = !any;
         if (!sel && row !== 'model') { pick.classList.toggle('same', true); pick.append(el('span', 'm', t('Same as default'))); }
-        else if (!sel?.use || (!sel.model && sel.use !== DEVICE)) { pick.classList.toggle('none', true); pick.append(el('span', 'm', t('Choose a model'))); }
+        else if (!sel?.use || (!sel.model && !HERE.includes(sel.use))) { pick.classList.toggle('none', true); pick.append(el('span', 'm', t('Choose a model'))); }
         else {
           const m = el('span', 'm', pickText(sel));
-          if (sel.use !== DEVICE) m.append(el('span', 'p', ` · ${label(sel.use)}`));
+          if (!HERE.includes(sel.use)) m.append(el('span', 'p', ` · ${label(sel.use)}`));
           pick.append(mark(sel.use, 'ai-mk sm'), m);
           if (bad(sel.use)) { const dot = el('span', 'dot'); dot.setAttribute('role', 'img'); dot.setAttribute('aria-label', t('Key refused')); pick.append(dot); }
         }
@@ -530,7 +573,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         wrapPick.append(pick);
         if (picking === row) { const pop = picker(row); wrapPick.append(pop); float(pop, pick); }
         const levels = sel?.use ? efforts(sel) : [];
-        if (sel?.use && sel.use !== DEVICE && !catalogs[sel.use]) models(sel.use);
+        if (sel?.use && !HERE.includes(sel.use) && !catalogs[sel.use]) models(sel.use);
         line.append(name, wrapPick, levels.length ? slider(row, sel, levels) : el('span', 'ai-effort-none'));
         wrap.append(line);
         // Apple Intelligence's model is too small for Feedback's grading and reading: it mostly gives no usable answer.
@@ -573,13 +616,13 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       $('ai-connection').hidden = !s.on;
       $('ai-features').hidden = !s.on;
       $('ai-activity').hidden = !s.on && !rows(calls).length;
-      if (open && open !== DEVICE && open !== 'new' && kind(open) === 'custom' && s.mode !== 'advanced') open = null;
+      if (open && !HERE.includes(open) && open !== 'new' && kind(open) === 'custom' && s.mode !== 'advanced') open = null;
       if (open === 'new' && s.mode !== 'advanced') open = null;
-      const marks = [DEVICE, ...Object.keys(CARDS), ...Object.keys(conns)].map((id) => [id, connected(id), bad(id), tested[id]?.state]);
+      const marks = [...HERE, ...Object.keys(CARDS), ...Object.keys(conns)].map((id) => [id, connected(id), bad(id), tested[id]?.state]);
       const lists = Object.fromEntries(Object.entries(catalogs).map(([id, x]) => [id, x.models ? x.models.length : 'loading']));
-      once('providers', [s.mode, open, providers, conns, device, marks], renderProviders);
-      once('drawer', [s.mode, open, said, conns[open], open === DEVICE ? device : null, lists[open], marks.find(([id]) => id === open)], renderDrawer);
-      once('features', [s, conns, providers, device, picking, marks, lists], renderFeatures);
+      once('providers', [s.mode, open, providers, conns, device, ours, marks], renderProviders);
+      once('drawer', [s.mode, open, said, conns[open], open === DEVICE ? device : open === OWN ? ours : null, lists[open], marks.find(([id]) => id === open)], renderDrawer);
+      once('features', [s, conns, providers, device, ours, picking, marks, lists], renderFeatures);
       renderCalls();
     };
     // A part is drawn again only when what it shows changed: a key being typed, or a search, keeps its words and the focus
@@ -602,6 +645,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       providers = r.ok && Array.isArray(r.providers) ? r.providers.filter((id) => S.PROVIDERS.includes(id)) : [];
       render();
       if (s.on && [s.model, ...Object.values(s.models)].some((x) => x?.use === DEVICE) && offered()) await deviceStatus();
+      if (s.on && [s.model, ...Object.values(s.models)].some((x) => x?.use === OWN) && offers()) await localStatus();
     };
     // On this device: its status and the model the worker resolved it to, a download the student starts (the browser's
     // model only; Apple Intelligence downloads in System Settings), and its progress as the worker reports it.
@@ -628,6 +672,64 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         if (r.ok) deviceResult(r); else await deviceStatus();
       }).finally(() => { preparing = false; });
     };
+    // Glaze's own model: its status (the connection kept first, as On this device's is), Download from the click, Delete,
+    // and the tier Advanced sets (the connection's).
+    let fetching = false, localPoll = null;
+    const localResult = (r) => {
+      const keep = (st) => ({ ...st, ...(!st.tiers && ours?.tiers && { tiers: ours.tiers }), ...(!st.size && ours?.size && { size: ours.size }) });
+      ours = r.ok ? keep({ state: r.state, ...['reason', 'size', 'tier', 'tiers', 'progress'].reduce((o, k) => (r[k] === undefined ? o : { ...o, [k]: r[k] }), {}) })
+        : { state: 'unavailable', reason: r.error };
+      clearTimeout(localPoll);
+      localPoll = ours.state === 'downloading' && !fetching ? setTimeout(() => localStatus(), 5000) : null;
+      localPoll?.unref?.();
+      render();
+    };
+    const localConn = async () => {
+      if (conns[OWN]) return true;
+      const r = await send({ op: 'set', id: OWN, cfg: { provider: OWN } });
+      if (!r.ok) { localResult(r); return false; }
+      conns[OWN] = { provider: OWN };
+      return true;
+    };
+    const localStatus = async () => {
+      if (!offers() || !await localConn()) return;
+      if (fetching && ours?.state === 'downloading') return;
+      localResult(await send({ op: 'test', provider: OWN }));
+    };
+    const fetchModel = (e) => {
+      if (!e?.isTrusted || fetching || !offers() || ours?.state !== 'download') return;
+      fetching = true;
+      ours = { ...ours, state: 'downloading' };
+      delete ours.reason; delete ours.progress;
+      render();
+      send({ op: 'prepare', provider: OWN }).then(async (r) => {
+        fetching = false;
+        if (r.ok) localResult(r); else await localStatus();
+      }, () => { fetching = false; });
+    };
+    const deleteModel = (e) => {
+      if (!e?.isTrusted || busy) return;
+      busy = true;
+      send({ op: 'delete', provider: OWN }).then(localResult).finally(() => { busy = false; });
+    };
+    const setTier = (tier) => {
+      if (busy) return;
+      busy = true;
+      send({ op: 'set', id: OWN, cfg: { provider: OWN, ...(tier && { tier }) } }).then(async (r) => {
+        if (!r.ok) return say(t('Could not save. Try again.'), true);
+        await load();
+        await localStatus();
+      }).finally(() => { busy = false; });
+    };
+    c.runtime.onMessage?.addListener((m, sender) => {
+      if (sender?.id !== c.runtime.id || m?.type !== TYPE || m.event !== 'progress' || m.provider !== OWN || !offers()) return;
+      const n = progress(m);
+      if (n === null) return;
+      ours = { ...ours, state: 'downloading', progress: n };
+      delete ours.reason;
+      render();
+      if (n >= 1 && !fetching) localStatus();
+    });
     c.runtime.onMessage?.addListener((m, sender) => {
       if (sender?.id !== c.runtime.id || m?.type !== TYPE || m.event !== 'progress' || m.provider !== DEVICE || !providers.includes(DEVICE)) return;
       const n = progress(m);
@@ -639,6 +741,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
 
     // ---- the student's changes -----------------------------------------------------------------------------------------
     $('ai-on').addEventListener('change', () => { const v = $('ai-on').checked; return write(() => ({ on: v })).then((saved) => {
+      if (saved && s.on && [s.model, ...Object.values(s.models)].some((x) => x?.use === OWN)) localStatus();
       if (saved && s.on && [s.model, ...Object.values(s.models)].some((x) => x?.use === DEVICE)) return deviceStatus();
     }); });
     for (const mode of ['simple', 'advanced']) $(`ai-mode-${mode}`).addEventListener('change', () => { if ($(`ai-mode-${mode}`).checked) write(() => ({ mode })); });
@@ -666,6 +769,6 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     load();
   };
 
-  return { DEVICE, APPLE, CATEGORIES, CARDS, LOCAL, STOPS, featureName, providerName, effortName, outcome, reason, deviceText, appleText, progress, rows, refused, tuneText, mount };
+  return { DEVICE, APPLE, OWN, HERE, CATEGORIES, CARDS, LOCAL, STOPS, featureName, providerName, effortName, outcome, reason, deviceText, appleText, localText, gb, progress, rows, refused, tuneText, mount };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AIEDIT;

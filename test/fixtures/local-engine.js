@@ -29,7 +29,7 @@ function host() {
     constructor({ size, usage }) { this.size = size; this.usage = usage; this.destroyed = false; buffers.push(this); }
     destroy() { this.destroyed = true; }
     async mapAsync() { if (this.destroyed) throw new Error('buffer destroyed'); }
-    getMappedRange() { return new ArrayBuffer(this.size); }
+    getMappedRange() { return this.data ? this.data.buffer.slice(0) : new ArrayBuffer(this.size); }
     unmap() {}
   }
   const features = new Set();
@@ -40,14 +40,27 @@ function host() {
     createShaderModule: (d) => d,
     createComputePipelineAsync: async (d) => ({ ...d, getBindGroupLayout: () => ({}) }),
     createBindGroup: (d) => d,
-    createCommandEncoder: () => ({
-      beginComputePass: () => {
-        let pipeline, group;
-        return { setPipeline(p) { pipeline = p; }, setBindGroup(i, g) { group = g; },
-          dispatchWorkgroups(...dims) { dispatches.push({ pipeline, group, dims }); }, end() {} };
-      },
-      copyBufferToBuffer() {}, finish: () => ({}),
-    }),
+    createCommandEncoder: () => {
+      const commands = [];
+      return {
+        beginComputePass: () => {
+          let pipeline, group;
+          return { setPipeline(p) { pipeline = p; }, setBindGroup(i, g) { group = g; },
+            dispatchWorkgroups(...dims) {
+              const d = { pipeline, group, dims };
+              dispatches.push(d); commands.push(() => device.execute?.(d));
+            }, end() {} };
+        },
+        copyBufferToBuffer(src, from, dst, to, size) {
+          commands.push(() => {
+            if (src.destroyed || dst.destroyed) throw new Error('buffer destroyed');
+            dst.data ||= new Uint8Array(dst.size);
+            dst.data.set(src.data ? src.data.subarray(from, from + size) : new Uint8Array(size), to);
+          });
+        },
+        finish: () => commands,
+      };
+    },
     queue: {
       writeBuffer(buffer, offset, data, byteOffset = 0, size = data.byteLength) {
         if (buffer.destroyed) throw new Error('buffer destroyed');
@@ -60,18 +73,24 @@ function host() {
           buffer.data.set(view.subarray(byteOffset, byteOffset + size), offset);
         }
       },
-      submit: (commands) => submissions.push(commands), onSubmittedWorkDone: async () => {},
+      submit(commands) {
+        submissions.push(commands);
+        for (const list of commands) for (const run of list) run();
+      }, onSubmittedWorkDone: async () => {},
     },
   };
   const adapter = { limits, features, requestDevice: async () => device };
   const context = vm.createContext({
-    require, navigator: { gpu: {} }, GZ_AI_REFERENCE: require('../../extension/ai/local/reference.js'),
+    require, navigator: { gpu: {} }, setTimeout, clearTimeout, URL, GZ_AI_REFERENCE: require('../../extension/ai/local/reference.js'),
     GPUBuffer: Buffer, GPUBufferUsage: { STORAGE: 1, COPY_SRC: 2, COPY_DST: 4, MAP_READ: 8, UNIFORM: 16 }, GPUMapMode: { READ: 1 },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/engine.js'), 'utf8'), context);
-  return { create: (g = model(), opts = {}) => context.GZ_AI_ENGINE.create(g, {
-    adapter, kernels: (n) => fs.readFileSync(path.join(__dirname, `../../extension/ai/local/kernels/${n}.wgsl`), 'utf8'), ...opts,
-  }), device, buffers, writes, submissions, dispatches };
+  const kernels = (n) => fs.readFileSync(path.join(__dirname, `../../extension/ai/local/kernels/${n}.wgsl`), 'utf8');
+  return {
+    create: (g = model(), opts = {}) => context.GZ_AI_ENGINE.create(g, { adapter, kernels, ...opts }),
+    load: (g = model(), opts = {}) => context.GZ_AI_ENGINE.load(g, { adapter, kernels, ...opts }),
+    engine: context.GZ_AI_ENGINE, context, device, buffers, writes, submissions, dispatches,
+  };
 }
 
 module.exports = { model, host };

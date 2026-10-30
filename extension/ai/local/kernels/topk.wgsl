@@ -2,7 +2,7 @@
 // PART: each workgroup takes 2048 logits of L and writes its own top k to C[chunk · k ..]; the final pass takes the
 // chunks' candidates from C, up to 4096 per workgroup, and writes each group's top k to R. Repeat this merge until
 // one group remains. Each round picks the best not yet picked (a tree over the workgroup), so k rounds give the k
-// best in order.
+// best in order. MASK (with PART): only ids whose bit i & 31 of word i >> 5 of M is set are candidates.
 struct P { n: u32, k: u32, chunks: u32, p0: u32 }
 //#if PART
 @group(0) @binding(0) var<storage, read> L: array<f32>;
@@ -12,6 +12,9 @@ struct P { n: u32, k: u32, chunks: u32, p0: u32 }
 @group(0) @binding(2) var<storage, read_write> R: array<vec2<u32>>;
 //#endif
 @group(0) @binding(3) var<uniform> p: P;
+//#if MASK
+@group(0) @binding(4) var<storage, read> M: array<u32>;
+//#endif
 
 var<workgroup> rv: array<f32, 256>;
 var<workgroup> ri: array<u32, 256>;
@@ -28,7 +31,11 @@ fn main(@builtin(local_invocation_index) li: u32, @builtin(workgroup_id) wg: vec
   let base = wg.x * 2048u;
   for (var k = li; k < 2048u; k += 256u) {
     let i = base + k;
+//#if MASK
+    if (i < p.n && ((M[i >> 5u] >> (i & 31u)) & 1u) == 1u) { let x = L[i]; if (x == x) { v[cnt] = x; id[cnt] = i; cnt++; } }
+//#else
     if (i < p.n) { let x = L[i]; if (x == x) { v[cnt] = x; id[cnt] = i; cnt++; } }
+//#endif
   }
 //#else
   let all = p.chunks * p.k;

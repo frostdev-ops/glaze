@@ -34,7 +34,8 @@ manifest['web_accessible_resources'] = [e for e in ({**e, 'resources': [r for r 
 # anywhere, and the detector (content/detect.js) on every other https page, which asks before Glaze runs there.
 manifest['host_permissions'] = ['<all_urls>']
 manifest.pop('optional_host_permissions', None)
-manifest['permissions'] = [p for p in manifest['permissions'] if p not in ('activeTab', 'declarativeContent')]
+# Safari has no offscreen documents, and keeps Apple Intelligence instead of Glaze's own model (ai/providers/local.js).
+manifest['permissions'] = [p for p in manifest['permissions'] if p not in ('activeTab', 'declarativeContent', 'offscreen')]
 scripts = manifest['content_scripts']
 for i, entry in enumerate(scripts):
     if 'content/content-ultra.js' in entry['js']:

@@ -62,7 +62,7 @@ test('package-firefox.sh: no declarativeContent or addHostAccessRequest, the but
     const chrome = require('../../extension/manifest.json');
     const zip = path.join(dist, `glaze-v${chrome.version}-firefox.zip`);
     const m = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json'], { encoding: 'utf8' }));
-    assert.deepEqual(m.permissions, chrome.permissions.filter((p) => p !== 'declarativeContent'));
+    assert.deepEqual(m.permissions, chrome.permissions.filter((p) => p !== 'declarativeContent' && p !== 'offscreen'), 'no offscreen documents: the engine host is a Worker of the event page');
     assert.ok(m.permissions.includes('activeTab'));
     assert.equal(m.action.default_area, 'navbar');
     assert.equal(chrome.action.default_area, undefined, "Chrome's manifest has no Firefox-only key");
