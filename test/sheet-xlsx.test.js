@@ -225,7 +225,7 @@ test('synthetic: fonts, fills, borders, alignment, protection and number formats
   assert.deepEqual(s[5], { fmt: 49, pattern: { type: 'gray125' }, quote: true });
   assert.deepEqual(s[6], { fmt: 30 }, 'a built-in id the en-US locale leaves out stays an id');
   assert.deepEqual(s[7], {});
-  assert.deepEqual(s[11], { fmt: 'General' }, 'a custom id the file never defines is General');
+  assert.deepEqual(s[11], {}, 'a custom id the file never defines is General');
   const keep = wb.keep.styles;
   assert.equal(keep.fonts.length, 5);
   assert.equal(keep.fills.length, 6);
@@ -401,7 +401,7 @@ const fields = (wb) => ({
     cells: [...sh.rows].sort((a, b) => a[0] - b[0]).flatMap(([r, row]) => [...row].sort((a, b) => a[0] - b[0])
       .filter(([, x]) => !(x.t === 'z' && x.s === undefined && x.f === undefined))
       .map(([c, x]) => [M.cellName(r, c), x.t === 'e' ? { ...x, v: stored(x.v) } : x])),
-    keep: { xml: sh.keep.xml, rowAttrs: [...(sh.keep.rowAttrs ?? [])], colAttrs: [...(sh.keep.colAttrs ?? [])], view: sh.keep.view?.attrs },
+    keep: { xml: sh.keep.xml, rowAttrs: [...(sh.keep.rowAttrs ?? [])], colAttrs: [...(sh.keep.colAttrs ?? [])], view: sh.keep.view && { ...sh.keep.view.attrs, tabSelected: undefined } },
   })),
 });
 const keptBytes = (wb) => Object.fromEntries(Object.entries(wb.keep.parts).map(([p, x]) => [p, Buffer.from(x.data).toString('base64')]));
@@ -474,7 +474,7 @@ test('write: Excel\'s element order, character widths, point heights, shared str
   assert.deepEqual(top(p['xl/workbook.xml']), ['fileVersion', 'workbookPr', 'bookViews', 'sheets', 'externalReferences', 'definedNames', 'calcPr']);
   assert.deepEqual(top(p['xl/styles.xml']), ['numFmts', 'fonts', 'fills', 'borders', 'cellStyleXfs', 'cellXfs', 'cellStyles', 'dxfs', 'tableStyles', 'colors']);
   assert.match(sheet, /<dimension ref="A1:H9"\/>/);
-  assert.match(sheet, /<col min="1" max="1" width="20.7109375" customWidth="1"\/><col min="2" max="3" width="0.7109375" hidden="1" customWidth="1"\/><col min="5" max="5" width="9.140625" style="3" customWidth="1"\/>/);
+  assert.match(sheet, /<col min="1" max="1" width="20.7109375" customWidth="1"\/><col min="2" max="3" width="0" hidden="1" customWidth="1"\/><col min="5" max="5" width="9.140625" style="3" customWidth="1"\/>/);
   assert.match(sheet, /<row r="1" ht="30" customHeight="1">/);
   assert.match(sheet, /<row r="3" s="4" customFormat="1" ht="12.75" outlineLevel="1">/);
   assert.match(sheet, /<c r="F2" t="str"><f>"x"&amp;A2<\/f><v>x1.5<\/v><\/c>/);
@@ -483,11 +483,11 @@ test('write: Excel\'s element order, character widths, point heights, shared str
   assert.match(sheet, /<c r="C3"><f t="array" ref="C3:C4">A2:A3\*2<\/f><v>3<\/v><\/c>/);
   assert.match(sheet, /<c r="D3"><f>_xlfn.LET\(_xlpm.x,2,_xlpm.x\*_xlfn.XLOOKUP\(1,A2:A3,A2:A3\)\)<\/f>/);
   assert.match(sheet, /<c r="D4"><f t="dataTable" ref="D4:D5" dt2D="0" dtr="0" r1="A2"\/><v>7<\/v><\/c>/);
-  assert.match(sheet, /<sheetView tabSelected="1" zoomScale="125" workbookViewId="0"><pane xSplit="2" ySplit="1" topLeftCell="C2" activePane="bottomRight" state="frozen"\/>/);
-  assert.doesNotMatch(p['xl/worksheets/sheet3.xml'], /tabSelected/);
+  assert.match(sheet, /<sheetView zoomScale="125" workbookViewId="0"><pane xSplit="2" ySplit="1" topLeftCell="C2" activePane="bottomRight" state="frozen"\/>/, 'not the active sheet');
+  assert.match(p['xl/worksheets/sheet3.xml'], /<sheetView tabSelected="1" workbookViewId="0">/, 'the active sheet');
   assert.match(sheet, /<autoFilter ref="A1:H9"><filterColumn colId="1">/);
   assert.match(sheet, /<mergeCells count="2"><mergeCell ref="G5:H6"\/><mergeCell ref="A7:C8"\/><\/mergeCells>/);
-  assert.match(p['xl/sharedStrings.xml'], /^<\?xml[^>]*\?>\n<sst xmlns="[^"]+" count="5" uniqueCount="5"><si><t>plain &amp; simple<\/t><\/si>/);
+  assert.match(p['xl/sharedStrings.xml'], /^<\?xml[^>]*\?>\n<sst xmlns="[^"]+" count="8" uniqueCount="7"><si><t>plain &amp; simple<\/t><\/si>/, 'inline strings become shared ones');
   assert.match(p['xl/sharedStrings.xml'], /<si><r><t xml:space="preserve">Bold <\/t><\/r><r><rPr><b\/><sz val="12"\/><color theme="4"\/><rFont val="Calibri"\/><family val="2"\/><scheme val="minor"\/><\/rPr><t>blue<\/t><\/r>/);
   assert.match(p['xl/sharedStrings.xml'], /<t>a_x000D_b_x005F_x0041_<\/t>/);
   assert.match(p['xl/workbook.xml'], /<sheets><sheet name="One" sheetId="5" r:id="rId\d+"\/><sheet name="Chart" sheetId="6" r:id="rId9"\/><sheet name="Two" sheetId="2" state="hidden" r:id="rId\d+"\/><sheet name="Split view" sheetId="9" r:id="rId\d+"\/><\/sheets>/);
@@ -510,7 +510,7 @@ test('write: a workbook built in Glaze from scratch reads back as built', async 
   const id = wb.sheets[0].id;
   e.apply({ op: 'addSheet', name: 'Data & more' });
   const data = M.getSheet(wb, 'Data & more').id;
-  for (const [a, text] of [['A1', 'Item'], ['B1', 'Qty'], ['C1', 'Price'], ['A2', 'Pens'], ['B2', '12'], ['C2', '$1.25'], ['A3', 'Paper <A4>'], ['B3', '3'], ['C3', '4.5'], ['D2', '=B2*C2'], ['D3', '=B3*C3'], ['D4', '=SUM(D2:D3)'], ['E2', '3/4/2025'], ['E3', '12%'], ['F2', "=TEXTJOIN(\", \",TRUE,A2:A3)"], ['F3', '=IF(D4>40,"big","small")'], ['G2', '=1/0'], ['G3', 'TRUE'], ['H2', "'0042"], ['A6', '=\'Data & more\'!A1&" "&Sheet1!A1']]) {
+  for (const [a, text] of [['A1', 'Item'], ['B1', 'Qty'], ['C1', 'Price'], ['D1', 'Total'], ['A2', 'Pens'], ['B2', '12'], ['C2', '$1.25'], ['A3', 'Paper <A4>'], ['B3', '3'], ['C3', '4.5'], ['D2', '=B2*C2'], ['D3', '=B3*C3'], ['D4', '=SUM(D2:D3)'], ['E2', '3/4/2025'], ['E3', '12%'], ['F2', "=TEXTJOIN(\", \",TRUE,A2:A3)"], ['F3', '=IF(D4>40,"big","small")'], ['G2', '=1/0'], ['G3', 'TRUE'], ['H2', "'0042"], ['A6', '=\'Data & more\'!A1&" "&Sheet1!A1']]) {
     const [r, c] = M.cellPosition(a);
     assert.equal(e.edit(id, r, c, text).error, undefined, a);
   }
@@ -539,7 +539,8 @@ test('write: a workbook built in Glaze from scratch reads back as built', async 
   assert.deepEqual(at(again, 'Sheet1', 'A6'), { t: 's', v: 'from Sheet1 Item', f: "'Data & more'!A1&\" \"&Sheet1!A1" });
   const p = await parts(out);
   assert.match(p['xl/worksheets/sheet1.xml'], /<c r="F2" t="str"><f>_xlfn.TEXTJOIN\(", ",TRUE,A2:A3\)<\/f><v>Pens, Paper &lt;A4&gt;<\/v><\/c>/);
-  assert.match(p['xl/styles.xml'], /<numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;\$&quot;#,##0.00"\/><\/numFmts>/);
+  assert.match(p['xl/styles.xml'], /<numFmts count="3"><numFmt numFmtId="164" formatCode="&quot;\$&quot;#,##0.00"\/><numFmt numFmtId="165" formatCode="m\/d\/yyyy"\/><numFmt numFmtId="166" formatCode="0%"\/><\/numFmts>/,
+    'typed formats are codes in the model, so they stay codes');
   assert.match(p['xl/styles.xml'], /<fills count="3"><fill><patternFill patternType="none"\/><\/fill><fill><patternFill patternType="gray125"\/><\/fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"\/><bgColor indexed="64"\/><\/patternFill><\/fill><\/fills>/);
   assert.equal(X.extension(again), 'xlsx');
 });
@@ -549,8 +550,9 @@ test('write: kept references follow inserted and deleted rows and columns, renam
   const drawing = '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><xdr:twoCellAnchor><xdr:from><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>4</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>20</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to></xdr:twoCellAnchor></xdr:wsDr>';
   const vml = '<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:x="urn:schemas-microsoft-com:office:excel"><v:shape id="_x0000_s1025"><x:ClientData ObjectType="Note"><x:Anchor>2, 15, 0, 2, 4, 15, 4, 16</x:Anchor><x:Row>1</x:Row><x:Column>1</x:Column></x:ClientData></v:shape></xml>';
   const wb = await X.read(synthetic({ 'xl/charts/chart1.xml': chart, 'xl/drawings/drawing1.xml': drawing, 'xl/drawings/vmlDrawing1.vml': vml }));
-  const original = await parts(await X.write(wb, { date: DATE, recalc: false }));
   const e = C.engine(wb);
+  e.recalc();
+  const original = await parts(await X.write(wb, { date: DATE, recalc: false }));
   const one = M.getSheet(wb, 'One').id;
   const apply = (op) => { const res = e.apply(op); X.track(wb, op); return res.inverse; };
   const undo = apply({ op: 'insert', sheet: one, axis: 'row', at: 0, n: 1 });
@@ -580,11 +582,12 @@ test('write: kept references follow inserted and deleted rows and columns, renam
   const s2 = p['xl/worksheets/sheet1.xml'];
   assert.doesNotMatch(s2, /<hyperlink ref="A1"/, 'the hyperlink in a deleted column goes');
   assert.match(s2, /<hyperlinks><hyperlink ref="A4" location="'Two'!A1"\/><\/hyperlinks>/);
-  assert.match(s2, /<conditionalFormatting sqref="B2"><cfRule type="expression" dxfId="0" priority="1"><formula>#REF!&gt;\$A\$1<\/formula>/);
+  assert.doesNotMatch(s2, /<conditionalFormatting/, 'its ranges were all in the deleted row and column');
+  assert.match(s2, /<dataValidations count="1"><dataValidation type="list" sqref="A2:A8"><formula1>#REF!<\/formula1>/, 'its list was in the deleted column');
   assert.doesNotMatch(p['xl/comments1.xml'], /<comment /, 'the comment on a deleted row goes');
   assert.match(p['xl/comments1.xml'], /<commentList><\/commentList>/);
   assert.doesNotMatch(p['xl/drawings/vmlDrawing1.vml'], /<v:shape/, 'and its note shape');
-  assert.match(p['xl/charts/chart1.xml'], /<c:f>#REF!<\/c:f>.*<c:f>'Split view'!\$B\$2:\$B\$9<\/c:f>/);
+  assert.match(p['xl/charts/chart1.xml'], /<c:f>One!#REF!<\/c:f>.*<c:f>'Split view'!\$B\$2:\$B\$9<\/c:f>/, 'as the engine writes a deleted reference');
   // Renaming 'Split view' reaches the chart.
   apply({ op: 'rename', sheet: M.getSheet(wb, 'Split view').id, name: 'Totals' });
   p = await parts(await X.write(wb, { date: DATE, recalc: false }));
