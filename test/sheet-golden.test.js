@@ -220,6 +220,14 @@ test('cases: deterministic formulas within Excel limits', () => {
   }
 });
 
+test('cases: nonempty TEXT format codes pin en-US', () => {
+  for (const c of cases.filter((c) => /^=TEXT\(/.test(c.formula))) {
+    const m = /^=TEXT\([^,]+,"((?:""|[^"])*)"\)$/.exec(c.formula);
+    assert.ok(m, `${c.id}: a literal format code`);
+    if (m[1]) assert.match(m[1], /^\[\$-409\]/i, `${c.id}: ${m[1]}`);
+  }
+});
+
 test('cases: fills and array formulas cover their ranges', () => {
   for (const key of ['fill', 'array']) {
     const groups = Map.groupBy(cases.filter((c) => c[key]), (c) => `${c.family} ${c[key]}`);
