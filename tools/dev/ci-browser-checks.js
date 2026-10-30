@@ -1,5 +1,5 @@
 // The browser gate: verified Chromium, settings, popup, site permissions, the student's pointer and the local engine's
-// kernels (SwiftShader), one check at a time.
+// and picture encoder's kernels (SwiftShader), one check at a time.
 //   NODE_PATH=<pinned playwright> PLAYWRIGHT_BROWSERS_PATH=<dir> nice -n 10 node tools/dev/ci-browser-checks.js <out dir>
 // Holds the shared lock throughout cleanup. Each check gets its own lock and temporary directory.
 const { spawn, execFileSync } = require('node:child_process');
@@ -14,6 +14,7 @@ const CHECKS = [
   { name: 'pointer', script: 'checks/looks/pointer-check.js', args: (dir) => [dir] },
   { name: 'register-update', script: 'checks/platform/register-update-check.js', limit: 60 * 1000, args: (dir) => [dir] },
   { name: 'local-engine', script: 'checks/ai/local-engine-check.js', limit: 2 * 60 * 1000, args: (dir) => ['small', '--out', dir] },
+  { name: 'local-vision', script: 'checks/ai/local-vision-gpu-check.js', limit: 2 * 60 * 1000, args: (dir) => ['small', '--out', dir] },
 ];
 const LIMIT = 2 * 60 * 1000, BUDGET = 11 * 60 * 1000;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
