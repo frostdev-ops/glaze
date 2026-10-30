@@ -75,13 +75,13 @@ test('Google Drive storage disclosures include the account id and Safari refresh
   assert.doesNotMatch(policy, /Safari will (?:keep it|use[^.]*keep it)\s+in the Keychain/);
 });
 
-// Save to Drive keeps the file it made on the document (documents/drive.js serve: record.set(key, { id, as })), which goes
-// wherever the document goes (Back up…, Sync's JSON copy): the policy says so, and that the next Save updates that file.
+// Save to Drive keeps the file it made on the document (documents/drive.js serve: record.set(key, { id, as })): the policy
+// says so, and that the next Save updates that file.
 test('Save to Drive discloses the Drive file id it keeps on the document', () => {
   assert.match(read('documents/drive.js'), /record\.set\(m\.key, \{ id: r\.id, as: m\.as \}\)/);
   const save = policy.slice(policy.indexOf('  - **Save to Drive**'), policy.indexOf('  - **Sync to Google Drive**'));
   assert.match(save, /Drive id[^.]*on the document/);
-  assert.match(save, /next Save updates/);
+  assert.match(save, /next Save\s+updates/);
 });
 
 const languages = {
