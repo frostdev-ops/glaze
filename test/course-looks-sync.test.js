@@ -122,3 +122,56 @@ test('removing a kept Look takes it off every course, in both maps', () => {
   assert.deepEqual([s.courses.looks, s.courseLooks], [{ _4_1: 'Terminal' }, { _3_1: K2 }]);
   assert.equal(C.unmap(s.courses, K1, s.courseLooks), false, 'none left to take off');
 });
+
+// The real 4.0 worker (lib/background.js) over `sync`: its writes of course Looks, and `arrive` for a change another device
+// synced (in storage and heard, not written here).
+const worker4 = (sync) => {
+  const env = require('./helpers/worker-env.cjs')({ store: { sync, local: { ultra: [] }, session: {} } });
+  const writes = [], set = env.context.chrome.storage.sync.set;
+  env.context.chrome.storage.sync.set = (v) => { if ('courses' in v || 'courseLooks' in v) writes.push(structuredClone(v)); return set(v); };
+  const arrive = (fn) => {
+    const was = structuredClone(sync);
+    fn(sync);
+    const ch = Object.fromEntries(Object.keys(sync).filter((k) => JSON.stringify(was[k]) !== JSON.stringify(sync[k])).map((k) => [k, { oldValue: was[k], newValue: sync[k] }]));
+    for (const f of env.changed) f(ch, 'sync');
+  };
+  return { writes, arrive, settle: env.settle };
+};
+const wears = (sync, cid) => G.GZ_COURSE_LOOK_ID(G.GZ_SANITIZE(sync), cid, saved);
+
+test('a built-in Look a 3.x device picks over a kept one clears the kept one, so its "Your theme" after is the theme on 4.0', async () => {
+  const s = G.GZ_SANITIZE({});
+  pick(s, '_1_1', 'Library'); pick(s, '_2_1', K1); pick(s, '_3_1', K2);
+  const sync = structuredClone(s);
+  const w = worker4(sync);
+  await w.settle();
+  assert.deepEqual(w.writes, [], 'nothing to clear: no write');
+  w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', 'Terminal')));
+  assert.equal(wears(sync, '_2_1'), 'Terminal', 'every device wears the 3.x pick');
+  await w.settle();
+  assert.equal(wears(sync, '_2_1'), 'Terminal', 'and still does');
+  assert.deepEqual(sync.courseLooks, { _3_1: K2 }, 'the kept Look it replaced goes; one with no built-in beside it stays');
+  assert.deepEqual(sync.courses.looks, { _1_1: 'Library', _2_1: 'Terminal' });
+  assert.equal(w.writes.length, 1, 'one write');
+  assert.ok(!('courses' in w.writes[0]), 'courses stay as the 3.x device wrote them');
+  w.arrive((x) => edit3x(x, (c) => old.GZ_COURSE_EDIT.look(c, '_2_1', '')));
+  await w.settle();
+  assert.equal(wears(sync, '_2_1'), '', '"Your theme" on 3.x: the theme on 4.0 too');
+  assert.equal(wears(sync, '_3_1'), K2);
+  assert.equal(wears(sync, '_1_1'), 'Library');
+  assert.equal(w.writes.length, 1, 'nothing more to clear: no write');
+});
+
+test('the worker clears them as it starts too, with the kept ids it moves, in one write; a restart writes nothing', async () => {
+  const sync = { version: 2, courses: { ...G.GZ_DEFAULTS.courses, looks: { _1_1: 'Library', _2_1: 'Terminal', _4_1: K2 } }, courseLooks: { _2_1: K1, _3_1: K2 } };
+  const w = worker4(sync);
+  await w.settle();
+  assert.deepEqual(sync.courses.looks, { _1_1: 'Library', _2_1: 'Terminal' });
+  assert.deepEqual(sync.courseLooks, { _3_1: K2, _4_1: K2 });
+  assert.equal(w.writes.length, 1, 'one write');
+  for (const [cid, id] of [['_1_1', 'Library'], ['_2_1', 'Terminal'], ['_3_1', K2], ['_4_1', K2]]) assert.equal(wears(sync, cid), id);
+  const again = worker4(sync);
+  await again.settle();
+  assert.deepEqual(again.writes, [], 'none once cleared');
+  assert.deepEqual(sync.courseLooks, { _3_1: K2, _4_1: K2 });
+});
