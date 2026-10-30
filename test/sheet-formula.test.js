@@ -242,6 +242,18 @@ test('the @ operator is _xlfn.SINGLE() in a file, as Excel writes it', () => {
   assert.deepEqual(F.parse(F.fromFile('_xlfn.SINGLE(B1:B5)')), F.parse('@B1:B5'));
 });
 
+test('file intersection operands include unary signs and reference intersections', () => {
+  for (const [text, file] of [
+    ['@-A1:A3', '_xlfn.SINGLE(-A1:A3)'], ['@+A1:A3', '_xlfn.SINGLE(+A1:A3)'],
+    ['@A1:C3 B2:D4', '_xlfn.SINGLE(A1:C3 B2:D4)'],
+    ['@A1:C3 (B2:D4)', '_xlfn.SINGLE(A1:C3 (B2:D4))'],
+    ['@A1:C3 INDEX(B:D,0)', '_xlfn.SINGLE(A1:C3 INDEX(B:D,0))'],
+  ]) {
+    assert.equal(F.toFile(text), file, text);
+    assert.deepEqual(F.parse(F.fromFile(file)), F.parse(text), file);
+  }
+});
+
 test('the model\'s shift and rename hooks are these', () => {
   assert.equal(F.hooks.shift, F.shift);
   assert.equal(F.hooks.rename, F.rename);
