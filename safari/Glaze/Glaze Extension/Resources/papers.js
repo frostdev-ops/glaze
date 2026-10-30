@@ -14,7 +14,7 @@
   // parts as options.js feeds #backdrop; there only while Glaze is on and the Look has one). Follows storage live. The home
   // is an address with no document's key (a kind's param, lib/doc-kinds.js), so its first paint is already the whole Look; a
   // stale link that falls back home paints again (home below). The Look's surfaces (features/surfaces.css) are the home's.
-  const look = { whole: !/[?&]paper=/.test(location.search), paint: () => {}, surfaces: null,
+  const look = { whole: !/[?&](?:paper|pdf)=/.test(location.search), paint: () => {}, surfaces: null,
     sheet: () => { look.surfaces ||= new Promise((ok) => { const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'features/surfaces.css', onload: ok, onerror: ok }); document.head.append(l); }); } };
   const theme = async () => {
     const root = document.documentElement, scheme = matchMedia('(prefers-color-scheme: dark)'), calm = matchMedia('(prefers-reduced-motion: reduce)');
@@ -205,9 +205,10 @@
     const sortSel = h('select', { id: 'gd-sort', 'aria-label': t('Sort') }, h('option', { value: 'updated', text: t('Last edited') }), h('option', { value: 'title', text: t('Title') }));
     const gridB = btn({ id: 'gd-grid', 'aria-label': t('Grid'), title: t('Grid') }, icon('grid')), listB = btn({ id: 'gd-list', 'aria-label': t('List'), title: t('List') }, icon('list'));
     const binB = btn({ id: 'gd-trash', 'aria-label': t('Trash'), title: t('Trash'), 'aria-pressed': 'false' }, icon('trash')), binBox = h('div', { class: 'gd-views gd-bin', hidden: true }, binB);
-    const accept = Object.values(DK.KINDS).flatMap((k) => [...k.accept, k.mime]).join(',');
-    const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept, hidden: true, tabindex: '-1', 'aria-label': t('Import .docx…') });
-    const importB = btn({ id: 'gd-import', class: 'gd-btn' }, t('Import .docx…'));
+    // Word files only, unless another kind takes files too (pdf-kind.js, Settings → Writer → PDFs).
+    const many = DK.taking().length > 1, importWord = t(many ? 'Import…' : 'Import .docx…');
+    const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept: DK.accept(), hidden: true, tabindex: '-1', 'aria-label': importWord });
+    const importB = btn({ id: 'gd-import', class: 'gd-btn' }, importWord);
     // Items the page's own scripts and mods add (GZ_DOCUMENTS.item 'toolbar'), before Import.
     const extra = h('div', { class: 'gd-extra', hidden: true });
     const said = h('p', { id: 'gd-said', class: 'gd-said', role: 'status' });
@@ -241,7 +242,7 @@
     };
     // A narrow card wraps its line between parts, never inside one ("7:33 / PM") nor before a dot; a course name wraps.
     const whole = (s) => String(s).replace(/ /g, '\u00a0');
-    const metaOf = (r) => [r.course, ...[labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 }), when(r.updated)].map(whole)].filter(Boolean).join('\u00a0· ');
+    const metaOf = (r) => [r.course, ...(DK.kindOf(r) === 'paper' ? [labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 })] : [t(DK.KINDS[DK.kindOf(r)].label)]).concat(when(r.updated)).map(whole)].filter(Boolean).join('\u00a0· ');
     // A row whose kind this build has no page code for stays out of the list, untouched.
     const known = () => rows.filter((r) => typeof DK.get(DK.kindOf(r))?.thumb === 'function' && !gone.has(r.key));
     // What the lists, search, the course choices and mods see: no document in Trash. inView: the view's (the Trash's).
@@ -378,7 +379,8 @@
     };
     const draw = (k, rec) => {
       let el = null;
-      if (rec?.doc) { try { el = DK.get(DK.kindOf(rec))?.thumb(rec) || null; } catch (e) { console.error(e); } learn(k, rec); }
+      // A paper's document or another kind's file (pdf-kind.js).
+      if (rec?.doc || rec?.file) { try { el = DK.get(DK.kindOf(rec))?.thumb(rec) || null; } catch (e) { console.error(e); } learn(k, rec); }
       thumbs.delete(k);
       thumbs.set(k, { rev: rec?.revision ?? null, el, stale: false });
       const c = cards.get(k);
@@ -461,7 +463,7 @@
       if (!c) return;
       if (menu?.k === k) { closeMenu(true); return; }
       closeMenu();
-      const items = bin ? [['restore', 'Restore'], ['forever', 'Delete forever']] : [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', 'Export .docx'], ['delete', 'Delete']].filter(Boolean);
+      const items = bin ? [['restore', 'Restore'], ['forever', 'Delete forever']] : [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', DK.kindOf(c.row) === 'pdf' ? 'Export .pdf' : 'Export .docx'], ['delete', 'Delete']].filter(Boolean);
       const added = bin ? [] : [...slots.card.values()];
       const el = h('div', { class: 'pop gp-menu gd-menu', role: 'menu', 'aria-labelledby': c.link.id },
         items.map(([act, label]) => btn({ role: 'menuitem', tabindex: '-1', 'data-act': act, onclick: () => { closeMenu(act !== 'rename'); run(act, k); } }, t(label))),
@@ -497,7 +499,7 @@
       if (act === 'rename') rename(k);
       else if (act === 'copy') copy(k).catch((e) => { console.error(e); say(t('Not saved. Try again in a moment.')); });
       // A paper Word can't take (a picture kept in a form Word has no place for) is said on the page, not logged.
-      else if (act === 'export') DK.get(DK.kindOf(cards.get(k)?.row)).exportFile(k).catch(() => say(t('The .docx could not be made.')));
+      else if (act === 'export') { const id = DK.kindOf(cards.get(k)?.row); DK.get(id).exportFile(k).catch(() => say(t(id === 'pdf' ? 'That file could not be read.' : 'The .docx could not be made.'))); }
       else if (act === 'delete') del(k);
       else if (act === 'restore') out(k);
       else if (act === 'forever') forever(k);
@@ -621,17 +623,20 @@
     });
 
     // ---- files dropped anywhere on the page or chosen with Import .docx…: one new document each, at most 20
-    const REFUSALS = new Set(['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.']);
+    // A kind's own refusal (pdf-kind.js: the PDF size the record holds for now, a form only XFA can show) is said as it is.
+    const REFUSALS = new Set(['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.', 'Choose a PDF smaller than 3 MB.', 'That file could not be read.']);
+    const SIZE = { paper: 'Choose a Word file smaller than 15 MB.', pdf: 'Choose a PDF smaller than 3 MB.' };
+    const unread = many ? 'That file could not be read.' : 'That file could not be read as a Word document.';
     const bring = async (list) => {
       dismiss();
       say('');
-      const { take, refused } = DH.route(list, DK.forFile, DK.KINDS, 20);
+      const { take, refused } = DH.route(list, DK.opens, DK.KINDS, 20);
       const first = refused.find((x) => x.why !== 'count');
       const limitText = refused.some((x) => x.why === 'count') ? t('Choose up to 20 files at a time.') : '';
-      let why = first ? (first.why === 'size' ? 'Choose a Word file smaller than 15 MB.' : 'That file could not be read as a Word document.') : '';
+      let why = first ? (first.why === 'size' ? SIZE[DK.forFile(first.file.name)] : unread) : '';
       for (const { file: f, kind: id } of take) {
         try { await DK.get(id).importFile(f); }
-        catch (e) { console.error(e); why ||= e instanceof RangeError && REFUSALS.has(e.message) ? e.message : 'That file could not be read as a Word document.'; }
+        catch (e) { console.error(e); why ||= e instanceof RangeError && REFUSALS.has(e.message) ? e.message : unread; }
       }
       say([why && t(why), limitText].filter(Boolean).join(' '));
     };
@@ -773,8 +778,11 @@
 
   catalogue().then(async () => {
     document.title = t('Documents');
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/doc-kinds.js']);
+    await GZ_WRITER_PAPER.need(['lib/writer-papers.js']);
     GZ_DOC_KINDS.register('paper', { edit, thumb, file, exportFile, text, importFile, measure: GZ_WRITER_PAPERS.measure });
+    // The other kinds' scripts (pdf-kind.js, after this one in papers.html) have run and said whether they register.
+    if (document.readyState === 'loading') await new Promise((ok) => document.addEventListener('DOMContentLoaded', ok, { once: true }));
+    await GZ_DOC_KINDS.settled();
     // ?<a kind's param>=<key> opens that document; else the home.
     const params = new URLSearchParams(location.search), id = Object.keys(GZ_DOC_KINDS.KINDS).find((k) => params.get(GZ_DOC_KINDS.KINDS[k].param));
     if (id) {
@@ -820,7 +828,8 @@ if (window.top !== window) (() => {
   };
   const place = () => {
     if (close.isConnected) return true;
-    const paper = root.dataset.mode === 'paper', at = paper ? document.querySelector('.gp-top') : $('list');
+    // A document of any kind (data-mode: 'paper', 'pdf') has the paper chrome's top bar.
+    const paper = !!root.dataset.mode, at = paper ? document.querySelector('.gp-top') : $('list');
     if (!at || at.hidden) return false;
     close.textContent = GZ_I18N.t('Close', {}, locale);
     if (!paper) { close.style.setProperty('position', 'absolute'); addEventListener('resize', align); }
@@ -829,7 +838,7 @@ if (window.top !== window) (() => {
     return true;
   };
   const update = () => {
-    if (port && !told && (root.dataset.mode === 'paper' || $('list')?.hidden === false)) { told = true; port.postMessage({ type: 'opened', at: location.search }); }
+    if (port && !told && (!!root.dataset.mode || $('list')?.hidden === false)) { told = true; port.postMessage({ type: 'opened', at: location.search }); }
     if (place() && told) seen.disconnect();
   };
   const seen = new MutationObserver(update);
