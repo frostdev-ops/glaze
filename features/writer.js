@@ -245,6 +245,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (m.type === 'compact:flushed') {
       const f = box.flushing;
       if (!f || m.request !== f.request) return;
+      if (Date.now() - f.at >= 60000) { endFlush(box, 'save'); return; }
       // Saved: Ultra's own button goes on with the text (Ultra may have drawn its footer again meanwhile), or the compact
       // bar says why not. A paper too long for Ultra's box: the frame has said so and focused Full writer itself (focusing
       // the frame from here would put its focus back on its body).
@@ -354,34 +355,62 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       return;
     }
   }, true);
+  // Disabled native buttons emit no click. Before the submit module is armed, keep the same pointer intent too;
+  // compact's saved paper can turn Ultra's empty box's Submit on once the frame has loaded and flushed it.
+  let heldDown = null;
+  const disabledAt = (e, includeArmed = false) => {
+    for (const box of boxes.values()) {
+      if (box.mode !== 'paper' || !sameBox(box) || (!includeArmed && box.full && globalThis.GZ_WRITER_SUBMIT?.armed?.(box))) continue;
+      const buttons = box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || [];
+      for (const b of buttons) {
+        if (!/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || U().enabled(b)) continue;
+        const r = b.getBoundingClientRect();
+        if (r.right > r.left && r.bottom > r.top && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return { box, b };
+      }
+    }
+    return null;
+  };
+  document.addEventListener('pointerdown', (e) => { heldDown = e.button === 0 ? disabledAt(e) : null; }, true);
+  document.addEventListener('pointerup', (e) => {
+    const was = heldDown; heldDown = null;
+    if (!was || e.button !== 0 || disabledAt(e, true)?.b !== was.b) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    hold(was.box, was.b, e.type);
+  }, true);
+  document.addEventListener('pointercancel', () => { heldDown = null; }, true);
   // Ultra's button, held until the frame can take it, marked busy meanwhile: while the frame opens or reopens there's no
   // frame to save the paper, and Ultra's box may not hold its last words (a full paper's, none). Compact: the frame's
   // save asked (compact:flush) once it is up and has said its view (a view ends a flush asked before it), asked again of
   // a frame that reopened before answering; a press while one is asked waits on that one (the bar says Saving…). Full:
-  // pressed again once the submit step has the box, or Ultra's own after HOLD_ARM if it never takes it (as before). A box
+  // pressed again once the submit step has the box; if it never takes it, fail without pressing Ultra's stale box. A box
   // Writer gives back holds nothing: Ultra's editor is there again to press.
   const HOLD_ARM = 5000;
-  const hold = (box, b) => {
+  const hold = (box, b, type = 'click') => {
+    if (box.flushing && Date.now() - box.flushing.at >= 60000) endFlush(box, 'save');
     if (box.flushing || (box.held && !box.held.request)) return;
     const id = b.getAttribute('data-analytics-id'), action = /submit$/.test(id) ? 'submit' : 'save';
-    const busy = (x, on) => { if (on) { x.setAttribute('aria-busy', 'true'); x.style.setProperty('cursor', 'progress'); } else { x.removeAttribute('aria-busy'); x.style.removeProperty('cursor'); } };
+    const busy = (x, on) => { if (!x) return; if (on) { x.setAttribute('aria-busy', 'true'); x.style.setProperty('cursor', 'progress'); } else { x.removeAttribute('aria-busy'); x.style.removeProperty('cursor'); } };
     if (box.held) busy(box.held.button, false);
-    const p = box.held = { button: b, request: null, port: null, up: null };
-    const button = () => (b.isConnected ? b : [...box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || []].find((x) => x.getAttribute('data-analytics-id') === id));
-    const end = () => { if (box.held === p) box.held = null; busy(b, false); };
+    const p = box.held = { button: b, request: null, port: null, up: null, at: Date.now() };
+    const button = () => [...box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || []].find((x) => x.getAttribute('data-analytics-id') === id);
+    const end = () => { if (box.held === p) box.held = null; if (p.button) busy(p.button, false); };
+    const fail = () => { end(); box.port?.postMessage({ type: 'submit:unavailable', action }); };
     const step = () => {
       if (box.held !== p) return;
       if (boxes.get(box.editor) !== box || !sameBox(box)) { end(); return; }
+      const x = button();
+      if (x !== p.button) { if (p.button) busy(p.button, false); p.button = x; if (x) busy(x, true); }
       if (p.request && box.flushing?.request === p.request) { setTimeout(step, 100); return; } // the frame saves it
       if (p.request && box.port === p.port) { end(); return; } // answered: Ultra's button went, or the bar says why
-      const x = button();
-      if (!x) { end(); return; }
-      if (box.full) {
-        if (globalThis.GZ_WRITER_SUBMIT?.armed?.(box)) { end(); x.click(); return; }
-        if (box.ready && Date.now() - (p.up ??= Date.now()) > HOLD_ARM) { end(); passing = x; try { x.click(); } finally { passing = null; } return; }
-      } else if (box.ready && box.port && box.viewedOn === box.port) {
+      if (Date.now() - p.at >= 60000) { fail(); return; }
+      if (box.full && x) {
+        if (p.port !== box.port) { p.port = box.port; p.up = null; }
+        if (globalThis.GZ_WRITER_SUBMIT?.armed?.(box)) { end(); GZ_WRITER_SUBMIT.press(box, x, type); return; }
+        if (!box.ready || !box.port) p.up = null;
+        else if (Date.now() - (p.up ??= Date.now()) > HOLD_ARM) { fail(); return; }
+      } else if (!box.full && x && box.ready && box.port && box.viewedOn === box.port) {
         p.request = crypto.randomUUID(); p.port = box.port;
-        box.flushing = { request: p.request, button: x, id, action, timer: setTimeout(() => {
+        box.flushing = { request: p.request, button: x, id, action, at: Date.now(), timer: setTimeout(() => {
           if (box.flushing?.request === p.request) endFlush(box, 'save');
         }, 60000) };
         box.port.postMessage({ type: 'compact:flush', request: p.request, action });

@@ -52,7 +52,7 @@ const HARNESS = `(() => {
 // and the frame drawn after that.
 const WATCH = () => {
   const view = GZ_WRITER_PAPER.current().editor.view, w = window.__huge = { click: null, first: null, frames: [], long: [], keys: [] };
-  new PerformanceObserver((l) => { for (const e of l.getEntries()) w.long.push({ at: Math.round(e.startTime), ms: Math.round(e.duration) }); }).observe({ type: 'longtask' });
+  new PerformanceObserver((l) => { for (const e of l.getEntries()) w.long.push({ at: e.startTime, ms: e.duration }); }).observe({ type: 'longtask' });
   // Long animation frames: their script, forced layout and rendering apart (where the browser has them).
   w.loaf = [];
   try {
@@ -69,7 +69,7 @@ const WATCH = () => {
   };
   requestAnimationFrame(tick);
   document.querySelector('.gw-bar .gp-full').addEventListener('click', () => { w.click = performance.now(); }, true);
-  addEventListener('keydown', (e) => { if (e.key === 'x') w.keys.push({ down: e.timeStamp, took: null, drawn: null, before: view.state.doc.textContent.length }); }, true);
+  addEventListener('keydown', (e) => { if (e.key === 'x') w.keys.push({ down: e.timeStamp, took: null, drawn: null, before: view.state.doc.textContent.length, pending: view.dom.gzLaying === true }); }, true);
   const update = view.updateState.bind(view);
   view.updateState = (s) => {
     const was = view.state.doc;
@@ -176,7 +176,7 @@ const top = (profile, n = 25) => {
     // A key every 200 ms from the switch until the pages are laid out (the plan settled, nothing left to measure) and a
     // few more after, at most a minute.
     const presses = [];
-    const laid = () => fr.evaluate(() => { const api = GZ_WRITER_PAPER.current(), v = api.editor.view; return document.documentElement.dataset.view === 'full' && api.pages() > 0 && !v.dom.gzLaying && (v.dom.gzLaid === undefined || v.dom.gzLaid === v.state.doc); }).catch(() => false);
+    const laid = () => fr.evaluate(() => { const api = GZ_WRITER_PAPER.current(), v = api.editor.view; return document.documentElement.dataset.view === 'full' && api.pages() > 0 && !v.dom.gzLaying && v.dom.gzLaid === v.state.doc; }).catch(() => false);
     let done = null;
     // QUIET (profiling only): no keys, the frame watched for QUIET ms after the switch, as a student who waits.
     if (process.env.QUIET) { await pause(Number(process.env.QUIET)); done = (await laid()) ? Date.now() - started : null; }
@@ -205,7 +205,9 @@ const top = (profile, n = 25) => {
     const w = await fr.evaluate(() => {
       const w = window.__huge, view = GZ_WRITER_PAPER.current().editor.view;
       const gaps = w.frames.filter((t) => t >= w.click).map((t, i, a) => (i ? t - a[i - 1] : 0));
-      return { first: w.first, long: w.long.filter((x) => x.at >= w.click - 50).map((x) => ({ at: Math.round(x.at - w.click), ms: x.ms })), loaf: w.loaf.filter((x) => x.at >= w.click - 50 && x.ms >= 100).map((x) => ({ ...x, at: Math.round(x.at - w.click) })), worstFrame: Math.max(0, ...gaps), keys: w.keys.map((k) => ({ at: Math.round(k.down - w.click), took: k.took == null ? null : Math.round(k.took - k.down), drawn: k.drawn == null ? null : Math.round(k.drawn - k.down) })),
+      const task = w.long.find((x) => x.at <= w.click && x.at + x.ms > w.click);
+      return { first: w.first, long: w.long.filter((x) => x.at >= w.click - 50).map((x) => ({ at: Math.round(x.at - w.click), ms: x.ms })), loaf: w.loaf.filter((x) => x.at >= w.click - 50 && x.ms >= 100).map((x) => ({ ...x, at: Math.round(x.at - w.click) })), worstFrame: Math.max(0, ...gaps), keys: w.keys.map((k) => ({ at: k.down - w.click, took: k.took == null ? null : Math.round(k.took - k.down), drawn: k.drawn == null ? null : Math.round(k.drawn - k.down) })),
+        switchTask: task ? { at: task.at - w.click, ms: task.ms } : null, pendingKeys: w.keys.filter((k) => k.pending && k.down >= w.click).length,
         typed: (view.state.doc.firstChild.textContent.match(/x/g) || []).length, pages: GZ_WRITER_PAPER.current().pages(), fontWaits: view.dom.gzFontWaits || 0 };
     });
     results = { ...results, laidAt, presses, ...w };
@@ -216,10 +218,11 @@ const top = (profile, n = 25) => {
     // The switch's own task: the browser restyling the whole paper and laying it out in the page's column (one task
     // nothing in Writer can split: ~250 ms on the runner), then the first slice. A key pressed during it is taken once it
     // ends: within KEY_MS of that, every other key within KEY_MS of its press.
-    const own = w.long.find((x) => x.at <= 5) || { at: 0, ms: 0 }, free = own.at + own.ms;
-    const late = w.keys.filter((k) => k.drawn == null || k.drawn > KEY_MS + Math.max(0, free - k.at));
-    const during = w.keys.filter((k) => k.at < free);
+    const own = w.switchTask || { at: 0, ms: 0 }, free = own.at + own.ms;
+    const during = w.keys.filter((k) => k.at >= 0 && k.at < free);
+    const late = w.keys.filter((k) => k.drawn == null || k.drawn > KEY_MS + (during.includes(k) ? free - k.at : 0));
     check(w.keys.length >= 5 && !late.length, `${w.keys.length} keys typed every ${KEY_EVERY} ms while ${w.pages} pages were laid out (${laidAt} ms): each in the paper and drawn within ${KEY_MS} ms of its press (slowest ${Math.max(...w.keys.filter((k) => k.at >= free).map((k) => k.drawn ?? Infinity))} ms)${during.length ? `, or of the switch's own ${own.ms} ms task for ${during.length} pressed during it (${during.map((k) => `${k.drawn} ms`).join(', ')})` : ''}${late.length ? `; late: ${JSON.stringify(late.slice(0, 5))}` : ''}`);
+    check(w.pendingKeys > 0, `${w.pendingKeys} keys taken while pagination slices were pending`);
     check(w.typed === presses.length && w.keys.length === presses.length, `none lost: ${presses.length} pressed, ${w.typed} in the paper`);
 
     // ---- the same paper laid out in one go, from scratch: the same pages and breaks; and every line's start as
