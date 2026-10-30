@@ -280,3 +280,13 @@ test('DATEDIF YD keeps the start calendar for whole months across leap years', (
     ['DATEDIF(DATE(2011,5,20),DATE(2014,5,19),"YD")', 365], ['DATEDIF(DATE(1988,6,22),DATE(2012,5,11),"YD")', 323],
   ]);
 });
+
+test('YEARFRAC uses Gregorian month ends and year lengths around serial 60', () => {
+  // Live Excel 16.114.1: the numerator still counts serial 60; the denominator treats 1900 as a 365-day year.
+  near(book(), [
+    ['YEARFRAC(59,91,0)', 31 / 360], ['YEARFRAC(60,91,0)', 32 / 360],
+    ['YEARFRAC(59,425,0)', 1], ['YEARFRAC(60,425,0)', 359 / 360],
+    ['YEARFRAC(59,91,1)', 32 / 365], ['YEARFRAC(60,91,1)', 31 / 365],
+    ['YEARFRAC(1,367,1)', 366 / 365], ['YEARFRAC(1,732,1)', 731 / 365], ['YEARFRAC(1,1097,1)', 1096 / 365],
+  ], 1e-12);
+});
