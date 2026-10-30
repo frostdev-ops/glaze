@@ -245,6 +245,8 @@ test('ROW, COLUMN, ROWS, COLUMNS', () => {
     ['ROWS(SEQUENCE(7,2))', 7], ['COLUMNS(SEQUENCE(7,2))', 2], ['ROWS(1/0)', '#DIV/0!'],
   ]);
   spills(e, [['ROW(C3:C5)', [[3], [4], [5]]], ['COLUMN(C3:E3)', [[3, 4, 5]]]]);
+  // Excel 16.114.1: several areas are #REF! for all four.
+  cases(e, [['ROW((A1,B2))', '#REF!'], ['COLUMN((A1,B2))', '#REF!'], ['ROWS((A1,B2))', '#REF!'], ['COLUMNS((A1,B2))', '#REF!']]);
 });
 
 test('ADDRESS: abs_num, R1C1 and a sheet name', () => {
@@ -318,8 +320,9 @@ test('an array past the engine\'s 250,000-cell cap is #NUM!, as the engine\'s ow
   cases(e, [
     ['TRANSPOSE(A1:E60000)', '#NUM!'], ['SORT(A1:E60000)', '#NUM!'], ['UNIQUE(A1:E60000)', '#NUM!'], ['SORTBY(A1:E60000,E1:E60000)', '#NUM!'],
     ['FILTER(A1:E60000,E1:E60000=1)', '#NUM!'], ['XLOOKUP(1,E1:E60000,A1:E60000)', 0], ['SEQUENCE(1000,1000)', '#NUM!'], ['SEQUENCE(250000)', 1],
-    ['ROW(A1:A300000)', '#NUM!'], ['COLUMN(A1:XFD1)', 1], ['ROWS(A1:E60000)', 60000],
+    ['ROW(A1:A300000)', 1], ['COLUMN(A1:XFD1)', 1], ['ROWS(A1:E60000)', 60000],
   ]);
+  cases(book({ A300000: 1 }), [['ROW(A1:A300000)', '#NUM!'], ['ROW(A1:A250000)', 1]]);
 });
 
 // Live Microsoft Excel 16.114.1, 2026-10-30; these cases distinguish lookup rules from the engine's comparisons.

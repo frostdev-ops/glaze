@@ -496,3 +496,16 @@ test('lib.used: a range of more than 4,096 rows or columns reads to the sheet\'s
     ['TESTUSED(1:1)', '1x5'], ['TESTUSED(A:XFD)', '5x5'], ['TESTUSED(Z10:Z5000)', '1x1'], ['TESTUSED(B2:F5000)', '4x4'],
   ]);
 });
+
+test('define() refuses a name already defined, so no file can replace another\'s function', () => {
+  const sum = C.fn('SUM');
+  assert.throws(() => C.define('SUM', { fn: () => 0 }), /SUM is defined twice/);
+  assert.equal(C.fn('SUM'), sum);
+});
+
+test('every function file loads beside the others', () => {
+  const lib = path.join(__dirname, '..', 'lib');
+  const files = fs.readdirSync(lib).filter((f) => /^sheet-fn-.*\.js$/.test(f)).map((f) => path.join(lib, f));
+  const out = require('node:child_process').execFileSync(process.execPath, ['-e', `for (const f of ${JSON.stringify(files)}) require(f); console.log(require(${JSON.stringify(path.join(lib, 'sheet-calc.js'))}).fn('ROW') ? 'ok' : 'none')`], { encoding: 'utf8' });
+  assert.equal(out.trim(), 'ok');
+});

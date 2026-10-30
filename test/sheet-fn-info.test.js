@@ -1,7 +1,8 @@
-// The information functions (lib/sheet-fn-info.js). Cases are the worked examples on Microsoft's page for each function
-// (support.microsoft.com/en-us/excel/functions/<name>-function; the IS functions share is-functions), its table laid out
-// as it lands pasted at A1; CELL's and COLUMN's examples are images, so their data come from the images. CELL("format")
-// follows the page's table of formats and codes. Edge cases follow each page's Remarks.
+// The information functions (lib/sheet-fn-info.js), with ROW, ROWS, COLUMN and COLUMNS (lib/sheet-fn-lookup.js). Cases
+// are the worked examples on Microsoft's page for each function (support.microsoft.com/en-us/excel/functions/<name>-
+// function; the IS functions share is-functions), its table laid out as it lands pasted at A1; CELL's and COLUMN's
+// examples are images, so their data come from the images. CELL("format") follows the page's table of formats and codes.
+// Edge cases follow each page's Remarks.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -12,6 +13,7 @@ require('../lib/sheet-fn-math.js');
 require('../lib/sheet-fn-logical.js');
 require('../lib/sheet-fn-text.js');
 require('../lib/sheet-fn-info.js');
+require('../lib/sheet-fn-lookup.js');
 
 // A calculated workbook from { 'A1': typed input, 'Sheet2!B1': ... }. An input { f, a } is an array formula over a; { v,
 // s } a number with style s. Names may be scoped to a sheet by its name.
@@ -45,7 +47,7 @@ const calc = (e, f, at = 'Z100') => out(e.evaluate(f, ...where(e, at)));
 const cases = (e, rows, at) => { for (const [f, want] of rows) assert.equal(calc(e, f, at), want, f); };
 
 test('the information functions are registered', () => {
-  const names = 'ISBLANK ISERR ISERROR ISNA ISNUMBER ISTEXT ISNONTEXT ISLOGICAL ISREF ISEVEN ISODD ISFORMULA N T TYPE ERROR.TYPE NA CELL INFO SHEET SHEETS ROW ROWS COLUMN COLUMNS FORMULATEXT'.split(' ');
+  const names = 'ISBLANK ISERR ISERROR ISNA ISNUMBER ISTEXT ISNONTEXT ISLOGICAL ISREF ISEVEN ISODD ISFORMULA N T TYPE ERROR.TYPE NA CELL INFO SHEET SHEETS FORMULATEXT'.split(' ');
   for (const name of names) assert.ok(C.fn(name), name);
   assert.ok(C.fn('CELL').volatile && C.fn('INFO').volatile && C.fn('SHEET').volatile);
   assert.ok(!/\bset(Timeout|Interval)\b/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'sheet-fn-info.js'), 'utf8')), 'no timers');
