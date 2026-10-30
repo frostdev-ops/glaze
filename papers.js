@@ -1,6 +1,7 @@
 // Glaze Writer's Documents home (papers.html): every document on this device as a grid of first-page thumbnails or a
-// list, with a New band (Blank and the three formats), search, a course filter, sort, rename, copy, export, delete to
-// Trash with Undo (the Trash its own view: Restore, Delete forever), and .docx files dropped or imported as new documents.
+// list, with a New band (Blank and the three formats, and a kind's own tile: sheet-kind.js's Spreadsheet), search, a course
+// filter, sort, rename, copy, export, delete to Trash with Undo (the Trash its own view: Restore, Delete forever), and files
+// dropped or imported as new documents (.docx, and what a switched-on kind takes).
 // ?paper=<key> opens one in the same paper chrome an assignment's frame has (writer-paper.js). Each kind of document
 // (lib/doc-kinds.js) brings its own page code; this file registers the paper's. Reads Writer's storage directly and writes
 // through the worker (lib/writer-papers.js).
@@ -14,7 +15,7 @@
   // parts as options.js feeds #backdrop; there only while Glaze is on and the Look has one). Follows storage live. The home
   // is an address with no document's key (a kind's param, lib/doc-kinds.js), so its first paint is already the whole Look; a
   // stale link that falls back home paints again (home below). The Look's surfaces (features/surfaces.css) are the home's.
-  const look = { whole: !/[?&]paper=/.test(location.search), paint: () => {}, surfaces: null,
+  const look = { whole: !/[?&](?:paper|sheet)=/.test(location.search), paint: () => {}, surfaces: null,
     sheet: () => { look.surfaces ||= new Promise((ok) => { const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'features/surfaces.css', onload: ok, onerror: ok }); document.head.append(l); }); } };
   const theme = async () => {
     const root = document.documentElement, scheme = matchMedia('(prefers-color-scheme: dark)'), calm = matchMedia('(prefers-reduced-motion: reduce)');
@@ -80,7 +81,7 @@
   };
   const btn = (props, ...kids) => h('button', { type: 'button', ...props }, ...kids);
   const SVG = 'http://www.w3.org/2000/svg';
-  const PATHS = { paper: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6', search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', list: 'M4 6h16M4 12h16M4 18h16', dots: 'M5 12h.01M12 12h.01M19 12h.01', trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6' };
+  const PATHS = { paper: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6', search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4', grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', list: 'M4 6h16M4 12h16M4 18h16', dots: 'M5 12h.01M12 12h.01M19 12h.01', trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6', sheet: 'M4 4h16v16H4zM4 9h16M4 14h16M9 4v16M14 4v16' };
   const icon = (name, cls = 'ico') => { const s = document.createElementNS(SVG, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', cls); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS(SVG, 'path'); p.setAttribute('d', PATHS[name] || PATHS.paper); s.append(p); return s; };
   const catalogue = () => new Promise((ok) => {
     const file = GZ_I18N.file(locale);
@@ -198,6 +199,14 @@
       return a;
     });
     const band = h('section', { class: 'gd-new', 'aria-labelledby': 'gd-new-h' }, h('h2', { id: 'gd-new-h', text: t('New') }), h('div', { class: 'gd-tiles' }, tiles));
+    // A kind that starts documents of its own (create → its new address) adds its tile, drawn by its own thumbnail.
+    for (const id of Object.keys(DK.KINDS).filter((k) => k !== 'paper' && typeof DK.get(k)?.create === 'function')) {
+      const k = DK.get(id), a = h('a', { class: 'gd-tile', 'data-kind': id, href: k.create() }, h('span', { class: 'gd-tile-pic' }, k.thumb(null)), h('span', { class: 'gd-tile-name', text: t(k.label) }));
+      const mint = () => a.setAttribute('href', k.create());
+      a.addEventListener('click', mint);
+      a.addEventListener('auxclick', mint);
+      band.lastChild.append(a);
+    }
 
     // ---- the toolbar: search, course, kind (once there are two), sort, grid or list, Trash (while it holds anything), import
     const q = h('input', { id: 'gd-q', type: 'search', 'aria-label': t('Search'), placeholder: t('Search'), autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search' });
@@ -205,9 +214,10 @@
     const sortSel = h('select', { id: 'gd-sort', 'aria-label': t('Sort') }, h('option', { value: 'updated', text: t('Last edited') }), h('option', { value: 'title', text: t('Title') }));
     const gridB = btn({ id: 'gd-grid', 'aria-label': t('Grid'), title: t('Grid') }, icon('grid')), listB = btn({ id: 'gd-list', 'aria-label': t('List'), title: t('List') }, icon('list'));
     const binB = btn({ id: 'gd-trash', 'aria-label': t('Trash'), title: t('Trash'), 'aria-pressed': 'false' }, icon('trash')), binBox = h('div', { class: 'gd-views gd-bin', hidden: true }, binB);
-    const accept = Object.values(DK.KINDS).flatMap((k) => [...k.accept, k.mime]).join(',');
-    const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept, hidden: true, tabindex: '-1', 'aria-label': t('Import .docx…') });
-    const importB = btn({ id: 'gd-import', class: 'gd-btn' }, t('Import .docx…'));
+    // What the kinds registered to import take (lib/doc-kinds.js accept): Word files alone unless a switched-on kind adds its own.
+    const accept = DK.accept(), importLabel = Object.keys(DK.KINDS).filter((id) => DK.opens(`x${DK.KINDS[id].accept[0]}`)).length > 1 ? t('Import…') : t('Import .docx…');
+    const file = h('input', { id: 'gd-file', type: 'file', multiple: true, accept, hidden: true, tabindex: '-1', 'aria-label': importLabel });
+    const importB = btn({ id: 'gd-import', class: 'gd-btn' }, importLabel);
     // Items the page's own scripts and mods add (GZ_DOCUMENTS.item 'toolbar'), before Import.
     const extra = h('div', { class: 'gd-extra', hidden: true });
     const said = h('p', { id: 'gd-said', class: 'gd-said', role: 'status' });
@@ -241,20 +251,22 @@
     };
     // A narrow card wraps its line between parts, never inside one ("7:33 / PM") nor before a dot; a course name wraps.
     const whole = (s) => String(s).replace(/ /g, '\u00a0');
-    const metaOf = (r) => [r.course, ...[labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 }), when(r.updated)].map(whole)].filter(Boolean).join('\u00a0· ');
+    const metaOf = (r) => [r.course, ...(DK.kindOf(r) === 'paper' ? [labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 })] : [t(DK.KINDS[DK.kindOf(r)].label)]).concat(when(r.updated)).map(whole)].filter(Boolean).join('\u00a0· ');
     // A row whose kind this build has no page code for stays out of the list, untouched.
     const known = () => rows.filter((r) => typeof DK.get(DK.kindOf(r))?.thumb === 'function' && !gone.has(r.key));
     // What the lists, search, the course choices and mods see: no document in Trash. inView: the view's (the Trash's).
     const live = () => DH.view(known(), false, moving), inView = () => DH.view(known(), bin, moving);
     // What a record says beyond the index: its text for search, and its first line where the index has no title.
+    // A record holds its document (doc, a paper's) or another kind's own (a spreadsheet's book).
+    const holds = (rec) => !!(rec?.doc || rec?.book);
     const learn = (k, rec) => {
-      if (!rec?.doc) return;
-      const text = DH.flat(rec.doc);
+      if (!holds(rec)) return;
+      const text = rec.doc ? DH.flat(rec.doc) : String(DK.get(DK.kindOf(rec))?.text?.(rec) ?? '');
       forgetText(k);
       texts.set(k, { updated: rec.updated, epoch: epoch(k), text }); textSize += text.length;
       if (words.length) hitsByKey.set(k, { updated: rec.updated, epoch: epoch(k), gen, hit: DH.matches({ course: rec.courseName }, titleOf(rec), words, text) });
       while (textSize > TEXT_CAP) { const first = texts.keys().next().value; textSize -= texts.get(first).text.length; texts.delete(first); }
-      if (!rec.title) { try { derived.set(k, F.name(rec.doc, ST.get(rec.format))); } catch { derived.set(k, ''); } }
+      if (!rec.title && rec.doc) { try { derived.set(k, F.name(rec.doc, ST.get(rec.format))); } catch { derived.set(k, ''); } }
     };
 
     // ---- cards: one per document, kept while it is listed so its thumbnail and focus survive a redraw
@@ -378,7 +390,7 @@
     };
     const draw = (k, rec) => {
       let el = null;
-      if (rec?.doc) { try { el = DK.get(DK.kindOf(rec))?.thumb(rec) || null; } catch (e) { console.error(e); } learn(k, rec); }
+      if (holds(rec)) { try { el = DK.get(DK.kindOf(rec))?.thumb(rec) || null; } catch (e) { console.error(e); } learn(k, rec); }
       thumbs.delete(k);
       thumbs.set(k, { rev: rec?.revision ?? null, el, stale: false });
       const c = cards.get(k);
@@ -432,7 +444,7 @@
         for (let j = 0; j < part.length; j++) {
           const r = part[j], rec = got[PAPER + r.key];
           if (stamps[j] !== epoch(r.key)) continue;
-          if (rec?.doc) learn(r.key, rec);
+          if (holds(rec)) learn(r.key, rec);
           else hitsByKey.set(r.key, { gen, updated: r.updated, epoch: epoch(r.key), hit: false });
         }
         render();
@@ -461,7 +473,7 @@
       if (!c) return;
       if (menu?.k === k) { closeMenu(true); return; }
       closeMenu();
-      const items = bin ? [['restore', 'Restore'], ['forever', 'Delete forever']] : [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', 'Export .docx'], ['delete', 'Delete']].filter(Boolean);
+      const items = bin ? [['restore', 'Restore'], ['forever', 'Delete forever']] : [PA.local(k) ? ['rename', 'Rename'] : null, ['copy', 'Make a copy'], ['export', DK.get(DK.kindOf(c.row))?.exportLabel || 'Export .docx'], ['delete', 'Delete']].filter(Boolean);
       const added = bin ? [] : [...slots.card.values()];
       const el = h('div', { class: 'pop gp-menu gd-menu', role: 'menu', 'aria-labelledby': c.link.id },
         items.map(([act, label]) => btn({ role: 'menuitem', tabindex: '-1', 'data-act': act, onclick: () => { closeMenu(act !== 'rename'); run(act, k); } }, t(label))),
@@ -497,7 +509,7 @@
       if (act === 'rename') rename(k);
       else if (act === 'copy') copy(k).catch((e) => { console.error(e); say(t('Not saved. Try again in a moment.')); });
       // A paper Word can't take (a picture kept in a form Word has no place for) is said on the page, not logged.
-      else if (act === 'export') DK.get(DK.kindOf(cards.get(k)?.row)).exportFile(k).catch(() => say(t('The .docx could not be made.')));
+      else if (act === 'export') { const id = DK.kindOf(cards.get(k)?.row); DK.get(id).exportFile(k).catch((e) => { console.error(e); say(t(id === 'paper' ? 'The .docx could not be made.' : 'Not saved. Try again in a moment.')); }); }
       else if (act === 'delete') del(k);
       else if (act === 'restore') out(k);
       else if (act === 'forever') forever(k);
@@ -548,13 +560,15 @@
       const rec = await st.get(k);
       return st.save(k, { title: rec?.doc ? F.name(rec.doc, ST.get(rec.format)) : '', named: false });
     };
-    // A copy as a standalone document (lib/writer-papers.js copyOf: the text and its look, never the assignment).
+    // A copy as a standalone document (lib/writer-papers.js copyOf: the text and its look, never the assignment), with what
+    // its kind keeps of its own (copy: a spreadsheet's book, and its parts written with it).
     const copy = async (k) => {
       const rec = await st.get(k);
       if (!rec) return;
-      const c = PA.copyOf(rec, t('Copy of {title}', { title: titleOf(cards.get(k)?.row || rec) }));
+      const { parts, ...own } = (await DK.get(DK.kindOf(rec))?.copy?.(rec)) || {};
+      const c = { ...PA.copyOf(rec, t('Copy of {title}', { title: titleOf(cards.get(k)?.row || rec) })), ...own };
       focusNext = c.key;
-      await st.save(c.key, c);
+      await st.save(c.key, c, parts ? { parts, changed: true } : undefined);
     };
 
     // ---- delete: the card goes to Trash at once; the toast's Undo (or Ctrl+Z while it shows) takes it out again through the
@@ -622,16 +636,20 @@
 
     // ---- files dropped anywhere on the page or chosen with Import .docx…: one new document each, at most 20
     const REFUSALS = new Set(['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.']);
+    // A kind other than the paper says its own refusals (its says: { size, read }); a file no kind opens gets the Word one.
+    const PAPER_SAYS = { size: 'Choose a Word file smaller than 15 MB.', read: 'That file could not be read as a Word document.' };
+    const saysOf = (id) => (id && id !== 'paper' && DK.get(id)?.says) || PAPER_SAYS;
     const bring = async (list) => {
       dismiss();
       say('');
-      const { take, refused } = DH.route(list, DK.forFile, DK.KINDS, 20);
+      const { take, refused } = DH.route(list, DK.opens, DK.KINDS, 20);
       const first = refused.find((x) => x.why !== 'count');
       const limitText = refused.some((x) => x.why === 'count') ? t('Choose up to 20 files at a time.') : '';
-      let why = first ? (first.why === 'size' ? 'Choose a Word file smaller than 15 MB.' : 'That file could not be read as a Word document.') : '';
+      let why = first ? (first.why === 'size' ? saysOf(DK.opens(first.file?.name)).size : PAPER_SAYS.read) : '';
       for (const { file: f, kind: id } of take) {
+        const says = saysOf(id);
         try { await DK.get(id).importFile(f); }
-        catch (e) { console.error(e); why ||= e instanceof RangeError && REFUSALS.has(e.message) ? e.message : 'That file could not be read as a Word document.'; }
+        catch (e) { console.error(e); why ||= e instanceof RangeError && (REFUSALS.has(e.message) || Object.values(says).includes(e.message)) ? e.message : says.read; }
       }
       say([why && t(why), limitText].filter(Boolean).join(' '));
     };
@@ -707,7 +725,7 @@
         return true;
       },
       create: (format) => { const ok = ST.IDS.includes(format); if (ok) location.assign(fresh(format)); return ok; },
-      read: async (key) => { const r = listed(key), rec = r && await st.get(key); return rec?.doc ? { key, title: titleOf(r), text: DK.get(DK.kindOf(r)).text(rec) } : null; },
+      read: async (key) => { const r = listed(key), rec = r && await st.get(key); return holds(rec) ? { key, title: titleOf(r), text: DK.get(DK.kindOf(r)).text(rec) } : null; },
       export: async (key) => { const r = listed(key), f = r && await DK.get(DK.kindOf(r)).file(key); return f ? { name: f.name, mime: f.mime, bytes: new Uint8Array(f.bytes) } : null; },
       item: (slot, label, fn, { by = '' } = {}) => {
         if (!slots[slot] || typeof fn !== 'function') return null;
@@ -773,17 +791,22 @@
 
   catalogue().then(async () => {
     document.title = t('Documents');
-    await GZ_WRITER_PAPER.need(['lib/writer-papers.js', 'lib/doc-kinds.js']);
+    await GZ_WRITER_PAPER.need(['lib/writer-papers.js']);
     GZ_DOC_KINDS.register('paper', { edit, thumb, file, exportFile, text, importFile, measure: GZ_WRITER_PAPERS.measure });
+    // The kinds' scripts after this one (sheet-kind.js) have run once the document is parsed; each may still be reading its
+    // switch.
+    if (document.readyState === 'loading') await new Promise((ok) => document.addEventListener('DOMContentLoaded', ok, { once: true }));
+    await GZ_DOC_KINDS.settled();
     // ?<a kind's param>=<key> opens that document; else the home.
     const params = new URLSearchParams(location.search), id = Object.keys(GZ_DOC_KINDS.KINDS).find((k) => params.get(GZ_DOC_KINDS.KINDS[k].param));
     if (id) {
       const key = params.get(GZ_DOC_KINDS.KINDS[id].param), k = GZ_DOC_KINDS.get(id);
       const rec = GZ_WRITER_PAPERS.valid(key) ? await papers().get(key) : null;
-      // Only a New tile can open a missing key. A stale link, malformed key or a kind this build cannot edit returns home
-      // without mounting an empty editor over an existing document of another kind.
-      const fresh = !rec && GZ_WRITER_PAPERS.local(key) && ['plain', 'mla9', 'apa7', 'chicago17'].includes(params.get('format'));
-      if (typeof k.edit === 'function' && ((rec && GZ_DOC_KINDS.kindOf(rec) === id) || fresh)) { await k.edit(key); return; }
+      // Only a New tile can open a missing key: a paper's with its format, another kind's (&new) while that kind creates. A
+      // stale link, malformed key or a kind this build cannot edit returns home without mounting an empty editor over an
+      // existing document of another kind.
+      const fresh = !rec && GZ_WRITER_PAPERS.local(key) && (id === 'paper' ? ['plain', 'mla9', 'apa7', 'chicago17'].includes(params.get('format')) : params.has('new') && typeof k.create === 'function');
+      if (typeof k.edit === 'function' && ((rec && GZ_DOC_KINDS.kindOf(rec) === id) || fresh)) { await k.edit(key, { fresh: !rec }); return; }
       history.replaceState(null, '', 'papers.html');
     }
     await home();
@@ -820,7 +843,8 @@ if (window.top !== window) (() => {
   };
   const place = () => {
     if (close.isConnected) return true;
-    const paper = root.dataset.mode === 'paper', at = paper ? document.querySelector('.gp-top') : $('list');
+    // A document of any kind (data-mode: 'paper', 'sheet') has the paper chrome's top bar.
+    const paper = !!root.dataset.mode, at = paper ? document.querySelector('.gp-top') : $('list');
     if (!at || at.hidden) return false;
     close.textContent = GZ_I18N.t('Close', {}, locale);
     if (!paper) { close.style.setProperty('position', 'absolute'); addEventListener('resize', align); }
@@ -829,7 +853,7 @@ if (window.top !== window) (() => {
     return true;
   };
   const update = () => {
-    if (port && !told && (root.dataset.mode === 'paper' || $('list')?.hidden === false)) { told = true; port.postMessage({ type: 'opened', at: location.search }); }
+    if (port && !told && (!!root.dataset.mode || $('list')?.hidden === false)) { told = true; port.postMessage({ type: 'opened', at: location.search }); }
     if (place() && told) seen.disconnect();
   };
   const seen = new MutationObserver(update);

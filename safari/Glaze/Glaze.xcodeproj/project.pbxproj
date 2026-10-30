@@ -136,6 +136,14 @@
 		D2400000000000000000C780 /* papers.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F780 /* papers.css */; };
 		D2400000000000000000A790 /* papers-motion.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F790 /* papers-motion.js */; };
 		D2400000000000000000C790 /* papers-motion.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F790 /* papers-motion.js */; };
+		D2400000000000000000A7E1 /* sheet-kind.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E1 /* sheet-kind.js */; };
+		D2400000000000000000C7E1 /* sheet-kind.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E1 /* sheet-kind.js */; };
+		D2400000000000000000A7E2 /* sheet-grid.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E2 /* sheet-grid.js */; };
+		D2400000000000000000C7E2 /* sheet-grid.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E2 /* sheet-grid.js */; };
+		D2400000000000000000A7E3 /* sheet-data.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E3 /* sheet-data.js */; };
+		D2400000000000000000C7E3 /* sheet-data.js in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E3 /* sheet-data.js */; };
+		D2400000000000000000A7E4 /* sheet.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E4 /* sheet.css */; };
+		D2400000000000000000C7E4 /* sheet.css in Resources */ = {isa = PBXBuildFile; fileRef = D2400000000000000000F7E4 /* sheet.css */; };
 		B0B1000000000000000000A4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000C4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000A5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
@@ -257,6 +265,10 @@
 		D2400000000000000000F700 /* papers.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = papers.js; path = Resources/papers.js; sourceTree = "<group>"; };
 		D2400000000000000000F780 /* papers.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = papers.css; path = Resources/papers.css; sourceTree = "<group>"; };
 		D2400000000000000000F790 /* papers-motion.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = papers-motion.js; path = Resources/papers-motion.js; sourceTree = "<group>"; };
+		D2400000000000000000F7E1 /* sheet-kind.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = sheet-kind.js; path = Resources/sheet-kind.js; sourceTree = "<group>"; };
+		D2400000000000000000F7E2 /* sheet-grid.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = sheet-grid.js; path = Resources/sheet-grid.js; sourceTree = "<group>"; };
+		D2400000000000000000F7E3 /* sheet-data.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = sheet-data.js; path = Resources/sheet-data.js; sourceTree = "<group>"; };
+		D2400000000000000000F7E4 /* sheet.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = sheet.css; path = Resources/sheet.css; sourceTree = "<group>"; };
 		B0B1000000000000000000F4 /* features */ = {isa = PBXFileReference; lastKnownFileType = folder; name = features; path = Resources/features; sourceTree = "<group>"; };
 		B0B1000000000000000000F5 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
 		D6B0000000000000000000F1 /* sharing */ = {isa = PBXFileReference; lastKnownFileType = folder; name = sharing; path = Resources/sharing; sourceTree = "<group>"; };
@@ -399,6 +411,10 @@
 				D2400000000000000000F700 /* papers.js */,
 				D2400000000000000000F780 /* papers.css */,
 				D2400000000000000000F790 /* papers-motion.js */,
+				D2400000000000000000F7E1 /* sheet-kind.js */,
+				D2400000000000000000F7E2 /* sheet-grid.js */,
+				D2400000000000000000F7E3 /* sheet-data.js */,
+				D2400000000000000000F7E4 /* sheet.css */,
 				D6B0000000000000000000F1 /* sharing */,
 				B0B1000000000000000000F4 /* features */,
 				B0B1000000000000000000F5 /* assets */,
@@ -614,6 +630,10 @@
 				D2400000000000000000A700 /* papers.js in Resources */,
 				D2400000000000000000A780 /* papers.css in Resources */,
 				D2400000000000000000A790 /* papers-motion.js in Resources */,
+				D2400000000000000000A7E1 /* sheet-kind.js in Resources */,
+				D2400000000000000000A7E2 /* sheet-grid.js in Resources */,
+				D2400000000000000000A7E3 /* sheet-data.js in Resources */,
+				D2400000000000000000A7E4 /* sheet.css in Resources */,
 				D6B0000000000000000000A1 /* sharing in Resources */,
 				B0B1000000000000000000A4 /* features in Resources */,
 				B0B1000000000000000000A5 /* assets in Resources */,
@@ -687,6 +707,10 @@
 				D2400000000000000000C700 /* papers.js in Resources */,
 				D2400000000000000000C780 /* papers.css in Resources */,
 				D2400000000000000000C790 /* papers-motion.js in Resources */,
+				D2400000000000000000C7E1 /* sheet-kind.js in Resources */,
+				D2400000000000000000C7E2 /* sheet-grid.js in Resources */,
+				D2400000000000000000C7E3 /* sheet-data.js in Resources */,
+				D2400000000000000000C7E4 /* sheet.css in Resources */,
 				D6B0000000000000000000C1 /* sharing in Resources */,
 				B0B1000000000000000000C4 /* features in Resources */,
 				B0B1000000000000000000C5 /* assets in Resources */,

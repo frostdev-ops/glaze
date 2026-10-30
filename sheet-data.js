@@ -144,9 +144,21 @@ var GZ_SHEET_DATA = globalThis.GZ_SHEET_DATA || (() => {
     }
     throw new Error('torn read of a spreadsheet');
   };
+  // A spreadsheet written through the worker (papers: lib/writer-papers.js open()): the parts plan() finds changed and the
+  // book when it changed, with the card's text, the search text and the counts; a packed version ({ reason, gz, cells })
+  // when one is asked for. Nothing is sent when nothing changed and nothing else is asked. show: a cell's shown text.
+  // → { sigs (for the next write; the old ones if the write fails, as it throws), saved (the worker's answer, or null) }.
+  const write = async (papers, key, wb, sigs, { patch = {}, dirty = null, version = null, show = plain, reason } = {}) => {
+    const p = plan(wb, sigs, dirty);
+    if (!p.changed && !version && !Object.keys(patch).length) return { sigs, saved: null };
+    const m = measure(wb);
+    const saved = await papers.save(key, { kind: 'sheet', ...(p.book && { book: p.book }), grid: glance(wb, show), text: text(wb, show), cells: m.cells, sheets: m.sheets, ...patch },
+      { parts: p.parts, drop: p.drop, changed: p.changed, ...(version && { version }), ...(reason && { reason }) });
+    return { sigs: p.sigs, saved };
+  };
   const GZ_SHEET_MODEL_OR = () => (typeof GZ_SHEET_MODEL !== 'undefined' ? GZ_SHEET_MODEL : require('./lib/sheet-model.js'));
 
-  return { BAND, TEXT_CAP, VERSIONS_CAP, PART, keyOf, enc, dec, split, join, serialize, deserialize, sig, plan, measure, text, glance, isGlance, pack, unpack, read };
+  return { BAND, TEXT_CAP, VERSIONS_CAP, PART, keyOf, enc, dec, split, join, serialize, deserialize, sig, plan, measure, text, glance, isGlance, pack, unpack, read, write };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_SHEET_DATA; else GZ_SHEET_DATA;

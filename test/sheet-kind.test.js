@@ -146,6 +146,30 @@ test('a sheet save writes its changed parts, the record and the index in one set
   assert.equal(s.data[`writerPaper:${KEY}`].edited, 2);
 });
 
+test('write(): the changed parts, the card\'s text, search text and counts in one save; nothing when nothing changed', async () => {
+  let t = 1;
+  const s = store(), P = PA.open(s, () => t, { versions: async () => 40 });
+  const wb = book();
+  const first = await SD.write(P, KEY, wb, new Map(), { patch: { title: 'Grades', named: true }, version: { reason: 'start', gz: await SD.pack(wb), cells: 9 } });
+  const rec = s.data[`writerPaper:${KEY}`];
+  assert.deepEqual([rec.kind, rec.title, rec.cells, rec.sheets, rec.grid[0][0], rec.text.slice(0, 10)], ['sheet', 'Grades', 9, 2, 'Name', 'Sheet1\nNam']);
+  assert.deepEqual(s.data.writerPapers[0].grid, rec.grid, 'the index row carries the card\'s text');
+  assert.equal((await P.versions(KEY)).length, 1);
+  const writes = s.sets.length;
+  const same2 = await SD.write(P, KEY, wb, first.sigs);
+  assert.equal(same2.saved, null);
+  assert.equal(s.sets.length, writes, 'nothing changed: nothing sent');
+  wb.sheets[1].rows.get(0).set(1, { t: 's', v: 'new' });
+  t++;
+  const next = await SD.write(P, KEY, wb, first.sigs, { dirty: new Set(['2:0']) });
+  assert.deepEqual(s.sets[s.sets.length - 1], [`writerPaper:${KEY}`, 'writerPapers', `writerSheet:${KEY}:2:0`].sort());
+  assert.ok(next.saved.paper.revision === 2);
+  // A refused write keeps the old sigs: the next one tries the same parts again.
+  const failing = { save: async () => { throw new Error('paper storage unavailable'); } };
+  wb.sheets[1].rows.get(0).set(2, { t: 's', v: 'more' });
+  await assert.rejects(SD.write(failing, KEY, wb, next.sigs, { dirty: new Set(['2:0']) }));
+});
+
 test('a part from another write is a torn read: read() tries again, then gives up', async () => {
   const s = store(), P = PA.open(s, () => 5, { versions: async () => 40 });
   const wb = book(), first = SD.plan(wb, new Map());
@@ -269,6 +293,6 @@ test('the card is the record\'s 6×4 text; its text and measure come from the re
   const k = DK.get('sheet');
   const rec = { kind: 'sheet', book: { sheets: [] }, text: 'Name\tScore', cells: 9, sheets: 2, grid: [['Name', 'Score', '', '', '', ''], ['Ada', '91.5', '', '', '', ''], ['', '', '', '', '', ''], ['', '', '', '', '', '']] };
   assert.equal(k.text(rec), 'Name\tScore');
-  assert.deepEqual(k.measure(rec), { cells: 9, sheets: 2 });
+  assert.deepEqual({ ...k.measure(rec) }, { cells: 9, sheets: 2 }, 'from the page\'s realm');
   assert.equal(k.text({}), '');
 });
