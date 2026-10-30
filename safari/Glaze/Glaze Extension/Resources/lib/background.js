@@ -234,7 +234,7 @@ const BROKER = {
           if (!f) return { ok: false, error: 'gone' };
           const s = GZ_SANITIZE(await area.sync.get('courses'));
           if (GZ_CATALOG.unmap(s.courses, m.id) && !await area.sync.set({ version: 2, courses: s.courses })) return { ok: false, error: 'write' };
-          await area.local.set({ lookFavorites: favorites.filter((e) => e.code !== f.code), rotateLooks: GZ_CATALOG.ids(rotateLooks, favorites).filter((id) => id !== m.id) });
+          if (!await area.local.set({ lookFavorites: favorites.filter((e) => e.code !== f.code), rotateLooks: GZ_CATALOG.ids(rotateLooks, favorites).filter((id) => id !== m.id) })) return { ok: false, error: 'write' };
         }
         await catalogue();
         return { ok: true };

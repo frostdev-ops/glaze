@@ -17,9 +17,10 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   // A standalone document's key (the Documents home's New and Make a copy), tied to no assignment.
   const LOCAL = /^doc:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
   const local = (k) => typeof k === 'string' && LOCAL.test(k);
-  // The saved sources a paper's Cite keeps (lib/writer-sources.js keyOf): an assignment's under its own key's parts, any
-  // other paper's under the local ones. They go when the paper goes.
-  const sourcesOf = (k) => `writer:sources:${/^[^|]+(\|[^|]+){3}$/.test(k) ? k.split('|').map(encodeURIComponent).join('|') : `local|local|papers|${encodeURIComponent(k)}`}`;
+  // Cite's local store, plus an assignment's own parts. Documents uses the local store when a legacy record lacks its
+  // assignment identity, so an assignment can have used both. Each belongs to this exact paper key.
+  const sourcesOf = (k) => [`writer:sources:local|local|papers|${encodeURIComponent(k)}`,
+    ...(/^[^|]+(\|[^|]+){3}$/.test(k) ? [`writer:sources:${k.split('|').map(encodeURIComponent).join('|')}`] : [])];
   const newKey = () => `doc:${crypto.randomUUID()}`;
   // Every key a paper is kept under: an assignment's, a standalone document's, or the stand-in for one whose key never came
   // (writer-paper.js recovery:).
@@ -201,7 +202,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       const paper = await get(PAPER + k), history = await get(VERSIONS + k), list = (await get(INDEX)) || [];
       // Publish the smaller index before deleting data: a refused index write must leave the recovery records intact.
       await store.set({ [INDEX]: list.filter((r) => r.key !== k) });
-      try { await store.remove([PAPER + k, VERSIONS + k, sourcesOf(k)]); }
+      try { await store.remove([PAPER + k, VERSIONS + k, ...sourcesOf(k)]); }
       catch (e) { await store.set({ [INDEX]: list }); throw e; }
       return { ...(paper ? { [PAPER + k]: paper } : {}), ...(Array.isArray(history) ? { [VERSIONS + k]: history } : {}) };
     });
@@ -229,7 +230,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       if (!keys.length) return keys;
       const gone = new Set(keys);
       await store.set({ [INDEX]: list.filter((r) => !gone.has(r?.key)) });
-      try { await store.remove(keys.flatMap((k) => [PAPER + k, VERSIONS + k, sourcesOf(k)])); }
+      try { await store.remove(keys.flatMap((k) => [PAPER + k, VERSIONS + k, ...sourcesOf(k)])); }
       catch (e) { await store.set({ [INDEX]: list }); throw e; }
       return keys;
     });

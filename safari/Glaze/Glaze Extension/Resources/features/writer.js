@@ -331,8 +331,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (box.flushing !== f) return;
     const b = flushButton(box, f);
     if (box.full || !sameBox(box) || !b) { endFlush(box, 'page'); return; }
-    if (U().enabled(b)) { try { passing = b; b.click(); } finally { passing = null; endFlush(box); } return; }
+    if (Date.now() - f.at >= 60000) { endFlush(box, 'save'); return; }
     if (Date.now() - since >= SUBMIT_ON) { endFlush(box, f.action === 'submit' ? 'submit' : 'page'); return; }
+    if (U().enabled(b)) { try { passing = b; b.click(); } finally { passing = null; endFlush(box); } return; }
     setTimeout(() => turnOn(box, f, since), 100);
   };
   const endFlush = (box, reason = null) => {
