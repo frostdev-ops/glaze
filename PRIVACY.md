@@ -185,6 +185,10 @@ separately. On older browsers without `storage.local.getKeys`, unknown legacy ba
 collected until a saved reference or direct request discovers them; Reset removes current and discoverable kept media,
 not those unknown legacy copies or unrelated stickers.
 
+Google Drive is unavailable in this build. In a build that enables it, while Drive is connected and Sync to Google Drive
+is on, the documents and records its section under Network requests lists are also kept in a Glaze folder in your own
+Google Drive, including ones described below as on this device only or never synced.
+
 - **Glaze navigation** (Canvas, Blackboard Ultra and Moodle, on by default): Glaze draws its own bar from the
   site's own navigation, which stays in the page, hidden. Its settings sync in `navbar` (placement, style, rail state,
   course behavior, logo choice) and the capped `navbarItems` item (names, icons, groups, hidden items, phone tabs, up to
@@ -785,7 +789,9 @@ you import) are bundled. It makes requests in these cases:
     page open; a Blackboard page reads what's due as described above.
   - **Disconnect**: if you choose, Glaze deletes the Glaze calendar first; then it asks Google to revoke Glaze's
     access (the token goes in the request body), has Chrome forget its tokens, removes the `identity` permission and
-    deletes what it stored. You can also remove Glaze's access at https://myaccount.google.com/connections.
+    deletes what it stored. In a build with Google Drive (below), while Drive is connected it uses the same access:
+    Glaze then doesn't revoke it or remove `identity`, and only Calendar's state goes. You can also remove Glaze's access
+    at https://myaccount.google.com/connections.
   - Uninstalling Glaze deletes what it stored on the device but doesn't revoke Google's access by itself:
     disconnect first, or remove it at https://myaccount.google.com/connections.
   - Edge, Brave, Safari and Firefox don't offer it; Export calendar (.ics) works everywhere.
@@ -819,7 +825,8 @@ you import) are bundled. It makes requests in these cases:
       come into Glaze instead).
     - in Glaze/Data, one JSON file per setting and per record: every Settings value, Better To Do's tasks and plans and
       the pet, dashboard notes, class schedules, GPA past terms, widgets, Looks history and favorites, the personal
-      dictionary and saved sources, Gradescope's course placings and your answers about it (not the assignments read from
+      dictionary and saved sources, Gradescope's account (your name there and the hash of its email address), course
+      placings and your answers about it (not the assignments read from
       Gradescope, which stay on the device that read them), and Notes: each account's folders, each note (its title,
       folder, course, times, whether it is in Trash, and its text) and each picture or attachment. Each carries when it last
       changed. When both sides changed one, the later change is kept; when a second device connects, its own records are
@@ -1133,7 +1140,7 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
 ## Permissions
 
 - `storage` — to save the settings, GPA choices, past terms and goal, the Insights summary, course names, places, what-if scores, due list, Better To Do's tasks and plans, your class schedule, reminder and streak state, marks on documents,
-  typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, Google Calendar sync's state, Google Drive's connected account, and Safari update-check timestamp described above.
+  typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, Google Calendar sync's state, Google Drive's connected account and Sync to Google Drive's state, and Safari update-check timestamp described above.
   Notes' text, pictures and attachments are in the extension's own IndexedDB.
 - No permission for reading PDFs and photos. The extension's own pages may compile WebAssembly (`'wasm-unsafe-eval'` in
   its content security policy), which the OCR engine needs; the reader runs only code that ships in the package, and
@@ -1141,7 +1148,7 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
   with a one-use pass that Glaze's import gets from its own background worker, so a site that framed it itself can't
   make it read anything.
 - `identity` (Chrome only, optional) — asked for only when you press Connect in Google Calendar sync, and removed on
-  Disconnect. The Firefox and Safari packages leave it out, with the OAuth client. It lets Chrome sign Glaze in to Google Calendar with the Google
+  Disconnect unless Google Drive still uses it. The Firefox and Safari packages leave it out, with the OAuth client. It lets Chrome sign Glaze in to Google Calendar with the Google
   account in your browser; Chrome shows no warning for it. Glaze never asks for `identity.email` and never sees your
   password. Google Drive uses it too, on Chrome, Edge, Brave and Firefox: unavailable in this build. Once a build includes Drive, it is asked for when you press Connect for Google Drive
   and removed on Disconnect, unless Google Calendar sync still uses it. Chrome signs in with the Google account in your
@@ -1150,8 +1157,9 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
   files kept for Look backgrounds to free space. Nothing more is stored or sent because of it; Chrome shows no warning
   for it.
 - `nativeMessaging` — on Safari, requested at install: to use on-device AI through the containing app, to ask the Mac
-  app to check for updates (the App Store apps ignore update requests) and, with agent access on, to reach the downloaded
-  Mac app's agent helper. On Chrome,
+  app to check for updates (the App Store apps ignore update requests), with agent access on, to reach the downloaded
+  Mac app's agent helper and, in a build with Google Drive, to sign in to Drive through the Glaze app and get its access
+  tokens (see Google Drive). On Chrome,
   Edge and Firefox, optional: asked for only when you turn on agent access in **Settings → AI → Agents**, and given back
   when you turn it off. It lets the browser start the `glaze-mcp` helper on this computer (see "Agent access").
 - `activeTab` (Chrome, Edge and Firefox) — when you open Glaze's toolbar popup, the browser lets Glaze into that one tab: the popup reads its
