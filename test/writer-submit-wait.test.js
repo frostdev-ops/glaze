@@ -367,3 +367,21 @@ test('full: the first explicit retry expires an old save even when its poll was 
   p.hear({ type: 'submit:saved', request: asks(p.sent)[1].request, ok: true });
   assert.equal(p.clicks.length, 1);
 });
+
+test('full: the arm deadline belongs to the current port even if a reopen finishes between polls', async () => {
+  const { c, press } = await attempt(true);
+  let now = 1e6, box;
+  c.ctx.__now = () => now; vm.runInContext('Date.now = () => globalThis.__now()', c.ctx);
+  c.ctx.GZ_WRITER_SUBMIT = { armed: (b) => { box = b; return false; } };
+  press(SUBMIT);
+  now += 4900; c.tick(100);
+  const sent = []; box.port = { postMessage: (m) => sent.push(m) }; // already ready again at the next poll
+  c.tick(100);
+  now += 200; c.tick(100);
+  assert.equal(c.doc.querySelector(SUBMIT).getAttribute('aria-busy'), 'true', 'the new frame gets its own arm window');
+  assert.equal(sent.length, 0);
+  now += 5000; c.tick(100);
+  assert.equal(c.doc.querySelector(SUBMIT).hasAttribute('aria-busy'), false);
+  assert.equal(sent.filter((m) => m.type === 'submit:unavailable').length, 1);
+  assert.equal(c.clicks.length, 0);
+});
