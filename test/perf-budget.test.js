@@ -232,8 +232,9 @@ const SYLLABUS_DOCS = 48 + 61;
 // double-spaced", "1 paragraph has other line spacing"): 279 bytes of English plurals in lib/i18n.js, measured against 115bb240.
 // defaults.js's enhance.writerUploads (Open uploads in Writer, 31, cd1afbd3) and content.js's draft finder reading a
 // reply's Ultra message-id, so Writer's and the native editor's drafts find their post (27, b3eb58eb). The Documents home's
-// count ("1 document"): 70 bytes of English plural in lib/i18n.js, measured against ab1da78d.
-const WRITER = 24 + 409 + 134 + 728 + 61 + 279 + 31 + 27 + 70;
+// count ("1 document"): 70 bytes of English plural in lib/i18n.js, measured against ab1da78d. The slides viewer's count
+// ("1 slide", slides-kind.js): 61, measured against 53e27f19.
+const WRITER = 24 + 409 + 134 + 728 + 61 + 279 + 31 + 27 + 70 + 61;
 // Settings → Writer (the brief's ask that every Writer part read one synced `writer` key from defaults.js; a named raise under
 // the owner's 2026-10-19 approval): defaults.js's writer group and its group rule, 1089 bytes on every site, where content.js
 // reads every GZ_DEFAULTS key (features/writer-quote.js reads writer.compose.quote); lib/i18n.js's English plural for its

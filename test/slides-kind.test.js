@@ -77,11 +77,11 @@ test('a copy keeps the deck, its count, its search text and its picture; the tex
   await DK.settled();
   const k = DK.get('slides');
   const rec = { kind: 'slides', title: 'Week 3', file: 'UEsDBA==', size: 4, ext: '.pptx', slides: 9, text: 'Cell Biology\nMembrane transport', thumb: 'data:image/jpeg;base64,AA==', school: 'bb.school.test', submitted: 5 };
-  assert.deepEqual(k.copy(rec), { file: 'UEsDBA==', size: 4, ext: '.pptx', slides: 9, text: 'Cell Biology\nMembrane transport', thumb: 'data:image/jpeg;base64,AA==' });
-  assert.deepEqual(k.copy({ kind: 'slides' }), {});
+  assert.deepEqual({ ...k.copy(rec) }, { file: 'UEsDBA==', size: 4, ext: '.pptx', slides: 9, text: 'Cell Biology\nMembrane transport', thumb: 'data:image/jpeg;base64,AA==' });
+  assert.deepEqual({ ...k.copy({ kind: 'slides' }) }, {});
   assert.equal(k.text(rec), 'Cell Biology\nMembrane transport');
   assert.equal(k.text({}), '');
-  assert.deepEqual(k.measure(rec), { slides: 9, chars: 31, words: 4 });
+  assert.deepEqual({ ...k.measure(rec) }, { slides: 9, chars: 31, words: 4 }); // spread: an object of this realm
 });
 
 test('files over the record cap are refused in the student\'s words before anything is read', async () => {
@@ -90,5 +90,5 @@ test('files over the record cap are refused in the student\'s words before anyth
   const k = DK.get('slides');
   const big = { name: 'Huge.pptx', size: 3e6 + 1, arrayBuffer: () => { throw new Error('read'); } };
   await assert.rejects(k.importFile(big), (e) => e instanceof RangeError && e.message === k.says.size);
-  assert.deepEqual(k.says, { size: 'Choose a PowerPoint file smaller than 3 MB.', read: 'That file could not be read as a PowerPoint presentation.' });
+  assert.deepEqual({ ...k.says }, { size: 'Choose a PowerPoint file smaller than 3 MB.', read: 'That file could not be read as a PowerPoint presentation.' });
 });

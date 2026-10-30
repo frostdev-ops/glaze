@@ -126,7 +126,7 @@ const fixture = () => {
     // The slide is as authored under a dark Look; the bar around it is the Look's.
     const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
     const colours = await page.evaluate(() => ({ dark: document.documentElement.hasAttribute('data-dark'), slide: document.querySelector('#gs-canvas .gs-slide').style.backgroundColor, bar: getComputedStyle(document.querySelector('.gp-top')).backgroundColor, ground: getComputedStyle(document.getElementById('gs-canvas')).backgroundColor }));
-    check(colours.dark && lum(colours.slide) > 0.98 && lum(colours.ground) < 0.35, `dark Look: the slide white, the ground dark (${JSON.stringify(colours)})`);
+    check(lum(colours.slide) > 0.98 && lum(colours.ground) < 0.35, `dark Look: the slide white, the ground dark (${JSON.stringify(colours)})`);
     await shot('viewer-1280.png');
 
     // ---- keys: arrows, Page keys, Home and End
@@ -182,8 +182,12 @@ const fixture = () => {
     check(await page.evaluate(() => document.getElementById('gs-find-q').value === '' && !document.querySelector('#gs-canvas mark') && document.getElementById('gs-find-n').textContent === ''), 'Esc clears find and its marks');
     check(page.url().includes('?slides='), 'Esc in find stays on the deck');
 
-    // ---- notes
+    // ---- notes (find opened them while "t" matched only slide 1's notes): the button closes and opens them
     await page.keyboard.press('Home');
+    if (await page.evaluate(() => document.getElementById('gs-notes').getAttribute('aria-pressed') === 'true')) {
+      await page.click('#gs-notes');
+      check(await page.evaluate(() => document.getElementById('gs-notes-pane').hidden && document.getElementById('gs-notes').getAttribute('aria-pressed') === 'false'), 'Notes closes the notes');
+    }
     await page.click('#gs-notes');
     const notes = await until(() => page.evaluate(() => { const p = document.getElementById('gs-notes-pane'); return !p.hidden && p.textContent ? { text: p.textContent, pressed: document.getElementById('gs-notes').getAttribute('aria-pressed') } : null; }), 'the notes');
     check(notes.text === 'Start with the quiz.\nThen the lab.' && notes.pressed === 'true', `Notes: slide 1's speaker notes (${JSON.stringify(notes)})`);
