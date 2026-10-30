@@ -3750,5 +3750,6 @@
   "as the app reports itself": "zoals de app zichzelf noemt",
   "Don't allow": "Niet toestaan",
   "Unnamed app": "Naamloze app",
-  "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde."
+  "Glaze restarted before you answered.": "Glaze is opnieuw gestart voordat je antwoordde.",
+  "Print with notes…": "Afdrukken met notities…"
 };

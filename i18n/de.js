@@ -3750,5 +3750,6 @@
   "as the app reports itself": "nach Angaben der App",
   "Don't allow": "Nicht erlauben",
   "Unnamed app": "Unbenannte App",
-  "Glaze restarted before you answered.": "Glaze wurde neu gestartet, bevor du geantwortet hast."
+  "Glaze restarted before you answered.": "Glaze wurde neu gestartet, bevor du geantwortet hast.",
+  "Print with notes…": "Mit Notizen drucken…"
 };

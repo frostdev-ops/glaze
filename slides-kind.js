@@ -1,8 +1,8 @@
 // Slide decks on the Documents page (papers.html). Settings → Writer → Slides (writer.slides, its default in defaults.js) permits
 // importing .pptx and .ppsx files; existing decks always remain available for viewing. Documents of the slides kind
 // (lib/doc-kinds.js), each card showing slide 1, and open in a viewer: a rail of thumbnails, the slide (lib/slides-render.js
-// on lib/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, and Present (a dialog, full screen
-// where the browser allows, Rimeward's keys, hidden slides skipped). Its chrome wears the Look; the slide stays as authored.
+// on lib/pptx.js's model), zoom, find in the slides' and notes' text, the speaker notes, Present (a dialog, full screen
+// where the browser allows, Rimeward's keys, hidden slides skipped) and Print (a page per slide, notes optionally below). Its chrome wears the Look; the slide stays as authored.
 // Export gives back the bytes imported. A viewer, never an editor: the record only changes by the page's rename.
 // Storage (STORE): the deck's bytes in the worker's file store (lib/doc-files.js, over its port), the record pointing at
 // them (file: { hash, size, type }), up to the kind's max; a record from before the store holds them as base64, read as
@@ -505,10 +505,58 @@
     };
     presentB.addEventListener('click', present);
 
-    // ---- ⋯: export in the deck's own format
+    // ---- Print…: the slides a show plays, each on a page of its own (GZ_SLIDES_RENDER.printPage, its @page through the
+    // CSSOM), with Print with notes each slide's notes below it on the deck's notes page; the pictures loaded before the
+    // browser's print dialog opens. Only the pages print (slides-kind.css @media print), never the Look's chrome.
+    let printing = null;
+    const PICTURE_WAIT = 15000;
+    const loaded = (el) => new Promise((ok) => {
+      const done = () => { clearTimeout(timer); el.setAttribute('data-gs-loaded', ''); ok(); };
+      const timer = setTimeout(ok, PICTURE_WAIT);
+      el.addEventListener('load', done, { once: true });
+      el.addEventListener('error', () => { clearTimeout(timer); ok(); }, { once: true });
+    });
+    const endPrint = () => {
+      if (!printing) return;
+      printing.box.remove();
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((x) => x !== printing.sheet);
+      root.removeAttribute('data-gs-print');
+      document.title = printing.title;
+      printing = null;
+    };
+    const print = async (withNotes = false) => {
+      if (!deck || printing) return;
+      const pg = Rr.printPage(deck, { notes: withNotes }), seq = Rr.visible(deck);
+      if (!pg || !seq.length) return;
+      const box = h('div', { class: 'gs-print', 'data-notes': withNotes, 'aria-hidden': 'true' });
+      for (const i of seq) {
+        const s = deck.slides[i];
+        box.append(h('section', { class: 'gs-print-page', 'data-slide': String(i) }, Rr.stage(s, deck, { document, media, labels, scale: pg.scale }),
+          withNotes && s.notes ? h('div', { class: 'gs-print-notes', text: s.notes }) : null));
+      }
+      // Each picture heard from as it is drawn, before the pages join the document (a load can't come first).
+      const pictures = [...box.querySelectorAll('img, image')].map(loaded);
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(`@page { size: ${pg.w}px ${pg.h}px; margin: 0; } .gs-print-page { width: ${pg.w}px; height: ${pg.h}px; padding: ${pg.margin}px; }`);
+      printing = { box, sheet, title: document.title };
+      document.title = title;
+      document.body.append(box);
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+      root.setAttribute('data-gs-print', withNotes ? 'notes' : 'slides');
+      await Promise.all([...pictures, document.fonts?.ready]);
+      if (printing?.box !== box) return;
+      box.setAttribute('data-ready', '');
+      addEventListener('afterprint', endPrint, { once: true, signal });
+      window.print();
+    };
+    const notesAny = !!deck?.slides.some((s) => !s.hidden && s.notes);
+
+    // ---- ⋯: print, and export in the deck's own format
     const closeMenu = (back) => { if (!menu) return; menu.remove(); menu = null; moreB.setAttribute('aria-expanded', 'false'); if (back) moreB.focus(); };
     const openMenu = () => {
       menu = h('div', { class: 'pop gp-menu gs-menu', role: 'menu', 'aria-label': t('More') },
+        btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'print', disabled: !deck, onclick: () => { closeMenu(true); print(false).catch((e) => { console.warn(e); endPrint(); }); } }, t('Print…')),
+        notesAny ? btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'print-notes', onclick: () => { closeMenu(true); print(true).catch((e) => { console.warn(e); endPrint(); }); } }, t('Print with notes…')) : null,
         btn({ role: 'menuitem', tabindex: '-1', 'data-act': 'export', disabled: !bytes, onclick: () => { closeMenu(true); exportFile(key).catch((e) => console.warn(e)); } }, t('Export .pptx').replace('.pptx', rec?.ext === '.ppsx' ? '.ppsx' : '.pptx')));
       document.body.append(menu);
       const r = moreB.getBoundingClientRect();
@@ -533,6 +581,8 @@
     addEventListener('keydown', (e) => {
       if (e.defaultPrevented || presenting || menu || !deck) return;
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); q.focus(); q.select(); }
+      // ⌘P / Ctrl+P: the slides, not the viewer around them.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); e.stopPropagation(); print(false).catch((x) => { console.warn(x); endPrint(); }); }
     }, { capture: true, signal });
     document.addEventListener('keydown', (e) => {
       if (e.defaultPrevented || presenting || menu || !deck) return;
@@ -548,7 +598,7 @@
     // What an assignment's submit sheet sends (writer-submit.js): the deck as it was brought.
     return { pages: () => null, say: (text) => { if (state.textContent !== text) state.textContent = text || ''; }, ready: () => !!deck, save: async () => true,
       dispose: () => {
-        life.abort(); sizing.disconnect(); near.disconnect(); closeMenu(); presenting?.close();
+        life.abort(); sizing.disconnect(); near.disconnect(); closeMenu(); presenting?.close(); endPrint();
         for (const u of media.values()) { URL.revokeObjectURL(u); made.delete(u); }
       },
       file: async () => { const f = await file(key); if (!f) throw new Error('no file'); return { bytes: f.bytes, mime: f.mime, ext: rec?.ext === '.ppsx' ? '.ppsx' : '.pptx' }; } };

@@ -3750,5 +3750,6 @@
   "as the app reports itself": "segundo o próprio app",
   "Don't allow": "Não permitir",
   "Unnamed app": "App sem nome",
-  "Glaze restarted before you answered.": "O Glaze reiniciou antes da sua resposta."
+  "Glaze restarted before you answered.": "O Glaze reiniciou antes da sua resposta.",
+  "Print with notes…": "Imprimir com anotações…"
 };
