@@ -435,6 +435,7 @@ test('a download queued in another context before a remove does not run after it
   const a = make({ models: () => catalog, channel: null }); // no message reaches it: the lock and OPFS alone decide
   const b = twin(a);
   const p = a.store.download('tiny-q4');
+  await settle(); // asked for, and waiting on its catalog
   await b.remove('tiny-q4');
   loaded([entry()]);
   await assert.rejects(p, (e) => e.reason === 'removed');
@@ -462,4 +463,48 @@ test('verify in another context waits for a running download instead of deleting
   await check;
   assert.deepEqual(checked, { state: 'ready' });
   assert.deepEqual(chunksFetched(fetch), [0, 1, 2, 3, 4]);
+});
+
+test('a remove while the last chunk is checked and written ends the download as removed, never ready', async () => {
+  const { store } = make();
+  let removing = null;
+  const p = store.download('tiny-q4', { onProgress: (x) => { if (x === 1 && !removing) removing = store.remove('tiny-q4'); } });
+  await assert.rejects(p, (e) => e.reason === 'removed');
+  await removing;
+  assert.deepEqual(await store.status('tiny-q4'), { state: 'missing' });
+});
+
+test('a download started once another context\'s remove has finished is not cancelled by its late message', async () => {
+  const fetch = fakeHf();
+  const slow = async (u, i) => { if (!fetch.log.length) await settle(); return fetch(u, i); }; // the message lands mid-download
+  const a = make({ fetch: slow });
+  const b = twin(a);
+  await a.store.remove('other'); // a has been listening since its own earlier work
+  await b.remove('tiny-q4');
+  assert.equal((await a.store.download('tiny-q4')).state, 'ready');
+  await settle();
+  assert.deepEqual(await a.store.status('tiny-q4'), { state: 'ready' });
+});
+
+test('removes and downloads in quick succession keep their order whatever the clock says', async () => {
+  const real = performance.now;
+  performance.now = () => 1000; // a clock too coarse to tell them apart
+  try {
+    const a = make({ channel: null });
+    const b = twin(a, { channel: null });
+    await a.store.remove('tiny-q4');
+    assert.equal((await a.store.download('tiny-q4')).state, 'ready', 'a download after a remove runs');
+    await b.remove('tiny-q4');
+    await b.remove('tiny-q4');
+    // Queued before a third remove, with no message to tell it: still refused.
+    let loaded;
+    const catalog = new Promise((r) => { loaded = r; });
+    const c = twin(a, { models: () => catalog, channel: null });
+    const p = c.download('tiny-q4');
+    await settle();
+    await b.remove('tiny-q4');
+    loaded([entry()]);
+    await assert.rejects(p, (e) => e.reason === 'removed');
+    assert.equal((await a.store.download('tiny-q4')).state, 'ready');
+  } finally { performance.now = real; }
 });
