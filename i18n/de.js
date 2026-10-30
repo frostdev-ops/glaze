@@ -3758,5 +3758,9 @@
   "Attach up to {n} documents.": "Hänge bis zu {n} Dokumente an.",
   "Attached: {names}": "Angehängt: {names}",
   "A file is larger than 50 MB. Nothing was submitted.": "Eine Datei ist größer als 50 MB. Es wurde nichts abgegeben.",
-  "A file could not be read. Nothing was submitted.": "Eine Datei konnte nicht gelesen werden. Es wurde nichts abgegeben."
+  "A file could not be read. Nothing was submitted.": "Eine Datei konnte nicht gelesen werden. Es wurde nichts abgegeben.",
+  "The document changed or was deleted. Remove it and pick it again. Nothing was submitted.": "Das Dokument wurde geändert oder gelöscht. Entferne es und wähle es erneut aus. Es wurde nichts abgegeben.",
+  "File: {name}.": "Datei: {name}.",
+  "Use Blackboard editor to review or remove these uploads: {names}.": "Prüfe oder entferne diese Uploads im Blackboard-Editor: {names}.",
+  "Not attached": "Nicht angehängt"
 };

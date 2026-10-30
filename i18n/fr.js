@@ -3758,5 +3758,9 @@
   "Attach up to {n} documents.": "Joignez jusqu’à {n} documents.",
   "Attached: {names}": "Pièces jointes : {names}",
   "A file is larger than 50 MB. Nothing was submitted.": "Un fichier dépasse 50 Mo. Rien n’a été remis.",
-  "A file could not be read. Nothing was submitted.": "Un fichier n’a pas pu être lu. Rien n’a été remis."
+  "A file could not be read. Nothing was submitted.": "Un fichier n’a pas pu être lu. Rien n’a été remis.",
+  "The document changed or was deleted. Remove it and pick it again. Nothing was submitted.": "Le document a été modifié ou supprimé. Retirez-le et sélectionnez-le à nouveau. Rien n’a été remis.",
+  "File: {name}.": "Fichier : {name}.",
+  "Use Blackboard editor to review or remove these uploads: {names}.": "Utilisez l’éditeur Blackboard pour vérifier ou supprimer ces fichiers téléversés : {names}.",
+  "Not attached": "Non joint"
 };
