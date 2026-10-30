@@ -912,3 +912,11 @@ test('review locked: named pivot sources and data tables refuse structural edits
   }));
   for (const sh of wb.sheets) assert.ok(X.locked(wb, { op: 'insert', sheet: sh.id, axis: 'row', at: 0, n: 1 }), sh.name);
 });
+
+test('review kept XML: a chart edit is read from its current bytes before tracked shifts', async () => {
+  const wb = await X.read(synthetic());
+  wb.keep.parts['xl/charts/chart1.xml'].data = enc.encode('<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:numRef><c:f>One!$A$1</c:f></c:numRef></c:chartSpace>');
+  X.track(wb, { op: 'insert', sheet: wb.sheets[0].id, axis: 'row', at: 0, n: 1 });
+  const p = await parts(await X.write(wb, { recalc: false }));
+  assert.match(p['xl/charts/chart1.xml'], /<c:f>One!\$A\$2<\/c:f>/);
+});
