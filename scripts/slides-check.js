@@ -330,6 +330,15 @@ const fixture = (extra = []) => {
     pp = await pdfPages();
     check(pp.pages === 9 && pp.media.length === 1 && pp.media[0] === '0 0 540 720', `the printed PDF with notes: 9 pages of 540 × 720 pt, 7.5 × 10 in (${JSON.stringify({ pages: pp.pages, media: pp.media })})`);
     check(await afterPrint(), 'after printing with notes the view goes');
+    const outsidePrint = await page.evaluate(() => {
+      const b = document.createElement('button');
+      document.body.append(b); b.focus();
+      const e = new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true, cancelable: true });
+      const native = b.dispatchEvent(e), pending = !!document.querySelector('.gs-print');
+      b.remove();
+      return { native, pending };
+    });
+    check(outsidePrint.native && !outsidePrint.pending, `Ctrl+P outside the viewer keeps native page printing (${JSON.stringify(outsidePrint)})`);
     await page.focus('#gs-canvas');
     await page.keyboard.press('Control+p');
     pv = await until(printView, 'Ctrl+P');
