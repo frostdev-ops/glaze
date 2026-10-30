@@ -3,7 +3,9 @@
 // (importFile); existing spreadsheets always open, copy and export. A card shows the record's 6×4 text (sheet-data.js
 // glance). Opening one mounts the grid (sheet-grid.js) on the calc engine (lib/sheet-*.js). .xlsx files are read and written
 // by GZ_SHEET_XLSX (lib/sheet-xlsx.js) where the page has it; without it an .xlsx is refused and Export writes the active
-// sheet as .csv. Storage is sheet-data.js's alone.
+// sheet as .csv. Storage is sheet-data.js's alone. In an assignment's frame (writer-kinds.js) the same grid is the attempt's
+// view (view), a brought .xlsx or .csv becomes the attempt's record (into), and an empty attempt can start as a blank
+// workbook (empty); the view's file() is what submit sends.
 (() => {
   const DK = globalThis.GZ_DOC_KINDS;
   const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return globalThis.navigator?.language || 'en'; } })();
@@ -81,7 +83,8 @@
     }));
     return wb;
   };
-  const importFile = async (file) => {
+  // A file as a workbook, its formulas calculated; a RangeError (SAYS) when it is too large or can't be read.
+  const workbookOf = async (file) => {
     if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > DK.KINDS.sheet.max) throw new RangeError(SAYS.size);
     await need([...ENGINE, 'sheet-grid.js']);
     const raw = await file.arrayBuffer();
@@ -91,6 +94,10 @@
     else if (xlsx()) wb = await xlsx().read(new Uint8Array(raw)).catch(() => null);
     if (!wb?.sheets?.length) throw new RangeError(SAYS.read);
     GZ_SHEET_CALC.engine(wb).recalc();
+    return wb;
+  };
+  const importFile = async (file) => {
+    const wb = await workbookOf(file);
     const key = GZ_WRITER_PAPERS.newKey(), title = stem(file.name);
     await saveAll(key, wb, { named: !!title, title }, 'start');
     return key;
@@ -122,21 +129,35 @@
   const exportFile = async (key) => { const f = await file(key); if (f) download(f); };
 
   // ---- the grid
+  // A spreadsheet brought to an assignment (Open in Glaze, writer-kinds.js): the attempt's record becomes it, the paper it
+  // held kept as a version first (the 'import' save), every part it had before dropped. → the record.
+  const into = async (key, f) => {
+    const wb = await workbookOf(f), SD = GZ_SHEET_DATA;
+    const had = (await get([`writerPaper:${key}`]))[`writerPaper:${key}`];
+    const sigs = new Map(Object.keys(had?.parts || {}).map((n) => [n, 'stale']));
+    const gz = await SD.pack(wb);
+    return (await SD.write(papers(), key, wb, sigs, { patch: { doc: null, words: 0 }, reason: 'import', show: shower(wb), version: { reason: 'start', gz, cells: SD.measure(wb).cells } })).saved.paper;
+  };
+  // An empty attempt started as a spreadsheet (writer-kinds.js): what its record takes; the grid opens a blank workbook.
+  const empty = () => ({ grid: Array.from({ length: 4 }, () => Array(6).fill('')), text: '', cells: 0, sheets: 1 });
   const create = () => `papers.html?sheet=${encodeURIComponent(GZ_WRITER_PAPERS.newKey())}&new`;
-  const edit = async (key, { fresh = false } = {}) => {
-    document.documentElement.dataset.mode = 'sheet';
+  // host: an assignment's frame (view below): { mount, t, title, tools }. → the grid's surface (sheet-grid.js mount).
+  const edit = async (key, { fresh = false, host = null } = {}) => {
+    if (!host) document.documentElement.dataset.mode = 'sheet';
     await need([...ENGINE, 'sheet-grid.js']);
     const got = fresh ? null : await GZ_SHEET_DATA.read(get, key).catch((e) => { console.warn(e); return null; });
     const wb = got?.wb || GZ_SHEET_MODEL.workbook();
-    GZ_SHEET_GRID.mount({ key, wb, rec: got?.rec || null, sigs: got?.sigs || new Map(), fresh: !got, t, locale, papers: papers(), show: shower,
-      local: GZ_WRITER_PAPERS.local(key), exportFile: async () => download(await fileOf(wb, (await papers().get(key))?.title)), exportLabel: () => (xlsx() ? 'Export .xlsx' : 'Export .csv') });
+    const v = GZ_SHEET_GRID.mount({ key, wb, rec: got?.rec || null, sigs: got?.sigs || new Map(), fresh: !got, t: host?.t || t, locale, papers: papers(), show: shower,
+      local: GZ_WRITER_PAPERS.local(key), fileOf, download, exportLabel: () => (xlsx() ? 'Export .xlsx' : 'Export .csv'), host });
     globalThis.GZ_PAPERS_MOTION?.shown('paper');
+    return v;
   };
+  const view = (key, host) => edit(key, { host });
 
   // Opening, copying and exporting stay registered; creating and importing follow the switch. The page waits before it
   // routes or draws.
   const on = Promise.resolve().then(() => chrome.storage.sync.get('writer')).then((r) => r?.writer?.sheets === true, () => false);
-  DK.wait(on.then((yes) => DK.register('sheet', { edit, thumb, file, exportFile, text, measure, copy, says: SAYS, get exportLabel() { return xlsx() ? 'Export .xlsx' : 'Export .csv'; },
+  DK.wait(on.then((yes) => DK.register('sheet', { edit, view, into, empty, thumb, file, exportFile, text, measure, copy, says: SAYS, get exportLabel() { return xlsx() ? 'Export .xlsx' : 'Export .csv'; },
     ...(yes && { importFile, create }) })));
   globalThis.GZ_SHEET_KIND = Object.freeze({ shower, fileOf });
 })();

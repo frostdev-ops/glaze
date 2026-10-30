@@ -259,7 +259,10 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     STDEV: 'number1, [number2], …', MEDIAN: 'number1, [number2], …', RANK: 'number, ref, [order]', LARGE: 'array, k', SMALL: 'array, k',
   };
 
-  // o: { key, wb, rec, sigs, fresh, t, locale, papers, show (wb → a cell's shown text), local, exportFile, exportLabel }.
+  // o: { key, wb, rec, sigs, fresh, t, locale, papers, show (wb → a cell's shown text), local, fileOf (wb, title → { name,
+  // mime, bytes }), download (that file), exportLabel, host }. host: an assignment's frame (writer-kinds.js view): { mount,
+  // title, tools }, the grid in mount under the assignment's title with the frame's tools (Submit…) before ⋯, no way back to
+  // Documents. → { pages, say, ready, save (→ whether all is saved), file (→ { bytes, mime, ext, name }) }.
   const mount = (o) => {
     const { key, t, papers } = o;
     const NF = GZ_SHEET_NUMFMT, CALC = GZ_SHEET_CALC, SD = GZ_SHEET_DATA, F = FX();
@@ -274,10 +277,11 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // ---- the chrome: Documents and the title; the toolbar; the formula bar; the grid; the sheet tabs; the status bar
     const state = h('span', { class: 'gp-state' });
     const titleText = rec?.title || '';
-    const titleIn = o.local ? h('input', { id: 'gx-title', class: 'gp-title-in', type: 'text', maxlength: '120', autocomplete: 'off', spellcheck: 'false', 'aria-label': t('Title') }) : null;
+    const host = o.host || null;
+    const titleIn = o.local && !host ? h('input', { id: 'gx-title', class: 'gp-title-in', type: 'text', maxlength: '120', autocomplete: 'off', spellcheck: 'false', 'aria-label': t('Title') }) : null;
     if (titleIn) { titleIn.value = titleText || t('Untitled document'); titleIn.size = Math.max(4, titleIn.value.length + 1); }
-    const back = h('a', { href: 'papers.html', text: t('Documents') });
-    const top = h('header', { class: 'gp-top' }, back, h('h1', {}, titleIn || (titleText || t('Untitled document'))), h('span', { class: 'grow' }), state);
+    const back = host ? null : h('a', { href: 'papers.html', text: t('Documents') });
+    const top = h('header', { class: 'gp-top' }, back, h('h1', {}, titleIn || (host?.title?.() || titleText || t('Untitled document'))), h('span', { class: 'grow' }), state);
     const tb = (id, label, name, more = {}) => btn({ id, class: 'gp-tbtn gx-tb', 'aria-label': label, title: label, ...more }, icon(name));
     const undoB = tb('gx-undo', t('Undo'), 'undo'), redoB = tb('gx-redo', t('Redo'), 'redo');
     const fmtB = btn({ id: 'gx-format', class: 'gp-tbtn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Number format') }, icon('num'), h('span', { class: 'gx-lbl', text: t('General') }), icon('caret'));
@@ -287,7 +291,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const versB = btn({ id: 'gx-versions', class: 'gp-tbtn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: t('Versions') }, icon('clock'), h('span', { class: 'gx-lbl', text: t('Versions') }));
     const moreB = tb('gx-more', t('More'), 'dots', { 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
     const sep = () => h('span', { class: 'gp-sepv' });
-    const tool = h('div', { class: 'gp-tool gx-tool', role: 'toolbar', 'aria-label': t('Spreadsheet') }, undoB, redoB, sep(), fmtB, sep(), azB, zaB, freezeB, sep(), findB, h('span', { class: 'grow' }), versB, moreB);
+    const tool = h('div', { class: 'gp-tool gx-tool', role: 'toolbar', 'aria-label': t('Spreadsheet') }, undoB, redoB, sep(), fmtB, sep(), azB, zaB, freezeB, sep(), findB, h('span', { class: 'grow' }), versB, ...(host?.tools || []), moreB);
     const nameIn = h('input', { id: 'gx-name', class: 'gx-name', type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': t('Name box') });
     const fx = h('input', { id: 'gx-formula', class: 'gx-fx', type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': t('Formula') });
     const fbar = h('div', { class: 'gx-bar' }, nameIn, fx);
@@ -316,7 +320,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const circ = h('span', { id: 'gx-circ', class: 'gx-circ' }), said = h('span', { class: 'gx-said', role: 'status' }), stats = h('span', { id: 'gx-sum', class: 'gx-sum' });
     const status = h('div', { id: 'gx-status', class: 'gp-status gx-status' }, circ, said, h('span', { class: 'grow' }), stats);
     const view = h('div', { class: 'gp gp-standalone gx' }, top, tool, fbar, findBar, h('div', { class: 'gx-wrap' }, gridEl, live), h('div', { class: 'gx-tabbar' }, addB, tabs), status);
-    document.body.append(view);
+    (host?.mount || document.body).append(view);
     // The one style read: the grid's font, for measuring text to fit a column.
     const css = getComputedStyle(gridEl), font = `${css.fontSize} ${css.fontFamily}`;
     let sayTimer = 0;
@@ -705,7 +709,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     addEventListener('pagehide', () => { if (busy()) flush(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden && busy()) flush(); });
     // Documents: what is unsaved goes first (a frame of a school's page replaces itself, as papers.js's links do).
-    back.addEventListener('click', (e) => {
+    back?.addEventListener('click', (e) => {
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       e.preventDefault();
       commit();
@@ -1135,7 +1139,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         { act: 'freeze-here', label: t('Freeze at {cell}', { cell: M.cellName(r, c) }), disabled: !r && !c, run: () => set({ rows: r, cols: c }) },
         { act: 'unfreeze', label: t('Unfreeze'), disabled: !fz?.rows && !fz?.cols, run: () => set(null) }];
     }, t('Freeze'));
-    toggle(moreB, () => [{ act: 'export', label: t(o.exportLabel()), run: () => { flush(); o.exportFile().catch((e) => { console.error(e); say(t('Not saved. Try again in a moment.')); }); } }], t('More'));
+    const fileNow = async () => o.fileOf(wb, rec?.title || host?.title?.() || '');
+    toggle(moreB, () => [{ act: 'export', label: t(o.exportLabel()), run: () => { flush(); fileNow().then(o.download, (e) => { console.error(e); say(t('Not saved. Try again in a moment.')); }); } }], t('More'));
     const when = new Intl.DateTimeFormat(o.locale || undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     versB.addEventListener('click', async () => {
       if (menu?.opener === versB) { closeMenu(true); return; }
@@ -1406,7 +1411,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // ---- first paint
     sizes(); layout(); tabsDraw(); told(); circular(); drawNow(true);
     gridEl.focus({ preventScroll: true });
-    globalThis.GZ_SHEET_VIEW = { flush, busy: () => busy() };
+    const save = async () => { if (!commit()) return false; await flush(); return !busy(); };
+    return { pages: () => wb.sheets.length, say, ready: () => true, save,
+      file: async () => { if (!await save()) throw new Error('not saved'); const f = await fileNow(); return { bytes: f.bytes, mime: f.mime, ext: f.name.slice(f.name.lastIndexOf('.')), name: f.name }; } };
   };
 
   return { Sizes, px, range, inside, select, end, bounds, count, name, edge, fill, parseDelimited, writeDelimited, sniff, sig, copy, parseHTML, fromR1C1, mount };
