@@ -456,11 +456,15 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       try { made = await env.snapshot(); } catch (e) { return skip(e); }
       if (!made) return skip();
       const backups = await sub(ctx, 'backups', 'Backups');
-      try { await ctx.D((c) => c.put({ meta: { name: made.name, mimeType: ZIP, parents: [backups], appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes })); }
+      const r = await ctx.D((c) => c.find(`'${backups}' in parents and appProperties has { key='glaze' and value='snapshot' } and trashed=false`, { fields: 'id,name,trashed,appProperties,version', pageSize: 100 }));
+      // Another device's of the same day (its name is the day's) is replaced, a new revision of the one file: five kept are five days.
+      const same = r.files.filter((f) => f.name === made.name).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+      let up;
+      try { up = await ctx.D((c) => c.put({ ...(same && { id: same.id }), meta: { ...(!same && { name: made.name, mimeType: ZIP, parents: [backups] }), appProperties: { glaze: 'snapshot' } }, mime: ZIP, bytes: made.bytes })); }
       catch (e) { if (e?.why === 'bad' || e?.why === 'size') return skip(e); throw e; }
       await ctx.state({ snap: now() });
-      const r = await ctx.D((c) => c.find(`'${backups}' in parents and appProperties has { key='glaze' and value='snapshot' } and trashed=false`, { fields: 'id,name,trashed,appProperties,version', pageSize: 100 }));
-      const old = r.files.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : a.id < b.id ? 1 : -1)).slice(SNAP.keep);
+      const all = same ? r.files : [...r.files, { id: up.id, name: made.name }];
+      const old = all.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : a.id < b.id ? 1 : -1)).slice(SNAP.keep);
       for (const f of old) await ctx.D((c) => c.patch(f.id, { trashed: true }));
     };
     const forget = async () => {
