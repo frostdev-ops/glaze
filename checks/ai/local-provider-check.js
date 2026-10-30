@@ -98,7 +98,7 @@ const records = () => ({
 (async () => {
   let context, profile, held = false, server, tls, ext;
   const log = [];
-  const lock = env.lockPath();
+  const lock = require('../../tools/dev/check-env.js').lockPath();
   try {
     while (!held) { try { fs.mkdirSync(lock); held = true; } catch (e) { if (e.code !== 'EEXIST') throw e; await pause(1000); } }
     fs.writeFileSync(path.join(lock, 'owner'), `${process.pid}\nlocal-provider-check\n`);
@@ -137,7 +137,7 @@ const records = () => ({
 
     profile = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-local-provider-profile-'));
     await require('../../tools/dev/wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(profile, { ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US',
+    context = await chromium.launchPersistentContext(profile, { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking',
         `--host-resolver-rules=${HOSTS.map((x) => `MAP ${x} 127.0.0.1:${port}`).join(',')}, MAP * ~NOTFOUND`, '--ignore-certificate-errors'] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
