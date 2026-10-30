@@ -218,6 +218,11 @@ const holds = (bytes, value) => {
     await until(() => fr.evaluate(() => document.documentElement.dataset.doc === 'slides' && document.querySelectorAll('.gk .gs-rail-b').length === 10 && !!document.querySelector('.gk #gs-canvas [role="group"]')), 'the slides viewer', 40000);
     rec = await record(); vs = await versions();
     check(rec.kind === 'slides' && rec.slides === 10 && sha(Buffer.from(rec.file, 'base64')) === sha(deckBytes) && vs.some((v) => v.reason === 'import'), `the record is the deck, its bytes as brought, the paper a version first (${JSON.stringify({ kind: rec.kind, slides: rec.slides })})`);
+    // Ctrl+F (⌘F) over the viewer is the viewer's own find, never the hidden paper's (writer-find.js).
+    await fr.evaluate(() => document.querySelector('.gk .gs-rail-b')?.focus());
+    await p.keyboard.press('ControlOrMeta+f');
+    const found = await fr.evaluate(() => ({ paper: document.querySelector('.ge-find')?.hidden !== false, own: document.activeElement?.id }));
+    check(found.paper && found.own === 'gs-find-q', `Ctrl+F over the slides finds in the deck, the paper's find closed (${JSON.stringify(found)})`);
     await shot(p, 'kinds-slides-1440.png');
     await tap(fr, '.gk .gp-submit');
     await until(() => sheetOf(fr), 'the deck\'s sheet');

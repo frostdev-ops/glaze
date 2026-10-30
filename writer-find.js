@@ -284,8 +284,9 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   addEventListener('resize', place);
 
   // ⌘F / Ctrl+F, ⌘⇧H / Ctrl+H (and Ctrl+Shift+H), ⌘G / ⇧⌘G, anywhere in the frame, ahead of the editor and the browser.
+  // Another kind's viewer in the paper's place (writer-kinds.js, data-doc) finds with its own.
   document.addEventListener('keydown', (e) => {
-    if (!view() || e.altKey || (mac ? !e.metaKey || e.ctrlKey : !e.ctrlKey || e.metaKey)) return;
+    if (!view() || document.documentElement.dataset.doc || e.altKey || (mac ? !e.metaKey || e.ctrlKey : !e.ctrlKey || e.metaKey)) return;
     const k = e.key.toLowerCase();
     if (k === 'f' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); open(false); }
     else if (k === 'h' && (e.shiftKey || !mac)) { e.preventDefault(); e.stopPropagation(); open(true); }
