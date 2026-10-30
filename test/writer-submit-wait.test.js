@@ -231,3 +231,68 @@ test('full: redraw transfers busy feedback and disconnected buttons are cleared 
   assert.equal(p.timers.size, 0);
   assert.equal(p.clicks.length, 0);
 });
+
+test('compact: a footer redrawn during a flush carries busy state until its single native press', async () => {
+  const { c, press } = await attempt(false);
+  c.emit({ type: 'view', full: false });
+  const old = c.doc.querySelector(SUBMIT), parent = old.parentElement;
+  press(SUBMIT);
+  const request = flushes(c.ports[0])[0].request;
+  const fresh = c.doc.createElement('button');
+  fresh.setAttribute('data-analytics-id', old.getAttribute('data-analytics-id'));
+  old.remove(); parent.append(fresh);
+  c.tick(100);
+  assert.equal(old.hasAttribute('aria-busy'), false);
+  assert.equal(fresh.getAttribute('aria-busy'), 'true');
+  c.emit({ type: 'compact:flushed', request, ...ok });
+  c.tick(100);
+  assert.equal(c.clicks.length, 1);
+  assert.equal(c.clicks[0], fresh);
+  assert.equal(fresh.hasAttribute('aria-busy'), false);
+  assert.equal(fresh.style.getPropertyValue('cursor'), '');
+});
+
+test('full: a save acknowledgement after the deadline cannot beat a throttled expiry poll', () => {
+  const p = page(), save = L.footer(p.box.editor).save;
+  p.fire(save, 'click');
+  const request = asks(p.sent)[0].request;
+  p.ctx.Date.now = () => p.now() + 51000;
+  p.hear({ type: 'submit:saved', request, ok: true });
+  assert.equal(p.clicks.length, 0);
+  assert.equal(save.hasAttribute('aria-busy'), false);
+});
+
+test('full: a held click handed off after Ultra disables Submit still opens the sheet once', async () => {
+  const { c, press } = await attempt(true);
+  let box;
+  c.ctx.GZ_WRITER_SUBMIT = { armed: (b) => { box = b; return false; } };
+  press(SUBMIT);
+  // Ultra disables its empty box's button before the submit module is armed. Native .click() now delivers no event.
+  const b = c.doc.querySelector(SUBMIT); b.disabled = true; b.click = () => {};
+  delete c.ctx.GZ_WRITER_SUBMIT;
+  c.ctx.GZ_WRITER_SUBMIT_LIB = L;
+  vm.runInContext(require('node:fs').readFileSync(require.resolve('../features/writer-submit.js'), 'utf8'), c.ctx);
+  c.ctx.GZ_WRITER_SUBMIT.hear(box, { type: 'submit:arm' }, c.ctx.GZ_CTX, () => true);
+  c.tick(100);
+  assert.equal(c.clicks.length, 0);
+  assert.equal(c.ports[0].sent.filter((m) => m.type === 'submit:open').length, 1);
+});
+
+test('compact: removal, navigation and a missing footer end their held poll without a native press', async () => {
+  for (const why of ['removed', 'navigated', 'footer gone']) {
+    const { c, press } = await attempt(false), button = c.doc.querySelector(SAVE);
+    // Delay readiness, so this tests the hold rather than the flush deadline.
+    press(SAVE);
+    if (why === 'removed') c.native().editor.remove();
+    if (why === 'navigated') c.location.pathname = '/ultra/courses/_101_1/outline';
+    if (why === 'footer gone') {
+      button.remove();
+      c.ctx.__now = () => 1e15;
+      vm.runInContext('Date.now = () => globalThis.__now()', c.ctx);
+    }
+    c.tick(100);
+    assert.equal(button.hasAttribute('aria-busy'), false, why);
+    assert.equal(c.clicks.length, 0, why);
+    assert.equal([...c.timers.values()].filter((t) => t.ms === 100).length, 0, why);
+  }
+});
