@@ -337,6 +337,15 @@ const seeded = (key, wb = M.workbook()) => {
     check(await cell(1, 5) === 'Bob', 'Replace all');
     await page.keyboard.press('Escape');
     await until(() => page.evaluate(() => document.getElementById('gx-find').hidden && document.activeElement?.id === 'gx-grid'), 'find closed');
+    // From the toolbar too, Ctrl+F and Ctrl+H are the grid's find and replace.
+    await page.focus('#gx-freeze');
+    await page.keyboard.press('Control+h');
+    await until(() => page.evaluate(() => !document.getElementById('gx-find').hidden && !!document.activeElement?.closest('#gx-find')), 'replace from the toolbar');
+    check(true, 'Ctrl+H from the toolbar opens the grid\'s find and replace');
+    await page.keyboard.press('Escape');
+    await until(() => page.evaluate(() => document.getElementById('gx-find').hidden && document.activeElement?.id === 'gx-grid'), 'find closed');
+    const dots = await page.evaluate(() => getComputedStyle(document.querySelector('#gx-more .gp-ico')).strokeWidth);
+    check(dots === '3.2px', `the ⋯ dots are drawn at the paper's ⋯ stroke (${dots})`);
     await go('J1');
     await page.keyboard.type('=SU');
     const offered = await until(() => page.evaluate(() => { const l = document.getElementById('gx-complete'); return !l.hidden && [...l.querySelectorAll('[role="option"]')].map((o) => o.textContent); }), 'autocomplete');
