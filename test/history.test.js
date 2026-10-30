@@ -77,6 +77,7 @@ const worker = ({ fetch, manifest = m } = {}) => {
         onMessage: { addListener: (f) => on.message.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
       storage: { local: area(local), sync: area(sync), onChanged: { addListener: (f) => on.changed.push(f) } },
+      scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {} },
     },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), context);
