@@ -91,8 +91,12 @@
   P.stats = () => new Promise((resolve) => { const id = ++ids; stats.set(id, resolve); post({ op: 'stats', id }); });
 
   // ---- asking ------------------------------------------------------------------------------------------------------
+  // A fresh editor state (the paper replaced whole: another tab's save adopted, a version restored over it) numbers its
+  // changes from 0 again, so a lint asked of the document before could map onto this one: those asks are dropped.
+  let epoch = 0;
   const ask = (p, text) => {
     const id = ++ids;
+    p.epoch = epoch;
     p.msg = { op: 'lint', id, key: p.key, text };
     pending.set(id, p);
     post(p.msg);
@@ -130,6 +134,7 @@
   // Every change: its ranges marked, a paragraph lint soon and a full one on a pause. Nothing else while typing.
   const onUpdate = (v, prev) => {
     if (v.state.doc === prev.doc) return;
+    if (!P.key.getState(v.state).ver) { epoch++; pending.clear(); }
     const maps = P.since(v.state, seen);
     seen = ver();
     if (!started || !proofOn()) return;
@@ -144,7 +149,7 @@
 
   // ---- landing: lints → issues, then the sure fixes ---------------------------------------------------------------
   const land = (p, lints) => {
-    const maps = P.since(view.state, p.ver);
+    const maps = p.epoch === epoch && P.since(view.state, p.ver);
     if (!maps) return;
     const doc = view.state.doc;
     // A spelling lint on a word that reads as a name (lib/writer-proof.js nameLike) is left out: the heading block's names
