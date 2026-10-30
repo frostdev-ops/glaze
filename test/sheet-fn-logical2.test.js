@@ -73,3 +73,13 @@ test('SWITCH: matching, laziness, errors and arrays as Excel has them', () => {
   ]);
   assert.equal(calc(e, 'SWITCH(2,1,"a",2,A1:A3)', 'Z2'), 1, 'intersects the row it is on');
 });
+
+test('SWITCH matches array values at each expression position', () => {
+  const e = book();
+  cases(e, [
+    ['SWITCH(0,A1,"blank","other")', 'blank'],
+    ['SWITCH(2,{1,2},"array","other")', 'other'],
+    ['INDEX(SWITCH({1,2},{1,2},"array","other"),1,2)', 'array'],
+    ['INDEX(SWITCH({1,2},{1,2},{10,20},1/0),1,2)', 20],
+  ]);
+});
