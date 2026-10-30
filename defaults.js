@@ -127,7 +127,7 @@ const GZ_SPEC = {
   // slides: Documents takes spreadsheets, PDFs, slide decks (sheet-kind.js, pdf-kind.js, slides-kind.js); submit.text: the
   // submit sheet's paste switch as left.
   writer: {
-    format: ['mla9', ['mla9', 'apa7', 'chicago17', 'plain']], zoom: ['fit', ['fit', 75, 100, 125, 150]], ruler: [true, 'bool'], lightPage: [false, 'bool'], full: [false, 'bool'], sheets: [false, 'bool'], pdf: [false, 'bool'], slides: [false, 'bool'], pasteAsk: [true, 'bool'],
+    format: ['mla9', ['mla9', 'apa7', 'chicago17', 'plain']], zoom: ['fit', ['fit', 75, 100, 125, 150]], ruler: [true, 'bool'], lightPage: [false, 'bool'], full: [false, 'bool'], sheets: [true, 'bool'], pdf: [true, 'bool'], slides: [true, 'bool'], pasteAsk: [true, 'bool'],
     versions: [40, [10, 25, 40, 50, 100]], proofing: [true, 'bool'], dialect: ['en-US', ['en-US', 'en-GB', 'en-CA', 'en-AU']],
     autocorrect: GZ_GROUP({ typos: [true, 'bool'], capitalI: [true, 'bool'], doubles: [true, 'bool'], smart: [true, 'bool'] }),
     compose: GZ_GROUP({ markdown: [true, 'bool'], target: [true, 'bool'], quote: [true, 'bool'] }),
