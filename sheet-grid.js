@@ -1443,13 +1443,16 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     // ---- the keyboard on the grid
     const pageRows = () => Math.max(1, Math.floor((vh - HH - FH) / 20) - 1), pageCols = () => Math.max(1, Math.floor((vw - HW - FW) / 64) - 1);
     const filled = (r, c) => !!cellAt(r, c) && cellAt(r, c).t !== 'z';
+    const MAC = /^mac/i.test(globalThis.navigator?.userAgentData?.platform || globalThis.navigator?.platform || '');
     let tabOut = false;
     gridEl.addEventListener('keydown', (e) => {
       if (e.target !== gridEl || editing) return;
       if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
       if (e.key === 'Tab' && tabOut) { tabOut = false; return; }
       tabOut = e.key === 'Escape';
-      const mod = e.ctrlKey || e.metaKey, k = e.key;
+      // A character typed with AltGr (Ctrl+Alt to the page) or the Mac's Option is a character, not a shortcut.
+      const altGr = e.getModifierState?.('AltGraph') === true, option = MAC && e.altKey && !e.ctrlKey && !e.metaKey;
+      const mod = (e.ctrlKey || e.metaKey) && !altGr, k = e.key;
       const lim = { rows: ext.rows, cols: ext.cols };
       const arrow = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[k];
       if (arrow && !e.altKey) {
@@ -1489,7 +1492,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
         case mod && k === '-' && (whole('row') || whole('col')): e.preventDefault(); shape('delete', whole('col') ? 'col' : 'row'); return;
         default:
       }
-      if (k.length === 1 && !mod && !e.altKey) { e.preventDefault(); startEdit(k, 'enter'); return; }
+      if (k.length === 1 && !mod && (!e.altKey || altGr || option)) { e.preventDefault(); startEdit(k, 'enter'); return; }
       if (k === 'Process' || k === 'Dead') startEdit('', 'enter');
     });
     gridEl.addEventListener('focus', () => draw());

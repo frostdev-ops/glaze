@@ -338,3 +338,17 @@ test('sorting from a cell or a whole column keeps rows whole and the header row 
   f.fire(f.el('gx-sort-az'), 'click');
   assert.equal([0, 1, 2].map((r) => f.wb.sheets[0].rows.get(r).get(0).v).join(), 'Ab,Bo,Cy');
 });
+
+test('a cell starts with a character typed with AltGr or the Mac\'s Option; Windows\' Alt+letter stays the browser\'s', () => {
+  const altGr = (m) => m === 'AltGraph';
+  const pc = frame({ ctx: { navigator: { platform: 'Win32' } } });
+  pc.key('€', { ctrlKey: true, altKey: true, getModifierState: altGr });
+  assert.equal(pc.el('gx-edit').hidden, false);
+  assert.equal(pc.el('gx-edit').value, '€');
+  pc.key('Escape');
+  assert.ok(!pc.key('d', { altKey: true }).defaultPrevented, 'Alt+D: the address bar');
+  assert.equal(pc.el('gx-edit').hidden, true);
+  const mac = frame({ ctx: { navigator: { platform: 'MacIntel' } } });
+  mac.key('@', { altKey: true });
+  assert.equal(mac.el('gx-edit').value, '@', 'Option+L on a German Mac');
+});
