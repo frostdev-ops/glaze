@@ -1,6 +1,6 @@
 # Privacy summary
 
-_Last updated: 2026-10-27_
+_Last updated: 2026-10-29_
 
 A plain-language summary. The full policy is [PRIVACY.md](../PRIVACY.md).
 
@@ -8,7 +8,7 @@ Optional [encrypted sharing](../PRIVACY.md#optional-encrypted-share-sessions) en
 
 User-installed [mods](../PRIVACY.md#user-installed-mods) can read course data only with declared and granted permissions. Removing a mod also removes the data it stored, unless you untick **Remove its stored data too**. On Chrome, code with access to personal data runs in a Worker; a mod granted both data and network access can send that data to its approved hosts. Firefox and Safari use declarative parts only.
 The `nav.read` permission is personal-data access too: it reads the bar's items, course names, unread counts and navigation events, without link addresses, and disables the mod's frame UI. `nav.items` lets a mod manage up to eight items of its own with school-origin links or click actions; `nav.layout` proposes a layout while it runs. Use my own keeps that mod's layouts off locally. An enabled replacement can use `glaze.nav.go` to open an existing bar item only within a second of a click in its navigation controls.
-`documents` lets a mod's Worker on the Documents page read your documents' titles, courses and word counts and add items of its own there; `documents.read` adds their text and exported files. Both are personal data, Worker only.
+`documents` lets a mod's Worker on the Documents page, in its own tab, read your documents' titles, courses and word counts and add items of its own there; `documents.read` adds their text and exported files. Both are personal data, Worker only, and only once you grant them. A mod sees random handles of its own for your documents, never their storage keys.
 
 On Chrome, the optional [signed mod blocklist](../PRIVACY.md#signed-mod-blocklist) makes a credential-free request at most daily when Glaze and the setting are on and a code mod is installed. Failed checks retry after an hour. Declarative-only mods, Firefox and Safari do not make this request.
 
@@ -19,12 +19,15 @@ while stickers and other local data stay.
 
 Backups (**Back up…**, and older settings files and notes ZIPs) include share keys and creator delete tokens for all sessions, even paused ones. Keep these backups private: the keys grant access to shared content. Single-note exports do not contain session keys. See [sharing and backups](../PRIVACY.md#optional-encrypted-share-sessions).
 
-[Glaze Writer](../PRIVACY.md#what-glaze-stores) (Blackboard Ultra) keeps your papers, their versions and your format
-presets, your personal dictionary and the sources you save on this device; **Back up…** includes them. Discussion,
+[Glaze Writer](../PRIVACY.md#what-glaze-stores) (Blackboard Ultra) keeps your papers and the documents on its Documents
+page, their versions and your format presets, your personal dictionary and the sources you save in `chrome.storage.local`
+on this device, with no server; **Back up…** includes them. Documents' Trash keeps a deleted paper or document for 30
+days, then deletes it. The Documents page loads a web font your Look uses from Google Fonts or jsDelivr, as Settings does. Discussion,
 message and test boxes keep their drafts through Back up what you type when it is on, as Blackboard's own editor does. Spelling and
 grammar are checked on your device. Writer reads the prompt, thread and rubric from your own Blackboard site, read-only,
 and sends nothing to Blackboard itself: your words reach it only when you press Blackboard's own Post, Reply, Send or
-Submit (the submit sheet attaches your paper's .docx through Blackboard's upload and clicks its Submit). A citation
+Submit (an assignment's compact box puts its text in Blackboard's text box; with Full writer the submit sheet attaches
+your paper's .docx through Blackboard's upload and clicks its Submit). A citation
 lookup goes out only when you click Look up: a DOI to `doi.org` (or Crossref and DataCite), an ISBN to
 `openlibrary.org`, a web address to that page's own host once you allow it. AI runs only for what you turn on in
 Settings → AI, to the model you chose for it: Tab completion sends the text around the caret, the course, prompt

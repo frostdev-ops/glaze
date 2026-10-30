@@ -3,8 +3,10 @@
 // open editor), Make a copy, Delete to Trash and Undo (versions kept), the Trash (its view, Restore, Delete forever, opening
 // one, the 30-day purge, and nothing trashed in search, courses or a mod's list), .docx drop and import and a refused .txt, the keyboard,
 // accessible names and the live region, opening a card in the same tab and coming back; the student's Look on the page
-// (ground, background and its motion, glass, fonts, corners, contrast over a busy photo, a live change) and a mod's items
-// and calls there. Screenshots at 1280 and 640 px in English and German, and look-*.png on four Looks. Synthetic records
+// (ground, background and its motion, glass, fonts, corners, contrast over a busy photo, a live change), a mod's items
+// and calls there, and the page in motion (papers-motion.js: a document opening out of its card or New tile and folding
+// back with the list as it was, glides, menus, the toast; Expressive, Subtle, Off and reduced motion). Screenshots at 1280
+// and 640 px in English and German, look-*.png on four Looks, and motion-*.png frames of the motion. Synthetic records
 // only; the browser reaches no network (a Look's fonts are refused and counted apart, the photo is served here).
 // NODE_PATH=<playwright> nice -n 10 node scripts/documents-check.js [evidence directory]
 // DOCUMENTS_SHOTS: where the screenshots go (default ~/Projects/glaze-plans/writer/mockups/build-documents).
@@ -184,7 +186,7 @@ const PROBE = ({ lang }) => {
     check(await home.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"] img`)?.getAttribute('src').startsWith('data:image/png;base64,'), NOTES), 'a thumbnail keeps the inline data-URL picture');
     list = await cards(home);
     const essay = list.find((c) => c.key === ESSAY), lab = list.find((c) => c.key === LAB);
-    check(essay.title === 'Essay 2: Memory in Beloved' && /^ENGL 2110 · MLA 9 · \d+ words · /.test(essay.meta), `an assignment paper's card: its title, course, format, words and date (${essay.meta})`);
+    check(essay.title === 'Essay 2: Memory in Beloved' && /^ENGL 2110\s·\sMLA\s9\s·\s\d+\swords\s·\s/.test(essay.meta), `an assignment paper's card: its title, course, format, words and date (${essay.meta})`);
     check(lab.badge === 'Submitted' && list.filter((c) => c.badge).length === 1, 'the submitted paper carries the Submitted badge, and only it');
     check(list.find((c) => c.key === FIELD).title === 'Field notes from Tuesday' && list.find((c) => c.key === NOTES).title === 'Reading notes', 'local documents show their named and derived titles');
     check(list.map((c) => c.key).join() === seeds.slice().sort((a, b) => b.updated - a.updated).map((s) => s.key).join(), 'Last edited orders the grid newest first');
@@ -455,9 +457,9 @@ const PROBE = ({ lang }) => {
     await home.setViewportSize({ width: 640, height: 900 });
     await shot(home, 'trash-640.png');
     await home.setViewportSize({ width: 1280, height: 900 });
-    await home.click(`${card(FIELD)} .gd-more`);
+    await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Shift+F10');
     const binMenu = await home.evaluate(() => [...document.querySelectorAll('.gd-menu [role="menuitem"], .gd-menu [role="separator"]')].map((b) => b.textContent || '—'));
-    check(binMenu.join('|') === 'Restore|Delete forever', `a card in Trash offers Restore and Delete forever only (${binMenu.join('|')})`);
+    check(binMenu.join('|') === 'Restore|Delete forever', `Shift+F10 in Trash offers Restore and Delete forever only (${binMenu.join('|')})`);
     await home.keyboard.press('Escape');
     await home.focus(`${card(FIELD)} .gd-title`); await home.keyboard.press('Delete'); await home.keyboard.press('F2'); await pause(200);
     check((await binned()).includes(FIELD) && !(await home.evaluate(() => document.querySelector('.gd-rename, .gd-toast'))) && !!(await local(`writerPaper:${FIELD}`)), 'in Trash the Delete key and F2 do nothing');
@@ -482,6 +484,7 @@ const PROBE = ({ lang }) => {
     await home.click(`${card(D5)} .gd-more`); await home.click('.gd-menu [data-act="forever"]');
     check(!(await binned()).includes(D5), 'Delete forever takes the card away at once');
     await until(async () => !(await local(`writerPaper:${D5}`)) && !(await local(`writerVersions:${D5}`)) && !(await local('writerPapers')).some((r) => r.key === D5), 'gone for good');
+    check(await home.evaluate(() => document.activeElement?.id === 'gd-q'), 'Delete forever of the last card focuses search');
     check(!(await home.evaluate(() => !!document.querySelector('.gd-toast'))), 'Delete forever removes the paper, its versions and its row, with no Undo');
     const empty = await home.evaluate(() => ({ cards: document.getElementById('gd-docs').children.length, said: document.getElementById('gd-said').textContent, shown: !document.getElementById('gd-trash').closest('.gd-bin').hidden }));
     check(await binOn() && empty.cards === 0 && empty.said === '' && empty.shown && await said(home) === '0 documents', `an empty Trash shows nothing but its pressed control (${JSON.stringify(empty)})`);
@@ -877,6 +880,13 @@ const PROBE = ({ lang }) => {
     await until(() => purged.evaluate((k) => [...document.querySelectorAll('.gd-card')].map((c) => c.dataset.key).join() === k, KEPT), 'Trash after purge');
     check(true, 'the Trash holds the 29-day document only');
     await purged.close();
+    const apiOpen = await openHome('en', 'api-trash-open');
+    await apiOpen.evaluate((k) => { GZ_DOCUMENTS.open(k); }, KEPT);
+    await until(() => apiOpen.evaluate(() => !!GZ_WRITER_PAPER?.current()?.key()), 'documents.open from Trash');
+    check(await apiOpen.evaluate((k) => GZ_WRITER_PAPER.current().key() === k, KEPT) && !('trashed' in (await local(`writerPaper:${KEPT}`))), 'documents.open restores a trashed key before opening it');
+    // Keep a trashed record for the mod list's exclusion check below.
+    await apiOpen.evaluate((k) => GZ_WRITER_PAPERS.open().trash(k), KEPT);
+    await apiOpen.close();
 
     // ---- a mod on the Documents page: its items, its calls and their limits (lib/modbroker.js, features/mods.js)
     const MOD = 'docsmodaaaaaaaaa';
@@ -935,6 +945,16 @@ const PROBE = ({ lang }) => {
     await mp.keyboard.press('ControlOrMeta+z');
     await until(async () => { const c = (await modData())?.change; return c?.n > changeMid && c.titles.includes('Essay 3: The Clearing'); }, 'mod told of the undo');
     check(!('trashed' in (await local(`writerPaper:${ESSAY3}`))), 'mod: documents.change fires as a document goes to Trash and comes back, documents.list() following');
+    const changeBeforeSeed = (await modData()).change.n;
+    await mp.evaluate(async (k) => {
+      const P = GZ_WRITER_PAPERS.open(), old = Date.now() - 31 * 864e5;
+      await P.save(k, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph' }] }, format: 'plain', trashed: old });
+    }, OLD);
+    await until(async () => (await modData())?.change?.n > changeBeforeSeed, 'mod told of the seeded Trash record');
+    const changeBeforePurge = (await modData()).change.n;
+    await mp.evaluate(() => GZ_WRITER_PAPERS.open().purge());
+    await until(async () => (await modData())?.change?.n > changeBeforePurge && !(await local(`writerPaper:${OLD}`)), 'mod told of the purge');
+    check(true, 'mod: documents.change fires on purge');
     check(md.early.ok === false && md.early.error === 'permission', `mod: documents.open without a click on its own item is refused (${md.early.error})`);
     await mp.evaluate(() => document.querySelector('.gd-extra button').click());
     await until(async () => (await modData())?.open, 'synthetic mod item click');
@@ -966,6 +986,358 @@ const PROBE = ({ lang }) => {
     check(await off.evaluate(() => !document.querySelector('.gd-extra button')) && !(await modData())?.ready, 'mod: without the documents grant it does not run on the Documents page');
     await off.close();
     await worker.evaluate(async (id) => chrome.storage.local.remove(['mods', `mod:${id}`, `modData:${id}`, `modPrivate:${id}`]), MOD);
+
+    {
+      // ---- motion (papers-motion.js): a document opens out of its card with the genie (Expressive) or a scale (Subtle), across
+      // the two page loads, and closing folds it back into the card with the list as it was; cards glide on sort, a deleted one
+      // fades where it was while the rest close up, Undo brings it back in, dropped files' cards come in; the ⋯ menu genies
+      // from its button and back, the toast and the status line come and go, the drop target fades; Off and reduced motion
+      // change at once. Every animation the page starts is recorded as started (RECORD), and the view transition itself.
+      // Frames for the owner: motion-*.png in the shots folder, the motion slowed five times.
+      const RECORD = () => {
+        if (location.pathname !== '/papers.html') return;
+        const log = globalThis.__mo = { vt: null, t0: 0, finished: 0, all: [] };
+        chrome.storage.onChanged.addListener((c, area) => { if (area === 'sync' && 'popup' in c) log.popup = c.popup.newValue?.anim || 'genie'; });
+        // The frames the page draws while its transition runs: how smooth the genie is beside the page's own first work.
+        addEventListener('pagereveal', (e) => {
+          log.vt = !!e.viewTransition; log.t0 = performance.now(); log.frames = [];
+          e.viewTransition?.finished.then(() => { log.finished = performance.now(); }, () => { log.finished = -1; });
+          const tick = (t) => { log.frames.push(t); if (!log.finished && t - log.t0 < 8000) requestAnimationFrame(tick); };
+          if (e.viewTransition) requestAnimationFrame(tick);
+        });
+        const slow = Number(sessionStorage.getItem('gz-check-slow')) || 1, animate = Element.prototype.animate;
+        Element.prototype.animate = function (frames, o = {}) {
+          const a = animate.call(this, frames, o), list = Array.isArray(frames) ? frames : [];
+          log.all.push({ at: performance.now(), cls: typeof this.className === 'string' ? this.className : '', key: this.dataset?.key || '', ghost: !!this.hasAttribute?.('data-gz-ghost'), parent: this.parentElement?.className || '',
+            pseudo: o.pseudoElement || '', route: document.documentElement.getAttribute('data-gd-route') || '', n: list.length, first: list[0] || null, last: list.at(-1) || null, duration: o.duration, easing: o.easing || '' });
+          if (slow !== 1) a.playbackRate = 1 / slow;
+          return a;
+        };
+      };
+      const MOVE = (level) => G.GZ_SANITIZE({ ...settings, motion: { ...G.GZ_DEFAULTS.motion, level }, popup: { anim: 'genie' } });
+      const W = 1280, H = 900;
+      // A genie keyframe's near edge: its clip's first two points, as px of the box it clips (w); and its translate.
+      const funnel = (f, w) => { const m = /polygon\(([-\d.]+)% ([-\d.]+)%, ([-\d.]+)% ([-\d.]+)%/.exec(f?.clipPath || ''); return m ? (m[3] - m[1]) / 100 * w : NaN; };
+      const moved = (f) => { const m = /translate\(([-\d.]+)px, ([-\d.]+)px\)/.exec(f?.transform || ''); return m ? [+m[1], +m[2]] : [NaN, NaN]; };
+      const since = async (pg, t, test = () => true) => (await pg.evaluate((t) => globalThis.__mo.all.filter((x) => x.at >= t), t)).filter(test);
+      const clock = (pg) => pg.evaluate(() => performance.now());
+      const landed = (pg, what) => until(() => pg.evaluate((what) => (globalThis.__mo?.vt === false || globalThis.__mo?.finished !== 0)
+        && (what === 'paper' ? !!globalThis.GZ_WRITER_PAPER?.current()?.key() : !location.search && !document.getElementById('list').hidden && document.querySelectorAll('#gd-docs > .gd-card').length > 0), what), `motion: ${what} drawn`);
+      const boxIn = (pg, key) => pg.evaluate((k) => { const r = document.querySelector(`#gd-docs > .gd-card[data-key="${k}"]`)?.getBoundingClientRect(); return r && { left: r.left, top: r.top, width: r.width, height: r.height, bottom: r.bottom }; }, key);
+      // The first card wholly in the window, below the toolbar.
+      const visibleCard = (pg) => pg.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].find((c) => { const r = c.getBoundingClientRect(); return r.top > 60 && r.bottom < innerHeight - 10; })?.dataset.key);
+      // Nothing moving on the page: each case starts from rest.
+      const settled = (pg) => until(() => pg.evaluate(() => !document.getAnimations().some((a) => a.playState === 'running')), 'motion: at rest', 5000);
+      const openWithEnter = async (pg, key) => { await pg.mouse.move(2, H - 2); await pg.focus(`${card(key)} .gd-title`); await pg.keyboard.press('Enter'); await landed(pg, 'paper'); };
+      // The frames drawn while a picture's animation ran: how many, and the longest gap between two.
+      const jank = (l, x) => { const f = (l.frames || []).filter((t) => t >= x.at && t <= x.at + x.duration * 1.2); let gap = 0; for (let i = 1; i < f.length; i++) gap = Math.max(gap, f[i] - f[i - 1]); return `${f.length} frames, longest gap ${Math.round(gap)} ms`; };
+      // What the view transition played, for a failure's message.
+      const pictures = (l) => `transition ${l.vt}, ${l.all.filter((x) => x.pseudo).map((x) => `${x.pseudo.slice(18, 21)}/${x.route}/${x.n}/${x.duration}`).join(' ') || 'no pictures animated'}`;
+      const genieOpen = (x) => x.pseudo === '::view-transition-new(root)' && x.route === 'open' && x.n >= 24;
+      const genieBack = (x) => x.pseudo === '::view-transition-old(root)' && x.route === 'back' && x.n >= 24;
+
+      await wearLook(MOVE('expressive'));
+      const mo = await context.newPage();
+      watch(mo, 'motion');
+      await mo.emulateMedia({ reducedMotion: 'no-preference' });
+      await mo.addInitScript(RECORD);
+      await mo.goto(HOME);
+      await landed(mo, 'home');
+      await until(() => mo.evaluate(() => document.documentElement.getAttribute('data-gz-motion') === 'expressive' && !document.documentElement.hasAttribute('data-gz-no-trans')), 'motion: Expressive worn');
+
+      // The full list is scanned once on each side of a filter; only nearby cards get FLIP animations, never per-frame reads.
+      const budget = await mo.evaluate(() => {
+        const docs = document.getElementById('gd-docs'), q = document.getElementById('gd-q');
+        const original = Element.prototype.getBoundingClientRect;
+        let reads = 0;
+        Element.prototype.getBoundingClientRect = function () { if (this.parentElement === docs) reads++; return original.call(this); };
+        const n = docs.children.length, start = performance.now();
+        try { q.value = 'notes'; q.dispatchEvent(new Event('input')); }
+        finally { Element.prototype.getBoundingClientRect = original; }
+        return { n, hits: docs.children.length, ms: performance.now() - start, reads };
+      });
+      console.log(`motion filter: ${budget.n} cards to ${budget.hits}; ${budget.ms.toFixed(1)} ms; ${budget.reads} card box reads`);
+      check(budget.n >= 180 && budget.hits > 0 && budget.hits < budget.n && budget.ms < 150 && budget.reads <= budget.n + budget.hits + 100,
+        `motion: filtering hundreds of cards stays bounded (${JSON.stringify(budget)})`);
+      await mo.fill('#gd-q', '');
+      await settled(mo);
+
+      // Opening on Expressive, from a list sorted by title, filtered to the documents without a course, scrolled down.
+      await mo.selectOption('#gd-sort', 'title');
+      await mo.selectOption('#gd-course', 'none');
+      await mo.evaluate(() => scrollTo(0, 1500));
+      const leftAt = await mo.evaluate(() => ({ y: scrollY, n: document.querySelectorAll('#gd-docs > .gd-card').length }));
+      const openKey = await visibleCard(mo), openBox = await boxIn(mo, openKey);
+      await openWithEnter(mo, openKey);
+      let log = await mo.evaluate(() => globalThis.__mo);
+      let pic = log.all.find(genieOpen);
+      const held = pic && Math.round(pic.at - log.t0);
+      check(log.vt && pic && pic.duration === 420 && pic.easing === 'linear' && Math.abs(funnel(pic.first, W) - openBox.width) < 1
+        && Math.abs(moved(pic.first)[1] - (openBox.top + openBox.height / 2 <= H / 2 ? openBox.top : openBox.bottom - H)) < 0.5 && pic.first.opacity === 0 && pic.last.transform === 'none'
+        && await mo.evaluate((k) => GZ_WRITER_PAPER.current().key() === k, openKey),
+      `motion: on Expressive a card opens its document with the genie out of the card's box, across the page load (near edge ${funnel(pic?.first, W).toFixed(1)} px for a ${openBox.width.toFixed(1)} px card; the old page held ${held} ms while the editor drew)`);
+      check(log.all.some((x) => x.route === 'hold' && x.pseudo === '::view-transition-new(root)') && log.finished - pic.at >= 400, `motion: the transition holds until the editor has drawn and lasts the whole genie (${jank(log, pic)})`);
+
+      // Back through the editor's Documents link: the editor folds into the same card, the list where it was.
+      await mo.mouse.move(2, H - 2);
+      await mo.click('.gp-top a');
+      await landed(mo, 'home');
+      log = await mo.evaluate(() => globalThis.__mo);
+      pic = log.all.find(genieBack);
+      const backBox = await boxIn(mo, openKey), backAt = await mo.evaluate(() => ({ y: scrollY, n: document.querySelectorAll('#gd-docs > .gd-card').length, sort: document.getElementById('gd-sort').value, course: document.getElementById('gd-course').value }));
+      check(log.vt && pic && pic.duration === 340 && Math.abs(funnel(pic.last, W) - backBox.width) < 1 && pic.last.opacity === 0,
+        `motion: closing, the editor folds back into its card with the genie (near edge ${funnel(pic?.last, W).toFixed(1)} px for ${backBox?.width.toFixed(1)} px; ${pic ? `${Math.round(log.finished - pic.at)} ms, ${jank(log, pic)}` : pictures(log)})`);
+      check(backAt.sort === 'title' && backAt.course === 'none' && Math.abs(backAt.y - leftAt.y) < 2 && backAt.n === leftAt.n && Math.abs(backBox.top - openBox.top) < 2 && Math.abs(backBox.left - openBox.left) < 1,
+        `motion: back on the list, its order, filter and scroll are as left (${JSON.stringify(backAt)} vs ${JSON.stringify(leftAt)})`);
+
+      // Browser Back, with a search: the same fold, the search kept.
+      await mo.selectOption('#gd-course', 'all');
+      await mo.selectOption('#gd-sort', 'updated');
+      await mo.evaluate(() => scrollTo(0, 0));
+      await mo.fill('#gd-q', 'reading');
+      await until(async () => (await mo.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].map((c) => c.dataset.key))).includes(NOTES), 'motion: search');
+      const found = await mo.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].map((c) => c.dataset.key).join());
+      await openWithEnter(mo, NOTES);
+      await mo.goBack();
+      await landed(mo, 'home');
+      await until(async () => (await mo.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].map((c) => c.dataset.key).join())) === found, 'motion: the search again', 5000).catch(() => {});
+      log = await mo.evaluate(() => globalThis.__mo);
+      check(log.all.some(genieBack) && await mo.evaluate(() => document.getElementById('gd-q').value) === 'reading'
+        && (await mo.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].map((c) => c.dataset.key).join())) === found,
+      'motion: the browser\'s Back folds the document into its card too, the search and its results kept');
+      await mo.fill('#gd-q', '');
+      await until(async () => (await mo.evaluate(() => document.querySelectorAll('#gd-docs > .gd-card').length)) > 20, 'motion: search cleared');
+
+      // Creating: a New tile genies into the new document out of the tile's page; written in and closed, the document folds
+      // into its new card, which settles in.
+      await mo.mouse.move(2, H - 2);
+      await settled(mo);
+      const tileBox = await mo.evaluate(() => { const r = document.querySelector('.gd-tile[data-format="plain"] .gd-tile-pic').getBoundingClientRect(); return { width: r.width }; });
+      await mo.focus('.gd-tile[data-format="plain"]');
+      await mo.keyboard.press('Enter');
+      await landed(mo, 'paper');
+      log = await mo.evaluate(() => globalThis.__mo);
+      pic = log.all.find(genieOpen);
+      check(log.vt && pic && Math.abs(funnel(pic.first, W) - tileBox.width) < 1, `motion: a New tile genies into the new document out of its page (near edge ${funnel(pic?.first, W).toFixed(1)} px for ${tileBox.width.toFixed(1)} px)`);
+      const made = await mo.evaluate(() => GZ_WRITER_PAPER.current().key());
+      await mo.locator('.ProseMirror').click();
+      await mo.keyboard.type('Motion, written in a new document.');
+      await until(() => mo.evaluate(() => document.querySelector('.gp-state')?.textContent === 'Saved'), 'motion: new document saved');
+      await mo.mouse.move(2, H - 2);
+      await mo.click('.gp-top a');
+      await landed(mo, 'home');
+      log = await mo.evaluate(() => globalThis.__mo);
+      pic = log.all.find(genieBack);
+      const madeBox = await boxIn(mo, made), settles = log.all.find((x) => x.key === made && x.first?.opacity === 0);
+      check(madeBox && pic && Math.abs(funnel(pic.last, W) - madeBox.width) < 1 && settles,
+        `motion: closed, the new document folds into its new card and the card settles in (${JSON.stringify({ edge: funnel(pic?.last, W), card: madeBox?.width, settles: !!settles })})`);
+
+      // In the list on Expressive: the ⋯ menu genies from its button and back into it.
+      await mo.mouse.move(2, H - 2);
+      await settled(mo);
+      const menuKey = await visibleCard(mo);
+      let t = await clock(mo);
+      await mo.focus(`${card(menuKey)} .gd-title`);
+      await mo.keyboard.press('Shift+F10');
+      // The menu's box and its button's, and which edge of the menu is near the button (lib/popup.js genie's rule).
+      const geo = await mo.evaluate((k) => {
+        const m = document.querySelector('.gd-menu'), b = document.querySelector(`.gd-card[data-key="${k}"] .gd-more`).getBoundingClientRect();
+        const mt = parseFloat(m.style.top), mh = m.offsetHeight, top = b.top + b.height / 2 <= mt + mh / 2;
+        return { mw: m.getBoundingClientRect().width, bw: b.width, dy: top ? b.top - mt : b.bottom - (mt + mh) };
+      }, menuKey);
+      let menuIn = (await since(mo, t, (x) => /gd-menu/.test(x.cls)))[0];
+      check(menuIn && menuIn.n >= 24 && menuIn.duration === 420 && Math.abs(funnel(menuIn.first, geo.mw) - geo.bw) < 1 && Math.abs(moved(menuIn.first)[1] - geo.dy) < 0.5,
+        `motion: the ⋯ menu genies out of its button (near edge ${funnel(menuIn?.first, geo.mw).toFixed(1)} px for a ${geo.bw.toFixed(1)} px button, from ${moved(menuIn?.first)[1]} px for ${geo.dy.toFixed(1)}; ${menuIn?.n} frames, ${menuIn?.duration} ms)`);
+      const unseen = (await since(mo, t, (x) => /gd-menu/.test(x.cls) && !x.ghost))[0];
+      check(menuIn?.ghost === true && unseen?.n === 2 && unseen.first.opacity === 0 && unseen.last.opacity === 0, 'motion: the genie plays on a copy over the menu, which waits unseen in its place');
+      await settled(mo);
+      t = await clock(mo);
+      await mo.keyboard.press('Escape');
+      const menuOut = (await since(mo, t, (x) => /gd-menu/.test(x.cls)))[0];
+      const lingers = await mo.evaluate(() => !!document.querySelector('.gd-menu')?.inert);
+      await until(() => mo.evaluate(() => !document.querySelector('.gd-menu')), 'motion: menu gone');
+      check(menuOut && menuOut.n >= 24 && menuOut.duration === 340 && menuOut.last.opacity === 0 && lingers, 'motion: Escape folds it back into the button (inert while it goes), then it is gone');
+      // Its items take clicks where they will be from the first frame: Rename clicked while the menu still genies open.
+      await settled(mo);
+      const localKey = await mo.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].find((c) => { const r = c.getBoundingClientRect(); return c.dataset.key.startsWith('doc:') && r.top > 60 && r.bottom < innerHeight - 10; })?.dataset.key);
+      await mo.click(`${card(localKey)} .gd-more`);
+      const item = await mo.evaluate(() => { const b = document.querySelector('.gd-menu [data-act="rename"]').getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, opening: document.querySelectorAll('.gd-menu').length === 2 }; });
+      await mo.mouse.click(item.x, item.y);
+      check(item.opening && await mo.evaluate(() => !!document.querySelector('.gd-rename')), 'motion: while the menu genies open, its items take clicks where they will be (Rename, mid-genie)');
+      await mo.keyboard.press('Escape');
+      await until(() => mo.evaluate(() => !document.querySelector('.gd-menu') && !document.querySelector('.gd-rename')), 'motion: the menu turned back and went');
+      await mo.mouse.move(2, H - 2);
+
+      // Sort: the cards glide to their new places.
+      await settled(mo);
+      t = await clock(mo);
+      await mo.selectOption('#gd-sort', 'title');
+      let glides = await since(mo, t, (x) => x.cls.includes('gd-card') && !x.ghost && x.first?.translate);
+      check(glides.length >= 3 && glides.every((x) => x.last.translate === '0px 0px'), `motion: a new order glides the cards on screen to their places (${glides.length} cards)`);
+      await mo.selectOption('#gd-sort', 'updated');
+      await mo.evaluate(() => scrollTo(0, 0));
+      await pause(600);
+
+      // Delete: the card fades where it was while the rest close up; the toast comes in; Undo takes it out and brings the card back in.
+      await settled(mo);
+      const delKey = await visibleCard(mo);
+      t = await clock(mo);
+      await mo.focus(`${card(delKey)} .gd-title`);
+      await mo.keyboard.press('Delete');
+      await until(() => mo.evaluate(() => !!document.querySelector('.gd-toast')), 'motion: toast');
+      let all = await since(mo, t);
+      const ghost = all.find((x) => x.ghost), closing = all.filter((x) => x.cls.includes('gd-card') && !x.ghost && x.first?.translate), toastIn = all.find((x) => /gd-toast/.test(x.cls));
+      check(ghost && ghost.last.opacity === 0 && ghost.parent === 'gd-ghosts' && closing.length >= 1 && await mo.evaluate(() => !document.querySelector('#gd-docs > [data-gz-ghost]')),
+        `motion: delete fades the card where it was (on its own layer) while ${closing.length} close up`);
+      check(toastIn && toastIn.first.opacity === 0 && toastIn.first.translate === '0 8px', 'motion: the Undo toast rises in');
+      t = await clock(mo);
+      await mo.click('.gd-toast button');
+      await until(async () => (await since(mo, t, (x) => x.key === delKey)).length > 0, 'motion: restored card animates');
+      all = await since(mo, t);
+      const toastOut = all.find((x) => /gd-toast/.test(x.cls)), back = all.find((x) => x.key === delKey);
+      check(toastOut && toastOut.last.opacity === 0 && back && back.first.opacity === 0 && back.last.opacity === 1, 'motion: Undo fades the toast out and settles the card back in');
+
+      // Files over the page: the drop target fades in and out; a refused file's words pop; a dropped .docx's card comes in.
+      await drop(mo, [{ name: 'notes.txt', type: 'text/plain', bytes: [104, 105] }], 'over');
+      await pause(400);
+      const over = await mo.evaluate(() => { const s = getComputedStyle(document.getElementById('list'), '::after'); return { o: s.opacity, v: s.visibility, d: s.transitionDuration }; });
+      t = await clock(mo);
+      await drop(mo, [{ name: 'notes.txt', type: 'text/plain', bytes: [104, 105] }]);
+      await until(() => mo.evaluate(() => document.getElementById('gd-said').textContent !== ''), 'motion: refusal');
+      // Polled: a loaded machine can draw no frame for a while, and the fade runs on frames.
+      let after = null;
+      await until(async () => { after = await mo.evaluate(() => { const s = getComputedStyle(document.getElementById('list'), '::after'); return { o: s.opacity, v: s.visibility }; }); return after.o === '0' && after.v === 'hidden'; }, 'motion: the drop target gone', 3000).catch(() => {});
+      check(over.o === '1' && over.v === 'visible' && /^0\.25s/.test(over.d) && after.o === '0' && after.v === 'hidden', `motion: the drop target fades in and out at the transitions' pace (${JSON.stringify([over, after])})`);
+      const popped = (await since(mo, t, (x) => x.cls.includes('gd-said')))[0];
+      check(popped && popped.n === 3 && popped.first.scale === 1, 'motion: the status line pops with its words');
+      const keysBefore = new Set(await mo.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].map((c) => c.dataset.key)));
+      t = await clock(mo);
+      await drop(mo, [{ name: 'Moving notes.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: docx }]);
+      const dropped = await until(async () => (await mo.evaluate(() => [...document.querySelectorAll('#gd-docs > .gd-card')].map((c) => c.dataset.key))).find((k) => !keysBefore.has(k)), 'motion: dropped card');
+      const cameIn = await until(async () => (await since(mo, t, (x) => x.key === dropped))[0], 'motion: dropped card animates', 3000).catch(() => null);
+      check(cameIn && cameIn.first.opacity === 0 && cameIn.last.opacity === 1, 'motion: a dropped file\'s card settles in');
+      const sayCleared = await until(() => mo.evaluate(() => document.getElementById('gd-said').textContent === ''), 'motion: status cleared', 3000).then(() => true, () => false);
+      check(sayCleared, 'motion: the next action fades the old words out, then clears them');
+
+      // Frames for the owner, five times slower, from Chrome's screencast (as the compositor draws them): up to 16 spread over
+      // each animation (span: its start and end, epoch ms), for opening, closing, the menu and a delete.
+      await mo.evaluate(() => { sessionStorage.setItem('gz-check-slow', '5'); scrollTo(0, 0); });
+      await mo.reload();
+      await landed(mo, 'home');
+      const film = async (name, act, span) => {
+        const cdp = await context.newCDPSession(mo), got = [];
+        cdp.on('Page.screencastFrame', (f) => { got.push({ t: f.metadata.timestamp * 1000, data: f.data }); cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }).catch(() => {}); });
+        await cdp.send('Page.startScreencast', { format: 'png', maxWidth: W, maxHeight: H, everyNthFrame: 1 });
+        try { await act(); } finally { await cdp.send('Page.stopScreencast').catch(() => {}); await cdp.detach().catch(() => {}); }
+        const { start, end } = await span(), within = got.filter((f) => f.t >= start - 40 && f.t <= end + 40);
+        const pick = within.length <= 16 ? within : Array.from({ length: 16 }, (_, i) => within[Math.round(i * (within.length - 1) / 15)]);
+        pick.forEach((f, i) => { const file = path.join(shots, `motion-${name}-${String(i + 1).padStart(2, '0')}.png`); fs.writeFileSync(file, Buffer.from(f.data, 'base64')); saved.push(file); });
+        console.log(`     motion-${name}: ${pick.length} of ${within.length} frames in its ${Math.round(end - start)} ms (${got.length} drawn)`);
+      };
+      const route = (r) => () => mo.evaluate((r) => { const l = globalThis.__mo, g = l.all.find((x) => x.route === r && x.n >= 24); return { start: performance.timeOrigin + g.at, end: performance.timeOrigin + l.finished }; }, r);
+      const played = (what) => () => mo.evaluate((what) => { const g = globalThis.__mo.all.filter((x) => (what === 'ghost' ? x.ghost : /gd-menu/.test(x.cls) && x.n >= 24)).at(-1); return { start: performance.timeOrigin + g.at, end: performance.timeOrigin + g.at + g.duration * 5 }; }, what);
+      await mo.mouse.move(2, H - 2);
+      await settled(mo);
+      const shotKey = await visibleCard(mo);
+      await film('open', async () => { await mo.focus(`${card(shotKey)} .gd-title`); await mo.keyboard.press('Enter'); await landed(mo, 'paper'); }, route('open'));
+      await film('back', async () => { await mo.mouse.move(2, H - 2); await mo.click('.gp-top a'); await landed(mo, 'home'); }, route('back'));
+      await mo.mouse.move(2, H - 2);
+      await settled(mo);
+      await mo.focus(`${card(await visibleCard(mo))} .gd-title`);
+      await film('menu', async () => { await mo.keyboard.press('Shift+F10'); await pause(2400); }, played('menu'));
+      await mo.keyboard.press('Escape');
+      await settled(mo);
+      await mo.focus(`${card(await visibleCard(mo))} .gd-title`);
+      await film('delete', async () => { await mo.keyboard.press('Delete'); await pause(2600); }, played('ghost'));
+      await mo.keyboard.press('ControlOrMeta+z');
+      await mo.evaluate(() => sessionStorage.removeItem('gz-check-slow'));
+      await settled(mo);
+
+      // Subtle: a scale about the card, out and back.
+      await wearLook(MOVE('subtle'));
+      await until(() => mo.evaluate(() => document.documentElement.getAttribute('data-gz-motion') === 'subtle'), 'motion: Subtle worn');
+      await mo.reload();
+      await landed(mo, 'home');
+      const subKey = await visibleCard(mo), subBox = await boxIn(mo, subKey);
+      await openWithEnter(mo, subKey);
+      log = await mo.evaluate(() => globalThis.__mo);
+      pic = log.all.find((x) => x.pseudo === '::view-transition-new(root)' && x.route === 'open');
+      const centre = `${Math.round((subBox.left + subBox.width / 2) * 10) / 10}px ${Math.round((subBox.top + subBox.height / 2) * 10) / 10}px`;
+      check(log.vt && pic && pic.n === 2 && pic.first.transform === 'scale(0.96)' && pic.first.opacity === 0 && pic.first.transformOrigin === centre && pic.duration === 180,
+        `motion: on Subtle a card opens its document with a scale about the card (${pic?.first.transformOrigin} for ${centre})`);
+      await mo.goBack();
+      await landed(mo, 'home');
+      log = await mo.evaluate(() => globalThis.__mo);
+      pic = log.all.find((x) => x.pseudo === '::view-transition-old(root)' && x.route === 'back');
+      check(log.vt && pic && pic.last.transform === 'scale(0.96)' && pic.last.opacity === 0 && pic.duration === 140, 'motion: on Subtle closing scales the editor down into the card');
+      t = await clock(mo);
+      await mo.focus(`${card(await visibleCard(mo))} .gd-title`);
+      await mo.keyboard.press('Shift+F10');
+      menuIn = (await since(mo, t, (x) => /gd-menu/.test(x.cls)))[0];
+      check(menuIn && menuIn.n === 2 && menuIn.first.opacity === 0 && menuIn.first.scale === 0.96, 'motion: on Subtle the ⋯ menu settles in (lib/motion.js enter)');
+      await mo.keyboard.press('Escape');
+
+      // Off, and reduced motion followed: nothing animates, and opening a document is a plain page change.
+      for (const [name, level, reduced, switches] of [['Off', 'off', 'no-preference'], ['reduced motion', 'expressive', 'reduce'],
+        ['transitions off', 'expressive', 'no-preference', { transitions: false }]]) {
+        const choice = MOVE(level);
+        if (switches) Object.assign(choice.motion, switches);
+        await wearLook(choice);
+        await mo.emulateMedia({ reducedMotion: reduced });
+        await until(() => mo.evaluate((off) => off ? document.documentElement.getAttribute('data-gz-motion') === 'off' : document.documentElement.hasAttribute('data-gz-no-trans'), !switches), `motion: ${name} worn`);
+        await mo.reload();
+        await landed(mo, 'home');
+        t = await clock(mo);
+        const k = await visibleCard(mo);
+        await mo.focus(`${card(k)} .gd-title`);
+        await mo.keyboard.press('Shift+F10');
+        const menuThere = await mo.evaluate(() => !!document.querySelector('.gd-menu'));
+        await mo.keyboard.press('Escape');
+        const menuGone = await mo.evaluate(() => !document.querySelector('.gd-menu'));
+        await mo.selectOption('#gd-sort', 'title');
+        await mo.focus(`${card(await visibleCard(mo))} .gd-title`);
+        await mo.keyboard.press('Delete');
+        await until(() => mo.evaluate(() => !!document.querySelector('.gd-toast')), `motion: ${name} toast`);
+        const ghosts = await mo.evaluate(() => document.querySelectorAll('.gd-ghosts > *').length);
+        await mo.keyboard.press('ControlOrMeta+z');
+        await until(() => mo.evaluate(() => !document.querySelector('.gd-toast')), `motion: ${name} undone`);
+        await mo.selectOption('#gd-sort', 'updated');
+        const moves = await since(mo, t);
+        await openWithEnter(mo, k);
+        log = await mo.evaluate(() => globalThis.__mo);
+        check(menuThere && menuGone && ghosts === 0 && moves.length === 0 && log.vt === false && log.all.length === 0,
+          `motion: with ${name} nothing animates, the menu and toast come and go at once, and a document opens with no transition (${moves.length} animations, transition ${log.vt})`);
+        await mo.goBack();
+        await landed(mo, 'home');
+      }
+      await mo.emulateMedia({ reducedMotion: 'no-preference' });
+      await wearLook(MOVE('expressive'));
+      await worker.evaluate(() => chrome.storage.sync.set({ popup: { anim: 'none' } }));
+      await mo.reload(); await landed(mo, 'home'); await settled(mo);
+      t = await clock(mo);
+      const noneKey = await visibleCard(mo);
+      await mo.focus(`${card(noneKey)} .gd-title`); await mo.keyboard.press('Shift+F10');
+      await mo.keyboard.press('Escape');
+      const noneMenu = await mo.evaluate(() => !document.querySelector('.gd-menu'));
+      const noneMoves = await since(mo, t);
+      await openWithEnter(mo, noneKey);
+      log = await mo.evaluate(() => globalThis.__mo);
+      check(noneMenu && noneMoves.length === 0 && log.vt === false && log.all.length === 0,
+        `motion: Pop-up None leaves no menu animation or native transition (${noneMoves.length} animations, transition ${log.vt})`);
+      await mo.goBack(); await landed(mo, 'home');
+      await worker.evaluate(() => chrome.storage.sync.set({ popup: { anim: 'fade' } }));
+      await until(() => mo.evaluate(() => globalThis.__mo.popup === 'fade'), 'live Pop-up Fade update');
+      await settled(mo);
+      t = await clock(mo);
+      await mo.focus(`${card(noneKey)} .gd-title`); await mo.keyboard.press('Shift+F10');
+      const fadeMoves = await since(mo, t, (x) => /\bgd-menu\b/.test(x.cls));
+      check(fadeMoves.some((x) => x.n === 2 && x.first.opacity === 0 && !x.first.scale && !x.first.transform), 'motion: live Pop-up Fade uses a fade without scale or genie');
+      await mo.keyboard.press('Escape'); await settled(mo);
+      await openWithEnter(mo, noneKey);
+      log = await mo.evaluate(() => globalThis.__mo);
+      check(log.vt && log.all.some((x) => x.route === 'fade' && x.first.opacity === 0 && x.last.opacity === 1), 'motion: Pop-up Fade crossfades the native pictures');
+      await mo.close();
+    }
 
     check(!errors.some((e) => /sender/.test(e)), 'no worker sender refusals');
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);

@@ -195,6 +195,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
   let mo = null, frame = 0, noteTimer = 0, retryTimer = 0, passFrame = 0, offer = null, asleep = false;
   let topRO = null, topHeaders = [];
+  let peekMO = null, peekFrame = 0;
   let openHere = null; // expanded or collapsed on this page, when the settings start each page one way
   const isOpen = () => (['expanded', 'collapsed'].includes(cfg().open) ? openHere ?? cfg().open === 'expanded' : rec.open);
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
@@ -716,6 +717,63 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let hadStyle = null;
   const setVar = (k, v) => { if (hadStyle === null) hadStyle = html().hasAttribute('style'); const s = html().style; if (s.getPropertyValue(k) !== v) s.setProperty(k, v); };
   const setAttr = (el, k, v) => { if (v === false || v == null) { if (el.hasAttribute(k)) el.removeAttribute(k); } else if (el.getAttribute(k) !== v) el.setAttribute(k, v); };
+  // A retained or nonoverlapping peek must not bury exposed controls under the page. Ultra's visible panel and its
+  // own backdrop decide separately for the fixed column and each edge button. No native node is restyled or moved.
+  const peek = () => {
+    if (!ultra || !active || !host || asleep) return;
+    const rect = (e) => {
+      if (!e?.isConnected || e.closest('[hidden], [inert], [aria-hidden="true"]')) return null;
+      for (let p = e; p?.tagName; p = p.parentElement) {
+        const s = getComputedStyle(p);
+        if (s.display === 'none' || ['hidden', 'collapse'].includes(s.visibility) || s.opacity === '0') return null;
+      }
+      const r = e.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight
+        ? { left: Math.max(0, r.left), right: Math.min(innerWidth, r.right), top: Math.max(0, r.top), bottom: Math.min(innerHeight, r.bottom) } : null;
+    };
+    const covers = [];
+    for (const panel of document.querySelectorAll('#main-content .bb-offcanvas-panel.peek.active')) {
+      const container = panel.closest('.bb-offcanvas-container');
+      const r = container?.classList.contains('bb-offcanvas-open') && rect(panel);
+      if (!r) continue;
+      covers.push(r);
+      for (const overlay of container.querySelectorAll(':scope > .bb-offcanvas-overlay')) {
+        const b = rect(overlay); if (b) covers.push(b);
+      }
+    }
+    const fixed = host.own && A.own && ['expanded', 'collapsed'].includes(html().getAttribute('data-gz-sidebar'));
+    const tokens = [];
+    for (const [name, e] of [['column', fixed && host.el], ['edge', edge], ['launch', launch]]) {
+      const r = covers.length && e && rect(e);
+      if (r && covers.some((b) => b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top)) tokens.push(name);
+    }
+    setAttr(html(), 'data-gz-sb-peek', tokens.join(' ') || false);
+  };
+  const queuePeek = () => {
+    if (!ultra || !active || asleep || peekFrame) return;
+    peekFrame = requestAnimationFrame(() => { peekFrame = 0; peek(); });
+  };
+  const peekEnd = (e) => { if (e.target?.closest?.('.bb-offcanvas-panel.peek, .bb-offcanvas-overlay')) queuePeek(); };
+  const watchPeek = () => {
+    if (!ultra || typeof MutationObserver !== 'function') return;
+    const main = document.getElementById('main-content');
+    peekMO?.disconnect();
+    if (!main) {
+      cancelAnimationFrame(peekFrame); peekFrame = 0;
+      document.removeEventListener('transitionend', peekEnd, true);
+      document.removeEventListener('animationend', peekEnd, true);
+      setAttr(html(), 'data-gz-sb-peek', false);
+      return;
+    }
+    peekMO ||= new MutationObserver(queuePeek);
+    const attributes = { attributes: true, attributeFilter: ['class', 'style', 'hidden', 'inert', 'aria-hidden'] };
+    peekMO.observe(main, { childList: true, subtree: true, ...attributes });
+    // Also see replacement or hiding of this one container; unrelated page subtrees need no observer.
+    if (main.parentElement) peekMO.observe(main.parentElement, { childList: true, ...attributes });
+    document.addEventListener('transitionend', peekEnd, true);
+    document.addEventListener('animationend', peekEnd, true);
+    peek();
+  };
   // A drawer starts closed. Canvas's column holds a quiz's timer and question list, so a quiz's content gives up room down
   // to S.MAIN_KEEP before they go into one. On the grades page, while what-if scores show the note that they aren't
   // official (with Revert), the table keeps the room any page does (sidebar.min) instead of its own: narrower, it would
@@ -848,6 +906,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       absorbBlocked.set(review.el, absorbKey());
       queueMicrotask(() => { if (on && active && !asleep) layout(); });
     }
+    watchPeek();
   };
   const paint = () => {
     if (!active || !host || asleep) return;
@@ -962,6 +1021,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       asleep = true;
       mo?.disconnect();
       topRO?.disconnect(); topHeaders = [];
+      peekMO?.disconnect(); cancelAnimationFrame(peekFrame); peekFrame = 0;
       watchNativeScroll(null);
       for (const f of [frame, passFrame]) cancelAnimationFrame(f);
       clearTimeout(noteTimer);
@@ -1178,6 +1238,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     backdrop?.remove();
     cancelAnimationFrame(frame);
     cancelAnimationFrame(passFrame);
+    peekMO?.disconnect(); cancelAnimationFrame(peekFrame); peekFrame = 0;
+    document.removeEventListener('transitionend', peekEnd, true);
+    document.removeEventListener('animationend', peekEnd, true);
     clearTimeout(noteTimer);
     clearTimeout(retryTimer);
     nativeView = null; route = '';
@@ -1194,7 +1257,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // <html> as before the sidebar: its attributes and variables gone.
   const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool', 'data-gz-sb-layer',
-    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle', 'data-gz-sb-native-root', 'data-gz-sb-assessment'];
+    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle', 'data-gz-sb-native-root', 'data-gz-sb-assessment', 'data-gz-sb-peek'];
   const bare = () => {
     const h = html();
     if (!h) return;

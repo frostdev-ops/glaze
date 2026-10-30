@@ -5,14 +5,12 @@
    motion within its level. Menus and the Undo toast are the paper chrome's (.pop, .gp-menu, .gp-toast), glass here too.
    Pages in thumbnails are paper: the sheet's colours, as printed.
    Hooks (docs/mods-api.md, glaze.documents.style): --gd-radius (the panels' and cards' corners), --gd-glass (the blur),
-   --gd-thumb (the thumbnails' scale), --gd-column (the grid's narrowest column), --gd-lift (a hovered card's rise, none
-   with motion off) and --gd-panel (the panels' fill). */
+   --gd-thumb (the thumbnails' scale), --gd-column (the grid's narrowest column), --gd-lift (a hovered card's and New tile's
+   lift: motion.css's --gz-lift, none with motion or hover effects off) and --gd-panel (the panels' fill). */
 :root {
-  --gd-radius: var(--gz-radius, 12px); --gd-glass: var(--gz-glass, 12px); --gd-thumb: 1; --gd-column: 224px; --gd-lift: -2px;
+  --gd-radius: var(--gz-radius, 12px); --gd-glass: var(--gz-glass, 12px); --gd-thumb: 1; --gd-column: 224px; --gd-lift: var(--gz-lift);
   --gd-panel: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
 }
-:root[data-motion="expressive"] { --gd-lift: -4px; }
-:root[data-motion="off"] { --gd-lift: 0px; }
 :root:not([data-mode]) { background: var(--gz-surface-paint-2, var(--gz-surface-2)); }
 :root:not([data-mode]) .gp-page { background: none; font-family: var(--gz-font); font-size: calc(14px * var(--gz-scale, 1)); }
 #gd-backdrop { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: -1; pointer-events: none; opacity: 0; transition: opacity calc(var(--t) * 2) ease-out; }
@@ -30,8 +28,8 @@
 .gd-tiles { display: flex; flex-wrap: wrap; gap: 18px; }
 .gd-tile { display: grid; justify-items: center; gap: 8px; color: var(--gz-ink); text-decoration: none; font-size: 13px; font-weight: 600; outline: none; }
 .gd-tile-pic { display: block; border-radius: calc(var(--gd-radius) / 2); overflow: hidden; background: var(--sheet); box-shadow: 0 0 0 1px var(--gz-border-strong, var(--gz-line-strong));
-  transition: box-shadow var(--t) ease-out, transform var(--t) ease-out; }
-.gd-tile:hover .gd-tile-pic { box-shadow: 0 0 0 2px var(--gz-accent), 0 10px 26px color-mix(in srgb, var(--gz-accent) 32%, transparent); transform: translateY(var(--gd-lift)); }
+  transition: var(--gz-card-transition); }
+.gd-tile:hover .gd-tile-pic { box-shadow: 0 0 0 2px var(--gz-accent), 0 10px 26px color-mix(in srgb, var(--gz-accent) 32%, transparent); transform: var(--gd-lift); }
 .gd-tile:active .gd-tile-pic { box-shadow: 0 0 0 2px var(--gz-accent), 0 4px 12px color-mix(in srgb, var(--gz-accent) 28%, transparent); transform: none; }
 .gd-tile:focus-visible .gd-tile-pic { box-shadow: 0 0 0 2px var(--gz-surface-2), 0 0 0 4px var(--gz-accent); }
 
@@ -54,8 +52,8 @@
 :root:not([data-dark]) .gd-views button[aria-pressed="true"] { color: var(--gz-accent); }
 .gd-bin[hidden] { display: none; }
 .gd-btn { height: 36px; padding: 0 16px; border-radius: calc(var(--gd-radius) * 2 / 3); background: var(--gz-accent); color: var(--gz-accent-ink); font-size: 13px; font-weight: 600; white-space: nowrap;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--gz-accent) 30%, transparent); transition: transform var(--t) ease-out, box-shadow var(--t) ease-out; }
-.gd-btn:hover { transform: translateY(calc(var(--gd-lift) / 2)); box-shadow: 0 8px 20px color-mix(in srgb, var(--gz-accent) 38%, transparent); }
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--gz-accent) 30%, transparent); transition: var(--gz-card-transition); }
+.gd-btn:hover { transform: var(--gz-lift); box-shadow: 0 8px 20px color-mix(in srgb, var(--gz-accent) 38%, transparent); }
 .gd-btn.gd-quiet { border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); background: var(--gz-surface-fill-2, var(--gz-surface-2)); color: var(--gz-ink); box-shadow: none; }
 .gd-btn.gd-quiet:hover { border-color: var(--gz-accent); }
 .gd-said { flex-basis: 100%; margin: 0 4px; font-size: 13px; color: var(--gz-err); }
@@ -65,8 +63,8 @@
 /* The documents: cards in a grid, or rows */
 .gd-docs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--gd-column), 100%), 1fr)); gap: 16px; }
 .gd-card { position: relative; display: grid; grid-template-rows: auto 1fr; min-width: 0; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gd-radius); background: var(--gd-panel); overflow: hidden;
-  box-shadow: var(--gz-rest-shadow, none); transition: border-color var(--t) ease-out, box-shadow var(--t) ease-out, transform var(--t) ease-out; }
-.gd-card:hover { border-color: color-mix(in srgb, var(--gz-accent) 55%, var(--gz-border-strong, var(--gz-line-strong))); box-shadow: var(--gz-shadow, 0 8px 24px rgb(0 0 0 / .3)); transform: translateY(var(--gd-lift)); }
+  box-shadow: var(--gz-rest-shadow, none); transition: var(--gz-card-transition); }
+.gd-card:hover { border-color: color-mix(in srgb, var(--gz-accent) 55%, var(--gz-border-strong, var(--gz-line-strong))); box-shadow: var(--gz-shadow, 0 8px 24px rgb(0 0 0 / .3)); transform: var(--gd-lift); }
 .gd-card:focus-within { border-color: var(--gz-accent); }
 .gd-pic { height: calc(214px * var(--gd-thumb)); display: flex; justify-content: center; padding-top: 16px; overflow: hidden; border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
   background: color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) 55%, transparent); }
@@ -101,7 +99,7 @@
 .gd-home[data-view="list"] .gd-more { margin: 0; }
 
 /* Files over the page: the page is the drop target */
-.gd-home[data-drop]::after { content: ""; position: fixed; inset: 8px; z-index: 4; border: 2px dashed var(--gz-accent); border-radius: var(--gd-radius); background: color-mix(in srgb, var(--gz-accent) 8%, transparent); pointer-events: none; }
+.gd-home::after { content: ""; position: fixed; inset: 8px; z-index: 4; border: 2px dashed var(--gz-accent); border-radius: var(--gd-radius); background: color-mix(in srgb, var(--gz-accent) 8%, transparent); pointer-events: none; }
 
 @media (max-width: 640px) {
   .gd-home { padding: 16px 12px 56px; gap: 12px; }
@@ -121,3 +119,20 @@
   .gd-home:not([data-view="list"]) .gd-info { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 6px; padding: 8px 4px 10px 10px; }
   .gd-home:not([data-view="list"]) .gd-kind { display: none; }
 }
+
+/* motion: Glaze's motion on the page, on motion.css's knobs (papers-motion.js plays lib/motion.js and lib/popup.js's
+   genie). Cards, New tiles and buttons lift and give as Glaze's cards do; the drop target fades in and out; the menus and
+   the toast move only as papers-motion.js moves them; a card that left fades on .gd-ghosts, over the list. A document
+   opens and closes in a view transition across the two page loads, papers-motion.js animating its two pictures
+   (data-gd-route: hold until the page arriving has drawn, then open, back or fade). */
+.gd-card:has(.gd-title:active), .gd-btn:active, .gd-tile:active .gd-tile-pic { scale: var(--gz-press); }
+.gd-menu, .gd-toast { transition: none; }
+.gd-said { transform-origin: 0 50%; }
+.gd-ghosts { position: absolute; inset: 0; pointer-events: none; }
+.gd-home::after { transition: opacity var(--gz-t) var(--gz-ease); }
+.gd-home:not([data-drop])::after { opacity: 0; visibility: hidden; transition: opacity var(--gz-t) var(--gz-ease), visibility 0s var(--gz-t); }
+@view-transition { navigation: auto; }
+html[data-gd-route]::view-transition-old(root), html[data-gd-route]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html[data-gd-route="hold"]::view-transition-new(root) { opacity: 0; }
+html[data-gd-route="back"]::view-transition-old(root) { z-index: 1; }
+html[data-gd-route="fade"]::view-transition-old(root), html[data-gd-route="fade"]::view-transition-new(root) { mix-blend-mode: plus-lighter; }

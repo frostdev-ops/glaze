@@ -198,6 +198,47 @@ test('a record of an unknown kind is skipped on restore', async () => {
   } finally { a.stop(); b.stop(); }
 });
 
+// A whole mixed set onto a device with documents of its own: an assignment's paper, a document edited on both, one in
+// Trash and a later build's kind. What restores is the backup's, what the device alone holds stays, the index lists every
+// record it should and no other, and the 30 days of the restored Trash run from when it was trashed.
+test('a mixed set restores onto a device that has documents of its own', async () => {
+  const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js'), DAY = 864e5;
+  const p = (text) => SC.parse(SC.paper, `<p>${text}</p>`).toJSON(), text = (r) => SC.text(SC.paper.nodeFromJSON(r.doc)).text;
+  const paper = 'bb.school.test|_900_1|_101_1|_7_1', both = PA.newKey(), binned = PA.newKey(), sheet = PA.newKey(), mine = PA.newKey(), slides = PA.newKey();
+  const a = device(), b = device();
+  try {
+    let at = NOW - 20 * DAY;
+    const A = PA.open(a.local, () => at), Bs = PA.open(b.local, () => at);
+    await Bs.save(both, { doc: p('MARK-BOTH-OLD'), title: 'Notes', named: true, format: 'plain' });
+    await Bs.save(mine, { doc: p('MARK-MINE'), title: 'Mine', named: true, format: 'plain' });
+    at += DAY;
+    await A.save(paper, { doc: p('MARK-PAPER'), title: 'Essay 2', courseName: 'ENGL 2110' });
+    await A.save(both, { doc: p('MARK-BOTH-NEW'), title: 'Notes', named: true, format: 'plain' });
+    await A.save(binned, { doc: p('MARK-BINNED'), title: 'Old draft', named: true, format: 'plain' });
+    const { trashed } = await A.trash(binned);
+    // Later builds' kinds, on each device: theirs, never this build's to restore or to touch.
+    a.store[`writerPaper:${sheet}`] = { key: sheet, kind: 'sheet', title: 'Budget', updated: at, doc: { cells: [] } };
+    b.store[`writerPaper:${slides}`] = { key: slides, kind: 'slides', title: 'Talk', updated: at, doc: { slides: [] } };
+    b.store.writerPapers = [{ key: slides, kind: 'slides', title: 'Talk', updated: at }, ...b.store.writerPapers];
+    const result = await restore(b, await backUp(a), ['papers']);
+    assert.deepEqual(result.out.failed, []);
+    const rows = await Bs.list(), keys = rows.map((r) => r.key).sort();
+    assert.deepEqual(keys, [paper, both, binned, mine, slides].sort(), 'every record listed once, the later kind\'s own row kept');
+    for (const k of keys) assert.ok(b.store[`writerPaper:${k}`], `${k}: its record`);
+    assert.equal(b.store[`writerPaper:${sheet}`], undefined, 'the backup\'s later kind left out');
+    assert.deepEqual(b.store[`writerPaper:${slides}`].doc, { slides: [] }, 'the device\'s later kind untouched');
+    assert.equal(text(await Bs.get(paper)), 'MARK-PAPER');
+    assert.equal(text(await Bs.get(both)), 'MARK-BOTH-NEW', 'the newer edit wins');
+    assert.ok((await Bs.versions(both)).some((v) => v.reason === 'restore'), 'the device\'s older text kept as a version');
+    assert.equal(text(await Bs.get(mine)), 'MARK-MINE');
+    assert.equal((await Bs.get(binned)).trashed, trashed);
+    assert.deepEqual(rows.filter((r) => PA.trashed(r)).map((r) => r.key), [binned], 'in Trash: only what was');
+    at = trashed + 31 * DAY;
+    assert.deepEqual(await Bs.purge(), [binned], '30 days from when it was trashed, not from the restore');
+    assert.deepEqual((await Bs.list()).map((r) => r.key).sort(), [paper, both, mine, slides].sort());
+  } finally { a.stop(); b.stop(); }
+});
+
 test('backups accept the maximum selectable version count', async () => {
   const PA = require('../lib/writer-papers.js'), SC = require('../lib/writer-schema.js');
   const key = 'bb.school.test|_900_1|_101_1|_7_1', a = device(), b = device();

@@ -271,7 +271,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     else if (m.type === 'submit:held' && armed.has(box)) say(box, { type: 'submit:held', text: heldOf(box).slice(0, 1e6) });
     else if (m.type === 'submit:review' && armed.has(box)) review(box);
   };
-  return { hear };
+  return { hear, passing: (button) => button === passing };
 })();
 
 GZ_WRITER_SUBMIT;

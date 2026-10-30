@@ -182,6 +182,24 @@ test('the worker\'s sender check: only the Documents page in a tab of its own, t
   assert.match(src, /account: \(\) => \(who \|\|= env\.site && !preview && env\.site !== 'documents' \?/, 'the Documents page has no account to read');
 });
 
+test('an embedded Documents pass grants paper writes, never the standalone documents mod API or an LMS account', async () => {
+  const w = require('./helpers/worker-env.cjs')();
+  const home = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/papers.html', origin: 'chrome-extension://x', tab: { id: 8 } };
+  const host = { ...home, url: `${SITE}/courses/1`, origin: SITE };
+  const frame = { ...home, frameId: 3, documentId: 'embedded' };
+  const pass = crypto.randomUUID();
+  await w.send({ type: 'glaze:papers', op: 'job', pass }, host);
+  assert.deepEqual(await w.send({ type: 'glaze:papers', op: 'claim', pass }, frame), { ok: true });
+  const fromDocuments = vm.runInContext('fromDocuments', w.context);
+  assert.equal(await fromDocuments(home), true);
+  for (const sender of [frame, { ...frame, documentId: 'next' }, { ...frame, frameId: 4 }]) {
+    assert.equal(await fromDocuments(sender), false, 'a claimed frame is not a standalone mods host');
+    assert.equal(await vm.runInContext('fromLms', w.context)(sender), null, 'nor an LMS page');
+    assert.deepEqual(await w.send({ type: 'glaze:modpage', op: 'list' }, sender), { ok: false, error: 'sender' });
+    assert.deepEqual(await w.send({ type: 'glaze:mod', mod: ID, call: 'documents.list', args: [], via: 'worker' }, sender), { ok: false, error: 'sender' });
+  }
+});
+
 test('install: documents and documents.read are personal data, and documents.read comes with documents', async () => {
   const u8 = (s) => new TextEncoder().encode(s);
   const key = Buffer.alloc(32, 7).toString('base64url');

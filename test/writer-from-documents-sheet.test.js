@@ -90,3 +90,18 @@ test('an active submit or a closed request cannot open a late sheet', async () =
   const opening = s.open(); s.close(); finish(rows()); await opening;
   assert.equal(s.layer(), null); assert.equal(s.root.inert, false);
 });
+
+test('closing returns focus immediately while the inaccessible sheet finishes its exit', async () => {
+  const s = sheet(); await s.open(); const layer = s.layer();
+  let finish;
+  layer.getAnimations = () => [{ finished: new Promise((r) => { finish = r; }) }];
+  s.close();
+  assert.equal(layer.isConnected, true);
+  assert.equal(layer.inert, true);
+  assert.equal(layer.getAttribute('aria-hidden'), 'true');
+  assert.equal(layer.hasAttribute('data-open'), false);
+  assert.equal(s.doc.activeElement, s.versionsB);
+  assert.equal(s.root.inert, false);
+  finish(); for (let i = 0; i < 4; i++) await Promise.resolve();
+  assert.equal(layer.isConnected, false);
+});

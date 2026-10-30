@@ -36,6 +36,9 @@
       GZ_UI.paint(art || !look.whole ? s : { ...s, bg: { ...s.bg, kind: 'solid' } }, { page: look.whole });
       root.toggleAttribute('data-dark', root.style.colorScheme === 'dark');
       root.dataset.motion = s.motion.followSystem && calm.matches ? 'off' : s.motion.level;
+      // Glaze's motion knobs (motion.css) read the same level and the three switches, as content.js sets them.
+      root.dataset.gzMotion = root.dataset.motion;
+      for (const [a, on] of [['data-gz-no-trans', s.motion.transitions], ['data-gz-no-enter', s.motion.enter], ['data-gz-no-hover', s.motion.hover]]) root.toggleAttribute(a, !on);
       if (art && !backdrop) {
         backdrop = Object.assign(document.createElement('iframe'), { id: 'gd-backdrop', src: 'preview.html?site=canvas&backdrop', tabIndex: -1, inert: true });
         backdrop.setAttribute('aria-hidden', 'true');
@@ -58,6 +61,10 @@
     await paint();
   };
   theme().catch((e) => console.error(e));
+  // The page in motion (papers-motion.js): cards moving, menus, the field, the toast and the status line coming and going,
+  // and the list or a document having drawn. Without it, each change at once.
+  const STILL = { cards: (change) => change(), open: () => {}, leave: (el) => el.remove(), say: (el, text) => { el.textContent = text; }, shown: () => {} };
+  const motion = () => globalThis.GZ_PAPERS_MOTION || STILL;
   const $ = (id) => document.getElementById(id);
   const locale = (() => { try { return chrome.i18n.getUILanguage(); } catch { return navigator.language || 'en'; } })();
   const t = (k, v) => GZ_I18N.t(k, v, locale);
@@ -85,6 +92,10 @@
   const DOCX = ['lib/writer-color.js', 'lib/zip.js', 'lib/doctext.js', 'lib/writer-docx.js', 'lib/writer-objects-docx.js'];
   let store = null;
   const papers = () => (store ||= GZ_WRITER_PAPERS.open());
+  // In a frame of a school's page the worker takes this document's writes once it has claimed its pass (embedded below,
+  // which keeps the body inert until then): what writes waits for that.
+  const claimed = () => (document.body.inert ? new Promise((ok) => new MutationObserver((_, o) => { if (!document.body.inert) { o.disconnect(); ok(); } })
+    .observe(document.body, { attributes: true, attributeFilter: ['inert'] })) : Promise.resolve());
 
   // ---- the paper kind's page code (GZ_DOC_KINDS.register below)
   // A paper as its .docx: { name, mime, bytes }, or null when it holds no document.
@@ -135,10 +146,13 @@
     const emit = (event, ...a) => { for (const fn of hooks[event]) try { fn(...a); } catch (e) { console.error(e); } };
     let editor = null;
     // One context object, as writer.js keeps its init's (proofing drops an AI ruling once it changes); Sources stay under
-    // this local key. An assignment's paper adds what its record keeps; its instructions and rubric are read only on Ultra.
+    // this local key. An assignment's paper adds what its record keeps, and its paper's parts when they make its key, so
+    // Sources open the store its attempt's frame keeps (lib/writer-sources.js keyOf); its instructions and rubric are read
+    // only on Ultra.
     const rec = GZ_WRITER_PAPERS.local(key) ? null : await papers().get(key).catch(() => null);
+    const paper = rec && GZ_WRITER_PAPERS.keyOf(rec) === key ? { school: rec.school.toLowerCase(), user: rec.user, course: rec.course, content: rec.content } : null;
     const context = { school: 'local', user: { id: 'local' }, course: { id: 'papers', ...(rec?.courseName && { name: rec.courseName }) }, item: { id: key },
-      ...(rec && { kind: 'assignment', assignment: { title: rec.title || '', due: rec.due || null } }) };
+      ...(rec && { kind: 'assignment', assignment: { title: rec.title || '', due: rec.due || null } }), ...(paper && { paper }) };
     // The same editor modules as an assignment frame, with a local host and no page messaging or submission. ⋯ entries
     // (item) stay off the page, as the paper hides writer.html's bar.
     globalThis.GZ_WRITER_FRAME = {
@@ -151,8 +165,11 @@
     const mountEl = h('div');
     document.body.append(mountEl);
     editor = GZ_WRITER_EDITOR.create({ mount: mountEl, mode: 'paper', html: '', plugins, onChange: (change) => emit('change', change) });
+    // Opening writes (a document in Trash comes out of it, a tab's unsaved copy is saved): not before the claim.
+    await claimed();
     await GZ_WRITER_PAPER.mount({ editor, t, standalone: true, key, context: () => ({}) });
     emit('ready', editor);
+    motion().shown('paper');
   };
 
   // ---- the home
@@ -201,7 +218,7 @@
     const count = h('p', { id: 'gd-count', class: 'gd-sr', 'aria-live': 'polite' });
     // The heading and the New band share one panel of glass; the toolbar is another, the cards each their own.
     main.append(h('div', { class: 'gd-top' }, $('heading'), band), bar, docs, count);
-    const say = (text) => { said.textContent = text || ''; };
+    const say = (text) => motion().say(said, text || '');
 
     // ---- state
     // Text is bounded by characters, thumbnails by count (including those held in a detached card). Search retains each
@@ -224,7 +241,9 @@
       if (words.length && hit !== null) hitsByKey.set(r.key, { gen, updated: r.updated, epoch: epoch(r.key), hit });
       return hit;
     };
-    const metaOf = (r) => [r.course, labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 }), when(r.updated)].filter(Boolean).join(' · ');
+    // A narrow card wraps its line between parts, never inside one ("7:33 / PM") nor before a dot; a course name wraps.
+    const whole = (s) => String(s).replace(/ /g, '\u00a0');
+    const metaOf = (r) => [r.course, ...[labelOf(ST.get(r.format)), t('{n} words', { n: r.words || 0 }), when(r.updated)].map(whole)].filter(Boolean).join('\u00a0· ');
     // A row whose kind this build has no page code for stays out of the list, untouched.
     const known = () => rows.filter((r) => typeof DK.get(DK.kindOf(r))?.thumb === 'function' && !gone.has(r.key));
     // What the lists, search, the course choices and mods see: no document in Trash. inView: the view's (the Trash's).
@@ -304,7 +323,7 @@
       const els = shown.map(cardFor);
       if (els.length !== docs.children.length || els.some((e, i) => docs.children[i] !== e)) {
         const had = docs.contains(document.activeElement) ? document.activeElement : null;
-        docs.replaceChildren(...els);
+        motion().cards(() => docs.replaceChildren(...els));
         if (had?.isConnected) had.focus({ preventScroll: true });
       }
       const listed = new Set(rows.map((r) => r.key));
@@ -427,7 +446,7 @@
     kindSel.addEventListener('change', () => { kind = kindSel.value; render(); });
     sortSel.addEventListener('change', () => { sortBy = sortSel.value; render(); });
     const setView = (v, keep) => {
-      view = v; main.dataset.view = v;
+      view = v; motion().cards(() => { main.dataset.view = v; });
       gridB.setAttribute('aria-pressed', String(v === 'grid')); listB.setAttribute('aria-pressed', String(v === 'list'));
       if (keep) try { localStorage.setItem(VIEW, v); } catch { /* the choice lasts this visit */ }
     };
@@ -438,7 +457,7 @@
     // ---- the ⋯ menu: Rename (a standalone document's), Make a copy, Export .docx, Delete; then the items added for cards
     // (GZ_DOCUMENTS.item 'card'), each told the card's summary. In Trash: Restore and Delete forever only.
     let menu = null, keyMenu = false;
-    const closeMenu = (back) => { if (!menu) return; const m = menu; menu = null; m.el.remove(); m.opener.setAttribute('aria-expanded', 'false'); if (back) m.back.focus(); };
+    const closeMenu = (back) => { if (!menu) return; const m = menu; menu = null; motion().leave(m.el, m.opener); m.opener.setAttribute('aria-expanded', 'false'); if (back) m.back.focus(); };
     const menuFor = (k, back) => {
       const c = cards.get(k);
       if (!c) return;
@@ -451,9 +470,15 @@
         added.length ? h('div', { class: 'gp-hr', role: 'separator' }) : null,
         added.map((x) => btn({ role: 'menuitem', tabindex: '-1', class: 'gd-added', title: x.by || null, onclick: (e) => { closeMenu(true); x.run(summary(c.row), e); } }, x.label)));
       document.body.append(el);
-      const anchor = c.more.getClientRects().length ? c.more : c.link, r = anchor.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
-      el.style.left = `${Math.max(4, Math.min(r.right - w, innerWidth - w - 4))}px`;
-      el.style.top = `${r.bottom + 6 + hh > innerHeight - 4 ? Math.max(4, r.top - hh - 6) : r.bottom + 6}px`;
+      // A host can finish resizing its iframe after the menu opens. Keep both actions beside the live card geometry.
+      const place = () => {
+        const anchor = c.more.getClientRects().length ? c.more : c.link, r = anchor.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
+        el.style.left = `${Math.max(4, Math.min(r.right - w, innerWidth - w - 4))}px`;
+        // The short Trash menu stays above its card, clear of the LMS's bottom navigation in a narrow frame.
+        const above = (bin && r.top >= hh + 10) || r.bottom + 6 + hh > innerHeight - 4;
+        el.style.top = `${Math.max(4, Math.min(above ? r.top - hh - 6 : r.bottom + 6, innerHeight - hh - 4))}px`;
+      };
+      place();
       el.style.transformOrigin = 'top right';
       el.addEventListener('keydown', (e) => {
         const all = [...el.querySelectorAll('[role="menuitem"]')], i = all.indexOf(document.activeElement);
@@ -462,9 +487,11 @@
       });
       el.getBoundingClientRect();
       el.setAttribute('data-open', '');
+      motion().open(el, c.more);
       c.more.setAttribute('aria-expanded', 'true');
-      menu = { el, k, opener: c.more, back: back || c.more };
+      menu = { el, k, opener: c.more, back: back || c.more, place };
       el.querySelector('[role="menuitem"]').focus();
+      place();
     };
     const run = (act, k) => {
       dismiss();
@@ -480,6 +507,8 @@
     document.addEventListener('pointerdown', (e) => { keyMenu = false; if (menu && !menu.el.contains(e.target) && !menu.opener.contains(e.target)) closeMenu(); }, true);
     // The menu opened from the keyboard: the browser's own context menu that follows the key stays shut.
     document.addEventListener('contextmenu', (e) => { if (keyMenu) { keyMenu = false; e.preventDefault(); } });
+    addEventListener('resize', () => menu?.place());
+    addEventListener('scroll', () => menu?.place(), { passive: true });
 
     // ---- rename in place: Enter saves (named; emptied, the document's first line again), Esc or an unchanged name keeps it
     const rename = (k) => {
@@ -491,6 +520,7 @@
       input.value = was;
       c.link.hidden = true;
       c.link.after(input);
+      motion().open(input);
       renaming = { k, input };
       input.focus();
       input.select();
@@ -533,7 +563,7 @@
     // worker. The toast goes at the next action or after 8 seconds. In Trash, Restore and Delete forever (the record and its
     // versions, no Undo) take the card out of the view at once too.
     let undoable = null;
-    const dismiss = () => { if (!undoable) return; clearTimeout(undoable.timer); undoable.el.remove(); undoable = null; };
+    const dismiss = () => { if (!undoable) return; clearTimeout(undoable.timer); motion().leave(undoable.el); undoable = null; };
     // The card leaves the view (hide), focus going to the next card, else the one before, else search; then the worker's
     // write (write), and the card back with a word on the page if it is refused. → whether it was written.
     const leave = async (k, hide, back, write) => {
@@ -555,6 +585,7 @@
       document.body.append(el);
       el.getBoundingClientRect();
       el.setAttribute('data-open', '');
+      motion().open(el);
       undoable = { k, el, timer: setTimeout(dismiss, 8000) };
     };
     const undo = async () => {
@@ -671,7 +702,12 @@
       t,
       on: (ev, fn) => { if (hooks[ev] && typeof fn === 'function') hooks[ev].push(fn); },
       list: () => DH.sort(live(), 'updated', new Map(), locale).map(summary),
-      open: (key) => { const r = listed(key); if (r) location.assign(`papers.html?${DK.get(DK.kindOf(r)).param}=${encodeURIComponent(key)}`); return !!r; },
+      open: async (key) => {
+        const r = known().find((r) => r.key === key);
+        if (!r || (DH.inTrash(r, moving) && !await st.untrash(key))) return false;
+        location[window.top === window ? 'assign' : 'replace'](`papers.html?${DK.get(DK.kindOf(r)).param}=${encodeURIComponent(key)}`);
+        return true;
+      },
       create: (format) => { const ok = ST.IDS.includes(format); if (ok) location.assign(fresh(format)); return ok; },
       read: async (key) => { const r = listed(key), rec = r && await st.get(key); return rec?.doc ? { key, title: titleOf(r), text: DK.get(DK.kindOf(r)).text(rec) } : null; },
       export: async (key) => { const r = listed(key), f = r && await DK.get(DK.kindOf(r)).file(key); return f ? { name: f.name, mime: f.mime, bytes: new Uint8Array(f.bytes) } : null; },
@@ -709,7 +745,7 @@
           const at = clicked.get(id);
           if (at === undefined || performance.now() - at > 1000) return { error: 'permission' };
           clicked.delete(id);
-          return (name === 'documents.open' ? D.open(keys.resolve(id, v.key)) : D.create(v.format)) ? null : { error: 'args' };
+          return (name === 'documents.open' ? await D.open(keys.resolve(id, v.key)) : D.create(v.format)) ? null : { error: 'args' };
         }
         if (name === 'documents.add') {
           const k = `${id}|${v.slot}|${v.id}`;
@@ -728,14 +764,12 @@
       GZ_MODS.start(a.mods);
     };
 
-    // What has been in Trash past 30 days goes as the page opens, once the worker takes its writes: a frame of a school's
-    // page (embedded below) only once it claimed its pass, its body inert until then.
-    const sweep = () => st.purge().catch((e) => console.error(e));
-    if (!document.body.inert) sweep();
-    else new MutationObserver((_, o) => { if (!document.body.inert) { o.disconnect(); sweep(); } }).observe(document.body, { attributes: true, attributeFilter: ['inert'] });
+    // What has been in Trash past 30 days goes as the page opens, once the worker takes its writes.
+    claimed().then(() => st.purge()).catch((e) => console.error(e));
     await Promise.all([refresh(), look.surfaces]);
     main.hidden = false;
     tell('ready');
+    motion().shown('home');
     mods().catch((e) => console.error(e));
   };
 

@@ -146,6 +146,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   };
   // A crashed or navigated frame gets a fresh one-use channel, initialized from Writer's buffered document.
   const retire = (box) => {
+    endFlush(box);
     if (box.focused) focusMode(box, false);
     clearTimeout(box.wait);
     box.unhello?.();
@@ -241,6 +242,16 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (m.type === 'ready' && !box.ready) swap(box);
     else if (m.type.startsWith('submit:')) { if (box.mode === 'paper') X.need('lib/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT_LIB).then(() => X.need('features/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT)).then(() => boxes.get(box.editor) === box && GZ_WRITER_SUBMIT.hear(box, m, X, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
     else if (m.type === 'attachments') { if (box.mode === 'paper') X.need('lib/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.attachments(X, box, m, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
+    else if (m.type === 'compact:flushed') {
+      const f = box.flushing;
+      if (!f || m.request !== f.request) return;
+      try {
+        if (!box.full && m.ok === true && typeof m.html === 'string' && Array.isArray(m.delta) && sameBox(box) && f.button.isConnected && U().enabled(f.button) && sync(box, m.html, m.delta)) {
+          passing = f.button;
+          try { f.button.click(); } finally { passing = null; }
+        }
+      } finally { endFlush(box); }
+    }
     else if (m.type === 'view' || m.type === 'room') { if (box.mode === 'paper') view(box, m); }
     else if (box.mode === 'paper' && box.full) { if (m.type === 'focus-mode') focusMode(box, m.on === true); else if (m.type === 'native') { drop(box); declined.add(box.editor); } }
     else if (m.type === 'height' && Number.isFinite(m.px)) { box.px = Math.max(40, Math.min(20000, Math.round(m.px))); if (!paged(box) && !box.focused) box.frame.style.height = `${box.px}px`; }
@@ -261,6 +272,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // scrolled by what it moved the caret (from, to: its top in the frame before and after), so its line stays where it was
   // on screen; a full frame or a sheet's room brought into sight.
   const view = (box, m) => {
+    if (m.type === 'view') endFlush(box);
     const was = box.full, switched = m.type === 'view' && Number.isFinite(m.from) && Number.isFinite(m.to);
     if (m.type === 'room') box.room = m.on === true;
     else { box.full = m.full === true; if (Number.isFinite(m.px)) box.px = Math.max(40, Math.min(20000, Math.round(m.px))); }
@@ -299,10 +311,20 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (b?.isConnected && U().enabled(b)) { remember(box); globalThis.GZ_DRAFT_UI?.sent?.(box.editor); box.sending = true; b.click(); }
     else if (box.text) box.retry = setTimeout(() => { box.retry = null; if (boxes.get(box.editor) === box) send(box, until); }, 60);
   };
+  // A compact native action must read the frame's current document, not merely its last delivered change. The frame
+  // saves and holds editing until the native click is dispatched; late or failed acknowledgements never click Ultra.
+  let passing = null;
+  const endFlush = (box) => {
+    const f = box.flushing;
+    if (!f) return;
+    clearTimeout(f.timer);
+    box.flushing = null;
+    box.port?.postMessage({ type: 'compact:resume', request: f.request });
+  };
   // A normal native Post/Reply/Send has the same flush and clear lifecycle as the shortcut.
   document.addEventListener('click', (e) => {
     const b = e.target?.closest?.('button');
-    if (!b) return;
+    if (!b || b === passing || globalThis.GZ_WRITER_SUBMIT?.passing?.(b)) return;
     // Ultra collapses an empty new-post editor on Cancel without removing its node. Release the empty frame too,
     // so its next click can activate the native composer again.
     if (b.getAttribute('ng-click') === 'messageControl.onCancelClick()') {
@@ -316,8 +338,12 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     }
     // An attempt's Submit and Save and Close send its box: a compact paper's last edit goes in first.
     for (const box of boxes.values()) {
-      if (box.mode !== 'paper' || box.full || !box.ready || !/\.footer\./.test(b.getAttribute('data-analytics-id') || '') || !box.editor.closest('bb-assignment-attempt-authoring-panel')?.contains(b) || !sameBox(box)) continue;
-      if (!sync(box, box.latest)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+      if (box.mode !== 'paper' || box.full || !/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || !box.editor.closest('bb-assignment-attempt-authoring-panel')?.contains(b) || !sameBox(box)) continue;
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (!box.ready || !box.port || box.flushing) return;
+      const request = crypto.randomUUID();
+      box.flushing = { request, button: b, timer: setTimeout(() => endFlush(box), 4000) };
+      box.port.postMessage({ type: 'compact:flush', request });
     }
   }, true);
   // Ultra collapses an empty new Post when its editor loses focus, and the frame taking the typing is such a loss. While

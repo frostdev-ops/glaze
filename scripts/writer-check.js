@@ -229,10 +229,12 @@ const HARNESS = `(() => {
     await until(() => oldFrame.evaluate((f) => !f.isConnected), 'old frame retired');
     post = await box(p, 'post');
     check(await post.fr.evaluate((t) => document.querySelector('.ProseMirror').textContent === t, kept), 'a reloaded frame restores its unsynced buffered document');
-    await post.fr.click('#more'); await post.fr.click('[data-do="native"]');
+    if (await post.fr.evaluate(() => document.getElementById('menu').hidden)) await post.fr.click('#more');
+    await post.fr.click('[data-do="native"]');
     check(await post.el.isVisible() && await quillText(p, REPLY) !== kept, 'a forged success cannot hand back an unsynced draft');
     await p.evaluate((s) => { document.querySelector(s).closest('.ql-container').__quill = __savedQuill; }, POST);
-    await post.fr.click('#more'); await post.fr.click('[data-do="native"]');
+    if (await post.fr.evaluate(() => document.getElementById('menu').hidden)) await post.fr.click('#more');
+    await post.fr.click('[data-do="native"]');
     await until(() => p.evaluate(() => !document.querySelector('iframe[data-gz-writer-frame="post"]')), 'hand-back after native recovery');
     check(await quillText(p, POST) === kept, 'native recovery receives every word before the frame closes');
     await p.close();

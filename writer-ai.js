@@ -32,8 +32,12 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     return single || n(/"/g) % 2 === 1 || n(/“/g) > n(/”/g) || n(/«/g) > n(/»/g) || n(/‘/g) > n(/’(?![\p{L}\p{N}])/gu);
   };
   const word = (before) => (/[^ ] $/.test(before) ? before.slice(0, -1) : before);
-  const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && TAIL.test(word(before)) && !/^[^\S\n]*[^\s]/.test(after)
+  // Find the final whitespace first: searching a long CJK word before a space with an unanchored suffix is quadratic.
+  const caretWord = (s) => { let at = s.length; while (at && !/\s/u.test(s[at - 1])) at--; return TAIL.exec(s.slice(at)); };
+  const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && !!caretWord(word(before)) && !/^[^\S\n]*[^\s]/.test(after)
     && sentence(word(before)).split(/\s+/).filter((w) => WORD.test(w)).length >= 3;
+  // Document and suggestion caps count UTF-16 units; discard a low surrogate exposed at their start.
+  const tailText = (s, n) => s.slice(-n).replace(/^[\uDC00-\uDFFF]/, '');
   // The next word of the gray text, with the space before it: what ⌥→ takes.
   const nextWord = (ghost) => /^\s*\S+/.exec(ghost)?.[0] || '';
   // What is left of the gray text once `typed` is typed at its place, or null when it isn't its start (quotes as the
@@ -48,7 +52,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const wait = (s, score) => { const p = s?.mode === 'advanced' ? s.tune?.completion?.pause : undefined; return Number.isSafeInteger(p) && p >= 100 && p <= 2000 ? p : pause(score); };
   // The connection's name on the chip.
   const providerName = (st, t) => (st?.provider === 'device' ? t('Chrome on-device AI') : st?.provider === 'apple' ? t('Apple Intelligence') : st?.to || t('Endpoint'));
-  const api = { fits, sentence, nextWord, consume, pause, wait, learn, providerName };
+  const api = { fits, sentence, tailText, nextWord, consume, pause, wait, learn, providerName };
   const D = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : typeof require === 'function' ? require('./lib/ai/failure.js') : null;
   const reasonText = (e) => D?.explain(e) || '';
 
@@ -223,6 +227,10 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const trackers = new Set();
   const track = () => { const m = new Mapping(); trackers.add(m); return { m, done: () => trackers.delete(m) }; };
   let score = 0.5, timer = 0, flight = 0, shown = 0;
+  // The sentences as the gray text shown here would have finished them, the newest 40: the model is told them and the task
+  // refuses them again (lib/ai/tasks/writer-complete.js input past). In memory only, for one document: a new editor state
+  // (another paper) or a document replaced whole (the page's own text, a version restored) starts it again.
+  const past = [];
   // The gray text's model, readied as the box opens, on focus a minute later, and every 90 s while focused, so the first
   // pause is as quick as the next (the owner, 2026-10-27; lib/ai/broker.js op warm: nothing is asked of the model). After a
   // space and mid-word it reads different instructions (lib/ai/tasks/writer-complete.js), so both are readied.
@@ -264,8 +272,9 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const plugin = new Plugin({
     key: KEY,
     state: {
-      init: () => null,
+      init: () => { past.length = 0; return null; },
       apply(tr, g, old, now) {
+        if (tr.steps.some((st, i) => st.slice && st.from === 0 && st.to === tr.docs[i].content.size)) past.length = 0;
         const meta = tr.getMeta(KEY);
         if (meta !== undefined) return meta;
         if (!g) return null;
@@ -343,9 +352,9 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const st = v.state, { selection } = st;
     if (!selection.empty || !selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code || quoted(selection.$head)) return;
     const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
-    const before = tx.text.slice(Math.max(0, off - 8000), off), after = tx.text.slice(off, off + 2000);
+    const before = tailText(tx.text.slice(0, off), 1e6), after = tx.text.slice(off, off + 4001);
     if (!fits(before, after)) return;
-    const r = run('completion', 'writer.complete', { before, after, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context() });
+    const r = run('completion', 'writer.complete', { before, after, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context(), past: past.slice() });
     flight = r.id;
     const end = await r;
     if (flight !== r.id) return;
@@ -354,6 +363,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     const now = v.state;
     if (now.doc !== st.doc || !now.selection.eq(selection) || v.composing || !v.hasFocus()) return;
     set(v, { pos: selection.head, text: end.output, fresh: true, id: ++shown });
+    if (past.push(tailText(`${sentence(before)}${end.output}`, 600)) > 40) past.shift();
     say(t('Suggestion: {text}', { text: end.output.trim() }));
   };
 
@@ -369,7 +379,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code) return 'not at this caret';
     if (quoted(selection.$head)) return 'in a quotation';
     const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
-    if (!fits(tx.text.slice(Math.max(0, off - 8000), off), tx.text.slice(off, off + 2000))) return 'not at this caret';
+    if (!fits(tailText(tx.text.slice(0, off), 1e6), tx.text.slice(off, off + 4000))) return 'not at this caret';
     return KEY.getState(st) ? 'showing' : flight ? 'asking' : timer ? 'waiting for the pause' : 'ready: type a letter or a space';
   };
 
@@ -595,7 +605,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
       top.append(dot, el('span', 'gz-fb-msg', t("AI couldn't give feedback.")));
       const reason = { timeout: t('Timed out'), 'connection-lost': t('Connection lost'), 'provider-unavailable': t('Unavailable'), 'request-rejected': t('Refused'),
         cancelled: t('Cancelled'), permission: t('Glaze isn’t allowed to reach this address.'), setup: t('Choose a model'), busy: t('Running'), often: t('Not ready'),
-        'invalid-response': t('Unreadable answer'), check: t('No usable answer'), refusal: t('No usable answer'), size: t('The document is too large.') }[fb.error] || t('No usable answer');
+        'invalid-response': t('Unreadable answer'), check: t('No usable answer'), refusal: t('No usable answer'), size: t('The document is too large.'), limit: t('The document is too large.') }[fb.error] || t('No usable answer');
       const detail = reasonText(fb.detail) ? t(reasonText(fb.detail)) : reason;
       const counts = Number.isSafeInteger(fb.detail?.actual) && Number.isSafeInteger(fb.detail?.limit) ? (fb.detail.reason === 'response-limit' ? t('{n} bytes', { n: `${fb.detail.actual}/${fb.detail.limit}` }) : `${fb.detail.actual}/${fb.detail.limit}`)
         : Number.isSafeInteger(fb.detail?.tokens) && Number.isSafeInteger(fb.detail?.context) ? t('{n} tokens', { n: `${fb.detail.tokens}/${fb.detail.context}` }) : '';

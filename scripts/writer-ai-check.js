@@ -24,7 +24,7 @@ const until = async (fn, label, ms = 8000) => {
 
 // In the frame, before its scripts: chrome.* as the frame sees it, with the worker's port played by the real harness.
 const STUB = `(() => {
-  const ai = window.__ai = { settings: { on: true, outline: false, use: 'main', features: { completion: true, writing: true } }, connects: 0, runs: [], ends: [], cancels: [], next: {}, changed: [],
+  const ai = window.__ai = { settings: { on: true, outline: false, use: 'main', features: { completion: true, writing: true } }, connects: 0, runs: [], ends: [], cancels: [], next: {}, changed: [], seen: [],
     status: { completion: { allowed: true, ready: true, provider: 'device', caps: { text: true } }, writing: { allowed: true, ready: true, provider: 'device', caps: { text: true, json: true } } } };
   // The real issues store (lib/writer-issues.js), with every set() recorded as it lands.
   let issues;
@@ -54,7 +54,7 @@ const STUB = `(() => {
         if (ai.hold) await new Promise((r) => { ai.release = r; }); // held, so a check can see the run in flight
         const reply = ai.next[m.task] || { text: '' };
         try {
-          const out = await GZ_AI_TASKS.run(task, m.input, { provider: 'mock', cfg: { replies: Array.isArray(reply) ? reply : [reply] }, signal: c.signal, emit: (e) => post({ ...e, id: m.id }) });
+          const out = await GZ_AI_TASKS.run(task, m.input, { provider: 'mock', cfg: { replies: Array.isArray(reply) ? reply : [reply], seen: ai.seen }, signal: c.signal, emit: (e) => post({ ...e, id: m.id }) });
           ai.ends.push({ id: m.id, output: out.output });
           post({ id: m.id, type: 'end', output: out.output, meta: out.meta });
         } catch (e) { ai.ends.push({ id: m.id, error: e.code || String(e), detail: String(e.detail || ''), stack: String(e.stack).slice(0, 600) }); post({ id: m.id, type: 'error', error: c.signal.aborted ? 'cancelled' : e.code || 'failed' }); }
@@ -64,7 +64,9 @@ const STUB = `(() => {
   };
   const data = {}, local = { get: async () => ({ ...data, ai: JSON.parse(JSON.stringify(ai.settings)) }), set: async (o) => { Object.assign(data, o); if (o.ai) { ai.settings = JSON.parse(JSON.stringify(o.ai)); ai.changed.forEach((f) => f({ ai: { newValue: o.ai } }, 'local')); } }, remove: async (k) => { delete data[k]; } };
   window.chrome = { runtime: { sendMessage: async (m) => m.type === 'glaze:writerPapers' ? { ok: true, value: await GZ_WRITER_PAPERS.open(local)[m.op](...m.args) } : { ok: true }, connect },
-    storage: { local, onChanged: { addListener: (f) => ai.changed.push(f) } } };
+    // Writer's synced settings (lib/writer-settings.js): Full writer on for a frame opened at #full, where a step needs an
+    // assignment's pages rather than its compact box; the defaults otherwise.
+    storage: { local, sync: { get: async () => ({ writer: location.hash === '#full' ? { full: true } : {} }), set: async () => {} }, onChanged: { addListener: (f) => ai.changed.push(f) } } };
 })();`;
 const CONTEXT = {
   kind: 'reply', course: { id: '_101_1', name: 'ENGL 2110' },
@@ -76,6 +78,14 @@ const QUOTED = '<p class="ql-indent-1"><em>Every time a character crosses it, th
   + '<p>I agree that the river works as a kind of archive, but I think Morrison is definately less interested in nostalgia than in what the town chooses to forget. Baldwin calls this "the price of the ticket," and the clearing seem to collect that price.</p>';
 const LAST = 'When Sethe returns to the clearing, the memory is not something she owns;';
 const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the river takes it back.' };
+// Paragraph k of about `size` characters, its first and last words saying which it is.
+const PARAS = (n, size) => Array.from({ length: n }, (_, i) => {
+  let s = `Paragraph ${i + 1} opens here.`, j = 0;
+  while (s.length < size - 40) s += ` Detail ${i + 1} ${++j} is about the river and the town.`;
+  return `${s} Paragraph ${i + 1} ends here.`;
+});
+// The document so far as the model read it, from a request the stub's model saw.
+const SO_FAR = /\[the document so far[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)\n>>>\1/;
 
 (async () => {
   await require('./wait-for-browser.js')();
@@ -93,11 +103,11 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
     });
     await context.addInitScript(STUB);
     // A frame opened by the page's side with init { mode, kind, html, context }.
-    const frame = async ({ kind = 'reply', mode = 'compose', html = QUOTED + `<p>${LAST}</p>`, ctx = CONTEXT, settings } = {}) => {
+    const frame = async ({ kind = 'reply', mode = 'compose', html = QUOTED + `<p>${LAST}</p>`, ctx = CONTEXT, settings, full = false } = {}) => {
       const page = await context.newPage();
       page.on('pageerror', (e) => errors.push(`page: ${e.message}`));
       page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
-      await page.goto(`${site}/writer.html`);
+      await page.goto(`${site}/writer.html${full ? '#full' : ''}`);
       for (const f of AI_FILES) await page.addScriptTag({ url: `${site}/${f}` });
       if (settings) await page.evaluate((s) => { __ai.settings = s; }, settings);
       await page.evaluate((init) => {
@@ -122,6 +132,22 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
     const reset = async (p, text = LAST) => { await p.evaluate((h) => __page.port.postMessage({ type: 'html', html: h }), QUOTED + `<p>${text}</p>`); await until(async () => (await last(p)) === text, 'reset'); await end(p); };
     const next = (p, task, reply) => p.evaluate(([task, reply]) => { __ai.next[task] = reply; }, [task, reply]);
 
+    if (process.argv.includes('--compact')) {
+      const q = await frame({ mode: 'paper', kind: 'assignment', html: `<p>${LAST}</p>`, ctx: { kind: 'assignment' } });
+      try {
+        await until(() => q.evaluate(() => !!GZ_WRITER_PAPER.current()?.compact() && GZ_WRITER_AI.allowed('completion')), 'compact paper ready');
+        await check('compact paper shows completion in the box and Tab accepts only the current sentence', async () => {
+          await next(q, 'writer.complete', GHOST); await end(q); await q.keyboard.type(' it');
+          assert.equal(await until(() => ghost(q), 'compact ghost'), ' arrives uninvited and rearranges the present.');
+          assert.ok(await q.$('#gw .gz-ghost'));
+          await q.keyboard.press('Tab');
+          assert.equal(await last(q), LAST + ' it arrives uninvited and rearranges the present.');
+          assert.equal(await ghost(q), null);
+          assert.equal(await q.evaluate(() => document.documentElement.dataset.view), 'compact');
+        });
+        await check('no page errors', async () => assert.deepEqual(errors, []));
+      } finally { await q.close(); }
+    } else {
     const p = await frame();
     await check('the chip names the connection, with a green dot, when AI is ready', async () => {
       const chip = await until(() => p.$('.slot[data-slot="ai"] .gz-ai-chip'), 'chip');
@@ -283,6 +309,97 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       await next(p, 'writer.decide', { json: { verdict: 'apply', choice: 'they\'re' } });
       assert.deepEqual(await p.evaluate(() => GZ_WRITER_PROOF.decide({ text: 'They put there coats down.', from: 9, to: 14, suggestions: ['their', 'they\'re'] })), { verdict: 'apply', choice: 1 });
     });
+    // The whole document before the caret (lib/ai/tasks/writer-complete.js): the stub's model has no window, so it reads
+    // up to READ.unknown bytes of it, the earliest paragraphs left out first.
+    const asked = async (html, label) => {
+      await p.evaluate((h) => __page.port.postMessage({ type: 'html', html: h }), html);
+      await until(async () => (await last(p)) === LAST, label);
+      await end(p); await next(p, 'writer.complete', GHOST);
+      await p.keyboard.type(' it');
+      assert.equal(await until(() => ghost(p), `gray text in ${label}`, 4000), ' arrives uninvited and rearranges the present.', 'the gray text as before');
+      const req = await p.evaluate(() => __ai.seen.at(-1));
+      return { req, size: JSON.stringify(req).length, read: SO_FAR.exec(req.messages[1].content[0].text)?.[2] ?? '' };
+    };
+    await check('the gray text\'s request carries the whole document: the first of twenty paragraphs reaches the model', async () => {
+      const paras = PARAS(20, 600), { size, read } = await asked(paras.map((t) => `<p>${t}</p>`).join('') + `<p>${LAST}</p>`, 'twenty paragraphs');
+      assert.equal(read, paras.join('\n'), 'all twenty, the first one first');
+      const chars = paras.join('\n').length;
+      console.log(`  request: ${size} characters for ${chars} characters of document`);
+      assert.ok(size > chars && size < chars + 8000, `${size} characters`);
+    });
+    await check('a 50-page paper reaches the model cut from its start at a paragraph, within the window', async () => {
+      const paras = PARAS(100, 1000), { size, read } = await asked(paras.map((t) => `<p>${t}</p>`).join('') + `<p>${LAST}</p>`, 'a 50-page paper');
+      const first = Number(/^Paragraph (\d+) opens here\./.exec(read)?.[1]), bytes = Buffer.byteLength(read, 'utf8'), chars = paras.join('\n').length;
+      assert.ok(chars > 95000, `${chars} characters`);
+      assert.ok(first > 1 && read === paras.slice(first - 1).join('\n'), `whole paragraphs from paragraph ${first} to the last`);
+      console.log(`  request: ${size} characters for a ${chars}-character paper; ${bytes} bytes of it read, from paragraph ${first}`);
+      assert.ok(bytes <= 60000 && bytes > 60000 - 1100, `${bytes} bytes read`);
+      assert.ok(size < 60000 + 8000, `${size} characters`);
+    });
+    await check('a suggestion already shown at a sentence is not shown there again; a new one is', async () => {
+      await reset(p); await next(p, 'writer.complete', GHOST);
+      await p.keyboard.type(' it');
+      await until(() => ghost(p), 'gray text', 3000);
+      await p.keyboard.press('Escape');
+      const n = await runs(p);
+      await p.keyboard.type('x'); await p.keyboard.press('Backspace');
+      await until(() => p.evaluate((n) => __ai.runs.filter((r) => r.task === 'writer.complete').length > n && __ai.ends.at(-1)?.id === __ai.runs.at(-1).id, n), 'asked again', 3000);
+      const said = `${LAST} it arrives uninvited and rearranges the present.`;
+      assert.deepEqual(await p.evaluate(() => __ai.runs.at(-1).input.past), [said], 'the frame sends what it showed');
+      assert.match((await p.evaluate(() => __ai.seen.at(-1))).messages[1].content.map((p) => p.text).join('\n\n'), /\[suggestions already shown[^\n]*\n<<<DATA-[0-9a-f]+\nWhen Sethe returns/, 'the model is told');
+      assert.equal((await p.evaluate(() => __ai.ends.at(-1))).error, 'check', 'the same suggestion is refused');
+      await pause(300);
+      assert.equal(await ghost(p), null);
+      await next(p, 'writer.complete', { text: 'it arrives late and leaves early.' });
+      await p.keyboard.type('x'); await p.keyboard.press('Backspace');
+      assert.equal(await until(() => ghost(p), 'a new suggestion', 3000), ' arrives late and leaves early.');
+      await p.keyboard.press('Escape');
+    });
+    await check('completion memory clears on whole replacements and fresh editor states, but survives a view switch', async () => {
+      const q = await frame({ mode: 'paper', kind: 'assignment', html: `<p>${LAST}</p>`, ctx: { kind: 'assignment' } });
+      try {
+        await until(() => q.evaluate(() => !!GZ_WRITER_PAPER.current()), 'paper');
+        const askOnce = async () => {
+          await end(q); await next(q, 'writer.complete', GHOST);
+          await q.keyboard.type(' it'); await until(() => ghost(q), 'memory suggestion');
+          await q.keyboard.press('Escape');
+        };
+        await reset(q); await askOnce();
+        const full = q.locator('.gp-full:visible').first();
+        await full.click(); await end(q);
+        await next(q, 'writer.complete', { text: 'it arrives late and leaves early.' });
+        await q.keyboard.type('x'); await q.keyboard.press('Backspace');
+        await until(() => ghost(q), 'suggestion after view switch');
+        assert.equal((await q.evaluate(() => __ai.runs.at(-1).input.past)).length, 1, 'same paper across compact/full');
+        await q.keyboard.press('Escape');
+        for (const fresh of [false, true]) {
+          await q.evaluate((fresh) => {
+            const v = GZ_WRITER_FRAME.editor().view;
+            const doc = GZ_WRITER_SCHEMA.paper.nodeFromJSON({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'When Sethe returns to the clearing, the memory is not something she owns;' }] }] });
+            if (fresh) v.updateState(GZ_PM.state.EditorState.create({ doc, plugins: v.state.plugins }));
+            else v.dispatch(v.state.tr.replaceWith(0, v.state.doc.content.size, doc.content));
+          }, fresh);
+          await askOnce();
+          assert.deepEqual(await q.evaluate(() => __ai.runs.at(-1).input.past), [], fresh ? 'another paper / Documents open: init' : 'restore / native text: whole replacement');
+        }
+      } finally { await q.close(); }
+    });
+    await check('completion sends text after the caret far enough to clip at a paragraph boundary', async () => {
+      const paras = PARAS(2, 3000);
+      await p.evaluate((html) => __page.port.postMessage({ type: 'html', html }), `<p>${LAST}</p>` + paras.map((t) => `<p>${t}</p>`).join(''));
+      await until(() => p.evaluate(() => GZ_WRITER_FRAME.editor().view.state.doc.childCount === 3), 'three paragraphs');
+      await p.evaluate(() => {
+        const v = GZ_WRITER_FRAME.editor().view;
+        v.focus(); v.dispatch(v.state.tr.setSelection(GZ_PM.state.TextSelection.create(v.state.doc, v.state.doc.firstChild.nodeSize - 1)));
+      });
+      await next(p, 'writer.complete', GHOST); await p.keyboard.type(' it');
+      await until(() => ghost(p), 'suggestion before later paragraphs');
+      const req = await p.evaluate(() => __ai.seen.at(-1));
+      const text = req.messages[1].content.map((p) => p.text).join('\n\n');
+      const after = /\[the text after the caret[^\]\n]*\]\n<<<(DATA-[0-9a-f]+)\n([\s\S]*?)\n>>>\1/.exec(text)?.[2];
+      assert.equal(after, '\n' + paras[0]);
+      await p.keyboard.press('Escape');
+    });
     await check('nothing with completion off: no run, no gray text; the chip stays for writing', async () => {
       await p.evaluate(() => { __ai.settings.features.completion = false; __ai.changed.forEach((f) => f({ ai: {} }, 'local')); });
       await pause(100);
@@ -386,7 +503,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
           { id: 'claim', label: 'Claim', points: 10, cells: [{ level: 'high', value: 8 }, { level: 'low', value: 4 }] },
           { id: 'evidence', label: 'Evidence', points: 10, cells: [{ level: 'high', value: 8 }, { level: 'low', value: 4 }] },
         ] } };
-      const q = await frame({ mode: 'paper', kind: 'assignment', settings: { on: true, model: { use: 'device' }, outline: true, features: { writing: true } }, ctx: { kind: 'assignment', assignment } });
+      const q = await frame({ mode: 'paper', kind: 'assignment', full: true, settings: { on: true, model: { use: 'device' }, outline: true, features: { writing: true } }, ctx: { kind: 'assignment', assignment } });
       try {
         await q.setViewportSize({ width: 1440, height: 900 });
         await until(() => q.evaluate(() => !!GZ_WRITER_PAPER.current()?.pages()), 'paper for outline and grading', 20000);
@@ -447,7 +564,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
     const FX = require('../test/fixtures/writer-paper-fixtures.js');
     for (const [name, look] of Object.entries(looks)) for (const [wide, size] of [['wide', { width: 1440, height: 900 }], ['narrow', { width: 760, height: 1000 }]]) {
       await check(`Feedback and Outline as mockups E (${name}, ${wide}): head row, states, cards, levels, pages, Outline, focus ring`, async () => {
-        const q = await frame({ mode: 'paper', kind: 'assignment', html: `<p>${LAST}</p>`, ctx: { kind: 'assignment', assignment: { title: 'Essay 2', instructions: 'Write 1,200 words on memory in Beloved.', rubric: RUBRIC } } });
+        const q = await frame({ mode: 'paper', kind: 'assignment', full: true, html: `<p>${LAST}</p>`, ctx: { kind: 'assignment', assignment: { title: 'Essay 2', instructions: 'Write 1,200 words on memory in Beloved.', rubric: RUBRIC } } });
         try {
           await q.setViewportSize(size);
           await q.evaluate((look) => __page.port.postMessage({ type: 'look', look }), look);
@@ -554,6 +671,7 @@ const GHOST = { text: 'it arrives uninvited and rearranges the present. Then the
       } finally { await q.close(); }
     });
     await check('no page errors', async () => assert.deepEqual(errors, []));
+    }
   } finally { await browser.close(); }
   console.log(`${checks - failures}/${checks} passed${failures ? '' : ` · screenshots in ${shots}`}`);
   process.exitCode = failures ? 1 : 0;

@@ -487,6 +487,14 @@ const run = async () => {
     ok(await b.value(`browser.storage.sync.get('navbar').then((r) => browser.storage.sync.set({ navbar: { ...r.navbar, on: true }, navbarItems: { glaze: ['settings', 'documents'] } }))
       .then(() => browser.runtime.sendMessage({ type: 'glaze:writerPapers', op: 'save', args: [${JSON.stringify(KEY)}, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Notes from the archive.' }] }] }, format: 'plain', title: 'Field notes', named: true }] }))
       .then((r) => r?.ok === true)`, papersTab), 'a document saved from the Documents tab');
+    // Same-document support does not imply cross-document support (Firefox 140+). Load a stale handoff and navigate for real.
+    const support = await b.value(`({ reveal: 'onpagereveal' in window, swap: 'onpageswap' in window, same: typeof document.startViewTransition === 'function' })`, papersTab);
+    console.log(`Documents view-transition support: ${JSON.stringify(support)}`);
+    await b.value(`(sessionStorage.setItem('gz-documents-route', JSON.stringify({ at: '?paper=old', kind: 'genie' })), 1)`, papersTab);
+    await until(() => b.value(`!!document.querySelector('.gd-card[data-key="${KEY}"] .gd-title')`, papersTab), 'the Documents card');
+    await b.clickOn(papersTab, `document.querySelector('.gd-card[data-key="${KEY}"] .gd-title')`);
+    await until(() => b.value(`!!globalThis.GZ_WRITER_PAPER?.current()?.key()`, papersTab), 'document editor without cross-document transitions');
+    ok(await b.value(`!sessionStorage.getItem('gz-documents-route') && !document.documentElement.hasAttribute('data-gd-route') && !document.getAnimations().some((a) => a.effect?.pseudoElement?.startsWith('::view-transition'))`, papersTab), 'Documents: unsupported cross-document motion is instant and consumes a stale handoff');
     await b.close(papersTab);
     const docsCourse = await b.open(`${INST}/courses/25`);
     const navDocs = `document.getElementById('gz-navbar')?.shadowRoot?.querySelector('[data-id="glaze:documents"]')`;

@@ -13,7 +13,7 @@ const fixture = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, `fixtu
 const real = () => fixture('ultra-rubric-graded'), numeric = () => fixture('ultra-rubric-numeric');
 const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const ORIGIN = 'https://bb.school.test', PATH = '/ultra/courses/_101_1/assessment/_8120_1/overview';
-const PATHS = { overview: PATH, discussion: '/ultra/courses/_101_1/discussion/_8120_1', attempt: '/ultra/courses/_101_1/assessment/_8120_1/attempt/create' };
+const PATHS = { overview: PATH, discussion: '/ultra/courses/_101_1/discussion/_8120_1', attempt: '/ultra/courses/_101_1/assessment/_8120_1/attempt/create', draft: '/ultra/courses/_101_1/assessment/_8120_1/attempt/_400_1' };
 
 class Box extends El {
   matches(sel) { return matches(this, sel); }
@@ -22,7 +22,8 @@ class Box extends El {
 
 // The overview's Assessment Details section, 706 px wide, with the native rubric link; the school answers from data.
 // kind 'discussion' and 'attempt' are the other pages with Ultra's rubric link, in the markup the real pages have: a
-// discussion's Details panel (inside Glaze's sidebar) and the attempt page View instructions opens (React, no stable class).
+// discussion's Details panel (inside Glaze's sidebar) and the attempt page View instructions opens (React, no stable class);
+// 'draft' is that attempt page once Ultra has saved it and numbered its address.
 const page = (data, width = 706, kind = 'overview') => {
   const asked = [], listeners = [], popups = [];
   const doc = { activeElement: null, hidden: false, fire() {} };
@@ -36,9 +37,9 @@ const page = (data, width = 706, kind = 'overview') => {
     box = make('div', 'layer-details', make('bb-discussion-settings', '', make('div', 'full-panel-details', make('div', 'discussion-settings student-details',
       make('div', 'full-panel-details-info', make('div', 'element-card discussion-info-list', make('div', 'element-details discussion-info-details', row)))))));
     box.setAttribute('data-gz-sidebar-host', 'native');
-  } else if (kind === 'attempt') {
+  } else if (kind === 'attempt' || kind === 'draft') {
     link = make('a', 'MuiTypography-root MuiLink-root MuiLink-underlineAlways', 'This item is graded with a rubric');
-    link.setAttribute('data-analytics-id', 'assignment.attempt.authoring.rubric.view.link'); link.setAttribute('href', ORIGIN + PATHS.attempt);
+    link.setAttribute('data-analytics-id', 'assignment.attempt.authoring.rubric.view.link'); link.setAttribute('href', ORIGIN + PATHS[kind]);
     row = make('div', 'makeStylescontentRoot-0-2-206', make('span', '', 'Grading rubric'), link);
     box = make('div', 'makeStylesdetails-0-2-92', make('div', 'makeStyleslistWrapper-0-2-204', make('div', 'makeStylesroot-0-2-205', row)));
   } else {
@@ -57,7 +58,8 @@ const page = (data, width = 706, kind = 'overview') => {
   const answer = (u) => {
     if (/\/gradebook\/grades$/.test(u.pathname)) return { results: data.grade ? [data.grade] : [] };
     if (/\/gradebook\/columns\/_300_1$/.test(u.pathname)) return data.column;
-    if (/\/gradebook\/attempts\/_400_1$/.test(u.pathname)) return data.attempt;
+    const attemptId = /\/gradebook\/attempts\/(_\d+_\d+)$/.exec(u.pathname)?.[1];
+    if (attemptId) return data.attempts?.[attemptId] ?? (data.attempt?.id === attemptId ? data.attempt : null);
     return null;
   };
   const fetch = async (url) => {
@@ -265,6 +267,56 @@ test('View instructions on a submitted, ungraded attempt: the rubric link opens 
   assert.doesNotMatch(shadow.textContent, /Synthetic note\./);
 });
 
+// As a real saved draft reads (2026-10-29): the row NEEDS_GRADING, its submission DRAFT_SAVED_STUDENT, the attempt IN_PROGRESS.
+test('a saved draft at its numbered attempt address: the rubric link opens the pop-up with the definition only', async () => {
+  const d = real(); d.grade.status = 'NEEDS_GRADING'; d.grade.submissionStatus = { actionCount: null, status: 'DRAFT_SAVED_STUDENT' };
+  d.attempt.status = 'IN_PROGRESS'; d.grade.lastAttempt.status = 'IN_PROGRESS';
+  const p = await show(d, 1400, 'draft');
+  const e = press(p);
+  assert.ok(e.prevented && e.stopped);
+  assert.equal(p.popups.length, 1);
+  assert.deepEqual(marks(p.popups[0].body.shadowForTest), [], 'no selections on a draft');
+});
+
+test('a numbered attempt never borrows the latest attempt\'s selections or feedback', async () => {
+  for (const status of ['IN_PROGRESS', 'COMPLETED']) {
+    const d = real(), latest = structuredClone(d.attempt);
+    latest.id = '_401_1'; latest.rubricEvaluation.attemptId = latest.id;
+    d.grade.lastAttemptId = latest.id; d.grade.lastAttempt.id = latest.id;
+    d.attempt.status = status;
+    d.attempts = { [d.attempt.id]: d.attempt, [latest.id]: latest };
+    const p = await show(d, 1400, 'draft');
+    assert.ok(press(p).prevented, status);
+    const shadow = p.popups[0].body.shadowForTest;
+    assert.deepEqual(marks(shadow), [], `${status}: the latest grade row cannot release another attempt's evaluation`);
+    assert.doesNotMatch(shadow.textContent, /Synthetic note\./);
+    assert.ok(p.asked.some((x) => x.endsWith('/attempts/_400_1')), 'read the attempt in the address');
+    assert.ok(!p.asked.some((x) => x.endsWith('/attempts/_401_1')), 'do not read a different attempt');
+  }
+});
+
+test('a numbered latest attempt retains its released selections, but a foreign column or user stays native', async () => {
+  const p = await show(real(), 1400, 'draft');
+  assert.ok(press(p).prevented);
+  assert.equal(marks(p.popups[0].body.shadowForTest).length, 2);
+  for (const field of ['columnId', 'userId']) {
+    const d = real(); d.attempt[field] = '_999_1';
+    const p = await show(d, 1400, 'draft');
+    assert.ok(!press(p).prevented, field);
+    assert.equal(p.popups.length, 0, field);
+  }
+});
+
+// No live capture shows an attempt's own columnId (the read is already scoped by ?columnId=): its absence never hides grading.
+test('an attempt that names no column still shows its released selections', async () => {
+  const d = real(); delete d.attempt.columnId;
+  const p = await show(d);
+  assert.equal(p.selected.length, 2);
+  const q = await show(d, 1400, 'draft');
+  assert.ok(press(q).prevented);
+  assert.equal(marks(q.popups[0].body.shadowForTest).length, 2);
+});
+
 test('until Glaze has the rubric, the discussion and attempt links still open Ultra\'s own', async () => {
   for (const kind of ['discussion', 'attempt']) {
     const d = real(); d.grade = null;
@@ -284,8 +336,8 @@ test('routes: features/rubric.js loads on Ultra\'s overview, attempt and discuss
     ctx.GZ_ROUTES.sync(); await settle();
     return loaded.includes('features/rubric.js');
   };
-  for (const p of [PATHS.overview, PATHS.discussion, PATHS.attempt, '/ultra/courses/_101_1/assessment/_8120_1/attempt']) assert.equal(await where('ultra', p), true, p);
+  for (const p of [PATHS.overview, PATHS.discussion, PATHS.attempt, PATHS.draft, '/ultra/courses/_101_1/assessment/_8120_1/attempt']) assert.equal(await where('ultra', p), true, p);
   assert.equal(await where('canvas', '/courses/101/assignments/7'), true);
   for (const p of ['/ultra/courses/_101_1/discussion/_8120_1/rubric-view', '/ultra/courses/_101_1/assessment/_8120_1/attempt/create/rubric-view',
-    '/ultra/courses/_101_1/discussions', '/ultra/courses/_101_1/outline', '/ultra/courses/_101_1/assessment/_8120_1/attempt/_3_1']) assert.equal(await where('ultra', p), false, p);
+    '/ultra/courses/_101_1/discussions', '/ultra/courses/_101_1/outline', `${PATHS.draft}/rubric-view`]) assert.equal(await where('ultra', p), false, p);
 });

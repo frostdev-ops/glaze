@@ -267,8 +267,13 @@ const HARNESS = `(() => {
     check(duplicates === 1, `paper format and cite checks share one MLA citation card (${duplicates})`);
     // In the attempt panel, then in Focus (the frame fills the window): the mockup's 1440px view.
     saved.panel = await shot(p, 'paper-panel.png');
+    // A loaded runner has swallowed this click (the frame still laying out); once more if Focus didn't take.
+    const filled = () => el.evaluate((f) => getComputedStyle(f).position === 'fixed' && Math.round(f.getBoundingClientRect().width) === innerWidth);
     await fr.click('.gp-tbtn[aria-label="Focus"]');
-    await until(() => el.evaluate((f) => getComputedStyle(f).position === 'fixed' && Math.round(f.getBoundingClientRect().width) === innerWidth), 'focus fills the window');
+    try { await until(filled, 'focus fills the window', 5000); } catch {
+      if (await fr.evaluate(() => document.querySelector('.gp-tbtn[aria-label="Focus"]')?.getAttribute('aria-pressed')) !== 'true') await fr.click('.gp-tbtn[aria-label="Focus"]');
+      await until(filled, 'focus fills the window');
+    }
     check(true, 'Focus asks the page to fill the window with the paper (focus-mode message)');
     await settle(fr);
     await fr.click('.gp-issue[data-rule="cite-shape"]');
@@ -357,6 +362,7 @@ const HARNESS = `(() => {
     check(key === 'bb.school.test|_900_1|_101_1|_7_1', 'paper keyed by school, student, course and assignment');
     // IndexedDB written in the frame, read from papers.html below: is it one store across the two?
     await fr.evaluate(() => new Promise((ok) => { const r = indexedDB.open('gz-paper-probe', 1); r.onupgradeneeded = () => r.result.createObjectStore('p'); r.onsuccess = () => { const tx = r.result.transaction('p', 'readwrite'); tx.objectStore('p').put('frame', 'k'); tx.oncomplete = () => { r.result.close(); ok(); }; }; }));
+    const trashedBeforeOpen = await fr.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(), k = GZ_WRITER_PAPER.current().key(); await P.trash(k); return P.get(k); });
     await p.reload();
     ({ el, fr } = await (async () => {
       const x = await until(async () => { const y = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return y && await y.evaluate((f) => !f.style.opacity && f.offsetHeight > 500) && y; }, 'paper frame after reload');
@@ -365,6 +371,10 @@ const HARNESS = `(() => {
       return { el: x, fr: d };
     })());
     check(await fr.evaluate(() => GZ_WRITER_PAPER.current().editor.view.state.doc.textContent.includes('A sentence typed before the reload.')), 'the paper survives a reload');
+    const restoredOnOpen = await fr.evaluate(async () => { const P = GZ_WRITER_PAPERS.open(), k = GZ_WRITER_PAPER.current().key(); return { paper: await P.get(k), versions: await P.versions(k) }; });
+    check(!('trashed' in restoredOnOpen.paper) && restoredOnOpen.paper.updated === trashedBeforeOpen.updated && restoredOnOpen.paper.revision === trashedBeforeOpen.revision,
+      "Ultra restores a trashed assignment on open without changing Last edited or revision");
+    check(restoredOnOpen.versions[0]?.reason === 'restore', 'opening a trashed assignment keeps a checkpoint version');
     const papers = await context.newPage();
     watch(papers, 'papers');
     await papers.goto(`chrome-extension://${id}/papers.html`);
@@ -384,10 +394,12 @@ const HARNESS = `(() => {
     check(true, 'Versions lists saved versions');
     saved.versions = await shot(papers, 'paper-versions.png');
     // A paper Word can't take (a picture kept in a form Word has no place for) says so on the list, and nothing breaks.
+    // Seeded through the worker, the index's one writer: the open editor's autosave of the paste above rewrites the index
+    // too, and a write around the worker's queue lost this row to it on a loaded runner.
     await papers.evaluate(async () => {
-      const k = 'bb.school.test|_900_1|_101_1|_8_1', { writerPapers: rows } = await chrome.storage.local.get('writerPapers');
+      const k = 'bb.school.test|_900_1|_101_1|_8_1';
       const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A picture Word can’t take: ' }, { type: 'image', attrs: { src: 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA', alt: 'Chart' } }] }] };
-      await chrome.storage.local.set({ [`writerPaper:${k}`]: { key: k, doc, title: 'Lab report', format: 'mla9', updated: Date.now(), revision: 1 }, writerPapers: [{ key: k, title: 'Lab report', course: '', url: '', words: 5, format: 'mla9', updated: Date.now(), submitted: null }, ...rows] });
+      await GZ_WRITER_PAPERS.open().save(k, { doc, title: 'Lab report', format: 'mla9' });
     });
     await papers.goto(`chrome-extension://${id}/papers.html`);
     await until(() => papers.evaluate(() => document.querySelectorAll('.gd-card').length === 2), 'papers list with the second paper');

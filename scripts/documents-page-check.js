@@ -210,8 +210,22 @@ const check = async (name, test) => {
       await f.locator('.gd-menu [data-act="delete"]').click();
       await until(async () => Number.isFinite((await record(KEY))?.trashed), 'in Trash again');
       await f.locator('#gd-trash').click();
-      await f.locator(`.gd-card[data-key="${KEY}"] .gd-more`).click();
-      await f.locator('.gd-menu [data-act="restore"]').click();
+      const viewport = page.viewportSize();
+      try {
+        await page.setViewportSize({ width: 640, height: 860 });
+        await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).focus();
+        await page.keyboard.press('Shift+F10');
+        assert.deepEqual(await f.locator('.gd-menu [role="menuitem"]').allTextContents(), ['Restore', 'Delete forever']);
+        assert.equal(await f.locator('#gd-count').textContent(), '1 document');
+        assert.ok(await f.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '640px embedded Trash fits');
+        await shoot(page, f, 'inpage-ultra-trash-640');
+        const target = await f.locator('.gd-menu [data-act="forever"]').boundingBox();
+        const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.id, [target.x + target.width / 2, target.y + target.height / 2]);
+        console.log(`     Trash Delete forever: ${JSON.stringify(target)}, hit ${hit}`);
+        await f.locator('.gd-menu [data-act="restore"]').click();
+        assert.equal(await f.evaluate(() => document.activeElement?.id), 'gd-q', 'Restore of the last card focuses search');
+        assert.equal(hit, 'gz-settings-page', 'Trash Delete forever stays above the LMS navigation');
+      } finally { await page.setViewportSize(viewport); }
       await until(async () => !('trashed' in (await record(KEY))), 'restored from the Trash view');
       await f.locator('#gd-trash').click();
       await until(() => f.locator(`.gd-card[data-key="${KEY}"]`).count(), 'listed after Restore');
@@ -254,14 +268,43 @@ const check = async (name, test) => {
       // One more Back leaves the page as it would without Documents: nothing of the frame's left in the history.
       length = await page.evaluate(() => history.length);
     });
+    await check('ultra: Escape stays in the document editor, then leaves from outside the editor past both entries', async () => {
+      f = await openFromBar(page);
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+      f = await shown(page);
+      const editor = f.locator('.ProseMirror');
+      await editor.click();
+      await editor.focus();
+      // Establish the keyboard target in the OOPIF explicitly; a pointer click alone does not prove that precondition.
+      await until(() => f.evaluate(() => document.hasFocus() && document.activeElement?.isContentEditable), 'editor keyboard focus');
+      await editor.press('Escape');
+      assert.ok(await hosted(page), 'Escape in editable text keeps Documents open');
+      await f.locator('.gp-top > .gd-btn').focus();
+      await f.locator('.gp-top > .gd-btn').press('Escape');
+      await closed(page);
+      await atMark(page);
+    });
     await check('ultra: Settings in the bar takes its place, Back is Documents again; Search leaves it', async () => {
       f = await openFromBar(page);
+      await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+      f = await shown(page);
       await item(page, 'glaze:settings').click();
       await until(() => framed(page, `${base}/options.html`), 'Settings in its place');
       assert.equal(framed(page), undefined, 'Documents gone');
       await until(async () => (await item(page, 'glaze:settings').getAttribute('aria-current')) === 'page', 'Settings marked');
       assert.equal(await item(page, 'glaze:documents').getAttribute('aria-current'), null);
+      const settingsFrame = framed(page, `${base}/options.html`);
+      await settingsFrame.locator('[data-editor-tab="study"]').click();
+      await settingsFrame.locator('[data-editor-jump][href="#study/grades"]').click();
+      // A repeated open of Settings sends its section through the host's message handler.
+      await item(page, 'glaze:settings').click();
+      assert.equal(await settingsFrame.evaluate(() => location.hash), '#study/grades');
+      const tabId = await worker.evaluate((url) => chrome.tabs.query({}).then((tabs) => tabs.find((t) => t.url === url)?.id), page.url());
+      await worker.evaluate((tabId) => chrome.scripting.executeScript({ target: { tabId }, func: () => GZ_SETTINGS_PAGE.open('writer/papers') }), tabId);
+      await until(() => settingsFrame.evaluate(() => location.hash === '#writer/papers' && !document.querySelector('[data-editor-panel="writer"]').hidden), 'a repeated open replaces Settings section history');
       await back(page);
+      // The frame shows its list once claimed, then the channel's go replaces it with the document.
+      await until(() => framed(page) && new URL(framed(page).url()).searchParams.get('paper') === KEY, 'Back restores the document through the private channel');
       f = await shown(page);
       await until(async () => (await item(page, 'glaze:documents').getAttribute('aria-current')) === 'page', 'Documents marked again');
       await item(page, 'glaze:search').click();
@@ -316,10 +359,73 @@ const check = async (name, test) => {
         if (await page.evaluate(() => !!document.getElementById('gz-settings-page'))) { await page.keyboard.press('Escape'); await closed(page).catch(() => {}); }
       }
     });
+    await check('ultra: with motion on, a document opens out of its card in the frame and Back folds it in again, the page keeping the history', async () => {
+      // Every animation on a view transition's pictures in Documents' frame (papers-motion.js), and the transition.
+      await page.addInitScript(() => {
+        if (location.pathname !== '/papers.html') return;
+        const log = globalThis.__mo = { vt: null, finished: 0, all: [] }, animate = Element.prototype.animate;
+        addEventListener('pagereveal', (e) => { log.vt = !!e.viewTransition; e.viewTransition?.finished.then(() => { log.finished = 1; }, () => { log.finished = -1; }); });
+        Element.prototype.animate = function (frames, o = {}) { if (o.pseudoElement) log.all.push({ pseudo: o.pseudoElement, route: document.documentElement.getAttribute('data-gd-route'), n: frames.length, first: frames[0], last: frames.at(-1) }); return animate.call(this, frames, o); };
+      });
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      await worker.evaluate((motion) => chrome.storage.sync.set({ motion }), { ...G.GZ_DEFAULTS.motion, level: 'expressive' });
+      const ended = (g) => until(() => g.evaluate(() => globalThis.__mo && (globalThis.__mo.vt === false || globalThis.__mo.finished !== 0)), 'the frame\'s transition ends');
+      const edge = (frame, w) => { const m = /polygon\(([-\d.]+)% [-\d.]+%, ([-\d.]+)%/.exec(frame?.clipPath || ''); return m ? (m[2] - m[1]) / 100 * w : NaN; };
+      try {
+        f = await openFromBar(page);
+        await until(() => f.evaluate(() => document.documentElement.getAttribute('data-gz-motion') === 'expressive' && !matchMedia('(prefers-reduced-motion: reduce)').matches), 'Expressive in the frame');
+        const h0 = await page.evaluate(() => history.length), w = await f.evaluate(() => innerWidth);
+        const cardW = await f.evaluate((k) => document.querySelector(`.gd-card[data-key="${k}"]`).getBoundingClientRect().width, KEY);
+        // From the keyboard, the pointer away: a hovered card lifts (papers.css), and the genie leaves the card as it shows.
+        await page.mouse.move(2, 2);
+        await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).press('Enter');
+        f = await shown(page);
+        await ended(f);
+        const open = await f.evaluate(() => ({ vt: globalThis.__mo.vt, genie: globalThis.__mo.all.find((x) => x.pseudo === '::view-transition-new(root)' && x.route === 'open' && x.n >= 24) }));
+        assert.ok(open.vt && open.genie && Math.abs(edge(open.genie.first, w) - cardW) < 1, `the genie out of the card (${JSON.stringify({ vt: open.vt, edge: edge(open.genie?.first, w), cardW })})`);
+        assert.equal(await page.evaluate(() => history.length), h0 + 1, 'the page keeps one entry for the document');
+        await back(page);
+        await until(() => framed(page) && !new URL(framed(page).url()).search, 'the list in the frame');
+        f = await shown(page);
+        await ended(f);
+        const shut = await f.evaluate(() => globalThis.__mo.all.find((x) => x.pseudo === '::view-transition-old(root)' && x.route === 'back' && x.n >= 24));
+        assert.ok(shut && shut.last.opacity === 0 && Math.abs(edge(shut.last, w) - cardW) < 1, `folded into the card (${JSON.stringify(shut && { edge: edge(shut.last, w), cardW })})`);
+        await f.locator('#list > .gd-btn').click();
+        await closed(page);
+        await atMark(page);
+      } finally {
+        await worker.evaluate((motion) => chrome.storage.sync.set({ motion }), settings.motion);
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        if (await page.evaluate(() => !!document.getElementById('gz-settings-page'))) { await page.keyboard.press('Escape'); await closed(page).catch(() => {}); }
+      }
+    });
+    await check('ultra: a document opens editable when its frame\'s pass is claimed after the editor has loaded', async () => {
+      // The worker trusts a claimed frame once the claim is kept in session storage (claimFrame). Holding that write lets the
+      // editor reach its first write (restoring a document from Trash, a tab's unsaved copy) before the frame is trusted.
+      const live = context.serviceWorkers()[0] || worker;
+      await live.evaluate(() => {
+        const s = chrome.storage.session, set = s.set.bind(s);
+        globalThis.__claimSet = set;
+        s.set = async (v) => { if (Object.keys(v || {}).some((k) => k.startsWith('papersFrame:'))) await new Promise((r) => setTimeout(r, 3000)); return set(v); };
+      });
+      try {
+        f = await openFromBar(page);
+        await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
+        f = await shown(page);
+        await until(() => f.evaluate(() => !!globalThis.GZ_WRITER_PAPER?.current() && document.querySelector('.ProseMirror')?.isContentEditable === true), 'the document loaded and editable after a slow claim');
+        await f.locator('.gp-top > .gd-btn').click();
+        await closed(page);
+        await atMark(page);
+      } finally {
+        await live.evaluate(() => { if (globalThis.__claimSet) chrome.storage.session.set = globalThis.__claimSet; });
+        if (await page.evaluate(() => !!document.getElementById('gz-settings-page'))) { await page.keyboard.press('Escape'); await closed(page).catch(() => {}); }
+      }
+    });
     await check('ultra: the page heard no document of the student\'s, and its history holds none', async () => {
       const heard = await page.evaluate(() => __heard);
       assert.ok(heard.length && heard.every((m) => !m.includes(KEY.slice(4)) && !m.includes('pass')), JSON.stringify(heard));
       assert.ok(!JSON.stringify(await page.evaluate(() => history.state)).includes(KEY.slice(4)));
+      assert.ok(!(await page.evaluate(() => performance.getEntriesByType('resource').map((e) => e.name))).some((u) => u.includes(KEY.slice(4))), 'iframe resource URLs reveal no document key');
     });
     await check('ultra: a papers.html frame the page makes itself stays blank, and the worker refuses its writes', async () => {
       await page.evaluate((src) => { const r = document.createElement('iframe'); r.id = 'check-rogue'; r.src = src; document.body.append(r); }, PAPERS);
@@ -338,12 +444,20 @@ const check = async (name, test) => {
       f = await openFromBar(page);
       const h = await hosted(page), b = await item(page, 'glaze:documents').boundingBox();
       console.log(`     640: page host ${JSON.stringify(h)}, bar item ${JSON.stringify(b)}`);
+      const tabs = await page.locator('#gz-navbar .tabs').boundingBox();
+      assert.ok(h.bottom <= tabs.y + 1, `the entire frame is above the phone bar: ${JSON.stringify({ h, tabs })}`);
       assert.ok(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.id === 'gz-navbar', [b.x + b.width / 2, b.y + b.height / 2]), 'the bar stays over it, in use');
       await shoot(page, f, 'inpage-ultra-640');
       await f.locator(`.gd-card[data-key="${KEY}"] .gd-title`).click();
       f = await shown(page);
       await shoot(page, f, 'inpage-ultra-doc-640');
       await f.locator('.gp-top > .gd-btn').click();
+      await closed(page);
+      await page.locator('#gz-navbar .tabs .more').click();
+      await item(page, 'glaze:settings').click();
+      await until(() => framed(page, `${base}/options.html`), 'Settings at 640');
+      await until(async () => (await hosted(page)).bottom <= (await page.locator('#gz-navbar .tabs').boundingBox()).y + 1, 'Settings is above the phone bar too');
+      await page.keyboard.press('Escape');
       await closed(page);
       await page.setViewportSize({ width: 1280, height: 860 });
     });

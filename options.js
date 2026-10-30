@@ -58,7 +58,11 @@ if (embedded) {
   const ticket = new URLSearchParams(location.search).get('t') || '';
   history.replaceState(null, '', location.pathname + location.hash);
   chrome.runtime.sendMessage({ type: 'glaze:settings-claim', ticket }).then((r) => { if (r?.ok) document.documentElement.setAttribute('data-embed-ok', ''); }, () => {});
-  addEventListener('message', (e) => { if (e.source === window.parent && e.data?.gzSettings === 'go' && /^#[a-z][a-z-]*(\/[a-z-]+)?$/.test(e.data.hash || '')) location.hash = e.data.hash; });
+  addEventListener('message', (e) => {
+    if (e.source !== window.parent || e.data?.gzSettings !== 'go' || !/^#[a-z][a-z-]*(\/[a-z-]+)?$/.test(e.data.hash || '')) return;
+    history.replaceState(null, '', e.data.hash);
+    editor.show(e.data.hash, { scroll: true, remember: true });
+  });
   $('.embed-tools').hidden = false;
   const leave = () => window.parent.postMessage({ gzSettings: 'close' }, '*');
   // Where the frame has no tabs API (Firefox gives an extension page framed in a web page none), the worker opens it.

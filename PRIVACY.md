@@ -1,6 +1,6 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-27_
+_Last updated: 2026-10-29_
 
 ## User-installed mods
 
@@ -31,7 +31,8 @@ it propose a bar layout while it runs, without saving over yours. **Use my own**
 device-local `modNavLayout:<id>` until you allow them again. `glaze.nav.go` lets an enabled replacement navigation
 open an existing bar item, only from its Worker within a second of a click in its own navigation controls.
 
-With **documents**, a mod's Worker runs on Writer's Documents page and can read the titles, courses, formats, word counts
+With **documents**, a mod's Worker runs on Writer's Documents page in a tab of its own (not when Documents opens as a page
+of a school's site) and can read the titles, courses, formats, word counts
 and last-edited times of the documents listed there, add up to four items of its own to the toolbar and to each card's
 menu, and open or start a document right after a click on one of them. **documents.read** (which needs documents) adds
 a document's text and its exported .docx. Glaze treats both as personal data, as above: Worker only, no frame UI, and a
@@ -436,10 +437,14 @@ not those unknown legacy copies or unrelated stickers.
   and assignment (one Blackboard hasn't yet said whose it is waits under a key of its own), with the versions Settings →
   Writer keeps (40 to start, 10 to 100; 4 MB in all, the last submitted one always kept) and your own format presets; your
   personal dictionary (up to 5,000 words, shared by every box); and the sources you save for each assignment or
-  discussion (up to 300 each), keyed the same way. A paper's edits not yet saved wait in the writer frame's own
+  discussion (up to 300 each), keyed the same way. The documents you start or import on Writer's Documents page are kept
+  the same way, each under a random key (`doc:<uuid>`) with its text, title, format and versions; Glaze keeps no copy on
+  a server. Delete there moves a paper or document to Trash, which keeps it and its versions on this device; 30 days later
+  it is deleted for good the next time the browser starts or Documents opens, unless you restore it first. A paper's edits
+  not yet saved wait in the writer frame's own
   `sessionStorage` until they are. What you type in a discussion, reply, message or test box goes to Back up what you
-  type (when it is on), as Blackboard's own editor's does; Writer keeps no copy of its own. **Back up…** includes papers, versions, presets, the
-  dictionary and saved sources; uninstalling removes them. The thread, prompt, rubric, attached files and names Writer reads
+  type (when it is on), as Blackboard's own editor's does; Writer keeps no copy of its own. **Back up…** includes papers,
+  documents (those in Trash too), versions, presets, the dictionary and saved sources; uninstalling removes them. The thread, prompt, rubric, attached files and names Writer reads
   from Blackboard for a box are held in that page's memory only.
 - **Course tabs** (Canvas and Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
   signed-in account (`ctabs:<origin>:<uid>`): for each tab (40 at most) the course's id, name and code, whether it is
@@ -724,10 +729,16 @@ you import) are bundled. It makes requests in these cases:
     host, after the browser asks you for access to that one host. The answer is read as untrusted text; only the
     source's fields are kept, and only if you save it.
   - **AI**, only for the features you turned on in Settings → AI, to the model you chose for each (see AI reading
-    above; a model on this device sends nothing anywhere). **Tab completion** sends, as you pause, up to 4,000
-    characters before the caret and 1,000 after, the course name, citation style, the discussion's prompt or the
-    assignment's title, instructions and rubric, and, in a discussion, the thread: your classmates' posts with their
-    names (24,000 characters at most) and the post you are answering. **Feedback** sends your draft with the
+    above; a model on this device sends nothing anywhere). **Tab completion** sends the whole document before the caret on each pause,
+    within a rolling window bounded by the model's context and a 60,000-token estimated run cap; earliest paragraphs
+    are dropped first. It also sends up to 4,000 characters after the caret, the course name, citation style, the
+    discussion's prompt or the assignment's title, instructions and rubric, and, in a discussion, the thread: your
+    classmates' posts with their names (24,000 characters at most) and the post you are answering. The newest 40
+    suggestions shown in that editor may accompany the request to avoid repeating them. They stay in frame memory only,
+    are cleared when another paper opens or the document is replaced, and are never saved. Device and small-window
+    models receive a brief context, up to the newest 1,500 bytes of earlier document text and three suggestions, within
+    the available window. Completion is limited to 60 requests per minute per tab. OpenRouter Anthropic requests mark
+    the stable document prefix for the provider's temporary prompt cache; actual cache use depends on the provider. **Feedback** sends your draft with the
     course name, style, prompt and assignment (no thread) for Check with AI; the draft with the assignment's
     instructions and rubric for Feedback, with the text of the documents the assignment attaches (up to 200,000 characters
     of assignment material in total) and its pictures (4 at most, only to a model that takes pictures); the prompt, to read its word, source and reply targets; the sentence around a
@@ -852,7 +863,8 @@ you import) are bundled. It makes requests in these cases:
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an
   ordinary font download from your browser. Opening the font list in the editor loads small previews
   of the fonts' names from Google Fonts the same way, and OpenDyslexic's two files from jsDelivr (it has no small
-  preview). Built-in fonts load nothing.
+  preview). Built-in fonts load nothing. Writer's Documents page wears your Look, so it loads the web font you chose
+  from the same hosts (its page policy allows only those).
 - **Grades on course cards** (an Extra, on by default). To show your overall grade on each course on
   the Courses page, Glaze makes the same gradebook request for each course whose card is on screen, at
   most once a minute per course, to the site you are on, with your existing session. The answer is kept
