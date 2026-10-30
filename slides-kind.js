@@ -66,14 +66,14 @@
   };
   // Pictures as blob: URLs, kept until the page goes.
   const made = new Set();
-  const blobs = async (bytes, deck, paths) => {
+  const blobs = async (bytes, deck, paths, inline = false) => {
     const out = new Map();
     for (const m of deck.media) {
       if (!paths.has(m.path)) continue;
       const b = await GZ_PPTX.media(bytes, m.path).catch(() => null);
       if (!b) continue;
-      const url = URL.createObjectURL(new Blob([b], { type: m.mime }));
-      made.add(url);
+      const url = inline ? `data:${m.mime};base64,${b64(b)}` : URL.createObjectURL(new Blob([b], { type: m.mime }));
+      if (!inline) made.add(url);
       out.set(m.path, url);
     }
     return out;
@@ -147,7 +147,8 @@
       await need(LIBS);
       const bytes = STORE.get(rec), deck = bytes && await GZ_PPTX.read(bytes).catch(() => null), s = deck?.slides[0];
       if (!s) return;
-      const media = await blobs(bytes, deck, mediaOf(s));
+      // Cards can be discarded and redrawn while the page lives; their images own no blob URLs.
+      const media = await blobs(bytes, deck, mediaOf(s), true);
       box.replaceChildren(R().stage(s, deck, { document, media, labels: LABELS(), scale: THUMB / R().px(deck.size.w) }));
     })().catch((e) => console.warn(e));
     return box;
@@ -181,8 +182,9 @@
   const exportFile = async (key) => {
     const f = await file(key);
     if (!f) return;
-    if (exported) URL.revokeObjectURL(exported);
+    if (exported) { URL.revokeObjectURL(exported); made.delete(exported); }
     exported = URL.createObjectURL(new Blob([f.bytes], { type: f.mime }));
+    made.add(exported);
     const a = document.createElement('a');
     a.href = exported;
     a.download = f.name;
