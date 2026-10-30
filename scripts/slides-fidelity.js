@@ -8,7 +8,7 @@
 // (--force overrides: it then opens the deck in the session in use).
 // NEEDS POWERPOINT FREE: not run while PowerPoint was busy with other work (2026-10-30). Without PowerPoint:
 //   --render-only writes the Glaze PNGs alone; --reference <folder> compares with PNGs already made (Slide1.png, … or any
-//   names numbered in slide order) instead of exporting.
+//   names numbered consecutively from 1, including hidden slides) instead of exporting. Incomplete references are refused.
 // NODE_PATH=<playwright> node scripts/slides-fidelity.js <deck.pptx | unzipped deck folder> [out folder] [--reference <folder>]
 //   [--render-only] [--tolerance 96] [--max 0.02] [--force]
 const { execFileSync } = require('node:child_process');
@@ -38,7 +38,10 @@ const numbered = (dir) => {
   const all = [];
   const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (/\.png$/i.test(e.name)) all.push(f); } };
   walk(dir);
-  return all.map((f) => ({ f, n: Number(/(\d+)(?=\D*\.png$)/i.exec(path.basename(f))?.[1] ?? NaN) })).filter((x) => Number.isFinite(x.n)).sort((a, b) => a.n - b.n).map((x) => x.f);
+  const slides = all.map((f) => ({ f, n: Number(/(\d+)(?=\D*\.png$)/i.exec(path.basename(f))?.[1] ?? NaN) })).filter((x) => Number.isFinite(x.n)).sort((a, b) => a.n - b.n);
+  if (!slides.length) throw Error(`No numbered PNG reference under ${dir}`);
+  if (slides.some((s, i) => s.n !== i + 1)) throw Error('PNG references must number every slide from 1, including hidden slides, with no gaps or duplicate slide numbers');
+  return slides.map((x) => x.f);
 };
 
 // PowerPoint's own pictures of the slides, made in a folder inside its container so the sandboxed app may write there.
@@ -98,8 +101,9 @@ const stagePage = () => {
       for (const m of deck.media) { const b = await GZ_PPTX.media(u, m.path); if (b) media.set(m.path, URL.createObjectURL(new Blob([b], { type: m.mime }))); }
       return { n: deck.slides.length, w: GZ_SLIDES_RENDER.px(deck.size.w), h: GZ_SLIDES_RENDER.px(deck.size.h), cut: deck.cut };
     }, bytes.toString('base64'));
-    if (ppt.length && ppt.length !== info.n) console.warn(`PowerPoint gave ${ppt.length} pictures for ${info.n} slides; comparing the first ${Math.min(ppt.length, info.n)}`);
-    const count = renderOnly ? info.n : Math.min(ppt.length, info.n);
+    if (!info.n) throw Error('The deck has no readable slides');
+    if (!renderOnly && ppt.length !== info.n) throw Error(`PowerPoint reference has ${ppt.length} PNGs for ${info.n} slides; export every slide, including hidden slides`);
+    const count = info.n;
     for (let i = 0; i < count; i++) {
       // Glaze's picture at PowerPoint's size (else the slide's own: 96 px to the inch).
       const want = ppt[i] ? await page.evaluate(async (b64) => { const img = new Image(); img.src = `data:image/png;base64,${b64}`; await img.decode(); return { w: img.naturalWidth, h: img.naturalHeight }; }, ppt[i].toString('base64')) : { w: Math.round(info.w), h: Math.round(info.h) };
