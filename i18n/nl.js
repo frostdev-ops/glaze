@@ -3089,7 +3089,6 @@
   "Only this key can update your mods; keep a backup of it.": "Je mods kunnen alleen met deze sleutel worden bijgewerkt; bewaar er een back-up van.",
   "Locks the backup file, and is needed to restore it.": "Vergrendelt het back-upbestand en is nodig om het te herstellen.",
   "Includes all share keys and creator delete tokens: anyone with this backup can open, change or delete those sessions.": "Bevat alle deelsleutels en verwijdertokens van makers: iedereen met deze back-up kan die sessies openen, wijzigen of verwijderen.",
-  "Backups leave out spreadsheets, PDFs and slides; export them from Documents.": "Back-ups laten spreadsheets, pdf’s en dia’s weg; exporteer die uit Documenten.",
   "Reset keeps your presets, pictures, notes, tasks, bookmarks and share keys.": "Resetten behoudt je voorinstellingen, afbeeldingen, notities, taken, bladwijzers en deelsleutels.",
   "On Chrome, with code mods installed, Glaze asks frostdev.io once a day for a signed list of mods to stop. Nothing about you is sent.": "In Chrome, met codemods geïnstalleerd, vraagt Glaze één keer per dag aan frostdev.io om een getekende lijst van mods die moeten worden gestopt. Er wordt niets over jou verstuurd.",
   "Removing a site forgets what Glaze read there; your notes and tasks stay.": "Een site verwijderen laat Glaze vergeten wat het daar las; je notities en taken blijven bewaard.",

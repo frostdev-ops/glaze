@@ -123,21 +123,6 @@ async function pass(scheme) {
       await until(async () => (await page.locator('#writer-words li').count()) === 5, 'the list follows');
     });
 
-    // Back up… leaves spreadsheets, PDFs and slides out (lib/backup.js pack): the panel says so while this device keeps one.
-    await check(`${scheme}-backup-kinds-note`, async () => {
-      const note = page.locator('#backup-kinds-note');
-      assert.equal(await note.count(), 1);
-      assert.equal(await note.evaluate((el) => el.hidden), true, 'papers only: no note');
-      const rows = await page.evaluate(() => chrome.storage.local.get('writerPapers').then((r) => r.writerPapers));
-      for (const kind of ['sheet', 'pdf', 'slides']) {
-        await page.evaluate(({ rows, kind }) => chrome.storage.local.set({ writerPapers: [{ key: 'doc:00000000-0000-4000-8000-000000000001', kind, title: 'Lab data', course: '', url: '', words: 0, updated: 2000 }, ...rows] }), { rows, kind });
-        await until(() => note.evaluate((el) => !el.hidden), `a ${kind} shows the note`);
-        assert.equal(await note.textContent(), 'Backups leave out spreadsheets, PDFs and slides; export them from Documents.');
-        await page.evaluate((rows) => chrome.storage.local.set({ writerPapers: rows }), rows);
-        await until(() => note.evaluate((el) => el.hidden), `the ${kind} gone, the note goes`);
-      }
-    });
-
     if (shots) {
       fs.mkdirSync(shots, { recursive: true });
       await page.evaluate(() => scrollTo(0, 0));
