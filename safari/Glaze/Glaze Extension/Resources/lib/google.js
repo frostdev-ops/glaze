@@ -84,7 +84,8 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
     const now = env.now || Date.now;
     const id = () => env.identity();
     let held = null; // the web flow's { token, exp }: this worker's memory only
-    const checked = new Set(); // tokens whose userinfo named the connected account, this worker's memory only
+    const checked = new Map(); // token → the account (sub) its userinfo named: this worker's memory only
+    let gen = 0; // moves on at each Connect and Disconnect: a Pick that started before one stops
     let queue = Promise.resolve();
     const turn = (f) => { const p = queue.then(f); queue = p.catch(() => {}); return p; };
     const send = (url, init = {}) => env.fetch(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store' });
@@ -169,10 +170,11 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
     // memory) and refused: 'account'.
     const ours = async (g, interactive) => {
       const t = await tokenFor(g.flow, interactive, g.email);
-      if (checked.has(t)) return t;
-      if ((await who(g.flow, t)).sub !== g.sub) { await drop(g.flow, t); throw new Fail('account'); }
+      if (checked.get(t) === g.sub) return t;
+      const { sub } = await who(g.flow, t);
       if (checked.size > 50) checked.clear();
-      checked.add(t);
+      checked.set(t, sub);
+      if (sub !== g.sub) { await drop(g.flow, t); throw new Fail('account'); }
       return t;
     };
 
@@ -198,8 +200,9 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       if (flow === 'web') token = await webToken(true, '');
       try {
         const { email, sub } = await who(flow, token);
+        gen++;
         await env.storage.set({ google: { email, sub, flow, at: now() } });
-        checked.add(token);
+        checked.set(token, sub);
         return { ok: true, email };
       } catch (e) { held = null; throw e; }
     }));
@@ -218,9 +221,11 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
     // → { ok, revoked: whether Google confirmed, had: a connection, so Google may still hold its grant unless revoked (no
     // token for its account: signed out of Google, offline, or the browser's account changed) }
     const disconnect = () => turn(async () => {
+      gen++;
       const g = await saved();
       if (await Promise.resolve().then(() => env.keep?.()).catch(() => true)) {
         held = null;
+        checked.clear();
         await env.storage.remove('google');
         return { ok: true, revoked: false, had: false };
       }
@@ -252,11 +257,16 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const g = await saved();
       if (!g) return { ok: false, why: 'connect' };
       if (env.flow === 'native') return { ok: false, why: 'browser' };
+      // A Connect or Disconnect while this waits: the token isn't handed on, and nothing comes back.
+      const at = gen, still = () => { if (gen !== at) throw new Fail('connect'); };
       const t = await token({ interactive: true });
+      still();
       const base = await reach();
+      still();
       if (!base) return { ok: false, why: 'offline' };
       const state = O.random();
       const url = await launch(pickerUrl(base, { token: t, state, redirect: id().getRedirectURL(), key: c().apiKey, appId: c().appId }), true);
+      still();
       return { ok: true, files: picked(url, state) };
     });
 

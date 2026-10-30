@@ -3142,6 +3142,10 @@ chrome.storage.onChanged.addListener((c, area) => {
   if (GCAL_WATCH[area]?.some((k) => k in c)) for (const run of gcalRuns) run.heard = true;
 });
 const gcalTurn = (f) => { const p = gcalQueue.then(f); gcalQueue = p.catch(() => {}); return p; };
+// Calendar and Drive share one Google grant (one client): their Connects and Disconnects take turns here, so each Disconnect
+// sees whether the other still holds the grant, and the last one revokes it and gives identity back.
+let grantQueue = Promise.resolve();
+const grantTurn = (f) => { const p = grantQueue.then(f); grantQueue = p.catch(() => {}); return p; };
 const gcalState = async () => (await chrome.storage.local.get('gcal')).gcal;
 const gcalOps = {
   connect: async (m) => {
@@ -3253,7 +3257,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
         || typeof m.consent !== 'string' || m.consent.length > 4000 || typeof m.whole !== 'boolean') return { ok: false, error: 'sender' };
     } else if (!fromEditor(s)) return { ok: false, error: 'sender' };
     else if (m.op === 'disconnect') { gcalEpoch++; gcalStop?.abort(); }
-    return gcalTurn(() => gcalOps[m.op](m, epoch));
+    return m.op === 'connect' || m.op === 'disconnect' ? grantTurn(() => gcalTurn(() => gcalOps[m.op](m, epoch))) : gcalTurn(() => gcalOps[m.op](m, epoch));
   })().then(reply, (e) => reply({ ok: false, error: e?.code || 'network' }));
   return true;
 });
@@ -3284,7 +3288,8 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (!(m.op === 'pick' ? googlePage(s) : fromEditor(s))) { reply({ ok: false, why: 'sender' }); return; }
   googleLib();
   if (!GZ_GOOGLE.ON) { reply({ ok: false, why: 'off' }); return; } // the build-time switch (lib/google.js)
-  Promise.resolve().then(() => openGoogle()[m.op]()).then(reply, () => reply({ ok: false, why: 'network' }));
+  const run = () => openGoogle()[m.op]();
+  Promise.resolve().then(() => (m.op === 'connect' || m.op === 'disconnect' ? grantTurn(run) : run())).then(reply, () => reply({ ok: false, why: 'network' }));
   return true;
 });
 
