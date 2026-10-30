@@ -416,6 +416,8 @@ const STYLE_READS = [
   ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
   ['features/sidebar.js', 'getComputedStyle(panel.grid)', 1], // one verified assessment overview grid, to identify Ultra's current native sidebar shell
   ['features/widgets.js', 'getComputedStyle(html)', 1], // the root's two room variables for Glaze's bar, when floating tiles are placed
+  ['pdf-kind.js', 'getComputedStyle(pagesEl)', 1], // the PDF viewer's pages box, its top padding: once when Whole page is chosen or its room resizes
+  ['pdf-kind.js', 'getComputedStyle(pv.div)', 1], // the current page's margin and borders, with the read above
   // WP-T2: only where a Look's colour rule meets Glaze settings: the root's palette, Glaze's item, and that part's ancestors
   // up to the first solid background.
   ['features/rules.js', 'getComputedStyle(el)', 1],

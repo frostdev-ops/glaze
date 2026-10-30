@@ -241,11 +241,32 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
 
     // ---- zoom: −, the box (Page width, Whole page, percents), +; Ctrl or ⌘ with + and −
     const PRESETS = [['page-width', 'Page width'], ['page-fit', 'Whole page']], STEPS = [50, 75, 100, 125, 150, 200, 300];
-    bus.on('scalechanging', ({ scale, presetValue }) => { const p = PRESETS.find(([v]) => v === presetValue); zoomLabel.textContent = p ? t(p[1]) : `${Math.round(scale * 100)}%`; });
+    // fit: the preset the zoom follows, or null at a percent. Whole page is set as its scale (wholePage), so a change
+    // while it is being set keeps it.
+    let fit = null, fitting = false;
+    const sayZoom = (scale) => { const p = PRESETS.find(([v]) => v === fit); zoomLabel.textContent = p ? t(p[1]) : `${Math.round(scale * 100)}%`; };
+    bus.on('scalechanging', ({ scale, presetValue }) => { if (!fitting) fit = PRESETS.some(([v]) => v === presetValue) ? presetValue : null; sayZoom(scale); });
+    // pdf.js's 'page-fit' leaves 5 px of the room for its own page borders (pdf_viewer.mjs VERTICAL_PADDING); Glaze's pages
+    // sit under the viewer's top padding with a margin below (pdf-kind.css), so the page's height is the room less those.
+    const wholePage = () => {
+      const pv = viewer.getPageView(viewer.currentPageNumber - 1);
+      if (!pv?.div || !pv.width || !pv.height) return null;
+      const n = (v) => parseFloat(v) || 0, box = getComputedStyle(pagesEl), pg = getComputedStyle(pv.div);
+      const down = scroll.clientHeight - n(box.paddingTop) - n(pg.marginBottom) - n(pg.borderTopWidth) - n(pg.borderBottomWidth);
+      return Math.min((scroll.clientWidth - 40) / pv.width, down / pv.height) * pv.scale;
+    };
+    const zoomTo = (v) => {
+      if (v !== 'page-fit') { viewer.currentScaleValue = v; return; }
+      const s = wholePage();
+      if (!(s > 0)) return;
+      fit = v; fitting = true;
+      try { viewer.currentScaleValue = String(s); } finally { fitting = false; }
+      sayZoom(s);
+    };
     zoomIn.addEventListener('click', () => viewer.increaseScale());
     zoomOut.addEventListener('click', () => viewer.decreaseScale());
     // A fit follows the room it fits (the window, the find bar), as pdf.js's own app re-applies it.
-    const sizing = new ResizeObserver(() => { const v = viewer.currentScaleValue; if (doc && PRESETS.some(([p]) => p === v)) viewer.currentScaleValue = v; });
+    const sizing = new ResizeObserver(() => { if (doc && fit) zoomTo(fit); });
     sizing.observe(scroll);
 
     // ---- menus (the paper's .pop .gp-menu): arrows move, Esc and Tab close, focus back on the opener
@@ -271,7 +292,7 @@ var GZ_PDF_KIND = globalThis.GZ_PDF_KIND || (() => {
       el.querySelector('[role="menuitem"]')?.focus();
     };
     document.addEventListener('pointerdown', (e) => { if (menu && !menu.el.contains(e.target) && !menu.opener.contains(e.target)) closeMenu(); }, { capture: true, signal });
-    zoomB.addEventListener('click', () => openMenu(zoomB, [...PRESETS.map(([v, label]) => [t(label), () => { viewer.currentScaleValue = v; }, { 'data-zoom': v }]),
+    zoomB.addEventListener('click', () => openMenu(zoomB, [...PRESETS.map(([v, label]) => [t(label), () => { zoomTo(v); }, { 'data-zoom': v }]),
       ...STEPS.map((n) => [`${n}%`, () => { viewer.currentScaleValue = String(n / 100); }, { 'data-zoom': String(n) }])]));
     // ⋯: Export .pdf (the pages panel's bake and the tools come in later steps).
     moreB.addEventListener('click', () => openMenu(moreB, [[t('Export .pdf'), () => { flush().then((ok) => ok && exportFile(key)).catch(() => say(t(UNREAD))); }, { 'data-act': 'export' }]]));
