@@ -159,6 +159,15 @@ test('bullets and auto-numbering hang in the indent; autofit scales the type', a
   assert.ok(find(paras[4], tag('br')));
 });
 
+test('a superscript run is two thirds of its size, raised by its baseline share of that size', async () => {
+  const el = await draw(2);
+  const run = find(el, (e) => e.localName === 'span' && e.style.getPropertyValue('vertical-align'));
+  const d = await deck(), r = d.slides[2].shapes.flatMap((x) => x.text?.paragraphs || []).flatMap((p) => p.runs).find((x) => x.baseline);
+  assert.equal(r.baseline, 0.3);
+  assert.equal(px(run.style.getPropertyValue('font-size')), Math.round(r.size * 4 / 3 * 2 / 3 * 100) / 100);
+  assert.equal(px(run.style.getPropertyValue('vertical-align')), Math.round(0.3 * r.size * 4 / 3 * 100) / 100);
+});
+
 test('a right-to-left paragraph keeps its margin and hanging bullet on its start side, the right', async () => {
   const d = await deck(), s = structuredClone(d.slides[1]);
   const body = s.shapes.find((x) => x.name === 'Content Placeholder 2');

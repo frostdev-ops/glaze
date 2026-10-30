@@ -217,15 +217,18 @@ var GZ_SLIDES_RENDER = globalThis.GZ_SLIDES_RENDER || (() => {
     }
     if (at < text.length) el.append(text.slice(at));
   };
+  // A superscript or subscript is drawn smaller, as Office draws it, and raised or lowered by its baseline share of the
+  // run's own size.
+  const SCRIPT = 2 / 3;
   const runEl = (X, r, fs, ranges, offset) => {
     if (r.br) return html(X, 'br');
     const e = html(X, 'span');
     const lines = [r.underline && 'underline', r.strike && 'line-through'].filter(Boolean);
     style(e, {
-      'font-family': family(r.font), 'font-size': `${r2(r.size * PT * fs)}px`, 'font-weight': r.bold ? '700' : null, 'font-style': r.italic ? 'italic' : null,
+      'font-family': family(r.font), 'font-size': `${r2(r.size * PT * fs * (r.baseline ? SCRIPT : 1))}px`, 'font-weight': r.bold ? '700' : null, 'font-style': r.italic ? 'italic' : null,
       color: r.color == null ? 'transparent' : cssColor(r.color), 'text-decoration-line': lines.length ? lines.join(' ') : null,
       'text-decoration-style': r.underline ? UNDERLINE[r.underline] : r.strike === 'double' ? 'double' : null, 'background-color': r.highlight ? cssColor(r.highlight) : null,
-      'vertical-align': r.baseline ? `${r2(r.baseline * 100)}%` : null, 'text-transform': r.caps === 'all' ? 'uppercase' : null, 'font-variant-caps': r.caps === 'small' ? 'small-caps' : null,
+      'vertical-align': r.baseline ? `${r2(r.baseline * r.size * PT * fs)}px` : null, 'text-transform': r.caps === 'all' ? 'uppercase' : null, 'font-variant-caps': r.caps === 'small' ? 'small-caps' : null,
       'letter-spacing': r.spacing ? `${r2(r.spacing * PT * fs)}px` : null,
     });
     marked(X, e, r.text, ranges, offset);
