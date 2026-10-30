@@ -18,7 +18,8 @@ const opaqueHex = (value) => { const c = C.parse(value); return c?.a === 1 ? C.h
 
 const ext = path.join(__dirname, '..');
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docviewer-'));
-const chromeLaunch = require('./check-env.js').chromeLaunch();
+const env = require('./check-env.js');
+const chromeLaunch = env.chromeLaunch();
 const fx = (f) => fs.readFileSync(path.join(ext, 'test/fixtures', f), 'utf8');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const BLOB = encodeURIComponent(JSON.stringify({ user_id: 170000000000042, attachment_id: 21, type: 'canvadoc' }));
@@ -32,6 +33,9 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     ...chromeLaunch, headless: true, viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce', colorScheme: 'dark',
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
   });
+  // Glaze's first screen opens on install as the active tab; a page left behind it renders at 1 Hz, too slow for the
+  // layer the viewer puts back on the next frame.
+  const welcomed = env.noFirstRun(ctx);
   try {
     let lang = 'en';
     const external = [];
@@ -55,6 +59,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     const set = (s) => opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, s);
     const local = () => opts.evaluate(() => chrome.storage.local.get(null));
     const look = (name) => ({ ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === name)[1], preset: name });
+    let welcomeTimer;
+    try {
+      await Promise.race([welcomed, new Promise((_, no) => { welcomeTimer = setTimeout(() => no(new Error('the install never closed its first screen')), 45000); })]);
+    } finally { clearTimeout(welcomeTimer); }
     const page = await ctx.newPage();
     const frame = async () => {
       await page.waitForSelector('#file-preview-iframe');
@@ -176,7 +184,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     ok(/^page-1-21\.png$/.test(pic.suggestedFilename()), `page picture ${pic.suggestedFilename()}`);
     // Re-render on scroll: the viewer replaces a page's contents; the layer comes back with the marks.
     await f.evaluate(() => { const p = document.getElementById('page-1'); p.replaceChildren(...[...p.children].filter((c) => !c.matches('.gz-ink')).map((c) => c.cloneNode(true))); });
-    await page.waitForTimeout(300);
+    await f.waitForFunction(() => document.querySelector('#page-1 > svg.gz-ink path'), null, { polling: 50, timeout: 5000 }).catch(() => {});
     ok(await f.locator('#page-1 > svg.gz-ink path').count() === 1, 'a page drawn again gets its layer and marks back');
     // Zoom: the page doubles in width; the layer follows, the stroke keeps its place in page units.
     await f.evaluate(() => { document.getElementById('page-1').style.width = '1224px'; });
@@ -185,7 +193,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     ok(/^0 0 1000 \d+$/.test(vb), `viewBox in page units at any zoom: ${vb}`);
     // Rotation: a click on the rotate button turns the frame a quarter turn.
     await f.locator('button[aria-label="Rotate Page Clockwise By 90 Degrees"]').click();
-    await page.waitForTimeout(300);
+    await f.waitForFunction(() => /^matrix\(0,1,-1,0,/.test(document.querySelector('#page-1 > svg.gz-ink g')?.getAttribute('transform')), null, { polling: 50, timeout: 5000 }).catch(() => {});
     ok(/^matrix\(0,1,-1,0,/.test(await f.locator('#page-1 > svg.gz-ink g').getAttribute('transform')), 'rotate: the layer turns a quarter');
     await page.screenshot({ path: path.join(out, 'ink-rotated.png') });
 
