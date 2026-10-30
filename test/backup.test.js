@@ -947,3 +947,15 @@ test('Back up refuses a missing spreadsheet band instead of silently leaving the
     assert.throws(() => B.pack({ settings: SETTINGS, local: a.store }), (e) => e.why === 'bad');
   } finally { a.stop(); }
 });
+
+for (const kind of ['pdf', 'deck']) test(`an older ${kind} already versioned in the backup is not snapshotted again`, async () => {
+  const a = device(), b = device();
+  try {
+    const keys = await kinds(a), k = keys[kind];
+    await keys.P.save(k, {}, { reason: 'sending' });
+    const P = require('../lib/writer-papers.js').open(b.local, () => NOW + 1e6);
+    await P.save(k, { ...a.store[`writerPaper:${k}`], file: 'TkVX', size: 3 }, { reason: 'import' });
+    assert.deepEqual((await restore(b, await backUp(a), ['papers'])).out.failed, []);
+    assert.deepEqual(b.store[`writerVersions:${k}`].map((v) => v.id).sort(), a.store[`writerVersions:${k}`].map((v) => v.id).sort(), 'the existing backup version already retains the older file');
+  } finally { a.stop(); b.stop(); }
+});
